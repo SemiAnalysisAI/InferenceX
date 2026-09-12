@@ -7399,3 +7399,17 @@
     - "Disable adaptive verification in the EVAL_ONLY DSpark config as well. It trims verification requests on device, which the ROCm DeepseekV4IndexerBackend does not support, so the eval-only engine refused to start (run 34651830283, c32). Evals keep real block rejection; throughput settings are unchanged."
     - "EVAL_ONLY 的 DSpark 配置同样关闭自适应验证：它会在设备端裁剪验证请求，而 ROCm 的 DeepseekV4IndexerBackend 不支持该操作，导致仅评测引擎拒绝启动（运行 34651830283，c32）。评测仍保留真实块拒绝采样；吞吐设置不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Switch to the upstream ROCm nightly image nightly-eed1f3d0c6043bd494424a22443ee198dd56f657. The deepseekv41-flash-0909 tag predates vllm-project/vllm#56503, which moves the mHC delayed pre block off the eager Torch reference onto AITER; that block is 85% of the decoder's kernel launches, measured 15.9-20.9x faster under cudagraph with gsm8k unchanged at 0.9719. The upstream recipe moves to the same nightly in vllm-project/recipes#962."
+    - "切换到上游 ROCm nightly 镜像 nightly-eed1f3d0c6043bd494424a22443ee198dd56f657。deepseekv41-flash-0909 标签早于 vllm-project/vllm#56503，该 PR 将 mHC delayed pre 块从 eager Torch 参考实现切换到 AITER；该块占解码器内核启动数的 85%，在 cudagraph 下实测加速 15.9-20.9 倍，gsm8k 保持 0.9719 不变。上游配方在 vllm-project/recipes#962 中切换到同一 nightly。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3035
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Raise max_num_seqs to the upstream default of 128. The 2*CONC cap sat below AgentX's subagent fan-out, so requests queued on scheduling capacity; vLLM reported queue times up to 16.2 s at CONC=1, and removing the cap took them to zero."
+    - "将 max_num_seqs 提升到上游默认值 128。此前的 2*CONC 上限低于 AgentX 的子代理扇出，导致请求因调度容量排队；vLLM 在 CONC=1 时报告排队时间最高达 16.2 秒，取消该上限后归零。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3035
