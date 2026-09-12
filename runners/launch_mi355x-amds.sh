@@ -59,6 +59,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         if [[ -n "${GITHUB_ACTIONS:-}" && -n "${JOB_ID:-}" ]]; then
             local art_dir="$GITHUB_WORKSPACE/benchmark_artifacts"
             mkdir -p "$art_dir"
+            if [[ -d "$BENCHMARK_LOGS_DIR/native_power" ]]; then
+                mkdir -p "$GITHUB_WORKSPACE/LOGS/native_power"
+                cp -r "$BENCHMARK_LOGS_DIR/native_power/". "$GITHUB_WORKSPACE/LOGS/native_power/" || true
+            fi
             cp -r "$BENCHMARK_LOGS_DIR"/slurm_job-${JOB_ID}.{out,err} "$art_dir/" 2>/dev/null || true
         fi
         # Print .err inline so failures are visible in CI output
@@ -128,6 +132,13 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # FIXME: The below is bad and is a result of the indirection of the ways in which
     # Dynamo jobs are launched. In a follow-up PR, the location of the result file should not
     # depend on the runner, it should always be in the same spot in the GH workspace.
+
+    # Preserve native power evidence before cleanup, even when result processing fails.
+    if [[ -d "$BENCHMARK_LOGS_DIR/native_power" ]]; then
+        mkdir -p "$GITHUB_WORKSPACE/LOGS/native_power"
+        cp -r "$BENCHMARK_LOGS_DIR/native_power/". "$GITHUB_WORKSPACE/LOGS/native_power/"
+        export POWERX_NATIVE_DIR="$GITHUB_WORKSPACE/LOGS/native_power"
+    fi
 
     # Process results from all configurations
 

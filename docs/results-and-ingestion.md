@@ -106,6 +106,10 @@ For multinode fixed-sequence jobs, `utils/process_result.py --all` processes eve
 
 Processing and diagnostic power-audit uploads run after launcher or validation failure, retaining raw and aggregate JSON. Normal `bmk_*` upload requires successful benchmark and processing steps, so an incomplete batch or failed Slurm job does not publish diagnostic rows. The main-branch ingest trigger can still publish other successful configurations from a partially failed sweep; it does not establish complete fleet coverage. Downstream importers can use the retained outcome to reject explicitly failed benchmarks.
 
+### Power telemetry stop and validation
+
+The single-node AMD monitor in [`benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) waits for every observed GPU to have a positive, numeric power sample at or beyond the first whole second after the stop request. `AMD_MONITOR_STOP_TIMEOUT_S` bounds the wait (default `30`; `0` skips it). Streams with missing or unsupported timestamps keep the same bounded wait for a usable sample. A timeout does not certify coverage: the aggregator still rejects an unbracketed benchmark window. AgentX cancellation skips the coverage wait and stops the monitor, including when cancellation arrives during a normal stop.
+
 ### Native multinode telemetry
 
 `native_power_collect.sh` and `native_power_lifecycle.sh` provide per-node collection and bounded ready/stop receipts. Launchers opt into the native package under `LOGS/native_power`; this prerequisite enables no new recipe. The adapter validates serving GPU identity, synchronized clocks, collector completion, and complete formal-window coverage. It preserves per-node failures, sample counts, and collector revision in the audit.
