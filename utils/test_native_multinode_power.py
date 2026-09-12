@@ -199,3 +199,79 @@ def test_result_processor_discovers_staged_native_package(tmp_path, monkeypatch)
     invalid = json.loads(agg.read_text())
     assert invalid["power_valid"] == 0
     assert "total_gpu_energy_j" not in invalid
+
+
+@pytest.mark.parametrize('role', ['prefill', 'decode'])
+def test_native_single_role_preserves_whole_fleet_and_role_metrics(tmp_path, role):
+    root, bench, agg = _package(tmp_path)
+    for path in root.glob('*/manifest.json'):
+        manifest = json.loads(path.read_text())
+        manifest['role'] = role
+        path.write_text(json.dumps(manifest))
+    assert run(root, bench, agg, expected_prefill_gpus=2 if role == 'prefill' else 0,
+               expected_decode_gpus=2 if role == 'decode' else 0, require_power=True) == 0
+    actual = json.loads(agg.read_text())
+    assert actual['total_gpu_energy_j'] == 800
+    assert actual[f'{role}_gpu_energy_j'] == 800
+    assert actual[f'{role}_avg_power_w'] == 200
+    opposite = 'decode' if role == 'prefill' else 'prefill'
+    assert f'{opposite}_gpu_energy_j' not in actual
+    assert json.loads((tmp_path / 'power_validation_result.json').read_text())['power_valid']
+
+
+def test_native_amd_abort_skips_legacy_tail_wait(tmp_path):
+    result = subprocess.run(['bash', '-c', '''source "$1"
+kill() { return 0; }; wait() { return 0; }
+sleep() { echo unexpected-tail-wait >&2; }
+_write_amd_smi_sidecar() { return 0; }
+GPU_MONITOR_PID=999 GPU_MONITOR_VENDOR=amd AMD_MONITOR_STOP_TIMEOUT_S=0
+GPU_METRICS_CSV="$2/missing.csv"
+stop_gpu_monitor
+''', 'bash', str(REPO / 'benchmarks/benchmark_lib.sh'), str(tmp_path)],
+                            capture_output=True, text=True, timeout=5)
+    assert result.returncode == 0, result.stderr
+    assert 'unexpected-tail-wait' not in result.stderr
+
+
+def test_native_amd_abort_publishes_receipt_before_reaper_deadline(tmp_path):
+    binary = tmp_path / 'bin'
+    binary.mkdir()
+    (binary / 'python3').symlink_to(sys.executable)
+    fake = binary / 'amd-smi'
+    fake.write_text(f'''#!{sys.executable}
+import sys, time
+if "-w" in sys.argv:
+    print("timestamp,gpu,socket_power", flush=True)
+    while True:
+        print(str(int(time.time())) + ",0,100", flush=True)
+        time.sleep(0.1)
+else:
+    print("[]")
+''')
+    fake.chmod(0o755)
+    control = tmp_path / 'control'
+    control.mkdir()
+    node = tmp_path / 'node-0'
+    process = subprocess.Popen(['bash', '-c', '\n'.join([
+        'source "$1"',
+        'bash "$4" "$2" "$3" amd 0 aggregate 0 1 &',
+        'POWERX_COLLECTOR_PID=$! POWERX_CONTROL_DIR=$3 POWERX_NUM_NODES=1',
+        'POWERX_BARRIER_TIMEOUT_S=5',
+        'powerx_wait_collectors ready || exit 1',
+        'POWERX_BARRIER_TIMEOUT_S=0',
+        'powerx_reap_collector',
+    ]), 'bash', str(REPO / 'benchmarks/native_power_lifecycle.sh'), str(node), str(control), str(REPO / 'benchmarks/native_power_collect.sh')],
+        env={**os.environ, 'PATH': f'{binary}:/usr/bin:/bin', 'SLURM_JOB_ID': 'test-job'},
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+    try:
+        stdout, stderr = process.communicate(timeout=8)
+        assert process.returncode == 143, (stdout, stderr)
+        assert (control / 'done-0').read_text().strip() == '143'
+        assert json.loads((node / 'manifest.json').read_text())['lifecycle'] == 'failed'
+    finally:
+        import signal
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.communicate()
