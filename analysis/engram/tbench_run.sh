@@ -118,6 +118,32 @@ say "--- local endpoint check (authenticated)"
 curl -sS -m 60 -H "Authorization: Bearer $API_KEY" "http://localhost:$PORT/v1/models" \
     | head -c 300 | tee -a "$RESULT_DIR/tbench_run.txt"; echo
 
+say "--- timed generation canary: a full response must fit in Cloudflare's 120s"
+GEN_START=$(date +%s)
+GEN_JSON=$(curl -sS -m 300 -H "Authorization: Bearer $API_KEY" \
+    -H 'Content-Type: application/json' \
+    -d '{"model":"'"$MODEL"'","messages":[{"role":"user","content":"Write a detailed technical explanation of how a B-tree index works, including insertion, splitting and deletion. Be thorough."}],"max_tokens":6144,"temperature":0}' \
+    "http://localhost:$PORT/v1/chat/completions" 2>&1)
+GEN_ELAPSED=$(( $(date +%s) - GEN_START ))
+GEN_TOKENS=$(python3 -c "
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+    print((d.get('usage') or {}).get('completion_tokens') or 0)
+except Exception:
+    print(0)
+" <<<"$GEN_JSON")
+say "  generated $GEN_TOKENS tokens in ${GEN_ELAPSED}s"
+if (( GEN_ELAPSED > 0 )); then
+    say "  throughput: $(( GEN_TOKENS / GEN_ELAPSED )) tok/s"
+fi
+if (( GEN_ELAPSED >= 110 )); then
+    say "FATAL: a 6144-token response took ${GEN_ELAPSED}s, at or over Cloudflare's"
+    say "120s read timeout. harbor cannot stream, so every agent call would 524."
+    say "Lower max_output_tokens or the concurrency, or use a tunnel without the cap."
+    exit 1
+fi
+
 say "--- chat-completion canary: assistant content must be non-empty"
 CANARY_JSON=$(curl -sS -m 300 -H "Authorization: Bearer $API_KEY" \
     -H 'Content-Type: application/json' \
@@ -210,8 +236,12 @@ ctx = $EVAL_CONTEXT
 print(json.dumps({
     # Reasoning is emitted as output tokens, so the answer needs room after
     # the thinking: a 8192 budget truncated every summarisation.
-    'max_input_tokens': ctx - 32768,
-    'max_output_tokens': 32768,
+    # Bounded by the tunnel, not the model: harbor cannot stream
+    # ("Streaming is not supported for T bench yet"), so every response must
+    # COMPLETE inside Cloudflare's 120s read timeout. The timed canary below
+    # measures whether this budget actually fits.
+    'max_input_tokens': ctx - 6144,
+    'max_output_tokens': 6144,
     'max_tokens': ctx,
     'input_cost_per_token': 0,
     'output_cost_per_token': 0,
@@ -241,7 +271,7 @@ timeout "${TBENCH_TIMEOUT_S:-16200}" "${HARBOR[@]}" run \
     --env modal \
     --ak "model_info=$MODEL_INFO" \
     -k "${TBENCH_ATTEMPTS:-1}" \
-    --n-concurrent "${TBENCH_CONCURRENT:-8}" \
+    --n-concurrent "${TBENCH_CONCURRENT:-4}" \
     --timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.1}" \
     --agent-timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.1}" \
     --job-name "engram-tbench-$(date +%s)" \
