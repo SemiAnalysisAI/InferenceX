@@ -688,3 +688,13 @@ def test_slurm_exit_before_log_retains_terminal_receipt(tmp_path):
     )
     assert result.returncode == 1
     assert (tmp_path / 'slurm_job_42_outcome.txt').read_text().strip() == '42|FAILED|1:0'
+
+
+@pytest.mark.parametrize('exit_code,derived,expected', [('0:0', '7:0', 0), ('1:0', '0:0', 1)])
+def test_slurm_controller_checks_allocation_not_derived_exit(tmp_path, exit_code, derived, expected):
+    result = run_bash(
+        'source "$1"; export GITHUB_WORKSPACE="$2"; sacct() { return 1; }; '
+        f'scontrol() {{ echo "JobId=42 JobState=COMPLETED ExitCode={exit_code} DerivedExitCode={derived}"; }}; '
+        'verify_slurm_job_completion 42', SLURM_UTILS, tmp_path,
+    )
+    assert result.returncode == expected, result.stderr
