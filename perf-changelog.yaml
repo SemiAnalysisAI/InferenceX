@@ -7417,3 +7417,12 @@
     - "Enable required power for the H200 Kimi-K3 latency recipe and route their launch, concurrency injection, failure handling and result validation through the pinned producer and shared collector."
     - "仅为 H200 Kimi-K3 latency 配方启用必需实测功耗。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3044
+
+- config-keys:
+    - kimik3-fp4-h200-vllm-agentic-simple
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required measured power for the complete H200 Kimi-K3 simple recipe through the shared recipe-gated launcher."
+    - "为 H200 Kimi-K3 simple 完整配方启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3054
