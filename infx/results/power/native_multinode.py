@@ -221,13 +221,15 @@ def run(power_dir: Path, bench_result: Path, agg_result: Path, *,
     metrics = {}
     if not reasons and integration is not None and benchmark is not None:
         metrics = _derived_metrics(integration, benchmark)
-        if expected_decode_gpus:
+        if roles["prefill"]:
             prefill = sum(integration.per_gpu_energy_j[uuid] for uuid in roles["prefill"])
-            decode = sum(integration.per_gpu_energy_j[uuid] for uuid in roles["decode"])
-            metrics.update(prefill_gpu_energy_j=prefill, decode_gpu_energy_j=decode,
+            metrics.update(prefill_gpu_energy_j=prefill,
                            prefill_avg_power_w=prefill / benchmark.integration_duration_s / expected_prefill_gpus,
+                           prefill_joules_per_input_token=prefill / benchmark.total_input_tokens)
+        if roles["decode"]:
+            decode = sum(integration.per_gpu_energy_j[uuid] for uuid in roles["decode"])
+            metrics.update(decode_gpu_energy_j=decode,
                            decode_avg_power_w=decode / benchmark.integration_duration_s / expected_decode_gpus,
-                           prefill_joules_per_input_token=prefill / benchmark.total_input_tokens,
                            decode_joules_per_output_token=decode / benchmark.total_output_tokens)
     valid = not reasons
     try:
