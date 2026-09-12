@@ -60,9 +60,11 @@ if [[ -n "${MODEL_PATH:-}" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
     fi
     DRAFT_MODEL_PATH="${WRITABLE_MODELS_DIR:-/data/models}/${DRAFT_MODEL##*/}"
-    if [[ ! -d "$DRAFT_MODEL_PATH" || -z "$(ls -A "$DRAFT_MODEL_PATH" 2>/dev/null)" ]]; then
+    # Other sweep cells share this directory; nonempty may mean a download
+    # is still in progress. Let HF validate/resume cached files under one lock.
+    mkdir -p "$(dirname "$DRAFT_MODEL_PATH")"
+    flock -w "${MODEL_DOWNLOAD_LOCK_TIMEOUT:-21600}" "${DRAFT_MODEL_PATH}.download.lock" \
         hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
-    fi
 else
     hf download "$MODEL"
     export MODEL_PATH="$MODEL"

@@ -115,6 +115,8 @@ runner 名称前缀是关键契约：workflow 通过 `launch_${RUNNER_NAME%%_*}.
 B300 DSXE 的 Kimi-K3 AgentX 路径在 `/scratch/models` 下挂载预置目标模型，
 另行导出并挂载 `WRITABLE_MODELS_DIR` 以保存 DSpark 权重。复用服务容器时，
 草稿模型目录应保留在该持久化挂载中；只读目标模型挂载无法保存草稿模型。
+并发任务通过模型专用锁串行准备草稿权重。每个任务在启动服务前由 `hf download`
+校验或续传现有缓存；目录非空不代表下载完成。
 
 ## 注册 srt-slurm 配方
 

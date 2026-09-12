@@ -116,6 +116,9 @@ The B300 DSXE Kimi-K3 AgentX path mounts its pre-staged target under
 `/scratch/models` and separately exports and mounts `WRITABLE_MODELS_DIR` for
 DSpark weights. Keep the draft directory on that persistent mount when reusing
 the serving container; the read-only target mount cannot hold the draft.
+Concurrent cells serialize draft staging with a per-model lock. Each cell lets
+`hf download` validate or resume the existing cache before serving; a nonempty
+directory is not a completion signal.
 
 ## Register an srt-slurm recipe
 

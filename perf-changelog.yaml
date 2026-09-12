@@ -7417,3 +7417,12 @@
     - "Mount and export the persistent writable model root for Kimi-K3 DSpark weights alongside the pre-staged target on B300 DSXE."
     - "在 B300 DSXE 上为 Kimi-K3 DSpark 权重挂载并导出持久化可写模型目录，与预加载目标模型一同使用。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3040
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Serialize shared Kimi-K3 DSpark downloads and validate or resume the cached draft before each cell starts serving."
+    - "串行执行共享 Kimi-K3 DSpark 下载，在每个任务启动服务前校验或续传草稿缓存。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3040
