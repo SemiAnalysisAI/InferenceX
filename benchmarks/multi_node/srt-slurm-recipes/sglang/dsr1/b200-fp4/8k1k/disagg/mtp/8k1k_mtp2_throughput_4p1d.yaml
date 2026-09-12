@@ -6,7 +6,7 @@ name: "b200-fp4-mtp2-throughput-4p-dep4-1d-dep8"
 # layout (sglang/<model>/<hw>-<precision>/<seq>/disagg/<variant>/...).
 
 dynamo:
-  hash: "5b4bc1dd70965017a737c71b19db5a0aeaa88727"
+  hash: "4a205cb356c9a1882ed8cda8980404026b52173a"
   install: true
 
 frontend:
@@ -17,7 +17,7 @@ frontend:
 
 model:
   path: "dsr1"
-  container: "lmsysorg/sglang:v0.5.12.post1"
+  container: "lmsysorg/sglang:v0.5.19"
   precision: "fp4"
 
 resources:
