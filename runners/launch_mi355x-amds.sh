@@ -304,6 +304,18 @@ else
         export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
     fi
 
+    # DSv4.1 weights live on the persistent shared cache. Mount this recipe
+    # outside /workspace so runtime setup does not create directories there.
+    CONTAINER_REPO=/workspace
+    if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4.1-Flash" ]]; then
+        export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
+        CONTAINER_REPO=/ix
+        export INFMAX_CONTAINER_WORKSPACE="$CONTAINER_REPO"
+        case "${RESULT_DIR:-}" in
+            /workspace/*) export RESULT_DIR="/ix/${RESULT_DIR#/workspace/}" ;;
+        esac
+    fi
+
     SCRIPT_BASE="${EXP_NAME%%_*}_${PRECISION}_mi355x"
     SCRIPT_FW="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
     SCRIPT_FALLBACK="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
@@ -315,10 +327,10 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_REPO/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
         $SLRUM_HOME_MOUNT \
         --container-writable \
-        --container-workdir=/workspace/ \
+        --container-workdir=$CONTAINER_REPO/ \
         --container-remap-root \
         --no-container-entrypoint --export=ALL,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
         bash "$BENCHMARK_SCRIPT"

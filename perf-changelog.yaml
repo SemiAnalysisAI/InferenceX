@@ -7354,3 +7354,48 @@
     - "Route ordinary B300 AgentX configurations through the registered DSXE runner after retirement of the B300 NV fleet; preserve model, image, serving flags, and concurrency grids. Dedicated power-ab configurations remain unchanged."
     - "将普通 B300 AgentX 配置切换到已注册的 DSXE runner，保留模型、镜像、服务参数及并发配置；不修改独立 power-ab 配置。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2927
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Add draft DeepSeek-V4.1-Flash FP4 AgentX on MI355X: TP4, concurrency 1-32, native five-token DSpark with adaptive real verification"
+    - "Use upstream ROCm AITER recipe with GPU-resident KV on the official vllm/vllm-openai-rocm:deepseekv41-flash-0909 image; Engram compatibility and GPU validation pending"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Pin AgentX to semianalysis_cc_traces_weka_062126, preventing the 256k corpus override"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Use thinking-on golden synthetic AL 3.51 for five-token DSpark throughput; disable adaptive verification and retain real verification for evals"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Replace unavailable Docker Hub image with public.ecr.aws/q9t5s3a7/vllm-release-repo:79a7108d9aea27ddab99ce1779290d300b17fc23-rocm"
+    - "Keep TP4, DSpark settings, and the full-context semianalysis_cc_traces_weka_062126 corpus"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Set INFMAX_CONTAINER_WORKSPACE=/ix for the MI355X DS V4.1 mount so AgentX dependencies and outputs resolve correctly"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Set VLLM_USE_BREAKABLE_CUDAGRAPH=1. Upstream does not torch-compile DeepseekV41ForCausalLM, so the default cudagraph_mode=FULL_AND_PIECEWISE aborted at engine init with piecewise CUDA graphs unavailable (run 34566727564, all concurrencies); the model targets the breakable cudagraph path"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Disable adaptive verification in the EVAL_ONLY DSpark config as well. It trims verification requests on device, which the ROCm DeepseekV4IndexerBackend does not support, so the eval-only engine refused to start (run 34651830283, c32). Evals keep real block rejection; throughput settings are unchanged."
+    - "EVAL_ONLY 的 DSpark 配置同样关闭自适应验证：它会在设备端裁剪验证请求，而 ROCm 的 DeepseekV4IndexerBackend 不支持该操作，导致仅评测引擎拒绝启动（运行 34651830283，c32）。评测仍保留真实块拒绝采样；吞吐设置不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
