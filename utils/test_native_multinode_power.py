@@ -275,3 +275,33 @@ else:
         except ProcessLookupError:
             pass
         process.communicate()
+
+
+def test_native_prefill_only_rejects_aggregate_role_devices(tmp_path):
+    root, bench, agg = _package(tmp_path)
+    manifest_path = root / 'node-1/manifest.json'
+    manifest = json.loads(manifest_path.read_text())
+    manifest['role'] = 'aggregate'
+    manifest_path.write_text(json.dumps(manifest))
+    assert run(root, bench, agg, expected_prefill_gpus=2, expected_decode_gpus=0,
+               require_power=True) == 1
+    audit = json.loads((tmp_path / 'power_validation_result.json').read_text())
+    assert 'native_role_gpu_count_mismatch' in audit['reasons']
+    assert json.loads(agg.read_text())['power_valid'] == 0
+    assert 'prefill_avg_power_w' not in json.loads(agg.read_text())
+
+
+@pytest.mark.parametrize('tick', [2, 4])
+def test_native_audit_retains_boundary_noise_without_relaxing_in_window_errors(tmp_path, tick):
+    root, bench, agg = _package(tmp_path)
+    for rank in [0, 1]:
+        with (root / f'node-{rank}/gpu_metrics.csv').open('a') as stream:
+            stream.write(f'{tick},0,N/A\n')
+            if rank == 0:
+                stream.write(f'{tick},0,0\n')
+    assert run(root, bench, agg, expected_prefill_gpus=1, expected_decode_gpus=1,
+               require_power=True) == int(tick == 2)
+    audit = json.loads((tmp_path / 'power_validation_result.json').read_text())
+    assert audit['boundary_degenerate_rows'] == ({'uuid-0': 2, 'uuid-1': 1} if tick == 4 else {})
+    if tick == 4:
+        assert json.loads(agg.read_text())['total_gpu_energy_j'] == 800

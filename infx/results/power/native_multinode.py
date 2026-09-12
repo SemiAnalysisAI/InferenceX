@@ -202,10 +202,8 @@ def run(power_dir: Path, bench_result: Path, agg_result: Path, *,
     if expected_aggregate_gpus:
         if roles["prefill"] or roles["decode"] or len(roles["aggregate"]) != expected_aggregate_gpus:
             reasons.append("native_role_gpu_count_mismatch")
-    elif expected_decode_gpus:
-        if roles["aggregate"] or len(roles["prefill"]) != expected_prefill_gpus or len(roles["decode"]) != expected_decode_gpus:
-            reasons.append("native_role_gpu_count_mismatch")
-    elif roles["decode"] or len(roles["aggregate"] + roles["prefill"]) != expected_prefill_gpus:
+    elif (roles["aggregate"] or len(roles["prefill"]) != expected_prefill_gpus or
+          len(roles["decode"]) != expected_decode_gpus):
         reasons.append("native_role_gpu_count_mismatch")
     combined_path = validation_result.with_name(f"{validation_result.stem}_native.csv")
     combined_path.parent.mkdir(parents=True, exist_ok=True)
@@ -247,6 +245,7 @@ def run(power_dir: Path, bench_result: Path, agg_result: Path, *,
              "observed_gpu_count": integration.observed_num_gpus if integration else 0,
              "per_gpu_role": {uuid: role for role, uuids in roles.items() for uuid in uuids},
              "per_gpu_sample_counts": integration.per_gpu_sample_counts if integration else {},
+             "boundary_degenerate_rows": integration.boundary_degenerate_rows if integration else {},
              "per_gpu_max_sample_gap_s": integration.per_gpu_max_sample_gap_s if integration else {},
              "producer": {"name": "inferencex-native-smi", "revisions": sorted(revisions),
                           "producer_git_commit": next(iter(revisions)) if len(revisions) == 1 else None},
