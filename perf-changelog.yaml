@@ -7405,8 +7405,8 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Replace unavailable vLLM build 5894fdf with 3696c77 and route the existing Kimi-K3 recipe to B300 DSXE. This establishes a new runtime baseline."
-    - "恢复 Kimi-K3 B300 镜像与集群路由。"
+    - "Replace unavailable vLLM build 5894fdf with 3696c77 for the existing Kimi-K3 B300 DSXE route. This establishes a new runtime baseline."
+    - "将现有 Kimi-K3 B300 DSXE 路径不可用的 vLLM 镜像 5894fdf 更换为 3696c77，建立新的运行时基线。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3040
 
 - config-keys:
