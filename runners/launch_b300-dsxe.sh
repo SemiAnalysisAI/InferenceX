@@ -443,7 +443,9 @@ else
         export RESULT_DIR=/ix/results
     fi
 
-    import_squash_image "$IMAGE" "$SQUASH_FILE"
+    # Isolated diagnostic: never import an image or exceed the assigned slice.
+    [[ "${SALLOC_TIME_LIMIT:-}" == "15" ]] || exit 1
+    unsquashfs -s "$SQUASH_FILE" || exit 1
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
@@ -470,6 +472,17 @@ else
     ) || exit 1
     [[ "$JOB_ID" =~ ^[0-9]+$ ]] || { echo 'ERROR: B300 allocation unavailable' >&2; exit 1; }
     trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
+    scontrol show job "$JOB_ID"
+    srun --jobid="$JOB_ID" bash -c '
+        hostname; date -u --iso-8601=seconds
+        nvidia-smi --query-gpu=index,uuid,name --format=csv
+        taskset -pc $$
+        enroot list || true
+        echo "RDMA devices on host:"
+        ls -l /sys/class/infiniband/ || true
+        ibv_devices || true
+        ldconfig -p | grep -E "lib(ibverbs|mlx5|efa|fabric)" || true
+    '
     if [[ "$MODEL_MOUNT_DIR" == "$MODEL_ROOT" ]]; then
         # MODEL_ROOT is node-local: probe the allocated compute node, not the login host.
         srun --jobid="$JOB_ID" test -r "$MODEL_PATH/config.json" || {
