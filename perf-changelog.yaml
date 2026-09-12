@@ -7408,3 +7408,10 @@
     - "Enable required power for the seven existing B200 Kimi-K3 recipes, use the pinned AgentX producer and shared collector, fix the exporter import URI, and record DCP8 with offload disabled to match the serving commands."
     - "启用 Kimi-K3 B200 实测功耗并修正 DCP 与 Offload 元数据。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3043
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Switch to the upstream ROCm nightly image. The deepseekv41-flash-0909 tag predates vllm-project/vllm#56503, which moves the mHC delayed pre block off the eager Torch reference onto AITER; that block is 85% of the decoder's kernel launches, measured 15.9-20.9x faster under cudagraph with gsm8k unchanged at 0.9719. Tag is nightly-TBD until the first nightly containing the commit is published."
+    - "切换到上游 ROCm nightly 镜像。deepseekv41-flash-0909 标签早于 vllm-project/vllm#56503，该 PR 将 mHC delayed pre 块从 eager Torch 参考实现切换到 AITER；该块占解码器内核启动数的 85%，在 cudagraph 下实测加速 15.9-20.9 倍，gsm8k 保持 0.9719 不变。标签暂为 nightly-TBD，待包含该提交的首个 nightly 发布后固定。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3035
