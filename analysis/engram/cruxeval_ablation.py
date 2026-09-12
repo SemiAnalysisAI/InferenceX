@@ -85,19 +85,28 @@ def build_prompt(code: str, value: str) -> str:
 
 
 def extract(text: str) -> str | None:
-    """The right-hand side of the asserted equality, as raw source text."""
-    block = _ANSWER.search(text)
-    body = (block.group(1) if block else text).strip()
-    # Some completions restate the assertion, some emit the bare literal.
-    for line in body.splitlines():
-        line = line.strip().rstrip(";")
-        if not line:
+    """The right-hand side of the asserted equality, as raw source text.
+
+    Scanned from the END. This checkpoint is a reasoning model, so with a chat
+    template the visible content carries its chain of thought before the
+    answer, and that chain routinely contains candidate equalities it then
+    rejects. Taking the first `==` would grade the model's discarded working;
+    the last one is its conclusion.
+    """
+    blocks = _ANSWER.findall(text)
+    body = (blocks[-1] if blocks else text).strip()
+    for line in reversed(body.splitlines()):
+        line = line.strip().rstrip(";").rstrip("`").strip()
+        if not line or line in ("[/ANSWER]", "[ANSWER]"):
             continue
         if "==" in line:
             return line.split("==", 1)[1].strip()
         if line.startswith("assert "):
             continue
-        return line
+        # A bare literal is only trusted when the prompt's own [ANSWER] tag
+        # framed it; loose prose would otherwise be read as an answer.
+        if blocks:
+            return line
     return None
 
 
@@ -139,7 +148,9 @@ def main() -> int:
     ap.add_argument("--tp", type=int, default=int(os.environ.get("TP", "4")))
     ap.add_argument("--limit", type=int, default=0, help="0 = the whole 800")
     ap.add_argument("--max-model-len", type=int, default=8192)
-    ap.add_argument("--max-tokens", type=int, default=768)
+    # A reasoning checkpoint needs room to think before the [ANSWER] block;
+    # too small a budget truncates the answer rather than the reasoning.
+    ap.add_argument("--max-tokens", type=int, default=2048)
     ap.add_argument("--out", default=(os.environ.get("RESULT_DIR", ".") + "/engram_cruxeval"))
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
@@ -160,18 +171,37 @@ def main() -> int:
         rows = rows[: args.limit]
     logger.info("cruxeval-O: %d items", len(rows))
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
+    # Prefer the chat template, but do not require it: the local MODEL_PATH
+    # copy does not always carry tokenizer_config's chat_template, and the
+    # two-shot CRUXEval format is a completion-style prompt to begin with, so
+    # raw continuation is a correct fallback rather than a degraded one.
+    tokenizer, template_source = None, None
+    for candidate in (args.model, os.environ.get("MODEL")):
+        if not candidate:
+            continue
+        try:
+            tok = AutoTokenizer.from_pretrained(candidate, trust_remote_code=True)
+        except Exception as exc:
+            logger.warning("tokenizer %s: %r", candidate, exc)
+            continue
+        if getattr(tok, "chat_template", None):
+            tokenizer, template_source = tok, candidate
+            break
+        tokenizer = tokenizer or tok
+    if template_source:
+        logger.info("using the chat template from %s", template_source)
+    else:
+        logger.warning("no chat_template available; using raw completion prompts")
+
     prompts = []
     for row in rows:
         text = build_prompt(row["code"], row["input"])
-        # Instruct checkpoint: go through its chat template rather than feeding
-        # raw completion text, which is what made the code suites score 0.0.
-        prompts.append(
-            tokenizer.apply_chat_template(
+        if template_source:
+            text = tokenizer.apply_chat_template(
                 [{"role": "user", "content": text}],
                 tokenize=False, add_generation_prompt=True,
             )
-        )
+        prompts.append(text)
 
     llm = LLM(
         model=args.model,
@@ -183,7 +213,11 @@ def main() -> int:
         # the ablated arm reuse KV computed while Engram was still on.
         enable_prefix_caching=False,
     )
-    sampling = SamplingParams(max_tokens=args.max_tokens, temperature=0.0)
+    # Stop at the closing tag so a completion-style prompt does not run on to
+    # invent a third exemplar; the tag is stripped before extraction anyway.
+    sampling = SamplingParams(
+        max_tokens=args.max_tokens, temperature=0.0, stop=["[/ANSWER]", "[PYTHON]"],
+    )
 
     correct: dict[str, list[bool]] = {}
     samples: dict[str, list[dict]] = {}
@@ -221,6 +255,8 @@ def main() -> int:
         "task": "cruxeval-O (output prediction, no execution)",
         "model": args.model,
         "items": len(rows),
+        "prompt_style": ("chat-template:%s" % template_source) if template_source
+                        else "raw-completion",
         "pass@1": {arm: round(sum(f) / len(f), 4) for arm, f in correct.items()},
         "delta_pass@1": round(sum(abl) / len(abl) - sum(base) / len(base), 4),
         "paired": {

@@ -459,6 +459,11 @@ def test_cruxeval_grades_literals_without_executing_anything():
     assert not ok("[ANSWER]\nassert f(x) == 1 + 1\n[/ANSWER]", "2")
     # A call in the answer must never be invoked.
     assert not ok("[ANSWER]\nassert f(x) == __import__('os').getpid()\n[/ANSWER]", "1")
+    # Raw completion: the prompt already ended with the opening [ANSWER] tag.
+    assert ok("assert f('x9j') == 'x9ja'", "'x9ja'")
+    # Reasoning output: grade the conclusion, never a rejected candidate.
+    assert ok("Maybe f(x) == 5? No.\n[ANSWER]\nassert f(x) == 7\n[/ANSWER]", "7")
+    assert ok("Try f(x) == 5. Wrong, it is 7.\nassert f(x) == 7", "7")
 
 
 def test_cruxeval_prompt_shape():
