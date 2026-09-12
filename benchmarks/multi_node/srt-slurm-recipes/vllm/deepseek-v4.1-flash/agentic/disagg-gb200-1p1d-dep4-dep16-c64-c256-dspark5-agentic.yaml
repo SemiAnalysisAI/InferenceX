@@ -81,8 +81,6 @@ backend:
       max-num-batched-tokens: 8192
       long-prefill-token-threshold: 1024
       tokenizer-mode: "deepseek_v41"
-      tool-call-parser: "deepseek_v41"
-      enable-auto-tool-choice: true
       reasoning-parser: "deepseek_v41"
       engram-config: '{"cpu_offload":true}'
       gpu-memory-utilization: 0.90
@@ -106,8 +104,6 @@ backend:
       max-num-seqs: 8
       max-num-batched-tokens: 64
       tokenizer-mode: "deepseek_v41"
-      tool-call-parser: "deepseek_v41"
-      enable-auto-tool-choice: true
       reasoning-parser: "deepseek_v41"
       engram-config: '{"cpu_offload":true}'
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'

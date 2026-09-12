@@ -262,7 +262,10 @@ elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
     fi
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     if [[ $MODEL_PREFIX == "dsv41flash" && $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="$MODEL"
+        DSV41_CACHE="/mnt/lustre01/users-public/sa-shared/hf-hub-cache/models--deepseek-ai--DeepSeek-V4.1-Flash"
+        DSV41_REVISION=$(cat "$DSV41_CACHE/refs/main") || exit 1
+        export MODEL_PATH="$DSV41_CACHE/snapshots/$DSV41_REVISION"
+        test -r "$MODEL_PATH/config.json" || { echo "Missing cached DeepSeek V4.1 Flash snapshot: $MODEL_PATH" >&2; exit 1; }
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4.1-flash"
     elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
