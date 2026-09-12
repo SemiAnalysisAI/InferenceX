@@ -96,6 +96,10 @@ Single-node GPU count is `tp * pp * pcp_size`. DCP does not multiply the physica
 
 InferenceX-app treats routing fields as columns or config dimensions and stores numeric measurements in `benchmark_results.metrics` JSONB. The mapper supports v1 shared topology, v2 split prefill/decode topology, and nested v3 AgentX metrics. Unknown numeric metrics are retained and warned about, which permits schema growth without silently losing numeric data.
 
+### Slurm completion receipts
+
+Shared Slurm waiting verifies the terminal allocation state and exit code, consulting `scontrol` when `sacct` is missing or non-terminal and retaining `slurm_job_*_outcome.txt`. Launchers stage available evidence before returning failure. llm-d workers exit using the coordinator’s atomically published status-bearing completion marker; normal completion no longer cancels the allocation.
+
 ## Eval artifacts
 
 ### Per-config identity and collection

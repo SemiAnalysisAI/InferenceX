@@ -96,6 +96,10 @@ shape:    array of benchmark row objects
 
 InferenceX-app 将路由字段作为列或配置维度，并把数值测量存入 `benchmark_results.metrics` JSONB。映射器支持共享拓扑的 v1、拆分 prefill/decode 拓扑的 v2，以及嵌套 AgentX 指标的 v3。未知数值指标会被保留并产生警告，因此架构可以扩展，同时不会无提示地丢失数值数据。
 
+### Slurm 完成状态文件
+
+共享 Slurm 等待逻辑检查分配的最终状态和退出码；当 `sacct` 记录缺失或尚未进入最终状态时查询 `scontrol`，并保留 `slurm_job_*_outcome.txt`。启动器先保存已有证据再返回失败。llm-d 工作进程根据协调进程原子发布的完成状态退出；正常结束不再取消 Slurm 分配。
+
 ## 评测工件
 
 ### 单配置身份和收集
