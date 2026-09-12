@@ -10,7 +10,7 @@ REPO = Path(__file__).resolve().parents[1]
 RECIPE_DIR = "benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic"
 
 
-@pytest.mark.parametrize("hardware", ["b200"])
+@pytest.mark.parametrize("hardware", ["b200", "h200"])
 @pytest.mark.parametrize("power,wrong_head", [(True, False), (False, False), (True, True)])
 def test_kimi_power_selects_verified_runtime(
     tmp_path: Path, hardware: str, power: bool, wrong_head: bool,
@@ -32,7 +32,11 @@ def test_kimi_power_selects_verified_runtime(
         'AGENTX_POWER_SRT_SLURM_PIN="' + "a" * 40 + '"',
         source, flags=re.MULTILINE,
     )
-    recipe = next((REPO / RECIPE_DIR).glob(f"agg-{hardware}*"))
+    recipe = (
+        REPO / RECIPE_DIR / "agg-h200-tp16dp2ep32-latency-agentic.yaml"
+        if hardware == "h200"
+        else next((REPO / RECIPE_DIR).glob("agg-b200*"))
+    )
     data = yaml.safe_load(recipe.read_text())
     if not power:
         data.pop("telemetry")
@@ -82,7 +86,7 @@ function cp() {
         assert "edwingao28/srt-slurm.git" not in (tmp_path / "route.log").read_text()
 
 
-@pytest.mark.parametrize("hardware", ["b200"])
+@pytest.mark.parametrize("hardware", ["b200", "h200"])
 def test_kimi_failed_power_stages_evidence_before_exit(tmp_path: Path, hardware: str) -> None:
     filename = {"b200": "launch_b200-nscale-slurm.sh", "h200": "launch_h200-dgxc-slurm.sh"}[hardware]
     source = (REPO / "runners" / filename).read_text()

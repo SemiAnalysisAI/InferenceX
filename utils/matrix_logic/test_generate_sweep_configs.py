@@ -3241,3 +3241,30 @@ class TestE2EConfigSplitting:
         output = split_e2e_configs([])
 
         assert output and all(rows == [] for rows in output.values())
+
+
+@pytest.mark.parametrize("variant,concs,tp,workers,offload", [
+    ("latency", [1, 2, 3, 4, 5, 6, 7, 8, 10, 12], 16, 2, "none"),
+    ("balanced", [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16], 8, 4, "none"),
+    ("simple", [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32], 8, 4, "dram"),
+])
+def test_h200_recipe_keys_preserve_complete_scopes(
+    variant: str, concs: list[int], tp: int, workers: int, offload: str,
+) -> None:
+    from infx.matrix.generate import generate_config_matrix
+
+    repo = Path(__file__).resolve().parents[2]
+    master = yaml.safe_load((repo / "configs/nvidia-master.yaml").read_text())
+    runners = yaml.safe_load((repo / "configs/runners.yaml").read_text())
+    key = f"kimik3-fp4-h200-vllm-agentic-{variant}"
+    rows = generate_config_matrix([key], master, runners)
+    assert [row["conc"][0] for row in rows] == concs
+    assert {row["node-count"] for row in rows} == {4}
+    assert {row["duration"] for row in rows} == {3600}
+    assert {row["prefill"]["tp"] for row in rows} == {tp}
+    assert {row["prefill"]["num-worker"] for row in rows} == {workers}
+    assert {row["kv-offloading"] for row in rows} == {offload}
+    assert all(row["run-eval"] and row["eval-suite"] == "kimi_tool_call_schema" for row in rows)
+    recipes = {row["prefill"]["additional-settings"][0] for row in rows}
+    assert len(recipes) == 1
+    assert ("vllm-simple" if variant == "simple" else variant) in recipes.pop()

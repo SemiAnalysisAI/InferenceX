@@ -7408,3 +7408,12 @@
     - "Enable required power for the seven existing B200 Kimi-K3 recipes, use the pinned AgentX producer and shared collector, fix the exporter import URI, and record DCP8 with offload disabled to match the serving commands."
     - "启用 Kimi-K3 B200 实测功耗并修正 DCP 与 Offload 元数据。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3043
+
+- config-keys:
+    - kimik3-fp4-h200-vllm-agentic-latency
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required power for the H200 Kimi-K3 latency recipe and route their launch, concurrency injection, failure handling and result validation through the pinned producer and shared collector."
+    - "仅为 H200 Kimi-K3 latency 配方启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3044
