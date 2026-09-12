@@ -17,11 +17,14 @@ set -x
 # portability, but we resolve to pre-staged paths here to avoid repeated
 # downloading on every Nscale node. Runs for both single-node and multinode
 # launches.
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" ]]; then
-    export MODEL_PATH="$MODEL"
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" ]]; then
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4.1-flash"
     export HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
     mkdir -p "$HF_HUB_CACHE_HOST_PATH"
+    DSV41_CACHE="$HF_HUB_CACHE_HOST_PATH/models--deepseek-ai--DeepSeek-V4.1-Flash"
+    DSV41_REVISION=$(cat "$DSV41_CACHE/refs/main") || exit 1
+    export MODEL_PATH="$DSV41_CACHE/snapshots/$DSV41_REVISION"
+    test -r "$MODEL_PATH/config.json" || { echo "Missing cached DeepSeek V4.1 Flash snapshot: $MODEL_PATH" >&2; exit 1; }
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/DeepSeek-R1-0528-NVFP4-v2"
     export SRT_SLURM_MODEL_PREFIX="dsr1"
