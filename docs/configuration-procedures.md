@@ -112,6 +112,14 @@ The runner-name prefix is load-bearing: workflow routing uses `launch_${RUNNER_N
 6. Verify every runner is **Idle** in [repository runner settings](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners) before adding it to sweep traffic.
 7. Verify launcher mounts for `_work`, HF cache, staged weights, and squash images from a compute node. Root containers must not leave root-owned files in the shared workspace.
 
+The B300 DSXE Kimi-K3 AgentX path mounts its pre-staged target under
+`/scratch/models` and separately exports and mounts `WRITABLE_MODELS_DIR` for
+DSpark weights. Keep the draft directory on that persistent mount when reusing
+the serving container; the read-only target mount cannot hold the draft.
+Concurrent cells serialize draft staging with a per-model lock. Each cell lets
+`hf download` validate or resume the existing cache before serving; a nonempty
+directory is not a completion signal.
+
 ## Register an srt-slurm recipe
 
 Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md). Checked-in recipes: [`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/).

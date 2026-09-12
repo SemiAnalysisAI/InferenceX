@@ -7399,3 +7399,30 @@
     - "Disable adaptive verification in the EVAL_ONLY DSpark config as well. It trims verification requests on device, which the ROCm DeepseekV4IndexerBackend does not support, so the eval-only engine refused to start (run 34651830283, c32). Evals keep real block rejection; throughput settings are unchanged."
     - "EVAL_ONLY 的 DSpark 配置同样关闭自适应验证：它会在设备端裁剪验证请求，而 ROCm 的 DeepseekV4IndexerBackend 不支持该操作，导致仅评测引擎拒绝启动（运行 34651830283，c32）。评测仍保留真实块拒绝采样；吞吐设置不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace unavailable vLLM build 5894fdf with 3696c77 for the existing Kimi-K3 B300 DSXE route. This establishes a new runtime baseline."
+    - "将现有 Kimi-K3 B300 DSXE 路径不可用的 vLLM 镜像 5894fdf 更换为 3696c77，建立新的运行时基线。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3040
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Mount and export the persistent writable model root for Kimi-K3 DSpark weights alongside the pre-staged target on B300 DSXE."
+    - "在 B300 DSXE 上为 Kimi-K3 DSpark 权重挂载并导出持久化可写模型目录，与预加载目标模型一同使用。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3040
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Serialize shared Kimi-K3 DSpark downloads and validate or resume the cached draft before each cell starts serving."
+    - "串行执行共享 Kimi-K3 DSpark 下载，在每个任务启动服务前校验或续传草稿缓存。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3040
