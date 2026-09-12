@@ -225,7 +225,7 @@ stop_gpu_monitor() {
         # tick in the same second as the window end still fails bracketing —
         # the stream needs a tick at the NEXT whole second (measured on MI355X:
         # end=...153.325 vs last sample ...153.0).
-        if [[ "$GPU_MONITOR_VENDOR" == "amd" ]]; then
+        if [[ "$GPU_MONITOR_VENDOR" == "amd" && "${AMD_MONITOR_STOP_TIMEOUT_S:-}" != "0" ]]; then
             sleep $(( ${GPU_MONITOR_INTERVAL:-1} + 2 ))
         fi
         kill "$GPU_MONITOR_PID" 2>/dev/null
