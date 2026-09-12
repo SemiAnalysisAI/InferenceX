@@ -1639,3 +1639,90 @@ def test_workflow_retains_context_for_each_metrics_csv(tmp_path, step_name):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text('{"timestamp_timezone":"UTC"}')
         assert any(path in tmp_path.glob(pattern.strip()) for pattern in patterns)
+
+
+@pytest.mark.parametrize('sidecar', ['run_recipe_conc4_gpus_4_ctx_2_gen_2.pytorch.json',
+                                    'run_gpu_metrics_context.json', 'run_gpu_metrics_identity.json'])
+@pytest.mark.parametrize('point_state', ['valid', 'missing', 'malformed'])
+def test_multinode_batch_retains_sidecars_without_counting_them_as_points(
+    tmp_path, multinode_env_vars, sample_benchmark_result, sidecar, point_state,
+):
+    (tmp_path / sidecar).write_text('{"diagnostic": true}')
+    if point_state != 'missing':
+        (tmp_path / 'run_recipe_conc4_gpus_4_ctx_2_gen_2.json').write_text(
+            json.dumps({**sample_benchmark_result, 'max_concurrency': 4})
+            if point_state == 'valid' else '{broken')
+    env = {**os.environ, **multinode_env_vars, 'RESULT_FILENAME': 'run', 'CONC_LIST': '4',
+           'PYTHONPATH': str(REPO_ROOT)}
+    result = subprocess.run([*MODULE_COMMAND, '--all'], cwd=tmp_path, env=env,
+                            capture_output=True, text=True)
+    assert result.returncode == int(point_state != 'valid'), result.stderr
+    receipt = json.loads((tmp_path / 'result_processing_run.json').read_text())
+    assert receipt['ignored_sidecars'] == [sidecar]
+    assert receipt['missing_concurrencies'] == ([] if point_state == 'valid' else [4])
+    assert (tmp_path / sidecar).read_text() == '{"diagnostic": true}'
+
+
+def test_multinode_batch_rejects_unknown_point_filename(
+    tmp_path, multinode_env_vars, sample_benchmark_result,
+):
+    for name in ['run_conc4_gpus_4_ctx_2_gen_2.json', 'run_conc16_gpus_bad.json']:
+        (tmp_path / name).write_text(json.dumps({**sample_benchmark_result, 'max_concurrency': 4}))
+    result = subprocess.run([*MODULE_COMMAND, '--all'], cwd=tmp_path,
+                            env={**os.environ, **multinode_env_vars, 'RESULT_FILENAME': 'run',
+                                 'CONC_LIST': '4 16', 'PYTHONPATH': str(REPO_ROOT)},
+                            capture_output=True, text=True)
+    assert result.returncode == 1
+    receipt = json.loads((tmp_path / 'result_processing_run.json').read_text())
+    assert receipt['missing_concurrencies'] == [16]
+    assert any('filename lacks' in point.get('error', '') for point in receipt['points'])
+
+
+@pytest.mark.parametrize('first_rc', [0, 7])
+@pytest.mark.parametrize('expected_concs', ['4 16', '4 8 16', '4'])
+def test_multinode_workflow_processes_every_point_with_legacy_processor(tmp_path, first_rc, expected_concs):
+    (tmp_path / 'utils').mkdir()
+    (tmp_path / 'utils/process_result.py').write_text('''import json, os, sys
+from pathlib import Path
+stem = os.environ['RESULT_FILENAME']
+data = json.loads(Path(stem + '.json').read_text())
+Path('agg_' + stem + '.json').write_text(json.dumps(data))
+sys.exit(data['exit_code'])
+''')
+    for conc, rc in [(4, first_rc), (16, 0)]:
+        (tmp_path / f'run_conc{conc}_gpus_4_ctx_2_gen_2.json').write_text(
+            json.dumps({'exit_code': rc}))
+    workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-multinode-tmpl.yml').read_text())
+    step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
+                if step.get('name') == 'Process result')
+    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=tmp_path,
+                            env={**os.environ, 'RESULT_FILENAME': 'run', 'POWER_PRODUCER_SHA': '',
+                                 'CONC_LIST': expected_concs, 'PYTHONPATH': '',
+                                 'PATH': f"{Path(sys.executable).parent}:{os.environ['PATH']}"},
+                            capture_output=True, text=True, timeout=10)
+    assert result.returncode == int(bool(first_rc) or expected_concs != '4 16'), result.stderr
+    for conc in [4, 16]:
+        assert (tmp_path / f'agg_run_conc{conc}_gpus_4_ctx_2_gen_2.json').is_file()
+
+
+def test_multinode_workflow_does_not_downgrade_processor_import_errors(tmp_path):
+    (tmp_path / 'infx/results').mkdir(parents=True)
+    (tmp_path / 'infx/__init__.py').touch()
+    (tmp_path / 'infx/results/__init__.py').touch()
+    (tmp_path / 'infx/results/fixed_sequence.py').write_text(
+        'raise RuntimeError("broken processor import")\n')
+    (tmp_path / 'utils').mkdir()
+    (tmp_path / 'utils/process_result.py').write_text(
+        'from pathlib import Path\nPath("legacy-called").touch()\n')
+    (tmp_path / 'run_conc4_gpus_4.json').write_text('{}')
+    workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-multinode-tmpl.yml').read_text())
+    step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
+                if step.get('name') == 'Process result')
+    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=tmp_path,
+                            env={**os.environ, 'RESULT_FILENAME': 'run', 'POWER_PRODUCER_SHA': '',
+                                 'CONC_LIST': '4', 'PYTHONPATH': '',
+                                 'PATH': f"{Path(sys.executable).parent}:{os.environ['PATH']}"},
+                            capture_output=True, text=True, timeout=10)
+    assert result.returncode != 0
+    assert 'broken processor import' in result.stderr
+    assert not (tmp_path / 'legacy-called').exists()
