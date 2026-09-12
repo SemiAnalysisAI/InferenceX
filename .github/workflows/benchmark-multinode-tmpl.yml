@@ -363,15 +363,19 @@ jobs:
     steps:
       - name: Slurm cleanup (pre-run)
         run: &slurm-cleanup |
-          if command -v squeue >/dev/null 2>&1; then
-            for job_name in "${{ runner.name }}" "inferencex-${{ runner.name }}"; do
-              echo "[Slurm] Cleaning up jobs named: $job_name ..."
-              scancel --user="$USER" --name="$job_name" || true
-              while [ -n "$(squeue --user="$USER" --name="$job_name" --noheader --format='%i')" ]; do
-                squeue --user="$USER" --name="$job_name"
-                sleep 5
-              done
-            done
+          # Runner names can outlive their job, so cleanup requires this run's receipt.
+          receipt="${RUNNER_TEMP}/gb300-power-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.job"
+          if [[ -f "$receipt" ]]; then
+            read -r job_id < "$receipt"
+            [[ "$job_id" =~ ^[0-9]+$ ]] || exit 1
+            expected="gb300-power-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            actual=$(squeue -j "$job_id" -h -o '%j|%u')
+            if [[ "$actual" == "$expected|$USER" ]]; then
+              scancel "$job_id"
+            elif [[ -n "$actual" ]]; then
+              echo "Refusing cleanup: diagnostic ownership mismatch" >&2
+              exit 1
+            fi
           fi
 
       - name: Repair stale git state (pre-run)

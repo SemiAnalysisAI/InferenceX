@@ -4,6 +4,9 @@
 
 set -exo pipefail
 
+# Diagnostic branch only: inspect the occupied power endpoint before any image work.
+exec bash "$(dirname "${BASH_SOURCE[0]}")/gb300_power_listener_diagnostic.sh"
+
 # shellcheck source=runners/slurm_utils.sh
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
 
