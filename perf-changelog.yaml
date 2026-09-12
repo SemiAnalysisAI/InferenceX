@@ -7408,3 +7408,13 @@
     - "Enable required power for the seven existing B200 Kimi-K3 recipes, use the pinned AgentX producer and shared collector, fix the exporter import URI, and record DCP8 with offload disabled to match the serving commands."
     - "启用 Kimi-K3 B200 实测功耗并修正 DCP 与 Offload 元数据。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3043
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260911."
+    - "Rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode for sglang 0.5.19."
+    - "Prefill allreduce INT4; scheduler-recv-interval default 60."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2972
