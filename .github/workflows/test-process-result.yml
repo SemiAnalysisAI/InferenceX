@@ -36,6 +36,10 @@ on:
       - 'utils/test_gb300_power_official_contract.py'
       - 'utils/test_inject_srt_power_concurrencies.py'
       - 'utils/test_process_result.py'
+      - 'runners/powerx_8k1k.sh'
+      - 'runners/prepare_srt_power.py'
+      - 'runners/launch_h100-dgxc-slurm.sh'
+      - 'utils/test_prepare_srt_power.py'
 
 permissions:
   contents: read
@@ -57,4 +61,4 @@ jobs:
         run: |
           cd utils
           uv run --no-project --exclude-newer PT12H --python 3.12 --with pytest --with pyyaml \
-            python -m pytest test_aggregate_power.py test_aggregate_power_multinode.py agentic/aggregation/ test_gb300_power_official_contract.py test_inject_srt_power_concurrencies.py test_process_result.py -v
+            python -m pytest test_aggregate_power.py test_aggregate_power_multinode.py agentic/aggregation/ test_gb300_power_official_contract.py test_inject_srt_power_concurrencies.py test_process_result.py test_prepare_srt_power.py -v
