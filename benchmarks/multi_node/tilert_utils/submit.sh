@@ -37,15 +37,21 @@ if [[ "${REQUIRE_POWER:-0}" =~ ^(1|true|TRUE|yes|YES)$ && "$ISL" == 8192 && "$OS
     export POWERX_NATIVE_ENABLED=1
 fi
 export SLURM_JOB_ID="$JOB_ID"
-export POWERX_HOST_UID="$(id -u)" POWERX_HOST_GID="$(id -g)"
-export POWERX_COLLECTOR_REVISION="$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)"
-export POWERX_RAW_ROOT="${POWERX_RAW_ROOT:-/tmp/inferencex-native-$JOB_ID}"
-export POWERX_CONTROL_ROOT="$GITHUB_WORKSPACE/LOGS/power_control-$JOB_ID"
-mkdir -p "$POWERX_CONTROL_ROOT" "$GITHUB_WORKSPACE/LOGS/native_power"
-chmod 777 "$POWERX_CONTROL_ROOT"
+POWERX_MOUNTS=""
+POWERX_ENV="POWERX_NATIVE_ENABLED"
+if [[ "$POWERX_NATIVE_ENABLED" == 1 ]]; then
+    export POWERX_HOST_UID="$(id -u)" POWERX_HOST_GID="$(id -g)"
+    export POWERX_COLLECTOR_REVISION="$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)"
+    export POWERX_RAW_ROOT="${POWERX_RAW_ROOT:-/tmp/inferencex-native-$JOB_ID}"
+    export POWERX_CONTROL_ROOT="$GITHUB_WORKSPACE/LOGS/power_control-$JOB_ID"
+    mkdir -p "$POWERX_CONTROL_ROOT" "$GITHUB_WORKSPACE/LOGS/native_power"
+    chmod 777 "$POWERX_CONTROL_ROOT"
+    srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 mkdir -p "$POWERX_RAW_ROOT"
+    srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 chmod 777 "$POWERX_RAW_ROOT"
+    POWERX_MOUNTS=",$POWERX_RAW_ROOT:/powerx_native,$POWERX_CONTROL_ROOT:/powerx_control"
+    POWERX_ENV+=",CUDA_VISIBLE_DEVICES,POWERX_HOST_UID,POWERX_HOST_GID,POWERX_COLLECTOR_REVISION,POWERX_NODE_NAME,POWERX_CLOCK_SYNCHRONIZED,POWERX_RANK,POWERX_GPU_COUNT"
+fi
 rm -f "${BENCHMARK_LOGS_DIR:-$GITHUB_WORKSPACE}/.tilert_done.$JOB_ID"
-srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 mkdir -p "$POWERX_RAW_ROOT"
-srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 chmod 777 "$POWERX_RAW_ROOT"
 # Keep node-local receipts inside the allocation until both serving steps drain.
 # A caught cancellation exits through the same staging path as normal completion.
 wait_owned_step() {
@@ -120,11 +126,13 @@ run_role() {
     local role="$1" host="$2" squash_file="$3"
     local rank=0 gpu_count="${DECODE_TP:-8}"
     if [[ "$role" == prefill ]]; then rank=1; gpu_count="${PREFILL_TP:-8}"; fi
-    export POWERX_RANK="$rank" POWERX_GPU_COUNT="$gpu_count" POWERX_NODE_NAME="$host"
-    export CUDA_VISIBLE_DEVICES="$(seq -s, 0 "$((gpu_count - 1))")"
-    export POWERX_CLOCK_SYNCHRONIZED
-    POWERX_CLOCK_SYNCHRONIZED=$(srun --jobid="$JOB_ID" --nodelist="$host" --ntasks=1 \
-        bash -c 'timedatectl show -p NTPSynchronized --value 2>/dev/null || echo false')
+    if [[ "$POWERX_NATIVE_ENABLED" == 1 ]]; then
+        export POWERX_RANK="$rank" POWERX_GPU_COUNT="$gpu_count" POWERX_NODE_NAME="$host"
+        export CUDA_VISIBLE_DEVICES="$(seq -s, 0 "$((gpu_count - 1))")"
+        export POWERX_CLOCK_SYNCHRONIZED
+        POWERX_CLOCK_SYNCHRONIZED=$(srun --jobid="$JOB_ID" --nodelist="$host" --ntasks=1 \
+            bash -c 'timedatectl show -p NTPSynchronized --value 2>/dev/null || echo false')
+    fi
     # The tilert image bakes no NVIDIA_VISIBLE_DEVICES (unlike vllm-openai), and
     # enroot's nvidia hook only injects the driver when it is set — without it the
     # decode container has no libcuda and torch dies with "Found no NVIDIA driver".
@@ -134,9 +142,9 @@ run_role() {
     export NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIVER_CAPABILITIES=compute,utility
     exec srun --jobid="$JOB_ID" --nodelist="$host" --ntasks=1 \
         --container-image="$squash_file" \
-        --container-mounts="$GITHUB_WORKSPACE:/workspace,$MODEL_PATH:$MODEL_PATH,$TILERT_WEIGHTS_DIR:$TILERT_WEIGHTS_DIR,$POWERX_RAW_ROOT:/powerx_native,$POWERX_CONTROL_ROOT:/powerx_control" \
+        --container-mounts="$GITHUB_WORKSPACE:/workspace,$MODEL_PATH:$MODEL_PATH,$TILERT_WEIGHTS_DIR:$TILERT_WEIGHTS_DIR$POWERX_MOUNTS" \
         --container-workdir=/workspace --no-container-entrypoint \
-        --container-env=CUDA_VISIBLE_DEVICES,POWERX_NATIVE_ENABLED,POWERX_HOST_UID,POWERX_HOST_GID,POWERX_COLLECTOR_REVISION,POWERX_NODE_NAME,POWERX_CLOCK_SYNCHRONIZED,POWERX_RANK,POWERX_GPU_COUNT \
+        --container-env="$POWERX_ENV" \
         --export=ALL,TILERT_ROLE="$role",DECODE_HOST="$DECODE_HOST",PREFILL_HOST="$PREFILL_HOST",PORT="${PORT:-8888}" \
         bash "/workspace/benchmarks/multi_node/tilert_utils/run_node.sh"
 }

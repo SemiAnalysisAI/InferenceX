@@ -8,14 +8,13 @@ import sys
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-LIFECYCLE = ROOT / 'benchmarks/native_power_lifecycle.sh'
-JOB = ROOT / 'benchmarks/multi_node/llm-d/job.slurm'
 
 
-@pytest.mark.parametrize(('decode_rc', 'interruption'), [(0, None), (9, None),
-                                                        (0, 'TERM'), (0, 'HUP'),
-                                                        (0, 'INT'), (0, 'hang')])
-def test_tilert_submit_keeps_decode_status_and_stages_both_roles(tmp_path, decode_rc, interruption):
+@pytest.mark.parametrize(('decode_rc', 'interruption', 'enabled'),
+                         [(0, None, True), (9, None, True), (0, 'TERM', True),
+                          (0, 'HUP', True), (0, 'INT', True), (0, 'hang', True),
+                          (0, None, False)])
+def test_tilert_submit_keeps_decode_status_and_stages_both_roles(tmp_path, decode_rc, interruption, enabled):
     repo, bindir = tmp_path / 'repo', tmp_path / 'bin'
     for path in (repo, bindir):
         path.mkdir()
@@ -39,6 +38,9 @@ sys.exit(result.returncode)
 import json, os, pathlib, signal, subprocess, sys, time
 args=sys.argv[1:]
 if any(a.startswith('--container-image=') for a in args):
+    if os.environ['POWERX_NATIVE_ENABLED'] != '1':
+        assert not any('/powerx_native' in a for a in args)
+        sys.exit(0)
     rank=os.environ['POWERX_RANK']
     out=pathlib.Path(os.environ['POWERX_RAW_ROOT']) / f'node-{rank}'
     out.mkdir(parents=True,exist_ok=True)
@@ -81,7 +83,7 @@ sys.exit(subprocess.run(args).returncode)
            'IMAGE':'synthetic-decode','PREFILL_IMAGE':'synthetic-prefill',
            'MODEL_PATH':str(repo),'MODEL_PREFIX':'fixture','PRECISION':'fp8',
            'PREFILL_TP':'2','DECODE_TP':'2','SLURM_ACCOUNT':'fixture',
-           'SLURM_PARTITION':'fixture','RUNNER_NAME':'fixture','REQUIRE_POWER':'1', 'ISL':'8192','OSL':'1024',
+           'SLURM_PARTITION':'fixture','RUNNER_NAME':'fixture','REQUIRE_POWER':'1' if enabled else '0', 'ISL':'8192','OSL':'1024',
            'TILERT_WEIGHTS_DIR':str(tmp_path/'weights'),'TILERT_DECODE_DRAIN':'1',
            'POWERX_RAW_ROOT':str(tmp_path/'raw'),'DECODE_RC':str(decode_rc),
            'RELEASE_RECEIPT':str(tmp_path/'released'), 'INTERRUPTION':interruption or ''}
@@ -90,6 +92,11 @@ sys.exit(subprocess.run(args).returncode)
     expected_rc={'TERM':143,'HUP':143,'INT':130,'hang':7}.get(interruption,decode_rc)
     assert result.returncode == expected_rc, result.stderr + result.stdout
     release_evidence=json.loads((tmp_path/'released').read_text())
+    if not enabled:
+        assert release_evidence == []
+        assert not (repo / 'LOGS/native_power').exists()
+        assert not (tmp_path / 'raw').exists()
+        return
     assert [item['rank'] for item in release_evidence] == [0,1]
     if interruption in {'TERM','HUP','INT'}:
         assert all(item.get('terminated') for item in release_evidence)
