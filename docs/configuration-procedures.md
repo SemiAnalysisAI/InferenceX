@@ -191,6 +191,11 @@ GPU sweep and eval evidence is required before calling any recipe validated.
 
 Source: [upstream recipe](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash).
 
+The B300 P/D key `dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg`
+uses one DEP8 prefill worker and one DEP16 decode worker on three nodes at
+concurrency 64, 128, and 256. NIXL performs direct P/D KV transfer; KV remains
+GPU-resident and no MooncakeStore tier is configured.
+
 ### DeepSeek-V4.1-Flash DSpark on H200
 
 `dsv41flash-fp4-h200-vllm-agentic-dspark` is the H200 AgentX arm of the
