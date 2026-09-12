@@ -127,6 +127,31 @@ def equivalent(predicted: str | None, reference: str) -> bool:
         return " ".join(predicted.split()) == " ".join(reference.split())
 
 
+def answer_kind(reference: str) -> str:
+    """Coarse type of the expected answer, for splitting the delta.
+
+    CRUXEval-O mixes two very different demands. Some items want a value the
+    model has to compute (an int, a bool); many want a string or container
+    that is largely a rearrangement of characters already present in the
+    prompt. An n-gram memory is exactly the mechanism that would help with the
+    second and not the first, so the headline delta is not interpretable
+    without this split.
+    """
+    try:
+        value = ast.literal_eval(reference)
+    except (ValueError, SyntaxError, MemoryError, TypeError, RecursionError):
+        return "unparsed"
+    if isinstance(value, bool) or value is None:
+        return "bool/None"
+    if isinstance(value, str):
+        return "str"
+    if isinstance(value, (int, float)):
+        return "number"
+    if isinstance(value, (list, tuple, set, dict)):
+        return "container"
+    return "other"
+
+
 def _mcnemar(only_baseline: int, only_ablated: int) -> dict:
     """Paired-binary significance for the flips, which is what we sampled."""
     n = only_baseline + only_ablated
@@ -227,6 +252,7 @@ def main() -> int:
 
     correct: dict[str, list[bool]] = {}
     samples: dict[str, list[dict]] = {}
+    records: dict[str, list[dict]] = {}
     coverage: dict[str, dict] = {}
     for arm, mode in ARMS.items():
         gate_probe.set_mode(meter_dir, mode)
@@ -246,6 +272,12 @@ def main() -> int:
                               "predicted": predicted, "correct": ok})
         correct[arm] = flags
         samples[arm] = shown
+        records[arm] = [
+            {"id": row.get("id"), "reference": row["output"],
+             "predicted": extract(out.outputs[0].text if out.outputs else ""),
+             "correct": ok}
+            for row, out, ok in zip(rows, outputs, flags)
+        ]
         stats = gate_probe.read_meter(meter_dir)
         coverage[arm] = dict(stats, empty_generations=empty)
         logger.info("%s: pass@1=%.4f empty=%d meter=%s", arm,
@@ -253,6 +285,23 @@ def main() -> int:
         if empty > len(rows) // 10:
             logger.error("%s: %d/%d generations were empty -- the score is not "
                          "a measurement of the model", arm, empty, len(rows))
+
+    # Split the delta by what the answer actually demands.
+    kinds = [answer_kind(row["output"]) for row in rows]
+    by_kind = {}
+    for kind in sorted(set(kinds)):
+        sel = [i for i, k in enumerate(kinds) if k == kind]
+        b = [correct["baseline"][i] for i in sel]
+        a = [correct["ablated"][i] for i in sel]
+        by_kind[kind] = {
+            "items": len(sel),
+            "pass@1_baseline": round(sum(b) / len(sel), 4),
+            "pass@1_ablated": round(sum(a) / len(sel), 4),
+            "delta": round((sum(a) - sum(b)) / len(sel), 4),
+            "only_baseline_correct": sum(1 for x, y in zip(b, a) if x and not y),
+            "only_ablated_correct": sum(1 for x, y in zip(b, a) if y and not x),
+        }
+        logger.info("kind %s: %s", kind, json.dumps(by_kind[kind]))
 
     base, abl = correct["baseline"], correct["ablated"]
     only_base = sum(1 for b, a in zip(base, abl) if b and not a)
@@ -272,6 +321,7 @@ def main() -> int:
             "only_ablated_correct": only_abl,
             "mcnemar": _mcnemar(only_base, only_abl),
         },
+        "by_answer_kind": by_kind,
         "coverage": coverage,
         "samples": samples,
     }
@@ -280,6 +330,13 @@ def main() -> int:
 
     with open(os.path.join(args.out, "cruxeval_ablation.json"), "w") as handle:
         json.dump(report, handle, indent=2)
+    # Per-item flags go to their own file: they are what makes any later
+    # slice of this result possible without paying for another run.
+    with open(os.path.join(args.out, "cruxeval_items.json"), "w") as handle:
+        json.dump(records, handle, indent=2)
+    print("===ENGRAM_CRUXEVAL_KINDS_BEGIN===")
+    print(json.dumps(by_kind))
+    print("===ENGRAM_CRUXEVAL_KINDS_END===")
     print("===ENGRAM_CRUXEVAL_JSON_BEGIN===")
     print(json.dumps(report))
     print("===ENGRAM_CRUXEVAL_JSON_END===")
