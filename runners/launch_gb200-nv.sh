@@ -850,8 +850,12 @@ if [ -d "$LOGS_DIR" ]; then
         cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
         cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
     fi
-    mkdir -p "$GITHUB_WORKSPACE/LOGS"
-    cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/"
+    if powerx_fixed_8k1k; then
+        mkdir -p "$GITHUB_WORKSPACE/LOGS"
+        cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/"
+    else
+        cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+    fi
     bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 else
     echo "Warning: Logs directory not found at $LOGS_DIR"
@@ -922,4 +926,4 @@ if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
     copy_eval_artifacts "$LOGS_DIR/eval_results" "$GITHUB_WORKSPACE" || exit 1
 fi
 
-exit "${SRT_JOB_RC:-1}"
+exit "$SRT_JOB_RC"

@@ -128,3 +128,22 @@ scancel() { :; }
         assert not (runtime / "outputs").exists()
     assert (workspace / "LOGS/power/manifest.json").read_text() == '{"retained": true}'
     assert (workspace / "LOGS/power/power-producer-sha.txt").read_text() == "fixture-producer"
+
+
+@pytest.mark.parametrize("overrides", [{"REQUIRE_POWER": "0"}, {"IS_AGENTIC": "1"},
+                                       {"SCENARIO_TYPE": "agentic-coding"}, {"EVAL_ONLY": "true"}])
+def test_snapshot_leaves_unselected_runtime_artifacts_untouched(tmp_path, overrides):
+    logs = tmp_path / "runtime-logs"
+    logs.mkdir()
+    (logs / "sentinel").write_text("existing runtime output")
+    result = subprocess.run(
+        ["bash", "-c", 'source "$1"; powerx_snapshot_srt', "test", str(ROOT / "runners/powerx_8k1k.sh")],
+        env={**os.environ, "GITHUB_WORKSPACE": str(tmp_path), "LOGS_DIR": str(logs),
+             "REQUIRE_POWER": "1", "ISL": "8192", "OSL": "1024", "IS_AGENTIC": "0",
+             "EVAL_ONLY": "false", "SCENARIO_TYPE": "fixed-seq-len", **overrides},
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert not (tmp_path / "LOGS").exists()
+    assert not (tmp_path / "multinode_server_logs.tar.gz").exists()
+    assert list(logs.iterdir()) == [logs / "sentinel"]

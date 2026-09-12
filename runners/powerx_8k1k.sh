@@ -27,6 +27,7 @@ powerx_prepare_srt() {
 }
 
 powerx_snapshot_srt() {
+    powerx_fixed_8k1k || return 0
     [[ -n "${LOGS_DIR:-}" && -d "$LOGS_DIR" ]] || return 0
     if [[ "${USES_DCGM_POWER:-0}" == "1" ]]; then
         mkdir -p "$LOGS_DIR/power"

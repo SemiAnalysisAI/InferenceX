@@ -320,8 +320,10 @@ EOF
 
     echo "Submitting job with srtctl..."
 
-    powerx_prepare_srt || exit 1
-    CONFIG_PATH="${CONFIG_FILE%%:*}"
+    if powerx_fixed_8k1k; then
+        powerx_prepare_srt || exit 1
+        CONFIG_PATH="${CONFIG_FILE%%:*}"
+    fi
     # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
     sed -i '/^health_check:/,/^[^ ]/{ /^health_check:/d; /^  /d; }' "$CONFIG_PATH"
@@ -353,9 +355,13 @@ EOF
     # srtctl creates logs in outputs/JOB_ID/logs/
     LOGS_DIR="outputs/$JOB_ID/logs"
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
-    trap 'rc=$?; powerx_snapshot_srt; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
-    trap 'exit 130' INT
-    trap 'exit 143' TERM HUP
+    if powerx_fixed_8k1k; then
+        trap 'rc=$?; powerx_snapshot_srt; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
+        trap 'exit 130' INT
+        trap 'exit 143' TERM HUP
+    else
+        trap 'rc=$?; bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT INT TERM HUP
+    fi
 
     SRT_JOB_RC=0
     stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
@@ -398,8 +404,12 @@ EOF
         cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
     fi
 
-    mkdir -p "$GITHUB_WORKSPACE/LOGS"
-    cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/"
+    if powerx_fixed_8k1k; then
+        mkdir -p "$GITHUB_WORKSPACE/LOGS"
+        cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/"
+    else
+        cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+    fi
     bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then

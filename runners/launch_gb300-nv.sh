@@ -647,8 +647,12 @@ _snapshot_server_logs() {
         # Copy + tar are independent best-effort; an in-flight write
         # from a worker .out file at SIGTERM time would otherwise abort
         # the whole script before either succeeds.
-        mkdir -p "$GITHUB_WORKSPACE/LOGS"
-        cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/" 2>/dev/null || true
+        if powerx_fixed_8k1k; then
+            mkdir -p "$GITHUB_WORKSPACE/LOGS"
+            cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/" 2>/dev/null || true
+        else
+            cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
+        fi
         tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" . 2>/dev/null || true
     fi
 }

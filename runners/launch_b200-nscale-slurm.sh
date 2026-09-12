@@ -399,8 +399,12 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
     cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
 fi
 
-mkdir -p "$GITHUB_WORKSPACE/LOGS"
-cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/"
+if powerx_fixed_8k1k; then
+    mkdir -p "$GITHUB_WORKSPACE/LOGS"
+    cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/"
+else
+    cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+fi
 bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 
 if [[ "${EVAL_ONLY:-false}" != "true" ]]; then

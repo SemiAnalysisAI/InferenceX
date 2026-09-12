@@ -477,8 +477,12 @@ EOF
         cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
     fi
 
-    mkdir -p "$GITHUB_WORKSPACE/LOGS"
-    cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/"
+    if powerx_fixed_8k1k; then
+        mkdir -p "$GITHUB_WORKSPACE/LOGS"
+        cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/"
+    else
+        cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+    fi
     tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
