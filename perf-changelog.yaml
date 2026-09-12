@@ -7399,3 +7399,12 @@
     - "Disable adaptive verification in the EVAL_ONLY DSpark config as well. It trims verification requests on device, which the ROCm DeepseekV4IndexerBackend does not support, so the eval-only engine refused to start (run 34651830283, c32). Evals keep real block rejection; throughput settings are unchanged."
     - "EVAL_ONLY 的 DSpark 配置同样关闭自适应验证：它会在设备端裁剪验证请求，而 ROCm 的 DeepseekV4IndexerBackend 不支持该操作，导致仅评测引擎拒绝启动（运行 34651830283，c32）。评测仍保留真实块拒绝采样；吞吐设置不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace unavailable vLLM build 5894fdf with 3696c77 and route the existing Kimi-K3 recipe to B300 DSXE. This establishes a new runtime baseline."
+    - "恢复 Kimi-K3 B300 镜像与集群路由。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3040
