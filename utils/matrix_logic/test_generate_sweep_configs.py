@@ -3244,7 +3244,8 @@ class TestE2EConfigSplitting:
 
 
 @pytest.mark.parametrize("multinode", [False, True])
-def test_require_power_is_scoped_to_one_fixed_sequence(multinode, sample_single_node_config,
+@pytest.mark.parametrize("power_key", ["require-power", "require_power"])
+def test_require_power_is_scoped_to_one_fixed_sequence(multinode, power_key, sample_single_node_config,
                                                        sample_multinode_config, sample_runner_config):
     from infx.matrix.generate import expand_full_sweep, select_matrix_evals
     from infx.matrix.validation import MultiNodeSeqLenConfig, SingleNodeSeqLenConfig
@@ -3257,7 +3258,7 @@ def test_require_power_is_scoped_to_one_fixed_sequence(multinode, sample_single_
         sequences[-1]["isl"] = 8192
     before = expand_full_sweep(config, sample_runner_config)
     assert all("require-power" not in row for row in before)
-    sequences[-1]["require-power"] = True
+    sequences[-1][power_key] = True
     schema = MultiNodeSeqLenConfig if multinode else SingleNodeSeqLenConfig
     schema.model_validate(sequences[-1])
     after = expand_full_sweep(config, sample_runner_config)
@@ -3267,6 +3268,6 @@ def test_require_power_is_scoped_to_one_fixed_sequence(multinode, sample_single_
     evals = select_matrix_evals(copy.deepcopy(after), mode="subset")
     assert evals
     assert all("require-power" not in row for row in evals)
-    sequences[0]["require-power"] = True
+    sequences[0][power_key] = True
     with pytest.raises(ValueError, match="only fixed-sequence 8192/1024"):
         expand_full_sweep(config, sample_runner_config)
