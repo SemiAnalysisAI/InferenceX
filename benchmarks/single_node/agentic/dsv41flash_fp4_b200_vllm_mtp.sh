@@ -18,5 +18,37 @@ if [[ "$CONC" == 14 ]]; then
     exec bash "$INFERENCEX_REPO_ROOT/analysis/engram/tbench_run.sh"
 fi
 
+# conc 15/16 are the TP4 single-node analysis tasks, one node each:
+#   15 = CRUXEval-O output prediction, baseline vs Engram removed, nothing executed
+#   16 = likelihood ablation with the phase arms (prefill-only / decode-only)
+if [[ "$CONC" == 15 || "$CONC" == 16 ]]; then
+    export GPU_COUNT="$TP"
+    if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
+        hf download "$MODEL" --local-dir "$MODEL_PATH"
+    else
+        hf download "$MODEL"
+        export MODEL_PATH="$MODEL"
+    fi
+    nvidia-smi
+    mkdir -p "$RESULT_DIR"
+    export PYTHONUNBUFFERED=1
+    export VLLM_ENGINE_READY_TIMEOUT_S=3600
+    export VLLM_USE_V2_MODEL_RUNNER=1
+    export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+    python3 -m pip install -q --no-input datasets 2>&1 | tail -2 || true
+    cd "$INFERENCEX_REPO_ROOT"
+    if [[ "$CONC" == 15 ]]; then
+        exec python3 analysis/engram/cruxeval_ablation.py \
+            --model "$MODEL_PATH" --tp "$TP" \
+            --limit "${ENGRAM_CRUX_LIMIT:-0}" \
+            --out "$RESULT_DIR/engram_cruxeval"
+    fi
+    exec python3 analysis/engram/nll_ablation.py \
+        --model "$MODEL_PATH" --tp "$TP" \
+        --arms "${ENGRAM_NLL_ARMS:-baseline,ablated,prefill_only,decode_only}" \
+        --chunks-per-domain "${ENGRAM_NLL_CHUNKS:-100}" \
+        --out "$RESULT_DIR/engram_nll"
+fi
+
 echo "dsv41flash b200: no mode for CONC=$CONC on this analysis branch" >&2
 exit 1

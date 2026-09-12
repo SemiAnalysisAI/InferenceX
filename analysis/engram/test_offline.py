@@ -386,3 +386,84 @@ def test_gate_matches_the_kernels_sign_and_clamp_branches():
     # Documented divergence at exactly zero: sign(0)==0 here, kernel goes positive.
     assert abs(float(torch.sigmoid(torch.tensor(0.0))) - 0.5) < 1e-9
     assert abs(kernel_gate(0.0) - 0.5) < 1e-3
+
+
+def test_phase_mask_splits_on_the_boundary():
+    """prefix/suffix are complements at the boundary and cover every token."""
+    pm = gate_probe.phase_mask
+    dev = torch.device("cpu")
+    pre = pm("prefix", 4, 10, dev)
+    suf = pm("suffix", 4, 10, dev)
+    assert pre.dtype == torch.bool and pre.shape == (10,)
+    assert pre.sum() == 4 and suf.sum() == 6
+    assert bool((pre ^ suf).all()), "prefix and suffix must partition the call"
+    assert not pm("none", 4, 10, dev).any()
+    # An incoming token_mask is intersected, never widened.
+    incoming = torch.zeros(10, dtype=torch.bool)
+    incoming[:2] = True
+    assert int(pm("prefix", 4, 10, dev, incoming).sum()) == 2
+    assert int(pm("suffix", 4, 10, dev, incoming).sum()) == 0
+
+
+def test_meter_applies_the_selected_phase_mask(tmp_path):
+    """The meter must honour the mode file, not just the legacy boolean."""
+    masks = []
+
+    class Fake:
+        def forward(self, hidden_states, hash_ids, token_mask=None):
+            masks.append(None if token_mask is None else token_mask.clone())
+            return hidden_states + 0.01 * torch.ones_like(hidden_states)
+
+    meter = str(tmp_path)
+    saved = gate_probe._find_engram_class
+    gate_probe._find_engram_class = lambda: Fake
+    os.environ[gate_probe.METER_DIR_ENV] = meter
+    try:
+        gate_probe.install_meter()
+        obj = Fake()
+        obj.layer_hash_index = 0
+        h = torch.randn(8, 2, 4)
+        hash_ids = torch.zeros(8, 2, dtype=torch.long)
+        for mode, boundary, expect in (
+            ("all", 0, None), ("none", 0, 0), ("prefix", 3, 3), ("suffix", 3, 5),
+        ):
+            masks.clear()
+            gate_probe.set_mode(meter, mode, boundary)
+            Fake.forward(obj, h, hash_ids)
+            if expect is None:
+                # "all" must not re-run the forward with a mask at all.
+                assert masks == [None], masks
+            else:
+                assert masks[-1] is not None and int(masks[-1].sum()) == expect, (mode, masks)
+    finally:
+        gate_probe._find_engram_class = saved
+        os.environ.pop(gate_probe.METER_DIR_ENV, None)
+
+
+def _crux():
+    import importlib
+    return importlib.import_module("engram.cruxeval_ablation")
+
+
+def test_cruxeval_grades_literals_without_executing_anything():
+    crux = _crux()
+    ok = lambda text, ref: crux.equivalent(crux.extract(text), ref)
+    assert ok("[ANSWER]\nassert f(17) == 17\n[/ANSWER]", "17")
+    assert ok("[ANSWER]\nassert f(x) == {'a': 1}\n[/ANSWER]", "{'a':1}")
+    assert ok('[ANSWER]\nassert f("s") == "s"\n[/ANSWER]', "'s'")
+    assert ok("[ANSWER]\n[1, 2, 3]\n[/ANSWER]", "[1, 2, 3]")
+    assert not ok("[ANSWER]\nassert f(x) == 'abc'\n[/ANSWER]", "'abd'")
+    assert not ok("", "3")
+    # An unsimplified expression is wrong, not evaluated -- the task forbids it
+    # and we refuse to execute model output to find out.
+    assert not ok("[ANSWER]\nassert f(x) == 1 + 1\n[/ANSWER]", "2")
+    # A call in the answer must never be invoked.
+    assert not ok("[ANSWER]\nassert f(x) == __import__('os').getpid()\n[/ANSWER]", "1")
+
+
+def test_cruxeval_prompt_shape():
+    crux = _crux()
+    prompt = crux.build_prompt("def f(a):\n    return a * 2", "3")
+    assert "assert f(3) == ??" in prompt
+    assert prompt.rstrip().endswith("[ANSWER]")
+    assert "[/ANSWER]" in prompt  # the two-shot exemplars are present

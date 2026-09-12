@@ -10232,6 +10232,9 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
       # conc 13/14 are Terminal-Bench arms, not concurrencies: 13 serves with
       # Engram active, 14 with its contribution removed. TP8 = a full node each.
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [13, 14] }
+      # conc 15 = CRUXEval-O ablation, conc 16 = likelihood ablation with the
+      # prefill-only / decode-only phase arms. TP4, one node per task.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [15, 16] }
 dsv41flash-fp4-h100-vllm-agentic-dspark:
   image: vllm/vllm-openai:deepseekv41-flash-0909
   model: deepseek-ai/DeepSeek-V4.1-Flash

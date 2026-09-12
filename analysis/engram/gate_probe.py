@@ -39,6 +39,7 @@ contribution measures 0.0 and not merely small.
 from __future__ import annotations
 
 import importlib
+import json
 import logging
 import os
 import sys
@@ -364,19 +365,82 @@ METER_DIR_ENV = "ENGRAM_METER_DIR"
 _ABLATE_SENTINEL = "ABLATE_NOW"
 
 
-def set_ablate(meter_dir: str, on: bool) -> None:
-    """Toggle ablation for the worker processes via a sentinel file.
+_MODE_FILE = "ENGRAM_MODE.json"
+
+# Which token positions Engram is allowed to act on, within one forward call.
+#   all    -- unmodified model
+#   none   -- full ablation (the original ABLATE_NOW behaviour)
+#   prefix -- positions < boundary only
+#   suffix -- positions >= boundary only
+MODES = ("all", "none", "prefix", "suffix")
+
+
+def set_mode(meter_dir: str, mode: str, boundary: int = 0) -> None:
+    """Select the Engram masking mode for the worker processes.
 
     The workers are separate interpreters, so the driver cannot flip a global
-    in them. A file check per call costs microseconds and keeps baseline and
-    ablated measurements inside one process lifetime, which is the whole point
-    -- same weights, same allocation, one variable.
+    in them. A file check per call costs microseconds and keeps every arm
+    inside one process lifetime, which is the whole point -- same weights,
+    same allocation, one variable.
     """
-    path = os.path.join(meter_dir, _ABLATE_SENTINEL)
-    if on:
-        open(path, "w").close()
-    elif os.path.exists(path):
-        os.unlink(path)
+    if mode not in MODES:
+        raise ValueError("unknown engram mode %r" % (mode,))
+    path = os.path.join(meter_dir, _MODE_FILE)
+    legacy = os.path.join(meter_dir, _ABLATE_SENTINEL)
+    if mode == "all":
+        for stale in (path, legacy):
+            if os.path.exists(stale):
+                os.unlink(stale)
+        return
+    tmp = path + ".tmp"
+    with open(tmp, "w") as handle:
+        json.dump({"mode": mode, "boundary": int(boundary)}, handle)
+    os.replace(tmp, path)
+    # Keep the legacy sentinel in sync so anything still reading it agrees.
+    if mode == "none":
+        open(legacy, "w").close()
+    elif os.path.exists(legacy):
+        os.unlink(legacy)
+
+
+def set_ablate(meter_dir: str, on: bool) -> None:
+    """Back-compatible boolean form of set_mode."""
+    set_mode(meter_dir, "none" if on else "all")
+
+
+def _read_mode(meter_dir: str):
+    """(mode, boundary) for this call; falls back to the legacy sentinel."""
+    if not meter_dir:
+        return "all", 0
+    try:
+        with open(os.path.join(meter_dir, _MODE_FILE)) as handle:
+            spec = json.load(handle)
+        mode = spec.get("mode", "all")
+        return (mode if mode in MODES else "all"), int(spec.get("boundary", 0))
+    except (OSError, ValueError):
+        pass
+    if os.path.exists(os.path.join(meter_dir, _ABLATE_SENTINEL)):
+        return "none", 0
+    return "all", 0
+
+
+@torch.no_grad()
+def phase_mask(mode, boundary, num_tokens, device, token_mask=None):
+    """Per-token gate mask for a phase-restricted Engram.
+
+    The mask is the module's own documented mechanism -- "token_mask: [T],
+    False shuts the gate so those positions pass through untouched" -- applied
+    by the same fused kernel that normally consumes the gate, so no assumption
+    about return conventions is involved.
+    """
+    if mode == "none":
+        mask = torch.zeros(num_tokens, dtype=torch.bool, device=device)
+    else:
+        idx = torch.arange(num_tokens, device=device)
+        mask = idx < boundary if mode == "prefix" else idx >= boundary
+    if token_mask is not None:
+        mask = mask & token_mask.reshape(-1).to(torch.bool)
+    return mask
 
 
 def clear_meter(meter_dir: str) -> None:
@@ -423,7 +487,7 @@ def install_meter() -> None:
     if getattr(cls, "_gate_meter_installed", False):
         return
     original = cls.forward
-    state = {"returns_updated_hidden": None}
+    state = {"returns_updated_hidden": None, "tokens_seen": []}
 
     def forward(self, hidden_states, hash_ids, token_mask=None):
         meter_dir = os.environ.get(METER_DIR_ENV)
@@ -433,20 +497,14 @@ def install_meter() -> None:
             _say("meter: rel-norm of the real contribution = %.6f"
                  % float((out.float() - hidden_states.float()).norm()
                          / (hidden_states.float().norm() + 1e-12)))
-        ablate = bool(meter_dir) and os.path.exists(
-            os.path.join(meter_dir, _ABLATE_SENTINEL)
-        )
-        if ablate:
-            # Use the module's own gate-shutting path rather than guessing what
-            # forward returns. Its docstring is explicit: "token_mask: [T],
-            # False shuts the gate so those positions pass through untouched."
-            # An all-False mask is therefore an exact, supported ablation, and
-            # it is applied by the same fused kernel that normally consumes the
-            # gate -- no assumption about return conventions at all.
-            shut = torch.zeros(
-                hash_ids.shape[0], dtype=torch.bool, device=hidden_states.device
+        mode, boundary = _read_mode(meter_dir)
+        if mode != "all":
+            mask = phase_mask(
+                mode, boundary, hash_ids.shape[0],
+                hidden_states.device, token_mask,
             )
-            returned = original(self, hidden_states, hash_ids, shut)
+            state["tokens_seen"].append(int(hash_ids.shape[0]))
+            returned = original(self, hidden_states, hash_ids, mask)
         else:
             returned = out
         if meter_dir:
