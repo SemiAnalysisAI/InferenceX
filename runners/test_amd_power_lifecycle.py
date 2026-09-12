@@ -9,6 +9,20 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _docker_container_env(required):
+    job = (ROOT / 'benchmarks/multi_node/amd_utils/job.slurm').read_text()
+    start = job.index('DOCKER_ENV_COMMON=(')
+    block = job[start:job.index('\n)', start) + 2]
+    # Execute the submit-shell array and the node-shell expansion used by docker.
+    script = block + '\ndocker() { printf \'%s\\0\' "$@"; }; export -f docker;\n' + (
+        'bash -c "docker run ${DOCKER_ENV_COMMON[*]} test-image"')
+    result = subprocess.run(['bash', '-e', '-c', script],
+                            env={'PATH': '/usr/bin:/bin', 'WS_PATH': '/workspace',
+                                 'REQUIRE_POWER': required}, capture_output=True, check=True)
+    args = result.stdout.decode().split('\0')
+    return dict(args[index + 1].split('=', 1) for index, arg in enumerate(args) if arg == '-e')
+
+
 @pytest.mark.parametrize('phase', ['ready', 'done'])
 @pytest.mark.parametrize('required', ['', '1', 'true', 'YES'])
 @pytest.mark.parametrize('serving_rc', [0, 7])
@@ -33,7 +47,7 @@ def test_amd_collector_failure_respects_requirement(tmp_path, phase, required, s
     result = subprocess.run(['bash', str(scripts / 'bench.sh'), '1', '1', '1', '1',
                              '/model', 'test', str(tmp_path / 'logs'), '8192', '1024', '1'],
                             env={**os.environ, 'POWERX_CONTROL_DIR': str(control), 'NNODES': '1',
-                                 'REQUIRE_POWER': required, 'SERVING_RC': str(serving_rc),
+                                 'REQUIRE_POWER': _docker_container_env(required).get('REQUIRE_POWER', ''), 'SERVING_RC': str(serving_rc),
                                  'CALL_RECEIPT': str(receipt), 'POWERX_HOST_UID': str(os.getuid()),
                                  'POWERX_HOST_GID': str(os.getgid())}, capture_output=True, text=True, timeout=10)
     expected = 1 if required and phase == 'ready' else serving_rc or int(bool(required))
@@ -61,7 +75,7 @@ exit "$SERVING_RC"
                                  'GPUS_PER_NODE': '8', 'PREFILL_TP_SIZE': '9',
                                  'DECODE_TP_SIZE': '8', 'xP': '1', 'yD': '1',
                                  'NNODES': '2' if fault == 'topology' else '3',
-                                 'NODE_RANK': '0', 'REQUIRE_POWER': required,
+                                 'NODE_RANK': '0', 'REQUIRE_POWER': _docker_container_env(required).get('REQUIRE_POWER', ''),
                                  'SERVING_RC': str(serving_rc), 'CALL_RECEIPT': str(receipt)},
                             capture_output=True, text=True, timeout=5)
     is_required = required in ['1', 'true', 'YES']
