@@ -72,7 +72,7 @@ KDA_ARGS=()
 case "$CONC" in
     1|2|4|8)
         DCP_SIZE="${DCP_SIZE:-1}"
-        SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-8}"
+        SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-4}"
         case "$SPEC_NUM_TOKENS" in
             1) SYNTHETIC_ACCEPT_LEN=1.85 ;;
             2) SYNTHETIC_ACCEPT_LEN=2.51 ;;
@@ -96,7 +96,7 @@ case "$CONC" in
         SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 ))
         KDA_ARGS=(--additional-config '{"kda_prefill_backend":"triton"}')
         MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( CONC > 4 ? CONC : 4 ))}"
-        MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-8192}"
+        MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-16384}"
         ;;
     *)
         DCP_SIZE="${DCP_SIZE:-8}"
@@ -108,7 +108,13 @@ case "$CONC" in
 esac
 export DCP_SIZE
 
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
+if [ "$DCP_SIZE" -gt 1 ]; then
+    export VLLM_USE_DIRECT_DCP_A2A=0
+    export VLLM_USE_DIRECT_DCP_Q_GATHER=0
+    export VLLM_USE_DIRECT_DCP_KV_GATHER=0
+fi
+
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.89}"
 CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL_DECODE_ONLY}"
 
 LADDER=$(( MAX_NUM_SEQS * SPEC_ROWS ))
