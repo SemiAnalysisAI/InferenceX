@@ -35,6 +35,9 @@ BENCH_MAX_CONCURRENCY="${BENCH_MAX_CONCURRENCY:-512}"
 
 # Extract the maximum concurrency from the x-delimited list
 BENCH_MAX_CONC_VALUE=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
+# Exported so the models.yaml config-loader's inline Python (eval_formula)
+# can resolve formulas like "BENCH_MAX_CONC_VALUE*2" for max_running_requests.
+export BENCH_MAX_CONC_VALUE
 
 # Dry Run for debugging purpose
 DRY_RUN="${DRY_RUN:-0}"
@@ -122,7 +125,11 @@ def eval_formula(val):
 def parse_range(cuda_range, default_start, default_end):
     if '-' in str(cuda_range):
         s, e = str(cuda_range).split('-')
-        return s, e
+        # Resolve formula strings (e.g. "BENCH_MAX_CONC_VALUE/4") the same way
+        # chunked_prefill_size/max_running_requests do, so a range end like
+        # "1-BENCH_MAX_CONC_VALUE/4" doesn't reach `seq` as a literal,
+        # non-numeric string (which fails outright).
+        return str(eval_formula(s)), str(eval_formula(e))
     return str(default_start), str(default_end)
 
 # Output shell variables
@@ -140,13 +147,20 @@ print(f'PREFILL_DISABLE_CUDA_GRAPH=\"{prefill.get(\"disable_cuda_graph\", False)
 
 dp = prefill.get('dp', {})
 no_dp = prefill.get('no_dp', {})
-print(f'PREFILL_MAX_RUNNING_REQUESTS_DP=\"{dp.get(\"max_running_requests\", 24)}\"')
+# Per-bucket mem_fraction_static override (falls back to the role-level
+# PREFILL_MEM_FRACTION_STATIC above when a model only sets one value for
+# both DP and no-DP, as all but DeepSeek-V4-Pro-AgentX currently do). This is
+# NOT routed through eval_formula(): that helper casts its result to int(),
+# which would silently truncate a float like 0.92 down to 0.
+print(f'PREFILL_MEM_FRACTION_STATIC_DP=\"{dp.get(\"mem_fraction_static\", prefill.get(\"mem_fraction_static\", 0.8))}\"')
+print(f'PREFILL_MEM_FRACTION_STATIC_NO_DP=\"{no_dp.get(\"mem_fraction_static\", prefill.get(\"mem_fraction_static\", 0.8))}\"')
+print(f'PREFILL_MAX_RUNNING_REQUESTS_DP=\"{eval_formula(dp.get(\"max_running_requests\", 24))}\"')
 print(f'PREFILL_CHUNKED_PREFILL_SIZE_DP=\"{eval_formula(dp.get(\"chunked_prefill_size\", 262144))}\"')
 print(f'PREFILL_CUDA_GRAPH_BS_DP=\"{dp.get(\"cuda_graph_bs\", \"1 2 3\")}\"')
 print(f'PREFILL_CONTEXT_LENGTH_DP=\"{dp.get(\"context_length\", \"\")}\"')
 print(f'PREFILL_MAX_TOTAL_TOKENS_DP=\"{dp.get(\"max_total_tokens\", \"\")}\"')
 print(f'PREFILL_ENABLE_TWO_BATCH_OVERLAP_DP=\"{dp.get(\"enable_two_batch_overlap\", False)}\"')
-print(f'PREFILL_MAX_RUNNING_REQUESTS_NO_DP=\"{no_dp.get(\"max_running_requests\", 128)}\"')
+print(f'PREFILL_MAX_RUNNING_REQUESTS_NO_DP=\"{eval_formula(no_dp.get(\"max_running_requests\", 128))}\"')
 print(f'PREFILL_CHUNKED_PREFILL_SIZE_NO_DP=\"{eval_formula(no_dp.get(\"chunked_prefill_size\", 262144))}\"')
 print(f'PREFILL_CONTEXT_LENGTH_NO_DP=\"{no_dp.get(\"context_length\", \"\")}\"')
 print(f'PREFILL_MAX_TOTAL_TOKENS_NO_DP=\"{no_dp.get(\"max_total_tokens\", \"\")}\"')
@@ -155,7 +169,6 @@ print(f'PREFILL_CUDA_GRAPH_BS_NO_DP_START=\"{s}\"')
 print(f'PREFILL_CUDA_GRAPH_BS_NO_DP_END=\"{e}\"')
 
 print(f'DECODE_MEM_FRACTION_STATIC=\"{decode.get(\"mem_fraction_static\", 0.85)}\"')
-print(f'DECODE_PREFILL_ROUND_ROBIN_BALANCE=\"{decode.get(\"prefill_round_robin_balance\", True)}\"')
 print(f'DECODE_DISAGG_ENABLE_RADIX_CACHE=\"{decode.get(\"disagg_decode_enable_radix_cache\", False)}\"')
 
 dp = decode.get('dp', {})
@@ -163,7 +176,12 @@ ep_only = decode.get('ep_only', {})
 no_dp = decode.get('no_dp', {})
 
 # Decode DP config
-print(f'DECODE_MAX_RUNNING_REQUESTS_DP=\"{dp.get(\"max_running_requests\", 4096)}\"')
+# Per-bucket mem_fraction_static override -- see PREFILL_MEM_FRACTION_STATIC_DP
+# comment above for why this bypasses eval_formula().
+print(f'DECODE_MEM_FRACTION_STATIC_DP=\"{dp.get(\"mem_fraction_static\", decode.get(\"mem_fraction_static\", 0.85))}\"')
+print(f'DECODE_MEM_FRACTION_STATIC_EP_ONLY=\"{ep_only.get(\"mem_fraction_static\", decode.get(\"mem_fraction_static\", 0.85))}\"')
+print(f'DECODE_MEM_FRACTION_STATIC_NO_DP=\"{no_dp.get(\"mem_fraction_static\", decode.get(\"mem_fraction_static\", 0.85))}\"')
+print(f'DECODE_MAX_RUNNING_REQUESTS_DP=\"{eval_formula(dp.get(\"max_running_requests\", 4096))}\"')
 print(f'DECODE_CHUNKED_PREFILL_SIZE_DP=\"{eval_formula(dp.get(\"chunked_prefill_size\", 262144))}\"')
 print(f'DECODE_CONTEXT_LENGTH_DP=\"{dp.get(\"context_length\", \"\")}\"')
 s, e = parse_range(dp.get('cuda_graph_bs_range', '1-160'), 1, 160)
@@ -179,7 +197,7 @@ print(f'DECODE_CUDA_GRAPH_BS_EP_ONLY_START=\"{s}\"')
 print(f'DECODE_CUDA_GRAPH_BS_EP_ONLY_END=\"{e}\"')
 
 # Decode no-DP config
-print(f'DECODE_MAX_RUNNING_REQUESTS_NO_DP=\"{no_dp.get(\"max_running_requests\", 128)}\"')
+print(f'DECODE_MAX_RUNNING_REQUESTS_NO_DP=\"{eval_formula(no_dp.get(\"max_running_requests\", 128))}\"')
 print(f'DECODE_CHUNKED_PREFILL_SIZE_NO_DP=\"{eval_formula(no_dp.get(\"chunked_prefill_size\", 262144))}\"')
 print(f'DECODE_CONTEXT_LENGTH_NO_DP=\"{no_dp.get(\"context_length\", \"\")}\"')
 s, e = parse_range(no_dp.get('cuda_graph_bs_range', '1-128'), 1, 128)
@@ -197,6 +215,7 @@ if [[ "$PREFILL_ENABLE_DP" == "true" ]]; then
     prefill_context_length=$PREFILL_CONTEXT_LENGTH_DP
     prefill_max_total_tokens=$PREFILL_MAX_TOTAL_TOKENS_DP
     prefill_enable_two_batch_overlap=$PREFILL_ENABLE_TWO_BATCH_OVERLAP_DP
+    prefill_mem_fraction_static=$PREFILL_MEM_FRACTION_STATIC_DP
 else
     prefill_cuda_graph_bs=($(seq $PREFILL_CUDA_GRAPH_BS_NO_DP_START $PREFILL_CUDA_GRAPH_BS_NO_DP_END))
     prefill_max_running_requests=$PREFILL_MAX_RUNNING_REQUESTS_NO_DP
@@ -204,6 +223,7 @@ else
     prefill_context_length=$PREFILL_CONTEXT_LENGTH_NO_DP
     prefill_max_total_tokens=$PREFILL_MAX_TOTAL_TOKENS_NO_DP
     prefill_enable_two_batch_overlap="false"
+    prefill_mem_fraction_static=$PREFILL_MEM_FRACTION_STATIC_NO_DP
 fi
 
 # When both DP and EP are enabled, override max-running-requests with max bench concurrency
@@ -218,16 +238,34 @@ fi
 # Compute DP-dependent decode parameters (3-way: DP > EP-only > no_dp)
 if [[ "$DECODE_ENABLE_DP" == "true" ]]; then
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_DP_START $DECODE_CUDA_GRAPH_BS_DP_END))
-    decode_max_running_requests=$((DECODE_CUDA_GRAPH_BS_DP_END * DECODE_TP_SIZE))
+    # decode.dp.max_running_requests (YAML) is honored as an upper bound, not
+    # taken verbatim: the actual admissible concurrency can never exceed what
+    # the captured CUDA-graph range supports (cuda_graph_bs_end * TP_SIZE --
+    # each DP rank runs its own copy of the graph, one request per rank per
+    # step). Every existing model's YAML value (4096/1024/etc.) is already
+    # >= this computed ceiling, so taking the min is a no-op for them; it
+    # only bites for configs (like DeepSeek-V4-Pro-AgentX's
+    # BENCH_MAX_CONC_VALUE*2 formula) that intentionally want a smaller,
+    # concurrency-scaled cap.
+    decode_max_running_requests_computed=$((DECODE_CUDA_GRAPH_BS_DP_END * DECODE_TP_SIZE))
+    if [[ "$decode_max_running_requests_computed" -lt "$DECODE_MAX_RUNNING_REQUESTS_DP" ]]; then
+        decode_max_running_requests=$decode_max_running_requests_computed
+    else
+        decode_max_running_requests=$DECODE_MAX_RUNNING_REQUESTS_DP
+    fi
+    echo "[decode.dp max_running_requests] computed(cuda_graph_bs_end*TP)=$decode_max_running_requests_computed yaml=$DECODE_MAX_RUNNING_REQUESTS_DP -> using $decode_max_running_requests"
     decode_context_length=$DECODE_CONTEXT_LENGTH_DP
+    decode_mem_fraction_static=$DECODE_MEM_FRACTION_STATIC_DP
 elif [[ "$DECODE_ENABLE_EP" == "true" ]]; then
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_EP_ONLY_START $DECODE_CUDA_GRAPH_BS_EP_ONLY_END))
     decode_max_running_requests=$DECODE_MAX_RUNNING_REQUESTS_EP_ONLY
     decode_context_length=$DECODE_CONTEXT_LENGTH_EP_ONLY
+    decode_mem_fraction_static=$DECODE_MEM_FRACTION_STATIC_EP_ONLY
 else
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_NO_DP_START $DECODE_CUDA_GRAPH_BS_NO_DP_END))
     decode_max_running_requests=$DECODE_MAX_RUNNING_REQUESTS_NO_DP
     decode_context_length=$DECODE_CONTEXT_LENGTH_NO_DP
+    decode_mem_fraction_static=$DECODE_MEM_FRACTION_STATIC_NO_DP
 fi
 # In PD-disaggregation the decode must admit requests against the SAME context
 # length as prefill; otherwise decode accepts over-length requests that prefill
@@ -251,11 +289,11 @@ if [[ "$DECODE_ENABLE_DP" == "true" ]] && [[ "$DECODE_ENABLE_EP" == "true" ]]; t
 fi
 
 # Build the composed config strings (equivalent to the old MODEL_PREFILL_CONFIGS / MODEL_DECODE_CONFIGS)
-# disable_cuda_graph (model-level) routes prefill to --disable-cuda-graph instead of --cuda-graph-bs.
+# disable_cuda_graph (model-level) routes prefill to --disable-cuda-graph instead of --cuda-graph-bs-prefill.
 if [[ "$PREFILL_DISABLE_CUDA_GRAPH" == "True" ]] || [[ "$PREFILL_DISABLE_CUDA_GRAPH" == "true" ]]; then
-    PREFILL_MODE_FLAGS="--mem-fraction-static ${PREFILL_MEM_FRACTION_STATIC} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --disable-cuda-graph "
+    PREFILL_MODE_FLAGS="--mem-fraction-static ${prefill_mem_fraction_static} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --disable-cuda-graph "
 else
-    PREFILL_MODE_FLAGS="--mem-fraction-static ${PREFILL_MEM_FRACTION_STATIC} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --cuda-graph-bs ${prefill_cuda_graph_bs[*]} "
+    PREFILL_MODE_FLAGS="--mem-fraction-static ${prefill_mem_fraction_static} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --cuda-graph-bs-prefill ${prefill_cuda_graph_bs[*]} "
 fi
 
 if [[ "$PREFILL_DISABLE_RADIX_CACHE" == "True" ]] || [[ "$PREFILL_DISABLE_RADIX_CACHE" == "true" ]]; then
@@ -276,11 +314,8 @@ if [[ "$prefill_enable_two_batch_overlap" == "True" ]] || [[ "$prefill_enable_tw
     PREFILL_SDMA_ENV="MORI_ENABLE_SDMA=true"
 fi
 
-DECODE_MODE_FLAGS="--mem-fraction-static ${DECODE_MEM_FRACTION_STATIC} --max-running-requests ${decode_max_running_requests} --cuda-graph-bs ${decode_cuda_graph_bs[*]} "
+DECODE_MODE_FLAGS="--mem-fraction-static ${decode_mem_fraction_static} --max-running-requests ${decode_max_running_requests} --cuda-graph-bs-decode ${decode_cuda_graph_bs[*]} "
 
-if [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "True" ]] || [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "true" ]]; then
-    DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --prefill-round-robin-balance"
-fi
 if [[ -n "$decode_context_length" ]]; then
     DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --context-length ${decode_context_length}"
 fi
@@ -403,9 +438,23 @@ build_server_config() {
         mtp_config="${MODEL_MTP_FLAGS} --speculative-num-steps ${decode_mtp_size} --speculative-num-draft-tokens $((decode_mtp_size + 1))"
     fi
 
-    # DP config (only if DP is enabled)
+    # DP config (only if DP is enabled).
     if [[ "$enable_dp" == "true" ]]; then
         dp_config="$MODEL_DP_FLAGS"
+        # dp_flags may override a base_flags value (e.g. --swa-full-tokens-ratio);
+        # strip base_config's copy so the flag appears only once on the command line.
+        if [[ "$dp_config" == *"--swa-full-tokens-ratio"* ]]; then
+            base_config="$(echo "$base_config" | sed -E 's/--swa-full-tokens-ratio[[:space:]]+[0-9.]+//')"
+        fi
+        # --disable-shared-experts-fusion and base_flags' --enforce-shared-experts-fusion
+        # are documented by sglang as mutually exclusive (server_args.py). Two-batch
+        # overlap requires the shared expert NOT be fused into the routed list, so only
+        # override the base_flags default in that case; strip base_config's copy so
+        # both flags never land on the same command line.
+        if [[ "$prefill_enable_two_batch_overlap" == "True" ]] || [[ "$prefill_enable_two_batch_overlap" == "true" ]]; then
+            dp_config="$dp_config --disable-shared-experts-fusion"
+            base_config="$(echo "$base_config" | sed -E 's/--enforce-shared-experts-fusion//')"
+        fi
     fi
 
     # EP config (only if EP is enabled): a2a backend, deepep mode, ep-dispatch algo.
@@ -578,13 +627,248 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     # Prefill always gets HiCache.
     PREFILL_SERVER_CONFIG="$PREFILL_SERVER_CONFIG $(build_hicache_flags "$PREFILL_TP_SIZE")"
 
-
-    DECODE_SERVER_CONFIG="$DECODE_SERVER_CONFIG --page-size ${HICACHE_PAGE_SIZE}"
-    echo "[HiCache] KV_OFFLOADING=${KV_OFFLOADING} backend=${KV_OFFLOAD_BACKEND} applied to prefill only; decode mirrors --page-size ${HICACHE_PAGE_SIZE} for transfer compatibility (chunk cache under the mori transfer backend)"
+    echo "[HiCache] KV_OFFLOADING=${KV_OFFLOADING} backend=${KV_OFFLOAD_BACKEND} applied to prefill only"
     echo "[HiCache] params: io_backend=${HICACHE_IO_BACKEND}, mem_layout=${HICACHE_MEM_LAYOUT}, page_size=${HICACHE_PAGE_SIZE}, write_policy=${HICACHE_WRITE_POLICY}, prefetch_policy=${HICACHE_PREFETCH_POLICY}, storage_backend=${HICACHE_STORAGE_BACKEND:-none}"
     if [[ "$HICACHE_STORAGE_BACKEND" == "mooncake" ]]; then
         echo "[HiCache] Mooncake store: master=${MC_MASTER_ADDR} metadata=${MC_METADATA_SERVER} protocol=${MC_PROTOCOL} device=${MC_DEVICE} segment=${MC_GLOBAL_SEG} threads=${MC_MASTER_THREADS} eviction_watermark=${MC_EVICTION_HIGH_WATERMARK}"
     fi
+elif [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == umbp-linker* ]]; then
+    # =========================================================================
+    # UMBP as a DIRECT external store for the unified radix tree (PD disagg).
+    #
+    # Ported from benchmarks/single_node/agentic/dsv4_fp4_mi355x_sglang_mtp.sh,
+    # which is where this arm exists today. It is a SEPARATE sglang code path
+    # from the HiCache branch above, not a variation of it: the tree loads and
+    # offloads pages against UMBP with NO host cache tier in between, and
+    # sglang rejects the combination outright (server_args.py::_handle_hicache
+    # raises when --enable-hierarchical-cache or --hicache-storage-backend is
+    # set alongside it). So none of the L2 knobs apply here or may be passed,
+    # and this branch deliberately shares no code with the one above.
+    #
+    # PREFILL ONLY, exactly like HiCache on this path: only the prefill worker
+    # offloads KV, and the tier metric (sglang:prefill_effective_tokens) is
+    # emitted by the prefill engine alone. Decode is untouched -- it already
+    # carries --page-size 256 from the DeepSeek-V4-Pro-AgentX base_flags in
+    # models.yaml, so it needs no mirror flag the way the HiCache branch does
+    # (that branch sets HICACHE_PAGE_SIZE and has to restate it).
+    # =========================================================================
+
+    # DP-ONLY ON PURPOSE, same refusal the single-node recipe carries. Under
+    # pure TP the linker's object keys carry a per-rank suffix and MLA KV is
+    # replicated across TP, so a TP8 prefill worker yields EIGHT keyspaces and
+    # the tier holds eight copies of the same tokens -- its effective
+    # distinct-token capacity is an eighth of what the byte budget suggests.
+    # Under DP attention the keys collapse to tp0 and the tier is one shared
+    # keyspace. Refuse rather than silently measure a derated tier: a result
+    # file from the derated arm is indistinguishable from a real one.
+    if [[ "$PREFILL_ENABLE_DP" != "true" ]]; then
+        echo "Error: KV_OFFLOAD_BACKEND '$KV_OFFLOAD_BACKEND' is supported only with prefill dp-attn: true. Under pure TP the linker keyspace is per rank, so the tier holds TP copies of the same tokens and the arm measures a different system than the DP one." >&2
+        exit 1
+    fi
+
+    # Multi-node prefill workers are not supported here. The tier is a
+    # per-node process and each node would hold its own keyspace, so a prefill
+    # worker spanning nodes would silently shard the store by node.
+    if [[ "$PREFILL_NODES_PER_WORKER" -ne 1 ]]; then
+        echo "Error: KV_OFFLOAD_BACKEND '$KV_OFFLOAD_BACKEND' supports single-node prefill workers only (PREFILL_NODES_PER_WORKER=${PREFILL_NODES_PER_WORKER}); the UMBP tier is a per-node process and a multi-node prefill worker would shard its keyspace by node." >&2
+        exit 1
+    fi
+
+    # Upstream renamed both the flag pair and the class when this line was
+    # rebased (unified-tree-connector -> unified-cache-external-linker,
+    # UMBPTreeConnector -> UMBPDirectLinker). Detect rather than pin: the image
+    # decides which vocabulary is valid, and a pinned name means editing this
+    # file on every image bump. Search the whole sglang.srt TREE, not
+    # server_args.py alone -- the flag lived in server_args.py on mori-0905 and
+    # moved into arg_groups/fields/memory.py by mori-0908 (0.5.19 split the
+    # server args into per-group dataclasses), so a detector pinned to
+    # server_args.py reports "this image cannot drive UMBP" on an image that
+    # can. find_spec, not sglang.__file__: sglang installs as a namespace
+    # package in these images, so __file__ is None.
+    SGLANG_SRT_DIR="$(python3 -c 'import importlib.util as u, os; s = u.find_spec("sglang.srt.server_args"); print(os.path.dirname(s.origin) if s else "")' 2>/dev/null)"
+    [[ -d "${SGLANG_SRT_DIR:-}" ]] || { echo "Error: cannot locate the installed sglang.srt tree" >&2; exit 1; }
+    echo "[UMBP] probing $SGLANG_SRT_DIR for the linker flag vocabulary"
+    if grep -rqs "enable_unified_cache_external_linker" "$SGLANG_SRT_DIR"; then
+        UMBP_LINKER_FLAGS="--enable-unified-cache-external-linker --unified-cache-external-linker-backend mori"
+    elif grep -rqs "enable_unified_tree_connector" "$SGLANG_SRT_DIR"; then
+        UMBP_LINKER_FLAGS="--enable-unified-tree-connector --unified-tree-connector-backend mori"
+    else
+        echo "Error: this image's sglang exposes neither --enable-unified-cache-external-linker nor --enable-unified-tree-connector, so it cannot drive UMBP as a direct external store. Use a linker-capable image (e.g. rocm/mori-dev:sglang-0.5.19-rocm720-mi35x-mori-0908-pr38269-638c6a61)." >&2
+        exit 1
+    fi
+
+    # ---- Tier capacity ----------------------------------------------------
+    # 1.5 TB, the same NODE total the single-node linker arms run with, so a
+    # PD linker number can be read against them without restating the size.
+    # TOTAL_CPU_DRAM_GB is NOT the bound here: that is the HiCache budget the
+    # sweep generator hands down (available-cpu-dram-mib scaled by
+    # dram-utilization) and the HiCache control arm does not even apply it
+    # (FORCE_HICACHE_RATIO=1 makes it size by ratio instead). The guard that
+    # matters is the box's own memory: the 806 GB checkpoint's page cache, the
+    # sglang ranks and the co-located AIPerf client all live in what is left,
+    # so refuse a tier above half of MemTotal.
+    UMBP_DRAM_BYTES="${UMBP_DRAM_BYTES:-1500000000000}"
+    UMBP_DRAM_GB=$((UMBP_DRAM_BYTES / 1000000000))
+    UMBP_HOST_MEMTOTAL_GB=$(awk '/^MemTotal:/ {printf "%d", $2 / 1000000}' /proc/meminfo)
+    echo "[UMBP] tier sizing: ${UMBP_DRAM_GB} GB requested, host MemTotal ${UMBP_HOST_MEMTOTAL_GB} GB, ceiling $((UMBP_HOST_MEMTOTAL_GB / 2)) GB (TOTAL_CPU_DRAM_GB=${TOTAL_CPU_DRAM_GB:-unset} is the HiCache budget and does not bound this arm)"
+    if [[ "$UMBP_DRAM_GB" -gt "$((UMBP_HOST_MEMTOTAL_GB / 2))" ]]; then
+        echo "Error: UMBP tier ${UMBP_DRAM_GB} GB exceeds half of the host's ${UMBP_HOST_MEMTOTAL_GB} GB MemTotal; the checkpoint's page cache and the server's working set need the rest. Lower UMBP_DRAM_BYTES." >&2
+        exit 1
+    fi
+    # These nodes run with HugePages_Total=0 and the allocator silently demotes
+    # to 4 KiB pages. The linker registers the GPU KV buffers, not the host
+    # pool, so small pages cost locality here, not correctness.
+    UMBP_DRAM_USE_HUGEPAGES="${UMBP_DRAM_USE_HUGEPAGES:-0}"
+
+    # ---- Standalone server, prefill nodes only ----------------------------
+    # server_sglang.sh runs on every node; only the prefill nodes need a tier.
+    # NODE_RANK < NODE_OFFSET is exactly the prefill-node test the launch
+    # dispatch further down uses.
+    if [[ "$NODE_RANK" -lt "$NODE_OFFSET" ]]; then
+        # The container's own /tmp (the HOST /tmp is bind-mounted at /run_logs),
+        # so the socket dies with the container and cannot collide with another
+        # runner on this node.
+        UMBP_SA_DIR="${UMBP_SA_DIR:-/tmp/umbp_sa_${SLURM_JOB_ID:-$$}}"
+        mkdir -p "$UMBP_SA_DIR"
+        export UMBP_STANDALONE_ADDRESS="${UMBP_STANDALONE_ADDRESS:-unix://${UMBP_SA_DIR}/sa.grpc.sock}"
+        UMBP_SA_LOG="/run_logs/slurm_job-${SLURM_JOB_ID}/umbp_standalone_$(hostname).log"
+
+        # Take the standalone server from the mori that is actually importable,
+        # not a stale copy elsewhere in the image: client and server must agree
+        # on capabilities or the linker aborts with "requires a standalone
+        # server whose inner backend advertises ranged multi-buffer I/O
+        # support" -- which reads like a mori version problem but means the two
+        # halves disagree.
+        if [[ -z "${UMBP_SA_BIN:-}" ]]; then
+            for _cand in \
+                "$(python3 -c 'import os, mori; print(os.path.dirname(os.path.realpath(mori.__file__)))' 2>/dev/null)/umbp_standalone_server" \
+                /sgl-workspace/mori/python/mori/umbp_standalone_server \
+                /sgl-workspace/mori/build_umbp/src/umbp/umbp_standalone_server; do
+                if [[ -x "$_cand" ]]; then UMBP_SA_BIN="$_cand"; break; fi
+            done
+        fi
+        [[ -x "${UMBP_SA_BIN:-}" ]] || { echo "Error: umbp_standalone_server not found in this image; it does not ship UMBP standalone mode." >&2; exit 1; }
+        echo "[UMBP] standalone server binary: $UMBP_SA_BIN"
+        export LD_LIBRARY_PATH="$(dirname "$UMBP_SA_BIN"):${LD_LIBRARY_PATH:-}"
+
+        echo "[UMBP] starting standalone server at $UMBP_STANDALONE_ADDRESS (tier ${UMBP_DRAM_GB} GB, hugepages=${UMBP_DRAM_USE_HUGEPAGES}), log -> $UMBP_SA_LOG"
+        # UMBP_SSD_ENABLED is atoi()'d by the server (UMBPConfig::
+        # FromEnvironment), so it needs 1/0 -- atoi("true") is 0, which happens
+        # to be right but only by accident.
+        env UMBP_DRAM_CAPACITY="$UMBP_DRAM_BYTES" \
+            UMBP_DRAM_USE_HUGEPAGES="$UMBP_DRAM_USE_HUGEPAGES" \
+            UMBP_SSD_ENABLED=0 \
+            MORI_UMBP_LOG_LEVEL="${MORI_UMBP_LOG_LEVEL:-info}" \
+            "$UMBP_SA_BIN" "$UMBP_STANDALONE_ADDRESS" > "$UMBP_SA_LOG" 2>&1 &
+        UMBP_SA_PID=$!
+        echo "[UMBP] standalone server PID: $UMBP_SA_PID"
+        trap '[[ -n "${UMBP_SA_PID:-}" ]] && kill "$UMBP_SA_PID" 2>/dev/null || true' EXIT
+
+        # Three waits, all bounded by wall time rather than by a guess at how
+        # fast this node is. Bind time for a 549 GB tier measured 120 s on
+        # n08-21 and over 300 s on n09-25 -- same hardware, but n09-25 was
+        # holding 1.9 TB of page cache and the allocation had to reclaim
+        # through it. At 1.5 TB that spread only widens, so the ceiling is
+        # generous; a dead server is still caught in the first second by the
+        # kill -0 probe, so a generous ceiling costs nothing when something is
+        # actually broken.
+        UMBP_SA_WAIT_SECONDS="${UMBP_SA_WAIT_SECONDS:-1800}"
+        UMBP_SA_SOCK="${UMBP_STANDALONE_ADDRESS#unix://}"
+
+        # 1. The socket appears as soon as grpc listens.
+        UMBP_SA_T0=$SECONDS
+        UMBP_SA_READY=false
+        for _ in $(seq 1 "$UMBP_SA_WAIT_SECONDS"); do
+            if ! kill -0 "$UMBP_SA_PID" 2>/dev/null; then
+                echo "[UMBP] standalone server died during startup. Log follows:" >&2
+                cat "$UMBP_SA_LOG" >&2 || true
+                exit 1
+            fi
+            [[ -S "$UMBP_SA_SOCK" ]] && { UMBP_SA_READY=true; break; }
+            sleep 1
+        done
+        [[ "$UMBP_SA_READY" == "true" ]] || { echo "Error: UMBP standalone server never bound $UMBP_SA_SOCK within ${UMBP_SA_WAIT_SECONDS} s" >&2; cat "$UMBP_SA_LOG" >&2 || true; exit 1; }
+        echo "[UMBP] bound $UMBP_SA_SOCK after $((SECONDS - UMBP_SA_T0)) s"
+
+        # 2. But the socket is bound before the server can serve: the DRAM tier
+        # still has to register its host memory. sglang launched into that
+        # window dies at linker construction with
+        #   RuntimeError: StandaloneProcessClient: server is not ready
+        # and takes the whole arm with it, minutes in, for a reason that has
+        # nothing to do with what the run was measuring. "data plane" is the
+        # first line the server prints once it will answer.
+        UMBP_SA_T1=$SECONDS
+        UMBP_SA_SERVING=false
+        for _ in $(seq 1 "$UMBP_SA_WAIT_SECONDS"); do
+            if ! kill -0 "$UMBP_SA_PID" 2>/dev/null; then
+                echo "[UMBP] standalone server died while registering its tier. Log follows:" >&2
+                cat "$UMBP_SA_LOG" >&2 || true
+                exit 1
+            fi
+            grep -q "data plane" "$UMBP_SA_LOG" 2>/dev/null && { UMBP_SA_SERVING=true; break; }
+            sleep 1
+        done
+        [[ "$UMBP_SA_SERVING" == "true" ]] || { echo "Error: UMBP standalone server bound $UMBP_SA_SOCK but never reached its data plane within ${UMBP_SA_WAIT_SECONDS} s" >&2; cat "$UMBP_SA_LOG" >&2 || true; exit 1; }
+        echo "[UMBP] data plane up after $((SECONDS - UMBP_SA_T1)) s ($SECONDS s total): $(grep -m1 'data plane' "$UMBP_SA_LOG")"
+
+        # 3. And the data plane answers before the tier is usable from the GPU.
+        # HostTierRegistration hands hipHostRegister to a worker thread for any
+        # tier above its sync threshold, so "data plane" can print with the
+        # region still unpinned -- and mori says what that costs: "the GPU
+        # gather path stays off and copies fall back to pageable hipMemcpy". An
+        # arm that starts serving inside that window measures the fallback path
+        # for its first several minutes.
+        if [[ "${UMBP_SA_WAIT_REGISTERED:-1}" == "1" ]]; then
+            UMBP_SA_T2=$SECONDS
+            UMBP_SA_REGISTERED=false
+            for _ in $(seq 1 "$UMBP_SA_WAIT_SECONDS"); do
+                if ! kill -0 "$UMBP_SA_PID" 2>/dev/null; then
+                    echo "[UMBP] standalone server died while registering its tier for GPU access. Log follows:" >&2
+                    cat "$UMBP_SA_LOG" >&2 || true
+                    exit 1
+                fi
+                if grep -q "host memory registered for GPU access" "$UMBP_SA_LOG" 2>/dev/null; then
+                    UMBP_SA_REGISTERED=true
+                    break
+                fi
+                if grep -q "hipHostRegister of .* failed" "$UMBP_SA_LOG" 2>/dev/null; then
+                    echo "Error: hipHostRegister failed for the UMBP tier; every copy would take the pageable fallback path" >&2
+                    grep -m1 "hipHostRegister of .* failed" "$UMBP_SA_LOG" >&2 || true
+                    exit 1
+                fi
+                sleep 1
+            done
+            [[ "$UMBP_SA_REGISTERED" == "true" ]] || { echo "Error: the UMBP tier was still not registered for GPU access after ${UMBP_SA_WAIT_SECONDS} s" >&2; exit 1; }
+            echo "[UMBP] tier registered for GPU access after $((SECONDS - UMBP_SA_T2)) s past the data plane: $(grep -m1 'host memory registered for GPU access' "$UMBP_SA_LOG")"
+        fi
+    else
+        echo "[UMBP] node rank ${NODE_RANK} runs decode only; no tier here (offload is prefill-side on this path)"
+    fi
+
+    # The linker requires RadixAttention, same as HiCache; strip any
+    # --disable-radix-cache from the prefill config.
+    PREFILL_SERVER_CONFIG="${PREFILL_SERVER_CONFIG//--disable-radix-cache/}"
+
+    # Device KV pool left at whatever mem-fraction-static profiles, same as the
+    # HiCache control, so the linker is compared against it at an IDENTICAL
+    # pool rather than at a capped one. UMBP_MAX_TOTAL_TOKENS caps it if the
+    # profiled pool swallows the whole working set and the arm ends up
+    # measuring nothing about UMBP -- sglang takes min(requested, profiled), so
+    # it can only shrink the pool, and the effective value has to be read back
+    # from the server log either way.
+    UMBP_POOL_FLAGS=""
+    [[ -n "${UMBP_MAX_TOTAL_TOKENS:-}" ]] && UMBP_POOL_FLAGS="--max-total-tokens ${UMBP_MAX_TOTAL_TOKENS}"
+
+    # StandaloneProcess drops the client-side sizing keys: the server owns the
+    # tier and takes UMBP_DRAM_CAPACITY from its own environment, so the extra
+    # config is empty. It is still passed because the linker reads the flag.
+    # Single-quoted so it survives the later `eval` of the launch command as
+    # one argument, matching build_storage_flags() above.
+    PREFILL_SERVER_CONFIG="$PREFILL_SERVER_CONFIG ${UMBP_LINKER_FLAGS} ${UMBP_POOL_FLAGS} --hicache-storage-backend-extra-config '{}' --enable-cache-report"
+
+    echo "[UMBP] direct linker on prefill: tier=${UMBP_DRAM_GB} GB, address=${UMBP_STANDALONE_ADDRESS:-<decode node, none>}, prefill tp=${PREFILL_TP_SIZE} dp-attn=${PREFILL_ENABLE_DP}, device pool=${UMBP_MAX_TOTAL_TOKENS:-profiled}, no host cache tier"
+    echo "[UMBP] flags: ${UMBP_LINKER_FLAGS} ${UMBP_POOL_FLAGS}"
+    echo "[UMBP] decode untouched; --page-size 256 already comes from the models.yaml base_flags"
 else
     echo "[HiCache] KV_OFFLOADING=${KV_OFFLOADING} backend=${KV_OFFLOAD_BACKEND:-none} (HiCache disabled)"
 fi
@@ -614,6 +898,13 @@ run_barrier_or_die() {
 }
 
 echo "Waiting at the container creation barrier on $host_name"
+# The 300s default is too tight on the umbp-linker path: rank 0 does not open
+# port 5000 until umbp_standalone_server has registered the whole DRAM tier for
+# GPU access, which is strongly node-dependent (305.7s on one node vs >780s on
+# another). The peer that came up first then times out and kills an otherwise
+# healthy run. Raise it per-arm via CONTAINER_BARRIER_TIMEOUT, above
+# UMBP_SA_WAIT_SECONDS so UMBP's own wait is the binding one, not the barrier.
+# Unset keeps the historical 300s for every other arm.
 run_barrier_or_die "container creation barrier" "python3 $SGLANG_WS_PATH/sync.py barrier \
     --local-ip ${host_ip} \
     --local-port 5000 \
@@ -621,7 +912,7 @@ run_barrier_or_die "container creation barrier" "python3 $SGLANG_WS_PATH/sync.py
     --node-ips ${IPADDRS} \
     --node-ports 5000 \
     --wait-for-all-ports \
-    --timeout 300"
+    --timeout ${CONTAINER_BARRIER_TIMEOUT:-300}"
 
 
 # =============================================================================

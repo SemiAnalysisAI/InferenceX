@@ -68,11 +68,18 @@ export MORI_CONN_PATCH="${MORI_CONN_PATCH:-skip}"
 # --disable-custom-all-reduce avoids a known aiter fault on MI355X.
 export DISABLE_CUSTOM_ALL_REDUCE="${DISABLE_CUSTOM_ALL_REDUCE:-0}"
 
-# ── KV cache offloading (HiCache) ──
+# ── KV cache offloading ──
 # KV_OFFLOADING=none | dram (passed from YAML; default none for disagg).
-# KV_OFFLOAD_BACKEND selects the backend when offloading is on; this recipe
-# only implements HiCache, so "hicache" is the only supported value.
-# HICACHE_TIER: L2 -> GPU + CPU-DRAM host pool. L3 -> + Mooncake store.
+# KV_OFFLOAD_BACKEND selects the backend when offloading is on:
+#   hicache      GPU + CPU-DRAM host pool (HICACHE_TIER L2), optionally + a
+#                Mooncake L3 store (HICACHE_TIER L3). The tunables below.
+#   umbp-linker  UMBP as a DIRECT external store for the unified radix tree,
+#                with NO host cache tier in between. A different sglang code
+#                path, not a variation of HiCache -- sglang rejects the two
+#                together -- so it reads NONE of the HICACHE_*/MC_* tunables
+#                and takes UMBP_* instead (block further down). Implemented in
+#                amd_utils/server_sglang.sh; prefill-side only, like HiCache
+#                on this path, and dp-attn: true only.
 export KV_OFFLOADING="${KV_OFFLOADING:-none}"
 if [[ "$KV_OFFLOADING" != "none" ]]; then
   export KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-hicache}"
@@ -84,7 +91,7 @@ if [[ "$KV_OFFLOADING" != "none" && "${KV_OFFLOAD_BACKEND:-}" == "hicache" ]]; t
   # DSV4 uses page-size 256 (set in models.yaml); HiCache must match.
   export HICACHE_PAGE_SIZE="${HICACHE_PAGE_SIZE:-256}"
   # HiCache ratio (host pool = ratio * GPU KV pool).
-  export HICACHE_RATIO="${HICACHE_RATIO:-3}"
+  export HICACHE_RATIO="${HICACHE_RATIO:-2.5}"
   # DSv4 wants the ratio-based pool, but server_sglang.sh prefers
   # --hicache-size over --hicache-ratio when TOTAL_CPU_DRAM_GB is set.
   # Opt out via FORCE_HICACHE_RATIO instead of unsetting TOTAL_CPU_DRAM_GB
@@ -120,6 +127,30 @@ if [[ "$KV_OFFLOADING" != "none" && "${KV_OFFLOAD_BACKEND:-}" == "hicache" ]]; t
   export MC_DEVICE="${MC_DEVICE:-}"
   export MC_MASTER_ADDR="${MC_MASTER_ADDR:-}"
   export MC_METADATA_SERVER="${MC_METADATA_SERVER:-}"
+fi
+
+# ── UMBP direct-linker tunables ──
+# Only read when KV_OFFLOAD_BACKEND is a umbp-linker* arm. Defaults live in
+# server_sglang.sh; these exports exist so the values are visible in the
+# recipe (and in the commands dump) rather than buried, and so job.slurm has
+# something to forward.
+#   UMBP_DRAM_BYTES      NODE total for the tier, on the prefill node only.
+#                        1.5 TB matches the single-node linker arms, so a PD
+#                        number can be read against them directly. Guarded in
+#                        server_sglang.sh against half of the host's MemTotal.
+#   UMBP_MAX_TOTAL_TOKENS  optional device KV pool cap. UNSET on purpose: the
+#                        linker is compared against the HiCache control at an
+#                        IDENTICAL profiled pool, not at a capped one.
+#   UMBP_SA_WAIT_SECONDS ceiling for each of the three server-readiness waits
+#                        (socket -> data plane -> host memory registered for
+#                        GPU access). A 1.5 TB tier can take many minutes to
+#                        register on a node holding a lot of page cache.
+if [[ "$KV_OFFLOADING" != "none" && "${KV_OFFLOAD_BACKEND:-}" == umbp-linker* ]]; then
+  export UMBP_DRAM_BYTES="${UMBP_DRAM_BYTES:-1500000000000}"
+  export UMBP_DRAM_USE_HUGEPAGES="${UMBP_DRAM_USE_HUGEPAGES:-0}"
+  export UMBP_SA_WAIT_SECONDS="${UMBP_SA_WAIT_SECONDS:-1800}"
+  export UMBP_SA_WAIT_REGISTERED="${UMBP_SA_WAIT_REGISTERED:-1}"
+  export MORI_UMBP_LOG_LEVEL="${MORI_UMBP_LOG_LEVEL:-info}"
 fi
 
 # ── MoRIIO RDMA Send Queue tuning ──

@@ -473,6 +473,26 @@ DOCKER_ENV_COMMON=(
     -e KV_OFFLOAD_BACKEND=\${KV_OFFLOAD_BACKEND:-}
     -e KV_OFFLOAD_BACKEND_METADATA=\"\${KV_OFFLOAD_BACKEND_METADATA:-}\"
     -e TOTAL_CPU_DRAM_GB=\${TOTAL_CPU_DRAM_GB:-}
+    # UMBP direct-linker arm (KV_OFFLOAD_BACKEND=umbp-linker*). server_sglang.sh
+    # starts the standalone server INSIDE this container on the prefill node and
+    # exports UMBP_STANDALONE_ADDRESS itself, so only the knobs the recipe sets
+    # need a route in. Empty for every other arm, and server_sglang.sh only
+    # reads them on the umbp-linker branch, so this is inert elsewhere.
+    -e UMBP_DRAM_BYTES=\${UMBP_DRAM_BYTES:-}
+    -e UMBP_DRAM_USE_HUGEPAGES=\${UMBP_DRAM_USE_HUGEPAGES:-}
+    -e UMBP_MAX_TOTAL_TOKENS=\${UMBP_MAX_TOTAL_TOKENS:-}
+    -e UMBP_SA_WAIT_SECONDS=\${UMBP_SA_WAIT_SECONDS:-}
+    -e UMBP_SA_WAIT_REGISTERED=\${UMBP_SA_WAIT_REGISTERED:-}
+    -e MORI_UMBP_LOG_LEVEL=\${MORI_UMBP_LOG_LEVEL:-}
+    # The container-creation barrier (port 5000, server_sglang.sh) defaults to
+    # 300s, but on the umbp-linker path rank 0 does not open that port until
+    # umbp_standalone_server has hipHostRegister'd the whole DRAM tier for GPU
+    # access. That step is strongly node-dependent: 305.7s on one node vs >780s
+    # and still unfinished on another. The default is therefore shorter than the
+    # operation it waits on, and a slow node fails 100% of the time. Forward the
+    # knob so a recipe can raise it above UMBP_SA_WAIT_SECONDS instead of losing
+    # the whole dispatch. Empty => server_sglang.sh keeps its 300s default.
+    -e CONTAINER_BARRIER_TIMEOUT=\${CONTAINER_BARRIER_TIMEOUT:-}
     -e ENABLE_METRICS=\${ENABLE_METRICS:-0}
     -e PREFILL_ROUTER_POLICY=\${PREFILL_ROUTER_POLICY:-random}
     -e DECODE_ROUTER_POLICY=\${DECODE_ROUTER_POLICY:-random}
