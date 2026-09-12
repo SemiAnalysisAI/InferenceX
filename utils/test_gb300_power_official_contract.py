@@ -291,7 +291,7 @@ def test_agentx_collection_preserves_failed_jobs_and_incomplete_sweeps(
         "conc": 4, "disagg": True, "num_prefill_gpu": 2, "num_decode_gpu": 2,
     }))
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(REPO_ROOT)
+    env.pop("PYTHONPATH", None)
     env["PATH"] = f"{Path(sys.executable).parent}:{env['PATH']}"
     result = subprocess.run(
         ["bash", "-c",

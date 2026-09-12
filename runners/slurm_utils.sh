@@ -195,7 +195,7 @@ collect_agentic_power_results() {
     for concurrency in "$@"; do
         (
             cd "$workspace" || exit 1
-            python3 -m infx.results.agentic.power_adapter \
+            PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.results.agentic.power_adapter \
                 --result-dir "$logs_dir/agentic/conc_${concurrency}" \
                 --agg-result "$workspace/${result_filename}_conc${concurrency}.json" \
                 --power-dir "$logs_dir/power" \
