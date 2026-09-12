@@ -332,6 +332,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         DEFAULT_MOUNTS_BLOCK="default_mounts:
   ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
   ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+        if [[ "$MODEL_PREFIX" == "dsv41flash" ]]; then
+            DEFAULT_MOUNTS_BLOCK+="
+  ${DSV41_CACHE}/blobs: /blobs"
+        fi
     fi
 
     # Create srtslurm.yaml for srtctl (used by both frameworks)
