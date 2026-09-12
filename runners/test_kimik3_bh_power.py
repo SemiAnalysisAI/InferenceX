@@ -32,7 +32,11 @@ def test_kimi_power_selects_verified_runtime(
         'AGENTX_POWER_SRT_SLURM_PIN="' + "a" * 40 + '"',
         source, flags=re.MULTILINE,
     )
-    recipe = next((REPO / RECIPE_DIR).glob(f"agg-{hardware}*"))
+    recipe = (
+        REPO / RECIPE_DIR / "agg-h200-tp16dp2ep32-latency-agentic.yaml"
+        if hardware == "h200"
+        else next((REPO / RECIPE_DIR).glob("agg-b200*"))
+    )
     data = yaml.safe_load(recipe.read_text())
     if not power:
         data.pop("telemetry")

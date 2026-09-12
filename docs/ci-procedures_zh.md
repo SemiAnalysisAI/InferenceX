@@ -527,3 +527,5 @@ jq -r 'to_entries[] | [.key, .value.n_success, .value.total] | @tsv' \
    ```
 
 当源 Run、Merge Run、Artifact 覆盖、Changelog Metadata 或下游 Event 含糊不清时，应停止并升级处理。绝不能替换成方便的 Run ID，也不能仅凭 Actions Dispatch 就宣称发布成功。
+
+原 `kimik3-fp4-h200-vllm-agentic` key 拆为 `-latency`、`-balanced` 和 `-simple` 三个 key，合计保留原来的全部 35 个点（10/12/13）、配方指纹及图表序列。每个 key 选择一份完整配方及其默认评估；功耗启用范围由该配方的 `telemetry.enabled` 决定。使用 `kimik3-fp4-h200-vllm-agentic-*` 可选择三份配方。局部配方运行不能证明其他 key 已通过资格验证。
