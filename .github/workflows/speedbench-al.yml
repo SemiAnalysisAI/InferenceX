@@ -87,6 +87,7 @@ env:
   EXP_NAME: ${{ inputs.model-prefix }}_speedbench
   IMAGE: ${{ inputs.image }}
   TP: '8'
+  GPU_COUNT: '8'
   EP_SIZE: '1'
   DP_ATTENTION: 'false'
   SPEC_DECODING: mtp
@@ -176,7 +177,7 @@ jobs:
           persist-credentials: false
       - name: Recover resources and inspect cached runtime
         env:
-          RUNNER_NAME: powerx3040-${{ github.run_id }}
+          TASK_JOB_NAME: powerx3040-${{ github.run_id }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/powerx3040"
@@ -186,8 +187,9 @@ jobs:
           id
           # Prior task-owned job was cancelled before allocation. Never cancel
           # by shared runner/user identity or adopt another task's resources.
-          sacct -j 2138 --format=JobID,JobName,User,State,NodeList,Start,End,Elapsed,AllocTRES -P || true
+          sacct -j 2138,2168 --format=JobID,JobName,User,State,NodeList,Start,End,Elapsed,AllocTRES -P || true
           squeue --me --format='%i|%j|%T|%N|%L|%b'
+          python3 runners/b300_recover_diagnostic.py
           if squeue --me --noheader --format='%j' | grep -Eq '^powerx3040-'; then
             echo 'Existing task diagnostic found; recover its receipt before allocating.'
             exit 1
@@ -197,7 +199,7 @@ jobs:
           unsquashfs -s /data/home/sa-gha-runner/squash/vllm_vllm-openai_nightly-dev-x86_64-cu13-3696c77.sqsh
       - name: Run bounded runtime diagnostic
         env:
-          RUNNER_NAME: powerx3040-${{ github.run_id }}
+          TASK_JOB_NAME: powerx3040-${{ github.run_id }}
         run: |
           set -euo pipefail
           # Native Slurm time limit is enforced inside the launcher; this

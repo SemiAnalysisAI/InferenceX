@@ -444,7 +444,7 @@ else
     fi
 
     # Isolated diagnostic: never import an image or exceed the assigned slice.
-    [[ "${SALLOC_TIME_LIMIT:-}" == "15" ]] || exit 1
+    [[ "${SALLOC_TIME_LIMIT:-}" == "15" && "${GPU_COUNT:-}" == "8" && "${TASK_JOB_NAME:-}" == powerx3040-* ]] || exit 1
     unsquashfs -s "$SQUASH_FILE" || exit 1
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
@@ -458,7 +458,7 @@ else
         --mem=0
         --time="${SALLOC_TIME_LIMIT:-480}"
         --no-shell
-        --job-name="$RUNNER_NAME"
+        --job-name="$TASK_JOB_NAME"
     )
     # Optional escape hatch for taking a bad node out of rotation without a code change.
     if [[ -n "${SALLOC_EXCLUDE:-}" ]]; then
