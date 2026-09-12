@@ -413,6 +413,7 @@ jobs:
             klaud-run: &klaud-run ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'Klaud-Cold' && (startsWith(github.head_ref, 'klaud/auto-') || startsWith(github.head_ref, 'klaude/auto-')) }}
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
+            require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
@@ -474,6 +475,7 @@ jobs:
             kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
+            require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
@@ -540,6 +542,7 @@ jobs:
             klaud-run: *klaud-run
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
+            require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
