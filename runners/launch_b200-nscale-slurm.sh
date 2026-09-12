@@ -421,7 +421,7 @@ fi
 cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
 bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 
-if [[ "$AGENTX_POWER_RC" != "0" ]]; then
+if [[ "$AGENTX_POWER_RC" != "0" && "$SRT_JOB_RC" == "0" ]]; then
     echo "ERROR: AgentX power validation failed; available audit and server artifacts were staged" >&2
     exit "$AGENTX_POWER_RC"
 fi
