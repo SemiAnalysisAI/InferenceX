@@ -30,6 +30,8 @@ on:
       - 'runners/launch_b300-dsxe.sh'
       - 'runners/launch_h200-dgxc-slurm.sh'
       - 'runners/inject_srt_power_concurrencies.py'
+      - 'runners/slurm_utils.sh'
+      - 'runners/test_kimik3_bh_power.py'
       - 'utils/aggregate_power.py'
       - 'utils/aggregate_power_multinode.py'
       - 'utils/agentic/aggregation/**'
@@ -64,4 +66,4 @@ jobs:
         run: |
           cd utils
           uv run --no-project --exclude-newer PT12H --python 3.12 --with pytest --with pyyaml \
-            python -m pytest test_aggregate_power.py test_aggregate_power_multinode.py agentic/aggregation/ test_gb300_power_official_contract.py test_inject_srt_power_concurrencies.py test_process_result.py test_native_multinode_power.py ../runners/test_native_collector_barriers.py ../runners/test_native_collector_receipts.py ../runners/test_llmd_power_lifecycle.py -v
+            python -m pytest test_aggregate_power.py test_aggregate_power_multinode.py agentic/aggregation/ test_gb300_power_official_contract.py test_inject_srt_power_concurrencies.py test_process_result.py test_native_multinode_power.py ../runners/test_native_collector_barriers.py ../runners/test_native_collector_receipts.py ../runners/test_llmd_power_lifecycle.py ../runners/test_kimik3_bh_power.py -v

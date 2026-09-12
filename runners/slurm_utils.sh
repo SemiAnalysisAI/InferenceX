@@ -188,6 +188,52 @@ copy_agentic_results() {
     echo "Copied $copied agentic result file(s)"
 }
 
+collect_agentic_power_results() {
+    local job_id="$1" logs_dir="$2" source_dir="$3" workspace="$4"
+    local result_filename="$5" producer_sha="$6"
+    shift 6
+    local rc=0 concurrency attempt
+    [[ "$#" -gt 0 ]] || return 1
+    mkdir -p "$logs_dir/power" || return 1
+    logs_dir="$(cd "$logs_dir" && pwd -P)" || return 1
+    workspace="$(cd "$workspace" && pwd -P)" || return 1
+
+    # Accounting can lag squeue removal; retry only missing or nonterminal rows.
+    for attempt in 1 2 3; do
+        echo "$attempt" > "$logs_dir/power/native-job-status-attempts.txt"
+        sacct -X -n -P -j "$job_id" --format=JobIDRaw,State,ExitCode \
+            > "$logs_dir/power/native-job-status.txt" \
+            2>> "$logs_dir/power/native-job-status.stderr" || true
+        if awk -F'|' -v job="$job_id" '
+            $1 == job && $2 !~ /^(PENDING|RUNNING|COMPLETING)$/ { found = 1 }
+            END { exit !found }
+        ' "$logs_dir/power/native-job-status.txt"; then
+            break
+        fi
+        if [[ "$attempt" != "3" ]]; then sleep 5; fi
+    done
+    if ! awk -F'|' -v job="$job_id" '
+        $1 == job { found = 1; if ($2 != "COMPLETED" || $3 != "0:0") failed = 1 }
+        END { exit (!found || failed) }
+    ' "$logs_dir/power/native-job-status.txt"; then
+        rc=1
+    fi
+    copy_agentic_results "$source_dir" "$workspace" "$result_filename" || rc=$?
+    for concurrency in "$@"; do
+        (
+            cd "$workspace" || exit 1
+            PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.results.agentic.power_adapter \
+                --result-dir "$logs_dir/agentic/conc_${concurrency}" \
+                --agg-result "$workspace/${result_filename}_conc${concurrency}.json" \
+                --power-dir "$logs_dir/power" \
+                --logs-root "$logs_dir" \
+                --expected-producer-sha "$producer_sha" \
+                --require-power
+        ) || rc=$?
+    done
+    return "$rc"
+}
+
 copy_eval_artifacts() {
     local eval_dir="$1"
     local workspace="$2"
