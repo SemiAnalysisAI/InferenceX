@@ -7420,7 +7420,7 @@
   description:
     - "Retain UTC SMI telemetry context and validate native multinode collector artifacts without enabling new recipes."
     - "保留 UTC SMI 遥测上下文并验证原生多节点采集产物，不启用新 recipe。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3026
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3051
 
 - config-keys:
   - glm5.1-fp8-b200-tilert

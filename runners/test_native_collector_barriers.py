@@ -44,3 +44,15 @@ def test_ready_barrier_rejects_collector_that_already_stopped(tmp_path):
     assert 'stopped before benchmark readiness' in result.stderr
 
 
+def test_control_receipt_is_owned_before_publication(tmp_path):
+    command = '''source "$1"
+POWERX_CONTROL_DIR=$2
+POWERX_HOST_UID=1000 POWERX_HOST_GID=1000
+chown() { [[ ! -e "$POWERX_CONTROL_DIR/stop" ]]; }
+powerx_write_control stop stop
+'''
+    result = subprocess.run(['bash', '-c', command, 'bash', str(LIFECYCLE), str(tmp_path)],
+                            capture_output=True, text=True, timeout=5)
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / 'stop').read_text() == 'stop\n'
+    assert not list(tmp_path.glob('*.tmp'))
