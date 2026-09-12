@@ -2,6 +2,8 @@
 
 # shellcheck source=runners/slurm_utils.sh
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+# shellcheck source=runners/powerx_8k1k.sh
+source "$(dirname "${BASH_SOURCE[0]}")/powerx_8k1k.sh"
 
 # Compatibility launcher for B200 Nscale configurations that have not yet
 # moved to the native srt-slurm path in launch_b200-nscale-slurm.sh.
@@ -129,6 +131,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     USES_DCGM_POWER=0
+    if powerx_fixed_8k1k; then USES_DCGM_POWER=1; fi
     _POWER_CONFIG_FILE="${CONFIG_FILE:-}"
     if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
         _POWER_CONFIG_FILE="$EVAL_CONFIG_FILE"
@@ -144,7 +147,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     ' "$_RECIPE_SRC"; then
         USES_DCGM_POWER=1
     fi
-    if [[ "$USES_DCGM_POWER" == "1" && (
+    if ! powerx_fixed_8k1k && [[ "$USES_DCGM_POWER" == "1" && (
         "${IS_AGENTIC:-0}" == "1" ||
         "$MODEL_PREFIX" != "dsv4" ||
         "$PRECISION" != "fp4" ||
@@ -166,7 +169,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # Kimi K3 aggregate profiles use the srt-slurm fork that supports direct
     # multi-node vLLM. Pin the tested renderer so branch movement cannot change
     # generated rank commands between sweep points.
-    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    if powerx_fixed_8k1k; then
+        powerx_clone_srt "$SRT_REPO_DIR" || exit 1
+    elif [[ "$USES_DCGM_POWER" == "1" ]]; then
         git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
         cd "$SRT_REPO_DIR" || exit 1
         git checkout "$POWER_SRT_SLURM_PIN" || exit 1
@@ -387,6 +392,7 @@ EOF
         exit 1
     fi
 
+    powerx_prepare_srt || exit 1
     # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "${CONFIG_FILE%%:*}"
     # Bump recipe health-check timeout from 360×10s=3600s to 720×10s=7200s
@@ -423,6 +429,7 @@ EOF
     # srtctl creates logs in outputs/JOB_ID/logs/
     LOGS_DIR="outputs/$JOB_ID/logs"
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
+    trap powerx_snapshot_srt EXIT
 
     # Wait for log file to appear (also check job is still alive)
     while ! ls "$LOG_FILE" &>/dev/null; do
@@ -470,7 +477,12 @@ EOF
         cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
     fi
 
-    cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+    if powerx_fixed_8k1k; then
+        mkdir -p "$GITHUB_WORKSPACE/LOGS"
+        cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/"
+    else
+        cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+    fi
     tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then

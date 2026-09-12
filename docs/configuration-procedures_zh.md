@@ -114,6 +114,10 @@ runner 名称前缀是关键契约：workflow 通过 `launch_${RUNNER_NAME%%_*}.
 6. 将 runner 加入 sweep 流量前，在[仓库 runner 设置页](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners)确认每个 runner 都是 **Idle**。
 7. 从计算节点验证 launcher 对 `_work`、HF cache、预置权重和 squash 镜像的挂载。root 容器不得在共享 workspace 留下 root 所有的文件。
 
+## NVIDIA SRT 可选功耗
+
+固定 8192/1024 SRT 运行仅在 `REQUIRE_POWER=1` 时选择 runtime `3f3b7af26e34acc8b62b39971bec839a19ac57a2`。准备过程解析所选 override、注入矩阵并发度、转换 DeepSeek-V4 tokenizer 设置并要求 DCGM 遥测。目前无主配置启用此路径。AgentX 和 eval-only 保留原有路由。失败时保留已有日志与生产者版本。各硬件及框架范围仍需完整 sweep 和适用 eval。
+
 ## 注册 srt-slurm 配方
 
 映射来源：[`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md)。检入的配方：[`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/)。

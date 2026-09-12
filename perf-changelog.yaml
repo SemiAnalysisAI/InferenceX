@@ -7440,3 +7440,57 @@
     - "Verify terminal Slurm receipts and exit llm-d workers normally after preserving available evidence."
     - "验证 Slurm 最终状态，并在保留已有证据后正常退出 llm-d 工作进程。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3052
+
+- config-keys:
+  - dsr1-fp4-b200-dynamo-trt
+  - dsr1-fp8-b200-dynamo-trt
+  - dsr1-fp4-b300-dynamo-trt
+  - dsr1-fp8-b300-dynamo-trt
+  - dsr1-fp8-h200-dynamo-trt
+  - dsr1-fp8-h100-dynamo-trt
+  - dsr1-fp8-h100-dynamo-sglang
+  - dsr1-fp4-gb200-dynamo-trt
+  - dsr1-fp8-gb200-dynamo-trt
+  - dsr1-fp8-gb200-dynamo-sglang
+  - dsr1-fp8-gb300-dynamo-sglang
+  - dsr1-fp4-gb200-dynamo-sglang
+  - dsr1-fp4-gb300-dynamo-trt
+  - dsr1-fp4-gb300-dynamo-sglang
+  - dsr1-fp8-gb300-dynamo-trt
+  - dsr1-fp8-h200-dynamo-sglang
+  - dsr1-fp4-b200-dynamo-sglang
+  - dsr1-fp8-b200-dynamo-sglang
+  - dsr1-fp8-b200-dynamo-sglang-mtp
+  - dsr1-fp4-b200-dynamo-sglang-mtp
+  - kimik2.6-fp4-b200-dynamo-vllm
+  - dsv4-fp4-b200-dynamo-vllm
+  - dsv4-fp4-gb200-dynamo-vllm
+  - dsv4-fp4-gb200-dynamo-vllm-mtp2
+  - dsv4-fp4-gb200-dynamo-vllm-mtp2-nosynthetic
+  - dsv4-fp4-b200-dynamo-sglang
+  - dsv4-fp4-gb200-dynamo-sglang
+  - qwen3.5-fp8-gb200-dynamo-sglang
+  - dsv4-fp4-gb200-dynamo-sglang-mtp
+  - dsv4-fp4-b300-dynamo-vllm
+  - dsv4-fp4-b300-dynamo-sglang
+  - dsv4-fp4-gb300-dynamo-vllm
+  - dsv4-fp4-b200-dynamo-sglang-mtp
+  - dsv4-fp4-b200-dynamo-vllm-mtp
+  - dsv4-fp4-gb300-dynamo-trt
+  - dsv4-fp4-gb300-dynamo-trt-mtp
+  - dsv4-fp4-gb300-dynamo-sglang
+  - dsv4-fp4-gb300-dynamo-sglang-mtp
+  - dsv4-fp4-b300-dynamo-sglang-mtp
+  - qwen3.5-fp4-gb300-dynamo-sglang
+  - qwen3.5-fp4-gb300-dynamo-trt
+  - qwen3.5-fp4-gb300-dynamo-trt-mtp
+  - qwen3.5-fp8-gb300-dynamo-sglang
+  - qwen3.5-fp8-gb200-dynamo-sglang-mtp
+  - qwen3.5-fp8-gb300-dynamo-sglang-mtp
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Support explicitly requested NVIDIA SRT 8k1k power with a pinned runtime; preserve
+    override, accounting and audit provenance. No scenario is enabled by default.
+  - 支持显式请求的 NVIDIA SRT 8k1k 功耗采集，固定 runtime 并保留 override、请求计数和审计来源；默认不启用任何场景。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3027

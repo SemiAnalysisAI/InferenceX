@@ -27,6 +27,10 @@ def test_kimi_power_selects_verified_runtime(
         'source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"',
         'source "$TEST_SLURM_UTILS"',
     )
+    source = source.replace(
+        'source "$(dirname "${BASH_SOURCE[0]}")/powerx_8k1k.sh"',
+        'source "$TEST_POWERX_HELPER"',
+    )
     source = re.sub(
         r'^AGENTX_POWER_SRT_SLURM_PIN="[0-9a-f]+"$',
         'AGENTX_POWER_SRT_SLURM_PIN="' + "a" * 40 + '"',
@@ -61,7 +65,8 @@ function cp() {
 }
 '''
     env = dict(os.environ, GITHUB_WORKSPACE=str(tmp_path), TEST_ROUTE_LOG=str(tmp_path / "route.log"),
-               TEST_SLURM_UTILS=str(REPO / "runners/slurm_utils.sh"), TEST_WRONG_HEAD=str(int(wrong_head)),
+               TEST_SLURM_UTILS=str(REPO / "runners/slurm_utils.sh"),
+               TEST_POWERX_HELPER=str(REPO / "runners/powerx_8k1k.sh"), TEST_WRONG_HEAD=str(int(wrong_head)),
                IS_MULTINODE="true", IS_AGENTIC="1", MODEL_PREFIX="kimik3", MODEL="moonshotai/Kimi-K3",
                PRECISION="fp4", FRAMEWORK="dynamo-vllm" if hardware == "b200" else "vllm",
                CONFIG_FILE=recipe_ref, SPEC_DECODING="mtp", EVAL_ONLY="false", EVAL_FRAMEWORK="lm-eval")

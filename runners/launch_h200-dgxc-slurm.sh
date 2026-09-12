@@ -16,6 +16,8 @@ POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
 set -x
 
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+# shellcheck source=runners/powerx_8k1k.sh
+source "$(dirname "${BASH_SOURCE[0]}")/powerx_8k1k.sh"
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
@@ -29,6 +31,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # The producer pin decision is recipe-driven. Upstream-only recipes have
     # no workspace mirror and remain non-power.
     USES_DCGM_POWER=0
+    if powerx_fixed_8k1k; then USES_DCGM_POWER=1; fi
     _RECIPE_REL="${CONFIG_FILE%%:*}"
     _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
     if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
@@ -44,7 +47,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # Only explicitly reviewed H200 FP8 AgentX recipes may use dcgm-power.
     # Future recipes must earn a separate cluster smoke instead of inheriting
     # this lane.
-    if [[ "$USES_DCGM_POWER" == "1" && (
+    if ! powerx_fixed_8k1k && [[ "$USES_DCGM_POWER" == "1" && (
         "$IS_AGENTIC" != "1" ||
         "$FRAMEWORK" != "dynamo-sglang" ||
         ( "$MODEL_PREFIX" != "glm5.2" && "$MODEL_PREFIX" != "dsv4" ) ||
@@ -108,7 +111,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    if [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && (
+    if powerx_fixed_8k1k; then
+        powerx_clone_srt "$SRT_REPO_DIR" || exit 1
+    elif [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && (
         "$MODEL_PREFIX" == "glm5.2" || "$MODEL_PREFIX" == "dsv4"
     ) ]]; then
         if [[ "$USES_DCGM_POWER" == "1" ]]; then
@@ -304,7 +309,7 @@ EOF
         cp "$LOCAL_CONFIG_FILE" "$CONFIG_PATH"
     fi
 
-    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" ]]; then
         read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
         python "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
             "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}"
@@ -315,6 +320,10 @@ EOF
 
     echo "Submitting job with srtctl..."
 
+    if powerx_fixed_8k1k; then
+        powerx_prepare_srt || exit 1
+        CONFIG_PATH="${CONFIG_FILE%%:*}"
+    fi
     # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
     sed -i '/^health_check:/,/^[^ ]/{ /^health_check:/d; /^  /d; }' "$CONFIG_PATH"
@@ -346,7 +355,13 @@ EOF
     # srtctl creates logs in outputs/JOB_ID/logs/
     LOGS_DIR="outputs/$JOB_ID/logs"
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
-    trap 'rc=$?; bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT INT TERM HUP
+    if powerx_fixed_8k1k; then
+        trap 'rc=$?; powerx_snapshot_srt; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
+        trap 'exit 130' INT
+        trap 'exit 143' TERM HUP
+    else
+        trap 'rc=$?; bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT INT TERM HUP
+    fi
 
     SRT_JOB_RC=0
     stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
@@ -363,7 +378,7 @@ EOF
 
     echo "Found logs directory: $LOGS_DIR"
 
-    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" ]]; then
         POWER_LOGS_ROOT=$(cd "$LOGS_DIR" && pwd -P)
         read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
         for concurrency in "${POWER_CONCURRENCIES[@]}"; do
@@ -382,12 +397,19 @@ EOF
                 python -m infx.results.agentic.power_adapter "${power_args[@]}"
             ) || exit 1
         done
+    fi
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
         mkdir -p "$LOGS_DIR/power"
         cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
         cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
     fi
 
-    cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+    if powerx_fixed_8k1k; then
+        mkdir -p "$GITHUB_WORKSPACE/LOGS"
+        cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/"
+    else
+        cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+    fi
     bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then

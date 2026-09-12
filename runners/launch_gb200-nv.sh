@@ -5,6 +5,8 @@
 set -x
 
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+# shellcheck source=runners/powerx_8k1k.sh
+source "$(dirname "${BASH_SOURCE[0]}")/powerx_8k1k.sh"
 
 export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
@@ -319,6 +321,7 @@ import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 # enabled dcgm-power telemetry block. Read the workspace mirror (it overlays
 # the srt-slurm clone later), since the pin decision precedes the clone.
 USES_DCGM_POWER=0
+if powerx_fixed_8k1k; then USES_DCGM_POWER=1; fi
 _RECIPE_REL="${CONFIG_FILE%%:*}"
 _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
 # Note (wenyao): a stray "enabled: true" outside the telemetry block must
@@ -337,7 +340,7 @@ fi
 # dynamo-sglang lanes run on (fp8 validated end-to-end, fp4 recipes
 # parse-verified against the pin); other frameworks clone diverging refs
 # (aflowers branch, sa-submission), so fail fast for them instead.
-if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" ]]; then
+if ! powerx_fixed_8k1k && [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" ]]; then
     echo "Error: dcgm-power lanes are only validated for FRAMEWORK=dynamo-sglang, got: $FRAMEWORK" >&2
     exit 1
 fi
@@ -431,7 +434,9 @@ fi
 
 # GLM-5.2 uses v1.0.50 for complete logical-worker metrics discovery across
 # aggregate, DP-attention, and disaggregated topologies.
-if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+if powerx_fixed_8k1k; then
+    powerx_clone_srt "$SRT_REPO_DIR" || exit 1
+elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
     git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     test "$(git rev-parse HEAD)" = "e4019633c9e2bc25f38c44b81edf52bb0504d937" || {
@@ -735,6 +740,7 @@ fi
 echo "Submitting job with srtctl..."
 
 # Resolve the recipe path before editing or submitting it.
+powerx_prepare_srt || exit 1
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 if [[ ! -f "$CONFIG_PATH" ]]; then
     echo "Error: CONFIG_FILE does not exist after srt-slurm setup: $CONFIG_PATH" >&2
@@ -811,6 +817,7 @@ echo "Extracted JOB_ID: $JOB_ID"
 # collisions. Always clean up the exact submitted allocation on exit.
 cleanup_srt_job() {
     local rc=$?
+    powerx_snapshot_srt
     scancel "$JOB_ID" 2>/dev/null || true
     return "$rc"
 }
@@ -840,7 +847,12 @@ if [ -d "$LOGS_DIR" ]; then
         cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
         cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
     fi
-    cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+    if powerx_fixed_8k1k; then
+        mkdir -p "$GITHUB_WORKSPACE/LOGS"
+        cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/"
+    else
+        cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+    fi
     bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 else
     echo "Warning: Logs directory not found at $LOGS_DIR"

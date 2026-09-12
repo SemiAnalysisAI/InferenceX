@@ -2,6 +2,8 @@
 
 # shellcheck source=runners/slurm_utils.sh
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+# shellcheck source=runners/powerx_8k1k.sh
+source "$(dirname "${BASH_SOURCE[0]}")/powerx_8k1k.sh"
 
 # Launcher for the B300 DSXE Slurm cluster (dsxe-sa-b300-prd0), runners run as sa-gha-runner.
 #
@@ -121,6 +123,7 @@ if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" && $FRAMEWORK 
 fi
 
 USES_DCGM_POWER=0
+if powerx_fixed_8k1k; then USES_DCGM_POWER=1; fi
 _RECIPE_REL="${CONFIG_FILE%%:*}"
 _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
 if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
@@ -132,7 +135,7 @@ if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
 ' "$_RECIPE_SRC"; then
     USES_DCGM_POWER=1
 fi
-if [[ "$USES_DCGM_POWER" == "1" && (
+if ! powerx_fixed_8k1k && [[ "$USES_DCGM_POWER" == "1" && (
     "${IS_AGENTIC:-0}" == "1" ||
     "$MODEL_PREFIX" != "dsv4" ||
     "$PRECISION" != "fp4" ||
@@ -159,6 +162,10 @@ select_srt_slurm_version() {
 SRT_REPO_DIR="srt-slurm"
 rm -rf "$SRT_REPO_DIR"
 
+if powerx_fixed_8k1k; then
+    powerx_clone_srt "$SRT_REPO_DIR" || exit 1
+    git rev-parse HEAD > "$GITHUB_WORKSPACE/srt-slurm-sha.txt"
+else
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     SRT_SLURM_REPO="$POWER_SRT_SLURM_URL"
     SRT_SLURM_REF="$POWER_SRT_SLURM_PIN"
@@ -175,6 +182,8 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
     test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" \
         || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
     cp "$GITHUB_WORKSPACE/srt-slurm-sha.txt" "$GITHUB_WORKSPACE/power-producer-sha.txt"
+fi
+
 fi
 
 # Recipes live in this repo; overlay all of them onto the checkout's recipes/ dir.
@@ -272,6 +281,7 @@ fi
 
 # Resolve the recipe path before editing it. CONFIG_FILE may include an
 # srt-slurm matrix selector such as :zip_override_dep4_dep8[0].
+powerx_prepare_srt || exit 1
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 if [[ ! -f "$CONFIG_PATH" ]]; then
     echo "Error: CONFIG_FILE does not exist after srt-slurm setup: $CONFIG_PATH" >&2
@@ -312,6 +322,7 @@ echo "Extracted JOB_ID: $JOB_ID"
 # srtctl creates logs in outputs/JOB_ID/logs/
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
+trap powerx_snapshot_srt EXIT
 
 # Wait for log file to appear (also check job is still alive)
 while ! ls "$LOG_FILE" &>/dev/null; do
@@ -359,7 +370,12 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
     cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
 fi
 
-cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+if powerx_fixed_8k1k; then
+    mkdir -p "$GITHUB_WORKSPACE/LOGS"
+    cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/"
+else
+    cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+fi
 tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
 if [[ "${EVAL_ONLY:-false}" != "true" ]]; then

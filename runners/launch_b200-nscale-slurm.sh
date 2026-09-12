@@ -28,6 +28,8 @@ SQUASH_LOCK_TIMEOUT=3600
 
 # shellcheck source=runners/slurm_utils.sh
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+# shellcheck source=runners/powerx_8k1k.sh
+source "$(dirname "${BASH_SOURCE[0]}")/powerx_8k1k.sh"
 
 set -x
 
@@ -64,6 +66,7 @@ if [[ $FRAMEWORK != "dynamo-vllm" ]] &&
 fi
 
 USES_DCGM_POWER=0
+if powerx_fixed_8k1k; then USES_DCGM_POWER=1; fi
 USES_AGENTX_POWER=0
 _POWER_CONFIG_FILE="${CONFIG_FILE:-}"
 if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
@@ -83,7 +86,7 @@ fi
 if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
     "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
     USES_AGENTX_POWER=1
-elif [[ "$USES_DCGM_POWER" == "1" && (
+elif ! powerx_fixed_8k1k && [[ "$USES_DCGM_POWER" == "1" && (
     "${IS_AGENTIC:-0}" == "1" ||
     "$PRECISION" != "fp4" ||
     ( "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" ) ||
@@ -99,7 +102,9 @@ export SERVED_MODEL_NAME=$MODEL
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
 rm -rf "$SRT_REPO_DIR"
-if [[ "$USES_DCGM_POWER" == "1" ]]; then
+if powerx_fixed_8k1k; then
+    powerx_clone_srt "$SRT_REPO_DIR" || exit 1
+elif [[ "$USES_DCGM_POWER" == "1" ]]; then
     SELECTED_POWER_SRT_SLURM_PIN="$POWER_SRT_SLURM_PIN"
     if [[ "$USES_AGENTX_POWER" == "1" ]]; then
         SELECTED_POWER_SRT_SLURM_PIN="$AGENTX_POWER_SRT_SLURM_PIN"
@@ -348,6 +353,7 @@ if [[ -z "$CONFIG_FILE" ]]; then
 fi
 
 # Strip any :override[N] selector so sed and the injector operate on the file.
+powerx_prepare_srt || exit 1
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 
 # Override the job name in the config file with the runner name
@@ -388,6 +394,7 @@ echo "Extracted JOB_ID: $JOB_ID"
 
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
+trap powerx_snapshot_srt EXIT
 
 # Waits for the log file to appear, fails fast if the job dies first, then
 # streams until the job leaves the queue.
@@ -418,7 +425,12 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
     cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
 fi
 
-cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+if powerx_fixed_8k1k; then
+    mkdir -p "$GITHUB_WORKSPACE/LOGS"
+    cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/"
+else
+    cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+fi
 bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 
 if [[ "$AGENTX_POWER_RC" != "0" && "$SRT_JOB_RC" == "0" ]]; then
