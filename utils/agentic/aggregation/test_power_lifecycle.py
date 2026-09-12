@@ -657,7 +657,7 @@ done
     assert duration < 10
 
 
-def test_amd_stop_falls_back_to_fixed_tail_for_iso_timestamps(tmp_path: Path):
+def test_amd_stop_bounds_wait_for_iso_timestamps(tmp_path: Path):
     producer = """
 while :; do
     emit_row "$(date +%Y-%m-%dT%H:%M:%S)" 0 500
@@ -665,14 +665,27 @@ while :; do
 done
 """
     started = time.monotonic()
-    result = _run_amd_stop(tmp_path, producer_script=producer, timeout_s=30, interval=0)
+    result = _run_amd_stop(tmp_path, producer_script=producer, timeout_s=1, interval=30)
     duration = time.monotonic() - started
 
     assert result.returncode == 0, result.stderr
-    assert "never covered the stop request" not in result.stdout + result.stderr
-    assert "exited before covering" not in result.stdout + result.stderr
-    pre, post = _stop_epochs(tmp_path)
-    # Non-epoch timestamps keep the legacy interval+2 fixed tail (one shot).
-    assert post - pre >= 2
-    assert duration < 10
+    assert "never covered the stop request" in result.stderr
+    assert "exited before covering" not in result.stderr
+    assert duration < 4
+    _assert_producer_dead(tmp_path)
+
+
+def test_amd_stop_waits_for_delayed_first_sample(tmp_path: Path):
+    producer = """
+sleep 4
+while :; do
+    emit_row "$(date +%s)" 0 500
+    sleep 0.2
+done
+"""
+    result = _run_amd_stop(tmp_path, producer_script=producer, timeout_s=8)
+
+    assert result.returncode == 0, result.stderr
+    pre, _ = _stop_epochs(tmp_path)
+    assert _min_covered_tick(tmp_path / "gpu_metrics.csv") >= pre + 1
     _assert_producer_dead(tmp_path)

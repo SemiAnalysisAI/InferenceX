@@ -373,13 +373,9 @@ _wait_for_amd_stop_coverage() {
     deadline=$(( target + timeout_s ))
     while :; do
         covered=$(_amd_monitor_min_covered_tick)
-        if [[ -z "$covered" ]]; then
-            # Non-epoch timestamps or an unusable stream: keep the legacy
-            # fixed tail so older amd-smi builds behave exactly as before.
-            sleep $(( ${GPU_MONITOR_INTERVAL:-1} + 2 ))
-            return 0
-        fi
-        if [[ "$covered" -ge "$target" ]]; then
+        # The first usable row may arrive after stop begins. Keep the same
+        # deadline for empty or unsupported streams instead of stopping early.
+        if [[ -n "$covered" && "$covered" -ge "$target" ]]; then
             return 0
         fi
         if ! _background_process_is_running "$GPU_MONITOR_PID"; then

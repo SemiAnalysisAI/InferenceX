@@ -160,6 +160,11 @@ The aggregate artifact matches the `bmk_*` collection pattern and therefore also
 Server logs are separate `server_logs_<RESULT_FILENAME>` artifacts. The app uses the fully stripped suffix fallback so AgentX rows can find a server log even though the log artifact has no `agentic_` prefix.
 
 Ordinary single-node AgentX runs enable the shared GPU power monitor by default.
+AMD monitor shutdown waits for usable samples through the stop request, up to
+`AMD_MONITOR_STOP_TIMEOUT_S` (default 30 seconds), including when the first sample
+is delayed. Unsupported timestamps or missing samples reach the same deadline;
+aggregation still rejects an uncovered measurement window. AgentX cancellation
+skips this wait and preserves the available evidence.
 Their `power_audit_<RESULT_FILENAME>` artifact retains the raw telemetry, GPU
 identity, formal measurement window, timezone offset, and validation verdict
 from `results/`. Multinode runs retain the deployment telemetry under

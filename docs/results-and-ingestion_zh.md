@@ -159,6 +159,9 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 服务器日志是单独的 `server_logs_<RESULT_FILENAME>` 工件。应用会使用完全移除前缀后的后缀作为回退，从而让 AgentX 记录找到不含 `agentic_` 前缀的日志工件。
 
 普通单节点 AgentX 提交默认启用共享 GPU 功耗监控。
+AMD 监控停止时等待有效采样覆盖停止请求，最长等待 `AMD_MONITOR_STOP_TIMEOUT_S`
+（默认 30 秒），首条采样延迟也适用。不支持的时间戳或缺失采样使用相同截止时间；
+聚合仍会拒绝未覆盖测量窗口的数据。AgentX 取消时跳过等待，并保留已有证据。
 `power_audit_<RESULT_FILENAME>` 工件保留 `results/` 中的原始遥测、GPU 身份、
 正式测量窗口、时区偏移和校验结果。多节点运行在同一审计工件中保留
 `LOGS/power/` 下的部署遥测，以及 `LOGS/agentic/` 下各并发的窗口和校验文件。

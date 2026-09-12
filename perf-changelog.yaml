@@ -7408,3 +7408,12 @@
     - "Retain the AMD monitor stream until it brackets the stop request, keep cancellation teardown bounded, and reject invalid samples inside the measured window while accounting for degenerate boundary rows."
     - "保留 AMD 功耗测量边界及诊断信息。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3041
+
+- config-keys:
+    - kimik3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Keep the AMD stop deadline active while waiting for the first usable telemetry row; unsupported streams no longer sleep beyond the configured timeout."
+    - "等待首条有效 AMD 遥测时继续执行停止截止时间；不支持的采样流不再超出配置超时。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3041
