@@ -283,8 +283,13 @@ stop_gpu_monitor() {{
     printf 'monitor-stop:%s\n' "${{AMD_MONITOR_STOP_TIMEOUT_S:-unset}}" >> {str(event_log)!r}
 }}
 fake_replay() {{
-    printf 'replay-ready\n' >> {str(event_log)!r}
-    exec sleep 30
+    exec {sys.executable!r} -c '
+import signal, sys, time
+signal.signal(signal.SIGINT, signal.SIG_DFL)
+signal.signal(signal.SIGTERM, signal.SIG_DFL)
+print("replay-ready", file=open(sys.argv[1], "a"), flush=True)
+time.sleep(30)
+' {str(event_log)!r}
 }}
 trap 'printf "parent-exit\\n" >> {str(event_log)!r}' EXIT
 trap 'printf "parent-int\\n" >> {str(event_log)!r}; exit 130' INT
@@ -304,7 +309,8 @@ run_agentic_replay_and_write_outputs {str(result_dir)!r}
     )
     try:
         # The monitor starts before the production signal traps are installed.
-        # Wait for replay so the signal actually exercises those traps.
+        # Publish readiness from the execed process after restoring signal handling;
+        # a shell marker before exec races with the group SIGINT.
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
             if event_log.exists() and "replay-ready" in event_log.read_text().splitlines():
