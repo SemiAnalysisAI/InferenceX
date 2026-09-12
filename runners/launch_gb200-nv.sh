@@ -99,6 +99,13 @@ import_squash() {
     ) || exit 1
 }
 
+# DeepSeek V4.1 Flash resolves through the persistent shared HF cache for both
+# direct serving and Dynamo P/D.
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" ]]; then
+    export MODEL_PATH="$MODEL"
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4.1-flash"
+fi
+
 # Direct single-tray AgentX uses the existing shared image and HF caches.
 if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
     BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb200_${FRAMEWORK}_mtp.sh"
@@ -254,7 +261,13 @@ elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         exit 1
     fi
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
-    if [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
+    if [[ $MODEL_PREFIX == "dsv41flash" && $PRECISION == "fp4" ]]; then
+        DSV41_CACHE="/mnt/lustre01/users-public/sa-shared/hf-hub-cache/models--deepseek-ai--DeepSeek-V4.1-Flash"
+        DSV41_REVISION=$(cat "$DSV41_CACHE/refs/main") || exit 1
+        export MODEL_PATH="$DSV41_CACHE/snapshots/$DSV41_REVISION"
+        test -r "$MODEL_PATH/config.json" || { echo "Missing cached DeepSeek V4.1 Flash snapshot: $MODEL_PATH" >&2; exit 1; }
+        export SRT_SLURM_MODEL_PREFIX="deepseek-v4.1-flash"
+    elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
     elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
@@ -492,6 +505,14 @@ elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "minimaxm3" ]]; then
     RECIPE_DIR="benchmarks/multi_node/srt-slurm-recipes/trtllm/minimax-m3/gb200-fp4/agentic"
     mkdir -p "$RECIPE_DIR" || exit 1
     cp -rT "$GITHUB_WORKSPACE/$RECIPE_DIR" "$RECIPE_DIR" || exit 1
+# DeepSeek V4.1 Flash uses the released schema that supports per-node DP
+# launch and explicit worker placement fields in its P/D recipe.
+elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
+    git clone --branch v1.0.36 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    mkdir -p recipes/vllm/deepseek-v4.1-flash/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4.1-flash/agentic" \
+        recipes/vllm/deepseek-v4.1-flash/agentic
 # TODO(CJQ): migrate the remaining Agentic model paths to released srt-slurm.
 elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic multi-node pins cquil11/srt-slurm-nv revisions that provide:
@@ -508,6 +529,9 @@ elif [[ "$IS_AGENTIC" == "1" ]]; then
     mkdir -p recipes/vllm/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
         recipes/vllm/deepseek-v4/agentic
+    mkdir -p recipes/vllm/deepseek-v4.1-flash/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4.1-flash/agentic" \
+        recipes/vllm/deepseek-v4.1-flash/agentic
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -649,6 +673,10 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
     DEFAULT_MOUNTS_BLOCK="default_mounts:
   ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
   ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+    if [[ "$MODEL_PREFIX" == "dsv41flash" ]]; then
+        DEFAULT_MOUNTS_BLOCK+="
+  ${DSV41_CACHE}/blobs: /blobs"
+    fi
     if uses_watchtower_shared_fs && [[ "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
         DYNAMO_WHEELS_CACHE_HOST_PATH="${SHARED_BASE}/dynamo-wheels"
         mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
