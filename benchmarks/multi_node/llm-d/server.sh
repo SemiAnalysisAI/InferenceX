@@ -649,7 +649,12 @@ PY
     exit "$BENCH_RC"
 else
     while [[ ! -f "$BENCH_DONE_MARKER" ]]; do
-        kill -0 "$VLLM_PID" 2>/dev/null || exit 1
+        if ! kill -0 "$VLLM_PID" 2>/dev/null; then
+            # The coordinator may publish completion and stop the engine
+            # between the marker check and this process check.
+            [[ -f "$BENCH_DONE_MARKER" ]] && break
+            exit 1
+        fi
         sleep 2
     done
     exit "$(cat "$BENCH_DONE_MARKER")"

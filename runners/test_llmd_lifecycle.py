@@ -88,3 +88,27 @@ exit "$2"
                             capture_output=True, text=True, timeout=5)
     assert result.returncode == node_rc, result.stderr
     assert (tmp_path / 'done').read_text().strip() == str(node_rc)
+
+
+@pytest.mark.parametrize('coordinator_rc', [0, 7, None])
+def test_llmd_worker_rechecks_completion_when_engine_stops(tmp_path, coordinator_rc):
+    worker = SERVER.read_text().rsplit('\nelse\n', 1)[1].rsplit('\nfi', 1)[0]
+    command = r'''
+BENCH_DONE_MARKER="$1/done"
+VLLM_PID=123
+kill() {
+    # The loop already observed no marker. Publish the coordinator's result
+    # before reporting the distributed engine shutdown at its next PID check.
+    [[ ! -f "$BENCH_DONE_MARKER" ]] || return 99
+    if [[ "$2" != 123 ]]; then return 99; fi
+    if [[ "$COORDINATOR_RC" != missing ]]; then
+        printf '%s\n' "$COORDINATOR_RC" > "$BENCH_DONE_MARKER"
+    fi
+    return 1
+}
+''' + worker
+    env = {**os.environ, 'COORDINATOR_RC': str(coordinator_rc) if coordinator_rc is not None else 'missing'}
+    result = subprocess.run(['bash', '-c', command, 'bash', str(tmp_path)], env=env,
+                            capture_output=True, text=True, timeout=5)
+    expected = coordinator_rc if coordinator_rc is not None else 1
+    assert result.returncode == expected, result.stderr
