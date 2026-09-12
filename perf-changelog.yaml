@@ -7032,3 +7032,13 @@
     - "Refresh the full GB200 Dynamo-vLLM AgentX configuration across the configured aggregate and disaggregated topology points."
     - "Retain aggregate SimpleCPU-offload concurrency 20 and 30, and configure Mooncake host KV storage, NIXL over UCX, explicit thinking mode, and the committed MiniMax-M3 EAGLE3-GQA acceptance target."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2807
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add exact CUDA-graph captures for DEP decode batches 3, 5-7, and 9-15, avoiding the default power-of-two padding work in attention, MoE, and RCCL collectives. Preserve 256/512 captures for C96+ where max-num-seqs exceeds 128."
+    - "A controlled C64 900-second A/B on the current 8192-token checkpoint configuration, with identical synthetic acceptance, improved AIPerf total token throughput from 121,002.58 to 124,240.67 tok/s (+2.68%) and reduced P90 ITL from 35.79 to 32.20 ms (-10.03%), with zero request errors. The extra graphs add about 13 seconds of startup and 0.12 GB per GPU."
+    - "Retain the post-review 8192-token state-checkpoint interval and default scheduler controls; this supersedes the earlier changelog statement that described the removed 32768-token and experimental scheduler overrides."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912

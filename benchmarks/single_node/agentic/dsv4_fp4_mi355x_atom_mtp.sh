@@ -116,6 +116,19 @@ trap 'exit 143' TERM
 # request bursts produced by subagent fan-out.
 MAX_NUM_SEQS=$((2 * CONC))
 
+# DPA splits the C48+ workload across eight ranks, so real decode batches are
+# commonly 3, 5-7, and 9-15. ATOM's default power-of-two ladder rounds those
+# shapes up and runs unnecessary attention, MoE, and collective work. Capture
+# every small shape for DEP, while retaining larger graphs for the C96+ arms.
+CUDAGRAPH_ARGS=()
+if [ "$DP_ATTENTION" = "true" ]; then
+    CUDAGRAPH_CAPTURE_SIZES='[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128]'
+    if [ "$MAX_NUM_SEQS" -gt 128 ]; then
+        CUDAGRAPH_CAPTURE_SIZES='[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128,256,512]'
+    fi
+    CUDAGRAPH_ARGS=(--cudagraph-capture-sizes "$CUDAGRAPH_CAPTURE_SIZES")
+fi
+
 # golden_al_distribution/dsv4_mtp.yaml: thinking_on, 3 draft tokens -> AL 2.49.
 # https://github.com/SemiAnalysisAI/InferenceX/blob/main/golden_al_distribution/dsv4_mtp.yaml
 # Native RCCL DEP was validated with the model's real acceptance, so only the
@@ -154,6 +167,7 @@ ATOM_CMD=(
     --state-checkpoint-interval-tokens "$STATE_CHECKPOINT_INTERVAL_TOKENS"
     --level 3
     --cudagraph-mode FULL
+    "${CUDAGRAPH_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     "${EP_ARGS[@]}"
     "${DEP_ARGS[@]}"
