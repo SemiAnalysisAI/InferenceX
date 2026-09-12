@@ -436,9 +436,6 @@ fi
 # aggregate, DP-attention, and disaggregated topologies.
 if powerx_fixed_8k1k; then
     powerx_clone_srt "$SRT_REPO_DIR" || exit 1
-    if [[ "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
-        export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
-    fi
 elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
     git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"

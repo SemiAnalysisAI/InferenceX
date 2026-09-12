@@ -243,9 +243,6 @@ rm -rf "$SRT_REPO_DIR"
 
 if powerx_fixed_8k1k; then
     powerx_clone_srt "$SRT_REPO_DIR" || exit 1
-    if [[ "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-trt" ]]; then
-        SRT_SLURM_MODEL_PREFIX="deepseek-ai/DeepSeek-V4-Pro"
-    fi
 elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qwen3.5" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"

@@ -147,3 +147,26 @@ def test_snapshot_leaves_unselected_runtime_artifacts_untouched(tmp_path, overri
     assert not (tmp_path / "LOGS").exists()
     assert not (tmp_path / "multinode_server_logs.tar.gz").exists()
     assert list(logs.iterdir()) == [logs / "sentinel"]
+
+
+@pytest.mark.parametrize(
+    ("launcher", "framework", "model_path", "model_alias"),
+    [("launch_gb200-nv.sh", "dynamo-sglang", "/mnt/lustre01/models/DeepSeek-V4-Pro", "deepseek-v4-pro"),
+     ("launch_gb300-nv.sh", "dynamo-trt", "/scratch/models/DeepSeek-V4-Pro", "deepseek-v4-pro")],
+)
+def test_power_checkout_preserves_resolved_model_mapping(launcher, framework, model_path, model_alias):
+    source = (ROOT / "runners" / launcher).read_text()
+    start = source.index('if powerx_fixed_8k1k; then\n    powerx_clone_srt')
+    selected_branch = source[start:source.index('\nelif ', start)] + '\nfi\n'
+    shell = '''source "$ROOT/runners/powerx_8k1k.sh"
+powerx_clone_srt() { echo "cloned:$1"; }
+''' + selected_branch + 'printf "%s\\n%s\\n" "$MODEL_PATH" "$SRT_SLURM_MODEL_PREFIX"\n'
+    result = subprocess.run(
+        ["bash", "-c", shell], capture_output=True, text=True,
+        env={**os.environ, "ROOT": str(ROOT), "REQUIRE_POWER": "1", "ISL": "8192", "OSL": "1024",
+             "IS_AGENTIC": "0", "EVAL_ONLY": "false", "SCENARIO_TYPE": "fixed-seq-len",
+             "MODEL_PREFIX": "dsv4", "FRAMEWORK": framework, "MODEL_PATH": model_path,
+             "SRT_SLURM_MODEL_PREFIX": model_alias, "SRT_REPO_DIR": "selected-runtime"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ["cloned:selected-runtime", model_path, model_alias]
