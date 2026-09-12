@@ -112,6 +112,10 @@ InferenceX-app 将路由字段作为列或配置维度，并把数值测量存�
 
 SMI 采集在 CSV 旁记录 UTC 上下文以支持跨环境回放。正式窗口外的无效样本不能构成覆盖；`boundary_degenerate_rows` 保留其逐 GPU 计数。
 
+### Slurm 完成状态文件
+
+共享 Slurm 等待逻辑检查分配的最终状态和退出码；当 `sacct` 记录缺失或尚未进入最终状态时查询 `scontrol`，并保留 `slurm_job_*_outcome.txt`。启动器先保存已有证据再返回失败。llm-d 工作进程根据协调进程原子发布的完成状态退出；正常结束不再取消 Slurm 分配。
+
 ## 评测工件
 
 ### 单配置身份和收集

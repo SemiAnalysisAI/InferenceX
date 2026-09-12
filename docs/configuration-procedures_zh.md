@@ -88,6 +88,8 @@ STP（Single Token Prediction，单 Token 预测）是每次前向传播生成�
 6. srt-slurm 必须同时更新配方和主条目；llm-d 必须同时更新 llm-d 配方/编排和主条目。
 7. 追加触发条目，先只生成受影响的 key，并检查每个生成点。
 
+固定序列 `8192/1024` 场景可设置 `require-power: true`，要求经过验证的实测功耗。矩阵将此标记传递给标准 sweep 和手动 E2E 吞吐作业；eval-only 和 AgentX 行不继承该标记。省略此字段可保留现有行为。仅在对应 runtime 和结果适配器同时交付时启用，然后验证完整选定范围。
+
 ## 注册并设置 runner
 
 设置来源：[`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md)。配置来源：[`configs/CONFIGS.md#runners`](../configs/CONFIGS.md#runners)。
@@ -111,6 +113,10 @@ runner 名称前缀是关键契约：workflow 通过 `launch_${RUNNER_NAME%%_*}.
 5. 用 [`start_runners.sh`](../utils/runner_setup/start_runners.sh) 启动。
 6. 将 runner 加入 sweep 流量前，在[仓库 runner 设置页](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners)确认每个 runner 都是 **Idle**。
 7. 从计算节点验证 launcher 对 `_work`、HF cache、预置权重和 squash 镜像的挂载。root 容器不得在共享 workspace 留下 root 所有的文件。
+
+## llm-d 原生功耗
+
+仅固定 8192/1024 的 `dsv4-fp4-gb200-llmd-vllm` 要求原生功耗。每个服务节点采集所选设备；协调进程等待 ready 与 drain 后正常退出。结果与审计数据共同保留。其他序列长度、AgentX 和 eval-only 不启用此采集器。硬件资格验证与发布仍待完成。
 
 ## 注册 srt-slurm 配方
 

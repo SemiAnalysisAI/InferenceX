@@ -88,6 +88,8 @@ Sources: [`configs/CONFIGS.md`](../configs/CONFIGS.md), [`validation.py`](../uti
 6. For srt-slurm, update recipe and master entry together. For llm-d, update the llm-d recipe/orchestration and master entry together.
 7. Append the trigger entry, generate only the affected key first, and inspect every emitted point.
 
+Fixed-sequence `8192/1024` scenarios may set `require-power: true` to opt into validated measured power. The matrix passes this flag to standard sweeps and manual E2E throughput jobs; eval-only and AgentX rows do not inherit it. Omit the field to preserve existing behavior. Enable it only alongside the corresponding runtime and result adapter, then qualify the complete selected scope.
+
 ## Register and set up a runner
 
 Setup source: [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md). Config source: [`configs/CONFIGS.md#runners`](../configs/CONFIGS.md#runners).
@@ -111,6 +113,10 @@ The runner-name prefix is load-bearing: workflow routing uses `launch_${RUNNER_N
 5. Start with [`start_runners.sh`](../utils/runner_setup/start_runners.sh).
 6. Verify every runner is **Idle** in [repository runner settings](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners) before adding it to sweep traffic.
 7. Verify launcher mounts for `_work`, HF cache, staged weights, and squash images from a compute node. Root containers must not leave root-owned files in the shared workspace.
+
+## Native llm-d power
+
+Only fixed 8192/1024 `dsv4-fp4-gb200-llmd-vllm` requires native power. Every serving node collects its selected devices; the coordinator waits for readiness and drain before normal shutdown. Results and audits are retained together. Other sequence lengths, AgentX and eval-only do not enable this collector. Hardware qualification and publication remain pending.
 
 ## Register an srt-slurm recipe
 
