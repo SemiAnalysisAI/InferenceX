@@ -7358,3 +7358,12 @@
     - "为 B200、H200、GB200 和 GB300 启用 Kimi-K3 AgentX 必需功耗采集、精确测量窗口验证及失败任务审计产物。"
     - "AMD 遥测覆盖完整窗口后再收尾；使用现有 B300 集群标签，并修正 B200 的 DCP/Offload 元数据以匹配实际服务命令。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3030
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the unavailable B300 Kimi-K3 vLLM 5894fdf image with build 3696c77. This changes the runtime baseline; DSXE RDMA compatibility and end-to-end power qualification remain pending."
+    - "将 B300 Kimi-K3 不可用的 vLLM 5894fdf 镜像替换为 3696c77 构建。运行时基线随之改变；DSXE RDMA 兼容性及端到端功耗验证尚未完成。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3030
