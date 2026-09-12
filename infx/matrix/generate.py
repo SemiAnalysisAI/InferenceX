@@ -3,6 +3,8 @@ import fnmatch
 import json
 import math
 import re
+from collections.abc import Iterable
+from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 from typing import Literal
@@ -979,242 +981,142 @@ def _agentic_entries(
     return entries
 
 
-def generate_full_sweep(args, all_config_data, runner_data):
-    """Generate full sweep configurations with optional filtering.
+@dataclass(frozen=True)
+class FullSweepOptions:
+    """Full-sweep selection and overrides, independent of the CLI parser."""
 
-    Supports filtering by model prefix, precision, framework, runner type, sequence lengths,
-    and max concurrency.
+    model_prefix: list[str] | None = None
+    precision: list[str] | None = None
+    framework: list[str] | None = None
+    runner_type: list[str] | None = None
+    seq_lens: list[str] | None = None
+    scenario_types: list[str] | None = None
+    runner_node_filter: str | None = None
+    single_node: bool = True
+    multi_node: bool = True
+    step_size: int = 2
+    min_conc: int | None = None
+    max_conc: int | None = None
+    max_tp: int | None = None
+    max_ep: int | None = None
 
-    All filters are optional - can generate sweeps for all configs or filter by specific criteria.
 
-    Assumes all_config_data has been validated by validate_master_config().
-    """
-    if args.step_size <= 1:
+def generate_full_sweep(
+    args: argparse.Namespace, all_config_data: dict, runner_data: dict,
+) -> list[dict]:
+    """Compatibility adapter for callers passing the full-sweep CLI namespace."""
+    return expand_full_sweep(all_config_data, runner_data, options=FullSweepOptions(
+        model_prefix=args.model_prefix, precision=args.precision,
+        framework=args.framework, runner_type=args.runner_type,
+        seq_lens=args.seq_lens, scenario_types=getattr(args, "scenario_type", None),
+        runner_node_filter=args.runner_node_filter,
+        single_node=args.single_node, multi_node=args.multi_node,
+        step_size=args.step_size, min_conc=args.min_conc, max_conc=args.max_conc,
+        max_tp=args.max_tp, max_ep=args.max_ep,
+    ))
+
+
+def expand_full_sweep(
+    master_config: dict, runner_data: dict, *,
+    options: FullSweepOptions = FullSweepOptions(),
+) -> list[dict]:
+    """Expand validated configs in declaration order, before eval selection."""
+    if options.step_size <= 1:
         raise ValueError("step_size must be greater than 1")
     if (
-        args.min_conc is not None
-        and args.max_conc is not None
-        and args.min_conc > args.max_conc
+        options.min_conc is not None and options.max_conc is not None
+        and options.min_conc > options.max_conc
     ):
         raise ValueError("min_conc must be less than or equal to max_conc")
-
-    # Validate runner types if specified
-    if args.runner_type:
-        valid_runner_types = set(runner_labels(runner_data).keys())
-        invalid_runners = set(args.runner_type) - valid_runner_types
+    if options.runner_type:
+        valid_runner_types = set(runner_labels(runner_data))
+        invalid_runners = set(options.runner_type) - valid_runner_types
         if invalid_runners:
             raise ValueError(
                 f"Invalid runner type(s): {invalid_runners}. "
                 f"Valid runner types are: {', '.join(sorted(valid_runner_types))}")
 
-    matrix_values = []
-
-    # Convert seq-lens to set of (isl, osl) tuples for filtering
-    seq_lens_filter = None
-    if args.seq_lens:
-        seq_lens_filter = {seq_len_stoi[sl] for sl in args.seq_lens}
-
-    # Iterate through all configurations and apply filters as specified (this is just "selecting" 
-    # configs from all of the master configs subject to some pattern matching)
-    for key, val in all_config_data.items():
-        # Filter by model prefix if specified
-        if args.model_prefix:
-            if not any(key.startswith(prefix) for prefix in args.model_prefix):
-                continue
-
-        # Filter by precision if specified
-        if args.precision and val[Fields.PRECISION.value] not in args.precision:
-            continue
-
-        # Filter by framework if specified
-        if args.framework and val[Fields.FRAMEWORK.value] not in args.framework:
-            continue
-
-        # Filter by runner type if specified
-        if args.runner_type and val[Fields.RUNNER.value] not in args.runner_type:
-            continue
-
-        # Check if this is a multinode config
-        is_multinode = val.get(Fields.MULTINODE.value, False)
-
-        scenarios = val[Fields.SCENARIOS.value]
-        scenario_filter = set(args.scenario_type) if getattr(args, 'scenario_type', None) else None
-        seq_len_configs = scenarios.get(Fields.FIXED_SEQ_LEN.value, []) if (scenario_filter is None or 'fixed-seq-len' in scenario_filter) else []
-        runner = val[Fields.RUNNER.value]
-
-        # Compute filtered runner nodes for this config if filter is specified
-        runner_nodes_to_use = None
-        if args.runner_node_filter:
-            runner_nodes = runner_nodes_for_label(runner, runner_data)
-            runner_nodes_to_use = [
-                node for node in runner_nodes if args.runner_node_filter in node]
-            if not runner_nodes_to_use:
-                # No matching nodes for this config's runner type, skip this config
-                continue
-
-        for seq_config in seq_len_configs:
-            isl = seq_config[Fields.ISL.value]
-            osl = seq_config[Fields.OSL.value]
-
-            # Filter by sequence lengths if specified
-            if seq_lens_filter and (isl, osl) not in seq_lens_filter:
-                continue
-
-            bmk_space = seq_config[Fields.SEARCH_SPACE.value]
-
-            for bmk in bmk_space:
-                # Skip configs that don't match the requested node type
-                if is_multinode and not args.multi_node:
-                    continue
-                if not is_multinode and not args.single_node:
-                    continue
-
-                if is_multinode:
-                    # Get concurrency values (can be list or range)
-                    conc_list = bmk.get(Fields.CONC_LIST.value)
-                    # If it's a list
-                    if conc_list:
-                        conc_values = conc_list
-                    # If it's a range
-                    else:
-                        conc_start = bmk[Fields.CONC_START.value]
-                        conc_end = bmk[Fields.CONC_END.value]
-                        conc_values = _concurrency_range(conc_start, conc_end, args.step_size)
-
-                    # Apply min-conc filter if specified
-                    if args.min_conc is not None:
-                        if args.min_conc <= 0:
-                            continue  # Skip if min_conc is not positive
-                        conc_values = [c for c in conc_values if c >= args.min_conc]
-                        if not conc_values:
-                            continue  # Skip if no values meet the min_conc requirement
-
-                    # Apply max-conc filter if specified
-                    # If max_conc is less than all values, use max_conc directly (if valid)
-                    if args.max_conc is not None:
-                        filtered_conc = [c for c in conc_values if c <= args.max_conc]
-                        if not filtered_conc:
-                            # No existing values <= max_conc, so use max_conc directly if valid
-                            if args.max_conc > 0:
-                                conc_values = [args.max_conc]
-                            else:
-                                continue  # Skip if max_conc is not positive
-                        else:
-                            conc_values = filtered_conc
-
-                    runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
-                    matrix_values.extend(_fixed_sequence_entries(
-                        val, bmk, seq_config, conc_values, runners_for_entry, runner_data))
-                else:
-                    # Single-node configuration
-                    tp = bmk[Fields.TP.value]
-                    ep = bmk.get(Fields.EP.value)
-
-                    # Apply max-tp filter if specified
-                    if args.max_tp is not None:
-                        if args.max_tp <= 0:
-                            continue  # Skip if max_tp is not positive
-                        if tp > args.max_tp:
-                            continue
-
-                    # Apply max-ep filter if specified
-                    # If ep > max_ep, use max_ep instead of skipping (if valid)
-                    if args.max_ep is not None:
-                        if args.max_ep <= 0:
-                            continue  # Skip if max_ep is not positive
-                        if ep is not None and ep > args.max_ep:
-                            ep = args.max_ep
-
-                    conc_list = bmk.get(Fields.CONC_LIST.value)
-                    if conc_list:
-                        conc_values = list(conc_list)
-
-                        if args.min_conc is not None:
-                            if args.min_conc <= 0:
-                                continue
-                            conc_values = [
-                                conc for conc in conc_values
-                                if conc >= args.min_conc
-                            ]
-                            if not conc_values:
-                                continue
-
-                        if args.max_conc is not None:
-                            if args.max_conc <= 0:
-                                continue
-                            filtered_conc = [
-                                conc for conc in conc_values
-                                if conc <= args.max_conc
-                            ]
-                            conc_values = (
-                                filtered_conc
-                                if filtered_conc
-                                else [args.max_conc]
-                            )
-                    else:
-                        conc_start = bmk[Fields.CONC_START.value]
-                        conc_end = bmk[Fields.CONC_END.value]
-
-                        # If conc_end < min_conc, skip this config entirely.
-                        if args.min_conc is not None:
-                            if args.min_conc <= 0:
-                                continue
-                            if conc_end < args.min_conc:
-                                continue
-                            conc_start = max(conc_start, args.min_conc)
-
-                        # If conc_start > max_conc, use max_conc directly.
-                        if args.max_conc is not None:
-                            if args.max_conc <= 0:
-                                continue
-                            if conc_start > args.max_conc:
-                                conc_start = args.max_conc
-                                conc_end = args.max_conc
-                            else:
-                                conc_end = min(conc_end, args.max_conc)
-
-                        conc_values = _concurrency_range(conc_start, conc_end, args.step_size)
-
-                    runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
-                    matrix_values.extend(_fixed_sequence_entries(
-                        val, {**bmk, Fields.EP.value: ep}, seq_config,
-                        conc_values, runners_for_entry, runner_data))
-
-        # ---- Agentic-coding scenarios ----
-        agentic_configs = scenarios.get(Fields.AGENTIC_CODING.value, []) if (scenario_filter is None or 'agentic-coding' in scenario_filter) else []
-        if is_multinode and not args.multi_node:
-            continue
-        if not is_multinode and not args.single_node:
-            continue
-
-        for scenario in agentic_configs:
-            for benchmark in scenario[Fields.SEARCH_SPACE.value]:
-                matrix_values.extend(_agentic_entries(
-                    val, benchmark, scenario, runner_nodes_to_use or [runner], runner_data,
-                    step_size=args.step_size, min_conc=args.min_conc, max_conc=args.max_conc,
-                ))
-
-    return matrix_values
+    # Full-sweep validates sequence names even when no config matches.
+    seq_filter = {seq_len_stoi[sl] for sl in options.seq_lens} if options.seq_lens else None
+    configs = (
+        config for key, config in master_config.items()
+        if (not options.model_prefix or any(key.startswith(p) for p in options.model_prefix))
+        and (not options.precision or config[Fields.PRECISION.value] in options.precision)
+        and (not options.framework or config[Fields.FRAMEWORK.value] in options.framework)
+        and (not options.runner_type or config[Fields.RUNNER.value] in options.runner_type)
+    )
+    return _expand_configs(
+        configs, runner_data, seq_filter=seq_filter,
+        scenario_types=options.scenario_types,
+        runner_node_filter=options.runner_node_filter, full_sweep=options,
+    )
 
 
-def _runner_values_for_filter(runner: str, runner_data: dict, runner_node_filter: str | None) -> list[str]:
+def _fixed_sequence_concurrencies(
+    benchmark: dict, *, multinode: bool, full_sweep: FullSweepOptions | None,
+    concurrencies: list[int] | None,
+) -> list[int] | None:
+    """Keep full-sweep capping separate from selected-key intersection.
+
+    Single-node ranges are clipped before expansion; multi-node ranges and
+    explicit lists are expanded first. AgentX only filters its existing points.
+    None skips a deployment; an empty list retains the legacy empty batch.
+    """
+    if full_sweep is None:
+        values = (
+            benchmark[Fields.CONC_LIST.value] if Fields.CONC_LIST.value in benchmark
+            else _concurrency_range(
+                benchmark[Fields.CONC_START.value], benchmark[Fields.CONC_END.value], 2)
+        )
+        return ([c for c in values if c in concurrencies] or None) if concurrencies else values
+
+    minimum, maximum = full_sweep.min_conc, full_sweep.max_conc
+    values = benchmark.get(Fields.CONC_LIST.value)
+    if not values:
+        start, end = benchmark[Fields.CONC_START.value], benchmark[Fields.CONC_END.value]
+        if not multinode:
+            if minimum is not None:
+                if minimum <= 0 or end < minimum:
+                    return None
+                start = max(start, minimum)
+            if maximum is not None:
+                if maximum <= 0:
+                    return None
+                start, end = min(start, maximum), min(end, maximum)
+            return _concurrency_range(start, end, full_sweep.step_size)
+        values = _concurrency_range(start, end, full_sweep.step_size)
+
+    if minimum is not None:
+        if minimum <= 0:
+            return None
+        values = [c for c in values if c >= minimum]
+        if not values:
+            return None
+    if maximum is not None:
+        if maximum <= 0:
+            return None
+        values = [c for c in values if c <= maximum] or [maximum]
+    return values
+
+
+def _runner_values_for_filter(
+    runner: str, runner_data: dict, runner_node_filter: str | None, *,
+    include_label: bool = True,
+) -> list[str]:
     if not runner_node_filter:
         return [runner]
-
     candidates = runner_nodes_for_label(runner, runner_data)
+    if not include_label:
+        # Full-sweep expands concrete nodes in inventory order, including repeats.
+        return [node for node in candidates if runner_node_filter in node]
     if runner_node_filter in runner:
         candidates = [runner, *candidates]
-
-    matches = []
-    seen = set()
-    for node in candidates:
-        if runner_node_filter in node and node not in seen:
-            matches.append(node)
-            seen.add(node)
-    return matches
+    return list(dict.fromkeys(node for node in candidates if runner_node_filter in node))
 
 
-def generate_test_config_sweep(args, all_config_data, runner_data=None):
+def generate_test_config_sweep(
+    args: argparse.Namespace, all_config_data: dict, runner_data: dict | None = None,
+) -> list[dict]:
     """Compatibility API for selected-key expansion without eval selection."""
     return _expand_selected_configs(
         args.config_keys, all_config_data, runner_data,
@@ -1232,59 +1134,96 @@ def _expand_selected_configs(
     concurrencies: list[int] | None = None,
 ) -> list[dict]:
     resolved_keys = expand_config_keys(config_keys, all_config_data.keys())
+    return _expand_configs(
+        (all_config_data[key] for key in resolved_keys), runner_data or {},
+        runner_node_filter=runner_node_filter, seq_lens=seq_lens,
+        scenario_types=scenario_types, concurrencies=concurrencies,
+    )
 
-    matrix_values = []
 
-    runner_data = runner_data or {}
+def _expand_configs(
+    configs: Iterable[dict], runner_data: dict, *,
+    runner_node_filter: str | None = None, seq_lens: list[str] | None = None,
+    seq_filter: set[tuple[int, int]] | None = None,
+    scenario_types: tuple[str, ...] | list[str] | None = None,
+    concurrencies: list[int] | None = None,
+    full_sweep: FullSweepOptions | None = None,
+) -> list[dict]:
+    """Traverse configs and scenarios once for both generation commands.
 
-    for key in resolved_keys:
-        val = all_config_data[key]
-
-        runner = val[Fields.RUNNER.value]
-        runners_for_entry = _runner_values_for_filter(
-            runner, runner_data, runner_node_filter)
-        if not runners_for_entry:
+    Selection retains each command's ordering and overrides. Row builders own
+    identity, topology and validation; eval policy is applied by the caller.
+    """
+    rows = []
+    for config in configs:
+        multinode = config.get(Fields.MULTINODE.value, False)
+        # Full-sweep reads scenarios before runner filtering; selected keys defer it.
+        if full_sweep is not None:
+            scenarios = config[Fields.SCENARIOS.value]
+            fixed = (
+                scenarios.get(Fields.FIXED_SEQ_LEN.value, [])
+                if not scenario_types or "fixed-seq-len" in scenario_types else []
+            )
+        runners = _runner_values_for_filter(
+            config[Fields.RUNNER.value], runner_data, runner_node_filter,
+            include_label=full_sweep is None,
+        )
+        if not runners:
             continue
-
-        # Build seq-len filter if --seq-lens was provided
-        seq_lens_filter = None
         if seq_lens:
-            seq_lens_filter = {seq_len_stoi[s] for s in seq_lens}
+            seq_filter = {seq_len_stoi[sl] for sl in seq_lens}
+        if full_sweep is None:
+            fixed = (
+                config[Fields.SCENARIOS.value].get(Fields.FIXED_SEQ_LEN.value, [])
+                if not scenario_types or "fixed-seq-len" in scenario_types else []
+            )
+        node_allowed = full_sweep is None or (
+            full_sweep.multi_node if multinode else full_sweep.single_node)
 
-        scenario_filter = set(scenario_types) if scenario_types else None
-        fixed_configs = val[Fields.SCENARIOS.value].get(Fields.FIXED_SEQ_LEN.value, []) if (scenario_filter is None or 'fixed-seq-len' in scenario_filter) else []
-        for seq_len_config in fixed_configs:
-            isl = seq_len_config[Fields.ISL.value]
-            osl = seq_len_config[Fields.OSL.value]
-
-            if seq_lens_filter and (isl, osl) not in seq_lens_filter:
+        for sequence in fixed:
+            isl, osl = sequence[Fields.ISL.value], sequence[Fields.OSL.value]
+            if seq_filter and (isl, osl) not in seq_filter:
                 continue
-
-            for bmk in seq_len_config[Fields.SEARCH_SPACE.value]:
-                if Fields.CONC_LIST.value in bmk:
-                    conc_values = bmk[Fields.CONC_LIST.value]
-                else:
-                    conc_values = _concurrency_range(
-                        bmk[Fields.CONC_START.value], bmk[Fields.CONC_END.value], 2)
-
-                if concurrencies:
-                    conc_values = [c for c in conc_values if c in concurrencies]
-                    if not conc_values:
+            for benchmark in sequence[Fields.SEARCH_SPACE.value]:
+                if not node_allowed:
+                    continue
+                if full_sweep is not None and not multinode:
+                    tp, ep = benchmark[Fields.TP.value], benchmark.get(Fields.EP.value)
+                    if full_sweep.max_tp is not None and (
+                        full_sweep.max_tp <= 0 or tp > full_sweep.max_tp
+                    ):
                         continue
+                    if full_sweep.max_ep is not None:
+                        if full_sweep.max_ep <= 0:
+                            continue
+                        if ep is not None:
+                            ep = min(ep, full_sweep.max_ep)
+                    benchmark = {**benchmark, Fields.EP.value: ep}
+                values = _fixed_sequence_concurrencies(
+                    benchmark, multinode=multinode, full_sweep=full_sweep,
+                    concurrencies=concurrencies,
+                )
+                if values is None:
+                    continue
+                rows.extend(_fixed_sequence_entries(
+                    config, benchmark, sequence, values, runners, runner_data))
 
-                matrix_values.extend(_fixed_sequence_entries(
-                    val, bmk, seq_len_config, conc_values, runners_for_entry, runner_data))
-
-        # ---- Agentic-coding scenarios ----
-        agentic_configs = val[Fields.SCENARIOS.value].get(Fields.AGENTIC_CODING.value, []) if (scenario_filter is None or 'agentic-coding' in scenario_filter) else []
-        for scenario in agentic_configs:
+        agentic = (
+            config[Fields.SCENARIOS.value].get(Fields.AGENTIC_CODING.value, [])
+            if not scenario_types or "agentic-coding" in scenario_types else []
+        )
+        if not node_allowed:
+            continue
+        for scenario in agentic:
             for benchmark in scenario[Fields.SEARCH_SPACE.value]:
-                matrix_values.extend(_agentic_entries(
-                    val, benchmark, scenario, runners_for_entry, runner_data,
+                rows.extend(_agentic_entries(
+                    config, benchmark, scenario, runners, runner_data,
+                    step_size=full_sweep.step_size if full_sweep is not None else 2,
+                    min_conc=full_sweep.min_conc if full_sweep is not None else None,
+                    max_conc=full_sweep.max_conc if full_sweep is not None else None,
                     conc_filter=concurrencies,
                 ))
-
-    return matrix_values
+    return rows
 
 
 def expand_config_keys(config_keys, available_keys):
