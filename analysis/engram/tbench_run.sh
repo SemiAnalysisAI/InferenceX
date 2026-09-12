@@ -75,7 +75,7 @@ fi
 say "using agent: $AGENT"
 
 API_KEY="sk-engram-$(head -c 18 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-EVAL_CONTEXT=65536
+EVAL_CONTEXT=131072
 # Indexer buffer is batched-tokens x max-model-len x 2B: 4096 x 65536 x 2 =
 # 0.5 GiB, unlike the 16 GiB that 1M context would cost on an 80 GB card.
 pick_port() {
@@ -208,8 +208,10 @@ MODEL_INFO=$(python3 -c "
 import json
 ctx = $EVAL_CONTEXT
 print(json.dumps({
-    'max_input_tokens': ctx - 8192,
-    'max_output_tokens': 8192,
+    # Reasoning is emitted as output tokens, so the answer needs room after
+    # the thinking: a 8192 budget truncated every summarisation.
+    'max_input_tokens': ctx - 32768,
+    'max_output_tokens': 32768,
     'max_tokens': ctx,
     'input_cost_per_token': 0,
     'output_cost_per_token': 0,
