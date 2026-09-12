@@ -1,5 +1,5 @@
-name: B300 runtime diagnostic round 2
-run-name: powerx3040-runtime-${{ github.run_id }}
+name: B300 controller diagnostic round 2
+run-name: powerx3040-controller-${{ github.run_id }}
 
 # Push-button (workflow_dispatch) collection of a SPEED-Bench acceptance-length
 # (AL) matrix: thinking_on/off x MTP levels, for the given model (defaults to
@@ -167,61 +167,33 @@ jobs:
         ) ||
         format('[{0},"nodes:1"]', toJSON(inputs.runner))
       ) }}
-    timeout-minutes: 25
-    name: "p${{ needs.setup.outputs.priority }} | SpeedBench AL matrix | ${{ inputs.category }} | mtp=[${{ inputs.mtp-list }}] | thinking=[${{ inputs.thinking-modes }}]"
+    timeout-minutes: 5
+    name: "p${{ needs.setup.outputs.priority }} | B300 read-only Slurm failure diagnosis"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ inputs.ref || github.sha }}
           clean: true
           persist-credentials: false
-      - name: Recover resources and inspect cached runtime
-        env:
-          TASK_JOB_NAME: powerx3040-${{ github.run_id }}
+      - name: Inspect known job and node failures without allocating
         run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/powerx3040"
-          exec > >(tee "$RUNNER_TEMP/powerx3040/recovery.log") 2>&1
+          set -uo pipefail
+          mkdir -p "$RUNNER_TEMP/powerx3040-controller"
+          exec > >(tee "$RUNNER_TEMP/powerx3040-controller/controller.log") 2>&1
           date -u --iso-8601=seconds
           git rev-parse HEAD
           id
-          # Prior task-owned job was cancelled before allocation. Never cancel
-          # by shared runner/user identity or adopt another task's resources.
-          sacct -j 2138,2168 --format=JobID,JobName,User,State,NodeList,Start,End,Elapsed,AllocTRES -P || true
+          sacct -X -j 2138,2168 --starttime=2026-09-12 --parsable2 --format=JobIDRaw,JobName%100,User,Submit,Eligible,Start,End,State,Reason,ExitCode,DerivedExitCode,ElapsedRaw,AllocTRES,ReqTRES,NodeList,Restarts
+          sacct -j 2168 --starttime=2026-09-12 --long --parsable2
+          scontrol show job 2168 || true
+          scontrol show node dsxe-sa-b300-prd0-gpu-00
+          sinfo -N -n dsxe-sa-b300-prd0-gpu-00 --format='%N|%T|%E'
           squeue --me --format='%i|%j|%T|%N|%L|%b'
-          python3 runners/b300_recover_diagnostic.py
-          if squeue --me --noheader --format='%j' | grep -Eq '^powerx3040-'; then
-            echo 'Existing task diagnostic found; recover its receipt before allocating.'
-            exit 1
-          fi
-          enroot list || true
-          echo 'No saved task-owned named rootfs exists; prior single-node Pyxis entry was unnamed.'
-          unsquashfs -s /data/home/sa-gha-runner/squash/vllm_vllm-openai_nightly-dev-x86_64-cu13-3696c77.sqsh
-      - name: Run bounded runtime diagnostic
-        env:
-          TASK_JOB_NAME: powerx3040-${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          # Native Slurm time limit is enforced inside the launcher; this
-          # timeout additionally bounds queue wait, without allocating twice.
-          timeout --signal=TERM --kill-after=30s 1200 bash runners/launch_b300-dsxe.sh 2>&1 | tee "$RUNNER_TEMP/powerx3040/launcher.log"
-      - name: Recover final task state and release only this diagnostic
-        if: always()
-        env:
-          TASK_JOB_NAME: powerx3040-${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/powerx3040"
-          while read -r job; do
-            [[ "$job" =~ ^[0-9]+$ ]] || continue
-            scontrol show job "$job"
-            scancel "$job"
-          done < <(squeue --me --name="$TASK_JOB_NAME" --noheader --format='%i')
-          sacct --name="$TASK_JOB_NAME" --starttime=now-1day --format=JobID,JobName,User,State,NodeList,Start,End,Elapsed,AllocTRES -P > "$RUNNER_TEMP/powerx3040/accounting.txt"
-      - name: Upload runtime diagnostic evidence
+          scontrol show config | grep -E '^[[:space:]]*(Prolog|Epilog|JobRequeue|SlurmctldLogFile|SlurmdLogFile|UnkillableStepTimeout|ReturnToService)[[:space:]=]'
+      - name: Upload controller evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: powerx3040-runtime-${{ github.run_id }}
-          path: ${{ runner.temp }}/powerx3040/
+          name: powerx3040-controller-${{ github.run_id }}
+          path: ${{ runner.temp }}/powerx3040-controller/
           if-no-files-found: error
