@@ -261,7 +261,10 @@ elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         exit 1
     fi
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
-    if [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
+    if [[ $MODEL_PREFIX == "dsv41flash" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="$MODEL"
+        export SRT_SLURM_MODEL_PREFIX="deepseek-v4.1-flash"
+    elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
     elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
