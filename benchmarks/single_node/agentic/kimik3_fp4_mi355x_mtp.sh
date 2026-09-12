@@ -108,22 +108,7 @@ case "$CONC" in
 esac
 export DCP_SIZE
 
-NUMA_ARGS=()
-if [ "${K3_NUMA_BIND:-0}" = "1" ]; then
-    if ! command -v numactl >/dev/null 2>&1; then
-        apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq numactl >/dev/null 2>&1 || true
-    fi
-    command -v numactl >/dev/null 2>&1 || { echo "[numa] FATAL: numactl unavailable, --numa-bind would silently no-op" >&2; exit 1; }
-    numactl --cpunodebind=0 --membind=0 true 2>/dev/null || {
-        numactl --cpunodebind=0 true 2>/dev/null && echo "[numa] WARN: membind rejected, CPU binding only" >&2 \
-        || { echo "[numa] FATAL: numactl present but binding rejected, --numa-bind would silently no-op" >&2; exit 1; }
-    }
-    export VLLM_WORKER_MULTIPROC_METHOD=spawn
-    NUMA_ARGS=(--numa-bind)
-    echo "[numa] $(numactl --show | tr '\n' ' ')"
-fi
-
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.89}"
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
 CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL_DECODE_ONLY}"
 
 LADDER=$(( MAX_NUM_SEQS * SPEC_ROWS ))
@@ -171,7 +156,6 @@ VLLM_CMD=(
     "${CP_ARGS[@]}"
     "${EP_ARGS[@]}"
     "${SPEC_ARGS[@]}"
-    "${NUMA_ARGS[@]}"
     "${KDA_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
 )
