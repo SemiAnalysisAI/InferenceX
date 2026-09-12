@@ -10,8 +10,9 @@ check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 require_agentic_kv_offload_none
 export GPU_COUNT="$TP"
 
-# Patch the installed AITER inside this serving container; keep backend selection.
+# Patch both installed libraries inside this serving container, before downloads.
 python3 "$(dirname "${BASH_SOURCE[0]}")/../../../runners/patch_aiter_quiet_auto_backend.py"
+python3 "$(dirname "${BASH_SOURCE[0]}")/../../../runners/patch_vllm_w4a16_backend.py"
 
 # Complete/resume partial downloads instead of trusting nonempty directories.
 if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then

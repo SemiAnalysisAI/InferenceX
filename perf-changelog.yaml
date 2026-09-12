@@ -7390,3 +7390,10 @@
     - "Inherit the MI355X recipe from InferenceX #2962; apply AITER #5471 inside the existing serving image before startup: quiet automatic backend fallback and warn once for an unsupported explicit Gluon request; backend selection, vLLM dispatch, and log levels are unchanged."
     - "继承 InferenceX #2962 的 MI355X 配方；启动前在现有服务镜像内应用 AITER #5471：自动 backend 回退不再告警，显式请求不受支持的 Gluon 时仅告警一次；backend 选择、vLLM 调度和日志级别不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3031
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Test both runtime patches together in the existing image: retain AITER #5471 quiet-auto fallback and add vLLM explicit Triton selection for both W4A16 GEMMs on gfx942/gfx950. Preserve automatic selection on gfx1250 and other architectures, MX scale swizzle, and log levels."
+    - "在现有镜像中联合测试两个运行时补丁：保留 AITER #5471 的静默自动回退，并让 vLLM 在 gfx942/gfx950 上为两个 W4A16 GEMM 显式选择 Triton。gfx1250 和其他架构的自动选择、MX scale swizzle 及日志级别保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3031
