@@ -22,7 +22,7 @@ def _launcher_routing_source(launcher_name: str = "launch_gb300-nv.sh") -> str:
     """Extract the real clone-routing chain, not a copy of its implementation."""
     launcher = (REPO_ROOT / "runners" / launcher_name).read_text()
     start_marker = (
-        'if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" ' '&& $MODEL_PREFIX == "qwen3.5" ]]; then'
+        'if [[ "$USES_AGENTX_POWER" == "1" ]]; then'
         if launcher_name == "launch_gb300-nv.sh"
         else 'if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2"'
     )
@@ -265,7 +265,7 @@ def test_gb300_dsv4_recipe_images_match_their_master_configs():
             assert recipe_image == config["image"], (key, config_file)
 
 
-@pytest.mark.parametrize("launcher_name", ["launch_gb200-nv.sh"])
+@pytest.mark.parametrize("launcher_name", ["launch_gb200-nv.sh", "launch_gb300-nv.sh"])
 def test_kimi_agentx_route_uses_custom_power_producer(tmp_path, launcher_name):
     log, workspace, repo_dir, marker = _run_dsv4_route(
         tmp_path, True, launcher_name=launcher_name, model="kimik3"
@@ -276,7 +276,7 @@ def test_kimi_agentx_route_uses_custom_power_producer(tmp_path, launcher_name):
     assert marker.read_text() == "from-workspace\n"
 
 
-@pytest.mark.parametrize("launcher_name", ["launch_gb200-nv.sh"])
+@pytest.mark.parametrize("launcher_name", ["launch_gb200-nv.sh", "launch_gb300-nv.sh"])
 def test_kimi_power_route_rejects_wrong_commit(tmp_path, launcher_name):
     with pytest.raises(subprocess.CalledProcessError):
         _run_dsv4_route(
