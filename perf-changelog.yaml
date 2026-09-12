@@ -7340,6 +7340,22 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3020
 
 - config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-mtp
+    - kimik3-fp4-b300-vllm-agentic-dspark
+    - dsv4-fp4-b300-vllm-agentic-mtp
+    - qwen3.5-fp8-b300-sglang-agentic-mtp
+    - qwen3.5-fp4-b300-sglang-agentic-mtp
+    - qwen3.8next-fp4-b300-sglang-agentic-mtp
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+    - minimaxm3-fp4-b300-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Route ordinary B300 AgentX configurations through the registered DSXE runner after retirement of the B300 NV fleet; preserve model, image, serving flags, and concurrency grids. Dedicated power-ab configurations remain unchanged."
+    - "将普通 B300 AgentX 配置切换到已注册的 DSXE runner，保留模型、镜像、服务参数及并发配置；不修改独立 power-ab 配置。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2927
+
+- config-keys:
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark
   description:
     - "Add draft DeepSeek-V4.1-Flash FP4 AgentX on MI355X: TP4, concurrency 1-32, native five-token DSpark with adaptive real verification"
