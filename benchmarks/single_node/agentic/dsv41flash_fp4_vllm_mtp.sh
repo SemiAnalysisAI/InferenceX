@@ -77,6 +77,13 @@ fi
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 if [[ "$DP_ATTENTION" == "true" ]]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
+    # Under DEP every rank's expert layer sees the tokens dispatched from all
+    # DP ranks, so the TRT-LLM FP4 MoE workspace is larger than under TP. With
+    # the image default of 0.92 the autotuner warmup died 4.45 GiB short after
+    # the KV cache was sized (run 34655656558, DEP4 c64); reserve headroom and
+    # let the allocator grow segments instead of fragmenting.
+    PARALLEL_ARGS+=(--gpu-memory-utilization 0.85)
+    export PYTORCH_ALLOC_CONF=expandable_segments:True
 fi
 if [[ "$EP_SIZE" -gt 1 ]]; then
     PARALLEL_ARGS+=(--enable-expert-parallel)
