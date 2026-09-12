@@ -7428,3 +7428,15 @@
     - "Add representative AMD coverage for fixed-sequence request diagnostics and multinode concurrency filename processing; shared processor changes also affect unlisted fixed-sequence recipes."
     - "增加固定序列请求诊断与多节点并发文件名处理的代表性 AMD 覆盖；共享处理器变更也影响未列出的固定序列配置。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3026
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the MI355X Qwen3.5 MXFP4 AgentX image from lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260908 to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260912."
+    - "Default HiCache CPU-tier to kernel / page_first (ratio 1.5, write_through unchanged)."
+    - "Rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode for sglang 0.5.19."
+    - "Prefill allreduce INT4; scheduler-recv-interval default 60."
+    - "Trim AgentX search space to TP4 none [1,4,8,12,16], TP2 none [1,4,8,12,16,20], TP2 HiCache [20,24,28,32,36,40]; drop the TP4 HiCache arm."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3062
