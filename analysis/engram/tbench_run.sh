@@ -92,6 +92,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --host 0.0.0.0 --port "$PORT" --tensor-parallel-size "$TP" \
     --api-key "$API_KEY" \
     --language-model-only --tokenizer-mode deepseek_v41 \
+    --reasoning-parser deepseek_v41 \
     --engram-config '{"cpu_offload":true}' \
     --speculative-config '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":true}' \
     --max-model-len "$EVAL_CONTEXT" --max-num-batched-tokens 4096 \
@@ -127,19 +128,23 @@ import json, sys
 try:
     d = json.loads(sys.stdin.read())
 except Exception as exc:
-    print('PARSE_ERROR', exc); raise SystemExit
+    print('VERDICT=FAIL parse_error=%r' % (exc,)); raise SystemExit
 ch = (d.get('choices') or [{}])[0]
 msg = ch.get('message') or {}
-print('content=%r reasoning=%r finish=%r' % (
-    (msg.get('content') or '')[:120],
-    (msg.get('reasoning_content') or '')[:60],
+content = (msg.get('content') or '').strip()
+reasoning = (msg.get('reasoning_content') or '').strip()
+# The answer must be in content, short, and not the model thinking out loud.
+ok = bool(content) and 'READY' in content.upper() and len(content) < 200
+print('VERDICT=%s content=%r len=%d reasoning_len=%d finish=%r' % (
+    'PASS' if ok else 'FAIL', content[:160], len(content), len(reasoning),
     ch.get('finish_reason')))
 " <<<"$CANARY_JSON")
 say "  $CANARY_TEXT"
-if [[ "$CANARY_TEXT" != *"content='"* ]] || [[ "$CANARY_TEXT" == *"content=''"* ]]; then
-    say "FATAL: the endpoint returns empty assistant content. terminus-2 reads"
-    say "message.content, so every agent step would fail to parse -- which is"
-    say "what produced 8006 empty parses and a 0.000 score last run."
+if [[ "$CANARY_TEXT" != VERDICT=PASS* ]]; then
+    say "FATAL: message.content is not a usable answer. terminus-2 parses"
+    say "commands out of content, so every agent step would fail. Empty content"
+    say "means a parser is diverting the answer (tool_calls); long prose means"
+    say "the chain-of-thought is leaking in and needs --reasoning-parser."
     exit 1
 fi
 
