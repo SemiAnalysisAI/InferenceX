@@ -7433,3 +7433,13 @@
     - "Verify terminal Slurm receipts and exit llm-d workers normally after preserving available evidence."
     - "验证 Slurm 最终状态，并在保留已有证据后正常退出 llm-d 工作进程。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3026
+
+- config-keys:
+  - dsv4-fp4-gb200-llmd-vllm
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Require native power only for llm-d 8k1k and preserve per-node collector readiness,
+    drain and completion evidence.
+  - 仅对 llm-d 8k1k 要求原生功耗，并保留每节点采集器 ready、drain 和完成证据。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3027

@@ -63,11 +63,43 @@ export DOCKER_CONT_NAME
 : "${BENCHMARK_LOGS_DIR:?BENCHMARK_LOGS_DIR not set}"
 DOCKER_MOUNT_PATH="/workspace"
 
-# Workers exit through server.sh after reading the coordinator's final status.
-# Normal completion must not cancel an otherwise successful allocation.
+# Normal completion is coordinated inside server.sh. Cancelling a successful
+# allocation would discard its terminal success state and interrupt collectors.
 BENCH_DONE_MARKER="$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
 rm -f "$BENCH_DONE_MARKER"
+POWERX_NATIVE_ENABLED="${POWERX_NATIVE_ENABLED:-0}"
+export POWERX_HOST_UID="$(id -u)" POWERX_HOST_GID="$(id -g)"
+export POWERX_COLLECTOR_REVISION="$(git -C "$DI_REPO_DIR" rev-parse HEAD)"
+export POWERX_RAW_ROOT="${POWERX_RAW_ROOT:-/tmp/inferencex-native-$SLURM_JOB_ID}"
+srun --nodes="$NUM_NODES" --ntasks-per-node=1 mkdir -p "$POWERX_RAW_ROOT"
+if [[ "$POWERX_NATIVE_ENABLED" == 1 ]]; then
+    mkdir -p "$BENCHMARK_LOGS_DIR/power_control-$SLURM_JOB_ID" "$DI_REPO_DIR/LOGS/native_power"
+    chmod 777 "$BENCHMARK_LOGS_DIR/power_control-$SLURM_JOB_ID"
+    srun --nodes="$NUM_NODES" --ntasks-per-node=1 chmod 777 "$POWERX_RAW_ROOT"
+    srun --nodes="$NUM_NODES" --ntasks-per-node=1 bash -c '
+        { hostname; timedatectl show -p NTPSynchronized --value 2>/dev/null || echo false; } \
+            > "$BENCHMARK_LOGS_DIR/power_control-$SLURM_JOB_ID/host-$SLURM_PROCID"
+    '
+fi
 main_rc=0
+finish_llmd_job() {
+    local rc=$?
+    trap - EXIT
+    [[ "$rc" == 0 ]] || main_rc=$rc
+
+    if [[ "$POWERX_NATIVE_ENABLED" == 1 ]]; then
+        # Copy as the host user only after collectors and serving containers drain.
+        srun --nodes="$NUM_NODES" --ntasks-per-node=1 bash -c '
+            source_dir="$POWERX_RAW_ROOT/node-$SLURM_PROCID"
+            [[ -d "$source_dir" ]] || exit 1
+            cp -R "$source_dir" "$DI_REPO_DIR/LOGS/native_power/"
+        ' || main_rc=$?
+    fi
+    exit "$main_rc"
+}
+trap finish_llmd_job EXIT
+trap 'exit 143' TERM HUP
+trap 'exit 130' INT
 
 # Container engine: 'docker' (default) for clusters where the SLURM
 # user can talk to /var/run/docker.sock (e.g. h200-dgxc-slurm); 'pyxis'
@@ -105,10 +137,15 @@ exec docker run --rm \
     --privileged \
     -v ${MODEL_DIR}:/models:ro \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
+    -v ${POWERX_RAW_ROOT}:/powerx_native \
     -v ${DI_REPO_DIR}:${DOCKER_MOUNT_PATH} \
     -v ${DI_REPO_DIR}/benchmarks/multi_node/llm-d-recipes:/etc/llmd-recipes:ro \
     -v ${DI_REPO_DIR}/benchmarks/llm-d/epp-config.yaml:/etc/epp/config.yaml:ro \
     -v ${DI_REPO_DIR}/benchmarks/llm-d/envoy.yaml:/etc/envoy/envoy.yaml:ro \
+    -e POWERX_NATIVE_ENABLED=$POWERX_NATIVE_ENABLED \
+    -e POWERX_HOST_UID=$POWERX_HOST_UID \
+    -e POWERX_HOST_GID=$POWERX_HOST_GID \
+    -e POWERX_COLLECTOR_REVISION=$POWERX_COLLECTOR_REVISION \
     -e SLURM_JOB_ID=\$SLURM_JOB_ID \
     -e NODE_RANK=\$SLURM_PROCID \
     -e NUM_NODES=$NUM_NODES \
@@ -186,7 +223,7 @@ elif [[ "$LLMD_CONTAINER_ENGINE" == "pyxis" ]]; then
     export IS_AGENTIC SCENARIO_TYPE FRAMEWORK PRECISION MODEL_PREFIX
     export RUNNER_TYPE RESULT_FILENAME SPEC_DECODING IS_MULTINODE CONFIG_FILE
 
-    PYXIS_ENV_LIST="NUM_NODES,PREFILL_NODES,DECODE_NODES,ALL_IPS,PREFILL_LEADER_IP,DECODE_LEADER_IP"
+    PYXIS_ENV_LIST="POWERX_NATIVE_ENABLED,POWERX_HOST_UID,POWERX_HOST_GID,POWERX_COLLECTOR_REVISION,NUM_NODES,PREFILL_NODES,DECODE_NODES,ALL_IPS,PREFILL_LEADER_IP,DECODE_LEADER_IP"
     PYXIS_ENV_LIST+=",PREFILL_WORKERS,DECODE_WORKERS"
     PYXIS_ENV_LIST+=",PREFILL_DP_ADDR,DECODE_DP_ADDR,MODEL_NAME,GPUS_PER_NODE"
     PYXIS_ENV_LIST+=",PREFILL_DP_SIZE,DECODE_DP_SIZE"
@@ -198,7 +235,7 @@ elif [[ "$LLMD_CONTAINER_ENGINE" == "pyxis" ]]; then
     PYXIS_ENV_LIST+=",RUNNER_TYPE,RESULT_FILENAME,SPEC_DECODING,IS_MULTINODE,CONFIG_FILE"
 
     PYXIS_MOUNTS="${MODEL_DIR}:/models:ro"
-    PYXIS_MOUNTS+=",${BENCHMARK_LOGS_DIR}:/benchmark_logs"
+    PYXIS_MOUNTS+=",${BENCHMARK_LOGS_DIR}:/benchmark_logs,${POWERX_RAW_ROOT}:/powerx_native"
     PYXIS_MOUNTS+=",${DI_REPO_DIR}:${DOCKER_MOUNT_PATH}"
     PYXIS_MOUNTS+=",${DI_REPO_DIR}/benchmarks/multi_node/llm-d-recipes:/etc/llmd-recipes:ro"
     PYXIS_MOUNTS+=",${DI_REPO_DIR}/benchmarks/llm-d/epp-config.yaml:/etc/epp/config.yaml:ro"

@@ -4438,6 +4438,7 @@ dsv4-fp4-gb200-llmd-vllm:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       # Low latency: 1 prefill DEP8 + 1 decode TP8.
       - spec-decoding: "none"

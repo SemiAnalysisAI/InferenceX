@@ -173,6 +173,8 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
         copy_eval_artifacts "$EVAL_DIR" "$GITHUB_WORKSPACE" || exit 1
     fi
 
+    mkdir -p "$GITHUB_WORKSPACE/LOGS"
+    cp -a "$BENCHMARK_LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/" || exit 1
     scancel "$JOB_ID" 2>/dev/null || true
     exit "$SRT_JOB_RC"
 fi

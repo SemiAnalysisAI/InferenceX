@@ -114,17 +114,28 @@ else
     DP_ADDR="$DECODE_DP_ADDR"
 fi
 
-# One coordinator publishes the benchmark status; workers leave normally when
-# it finishes so Slurm can distinguish success from cancellation.
+# Exactly one coordinator owns the benchmark and global shutdown, even when
+# decode has several independent engine leaders.
 BENCH_DONE_MARKER="$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
 BENCH_RC=0
+source /workspace/benchmarks/native_power_lifecycle.sh
 
 finish_llmd_node() {
     local rc=$? pid
     trap - EXIT
+    if [[ "${POWERX_NATIVE_ENABLED:-0}" == 1 && -n "${POWERX_COLLECTOR_PID:-}" ]]; then
+        if [[ "$NODE_RANK" == "$PREFILL_NODES" || "$rc" != 0 ]]; then
+            powerx_stop_collectors || rc=$?
+        else
+            powerx_reap_collector || rc=$?
+        fi
+    fi
     if [[ "$NODE_RANK" == "$PREFILL_NODES" ]]; then
-        printf '%s\n' "$rc" > "$BENCH_DONE_MARKER.tmp" &&
-            mv -f "$BENCH_DONE_MARKER.tmp" "$BENCH_DONE_MARKER" || rc=1
+        printf '%s\n' "$rc" > "$BENCH_DONE_MARKER.tmp" || rc=1
+        if [[ -n "${POWERX_HOST_UID:-}" ]]; then
+            chown "$POWERX_HOST_UID:$POWERX_HOST_GID" "$BENCH_DONE_MARKER.tmp" || rc=1
+        fi
+        mv -f "$BENCH_DONE_MARKER.tmp" "$BENCH_DONE_MARKER" || rc=1
     fi
     for pid in "${ENVOY_PID:-}" "${EPP_PID:-}" "${SIDECAR_PID:-}" "${VLLM_PID:-}"; do
         [[ -z "$pid" ]] || kill -TERM "$pid" 2>/dev/null || true
@@ -134,6 +145,13 @@ finish_llmd_node() {
 trap finish_llmd_node EXIT
 trap 'exit 143' TERM HUP
 trap 'exit 130' INT
+if [[ "${POWERX_NATIVE_ENABLED:-0}" == 1 ]]; then
+    _power_control="$BENCHMARK_LOGS_DIR/power_control-$SLURM_JOB_ID"
+    export POWERX_NODE_NAME="$(sed -n '1p' "$_power_control/host-$NODE_RANK")"
+    export POWERX_CLOCK_SYNCHRONIZED="$(sed -n '2p' "$_power_control/host-$NODE_RANK")"
+    powerx_start_collector "/powerx_native/node-$NODE_RANK" "$_power_control" \
+        nvidia "$NODE_RANK" "$ROLE" "$GPUS_PER_NODE" "$NUM_NODES"
+fi
 
 DP_SIZE_LOCAL="$GPUS_PER_NODE"
 START_RANK=$((LWS_WORKER_INDEX * DP_SIZE_LOCAL))
@@ -568,6 +586,10 @@ PY
     done
     echo "All ${#_prefill_ips[@]} prefill vLLM endpoint(s) ready"
 
+    if [[ "${POWERX_NATIVE_ENABLED:-0}" == 1 ]]; then
+        powerx_wait_collectors ready
+    fi
+
     # ---- Benchmark sweep (one run per concurrency level) ----
     # BENCH_MAX_CONCURRENCY is an 'x'-delimited list from submit.sh (e.g. "1024x512").
     IFS='x' read -r -a CONCURRENCIES <<< "$BENCH_MAX_CONCURRENCY"
@@ -646,6 +668,7 @@ PY
         )
     fi
 
+    # EXIT drains every collector before signaling workers to stop serving.
     exit "$BENCH_RC"
 else
     while [[ ! -f "$BENCH_DONE_MARKER" ]]; do
