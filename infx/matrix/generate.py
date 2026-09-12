@@ -136,6 +136,7 @@ def smoke_entries(entries: list[dict]) -> list[dict]:
         if not row.get('run-eval'):
             continue
         row = {**row, 'eval-only': True}
+        row.pop(Fields.REQUIRE_POWER.value, None)
         if row.get('prefill') is not None:
             row['conc'] = [row['eval-conc']]
             row['eval-all-concs'] = False
@@ -808,6 +809,9 @@ def _fixed_sequence_entries(
     is_multinode = config.get(Fields.MULTINODE.value, False)
     disagg = config.get(Fields.DISAGG.value, False)
     isl, osl = sequence[Fields.ISL.value], sequence[Fields.OSL.value]
+    require_power = sequence.get(Fields.REQUIRE_POWER.value, False)
+    if require_power and (isl, osl) != (8192, 1024):
+        raise ValueError("require-power rollout supports only fixed-sequence 8192/1024")
     model_code = config[Fields.MODEL_PREFIX.value]
     spec_decoding = benchmark.get(Fields.SPEC_DECODING.value, "none")
     if is_multinode:
@@ -831,6 +835,8 @@ def _fixed_sequence_entries(
                 Fields.ISL.value: isl,
                 Fields.OSL.value: osl,
             }
+            if require_power:
+                entry[Fields.REQUIRE_POWER.value] = True
             if is_multinode:
                 entry.update({
                     Fields.SPEC_DECODING.value: spec_decoding,
@@ -1316,6 +1322,7 @@ def select_matrix_evals(
         rows = [row for row in rows if row.get(Fields.RUN_EVAL.value, False)]
         for row in rows:
             row[Fields.EVAL_ONLY.value] = True
+            row.pop(Fields.REQUIRE_POWER.value, None)
     return rows
 
 
