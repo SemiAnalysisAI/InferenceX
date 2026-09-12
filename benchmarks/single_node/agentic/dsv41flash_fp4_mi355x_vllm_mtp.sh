@@ -47,8 +47,11 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_RUST_FRONTEND=1
 export PYTHONUNBUFFERED=1
 
-# Match the sibling's scheduler headroom for AgentX subagent fan-out.
-MAX_NUM_SEQS=$((2 * CONC))
+# Upstream default. The previous 2*CONC cap sat below AgentX's subagent
+# fan-out, so at CONC=1 the engine admitted 2 requests and left the rest
+# queued on scheduling capacity. Pinned rather than inherited so CAPTURE_SIZE
+# below stays consistent with it.
+MAX_NUM_SEQS=128
 NUM_SPEC_TOKENS=5
 CAPTURE_SIZE=1
 while (( CAPTURE_SIZE < MAX_NUM_SEQS * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
