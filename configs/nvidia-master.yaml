@@ -9995,8 +9995,8 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg:
 # section 5): the single worker serves both phases, so no P/D KV transfer.
 # Serving is DIRECT vllm serve (srt-slurm frontend.type: vllm), not the dynamo
 # worker entrypoint -- framework stays dynamo-vllm for launcher routing only.
-# DCP8 over a2a with the direct symmetric-memory kernels and DSpark
-# speculation sized per concurrency: 7 draft tokens (golden
+# DCP8 over a2a with the direct symmetric-memory kernels, Mooncake DRAM KV
+# offload, and DSpark speculation sized per concurrency: 7 draft tokens (golden
 # AL 3.84) through conc 14, where the decode batch is small enough that deeper
 # speculation pays; 4 draft tokens (AL 3.36) at conc 24/48; and no speculation
 # at conc 96, where the batch already saturates the two nodes.

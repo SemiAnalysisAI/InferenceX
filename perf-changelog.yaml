@@ -7408,3 +7408,12 @@
     - "Replace unavailable vLLM build 5894fdf with 3696c77 and route the existing Kimi-K3 recipe to B300 DSXE. This establishes a new runtime baseline."
     - "恢复 Kimi-K3 B300 镜像与集群路由。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3040
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Mount and export the persistent writable model root for Kimi-K3 DSpark weights alongside the pre-staged target on B300 DSXE."
+    - "在 B300 DSXE 上为 Kimi-K3 DSpark 权重挂载并导出持久化可写模型目录，与预加载目标模型一同使用。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3040
