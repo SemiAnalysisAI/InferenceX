@@ -265,6 +265,26 @@ else
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
+    # This temporary benchmark branch repairs a shared-cache permission
+    # regression before reserving a GPU node. A previous container left the
+    # DeepSeek-V4-Pro snapshot unreadable by the remapped container user.
+    if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro" ]]; then
+        DSV4_CACHE_ROOT="/it-share/hf-hub-cache/models--deepseek-ai--DeepSeek-V4-Pro"
+        if [[ -d "$DSV4_CACHE_ROOT" ]]; then
+            echo "Repairing read/traverse permissions under $DSV4_CACHE_ROOT"
+            sudo chmod -R a+rX "$DSV4_CACHE_ROOT"
+            DSV4_CONFIG=$(sudo find "$DSV4_CACHE_ROOT/snapshots" \
+                -mindepth 2 -maxdepth 2 -name config.json -print -quit 2>/dev/null || true)
+            if [[ -z "$DSV4_CONFIG" || ! -r "$DSV4_CONFIG" ]]; then
+                echo "ERROR: DeepSeek-V4-Pro config remains unreadable after permission repair" >&2
+                exit 1
+            fi
+            stat -Lc 'Cache repair verified: %A %a %U:%G %n' "$DSV4_CONFIG"
+        else
+            echo "DeepSeek-V4-Pro cache is absent; Hugging Face will download it"
+        fi
+    fi
+
     set -x
     salloc --partition=$PARTITION --gres=gpu:$GPU_COUNT --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)
