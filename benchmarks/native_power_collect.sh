@@ -10,6 +10,7 @@ role=$5
 gpu_indices=$6
 num_nodes=$7
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+export TZ=UTC
 export PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}"
 source "$repo_root/benchmarks/benchmark_lib.sh"
 mkdir -p "$power_dir"
@@ -60,6 +61,7 @@ esac
 python3 -m infx.results.power.native_multinode begin --directory "$power_dir" \
     --vendor "$vendor" --rank "$rank" --role "$role" --gpu-indices "$gpu_indices" \
     --num-nodes "$num_nodes" --clock-synchronized "$clock_synchronized" || exit 1
+printf '{"timestamp_timezone":"UTC"}\n' > "$power_dir/gpu_metrics_context.json" || exit 1
 start_gpu_monitor --output "$power_dir/gpu_metrics.csv" || exit 1
 [[ "$GPU_MONITOR_VENDOR" == "$vendor" ]] || exit 1
 if [[ "$vendor" == amd ]]; then

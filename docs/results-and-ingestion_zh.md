@@ -112,7 +112,7 @@ PR changelog 选择具有代表性的 NVIDIA 和 AMD 覆盖，并非所有受影
 
 `native_power_collect.sh` 和 `native_power_lifecycle.sh` 提供每节点采集及有时限的就绪/停止状态文件。启动器可使用 `LOGS/native_power` 下的原生产物；此前置改动不会启用新 recipe。适配器验证服务 GPU 身份、时钟同步、采集完成及正式窗口完整覆盖，并在审计中保留节点故障、样本数和采集器版本。
 
-SMI 采集在 CSV 旁记录 UTC 上下文以支持跨环境回放。正式窗口外的无效样本不能构成覆盖；`boundary_degenerate_rows` 保留其逐 GPU 计数。
+原生采集器单独设置 UTC，并在 CSV 旁记录上下文以支持跨环境回放；现有基准监控行为保持不变。启动器接入需要另行完成硬件验证。离线适配器接受该上下文，不改变现有生产端。正式窗口外的无效样本不能构成覆盖；`boundary_degenerate_rows` 保留其逐 GPU 计数。
 
 ## 评测工件
 

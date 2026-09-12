@@ -64,7 +64,11 @@ powerx_reap_collector() {
     while kill -0 "$POWERX_COLLECTOR_PID" 2>/dev/null; do
         if (( SECONDS >= deadline )); then
             kill -TERM "$POWERX_COLLECTOR_PID" 2>/dev/null || true
-            sleep 2
+            # The shared AMD monitor drains for three seconds before writing receipts.
+            local grace_deadline=$((SECONDS + 5))
+            while kill -0 "$POWERX_COLLECTOR_PID" 2>/dev/null && (( SECONDS < grace_deadline )); do
+                sleep 1
+            done
             kill -KILL "$POWERX_COLLECTOR_PID" 2>/dev/null || true
             rc=1
             break

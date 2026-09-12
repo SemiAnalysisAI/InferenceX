@@ -177,7 +177,6 @@ start_gpu_monitor() {
     GPU_METRICS_CSV="$output"
     GPU_MONITOR_INTERVAL="$interval"
     export GPU_METRICS_CSV
-    printf '{"timestamp_timezone":"UTC"}\n' > "${output%.csv}_context.json"
 
     if command -v nvidia-smi &>/dev/null; then
         GPU_MONITOR_VENDOR="nvidia"
@@ -186,7 +185,7 @@ start_gpu_monitor() {
             rm -f "${output%.csv}_identity.csv"
             echo "[GPU Monitor] Warning: NVIDIA identity sidecar failed" >&2
         fi
-        TZ=UTC nvidia-smi --query-gpu="$NVIDIA_GPU_MONITOR_QUERY" \
+        nvidia-smi --query-gpu="$NVIDIA_GPU_MONITOR_QUERY" \
             --format=csv -l "$interval" > "$output" 2>/dev/null &
         GPU_MONITOR_PID=$!
         echo "[GPU Monitor] Started NVIDIA (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
@@ -197,7 +196,7 @@ start_gpu_monitor() {
         # Python; measured on MI355X: trailing ticks were lost at kill without it).
         # Pipe through awk to: skip preamble lines, keep first CSV header, skip repeated
         # headers, and flush every row so killing the pipe cannot discard buffered samples.
-        TZ=UTC PYTHONUNBUFFERED=1 amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
+        PYTHONUNBUFFERED=1 amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
             | awk '/^timestamp,/{if(!h){print;h=1};next} h{print;fflush()}' > "$output" &
         GPU_MONITOR_PID=$!
         # Hardware energy-accumulator + identity snapshots; the end-side twin in
@@ -225,7 +224,7 @@ stop_gpu_monitor() {
         # tick in the same second as the window end still fails bracketing —
         # the stream needs a tick at the NEXT whole second (measured on MI355X:
         # end=...153.325 vs last sample ...153.0).
-        if [[ "$GPU_MONITOR_VENDOR" == "amd" && "${AMD_MONITOR_STOP_TIMEOUT_S:-}" != "0" ]]; then
+        if [[ "$GPU_MONITOR_VENDOR" == "amd" ]]; then
             sleep $(( ${GPU_MONITOR_INTERVAL:-1} + 2 ))
         fi
         kill "$GPU_MONITOR_PID" 2>/dev/null
@@ -233,7 +232,7 @@ stop_gpu_monitor() {
         case "$GPU_MONITOR_VENDOR" in
             nvidia)
                 if _repair_truncated_gpu_metrics_tail; then
-                    TZ=UTC nvidia-smi --query-gpu="$NVIDIA_GPU_MONITOR_QUERY" \
+                    nvidia-smi --query-gpu="$NVIDIA_GPU_MONITOR_QUERY" \
                         --format=csv,noheader >> "$GPU_METRICS_CSV" 2>/dev/null ||
                         echo "[GPU Monitor] Warning: final NVIDIA sample failed" >&2
                 fi

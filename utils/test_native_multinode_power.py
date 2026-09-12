@@ -219,20 +219,6 @@ def test_native_single_role_preserves_whole_fleet_and_role_metrics(tmp_path, rol
     assert json.loads((tmp_path / 'power_validation_result.json').read_text())['power_valid']
 
 
-def test_native_amd_abort_skips_legacy_tail_wait(tmp_path):
-    result = subprocess.run(['bash', '-c', '''source "$1"
-kill() { return 0; }; wait() { return 0; }
-sleep() { echo unexpected-tail-wait >&2; }
-_write_amd_smi_sidecar() { return 0; }
-GPU_MONITOR_PID=999 GPU_MONITOR_VENDOR=amd AMD_MONITOR_STOP_TIMEOUT_S=0
-GPU_METRICS_CSV="$2/missing.csv"
-stop_gpu_monitor
-''', 'bash', str(REPO / 'benchmarks/benchmark_lib.sh'), str(tmp_path)],
-                            capture_output=True, text=True, timeout=5)
-    assert result.returncode == 0, result.stderr
-    assert 'unexpected-tail-wait' not in result.stderr
-
-
 def test_native_amd_abort_publishes_receipt_before_reaper_deadline(tmp_path):
     binary = tmp_path / 'bin'
     binary.mkdir()
