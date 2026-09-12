@@ -37,7 +37,7 @@ mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
 
 export MODEL_PATH=$MODEL
 
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" ]]; then
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" ]]; then
     # Both direct and Dynamo-vLLM paths resolve the V4.1 Flash checkpoint from
     # the persistent shared HF cache. The alias must match model.path in the
     # checked-in P/D recipe.
