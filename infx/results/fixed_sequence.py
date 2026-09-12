@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import math
 import os
+import re
 import sys
 from collections.abc import Iterable, Mapping
 from pathlib import Path
@@ -12,6 +14,7 @@ from typing import Any
 from .metadata import parse_component_metadata
 from .power import ALL_POWER_METRIC_KEYS, POWER_METRIC_SCHEMA_VERSION, with_power_metrics
 from .topology import Parallelism, validate_parallelism
+from infx.bench_serving.benchmark_outcome import benchmark_outcome
 
 
 _BASE_ENV_VARS = (
@@ -49,6 +52,14 @@ def build_result(benchmark: Mapping[str, Any], env: Mapping[str, str]) -> dict[s
         'isl': int(env['ISL']),
         'osl': int(env['OSL']),
     }
+    if 'benchmark_outcome' in benchmark:
+        outcome = benchmark['benchmark_outcome']
+        expected = benchmark_outcome(outcome['requested'], outcome['completed'])
+        if (outcome != expected
+                or benchmark.get('completed', expected['completed']) != expected['completed']
+                or benchmark.get('num_prompts', expected['requested']) != expected['requested']):
+            raise ValueError("Benchmark outcome does not match the recorded request counts and gate")
+        data['benchmark_outcome'] = expected
 
     router = parse_component_metadata(env.get('ROUTER_METADATA'), 'ROUTER_METADATA')
     if router is not None:
@@ -61,9 +72,6 @@ def build_result(benchmark: Mapping[str, Any], env: Mapping[str, str]) -> dict[s
     is_multinode = env.get('IS_MULTINODE', 'false').lower() == 'true'
 
     if is_multinode:
-        # TODO: Eventually will have to have a separate condition in here for multinode disagg and
-        # multinode agg. For now, just assume that multinode implies disagg.
-
         multinode_vars = ['PREFILL_GPUS', 'DECODE_GPUS', 'PREFILL_NUM_WORKERS', 'PREFILL_TP',
                           'PREFILL_EP', 'PREFILL_DP_ATTN', 'DECODE_NUM_WORKERS', 'DECODE_TP',
                           'DECODE_EP', 'DECODE_DP_ATTN']
@@ -76,6 +84,14 @@ def build_result(benchmark: Mapping[str, Any], env: Mapping[str, str]) -> dict[s
             )
         prefill_gpus = int(env['PREFILL_GPUS'])
         decode_gpus = int(env['DECODE_GPUS'])
+        aggregate_gpus = int(env.get('AGGREGATE_GPUS', '0'))
+        if aggregate_gpus:
+            if aggregate_gpus < 0 or prefill_gpus or decode_gpus or disagg:
+                raise ValueError("Aggregate GPUs require non-disaggregated topology without role GPUs")
+            # Preserve the existing multinode layout fields for consumers, but
+            # expose the actual shared role and validate telemetry as `agg`.
+            prefill_gpus = aggregate_gpus
+            data['num_aggregate_gpu'] = aggregate_gpus
         prefill_num_workers = int(env['PREFILL_NUM_WORKERS'])
         prefill = Parallelism(
             tp=int(env['PREFILL_TP']),
@@ -154,9 +170,9 @@ def build_result(benchmark: Mapping[str, Any], env: Mapping[str, str]) -> dict[s
         data = data | single_node_data
 
     for key, value in benchmark.items():
-        if key.endswith('ms'):
+        if key.endswith('ms') and math.isfinite(float(value)):
             data[key.replace('_ms', '')] = float(value) / 1000.0
-        if 'tpot' in key:
+        if 'tpot' in key and math.isfinite(float(value)) and float(value) > 0:
             data[key.replace('_ms', '').replace(
                 'tpot', 'intvty')] = 1000.0 / float(value)
     return data
@@ -221,7 +237,8 @@ def aggregate_power_result(
         source = Path(env.get('POWER_ARTIFACT_DIR', 'LOGS/power'))
         prefill_gpus = int(env['PREFILL_GPUS'])
         decode_gpus = int(env['DECODE_GPUS'])
-        expected_num_gpus = prefill_gpus + decode_gpus
+        aggregate_gpus = int(env.get('AGGREGATE_GPUS', '0'))
+        expected_num_gpus = prefill_gpus + decode_gpus + aggregate_gpus
     else:
         candidates = [env.get('GPU_METRICS_CSV'), 'gpu_metrics.csv', '/workspace/gpu_metrics.csv']
         source = next(
@@ -237,6 +254,7 @@ def aggregate_power_result(
                 source, bench_path, agg_path,
                 prefill_gpus=prefill_gpus,
                 decode_gpus=decode_gpus,
+                aggregate_gpus=aggregate_gpus,
                 expected_producer_sha=env.get('POWER_PRODUCER_SHA') or None,
                 logs_root=Path(env.get('POWER_RESULT_ROOT', 'LOGS')),
                 validation_result=validation_path,
@@ -265,8 +283,7 @@ def aggregate_power_result(
         return int(require_power)
 
 
-def main() -> int:
-    env = os.environ
+def process_result(env: Mapping[str, str]) -> int:
     require_environment(env, _BASE_ENV_VARS)
     result_filename = env['RESULT_FILENAME']
     bench_path = Path(f'{result_filename}.json')
@@ -277,9 +294,85 @@ def main() -> int:
     with open(agg_path, 'w') as f:
         json.dump(data, f, indent=2)
     status = aggregate_power_result(env, bench_path, agg_path)
+    validation_path = Path(f'power_validation_{result_filename}.json')
+    from .power.audit import audit_summary
+
+    result = json.loads(agg_path.read_text())
+    try:
+        validation = json.loads(validation_path.read_text())
+        result.update(audit_summary(validation, validation_path.name))
+    except (OSError, ValueError, TypeError) as exc:
+        print(f'[process_result] audit summary unavailable: {exc}', file=sys.stderr)
+        result['power_invalid_reasons'] = ['validation_artifact_unavailable']
+        # A required run must preserve its audit as well as numeric metrics.
+        status = max(status, int(env.get('REQUIRE_POWER', '').lower() in {'1', 'true', 'yes'}))
+    agg_path.write_text(json.dumps(result, indent=2))
     with open(agg_path) as f:
         print(json.dumps(json.load(f), indent=2))
+    return max(status, int(data.get('benchmark_outcome', {}).get('status') == 'failed'))
+
+
+def process_multinode_results(env: Mapping[str, str]) -> int:
+    """Process every available point and preserve sweep omissions before failing."""
+    expected = {int(value) for value in env['CONC_LIST'].split()}
+    if not expected or min(expected) <= 0:
+        raise ValueError('CONC_LIST must contain positive concurrencies')
+    points: list[dict[str, Any]] = []
+    observed: set[int] = set()
+    status = 0
+    for path in sorted(Path('.').glob(f"{env['RESULT_FILENAME']}_*.json")):
+        point: dict[str, Any] = {'source': path.name}
+        try:
+            match = re.search(
+                r'_(?:c|conc|concurrency_)(\d+)(?:_req_rate_[^_]+)?_gpus_(\d+)'
+                r'(?:_ctx_(\d+)_gen_(\d+))?$', path.stem)
+            if match is None:
+                raise ValueError('Result filename lacks concurrency and physical GPU counts')
+            concurrency, total = int(match[1]), int(match[2])
+            raw = json.loads(path.read_text())
+            if raw['max_concurrency'] != concurrency:
+                raise ValueError('Result concurrency does not match its filename')
+            if concurrency in observed:
+                raise ValueError('Duplicate concurrency result within one recipe')
+            observed.add(concurrency)
+            point['concurrency'] = concurrency
+            point_env = {**env, 'RESULT_FILENAME': path.stem, 'IS_MULTINODE': 'true'}
+            disagg = env['DISAGG'].lower() == 'true'
+            # Some disaggregated recipe groups include a shared-worker point.
+            # Its zero decode workers and filename must both describe aggregate
+            # execution; the group-level flag cannot manufacture role energy.
+            aggregate = not disagg or int(env['DECODE_NUM_WORKERS']) == 0
+            if aggregate:
+                if match[3] is not None and (int(match[3]) != total or int(match[4]) != 0):
+                    raise ValueError('Aggregate result contains separate role GPU counts')
+                point_env.update(DISAGG='false', PREFILL_GPUS='0', DECODE_GPUS='0',
+                                 AGGREGATE_GPUS=str(total))
+            else:
+                if match[3] is None:
+                    raise ValueError('Disaggregated result lacks prefill/decode GPU counts')
+                prefill, decode = int(match[3]), int(match[4])
+                if prefill + decode != total:
+                    raise ValueError('Role GPU counts do not equal total GPU count')
+                point_env.update(PREFILL_GPUS=str(prefill), DECODE_GPUS=str(decode), AGGREGATE_GPUS='0')
+            point['exit_code'] = process_result(point_env)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            point.update(exit_code=1, error=str(exc))
+            print(f'[process_result] {path}: {exc}', file=sys.stderr)
+        status = max(status, point['exit_code'])
+        points.append(point)
+    missing, unexpected = sorted(expected - observed), sorted(observed - expected)
+    status = max(status, int(bool(missing or unexpected)))
+    summary = {'expected_concurrencies': sorted(expected),
+               'missing_concurrencies': missing, 'unexpected_concurrencies': unexpected,
+               'points': points, 'exit_code': status}
+    Path(f"result_processing_{env['RESULT_FILENAME']}.json").write_text(json.dumps(summary, indent=2))
+    if missing or unexpected:
+        print(f'[process_result] incomplete sweep: missing={missing}, unexpected={unexpected}', file=sys.stderr)
     return status
+
+
+def main() -> int:
+    return process_multinode_results(os.environ) if sys.argv[1:] == ['--all'] else process_result(os.environ)
 
 
 if __name__ == '__main__':

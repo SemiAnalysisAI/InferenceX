@@ -62,6 +62,7 @@ except ImportError:
     from argparse import ArgumentParser as FlexibleArgumentParser
 
 from .benchmark_utils import convert_to_pytorch_benchmark_format
+from .benchmark_outcome import benchmark_outcome
 from .encoding_dsv4 import encode_messages as dsv4_encode_messages
 
 MILLISECONDS_TO_SECONDS_CONVERSION = 1000
@@ -898,6 +899,11 @@ def main(args: argparse.Namespace):
             lora_modules=args.lora_modules,
         ))
 
+    # Preserve the request gate before writing results: cleanup or a surrounding
+    # launcher must not turn an error-containing benchmark into a passed point.
+    outcome = benchmark_outcome(args.num_prompts, benchmark_result["completed"])
+    benchmark_result["benchmark_outcome"] = outcome
+
     # Save config and results to json
     if args.save_result:
         result_json: Dict[str, Any] = {}
@@ -957,14 +963,11 @@ def main(args: argparse.Namespace):
             json.dump(result_json, outfile)
         save_to_pytorch_benchmark_format(args, result_json, file_name)
 
-    max_failure_rate = 0.05
-    completed = benchmark_result["completed"]
-    failure_rate = 1 - completed / args.num_prompts
-    if failure_rate > max_failure_rate:
+    if outcome["status"] == "failed":
         raise SystemExit(
-            f"FAIL: request failure rate {failure_rate:.1%} exceeds "
-            f"{max_failure_rate:.0%} threshold "
-            f"({completed}/{args.num_prompts} completed)"
+            f"FAIL: request failure rate {outcome['failed'] / outcome['requested']:.1%} exceeds "
+            f"{outcome['max_failure_rate']:.0%} threshold "
+            f"({outcome['completed']}/{outcome['requested']} completed)"
         )
 
 

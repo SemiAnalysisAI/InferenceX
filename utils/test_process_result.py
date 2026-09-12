@@ -28,12 +28,13 @@ def test_workflow_processes_results_through_compatibility_entrypoint(
     step = next(step for job in workflow["jobs"].values() for step in job.get("steps", [])
                 if step.get("name", "").startswith("Process result"))
     multinode = workflow_name == "benchmark-multinode-tmpl.yml"
-    stem = "fixture_gpus_28_ctx_20_gen_8" if multinode else "fixture"
+    stem = "fixture_conc64_gpus_28_ctx_20_gen_8" if multinode else "fixture"
     (tmp_path / f"{stem}.json").write_text(json.dumps({
         **sample_benchmark_result, "total_token_throughput": 56, "output_throughput": 28,
     }))
     env = {**(multinode_env_vars if multinode else single_node_env_vars),
            "RESULT_FILENAME": "fixture" if multinode else stem, "POWER_PRODUCER_SHA": "",
+           "CONC_LIST": "64",
            "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}"}
     result = subprocess.run(["bash", "-euo", "pipefail", "-c", step["run"]],
                             cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10)
@@ -845,7 +846,7 @@ class TestPowerAggregationIntegration:
         assert "avg_power_w" not in patched
         assert "joules_per_output_token" not in patched
         assert patched["power_valid"] == 0
-        assert "power_invalid_reasons" not in patched
+        assert patched["power_invalid_reasons"]
 
         validation = json.loads(
             (tmp_path / "power_validation_benchmark_result.json").read_text()
@@ -876,7 +877,7 @@ class TestPowerAggregationIntegration:
         assert "avg_power_w" not in patched
         assert "joules_per_output_token" not in patched
         assert patched["power_valid"] == 0
-        assert "power_invalid_reasons" not in patched
+        assert patched["power_invalid_reasons"]
 
     def test_expected_gpu_count_mismatch_is_invalid(self, tmp_path, single_node_env_vars):
         """TP/PP/PCP topology is checked against the observed device IDs."""
@@ -902,7 +903,7 @@ class TestPowerAggregationIntegration:
         assert result.returncode == 0, f"Script failed: {result.stderr}"
         patched = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
         assert patched["power_valid"] == 0
-        assert "power_invalid_reasons" not in patched
+        assert patched["power_invalid_reasons"]
         assert "total_gpu_energy_j" not in patched
 
     def test_require_power_propagates_validation_failure(
@@ -1009,7 +1010,7 @@ class TestPowerAggregationIntegration:
         agg = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
         assert agg["power_metric_schema_version"] == 2
         assert agg["power_valid"] == 0
-        assert "power_invalid_reasons" not in agg
+        assert agg["power_invalid_reasons"] == ["aggregation_internal_error"]
         validation = json.loads(
             (tmp_path / "power_validation_benchmark_result.json").read_text()
         )
@@ -1416,3 +1417,209 @@ class TestMultinodePower:
         assert result.returncode == 0, f"Script failed: {result.stderr}"
         agg = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
         assert agg["power_valid"] == 1
+
+
+@pytest.mark.parametrize('completed,status', [(100, 'passed'), (95, 'passed'), (94, 'failed')])
+def test_request_outcome_preserves_existing_failure_threshold(completed, status):
+    from infx.bench_serving.benchmark_outcome import benchmark_outcome
+
+    outcome = benchmark_outcome(100, completed)
+    assert outcome['status'] == status
+    assert outcome['failed'] == 100 - completed
+    assert outcome['max_failure_rate'] == 0.05
+
+
+def test_failed_client_is_preserved_with_valid_power(tmp_path, single_node_env_vars):
+    start, end = 1_700_000_100.0, 1_700_000_110.0
+    TestPowerAggregationIntegration._write_nvidia_csv(tmp_path / 'gpu_metrics.csv', start, end, num_gpus=2)
+    outcome = {'status': 'failed', 'requested': 100, 'completed': 94, 'failed': 6,
+               'max_failure_rate': 0.05}
+    raw = {'model_id': 'fixture', 'max_concurrency': 4, 'total_token_throughput': 500,
+           'output_throughput': 100, 'benchmark_start_time_unix': start,
+           'benchmark_end_time_unix': end, 'duration': 10, 'completed': 94,
+           'total_input_tokens': 8192, 'total_output_tokens': 1024,
+           'benchmark_outcome': outcome}
+    result = run_script(tmp_path, {**single_node_env_vars, 'TP': '2'}, raw)
+    assert result.returncode == 1, result.stderr
+    aggregate = json.loads((tmp_path / 'agg_benchmark_result.json').read_text())
+    assert aggregate['benchmark_outcome'] == outcome
+    assert aggregate['power_valid'] == 1
+    assert aggregate['power_invalid_reasons'] == []
+    assert aggregate['power_audit']['window_start_unix'] == start
+    assert aggregate['power_audit']['expected_gpu_count'] == 2
+    assert aggregate['power_audit']['observed_gpu_count'] == 2
+    assert aggregate['power_audit']['source'] == 'power_validation_benchmark_result.json'
+
+
+def test_request_outcome_cannot_disagree_with_raw_counts(single_node_env_vars, sample_benchmark_result):
+    from infx.results.fixed_sequence import build_result
+
+    raw = {**sample_benchmark_result, 'completed': 94,
+           'benchmark_outcome': {'status': 'passed', 'requested': 100, 'completed': 100,
+                                 'failed': 0, 'max_failure_rate': 0.05}}
+    with pytest.raises(ValueError, match='request counts and gate'):
+        build_result(raw, single_node_env_vars)
+
+
+def test_multinode_aggregate_role_through_result_processor(tmp_path, multinode_env_vars):
+    pkg = build_package(tmp_path, bench_extra=TestMultinodePower.BENCH_EXTRA)
+    manifest_path = pkg.power_dir / 'manifest.json'
+    manifest = json.loads(manifest_path.read_text())
+    for device in manifest['expected_devices']:
+        for assignment in device['assignments']:
+            assignment.update(worker_role='agg', het_group=None)
+    manifest_path.write_text(json.dumps(manifest))
+    env = {**multinode_env_vars, 'DISAGG': 'false', 'PREFILL_GPUS': '0',
+           'DECODE_GPUS': '0', 'AGGREGATE_GPUS': '4', 'POWER_PRODUCER_SHA': PRODUCER_SHA,
+           'REQUIRE_POWER': '1'}
+    result = run_script(tmp_path, env, json.loads(pkg.original_result.read_text()))
+    assert result.returncode == 0, result.stderr
+    aggregate = json.loads((tmp_path / 'agg_benchmark_result.json').read_text())
+    assert aggregate['power_valid'] == 1
+    assert aggregate['num_aggregate_gpu'] == 4
+    assert aggregate['avg_power_w'] == 350
+    assert aggregate['power_audit']['producer_sha'] == PRODUCER_SHA
+    assert set(ROLE_METRIC_KEYS).isdisjoint(aggregate)
+
+
+@pytest.mark.parametrize('conc_token,rate_suffix', [
+    ('c', ''), ('conc', ''),
+    ('concurrency_', '_req_rate_1'), ('concurrency_', '_req_rate_inf'),
+])
+@pytest.mark.parametrize('expected_concs,missing', [('4 8 16', [8]), ('4 16', [])])
+def test_multinode_batch_preserves_points_and_checks_completeness(
+    tmp_path, multinode_env_vars, sample_benchmark_result, conc_token, rate_suffix,
+    expected_concs, missing,
+):
+    for conc in (4, 16):
+        (tmp_path / f'run_recipe_{conc_token}{conc}{rate_suffix}_gpus_4_ctx_2_gen_2.json').write_text(
+            json.dumps({**sample_benchmark_result, 'max_concurrency': conc}))
+    env = {**os.environ, **multinode_env_vars, 'RESULT_FILENAME': 'run',
+           'CONC_LIST': expected_concs, 'REQUIRE_POWER': '0'}
+    result = subprocess.run([*MODULE_COMMAND, '--all'], cwd=tmp_path,
+                            env={**env, 'PYTHONPATH': str(REPO_ROOT)},
+                            capture_output=True, text=True)
+    assert result.returncode == int(bool(missing)), result.stderr
+    receipt = json.loads((tmp_path / 'result_processing_run.json').read_text())
+    assert receipt['missing_concurrencies'] == missing
+    assert receipt['unexpected_concurrencies'] == []
+    assert len(receipt['points']) == 2
+    for conc in (4, 16):
+        stem = f'run_recipe_{conc_token}{conc}{rate_suffix}_gpus_4_ctx_2_gen_2'
+        aggregate = json.loads((tmp_path / f'agg_{stem}.json').read_text())
+        assert aggregate['power_valid'] == 0
+        assert aggregate['power_invalid_reasons']
+        assert (tmp_path / f'power_validation_{stem}.json').is_file()
+
+
+@pytest.mark.parametrize('role_suffix', ['', '_ctx_4_gen_0'])
+def test_multinode_batch_normalizes_legacy_zero_decode_aggregate(
+    tmp_path, multinode_env_vars, role_suffix,
+):
+    pkg = build_package(tmp_path, bench_extra=TestMultinodePower.BENCH_EXTRA)
+    manifest_path = pkg.power_dir / 'manifest.json'
+    manifest = json.loads(manifest_path.read_text())
+    for device in manifest['expected_devices']:
+        for assignment in device['assignments']:
+            assignment.update(worker_role='agg', het_group=None)
+    manifest_path.write_text(json.dumps(manifest))
+    stem = f'run_recipe_c4_gpus_4{role_suffix}'
+    (tmp_path / f'{stem}.json').write_text(pkg.original_result.read_text())
+    env = {**os.environ, **multinode_env_vars, 'RESULT_FILENAME': 'run',
+           'CONC_LIST': '4', 'DECODE_NUM_WORKERS': '0', 'REQUIRE_POWER': '1',
+           'POWER_PRODUCER_SHA': PRODUCER_SHA}
+    result = subprocess.run([*MODULE_COMMAND, '--all'], cwd=tmp_path,
+                            env={**env, 'PYTHONPATH': str(REPO_ROOT)},
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    aggregate = json.loads((tmp_path / f'agg_{stem}.json').read_text())
+    assert aggregate['disagg'] is False
+    assert aggregate['num_aggregate_gpu'] == 4
+    assert aggregate['num_decode_gpu'] == 0
+    assert aggregate['decode_num_workers'] == 0
+    assert aggregate['power_valid'] == 1
+    assert aggregate['avg_power_w'] == 350
+    assert set(ROLE_METRIC_KEYS).isdisjoint(aggregate)
+
+
+@pytest.mark.parametrize('decode_workers,role_suffix', [
+    ('0', '_ctx_2_gen_2'), ('0', '_ctx_3_gen_0'), ('1', ''),
+])
+def test_multinode_batch_rejects_misdeclared_aggregate_role_counts(
+    tmp_path, multinode_env_vars, sample_benchmark_result, decode_workers, role_suffix,
+):
+    stem = f'run_recipe_c4_gpus_4{role_suffix}'
+    (tmp_path / f'{stem}.json').write_text(
+        json.dumps({**sample_benchmark_result, 'max_concurrency': 4}))
+    env = {**os.environ, **multinode_env_vars, 'RESULT_FILENAME': 'run',
+           'CONC_LIST': '4', 'DECODE_NUM_WORKERS': decode_workers}
+    result = subprocess.run([*MODULE_COMMAND, '--all'], cwd=tmp_path,
+                            env={**env, 'PYTHONPATH': str(REPO_ROOT)},
+                            capture_output=True, text=True)
+    assert result.returncode == 1, result.stderr
+    receipt = json.loads((tmp_path / 'result_processing_run.json').read_text())
+    assert receipt['points'][0]['exit_code'] == 1
+    assert not (tmp_path / f'agg_{stem}.json').exists()
+
+
+def test_zero_successful_requests_preserves_diagnostic_result(tmp_path, single_node_env_vars, sample_benchmark_result):
+    raw = {**sample_benchmark_result, 'tpot_p50_ms': 0, 'tpot_p99_ms': float('nan'),
+           'completed': 0, 'num_prompts': 4,
+           'benchmark_outcome': {'status': 'failed', 'requested': 4, 'completed': 0,
+                                 'failed': 4, 'max_failure_rate': 0.05}}
+    result = run_script(tmp_path, single_node_env_vars, raw)
+    assert result.returncode == 1, result.stderr
+    aggregate = json.loads((tmp_path / 'agg_benchmark_result.json').read_text())
+    assert aggregate['benchmark_outcome']['failed'] == 4
+    assert aggregate['power_valid'] == 0
+    assert 'intvty_p50' not in aggregate
+    assert 'tpot_p99' not in aggregate
+
+
+@pytest.mark.parametrize('extra_conc,error', [(4, 'Duplicate concurrency'), (8, None)])
+def test_multinode_batch_rejects_extra_results_without_losing_other_points(
+    tmp_path, multinode_env_vars, sample_benchmark_result, extra_conc, error,
+):
+    for label, conc in [('a', 4), ('b', extra_conc), ('c', 16)]:
+        (tmp_path / f'run_{label}_conc{conc}_gpus_4_ctx_2_gen_2.json').write_text(
+            json.dumps({**sample_benchmark_result, 'max_concurrency': conc}))
+    env = {**os.environ, **multinode_env_vars, 'RESULT_FILENAME': 'run', 'CONC_LIST': '4 16'}
+    result = subprocess.run([*MODULE_COMMAND, '--all'], cwd=tmp_path,
+                            env={**env, 'PYTHONPATH': str(REPO_ROOT)},
+                            capture_output=True, text=True)
+    assert result.returncode == 1, result.stderr
+    receipt = json.loads((tmp_path / 'result_processing_run.json').read_text())
+    assert receipt['missing_concurrencies'] == []
+    assert receipt['unexpected_concurrencies'] == ([] if error else [8])
+    if error:
+        assert error in receipt['points'][1]['error']
+    assert (tmp_path / 'agg_run_a_conc4_gpus_4_ctx_2_gen_2.json').is_file()
+    assert (tmp_path / 'agg_run_c_conc16_gpus_4_ctx_2_gen_2.json').is_file()
+
+
+def test_multinode_empty_sweep_records_every_missing_point(tmp_path, multinode_env_vars):
+    env = {**os.environ, **multinode_env_vars, 'RESULT_FILENAME': 'run', 'CONC_LIST': '4 8'}
+    result = subprocess.run([*MODULE_COMMAND, '--all'], cwd=tmp_path,
+                            env={**env, 'PYTHONPATH': str(REPO_ROOT)},
+                            capture_output=True, text=True)
+    assert result.returncode == 1, result.stderr
+    receipt = json.loads((tmp_path / 'result_processing_run.json').read_text())
+    assert receipt['missing_concurrencies'] == [4, 8]
+    assert receipt['points'] == []
+
+
+def test_public_power_audit_bounds_text_and_device_identifiers():
+    from infx.results.power.audit import audit_summary
+
+    summary = audit_summary({
+        'producer': {'producer_git_commit': 'x' * 129, 'exporter_image_sha256': 'a' * 64},
+        'observed_gpu_ids': ['gpu0', 'gpu0', 'x' * 129] + [f'gpu{i}' for i in range(1, 1025)],
+        'reasons': ['window_missing', '<raw log>'] + [f'reason_{i}' for i in range(40)],
+    }, 'power_validation_run.json')
+    assert len(summary['power_invalid_reasons']) == 32
+    assert '<raw log>' not in summary['power_invalid_reasons']
+    audit = summary['power_audit']
+    assert 'producer_sha' not in audit
+    assert audit['exporter_image_sha256'] == 'a' * 64
+    assert len(audit['observed_gpu_ids']) == 1024
+    assert audit['observed_gpu_ids'][:2] == ['gpu0', 'gpu1']

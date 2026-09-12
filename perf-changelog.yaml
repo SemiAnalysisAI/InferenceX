@@ -7399,3 +7399,14 @@
     - "Disable adaptive verification in the EVAL_ONLY DSpark config as well. It trims verification requests on device, which the ROCm DeepseekV4IndexerBackend does not support, so the eval-only engine refused to start (run 34651830283, c32). Evals keep real block rejection; throughput settings are unchanged."
     - "EVAL_ONLY 的 DSpark 配置同样关闭自适应验证：它会在设备端裁剪验证请求，而 ROCm 的 DeepseekV4IndexerBackend 不支持该操作，导致仅评测引擎拒绝启动（运行 34651830283，c32）。评测仍保留真实块拒绝采样；吞吐设置不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang
+    - qwen3.5-fp8-h100-sglang
+    - qwen3.5-fp8-gb200-dynamo-sglang
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Preserve request failure outcomes, retain all available fixed-sequence diagnostics, and reject incomplete concurrency batches before publishing benchmark artifacts."
+    - "保留请求失败状态及全部可用的固定序列诊断信息；发布基准产物前拒绝缺失并发点的批次。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3026
