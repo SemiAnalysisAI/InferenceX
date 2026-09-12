@@ -1757,7 +1757,7 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
 # tag predates vllm-project/vllm#56503, which moves the mHC delayed pre block off
 # the eager Torch reference and onto AITER. MI355X runtime validation is pending.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:nightly-TBD
+  image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
