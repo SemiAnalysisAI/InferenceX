@@ -7013,6 +7013,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2851
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3 MXFP4 ATOM AgentX MTP on MI355X (cluster:mi355x-amds) with image rocm/atom-dev:nightly_202609091233-lirzhang-triton-build and no runtime ATOM patches."
+    - "Search space: TP4 GPU-resident conc [1, 2, 4, 5, 8, 10, 12, 15, 20, 24, 28, 32], TP2 GPU-resident conc [1, 2, 5], and TP4 LMCache 0.4.5 DRAM offload conc [40, 48] (CPU-only tier: 256 GiB/rank, 256-token chunks, no hybrid state offload and no draft model)."
+    - "benchmarks/single_node/agentic/minimaxm3_fp4_mi355x_atom_mtp.sh matches the MI355X vLLM arm: EAGLE3-GQA draft (Inferact/MiniMax-M3-EAGLE3-GQA, 3 speculative tokens), synthetic acceptance length 2.78 on throughput runs, thinking_mode enabled, FP8 KV and index cache (--index-cache-dtype fp8, no --hf-overrides use_index_cache/index_topk_freq; sparse-PA behavior follows the checkpoint and image per PR_REVIEW_CHECKLIST.md), block-size 128, prefix caching, max-num-seqs=2x concurrency, max-num-batched-tokens=32768, gpu-memory-utilization=0.9, and ATOM_ENABLE_REPLAYSSM=1 for conc 8-28."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2816
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang-mtp
   scenario-type:
     - fixed-seq-len
