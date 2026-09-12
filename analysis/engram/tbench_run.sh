@@ -261,7 +261,7 @@ say "wrote $ENV_FILE (mode $(stat -c %a "$ENV_FILE" 2>/dev/null || echo '?'))"
 # published default is an 8-hour agent timeout per task.
 say "=== harbor run (env modal) ==="
 set +e
-timeout "${TBENCH_TIMEOUT_S:-2700}" "${HARBOR[@]}" run \
+timeout "${TBENCH_TIMEOUT_S:-16200}" "${HARBOR[@]}" run \
     -d terminal-bench/terminal-bench@4.0.0 \
     --agent "$AGENT" \
     --model "openai/$MODEL" \
@@ -270,8 +270,8 @@ timeout "${TBENCH_TIMEOUT_S:-2700}" "${HARBOR[@]}" run \
     --ak "model_info=$MODEL_INFO" \
     -k "${TBENCH_ATTEMPTS:-1}" \
     --n-concurrent "${TBENCH_CONCURRENT:-32}" \
-    --timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.1}" \
-    --agent-timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.1}" \
+    --timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.25}" \
+    --agent-timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.25}" \
     --job-name "engram-tbench-$(date +%s)" \
     --jobs-dir "$RESULT_DIR/harbor_jobs" \
     --yes 2>&1 | tee -a "$RESULT_DIR/tbench_run.txt"
