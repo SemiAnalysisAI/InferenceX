@@ -1,0 +1,1837 @@
+{
+ "per_domain": {
+  "wiki": {
+   "chunks": 100,
+   "tokens_scored": 179200,
+   "boundary": 1792,
+   "nll_baseline": 1.038818,
+   "ppl_baseline": 2.8259,
+   "arms": {
+    "ablated": {
+     "nll": 1.875307,
+     "delta_nll": 0.836489,
+     "delta_bits_per_token": 1.206798,
+     "ppl": 6.5228,
+     "ppl_ratio": 2.308248,
+     "chunk_stderr": 0.040915,
+     "sigma": 20.44
+    },
+    "prefill_only": {
+     "nll": 1.849908,
+     "delta_nll": 0.81109,
+     "delta_bits_per_token": 1.170155,
+     "ppl": 6.3592,
+     "ppl_ratio": 2.250359,
+     "chunk_stderr": 0.045635,
+     "sigma": 17.77
+    },
+    "decode_only": {
+     "nll": 1.092462,
+     "delta_nll": 0.053643,
+     "delta_bits_per_token": 0.077391,
+     "ppl": 2.9816,
+     "ppl_ratio": 1.055108,
+     "chunk_stderr": 0.004023,
+     "sigma": 13.33
+    }
+   },
+   "contribution_first_chunk": {
+    "baseline": {
+     "calls": 8,
+     "mean_rel_norm": 0.49405998,
+     "max_rel_norm": 0.7461496,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.7461496,
+       "max_rel_norm": 0.7461496,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.24197036,
+       "max_rel_norm": 0.24197036,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "ablated": {
+     "calls": 8,
+     "mean_rel_norm": 0.0,
+     "max_rel_norm": 0.0,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "prefill_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.35794496,
+     "max_rel_norm": 0.5318045,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.5318045,
+       "max_rel_norm": 0.5318045,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.18408541,
+       "max_rel_norm": 0.18408541,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "decode_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.35671285,
+     "max_rel_norm": 0.52337676,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.52337676,
+       "max_rel_norm": 0.52337676,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.19004893,
+       "max_rel_norm": 0.19004893,
+       "mean_max_gate": 0.0
+      }
+     }
+    }
+   }
+  },
+  "chat": {
+   "chunks": 100,
+   "tokens_scored": 179200,
+   "boundary": 1792,
+   "nll_baseline": 1.121693,
+   "ppl_baseline": 3.07,
+   "arms": {
+    "ablated": {
+     "nll": 1.255969,
+     "delta_nll": 0.134276,
+     "delta_bits_per_token": 0.193719,
+     "ppl": 3.5112,
+     "ppl_ratio": 1.143708,
+     "chunk_stderr": 0.008428,
+     "sigma": 15.93
+    },
+    "prefill_only": {
+     "nll": 1.222661,
+     "delta_nll": 0.100969,
+     "delta_bits_per_token": 0.145667,
+     "ppl": 3.3962,
+     "ppl_ratio": 1.106242,
+     "chunk_stderr": 0.006911,
+     "sigma": 14.61
+    },
+    "decode_only": {
+     "nll": 1.123047,
+     "delta_nll": 0.001355,
+     "delta_bits_per_token": 0.001954,
+     "ppl": 3.0742,
+     "ppl_ratio": 1.001356,
+     "chunk_stderr": 0.0012,
+     "sigma": 1.13
+    }
+   },
+   "contribution_first_chunk": {
+    "baseline": {
+     "calls": 8,
+     "mean_rel_norm": 0.43302508,
+     "max_rel_norm": 0.71657306,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.71657306,
+       "max_rel_norm": 0.71657306,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.14947709,
+       "max_rel_norm": 0.14947709,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "ablated": {
+     "calls": 8,
+     "mean_rel_norm": 0.0,
+     "max_rel_norm": 0.0,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "prefill_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.33244606,
+     "max_rel_norm": 0.53089213,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.53089213,
+       "max_rel_norm": 0.53089213,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.13399999,
+       "max_rel_norm": 0.13399999,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "decode_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.28146407,
+     "max_rel_norm": 0.48128009,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.48128009,
+       "max_rel_norm": 0.48128009,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.08164804,
+       "max_rel_norm": 0.08164804,
+       "mean_max_gate": 0.0
+      }
+     }
+    }
+   }
+  },
+  "math": {
+   "chunks": 100,
+   "tokens_scored": 179200,
+   "boundary": 1792,
+   "nll_baseline": 0.699343,
+   "ppl_baseline": 2.0124,
+   "arms": {
+    "ablated": {
+     "nll": 1.062179,
+     "delta_nll": 0.362836,
+     "delta_bits_per_token": 0.523461,
+     "ppl": 2.8927,
+     "ppl_ratio": 1.4374,
+     "chunk_stderr": 0.013173,
+     "sigma": 27.54
+    },
+    "prefill_only": {
+     "nll": 1.109146,
+     "delta_nll": 0.409803,
+     "delta_bits_per_token": 0.59122,
+     "ppl": 3.0318,
+     "ppl_ratio": 1.50652,
+     "chunk_stderr": 0.013253,
+     "sigma": 30.92
+    },
+    "decode_only": {
+     "nll": 0.710093,
+     "delta_nll": 0.01075,
+     "delta_bits_per_token": 0.015509,
+     "ppl": 2.0342,
+     "ppl_ratio": 1.010808,
+     "chunk_stderr": 0.002653,
+     "sigma": 4.05
+    }
+   },
+   "contribution_first_chunk": {
+    "baseline": {
+     "calls": 8,
+     "mean_rel_norm": 0.44338875,
+     "max_rel_norm": 0.68043876,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.68043876,
+       "max_rel_norm": 0.68043876,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.20633873,
+       "max_rel_norm": 0.20633873,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "ablated": {
+     "calls": 8,
+     "mean_rel_norm": 0.0,
+     "max_rel_norm": 0.0,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "prefill_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.30727652,
+     "max_rel_norm": 0.46405515,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.46405515,
+       "max_rel_norm": 0.46405515,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.1504979,
+       "max_rel_norm": 0.1504979,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "decode_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.32056896,
+     "max_rel_norm": 0.49764416,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.49764416,
+       "max_rel_norm": 0.49764416,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.14349377,
+       "max_rel_norm": 0.14349377,
+       "mean_max_gate": 0.0
+      }
+     }
+    }
+   }
+  },
+  "code_mbpp": {
+   "chunks": 8,
+   "tokens_scored": 14336,
+   "boundary": 1792,
+   "nll_baseline": 0.409126,
+   "ppl_baseline": 1.5055,
+   "arms": {
+    "ablated": {
+     "nll": 1.174994,
+     "delta_nll": 0.765869,
+     "delta_bits_per_token": 1.104915,
+     "ppl": 3.2381,
+     "ppl_ratio": 2.150862,
+     "chunk_stderr": 0.054607,
+     "sigma": 14.03
+    },
+    "prefill_only": {
+     "nll": 1.042173,
+     "delta_nll": 0.633047,
+     "delta_bits_per_token": 0.913294,
+     "ppl": 2.8354,
+     "ppl_ratio": 1.883341,
+     "chunk_stderr": 0.057807,
+     "sigma": 10.95
+    },
+    "decode_only": {
+     "nll": 0.446169,
+     "delta_nll": 0.037044,
+     "delta_bits_per_token": 0.053442,
+     "ppl": 1.5623,
+     "ppl_ratio": 1.037738,
+     "chunk_stderr": 0.00665,
+     "sigma": 5.57
+    }
+   },
+   "contribution_first_chunk": {
+    "baseline": {
+     "calls": 8,
+     "mean_rel_norm": 0.51913192,
+     "max_rel_norm": 0.80421519,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.80421519,
+       "max_rel_norm": 0.80421519,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.23404865,
+       "max_rel_norm": 0.23404865,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "ablated": {
+     "calls": 8,
+     "mean_rel_norm": 0.0,
+     "max_rel_norm": 0.0,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "prefill_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.36882309,
+     "max_rel_norm": 0.57179946,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.57179946,
+       "max_rel_norm": 0.57179946,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.16584672,
+       "max_rel_norm": 0.16584672,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "decode_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.37611766,
+     "max_rel_norm": 0.56551528,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.56551528,
+       "max_rel_norm": 0.56551528,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.18672004,
+       "max_rel_norm": 0.18672004,
+       "mean_max_gate": 0.0
+      }
+     }
+    }
+   }
+  },
+  "wiki_zh": {
+   "chunks": 100,
+   "tokens_scored": 179200,
+   "boundary": 1792,
+   "nll_baseline": 1.484634,
+   "ppl_baseline": 4.4134,
+   "arms": {
+    "ablated": {
+     "nll": 2.441295,
+     "delta_nll": 0.956661,
+     "delta_bits_per_token": 1.38017,
+     "ppl": 11.4879,
+     "ppl_ratio": 2.60299,
+     "chunk_stderr": 0.058925,
+     "sigma": 16.24
+    },
+    "prefill_only": {
+     "nll": 2.466145,
+     "delta_nll": 0.981511,
+     "delta_bits_per_token": 1.416021,
+     "ppl": 11.777,
+     "ppl_ratio": 2.668486,
+     "chunk_stderr": 0.059541,
+     "sigma": 16.48
+    },
+    "decode_only": {
+     "nll": 1.465083,
+     "delta_nll": -0.019551,
+     "delta_bits_per_token": -0.028206,
+     "ppl": 4.3279,
+     "ppl_ratio": 0.980639,
+     "chunk_stderr": 0.006367,
+     "sigma": -3.07
+    }
+   },
+   "contribution_first_chunk": {
+    "baseline": {
+     "calls": 8,
+     "mean_rel_norm": 0.48511228,
+     "max_rel_norm": 0.69502765,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.69502765,
+       "max_rel_norm": 0.69502765,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.27519691,
+       "max_rel_norm": 0.27519691,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "ablated": {
+     "calls": 8,
+     "mean_rel_norm": 0.0,
+     "max_rel_norm": 0.0,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "prefill_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.35724495,
+     "max_rel_norm": 0.50908166,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.50908166,
+       "max_rel_norm": 0.50908166,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.20540823,
+       "max_rel_norm": 0.20540823,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "decode_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.33339264,
+     "max_rel_norm": 0.47317994,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.47317994,
+       "max_rel_norm": 0.47317994,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.19360535,
+       "max_rel_norm": 0.19360535,
+       "mean_max_gate": 0.0
+      }
+     }
+    }
+   }
+  },
+  "chat_zh": {
+   "chunks": 100,
+   "tokens_scored": 179200,
+   "boundary": 1792,
+   "nll_baseline": 1.800752,
+   "ppl_baseline": 6.0542,
+   "arms": {
+    "ablated": {
+     "nll": 1.854795,
+     "delta_nll": 0.054044,
+     "delta_bits_per_token": 0.077968,
+     "ppl": 6.3904,
+     "ppl_ratio": 1.055531,
+     "chunk_stderr": 0.002865,
+     "sigma": 18.86
+    },
+    "prefill_only": {
+     "nll": 1.841834,
+     "delta_nll": 0.041082,
+     "delta_bits_per_token": 0.059269,
+     "ppl": 6.3081,
+     "ppl_ratio": 1.041937,
+     "chunk_stderr": 0.002545,
+     "sigma": 16.14
+    },
+    "decode_only": {
+     "nll": 1.796104,
+     "delta_nll": -0.004648,
+     "delta_bits_per_token": -0.006705,
+     "ppl": 6.0261,
+     "ppl_ratio": 0.995363,
+     "chunk_stderr": 0.001036,
+     "sigma": -4.48
+    }
+   },
+   "contribution_first_chunk": {
+    "baseline": {
+     "calls": 8,
+     "mean_rel_norm": 0.40708052,
+     "max_rel_norm": 0.6636067,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.6636067,
+       "max_rel_norm": 0.6636067,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.15055434,
+       "max_rel_norm": 0.15055434,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "ablated": {
+     "calls": 8,
+     "mean_rel_norm": 0.0,
+     "max_rel_norm": 0.0,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "prefill_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.27313779,
+     "max_rel_norm": 0.43797264,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.43797264,
+       "max_rel_norm": 0.43797264,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.10830294,
+       "max_rel_norm": 0.10830294,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "decode_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.3069205,
+     "max_rel_norm": 0.49855173,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.49855173,
+       "max_rel_norm": 0.49855173,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.11528927,
+       "max_rel_norm": 0.11528927,
+       "mean_max_gate": 0.0
+      }
+     }
+    }
+   }
+  },
+  "web_zh": {
+   "chunks": 100,
+   "tokens_scored": 179200,
+   "boundary": 1792,
+   "nll_baseline": 2.609404,
+   "ppl_baseline": 13.591,
+   "arms": {
+    "ablated": {
+     "nll": 3.127989,
+     "delta_nll": 0.518585,
+     "delta_bits_per_token": 0.74816,
+     "ppl": 22.828,
+     "ppl_ratio": 1.679649,
+     "chunk_stderr": 0.028528,
+     "sigma": 18.18
+    },
+    "prefill_only": {
+     "nll": 3.062935,
+     "delta_nll": 0.453531,
+     "delta_bits_per_token": 0.654307,
+     "ppl": 21.3902,
+     "ppl_ratio": 1.573859,
+     "chunk_stderr": 0.028147,
+     "sigma": 16.11
+    },
+    "decode_only": {
+     "nll": 2.626243,
+     "delta_nll": 0.016839,
+     "delta_bits_per_token": 0.024293,
+     "ppl": 13.8217,
+     "ppl_ratio": 1.016981,
+     "chunk_stderr": 0.005512,
+     "sigma": 3.06
+    }
+   },
+   "contribution_first_chunk": {
+    "baseline": {
+     "calls": 8,
+     "mean_rel_norm": 0.4632877,
+     "max_rel_norm": 0.72123098,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.72123098,
+       "max_rel_norm": 0.72123098,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.20534441,
+       "max_rel_norm": 0.20534441,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "ablated": {
+     "calls": 8,
+     "mean_rel_norm": 0.0,
+     "max_rel_norm": 0.0,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "prefill_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.31117836,
+     "max_rel_norm": 0.47494575,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.47494575,
+       "max_rel_norm": 0.47494575,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.14741096,
+       "max_rel_norm": 0.14741096,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "decode_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.35680898,
+     "max_rel_norm": 0.54277128,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.54277128,
+       "max_rel_norm": 0.54277128,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.17084667,
+       "max_rel_norm": 0.17084667,
+       "mean_max_gate": 0.0
+      }
+     }
+    }
+   }
+  },
+  "code_python": {
+   "chunks": 100,
+   "tokens_scored": 179200,
+   "boundary": 1792,
+   "nll_baseline": 0.789936,
+   "ppl_baseline": 2.2033,
+   "arms": {
+    "ablated": {
+     "nll": 1.445582,
+     "delta_nll": 0.655647,
+     "delta_bits_per_token": 0.945898,
+     "ppl": 4.2443,
+     "ppl_ratio": 1.926388,
+     "chunk_stderr": 0.022679,
+     "sigma": 28.91
+    },
+    "prefill_only": {
+     "nll": 1.263822,
+     "delta_nll": 0.473886,
+     "delta_bits_per_token": 0.683673,
+     "ppl": 3.5389,
+     "ppl_ratio": 1.606224,
+     "chunk_stderr": 0.019521,
+     "sigma": 24.28
+    },
+    "decode_only": {
+     "nll": 0.863279,
+     "delta_nll": 0.073344,
+     "delta_bits_per_token": 0.105813,
+     "ppl": 2.3709,
+     "ppl_ratio": 1.076101,
+     "chunk_stderr": 0.004645,
+     "sigma": 15.79
+    }
+   },
+   "contribution_first_chunk": {
+    "baseline": {
+     "calls": 8,
+     "mean_rel_norm": 0.51427739,
+     "max_rel_norm": 0.83943701,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.83943701,
+       "max_rel_norm": 0.83943701,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.18911777,
+       "max_rel_norm": 0.18911777,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "ablated": {
+     "calls": 8,
+     "mean_rel_norm": 0.0,
+     "max_rel_norm": 0.0,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "prefill_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.36660346,
+     "max_rel_norm": 0.60903758,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.60903758,
+       "max_rel_norm": 0.60903758,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.12416934,
+       "max_rel_norm": 0.12416934,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "decode_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.3870215,
+     "max_rel_norm": 0.57769173,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.57769173,
+       "max_rel_norm": 0.57769173,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.19635126,
+       "max_rel_norm": 0.19635126,
+       "mean_max_gate": 0.0
+      }
+     }
+    }
+   }
+  },
+  "code_javascript": {
+   "chunks": 100,
+   "tokens_scored": 179200,
+   "boundary": 1792,
+   "nll_baseline": 0.299333,
+   "ppl_baseline": 1.349,
+   "arms": {
+    "ablated": {
+     "nll": 1.5415,
+     "delta_nll": 1.242167,
+     "delta_bits_per_token": 1.792068,
+     "ppl": 4.6716,
+     "ppl_ratio": 3.463111,
+     "chunk_stderr": 0.031427,
+     "sigma": 39.53
+    },
+    "prefill_only": {
+     "nll": 1.365371,
+     "delta_nll": 1.066037,
+     "delta_bits_per_token": 1.537967,
+     "ppl": 3.9172,
+     "ppl_ratio": 2.90385,
+     "chunk_stderr": 0.030075,
+     "sigma": 35.45
+    },
+    "decode_only": {
+     "nll": 0.442557,
+     "delta_nll": 0.143224,
+     "delta_bits_per_token": 0.206628,
+     "ppl": 1.5567,
+     "ppl_ratio": 1.153988,
+     "chunk_stderr": 0.006089,
+     "sigma": 23.52
+    }
+   },
+   "contribution_first_chunk": {
+    "baseline": {
+     "calls": 8,
+     "mean_rel_norm": 0.53949389,
+     "max_rel_norm": 0.84586519,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.84586519,
+       "max_rel_norm": 0.84586519,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.23312259,
+       "max_rel_norm": 0.23312259,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "ablated": {
+     "calls": 8,
+     "mean_rel_norm": 0.0,
+     "max_rel_norm": 0.0,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "prefill_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.38931312,
+     "max_rel_norm": 0.60658145,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.60658145,
+       "max_rel_norm": 0.60658145,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.17204478,
+       "max_rel_norm": 0.17204478,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "decode_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.3877297,
+     "max_rel_norm": 0.58953106,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.58953106,
+       "max_rel_norm": 0.58953106,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.18592833,
+       "max_rel_norm": 0.18592833,
+       "mean_max_gate": 0.0
+      }
+     }
+    }
+   }
+  },
+  "code_java": {
+   "chunks": 100,
+   "tokens_scored": 179200,
+   "boundary": 1792,
+   "nll_baseline": 0.478853,
+   "ppl_baseline": 1.6142,
+   "arms": {
+    "ablated": {
+     "nll": 1.036718,
+     "delta_nll": 0.557865,
+     "delta_bits_per_token": 0.804828,
+     "ppl": 2.8199,
+     "ppl_ratio": 1.746938,
+     "chunk_stderr": 0.022123,
+     "sigma": 25.22
+    },
+    "prefill_only": {
+     "nll": 0.897014,
+     "delta_nll": 0.418161,
+     "delta_bits_per_token": 0.603279,
+     "ppl": 2.4523,
+     "ppl_ratio": 1.519165,
+     "chunk_stderr": 0.0197,
+     "sigma": 21.23
+    },
+    "decode_only": {
+     "nll": 0.540516,
+     "delta_nll": 0.061663,
+     "delta_bits_per_token": 0.088961,
+     "ppl": 1.7169,
+     "ppl_ratio": 1.063604,
+     "chunk_stderr": 0.003226,
+     "sigma": 19.12
+    }
+   },
+   "contribution_first_chunk": {
+    "baseline": {
+     "calls": 8,
+     "mean_rel_norm": 0.51604419,
+     "max_rel_norm": 0.80827564,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.80827564,
+       "max_rel_norm": 0.80827564,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.22381274,
+       "max_rel_norm": 0.22381274,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "ablated": {
+     "calls": 8,
+     "mean_rel_norm": 0.0,
+     "max_rel_norm": 0.0,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "prefill_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.40490454,
+     "max_rel_norm": 0.64951128,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.64951128,
+       "max_rel_norm": 0.64951128,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.16029781,
+       "max_rel_norm": 0.16029781,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "decode_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.32572785,
+     "max_rel_norm": 0.48108691,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.48108691,
+       "max_rel_norm": 0.48108691,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.17036879,
+       "max_rel_norm": 0.17036879,
+       "mean_max_gate": 0.0
+      }
+     }
+    }
+   }
+  },
+  "code_go": {
+   "chunks": 100,
+   "tokens_scored": 179200,
+   "boundary": 1792,
+   "nll_baseline": 0.03235,
+   "ppl_baseline": 1.0329,
+   "arms": {
+    "ablated": {
+     "nll": 0.318535,
+     "delta_nll": 0.286185,
+     "delta_bits_per_token": 0.412877,
+     "ppl": 1.3751,
+     "ppl_ratio": 1.331338,
+     "chunk_stderr": 0.020966,
+     "sigma": 13.65
+    },
+    "prefill_only": {
+     "nll": 0.239151,
+     "delta_nll": 0.206801,
+     "delta_bits_per_token": 0.298351,
+     "ppl": 1.2702,
+     "ppl_ratio": 1.229738,
+     "chunk_stderr": 0.018065,
+     "sigma": 11.45
+    },
+    "decode_only": {
+     "nll": 0.067624,
+     "delta_nll": 0.035274,
+     "delta_bits_per_token": 0.05089,
+     "ppl": 1.07,
+     "ppl_ratio": 1.035904,
+     "chunk_stderr": 0.002964,
+     "sigma": 11.9
+    }
+   },
+   "contribution_first_chunk": {
+    "baseline": {
+     "calls": 8,
+     "mean_rel_norm": 0.55009852,
+     "max_rel_norm": 0.87265629,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.87265629,
+       "max_rel_norm": 0.87265629,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.22754076,
+       "max_rel_norm": 0.22754076,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "ablated": {
+     "calls": 8,
+     "mean_rel_norm": 0.0,
+     "max_rel_norm": 0.0,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "prefill_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.40882617,
+     "max_rel_norm": 0.65362376,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.65362376,
+       "max_rel_norm": 0.65362376,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.16402858,
+       "max_rel_norm": 0.16402858,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "decode_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.38049992,
+     "max_rel_norm": 0.57819122,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.57819122,
+       "max_rel_norm": 0.57819122,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.18280862,
+       "max_rel_norm": 0.18280862,
+       "mean_max_gate": 0.0
+      }
+     }
+    }
+   }
+  },
+  "code_php": {
+   "chunks": 100,
+   "tokens_scored": 179200,
+   "boundary": 1792,
+   "nll_baseline": 0.639775,
+   "ppl_baseline": 1.8961,
+   "arms": {
+    "ablated": {
+     "nll": 1.262091,
+     "delta_nll": 0.622316,
+     "delta_bits_per_token": 0.897812,
+     "ppl": 3.5328,
+     "ppl_ratio": 1.863238,
+     "chunk_stderr": 0.021656,
+     "sigma": 28.74
+    },
+    "prefill_only": {
+     "nll": 1.123191,
+     "delta_nll": 0.483416,
+     "delta_bits_per_token": 0.697422,
+     "ppl": 3.0746,
+     "ppl_ratio": 1.621604,
+     "chunk_stderr": 0.019719,
+     "sigma": 24.52
+    },
+    "decode_only": {
+     "nll": 0.689991,
+     "delta_nll": 0.050216,
+     "delta_bits_per_token": 0.072447,
+     "ppl": 1.9937,
+     "ppl_ratio": 1.051499,
+     "chunk_stderr": 0.002844,
+     "sigma": 17.66
+    }
+   },
+   "contribution_first_chunk": {
+    "baseline": {
+     "calls": 8,
+     "mean_rel_norm": 0.54165112,
+     "max_rel_norm": 0.89903438,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.89903438,
+       "max_rel_norm": 0.89903438,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.18426786,
+       "max_rel_norm": 0.18426786,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "ablated": {
+     "calls": 8,
+     "mean_rel_norm": 0.0,
+     "max_rel_norm": 0.0,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "prefill_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.3814401,
+     "max_rel_norm": 0.63570738,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.63570738,
+       "max_rel_norm": 0.63570738,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.12717283,
+       "max_rel_norm": 0.12717283,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "decode_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.40332671,
+     "max_rel_norm": 0.63571918,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.63571918,
+       "max_rel_norm": 0.63571918,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.17093423,
+       "max_rel_norm": 0.17093423,
+       "mean_max_gate": 0.0
+      }
+     }
+    }
+   }
+  },
+  "code_ruby": {
+   "chunks": 100,
+   "tokens_scored": 179200,
+   "boundary": 1792,
+   "nll_baseline": 0.539808,
+   "ppl_baseline": 1.7157,
+   "arms": {
+    "ablated": {
+     "nll": 1.669651,
+     "delta_nll": 1.129843,
+     "delta_bits_per_token": 1.630019,
+     "ppl": 5.3103,
+     "ppl_ratio": 3.095171,
+     "chunk_stderr": 0.034149,
+     "sigma": 33.09
+    },
+    "prefill_only": {
+     "nll": 1.443635,
+     "delta_nll": 0.903827,
+     "delta_bits_per_token": 1.303947,
+     "ppl": 4.2361,
+     "ppl_ratio": 2.469035,
+     "chunk_stderr": 0.031534,
+     "sigma": 28.66
+    },
+    "decode_only": {
+     "nll": 0.663756,
+     "delta_nll": 0.123948,
+     "delta_bits_per_token": 0.178819,
+     "ppl": 1.9421,
+     "ppl_ratio": 1.131957,
+     "chunk_stderr": 0.005138,
+     "sigma": 24.13
+    }
+   },
+   "contribution_first_chunk": {
+    "baseline": {
+     "calls": 8,
+     "mean_rel_norm": 0.55765201,
+     "max_rel_norm": 0.82512045,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.82512045,
+       "max_rel_norm": 0.82512045,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.29018357,
+       "max_rel_norm": 0.29018357,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "ablated": {
+     "calls": 8,
+     "mean_rel_norm": 0.0,
+     "max_rel_norm": 0.0,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "prefill_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.40241505,
+     "max_rel_norm": 0.59984076,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.59984076,
+       "max_rel_norm": 0.59984076,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.20498934,
+       "max_rel_norm": 0.20498934,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "decode_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.39621536,
+     "max_rel_norm": 0.56658173,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.56658173,
+       "max_rel_norm": 0.56658173,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.225849,
+       "max_rel_norm": 0.225849,
+       "mean_max_gate": 0.0
+      }
+     }
+    }
+   }
+  },
+  "web": {
+   "chunks": 100,
+   "tokens_scored": 179200,
+   "boundary": 1792,
+   "nll_baseline": 1.768159,
+   "ppl_baseline": 5.8601,
+   "arms": {
+    "ablated": {
+     "nll": 2.256419,
+     "delta_nll": 0.488261,
+     "delta_bits_per_token": 0.704411,
+     "ppl": 9.5488,
+     "ppl_ratio": 1.629479,
+     "chunk_stderr": 0.03301,
+     "sigma": 14.79
+    },
+    "prefill_only": {
+     "nll": 2.164896,
+     "delta_nll": 0.396737,
+     "delta_bits_per_token": 0.57237,
+     "ppl": 8.7137,
+     "ppl_ratio": 1.486964,
+     "chunk_stderr": 0.03078,
+     "sigma": 12.89
+    },
+    "decode_only": {
+     "nll": 1.787689,
+     "delta_nll": 0.01953,
+     "delta_bits_per_token": 0.028175,
+     "ppl": 5.9756,
+     "ppl_ratio": 1.019722,
+     "chunk_stderr": 0.003494,
+     "sigma": 5.59
+    }
+   },
+   "contribution_first_chunk": {
+    "baseline": {
+     "calls": 8,
+     "mean_rel_norm": 0.46323704,
+     "max_rel_norm": 0.72286838,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.72286838,
+       "max_rel_norm": 0.72286838,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.2036057,
+       "max_rel_norm": 0.2036057,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "ablated": {
+     "calls": 8,
+     "mean_rel_norm": 0.0,
+     "max_rel_norm": 0.0,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "prefill_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.33147872,
+     "max_rel_norm": 0.49725831,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.49725831,
+       "max_rel_norm": 0.49725831,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.16569914,
+       "max_rel_norm": 0.16569914,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "decode_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.32515977,
+     "max_rel_norm": 0.52466452,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.52466452,
+       "max_rel_norm": 0.52466452,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.12565501,
+       "max_rel_norm": 0.12565501,
+       "mean_max_gate": 0.0
+      }
+     }
+    }
+   }
+  },
+  "wiki_full": {
+   "chunks": 100,
+   "tokens_scored": 179200,
+   "boundary": 1792,
+   "nll_baseline": 0.313685,
+   "ppl_baseline": 1.3685,
+   "arms": {
+    "ablated": {
+     "nll": 2.143317,
+     "delta_nll": 1.829632,
+     "delta_bits_per_token": 2.639601,
+     "ppl": 8.5277,
+     "ppl_ratio": 6.231593,
+     "chunk_stderr": 0.040843,
+     "sigma": 44.8
+    },
+    "prefill_only": {
+     "nll": 2.068887,
+     "delta_nll": 1.755203,
+     "delta_bits_per_token": 2.532222,
+     "ppl": 7.916,
+     "ppl_ratio": 5.784619,
+     "chunk_stderr": 0.038529,
+     "sigma": 45.55
+    },
+    "decode_only": {
+     "nll": 0.395384,
+     "delta_nll": 0.081699,
+     "delta_bits_per_token": 0.117867,
+     "ppl": 1.485,
+     "ppl_ratio": 1.08513,
+     "chunk_stderr": 0.005018,
+     "sigma": 16.28
+    }
+   },
+   "contribution_first_chunk": {
+    "baseline": {
+     "calls": 8,
+     "mean_rel_norm": 0.52753,
+     "max_rel_norm": 0.7830987,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.7830987,
+       "max_rel_norm": 0.7830987,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.2719613,
+       "max_rel_norm": 0.2719613,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "ablated": {
+     "calls": 8,
+     "mean_rel_norm": 0.0,
+     "max_rel_norm": 0.0,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "prefill_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.37641963,
+     "max_rel_norm": 0.55341685,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.55341685,
+       "max_rel_norm": 0.55341685,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.19942242,
+       "max_rel_norm": 0.19942242,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "decode_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.38490073,
+     "max_rel_norm": 0.55405194,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.55405194,
+       "max_rel_norm": 0.55405194,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.21574953,
+       "max_rel_norm": 0.21574953,
+       "mean_max_gate": 0.0
+      }
+     }
+    }
+   }
+  },
+  "math_web": {
+   "chunks": 100,
+   "tokens_scored": 179200,
+   "boundary": 1792,
+   "nll_baseline": 1.135157,
+   "ppl_baseline": 3.1117,
+   "arms": {
+    "ablated": {
+     "nll": 1.679696,
+     "delta_nll": 0.544539,
+     "delta_bits_per_token": 0.785604,
+     "ppl": 5.3639,
+     "ppl_ratio": 1.723814,
+     "chunk_stderr": 0.039392,
+     "sigma": 13.82
+    },
+    "prefill_only": {
+     "nll": 1.605262,
+     "delta_nll": 0.470105,
+     "delta_bits_per_token": 0.678218,
+     "ppl": 4.9792,
+     "ppl_ratio": 1.600162,
+     "chunk_stderr": 0.037407,
+     "sigma": 12.57
+    },
+    "decode_only": {
+     "nll": 1.171182,
+     "delta_nll": 0.036025,
+     "delta_bits_per_token": 0.051973,
+     "ppl": 3.2258,
+     "ppl_ratio": 1.036682,
+     "chunk_stderr": 0.005247,
+     "sigma": 6.87
+    }
+   },
+   "contribution_first_chunk": {
+    "baseline": {
+     "calls": 8,
+     "mean_rel_norm": 0.48421349,
+     "max_rel_norm": 0.78904551,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.78904551,
+       "max_rel_norm": 0.78904551,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.17938147,
+       "max_rel_norm": 0.17938147,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "ablated": {
+     "calls": 8,
+     "mean_rel_norm": 0.0,
+     "max_rel_norm": 0.0,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.0,
+       "max_rel_norm": 0.0,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "prefill_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.32125657,
+     "max_rel_norm": 0.4912867,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.4912867,
+       "max_rel_norm": 0.4912867,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.15122645,
+       "max_rel_norm": 0.15122645,
+       "mean_max_gate": 0.0
+      }
+     }
+    },
+    "decode_only": {
+     "calls": 8,
+     "mean_rel_norm": 0.35712893,
+     "max_rel_norm": 0.61743844,
+     "per_layer": {
+      "engram0": {
+       "calls": 4,
+       "mean_rel_norm": 0.61743844,
+       "max_rel_norm": 0.61743844,
+       "mean_max_gate": 0.0
+      },
+      "engram1": {
+       "calls": 4,
+       "mean_rel_norm": 0.09681942,
+       "max_rel_norm": 0.09681942,
+       "mean_max_gate": 0.0
+      }
+     }
+    }
+   }
+  }
+ },
+ "model": "deepseek-ai/DeepSeek-V4.1-Flash",
+ "arms": [
+  "baseline",
+  "ablated",
+  "prefill_only",
+  "decode_only"
+ ],
+ "boundary": 1792,
+ "mode_note": "Scoring prompt logprobs is one prefill; there is no decode phase to split on, so 'prefill_only' and 'decode_only' are a POSITIONAL split of the chunk at --boundary. prefill_only lets Engram act only on the context prefix (it shapes the KV the suffix attends to, but is shut at the point of prediction); decode_only shuts it over the prefix and opens it only on the scored tokens themselves. All four arms are scored on the same suffix tokens, so the numbers are directly comparable: prefill_only isolates Engram as a context builder, decode_only as a point-of-prediction lookup."
+}
