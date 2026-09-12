@@ -156,11 +156,9 @@ def test_fixed_topology_rejects_empty_parallelism(
         build_result(sample_benchmark_result, {**single_node_env_vars, name: ""})
 
 
-# ======================================================================
-
+# =============================================================================
 # Test Fixtures - Based on real benchmark output structure
-# ======================================================================
-
+# =============================================================================
 
 @pytest.fixture
 def sample_benchmark_result():
@@ -300,11 +298,9 @@ runpy.run_module("infx.results.fixed_sequence", run_name="__main__")
     )
 
 
-# ======================================================================
-
+# =============================================================================
 # Test script execution via subprocess
-# ======================================================================
-
+# =============================================================================
 
 class TestProcessResultScript:
     """Tests for process_result.py script execution."""
@@ -534,11 +530,9 @@ class TestProcessResultScript:
         assert result.returncode != 0
 
 
-# ======================================================================
-
+# =============================================================================
 # Test latency and throughput calculations
-# ======================================================================
-
+# =============================================================================
 
 class TestCalculations:
     """Tests for throughput and latency calculations."""
@@ -667,11 +661,9 @@ class TestCalculations:
         assert "Multinode results require at least one GPU" in result.stderr
 
 
-# ======================================================================
-
+# =============================================================================
 # Test output file generation
-# ======================================================================
-
+# =============================================================================
 
 class TestOutputFile:
     """Tests for output file generation."""
@@ -700,11 +692,9 @@ class TestOutputFile:
         assert output_file.exists()
 
 
-# ======================================================================
-
+# =============================================================================
 # Test edge cases
-# ======================================================================
-
+# =============================================================================
 
 class TestEdgeCases:
     """Tests for edge cases and special scenarios."""
@@ -753,11 +743,9 @@ class TestEdgeCases:
         assert isinstance(output_data["isl"], int)
         assert isinstance(output_data["osl"], int)
 
-# ======================================================================
-
+# =============================================================================
 # Integration: power aggregation patches the agg JSON
-# ======================================================================
-
+# =============================================================================
 
 class TestPowerAggregationIntegration:
     """End-to-end wiring: process_result.py invokes aggregate_power.py and
@@ -1345,11 +1333,9 @@ fi
         assert identity == {"gpu_data": []}
 
 
-# ======================================================================
-
+# =============================================================================
 # Integration: multinode power aggregation patches the agg JSON
-# ======================================================================
-
+# =============================================================================
 
 
 class TestMultinodePower:
