@@ -7429,3 +7429,13 @@
     - "Enable the two GB300 aggregate recipes and their common launcher power route, with the pinned producer, strict result collection and retained diagnostics."
     - "为 GB300 Kimi-K3 聚合部署启用必需实测功耗。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3046
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use port 19401 for the GB300 aggregate exporter; the two-node shared lifecycle check verified ownership, all eight GPU telemetry streams, and preservation of the system service on port 9401. Full Kimi-K3 qualification remains pending."
+    - "GB300 聚合部署改用已验证的 19401 功耗端口；完整 Kimi-K3 基准验证仍待完成。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3046

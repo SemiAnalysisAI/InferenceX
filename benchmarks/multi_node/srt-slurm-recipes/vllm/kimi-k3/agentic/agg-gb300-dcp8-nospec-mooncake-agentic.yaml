@@ -126,7 +126,7 @@ telemetry:
   collector_join_timeout_seconds: 12
   dcgm_exporter:
     container_image: dcgm-exporter
-    port: 9401
+    port: 19401
 
 benchmark:
   type: custom
