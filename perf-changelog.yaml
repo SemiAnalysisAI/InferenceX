@@ -7363,6 +7363,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
 
 - config-keys:
+    - dsv41flash-fp4-b200-dynamo-vllm-agentic-dspark-disagg
+  description:
+    - "Add B200 DeepSeek-V4.1-Flash AgentX 1P/1D with NIXL transfer, GPU-resident KV and concurrency 64, 128, 256"
+    - "新增 B200 DeepSeek-V4.1-Flash AgentX 1P/1D：使用 NIXL 传输、GPU 驻留 KV 和并发 64、128、256"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/0
+
+- config-keys:
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark
   description:
     - "Pin AgentX to semianalysis_cc_traces_weka_062126, preventing the 256k corpus override"
