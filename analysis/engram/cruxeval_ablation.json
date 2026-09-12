@@ -1,0 +1,180 @@
+{
+ "task": "cruxeval-O (output prediction, no execution)",
+ "model": "deepseek-ai/DeepSeek-V4.1-Flash",
+ "items": 800,
+ "prompt_style": "raw-completion",
+ "pass@1": {
+  "baseline": 0.6388,
+  "ablated": 0.4925
+ },
+ "delta_pass@1": -0.1463,
+ "paired": {
+  "both_correct": 362,
+  "both_wrong": 257,
+  "only_baseline_correct": 149,
+  "only_ablated_correct": 32,
+  "mcnemar": {
+   "discordant": 181,
+   "chi2": 74.343,
+   "approx_sigma": 8.62,
+   "note": "chi-square approximation is weak below ~25 discordant pairs"
+  }
+ },
+ "by_answer_kind": {
+  "bool/None": {
+   "items": 49,
+   "pass@1_baseline": 0.7551,
+   "pass@1_ablated": 0.6735,
+   "delta": -0.0816,
+   "only_baseline_correct": 9,
+   "only_ablated_correct": 5
+  },
+  "container": {
+   "items": 280,
+   "pass@1_baseline": 0.7071,
+   "pass@1_ablated": 0.5464,
+   "delta": -0.1607,
+   "only_baseline_correct": 51,
+   "only_ablated_correct": 6
+  },
+  "number": {
+   "items": 98,
+   "pass@1_baseline": 0.6327,
+   "pass@1_ablated": 0.5102,
+   "delta": -0.1224,
+   "only_baseline_correct": 20,
+   "only_ablated_correct": 8
+  },
+  "other": {
+   "items": 2,
+   "pass@1_baseline": 1.0,
+   "pass@1_ablated": 0.5,
+   "delta": -0.5,
+   "only_baseline_correct": 1,
+   "only_ablated_correct": 0
+  },
+  "str": {
+   "items": 371,
+   "pass@1_baseline": 0.5714,
+   "pass@1_ablated": 0.4232,
+   "delta": -0.1482,
+   "only_baseline_correct": 68,
+   "only_ablated_correct": 13
+  }
+ },
+ "coverage": {
+  "baseline": {
+   "calls": 16480,
+   "mean_rel_norm": 0.3096117,
+   "max_rel_norm": 3.49387527,
+   "per_layer": {
+    "engram0": {
+     "calls": 8240,
+     "mean_rel_norm": 0.55727015,
+     "max_rel_norm": 3.49387527,
+     "mean_max_gate": 0.0
+    },
+    "engram1": {
+     "calls": 8240,
+     "mean_rel_norm": 0.06195326,
+     "max_rel_norm": 0.43750373,
+     "mean_max_gate": 0.0
+    }
+   },
+   "empty_generations": 3
+  },
+  "ablated": {
+   "calls": 16480,
+   "mean_rel_norm": 0.0,
+   "max_rel_norm": 0.0,
+   "per_layer": {
+    "engram0": {
+     "calls": 8240,
+     "mean_rel_norm": 0.0,
+     "max_rel_norm": 0.0,
+     "mean_max_gate": 0.0
+    },
+    "engram1": {
+     "calls": 8240,
+     "mean_rel_norm": 0.0,
+     "max_rel_norm": 0.0,
+     "mean_max_gate": 0.0
+    }
+   },
+   "empty_generations": 0
+  }
+ },
+ "samples": {
+  "baseline": [
+   {
+    "id": "sample_0",
+    "reference": "[(4, 1), (4, 1), (4, 1), (4, 1), (2, 3), (2, 3)]",
+    "predicted": "[(4, 1), (2, 3)]",
+    "correct": false
+   },
+   {
+    "id": "sample_1",
+    "reference": "{1: None, 2: None}",
+    "predicted": "{1: None, 2: None}",
+    "correct": true
+   },
+   {
+    "id": "sample_2",
+    "reference": "'hbtofdeiequ'",
+    "predicted": "'hbtofdeiequ'",
+    "correct": true
+   },
+   {
+    "id": "sample_3",
+    "reference": "'bcksrutq'",
+    "predicted": "'bcksrutq'",
+    "correct": true
+   },
+   {
+    "id": "sample_4",
+    "reference": "'           '",
+    "predicted": "'       '",
+    "correct": false
+   }
+  ],
+  "ablated": [
+   {
+    "id": "sample_0",
+    "reference": "[(4, 1), (4, 1), (4, 1), (4, 1), (2, 3), (2, 3)]",
+    "predicted": "[(3, 1), (2, 3), (1, 1)]",
+    "correct": false
+   },
+   {
+    "id": "sample_1",
+    "reference": "{1: None, 2: None}",
+    "predicted": "{1: None, 2: None}",
+    "correct": true
+   },
+   {
+    "id": "sample_2",
+    "reference": "'hbtofdeiequ'",
+    "predicted": "'hbtodeequ'",
+    "correct": false
+   },
+   {
+    "id": "sample_3",
+    "reference": "'bcksrutq'",
+    "predicted": "'bcksrutq'",
+    "correct": true
+   },
+   {
+    "id": "sample_4",
+    "reference": "'           '",
+    "predicted": "'        '",
+    "correct": false
+   }
+  ]
+ },
+ "ablation_verdict": {
+  "baseline_mean_rel_norm": 0.3096117,
+  "ablated_max_rel_norm": 0.0,
+  "engram_used_in_baseline": true,
+  "contribution_removed": true,
+  "ok": true
+ }
+}
