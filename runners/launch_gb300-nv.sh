@@ -237,6 +237,10 @@ fi
 
 export ISL="$ISL"
 export OSL="$OSL"
+DSV41_BLOBS_MOUNT=""
+if [[ "$MODEL_PREFIX" == "dsv41flash" ]]; then
+    DSV41_BLOBS_MOUNT="  \"${DSV41_CACHE}/blobs\": \"/blobs\""
+fi
 
 echo "Cloning srt-slurm repository..."
 RUN_KEY=$(printf "%s" "${RESULT_FILENAME:-${RUNNER_NAME:-gb300-nv}}" | sha1sum | cut -c1-12)
@@ -526,6 +530,7 @@ srtctl_root: "${SRTCTL_ROOT}"
 default_mounts:
   "${AIPERF_MMAP_CACHE_HOST_PATH}": "/aiperf_mmap_cache"
   "${HF_HUB_CACHE_HOST_PATH}": "/hf_hub_cache"
+${DSV41_BLOBS_MOUNT}
   # Warm dynamo source-build cache (nested over the auto /configs mount) so the
   # hash-pinned install is a cache hit (pip-only, no apt/root) on every job.
   "${DYNAMO_WHEELS_CACHE_HOST_PATH}": "/configs/dynamo-wheels"
