@@ -1,8 +1,11 @@
+import hashlib
 import json
 import os
 import runpy
 import subprocess
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -14,6 +17,8 @@ PATCH_SRT_EVAL = REPO_ROOT / "runners" / "patch_srt_eval_dispatch.py"
 PATCH_SRT_DP_RANKS = REPO_ROOT / "runners" / "patch_srt_vllm_dp_ranks.py"
 PATCH_TRTLLM_CHAT_STORE = REPO_ROOT / "runners" / "patch_trtllm_chat_store.py"
 PATCH_VLLM_SIMPLE_KV = REPO_ROOT / "runners" / "patch_vllm_simple_kv_offload.py"
+PATCH_AITER_QUIET = REPO_ROOT / "runners" / "patch_aiter_quiet_auto_backend.py"
+PATCH_VLLM_W4A16 = REPO_ROOT / "runners" / "patch_vllm_w4a16_backend.py"
 INJECT_ACCEPTANCE = REPO_ROOT / "runners" / "inject_synthetic_acceptance.py"
 
 
@@ -419,6 +424,336 @@ def test_patch_vllm_simple_kv_offload_rejects_unknown_source(
     assert worker.read_text() == "unsupported worker\n"
 
 
+@pytest.fixture
+def aiter_backend_source() -> str:
+    # Independent, reduced upstream source: never assembled from patch constants.
+    return '''# Surrounding source must survive unchanged.
+import itertools
+
+import torch
+
+_GLUON_SUPPORTED_ARCHS = ("gfx1250",)
+
+
+def _is_gluon_available():
+    return get_arch() in _GLUON_SUPPORTED_ARCHS
+
+
+def moe_gemm_a16w4(backend=None):
+    if backend in (None, "gluon"):
+        if _is_gluon_available():
+            backend = "gluon"
+        else:
+            _LOGGER.warning("GLUON backend not available. Using TRITON backend!!!")
+            backend = "triton"
+
+    backend = backend.lower()
+    assert backend in ("triton", "gluon"), "Unknown backend"
+    return backend
+
+
+UNCHANGED = "surrounding source"
+'''
+
+
+def test_patch_aiter_quiet_is_idempotent_with_provenance(
+    tmp_path: Path, aiter_backend_source: str,
+) -> None:
+    backend = tmp_path / "backend.py"
+    backend.write_text(aiter_backend_source)
+    before = hashlib.sha256(backend.read_bytes()).hexdigest()
+    first = subprocess.run(
+        [sys.executable, str(PATCH_AITER_QUIET), str(backend)],
+        capture_output=True, text=True, check=False,
+    )
+    patched = backend.read_bytes()
+    modified_at = backend.stat().st_mtime_ns
+    after = hashlib.sha256(patched).hexdigest()
+    second = subprocess.run(
+        [sys.executable, str(PATCH_AITER_QUIET), str(backend)],
+        capture_output=True, text=True, check=False,
+    )
+
+    assert first.returncode == second.returncode == 0, first.stderr + second.stderr
+    assert before != after
+    assert f"Patch applied: AITER quiet auto backend at {backend}" in first.stdout
+    assert f"SHA256 before={before} after={after}" in first.stdout
+    assert f"Already patched: AITER quiet auto backend at {backend}" in second.stdout
+    assert f"SHA256 before={after} after={after}" in second.stdout
+    assert backend.read_bytes() == patched
+    assert backend.stat().st_mtime_ns == modified_at
+    assert patched.startswith(b"# Surrounding source must survive unchanged.\n")
+    assert patched.endswith(b'UNCHANGED = "surrounding source"\n')
+
+
+@pytest.mark.parametrize("arch", ["gfx942", "gfx950", "gfx1100", "gfx1250"])
+def test_patch_aiter_quiet_preserves_dispatch_and_warns_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, aiter_backend_source: str, arch: str,
+) -> None:
+    backend = tmp_path / "backend.py"
+    backend.write_text(aiter_backend_source)
+    runpy.run_path(str(PATCH_AITER_QUIET))["patch_backend"](backend)
+    warnings: list[str] = []
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace())
+    symbols = runpy.run_path(
+        str(backend),
+        init_globals={"get_arch": lambda: arch, "_LOGGER": SimpleNamespace(warning=warnings.append)},
+    )
+    dispatch = symbols["moe_gemm_a16w4"]
+    expected_auto = "gluon" if arch == "gfx1250" else "triton"
+    for _ in range(3):
+        assert dispatch() == expected_auto
+        assert dispatch("triton") == "triton"
+    assert warnings == []
+    for _ in range(3):
+        assert dispatch("gluon") == expected_auto
+        assert dispatch() == expected_auto
+    assert len(warnings) == (0 if arch == "gfx1250" else 1)
+    if warnings:
+        assert "explicitly requested" in warnings[0]
+    with pytest.raises(AssertionError, match="Unknown backend"):
+        dispatch("invalid")
+    # Exercise the real cached helper independently of dispatch.
+    symbols["_warn_gluon_fallback_once"]()
+    symbols["_warn_gluon_fallback_once"]()
+    assert len(warnings) == 1
+
+
+@pytest.mark.parametrize(
+    "failure", ["partial-import", "partial-helper", "unknown", "duplicate", "syntax"],
+)
+def test_patch_aiter_quiet_preflights_before_writing(
+    tmp_path: Path, aiter_backend_source: str, failure: str,
+) -> None:
+    if failure == "partial-import":
+        source = aiter_backend_source.replace(
+            "import itertools\n", "import itertools\nfrom functools import lru_cache\n",
+        )
+    elif failure == "partial-helper":
+        source = aiter_backend_source + "\ndef _warn_gluon_fallback_once():\n    pass\n"
+    elif failure == "unknown":
+        source = aiter_backend_source.replace("backend.lower()", "str(backend).lower()")
+    elif failure == "duplicate":
+        source = aiter_backend_source + aiter_backend_source
+    else:
+        source = aiter_backend_source + "\ndef invalid(:\n"
+    backend = tmp_path / "backend.py"
+    backend.write_bytes(source.encode())
+    modified_at = backend.stat().st_mtime_ns
+    result = subprocess.run(
+        [sys.executable, str(PATCH_AITER_QUIET), str(backend)],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 1
+    assert "failed to patch AITER quiet auto backend" in result.stderr
+    assert "Patch applied" not in result.stdout
+    assert backend.read_bytes() == source.encode()
+    assert backend.stat().st_mtime_ns == modified_at
+
+
+@pytest.fixture
+def vllm_w4a16_source() -> str:
+    # Independent reduced wrapper, including both GEMMs and the scale contract.
+    return '''# Preserve unrelated source.
+def forward(
+    swiglu_add_residual=True, apply_router_weight_on_input=False, gammas="weights",
+    unpadded_N_w1=11, unpadded_K_w1=12, unpadded_N_w2=21, unpadded_K_w2=22,
+):
+    from vllm.model_executor.layers.quantization.utils.mxfp4_utils import (
+        should_use_cdna4_mx_scale_swizzle,
+    )
+    from vllm.platforms.rocm import on_gfx1250
+
+    swz = "CDNA4_SCALE" if should_use_cdna4_mx_scale_swizzle() else None
+
+    intermediate = moe_gemm_a16w4(
+        "hidden_states",
+        "w1",
+        swizzle_mx_scale=swz,
+        swiglu_add_residual=swiglu_add_residual,
+        unpadded_N=unpadded_N_w1,
+        unpadded_K=unpadded_K_w1,
+    )
+
+    out = moe_gemm_a16w4(
+        intermediate,
+        "w2",
+        gammas=None if apply_router_weight_on_input else gammas,
+        swizzle_mx_scale=swz,
+        unpadded_N=unpadded_N_w2,
+        unpadded_K=unpadded_K_w2,
+    )
+
+    return out
+
+
+def supports_device():
+    from vllm.platforms.rocm import on_gfx942, on_gfx950, on_gfx1250
+    return on_gfx942() or on_gfx950() or on_gfx1250()
+
+
+UNCHANGED = "surrounding source"
+'''
+
+
+def test_patch_vllm_w4a16_is_idempotent_with_provenance(
+    tmp_path: Path, vllm_w4a16_source: str,
+) -> None:
+    backend = tmp_path / "backend.py"
+    backend.write_text(vllm_w4a16_source)
+    before = hashlib.sha256(backend.read_bytes()).hexdigest()
+    first = subprocess.run(
+        [sys.executable, str(PATCH_VLLM_W4A16), str(backend)],
+        capture_output=True, text=True, check=False,
+    )
+    patched = backend.read_bytes()
+    modified_at = backend.stat().st_mtime_ns
+    after = hashlib.sha256(patched).hexdigest()
+    second = subprocess.run(
+        [sys.executable, str(PATCH_VLLM_W4A16), str(backend)],
+        capture_output=True, text=True, check=False,
+    )
+    assert first.returncode == second.returncode == 0, first.stderr + second.stderr
+    assert before != after
+    assert f"Patch applied: vLLM W4A16 backend at {backend}" in first.stdout
+    assert f"SHA256 before={before} after={after}" in first.stdout
+    assert f"Already patched: vLLM W4A16 backend at {backend}" in second.stdout
+    assert f"SHA256 before={after} after={after}" in second.stdout
+    assert backend.read_bytes() == patched
+    assert backend.stat().st_mtime_ns == modified_at
+    assert patched.startswith(b"# Preserve unrelated source.\n")
+    assert patched.endswith(b'UNCHANGED = "surrounding source"\n')
+
+
+@pytest.mark.parametrize("arch", ["gfx942", "gfx950", "gfx1250", "gfx1100"])
+@pytest.mark.parametrize("swizzle", [True, False])
+def test_patch_vllm_w4a16_selects_both_gemms_and_preserves_swizzle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, vllm_w4a16_source: str,
+    arch: str, swizzle: bool,
+) -> None:
+    backend = tmp_path / "backend.py"
+    backend.write_text(vllm_w4a16_source)
+    runpy.run_path(str(PATCH_VLLM_W4A16))["patch_backend"](backend)
+    monkeypatch.setitem(sys.modules, "vllm.platforms.rocm", SimpleNamespace(
+        on_gfx942=lambda: arch == "gfx942",
+        on_gfx950=lambda: arch == "gfx950",
+        on_gfx1250=lambda: arch == "gfx1250",
+    ))
+    monkeypatch.setitem(
+        sys.modules, "vllm.model_executor.layers.quantization.utils.mxfp4_utils",
+        SimpleNamespace(should_use_cdna4_mx_scale_swizzle=lambda: swizzle),
+    )
+    calls: list[tuple[tuple, dict]] = []
+
+    def gemm(*args, **kwargs):
+        calls.append((args, kwargs))
+        return f"gemm-{len(calls)}"
+
+    forward = runpy.run_path(str(backend), init_globals={"moe_gemm_a16w4": gemm})["forward"]
+    assert forward() == "gemm-2"
+    assert len(calls) == 2
+    assert calls[1][0] == ("gemm-1", "w2")
+    expected_backend = "triton" if arch in ("gfx942", "gfx950") else None
+    assert [kwargs["backend"] for _, kwargs in calls] == [expected_backend] * 2
+    expected_swizzle = "CDNA4_SCALE" if swizzle else None
+    assert [kwargs["swizzle_mx_scale"] for _, kwargs in calls] == [expected_swizzle] * 2
+    assert [(kw["unpadded_N"], kw["unpadded_K"]) for _, kw in calls] == [(11, 12), (21, 22)]
+    assert calls[0][1]["swiglu_add_residual"] is True
+    assert calls[1][1]["gammas"] == "weights"
+
+
+@pytest.mark.parametrize(
+    "failure", ["partial-import", "partial-gemm", "stray-setup", "unknown", "duplicate", "syntax"],
+)
+def test_patch_vllm_w4a16_preflights_before_writing(
+    tmp_path: Path, vllm_w4a16_source: str, failure: str,
+) -> None:
+    if failure == "partial-import":
+        source = vllm_w4a16_source.replace(
+            "import on_gfx1250\n", "import on_gfx942, on_gfx950, on_gfx1250\n",
+        )
+    elif failure == "partial-gemm":
+        source = vllm_w4a16_source.replace(
+            "        unpadded_K=unpadded_K_w2,\n",
+            "        unpadded_K=unpadded_K_w2,\n        backend=gemm_backend,\n",
+        )
+    elif failure == "stray-setup":
+        source = vllm_w4a16_source + '\ngemm_backend = "triton"\n'
+    elif failure == "unknown":
+        source = vllm_w4a16_source.replace(
+            "unpadded_N=unpadded_N_w2", "unpadded_N=None",
+        )
+    elif failure == "duplicate":
+        source = vllm_w4a16_source + vllm_w4a16_source
+    else:
+        source = vllm_w4a16_source + "\ndef invalid(:\n"
+    backend = tmp_path / "backend.py"
+    backend.write_bytes(source.encode())
+    modified_at = backend.stat().st_mtime_ns
+    result = subprocess.run(
+        [sys.executable, str(PATCH_VLLM_W4A16), str(backend)],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 1
+    assert "failed to patch vLLM W4A16 backend" in result.stderr
+    assert "Patch applied" not in result.stdout
+    assert backend.read_bytes() == source.encode()
+    assert backend.stat().st_mtime_ns == modified_at
+
+
+@pytest.mark.parametrize("failure", [None, "aiter", "vllm"])
+def test_mi355x_recipe_patches_both_installed_libraries_before_download(
+    tmp_path: Path, aiter_backend_source: str, vllm_w4a16_source: str,
+    failure: str | None,
+) -> None:
+    package = tmp_path / "aiter"
+    backend = package / "ops/triton/moe/moe_op_gemm_a16w4.py"
+    backend.parent.mkdir(parents=True)
+    # Discovery must not import AITER (and initialize GPU dependencies).
+    (package / "__init__.py").write_text('raise AssertionError("AITER imported")\n')
+    original = "# unknown backend\n" if failure == "aiter" else aiter_backend_source
+    backend.write_text(original)
+    vllm_package = tmp_path / "vllm"
+    vllm_backend = (
+        vllm_package / "model_executor/layers/fused_moe/experts/aiter_mxfp4_w4a16_moe.py"
+    )
+    vllm_backend.parent.mkdir(parents=True)
+    (vllm_package / "__init__.py").write_text('raise AssertionError("vLLM imported")\n')
+    vllm_original = "# unknown backend\n" if failure == "vllm" else vllm_w4a16_source
+    vllm_backend.write_text(vllm_original)
+    recipe = REPO_ROOT / "benchmarks/single_node/agentic/dsv41flash_fp4_mi355x_vllm_mtp.sh"
+    result = subprocess.run(
+        ["bash", "-c", 'hf() { echo hf-called; exit 0; }; export -f hf; bash "$1"',
+         "bash", str(recipe)],
+        cwd=tmp_path,
+        env={
+            **os.environ, "PYTHONPATH": str(tmp_path), "MODEL": "test/model",
+            "MODEL_PATH": "", "TP": "4", "CONC": "1", "KV_OFFLOADING": "none",
+            "KV_OFFLOAD_BACKEND": "", "TOTAL_CPU_DRAM_GB": "100",
+            "RESULT_DIR": str(tmp_path / "results"), "DURATION": "1",
+            "PYTHONPYCACHEPREFIX": str(tmp_path / "pycache"),
+        },
+        capture_output=True, text=True, check=False,
+    )
+    if failure is None:
+        assert result.returncode == 0, result.stderr
+        assert backend.read_text() != original
+        assert vllm_backend.read_text() != vllm_original
+        assert (
+            result.stdout.index("AITER quiet auto backend at")
+            < result.stdout.index("vLLM W4A16 backend at")
+            < result.stdout.index("hf-called")
+        )
+        assert str(backend) in result.stdout
+        assert str(vllm_backend) in result.stdout
+    else:
+        assert result.returncode == 1
+        assert "hf-called" not in result.stdout
+        assert vllm_backend.read_text() == vllm_original
+        if failure == "aiter":
+            assert backend.read_text() == original
+
+
 def test_patch_srt_eval_dispatch_preflights_before_writing(tmp_path: Path) -> None:
     do_sweep = tmp_path / "src/srtctl/cli/do_sweep.py"
     eval_script = tmp_path / "src/srtctl/benchmarks/scripts/lm-eval/bench.sh"
@@ -576,3 +911,58 @@ def test_eval_only_acceptance_rewrite_allows_non_speculative_recipe(
 
     assert result.returncode == 0, result.stderr
     assert recipe.read_text() == original
+
+
+@pytest.mark.parametrize(
+    ("model", "prefix", "mount", "cache"),
+    [
+        ("deepseek-ai/DeepSeek-V4.1-Flash", "dsv41flash", "/ix", "/it-share/hf-hub-cache/"),
+        ("deepseek-ai/DeepSeek-V4-Pro", "dsv4", "/workspace", "/it-share/hf-hub-cache/"),
+    ],
+)
+def test_mi355x_agentic_model_mount_and_routing(
+    tmp_path: Path, model: str, prefix: str, mount: str, cache: str,
+) -> None:
+    capture = tmp_path / "launch.txt"
+    env = {
+        **os.environ,
+        "IS_MULTINODE": "false", "MODEL": model,
+        "EXP_NAME": f"{prefix}_tp4_conc1", "FRAMEWORK": "vllm",
+        "PRECISION": "fp4", "SPEC_DECODING": "mtp",
+        "SCENARIO_SUBDIR": "agentic/", "TP": "4", "GPU_COUNT": "4",
+        "RUNNER_NAME": "mi355x-amds_01", "IMAGE": "test/image:mock",
+        "GITHUB_WORKSPACE": str(REPO_ROOT), "HF_HUB_CACHE": "/mnt/hf_hub_cache/",
+        "RESULT_DIR": "/workspace/results", "CAPTURE": str(capture),
+    }
+    result = subprocess.run(
+        ["bash", "-c", '''
+        salloc() { :; }
+        squeue() { echo 123; }
+        scancel() { :; }
+        srun() {
+            case "$*" in
+                *--container-image=*)
+                    printf '%s\n' "$@" > "$CAPTURE"
+                    printf 'RESULT_DIR=%s\n' "$RESULT_DIR" >> "$CAPTURE"
+                    bash -c 'source benchmarks/benchmark_lib.sh;
+                        printf "%s\n" "$INFMAX_CONTAINER_WORKSPACE" "$AGENTIC_DIR" "$AIPERF_DIR"' > "$CAPTURE.paths"
+                    ;;
+            esac
+        }
+        source runners/launch_mi355x-amds.sh
+        '''], cwd=REPO_ROOT, env=env, capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    args = capture.read_text().splitlines()
+    assert f"--container-workdir={mount}/" in args
+    assert f"RESULT_DIR={mount}/results" in args
+    assert Path(f"{capture}.paths").read_text().splitlines() == [
+        mount, f"{mount}/utils/agentic-benchmark", f"{mount}/utils/aiperf",
+    ]
+    assert (
+        f"--container-mounts={REPO_ROOT}:{mount}/,{cache}:/mnt/hf_hub_cache/,"
+        "/it-share/aiperf-cache/:/aiperf_mmap_cache"
+    ) in args
+    script = f"benchmarks/single_node/agentic/{prefix}_fp4_mi355x_vllm_mtp.sh"
+    assert args[-2] == script
+    assert (REPO_ROOT / script).is_file()
