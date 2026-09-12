@@ -100,7 +100,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --engram-config '{"cpu_offload":true}' \
     --speculative-config '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":true}' \
     --max-model-len "$EVAL_CONTEXT" --max-num-batched-tokens 4096 \
-    --max-num-seqs 16 --gpu-memory-utilization 0.92 \
+    --max-num-seqs "${TBENCH_MAX_SEQS:-64}" --gpu-memory-utilization 0.92 \
     --max-cudagraph-capture-size 128 \
     --disable-uvicorn-access-log > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
@@ -269,7 +269,7 @@ timeout "${TBENCH_TIMEOUT_S:-2700}" "${HARBOR[@]}" run \
     --env modal \
     --ak "model_info=$MODEL_INFO" \
     -k "${TBENCH_ATTEMPTS:-1}" \
-    --n-concurrent "${TBENCH_CONCURRENT:-2}" \
+    --n-concurrent "${TBENCH_CONCURRENT:-32}" \
     --timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.1}" \
     --agent-timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.1}" \
     --job-name "engram-tbench-$(date +%s)" \
