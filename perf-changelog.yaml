@@ -7338,3 +7338,10 @@
     - "Resolve the requested H100 SGLang container instead of a hardcoded older image, and stop benchmark/eval clients when their ready server or required worker exits."
     - "H100 SGLang 使用所请求的容器而非硬编码旧镜像；已就绪的服务或必需工作进程退出后，停止其 benchmark/评测客户端。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3020
+
+- config-keys:
+    - dsr1-fp4-b200-dynamo-sglang-mtp
+  description:
+    - "Update the DeepSeek-R1 FP4 B200 dynamo-sglang MTP disagg image from lmsysorg/sglang:v0.5.12.post1 to lmsysorg/sglang:v0.5.19; install Dynamo from the PyPI nightly 1.5.0.dev20260910 (pins sglang 0.5.19) instead of the hash-pinned source build, and switch --fp4-gemm-backend from flashinfer_trtllm to flashinfer_cutedsl because the v0.5.19 trtllm weight path skips the SM100 shared-experts SwiGLU fusion weights. Model, topology, MoE runner backend, speculation, workload, points and evals are unchanged."
+    - "将 DeepSeek-R1 FP4 B200 dynamo-sglang MTP 分离式镜像从 lmsysorg/sglang:v0.5.12.post1 更新为 lmsysorg/sglang:v0.5.19；Dynamo 改为从 PyPI nightly 1.5.0.dev20260910（固定 sglang 0.5.19）安装以替代哈希固定源码构建，并将 --fp4-gemm-backend 从 flashinfer_trtllm 改为 flashinfer_cutedsl，因为 v0.5.19 的 trtllm 权重路径跳过 SM100 共享专家 SwiGLU 融合权重。模型、拓扑、MoE runner 后端、投机解码、工作负载、点位与评测保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3034
