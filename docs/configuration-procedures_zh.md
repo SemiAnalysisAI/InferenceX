@@ -187,6 +187,10 @@ GB300 launcher 将引擎就绪等待时间设为 7200 秒。在[运行 345049691
 
 来源：[上游配方](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash)。
 
+GB200 P/D 配置 `dsv41flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg`
+在五个节点上使用一个 DEP4 prefill worker 和一个 DEP16 decode worker，并发为
+64、128、256。NIXL 执行直接 P/D KV 传输；KV 保持在 GPU 上，不配置 MooncakeStore。
+
 ### H200 上的 DeepSeek-V4.1-Flash DSpark
 
 `dsv41flash-fp4-h200-vllm-agentic-dspark` 是 DeepSeek-V4.1-Flash 配方的 H200 AgentX

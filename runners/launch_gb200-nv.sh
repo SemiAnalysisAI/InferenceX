@@ -99,6 +99,13 @@ import_squash() {
     ) || exit 1
 }
 
+# DeepSeek V4.1 Flash resolves through the persistent shared HF cache for both
+# direct serving and Dynamo P/D.
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" ]]; then
+    export MODEL_PATH="$MODEL"
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4.1-flash"
+fi
+
 # Direct single-tray AgentX uses the existing shared image and HF caches.
 if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
     BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb200_${FRAMEWORK}_mtp.sh"
@@ -508,6 +515,9 @@ elif [[ "$IS_AGENTIC" == "1" ]]; then
     mkdir -p recipes/vllm/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
         recipes/vllm/deepseek-v4/agentic
+    mkdir -p recipes/vllm/deepseek-v4.1-flash/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4.1-flash/agentic" \
+        recipes/vllm/deepseek-v4.1-flash/agentic
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
