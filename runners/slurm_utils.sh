@@ -61,7 +61,7 @@ verify_slurm_job_completion() {
             # empties. Ask the controller before judging the final outcome.
             record=$(scontrol show job "$job_id" --oneliner 2>/dev/null) || record=""
             state=$(printf '%s\n' "$record" | sed -n 's/.*JobState=\([^ ]*\).*/\1/p')
-            exit_code=$(printf '%s\n' "$record" | sed -n 's/.*ExitCode=\([^ ]*\).*/\1/p')
+            exit_code=$(printf '%s\n' "$record" | tr ' ' '\n' | sed -n 's/^ExitCode=//p')
             ;;
     esac
     printf '%s\n' "$record" > "${GITHUB_WORKSPACE:-.}/slurm_job_${job_id}_outcome.txt"
