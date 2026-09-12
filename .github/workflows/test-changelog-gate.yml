@@ -31,6 +31,8 @@ on:
       - "runners/launch_*.sh"
       - "runners/slurm_utils.sh"
       - "runners/test_slurm_utils.py"
+      - "runners/test_llmd_lifecycle.py"
+      - "benchmarks/multi_node/llm-d/**"
       - "utils/ci_priority.py"
       - "utils/test_ci_priority.py"
       - ".github/workflows/reuse-sweep-comment.yml"
@@ -123,4 +125,5 @@ jobs:
             utils/evals/test_batched_eval.py \
             utils/evals/test_run_eval_dispatch.py \
             runners/test_slurm_utils.py \
+            runners/test_llmd_lifecycle.py \
             -v -n 4
