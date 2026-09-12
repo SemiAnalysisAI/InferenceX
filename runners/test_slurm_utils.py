@@ -1,8 +1,11 @@
+import hashlib
 import json
 import os
 import runpy
 import subprocess
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -14,6 +17,7 @@ PATCH_SRT_EVAL = REPO_ROOT / "runners" / "patch_srt_eval_dispatch.py"
 PATCH_SRT_DP_RANKS = REPO_ROOT / "runners" / "patch_srt_vllm_dp_ranks.py"
 PATCH_TRTLLM_CHAT_STORE = REPO_ROOT / "runners" / "patch_trtllm_chat_store.py"
 PATCH_VLLM_SIMPLE_KV = REPO_ROOT / "runners" / "patch_vllm_simple_kv_offload.py"
+PATCH_AITER_QUIET = REPO_ROOT / "runners" / "patch_aiter_quiet_auto_backend.py"
 INJECT_ACCEPTANCE = REPO_ROOT / "runners" / "inject_synthetic_acceptance.py"
 
 
@@ -417,6 +421,169 @@ def test_patch_vllm_simple_kv_offload_rejects_unknown_source(
 
     assert result.returncode == 1
     assert worker.read_text() == "unsupported worker\n"
+
+
+@pytest.fixture
+def aiter_backend_source() -> str:
+    # Independent, reduced upstream source: never assembled from patch constants.
+    return '''# Surrounding source must survive unchanged.
+import itertools
+
+import torch
+
+_GLUON_SUPPORTED_ARCHS = ("gfx1250",)
+
+
+def _is_gluon_available():
+    return get_arch() in _GLUON_SUPPORTED_ARCHS
+
+
+def moe_gemm_a16w4(backend=None):
+    if backend in (None, "gluon"):
+        if _is_gluon_available():
+            backend = "gluon"
+        else:
+            _LOGGER.warning("GLUON backend not available. Using TRITON backend!!!")
+            backend = "triton"
+
+    backend = backend.lower()
+    assert backend in ("triton", "gluon"), "Unknown backend"
+    return backend
+
+
+UNCHANGED = "surrounding source"
+'''
+
+
+def test_patch_aiter_quiet_is_idempotent_with_provenance(
+    tmp_path: Path, aiter_backend_source: str,
+) -> None:
+    backend = tmp_path / "backend.py"
+    backend.write_text(aiter_backend_source)
+    before = hashlib.sha256(backend.read_bytes()).hexdigest()
+    first = subprocess.run(
+        [sys.executable, str(PATCH_AITER_QUIET), str(backend)],
+        capture_output=True, text=True, check=False,
+    )
+    patched = backend.read_bytes()
+    modified_at = backend.stat().st_mtime_ns
+    after = hashlib.sha256(patched).hexdigest()
+    second = subprocess.run(
+        [sys.executable, str(PATCH_AITER_QUIET), str(backend)],
+        capture_output=True, text=True, check=False,
+    )
+
+    assert first.returncode == second.returncode == 0, first.stderr + second.stderr
+    assert before != after
+    assert f"Patch applied: AITER quiet auto backend at {backend}" in first.stdout
+    assert f"SHA256 before={before} after={after}" in first.stdout
+    assert f"Already patched: AITER quiet auto backend at {backend}" in second.stdout
+    assert f"SHA256 before={after} after={after}" in second.stdout
+    assert backend.read_bytes() == patched
+    assert backend.stat().st_mtime_ns == modified_at
+    assert patched.startswith(b"# Surrounding source must survive unchanged.\n")
+    assert patched.endswith(b'UNCHANGED = "surrounding source"\n')
+
+
+@pytest.mark.parametrize("arch", ["gfx942", "gfx950", "gfx1100", "gfx1250"])
+def test_patch_aiter_quiet_preserves_dispatch_and_warns_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, aiter_backend_source: str, arch: str,
+) -> None:
+    backend = tmp_path / "backend.py"
+    backend.write_text(aiter_backend_source)
+    runpy.run_path(str(PATCH_AITER_QUIET))["patch_backend"](backend)
+    warnings: list[str] = []
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace())
+    symbols = runpy.run_path(
+        str(backend),
+        init_globals={"get_arch": lambda: arch, "_LOGGER": SimpleNamespace(warning=warnings.append)},
+    )
+    dispatch = symbols["moe_gemm_a16w4"]
+    expected_auto = "gluon" if arch == "gfx1250" else "triton"
+    for _ in range(3):
+        assert dispatch() == expected_auto
+        assert dispatch("triton") == "triton"
+    assert warnings == []
+    for _ in range(3):
+        assert dispatch("gluon") == expected_auto
+        assert dispatch() == expected_auto
+    assert len(warnings) == (0 if arch == "gfx1250" else 1)
+    if warnings:
+        assert "explicitly requested" in warnings[0]
+    with pytest.raises(AssertionError, match="Unknown backend"):
+        dispatch("invalid")
+    # Exercise the real cached helper independently of dispatch.
+    symbols["_warn_gluon_fallback_once"]()
+    symbols["_warn_gluon_fallback_once"]()
+    assert len(warnings) == 1
+
+
+@pytest.mark.parametrize(
+    "failure", ["partial-import", "partial-helper", "unknown", "duplicate", "syntax"],
+)
+def test_patch_aiter_quiet_preflights_before_writing(
+    tmp_path: Path, aiter_backend_source: str, failure: str,
+) -> None:
+    if failure == "partial-import":
+        source = aiter_backend_source.replace(
+            "import itertools\n", "import itertools\nfrom functools import lru_cache\n",
+        )
+    elif failure == "partial-helper":
+        source = aiter_backend_source + "\ndef _warn_gluon_fallback_once():\n    pass\n"
+    elif failure == "unknown":
+        source = aiter_backend_source.replace("backend.lower()", "str(backend).lower()")
+    elif failure == "duplicate":
+        source = aiter_backend_source + aiter_backend_source
+    else:
+        source = aiter_backend_source + "\ndef invalid(:\n"
+    backend = tmp_path / "backend.py"
+    backend.write_bytes(source.encode())
+    modified_at = backend.stat().st_mtime_ns
+    result = subprocess.run(
+        [sys.executable, str(PATCH_AITER_QUIET), str(backend)],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 1
+    assert "failed to patch AITER quiet auto backend" in result.stderr
+    assert "Patch applied" not in result.stdout
+    assert backend.read_bytes() == source.encode()
+    assert backend.stat().st_mtime_ns == modified_at
+
+
+@pytest.mark.parametrize("supported", [True, False])
+def test_mi355x_recipe_patches_installed_aiter_before_download(
+    tmp_path: Path, aiter_backend_source: str, supported: bool,
+) -> None:
+    package = tmp_path / "aiter"
+    backend = package / "ops/triton/moe/moe_op_gemm_a16w4.py"
+    backend.parent.mkdir(parents=True)
+    # Discovery must not import AITER (and initialize GPU dependencies).
+    (package / "__init__.py").write_text('raise AssertionError("AITER imported")\n')
+    original = aiter_backend_source if supported else "# unknown backend\n"
+    backend.write_text(original)
+    recipe = REPO_ROOT / "benchmarks/single_node/agentic/dsv41flash_fp4_mi355x_vllm_mtp.sh"
+    result = subprocess.run(
+        ["bash", "-c", 'hf() { echo hf-called; exit 0; }; export -f hf; bash "$1"',
+         "bash", str(recipe)],
+        cwd=tmp_path,
+        env={
+            **os.environ, "PYTHONPATH": str(tmp_path), "MODEL": "test/model",
+            "MODEL_PATH": "", "TP": "4", "CONC": "1", "KV_OFFLOADING": "none",
+            "KV_OFFLOAD_BACKEND": "", "TOTAL_CPU_DRAM_GB": "100",
+            "RESULT_DIR": str(tmp_path / "results"), "DURATION": "1",
+            "PYTHONPYCACHEPREFIX": str(tmp_path / "pycache"),
+        },
+        capture_output=True, text=True, check=False,
+    )
+    if supported:
+        assert result.returncode == 0, result.stderr
+        assert backend.read_text() != original
+        assert result.stdout.index("Patch applied") < result.stdout.index("hf-called")
+        assert str(backend) in result.stdout
+    else:
+        assert result.returncode == 1
+        assert "hf-called" not in result.stdout
+        assert backend.read_text() == original
 
 
 def test_patch_srt_eval_dispatch_preflights_before_writing(tmp_path: Path) -> None:
