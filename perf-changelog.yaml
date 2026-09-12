@@ -7414,5 +7414,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Bump the AgentX image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260911 (Docker Hub 200). main moved this key to 20260908 while the PR was open, so the net change against main is 20260908 -> 20260911."
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260911."
+    - "Rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode for sglang 0.5.19."
+    - "Prefill allreduce INT4; scheduler-recv-interval default 60."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2972
