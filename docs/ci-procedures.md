@@ -34,16 +34,16 @@ These files are the contract. Follow the target ref's source rather than copying
 
 | Concern | Exact source |
 | --- | --- |
-| Generator CLI, filtering, and eval marking | [`utils/matrix_logic/generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py) |
-| Strict master-config and matrix schemas | [`utils/matrix_logic/validation.py`](../utils/matrix_logic/validation.py) |
+| Generator CLI, filtering, and eval marking | [`infx.matrix.generate`](../infx/matrix/generate.py) |
+| Strict master-config and matrix schemas | [`infx.matrix.validation`](../infx/matrix/validation.py) |
 | Generator examples and reuse policy | [`.github/workflows/README.md`](../.github/workflows/README.md) |
 | Manual end-to-end inputs and matrix fan-out | [`.github/workflows/e2e-tests.yml`](../.github/workflows/e2e-tests.yml) |
 | PR/main sweep gates, canary, collection, and ingest dispatch | [`.github/workflows/run-sweep.yml`](../.github/workflows/run-sweep.yml) |
 | Single- and multi-node artifact uploads | [`.github/workflows/benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml), [`.github/workflows/benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) |
-| Throughput and eval aggregation | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml), [`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml), [`utils/collect_results.py`](../utils/collect_results.py), [`utils/collect_eval_results.py`](../utils/collect_eval_results.py) |
-| Changelog byte/diff/matrix gate | [`utils/validate_perf_changelog.py`](../utils/validate_perf_changelog.py), [`utils/process_changelog.py`](../utils/process_changelog.py) |
+| Throughput and eval aggregation | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml), [`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml), [`infx/results/collect_results.py`](../infx/results/collect_results.py), [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py) |
+| Changelog byte/diff/matrix gate | [`infx/workflows/validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py), [`infx.matrix.plan`](../infx/matrix/plan.py) |
 | Reuse authorization and source-run selection | [`infx/workflows/reuse.py`](../infx/workflows/reuse.py) |
-| Supported reuse merge and conflict preparation | [`utils/merge_with_reuse.sh`](../utils/merge_with_reuse.sh), [`utils/prepare_perf_changelog_merge.py`](../utils/prepare_perf_changelog_merge.py) |
+| Supported reuse merge and conflict preparation | [`utils/merge_with_reuse.sh`](../utils/merge_with_reuse.sh), [`infx/workflows/prepare_perf_changelog_merge.py`](../infx/workflows/prepare_perf_changelog_merge.py) |
 | Staging request and callback | [`.github/workflows/stage-results.yml`](../.github/workflows/stage-results.yml), [`.github/workflows/stage-results-callback.yml`](../.github/workflows/stage-results-callback.yml) |
 | Reused agentic-ingest redispatch | [`.github/workflows/recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) |
 | Post-merge responsibility reminder | [`.github/workflows/pr-recipe-reminder.yml`](../.github/workflows/pr-recipe-reminder.yml) |
@@ -75,7 +75,7 @@ Use `test-config` for exact keys or quoted `*`/`?` patterns. `--conc` must be pr
 ```bash
 MATRIX=/tmp/inferencex-matrix.json
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/matrix_logic/generate_sweep_configs.py test-config \
+  python -m infx.matrix.generate test-config \
   --config-files configs/nvidia-master.yaml \
   --config-keys dsr1-fp8-h200-sglang \
   --seq-lens 8k1k \
@@ -88,7 +88,7 @@ For multiple keys, pass each key after `--config-keys`. Quote wildcard patterns 
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/matrix_logic/generate_sweep_configs.py test-config \
+  python -m infx.matrix.generate test-config \
   --config-files configs/nvidia-master.yaml \
   --config-keys '*-b200-*' \
   --conc 4 \
@@ -101,7 +101,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/matrix_logic/generate_sweep_configs.py full-sweep \
+  python -m infx.matrix.generate full-sweep \
   --config-files configs/nvidia-master.yaml \
   --single-node \
   --model-prefix dsr1 \
@@ -161,7 +161,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
   configs/nvidia-master.yaml perf-changelog.yaml .github/workflows/e2e-tests.yml
 ```
 
-For master configs, matrix generation is the strict validation: [`validation.py`](../utils/matrix_logic/validation.py) forbids unknown fields and validates both master entries and emitted matrix entries. Run the smallest exact `test-config` or filtered `full-sweep` that exercises the change.
+For master configs, matrix generation is the strict validation: [`validation.py`](../infx/matrix/validation.py) forbids unknown fields and validates both master entries and emitted matrix entries. Run the smallest exact `test-config` or filtered `full-sweep` that exercises the change.
 
 ### Validate the append-only changelog contract
 
@@ -172,7 +172,7 @@ The validator reads Git objects, not uncommitted working-tree bytes. Commit the 
 ```bash
 git fetch origin main
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/validate_perf_changelog.py \
+  python -m infx.workflows.validate_perf_changelog \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \
   --head-ref HEAD
@@ -427,7 +427,7 @@ git merge origin/main
 If and only if `perf-changelog.yaml` is the unresolved file, use the byte-preserving helper while the three conflict stages are still present:
 
 ```bash
-python3 utils/prepare_perf_changelog_merge.py resolve-conflict \
+python3 -m infx.workflows.prepare_perf_changelog_merge resolve-conflict \
   --changelog-file perf-changelog.yaml \
   --pr-number "$PR" \
   --repo SemiAnalysisAI/InferenceX
@@ -441,7 +441,7 @@ After committing, run the exact gate against `origin/main`:
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/validate_perf_changelog.py \
+  python -m infx.workflows.validate_perf_changelog \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \
   --head-ref HEAD
@@ -500,7 +500,7 @@ jq -r '
 ' "$OUT/results_bmk/agg_bmk.json"
 ```
 
-Eval aggregate fields come from [`utils/collect_eval_results.py`](../utils/collect_eval_results.py):
+Eval aggregate fields come from [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py):
 
 ```bash
 jq -r '

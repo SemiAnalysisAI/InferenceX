@@ -34,16 +34,16 @@
 
 | 关注点 | 准确源码 |
 | --- | --- |
-| 生成器 CLI、过滤与 Eval 标记 | [`utils/matrix_logic/generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py) |
-| 严格的 Master Config 与矩阵 Schema | [`utils/matrix_logic/validation.py`](../utils/matrix_logic/validation.py) |
+| 生成器 CLI、过滤与 Eval 标记 | [`infx.matrix.generate`](../infx/matrix/generate.py) |
+| 严格的 Master Config 与矩阵 Schema | [`infx.matrix.validation`](../infx/matrix/validation.py) |
 | 生成器示例与复用策略 | [`.github/workflows/README.md`](../.github/workflows/README.md) |
 | 手动端到端输入与矩阵扇出 | [`.github/workflows/e2e-tests.yml`](../.github/workflows/e2e-tests.yml) |
 | PR/main 扫描 Gate、Canary、收集与入库派发 | [`.github/workflows/run-sweep.yml`](../.github/workflows/run-sweep.yml) |
 | 单节点与多节点产物上传 | [`.github/workflows/benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml)、[`.github/workflows/benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) |
-| 吞吐量与 Eval 聚合 | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml)、[`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml)、[`utils/collect_results.py`](../utils/collect_results.py)、[`utils/collect_eval_results.py`](../utils/collect_eval_results.py) |
-| Changelog 字节、Diff 与矩阵 Gate | [`utils/validate_perf_changelog.py`](../utils/validate_perf_changelog.py)、[`utils/process_changelog.py`](../utils/process_changelog.py) |
+| 吞吐量与 Eval 聚合 | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml)、[`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml)、[`infx/results/collect_results.py`](../infx/results/collect_results.py)、[`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py) |
+| Changelog 字节、Diff 与矩阵 Gate | [`infx/workflows/validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py)、[`infx.matrix.plan`](../infx/matrix/plan.py) |
 | 复用授权与源 Run 选择 | [`infx/workflows/reuse.py`](../infx/workflows/reuse.py) |
-| 受支持的复用合并与冲突准备 | [`utils/merge_with_reuse.sh`](../utils/merge_with_reuse.sh)、[`utils/prepare_perf_changelog_merge.py`](../utils/prepare_perf_changelog_merge.py) |
+| 受支持的复用合并与冲突准备 | [`utils/merge_with_reuse.sh`](../utils/merge_with_reuse.sh)、[`infx/workflows/prepare_perf_changelog_merge.py`](../infx/workflows/prepare_perf_changelog_merge.py) |
 | 预发布请求与回调 | [`.github/workflows/stage-results.yml`](../.github/workflows/stage-results.yml)、[`.github/workflows/stage-results-callback.yml`](../.github/workflows/stage-results-callback.yml) |
 | 复用 Agentic 入库的重新派发 | [`.github/workflows/recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) |
 | 合并后责任提醒 | [`.github/workflows/pr-recipe-reminder.yml`](../.github/workflows/pr-recipe-reminder.yml) |
@@ -75,7 +75,7 @@ gh workflow view e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref main --yam
 ```bash
 MATRIX=/tmp/inferencex-matrix.json
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/matrix_logic/generate_sweep_configs.py test-config \
+  python -m infx.matrix.generate test-config \
   --config-files configs/nvidia-master.yaml \
   --config-keys dsr1-fp8-h200-sglang \
   --seq-lens 8k1k \
@@ -88,7 +88,7 @@ python3 -m json.tool "$MATRIX" >/dev/null
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/matrix_logic/generate_sweep_configs.py test-config \
+  python -m infx.matrix.generate test-config \
   --config-files configs/nvidia-master.yaml \
   --config-keys '*-b200-*' \
   --conc 4 \
@@ -101,7 +101,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/matrix_logic/generate_sweep_configs.py full-sweep \
+  python -m infx.matrix.generate full-sweep \
   --config-files configs/nvidia-master.yaml \
   --single-node \
   --model-prefix dsr1 \
@@ -153,7 +153,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
   configs/nvidia-master.yaml perf-changelog.yaml .github/workflows/e2e-tests.yml
 ```
 
-对 Master Config 而言，矩阵生成就是严格验证：[`validation.py`](../utils/matrix_logic/validation.py) 禁止未知字段，并同时验证 Master 条目和输出矩阵条目。运行能覆盖改动的最小准确 `test-config` 或过滤后的 `full-sweep`。
+对 Master Config 而言，矩阵生成就是严格验证：[`validation.py`](../infx/matrix/validation.py) 禁止未知字段，并同时验证 Master 条目和输出矩阵条目。运行能覆盖改动的最小准确 `test-config` 或过滤后的 `full-sweep`。
 
 ### 验证仅追加 Changelog 契约
 
@@ -164,7 +164,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
 ```bash
 git fetch origin main
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/validate_perf_changelog.py \
+  python -m infx.workflows.validate_perf_changelog \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \
   --head-ref HEAD
@@ -412,7 +412,7 @@ git merge origin/main
 当且仅当 `perf-changelog.yaml` 是未解决文件时，在三个冲突 Stage 仍存在的情况下使用字节保留 Helper：
 
 ```bash
-python3 utils/prepare_perf_changelog_merge.py resolve-conflict \
+python3 -m infx.workflows.prepare_perf_changelog_merge resolve-conflict \
   --changelog-file perf-changelog.yaml \
   --pr-number "$PR" \
   --repo SemiAnalysisAI/InferenceX
@@ -426,7 +426,7 @@ Helper 会从 Index Stage 1/2/3 读取 Merge Base、PR 与 Main 字节，验证 
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/validate_perf_changelog.py \
+  python -m infx.workflows.validate_perf_changelog \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \
   --head-ref HEAD
@@ -485,7 +485,7 @@ jq -r '
 ' "$OUT/results_bmk/agg_bmk.json"
 ```
 
-Eval 聚合字段来自 [`utils/collect_eval_results.py`](../utils/collect_eval_results.py)：
+Eval 聚合字段来自 [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py)：
 
 ```bash
 jq -r '

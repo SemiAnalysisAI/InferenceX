@@ -333,7 +333,7 @@ def _run_processor(
     if env_overrides:
         env.update(env_overrides)
     proc = subprocess.run(
-        [sys.executable, "-m", "utils.agentic.aggregation.process_agentic_result"],
+        [sys.executable, "-m", "infx.results.agentic.process_agentic_result"],
         cwd=REPO_ROOT,
         env=env,
         capture_output=True,
@@ -662,7 +662,7 @@ def test_processor_throughput_per_gpu(tmp_path: Path):
 
 
 def test_processor_serializes_shared_expert_gpus_without_changing_power(tmp_path: Path):
-    from utils.agentic.aggregation.power_adapter import run_agentic_power
+    from infx.results.agentic.power_adapter import run_agentic_power
 
     result_dir = _write_fixture(tmp_path)
     output_dir = tmp_path / "out"
@@ -1697,7 +1697,7 @@ def test_processor_uses_aiperf_theoretical_cache_metric(tmp_path: Path):
         }
     )
     proc = subprocess.run(
-        [sys.executable, "-m", "utils.agentic.aggregation.process_agentic_result"],
+        [sys.executable, "-m", "infx.results.agentic.process_agentic_result"],
         cwd=REPO_ROOT,
         env=env,
         capture_output=True,
@@ -1881,7 +1881,7 @@ def test_processor_preserves_validation_before_optional_trace_reads(tmp_path, ov
         "FRAMEWORK": "vllm", "HF_HUB_CACHE": str(cache), **override,
     }
     proc = subprocess.run(
-        [sys.executable, "-m", "utils.agentic.aggregation.process_agentic_result"],
+        [sys.executable, "-m", "infx.results.agentic.process_agentic_result"],
         cwd=REPO_ROOT, env=env, text=True, capture_output=True, timeout=30,
     )
     assert proc.returncode == 1

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from ci_priority import (
+from infx.workflows.ci_priority import (
     PriorityContext,
     annotate_jobs,
     calculate_priority,
