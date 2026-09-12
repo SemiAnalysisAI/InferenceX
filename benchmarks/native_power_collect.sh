@@ -35,7 +35,7 @@ finish() {
     if ! _background_process_is_running "${GPU_MONITOR_PID:-}"; then collector_rc=1; fi
     stop_gpu_monitor
     if [[ "$vendor" == amd ]]; then
-        _write_amd_smi_sidecar "$power_dir/gpu_metrics_devices_end.json" list --json
+        amd-smi list --json > "$power_dir/gpu_metrics_devices_end.json" || collector_rc=1
     else
         nvidia-smi --query-gpu=index,uuid,pci.bus_id,name,driver_version --format=csv \
             > "$power_dir/gpu_metrics_identity_end.csv" || collector_rc=1
@@ -65,6 +65,7 @@ start_gpu_monitor --output "$power_dir/gpu_metrics.csv" || exit 1
 if [[ "$vendor" == amd ]]; then
     _write_amd_smi_sidecar "$power_dir/gpu_metrics_devices.json" list --json
 fi
+_background_process_is_running "$GPU_MONITOR_PID" || exit 1
 write_control "ready-$rank" ready
 while [[ ! -f "$control_dir/stop" ]]; do
     _background_process_is_running "$GPU_MONITOR_PID" || exit 1
