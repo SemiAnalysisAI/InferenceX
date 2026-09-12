@@ -17,10 +17,14 @@ set -x
 # portability, but we resolve to pre-staged paths here to avoid repeated
 # downloading on every Nscale node. Runs for both single-node and multinode
 # launches.
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "$IS_MULTINODE" != "true" ]]; then
-    export MODEL_PATH="$MODEL"
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" ]]; then
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4.1-flash"
     export HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
     mkdir -p "$HF_HUB_CACHE_HOST_PATH"
+    DSV41_CACHE="$HF_HUB_CACHE_HOST_PATH/models--deepseek-ai--DeepSeek-V4.1-Flash"
+    DSV41_REVISION=$(cat "$DSV41_CACHE/refs/main") || exit 1
+    export MODEL_PATH="$DSV41_CACHE/snapshots/$DSV41_REVISION"
+    test -r "$MODEL_PATH/config.json" || { echo "Missing cached DeepSeek V4.1 Flash snapshot: $MODEL_PATH" >&2; exit 1; }
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/DeepSeek-R1-0528-NVFP4-v2"
     export SRT_SLURM_MODEL_PREFIX="dsr1"
@@ -187,6 +191,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git checkout aflowers/vllm-gb200-v0.20.0
         mkdir -p recipes/vllm/deepseek-v4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+    elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv41flash" ]]; then
+        git clone --branch v1.0.36 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+        cd "$SRT_REPO_DIR" || exit 1
+        mkdir -p recipes/vllm/deepseek-v4.1-flash/agentic
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4.1-flash/agentic" \
+            recipes/vllm/deepseek-v4.1-flash/agentic
     elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
         git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
@@ -322,6 +332,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         DEFAULT_MOUNTS_BLOCK="default_mounts:
   ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
   ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+        if [[ "$MODEL_PREFIX" == "dsv41flash" ]]; then
+            DEFAULT_MOUNTS_BLOCK+="
+  ${DSV41_CACHE}/blobs: /blobs"
+        fi
     fi
 
     # Create srtslurm.yaml for srtctl (used by both frameworks)

@@ -10395,6 +10395,34 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
+dsv41flash-fp4-b200-dynamo-vllm-agentic-dspark-disagg:
+  image: vllm/vllm-openai:deepseekv41-flash-0909
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.4.0" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [64, 128, 256]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.51"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4.1-flash/agentic/disagg-b200-1p1d-dep8-dep16-c64-c256-dspark5-agentic.yaml"
+        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
+
 dsv41flash-fp4-gb300-vllm-agentic-dspark:
   image: vllm/vllm-openai:deepseekv41-flash-0909
   model: deepseek-ai/DeepSeek-V4.1-Flash
