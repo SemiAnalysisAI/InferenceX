@@ -3996,7 +3996,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
   runner: cluster:b200-nscale
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "4a205cb356c9a1882ed8cda8980404026b52173a" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260910" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true

@@ -6,7 +6,7 @@ name: "b200-fp4-mtp2-throughput-4p-dep4-1d-dep8"
 # layout (sglang/<model>/<hw>-<precision>/<seq>/disagg/<variant>/...).
 
 dynamo:
-  hash: "4a205cb356c9a1882ed8cda8980404026b52173a"
+  version: "1.5.0.dev20260910"
   install: true
 
 frontend:
