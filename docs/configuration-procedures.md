@@ -112,6 +112,14 @@ The runner-name prefix is load-bearing: workflow routing uses `launch_${RUNNER_N
 6. Verify every runner is **Idle** in [repository runner settings](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners) before adding it to sweep traffic.
 7. Verify launcher mounts for `_work`, HF cache, staged weights, and squash images from a compute node. Root containers must not leave root-owned files in the shared workspace.
 
+## Native PowerX collection for fixed-sequence multinode runs
+
+The AMD SGLang/ATOM/vLLM launchers enable native SMI collection for 8192-input/1024-output runs. Every serving node starts `benchmarks/native_power_collect.sh`; the client waits for all `ready-<rank>` receipts, then requests `stop` and waits for all `done-<rank>` receipts before tearing down servers. The shared collector also accepts NVIDIA SMI for launchers that do not use the srt-slurm/DCGM contract.
+
+Keep `native_power/node-<rank>/gpu_metrics.csv`, the start/end device identity snapshots and `manifest.json` together. Select the actual serving GPU indices, preserve physical node counts when workers span nodes, and stage node-local files as the host runner user into `LOGS/native_power`. The result processor uses each client's formal window, validates all node/role counts and UUID membership, and reuses the shared integration/percentile math. Aggregate deployments emit whole-deployment metrics; role metrics require real separate prefill/decode pools.
+
+Host `timedatectl NTPSynchronized` is recorded as clock context. The shared collector accepts `yes` or `true` as synchronized; other or missing values remain unsynchronized. It does not measure the offset between nodes; common-window trace coverage is still required, and runtime clock alignment remains part of fleet qualification. Missing clock context, a replaced UUID, a missing node or an incomplete collector lifecycle makes power unavailable. Local fixtures prove the format and failure behavior, not GPU runtime or dashboard publication.
+
 ## Register an srt-slurm recipe
 
 Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md). Checked-in recipes: [`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/).

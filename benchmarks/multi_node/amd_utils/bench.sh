@@ -52,6 +52,16 @@ profile_folder="${log_path}/${ENGINE}_isl_${chosen_isl}_osl_${chosen_osl}"
 mkdir -p "$profile_folder"
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
+source "$(dirname "$0")/power.sh"
+power_required=0
+case "${REQUIRE_POWER:-0}" in
+    1|true|TRUE|yes|YES) power_required=1 ;;
+esac
+if ! wait_amd_multinode_power ready; then
+    [[ "$power_required" == 0 ]] || exit 1
+    echo 'PowerX: continuing without ready optional telemetry' >&2
+fi
+benchmark_exit_code=0
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
@@ -101,6 +111,7 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
         fi
     fi
 
+    point_exit_code=0
     run_benchmark_serving \
         --bench-serving-dir "$REPO_ROOT" \
         --model "$BENCH_MODEL" \
@@ -113,7 +124,8 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
         --max-concurrency "$max_concurrency" \
         --result-filename "$export_file" \
         --result-dir /workspace/ \
-        $extra_flags
+        $extra_flags || point_exit_code=$?
+    if [[ "$point_exit_code" != 0 ]]; then benchmark_exit_code=$point_exit_code; break; fi
 
     echo "-----------------------------------------"
 
@@ -123,3 +135,10 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
         sleep 10
     fi
 done
+
+# Stop every node while all prefill/decode servers are still alive.
+if ! wait_amd_multinode_power done; then
+    echo 'PowerX: collector completion failed' >&2
+    if [[ "$power_required" == 1 && "$benchmark_exit_code" == 0 ]]; then benchmark_exit_code=1; fi
+fi
+exit "$benchmark_exit_code"
