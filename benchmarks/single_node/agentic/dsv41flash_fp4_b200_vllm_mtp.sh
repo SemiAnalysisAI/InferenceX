@@ -9,7 +9,12 @@ set -eo pipefail
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC RESULT_DIR
 
+# conc 13 = Engram active, conc 14 = Engram removed. Paired Terminal-Bench.
 if [[ "$CONC" == 13 ]]; then
+    exec bash "$INFERENCEX_REPO_ROOT/analysis/engram/tbench_run.sh"
+fi
+if [[ "$CONC" == 14 ]]; then
+    export TBENCH_ABLATE=1
     exec bash "$INFERENCEX_REPO_ROOT/analysis/engram/tbench_run.sh"
 fi
 

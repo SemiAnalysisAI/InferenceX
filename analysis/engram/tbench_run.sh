@@ -27,6 +27,21 @@ else
     hf download "$MODEL"; export MODEL_PATH="$MODEL"
 fi
 
+# TBENCH_ABLATE=1 serves with the Engram contribution removed, using the same
+# all-False token_mask path the NLL and gsm8k ablations verified. The paired
+# run is the point: same tasks, same budget, Engram the only difference.
+if [[ "${TBENCH_ABLATE:-0}" == 1 ]]; then
+    ABL_BOOTSTRAP=$(python3 -c "
+import sys; sys.path.insert(0, 'analysis')
+from engram import gate_probe
+print(gate_probe.write_bootstrap('$INFERENCEX_REPO_ROOT/analysis'))")
+    export ENGRAM_ABLATE=1
+    export PYTHONPATH="$ABL_BOOTSTRAP:$INFERENCEX_REPO_ROOT/analysis${PYTHONPATH:+:$PYTHONPATH}"
+    say "ENGRAM ABLATED: bootstrap $ABL_BOOTSTRAP"
+else
+    say "ENGRAM ACTIVE (baseline arm)"
+fi
+
 export PATH="$HOME/.local/bin:$PATH"
 # `harbor` alone is not enough: the run reached "0/66 Running trials" and then
 # died on ModuleNotFoundError: dockerfile_parse. The README installs the modal
@@ -100,7 +115,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --engram-config '{"cpu_offload":true}' \
     --speculative-config '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":true}' \
     --max-model-len "$EVAL_CONTEXT" --max-num-batched-tokens 4096 \
-    --max-num-seqs "${TBENCH_MAX_SEQS:-64}" --gpu-memory-utilization 0.92 \
+    --max-num-seqs "${TBENCH_MAX_SEQS:-128}" --gpu-memory-utilization 0.92 \
     --max-cudagraph-capture-size 128 \
     --disable-uvicorn-access-log > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
@@ -261,7 +276,7 @@ say "wrote $ENV_FILE (mode $(stat -c %a "$ENV_FILE" 2>/dev/null || echo '?'))"
 # published default is an 8-hour agent timeout per task.
 say "=== harbor run (env modal) ==="
 set +e
-timeout "${TBENCH_TIMEOUT_S:-16200}" "${HARBOR[@]}" run \
+timeout "${TBENCH_TIMEOUT_S:-28800}" "${HARBOR[@]}" run \
     -d terminal-bench/terminal-bench@4.0.0 \
     --agent "$AGENT" \
     --model "openai/$MODEL" \
@@ -269,15 +284,26 @@ timeout "${TBENCH_TIMEOUT_S:-16200}" "${HARBOR[@]}" run \
     --env modal \
     --ak "model_info=$MODEL_INFO" \
     -k "${TBENCH_ATTEMPTS:-1}" \
-    --n-concurrent "${TBENCH_CONCURRENT:-32}" \
-    --timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.25}" \
-    --agent-timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.25}" \
+    --n-concurrent "${TBENCH_CONCURRENT:-66}" \
+    --timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.9375}" \
+    --agent-timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.9375}" \
     --job-name "engram-tbench-$(date +%s)" \
     --jobs-dir "$RESULT_DIR/harbor_jobs" \
     --yes 2>&1 | tee -a "$RESULT_DIR/tbench_run.txt"
 HARBOR_RC=${PIPESTATUS[0]}
 set -e
 say "harbor exit=$HARBOR_RC"
+
+if [[ "${TBENCH_ABLATE:-0}" == 1 ]]; then
+    say "=== ablation evidence ==="
+    ABL_CALLS=$(grep -aoE "gate-shut forward call count = [0-9]+" "$SERVER_LOG" \
+        | grep -oE "[0-9]+$" | sort -n | tail -1)
+    say "gate-shut forward calls: ${ABL_CALLS:-0}"
+    if (( ${ABL_CALLS:-0} < 5000 )); then
+        say "WARNING: too few gate-shut calls for a full benchmark; this arm may"
+        say "not have served with Engram removed, so do not compare the scores."
+    fi
+fi
 
 say "=== cloudflare origin timeouts (524) seen during the run ==="
 say "count: $(grep -ac 'error_code.: 524' "$RESULT_DIR/tbench_run.txt" || echo 0)"

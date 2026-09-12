@@ -10229,9 +10229,9 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      # conc 13 is the Terminal-Bench 4.0 run, not a concurrency. TP4 matches
-      # the B200 sibling recipe.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [13] }
+      # conc 13/14 are Terminal-Bench arms, not concurrencies: 13 serves with
+      # Engram active, 14 with its contribution removed. TP8 = a full node each.
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [13, 14] }
 dsv41flash-fp4-h100-vllm-agentic-dspark:
   image: vllm/vllm-openai:deepseekv41-flash-0909
   model: deepseek-ai/DeepSeek-V4.1-Flash

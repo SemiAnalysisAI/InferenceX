@@ -21,6 +21,9 @@ if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" =
     export MODEL_PATH="$MODEL"
     export HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
     mkdir -p "$HF_HUB_CACHE_HOST_PATH"
+    # Terminal-Bench runs an 8h harbor cap plus model load, so the default
+    # 480-minute allocation would expire underneath it.
+    export SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-540}"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/DeepSeek-R1-0528-NVFP4-v2"
     export SRT_SLURM_MODEL_PREFIX="dsr1"
