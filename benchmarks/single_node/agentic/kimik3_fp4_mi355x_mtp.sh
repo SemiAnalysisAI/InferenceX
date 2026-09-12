@@ -123,7 +123,7 @@ if [ "${K3_NUMA_BIND:-0}" = "1" ]; then
     echo "[numa] $(numactl --show | tr '\n' ' ')"
 fi
 
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.89}"
 CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL_DECODE_ONLY}"
 
 LADDER=$(( MAX_NUM_SEQS * SPEC_ROWS ))
