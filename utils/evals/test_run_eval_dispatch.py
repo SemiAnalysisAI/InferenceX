@@ -1553,6 +1553,42 @@ append_lm_eval_summary >/dev/null
     assert not results_dir.exists()
 
 
+def test_summary_stages_nested_lm_eval_outputs_before_cleanup(tmp_path: Path) -> None:
+    work_dir = tmp_path / "work"
+    results_dir = tmp_path / "results"
+    nested_results_dir = results_dir / "local-chat-completions__test-model"
+    work_dir.mkdir()
+    nested_results_dir.mkdir(parents=True)
+    result = nested_results_dir / "results_2026-09-09T12-00-00.json"
+    sample = nested_results_dir / "samples_gsm8k_2026-09-09T12-00-00.jsonl"
+    result_content = '{"lm_eval_version": "test"}'
+    sample_content = '{"doc_id": 1}\n'
+    result.write_text(result_content)
+    sample.write_text(sample_content)
+    (nested_results_dir / "debug.log").write_text("do not stage")
+    script = r"""
+source "$BENCHMARK_LIB"
+cd "$WORK_DIR"
+append_lm_eval_summary >/dev/null
+"""
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "WORK_DIR": str(work_dir),
+        "EVAL_RESULT_DIR": str(results_dir),
+        "MODEL": "test-model",
+        "CONC": "7",
+        "KV_OFFLOADING": "none",
+    }
+
+    subprocess.run(["bash", "-c", script], env=env, check=True)
+
+    assert (work_dir / result.name).read_text() == result_content
+    assert (work_dir / sample.name).read_text() == sample_content
+    assert not (work_dir / "debug.log").exists()
+    assert not results_dir.exists()
+
+
 def test_stage_eval_artifacts_copies_eval_outputs_only(tmp_path: Path) -> None:
     source_one = tmp_path / "source-one"
     source_two = tmp_path / "source-two"
