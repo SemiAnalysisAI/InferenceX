@@ -7408,3 +7408,13 @@
     - "Enable required power for the seven existing B200 Kimi-K3 recipes, use the pinned AgentX producer and shared collector, fix the exporter import URI, and record DCP8 with offload disabled to match the serving commands."
     - "启用 Kimi-K3 B200 实测功耗并修正 DCP 与 Offload 元数据。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3043
+  
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the MI355X MiniMax-M3 AgentX image from vllm/vllm-openai-rocm:nightly-8a728663c1c3eeace834a95f5654fa653cc1998c to the latest immutable nightly, vllm/vllm-openai-rocm:nightly-2a02f6efe319c885e3ccbcecde402e0028f9ec1e"
+    - "Pick up the optimized FP8 MiniMax-M3 aiter indexer from vLLM PRs #52664"
+    - "hand-tuned graph capture range; increased max-num-batched-tokens to 65536"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2959
