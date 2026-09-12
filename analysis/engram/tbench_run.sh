@@ -259,8 +259,14 @@ say "tunnel: $PUBLIC  (api key withheld from this log)"
 #
 # Built with printf, not python -c: a comment containing double quotes inside
 # the -c string terminated the shell quoting and broke the JSON.
+# max_tokens here is LiteLLM's OUTPUT cap, not the context window. The first
+# paired run declared it as EVAL_CONTEXT, and both arms then died the same way
+# once conversations grew: 164 turns in the baseline arm failed with
+# "max_tokens must be at least 1, got 0", i.e. the per-call output budget was
+# being derived from a window-sized number and hit zero as the prompt filled
+# it. The window belongs in max_input_tokens alone.
 MODEL_INFO=$(printf '{"max_input_tokens": %d, "max_output_tokens": %d, "max_tokens": %d, "input_cost_per_token": 0, "output_cost_per_token": 0, "litellm_provider": "openai", "mode": "chat"}' \
-    "$((EVAL_CONTEXT - OUTPUT_BUDGET))" "$OUTPUT_BUDGET" "$EVAL_CONTEXT")
+    "$((EVAL_CONTEXT - OUTPUT_BUDGET))" "$OUTPUT_BUDGET" "$OUTPUT_BUDGET")
 say "model_info for terminus-2: $MODEL_INFO"
 
 ENV_FILE="$RESULT_DIR/harbor.env"
@@ -287,6 +293,7 @@ timeout "${TBENCH_TIMEOUT_S:-28800}" "${HARBOR[@]}" run \
     --n-concurrent "${TBENCH_CONCURRENT:-66}" \
     --timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.9375}" \
     --agent-timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.9375}" \
+    ${TBENCH_TASK_FILTER:+--task-id "$TBENCH_TASK_FILTER"} \
     --job-name "engram-tbench-$(date +%s)" \
     --jobs-dir "$RESULT_DIR/harbor_jobs" \
     --yes 2>&1 | tee -a "$RESULT_DIR/tbench_run.txt"
@@ -303,6 +310,17 @@ if [[ "${TBENCH_ABLATE:-0}" == 1 ]]; then
         say "WARNING: too few gate-shut calls for a full benchmark; this arm may"
         say "not have served with Engram removed, so do not compare the scores."
     fi
+fi
+
+# The failure that put both arms of the first paired run on the floor. It is
+# silent in the score -- a task whose turns all error still just scores 0 --
+# so it has to be counted explicitly.
+say "=== turns killed by a zero output budget ==="
+ZERO_BUDGET=$(grep -ac "max_tokens must be at least 1" "$RESULT_DIR/tbench_run.txt" || echo 0)
+say "count: $ZERO_BUDGET"
+if (( ZERO_BUDGET > 0 )); then
+    say "WARNING: $ZERO_BUDGET turns were rejected before reaching the model."
+    say "The score below is a floor, not a measurement of the model."
 fi
 
 say "=== cloudflare origin timeouts (524) seen during the run ==="
