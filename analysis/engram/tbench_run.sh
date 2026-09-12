@@ -76,6 +76,10 @@ say "using agent: $AGENT"
 
 API_KEY="sk-engram-$(head -c 18 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 EVAL_CONTEXT=131072
+# Output budget: big enough that summarisation does not truncate (6144 did),
+# small enough to finish inside Cloudflare's 120s (32768 did not). Measured
+# at 267 tok/s single-stream; the canary below re-measures at this budget.
+OUTPUT_BUDGET="${TBENCH_OUTPUT_BUDGET:-12288}"
 # Indexer buffer is batched-tokens x max-model-len x 2B: 4096 x 65536 x 2 =
 # 0.5 GiB, unlike the 16 GiB that 1M context would cost on an 80 GB card.
 pick_port() {
@@ -122,7 +126,7 @@ say "--- timed generation canary: a full response must fit in Cloudflare's 120s"
 GEN_START=$(date +%s)
 GEN_JSON=$(curl -sS -m 300 -H "Authorization: Bearer $API_KEY" \
     -H 'Content-Type: application/json' \
-    -d '{"model":"'"$MODEL"'","messages":[{"role":"user","content":"Write a detailed technical explanation of how a B-tree index works, including insertion, splitting and deletion. Be thorough."}],"max_tokens":6144,"temperature":0}' \
+    -d '{"model":"'"$MODEL"'","messages":[{"role":"user","content":"Write a detailed technical explanation of how a B-tree index works, including insertion, splitting and deletion. Be thorough."}],"max_tokens":'"$OUTPUT_BUDGET"',"temperature":0}' \
     "http://localhost:$PORT/v1/chat/completions" 2>&1)
 GEN_ELAPSED=$(( $(date +%s) - GEN_START ))
 GEN_TOKENS=$(python3 -c "
@@ -138,7 +142,7 @@ if (( GEN_ELAPSED > 0 )); then
     say "  throughput: $(( GEN_TOKENS / GEN_ELAPSED )) tok/s"
 fi
 if (( GEN_ELAPSED >= 110 )); then
-    say "FATAL: a 6144-token response took ${GEN_ELAPSED}s, at or over Cloudflare's"
+    say "FATAL: a ${OUTPUT_BUDGET}-token response took ${GEN_ELAPSED}s, at or over Cloudflare's"
     say "120s read timeout. harbor cannot stream, so every agent call would 524."
     say "Lower max_output_tokens or the concurrency, or use a tunnel without the cap."
     exit 1
@@ -241,7 +245,7 @@ say "tunnel: $PUBLIC  (api key withheld from this log)"
 # Built with printf, not python -c: a comment containing double quotes inside
 # the -c string terminated the shell quoting and broke the JSON.
 MODEL_INFO=$(printf '{"max_input_tokens": %d, "max_output_tokens": %d, "max_tokens": %d, "input_cost_per_token": 0, "output_cost_per_token": 0, "litellm_provider": "openai", "mode": "chat"}' \
-    "$((EVAL_CONTEXT - 6144))" 6144 "$EVAL_CONTEXT")
+    "$((EVAL_CONTEXT - OUTPUT_BUDGET))" "$OUTPUT_BUDGET" "$EVAL_CONTEXT")
 say "model_info for terminus-2: $MODEL_INFO"
 
 ENV_FILE="$RESULT_DIR/harbor.env"
@@ -265,7 +269,7 @@ timeout "${TBENCH_TIMEOUT_S:-16200}" "${HARBOR[@]}" run \
     --env modal \
     --ak "model_info=$MODEL_INFO" \
     -k "${TBENCH_ATTEMPTS:-1}" \
-    --n-concurrent "${TBENCH_CONCURRENT:-4}" \
+    --n-concurrent "${TBENCH_CONCURRENT:-2}" \
     --timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.1}" \
     --agent-timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.1}" \
     --job-name "engram-tbench-$(date +%s)" \
