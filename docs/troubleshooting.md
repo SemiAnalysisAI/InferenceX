@@ -25,9 +25,9 @@ Classify a failure by the first layer that did not establish its contract. Prese
 
 - [`KLAUD_DEBUG.md`](../KLAUD_DEBUG.md) records recurring Klaud-Cold/image-bump incidents and their observed signatures. It is incident knowledge, not a substitute for current workflow or review policy.
 - [`run-sweep.yml`](../.github/workflows/run-sweep.yml), [`benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml), and [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) define orchestration, artifact upload, server readiness, benchmark, and eval behavior.
-- [`validate_perf_changelog.py`](../utils/validate_perf_changelog.py), [`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py), and [`validation.py`](../utils/matrix_logic/validation.py) own changelog, matrix, and schema failures.
+- [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py), [`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py), and [`validation.py`](../utils/matrix_logic/validation.py) own changelog, matrix, and schema failures.
 - [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md) and [`runners/`](../runners/) own provisioning and launcher routing. [`CONTRIBUTING.md`](../CONTRIBUTING.md#amd-cluster-never-leave-root-owned-files-in-runner-workspaces) owns AMD workspace safety.
-- [`utils/evals/EVALS.md`](../utils/evals/EVALS.md), [`validate_scores.py`](../utils/evals/validate_scores.py), and [`collect_eval_results.py`](../utils/collect_eval_results.py) own eval execution, validation, and collection.
+- [`utils/evals/EVALS.md`](../utils/evals/EVALS.md), [`validate_scores.py`](../infx/evals/validate_scores.py), and [`collect_eval_results.py`](../infx/results/collect_eval_results.py) own eval execution, validation, and collection.
 - [The failed-ingest recovery command](../.claude/commands/recover-failed-ingest.md) is the guarded recovery procedure. The downstream source is InferenceX-app's [`ingest-results.yml`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/.github/workflows/ingest-results.yml), [`prepare-ci-artifacts.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/prepare-ci-artifacts.ts), [`ingest-ci-run.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/ingest-ci-run.ts), and [`benchmark-mapper.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/etl/benchmark-mapper.ts).
 
 ## Evidence before remediation
@@ -58,7 +58,7 @@ Do not rerun first: reruns can replace logs, change runner/node placement, or ma
 
 ### Changelog
 
-A setup-stage deletion error usually means a stale branch or whitespace-changing merge made historical bytes appear deleted. Follow the canonical repair in [`KLAUD_DEBUG.md` §1.1](../KLAUD_DEBUG.md#11-perf-changelogyaml-deletion-not-allowed): take the current main version verbatim, then append only this PR's entry at the tail. Validate against the real base and head with [`validate_perf_changelog.py`](../utils/validate_perf_changelog.py).
+A setup-stage deletion error usually means a stale branch or whitespace-changing merge made historical bytes appear deleted. Follow the canonical repair in [`KLAUD_DEBUG.md` §1.1](../KLAUD_DEBUG.md#11-perf-changelogyaml-deletion-not-allowed): take the current main version verbatim, then append only this PR's entry at the tail. Validate against the real base and head with [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py).
 
 Do not 3-way merge or normalize `perf-changelog.yaml`. Stop if the intended config keys, eval flags, scenario scope, or historical delta is ambiguous. Changelog additions and permitted `pr-link` correction behavior are enforced by the validator, not by a visually valid YAML parse.
 
@@ -95,6 +95,10 @@ For recovery, follow [`.claude/commands/clean-amd-mi355-runner-root-files.md`](.
 
 [`wait_for_server_ready`](../benchmarks/benchmark_lib.sh) distinguishes “server died before log,” “server died before healthy,” and a live process whose `/health` endpoint has not passed. Preserve the server log and PID status. The workflow's final timeout alone is not a diagnosis.
 
+After readiness, the shared helper snapshots the server and recognized persistent engine workers. Benchmark, AgentX and eval clients use `utils/server_watch.py`: a missing process, zombie or reused PID stops only the owned client process group. Healthy slow work has no new time cutoff. Recipes using a different readiness path need explicit server monitoring; a live wrapper alone is insufficient proof that its workers are alive.
+
+Client dependency setup uses uv's bounded HTTP retries and a 120-second read timeout, retaining its download cache. A network/download failure is infrastructure evidence, not a reason to change engine flags. H100 srt-slurm resolves the requested image to its own squash path and checks staged model/image assets; B300 checks node-local staged model configuration on the allocated compute node before launching its container. Missing assets are readiness blockers, never grounds to substitute an old image or different weights.
+
 Use the earliest specific signature:
 
 - **Image pull/tag failure:** verify the exact registry tag or digest exists before touching runtime flags. [`KLAUD_DEBUG.md` §6](../KLAUD_DEBUG.md#6-docker-image-tag-gotchas) warns against deriving release tags from dated nightlies.
@@ -109,13 +113,13 @@ Stop if the proposed workaround changes model semantics, reduces model FLOPs, pa
 
 ### Eval
 
-Read the individual `eval /` job, not only `collect-evals`. For each expected concurrency, inspect `meta_env.json`, completion/failure metadata, and its `results*.json`. [`validate_scores.py`](../utils/evals/validate_scores.py) rejects missing result files, below-threshold scores, and runs with zero checked metrics. With expected concurrency metadata it also rejects invalid manifests, duplicate/unexpected/missing concurrency, and failed batches. Because the workflow invokes it without `--expected-concs`, inspect unbatched `meta_env.json` separately. Missing or invalid metadata remains a failure even when the score validator exits successfully.
+Read the individual `eval /` job, not only `collect-evals`. For each expected concurrency, inspect `meta_env.json`, completion/failure metadata, and its `results*.json`. [`validate_scores.py`](../infx/evals/validate_scores.py) rejects missing result files, below-threshold scores, and runs with zero checked metrics. With expected concurrency metadata it also rejects invalid manifests, duplicate/unexpected/missing concurrency, and failed batches. Because the workflow invokes it without `--expected-concs`, inspect unbatched `meta_env.json` separately. Missing or invalid metadata remains a failure even when the score validator exits successfully.
 
 Confirm the task and image match the generated config. If the server failed during eval, return to the server layer. If the task, threshold, or manifest is wrong, fix that source and rerun the exact eval. Do not accept a green job with skipped, empty, or mismatched results.
 
 ### Collection
 
-[`collect_eval_results.py`](../utils/collect_eval_results.py) discovers both flat and nested artifact layouts, chooses the latest legacy result or latest result per batched concurrency, and filters batched results to completed concurrencies. Its `> No eval results found to summarize.` message means no rows were collected. It is not proof that evals passed.
+[`collect_eval_results.py`](../infx/results/collect_eval_results.py) discovers both flat and nested artifact layouts, chooses the latest legacy result or latest result per batched concurrency, and filters batched results to completed concurrencies. Its `> No eval results found to summarize.` message means no rows were collected. It is not proof that evals passed.
 
 When collection is empty:
 

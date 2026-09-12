@@ -46,6 +46,7 @@ def test_gb300_direct_vllm_uses_one_tray_and_propagates_failure(
     assert "--nodes=1" in serve
     assert "--ntasks=1" in serve
     assert "--gpus=4" in serve
+    assert "--cpus-per-task=144" in serve
     assert "--mem=0" in serve
     assert "--job-name=gb300-test" in serve
     mounts = next(arg for arg in serve if arg.startswith("--container-mounts="))

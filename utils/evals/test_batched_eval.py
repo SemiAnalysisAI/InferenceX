@@ -6,8 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from validate_scores import main as validate_scores_main
-from validate_scores import validate_batch_manifest
+from infx.evals.validate_scores import main as validate_scores_main
+from infx.evals.validate_scores import validate_batch_manifest
 
 
 def _run_batched_eval(

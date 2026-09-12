@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-import generate_sweep_configs
-from generate_sweep_configs import (
+from infx.matrix import generate as generate_sweep_configs
+from infx.matrix.generate import (
     MIN_EVAL_CONC,
     add_multinode_node_count,
     apply_node_type_defaults,
@@ -152,7 +152,7 @@ def test_multinode_node_count_prefers_recipe_resources(
     recipe.write_text(yaml.safe_dump({"resources": resources}))
     monkeypatch.setattr(
         generate_sweep_configs, "__file__",
-        str(tmp_path / "utils/matrix_logic/generate_sweep_configs.py"),
+        str(tmp_path / "infx/matrix/generate.py"),
     )
     prefill = {
         "num-worker": 1, "tp": 8,
@@ -2015,7 +2015,7 @@ class TestCommandLine:
         still only evaluates 8k1k (1k1k entries are excluded)."""
         import sys
 
-        import generate_sweep_configs
+        from infx.matrix import generate as generate_sweep_configs
 
         monkeypatch.setattr(
             generate_sweep_configs,
@@ -2055,7 +2055,7 @@ class TestCommandLine:
     ):
         import sys
 
-        import generate_sweep_configs
+        from infx.matrix import generate as generate_sweep_configs
 
         monkeypatch.setattr(
             generate_sweep_configs,
@@ -2093,7 +2093,7 @@ class TestCommandLine:
     ):
         import sys
 
-        import generate_sweep_configs
+        from infx.matrix import generate as generate_sweep_configs
 
         monkeypatch.setattr(
             generate_sweep_configs,
@@ -2142,6 +2142,38 @@ class TestCommandLine:
         assert result[0]['eval-conc'] == 4
         assert result[0]['run-eval'] is True
 
+    @pytest.mark.parametrize('entrypoint', ['cli', 'api'])
+    def test_smoke_keeps_canonical_eval_instead_of_throughput_minimum(
+        self, monkeypatch, sample_single_node_config, sample_runner_config, entrypoint,
+    ):
+        monkeypatch.setattr(generate_sweep_configs, 'load_config_files', lambda _: sample_single_node_config)
+        monkeypatch.setattr(generate_sweep_configs, 'load_runner_file', lambda _: sample_runner_config)
+        monkeypatch.setattr(sys, 'argv', ['generate_sweep_configs.py', 'test-config',
+                                         '--config-files', 'dummy.yaml', '--config-keys',
+                                         'dsr1-fp8-mi300x-sglang', '--smoke'])
+        if entrypoint == 'api':
+            result = generate_sweep_configs.generate_config_matrix(
+                ['dsr1-fp8-mi300x-sglang'], sample_single_node_config,
+                sample_runner_config, eval_mode='smoke',
+            )
+        else:
+            result = generate_sweep_configs.main()
+        benchmarks = [row for row in result if not row.get('eval-only')]
+        evals = [row for row in result if row.get('eval-only')]
+        assert {row['conc'] for row in benchmarks} == {4}
+        assert all(not row['run-eval'] for row in benchmarks)
+        assert {row['conc'] for row in evals} == {32}
+        assert all(row['run-eval'] for row in evals)
+
+    def test_multinode_smoke_preserves_representative_eval_concurrency(self):
+        from infx.matrix.generate import smoke_entries
+        entry = {'prefill': {'num-worker': 1, 'tp': 8}, 'decode': {'num-worker': 1, 'tp': 8},
+                 'conc': [4, 32, 64], 'run-eval': True, 'eval-conc': 64}
+        result = smoke_entries([entry])
+        assert [(row['conc'], row.get('eval-only', False), row['run-eval']) for row in result] == [
+            ([4], False, False), ([64], True, True)]
+        assert result[1]['eval-conc'] == 64
+
     def test_all_evals_batches_each_multinode_concurrency(
         self,
         monkeypatch,
@@ -2150,7 +2182,7 @@ class TestCommandLine:
     ):
         import sys
 
-        import generate_sweep_configs
+        from infx.matrix import generate as generate_sweep_configs
 
         config = sample_multinode_config
         seq_entry = (
@@ -2193,7 +2225,7 @@ class TestCommandLine:
     def test_all_evals_cannot_combine_with_no_evals(self, monkeypatch):
         import sys
 
-        import generate_sweep_configs
+        from infx.matrix import generate as generate_sweep_configs
 
         monkeypatch.setattr(sys, 'argv', [
             'generate_sweep_configs.py',
@@ -2782,6 +2814,122 @@ class TestApplyNodeTypeDefaults:
 class TestGenerateFullSweepMixed:
     """Tests for generate_full_sweep with both single-node and multi-node configs."""
 
+    @pytest.mark.parametrize(("multinode", "points", "expected"), [
+        (False, {"conc-start": 3, "conc-end": 10}, [5, 7]),
+        (True, {"conc-start": 3, "conc-end": 10}, [[6]]),
+        (False, {"conc-list": [10, 6, 3, 6]}, [6, 6]),
+        (True, {"conc-list": [10, 6, 3, 6]}, [[6, 6]]),
+    ])
+    def test_bounds_clip_single_node_ranges_before_expansion(
+        self, sample_single_node_config, sample_multinode_config,
+        sample_runner_config, full_sweep_args_both, multinode, points, expected,
+    ):
+        config = sample_multinode_config if multinode else sample_single_node_config
+        sequence = next(iter(config.values()))["scenarios"]["fixed-seq-len"][0]
+        benchmark = sequence["search-space"][0]
+        for name in ("conc-start", "conc-end", "conc-list"):
+            benchmark.pop(name, None)
+        benchmark.update(points)
+        before = copy.deepcopy(config)
+        vars(full_sweep_args_both).update(min_conc=5, max_conc=7, seq_lens=["1k1k"])
+
+        rows = generate_full_sweep(full_sweep_args_both, config, sample_runner_config)
+
+        assert [row["conc"] for row in rows] == expected
+        assert config == before
+
+    @pytest.mark.parametrize("command", ["full-sweep", "test-config"])
+    @pytest.mark.parametrize("node_names", [[], ["mi300x-amd_1", "mi300x-amd_1", "mi300x-amd_0"]])
+    def test_runner_filter_keeps_each_commands_label_and_duplicate_policy(
+        self, sample_single_node_config, sample_runner_config,
+        full_sweep_args_both, command, node_names,
+    ):
+        sample_runner_config["labels"]["mi300x"] = node_names
+        key, config = next(iter(sample_single_node_config.items()))
+        config["scenarios"]["fixed-seq-len"][0]["search-space"] = [{"tp": 8, "conc-list": [4]}]
+        vars(full_sweep_args_both).update(
+            config_keys=[key], runner_node_filter="mi300x", seq_lens=["1k1k"],
+        )
+        generate = generate_full_sweep if command == "full-sweep" else generate_test_config_sweep
+
+        rows = generate(full_sweep_args_both, sample_single_node_config, sample_runner_config)
+
+        if command == "full-sweep":
+            expected = ["mi300x-amd_1", "mi300x-amd_1", "mi300x-amd_0"] if node_names else []
+        else:
+            expected = ["mi300x", "mi300x-amd_1", "mi300x-amd_0"] if node_names else ["mi300x"]
+        assert [row["runner"] for row in rows] == expected
+
+    def test_typed_full_sweep_selects_configs_and_preserves_scenario_order(
+        self, sample_single_node_config, sample_runner_config,
+    ):
+        config = next(iter(sample_single_node_config.values()))
+        config["scenarios"]["agentic-coding"] = [{"search-space": [
+            {"tp": 4, "kv-offloading": "none", "conc-list": [16, 8]},
+        ]}]
+        excluded = copy.deepcopy(config)
+        excluded["framework"] = "vllm"
+        master = {"selected-vllm": excluded, "selected-sglang": config, "unselected": config}
+        before = copy.deepcopy(master)
+
+        rows = generate_sweep_configs.expand_full_sweep(
+            master, sample_runner_config,
+            options=generate_sweep_configs.FullSweepOptions(
+                model_prefix=["selected"], framework=["sglang"], precision=["fp8"],
+                runner_type=["mi300x"], runner_node_filter="amd_1",
+                seq_lens=["8k1k"], min_conc=5, max_conc=10,
+            ),
+        )
+
+        assert [(row.get("scenario-type", "fixed-seq-len"), row["conc"]) for row in rows] == [
+            ("fixed-seq-len", 5), ("fixed-seq-len", 10), ("agentic-coding", 8),
+        ]
+        assert [row["runner"] for row in rows] == ["mi300x-amd_1"] * 3
+        assert rows[0]["max-model-len"] == 9472
+        assert master == before
+
+    @pytest.mark.parametrize(("options", "message"), [
+        ({"step_size": 1}, "step_size must be greater than 1"),
+        ({"min_conc": 9, "max_conc": 3}, "min_conc must be less than or equal to max_conc"),
+        ({"runner_type": ["missing"]}, "Invalid runner type"),
+    ])
+    def test_typed_full_sweep_validates_options_even_without_configs(
+        self, sample_runner_config, options, message,
+    ):
+        with pytest.raises(ValueError, match=message):
+            generate_sweep_configs.expand_full_sweep(
+                {}, sample_runner_config,
+                options=generate_sweep_configs.FullSweepOptions(**options),
+            )
+
+    def test_unbounded_reversed_multinode_range_keeps_empty_batch(
+        self, sample_multinode_config, sample_runner_config, full_sweep_args_both,
+    ):
+        benchmark = next(iter(sample_multinode_config.values()))["scenarios"]["fixed-seq-len"][0]["search-space"][0]
+        benchmark.pop("conc-list")
+        benchmark.update({"conc-start": 10, "conc-end": 3})
+
+        rows = generate_full_sweep(full_sweep_args_both, sample_multinode_config, sample_runner_config)
+
+        assert [row["conc"] for row in rows] == [[]]
+        # Applying a lower bound filters out the empty batch entirely.
+        full_sweep_args_both.min_conc = 1
+        assert generate_full_sweep(full_sweep_args_both, sample_multinode_config, sample_runner_config) == []
+
+    @pytest.mark.parametrize("command", ["full-sweep", "test-config"])
+    def test_unmatched_runner_defers_scenario_access_only_for_selected_keys(
+        self, sample_single_node_config, sample_runner_config, full_sweep_args_both, command,
+    ):
+        key, config = next(iter(sample_single_node_config.items()))
+        config.pop("scenarios")
+        vars(full_sweep_args_both).update(config_keys=[key], runner_node_filter="missing")
+
+        if command == "test-config":
+            assert generate_test_config_sweep(full_sweep_args_both, sample_single_node_config, sample_runner_config) == []
+        else:
+            with pytest.raises(KeyError, match="scenarios"):
+                generate_full_sweep(full_sweep_args_both, sample_single_node_config, sample_runner_config)
+
     def test_both_flags_generates_mixed(self, sample_mixed_config, sample_runner_config, full_sweep_args_both):
         """Both flags True should produce both single-node and multinode entries."""
         result = generate_full_sweep(
@@ -3023,15 +3171,17 @@ def split_e2e_configs(tmp_path):
     # Actions resolves these expressions before invoking Bash. Their values
     # are irrelevant to routing, so use a harmless nonempty command/context.
     script = re.sub(r"\$\{\{.*?\}\}", "fixture", step["run"])
-    boundary_stubs = r"""
-uv() {
-  case "$*" in
-    *generate_sweep_configs.py*) cat "$MATRIX_FIXTURE" ;;
-    *ci_priority.py*) cat ;;
-    *) return 1 ;;
-  esac
-}
+    boundary_stubs = r"""#!/bin/bash
+case "$*" in
+  *generate_sweep_configs.py*|*infx.matrix.generate*) cat "$MATRIX_FIXTURE" ;;
+  *ci_priority.py*|*infx.workflows.ci_priority*) cat ;;
+  *) exit 1 ;;
+esac
 """
+    tools = tmp_path / "bin"
+    tools.mkdir()
+    (tools / "uv").write_text(boundary_stubs)
+    (tools / "uv").chmod(0o755)
 
     def run(entries):
         matrix_file = tmp_path / "matrix.json"
@@ -3039,11 +3189,11 @@ uv() {
         output_file = tmp_path / "outputs"
         output_file.write_text("")
         subprocess.run(
-            ["bash", "-euo", "pipefail", "-c", boundary_stubs + script],
+            ["bash", "-euo", "pipefail", "-c", script],
             cwd=tmp_path, check=True, capture_output=True, text=True, timeout=30,
             env={
                 **os.environ,
-                "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}",
+                "PATH": f"{tools}:{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}",
                 "GITHUB_WORKSPACE": str(tmp_path), "GITHUB_OUTPUT": str(output_file),
                 "MATRIX_FIXTURE": str(matrix_file), "PR_LABELS": "[]",
                 "CHANGELOG_BASE_REF": "", "CHANGELOG_HEAD_REF": "",

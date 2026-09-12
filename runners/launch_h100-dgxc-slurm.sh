@@ -88,15 +88,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # Map container images to local squash files based on framework
     NGINX_SQUASH_FILE="/mnt/nfs/lustre/containers/nginx_1.27.4.sqsh"
 
-    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-        # SGLang container mapping
-        SQUASH_FILE="/mnt/nfs/lustre/containers/lmsysorg_sglang_v0.5.8.post1-cu130.sqsh"
-        CONTAINER_KEY="lmsysorg/sglang:v0.5.8-cu130"
-    elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
-        # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
-        CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
-        SQUASH_FILE="/mnt/nfs/sa-shared/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
-    fi
+    resolve_h100_srt_container "$IMAGE" "$FRAMEWORK" || exit 1
+    check_staged_srt_assets "$MODEL_PATH" "$SQUASH_FILE" || exit 1
 
     export ISL="$ISL"
     export OSL="$OSL"

@@ -378,7 +378,7 @@ EOF
             esac
             (
                 cd "$GITHUB_WORKSPACE"
-                python -m utils.agentic.aggregation.power_adapter "${power_args[@]}"
+                python -m infx.results.agentic.power_adapter "${power_args[@]}"
             ) || exit 1
         done
         mkdir -p "$LOGS_DIR/power"

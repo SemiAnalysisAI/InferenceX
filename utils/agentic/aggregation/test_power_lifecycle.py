@@ -51,7 +51,7 @@ write_agentic_result_json() {{
 }}
 fake_python() {{
     case "$*" in
-        *utils.agentic.aggregation.power_adapter*)
+        *infx.results.agentic.power_adapter*)
             printf 'adapter:%s\n' "$*" >> {str(event_log)!r}
             if [ {'1' if real_power_adapter else '0'} = 1 ]; then
                 PYTHONPATH={str(REPO_ROOT)!r} {sys.executable!r} "$@"
