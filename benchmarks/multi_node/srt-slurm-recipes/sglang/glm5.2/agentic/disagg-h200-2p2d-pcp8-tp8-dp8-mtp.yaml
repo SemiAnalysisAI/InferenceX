@@ -7,12 +7,16 @@ name: "disagg-h200-2p2d-pcp8-tp8-dp8-mtp"
 
 model:
   path: "hf:zai-org/GLM-5.2-FP8"
-  container: "lmsysorg/sglang:v0.5.16-cu130"
+  container: "lmsysorg/sglang:v0.5.19-cu130"
   precision: "fp8"
 
+# Dynamo 1.3.0.dev1 imports sglang.srt.server_args_config_parser at worker
+# startup; SGLang v0.5.19 moved that module under sglang.srt.utils
+# (sgl-project/sglang#36681). 1.5.0.dev20260910 imports the new path and pins
+# sglang==0.5.19.
 dynamo:
   install: true
-  wheel: "1.3.0.dev1"
+  wheel: "1.5.0.dev20260910"
 
 slurm:
   time_limit: "8:00:00"
@@ -40,7 +44,7 @@ frontend:
     PIP_BREAK_SYSTEM_PACKAGES: "1"
   args:
     router-mode: "kv"
-    router-reset-states: true
+    # --router-reset-states was removed from the Dynamo 1.5 frontend.
     active-decode-blocks-threshold: "None"
     active-prefill-tokens-threshold: "None"
     active-prefill-tokens-threshold-frac: "None"
