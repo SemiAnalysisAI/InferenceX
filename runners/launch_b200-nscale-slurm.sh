@@ -40,6 +40,10 @@ if [[ "$IS_MULTINODE" != "true" ]]; then
     run_compat_launcher
 fi
 
+if [[ "$FRAMEWORK" == "tilert" && "${IS_AGENTIC:-0}" != "1" ]]; then
+    run_compat_launcher
+fi
+
 if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/DeepSeek-V4-Pro}"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"

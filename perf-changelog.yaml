@@ -7421,3 +7421,13 @@
     - "Retain UTC SMI telemetry context and validate native multinode collector artifacts without enabling new recipes."
     - "保留 UTC SMI 遥测上下文并验证原生多节点采集产物，不启用新 recipe。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3026
+
+- config-keys:
+  - glm5.1-fp8-b200-tilert
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Require native power only for TileRT 8k1k; keep native launches inside the owned
+    allocation and retain both role exit statuses.
+  - 仅对 TileRT 8k1k 要求原生功耗；原生启动始终使用本任务分配，并保留两个角色退出状态。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3027
