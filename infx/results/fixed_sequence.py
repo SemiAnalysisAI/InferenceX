@@ -333,9 +333,16 @@ def process_multinode_results(env: Mapping[str, str]) -> int:
     if not expected or min(expected) <= 0:
         raise ValueError('CONC_LIST must contain positive concurrencies')
     points: list[dict[str, Any]] = []
+    ignored_sidecars: list[str] = []
     observed: set[int] = set()
     status = 0
     for path in sorted(Path('.').glob(f"{env['RESULT_FILENAME']}_*.json")):
+        if path.name.endswith('.pytorch.json') or path.name in {
+            f"{env['RESULT_FILENAME']}_gpu_metrics_context.json",
+            f"{env['RESULT_FILENAME']}_gpu_metrics_identity.json",
+        }:
+            ignored_sidecars.append(path.name)
+            continue
         point: dict[str, Any] = {'source': path.name}
         try:
             match = re.search(
@@ -379,7 +386,7 @@ def process_multinode_results(env: Mapping[str, str]) -> int:
     status = max(status, int(bool(missing or unexpected)))
     summary = {'expected_concurrencies': sorted(expected),
                'missing_concurrencies': missing, 'unexpected_concurrencies': unexpected,
-               'points': points, 'exit_code': status}
+               'points': points, 'ignored_sidecars': ignored_sidecars, 'exit_code': status}
     Path(f"result_processing_{env['RESULT_FILENAME']}.json").write_text(json.dumps(summary, indent=2))
     if missing or unexpected:
         print(f'[process_result] incomplete sweep: missing={missing}, unexpected={unexpected}', file=sys.stderr)
