@@ -505,6 +505,14 @@ elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "minimaxm3" ]]; then
     RECIPE_DIR="benchmarks/multi_node/srt-slurm-recipes/trtllm/minimax-m3/gb200-fp4/agentic"
     mkdir -p "$RECIPE_DIR" || exit 1
     cp -rT "$GITHUB_WORKSPACE/$RECIPE_DIR" "$RECIPE_DIR" || exit 1
+# DeepSeek V4.1 Flash uses the released schema that supports per-node DP
+# launch and explicit worker placement fields in its P/D recipe.
+elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
+    git clone --branch v1.0.36 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    mkdir -p recipes/vllm/deepseek-v4.1-flash/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4.1-flash/agentic" \
+        recipes/vllm/deepseek-v4.1-flash/agentic
 # TODO(CJQ): migrate the remaining Agentic model paths to released srt-slurm.
 elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic multi-node pins cquil11/srt-slurm-nv revisions that provide:
@@ -665,6 +673,10 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
     DEFAULT_MOUNTS_BLOCK="default_mounts:
   ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
   ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+    if [[ "$MODEL_PREFIX" == "dsv41flash" ]]; then
+        DEFAULT_MOUNTS_BLOCK+="
+  ${DSV41_CACHE}/blobs: /blobs"
+    fi
     if uses_watchtower_shared_fs && [[ "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
         DYNAMO_WHEELS_CACHE_HOST_PATH="${SHARED_BASE}/dynamo-wheels"
         mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
