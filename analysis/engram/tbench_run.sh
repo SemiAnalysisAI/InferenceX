@@ -92,8 +92,6 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --host 0.0.0.0 --port "$PORT" --tensor-parallel-size "$TP" \
     --api-key "$API_KEY" \
     --language-model-only --tokenizer-mode deepseek_v41 \
-    --tool-call-parser deepseek_v41 --enable-auto-tool-choice \
-    --reasoning-parser deepseek_v41 \
     --engram-config '{"cpu_offload":true}' \
     --speculative-config '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":true}' \
     --max-model-len "$EVAL_CONTEXT" --max-num-batched-tokens 4096 \
@@ -118,6 +116,32 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 say "--- local endpoint check (authenticated)"
 curl -sS -m 60 -H "Authorization: Bearer $API_KEY" "http://localhost:$PORT/v1/models" \
     | head -c 300 | tee -a "$RESULT_DIR/tbench_run.txt"; echo
+
+say "--- chat-completion canary: assistant content must be non-empty"
+CANARY_JSON=$(curl -sS -m 300 -H "Authorization: Bearer $API_KEY" \
+    -H 'Content-Type: application/json' \
+    -d '{"model":"'"$MODEL"'","messages":[{"role":"user","content":"Reply with exactly: READY"}],"max_tokens":2048,"temperature":0}' \
+    "http://localhost:$PORT/v1/chat/completions" 2>&1)
+CANARY_TEXT=$(python3 -c "
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+except Exception as exc:
+    print('PARSE_ERROR', exc); raise SystemExit
+ch = (d.get('choices') or [{}])[0]
+msg = ch.get('message') or {}
+print('content=%r reasoning=%r finish=%r' % (
+    (msg.get('content') or '')[:120],
+    (msg.get('reasoning_content') or '')[:60],
+    ch.get('finish_reason')))
+" <<<"$CANARY_JSON")
+say "  $CANARY_TEXT"
+if [[ "$CANARY_TEXT" != *"content='"* ]] || [[ "$CANARY_TEXT" == *"content=''"* ]]; then
+    say "FATAL: the endpoint returns empty assistant content. terminus-2 reads"
+    say "message.content, so every agent step would fail to parse -- which is"
+    say "what produced 8006 empty parses and a 0.000 score last run."
+    exit 1
+fi
 
 # Quick tunnels are account-less and cloudflared says so itself: "no uptime
 # guarantee". Creation has already failed once with a client timeout against
@@ -195,7 +219,7 @@ timeout "${TBENCH_TIMEOUT_S:-16200}" "${HARBOR[@]}" run \
     --env-file "$ENV_FILE" \
     --env modal \
     -k "${TBENCH_ATTEMPTS:-1}" \
-    --n-concurrent "${TBENCH_CONCURRENT:-4}" \
+    --n-concurrent "${TBENCH_CONCURRENT:-8}" \
     --timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.1}" \
     --agent-timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.1}" \
     --job-name "engram-tbench-$(date +%s)" \
