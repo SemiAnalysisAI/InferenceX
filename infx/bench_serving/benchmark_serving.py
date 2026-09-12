@@ -901,7 +901,14 @@ def main(args: argparse.Namespace):
 
     # Preserve the request gate before writing results: cleanup or a surrounding
     # launcher must not turn an error-containing benchmark into a passed point.
-    outcome = benchmark_outcome(args.num_prompts, benchmark_result["completed"])
+    try:
+        outcome = benchmark_outcome(args.num_prompts, benchmark_result["completed"])
+    except ValueError as exc:
+        # Preserve invalid counts for diagnostics; the processor rejects them.
+        outcome = {
+            "status": "failed", "requested": args.num_prompts,
+            "completed": benchmark_result["completed"], "error": str(exc),
+        }
     benchmark_result["benchmark_outcome"] = outcome
 
     # Save config and results to json
@@ -963,6 +970,8 @@ def main(args: argparse.Namespace):
             json.dump(result_json, outfile)
         save_to_pytorch_benchmark_format(args, result_json, file_name)
 
+    if "error" in outcome:
+        raise SystemExit(f"FAIL: invalid request counts: {outcome['error']}")
     if outcome["status"] == "failed":
         raise SystemExit(
             f"FAIL: request failure rate {outcome['failed'] / outcome['requested']:.1%} exceeds "

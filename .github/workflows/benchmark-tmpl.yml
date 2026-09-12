@@ -399,6 +399,10 @@ jobs:
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
         run: |
+          if [ ! -f "$RESULT_FILENAME.json" ]; then
+            echo "no raw result to process: $RESULT_FILENAME.json" >&2
+            exit 1
+          fi
           python3 utils/process_result.py
 
       - name: Upload result
