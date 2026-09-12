@@ -7422,3 +7422,10 @@
     - "Raise max_num_seqs to the upstream default of 128. The 2*CONC cap sat below AgentX's subagent fan-out, so requests queued on scheduling capacity; vLLM reported queue times up to 16.2 s at CONC=1, and removing the cap took them to zero."
     - "将 max_num_seqs 提升到上游默认值 128。此前的 2*CONC 上限低于 AgentX 的子代理扇出，导致请求因调度容量排队；vLLM 在 CONC=1 时报告排队时间最高达 16.2 秒，取消该上限后归零。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3035
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Switch --moe-backend from aiter_triton_mxfp4_bf16 to aiter, which selects the CK a8w4 experts (mfma_moe1_silu_mul_afp8_wfp4_bf16 / mfma_moe2_afp8_wfp4_bf16) instead of the W4A16 _moe_gemm_a16w4 Triton kernel, matching the DSV4-Pro MI355X recipe. Decode traces at 131k context show MoE GEMM falling from 2.72 to 2.30 ms/step at conc 1, 4.91 to 4.27 at conc 4 and 9.06 to 7.18 at conc 16, for whole-step gains of 4.2%, 5.3% and 8.7%. AgentX conc 1 improves mean ITL 4.01 to 3.91 ms and mean TTFT 681 to 639 ms; gsm8k is unchanged at 0.9719 strict-match."
+    - "将 --moe-backend 从 aiter_triton_mxfp4_bf16 改为 aiter，从而选择 CK a8w4 专家内核（mfma_moe1_silu_mul_afp8_wfp4_bf16 / mfma_moe2_afp8_wfp4_bf16），取代 W4A16 的 _moe_gemm_a16w4 Triton 内核，与 DSV4-Pro MI355X 配方保持一致。131k 上下文的解码 trace 显示 MoE GEMM 在并发 1 时从 2.72 降至 2.30 ms/step，并发 4 从 4.91 降至 4.27，并发 16 从 9.06 降至 7.18，整步分别加速 4.2%、5.3% 和 8.7%。AgentX 并发 1 的平均 ITL 从 4.01 降至 3.91 ms，平均 TTFT 从 681 降至 639 ms；gsm8k strict-match 保持 0.9719 不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3058

@@ -82,7 +82,14 @@ VLLM_CMD=(
     --tokenizer-mode deepseek_v41
     --tool-call-parser deepseek_v41 --enable-auto-tool-choice
     --reasoning-parser deepseek_v41
-    --moe-backend aiter_triton_mxfp4_bf16
+    # aiter, not aiter_triton_mxfp4_bf16: the plain name opens vLLM's full
+    # priority list and the CK kernel at its head wins. Despite the BF16
+    # backend name and this checkpoint's activation_scheme=dynamic, CK
+    # quantizes activations to FP8 internally and dispatches the a8w4 experts
+    # (mfma_moe1_silu_mul_afp8_wfp4_bf16 / mfma_moe2_afp8_wfp4_bf16) that the
+    # DSV4-Pro MI355X recipe already gets. Pinning the Triton name instead
+    # forced the W4A16 _moe_gemm_a16w4 kernel.
+    --moe-backend aiter
     --gpu-memory-utilization 0.9
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576
