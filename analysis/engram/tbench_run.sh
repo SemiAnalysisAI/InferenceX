@@ -204,6 +204,20 @@ if [[ "$PUBLIC" == https://api.trycloudflare.com* ]]; then
 fi
 say "tunnel: $PUBLIC  (api key withheld from this log)"
 
+MODEL_INFO=$(python3 -c "
+import json
+ctx = $EVAL_CONTEXT
+print(json.dumps({
+    'max_input_tokens': ctx - 8192,
+    'max_output_tokens': 8192,
+    'max_tokens': ctx,
+    'input_cost_per_token': 0,
+    'output_cost_per_token': 0,
+    'litellm_provider': 'openai',
+    'mode': 'chat',
+}))")
+say "model_info for terminus-2: $MODEL_INFO"
+
 ENV_FILE="$RESULT_DIR/harbor.env"
 umask 077
 cat > "$ENV_FILE" <<ENV
@@ -223,6 +237,7 @@ timeout "${TBENCH_TIMEOUT_S:-16200}" "${HARBOR[@]}" run \
     --model "openai/$MODEL" \
     --env-file "$ENV_FILE" \
     --env modal \
+    --ak "model_info=$MODEL_INFO" \
     -k "${TBENCH_ATTEMPTS:-1}" \
     --n-concurrent "${TBENCH_CONCURRENT:-8}" \
     --timeout-multiplier "${TBENCH_TIMEOUT_MULT:-0.1}" \
