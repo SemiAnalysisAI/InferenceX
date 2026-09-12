@@ -7399,3 +7399,10 @@
     - "Disable adaptive verification in the EVAL_ONLY DSpark config as well. It trims verification requests on device, which the ROCm DeepseekV4IndexerBackend does not support, so the eval-only engine refused to start (run 34651830283, c32). Evals keep real block rejection; throughput settings are unchanged."
     - "EVAL_ONLY 的 DSpark 配置同样关闭自适应验证：它会在设备端裁剪验证请求，而 ROCm 的 DeepseekV4IndexerBackend 不支持该操作，导致仅评测引擎拒绝启动（运行 34651830283，c32）。评测仍保留真实块拒绝采样；吞吐设置不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2962
+
+- config-keys:
+    - dsr1-fp8-mi300x-sglang
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.12-rocm700-mi30x to lmsysorg/sglang:v0.5.19-rocm700-mi30x (digest sha256:590a815c128d7d5c83ef771ad768c9f8be82f64f7d0dbd98dc7b9f085b268a58, sgl-project/sglang commit 0bcd822377da7b5718e674eaf9c870d349424dd1, AITER c16d44b93a528b2a4bfd6d8d3409116d465872a9); recipe script, TP8 topology, 8k/1k concurrency points and default evals unchanged."
+    - "将 SGLang 镜像从 lmsysorg/sglang:v0.5.12-rocm700-mi30x 更新为 lmsysorg/sglang:v0.5.19-rocm700-mi30x（摘要 sha256:590a815c128d7d5c83ef771ad768c9f8be82f64f7d0dbd98dc7b9f085b268a58，sgl-project/sglang 提交 0bcd822377da7b5718e674eaf9c870d349424dd1，AITER c16d44b93a528b2a4bfd6d8d3409116d465872a9）；配方脚本、TP8 拓扑、8k/1k 并发点与默认评测均保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3048
