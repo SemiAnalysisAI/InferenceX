@@ -84,6 +84,7 @@ def main() -> int:
     sampling = SamplingParams(max_tokens=1, temperature=0.0, prompt_logprobs=0)
 
     per_domain = {}
+    coverage: dict[str, dict] = {}
     for domain in corpora.all_domains():
         chunks = list(
             _take_chunks(
@@ -103,8 +104,9 @@ def main() -> int:
             means = {}
             for phase in ("baseline", "ablated"):
                 gate_probe.set_ablate(meter_dir, phase == "ablated")
-                if idx == 0:
-                    gate_probe.clear_meter(meter_dir)
+                # Cleared every chunk, not just the first: the contribution is
+                # now checked on every single chunk rather than sampled once.
+                gate_probe.clear_meter(meter_dir)
                 out = llm.generate({"prompt_token_ids": chunk}, sampling, use_tqdm=False)[0]
                 nlls = _token_nll(out)
                 if not nlls:
@@ -112,8 +114,18 @@ def main() -> int:
                 totals[phase] += sum(nlls)
                 counts[phase] += len(nlls)
                 means[phase] = sum(nlls) / len(nlls)
+                stats = gate_probe.read_meter(meter_dir)
                 if idx == 0:
-                    contribution[phase] = gate_probe.read_meter(meter_dir)
+                    contribution[phase] = stats
+                # Every chunk is checked, so a single unablated chunk anywhere
+                # in the run is caught rather than averaged away.
+                if stats:
+                    seen = coverage.setdefault(phase, {"chunks": 0, "calls": 0,
+                                                       "worst": 0.0, "min": 1e9})
+                    seen["chunks"] += 1
+                    seen["calls"] += stats["calls"]
+                    seen["worst"] = max(seen["worst"], stats["max_rel_norm"])
+                    seen["min"] = min(seen["min"], stats["mean_rel_norm"])
             if len(means) == 2:
                 chunk_deltas.append(means["ablated"] - means["baseline"])
             if idx % 25 == 0:
@@ -160,6 +172,21 @@ def main() -> int:
     # and every delta below would be noise.
     first = next(iter(per_domain.values()))["contribution_first_chunk"]
     verdict = gate_probe.ablation_verdict(first.get("baseline"), first.get("ablated"))
+    # Whole-run coverage, not a first-chunk sample.
+    base_cov = coverage.get("baseline", {})
+    abl_cov = coverage.get("ablated", {})
+    verdict["coverage"] = {"baseline": base_cov, "ablated": abl_cov}
+    verdict["every_ablated_chunk_zero"] = bool(
+        abl_cov and abl_cov.get("worst", 1.0) <= gate_probe.ABLATION_FLOOR
+    )
+    verdict["every_baseline_chunk_nonzero"] = bool(
+        base_cov and base_cov.get("min", 0.0) > gate_probe.ABLATION_FLOOR
+    )
+    verdict["ok"] = bool(
+        verdict["ok"]
+        and verdict["every_ablated_chunk_zero"]
+        and verdict["every_baseline_chunk_nonzero"]
+    )
     report["ablation_verdict"] = verdict
     logger.info("ABLATION VERDICT %s", json.dumps(verdict))
     with open(os.path.join(args.out, "nll_ablation.json"), "w") as handle:

@@ -72,7 +72,7 @@ fi
 # shares the host network, so 8888 can already belong to a host service.
 pick_port() {
     local candidate
-    for candidate in $(seq 8890 8960); do
+    for candidate in $(seq "${PORT_FLOOR:-8890}" 8960); do
         if ! (exec 3<>"/dev/tcp/127.0.0.1/$candidate") 2>/dev/null; then
             PORT="$candidate"; export PORT; return 0
         fi
@@ -147,6 +147,9 @@ run_one() {
     # between them is the env var it reads.
     export PYTHONPATH="$BOOTSTRAP:$INFERENCEX_REPO_ROOT/analysis${PYTHONPATH:+:$PYTHONPATH}"
 
+    # A distinct port range per arm, so a surviving server from the previous
+    # arm can never answer this arm's requests.
+    if [[ "$mode" == ablated ]]; then PORT_FLOOR=8920; else PORT_FLOOR=8890; fi
     pick_port
     echo "=== $mode: serving on port $PORT (ENGRAM_ABLATE=${ENGRAM_ABLATE:-unset}) ==="
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
@@ -182,13 +185,42 @@ run_one() {
         done
     done
 
-    # A nonzero forward-call count is the evidence the ablation engaged.
     echo "--- $mode engram markers ---"
     grep -aE "engram-ablate: (gate-shut|Engram)" "$log" | tail -5 || true
+    if [[ "$mode" == ablated ]]; then
+        # Fewer than 100 calls once meant the eval was served by a stale
+        # baseline process while this server sat idle -- and the resulting
+        # "tiny ablation effect" was an artifact. Require a real magnitude.
+        local calls
+        calls=$(grep -aoE "gate-shut forward call count = [0-9]+" "$log" \
+                | grep -oE "[0-9]+$" | sort -n | tail -1)
+        calls=${calls:-0}
+        echo "--- ablated gate-shut forward calls: $calls"
+        if (( calls < ${ENGRAM_MIN_ABLATED_CALLS:-5000} )); then
+            echo "FATAL: only $calls gate-shut calls in the ablated arm; that is" >&2
+            echo "far too few for this eval, so the ablated model did not serve" >&2
+            echo "it. Refusing to report a delta." >&2
+            exit 1
+        fi
+    fi
 
+    # `kill $pid` alone left APIServer/EngineCore children alive, which is the
+    # most likely reason an "ablated" eval was served by the previous model.
     kill "$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
-    sleep 20
+    pkill -f "vllm serve" 2>/dev/null || true
+    local waited=0
+    while (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null; do
+        exec 3>&- 2>/dev/null || true
+        sleep 5
+        waited=$((waited + 5))
+        if (( waited > 180 )); then
+            echo "FATAL: port $PORT still listening after ${waited}s" >&2
+            exit 1
+        fi
+    done
+    echo "--- $mode: port $PORT released after ${waited}s"
+    sleep 10
 }
 
 run_one baseline
