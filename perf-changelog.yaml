@@ -7415,4 +7415,4 @@
     - agentic-coding
   description:
     - "Image : vllm/vllm-openai-rocm:nightly-e7edf17cea217e52701f913cd8491fcacf2d9490"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3059
