@@ -7367,7 +7367,7 @@
   description:
     - "Add B300 DeepSeek-V4.1-Flash AgentX 1P/1D with NIXL transfer, GPU-resident KV and concurrency 64, 128, 256"
     - "新增 B300 DeepSeek-V4.1-Flash AgentX 1P/1D：使用 NIXL 传输、GPU 驻留 KV 和并发 64、128、256"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/0
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3038
 
 - config-keys:
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark
