@@ -7417,3 +7417,14 @@
     - "Enable required power for the three H200 Kimi-K3 recipes and route their launch, concurrency injection, failure handling and result validation through the pinned producer and shared collector."
     - "为 H200 Kimi-K3 配方启用必需实测功耗。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3044
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required telemetry on the seven existing GB200 aggregate recipes, pin the AgentX producer, and validate power after telemetry drain while preserving failed-job artifacts."
+    - "为 GB200 Kimi-K3 聚合部署启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3045
