@@ -7338,3 +7338,10 @@
     - "Resolve the requested H100 SGLang container instead of a hardcoded older image, and stop benchmark/eval clients when their ready server or required worker exits."
     - "H100 SGLang 使用所请求的容器而非硬编码旧镜像；已就绪的服务或必需工作进程退出后，停止其 benchmark/评测客户端。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3020
+
+- config-keys:
+    - dsv41flash-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Add B300 TEP4 and DEP4 AgentX arms at concurrency 32, 64 and 128 alongside the unchanged TP4 grid: TEP4 shards the routed experts with --enable-expert-parallel; DEP4 runs data-parallel attention (--data-parallel-size 4) behind vllm-router 0.1.14 consistent-hash session affinity with --gpu-memory-utilization 0.85 and expandable allocator segments, because the TRT-LLM FP4 MoE autotuner warmup ran out of memory at the image default (run 34655656558). The shared DSpark script gates both on EP_SIZE and DP_ATTENTION, so the existing TP4 rows on every SKU serve the same command as before."
+    - "为 B300 新增 TEP4 与 DEP4 AgentX 分支（并发 32、64、128），TP4 网格保持不变：TEP4 通过 --enable-expert-parallel 切分路由专家；DEP4 以 --data-parallel-size 4 运行数据并行注意力，并由 vllm-router 0.1.14 一致性哈希保证会话亲和，并设置 --gpu-memory-utilization 0.85 与可扩展分配器段，因为在镜像默认值下 TRT-LLM FP4 MoE 自动调优预热会内存不足（运行 34655656558）。共享 DSpark 脚本按 EP_SIZE 与 DP_ATTENTION 门控，各 SKU 现有 TP4 行的服务命令与以前完全一致。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3028

@@ -178,7 +178,7 @@ weights determine the recipe's `precision: fp4` label.
 
 The GPU-specific entry points share the text-only serving script, `deepseek_v41` tokenizer and
 parsers, 1M context, and the shared AgentX trace replay, power, metrics, and eval
-helpers. Concurrency is 1–128. Model-runner selection and scheduler batching follow the
+helpers. Concurrency is 1–128 at TP4. On B300 the TP4 grid is joined by TEP4 (`ep: 4`, `--enable-expert-parallel`) and DEP4 (`dp-attn: true`, `--data-parallel-size 4` behind vllm-router 0.1.14 consistent-hash session affinity, engine on `PORT+1`, `--gpu-memory-utilization 0.85` because the TRT-LLM FP4 MoE autotuner warmup OOMs at the image default under DP) arms at concurrency 32–128; the shared script gates both on `EP_SIZE` and `DP_ATTENTION`, so every other row still serves the pure TP4 command. Model-runner selection and scheduler batching follow the
 official single-node TP recipe defaults; graph capture covers concurrency times
 the six-token DSpark verification block. The launchers mount the repository at `/ix` for this recipe so
 AgentX runtime directories are not created under `/workspace`. Launcher-specific model paths and persistent caches are reused.

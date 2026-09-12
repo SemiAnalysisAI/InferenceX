@@ -177,7 +177,7 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 专家权重为 MXFP4，因此配方标记为 `precision: fp4`。
 
 各 GPU 入口共用纯文本服务脚本，使用 `deepseek_v41` tokenizer 和解析器、1M 上下文，
-以及共享的 AgentX 轨迹回放、功耗、指标和 eval helper。并发范围为 1–128。模型 runner 选择和调度批处理沿用官方单节点 TP 配方的默认值；
+以及共享的 AgentX 轨迹回放、功耗、指标和 eval helper。TP4 的并发范围为 1–128。B300 在 TP4 网格之外新增 TEP4（`ep: 4`、`--enable-expert-parallel`）和 DEP4（`dp-attn: true`、`--data-parallel-size 4`，由 vllm-router 0.1.14 一致性哈希保证会话亲和，引擎监听 `PORT+1`，并设置 `--gpu-memory-utilization 0.85`，因为 DP 下 TRT-LLM FP4 MoE 自动调优预热在镜像默认值下会 OOM）分支，并发 32–128；共享脚本按 `EP_SIZE` 与 `DP_ATTENTION` 门控，其余各行仍执行纯 TP4 命令。模型 runner 选择和调度批处理沿用官方单节点 TP 配方的默认值；
 CUDA graph capture 覆盖并发数乘以六 token DSpark 验证块。launcher 都为该配方将仓库挂载到 `/ix`，避免在 `/workspace`
 下创建 AgentX 运行目录。沿用各 launcher 的模型路径和持久化缓存。配方在计算节点探测服务端口，首选端口被占用时选择可用端口，
 服务、回放、指标和 eval 共用同一端点。所有配方都必须获得 GPU sweep 和 eval
