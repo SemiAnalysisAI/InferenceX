@@ -190,6 +190,16 @@ jobs:
           sinfo -N -n dsxe-sa-b300-prd0-gpu-00 --format='%N|%T|%E'
           squeue --me --format='%i|%j|%T|%N|%L|%b'
           scontrol show config | grep -E '^[[:space:]]*(Prolog|Epilog|JobRequeue|SlurmctldLogFile|SlurmdLogFile|UnkillableStepTimeout|ReturnToService)[[:space:]=]'
+          hostname
+          scontrol show config | grep -E '^[[:space:]]*(SlurmctldHost|SlurmctldPort|SrunPortRange|MessageTimeout|CommunicationParameters|PrologSlurmctld|PrologFlags)[[:space:]=]'
+          if [[ -r /var/log/slurm/slurmctld.log ]]; then
+            grep -E '(^|[^0-9])(2138|2168)([^0-9]|$)' /var/log/slurm/slurmctld.log | tail -80
+          else
+            echo 'Configured controller log is not readable on this runner.'
+          fi
+          if command -v journalctl >/dev/null; then
+            journalctl --no-pager -u slurmctld --since='2026-09-12 08:58:40' --until='2026-09-12 09:00:00' 2>&1 | grep -E '(2138|2168|[Pp]ermission|[Nn]o journal|[Nn]o entries)' || true
+          fi
       - name: Upload controller evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
