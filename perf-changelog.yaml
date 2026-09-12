@@ -7430,4 +7430,4 @@
   - Require native power only for TileRT 8k1k; keep native launches inside the owned
     allocation and retain both role exit statuses.
   - 仅对 TileRT 8k1k 要求原生功耗；原生启动始终使用本任务分配，并保留两个角色退出状态。
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3027
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3057
