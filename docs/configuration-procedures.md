@@ -285,8 +285,10 @@ GPU KV cache size: 7,022,899 tokens
 Maximum concurrency for 1,048,576 tokens per request: 6.70x
 ```
 
-So the arm sweeps concurrency 1–4, under the 6.70x ceiling, so a trajectory replaying
-near full context does not drive the batch into preemption. Buying more KV means
+The original arm swept concurrency 1–4 under that 6.70x full-context estimate. The
+follow-up sweep extends the same recipe to concurrency 8 and 16 to measure the real
+AgentX saturation curve; these points may preempt if several trajectories approach 1M
+tokens simultaneously. Buying more KV means
 shrinking the indexer further — `--max-num-batched-tokens 2048` would free about 4 GiB
 more — at the cost of chunking long-trace prefill harder. That trade is worth revisiting
 once there is throughput data across the range.

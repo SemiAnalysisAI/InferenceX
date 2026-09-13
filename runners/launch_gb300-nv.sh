@@ -193,12 +193,15 @@ if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
     USES_DCGM_POWER=1
 fi
 
-# Note (wenyao): the producer pin follows the srt-slurm main lineage that the
-# dynamo-sglang lanes run on (fp8 validated end-to-end, fp4 recipes
-# parse-verified against the pin); other frameworks clone diverging refs
-# (aflowers branch, sa-submission), so fail fast for them instead.
-if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" ]]; then
-    echo "Error: dcgm-power lanes are only validated for FRAMEWORK=dynamo-sglang, got: $FRAMEWORK" >&2
+USES_AGENTX_POWER=0
+if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
+    "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" &&
+    "$FRAMEWORK" == "dynamo-vllm" &&
+    "$_RECIPE_REL" == recipes/vllm/kimi-k3/agentic/* ]]; then
+    USES_AGENTX_POWER=1
+fi
+if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" && "$USES_AGENTX_POWER" != "1" ]]; then
+    echo "Error: dcgm-power requires dynamo-sglang or the supported Kimi-K3 AgentX route" >&2
     exit 1
 fi
 
@@ -207,6 +210,7 @@ fi
 # srt-slurm merge lands.
 POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
 POWER_SRT_SLURM_PIN="6fc1bed01a0b82dae0088a105c03ce0cfb353443"
+AGENTX_POWER_SRT_SLURM_PIN="80d7203e424f903c9017de4608ee2044afce9574"
 
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
@@ -238,7 +242,16 @@ SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RU
 SRTCTL_SETUP_SCRIPT=""
 rm -rf "$SRT_REPO_DIR"
 
-if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qwen3.5" ]]; then
+if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+    git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout "$AGENTX_POWER_SRT_SLURM_PIN" || exit 1
+    test "$(git rev-parse HEAD)" = "$AGENTX_POWER_SRT_SLURM_PIN" || exit 1
+    git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+    mkdir -p recipes/vllm/kimi-k3/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
+        recipes/vllm/kimi-k3/agentic
+elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qwen3.5" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout v1.0.50
@@ -570,6 +583,12 @@ sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 # verification.
 inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
+if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+    read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+    python3 "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
+        "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
+fi
+
 # --no-preflight skips srtctl's pre-submit model-path stat, which runs on
 # the GHA runner host (im-gb300-login-02, an x86 login node). It's required
 # whenever model.path resolves to the node-local /scratch NVMe that the login
@@ -644,36 +663,48 @@ _snapshot_server_logs() {
 }
 trap _snapshot_server_logs EXIT
 
-# Wait for log file to appear (also check job is still alive)
-while ! ls "$LOG_FILE" &>/dev/null; do
-    if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
-        echo "ERROR: Job $JOB_ID failed before creating log file"
-        scontrol show job "$JOB_ID"
-        exit 1
-    fi
-    echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
-    sleep 5
-done
-
-# Poll for job completion in background
-(
-    while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
-        sleep 10
+AGENTX_POWER_RC=0
+if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || AGENTX_POWER_RC=$?
+else
+    # Wait for log file to appear (also check job is still alive)
+    while ! ls "$LOG_FILE" &>/dev/null; do
+        if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
+            echo "ERROR: Job $JOB_ID failed before creating log file"
+            scontrol show job "$JOB_ID"
+            exit 1
+        fi
+        echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
+        sleep 5
     done
-) &
-POLL_PID=$!
 
-echo "Tailing LOG_FILE: $LOG_FILE"
+    # Poll for job completion in background
+    (
+        while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
+            sleep 10
+        done
+    ) &
+    POLL_PID=$!
 
-# Stream the log file until job completes (-F follows by name, polls instead of inotify for NFS)
-tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
+    echo "Tailing LOG_FILE: $LOG_FILE"
 
-wait $POLL_PID
+    # Stream the log file until job completes (-F follows by name, polls instead of inotify for NFS)
+    tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
+
+    wait $POLL_PID
+fi
 
 set -x
 
 echo "Job $JOB_ID completed!"
 echo "Collecting results..."
+
+if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+    read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+    collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" "$INFMAX_WORKSPACE" \
+        "$GITHUB_WORKSPACE" "$RESULT_FILENAME" "$AGENTX_POWER_SRT_SLURM_PIN" \
+        "${POWER_CONCURRENCIES[@]}" || AGENTX_POWER_RC=$?
+fi
 
 if [ -d "$LOGS_DIR" ]; then
     echo "Found logs directory: $LOGS_DIR"
@@ -683,6 +714,11 @@ if [ -d "$LOGS_DIR" ]; then
     echo "multinode_server_logs.tar.gz will be (re)produced on script EXIT."
 else
     echo "Warning: Logs directory not found at $LOGS_DIR"
+fi
+
+if [[ "$AGENTX_POWER_RC" != "0" ]]; then
+    echo "ERROR: AgentX job or power validation failed; EXIT will stage audit artifacts" >&2
+    exit "$AGENTX_POWER_RC"
 fi
 
 if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
