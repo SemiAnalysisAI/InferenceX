@@ -1,7 +1,7 @@
 name: agg-gb300-tp8-c7-b1-mtp-hicache-nightly-20260831
 model:
   path: qwen3.5-fp4
-  container: lmsysorg/sglang:nightly-dev-cu13-20260831-bb5e6198
+  container: lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9
   precision: fp4
 slurm:
   time_limit: '8:00:00'

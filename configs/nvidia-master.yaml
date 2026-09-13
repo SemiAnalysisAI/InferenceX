@@ -7261,7 +7261,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto:
           dp-attn: true
 
 qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260831-bb5e6198
+  image: lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: cluster:gb300-nv
