@@ -7441,3 +7441,11 @@
     - "Replace the removed decode-only alias --cuda-graph-max-bs with its canonical name --cuda-graph-max-bs-decode, retaining the same min(2*CONC, 64) cap. The 20260910 image includes sgl-project/sglang#38375, so argparse interprets the removed spelling as an ambiguous prefix of the decode and prefill options and exits before serving. Leave --cuda-graph-max-bs-prefill unset: it controls a separate prefill token-capture ceiling, not request concurrency."
     - "Switch DSA prefill and decode from tilelang to triton (sgl-project/sglang#30575 Fast Triton Sparse MLA). The 20260910 image already contains that backend; kv-cache-dtype stays fp8_e4m3, which the Triton DSA path requires."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2900
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Image : vllm/vllm-openai-rocm:nightly-e7edf17cea217e52701f913cd8491fcacf2d9490"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3006
