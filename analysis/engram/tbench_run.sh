@@ -316,7 +316,8 @@ fi
 # silent in the score -- a task whose turns all error still just scores 0 --
 # so it has to be counted explicitly.
 say "=== turns killed by a zero output budget ==="
-ZERO_BUDGET=$(grep -ac "max_tokens must be at least 1" "$RESULT_DIR/tbench_run.txt" || echo 0)
+ZERO_BUDGET=$(grep -ac "max_tokens must be at least 1" "$RESULT_DIR/tbench_run.txt" | head -1)
+ZERO_BUDGET=${ZERO_BUDGET:-0}
 say "count: $ZERO_BUDGET"
 if (( ZERO_BUDGET > 0 )); then
     say "WARNING: $ZERO_BUDGET turns were rejected before reaching the model."
@@ -324,7 +325,7 @@ if (( ZERO_BUDGET > 0 )); then
 fi
 
 say "=== cloudflare origin timeouts (524) seen during the run ==="
-say "count: $(grep -ac 'error_code.: 524' "$RESULT_DIR/tbench_run.txt" || echo 0)"
+say "count: $(grep -ac 'error_code.: 524' "$RESULT_DIR/tbench_run.txt" | head -1)"
 say "A nonzero count means the 120s quick-tunnel read timeout is still cutting"
 say "requests short, and any score below is a floor rather than a measurement."
 
