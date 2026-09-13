@@ -82,9 +82,9 @@ vocab slice too, took it to 14,084.
 
 ## Contents
 
-- `engram-disk-offload-on-56512.patch` -- four commits on the head of
-  vllm-project/vllm#56512 (Juntian777/vllm `perf/dsv41-engram-prefetch-shm-main`),
-  which this stacks on for its `_allocate_weights`/`_storage` hooks.
+- `engram-disk-offload.patch` -- one commit on vllm-project/vllm main, which
+  now carries #56512 (merged 2026-09-13), whose `_allocate_weights` and
+  `_storage` hooks the file-backed shard uses.
 - `probe.sh`, `probe_client.py` -- the earlier KV-offload feasibility probe,
   which is what established that `/raid` is local NVMe at 3.1 GB/s write and
   4.6 GB/s read, against 260 MB/s on the NFS path.

@@ -1,57 +1,90 @@
-From b7f6d9806ca0ee90518098f7adc2b310d8465ec3 Mon Sep 17 00:00:00 2001
+From a702288800e1221bb0aebeb235fecf6573bb67c3 Mon Sep 17 00:00:00 2001
 From: Oseltamivir <bryan@semianalysis.com>
-Date: Sun, 13 Sep 2026 16:20:12 +0800
-Subject: [PATCH 1/4] [Model][Engram] Disk-backed Engram n-gram tables for
+Date: Sun, 13 Sep 2026 22:30:27 +0800
+Subject: [PATCH] [Model][Engram] Disk-backed Engram n-gram tables for
  DeepSeek-V4.1
 
-Stacked on #56512, whose prefetch and DP sharding this needs: the disk path
-has real latency to hide, and the same `_allocate_weights` / `_storage` hooks
-that PR introduces are where a file-backed shard belongs.
+DeepSeek-V4.1-Flash's Engram n-gram tables come to about 189 GiB. Tensor
+parallelism splits them across ranks rather than replicating them, so that
+figure is the same whatever the parallel layout, and it is what decides
+whether the model fits a given host rather than anything about GPU memory.
+The tables hold fp8 rows with ue8m0 block scales, 264 bytes per row.
 
-DeepSeek-V4.1-Flash's Engram table is 23.60 GiB per rank per Engram layer
-(96M rows x 256, fp8 + ue8m0 scales). Two Engram layers at TP4 is ~189 GiB of
-pinned host RAM, and that -- not GPU memory -- is what decides whether the
-model fits a given host. The table is a pure gather, so its working set is
-tiny next to its size, which is the argument #54070 makes for the Qwen4Exp
-PLE table. This is that change applied to Engram.
+The lookup is a pure gather of one row per head per layer per token, so the
+resident working set is tiny next to the size of the tables, which makes them
+a candidate for file-backed paging.
 
-`EngramConfig.disk_offload_dir` (default `VLLM_ENGRAM_DISK_OFFLOAD_DIR`) maps
-each shard from `<dir>/engram_r<shard>.{weight,scale}.bin`. First boot streams
-the checkpoint through a read-write mapping, so a host with less free RAM than
-the table can still load it; later boots map the finished file and skip the
-checkpoint read. A sidecar records the shard geometry so a half-written file,
-or one left by a different TP/EDP layout, is rebuilt rather than silently
-gathered from. It is an alternative to dp_shared_memory, not a companion, and
-both require cpu_offload.
+EngramConfig.disk_offload_dir, defaulting to VLLM_ENGRAM_DISK_OFFLOAD_DIR,
+maps each shard from <dir>/engram_v<start>_<end>_r<shard>.{weight,scale}.bin
+instead of holding it in anonymous pinned memory. The first boot streams the
+checkpoint through a read-write mapping, so a host with less free RAM than
+the tables can still load them; later boots map the finished file and skip the
+checkpoint read. A sidecar records the shard geometry, so a half-written file
+or one left by a different TP or EDP layout is rebuilt rather than silently
+gathered from. The path is keyed on the vocab slice as well as the shard
+index because a rank hosts one shard per Engram layer, and the two would
+otherwise collide on a single file.
 
-Engram differs from PLE in the part that matters. PLE gathers rows in a
-separate offload worker on the host; Engram's lookup is a Triton kernel
-dereferencing a UVA pointer into pinned memory. A mapped file cannot be read
-that way -- UVA needs page-locked memory, and pinning the mapping would pull
-the table back into RAM and defeat the change. So the disk path gathers rows
-on the host and dequantizes only the gathered rows on device, through a new
-`_engram_dequant_rows_kernel` mirroring the existing kernel's index and ue8m0
-math. Rows are deduplicated first: a batch repeats n-grams, and the distinct
-row count is what the disk actually serves.
+The option requires cpu_offload and is an alternative to dp_shared_memory
+rather than a companion to it. The UVA and shared-memory paths are untouched
+and remain the default.
 
-The UVA and shared-memory paths are untouched and stay the default.
+A mapped file cannot be read through UVA, which needs page-locked memory, and
+pinning the mapping would pull the whole table back into RAM and defeat the
+change. The disk path therefore gathers rows on the host and dequantizes only
+the gathered rows on the device, through _engram_dequant_rows_kernel, which
+mirrors the existing kernel's index and ue8m0 math. Rows are deduplicated
+first, on the host, because a batch repeats n-grams and the distinct-row count
+is what the filesystem actually serves; deduplicating on the device would cost
+a second synchronization per layer per step purely to learn that count.
+
+This builds on the Engram prefetch and DP sharding merged in #56512, reusing
+its _allocate_weights and _storage hooks for the file-backed shard.
+
+The gather runs inline on the forward thread and is skipped entirely while a
+stream is capturing. Host work is not legal during capture, and capture mode
+is global, so a worker thread does not escape the restriction: it cannot
+observe that the forward thread is capturing, and its in-flight gather would
+run through the capture window and invalidate it. Warmup output is discarded,
+so leaving the staging buffer untouched during capture is harmless. The disk
+path consequently needs a cudagraph mode that still executes the forward in
+Python on live steps, meaning piecewise rather than a mode that replays it
+wholesale, and overlapping the gather awaits a capture context able to break
+around host work.
+
+Measured on B200 at TP4, 8k1k, concurrency 16, with CUDA graphs and no eager,
+over three runs per arm: mean throughput 14,168 tok/s against 13,632 for the
+pinned baseline, with 1.4% run-to-run spread against 12.4%. Host RAM after
+load drops from 352 GB to 95 GB. Median TPOT is 8.45 to 8.60 ms against 8.57
+to 9.78 ms, because UVA makes the lookup kernel issue roughly 16k scattered
+264-byte PCIe reads per layer while this gathers rows in DRAM and page cache
+and then issues one contiguous host-to-device copy. Prefill's tail is worse,
+P99 TTFT around 6.0s against 3.9s while the median matches, because an 8k
+prefill touches roughly 16k distinct rows at once and first touch pays the
+device. Batched readahead over the resolved rows is the obvious follow-up and
+is not done here.
+
+Tests assert the disk path is bit-identical to the UVA path at atol=0 and
+rtol=0 across token counts, that unowned heads and out-of-slice ids still
+write zeros, that a second boot reuses the shard, that a stale sidecar forces
+a rebuild, and that the config rejects disk offload without cpu_offload.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 ---
- .../test_deepseek_v41_engram_disk_offload.py  | 183 +++++++++++++
+ .../test_deepseek_v41_engram_disk_offload.py  | 190 ++++++++++++
  vllm/config/engram.py                         |  20 ++
  vllm/envs.py                                  |   7 +
- vllm/models/deepseek_v4_1/common/engram.py    | 257 ++++++++++++++++++
- vllm/models/deepseek_v4_1/nvidia/engram.py    |  27 +-
- 5 files changed, 490 insertions(+), 4 deletions(-)
+ vllm/models/deepseek_v4_1/common/engram.py    | 283 ++++++++++++++++++
+ vllm/models/deepseek_v4_1/nvidia/engram.py    |  56 +++-
+ 5 files changed, 551 insertions(+), 5 deletions(-)
  create mode 100644 tests/models/test_deepseek_v41_engram_disk_offload.py
 
 diff --git a/tests/models/test_deepseek_v41_engram_disk_offload.py b/tests/models/test_deepseek_v41_engram_disk_offload.py
 new file mode 100644
-index 0000000..d7bb4c9
+index 0000000..2bb650a
 --- /dev/null
 +++ b/tests/models/test_deepseek_v41_engram_disk_offload.py
-@@ -0,0 +1,183 @@
+@@ -0,0 +1,190 @@
 +# SPDX-License-Identifier: Apache-2.0
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 +"""Engram disk offload: the mapped shard must behave exactly like the pinned one.
@@ -62,6 +95,7 @@ index 0000000..d7bb4c9
 +ids that fall outside its vocab slice.
 +"""
 +
++import glob
 +import json
 +import os
 +
@@ -76,6 +110,7 @@ index 0000000..d7bb4c9
 +from vllm.models.deepseek_v4_1.common.engram import (  # noqa: E402
 +    ParallelEngramEmbedding,
 +)
++
 +
 +@pytest.fixture(scope="module", autouse=True)
 +def _tp1_world():
@@ -130,6 +165,9 @@ index 0000000..d7bb4c9
 +    gen = torch.Generator().manual_seed(seed)
 +    rows = module.weight.shape[0]
 +    raw = torch.randint(0, 255, (rows, DIM), generator=gen, dtype=torch.uint8)
++    # 0x7F and 0xFF are the e4m3 NaN encodings. Keep them out so the comparison
++    # below can stay bitwise: NaN != NaN would fail even on identical bytes.
++    raw[raw == 0x7F] = 0x7E
 +    module.weight.data.copy_(raw.view(torch.float8_e4m3fn))
 +    # ue8m0 exponents around 1.0 keep the dequantized values in a sane range.
 +    module.weight_scale_inv.data.copy_(
@@ -189,8 +227,9 @@ index 0000000..d7bb4c9
 +    )
 +    first.lookup(ids, out)  # finalizes: flush, sidecar, remap copy-on-write
 +
-+    meta = os.path.join(str(tmp_path), f"engram_r{first.tp_rank}.done.json")
-+    assert os.path.exists(meta)
++    # Glob rather than derive the shard id: it is the TP rank or the EDP head
++    # rank depending on the sharding in force.
++    assert glob.glob(os.path.join(str(tmp_path), "engram_r*.done.json"))
 +
 +    second = _build(str(tmp_path))
 +    # A finished shard is mapped as-is, with no load pass.
@@ -209,7 +248,7 @@ index 0000000..d7bb4c9
 +            (4, first.part_n_hash_cols, DIM), dtype=torch.bfloat16, device="cuda"
 +        ),
 +    )
-+    meta = os.path.join(str(tmp_path), f"engram_r{first.tp_rank}.done.json")
++    meta = glob.glob(os.path.join(str(tmp_path), "engram_r*.done.json"))[0]
 +    with open(meta) as fh:
 +        recorded = json.load(fh)
 +    recorded["vocab_end"] += 1
@@ -224,8 +263,9 @@ index 0000000..d7bb4c9
 +def test_disk_requires_cpu_offload(tmp_path):
 +    from vllm.config import VllmConfig, set_current_vllm_config
 +
-+    with pytest.raises(ValueError, match="cpu_offload"), set_current_vllm_config(
-+        VllmConfig()
++    with (
++        pytest.raises(ValueError, match="cpu_offload"),
++        set_current_vllm_config(VllmConfig()),
 +    ):
 +        ParallelEngramEmbedding(
 +            num_embeddings=sum(HEAD_SIZES),
@@ -299,7 +339,7 @@ index 0269a96..9f4ef52 100755
          int(os.getenv("VLLM_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY", "0"))
      ),
 diff --git a/vllm/models/deepseek_v4_1/common/engram.py b/vllm/models/deepseek_v4_1/common/engram.py
-index c415bba..c70e474 100644
+index c415bba..1d7bef6 100644
 --- a/vllm/models/deepseek_v4_1/common/engram.py
 +++ b/vllm/models/deepseek_v4_1/common/engram.py
 @@ -34,7 +34,12 @@ chunk-by-chunk while an n-gram at position ``p`` needs the token ids at
@@ -409,7 +449,7 @@ index c415bba..c70e474 100644
  
      def __init__(
          self,
-@@ -700,6 +788,172 @@ class ParallelEngramEmbedding(nn.Module):
+@@ -700,6 +788,198 @@ class ParallelEngramEmbedding(nn.Module):
              ),
          )
  
@@ -426,7 +466,11 @@ index c415bba..c70e474 100644
 +        layout, is rebuilt rather than silently gathered from.
 +        """
 +        os.makedirs(disk_dir, exist_ok=True)
-+        base = os.path.join(disk_dir, f"engram_r{self._get_shard_info()[1]}")
++        base = os.path.join(
++            disk_dir,
++            f"engram_v{self.vocab_start_idx}_{self.vocab_end_idx}"
++            f"_r{self._get_shard_info()[1]}",
++        )
 +        self._disk_base = base
 +        meta_path = f"{base}.done.json"
 +        specs = (
@@ -538,20 +582,33 @@ index c415bba..c70e474 100644
 +            )
 +        return self._stage[0][:rows], self._stage[1][:rows]
 +
-+    def _lookup_from_disk(self, indices: torch.Tensor, out: torch.Tensor) -> None:
-+        """Gather rows on the host, then dequantize the gathered rows on device.
++    def stage_disk_rows(self, indices: torch.Tensor) -> tuple[torch.Tensor, ...]:
++        """Host half of a disk lookup: resolve rows and read them into pinned memory.
++
++        Split out from the device half so a caller can run it off the forward
++        thread. This is the part that touches the filesystem, takes the page
++        faults, and blocks on a device-to-host copy of the hash ids; a side
++        CUDA stream would not overlap any of it.
 +
 +        Rows are deduplicated first: a batch repeats n-grams often enough that
-+        the distinct-row count is what the disk actually has to serve, and each
-+        row is a separate random read.
++        the distinct-row count, not the token count, is what the disk serves.
 +        """
 +        self.finalize_disk_shard()
 +        local = self._local_row_ids(indices)
 +        flat = local.reshape(-1)
++        # Dedup on the host, not the device. torch.unique syncs to learn the
++        # distinct count, so doing it on device costs a second stall per layer
++        # per step on top of the copy the host gather already needs. One
++        # device-to-host copy of the ids is enough; numpy does the rest.
++        flat_cpu = flat.to("cpu", non_blocking=False).numpy()
++        unique_np, inverse_np = np.unique(flat_cpu.clip(min=0), return_inverse=True)
++        unique_cpu = torch.from_numpy(unique_np).to(torch.int64)
 +        # Unowned rows read row 0 and are masked to zero at dequantization, so
 +        # the gather stays a single dense index_select.
-+        unique, inverse = torch.unique(flat.clamp(min=0), return_inverse=True)
-+        unique_cpu = unique.to(torch.int64).to("cpu", non_blocking=False)
++        inverse = torch.from_numpy(inverse_np.astype("int32")).to(
++            indices.device, non_blocking=True
++        )
++        flat = flat.to(indices.device)
 +
 +        w_stage, s_stage = self._staging(unique_cpu.numel())
 +        # index_select has no fp8 overload; the gather is byte-wise either way.
@@ -562,15 +619,20 @@ index c415bba..c70e474 100644
 +            out=w_stage.view(torch.uint8),
 +        )
 +        torch.index_select(self.weight_scale_inv.data, 0, unique_cpu, out=s_stage)
++        return w_stage, s_stage, inverse, flat
 +
++    def finish_disk_rows(
++        self, staged: tuple[torch.Tensor, ...], out: torch.Tensor
++    ) -> None:
++        """Device half: copy the gathered rows over and dequantize them."""
++        w_stage, s_stage, inverse, flat = staged
 +        w_dev = w_stage.to(out.device, non_blocking=True)
 +        s_dev = s_stage.to(out.device, non_blocking=True)
-+
 +        rows = flat.numel()
 +        _engram_dequant_rows_kernel[(triton.cdiv(rows, 16),)](
 +            w_dev,
 +            s_dev,
-+            inverse.to(torch.int32),
++            inverse,
 +            flat,
 +            out,
 +            rows,
@@ -579,10 +641,14 @@ index c415bba..c70e474 100644
 +            BLOCK_R=16,
 +        )
 +
++    def _lookup_from_disk(self, indices: torch.Tensor, out: torch.Tensor) -> None:
++        """Synchronous disk lookup, for callers with nothing to overlap it with."""
++        self.finish_disk_rows(self.stage_disk_rows(indices), out)
++
      def _storage(self) -> tuple[torch.Tensor, torch.Tensor]:
          return self.weight.data, self.weight_scale_inv.data
  
-@@ -713,6 +967,9 @@ class ParallelEngramEmbedding(nn.Module):
+@@ -713,6 +993,9 @@ class ParallelEngramEmbedding(nn.Module):
          rows = indices.shape[0] * self.part_n_hash_cols
          if not rows:
              return
@@ -593,10 +659,10 @@ index c415bba..c70e474 100644
          # The table dwarfs TLB reach, so a persistent grid near the SM count
          # beats one program per row; halve it to leave SMs for the main stream.
 diff --git a/vllm/models/deepseek_v4_1/nvidia/engram.py b/vllm/models/deepseek_v4_1/nvidia/engram.py
-index 0b91765..c10d319 100644
+index b141b6c..4c08089 100644
 --- a/vllm/models/deepseek_v4_1/nvidia/engram.py
 +++ b/vllm/models/deepseek_v4_1/nvidia/engram.py
-@@ -226,8 +226,10 @@ class ParallelEngramEmbedding(BaseParallelEngramEmbedding):
+@@ -227,8 +227,10 @@ class ParallelEngramEmbedding(BaseParallelEngramEmbedding):
          block_size: int = 32,
          cpu_offload: bool = False,
          dp_shared_memory: bool = False,
@@ -607,7 +673,7 @@ index 0b91765..c10d319 100644
          self.dp_shared_memory = dp_shared_memory
          self.dp_size = get_engram_dp_size()
          if dp_shared_memory:
-@@ -241,15 +243,24 @@ class ParallelEngramEmbedding(BaseParallelEngramEmbedding):
+@@ -242,7 +244,16 @@ class ParallelEngramEmbedding(BaseParallelEngramEmbedding):
                      "DP replicas to be co-located."
                  )
              self.dp_size = 1
@@ -625,8 +691,9 @@ index 0b91765..c10d319 100644
              raise RuntimeError("Engram CPU offload requires UVA support")
          self._views: tuple[torch.Tensor, torch.Tensor] | None = None
          self._view_src: tuple[int, int] | None = None
-         super().__init__(num_embeddings, dim, head_sizes, block_size)
-         if cpu_offload:
+@@ -253,8 +264,8 @@ class ParallelEngramEmbedding(BaseParallelEngramEmbedding):
+             # The ue8m0 encoding of scale 1.0 is exponent byte 127.
+             set_weight_attrs(self.weight_scale_inv, {"dummy_weight_value": 127})
              logger.info(
 -                "Engram table offloaded to pinned host memory: %d rows x %d, "
 -                "%.2f GiB %s",
@@ -635,7 +702,7 @@ index 0b91765..c10d319 100644
                  self.part_num_embeddings,
                  dim,
                  self.part_num_embeddings * (dim + dim // block_size) / 1024**3,
-@@ -273,6 +284,12 @@ class ParallelEngramEmbedding(BaseParallelEngramEmbedding):
+@@ -278,6 +289,12 @@ class ParallelEngramEmbedding(BaseParallelEngramEmbedding):
              return storage.weight, storage.weight_scale_inv
          if not self.cpu_offload:
              return super()._allocate_weights()
@@ -648,7 +715,7 @@ index 0b91765..c10d319 100644
          # Model initialization may be inside a CUDA device context.
          return (
              torch.empty(
-@@ -294,7 +311,8 @@ class ParallelEngramEmbedding(BaseParallelEngramEmbedding):
+@@ -299,7 +316,8 @@ class ParallelEngramEmbedding(BaseParallelEngramEmbedding):
      def _storage(self) -> tuple[torch.Tensor, torch.Tensor]:
          if self._shared_memory is not None:
              return self._shared_memory.get_views(self.weight, self.weight_scale_inv)
@@ -658,7 +725,7 @@ index 0b91765..c10d319 100644
              return super()._storage()
          src = (self.weight.data_ptr(), self.weight_scale_inv.data_ptr())
          if self._view_src != src:
-@@ -358,6 +376,7 @@ class Engram(BaseEngram):
+@@ -363,6 +381,7 @@ class Engram(BaseEngram):
              tuple(size for order in layout.primes[layer_hash_index] for size in order),
              cpu_offload=engram_config.cpu_offload,
              dp_shared_memory=engram_config.dp_shared_memory,
@@ -666,358 +733,51 @@ index 0b91765..c10d319 100644
          )
  
      def _init_staging(self, max_tokens: int, head_dim: int) -> None:
--- 
-2.54.0 (Apple Git-157)
-
-
-From 0850b0323c0e1ec675b78705aa1fd956f8601a98 Mon Sep 17 00:00:00 2001
-From: Oseltamivir <bryan@semianalysis.com>
-Date: Sun, 13 Sep 2026 16:31:11 +0800
-Subject: [PATCH 2/4] [Model][Engram] Prefetch disk lookups off the forward
- thread
-
-#56512's prefetch runs the lookup on a side CUDA stream, which is the right
-shape for a UVA table: the gather is device work, so another stream overlaps
-it. A file-backed shard is not. Its gather blocks on a device-to-host copy of
-the hash ids and then on the filesystem, both on the calling thread, so a side
-stream overlaps nothing and every Engram layer stalls on disk in turn.
-
-Split the disk lookup into its host and device halves. `stage_disk_rows`
-resolves the rows and reads them into pinned memory; `finish_disk_rows` copies
-them over and dequantizes. `prepare_embeddings` submits the host half to a
-single-worker pool at forward entry, so it runs while the decoder layers
-before this one execute, and `_ready_rows` waits for it before the device half
-goes onto the prefetch stream.
-
-One worker per layer, so gathers stay ordered and cannot outrun the single
-staging buffer a layer owns. The worker sets the device explicitly: a fresh
-thread starts on device 0, which is the wrong one on every rank but the first.
-
-Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
----
- .../test_deepseek_v41_engram_disk_offload.py  |  9 +++-
- vllm/models/deepseek_v4_1/common/engram.py    | 23 ++++++--
- vllm/models/deepseek_v4_1/nvidia/engram.py    | 53 +++++++++++++++++++
- 3 files changed, 78 insertions(+), 7 deletions(-)
-
-diff --git a/tests/models/test_deepseek_v41_engram_disk_offload.py b/tests/models/test_deepseek_v41_engram_disk_offload.py
-index d7bb4c9..ea95db3 100644
---- a/tests/models/test_deepseek_v41_engram_disk_offload.py
-+++ b/tests/models/test_deepseek_v41_engram_disk_offload.py
-@@ -23,6 +23,7 @@ from vllm.models.deepseek_v4_1.common.engram import (  # noqa: E402
-     ParallelEngramEmbedding,
- )
- 
-+
- @pytest.fixture(scope="module", autouse=True)
- def _tp1_world():
-     """ParallelEngramEmbedding reads the TP group at construction."""
-@@ -76,6 +77,9 @@ def _fill(module: ParallelEngramEmbedding, seed: int = 0) -> None:
-     gen = torch.Generator().manual_seed(seed)
-     rows = module.weight.shape[0]
-     raw = torch.randint(0, 255, (rows, DIM), generator=gen, dtype=torch.uint8)
-+    # 0x7F and 0xFF are the e4m3 NaN encodings. Keep them out so the comparison
-+    # below can stay bitwise: NaN != NaN would fail even on identical bytes.
-+    raw[raw == 0x7F] = 0x7E
-     module.weight.data.copy_(raw.view(torch.float8_e4m3fn))
-     # ue8m0 exponents around 1.0 keep the dequantized values in a sane range.
-     module.weight_scale_inv.data.copy_(
-@@ -170,8 +174,9 @@ def test_geometry_change_rebuilds(tmp_path):
- def test_disk_requires_cpu_offload(tmp_path):
-     from vllm.config import VllmConfig, set_current_vllm_config
- 
--    with pytest.raises(ValueError, match="cpu_offload"), set_current_vllm_config(
--        VllmConfig()
-+    with (
-+        pytest.raises(ValueError, match="cpu_offload"),
-+        set_current_vllm_config(VllmConfig()),
-     ):
-         ParallelEngramEmbedding(
-             num_embeddings=sum(HEAD_SIZES),
-diff --git a/vllm/models/deepseek_v4_1/common/engram.py b/vllm/models/deepseek_v4_1/common/engram.py
-index c70e474..4f5b011 100644
---- a/vllm/models/deepseek_v4_1/common/engram.py
-+++ b/vllm/models/deepseek_v4_1/common/engram.py
-@@ -913,12 +913,16 @@ class ParallelEngramEmbedding(nn.Module):
-             )
-         return self._stage[0][:rows], self._stage[1][:rows]
- 
--    def _lookup_from_disk(self, indices: torch.Tensor, out: torch.Tensor) -> None:
--        """Gather rows on the host, then dequantize the gathered rows on device.
-+    def stage_disk_rows(self, indices: torch.Tensor) -> tuple[torch.Tensor, ...]:
-+        """Host half of a disk lookup: resolve rows and read them into pinned memory.
-+
-+        Split out from the device half so a caller can run it off the forward
-+        thread. This is the part that touches the filesystem, takes the page
-+        faults, and blocks on a device-to-host copy of the hash ids; a side
-+        CUDA stream would not overlap any of it.
- 
-         Rows are deduplicated first: a batch repeats n-grams often enough that
--        the distinct-row count is what the disk actually has to serve, and each
--        row is a separate random read.
-+        the distinct-row count, not the token count, is what the disk serves.
-         """
-         self.finalize_disk_shard()
-         local = self._local_row_ids(indices)
-@@ -937,10 +941,15 @@ class ParallelEngramEmbedding(nn.Module):
-             out=w_stage.view(torch.uint8),
-         )
-         torch.index_select(self.weight_scale_inv.data, 0, unique_cpu, out=s_stage)
-+        return w_stage, s_stage, inverse, flat
- 
-+    def finish_disk_rows(
-+        self, staged: tuple[torch.Tensor, ...], out: torch.Tensor
-+    ) -> None:
-+        """Device half: copy the gathered rows over and dequantize them."""
-+        w_stage, s_stage, inverse, flat = staged
-         w_dev = w_stage.to(out.device, non_blocking=True)
-         s_dev = s_stage.to(out.device, non_blocking=True)
--
-         rows = flat.numel()
-         _engram_dequant_rows_kernel[(triton.cdiv(rows, 16),)](
-             w_dev,
-@@ -954,6 +963,10 @@ class ParallelEngramEmbedding(nn.Module):
-             BLOCK_R=16,
-         )
- 
-+    def _lookup_from_disk(self, indices: torch.Tensor, out: torch.Tensor) -> None:
-+        """Synchronous disk lookup, for callers with nothing to overlap it with."""
-+        self.finish_disk_rows(self.stage_disk_rows(indices), out)
-+
-     def _storage(self) -> tuple[torch.Tensor, torch.Tensor]:
-         return self.weight.data, self.weight_scale_inv.data
- 
-diff --git a/vllm/models/deepseek_v4_1/nvidia/engram.py b/vllm/models/deepseek_v4_1/nvidia/engram.py
-index c10d319..9e03049 100644
---- a/vllm/models/deepseek_v4_1/nvidia/engram.py
-+++ b/vllm/models/deepseek_v4_1/nvidia/engram.py
-@@ -5,6 +5,7 @@
- import mmap
- import tempfile
- import weakref
-+from concurrent.futures import Future, ThreadPoolExecutor
- from contextlib import ExitStack
- 
- import numpy as np
-@@ -364,6 +365,8 @@ class Engram(BaseEngram):
-     """NVIDIA Engram with asynchronous offload and node-local DP lookup."""
- 
-     _prefetch_stream: torch.cuda.Stream | None = None
-+    _disk_pool: ThreadPoolExecutor | None = None
-+    _disk_pending: tuple[Future, torch.Tensor] | None = None
- 
-     def _create_embedding(
-         self, layout: EngramLayout, layer_hash_index: int
-@@ -383,6 +386,12 @@ class Engram(BaseEngram):
-         super()._init_staging(max_tokens * self.embed_tokens.dp_size, head_dim)
-         if self.embed_tokens.cpu_offload:
-             self._prefetch_stream = torch.cuda.Stream(device=self.staged_rows.device)
-+        if self.embed_tokens.disk_offload_dir is not None:
-+            # One worker, so a layer's gathers stay ordered and the pool cannot
-+            # outrun the single staging buffer each layer owns.
-+            self._disk_pool = ThreadPoolExecutor(
-+                max_workers=1, thread_name_prefix="engram-disk"
-+            )
- 
-     def prepare_embeddings(self, hash_ids: torch.Tensor) -> None:
-         """Prefetch local shared rows or the DP group's gathered hash IDs."""
-@@ -390,8 +399,50 @@ class Engram(BaseEngram):
+@@ -376,8 +395,33 @@ class Engram(BaseEngram):
              return super().prepare_embeddings(hash_ids)
          rows = self.staged_rows[: hash_ids.shape[0]]
          assert rows.shape[0] == hash_ids.shape[0], "engram staging buffer too small"
-+        if self._disk_pool is not None:
-+            self._start_disk_prefetch(hash_ids, rows)
++        if self.embed_tokens.disk_offload_dir is not None:
++            self._lookup_from_disk(hash_ids, rows)
 +            return
          self._start_prefetch(hash_ids, rows, self._prefetch_stream)
  
-+    def _start_disk_prefetch(self, hash_ids: torch.Tensor, rows: torch.Tensor) -> None:
-+        """Read this layer's rows off the forward thread.
++    def _lookup_from_disk(self, hash_ids: torch.Tensor, rows: torch.Tensor) -> None:
++        """Gather this layer's rows from the mapped shard.
 +
-+        The gather blocks on a device-to-host copy of the hash ids and then on
-+        the filesystem, so it runs in a worker while the decoder layers before
-+        this one execute. Only the copy back and the dequantization are device
-+        work, and those wait on the prefetch stream as usual.
++        Runs inline, on this thread, rather than on a side stream or a worker.
++        The gather is host work -- a device-to-host copy of the ids, a dedup,
++        and a read from a mapped file -- and none of that is legal while a
++        stream is capturing. Capture mode is global, so a worker thread does
++        not escape the restriction either: it cannot observe that the forward
++        thread is capturing, and its in-flight gather would run straight
++        through the capture window and invalidate it.
++
++        Overlapping the gather therefore needs a capture context that can break
++        around host work, which the cudagraph runner does not offer today.
 +        """
-+        assert self._disk_pool is not None
-+        device = rows.device
-+        embed = self.embed_tokens
-+
-+        def _gather() -> tuple[torch.Tensor, ...]:
-+            # A worker thread starts on device 0; the copy must target ours.
-+            with torch.cuda.device(device):
-+                return embed.stage_disk_rows(hash_ids)
-+
-+        self._disk_pending = (self._disk_pool.submit(_gather), rows)
-+
-+    def _finish_disk_prefetch(self) -> None:
-+        pending, self._disk_pending = self._disk_pending, None
-+        if pending is None:
++        if torch.cuda.is_current_stream_capturing():
++            # Capture stub: do no I/O. Warmup output is discarded, so leaving
++            # the staging buffer untouched is harmless. The real gather runs on
++            # every live step, which requires a cudagraph mode that still
++            # executes this forward (piecewise) rather than replaying it whole.
 +            return
-+        future, rows = pending
-+        staged = future.result()
-+        assert self._prefetch_stream is not None
-+        self._finish_disk_rows(staged, rows, self._prefetch_stream)
-+
-+    @eager_break_during_capture
-+    def _finish_disk_rows(
-+        self,
-+        staged: tuple[torch.Tensor, ...],
-+        rows: torch.Tensor,
-+        stream: torch.cuda.Stream,
-+    ) -> None:
-+        stream.wait_stream(torch.cuda.current_stream())
-+        with torch.cuda.stream(stream):
-+            self.embed_tokens.finish_disk_rows(staged, rows)
++        self.embed_tokens.lookup(hash_ids, rows)
 +
      @eager_break_during_capture
      def _start_prefetch(
          self, hash_ids: torch.Tensor, rows: torch.Tensor, stream: torch.cuda.Stream
-@@ -408,6 +459,8 @@ class Engram(BaseEngram):
+@@ -394,7 +438,9 @@ class Engram(BaseEngram):
          torch.cuda.current_stream().wait_stream(stream)
  
      def _ready_rows(self, num_tokens: int) -> torch.Tensor:
-+        if self._disk_pool is not None:
-+            self._finish_disk_prefetch()
-         if self._prefetch_stream is not None:
+-        if self._prefetch_stream is not None:
++        if self._prefetch_stream is not None and (
++            self.embed_tokens.disk_offload_dir is None
++        ):
              self._finish_prefetch(self._prefetch_stream)
          if self.embed_tokens.dp_size > 1:
--- 
-2.54.0 (Apple Git-157)
-
-
-From f8b344b1f566ea8e3a22ae20bdde24be98ae9409 Mon Sep 17 00:00:00 2001
-From: Oseltamivir <bryan@semianalysis.com>
-Date: Sun, 13 Sep 2026 19:23:54 +0800
-Subject: [PATCH 3/4] [Model][Engram] Name disk shards by vocab slice, not rank
- alone
-
-A rank hosts one shard per Engram layer, so the rank alone does not name a
-shard. DeepSeek-V4.1-Flash has two Engram layers (ids 1 and 14), and both
-mapped <dir>/engram_r<rank>: the second layer to load clobbered the first,
-leaving four files where there should be eight and serving both layers from
-one table. A benchmark cannot see this -- random prompts with --ignore-eos
-never check output -- and the unit tests missed it because they build a
-single embedding.
-
-Key the path on this shard's vocab slice as well, which is what actually
-distinguishes the two layers' tables on a rank.
-
-Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
----
- tests/models/test_deepseek_v41_engram_disk_offload.py | 8 +++++---
- vllm/models/deepseek_v4_1/common/engram.py            | 6 +++++-
- 2 files changed, 10 insertions(+), 4 deletions(-)
-
-diff --git a/tests/models/test_deepseek_v41_engram_disk_offload.py b/tests/models/test_deepseek_v41_engram_disk_offload.py
-index ea95db3..2bb650a 100644
---- a/tests/models/test_deepseek_v41_engram_disk_offload.py
-+++ b/tests/models/test_deepseek_v41_engram_disk_offload.py
-@@ -8,6 +8,7 @@ produce identical bytes -- including for heads this rank does not own, and for
- ids that fall outside its vocab slice.
- """
- 
-+import glob
- import json
- import os
- 
-@@ -139,8 +140,9 @@ def test_second_boot_reuses_the_file(tmp_path):
-     )
-     first.lookup(ids, out)  # finalizes: flush, sidecar, remap copy-on-write
- 
--    meta = os.path.join(str(tmp_path), f"engram_r{first.tp_rank}.done.json")
--    assert os.path.exists(meta)
-+    # Glob rather than derive the shard id: it is the TP rank or the EDP head
-+    # rank depending on the sharding in force.
-+    assert glob.glob(os.path.join(str(tmp_path), "engram_r*.done.json"))
- 
-     second = _build(str(tmp_path))
-     # A finished shard is mapped as-is, with no load pass.
-@@ -159,7 +161,7 @@ def test_geometry_change_rebuilds(tmp_path):
-             (4, first.part_n_hash_cols, DIM), dtype=torch.bfloat16, device="cuda"
-         ),
-     )
--    meta = os.path.join(str(tmp_path), f"engram_r{first.tp_rank}.done.json")
-+    meta = glob.glob(os.path.join(str(tmp_path), "engram_r*.done.json"))[0]
-     with open(meta) as fh:
-         recorded = json.load(fh)
-     recorded["vocab_end"] += 1
-diff --git a/vllm/models/deepseek_v4_1/common/engram.py b/vllm/models/deepseek_v4_1/common/engram.py
-index 4f5b011..2c8b0da 100644
---- a/vllm/models/deepseek_v4_1/common/engram.py
-+++ b/vllm/models/deepseek_v4_1/common/engram.py
-@@ -801,7 +801,11 @@ class ParallelEngramEmbedding(nn.Module):
-         layout, is rebuilt rather than silently gathered from.
-         """
-         os.makedirs(disk_dir, exist_ok=True)
--        base = os.path.join(disk_dir, f"engram_r{self._get_shard_info()[1]}")
-+        base = os.path.join(
-+            disk_dir,
-+            f"engram_v{self.vocab_start_idx}_{self.vocab_end_idx}"
-+            f"_r{self._get_shard_info()[1]}",
-+        )
-         self._disk_base = base
-         meta_path = f"{base}.done.json"
-         specs = (
--- 
-2.54.0 (Apple Git-157)
-
-
-From 4d94e8b9f7503d9284979143dcbf0834fd4f0442 Mon Sep 17 00:00:00 2001
-From: Oseltamivir <bryan@semianalysis.com>
-Date: Sun, 13 Sep 2026 20:11:13 +0800
-Subject: [PATCH 4/4] [Model][Engram] Dedup gathered rows on the host, not the
- device
-
-torch.unique syncs to learn the distinct count, so resolving rows on the
-device cost a second stall per Engram layer per step on top of the copy the
-host gather already needs -- four per step on DeepSeek-V4.1-Flash, which has
-two Engram layers. One device-to-host copy of the ids is enough; numpy does
-the dedup.
-
-8k1k on B200 TP4, concurrency 16, CUDA graphs, no eager: this was the best of
-three disk runs at 14283.77 tok/s against 14138.06 and 14083.53 without it,
-and trimmed P99 TTFT to 5996 ms from 6198/6256.
-
-Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
----
- vllm/models/deepseek_v4_1/common/engram.py | 15 ++++++++++++---
- 1 file changed, 12 insertions(+), 3 deletions(-)
-
-diff --git a/vllm/models/deepseek_v4_1/common/engram.py b/vllm/models/deepseek_v4_1/common/engram.py
-index 2c8b0da..1d7bef6 100644
---- a/vllm/models/deepseek_v4_1/common/engram.py
-+++ b/vllm/models/deepseek_v4_1/common/engram.py
-@@ -931,10 +931,19 @@ class ParallelEngramEmbedding(nn.Module):
-         self.finalize_disk_shard()
-         local = self._local_row_ids(indices)
-         flat = local.reshape(-1)
-+        # Dedup on the host, not the device. torch.unique syncs to learn the
-+        # distinct count, so doing it on device costs a second stall per layer
-+        # per step on top of the copy the host gather already needs. One
-+        # device-to-host copy of the ids is enough; numpy does the rest.
-+        flat_cpu = flat.to("cpu", non_blocking=False).numpy()
-+        unique_np, inverse_np = np.unique(flat_cpu.clip(min=0), return_inverse=True)
-+        unique_cpu = torch.from_numpy(unique_np).to(torch.int64)
-         # Unowned rows read row 0 and are masked to zero at dequantization, so
-         # the gather stays a single dense index_select.
--        unique, inverse = torch.unique(flat.clamp(min=0), return_inverse=True)
--        unique_cpu = unique.to(torch.int64).to("cpu", non_blocking=False)
-+        inverse = torch.from_numpy(inverse_np.astype("int32")).to(
-+            indices.device, non_blocking=True
-+        )
-+        flat = flat.to(indices.device)
- 
-         w_stage, s_stage = self._staging(unique_cpu.numel())
-         # index_select has no fp8 overload; the gather is byte-wise either way.
-@@ -958,7 +967,7 @@ class ParallelEngramEmbedding(nn.Module):
-         _engram_dequant_rows_kernel[(triton.cdiv(rows, 16),)](
-             w_dev,
-             s_dev,
--            inverse.to(torch.int32),
-+            inverse,
-             flat,
-             out,
-             rows,
+             slot = engram_gathered_num_tokens()
 -- 
 2.54.0 (Apple Git-157)
 
