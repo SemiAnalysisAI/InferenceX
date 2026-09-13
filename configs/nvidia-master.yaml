@@ -9961,7 +9961,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
 # Aggregate no-spec points measured at concurrency 48 and 70. One TP8 x DCP8 worker
 # spans two 4-GPU nodes and serves both phases.
 kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77
+  image: vllm/vllm-openai:v0.29.0
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb300-nv
