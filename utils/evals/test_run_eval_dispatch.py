@@ -1437,15 +1437,18 @@ PATH="$SHIM_DIR:$PATH" run_lm_eval --port 9999 2>&1
 """
 
 
-def _run_lm_eval_cmdline(*, eval_limit=None) -> str:
+def _run_lm_eval_cmdline(*, eval_limit=None, eval_server_host=None) -> str:
     env = {
         **os.environ,
         "BENCHMARK_LIB": str(BENCHMARK_LIB),
         "KV_OFFLOADING": "none",
     }
     env.pop("EVAL_LIMIT", None)
+    env.pop("EVAL_SERVER_HOST", None)
     if eval_limit is not None:
         env["EVAL_LIMIT"] = str(eval_limit)
+    if eval_server_host is not None:
+        env["EVAL_SERVER_HOST"] = eval_server_host
     res = subprocess.run(
         ["bash", "-c", _EVAL_LIMIT_SCRIPT],
         env=env,
@@ -1464,6 +1467,11 @@ def test_eval_limit_appended_when_set():
 def test_eval_limit_absent_when_unset():
     out = _run_lm_eval_cmdline(eval_limit=None)
     assert "--limit" not in out, f"Expected no '--limit' in output:\n{out}"
+
+
+def test_lm_eval_uses_routed_server_host_when_set():
+    out = _run_lm_eval_cmdline(eval_server_host="10.0.0.42")
+    assert "base_url=http://10.0.0.42:9999/v1/chat/completions" in out
 
 
 def _summary_metadata(tmp_path: Path, **overrides: str) -> dict:
@@ -2630,6 +2638,10 @@ install_agentic_deps() { echo deps >> "$EVENTS"; }
 _wait_for_openai_chat_route() { echo "ready $*" >> "$EVENTS"; }
 build_replay_cmd() { echo build >> "$EVENTS"; }
 run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
+curl() {
+    echo flush >> "$EVENTS"
+    printf 'Cache flushed 200'
+}
 """,
         encoding="utf-8",
     )
@@ -2646,6 +2658,7 @@ run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
         "RESULT_FILENAME": "result",
         "RESULT_DIR": str(tmp_path / "results"),
         "DURATION": "1",
+        "AIPERF_SERVER_METRICS_URLS": "http://worker.invalid:9000/metrics",
     }
     expected_without_readiness = ["resolve", "deps", "build", "replay"]
 
@@ -2662,6 +2675,16 @@ run_agentic_replay_and_write_outputs() { echo replay >> "$EVENTS"; }
             check=True,
         )
         assert events_path.read_text().splitlines() == expected
+
+    events_path.unlink()
+    subprocess.run(
+        ["bash", str(MULTINODE_AGENTIC_SCRIPT)],
+        env={**base_env, "EVAL_ONLY": "false", "AIPERF_DRAIN_BACKEND": "sglang", "CLEAR_CACHE_BETWEEN_CONC": "1"},
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert events_path.read_text().splitlines() == ["resolve", "deps", "flush", "flush", "build", "replay"]
 
 
 def test_env_can_force_bfcl_on_agentic_eval() -> None:
