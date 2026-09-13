@@ -91,3 +91,50 @@ def test_live_monitor_with_successful_identity_completes(tmp_path):
     assert (control / 'ready-0').exists()
     assert (control / 'done-0').read_text().strip() == '0'
     assert json.loads((power / 'manifest.json').read_text())['lifecycle'] == 'complete'
+
+
+def test_native_timezone_is_scoped_to_collector(tmp_path):
+    import json
+    import os
+    import sys
+
+    binary = tmp_path / 'bin'
+    binary.mkdir()
+    smi = binary / 'nvidia-smi'
+    smi.write_text(f'''#!{sys.executable}
+import os, sys, time
+with open(os.environ['SMI_ENV_LOG'], 'a') as output:
+    print(os.environ.get('TZ', ''), file=output, flush=True)
+if '-l' in sys.argv:
+    print('timestamp, index, power.draw [W]', flush=True)
+    print('2026/09/12 00:00:00.000, 0, 100', flush=True)
+    time.sleep(30)
+else:
+    print('index, uuid, pci.bus_id, name, driver_version')
+    print('0, GPU-fixture, 0000:00:00.0, fixture, fixture')
+''')
+    smi.chmod(0o755)
+    env = {**os.environ, 'PATH': f'{binary}:{Path(sys.executable).parent}:/usr/bin:/bin',
+           'TZ': 'Pacific/Honolulu', 'SMI_ENV_LOG': str(tmp_path / 'ordinary-env')}
+    ordinary = tmp_path / 'ordinary.csv'
+    result = subprocess.run(['bash', '-c', '''source "$1"
+start_gpu_monitor --output "$2"
+stop_gpu_monitor
+''', 'bash', str(ROOT / 'benchmarks/benchmark_lib.sh'), str(ordinary)],
+                            env=env, capture_output=True, text=True, timeout=5)
+    assert result.returncode == 0, result.stderr
+    assert set((tmp_path / 'ordinary-env').read_text().splitlines()) == {'Pacific/Honolulu'}
+    assert not ordinary.with_name('ordinary_context.json').exists()
+
+    control = tmp_path / 'control'
+    control.mkdir()
+    (control / 'stop').touch()
+    power = tmp_path / 'native'
+    env['SMI_ENV_LOG'] = str(tmp_path / 'native-env')
+    result = subprocess.run(['bash', str(ROOT / 'benchmarks/native_power_collect.sh'),
+                             str(power), str(control), 'nvidia', '0', 'aggregate', '0', '1'],
+                            env=env, capture_output=True, text=True, timeout=5)
+    assert result.returncode == 0, result.stderr
+    assert set((tmp_path / 'native-env').read_text().splitlines()) == {'UTC'}
+    assert json.loads((power / 'gpu_metrics_context.json').read_text()) == {'timestamp_timezone': 'UTC'}
+    assert (control / 'done-0').read_text().strip() == '0'
