@@ -7473,5 +7473,5 @@
   description:
     - "Extend the existing H100 DeepSeek V4.1 Flash AgentX curve with concurrency 8 and 16; retain TP8, GPU-resident KV, full traces, 1M context and DSpark5 synthetic AL 3.51"
     - "为现有 H100 DeepSeek V4.1 Flash AgentX 曲线新增并发 8 和 16；保留 TP8、GPU 驻留 KV、完整轨迹、1M 上下文及 DSpark5 合成 AL 3.51"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3070
   append-only: true
