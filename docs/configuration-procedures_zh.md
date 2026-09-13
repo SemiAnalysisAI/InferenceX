@@ -268,8 +268,9 @@ GPU KV cache size: 7,022,899 tokens
 Maximum concurrency for 1,048,576 tokens per request: 6.70x
 ```
 
-因此该分支扫描并发 1–4，处于 6.70x 上限之下，避免接近满上下文的轨迹把批次推入抢占。
-若要获得更多 KV，需要进一步缩小 indexer —— `--max-num-batched-tokens 2048` 可再释放约
+原始分支扫描并发 1–4，处于 6.70x 满上下文估算上限之下。后续 sweep 保持配方不变，
+将并发扩展到 8 和 16，以测量 AgentX 的实际饱和曲线；如果多条轨迹同时接近 1M token，
+这些点可能发生抢占。若要获得更多 KV，需要进一步缩小 indexer —— `--max-num-batched-tokens 2048` 可再释放约
 4 GiB —— 代价是长轨迹 prefill 的分块更细。待有跨并发的吞吐数据后可重新权衡。
 
 `runners/launch_h100-dgxc-slurm.sh` 此前只解析不带 framework 的 `_h100[_mtp].sh` 名称，

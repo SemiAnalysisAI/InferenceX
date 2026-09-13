@@ -30,18 +30,22 @@ def _launcher_routing_source(launcher_path: Path = LAUNCHER_PATH) -> str:
         route_start = launcher.index("\nif ", launcher.index('rm -rf "$SRT_REPO_DIR"')) + 1
         route_end = launcher.index('\necho "Installing srtctl..."', route_start)
         return launcher[gate_start:gate_end] + launcher[route_start:route_end]
-    route_start = launcher.index(
-        'if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" '
-        '&& $MODEL_PREFIX == "qwen3.5" ]]; then'
-    )
-    route_end_marker = '\nfi\n\necho "Installing srtctl..."'
-    route_end = launcher.index(route_end_marker, route_start) + len("\nfi")
-    return launcher[route_start:route_end]
+    route_start = launcher.index("\nif ", launcher.index('rm -rf "$SRT_REPO_DIR"')) + 1
+    route_end = launcher.index('\necho "Installing srtctl..."', route_start)
+    return _launcher_power_gate_source(launcher_path.name) + "\n" + launcher[route_start:route_end]
 
 
 def _write_executable(path: Path, text: str) -> None:
     path.write_text(text)
     path.chmod(0o755)
+
+
+def _launcher_power_gate_source(launcher_name: str) -> str:
+    launcher = (REPO_ROOT / "runners" / launcher_name).read_text()
+    start = launcher.index("USES_DCGM_POWER=0\n")
+    end = launcher.index("\nfi", launcher.index("Error: dcgm-power requires", start))
+    return (f"source {shlex.quote(str(REPO_ROOT / 'runners/powerx_8k1k.sh'))}\n"
+            "REQUIRE_POWER=0\n" + launcher[start:end + len("\nfi")])
 
 
 def _run_dsv4_route(
@@ -53,6 +57,7 @@ def _run_dsv4_route(
     workspace = tmp_path / "workspace"
     stub_bin = tmp_path / "bin"
     recipe_directory = ("sglang/glm5.2/gb200-fp4/agentic" if model_prefix == "glm5.2"
+                        else "vllm/kimi-k3/agentic" if model_prefix == "kimik3"
                         else "sglang/deepseek-v4/8k1k")
     recipe_name = recipe_name or ("glm5.2-agentx-agg.yaml" if model_prefix == "glm5.2" else "recipe.yaml")
     source = workspace / "benchmarks/multi_node/srt-slurm-recipes" / recipe_directory
@@ -126,14 +131,15 @@ POWER_SRT_SLURM_URL={FORK_URL}
 POWER_SRT_SLURM_PIN={PRODUCER_PIN}
 AGENTX_POWER_SRT_SLURM_PIN={AGENTX_PRODUCER_PIN}
 IS_AGENTIC={int(is_agentic)}
-FRAMEWORK=dynamo-sglang
+FRAMEWORK={'dynamo-vllm' if model_prefix == 'kimik3' else 'dynamo-sglang'}
 MODEL_PREFIX={model_prefix}
 PRECISION=fp4
 SPEC_DECODING=
 USES_DCGM_POWER={int(uses_dcgm_power)}
-CONFIG_FILE=recipes/{recipe_directory}/{recipe_name}
+CONFIG_FILE=recipes/{recipe_directory}/{recipe_name}:fixture-override
 GITHUB_WORKSPACE={workspace!s}
 SRT_REPO_DIR={repo_dir!s}
+python3() {{ :; }}
 {routing}
 """
     )
@@ -314,15 +320,19 @@ def test_gb200_native_status_waits_for_terminal_and_fails_closed(
     assert (tmp_path / "logs/power/native-job-status-attempts.txt").read_text() == f"{attempts}\n"
 
 
+@pytest.mark.parametrize("launcher_name", ["launch_gb200-nv.sh", "launch_gb300-nv.sh"])
 @pytest.mark.parametrize("stream_rc,expected_rc", [(0, 1), (1, 1), (7, 7)])
-def test_gb200_agentx_window_injection_and_failure_artifacts(
-    tmp_path: Path, stream_rc: int, expected_rc: int
+def test_agentx_window_injection_and_failure_artifacts(
+    tmp_path: Path, launcher_name: str, stream_rc: int, expected_rc: int
 ) -> None:
-    launcher = (REPO_ROOT / "runners/launch_gb200-nv.sh").read_text()
-    injection_end = launcher.index("# Don't leak the login-node venv")
+    launcher = (REPO_ROOT / "runners" / launcher_name).read_text()
+    injection_end = launcher.index("# --no-preflight skips" if launcher_name == "launch_gb300-nv.sh" else "# Don't leak the login-node venv")
     injection_start = launcher.rfind('if [[ "$USES_AGENTX_POWER" == "1" ]]; then', 0, injection_end)
     collection_start = launcher.index("AGENTX_POWER_RC=0")
     collection_end = len(launcher)
+    snapshot_source = ""
+    if launcher_name == "launch_gb300-nv.sh":
+        snapshot_source = launcher[launcher.index("_snapshot_server_logs() {"):collection_start]
     workspace, compute, producer = (tmp_path / name for name in ("workspace", "compute", "producer"))
     for path in (workspace, compute, producer):
         path.mkdir()
@@ -351,6 +361,8 @@ def test_gb200_agentx_window_injection_and_failure_artifacts(
         f"stream_slurm_job_log() {{ return {stream_rc}; }}\n"
         "sacct() { printf '42|FAILED|1:0\\n'; }\n"
         + launcher[injection_start:injection_end]
+        + f"source {shlex.quote(str(REPO_ROOT / 'runners/powerx_8k1k.sh'))}\nREQUIRE_POWER=0\n"
+        + snapshot_source
         + launcher[collection_start:collection_end]
     ), text=True, capture_output=True, cwd=producer, env=env)
     assert result.returncode == expected_rc, result.stderr
@@ -385,6 +397,51 @@ def test_gb300_dsv4_recipe_images_match_their_master_configs():
             assert recipe_path.is_file(), (key, config_file)
             recipe_image = yaml.safe_load(recipe_path.read_text())["model"]["container"]
             assert recipe_image == config["image"], (key, config_file)
+
+
+@pytest.mark.parametrize("launcher_name", ["launch_gb300-nv.sh"])
+def test_kimi_agentx_route_uses_recipe_power_gate(tmp_path, launcher_name):
+    log, workspace, repo_dir, marker = _run_dsv4_route(
+        tmp_path, True, launcher_path=REPO_ROOT / "runners" / launcher_name, model_prefix="kimik3", is_agentic=True
+    )
+    assert f"git clone {FORK_URL} {repo_dir}" in log
+    assert f"git checkout {AGENTX_PRODUCER_PIN}" in log
+    assert (workspace / "power-producer-sha.txt").read_text() == f"{AGENTX_PRODUCER_PIN}\n"
+    assert marker.read_text() == "from-workspace\n"
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"CONFIG_FILE": "recipes/vllm/kimi-k3/8k1k/test.yaml"},
+        {"MODEL_PREFIX": "other-model"},
+        {"PRECISION": "fp8"},
+        {"IS_AGENTIC": "0"},
+        {"FRAMEWORK": "vllm"},
+    ],
+)
+def test_kimi_power_gate_rejects_unsupported_route(tmp_path, override):
+    env = os.environ.copy()
+    env.update(GITHUB_WORKSPACE=str(tmp_path), CONFIG_FILE="recipes/vllm/kimi-k3/agentic/test.yaml",
+               MODEL_PREFIX="kimik3", PRECISION="fp4", IS_AGENTIC="1", FRAMEWORK="dynamo-vllm")
+    env.update(override)
+    recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes" / env["CONFIG_FILE"].removeprefix("recipes/")
+    recipe.parent.mkdir(parents=True)
+    recipe.write_text("telemetry:\n  provider: dcgm-power\n  enabled: true\n")
+    result = subprocess.run(["/bin/bash"], input=_launcher_power_gate_source("launch_gb300-nv.sh"),
+                            text=True, capture_output=True, env=env)
+    assert result.returncode == 1
+    assert "dcgm-power requires" in result.stderr
+
+
+@pytest.mark.parametrize("launcher_name", ["launch_gb300-nv.sh"])
+def test_kimi_power_route_rejects_wrong_commit(tmp_path, launcher_name):
+    with pytest.raises(subprocess.CalledProcessError):
+        _run_dsv4_route(
+            tmp_path, True, reported_head="c" * 40,
+            launcher_path=REPO_ROOT / "runners" / launcher_name, model_prefix="kimik3", is_agentic=True,
+        )
+    assert not (tmp_path / "workspace/power-producer-sha.txt").exists()
 
 
 @pytest.mark.parametrize(
