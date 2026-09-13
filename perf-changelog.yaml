@@ -7509,6 +7509,6 @@
   scenario-type:
     - fixed-seq-len
   description:
-    - "Preserve explicit registries during native TileRT Enroot imports while reusing valid cached squash images."
-    - "原生 TileRT 导入镜像时保留显式仓库地址，并继续复用有效的 squash 缓存。"
+    - "Preserve explicit registries during native TileRT Enroot imports and select prepared shared weights and squash images for both C1 recipes."
+    - "原生 TileRT 导入镜像时保留显式仓库地址，并让两个 C1 配方使用已准备的共享权重与 squash 镜像。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3067
