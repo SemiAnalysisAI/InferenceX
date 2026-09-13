@@ -41,9 +41,10 @@ def main():
     Path(os.environ['RUNNER_TEMP'], 'powerx3040', 'prior2168.json').write_text(json.dumps(record, indent=2)+'\n')
     if record['state'].split()[0] not in TERMINAL:
         raise RuntimeError('Prior job is not terminal in accounting; no allocation allowed')
-    if record['elapsed_seconds'] != 0 or 'gres/gpu=' in record['allocated_tres']:
-        raise RuntimeError('Prior job consumed allocation; root must recompute the remaining budget')
-    print('PRIOR_2168_TERMINAL_ZERO_GPU=PASS', flush=True)
+    if (record['state'] != 'FAILED' or record['elapsed_seconds'] != 10
+            or 'gres/gpu=8' not in record['allocated_tres'].split(',')):
+        raise RuntimeError('Prior job differs from reconciled 80 GPU-second receipt; no allocation allowed')
+    print('PRIOR_2168_RECONCILED_GPU_SECONDS=80', flush=True)
 
 
 if __name__ == '__main__':
