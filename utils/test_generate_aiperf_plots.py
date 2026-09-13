@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import pytest
 
-from generate_aiperf_plots import has_atom_metrics, panel_prefix_cache_hit_rate
+from infx.results.generate_aiperf_plots import has_atom_metrics, panel_prefix_cache_hit_rate
 
 
 def _counter(value: float) -> dict:

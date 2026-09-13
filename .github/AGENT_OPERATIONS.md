@@ -86,7 +86,7 @@ Full details live in `utils/evals/EVALS.md`.
 - `--evals-only`: run the default selected eval subset and suppress throughput.
 - `--all-evals`: expand selection to every generated fixed-sequence configuration. It composes with `--evals-only`.
 
-For multi-node configurations, `--all-evals` creates one eval job per engine topology and runs every distinct `conc-list` value sequentially against that engine. Changelog `all-evals: true` suppresses throughput for that entry. The PR `all-evals` label expands selection only, while the `evals-only` label suppresses throughput. `utils/collect_eval_results.py` produces aggregated output.
+For multi-node configurations, `--all-evals` creates one eval job per engine topology and runs every distinct `conc-list` value sequentially against that engine. Changelog `all-evals: true` suppresses throughput for that entry. The PR `all-evals` label expands selection only, while the `evals-only` label suppresses throughput. `infx/results/collect_eval_results.py` produces aggregated output.
 
 ## Power telemetry
 

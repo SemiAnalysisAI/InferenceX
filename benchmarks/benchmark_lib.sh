@@ -22,6 +22,28 @@ INFERENCEX_REPO_ROOT="$(
 # nothing upstream set it.
 export PORT="${PORT:-8888}"
 
+# Opt-in for recipes running in the host network namespace. Probe the preferred
+# port on the compute node; fall back to an OS-selected port if it is occupied.
+# Call immediately before server launch and construct client URLs afterward.
+select_available_server_port() {
+    PORT=$(python3 - "${PORT:-8888}" <<'PYPORT'
+import errno
+import socket
+import sys
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    try:
+        sock.bind(("0.0.0.0", int(sys.argv[1])))
+    except OSError as exc:
+        if exc.errno != errno.EADDRINUSE:
+            raise
+        sock.bind(("0.0.0.0", 0))
+    print(sock.getsockname()[1])
+PYPORT
+    ) || return $?
+    export PORT
+}
+
 agentic_kv_offload_enabled() {
     if [[ -z "${KV_OFFLOADING+x}" || -z "$KV_OFFLOADING" ]]; then
         echo "Error: KV_OFFLOADING must be set for agentic benchmarks" >&2
@@ -499,7 +521,21 @@ wait_for_server_ready() {
         --endpoint "http://0.0.0.0:${port}/health" \
         --log "$server_log" \
         --pid "$server_pid" \
-        --sleep-interval "$sleep_interval"
+        --sleep-interval "$sleep_interval" || return $?
+    INFERENCEX_SERVER_STATE=$(mktemp /tmp/inferencex-server-state.XXXXXX) || return 1
+    PYTHONPATH="$INFERENCEX_REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench_serving.server_watch capture --pid "$server_pid" \
+        > "$INFERENCEX_SERVER_STATE" || return 1
+    INFERENCEX_SERVER_PID="$server_pid"
+}
+
+# Keep client process groups separate; on confirmed server/worker death only
+# this client's descendants are stopped. There is no elapsed-time cutoff.
+run_server_client() {
+    if [[ -n "${INFERENCEX_SERVER_STATE:-}" ]]; then
+        PYTHONPATH="$INFERENCEX_REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench_serving.server_watch run --state "$INFERENCEX_SERVER_STATE" -- "$@"
+    else
+        "$@"
+    fi
 }
 
 # Persist an argv array in shell-replayable form.
@@ -706,7 +742,8 @@ run_benchmark_serving() {
 
     # Build benchmark command
     local benchmark_cmd=(
-        python3 "$workspace_dir/utils/bench_serving/benchmark_serving.py"
+        env PYTHONPATH="$workspace_dir${PYTHONPATH:+:$PYTHONPATH}"
+        python3 -m infx.bench_serving.benchmark_serving
         --model "$model"
         --backend "$backend"
         --base-url "http://0.0.0.0:$port"
@@ -754,33 +791,15 @@ run_benchmark_serving() {
         benchmark_cmd+=(--tokenizer-mode "$tokenizer_mode")
     fi
 
-    # Run benchmark with optional server monitoring
-    set -x
-    if [[ -n "$server_pid" ]]; then
-        # Run benchmark in background and monitor server health
-        "${benchmark_cmd[@]}" &
-        local benchmark_pid=$!
-
-        # Monitor loop: check both benchmark and server status
-        while kill -0 "$benchmark_pid" 2>/dev/null; do
-            if ! kill -0 "$server_pid" 2>/dev/null; then
-                echo "ERROR: Server process $server_pid died during benchmark"
-                kill "$benchmark_pid" 2>/dev/null
-                wait "$benchmark_pid" 2>/dev/null
-                set +x
-                return 1
-            fi
-            sleep 2
-        done
-
-        # Benchmark finished, get its exit code
-        wait "$benchmark_pid"
-        local benchmark_exit_code=$?
-    else
-        # No server monitoring, run benchmark directly
-        "${benchmark_cmd[@]}"
-        local benchmark_exit_code=$?
+    if [[ -n "$server_pid" && "$server_pid" != "${INFERENCEX_SERVER_PID:-}" ]]; then
+        INFERENCEX_SERVER_STATE=$(mktemp /tmp/inferencex-server-state.XXXXXX) || return 1
+        PYTHONPATH="$INFERENCEX_REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench_serving.server_watch capture --pid "$server_pid" \
+            > "$INFERENCEX_SERVER_STATE" || return 1
+        INFERENCEX_SERVER_PID="$server_pid"
     fi
+    local benchmark_exit_code=0
+    set -x
+    run_server_client "${benchmark_cmd[@]}" || benchmark_exit_code=$?
     set +x
 
     # If profiling, move trace to relay-upload location
@@ -1022,7 +1041,7 @@ _prepare_kimi_vendor_verifier() {
 
     "${VENDOR_VERIFIER_PYTHON:-python3}" - \
         "$repo_url" "$verifier_ref" "$expected_archive_sha256" "$checkout_dir" \
-        < "${INFERENCEX_REPO_ROOT}/utils/evals/_kimi_verifier_archive.py" || prepare_rc=$?
+        < "${INFERENCEX_REPO_ROOT}/infx/evals/_kimi_verifier_archive.py" || prepare_rc=$?
 
     if [ "$prepare_rc" -ne 0 ]; then
         if ! rm -rf "$checkout_dir"; then
@@ -1142,7 +1161,7 @@ _run_kimi_tool_call_schema_eval() {
 
 
     local model_name="${MODEL_NAME:-${MODEL:-}}"
-    local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/kimi_vendor_eval.py"
+    local adapter_path="${INFERENCEX_REPO_ROOT}/infx/evals/kimi_vendor_eval.py"
     local runtime_dir=""
     local checkout_dir=""
 
@@ -1186,7 +1205,7 @@ _run_kimi_tool_call_schema_eval() {
 
     local eval_rc=0
     PYTHONPATH="${runtime_dir}${PYTHONPATH:+:${PYTHONPATH}}" \
-        "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+        run_server_client "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
             --verifier-dir "$checkout_dir" \
             --base-url "http://127.0.0.1:${port}/v1" \
             --api-key EMPTY \
@@ -1398,7 +1417,7 @@ _run_bfcl_suite_eval() {
     fi
 
     local model_name="${MODEL_NAME:-${MODEL:-}}"
-    local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/bfcl_adapter.py"
+    local adapter_path="${INFERENCEX_REPO_ROOT}/infx/evals/bfcl_adapter.py"
     local runtime_dir=""
     local project_root=""
 
@@ -1442,7 +1461,7 @@ _run_bfcl_suite_eval() {
     if [ "$eval_suite" != "bfcl_smoke" ]; then
         suite_args=(--suite "$eval_suite")
     fi
-    timeout "$process_timeout_seconds" \
+    run_server_client timeout "$process_timeout_seconds" \
         "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
         --base-url "http://127.0.0.1:${port}/v1" \
         --api-key EMPTY \
@@ -1552,8 +1571,8 @@ _run_minimax_m3_smoke_eval() {
     fi
 
     local model_name="${MODEL_NAME:-${MODEL:-}}"
-    local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/minimax_provider_eval.py"
-    local fixture_path="${INFERENCEX_REPO_ROOT}/utils/evals/minimax_m3_smoke.json"
+    local adapter_path="${INFERENCEX_REPO_ROOT}/infx/evals/minimax_provider_eval.py"
+    local fixture_path="${INFERENCEX_REPO_ROOT}/infx/evals/minimax_m3_smoke.json"
     local runtime_dir=""
 
     mkdir -p "$results_dir" || return $?
@@ -1586,7 +1605,7 @@ _run_minimax_m3_smoke_eval() {
     fi
 
     local eval_rc=0
-    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
+    run_server_client "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
         --python "${VENDOR_VERIFIER_PYTHON:-python3}" \
         --source-dir "${runtime_dir}/source" \
         --dependency-dir "${runtime_dir}/deps" \
@@ -1623,7 +1642,7 @@ _install_minimax_m3_full_deps() {
 }
 
 _prepare_minimax_m3_full_runtime() {
-    local source_adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/minimax_m3_full_eval.py"
+    local source_adapter_path="${INFERENCEX_REPO_ROOT}/infx/evals/minimax_m3_full_eval.py"
     local runtime_dir prepare_rc=0
     runtime_dir="$(mktemp -d /tmp/minimax-m3-full-runtime-XXXXXX)" || return $?
     "${VENDOR_VERIFIER_PYTHON:-python3}" "$source_adapter_path" prepare-source \
@@ -1667,7 +1686,7 @@ _run_minimax_m3_full_eval() {
     fi
 
     local model_name="${MODEL_NAME:-${MODEL:-}}"
-    local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/minimax_m3_full_eval.py"
+    local adapter_path="${INFERENCEX_REPO_ROOT}/infx/evals/minimax_m3_full_eval.py"
     local runtime_dir=""
 
     mkdir -p "$results_dir" || return $?
@@ -1700,7 +1719,7 @@ _run_minimax_m3_full_eval() {
     fi
 
     local eval_rc=0
-    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
+    run_server_client "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
         --python "${VENDOR_VERIFIER_PYTHON:-python3}" \
         --source-dir "${runtime_dir}/source" \
         --dependency-dir "${runtime_dir}/deps" \
@@ -1745,7 +1764,7 @@ run_minimax_vendor_eval() {
 }
 
 _eval_patches_dir() {
-    printf '%s\n' "${INFERENCEX_REPO_ROOT}/utils/evals/patches"
+    printf '%s\n' "${INFERENCEX_REPO_ROOT}/infx/evals/patches"
 }
 
 _patch_lm_eval() {
@@ -1817,7 +1836,7 @@ setup_eval_context() {
 
 run_lm_eval() {
     local port="${PORT:-8888}"
-    local tasks_dir="${EVAL_TASKS_DIR:-utils/evals/gsm8k.yaml}"
+    local tasks_dir="${EVAL_TASKS_DIR:-infx/evals/gsm8k.yaml}"
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local eval_context_len="${EVAL_MAX_MODEL_LEN:-16384}"
     local temperature=0
@@ -1885,7 +1904,7 @@ run_lm_eval() {
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
     set -x
-    python3 -m lm_eval --model local-chat-completions --apply_chat_template \
+    run_server_client python3 -m lm_eval --model local-chat-completions --apply_chat_template \
       ${include_path:+--include_path "$include_path"} \
       --tasks "${tasks_dir}" \
       --output_path "${results_dir}" \
@@ -2450,7 +2469,7 @@ run_swebench_eval() {
     gen_dir=$(mktemp -d /tmp/swebench_gen-XXXXXX)
 
     # Generation and scoring must share a dataset.
-    local yaml_path="${EVAL_TASKS_DIR:-utils/evals/${task_name}.yaml}"
+    local yaml_path="${EVAL_TASKS_DIR:-infx/evals/${task_name}.yaml}"
     local dataset
     dataset=$(awk '/^dataset_path:[[:space:]]/{print $2; exit}' "$yaml_path" 2>/dev/null)
     if [ -z "$dataset" ]; then
@@ -2513,7 +2532,7 @@ run_swebench_eval() {
 
     if [ "${SWEBENCH_SKIP_SCORE:-false}" = "true" ]; then
         local skip_rc=0
-        python3 utils/evals/swebench_score.py \
+        python3 -m infx.evals.swebench_score \
             "${score_input[@]}" --out-dir "$out_dir" \
             --model-name "${MODEL_NAME:-$MODEL}" --task-name "$task_name" \
             --predictions-only || skip_rc=$?
@@ -2535,7 +2554,7 @@ run_swebench_eval() {
     local itimeout_args=(--instance-timeout "${SWEBENCH_EVAL_TIMEOUT:-900}")
     # Avoid holding the GPU on scoring stalls.
     timeout "${SWEBENCH_SCORE_TIMEOUT:-7200}" \
-    python3 utils/evals/swebench_score.py \
+    python3 -m infx.evals.swebench_score \
         "${score_input[@]}" \
         --out-dir "$out_dir" \
         --model-name "${MODEL_NAME:-$MODEL}" \
@@ -2890,7 +2909,7 @@ install_agentic_deps() {
     # Install from the checked-out aiperf source with uv. This path does not
     # require git, and rootless Enroot containers cannot mutate dpkg.
 
-    ensure_agentic_uv
+    ensure_agentic_uv || return $?
     rm -rf "$AIPERF_VENV"
     mkdir -p "$AIPERF_UV_CACHE_DIR"
 
@@ -2906,15 +2925,18 @@ install_agentic_deps() {
     # already used to fetch uv itself above), so this doesn't depend on the
     # container image bundling a new-enough Python.
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
-        "$AIPERF_UV_BIN" venv --python "${AIPERF_PYTHON_VERSION:-3.11}" "$AIPERF_VENV"
-    UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
+        "$AIPERF_UV_BIN" venv --python "${AIPERF_PYTHON_VERSION:-3.11}" "$AIPERF_VENV" || return $?
+    UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" UV_HTTP_TIMEOUT=120 UV_HTTP_RETRIES=3 \
         "$AIPERF_UV_BIN" pip install --python "$AIPERF_PYTHON" \
         -r "$AGENTIC_DIR/requirements.txt" \
         -e "$AIPERF_DIR" \
         "datasets>=4.7.0" \
         "huggingface_hub[cli]>=0.25.0" \
         urllib3 \
-        requests
+        requests || {
+            echo "ERROR: benchmark client dependency bootstrap failed; inspect network/package resolution before recipe repairs" >&2
+            return 1
+        }
 
     if [ ! -x "$AIPERF_CLI" ] || [ ! -x "$AIPERF_HF_CLI" ]; then
         echo "ERROR: isolated AIPerf environment is incomplete at $AIPERF_VENV" >&2
@@ -3198,13 +3220,13 @@ write_agentic_result_json() {
     (
         cd "$INFMAX_CONTAINER_WORKSPACE"
         RESULT_DIR="$result_dir" AGENTIC_OUTPUT_DIR="${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}" \
-            "$AIPERF_PYTHON" -m utils.agentic.aggregation.process_agentic_result
+            "$AIPERF_PYTHON" -m infx.results.agentic.process_agentic_result
     )
 
     # Generate metrics_plots.png from the same aiperf artifacts. Best-effort:
     # don't fail the launcher if plot generation has trouble (e.g. matplotlib
     # missing in a stripped-down image). The agg JSON is the success gate.
-    "$AIPERF_PYTHON" "$INFMAX_CONTAINER_WORKSPACE/utils/generate_aiperf_plots.py" "$result_dir" 2>&1 || true
+    PYTHONPATH="$INFMAX_CONTAINER_WORKSPACE${PYTHONPATH:+:$PYTHONPATH}" "$AIPERF_PYTHON" -m infx.results.generate_aiperf_plots "$result_dir" 2>&1 || true
 }
 
 validate_required_agentic_server_metrics() {
@@ -3281,7 +3303,7 @@ run_agentic_replay_and_write_outputs() (
         esac
         (
             cd "$INFMAX_CONTAINER_WORKSPACE"
-            "$AIPERF_PYTHON" -m utils.agentic.aggregation.power_adapter "${power_args[@]}"
+            "$AIPERF_PYTHON" -m infx.results.agentic.power_adapter "${power_args[@]}"
         )
     }
 
@@ -3318,7 +3340,7 @@ run_agentic_replay_and_write_outputs() (
 
     set +e
     set -x
-    $REPLAY_CMD 2>&1 | tee "$result_dir/benchmark.log"
+    run_server_client $REPLAY_CMD 2>&1 | tee "$result_dir/benchmark.log"
     replay_rc=${PIPESTATUS[0]}
     set +x
     set -e
@@ -3356,19 +3378,19 @@ run_agentic_replay_and_write_outputs() (
         set +e
         (
             cd "$INFMAX_CONTAINER_WORKSPACE"
-            "$AIPERF_PYTHON" -m utils.agentic.aggregation.power_adapter "${power_args[@]}"
+            "$AIPERF_PYTHON" -m infx.results.agentic.power_adapter "${power_args[@]}"
         )
         power_rc=$?
         set -e
     fi
 
-    "$AIPERF_PYTHON" "$AGENTIC_DIR/scripts/analyze_benchmark_distributions.py" \
+    PYTHONPATH="$INFMAX_CONTAINER_WORKSPACE${PYTHONPATH:+:$PYTHONPATH}" "$AIPERF_PYTHON" -m infx.results.agentic.analyze_benchmark_distributions \
         "$result_dir/aiperf_artifacts" -o "$result_dir" 2>&1 || true
 
     set +e
     (
         cd "$INFMAX_CONTAINER_WORKSPACE"
-        "$AIPERF_PYTHON" -m utils.agentic.validation.validate_agentic_result \
+        "$AIPERF_PYTHON" -m infx.results.agentic.validate_agentic_result \
             "$result_dir/aiperf_artifacts" \
             --failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"
     )

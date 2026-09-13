@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,38 @@ def result_order(path: Path) -> tuple[int, str]:
         except ValueError:
             pass
     return path.stat().st_mtime_ns, path.name
+
+
+def select_latest_result(
+    paths: Iterable[Path], *, concurrency: int | None = None,
+) -> Path | None:
+    """Select from recognized candidates, optionally for one concurrency.
+
+    Return None when no candidate matches. Discovery and result-content
+    validation belong to the caller; legacy ordering may read file mtimes.
+    """
+    candidates = (
+        path for path in paths
+        if concurrency is None or result_concurrency(path.name) == concurrency
+    )
+    return max(candidates, key=result_order, default=None)
+
+
+def select_latest_results(paths: Iterable[Path], *, batched: bool = False) -> list[Path]:
+    """Select one result, or one per suffixed concurrency in numeric order."""
+    if not batched:
+        latest = select_latest_result(paths)
+        return [latest] if latest is not None else []
+
+    latest_by_conc: dict[int, Path] = {}
+    for path in paths:
+        conc = result_concurrency(path.name)
+        if conc is None:
+            continue
+        current = latest_by_conc.get(conc)
+        if current is None or result_order(path) > result_order(current):
+            latest_by_conc[conc] = path
+    return [latest_by_conc[conc] for conc in sorted(latest_by_conc)]
 
 
 _SCORE_NAMES = {"strict": "em_strict", "accuracy": "accuracy", "flex": "em_flexible"}
