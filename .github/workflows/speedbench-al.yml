@@ -3,8 +3,8 @@ name: SpeedBench AL Collection
 # Push-button (workflow_dispatch) collection of a SPEED-Bench acceptance-length
 # (AL) matrix: thinking_on/off x MTP levels, for the given model (defaults to
 # DeepSeek-V4-Pro). Produces the golden reference consumed by the
-# synthetic-acceptance framework and (optionally) opens a PR updating
-# benchmarks/speedbench-reference-al.yaml.
+# synthetic-acceptance framework and (optionally) opens a PR committing the
+# measured matrix to golden_al_distribution/ with its source run URL.
 
 on:
   workflow_dispatch:
@@ -60,10 +60,14 @@ on:
         type: string
         default: '480'
       open-pr:
-        description: "Open a PR updating benchmarks/speedbench-reference-al.yaml (default off: artifact-only, paste values in manually)"
+        description: "Open a PR committing the measured matrix to golden_al_distribution/ (default off: artifact-only, paste values in manually)"
         required: false
         type: boolean
         default: false
+      golden-yaml-name:
+        description: "Filename to commit under golden_al_distribution/ (e.g. qwen3.8next_mtp.yaml). Defaults to <model-prefix>_<spec-decoding>.yaml"
+        required: false
+        type: string
       ref:
         description: "Git ref (branch/sha) to checkout"
         required: false
@@ -233,31 +237,79 @@ jobs:
           path: speedbench-reference-al.yaml
           if-no-files-found: warn
 
-      - name: Open PR updating reference yaml
+      - name: Open PR committing golden AL matrix
         if: ${{ inputs.open-pr && success() }}
         env:
           GH_TOKEN: ${{ secrets.REPO_PAT }}
         run: |
           set -euo pipefail
-          # NOTE: the reference yaml is keyed by model at the top level. This
-          # overwrites it with the current model's matrix; when more than one
-          # model is collected, replace this cp with a per-model-key YAML merge.
-          cp speedbench-reference-al.yaml benchmarks/speedbench-reference-al.yaml
+
+          # Resolve the canonical golden_al_distribution/ filename. The naming
+          # convention is <model-prefix>_<method>.yaml (e.g. qwen3.8next_mtp.yaml,
+          # kimik2.5_eagle3.yaml); allow an explicit override for non-standard
+          # suffixes such as the dspark probabilistic-sample curves.
+          METHOD="${{ env.SPEC_DECODING }}"
+          GOLDEN_YAML_NAME="${{ inputs.golden-yaml-name }}"
+          if [ -z "$GOLDEN_YAML_NAME" ]; then
+            GOLDEN_YAML_NAME="${{ inputs.model-prefix }}_${METHOD}.yaml"
+          fi
+          GOLDEN_PATH="golden_al_distribution/${GOLDEN_YAML_NAME}"
+
+          if [ ! -f "golden_al_distribution/README.md" ]; then
+            echo "CRITICAL: golden_al_distribution/ not found on this ref — cannot commit the matrix." >&2
+            exit 1
+          fi
+
+          # The collector emits the metadata header (dataset, sampling, model).
+          # Prepend the source-run URL line so the committed YAML matches the
+          # canonical shape of the other golden curves and is auditable.
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          {
+            echo "# Source GitHub Actions run: ${RUN_URL}"
+            cat speedbench-reference-al.yaml
+          } > "$GOLDEN_PATH"
+
+          # Keep the README "Current golden curves" table in sync: replace the
+          # row whose Golden YAML cell links to this file, or append a new row.
+          # Display label: humanize the model prefix (qwen3.8next -> Qwen3.8-Flash-Next
+          # is left to the dispatcher; here we use the model-prefix as a stable label).
+          python3 - <<PYEOF
+          import re, sys
+          path = "golden_al_distribution/README.md"
+          src = open(path).read()
+          name = "${GOLDEN_YAML_NAME}"
+          run_url = "${RUN_URL}"
+          label = "${{ inputs.model-prefix }}"
+          method = "${METHOD}".upper()
+          row = f"| {label} | {method} | [\`{name}\`]({name}) | [{RUN_ID}]({run_url}) |\n".replace("{RUN_ID}", "${{ github.run_id }}")
+          pattern = re.compile(r"^\|[^|]*\|[^|]*\|\s*\[\`" + re.escape(name) + r"\`\][^|]*\|[^|]*\|\s*$", re.M)
+          if pattern.search(src):
+              src = pattern.sub(row.rstrip(), src)
+          else:
+              # Insert before the "Primary references" section if present; else append.
+              marker = "## Primary references"
+              if marker in src:
+                  src = src.replace(marker, row + "\n" + marker, 1)
+              else:
+                  if not src.endswith("\n"): src += "\n"
+                  src += row
+          open(path, "w").write(src)
+          PYEOF
 
           BRANCH="speedbench-al/${{ inputs.model-prefix }}-auto-${{ github.run_id }}"
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git checkout -b "$BRANCH"
-          git add benchmarks/speedbench-reference-al.yaml
+          git add "$GOLDEN_PATH" golden_al_distribution/README.md
           if git diff --cached --quiet; then
-            echo "No change in reference yaml; skipping PR."
+            echo "No change in golden AL matrix; skipping PR."
             exit 0
           fi
-          git commit -m "Update SpeedBench AL reference matrix for ${{ inputs.model }} (auto, run ${{ github.run_id }})"
+          git commit -m "Add golden AL distribution for ${{ inputs.model-prefix }} (auto, run ${{ github.run_id }})"
           git push -u origin "$BRANCH"
           gh pr create \
-            --title "Update SpeedBench AL reference matrix for ${{ inputs.model-prefix }} (auto)" \
-            --body "Auto-generated by the SpeedBench AL Collection workflow (run ${{ github.run_id }}). Model: \`${{ inputs.model }}\`, category: \`${{ inputs.category }}\`, MTP: \`${{ inputs.mtp-list }}\`, thinking: \`${{ inputs.thinking-modes }}\`, output_len: \`${{ inputs.output-len }}\`. Please review the measured values before merging." \
+            --title "Add golden AL distribution for ${{ inputs.model-prefix }} (auto)" \
+            --body "Auto-generated by the SpeedBench AL Collection workflow (run ${{ github.run_id }}).\n\nModel: \`${{ inputs.model }}\`\nCategory: \`${{ inputs.category }}\`\nMTP: \`${{ inputs.mtp-list }}\`\nThinking: \`${{ inputs.thinking-modes }}\`\noutput_len: \`${{ inputs.output-len }}\`\nGolden YAML: \`${GOLDEN_YAML_NAME}\`\nSource run: ${RUN_URL}\n\nThe measured matrix is committed to \`golden_al_distribution/\` with the source-run URL header and the README table is updated. Please review the measured values (and the per-request detailed results artifact) before merging." \
             --base main \
             --head "$BRANCH"
 
