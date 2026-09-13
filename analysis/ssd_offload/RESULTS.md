@@ -45,11 +45,18 @@ by construction.
 Unanswered: whether KV actually lands on disk and comes back. The probe has
 never reached its measurement phase.
 
-- SSD offload on B200 with **DeepSeek-V4.1-Flash via LMCache**: blocked
-  upstream. Needs `SupportsHMA` on the connector.
-- SSD offload on B200 **in general**: untested. A model with a uniform KV
-  layout would isolate this, since the failure above is specific to hybrid
-  specs.
+- SSD offload on B200 with **DeepSeek-V4.1-Flash via LMCache**: blocked.
+  Needs `SupportsHMA` on that connector.
+- SSD offload on B200 **in general**: NOT blocked. Correction to an earlier
+  version of this file, which generalised LMCache's limitation into a claim
+  about disk offload as such. vLLM ships a filesystem secondary tier
+  (`FileSystemTierManager`, `Medium.STORAGE`, registered as `fs` in
+  `v1/kv_offload/tiering/factory.py`) behind `TieringOffloadingSpec`, driven
+  by `OffloadingConnector` -- and `offloading_connector.py:49` reads
+  `class OffloadingConnector(KVConnectorBase_V1, SupportsHMA)`. Mooncake's
+  and NIXL's connectors declare it too. The probe now uses that path; it
+  next failed on block-size alignment (`tokens_per_block=8 not divisible by
+  tokens_per_hash=32`), which is a separate and unresolved question.
 
 ## Two false starts, both mine
 
