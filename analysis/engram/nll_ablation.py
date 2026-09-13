@@ -84,6 +84,12 @@ def main() -> int:
              "(default: half of --chunk-tokens)",
     )
     ap.add_argument(
+        "--boundaries", default=None,
+        help="comma-separated boundaries to sweep in one process, reusing the "
+             "loaded model. Answers whether decode_only's recovery depends on "
+             "how much context was built with the gate shut.",
+    )
+    ap.add_argument(
         "--arms", default=",".join(ARMS),
         help="comma-separated subset of %s" % ",".join(ARMS),
     )
@@ -95,10 +101,16 @@ def main() -> int:
         ap.error("unknown arm(s): %s" % ", ".join(unknown))
     if "baseline" not in arms:
         ap.error("baseline is required -- every delta is measured against it")
-    boundary = args.boundary if args.boundary is not None else args.chunk_tokens // 2
-    if not 0 < boundary < args.chunk_tokens:
-        ap.error("--boundary must be inside (0, --chunk-tokens)")
-    logger.info("arms=%s boundary=%d", arms, boundary)
+    if args.boundaries:
+        boundaries = [int(x) for x in args.boundaries.split(",") if x]
+    else:
+        boundaries = [
+            args.boundary if args.boundary is not None else args.chunk_tokens // 2
+        ]
+    for boundary in boundaries:
+        if not 0 < boundary < args.chunk_tokens:
+            ap.error("every boundary must be inside (0, --chunk-tokens)")
+    logger.info("arms=%s boundaries=%s", arms, boundaries)
     logger.info("%s", MODE_NOTE)
 
     os.makedirs(args.out, exist_ok=True)
@@ -129,7 +141,9 @@ def main() -> int:
     )
     sampling = SamplingParams(max_tokens=1, temperature=0.0, prompt_logprobs=0)
 
-    per_domain = {}
+    # per_boundary[boundary][domain]. Chunks are tokenized once per domain and
+    # reused across boundaries so the sweep costs generation time, not IO.
+    per_boundary: dict[int, dict] = {b: {} for b in boundaries}
     coverage: dict[str, dict] = {}
     for domain in corpora.all_domains():
         chunks = list(
@@ -142,87 +156,106 @@ def main() -> int:
             logger.warning("domain %s: no chunks", domain)
             continue
 
-        totals = {x: 0.0 for x in arms}
-        counts = {x: 0 for x in arms}
-        chunk_means: dict[str, list[float]] = {x: [] for x in arms}
-        contribution = {}
-        for idx, chunk in enumerate(chunks):
-            means = {}
-            for arm in arms:
-                gate_probe.set_mode(meter_dir, ARMS[arm], boundary)
-                # Cleared every chunk, not just the first: the contribution is
-                # now checked on every single chunk rather than sampled once.
-                gate_probe.clear_meter(meter_dir)
-                out = llm.generate({"prompt_token_ids": chunk}, sampling, use_tqdm=False)[0]
-                # Score only the suffix, identically in every arm, so the arms
-                # differ solely in where Engram was allowed to act.
-                nlls = [v for pos, v in _token_nll(out) if pos >= boundary]
-                if not nlls:
-                    continue
-                totals[arm] += sum(nlls)
-                counts[arm] += len(nlls)
-                means[arm] = sum(nlls) / len(nlls)
-                stats = gate_probe.read_meter(meter_dir)
-                if idx == 0:
-                    contribution[arm] = stats
-                # Every chunk is checked, so a single unablated chunk anywhere
-                # in the run is caught rather than averaged away.
-                if stats:
-                    seen = coverage.setdefault(arm, {"chunks": 0, "calls": 0,
-                                                     "worst": 0.0, "min": 1e9})
-                    seen["chunks"] += 1
-                    seen["calls"] += stats["calls"]
-                    seen["worst"] = max(seen["worst"], stats["max_rel_norm"])
-                    seen["min"] = min(seen["min"], stats["mean_rel_norm"])
-            if len(means) == len(arms):
+        for boundary in boundaries:
+            totals = {x: 0.0 for x in arms}
+            counts = {x: 0 for x in arms}
+            chunk_means: dict[str, list[float]] = {x: [] for x in arms}
+            contribution = {}
+            for idx, chunk in enumerate(chunks):
+                means = {}
                 for arm in arms:
-                    chunk_means[arm].append(means[arm])
-            if idx % 25 == 0:
-                logger.info("domain %s: %d/%d chunks", domain, idx + 1, len(chunks))
+                    gate_probe.set_mode(meter_dir, ARMS[arm], boundary)
+                    # Cleared every chunk, not just the first: the contribution
+                    # is checked on every chunk rather than sampled once.
+                    gate_probe.clear_meter(meter_dir)
+                    out = llm.generate(
+                        {"prompt_token_ids": chunk}, sampling, use_tqdm=False
+                    )[0]
+                    # Score only the suffix, identically in every arm, so the
+                    # arms differ solely in where Engram was allowed to act.
+                    nlls = [v for pos, v in _token_nll(out) if pos >= boundary]
+                    if not nlls:
+                        continue
+                    totals[arm] += sum(nlls)
+                    counts[arm] += len(nlls)
+                    means[arm] = sum(nlls) / len(nlls)
+                    stats = gate_probe.read_meter(meter_dir)
+                    if idx == 0:
+                        contribution[arm] = stats
+                    # Every chunk is checked, so a single unablated chunk
+                    # anywhere in the run is caught rather than averaged away.
+                    if stats:
+                        seen = coverage.setdefault(
+                            arm, {"chunks": 0, "calls": 0, "worst": 0.0, "min": 1e9}
+                        )
+                        seen["chunks"] += 1
+                        seen["calls"] += stats["calls"]
+                        seen["worst"] = max(seen["worst"], stats["max_rel_norm"])
+                        seen["min"] = min(seen["min"], stats["mean_rel_norm"])
+                if len(means) == len(arms):
+                    for arm in arms:
+                        chunk_means[arm].append(means[arm])
+                if idx % 25 == 0:
+                    logger.info("domain %s b=%d: %d/%d chunks",
+                                domain, boundary, idx + 1, len(chunks))
 
-        if not all(counts[x] for x in arms) or not chunk_means["baseline"]:
-            continue
-        base = totals["baseline"] / counts["baseline"]
-        entry = {
-            "chunks": len(chunk_means["baseline"]),
-            "tokens_scored": counts["baseline"],
-            "boundary": boundary,
-            "nll_baseline": round(base, 6),
-            "ppl_baseline": round(math.exp(base), 4),
-            "arms": {},
-            "contribution_first_chunk": contribution,
-        }
-        for arm in arms:
-            if arm == "baseline":
+            if not all(counts[x] for x in arms) or not chunk_means["baseline"]:
                 continue
-            value = totals[arm] / counts[arm]
-            # Paired per chunk, then a chunk-level stderr: tokens within a
-            # chunk are heavily correlated, so a per-token stderr would
-            # overstate the precision.
-            deltas = [
-                x - y for x, y in zip(chunk_means[arm], chunk_means["baseline"])
-            ]
-            stderr = (
-                statistics.stdev(deltas) / math.sqrt(len(deltas))
-                if len(deltas) > 1 else float("nan")
-            )
-            entry["arms"][arm] = {
-                "nll": round(value, 6),
-                "delta_nll": round(value - base, 6),
-                "delta_bits_per_token": round((value - base) / math.log(2), 6),
-                "ppl": round(math.exp(value), 4),
-                "ppl_ratio": round(math.exp(value - base), 6),
-                "chunk_stderr": round(stderr, 6) if stderr == stderr else None,
-                "sigma": (
-                    round((value - base) / stderr, 2)
-                    if stderr == stderr and stderr > 0 else None
-                ),
+            base = totals["baseline"] / counts["baseline"]
+            entry = {
+                "chunks": len(chunk_means["baseline"]),
+                "tokens_scored": counts["baseline"],
+                "boundary": boundary,
+                "nll_baseline": round(base, 6),
+                "ppl_baseline": round(math.exp(base), 4),
+                "arms": {},
+                "contribution_first_chunk": contribution,
             }
-        per_domain[domain] = entry
-        logger.info("%s: %s", domain, json.dumps(per_domain[domain], default=str))
+            for arm in arms:
+                if arm == "baseline":
+                    continue
+                value = totals[arm] / counts[arm]
+                # Paired per chunk, then a chunk-level stderr: tokens within a
+                # chunk are heavily correlated, so a per-token stderr would
+                # overstate the precision.
+                deltas = [
+                    x - y for x, y in zip(chunk_means[arm], chunk_means["baseline"])
+                ]
+                stderr = (
+                    statistics.stdev(deltas) / math.sqrt(len(deltas))
+                    if len(deltas) > 1 else float("nan")
+                )
+                entry["arms"][arm] = {
+                    "nll": round(value, 6),
+                    "delta_nll": round(value - base, 6),
+                    "delta_bits_per_token": round((value - base) / math.log(2), 6),
+                    "ppl": round(math.exp(value), 4),
+                    "ppl_ratio": round(math.exp(value - base), 6),
+                    "chunk_stderr": round(stderr, 6) if stderr == stderr else None,
+                    "sigma": (
+                        round((value - base) / stderr, 2)
+                        if stderr == stderr and stderr > 0 else None
+                    ),
+                }
+            # Recovery is the question the sweep exists to answer: how much of
+            # the full-ablation loss does this arm give back?
+            full = entry["arms"].get("ablated", {}).get("delta_nll")
+            if full:
+                for arm, got in entry["arms"].items():
+                    got["recovery_of_ablation_loss"] = round(
+                        1.0 - got["delta_nll"] / full, 4
+                    )
+            per_boundary[boundary][domain] = entry
+            logger.info("%s b=%d: %s", domain, boundary,
+                        json.dumps(entry, default=str))
+
+    # Backwards-compatible view: the first boundary is the primary result.
+    per_domain = per_boundary[boundaries[0]]
 
     report = {"per_domain": per_domain, "model": args.model,
-              "arms": arms, "boundary": boundary, "mode_note": MODE_NOTE}
+              "arms": arms, "boundary": boundaries[0], "boundaries": boundaries,
+              "per_boundary": {str(b): v for b, v in per_boundary.items()},
+              "mode_note": MODE_NOTE}
     with open(os.path.join(args.out, "nll_ablation.json"), "w") as handle:
         json.dump(report, handle, indent=2)
     print("===ENGRAM_NLL_JSON_BEGIN===")

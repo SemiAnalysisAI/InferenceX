@@ -34,6 +34,15 @@ fi
 # conc 15/16 are the TP4 single-node analysis tasks, one node each:
 #   15 = CRUXEval-O output prediction, baseline vs Engram removed, nothing executed
 #   16 = likelihood ablation with the phase arms (prefill-only / decode-only)
+# conc 18 is the likelihood run again with a boundary sweep: does decode_only's
+# recovery depend on how much context was built with the gate shut? Fewer chunks
+# per domain because it pays the whole measurement once per boundary.
+if [[ "$CONC" == 18 ]]; then
+    export ENGRAM_NLL_BOUNDARIES="${ENGRAM_NLL_BOUNDARIES:-512,1792,3072,3456}"
+    export ENGRAM_NLL_CHUNKS="${ENGRAM_NLL_CHUNKS:-25}"
+    CONC=16
+fi
+
 if [[ "$CONC" == 15 || "$CONC" == 16 ]]; then
     export GPU_COUNT="$TP"
     if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
@@ -60,6 +69,7 @@ if [[ "$CONC" == 15 || "$CONC" == 16 ]]; then
         --model "$MODEL_PATH" --tp "$TP" \
         --arms "${ENGRAM_NLL_ARMS:-baseline,ablated,prefill_only,decode_only}" \
         --chunks-per-domain "${ENGRAM_NLL_CHUNKS:-100}" \
+        ${ENGRAM_NLL_BOUNDARIES:+--boundaries "$ENGRAM_NLL_BOUNDARIES"} \
         --out "$RESULT_DIR/engram_nll"
 fi
 
