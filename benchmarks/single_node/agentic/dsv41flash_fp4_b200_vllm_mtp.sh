@@ -31,6 +31,14 @@ if [[ "$CONC" == 17 ]]; then
     exec bash "$INFERENCEX_REPO_ROOT/analysis/engram/tbench_run.sh"
 fi
 
+# conc 19 = one-off SSD KV-offload feasibility probe. Nothing in the repo
+# offloads KV to disk, so this finds out whether it works at all on a B200
+# node before any schema or recipe work: LMCache with a disk tier and a 1 GB
+# CPU tier, then check a prompt comes back after being evicted from both.
+if [[ "$CONC" == 19 ]]; then
+    exec bash "$INFERENCEX_REPO_ROOT/analysis/ssd_offload/probe.sh"
+fi
+
 # conc 15/16 are the TP4 single-node analysis tasks, one node each:
 #   15 = CRUXEval-O output prediction, baseline vs Engram removed, nothing executed
 #   16 = likelihood ablation with the phase arms (prefill-only / decode-only)
