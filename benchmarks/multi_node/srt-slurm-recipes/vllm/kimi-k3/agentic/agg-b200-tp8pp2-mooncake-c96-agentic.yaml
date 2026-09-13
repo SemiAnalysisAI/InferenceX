@@ -110,14 +110,27 @@ sbatch_directives:
 srun_options:
   container-remap-root: ""
 
+telemetry:
+  enabled: true
+  provider: dcgm-power
+  default_frequency: 1.0
+  storage_subdir: power
+  required: true
+  startup_timeout_seconds: 120
+  request_timeout_seconds: 2
+  collector_join_timeout_seconds: 12
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    port: 9401
+
 benchmark:
   type: custom
+  concurrencies: [96]
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
     AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: "300"
     AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: "0.25"
-    AIPERF_SERVER_METRICS_URLS: "http://localhost:8000/metrics"
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
     RESULT_DIR: "/logs/agentic"
     PORT: "8000"

@@ -73,13 +73,13 @@ bash -n runners/launch_<cluster>.sh
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/matrix_logic/generate_sweep_configs.py test-config \
+  python -m infx.matrix.generate test-config \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --config-keys <exact-key>
 
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/matrix_logic/generate_sweep_configs.py full-sweep \
+  python -m infx.matrix.generate full-sweep \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --model-prefix <prefix> \
@@ -99,20 +99,20 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
 | Changelog 内容或 PR 门禁 | `python -m pytest utils/test_process_changelog.py utils/changelog_gate_tests/ -v` |
 | 结果处理与拓扑 | `python -m pytest utils/test_process_result.py utils/agentic/aggregation/test_process_agentic_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
 | AgentX 聚合与工件加载 | `python -m pytest utils/agentic/aggregation/ -v` |
-| 评测分发、批处理或补丁 | `python -m pytest utils/evals/ -v` |
+| 评测分发、批处理或补丁 | `python -m pytest infx/evals/ -v` |
 | 评测收集 | `python -m pytest utils/test_collect_eval_results.py -v` |
 | 扫描复用或可复用制品 | `python -m pytest utils/test_github.py utils/test_find_reusable_sweep_run.py utils/test_acknowledge_sweep_reuse.py utils/test_validate_reusable_sweep_artifacts.py -v` |
 
 若编辑了 changelog，还要使用真实 base 和 head ref 运行 setup 所用的同一矩阵兼容性验证器：
 
 ```bash
-python3 utils/validate_perf_changelog.py \
+python3 -m infx.workflows.validate_perf_changelog \
   --changelog-file perf-changelog.yaml \
   --base-ref <base-ref> \
   --head-ref <head-ref>
 ```
 
-其契约实现在 [`validate_perf_changelog.py`](../utils/validate_perf_changelog.py) 中。该检查会验证生成矩阵并拒绝禁止的内容变更，但其差异读取器可能看不到仅空白的历史删除。应把精确字节差异检查作为独立证据门禁；不要改写或规范化 `perf-changelog.yaml` 历史字节。
+其契约实现在 [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py) 中。该检查会验证生成矩阵并拒绝禁止的内容变更，但其差异读取器可能看不到仅空白的历史删除。应把精确字节差异检查作为独立证据门禁；不要改写或规范化 `perf-changelog.yaml` 历史字节。
 
 本地矩阵不能证明 Slurm 分配或 llm-d 端点发现。多节点配方变更仍然需要上游配方检查器，并在目标集群上实际执行；详见[配置验证](./configuration-procedures.md#validate)。
 
@@ -148,7 +148,7 @@ python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
 
 吞吐与评测是独立任务。默认扫描对选中的 8k1k 子集进行评测；`all-evals` 扩大评测选择，`evals-only` 抑制吞吐。根据变更范围选择修饰标签，但不要用仅评测或预检运行替代所需的全量扫描。
 
-评测完成不能只看绿色任务。保留并检查 `meta_env.json`、`results*.json` 文件、分数验证输出、推理镜像和聚合评测制品。[`utils/evals/EVALS.md`](../utils/evals/EVALS.md) 负责任务与制品行为。[`validate_scores.py`](../utils/evals/validate_scores.py) 会拒绝缺失结果文件、低于阈值的分数和没有任何已检查指标的运行；当存在预期并发元数据时，它还会拒绝无效、不完整或失败的批次。工作流调用时没有传入 `--expected-concs`，因此评审者必须独立验证单并发制品中的 `meta_env.json`。
+评测完成不能只看绿色任务。保留并检查 `meta_env.json`、`results*.json` 文件、分数验证输出、推理镜像和聚合评测制品。[`utils/evals/EVALS.md`](../utils/evals/EVALS.md) 负责任务与制品行为。[`validate_scores.py`](../infx/evals/validate_scores.py) 会拒绝缺失结果文件、低于阈值的分数和没有任何已检查指标的运行；当存在预期并发元数据时，它还会拒绝无效、不完整或失败的批次。工作流调用时没有传入 `--expected-concs`，因此评审者必须独立验证单并发制品中的 `meta_env.json`。
 
 ## 证据标准
 

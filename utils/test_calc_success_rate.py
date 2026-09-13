@@ -1,6 +1,11 @@
-import calc_success_rate as success_rate
+import sys
+from types import SimpleNamespace
+from unittest.mock import Mock
+
 import pytest
 import yaml
+
+import infx.workflows.calc_success_rate as success_rate
 
 
 @pytest.mark.parametrize(
@@ -29,7 +34,7 @@ def test_load_hardware_labels_normalizes_supported_layouts(
     config_dir = tmp_path / "configs"
     config_dir.mkdir()
     (config_dir / "runners.yaml").write_text(yaml.safe_dump(runners, sort_keys=False))
-    monkeypatch.setattr(success_rate, "__file__", str(tmp_path / "utils" / "calc_success_rate.py"))
+    monkeypatch.setattr(success_rate, "__file__", str(tmp_path / "infx" / "workflows" / "calc_success_rate.py"))
 
     assert success_rate.load_hardware_labels() == expected
 
@@ -71,3 +76,42 @@ def test_hardware_matching_respects_case_boundaries_and_literal_punctuation(job_
     patterns = success_rate.build_hardware_match_patterns(["gpu.a"])
 
     assert success_rate.extract_hardware_from_name(job_name, patterns) == expected
+
+
+def test_success_rates_include_retries_and_exclude_skipped_or_unrelated_jobs(monkeypatch):
+    labels = ["sample-a", "sample-b"]
+    monkeypatch.setattr(success_rate, "HARDWARE_LABELS", labels)
+    monkeypatch.setattr(success_rate, "_HARDWARE_MATCH_PATTERNS",
+                        success_rate.build_hardware_match_patterns(labels))
+    monkeypatch.setattr(success_rate, "RUN_ID", "42")
+    client = Mock()
+    run = client.get_repo.return_value.get_workflow_run.return_value
+    jobs = [
+        SimpleNamespace(name=f"benchmark cluster:{hardware}", conclusion=conclusion)
+        for hardware, conclusion in [
+            ("sample-a", "failure"), ("sample-a", "success"),
+            ("sample-a", "skipped"), ("sample-b", "cancelled"),
+            ("sample-b", None), ("unrelated", "success"),
+        ]
+    ]
+    # The first failure belongs to an earlier attempt and is absent from the default API view.
+    run.jobs.side_effect = lambda _filter="latest": jobs if _filter == "all" else jobs[1:]
+    monkeypatch.setitem(sys.modules, "github", SimpleNamespace(
+        Auth=SimpleNamespace(Token=Mock()), Github=Mock(return_value=client),
+    ))
+
+    assert success_rate.calculate_hardware_success_rates() == {
+        "sample-a": {"n_success": 1, "total": 2},
+        "sample-b": {"n_success": 0, "total": 2},
+    }
+
+
+def test_success_rates_do_not_report_success_when_authentication_fails(monkeypatch):
+    client = Mock()
+    client.get_user.side_effect = RuntimeError("authentication unavailable")
+    monkeypatch.setitem(sys.modules, "github", SimpleNamespace(
+        Auth=SimpleNamespace(Token=Mock()), Github=Mock(return_value=client),
+    ))
+
+    assert success_rate.calculate_hardware_success_rates() is None
+    client.get_repo.assert_not_called()
