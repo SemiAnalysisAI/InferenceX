@@ -1,5 +1,5 @@
-name: Read-only HF cache audit
-run-name: Read-only HF cache audit - ${{ inputs.test-name || inputs.generate-cli-command || github.event.inputs.generate-cli-command }}
+name: HF config cache repair
+run-name: HF config cache repair - ${{ inputs.test-name || inputs.generate-cli-command || github.event.inputs.generate-cli-command }}
 
 permissions:
     contents: read

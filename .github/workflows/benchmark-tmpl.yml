@@ -214,11 +214,181 @@ jobs:
         format('[{0}]', toJSON(inputs.runner))
       ) }}
     timeout-minutes: 6
-    name: Read-only HF cache probe for PR 2912
+    name: Repair and verify HF config cache for PR 2912
     steps:
-      - name: Inspect model cache as the runner and remapped container user
+      - name: Restore verified public config using normal cache-owner permissions
+        shell: bash
         run: |
-          AUDIT_SCRIPT=$(cat <<'PY'
+          python3 - <<'PY'
+          #!/usr/bin/env python3
+          """Restore one verified public HF config using the cache owner's normal rights."""
+          import errno
+          import fcntl
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import signal
+          import stat
+          import tempfile
+          import time
+          import urllib.request
+          import uuid
+
+          MODEL = "deepseek-ai/DeepSeek-V4-Pro"
+          REVISION = "b5968e9190ef611bbf34a7229255be88a0e937c1"
+          BLOB = "025a1ca59cb255296f274d4ef5e0ea632a0d6384"
+          SIZE = 1828
+          URL = f"https://huggingface.co/{MODEL}/resolve/{REVISION}/config.json"
+
+
+          def verify(data):
+              digest = hashlib.sha1(f"blob {len(data)}\0".encode() + data).hexdigest()
+              if len(data) != SIZE or digest != BLOB:
+                  raise RuntimeError(f"Official config identity mismatch: size={len(data)}, git_blob={digest}")
+              if not isinstance(json.loads(data), dict):
+                  raise RuntimeError("Config must be a JSON object")
+
+
+          def signature(s):
+              return (s.st_dev, s.st_ino, s.st_uid, s.st_gid, s.st_mode, s.st_size, s.st_mtime_ns)
+
+
+          def repair(cache, data, *, expected_owner=0, expected_mode=0o600):
+              verify(data)
+              cache = Path(cache)
+              repo = cache / "models--deepseek-ai--DeepSeek-V4-Pro"
+              directory = repo / "blobs"
+              blob = directory / BLOB
+              pointer = repo / "snapshots" / REVISION / "config.json"
+              for parent in (cache, repo, directory, repo / "snapshots", pointer.parent):
+                  info = parent.lstat()
+                  if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid():
+                      raise RuntimeError(f"Not a directory owned by the current cache user: {parent}")
+              if not pointer.is_symlink() or os.readlink(pointer) != f"../../blobs/{BLOB}" or pointer.resolve(strict=True) != blob:
+                  raise RuntimeError("Snapshot config does not point to the expected canonical blob")
+              pointer_before = pointer.lstat()
+              lock_dir = cache / ".locks" / repo.name
+              for parent in (cache / ".locks", lock_dir):
+                  try:
+                      parent.mkdir()
+                  except FileExistsError:
+                      pass
+                  if not stat.S_ISDIR(parent.lstat().st_mode):
+                      raise RuntimeError(f"HF lock parent is not a real directory: {parent}")
+              lock_path = lock_dir / f"{BLOB}.lock"
+              lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o664)
+              temporary = None
+              backup = None
+              try:
+                  if not stat.S_ISREG(os.fstat(lock_fd).st_mode):
+                      raise RuntimeError("HF lock is not a regular file")
+                  deadline = time.monotonic() + 15
+                  while True:
+                      try:
+                          fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                          break
+                      except BlockingIOError:
+                          if time.monotonic() >= deadline:
+                              raise RuntimeError("Timed out waiting for the standard HF config-blob lock")
+                          time.sleep(0.1)
+                  before = blob.lstat()
+                  if not stat.S_ISREG(before.st_mode) or before.st_size != SIZE:
+                      raise RuntimeError("Unexpected config blob type or size")
+                  try:
+                      current = pointer.read_bytes()
+                  except PermissionError:
+                      if before.st_uid != expected_owner or stat.S_IMODE(before.st_mode) != expected_mode:
+                          raise RuntimeError("Unreadable config does not match the diagnosed owner/mode")
+                  else:
+                      verify(current)
+                      return {"status": "already-correct", "blob": str(blob), "git_blob": BLOB}
+
+                  fd, filename = tempfile.mkstemp(prefix=".pr2912-config-new-", dir=directory)
+                  temporary = Path(filename)
+                  with os.fdopen(fd, "wb") as stream:
+                      stream.write(data)
+                      stream.flush()
+                      os.fchmod(stream.fileno(), 0o644)
+                      os.fsync(stream.fileno())
+                      new_identity = (os.fstat(stream.fileno()).st_dev, os.fstat(stream.fileno()).st_ino)
+                  if (signature(blob.lstat()) != signature(before)
+                          or signature(pointer.lstat()) != signature(pointer_before)
+                          or pointer.resolve(strict=True) != blob):
+                      raise RuntimeError("Cache entry changed during repair; refusing replacement")
+                  backup = directory / f"{BLOB}.pr2912-backup-{uuid.uuid4().hex}"
+                  print(json.dumps({"status": "prepared", "backup": str(backup),
+                                    "publication": "backup-rename-then-replace"}), flush=True)
+                  try:
+                      os.rename(blob, backup)
+                      os.replace(temporary, blob)
+                      temporary = None
+                      published = blob.lstat()
+                      if ((published.st_dev, published.st_ino) != new_identity
+                              or published.st_uid != os.geteuid()
+                              or stat.S_IMODE(published.st_mode) != 0o644):
+                          raise RuntimeError("Published config does not match the prepared file")
+                      verify(pointer.read_bytes())
+                  except BaseException:
+                      if backup.exists():
+                          try:
+                              live = blob.lstat()
+                          except FileNotFoundError:
+                              live = None
+                          if live is not None and (live.st_dev, live.st_ino) != new_identity:
+                              raise RuntimeError(f"Concurrent replacement detected; retained original at {backup}")
+                          os.replace(backup, blob)
+                          backup = None
+                      raise
+                  after = blob.stat()
+                  saved = backup.stat()
+                  if signature(saved) != signature(before):
+                      raise RuntimeError("Backup attributes changed unexpectedly")
+                  directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+                  try:
+                      try:
+                          os.fsync(directory_fd)
+                          directory_sync = "success"
+                      except OSError as exc:
+                          if exc.errno not in (errno.EINVAL, errno.ENOTSUP):
+                              raise
+                          directory_sync = "unsupported"
+                  finally:
+                      os.close(directory_fd)
+                  return {"status": "repaired", "model": MODEL, "revision": REVISION,
+                          "git_blob": BLOB, "sha256": hashlib.sha256(data).hexdigest(),
+                          "blob": str(blob), "backup": str(backup), "bytes": SIZE,
+                          "directory_fsync": directory_sync,
+                          "before": {"uid": before.st_uid, "gid": before.st_gid,
+                                     "mode": oct(stat.S_IMODE(before.st_mode))},
+                          "after": {"uid": after.st_uid, "gid": after.st_gid,
+                                    "mode": oct(stat.S_IMODE(after.st_mode))}}
+              finally:
+                  if temporary is not None:
+                      temporary.unlink(missing_ok=True)
+                  os.close(lock_fd)
+
+
+          def main():
+              def interrupted(signum, frame):
+                  raise SystemExit(128 + signum)
+
+              signal.signal(signal.SIGTERM, interrupted)
+              if os.geteuid() != 300071:
+                  raise RuntimeError("Expected the audited normal CI user UID 300071")
+              with urllib.request.urlopen(URL, timeout=30) as response:
+                  data = response.read(SIZE + 1)
+              verify(data)
+              print(json.dumps(repair(Path("/it-share/hf-hub-cache"), data), indent=2))
+
+
+          if __name__ == "__main__":
+              main()
+          PY
+      - name: Verify all snapshot files and load tokenizer in the pinned container
+        shell: bash
+        run: |
+          VERIFY_SCRIPT=$(cat <<'PY'
           #!/usr/bin/env python3
           """Bounded, read-only HF cache audit. File bytes are never included in output."""
           import argparse
@@ -381,29 +551,45 @@ jobs:
                           result["getfacl"]["paths"].append({"path": path, **command([acl, "-cpn", "--", path], 1)})
 
 
+
           def main():
-              result = {"schema_version": 1, "model": MODEL, "revision": REVISION, "entry_limit": LIMIT}
-              code = 0
-              try:
-                  parser = Parser(description=__doc__)
-                  parser.add_argument("--cache-root", required=True)
-                  parser.add_argument("--getfacl", action="store_true", help="Audit up to 24 exact paths; never recursive.")
-                  audit(parser.parse_args(), result)
-              except Exception as exc:
-                  result["fatal_error"] = error(exc)
-                  code = 1
-              print(json.dumps(result, indent=2, sort_keys=True))
-              return code
+              result = {"model": MODEL, "revision": REVISION}
+              audit(argparse.Namespace(cache_root="/mnt/hf_hub_cache", getfacl=False), result)
+              print(json.dumps({"stage": "container-cache-verification", "hostname": result["hostname"],
+                                "identity": result["identity"], "summary": result["summary"],
+                                "config": next((f for f in result["files"] if f["path"] ==
+                                               result["snapshot"] + "/config.json"), None)}, indent=2), flush=True)
+              if not result["summary"]["complete_scan"]:
+                  raise RuntimeError("Cache scan was incomplete")
+              for category, expected in (("metadata", 27), ("safetensors", 64)):
+                  summary = result["summary"][category]
+                  if summary["examined"] != expected or summary["readable"] != expected:
+                      raise RuntimeError(f"Cache remains unreadable or differs from audited snapshot: {category}")
+              os.environ["HF_HUB_CACHE"] = "/mnt/hf_hub_cache"
+              os.environ["HF_HUB_OFFLINE"] = "1"
+              os.environ["TRANSFORMERS_OFFLINE"] = "1"
+              os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+              from huggingface_hub import hf_hub_download
+              from transformers import AutoTokenizer
+              config_path = hf_hub_download(MODEL, "config.json", local_files_only=True)
+              if config_path != result["snapshot"] + "/config.json":
+                  raise RuntimeError(f"Default model revision changed: {config_path}")
+              tokenizer = AutoTokenizer.from_pretrained(MODEL, local_files_only=True)
+              token_ids = tokenizer.encode("Hello, CI cache.", add_special_tokens=False)
+              if not token_ids or not tokenizer.decode(token_ids):
+                  raise RuntimeError("Tokenizer encode/decode failed")
+              print(json.dumps({"stage": "tokenizer", "status": "success", "model": MODEL,
+                                "config_path": config_path, "tokenizer_class": type(tokenizer).__name__,
+                                "vocab_size": len(tokenizer), "test_tokens": len(token_ids)}), flush=True)
 
 
           if __name__ == "__main__":
-              raise SystemExit(main())
+              main()
           PY
           )
-          python3 -c "$AUDIT_SCRIPT" --cache-root /it-share/hf-hub-cache --getfacl
           srun --partition=compute --nodes=1 --ntasks=1 --cpus-per-task=1 --time=00:02:00 --immediate=30 \
-            --nodelist=mia1-p01-g11 --job-name="pr2912-hf-cache-audit-${GITHUB_RUN_ID}" \
+            --nodelist=mia1-p01-g11 --job-name="pr2912-hf-cache-verify-${GITHUB_RUN_ID}" \
             --container-image=/var/lib/squash/rocm_atom-dev_nightly_202609121454.sqsh \
             --container-mounts=/it-share/hf-hub-cache/:/mnt/hf_hub_cache/:ro \
             --container-workdir=/tmp --container-remap-root --no-container-entrypoint \
-            python3 -c "$AUDIT_SCRIPT" --cache-root /mnt/hf_hub_cache --getfacl
+            python3 -c "$VERIFY_SCRIPT"
