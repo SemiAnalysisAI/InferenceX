@@ -7467,6 +7467,42 @@
     - "Collect shared measured GPU power for the existing two-node GB200 GLM-5.2 aggregate AgentX recipe with producer 80d7203e424f903c9017de4608ee2044afce9574, exact selected-concurrency windows, and post-job adapter validation. Preserve native status and invalid diagnostics before failure. Ordinary Slurm limits, serving settings, other AgentX recipes, and fixed-sequence producer pins are unchanged."
     - "为现有双节点 GB200 GLM-5.2 聚合 AgentX 配方接入共享 GPU 实测功耗，按所选并发绑定测量窗口，并在任务结束后通过适配器校验。返回失败前保留原生状态及无效诊断；普通 Slurm 时限、服务配置、其他 AgentX 配方和固定序列 producer 版本保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2928
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  description:
+    - "Rerun the H100 DeepSeek V4.1 Flash AgentX curve at concurrency 1, 2, 4, 8, 16; retain TP8, GPU-resident KV, full traces, 1M context and DSpark5 synthetic AL 3.51"
+    - "重新运行 H100 DeepSeek V4.1 Flash AgentX 曲线，并发为 1、2、4、8、16；保留 TP8、GPU 驻留 KV、完整轨迹、1M 上下文及 DSpark5 合成 AL 3.51"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3070
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable the two GB300 aggregate recipes and their common launcher power route, with the pinned producer, strict result collection and retained diagnostics."
+    - "为 GB300 Kimi-K3 聚合部署启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3046
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use port 19401 for the GB300 aggregate exporter; the two-node shared lifecycle check verified ownership, all eight GPU telemetry streams, and preservation of the system service on port 9401. Full Kimi-K3 qualification remains pending."
+    - "GB300 聚合部署改用已验证的 19401 功耗端口；完整 Kimi-K3 基准验证仍待完成。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3046
+
+- config-keys:
+    - kimik3-fp4-h200-vllm-agentic-latency
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required power for the H200 Kimi-K3 latency recipe and route their launch, concurrency injection, failure handling and result validation through the pinned producer and shared collector."
+    - "仅为 H200 Kimi-K3 latency 配方启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3044
 - config-keys:
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark
   description:
