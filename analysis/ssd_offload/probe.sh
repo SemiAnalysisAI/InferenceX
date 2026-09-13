@@ -68,7 +68,7 @@ if [[ -z "$SCRATCH" ]]; then
     echo "An SSD-offload benchmark here would be measuring NFS or RAM." >&2
     exit 1
 fi
-DISK_DIR="$SCRATCH/lmcache_disk"
+DISK_DIR="$SCRATCH/vllm_kv_tier"
 mkdir -p "$DISK_DIR"
 DISK_AVAIL_GB=$(( $(df -Pk "$DISK_DIR" | awk 'NR==2{print $4}') / 1024 / 1024 ))
 DISK_SRC=$(df -P "$DISK_DIR" | awk 'NR==2{print $1}')
@@ -85,10 +85,16 @@ rm -f "$DISK_DIR/.bw"
 echo "dd write: $DD_W"
 echo "dd read:  $DD_R"
 
-# ---- 2. LMCache with a disk tier and almost no DRAM tier --------------------
-python3 -m pip install -q --no-input "lmcache==${LMCACHE_VERSION:-0.3.10}" 2>&1 | tail -3 || {
-    echo "lmcache install failed" >&2; exit 1; }
-python3 -c "import importlib.metadata as m; import lmcache; print('lmcache', m.version('lmcache'))"
+# ---- 2. vLLM's own filesystem KV tier ---------------------------------------
+# vLLM registers an "fs" secondary tier (FileSystemTierManager, Medium.STORAGE)
+# behind TieringOffloadingSpec, driven by OffloadingConnector -- which, unlike
+# LMCacheConnectorV1, does subclass SupportsHMA. That matters for this model:
+# the connector keeps the hybrid KV cache manager on, so Flash's heterogeneous
+# KV specs are never forced through unify_hybrid_kv_cache_specs.
+#
+# The tier writes <root_dir>_r<rank>/<hhh>/<hh>_g<group>/<hash>.bin and probes
+# O_DIRECT once, falling back to buffered IO where the filesystem refuses it.
+# No external server and no pip install: it is in the image already.
 
 DISK_GB="${SSD_PROBE_DISK_GB:-200}"
 if (( DISK_GB > DISK_AVAIL_GB - 20 )); then DISK_GB=$(( DISK_AVAIL_GB - 20 )); fi
@@ -96,20 +102,26 @@ if (( DISK_GB < 20 )); then
     echo "not enough free space on $DISK_DIR (${DISK_AVAIL_GB}GB) to probe" >&2; exit 1
 fi
 
-LMCACHE_CFG="$RESULT_DIR/lmcache.yaml"
-cat > "$LMCACHE_CFG" <<EOF
-chunk_size: 256
-# 1 GB of CPU tier only because LMCache stages through it. Anything that
-# survives eviction and is still retrievable must have come off disk.
-local_cpu: True
-max_local_cpu_size: 1
-local_disk: "file://$DISK_DIR/"
-max_local_disk_size: $DISK_GB
-save_decode_cache: False
+# Keep the CPU primary tier small so it cannot hold the working set: anything
+# still retrievable after the flush phase has to come back off the fs tier.
+CPU_BYTES="${SSD_PROBE_CPU_BYTES:-4294967296}"   # 4 GiB
+OFFLOAD_CONFIG=$(cat <<EOF
+{
+  "kv_connector": "OffloadingConnector",
+  "kv_role": "kv_both",
+  "kv_connector_extra_config": {
+    "spec_name": "TieringOffloadingSpec",
+    "cpu_bytes_to_use": $CPU_BYTES,
+    "secondary_tiers": [
+      {"type": "fs", "root_dir": "$DISK_DIR/kv", "n_read_threads": 16, "n_write_threads": 16}
+    ]
+  }
+}
 EOF
-export LMCACHE_CONFIG_FILE="$LMCACHE_CFG"
+)
+echo "$OFFLOAD_CONFIG" | tee "$RESULT_DIR/offload_config.json"
+# Identical prefixes must hash to identical block filenames.
 export PYTHONHASHSEED=0
-cat "$LMCACHE_CFG"
 
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_V2_MODEL_RUNNER=1
@@ -142,7 +154,7 @@ VLLM_CMD=(
     --max-num-seqs 8
     --max-num-batched-tokens 8192
     --enable-prefix-caching
-    --kv-transfer-config '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}'
+    --kv-transfer-config "$OFFLOAD_CONFIG"
     --disable-uvicorn-access-log
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
