@@ -4,7 +4,7 @@ set -eo pipefail
 # DeepSeek-V4.1-Flash on MI355X: native DSpark and GPU-resident KV.
 # Follow upstream AMD defaults for Engram; storage behavior needs verification.
 # Image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
-# (configured in amd-master.yaml); GPU validation is pending.
+# MI355X run 34710937012 passed concurrency 1-32 and eval-only concurrency 32.
 # https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
@@ -24,13 +24,12 @@ if [[ -n "${ROCR_VISIBLE_DEVICES:-}" ]]; then
 fi
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
-# AITER's Triton MoE GEMM warns on every call that Gluon is unavailable and it
-# is falling back to Triton. Gluon supports only gfx1250, so on gfx950 that is
-# a fixed property rather than a condition worth reporting, and it was 98% of
-# the lines in a gsm8k server log (411k of 417k, 30 MiB of 32 MiB). Every
-# warning aiter.ops.triton emits is about Gluon availability, so raising the
-# threshold loses nothing actionable here. Log hygiene only: the emits cost
-# 0.03% of wall time per worker, so this is not a throughput change.
+# AITER's Triton MoE GEMM repeatedly warns that Gluon is unavailable and falls
+# back to Triton. Gluon supports only gfx1250, so on this gfx950 recipe that
+# message was 98% of a gsm8k server log (411k of 417k lines, 30 MiB of 32 MiB).
+# This process-global threshold can also hide other AITER Triton warnings; set
+# it back to WARNING while diagnosing new startup or runtime failures. This is
+# log hygiene only: the observed emits cost 0.03% of wall time per worker.
 export AITER_TRITON_LOG_LEVEL=ERROR
 # DeepseekV41ForCausalLM is not torch-compiled upstream, so the default
 # cudagraph_mode=FULL_AND_PIECEWISE aborts at engine init with "piecewise CUDA
@@ -48,10 +47,10 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_RUST_FRONTEND=1
 export PYTHONUNBUFFERED=1
 
-# Upstream default. The previous 2*CONC cap sat below AgentX's subagent
-# fan-out, so at CONC=1 the engine admitted 2 requests and left the rest
-# queued on scheduling capacity. Pinned rather than inherited so CAPTURE_SIZE
-# below stays consistent with it.
+# Explicit reproducibility cap. Upstream vllm serve selects 1024 on GPUs with
+# at least 160 GiB, while the previous local 2*CONC cap sat below AgentX's
+# subagent fan-out. At CONC=1 it admitted 2 requests and left the rest queued
+# on scheduling capacity. Pinning 128 also keeps CAPTURE_SIZE deterministic.
 MAX_NUM_SEQS=128
 NUM_SPEC_TOKENS=5
 CAPTURE_SIZE=1
