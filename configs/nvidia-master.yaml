@@ -8497,7 +8497,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
 # mtp2 keys/recipe files so the existing GB200 AgentX MTP recipes above are
 # untouched.
 dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f
+  image: vllm/vllm-openai:v0.29.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:gb200-nv

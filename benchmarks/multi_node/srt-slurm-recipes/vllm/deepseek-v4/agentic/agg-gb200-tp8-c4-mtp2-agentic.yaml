@@ -6,14 +6,14 @@ name: "svf-vllm-agg-gb200-tp8-c4-mtp2-agentic"
 
 model:
   path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
+  container: "vllm/vllm-openai:v0.29.0"
   precision: "fp4"
 
 identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro"
   container:
-    image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
+    image: "vllm/vllm-openai:v0.29.0"
   frameworks:
     dynamo: "1.2.1"
 
@@ -120,7 +120,12 @@ backend:
       block-size: 256
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64],"mode":0}'
       speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
-      gpu-memory-utilization: 0.94
+      # vLLM v0.29.0 profiles only ~3.8 GiB of peak activation and hands the
+      # rest of the budget to the KV cache (62.5 GiB at 0.94 versus 31.4 GiB on
+      # the previous dev image). Keep headroom for the lazily allocated sparse
+      # indexer logits workspace (VLLM_SPARSE_INDEXER_MAX_LOGITS_MB), which
+      # OOMed at 0.94 on the first long AgentX prefill (run 34662875814).
+      gpu-memory-utilization: 0.90
       stream-interval: 10
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: "deepseek_v4"
