@@ -24,7 +24,6 @@ set -eo pipefail
 # the disk tier); drop this recipe once that lands upstream.
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
-require_agentic_kv_offload_none
 export GPU_COUNT="$TP"
 
 if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
@@ -39,6 +38,8 @@ resolve_trace_source
 install_agentic_deps
 mkdir -p "$RESULT_DIR"
 SERVER_LOG="$RESULT_DIR/server.log"
+MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
+MOONCAKE_MASTER_PID=""
 export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-3600}"
 export VLLM_USE_RUST_FRONTEND=1
 export PYTHONUNBUFFERED=1
@@ -70,6 +71,112 @@ case "$ENGRAM_FSTYPE" in
 esac
 df -h "$ENGRAM_SSD_DIR" | tail -1
 
+# ---- KV offload ---------------------------------------------------------------
+# The point of moving Engram to disk is to leave DRAM for KV, so this recipe
+# supports the same KV offload backends as the other B200 vLLM agentic recipes
+# rather than requiring kv-offloading=none. The two are independent: Engram
+# rows are read on the host and copied to the device per step, while a KV
+# connector owns its own pinned pool.
+#
+# The page cache and the KV pool compete for the same DRAM, and that resolves
+# itself in the right direction: a connector's pool is pinned and therefore
+# unreclaimable, while the Engram mapping is clean page cache, so the kernel
+# evicts Engram pages under pressure instead of failing the KV allocation. The
+# cost of that eviction is a page fault on the next lookup of an evicted row,
+# measured at about 70 microseconds per 4 KiB read on this array.
+OFFLOAD_ARGS=()
+case "$KV_OFFLOAD_BACKEND" in
+    "")
+        require_agentic_kv_offload_none
+        ;;
+    vllm-simple)
+        require_agentic_kv_offload_backend vllm-simple
+        CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / GPU_COUNT ))
+        # Identical prefixes must hash to identical block keys across DP ranks.
+        export PYTHONHASHSEED=42
+        OFFLOAD_CONFIG=$(cat <<EOF
+{
+  "kv_connector": "SimpleCPUOffloadConnector",
+  "kv_role": "kv_both",
+  "kv_connector_extra_config": {
+    "cpu_bytes_to_use_per_rank": ${CPU_BYTES_PER_RANK},
+    "enable_cross_layers_blocks": "true",
+    "lazy_offload": false
+  }
+}
+EOF
+)
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            "$OFFLOAD_CONFIG"
+        )
+        ;;
+    mooncake)
+        require_agentic_kv_offload_backend mooncake
+        # Embedded mode contributes one segment per GPU rank to a shared
+        # distributed store, so pre-divide the aggregate host-memory budget.
+        PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / GPU_COUNT))
+
+        MOONCAKE_VERSION=0.3.11.post1
+        agentic_pip_install --quiet --no-cache-dir --no-deps \
+            --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
+        python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
+
+        MOONCAKE_MASTER_PORT=$((PORT + 12000))
+        MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
+        cat > "$MOONCAKE_CONFIG_PATH" <<EOF
+{
+  "mode": "embedded",
+  "metadata_server": "P2PHANDSHAKE",
+  "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
+  "global_segment_size": "${PER_RANK_GB}GB",
+  "local_buffer_size": "4GB",
+  "protocol": "rdma",
+  "device_name": "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11",
+  "enable_offload": false
+}
+EOF
+        export MOONCAKE_CONFIG_PATH
+        export MC_ENABLE_DEST_DEVICE_AFFINITY=1
+        # Identical prefixes must hash to identical store keys across DP ranks.
+        export PYTHONHASHSEED=0
+        export WITH_NVIDIA_PEERMEM=0
+        export MC_SLICE_SIZE=1048576
+        export MC_WORKERS_PER_CTX=4
+
+        # Each rank contributes a separate segment. Evict early enough to
+        # avoid an imbalanced rank exhausting its segment.
+        MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO=0.80
+        MOONCAKE_EVICTION_RATIO=0.10
+        # Mooncake's default 5s read lease is shorter than the observed
+        # transfer latency for large DSv4 hybrid-KV loads on B200 TCP.
+        MOONCAKE_KV_LEASE_TTL=60s
+
+        echo "Starting Mooncake master on port $MOONCAKE_MASTER_PORT..."
+        mooncake_master --port "$MOONCAKE_MASTER_PORT" \
+            --eviction_high_watermark_ratio="$MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO" \
+            --eviction_ratio="$MOONCAKE_EVICTION_RATIO" \
+            --default_kv_lease_ttl="$MOONCAKE_KV_LEASE_TTL" \
+            > "$MOONCAKE_MASTER_LOG" 2>&1 &
+        MOONCAKE_MASTER_PID=$!
+        sleep 2
+        if ! kill -0 "$MOONCAKE_MASTER_PID" 2>/dev/null; then
+            echo "Mooncake master died during startup." >&2
+            cat "$MOONCAKE_MASTER_LOG" >&2
+            exit 1
+        fi
+        unset VLLM_USE_SIMPLE_KV_OFFLOAD
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
+        )
+        ;;
+    *)
+        echo "Error: unsupported B200 KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND'" >&2
+        exit 1
+        ;;
+esac
+
 NUM_SPEC_TOKENS=5
 CAPTURE_SIZE=1
 while (( CAPTURE_SIZE < CONC * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
@@ -100,6 +207,7 @@ VLLM_CMD=(
     --tool-call-parser deepseek_v41 --enable-auto-tool-choice
     --reasoning-parser deepseek_v41
     --engram-config "{\"cpu_offload\":true,\"disk_offload_dir\":\"$ENGRAM_SSD_DIR\"}"
+    "${OFFLOAD_ARGS[@]}"
     --compilation-config '{"cudagraph_mode":"PIECEWISE"}'
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576

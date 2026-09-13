@@ -10405,12 +10405,17 @@ dsv41flashssd-fp4-b200-vllm-agentic-dspark:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    # 0.92 rather than the 0.80 the pinned recipe uses. Engram no longer holds
+    # ~189 GiB of unreclaimable host memory, so that much more of the host is
+    # available to the KV pool, which is the point of moving the tables to disk.
+    - dram-utilization: 0.92
       search-space:
       # Same layout as dsv41flash-fp4-b200-vllm-agentic-dspark, with the Engram
-      # tables mapped from node-local NVMe instead of pinned host DRAM. Frees
-      # ~257 GiB of host RAM; measured at parity on throughput.
+      # tables mapped from node-local NVMe instead of pinned host DRAM, and the
+      # DRAM that frees handed to a KV tier the pinned recipe has no room for.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [16, 32, 64, 128] }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, spec-decoding: mtp, conc-list: [16, 32, 64, 128] }
 
 dsv41flash-fp4-gb300-vllm-agentic-dspark:
   image: vllm/vllm-openai:deepseekv41-flash-0909
