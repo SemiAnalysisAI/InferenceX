@@ -7494,3 +7494,12 @@
     - "Use port 19401 for the GB300 aggregate exporter; the two-node shared lifecycle check verified ownership, all eight GPU telemetry streams, and preservation of the system service on port 9401. Full Kimi-K3 qualification remains pending."
     - "GB300 聚合部署改用已验证的 19401 功耗端口；完整 Kimi-K3 基准验证仍待完成。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3046
+
+- config-keys:
+    - dsv41flashssd-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Serve the DeepSeek-V4.1-Flash Engram n-gram tables from node-local NVMe instead of pinned host DRAM, freeing ~257 GiB of host RAM at throughput parity on B200 TP4 (14,168 vs 13,632 tok/s mean over three 8k1k runs each)."
+    - "DeepSeek-V4.1-Flash 的 Engram 表改由本地 NVMe 提供，释放约 257 GiB 主机内存，吞吐持平。"
+  pr-link: TBD

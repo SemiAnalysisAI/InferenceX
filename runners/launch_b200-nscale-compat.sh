@@ -17,7 +17,7 @@ set -x
 # portability, but we resolve to pre-staged paths here to avoid repeated
 # downloading on every Nscale node. Runs for both single-node and multinode
 # launches.
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "$IS_MULTINODE" != "true" ]]; then
+if [[ "$MODEL_PREFIX" == dsv41flash* && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "$IS_MULTINODE" != "true" ]]; then
     export MODEL_PATH="$MODEL"
     export HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
     mkdir -p "$HF_HUB_CACHE_HOST_PATH"
@@ -530,7 +530,8 @@ else
         CONTAINER_MOUNT_DIR=/workspace
     fi
 
-    if [[ "$MODEL_PREFIX" == "dsv41flash" ]]; then
+    # dsv41flash* so the Engram-SSD variant keeps the same mounts and paths.
+    if [[ "$MODEL_PREFIX" == dsv41flash* ]]; then
         CONTAINER_MOUNT_DIR=/ix
         export INFMAX_CONTAINER_WORKSPACE=/ix
         export RESULT_DIR=/ix/results
