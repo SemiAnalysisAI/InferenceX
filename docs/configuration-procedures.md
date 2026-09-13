@@ -114,6 +114,14 @@ The runner-name prefix is load-bearing: workflow routing uses `launch_${RUNNER_N
 6. Verify every runner is **Idle** in [repository runner settings](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners) before adding it to sweep traffic.
 7. Verify launcher mounts for `_work`, HF cache, staged weights, and squash images from a compute node. Root containers must not leave root-owned files in the shared workspace.
 
+The B300 DSXE Kimi-K3 AgentX path mounts its pre-staged target under
+`/scratch/models` and separately exports and mounts `WRITABLE_MODELS_DIR` for
+DSpark weights. Keep the draft directory on that persistent mount when reusing
+the serving container; the read-only target mount cannot hold the draft.
+Concurrent cells serialize draft staging with a per-model lock. Each cell lets
+`hf download` validate or resume the existing cache before serving; a nonempty
+directory is not a completion signal.
+
 ## Native TileRT power
 
 For GLM-5.1 on B200 Nscale, `MODEL_PATH` can select an existing shared checkpoint instead of the default `/scratch/models/GLM-5.1-FP8`. When it selects an HF snapshot, also set `HF_HUB_CACHE_HOST_PATH` to the existing cache root; TileRT mounts that root at the same absolute path so snapshot links to sibling blobs remain readable. Keep `TILERT_WEIGHTS_DIR` pointed at the separately converted decode weights.
