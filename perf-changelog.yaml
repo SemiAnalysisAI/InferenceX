@@ -7410,6 +7410,26 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3043
 
 - config-keys:
+    - qwen3.5-fp8-b200-sglang
+    - qwen3.5-fp8-h100-sglang
+    - qwen3.5-fp8-gb200-dynamo-sglang
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Preserve request failure outcomes, retain all available fixed-sequence diagnostics, and reject incomplete concurrency batches before publishing benchmark artifacts."
+    - "保留请求失败状态及全部可用的固定序列诊断信息；发布基准产物前拒绝缺失并发点的批次。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3026
+
+- config-keys:
+    - dsr1-fp8-mi355x-sglang-disagg
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add representative AMD coverage for fixed-sequence request diagnostics and multinode concurrency filename processing; shared processor changes also affect unlisted fixed-sequence recipes."
+    - "增加固定序列请求诊断与多节点并发文件名处理的代表性 AMD 覆盖；共享处理器变更也影响未列出的固定序列配置。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3026
+
+- config-keys:
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark
   description:
     - "Switch to the upstream ROCm nightly image nightly-eed1f3d0c6043bd494424a22443ee198dd56f657. The deepseekv41-flash-0909 tag predates vllm-project/vllm#56503, which moves the mHC delayed pre block off the eager Torch reference onto AITER; that block is 85% of the decoder's kernel launches, measured 15.9-20.9x faster under cudagraph with gsm8k unchanged at 0.9719. The upstream recipe moves to the same nightly in vllm-project/recipes#962."

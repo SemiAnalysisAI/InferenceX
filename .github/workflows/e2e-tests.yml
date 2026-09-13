@@ -368,7 +368,7 @@ jobs:
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             run-eval: false
-            require-power: ${{ inputs.require-power }}
+            require-power: ${{ inputs.require-power || (matrix.config['require-power'] == true && matrix.config['eval-only'] != true) }}
             power-producer-sha: ${{ inputs.power-producer-sha }}
             ref: ${{ inputs.ref }}
 
@@ -692,7 +692,7 @@ jobs:
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
             run-eval: false
-            require-power: ${{ inputs.require-power }}
+            require-power: ${{ inputs.require-power || (matrix.config['require-power'] == true && matrix.config['eval-only'] != true) }}
             ref: ${{ inputs.ref }}
 
     test-sweep-evals:
