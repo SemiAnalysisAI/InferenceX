@@ -37,6 +37,13 @@ def _write_executable(path: Path, text: str) -> None:
     path.chmod(0o755)
 
 
+def _launcher_power_gate_source(launcher_name: str) -> str:
+    launcher = (REPO_ROOT / "runners" / launcher_name).read_text()
+    start = launcher.index("USES_DCGM_POWER=0\n")
+    end = launcher.index("\nfi", launcher.index("Error: dcgm-power requires", start))
+    return launcher[start:end + len("\nfi")]
+
+
 def _run_dsv4_route(
     tmp_path: Path, uses_dcgm_power: bool, *, reported_head: str = "",
     launcher_name: str = "launch_gb300-nv.sh", model: str = "dsv4"
@@ -50,6 +57,10 @@ def _run_dsv4_route(
     source = workspace / "benchmarks/multi_node/srt-slurm-recipes" / recipe_directory
     source.mkdir(parents=True)
     (source / "overlay-marker.txt").write_text("from-workspace\n")
+    (source / "route-test.yaml").write_text(
+        "telemetry:\n  provider: dcgm-power\n"
+        f"  enabled: {str(uses_dcgm_power).lower()}\n"
+    )
     stub_bin.mkdir()
 
     route_log = tmp_path / "route.log"
@@ -110,16 +121,18 @@ set -eo pipefail
 POWER_SRT_SLURM_URL={FORK_URL}
 POWER_SRT_SLURM_PIN={PRODUCER_PIN}
 AGENTX_POWER_SRT_SLURM_PIN={PRODUCER_PIN}
-USES_AGENTX_POWER={int(model == 'kimik3' and uses_dcgm_power)}
 IS_AGENTIC={int(model == 'kimik3')}
 FRAMEWORK={'dynamo-vllm' if model == 'kimik3' else 'dynamo-sglang'}
 MODEL_PREFIX={model}
 PRECISION=fp4
 SPEC_DECODING=
 USES_DCGM_POWER={int(uses_dcgm_power)}
+USES_AGENTX_POWER=0
 GITHUB_WORKSPACE={workspace!s}
+CONFIG_FILE=recipes/{recipe_directory}/route-test.yaml:fixture-override
 SRT_REPO_DIR={repo_dir!s}
 python3() {{ :; }}
+{_launcher_power_gate_source(launcher_name) if model == 'kimik3' else ''}
 {routing}
 """
     )
@@ -266,7 +279,7 @@ def test_gb300_dsv4_recipe_images_match_their_master_configs():
 
 
 @pytest.mark.parametrize("launcher_name", ["launch_gb300-nv.sh"])
-def test_kimi_agentx_route_uses_custom_power_producer(tmp_path, launcher_name):
+def test_kimi_agentx_route_uses_recipe_power_gate(tmp_path, launcher_name):
     log, workspace, repo_dir, marker = _run_dsv4_route(
         tmp_path, True, launcher_name=launcher_name, model="kimik3"
     )
@@ -274,6 +287,30 @@ def test_kimi_agentx_route_uses_custom_power_producer(tmp_path, launcher_name):
     assert f"git checkout {PRODUCER_PIN}" in log
     assert (workspace / "power-producer-sha.txt").read_text() == f"{PRODUCER_PIN}\n"
     assert marker.read_text() == "from-workspace\n"
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"CONFIG_FILE": "recipes/vllm/kimi-k3/8k1k/test.yaml"},
+        {"MODEL_PREFIX": "other-model"},
+        {"PRECISION": "fp8"},
+        {"IS_AGENTIC": "0"},
+        {"FRAMEWORK": "vllm"},
+    ],
+)
+def test_kimi_power_gate_rejects_unsupported_route(tmp_path, override):
+    env = os.environ.copy()
+    env.update(GITHUB_WORKSPACE=str(tmp_path), CONFIG_FILE="recipes/vllm/kimi-k3/agentic/test.yaml",
+               MODEL_PREFIX="kimik3", PRECISION="fp4", IS_AGENTIC="1", FRAMEWORK="dynamo-vllm")
+    env.update(override)
+    recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes" / env["CONFIG_FILE"].removeprefix("recipes/")
+    recipe.parent.mkdir(parents=True)
+    recipe.write_text("telemetry:\n  provider: dcgm-power\n  enabled: true\n")
+    result = subprocess.run(["/bin/bash"], input=_launcher_power_gate_source("launch_gb300-nv.sh"),
+                            text=True, capture_output=True, env=env)
+    assert result.returncode == 1
+    assert "dcgm-power requires" in result.stderr
 
 
 @pytest.mark.parametrize("launcher_name", ["launch_gb300-nv.sh"])
