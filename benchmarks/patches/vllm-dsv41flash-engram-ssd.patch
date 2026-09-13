@@ -1,5 +1,5 @@
 --- a/models/deepseek_v4_1/common/engram.py	2026-09-13 21:00:26
-+++ b/models/deepseek_v4_1/common/engram.py	2026-09-14 00:40:05
++++ b/models/deepseek_v4_1/common/engram.py	2026-09-14 00:54:41
 @@ -34,12 +34,20 @@
    cache for the rest.
  """
@@ -26,9 +26,9 @@
              mask=valid[:, None],
          )
 +
- 
++
 +_ENGRAM_DISK_MAPS: dict[str, Any] = {}
- 
++
 +# numpy has no fp8/bf16, so files are mapped with a same-width integer dtype
 +# and reinterpreted.
 +_ENGRAM_DISK_NP_DTYPE = {
@@ -77,7 +77,7 @@
 +    BLOCK_R: tl.constexpr,
 +):
 +    """Dequantize host-gathered rows into the lookup's output layout.
-+
+ 
 +    The disk path gathers deduplicated rows on the host, so `inverse` maps each
 +    output row to its gathered row. `local_ids` carries the -1 sentinel for
 +    heads this rank does not own, which write zeros exactly as the UVA kernel's
@@ -104,7 +104,7 @@
 +        (values.to(tl.float32) * scale).to(tl.bfloat16),
 +        mask=valid[:, None],
 +    )
-+
+ 
 +
  class ParallelEngramEmbedding(nn.Module):
      """The n-gram hash table, sharded by complete hash heads over TP ranks.
@@ -185,7 +185,7 @@
          for param in (self.weight, self.weight_scale_inv):
              set_weight_attrs(
                  param,
-@@ -758,20 +857,214 @@
+@@ -758,20 +857,257 @@
              )
          if cpu_offload:
              logger.info(
@@ -196,8 +196,8 @@
                  self.part_num_embeddings,
                  dim,
                  self.part_num_embeddings * (dim + dim // block_size) / 1024**3,
-             )
- 
++            )
++
 +    def _open_disk_shard(
 +        self,
 +        disk_dir: str,
@@ -324,8 +324,51 @@
 +                    dtype=torch.uint8,
 +                    pin_memory=True,
 +                ),
-+            )
+             )
 +        return self._stage[0][:rows], self._stage[1][:rows]
+ 
++    def pin_hash_ids(self, hash_ids: torch.Tensor) -> torch.Tensor:
++        """Start an ordered copy of this layer's ids into reusable pinned memory."""
++        if (
++            self._ids_host is None
++            or self._ids_host.shape[0] < hash_ids.shape[0]
++            or self._ids_host.shape[1] != hash_ids.shape[1]
++        ):
++            self._ids_host = torch.empty(
++                hash_ids.shape, dtype=hash_ids.dtype, pin_memory=True
++            )
++        view = self._ids_host[: hash_ids.shape[0]]
++        view.copy_(hash_ids, non_blocking=True)
++        return view
++
++    def stage_disk_rows_from_host(self, ids_host: torch.Tensor, num_tokens: int):
++        """Resolve and read rows with no CUDA involvement, for a worker thread."""
++        ids = ids_host[:num_tokens].numpy()
++        heads = self.head_start + np.arange(self.part_n_hash_cols)
++        owned_head = heads < self.n_hash_cols
++        gathered = ids[:, np.clip(heads, None, self.n_hash_cols - 1)]
++        owned = (
++            owned_head
++            & (gathered >= self.vocab_start_idx)
++            & (gathered < self.vocab_end_idx)
++        )
++        flat = np.where(owned, gathered - self.vocab_start_idx, -1).reshape(-1)
++        unique_np, inverse_np = np.unique(flat.clip(min=0), return_inverse=True)
++        unique_cpu = torch.from_numpy(unique_np).to(torch.int64)
++        w_stage, s_stage = self._staging(unique_cpu.numel())
++        torch.index_select(
++            self.weight.data.view(torch.uint8),
++            0,
++            unique_cpu,
++            out=w_stage.view(torch.uint8),
++        )
++        torch.index_select(self.weight_scale_inv.data, 0, unique_cpu, out=s_stage)
++        return (
++            w_stage,
++            s_stage,
++            torch.from_numpy(inverse_np.astype("int32")),
++            torch.from_numpy(flat.astype("int32")),
++        )
 +
 +    def stage_disk_rows(self, indices: torch.Tensor) -> tuple[torch.Tensor, ...]:
 +        """Host half of a disk lookup: resolve rows and read them into pinned memory.
@@ -403,7 +446,7 @@
              return self.weight.data, self.weight_scale_inv.data
          src = (self.weight.data_ptr(), self.weight_scale_inv.data_ptr())
          if self._view_src != src:
-@@ -793,6 +1086,9 @@
+@@ -793,6 +1129,9 @@
          rows = indices.shape[0] * self.part_n_hash_cols
          if not rows:
              return
@@ -413,17 +456,17 @@
          weight, scales = self._storage()
          # The table dwarfs TLB reach, so a persistent grid near the SM count
          # beats one program per row; halve it to leave SMs for the main stream.
-@@ -1004,6 +1300,9 @@
-     stream against the key, signed-sqrt'ed before the sigmoid (matching the
+@@ -1005,6 +1344,9 @@
      training kernel).
      """
-+
+ 
 +    _disk_pool = None
 +    _disk_pending = None
- 
++
      def __init__(
          self,
-@@ -1031,6 +1330,8 @@
+         config,
+@@ -1031,6 +1373,8 @@
              layout.head_dim,
              tuple(size for order in layout.primes[layer_hash_index] for size in order),
              cpu_offload=engram_config.cpu_offload if engram_config else True,
@@ -432,7 +475,7 @@
          )
          n_hash_cols = (layout.max_ngram_size - 1) * layout.n_heads
          self.wkv = ReplicatedLinear(
-@@ -1073,15 +1374,77 @@
+@@ -1073,15 +1417,77 @@
          return self._extra_staged_rows[ubatch_id - 1]
  
      def prepare_embeddings(self, hash_ids: torch.Tensor) -> None:
@@ -459,14 +502,14 @@
 +            # leaving the staging buffer alone is harmless.
 +            return
 +        self._start_disk_prefetch(hash_ids, rows)
-+
+ 
 +    def _drain_disk_prefetch(self) -> None:
 +        """Join any queued gather without consuming it."""
 +        pending = self._disk_pending
 +        if pending is not None:
 +            pending[0].result()
 +            self._disk_pending = None
- 
++
 +    def _start_disk_prefetch(
 +        self, hash_ids: torch.Tensor, rows: torch.Tensor
 +    ) -> None:
@@ -512,7 +555,7 @@
      def _trade_dp_tokens_for_heads(self, num_tokens: int) -> torch.Tensor:
          """Keep this replica's tokens, take the heads its DP peers own.
  
-@@ -1096,6 +1459,8 @@
+@@ -1096,6 +1502,8 @@
  
      def embed(self, hash_ids: torch.Tensor) -> torch.Tensor:
          """Gather heads, returning only local tokens when SP is enabled."""
