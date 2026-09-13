@@ -71,6 +71,13 @@ case "$ENGRAM_FSTYPE" in
 esac
 df -h "$ENGRAM_SSD_DIR" | tail -1
 
+# Pyxis shares the host network; port 8888 can already belong to a host service.
+select_available_server_port
+export AIPERF_SERVER_URL="http://localhost:${PORT}"
+export AIPERF_SERVER_METRICS_URLS="${AIPERF_SERVER_URL}/metrics"
+export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
+echo "Using vLLM endpoint ${AIPERF_SERVER_URL}"
+
 # ---- KV offload ---------------------------------------------------------------
 # The point of moving Engram to disk is to leave DRAM for KV, so this recipe
 # supports the same KV offload backends as the other B200 vLLM agentic recipes
@@ -183,12 +190,6 @@ while (( CAPTURE_SIZE < CONC * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); 
     CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
 done
 
-select_available_server_port
-export AIPERF_SERVER_URL="http://localhost:${PORT}"
-export AIPERF_SERVER_METRICS_URLS="${AIPERF_SERVER_URL}/metrics"
-export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
-echo "Using vLLM endpoint ${AIPERF_SERVER_URL}"
-
 if [[ "${EVAL_ONLY:-false}" == true ]]; then
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":true}'
 else
@@ -216,6 +217,16 @@ VLLM_CMD=(
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
+cleanup_offload_services() {
+    local rc=$?
+    trap - EXIT
+    if [[ -n "$MOONCAKE_MASTER_PID" ]] && kill -0 "$MOONCAKE_MASTER_PID" 2>/dev/null; then
+        kill "$MOONCAKE_MASTER_PID" 2>/dev/null || true
+    fi
+    exit "$rc"
+}
+trap cleanup_offload_services EXIT
+
 "${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
