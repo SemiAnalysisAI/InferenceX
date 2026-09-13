@@ -7473,3 +7473,17 @@
     - "Switch --moe-backend from aiter_triton_mxfp4_bf16 to aiter, which selects the CK a8w4 experts (mfma_moe1_silu_mul_afp8_wfp4_bf16 / mfma_moe2_afp8_wfp4_bf16) instead of the W4A16 _moe_gemm_a16w4 Triton kernel, matching the DSV4-Pro MI355X recipe. Decode traces at 131k context show MoE GEMM falling from 2.72 to 2.30 ms/step at conc 1, 4.91 to 4.27 at conc 4 and 9.06 to 7.18 at conc 16, for whole-step gains of 4.2%, 5.3% and 8.7%. AgentX conc 1 improves mean ITL 4.01 to 3.91 ms and mean TTFT 681 to 639 ms; gsm8k is unchanged at 0.9719 strict-match."
     - "将 --moe-backend 从 aiter_triton_mxfp4_bf16 改为 aiter，从而选择 CK a8w4 专家内核（mfma_moe1_silu_mul_afp8_wfp4_bf16 / mfma_moe2_afp8_wfp4_bf16），取代 W4A16 的 _moe_gemm_a16w4 Triton 内核，与 DSV4-Pro MI355X 配方保持一致。131k 上下文的解码 trace 显示 MoE GEMM 在并发 1 时从 2.72 降至 2.30 ms/step，并发 4 从 4.91 降至 4.27，并发 16 从 9.06 降至 7.18，整步分别加速 4.2%、5.3% 和 8.7%。AgentX 并发 1 的平均 ITL 从 4.01 降至 3.91 ms，平均 TTFT 从 681 降至 639 ms；gsm8k strict-match 保持 0.9719 不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3058
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Size CUDA graph capture to the point being measured instead of pinning it at 1024. CAPTURE_SIZE was derived from the constant MAX_NUM_SEQS, so --max-cudagraph-capture-size never varied with concurrency: at conc 1 the engine never sees a decode batch larger than 6, yet it captured shapes out to 1024, spending 18.71 GiB of PIECEWISE plus 19.40 GiB of FULL capture memory per GPU on shapes the workload cannot reach. That left 86.0 GiB for KV and a 33.6M-token pool. The reclaimed memory is inert at the concurrencies swept so far, since peak KV occupancy was 13.0% at conc 32 and the prefix cache hit rate held at 99.7%, so this is hygiene and headroom rather than a throughput change. Deriving it from CONC * (1 + NUM_SPEC_TOKENS) rounded up to a power of two gives 8 through 1024 across the ladder and matches the derivation the other DeepSeek-V4.1-Flash agentic recipes use."
+    - "将 CUDA graph 捕获规模按被测点设定，不再固定为 1024。此前 CAPTURE_SIZE 由常量 MAX_NUM_SEQS 推导，导致 --max-cudagraph-capture-size 不随并发变化：并发 1 时引擎的解码批次不会超过 6，却仍捕获到 1024，每 GPU 为工作负载无法触及的形状消耗 18.71 GiB PIECEWISE 与 19.40 GiB FULL 捕获显存，KV 仅剩 86.0 GiB，token 池为 33.6M。在已扫描的并发范围内，这部分回收的显存并不影响性能：并发 32 时 KV 占用峰值为 13.0%，前缀缓存命中率保持在 99.7%，因此该改动属于配置卫生与余量，而非吞吐优化。改用 CONC * (1 + NUM_SPEC_TOKENS) 向上取到 2 的幂后，整条并发阶梯的取值为 8 至 1024，与其他 DeepSeek-V4.1-Flash AgentX 配方的推导方式一致。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3068
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Extend conc-list to [1, 2, 4, 8, 16, 32, 64, 128]. At the old top of the ladder the sweep is still climbing steeply: output throughput per GPU rises 62% from conc 16 to 32 with no sign of a knee, energy per output token is still improving at 3.81 to 2.60 J, mean TTFT is flat near 0.9 s and KV occupancy peaked at 14%. The sweep ended before it found the throughput plateau, which is the region that determines serving cost."
+    - "将 conc-list 扩展为 [1, 2, 4, 8, 16, 32, 64, 128]。在原并发阶梯顶端，吞吐仍在快速上升：每 GPU 输出吞吐从并发 16 到 32 提升 62%，未见拐点；每输出 token 能耗从 3.81 J 继续降至 2.60 J；平均 TTFT 稳定在约 0.9 s，KV 占用峰值仅 14%。原扫描在到达决定服务成本的吞吐平台区之前就结束了。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3068
