@@ -7496,6 +7496,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3046
 
 - config-keys:
+    - kimik3-fp4-h200-vllm-agentic-latency
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required power for the H200 Kimi-K3 latency recipe and route their launch, concurrency injection, failure handling and result validation through the pinned producer and shared collector."
+    - "仅为 H200 Kimi-K3 latency 配方启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3044
+
+- config-keys:
     - kimik3-fp4-b300-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
