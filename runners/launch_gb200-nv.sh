@@ -10,7 +10,7 @@ export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
 SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
 
-# dcgm-power producer pin — single source of truth for power lanes. Swap
+# Fixed-sequence dcgm-power producer pin. Swap
 # URL+PIN here (and identically in launch_gb300-nv.sh) when the upstream
 # srt-slurm merge lands.
 POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
@@ -334,11 +334,19 @@ if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
 fi
 
 USES_AGENTX_POWER=0
-if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
-    "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" &&
-    "$FRAMEWORK" == "dynamo-vllm" &&
-    "$_RECIPE_REL" == recipes/vllm/kimi-k3/agentic/* ]]; then
-    USES_AGENTX_POWER=1
+if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" ]]; then
+    if [[ "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" &&
+        "$FRAMEWORK" == "dynamo-sglang" &&
+        "$_RECIPE_REL" == "recipes/sglang/glm5.2/gb200-fp4/agentic/glm5.2-agentx-agg.yaml" ]]; then
+        USES_AGENTX_POWER=1
+    elif [[ "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" &&
+        "$FRAMEWORK" == "dynamo-vllm" &&
+        "$_RECIPE_REL" == recipes/vllm/kimi-k3/agentic/* ]]; then
+        USES_AGENTX_POWER=1
+    else
+        echo "Error: AgentX dcgm-power requires the GLM-5.2 aggregate or supported Kimi-K3 recipe" >&2
+        exit 1
+    fi
 fi
 if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" && "$USES_AGENTX_POWER" != "1" ]]; then
     echo "Error: dcgm-power requires dynamo-sglang or the supported Kimi-K3 AgentX route" >&2
@@ -432,15 +440,26 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-# GLM-5.2 uses v1.0.50 for complete logical-worker metrics discovery across
-# aggregate, DP-attention, and disaggregated topologies.
+# AgentX power needs the custom-window producer contract; the released GLM
+# metrics path can keep its existing producer.
 if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
-    git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    test "$(git rev-parse HEAD)" = "e4019633c9e2bc25f38c44b81edf52bb0504d937" || {
-        echo "Error: NVIDIA/srt-slurm v1.0.50 resolved to an unexpected commit" >&2
-        exit 1
-    }
+    if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+        git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout "$AGENTX_POWER_SRT_SLURM_PIN" || exit 1
+        test "$(git rev-parse HEAD)" = "$AGENTX_POWER_SRT_SLURM_PIN" || {
+            echo "Error: srt-slurm HEAD does not match AgentX power producer $AGENTX_POWER_SRT_SLURM_PIN" >&2
+            exit 1
+        }
+        git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+    else
+        git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+        test "$(git rev-parse HEAD)" = "e4019633c9e2bc25f38c44b81edf52bb0504d937" || {
+            echo "Error: NVIDIA/srt-slurm v1.0.50 resolved to an unexpected commit" >&2
+            exit 1
+        }
+    fi
     mkdir -p recipes/sglang/glm5.2/gb200-fp4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/gb200-fp4/agentic" \
         recipes/sglang/glm5.2/gb200-fp4/agentic
@@ -848,7 +867,7 @@ fi
 
 set -x
 
-echo "Job $JOB_ID completed!"
+echo "Job $JOB_ID finished!"
 echo "Collecting results..."
 
 if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
