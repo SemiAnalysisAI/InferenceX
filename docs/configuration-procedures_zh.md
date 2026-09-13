@@ -114,6 +114,12 @@ runner 名称前缀是关键契约：workflow 通过 `launch_${RUNNER_NAME%%_*}.
 6. 将 runner 加入 sweep 流量前，在[仓库 runner 设置页](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners)确认每个 runner 都是 **Idle**。
 7. 从计算节点验证 launcher 对 `_work`、HF cache、预置权重和 squash 镜像的挂载。root 容器不得在共享 workspace 留下 root 所有的文件。
 
+## TileRT 原生功耗
+
+B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默认的 `/scratch/models/GLM-5.1-FP8`。若指定 HF snapshot，还需把 `HF_HUB_CACHE_HOST_PATH` 设为现有缓存根目录；TileRT 按相同绝对路径挂载整个缓存，使 snapshot 指向同级 blobs 的软链接可读。`TILERT_WEIGHTS_DIR` 仍指向单独转换的 decode 权重。
+
+仅固定 8192/1024 的 `glm5.1-fp8-b200-tilert` 要求原生功耗。TileRT 在 `salloc` 返回的分配内运行，保留两个角色的退出码，并在保存审计数据前等待采集器排空。每个角色仅支持一个物理节点。其他序列长度、AgentX 和 eval-only 不启用此采集器。硬件资格验证与发布仍待完成。
+
 ## NVIDIA SRT 可选功耗
 
 固定 8192/1024 SRT 运行仅在 `REQUIRE_POWER=1` 时选择 runtime `3f3b7af26e34acc8b62b39971bec839a19ac57a2`。准备过程解析所选 override、注入矩阵并发度、转换 DeepSeek-V4 tokenizer 设置并要求 DCGM 遥测。目前无主配置启用此路径。AgentX 和 eval-only 保留原有路由。失败时保留已有日志与生产者版本。各硬件及框架范围仍需完整 sweep 和适用 eval。

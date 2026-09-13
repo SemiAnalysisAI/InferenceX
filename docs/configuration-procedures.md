@@ -114,6 +114,12 @@ The runner-name prefix is load-bearing: workflow routing uses `launch_${RUNNER_N
 6. Verify every runner is **Idle** in [repository runner settings](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners) before adding it to sweep traffic.
 7. Verify launcher mounts for `_work`, HF cache, staged weights, and squash images from a compute node. Root containers must not leave root-owned files in the shared workspace.
 
+## Native TileRT power
+
+For GLM-5.1 on B200 Nscale, `MODEL_PATH` can select an existing shared checkpoint instead of the default `/scratch/models/GLM-5.1-FP8`. When it selects an HF snapshot, also set `HF_HUB_CACHE_HOST_PATH` to the existing cache root; TileRT mounts that root at the same absolute path so snapshot links to sibling blobs remain readable. Keep `TILERT_WEIGHTS_DIR` pointed at the separately converted decode weights.
+
+Only fixed 8192/1024 `glm5.1-fp8-b200-tilert` requires native power. TileRT runs inside its returned `salloc` allocation, retains both role exit codes and drains collectors before staging audits. Exactly one physical node per role is supported. Other sequence lengths, AgentX and eval-only do not enable this collector. Hardware qualification and publication remain pending.
+
 ## Opt-in NVIDIA SRT power
 
 With `REQUIRE_POWER=1`, fixed 8192/1024 SRT launches select runtime `3f3b7af26e34acc8b62b39971bec839a19ac57a2`. Preparation resolves the selected override, injects matrix concurrencies, translates the DeepSeek-V4 tokenizer setting and requires DCGM telemetry. No master scenario enables this path yet. AgentX and eval-only retain existing routing. Available logs and producer provenance survive failure. Each hardware/framework scope needs its own full sweep and applicable evals.

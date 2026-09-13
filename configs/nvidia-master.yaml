@@ -10273,6 +10273,7 @@ glm5.1-fp8-b200-tilert:
           - "DECODE_NODES=1"
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       - spec-decoding: "mtp"
         conc-list: [1]
