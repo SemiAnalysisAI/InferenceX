@@ -1,101 +1,79 @@
 DeepSeek-V4.1-Flash's Engram n-gram tables come to about 189 GiB. Tensor
 parallelism splits them across ranks rather than replicating them, so that
-figure is the same whatever the parallel layout, and in practice it is what
-decides whether the model fits a given host rather than anything about GPU
-memory. The tables hold fp8 rows with ue8m0 block scales, 264 bytes per row.
+figure holds whatever the parallel layout, and on most hosts it is what decides
+whether the model fits. The lookup is a pure gather of one row per head per
+layer per token, so the resident working set is tiny next to the tables.
 
-The lookup is a pure gather of one row per head per layer per token, so the
-resident working set is tiny next to the size of the tables, which makes them
-a natural candidate for file-backed paging. This adds
-EngramConfig.disk_offload_dir, defaulting to VLLM_ENGRAM_DISK_OFFLOAD_DIR,
-which maps each shard from a file instead of holding it in anonymous pinned
-memory.
+This adds `EngramConfig.disk_offload_dir`, which memory-maps each shard from a
+file instead of holding it in anonymous pinned host memory. It builds on the
+Engram prefetch and DP sharding merged in #56512, reusing its
+`_allocate_weights` and `_storage` hooks.
 
-This builds on the Engram prefetch and DP sharding merged in #56512, reusing
-its _allocate_weights and _storage hooks for the file-backed shard, and
-targets main directly.
+Enabling it
+
+    vllm serve ... --engram-config '{"cpu_offload":true,"disk_offload_dir":"/raid/engram"}'
+
+or `VLLM_ENGRAM_DISK_OFFLOAD_DIR=/raid/engram`, which supplies the default. The
+option requires `cpu_offload`, is rejected alongside `dp_shared_memory` because
+the two are alternative placements for the same table, and requires a cudagraph
+mode that still executes the forward in Python on live steps (`PIECEWISE`).
+Unset, nothing changes: the UVA and shared-memory paths remain the default.
+
+For the directory given above, each shard is written as
+`/raid/engram/engram_v<vocab_start>_<vocab_end>_r<shard>.weight.bin`, with a
+matching `.scale.bin` and a `.done.json` recording the shard geometry. The
+vocab slice is part of the name because a rank hosts one shard per Engram
+layer, and keying on the rank alone makes the layers collide on one file. The
+first boot streams the checkpoint through a read-write mapping, so a host with
+less free RAM than the tables can still load them. Later boots map the finished
+file and skip the checkpoint read. A half-written file, or one left by a
+different TP or EDP layout, is rebuilt rather than gathered from.
+
+A mapped file cannot be read through UVA, which needs page-locked memory, and
+pinning the mapping would return the table to RAM. Rows are therefore gathered
+on the host, deduplicated there, and dequantized on the device by
+`_engram_dequant_rows_kernel`, which mirrors the existing kernel's index and
+ue8m0 math. The gather is host work and is skipped during capture, since
+capture mode is global and rejects it from any thread.
+
+Composability
+
+Independent of the KV offload backends. The Engram mapping is clean page cache
+while a KV connector's pool is pinned, so the kernel evicts Engram pages under
+pressure instead of failing the KV allocation. Verified on B200 TP4 with
+`SimpleCPUOffloadConnector` holding 186.26 GB per rank, 745 GB across the node,
+alongside disk-backed Engram: free memory 784 GB, page cache falling from 1671
+GB to 1188 GB as the pinned pool took its share. This is the case the feature
+exists for, since the freed DRAM is what makes a KV tier affordable.
+
+Shard naming keys on the index from `_get_shard_info`, which is the TP rank
+under tensor parallelism and the EDP head rank under Engram DP sharding, so
+both layouts name shards correctly and a layout change invalidates the sidecar.
 
 Results
 
-Measured on B200 at TP4, 8k1k, concurrency 16, with CUDA graphs and no eager,
-three runs per arm. Mean throughput was 14,168 tok/s on disk against 13,632
-for the pinned baseline, with 1.4% run-to-run spread against 12.4%. Median
-TPOT was 8.45 to 8.60 ms against 8.57 to 9.78 ms. Median TTFT was about 188 ms
-against 181 ms, but P99 TTFT was about 6.0s against 3.9s. Host RAM after load
-dropped from 352 GB to 95 GB.
+B200 TP4, CUDA graphs, no eager. Fixed 8k1k at concurrency 16, three runs per
+arm: 14,168 tok/s mean against 13,632 for the pinned baseline, with 1.4%
+run-to-run spread against 12.4%, and host memory in use falling from 352 GB to
+95 GB.
 
-I would describe that as parity on throughput with roughly 257 GiB of host RAM
-freed, not as a speedup. The disk arm's worst run beats the baseline's mean
-and two of its three runs, but the baseline's best single run at 14,496 still
-edges the disk's best at 14,284, and the baseline's own run-to-run spread is
-wider than the difference between the two arms. A single run of either arm
-would be misleading.
+Agentic traces across the concurrency sweep are less uniform. Median TPOT
+carries a near-constant offset of about 2.6 ms per token that does not scale
+with batch size, so it dominates where steps are short and disappears where
+they are not: at concurrency 4 total throughput is 25,417 tok/s against 34,897,
+at 16 it is 100,387 against 112,212, at 64 it is 336,073 against 348,969, and
+at 128 it is 106,897 against 76,717. The offset is the per-step host round
+trip, not device I/O; random 4 KiB reads on the array measure 70 microseconds,
+and the pages are cached in the steady state.
 
-Decode being slightly better is worth explaining, since a slower storage
-medium winning looks wrong. UVA makes the lookup kernel issue roughly 16k
-scattered 264-byte PCIe reads per layer, whereas this gathers rows on the
-host, which is random access in DRAM and page cache where it is cheap, and
-then issues one contiguous host-to-device copy. The page cache absorbs the
-skew in the n-gram distribution, so the backing device is mostly not in the
-steady-state path at all.
-
-The cost is the prefill tail. The median TTFT matches but the mean and P99 do
-not, because an 8k prefill touches roughly 16k distinct rows at once and first
-touch pays the device. Batched readahead with MADV_WILLNEED over the resolved
-rows is the obvious follow-up and is not in this PR.
-
-Design
-
-A mapped file cannot be read through a UVA view, which needs page-locked
-memory, and pinning the mapping would pull the whole table back into RAM and
-defeat the change. The disk path therefore gathers rows on the host and
-dequantizes only the gathered rows on the device, through a new
-_engram_dequant_rows_kernel that mirrors the existing kernel's index and ue8m0
-math. Rows are deduplicated first, on the host, because a batch repeats
-n-grams and the distinct-row count is what the filesystem actually serves;
-deduplicating on the device would cost a second synchronization per layer per
-step purely to learn that count.
-
-The gather runs inline on the forward thread and is skipped entirely while a
-stream is capturing. Host work is not legal during capture, and capture mode
-is global, so a worker thread does not escape the restriction: it cannot
-observe that the forward thread is capturing, and its in-flight gather would
-run through the capture window and invalidate it. Warmup output is discarded,
-so leaving the staging buffer untouched during capture is harmless.
-
-Two consequences are worth flagging. The disk path requires a cudagraph mode
-that still executes the forward in Python on live steps, meaning piecewise
-rather than a mode that replays it wholesale. And the gather is not
-overlapped. Overlapping it needs a capture context that can break around host
-work; eager_break_during_capture cannot serve here because nothing
-instantiates BreakableCUDAGraphCapture in-tree, so it is currently inert,
-while the prefetch merged in #56512 is unaffected because that gather is
-device-side.
-The alternative is to gather during input preparation into stable buffers so
-that captured code only reads them, as the Qwen4Exp PLE disk work does. I am
-happy to take direction on which route you would prefer.
-
-The on-disk layout is
-<dir>/engram_v<start>_<end>_r<shard>.{weight,scale}.bin plus a .done.json
-sidecar recording the shard geometry. The first boot streams the checkpoint
-through a read-write mapping, so a host with less free RAM than the tables can
-still load them; later boots map the finished file and skip the checkpoint
-read entirely. A half-written file, or one left by a different TP or EDP
-layout, is rebuilt rather than silently gathered from.
-
-The path is keyed on the vocab slice as well as the shard index. A rank hosts
-one shard per Engram layer, so keying on the rank alone made both of Flash's
-layers collide on one file and serve from a single table, which no throughput
-benchmark can detect.
-
-disk_offload_dir requires cpu_offload and is an alternative to
-dp_shared_memory rather than a companion to it. The UVA and shared-memory
-paths are untouched and remain the default.
+Low-concurrency serving is therefore the weak case today. Reducing the round
+trip to one per step rather than one per Engram layer, and computing the hashes
+on the host so the gather can start before the forward, are the follow-ups.
 
 Tests
 
-tests/models/test_deepseek_v41_engram_disk_offload.py, 7 passing on B200. They
-assert the disk path is bit-identical to the UVA path at atol=0 and rtol=0
-across token counts, that unowned heads and out-of-slice ids still write
-zeros, that a second boot reuses the shard, that a stale sidecar forces a
-rebuild, and that the config rejects disk offload without cpu_offload.
+`tests/models/test_deepseek_v41_engram_disk_offload.py`, 7 passing on B200. The
+disk path is bit-identical to the UVA path at `atol=0` and `rtol=0` across
+token counts, unowned heads and out-of-slice ids write zeros, a second boot
+reuses the shard, a stale sidecar forces a rebuild, and the config rejects disk
+offload without `cpu_offload`.
