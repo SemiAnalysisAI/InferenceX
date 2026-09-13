@@ -69,3 +69,67 @@ live confound for the cross-task comparison. Stated, not resolved.
 The ablated arm's contribution is exactly 0.0 across all 16,480 calls -- the
 all-False `token_mask` is applied by the shipped fused kernel itself, so this
 is zero rather than small. Both runs reproduced pass@1 to four decimals.
+
+---
+
+# Phase arms: prefill-only vs decode-only (run 34732450349)
+
+Same 800 items, same raw-completion prompt, four arms in one process. Unlike
+the likelihood run, CRUXEval generates, so `prefill_only` / `decode_only` are
+the **real engine phase** derived from `query_start_loc`, not a positional
+proxy. `phase_mask_unavailable` is false for all four arms, so every number
+below was measured under the mask it claims.
+
+| arm | pass@1 | Δ vs baseline | only baseline correct | only arm correct | McNemar χ² | ~σ |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| baseline | 0.6512 | — | — | — | — | — |
+| prefill_only | 0.6100 | −0.0413 | 52 | 19 | 14.423 | 3.8 |
+| decode_only | 0.4850 | −0.1663 | 161 | 28 | 92.190 | 9.6 |
+| ablated | 0.4888 | −0.1625 | 162 | 32 | 85.778 | 9.26 |
+
+**Engram is a decode-time lookup.** Letting it act only during prefill
+recovers almost the whole baseline (−0.04 vs the full −0.16); letting it act
+only during decode is statistically indistinguishable from removing it
+entirely (0.4850 vs 0.4888, a 0.4pp gap on 800 items). That is the same
+conclusion the likelihood run reached from the opposite direction — there
+`decode_only` recovered a median 94.4% of the ablation loss — and it is worth
+being explicit about why the two look inverted: the NLL arms are a
+*positional* split of one prefill, where "decode_only" means Engram is open on
+the scored tokens; here "decode_only" means Engram is open only while
+generating, and shut over the whole two-shot prompt. Both say the same thing:
+what matters is Engram acting on the tokens being predicted from, and shutting
+it over the prompt costs nearly everything.
+
+By answer kind, prefill_only is uniformly mild and decode_only tracks full
+ablation closely:
+
+| kind | items | baseline | prefill_only | decode_only | ablated |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| str | 371 | 0.5768 | −0.0377 | −0.1725 | −0.1590 |
+| container | 280 | 0.7214 | −0.0321 | −0.1714 | −0.1750 |
+| number | 98 | 0.6633 | −0.0816 | −0.1429 | −0.1633 |
+| bool/None | 49 | 0.7755 | −0.0408 | −0.1020 | −0.1020 |
+
+## Ablation verification (phase run)
+
+| arm | calls | mean contribution | max contribution | phase mask | empty gens |
+| --- | ---: | ---: | ---: | --- | ---: |
+| baseline | 16480 | 0.28390 | 0.95459 | ok | 3 |
+| ablated | 16480 | 0.00000 | 0.00000 | ok | 0 |
+| prefill_only | 16488 | 0.00362 | 0.79323 | ok | 8 |
+| decode_only | 16480 | 0.33595 | 0.80077 | ok | 0 |
+
+The contribution column is itself the check on the phase split: `prefill_only`
+averages 0.0036 because the overwhelming majority of forward calls in a
+generation run are decode steps, where that arm holds the gate shut;
+`decode_only` averages *above* baseline because its non-zero calls are exactly
+the decode steps, with the diluting prefill calls contributing zero.
+
+## Caveat on the baseline
+
+This run's baseline is 0.6512 against 0.6388 in the two earlier paired runs
+(which agreed with each other to four decimals). Same temperature 0.0, same
+items; the four-arm run batches differently, and the checkpoint is not
+bitwise-deterministic across batch shapes. All comparisons above are within
+this run and paired per item, so the deltas are unaffected, but do not read
+the 1.2pp baseline shift as a measurement of anything.
