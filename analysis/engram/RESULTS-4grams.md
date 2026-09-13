@@ -1667,16 +1667,30 @@ Showing 40 of 91 ranked 4-grams.
 Generated from `analysis/engram/scan.py` output; merged across shards 0-2.
 
 ---
-
 # Part 2: what the gate is worth
 
-The tables above say *which* 4-grams open the gate. This part says what
-happens to the model's behaviour when the gate is shut on all of them.
+Part 1 says which 4-grams open the gate. Part 2 says what happens to the
+model when the gate is shut on all of them. Everything measured on this
+branch is here; there are no other results files.
 
-Ablation is the module's own documented mechanism: an all-False `token_mask`
-through the real forward, applied by the shipped Triton kernel. That is why
-the ablated contribution is exactly `0.0` rather than merely small, and every
-run below carries a verification line proving it.
+## Method, and why the ablation is trustworthy
+
+Engram is an n-gram memory at layers 1 and 14. Its gate is computed and
+consumed inside the fused Triton kernel `_fused_engram_post_wkv_kernel`
+(`hidden + gate * value`, one store), so it is invisible to a forward hook.
+Ablation is therefore done the module's own documented way: an all-False
+`token_mask` through the real forward, applied by the shipped kernel itself.
+That is why every ablated measurement below reads exactly `0.0` rather than
+merely small.
+
+All runs: DeepSeek-V4.1-Flash MXFP4, B200, vLLM `deepseekv41-flash-0909`,
+`enforce_eager=True` (the meter's host-side work invalidates a CUDA graph
+capture), prefix caching off.
+
+Phase arms carry an extra guard. When a phase mask cannot be derived the call
+does **not** fall back to leaving Engram on -- that would look exactly like a
+measurement -- the run is marked `phase_mask_unavailable` and the driver
+refuses to report.
 
 ## Scores
 
@@ -1687,50 +1701,61 @@ run below carries a verification line proving it.
 | CRUXEval-O pass@1 (800 items) | 0.6388 | 0.4925 | **−0.1463**, χ²=74.3 (~8.6σ) | 16,480 calls, ablated exactly 0.0 |
 | CRUXEval-O pass@1, four-arm run (800 items) | 0.6512 | 0.4888 | **−0.1625**, χ²=85.8 (~9.3σ) | `phase_mask_unavailable` false on all arms |
 | NLL, 16 domains, 2.70M scored tokens | 1.0743 bits/tok | +0.8513 | **+0.8513 bits/token** (median) | ablated max 0.0 on all 1,508 chunks |
-| Terminal-Bench 4.0 | — | — | **not obtained** | runs cancelled mid-flight, see below |
+| Terminal-Bench 4.0 | — | — | **not obtained** | runs cancelled mid-flight |
 
-gsm8k's `+0.0008` is a null: it sits far inside the ±0.0047 standard error,
-and the sign is *positive*, i.e. removing Engram nominally helped. The
-contrast with CRUXEval's −0.1463 is the single most informative pair of
-numbers here, with the caveat in "Open items" below.
+gsm8k's `+0.0008` is a null: inside the ±0.0047 standard error, and positive,
+i.e. removing Engram nominally helped. The contrast with CRUXEval's −0.1463 is
+the most informative pair of numbers here, subject to the prompt-regime
+confound in "Open items".
 
-An earlier gsm8k pair (0.9712 -> 0.9689) was **retracted**: that ablated arm
+An earlier gsm8k pair (0.9712 -> 0.9689) is **retracted**: that ablated arm
 logged only 10 gate-shut forward calls, so it never served the eval -- a
-surviving baseline process on the same port did. The numbers in the table are
-from the re-run after per-arm ports, process-tree cleanup and a hard refusal
-to report below a call-count floor. The retraction is why every row above
-carries a verification column.
+surviving baseline process on the same port did. The numbers above are the
+re-run after per-arm ports, process-tree cleanup, and a hard refusal to report
+below a call-count floor. That retraction is why every row carries a
+verification column.
 
 ## Likelihood, per domain
 
-Boundary 1792, 100 chunks per domain, 3584-token chunks. Baseline is absolute
-bits/token on the scored suffix; the arms are deltas against it.
+Boundary 1792, 100 chunks per domain, 3584-token chunks, 16 domains. Baseline
+is absolute bits/token on the scored suffix; arms are deltas against it.
 
-| domain | baseline | ablated Δ | prefill_only Δ | decode_only Δ | ablated σ |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `wiki_full` | 0.4526 | +2.6396 | +2.5322 | +0.1179 | 44.8 |
-| `code_javascript` | 0.4318 | +1.7921 | +1.5380 | +0.2066 | 39.5 |
-| `code_ruby` | 0.7788 | +1.6300 | +1.3039 | +0.1788 | 33.1 |
-| `wiki_zh` | 2.1419 | +1.3802 | +1.4160 | −0.0282 | 16.2 |
-| `wiki` | 1.4987 | +1.2068 | +1.1702 | +0.0774 | 20.4 |
-| `code_mbpp` | 0.5902 | +1.1049 | +0.9133 | +0.0534 | 14.0 |
-| `code_python` | 1.1396 | +0.9459 | +0.6837 | +0.1058 | 28.9 |
-| `code_php` | 0.9230 | +0.8978 | +0.6974 | +0.0724 | 28.7 |
-| `code_java` | 0.6908 | +0.8048 | +0.6033 | +0.0890 | 25.2 |
-| `math_web` | 1.6377 | +0.7856 | +0.6782 | +0.0520 | 13.8 |
-| `web_zh` | 3.7646 | +0.7482 | +0.6543 | +0.0243 | 18.2 |
-| `web` | 2.5509 | +0.7044 | +0.5724 | +0.0282 | 14.8 |
-| `math` | 1.0089 | +0.5235 | +0.5912 | +0.0155 | 27.5 |
-| `code_go` | 0.0467 | +0.4129 | +0.2984 | +0.0509 | 13.7 |
-| `chat` | 1.6183 | +0.1937 | +0.1457 | +0.0020 | 15.9 |
-| `chat_zh` | 2.5979 | +0.0780 | +0.0593 | −0.0067 | 18.9 |
-| **median** | **1.0743** | **+0.8513** | **+0.6809** | **+0.0527** | |
+| domain | baseline | ppl base | ablated Δ | prefill_only Δ | decode_only Δ | abl σ | pre σ | dec σ |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `wiki_full` | 0.4526 | 1.369 | +2.6396 | +2.5322 | +0.1179 | 44.8 | 45.5 | 16.3 |
+| `code_javascript` | 0.4318 | 1.349 | +1.7921 | +1.5380 | +0.2066 | 39.5 | 35.5 | 23.5 |
+| `code_ruby` | 0.7788 | 1.716 | +1.6300 | +1.3039 | +0.1788 | 33.1 | 28.7 | 24.1 |
+| `wiki_zh` | 2.1419 | 4.413 | +1.3802 | +1.4160 | −0.0282 | 16.2 | 16.5 | −3.1 |
+| `wiki` | 1.4987 | 2.826 | +1.2068 | +1.1702 | +0.0774 | 20.4 | 17.8 | 13.3 |
+| `code_mbpp` | 0.5902 | 1.506 | +1.1049 | +0.9133 | +0.0534 | 14.0 | 10.9 | 5.6 |
+| `code_python` | 1.1396 | 2.203 | +0.9459 | +0.6837 | +0.1058 | 28.9 | 24.3 | 15.8 |
+| `code_php` | 0.9230 | 1.896 | +0.8978 | +0.6974 | +0.0724 | 28.7 | 24.5 | 17.7 |
+| `code_java` | 0.6908 | 1.614 | +0.8048 | +0.6033 | +0.0890 | 25.2 | 21.2 | 19.1 |
+| `math_web` | 1.6377 | 3.112 | +0.7856 | +0.6782 | +0.0520 | 13.8 | 12.6 | 6.9 |
+| `web_zh` | 3.7646 | 13.591 | +0.7482 | +0.6543 | +0.0243 | 18.2 | 16.1 | 3.1 |
+| `web` | 2.5509 | 5.860 | +0.7044 | +0.5724 | +0.0282 | 14.8 | 12.9 | 5.6 |
+| `math` | 1.0089 | 2.012 | +0.5235 | +0.5912 | +0.0155 | 27.5 | 30.9 | 4.0 |
+| `code_go` | 0.0467 | 1.033 | +0.4129 | +0.2984 | +0.0509 | 13.7 | 11.4 | 11.9 |
+| `chat` | 1.6183 | 3.070 | +0.1937 | +0.1457 | +0.0020 | 15.9 | 14.6 | 1.1 |
+| `chat_zh` | 2.5979 | 6.054 | +0.0780 | +0.0593 | −0.0067 | 18.9 | 16.1 | −4.5 |
+| **median** | **1.0743** | | **+0.8513** | **+0.6809** | **+0.0527** | | | |
 
-The ranking tracks Part 1: the domains whose top 4-grams are the most
-literal (`wiki_full` boilerplate, JS/Ruby punctuation runs) lose the most,
-and the two chat corpora -- whose strong n-grams are the most generic --
-lose almost nothing. `chat_zh` and `wiki_zh` even come out slightly *ahead*
-under `decode_only`, which is noise at these sigmas, not a finding.
+The ranking tracks Part 1: domains whose top 4-grams are the most literal
+(`wiki_full` boilerplate, JS/Ruby punctuation runs) lose the most, and the two
+chat corpora -- whose strong n-grams are the most generic -- lose almost
+nothing.
+
+Two Chinese corpora **invert**: `decode_only` beats baseline slightly and
+significantly (`wiki_zh` −0.028 bits at −3.1σ, `chat_zh` −0.007 at −4.5σ). On
+these corpora Engram acting over the context is mildly harmful. Real but tiny;
+recorded, not explained.
+
+### Verification (likelihood run)
+
+Every arm metered on every chunk, not sampled: 1,508 chunks, 12,064 Engram
+calls per arm. Ablated contribution exactly 0.0 on every chunk; baseline
+minimum 0.316, so Engram was demonstrably active wherever it was supposed to
+be.
 
 ## Phase arms
 
@@ -1738,11 +1763,11 @@ Two different splits share the name `decode_only`, and conflating them is a
 trap:
 
 - **NLL** scores prompt logprobs in a single prefill, so its split is
-  *positional* at `--boundary`: `decode_only` means the gate is shut over the
-  prefix and open on the scored tokens.
-- **CRUXEval** generates, so its split is the *real engine phase* from
-  `query_start_loc`: `decode_only` means the gate is shut over the entire
-  prompt and open only on generated tokens.
+  *positional* at `--boundary`: `decode_only` = gate shut over the prefix,
+  open on the scored tokens.
+- **CRUXEval** generates, so its split is the *real engine phase* derived from
+  `query_start_loc`: `decode_only` = gate shut over the entire prompt, open
+  only on generated tokens.
 
 | arm | NLL median Δ bits/tok | NLL recovery | CRUXEval pass@1 | CRUXEval Δ | χ² | ~σ |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -1751,23 +1776,67 @@ trap:
 | decode_only | +0.0527 | 94% | 0.4850 | −0.1663 | 92.2 | 9.6 |
 | ablated | +0.8513 | 0% | 0.4888 | −0.1625 | 85.8 | 9.3 |
 
-Read together rather than against each other, both say the same thing:
-neither half suffices. NLL's `prefill_only` recovers 18%; CRUXEval's
-`decode_only` recovers ~2%.
+Paired counts for CRUXEval (only-baseline / only-arm correct): prefill_only
+52/19, decode_only 161/28, ablated 162/32.
 
-## CRUXEval by answer kind (800 items, four-arm run)
+Read together rather than against each other, both say the same thing:
+**what matters is Engram acting on the tokens being predicted from.** Neither
+half suffices -- NLL's `prefill_only` recovers 18%, CRUXEval's `decode_only`
+recovers ~2%. On `wiki_full`, removing Engram from the predicted tokens costs
+2.53 bits/token; removing it from the context costs 0.12. The two deltas are
+close to additive on most domains (2.53 + 0.12 = 2.65 vs 2.64 for full
+ablation), so prefix and suffix contributions are largely independent rather
+than substituting for one another.
+
+### Verification (CRUXEval phase run)
+
+| arm | calls | mean contribution | max contribution | phase mask | empty gens |
+| --- | ---: | ---: | ---: | --- | ---: |
+| baseline | 16480 | 0.28390 | 0.95459 | ok | 3 |
+| ablated | 16480 | 0.00000 | 0.00000 | ok | 0 |
+| prefill_only | 16488 | 0.00362 | 0.79323 | ok | 8 |
+| decode_only | 16480 | 0.33595 | 0.80077 | ok | 0 |
+
+The contribution column is itself the check on the phase split.
+`prefill_only` averages 0.0036 because the overwhelming majority of forward
+calls in a generation run are decode steps, where that arm holds the gate
+shut; `decode_only` averages *above* baseline because its non-zero calls are
+exactly the decode steps, with the diluting prefill calls contributing zero.
+
+## CRUXEval-O: method and answer kinds
+
+Runs 34706153348 and 34707533583 reproduced pass@1 to four decimals. 800
+items, prompt style `raw-completion`. The model is denied any execution tool
+and has to simulate the program; grading executes nothing either -- both the
+reference and the model's answer are parsed with `ast.literal_eval` and
+compared as values, so an unsimplified expression is graded wrong rather than
+evaluated.
+
+The obvious confound is copying: many CRUXEval-O answers are strings or
+containers largely rearranged from characters already in the prompt, and an
+n-gram memory helps reproduce those without simulating anything. Numbers and
+booleans have nothing to copy -- but they drop nearly as much, which is what
+makes the copying story insufficient on its own.
 
 | kind | items | baseline | ablated Δ | prefill_only Δ | decode_only Δ |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| str | 371 | 0.577 | −0.159 | −0.038 | −0.173 |
-| container | 280 | 0.721 | −0.175 | −0.032 | −0.171 |
-| number | 98 | 0.663 | −0.163 | −0.082 | −0.143 |
-| bool/None | 49 | 0.776 | −0.102 | −0.041 | −0.102 |
+| str | 371 | 0.5768 | −0.1590 | −0.0377 | −0.1725 |
+| container | 280 | 0.7214 | −0.1750 | −0.0321 | −0.1714 |
+| number | 98 | 0.6633 | −0.1633 | −0.0816 | −0.1429 |
+| bool/None | 49 | 0.7755 | −0.1020 | −0.0408 | −0.1020 |
+
+### Verification (paired CRUXEval runs)
+
+| arm | Engram forward calls | mean contribution | max contribution | empty generations |
+| --- | ---: | ---: | ---: | ---: |
+| baseline | 16480 | 0.30961170 | 3.49387527 | 3 |
+| ablated | 16480 | 0.00000000 | 0.00000000 | 0 |
 
 ## Boundary sweep
 
-25 chunks/domain, four boundaries in one process, median recovery of the
-full-ablation loss:
+Does `decode_only`'s recovery depend on how much context was built with the
+gate shut? 25 chunks/domain, four boundaries in one process. Median recovery
+of the full-ablation loss:
 
 | gate-shut prefix | scored suffix | prefill_only | decode_only |
 | ---: | ---: | ---: | ---: |
@@ -1776,68 +1845,92 @@ full-ablation loss:
 | 3072 | 512 | 0.283 | 0.821 |
 | 3456 | 128 | 0.341 | 0.591 |
 
-`wiki_full` detail (bits/token, ablated / prefill_only / decode_only):
-512 -> 2.6521 / 2.5955 / 0.0306; 1792 -> 2.6261 / 2.5253 / 0.1048;
-3072 -> 2.6889 / 2.5774 / 0.3127; 3456 -> 2.7488 / 2.7964 / 0.7938.
+`wiki_full` detail, bits/token (ablated / prefill_only / decode_only, with
+decode_only recovery and σ):
 
-Recovery falls monotonically as more context is prefilled gate-shut, so
-degraded context is a real mechanism -- but it is nowhere near enough to
-explain CRUXEval. At boundary 3456, far more extreme starvation than
-CRUXEval's ~1-2k prompt, `decode_only` still returns 59%; extrapolating
-predicts ~90% where the measurement is ~2%. **The context-length explanation
-is at best partial.** Something task-shaped dominates: per-token likelihood
-tolerates a degraded prefix in a way a single graded whole-answer exact match
-through a long self-conditioned generation does not.
+| boundary | ablated | prefill_only | decode_only | recovery | σ |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 512 | 2.6521 | 2.5955 | 0.0306 | 0.9885 | 4.84 |
+| 1792 | 2.6261 | 2.5253 | 0.1048 | 0.9601 | 8.11 |
+| 3072 | 2.6889 | 2.5774 | 0.3127 | 0.8837 | 14.86 |
+| 3456 | 2.7488 | 2.7964 | 0.7938 | 0.7112 | 13.02 |
+
+**The prediction held directionally and failed on magnitude.** Recovery falls
+monotonically as more context is prefilled gate-shut, so degraded context is a
+real mechanism. But it is nowhere near enough to explain CRUXEval: at boundary
+3456 -- far more extreme starvation than CRUXEval's ~1-2k prompt --
+`decode_only` still returns 59%. Extrapolating to CRUXEval's prompt length
+predicts ~90% recovery; the measurement is ~2%. **The context-length
+explanation is at best partial, and I was wrong to lead with it as the likely
+resolution.** A task-shaped factor dominates: per-token likelihood tolerates a
+degraded prefix in a way that a single graded whole-answer exact match,
+produced through a long self-conditioned generation, does not.
 
 Confound, uncontrolled: raising the boundary both lengthens the gate-shut
-prefix and shrinks the scored suffix (76,800 scored tokens at 512 down to
-3,200 at 3456), so the scored tokens also sit deeper in context. Separating
-the two needs a fixed-width scored window slid along a longer chunk, which
-this sweep does not do.
+prefix *and* shrinks the scored suffix (76,800 scored tokens at 512 down to
+3,200 at 3456), so the scored tokens also sit deeper in context. The two move
+together by construction. Separating them needs a fixed-width scored window
+slid along a longer chunk, which this run does not do.
 
-## Terminal-Bench: still missing
+Prefix and suffix contributions stay close to additive across the sweep
+(median `(prefill_only + decode_only) / ablated` = 0.92, 0.89, 0.92, 1.09).
 
-The paired v2 run (baseline `34729702998`, ablated `34729704839`, TP8, 2 B200
+### Verification (sweep)
+
+12,256 Engram calls per arm over 1,532 chunks; ablated `worst` exactly 0.0 on
+every chunk, baseline `min` 0.362.
+
+## Terminal-Bench: no result
+
+**v1 paired run** (7h35m, 66 tasks) scored 0.045 / 0.030 against a published
+31.2 and was refused as a measurement. Root cause was mine: a `model_info`
+error declaring the context window as LiteLLM's per-call *output* cap, which
+floored both arms -- 164 and 32 turns respectively died on
+`max_tokens must be at least 1, got 0`.
+
+**Validation slice** (conc 17) confirmed the fix: zero-budget rejections
+164 -> 0, summarisation truncations 225 -> 2, Cloudflare 524s 29 -> 1.
+
+**v2 paired run** (baseline `34729702998`, ablated `34729704839`, TP8, 2 B200
 nodes, concurrency 66, 8h cap) started 2026-09-13 01:06:45Z and was
 **cancelled at 03:57:10Z**, ~2h50m in, both arms within one second of each
-other. `##[error]The operation was canceled.` No score was produced by
-either arm. I have not established what issued the cancellation; the
-one-second pairing points at something run-level rather than either job
-failing on its own.
+other: `##[error]The operation was canceled.` No score from either arm. I have
+not established what issued the cancellation; the one-second pairing points at
+something run-level rather than either job failing on its own. Four unrelated
+runs were dispatched against the same branch during that window, so I cannot
+rule out that I caused it.
 
-What the partial logs do show, and what any re-run has to survive: repeated
-Cloudflare **524** origin timeouts against the tunnel (03:41:15Z, 03:49:45Z,
-03:52:33Z) and a long run of `hit max_tokens limit. Response was truncated`
-during proactive summarisation.
-
-An earlier pair scored 0.045 / 0.030 against a published 31.2, but those are
-not reportable: 164 and 32 turns respectively were rejected with
-`max_tokens must be at least 1, got 0`. The validation slice (conc 17) exists
-to confirm those zero-budget rejections are gone before spending another
-~15 node-hours.
+The partial logs show what a re-run still has to survive: Cloudflare **524**
+origin timeouts at 03:41:15Z, 03:49:45Z and 03:52:33Z, and a long run of
+`hit max_tokens limit. Response was truncated` during proactive summarisation.
 
 Pre-conditions before any Terminal-Bench number from this branch is quoted:
 zero-budget rejections at 0, the 524 count, and the ablated arm's gate-shut
 forward call count above the 5,000 floor.
 
-## Open items
+## Open items and caveats
 
-- **gsm8k and CRUXEval are not directly comparable.** gsm8k ran 5-shot
-  through the chat template with lm-eval's filters; CRUXEval ran as a raw
-  completion. Part of the gap between `+0.0008` and `−0.1463` may be
-  harness, not task. A raw-completion gsm8k arm would settle it and has not
-  been run.
-- **Terminal-Bench is the only agentic evidence, and it is absent.**
-  Everything above is single-turn.
-- **The four-arm CRUXEval baseline shifted** (0.6512 vs 0.6388 in the two
-  earlier runs). Batching differs between the runs and the checkpoint is not
-  bitwise-deterministic across batch shapes. Deltas are paired per item, so
-  they are unaffected; absolute baselines across runs are not comparable.
+- **Terminal-Bench 4.0 has no result.** The harness is validated; the eval is
+  not done. Everything above is single-turn, so there is no agentic evidence.
+- **gsm8k vs CRUXEval remain confounded.** gsm8k ran 5-shot through the chat
+  template with chain of thought; CRUXEval ran as a raw few-shot completion
+  (this checkpoint copy ships no `chat_template`). Pattern completion is
+  exactly the regime where an n-gram memory should matter most, so prompt
+  regime is a live alternative to "task" as the explanation. A
+  raw-completion gsm8k arm would settle it and has not been run.
+- **CRUXEval baselines differ across runs** (0.6388 twice, 0.6512 in the
+  four-arm run). Same items, same temperature 0.0; the four-arm run batches
+  differently and the checkpoint is not bitwise-deterministic across batch
+  shapes. All comparisons are within-run and paired per item, so the deltas
+  hold -- but the 1.2pp baseline shift measures nothing.
+- **The two Chinese inversions** (`wiki_zh`, `chat_zh` under `decode_only`)
+  are unexplained.
 
 ## Provenance
 
 | result | run |
 | --- | --- |
+| 4-gram gate scan (Part 1) | 34610313633 |
 | gsm8k (verified re-run) | 34662897230 |
 | NLL phase arms | 34705399251 |
 | CRUXEval-O paired | 34706153348, 34707533583 |
@@ -1845,5 +1938,9 @@ forward call count above the 5,000 floor.
 | NLL boundary sweep | 34735263999 |
 | Terminal-Bench v2 (cancelled, no score) | 34729702998, 34729704839 |
 
-Raw artifacts: `nll_phase_arms.json`, `nll_boundary_sweep.json`,
-`cruxeval_ablation.json`, `cruxeval_phase_arms.json`.
+Raw artifacts: `engram_merged.json` (Part 1), `nll_phase_arms.json`,
+`nll_boundary_sweep.json`, `cruxeval_ablation.json`,
+`cruxeval_phase_arms.json`.
+
+The SSD/KV-offload feasibility probe is a separate investigation and lives in
+`analysis/ssd_offload/RESULTS.md`; it is not an Engram measurement.
