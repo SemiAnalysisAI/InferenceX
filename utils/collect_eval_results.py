@@ -11,6 +11,7 @@ if not __package__:
 
 from infx.results.evals import (
     EVAL_RESULT_FORMAT, as_int, build_row, build_rows, is_eval_result, result_order,
+    select_latest_results,
 )
 from infx.results.evals import result_concurrency as _result_concurrency
 
@@ -92,20 +93,7 @@ def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
         if is_eval_result(data):
             lm_paths.append(p)
 
-    if not lm_paths:
-        return []
-    if not batched:
-        return [max(lm_paths, key=result_order)]
-
-    latest_by_conc: Dict[int, Path] = {}
-    for path in lm_paths:
-        conc = result_concurrency(path)
-        if conc is None:
-            continue
-        current = latest_by_conc.get(conc)
-        if current is None or result_order(path) > result_order(current):
-            latest_by_conc[conc] = path
-    return [latest_by_conc[conc] for conc in sorted(latest_by_conc)]
+    return select_latest_results(lm_paths, batched=batched)
 
 
 def pct(x: Any) -> str:

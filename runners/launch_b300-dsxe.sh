@@ -436,6 +436,13 @@ else
         CONTAINER_MOUNT_DIR=/workspace
     fi
 
+    # Keep all new AgentX runtime directories outside /workspace.
+    if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" ]]; then
+        CONTAINER_MOUNT_DIR=/ix
+        export INFMAX_CONTAINER_WORKSPACE=/ix
+        export RESULT_DIR=/ix/results
+    fi
+
     import_squash_image "$IMAGE" "$SQUASH_FILE"
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"

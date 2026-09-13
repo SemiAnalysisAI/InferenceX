@@ -1,8 +1,8 @@
-name: dynamo-disagg-gb300-5p1d-dep16-c152-b16-mtp3
+name: dynamo-disagg-gb300-5p1d-dep16-c260-b16-mtp3
 
 model:
   path: nvidia/GLM-5.2-NVFP4
-  container: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc22.post1
+  container: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc26.dev202609040000
   precision: fp4
 
 dynamo:
@@ -38,6 +38,8 @@ backend:
     NCCL_GRAPH_MIXING_SUPPORT: "0"
     MIMALLOC_PURGE_DELAY: "0"
     PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+    TRTLLM_FUSED_DSA_METADATA: "1"
+    TRTLLM_DSA_INDEXER_BF16: "1"
     TRTLLM_SERVE_ENABLE_MSGSPEC: "1"
     TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: "0.10"
     TRTLLM_KV_CACHE_TRANSFER_TIMEOUT_SEC: "600"
@@ -161,6 +163,7 @@ frontend:
 
 benchmark:
   type: custom
+  client_dedicated_node: true
   client_placement: head
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
