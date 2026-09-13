@@ -7502,4 +7502,4 @@
   description:
     - "Serve the DeepSeek-V4.1-Flash Engram n-gram tables from node-local NVMe instead of pinned host DRAM, freeing ~257 GiB of host RAM at throughput parity on B200 TP4 (14,168 vs 13,632 tok/s mean over three 8k1k runs each)."
     - "DeepSeek-V4.1-Flash 的 Engram 表改由本地 NVMe 提供，释放约 257 GiB 主机内存，吞吐持平。"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3080
