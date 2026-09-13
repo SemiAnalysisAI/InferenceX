@@ -6,6 +6,84 @@ set -x
 
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
 
+# The one-off budget cannot cover another lane or a rerun attempt.
+[[ "${GITHUB_RUN_ID:-}" =~ ^[0-9]+$ && "${GITHUB_RUN_ATTEMPT:-}" == 1 ]] || exit 1
+export TASK_JOB_NAME="powerx3052-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+export TASK_JOB_USER="$(id -un)"
+export VALIDATION_LOGS="${GITHUB_WORKSPACE:?}/LOGS/pr3052-validation"
+export VALIDATION_JOB_RECEIPT="${RUNNER_TEMP:?}/${TASK_JOB_NAME}.job"
+mkdir -p "$VALIDATION_LOGS"
+
+cleanup_pr3052_validation() {
+    local rc="${1:-0}" job_id actual deadline record state owner exit_code
+    if [[ -f "$VALIDATION_JOB_RECEIPT" || -f "$VALIDATION_LOGS/request.txt" ]]; then
+        [[ "$(cat "$VALIDATION_LOGS/request.txt" 2>/dev/null)" == "$TASK_JOB_NAME|$TASK_JOB_USER|4|4|00:39:00|C1|8192|1024|16|no-eval" ]] || {
+            echo "Refusing stale or mismatched validation request" >&2; return 1;
+        }
+    fi
+    if [[ ! -f "$VALIDATION_JOB_RECEIPT" && -f "$VALIDATION_LOGS/request.txt" ]]; then
+        job_id=$(squeue -h --name="$TASK_JOB_NAME" --user="$TASK_JOB_USER" -o '%i') || return 1
+        [[ "$job_id" =~ ^[0-9]+$ ]] || { echo "Submission identity unresolved; do not retry" >&2; return 1; }
+        printf '%s\n' "$job_id" > "$VALIDATION_JOB_RECEIPT"
+        cp "$VALIDATION_JOB_RECEIPT" "$VALIDATION_LOGS/job-id.txt"
+    fi
+    if [[ -f "$VALIDATION_JOB_RECEIPT" ]]; then
+        job_id=$(cat "$VALIDATION_JOB_RECEIPT")
+        [[ "$job_id" =~ ^[0-9]+$ ]] || { echo "Invalid owned job receipt" >&2; return 1; }
+        actual=$(squeue -j "$job_id" -h -o '%j|%u') || return 1
+        if [[ "$actual" == "$TASK_JOB_NAME|$TASK_JOB_USER" ]]; then
+            scancel "$job_id" || return 1
+        elif [[ -n "$actual" ]]; then
+            echo "Refusing cleanup: job identity mismatch" >&2
+            return 1
+        fi
+        deadline=$(( $(date +%s) + 360 ))
+        while :; do
+            actual=$(squeue -j "$job_id" -h -o '%j|%u') || return 1
+            [[ -z "$actual" ]] && break
+            [[ "$actual" == "$TASK_JOB_NAME|$TASK_JOB_USER" && "$(date +%s)" -lt "$deadline" ]] || return 1
+            sleep 5
+        done
+        while :; do
+            sacct -j "$job_id" -n -P --format=JobIDRaw,JobName%100,User,State,ExitCode,Start,End,Elapsed,AllocTRES,NodeList \
+                > "$VALIDATION_LOGS/cleanup-accounting.txt" || return 1
+            record=$(awk -F'|' -v job="$job_id" '$1 == job {print; exit}' "$VALIDATION_LOGS/cleanup-accounting.txt")
+            if [[ -n "$record" ]]; then
+                IFS='|' read -r _ actual owner state exit_code _ <<< "$record"
+                [[ "$actual" == "$TASK_JOB_NAME" && "$owner" == "$TASK_JOB_USER" ]] || return 1
+                case "$state" in
+                    COMPLETED|FAILED|CANCELLED*|TIMEOUT|NODE_FAIL|OUT_OF_MEMORY|PREEMPTED|DEADLINE|BOOT_FAIL) break ;;
+                esac
+            fi
+            [[ "$(date +%s)" -lt "$deadline" ]] || { echo "Missing terminal accounting for owned job $job_id" >&2; return 1; }
+            sleep 5
+        done
+        [[ "$state" == COMPLETED && "$exit_code" == 0:0 ]] || { [[ "$rc" != 0 ]] || rc=1; }
+    elif [[ -s "$VALIDATION_LOGS/sbatch-output.txt" ]]; then
+        echo "Ambiguous submission without numeric receipt; do not retry" >&2
+        return 1
+    fi
+    return "$rc"
+}
+
+if [[ "${1:-}" == --cleanup-validation ]]; then
+    cleanup_pr3052_validation
+    exit $?
+fi
+[[ -z "${SLURM_JOB_ID:-}" && "${FRAMEWORK:-}" == llmd-vllm &&
+   "${MODEL_PREFIX:-}" == dsv4 && "${PRECISION:-}" == fp4 &&
+   "${IS_MULTINODE:-}" == true && "${IS_AGENTIC:-0}" == 0 &&
+   "${CONC_LIST:-}" == 1 && "${ISL:-}" == 8192 && "${OSL:-}" == 1024 &&
+   "${PREFILL_NODES:-}" == 2 && "${DECODE_NODES:-}" == 2 && "${GPUS_PER_NODE:-4}" == 4 &&
+   "${RUN_EVAL:-false}" == false && "${EVAL_ONLY:-false}" == false &&
+   "${BENCH_NUM_PROMPTS_MULTIPLIER:-10}" == 10 &&
+   "${CONFIG_FILE:-}" == dsv4-fp4-gb200-low-latency.yaml ]] || {
+    echo "Refusing configuration outside the one approved validation" >&2; exit 1;
+}
+[[ ! -e "$VALIDATION_JOB_RECEIPT" && ! -e "$VALIDATION_LOGS/request.txt" ]] || { echo "Existing submission; refusing retry" >&2; exit 1; }
+trap 'rc=$?; trap - EXIT; cleanup_pr3052_validation "$rc"; exit $?' EXIT
+trap 'exit 143' TERM HUP INT
+
 export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
 SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
@@ -133,7 +211,9 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     fi
 
     SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    import_squash "$SQUASH_FILE" "$IMAGE"
+    [[ -f "$SQUASH_FILE" ]] && unsquashfs -l "$SQUASH_FILE" >/dev/null 2>&1 || {
+        echo "Cached llm-d image missing or invalid; refusing import" >&2; exit 1;
+    }
 
     export LLMD_CONTAINER_ENGINE=pyxis
     export LLMD_SQUASH_FILE="$SQUASH_FILE"
@@ -148,14 +228,14 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
         exit 1
     fi
 
-    JOB_ID=$(bash "$BENCH_SCRIPT")
-    if [[ -z "$JOB_ID" ]]; then
+    JOB_ID=$(bash "$BENCH_SCRIPT") || exit 1
+    if [[ ! "$JOB_ID" =~ ^[0-9]+$ ]]; then
         echo "Error: failed to submit llm-d job" >&2
         exit 1
     fi
     echo "Submitted llm-d job: $JOB_ID"
 
-    trap 'bundle_server_logs "$BENCHMARK_LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true' EXIT INT TERM HUP
+    trap 'rc=$?; trap - EXIT; cleanup_pr3052_validation "$rc"; rc=$?; bundle_server_logs "$BENCHMARK_LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" || rc=1; exit "$rc"' EXIT
 
     LOG_FILE="${BENCHMARK_LOGS_DIR}/slurm_job-${JOB_ID}.out"
     SRT_JOB_RC=0
@@ -173,7 +253,6 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
         copy_eval_artifacts "$EVAL_DIR" "$GITHUB_WORKSPACE" || exit 1
     fi
 
-    scancel "$JOB_ID" 2>/dev/null || true
     exit "$SRT_JOB_RC"
 fi
 

@@ -361,18 +361,16 @@ jobs:
       c${{ join(fromJson(inputs.conc-list), 'x') }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
 
     steps:
-      - name: Slurm cleanup (pre-run)
-        run: &slurm-cleanup |
-          if command -v squeue >/dev/null 2>&1; then
-            for job_name in "${{ runner.name }}" "inferencex-${{ runner.name }}"; do
-              echo "[Slurm] Cleaning up jobs named: $job_name ..."
-              scancel --user="$USER" --name="$job_name" || true
-              while [ -n "$(squeue --user="$USER" --name="$job_name" --noheader --format='%i')" ]; do
-                squeue --user="$USER" --name="$job_name"
-                sleep 5
-              done
-            done
-          fi
+      - name: Check bounded validation scheduling
+        env:
+          PRIORITY_ENABLED: ${{ vars.PRIORITY_SCHEDULER_ENABLED }}
+          NODE_SLOTS_ENABLED: ${{ vars.NODE_SLOT_SCHEDULER_ENABLED }}
+          VALIDATION_NODES: ${{ inputs.node-count }}
+        run: |
+          test "$PRIORITY_ENABLED" = true
+          test "$NODE_SLOTS_ENABLED" = true
+          test "$VALIDATION_NODES" = 4
+          test "$GITHUB_RUN_ATTEMPT" = 1
 
       - name: Repair stale git state (pre-run)
         run: |
@@ -400,6 +398,7 @@ jobs:
           fi
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        id: validation-checkout
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
@@ -408,6 +407,7 @@ jobs:
           submodules: true
 
       - name: Launch multi-node job script
+        id: validation-launch
         env:
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
@@ -613,6 +613,14 @@ jobs:
           rm -f sample*.jsonl || true
           rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true
 
-      - name: Slurm cleanup (post-run)
+      - name: Clean up only this validation allocation
+        if: ${{ always() && steps.validation-checkout.outcome == 'success' && steps.validation-launch.outcome != 'skipped' }}
+        run: bash runners/launch_gb200-nv.sh --cleanup-validation
+
+      - name: Upload bounded allocation receipt
         if: always()
-        run: *slurm-cleanup
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pr3052-allocation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: LOGS/pr3052-validation/**
+          if-no-files-found: ignore

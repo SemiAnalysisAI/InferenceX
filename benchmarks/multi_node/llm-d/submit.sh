@@ -111,8 +111,33 @@ print(t)
     fi
 fi
 
+# The recipe's eight-hour default exceeds this one-off validation budget.
+[[ -z "${SLURM_JOB_ID:-}" && "$PREFILL_NODES" == 2 && "$DECODE_NODES" == 2 &&
+   "$GPUS_PER_NODE" == 4 && "$PREFILL_WORKERS" == 1 && "$DECODE_WORKERS" == 1 &&
+   "$ISL" == 8192 && "$OSL" == 1024 && "$CONCURRENCIES" == 1 &&
+   "$BENCH_NUM_PROMPTS_MULTIPLIER" == 10 && "$RUN_EVAL" == false && "$EVAL_ONLY" == false &&
+   "$IS_AGENTIC" == 0 && "$CONFIG_FILE" == dsv4-fp4-gb200-low-latency.yaml &&
+   "${GITHUB_RUN_ID:-}" =~ ^[0-9]+$ && "${GITHUB_RUN_ATTEMPT:-}" == 1 &&
+   "${TASK_JOB_NAME:-}" == "powerx3052-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" &&
+   "${TASK_JOB_USER:-}" == "$(id -un)" ]] || { echo "Invalid bounded validation request" >&2; exit 1; }
+[[ ! -e "${VALIDATION_JOB_RECEIPT:?}" && ! -e "${VALIDATION_LOGS:?}/request.txt" ]] || { echo "Refusing duplicate submission" >&2; exit 1; }
+existing_job=$(squeue -h --name="$TASK_JOB_NAME" --user="$TASK_JOB_USER" -o '%i') || exit 1
+[[ -z "$existing_job" ]] || {
+    echo "Existing owned job; reconcile before submitting" >&2; exit 1;
+}
+# Refuse inherited sbatch environment options that could add an array or
+# otherwise request resources outside the single explicit command below.
+while IFS= read -r option; do
+    [[ "$option" == SBATCH_PARTITION ]] || { echo "Unexpected sbatch option: $option" >&2; exit 1; }
+done < <(compgen -A variable SBATCH_ || true)
+TIME_LIMIT=00:39:00
+mkdir -p "${VALIDATION_LOGS:?}"
+printf '%s\n' "$TASK_JOB_NAME|$TASK_JOB_USER|4|4|$TIME_LIMIT|C1|8192|1024|16|no-eval" \
+    > "$VALIDATION_LOGS/request.txt"
+
 mkdir -p "$BENCHMARK_LOGS_DIR"
 
+submit_rc=0
 JOB_ID=$(sbatch \
     --parsable \
     --exclusive \
@@ -123,14 +148,25 @@ JOB_ID=$(sbatch \
     --time "$TIME_LIMIT" \
     --partition "$SLURM_PARTITION" \
     --account "$SLURM_ACCOUNT" \
-    --job-name "$RUNNER_NAME" \
+    --job-name "$TASK_JOB_NAME" --comment "$TASK_JOB_NAME" --no-requeue --export=ALL \
+    --chdir "$REPO_ROOT/benchmarks/multi_node/llm-d" \
     --output "${BENCHMARK_LOGS_DIR}/slurm_job-%j.out" \
     --error  "${BENCHMARK_LOGS_DIR}/slurm_job-%j.err" \
-    "$(dirname "$0")/job.slurm")
-
-if [[ -z "$JOB_ID" ]]; then
-    echo "Error: sbatch failed" >&2
-    exit 1
-fi
+    "$REPO_ROOT/runners/llmd_validation_job.sh") || submit_rc=$?
+printf '%s\n' "$JOB_ID" > "$VALIDATION_LOGS/sbatch-output.txt"
+JOB_ID=${JOB_ID%%;*}
+[[ "$JOB_ID" =~ ^[0-9]+$ ]] || { echo "Ambiguous sbatch response; do not retry" >&2; exit 1; }
+printf '%s\n' "$JOB_ID" > "$VALIDATION_JOB_RECEIPT"
+cp "$VALIDATION_JOB_RECEIPT" "$VALIDATION_LOGS/job-id.txt"
+submission_record=$(scontrol show job "$JOB_ID" --oneliner) || exit 1
+printf '%s\n' "$submission_record" > "$VALIDATION_LOGS/submission-job.txt"
+for field in "JobId=$JOB_ID" "JobName=$TASK_JOB_NAME" "TimeLimit=00:39:00" "Requeue=0" "NumNodes=4"; do
+    [[ " $submission_record " == *" $field "* ]] || { echo "Unexpected submission metadata: $field" >&2; exit 1; }
+done
+request_tres=$(printf '%s\n' "$submission_record" | tr ' ' '\n' | sed -n 's/^ReqTRES=//p')
+[[ ",$request_tres," == *,gres/gpu=16,* && " $submission_record " == *" UserId=$TASK_JOB_USER("* ]] || {
+    echo "Unexpected submission GPU request or owner" >&2; exit 1;
+}
+[[ "$submit_rc" == 0 ]] || { echo "sbatch failed; do not retry" >&2; exit "$submit_rc"; }
 
 echo "$JOB_ID"
