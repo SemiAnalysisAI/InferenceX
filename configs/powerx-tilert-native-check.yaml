@@ -28,7 +28,7 @@ glm5.1-fp8-b200-tilert:
           additional-settings:
           - PREFILL_IMAGE=vllm/vllm-openai:v0.26.0
           - PREFILL_NODES=1
-          - SALLOC_TIME_LIMIT=58
+          - SALLOC_TIME_LIMIT=44
           - B200_SQUASH_DIR=/data/home/sa-shared/containers
           - MODEL_PATH=/data/home/sa-shared/gharunners/hf-hub-cache/hub/models--zai-org--GLM-5.1-FP8/snapshots/f396cf805182f4ca10fa675e1a99815b3ca384db
           - HF_HUB_CACHE_HOST_PATH=/data/home/sa-shared/gharunners/hf-hub-cache

@@ -7459,3 +7459,10 @@
     - "Preserve the prepared GLM-5.1 model path and mount shared HF blobs for TileRT; bound the resumed check to 58 minutes."
     - "保留预备的 GLM-5.1 模型路径并为 TileRT 挂载共享 HF blobs；恢复验证的时限为 58 分钟。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3057
+
+- config-keys:
+    - glm5.1-fp8-b200-tilert
+  description:
+    - "Bound the isolated TileRT 1k1k C1 check to 44 minutes within the remaining campaign budget."
+    - "按本轮剩余预算，将独立 TileRT 1k1k C1 验证限制为 44 分钟。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3057
