@@ -7503,3 +7503,12 @@
     - "Enable required power for the H200 Kimi-K3 latency recipe and route their launch, concurrency injection, failure handling and result validation through the pinned producer and shared collector."
     - "仅为 H200 Kimi-K3 latency 配方启用必需实测功耗。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3044
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260910 to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913. Enable the v2 fused top-k path for GLM-5.x on ROCm after sgl-project/sglang#36684 and #36851."
+    - "将 SGLang ROCm 镜像从 lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260910 更新到 lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913；在 sgl-project/sglang#36684 和 #36851 合入后，为 ROCm 上的 GLM-5.x 启用 v2 fused top-k 路径。"
+  pr-link: TBD
