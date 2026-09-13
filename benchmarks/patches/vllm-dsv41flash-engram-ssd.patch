@@ -1,0 +1,623 @@
+--- a/models/deepseek_v4_1/common/engram.py	2026-09-13 21:00:26
++++ b/models/deepseek_v4_1/common/engram.py	2026-09-14 00:54:41
+@@ -34,12 +34,20 @@
+   cache for the rest.
+ """
+ 
++import contextlib
++import json
++import math
++import os
+ import weakref
++from concurrent.futures import ThreadPoolExecutor
++from typing import Any
+ 
+ import numpy as np
+ import torch
+ from torch import nn
+ 
++import vllm.envs as envs
++from vllm.compilation.breakable_cudagraph import eager_break_during_capture
+ from vllm.config import VllmConfig, get_current_vllm_config
+ from vllm.distributed import (
+     get_engram_dp_group,
+@@ -676,8 +684,87 @@
+             (values.to(tl.float32) * scale).to(tl.bfloat16),
+             mask=valid[:, None],
+         )
++
++
++_ENGRAM_DISK_MAPS: dict[str, Any] = {}
++
++# numpy has no fp8/bf16, so files are mapped with a same-width integer dtype
++# and reinterpreted.
++_ENGRAM_DISK_NP_DTYPE = {
++    torch.float8_e4m3fn: "uint8",
++    torch.uint8: "uint8",
++}
++
++
++def _engram_disk_tensor(
++    path: str, shape: tuple[int, ...], dtype: torch.dtype, writable: bool
++) -> torch.Tensor:
++    """Map ``path`` as a tensor of ``shape``/``dtype``.
++
++    ``writable`` selects a shared read-write mapping (first boot, where the
++    shard loader must reach the file) over copy-on-write (steady state).
++    MADV_RANDOM either way: lookups are random single-row gathers, and
++    readahead around them only evicts rows another token still wants.
++    """
++    import mmap as _mmap
++
++    import numpy as np
++
++    arr = np.memmap(
++        path,
++        dtype=_ENGRAM_DISK_NP_DTYPE[dtype],
++        mode="r+" if writable else "c",
++        shape=shape,
++    )
++    with contextlib.suppress(Exception):
++        # numpy exposes no public madvise.
++        arr._mmap.madvise(_mmap.MADV_RANDOM)  # noqa: SLF001
++    _ENGRAM_DISK_MAPS[path] = arr
++    return torch.from_numpy(arr).view(dtype)
++
++
++@triton.jit
++def _engram_dequant_rows_kernel(
++    rows_fp8,
++    rows_scale,
++    inverse,
++    local_ids,
++    out,
++    num_rows,
++    DIM: tl.constexpr,
++    QUANT_BLOCK: tl.constexpr,
++    BLOCK_R: tl.constexpr,
++):
++    """Dequantize host-gathered rows into the lookup's output layout.
+ 
++    The disk path gathers deduplicated rows on the host, so `inverse` maps each
++    output row to its gathered row. `local_ids` carries the -1 sentinel for
++    heads this rank does not own, which write zeros exactly as the UVA kernel's
++    masked loads do.
++    """
++    cols = tl.arange(0, DIM)
++    scale_cols = cols // QUANT_BLOCK
++    rows = tl.program_id(0) * BLOCK_R + tl.arange(0, BLOCK_R)
++    valid = rows < num_rows
++    owned = valid & (tl.load(local_ids + rows, mask=valid, other=-1) >= 0)
++    src = tl.load(inverse + rows, mask=valid, other=0).to(tl.int64)
++    values = tl.load(
++        rows_fp8 + src[:, None] * DIM + cols[None, :], mask=owned[:, None], other=0.0
++    )
++    scale = tl.load(
++        rows_scale + src[:, None] * (DIM // QUANT_BLOCK) + scale_cols[None, :],
++        mask=owned[:, None],
++        other=0,
++    )
++    # ue8m0 is a power of two, so its byte *is* the fp32 exponent field.
++    scale = (scale.to(tl.int32) << 23).to(tl.float32, bitcast=True)
++    tl.store(
++        out + rows[:, None] * DIM + cols[None, :],
++        (values.to(tl.float32) * scale).to(tl.bfloat16),
++        mask=valid[:, None],
++    )
+ 
++
+ class ParallelEngramEmbedding(nn.Module):
+     """The n-gram hash table, sharded by complete hash heads over TP ranks.
+     Rows stay fp8 and are dequantized with ue8m0 per-32 scales on lookup.
+@@ -698,13 +785,19 @@
+         head_sizes: tuple[int, ...],
+         block_size: int = 32,
+         cpu_offload: bool = False,
++        disk_offload_dir: str | None = None,
++        layer_hash_index: int = 0,
+     ):
+         super().__init__()
+         tp_size = get_tensor_model_parallel_world_size()
+         dp_size = get_engram_dp_size()
+         assert head_sizes and all(size > 0 for size in head_sizes)
+         assert sum(head_sizes) <= num_embeddings
+-        if cpu_offload and not is_uva_available():
++        disk_offload_dir = disk_offload_dir or envs.VLLM_ENGRAM_DISK_OFFLOAD_DIR or None
++        if disk_offload_dir is not None and not cpu_offload:
++            raise ValueError("Engram disk offload requires cpu_offload")
++        # Only the UVA path needs UVA. The disk path deliberately avoids it.
++        if cpu_offload and disk_offload_dir is None and not is_uva_available():
+             raise RuntimeError("Engram CPU offload requires UVA support")
+         self.num_embeddings = num_embeddings
+         self.dim = dim
+@@ -724,30 +817,36 @@
+         self.tp_size = tp_size
+         self.dp_size = dp_size
+         self.cpu_offload = cpu_offload
++        self.disk_offload_dir = disk_offload_dir
++        self._layer_hash_index = layer_hash_index
+         self._views: tuple[torch.Tensor, torch.Tensor] | None = None
+         self._view_src: tuple[int, int] | None = None
++        # Set once the written mapping has been flushed and remapped read-only.
++        self._disk_finalized = False
++        # Pinned staging for gathered rows, grown on demand and reused so a
++        # steady-state step allocates nothing.
++        self._stage: tuple[torch.Tensor, torch.Tensor] | None = None
++        self._ids_host: torch.Tensor | None = None
+         self._num_sms = torch.cuda.get_device_properties(
+             torch.accelerator.current_device_index()
+         ).multi_processor_count
+ 
+-        # Explicit device: model init runs under a `torch.device("cuda")`
+-        # context, which would otherwise put the shard in HBM.
+-        kwargs = {"device": "cpu", "pin_memory": True} if cpu_offload else {}
+-        self.weight = nn.Parameter(
+-            torch.empty(
+-                self.part_num_embeddings, dim, dtype=torch.float8_e4m3fn, **kwargs
+-            ),
+-            requires_grad=False,
+-        )
+-        self.weight_scale_inv = nn.Parameter(
+-            torch.empty(
+-                self.part_num_embeddings,
+-                dim // block_size,
+-                dtype=torch.uint8,
+-                **kwargs,
+-            ),
+-            requires_grad=False,
+-        )
++        weight_shape = (self.part_num_embeddings, dim)
++        scale_shape = (self.part_num_embeddings, dim // block_size)
++        if disk_offload_dir is not None:
++            weight_data, scale_data = self._open_disk_shard(
++                disk_offload_dir, weight_shape, scale_shape
++            )
++        else:
++            # Explicit device: model init runs under a `torch.device("cuda")`
++            # context, which would otherwise put the shard in HBM.
++            kwargs = {"device": "cpu", "pin_memory": True} if cpu_offload else {}
++            weight_data = torch.empty(
++                *weight_shape, dtype=torch.float8_e4m3fn, **kwargs
++            )
++            scale_data = torch.empty(*scale_shape, dtype=torch.uint8, **kwargs)
++        self.weight = nn.Parameter(weight_data, requires_grad=False)
++        self.weight_scale_inv = nn.Parameter(scale_data, requires_grad=False)
+         for param in (self.weight, self.weight_scale_inv):
+             set_weight_attrs(
+                 param,
+@@ -758,20 +857,257 @@
+             )
+         if cpu_offload:
+             logger.info(
+-                "Engram table offloaded to pinned host memory: %d rows x %d, "
+-                "%.2f GiB per rank",
++                "Engram table offloaded to %s: %d rows x %d, %.2f GiB per rank",
++                "disk" if disk_offload_dir is not None else "pinned host memory",
+                 self.part_num_embeddings,
+                 dim,
+                 self.part_num_embeddings * (dim + dim // block_size) / 1024**3,
++            )
++
++    def _open_disk_shard(
++        self,
++        disk_dir: str,
++        weight_shape: tuple[int, int],
++        scale_shape: tuple[int, int],
++    ) -> tuple[torch.Tensor, torch.Tensor]:
++        """Map this rank's table files, creating them on a first boot.
++
++        A shard is only reusable if a sidecar records the same geometry, so a
++        half-written file from a killed load, or one left by a different TP
++        layout, is rebuilt rather than silently gathered from.
++        """
++        os.makedirs(disk_dir, exist_ok=True)
++        base = os.path.join(
++            disk_dir,
++            f"engram_v{self.vocab_start_idx}_{self.vocab_end_idx}"
++            f"_r{engram_head_shard_rank()}",
++        )
++        self._disk_base = base
++        meta_path = f"{base}.done.json"
++        specs = (
++            (f"{base}.weight.bin", weight_shape, torch.float8_e4m3fn),
++            (f"{base}.scale.bin", scale_shape, torch.uint8),
++        )
++
++        want = {
++            "weight_shape": list(weight_shape),
++            "scale_shape": list(scale_shape),
++            "vocab_start": self.vocab_start_idx,
++            "vocab_end": self.vocab_end_idx,
++        }
++
++        def nbytes(shape: tuple[int, ...], dt: torch.dtype) -> int:
++            return math.prod(shape) * torch.tensor([], dtype=dt).element_size()
++
++        complete = False
++        if os.path.exists(meta_path):
++            with contextlib.suppress(Exception):
++                with open(meta_path) as fh:
++                    recorded = json.load(fh)
++                complete = recorded == want and all(
++                    os.path.getsize(path) == nbytes(shape, dt)
++                    for path, shape, dt in specs
++                )
++        if not complete:
++            with contextlib.suppress(FileNotFoundError):
++                os.remove(meta_path)
++            for path, shape, dt in specs:
++                with open(path, "ab") as fh:
++                    fh.truncate(nbytes(shape, dt))
++
++        self._disk_want = want
++        self._disk_finalized = complete
++        logger.info(
++            "Engram disk shard %s: %s",
++            base,
++            "reusing finished files" if complete else "first boot, writing through",
++        )
++        return tuple(
++            _engram_disk_tensor(path, shape, dt, writable=not complete)
++            for path, shape, dt in specs
++        )
++
++    def finalize_disk_shard(self) -> None:
++        """Flush the loaded shard and remap it copy-on-write.
++
++        Called on the first lookup rather than from a load hook: by then every
++        shard write has happened, and a reused shard skips straight past it.
++        Remapping copy-on-write is what stops a stray write reaching the file
++        and invalidating the sidecar for the next boot.
++        """
++        if self._disk_finalized or self.disk_offload_dir is None:
++            return
++        for path in (f"{self._disk_base}.weight.bin", f"{self._disk_base}.scale.bin"):
++            arr = _ENGRAM_DISK_MAPS.get(path)
++            if arr is not None:
++                with contextlib.suppress(Exception):
++                    arr.flush()
++        with open(f"{self._disk_base}.done.json", "w") as fh:
++            json.dump(self._disk_want, fh)
++        self.weight.data = _engram_disk_tensor(
++            f"{self._disk_base}.weight.bin",
++            tuple(self.weight.shape),
++            self.weight.dtype,
++            writable=False,
++        )
++        self.weight_scale_inv.data = _engram_disk_tensor(
++            f"{self._disk_base}.scale.bin",
++            tuple(self.weight_scale_inv.shape),
++            self.weight_scale_inv.dtype,
++            writable=False,
++        )
++        self._disk_finalized = True
++        logger.info(
++            "Engram disk shard %s finalized, remapped copy-on-write.", self._disk_base
++        )
++
++    def _local_row_ids(self, indices: torch.Tensor) -> torch.Tensor:
++        """Row ids the lookup kernel would read, as [T, local_heads], -1 unowned.
++
++        Mirrors the index math in `_engram_lookup_kernel` exactly; the two must
++        not drift, since the disk path is meant to be bit-identical to UVA.
++        """
++        heads = self.head_start + torch.arange(
++            self.part_n_hash_cols, device=indices.device
++        )
++        owned_head = heads < self.n_hash_cols
++        gathered = indices[:, heads.clamp(max=self.n_hash_cols - 1)]
++        owned = (
++            owned_head
++            & (gathered >= self.vocab_start_idx)
++            & (gathered < self.vocab_end_idx)
++        )
++        return torch.where(owned, gathered - self.vocab_start_idx, -1)
++
++    def _staging(self, rows: int) -> tuple[torch.Tensor, torch.Tensor]:
++        """Pinned host buffers for `rows` gathered rows, reused across steps."""
++        if self._stage is None or self._stage[0].shape[0] < rows:
++            self._stage = (
++                torch.empty(rows, self.dim, dtype=torch.float8_e4m3fn, pin_memory=True),
++                torch.empty(
++                    rows,
++                    self.dim // self.block_size,
++                    dtype=torch.uint8,
++                    pin_memory=True,
++                ),
+             )
++        return self._stage[0][:rows], self._stage[1][:rows]
+ 
++    def pin_hash_ids(self, hash_ids: torch.Tensor) -> torch.Tensor:
++        """Start an ordered copy of this layer's ids into reusable pinned memory."""
++        if (
++            self._ids_host is None
++            or self._ids_host.shape[0] < hash_ids.shape[0]
++            or self._ids_host.shape[1] != hash_ids.shape[1]
++        ):
++            self._ids_host = torch.empty(
++                hash_ids.shape, dtype=hash_ids.dtype, pin_memory=True
++            )
++        view = self._ids_host[: hash_ids.shape[0]]
++        view.copy_(hash_ids, non_blocking=True)
++        return view
++
++    def stage_disk_rows_from_host(self, ids_host: torch.Tensor, num_tokens: int):
++        """Resolve and read rows with no CUDA involvement, for a worker thread."""
++        ids = ids_host[:num_tokens].numpy()
++        heads = self.head_start + np.arange(self.part_n_hash_cols)
++        owned_head = heads < self.n_hash_cols
++        gathered = ids[:, np.clip(heads, None, self.n_hash_cols - 1)]
++        owned = (
++            owned_head
++            & (gathered >= self.vocab_start_idx)
++            & (gathered < self.vocab_end_idx)
++        )
++        flat = np.where(owned, gathered - self.vocab_start_idx, -1).reshape(-1)
++        unique_np, inverse_np = np.unique(flat.clip(min=0), return_inverse=True)
++        unique_cpu = torch.from_numpy(unique_np).to(torch.int64)
++        w_stage, s_stage = self._staging(unique_cpu.numel())
++        torch.index_select(
++            self.weight.data.view(torch.uint8),
++            0,
++            unique_cpu,
++            out=w_stage.view(torch.uint8),
++        )
++        torch.index_select(self.weight_scale_inv.data, 0, unique_cpu, out=s_stage)
++        return (
++            w_stage,
++            s_stage,
++            torch.from_numpy(inverse_np.astype("int32")),
++            torch.from_numpy(flat.astype("int32")),
++        )
++
++    def stage_disk_rows(self, indices: torch.Tensor) -> tuple[torch.Tensor, ...]:
++        """Host half of a disk lookup: resolve rows and read them into pinned memory.
++
++        Split out from the device half so a caller can run it off the forward
++        thread. This is the part that touches the filesystem, takes the page
++        faults, and blocks on a device-to-host copy of the hash ids; a side
++        CUDA stream would not overlap any of it.
++
++        Rows are deduplicated first: a batch repeats n-grams often enough that
++        the distinct-row count, not the token count, is what the disk serves.
++        """
++        self.finalize_disk_shard()
++        local = self._local_row_ids(indices)
++        flat = local.reshape(-1)
++        # Dedup on the host, not the device. torch.unique syncs to learn the
++        # distinct count, so doing it on device costs a second stall per layer
++        # per step on top of the copy the host gather already needs. One
++        # device-to-host copy of the ids is enough; numpy does the rest.
++        flat_cpu = flat.to("cpu", non_blocking=False).numpy()
++        unique_np, inverse_np = np.unique(flat_cpu.clip(min=0), return_inverse=True)
++        unique_cpu = torch.from_numpy(unique_np).to(torch.int64)
++        # Unowned rows read row 0 and are masked to zero at dequantization, so
++        # the gather stays a single dense index_select.
++        inverse = torch.from_numpy(inverse_np.astype("int32")).to(
++            indices.device, non_blocking=True
++        )
++        flat = flat.to(indices.device)
++
++        w_stage, s_stage = self._staging(unique_cpu.numel())
++        # index_select has no fp8 overload; the gather is byte-wise either way.
++        torch.index_select(
++            self.weight.data.view(torch.uint8),
++            0,
++            unique_cpu,
++            out=w_stage.view(torch.uint8),
++        )
++        torch.index_select(self.weight_scale_inv.data, 0, unique_cpu, out=s_stage)
++        return w_stage, s_stage, inverse, flat
++
++    def finish_disk_rows(
++        self, staged: tuple[torch.Tensor, ...], out: torch.Tensor
++    ) -> None:
++        """Device half: copy the gathered rows over and dequantize them."""
++        w_stage, s_stage, inverse, flat = staged
++        w_dev = w_stage.to(out.device, non_blocking=True)
++        s_dev = s_stage.to(out.device, non_blocking=True)
++        inverse = inverse.to(out.device, non_blocking=True)
++        flat = flat.to(out.device, non_blocking=True)
++        rows = flat.numel()
++        _engram_dequant_rows_kernel[(triton.cdiv(rows, 16),)](
++            w_dev,
++            s_dev,
++            inverse,
++            flat,
++            out,
++            rows,
++            DIM=self.dim,
++            QUANT_BLOCK=self.block_size,
++            BLOCK_R=16,
++        )
++
++    def _lookup_from_disk(self, indices: torch.Tensor, out: torch.Tensor) -> None:
++        """Synchronous disk lookup, for callers with nothing to overlap it with."""
++        self.finish_disk_rows(self.stage_disk_rows(indices), out)
++
+     def _storage(self) -> tuple[torch.Tensor, torch.Tensor]:
+         """Parameters when resident, else cached UVA views of the pinned shard.
+ 
+         Rebuilt if anything swaps `.data`, so a stale device pointer cannot
+         survive silently.
+         """
+-        if not self.cpu_offload:
++        if not self.cpu_offload or self.disk_offload_dir is not None:
+             return self.weight.data, self.weight_scale_inv.data
+         src = (self.weight.data_ptr(), self.weight_scale_inv.data_ptr())
+         if self._view_src != src:
+@@ -793,6 +1129,9 @@
+         rows = indices.shape[0] * self.part_n_hash_cols
+         if not rows:
+             return
++        if self.disk_offload_dir is not None:
++            self._lookup_from_disk(indices, out)
++            return
+         weight, scales = self._storage()
+         # The table dwarfs TLB reach, so a persistent grid near the SM count
+         # beats one program per row; halve it to leave SMs for the main stream.
+@@ -1005,6 +1344,9 @@
+     training kernel).
+     """
+ 
++    _disk_pool = None
++    _disk_pending = None
++
+     def __init__(
+         self,
+         config,
+@@ -1031,6 +1373,8 @@
+             layout.head_dim,
+             tuple(size for order in layout.primes[layer_hash_index] for size in order),
+             cpu_offload=engram_config.cpu_offload if engram_config else True,
++            disk_offload_dir=engram_config.disk_offload_dir if engram_config else None,
++            layer_hash_index=layer_hash_index,
+         )
+         n_hash_cols = (layout.max_ngram_size - 1) * layout.n_heads
+         self.wkv = ReplicatedLinear(
+@@ -1073,15 +1417,77 @@
+         return self._extra_staged_rows[ubatch_id - 1]
+ 
+     def prepare_embeddings(self, hash_ids: torch.Tensor) -> None:
+-        """Gather this layer's rows on the main stream before decoder layers.
++        """Gather this layer's rows before the decoder layers consume them.
+ 
+         `hash_ids` covers every DP replica sharing the table (see
+         `gather_engram_hashes`), so only `embed` narrows back to this one.
+         """
+         rows = self._staged_rows_for_ubatch()[: hash_ids.shape[0]]
+         assert rows.shape[0] == hash_ids.shape[0], "engram staging buffer too small"
+-        self.embed_tokens.lookup(hash_ids, rows)
++        if self.embed_tokens.disk_offload_dir is None:
++            self.embed_tokens.lookup(hash_ids, rows)
++            return
++        # Nothing may still be in flight when a capture starts. A forward that
++        # never reaches embed() leaves its gather queued on the worker, and a
++        # queued gather running inside the capture window invalidates it.
++        # Draining on every forward is what makes the worker safe to keep.
++        self._drain_disk_prefetch()
++        if torch.cuda.is_current_stream_capturing():
++            # Capture stub: the gather is host work and none of it is legal
++            # while a stream is capturing. Warmup output is discarded, so
++            # leaving the staging buffer alone is harmless.
++            return
++        self._start_disk_prefetch(hash_ids, rows)
+ 
++    def _drain_disk_prefetch(self) -> None:
++        """Join any queued gather without consuming it."""
++        pending = self._disk_pending
++        if pending is not None:
++            pending[0].result()
++            self._disk_pending = None
++
++    def _start_disk_prefetch(
++        self, hash_ids: torch.Tensor, rows: torch.Tensor
++    ) -> None:
++        """Read this layer's rows off the forward thread.
++
++        The gather blocks on a device-to-host copy of the hash ids and then on
++        the filesystem. Both are host work, so a side CUDA stream would overlap
++        neither -- and doing them inline invalidates a cudagraph capture. Run
++        them in a worker while the decoder layers ahead of this one execute.
++        """
++        if self._disk_pool is None:
++            # One worker, so a layer's gathers stay ordered and cannot outrun
++            # the single staging buffer it owns.
++            self._disk_pool = ThreadPoolExecutor(
++                max_workers=1, thread_name_prefix="engram-disk"
++            )
++        embed = self.embed_tokens
++        # Copy the ids on this thread, on the stream that produced them, so the
++        # transfer is ordered against the hash kernel and the pinned buffer
++        # cannot be recycled underneath it. The worker then touches no CUDA at
++        # all: it waits on the event and does numpy and filesystem work.
++        ids_host = embed.pin_hash_ids(hash_ids)
++        ready = torch.cuda.Event()
++        ready.record()
++
++        def _gather():
++            ready.synchronize()
++            return embed.stage_disk_rows_from_host(ids_host, hash_ids.shape[0])
++
++        self._disk_pending = (self._disk_pool.submit(_gather), rows)
++
++    def _finish_disk_prefetch(self) -> None:
++        pending, self._disk_pending = self._disk_pending, None
++        if pending is None:
++            return
++        if torch.cuda.is_current_stream_capturing():
++            return
++        future, rows = pending
++        # The host half is what the worker overlapped. The copy back and the
++        # dequantization are ordinary stream work and need no side stream.
++        self.embed_tokens.finish_disk_rows(future.result(), rows)
++
+     def _trade_dp_tokens_for_heads(self, num_tokens: int) -> torch.Tensor:
+         """Keep this replica's tokens, take the heads its DP peers own.
+ 
+@@ -1096,6 +1502,8 @@
+ 
+     def embed(self, hash_ids: torch.Tensor) -> torch.Tensor:
+         """Gather heads, returning only local tokens when SP is enabled."""
++        if self.embed_tokens.disk_offload_dir is not None:
++            self._finish_disk_prefetch()
+         if self.embed_tokens.dp_size > 1:
+             rows = self._trade_dp_tokens_for_heads(hash_ids.shape[0])
+             if self.embed_tokens.tp_size == 1:
+--- a/config/engram.py	2026-09-13 21:00:26
++++ b/config/engram.py	2026-09-13 21:00:26
+@@ -37,6 +37,31 @@
+     Each rank offloads its assigned hash heads, so host table storage and
+     lookup traffic scale with the number of heads assigned to the rank."""
+ 
++    disk_offload_dir: str | None = None
++    """Directory holding file-backed n-gram tables, one shard per rank.
++
++    Requires `cpu_offload`. The shard is memory-mapped from
++    `<dir>/engram_r<rank>.{weight,scale}.bin` rather than occupying anonymous
++    pinned host RAM, so what it costs in memory is whatever the page cache
++    keeps, not the size of the table. Lookups then gather their rows on the
++    host and copy only those rows to the device: a mapped file cannot be read
++    through UVA, which needs page-locked memory, and pinning the mapping would
++    pull the whole table back into RAM.
++
++    Point this at local NVMe. On a network filesystem every row gather becomes
++    a network round trip. Defaults to VLLM_ENGRAM_DISK_OFFLOAD_DIR."""
++
++    def __post_init__(self) -> None:
++        import vllm.envs as envs
++
++        if self.disk_offload_dir is None:
++            self.disk_offload_dir = envs.VLLM_ENGRAM_DISK_OFFLOAD_DIR or None
++        if self.disk_offload_dir is not None and not self.cpu_offload:
++            raise ValueError(
++                "EngramConfig.disk_offload_dir requires cpu_offload: the disk "
++                "shard is read on the host, so the table cannot also be resident."
++            )
++
+     def verify_model_config(self, model_config: "ModelConfig | None") -> None:
+         """Reject Engram configuration for models without n-gram embeddings."""
+         from vllm.platforms import current_platform
+--- a/envs.py	2026-09-13 21:00:26
++++ b/envs.py	2026-09-13 21:00:26
+@@ -301,6 +301,7 @@
+     VLLM_USE_V2_MODEL_RUNNER: bool | None = None
+     VLLM_LOG_MODEL_INSPECTION: bool = False
+     VLLM_DEBUG_MFU_METRICS: bool = False
++    VLLM_ENGRAM_DISK_OFFLOAD_DIR: str = ""
+     VLLM_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY: bool = False
+     VLLM_WEIGHT_OFFLOADING_DISABLE_UVA: bool = False
+     VLLM_KV_OFFLOAD_MAX_BATCH_DESCRIPTORS: int = 0
+@@ -2080,6 +2081,12 @@
+         int(os.getenv("VLLM_DEBUG_MFU_METRICS", "0"))
+     ),
+     # Disable using pytorch's pin memory for CPU offloading.
++    # Default for EngramConfig.disk_offload_dir: directory holding file-backed
++    # Engram n-gram tables. Use a local NVMe path; a network mount makes every
++    # row gather a network round trip.
++    "VLLM_ENGRAM_DISK_OFFLOAD_DIR": lambda: os.getenv(
++        "VLLM_ENGRAM_DISK_OFFLOAD_DIR", ""
++    ),
+     "VLLM_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY": lambda: bool(
+         int(os.getenv("VLLM_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY", "0"))
+     ),
