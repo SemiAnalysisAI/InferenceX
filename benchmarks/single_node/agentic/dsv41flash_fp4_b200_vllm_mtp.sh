@@ -64,6 +64,15 @@ if [[ "$CONC" == 20 ]]; then
     CONC=15
 fi
 
+# conc 21 = routing-pinned ablation. Teacher-forced CRUXEval answers scored
+# with Engram on/off while the MoE expert choice is recorded from one arm and
+# forced onto another, to split the ablation penalty into lost features vs
+# the downstream routing shift they cause. TP4, one node.
+if [[ "$CONC" == 21 ]]; then
+    export ENGRAM_MODE_ROUTING=1
+    CONC=15
+fi
+
 if [[ "$CONC" == 15 || "$CONC" == 16 ]]; then
     export GPU_COUNT="$TP"
     if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
@@ -80,6 +89,13 @@ if [[ "$CONC" == 15 || "$CONC" == 16 ]]; then
     export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
     python3 -m pip install -q --no-input datasets 2>&1 | tail -2 || true
     cd "$INFERENCEX_REPO_ROOT"
+    if [[ -n "${ENGRAM_MODE_ROUTING:-}" ]]; then
+        exec python3 analysis/engram/routing_ablation.py \
+            --model "$MODEL_PATH" --tp "$TP" \
+            --limit "${ENGRAM_CRUX_LIMIT:-0}" \
+            --arms "${ENGRAM_ROUTE_ARMS:-baseline,ablated,baseline_selfpin,ablated_selfpin,ablated_pinned,baseline_routeabl}" \
+            --out "$RESULT_DIR/engram_routing"
+    fi
     if [[ "$CONC" == 15 ]]; then
         exec python3 analysis/engram/cruxeval_ablation.py \
             --model "$MODEL_PATH" --tp "$TP" \
