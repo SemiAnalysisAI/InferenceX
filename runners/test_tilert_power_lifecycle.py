@@ -10,6 +10,21 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize('prepared_path', ['', '/shared/hf/hub/snapshots/revision'])
+def test_b200_tilert_preserves_prepared_model_path(prepared_path):
+    env = {**os.environ, 'MODEL_PREFIX': 'glm5.1', 'PRECISION': 'fp8',
+           'FRAMEWORK': 'tilert', 'IS_MULTINODE': 'true', 'SCENARIO_SUBDIR': '',
+           'EXP_NAME': 'glm5.1_8k1k', 'GITHUB_WORKSPACE': str(ROOT),
+           'MODEL_PATH': prepared_path}
+    result = subprocess.run(
+        ['bash', '-c', 'exec() { printf "%s\\n" "$MODEL_PATH"; exit; }; source "$1"',
+         'bash', str(ROOT / 'runners/launch_b200-nscale-compat.sh')],
+        env=env, capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == (prepared_path or '/scratch/models/GLM-5.1-FP8')
+
+
 @pytest.mark.parametrize(('decode_rc', 'interruption', 'enabled'),
                          [(0, None, True), (9, None, True), (0, 'TERM', True),
                           (0, 'HUP', True), (0, 'INT', True), (0, 'hang', True),
@@ -43,6 +58,11 @@ sys.exit(result.returncode)
 import json, os, pathlib, signal, subprocess, sys, time
 args=sys.argv[1:]
 if any(a.startswith('--container-image=') for a in args):
+    cache=os.environ['HF_HUB_CACHE_HOST_PATH']
+    mounts=next(a.split('=',1)[1] for a in args if a.startswith('--container-mounts='))
+    if cache:
+        assert f'{cache}:{cache}' in mounts.split(',')
+    assert f"{os.environ['MODEL_PATH']}:{os.environ['MODEL_PATH']}" in mounts.split(',')
     if os.environ['POWERX_NATIVE_ENABLED'] != '1':
         assert not any('/powerx_native' in a for a in args)
         sys.exit(0)
@@ -90,6 +110,7 @@ sys.exit(subprocess.run(args).returncode)
            'GITHUB_WORKSPACE':str(repo),'B200_SQUASH_DIR':str(tmp_path/'squash'),
            'IMAGE':'synthetic-decode','PREFILL_IMAGE':'synthetic-prefill',
            'MODEL_PATH':str(repo),'MODEL_PREFIX':'fixture','PRECISION':'fp8',
+           'HF_HUB_CACHE_HOST_PATH':str(tmp_path/'hf-cache') if enabled else '',
            'PREFILL_TP':'2','DECODE_TP':'2','SLURM_ACCOUNT':'fixture',
            'SLURM_PARTITION':'fixture','RUNNER_NAME':'fixture','REQUIRE_POWER':'1' if enabled else '0', 'ISL':'8192','OSL':'1024',
            'TILERT_WEIGHTS_DIR':str(tmp_path/'weights'),'TILERT_DECODE_DRAIN':'1',
