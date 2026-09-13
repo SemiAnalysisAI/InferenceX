@@ -48,7 +48,7 @@ if name == 'sbatch':
     print('4242')
 elif name == 'scontrol':
     assert pathlib.Path(os.environ['VALIDATION_JOB_RECEIPT']).read_text().strip() == '4242'
-    print('JobId=4242 JobName=' + os.environ['TASK_JOB_NAME'] + ' UserId=' + os.environ['TASK_JOB_USER'] + '(123) TimeLimit=' + os.environ.get('ACTUAL_LIMIT', '00:39:00') + ' Requeue=0 NumNodes=4 ReqTRES=cpu=16,node=4,gres/gpu=16')
+    print('JobId=4242 JobName=' + os.environ['TASK_JOB_NAME'] + ' UserId=' + os.environ['TASK_JOB_USER'] + '(123) TimeLimit=' + os.environ.get('ACTUAL_LIMIT', '00:39:00') + ' Requeue=0 NumNodes=' + os.environ.get('ACTUAL_NODES', '4-4') + ' ReqTRES=cpu=16,node=4,gres/gpu=16')
 elif name == 'squeue':
     mode = os.environ.get('QUEUE_MODE', 'empty')
     if mode == 'error': sys.exit(1)
@@ -176,3 +176,11 @@ kill -TERM "$$"
     assert (out / 'cancelled').exists()
     assert 'COMPLETED' in (out / 'cleanup-accounting.txt').read_text()
     assert [x for x in commands(out) if x[0] == 'scancel'] == [['scancel', '4242']]
+
+
+@pytest.mark.parametrize('node_count,accepted', [('4', True), ('4-4', True), ('4-5', False), ('4-8', False)])
+def test_effective_nodecount_accepts_only_exact_four(validation, node_count, accepted):
+    result = run_submit(validation, {'ACTUAL_NODES': node_count})
+    assert (result.returncode == 0) == accepted, result.stderr
+    # Even rejected controller metadata must retain the ID for owned cleanup.
+    assert (validation[2] / 'job-id.txt').read_text().strip() == '4242'

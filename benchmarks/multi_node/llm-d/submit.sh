@@ -160,9 +160,14 @@ printf '%s\n' "$JOB_ID" > "$VALIDATION_JOB_RECEIPT"
 cp "$VALIDATION_JOB_RECEIPT" "$VALIDATION_LOGS/job-id.txt"
 submission_record=$(scontrol show job "$JOB_ID" --oneliner) || exit 1
 printf '%s\n' "$submission_record" > "$VALIDATION_LOGS/submission-job.txt"
-for field in "JobId=$JOB_ID" "JobName=$TASK_JOB_NAME" "TimeLimit=00:39:00" "Requeue=0" "NumNodes=4"; do
+for field in "JobId=$JOB_ID" "JobName=$TASK_JOB_NAME" "TimeLimit=00:39:00" "Requeue=0"; do
     [[ " $submission_record " == *" $field "* ]] || { echo "Unexpected submission metadata: $field" >&2; exit 1; }
 done
+node_count=$(printf '%s\n' "$submission_record" | tr ' ' '\n' | sed -n 's/^NumNodes=//p')
+# Pending jobs may show equal minimum/maximum bounds instead of a scalar.
+[[ "$node_count" == 4 || "$node_count" == 4-4 ]] || {
+    echo "Unexpected submission node count: $node_count" >&2; exit 1;
+}
 request_tres=$(printf '%s\n' "$submission_record" | tr ' ' '\n' | sed -n 's/^ReqTRES=//p')
 [[ ",$request_tres," == *,gres/gpu=16,* && " $submission_record " == *" UserId=$TASK_JOB_USER("* ]] || {
     echo "Unexpected submission GPU request or owner" >&2; exit 1;

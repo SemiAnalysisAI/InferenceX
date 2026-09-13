@@ -7,7 +7,7 @@ mkdir -p "$receipt_dir"
 scontrol show job "$SLURM_JOB_ID" > "$receipt_dir/allocated-job.txt"
 grep -Eq '(^|[[:space:]])TimeLimit=00:39:00([[:space:]]|$)' "$receipt_dir/allocated-job.txt"
 grep -Eq '(^|[[:space:]])Requeue=0([[:space:]]|$)' "$receipt_dir/allocated-job.txt"
-grep -Eq '(^|[[:space:]])NumNodes=4([[:space:]]|$)' "$receipt_dir/allocated-job.txt"
+grep -Eq '(^|[[:space:]])NumNodes=4(-4)?([[:space:]]|$)' "$receipt_dir/allocated-job.txt"
 
 # Keep preparation inside the granted job so it counts against the budget.
 timeout 120s srun --jobid="$SLURM_JOB_ID" --nodes=4 --ntasks=4 \
