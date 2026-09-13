@@ -7494,3 +7494,11 @@
     - "Use port 19401 for the GB300 aggregate exporter; the two-node shared lifecycle check verified ownership, all eight GPU telemetry streams, and preservation of the system service on port 9401. Full Kimi-K3 qualification remains pending."
     - "GB300 聚合部署改用已验证的 19401 功耗端口；完整 Kimi-K3 基准验证仍待完成。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3046
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang-mtp
+  description:
+    - "Update the SGLang image from lmsysorg/sglang:v0.5.12-cu130 (build commit sgl-project/sglang@127b9e3283f7c2a43234b852ff5c9f1796d53624) to the v0.5.19 release lmsysorg/sglang:v0.5.19-cu130 (Docker Hub index digest sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9, build commit sgl-project/sglang@0bcd822377da7b5718e674eaf9c870d349424dd1, pushed 2026-09-04T22:50:19Z). The release tag stays unpinned in YAML because the b300-dsxe enroot import does not parse tag@digest references."
+    - "benchmarks/single_node/fixed_seq_len/qwen3.5_fp8_b300_mtp.sh is unchanged: every launch flag is still defined in v0.5.19 ServerArgs with the same choices (trtllm_mha, triton_attn, flashinfer_trtllm, fp8, fp8_e4m3 KV, EAGLE 3 steps / topk 1 / 4 draft tokens). v0.5.19 removed SGLANG_ENABLE_SPEC_V2 (the V2 speculative worker is always used) and deprecates --cuda-graph-max-bs in favour of --cuda-graph-max-bs-decode with a warning only. The bundle moves to CUDA 13.0.3, torch 2.13.0, sgl-kernel 0.4.6.post1, FlashInfer 0.6.18 and transformers 5.12.1. Model, TP4/EP1 topology, 8k1k workload, concurrency 4-256 and the gsm8k evals at c64/c256 are unchanged."
+    - "将 qwen3.5-fp8-b300-sglang-mtp 的 SGLang 镜像从 lmsysorg/sglang:v0.5.12-cu130 更新至 v0.5.19 发布镜像 lmsysorg/sglang:v0.5.19-cu130（索引摘要 sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9，构建提交 sgl-project/sglang@0bcd822377da7b5718e674eaf9c870d349424dd1）。启动脚本不变：全部参数在 v0.5.19 中仍有定义且可选值相同；SGLANG_ENABLE_SPEC_V2 已被上游移除（始终使用 V2 推测解码 worker），--cuda-graph-max-bs 仅给出弃用警告。依赖包升至 CUDA 13.0.3、torch 2.13.0、sgl-kernel 0.4.6.post1、FlashInfer 0.6.18 与 transformers 5.12.1。模型、TP4/EP1 拓扑、8k1k 工作负载、并发 4-256 与 c64/c256 的 gsm8k 评测保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3078
