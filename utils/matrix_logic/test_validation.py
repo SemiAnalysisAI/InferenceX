@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
-from validation import (
+from infx.matrix.validation import (
     ComponentMetadata,
     SingleNodeMatrixEntry,
     SingleNodeAgenticMatrixEntry,

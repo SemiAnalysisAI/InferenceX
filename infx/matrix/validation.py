@@ -76,6 +76,7 @@ class Fields(Enum):
     NUM_NODES = 'num-nodes'
     NODE_COUNT = 'node-count'
     DURATION = 'duration'
+    REQUIRE_POWER = 'require-power'
 
     # Matrix entry fields
     CONC = 'conc'
@@ -168,6 +169,7 @@ class SingleNodeMatrixEntry(BaseModel):
     runner: str
     isl: int
     osl: int
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     tp: int
     pp: int = Field(gt=0, strict=True)
     dcp_size: int = Field(alias=Fields.DCP_SIZE.value, gt=0, strict=True)
@@ -268,6 +270,7 @@ class MultiNodeMatrixEntry(BaseModel):
     node_count: int = Field(alias=Fields.NODE_COUNT.value, gt=0, strict=True)
     isl: int
     osl: int
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: List[int]
@@ -629,6 +632,7 @@ class SingleNodeSeqLenConfig(BaseModel):
 
     isl: int
     osl: int
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     search_space: List[SingleNodeSearchSpaceEntry] = Field(
         alias=Fields.SEARCH_SPACE.value)
 
@@ -639,6 +643,7 @@ class MultiNodeSeqLenConfig(BaseModel):
 
     isl: int
     osl: int
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     search_space: List[MultiNodeSearchSpaceEntry] = Field(
         alias=Fields.SEARCH_SPACE.value)
 
@@ -1031,6 +1036,7 @@ class ChangelogEntry(BaseModel):
     pr_link: str = Field(alias="pr-link")
     evals_only: bool = Field(alias="evals-only", default=False)
     all_evals: bool = Field(alias="all-evals", default=False)
+    no_evals: bool = Field(alias="no-evals", default=False)
     append_only: bool = Field(
         alias="append-only",
         default=False,
@@ -1054,6 +1060,10 @@ class ChangelogEntry(BaseModel):
     @model_validator(mode="after")
     def validate_append_only_mode(self):
         """Append-only entries are throughput deltas, never eval-only requests."""
+        if self.no_evals and (
+            self.evals_only or self.all_evals or self.eval_min_prefill_ep is not None
+        ):
+            raise ValueError("no-evals cannot be combined with eval selection fields")
         if self.append_only and (
             self.evals_only or self.all_evals or self.eval_min_prefill_ep is not None
         ):

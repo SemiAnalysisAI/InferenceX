@@ -194,8 +194,9 @@ class FlashInferCombineModelSwitch(unittest.TestCase):
             self.assertFalse(gate(version), f"{version!r} must fall back to the safe model")
 
 
-class NcclLowLatencyLadderClamp(unittest.TestCase):
-    """The measured ladder is clamped below the receive buffer around an unfixed upstream race."""
+class NcclLowLatencyLadderSizing(unittest.TestCase):
+    """The measured ladder and the receive buffer are separate knobs; under nccl-ep v0.2 (combine
+    fence shipped) the ladder is restored to the full buffer, and must never exceed it."""
 
     def _module(self):
         with mock.patch.dict(sys.modules, _stub_modules()):
