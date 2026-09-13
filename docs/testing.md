@@ -73,13 +73,13 @@ Parsing is only the first gate. Do not report a YAML parse as matrix validation.
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/matrix_logic/generate_sweep_configs.py test-config \
+  python -m infx.matrix.generate test-config \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --config-keys <exact-key>
 
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/matrix_logic/generate_sweep_configs.py full-sweep \
+  python -m infx.matrix.generate full-sweep \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --model-prefix <prefix> \
@@ -99,20 +99,20 @@ Inspect the emitted values, not only the exit code or row count: config key, mod
 | Changelog content or PR gating | `python -m pytest utils/test_process_changelog.py utils/changelog_gate_tests/ -v` |
 | Result processing and topology | `python -m pytest utils/test_process_result.py utils/agentic/aggregation/test_process_agentic_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
 | AgentX aggregation and artifact loading | `python -m pytest utils/agentic/aggregation/ -v` |
-| Eval dispatch, batching, or patches | `python -m pytest utils/evals/ -v` |
+| Eval dispatch, batching, or patches | `python -m pytest infx/evals/ -v` |
 | Eval collection | `python -m pytest utils/test_collect_eval_results.py -v` |
 | Sweep reuse or reusable artifacts | `python -m pytest utils/test_github.py utils/test_find_reusable_sweep_run.py utils/test_acknowledge_sweep_reuse.py utils/test_validate_reusable_sweep_artifacts.py -v` |
 
 For an edited changelog, also run the same matrix-compatibility validator used by setup, with real base and head refs:
 
 ```bash
-python3 utils/validate_perf_changelog.py \
+python3 -m infx.workflows.validate_perf_changelog \
   --changelog-file perf-changelog.yaml \
   --base-ref <base-ref> \
   --head-ref <head-ref>
 ```
 
-Its contract is implemented in [`validate_perf_changelog.py`](../utils/validate_perf_changelog.py). This check validates the generated matrix and rejects prohibited content changes, but whitespace-only historical deletions can be invisible to its diff reader. Inspect the exact byte diff as a separate evidence gate. Do not rewrite or normalize historical `perf-changelog.yaml` bytes.
+Its contract is implemented in [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py). This check validates the generated matrix and rejects prohibited content changes, but whitespace-only historical deletions can be invisible to its diff reader. Inspect the exact byte diff as a separate evidence gate. Do not rewrite or normalize historical `perf-changelog.yaml` bytes.
 
 A local matrix cannot prove Slurm allocation or llm-d endpoint discovery. Multi-node recipe changes still require the upstream recipe checker and an execution on the intended fleet, as described in [configuration validation](./configuration-procedures.md#validate).
 
@@ -148,7 +148,7 @@ The current meanings and eligibility rules are defined in the [sweep-label refer
 
 Throughput and evals are separate jobs. The default sweep evaluates the selected 8k1k subset. `all-evals` expands eval selection, and `evals-only` suppresses throughput. Choose modifiers from the changed scope, but do not substitute an eval-only or preflight run for the required full sweep.
 
-Eval completion is not just a green job. Preserve and inspect `meta_env.json`, the `results*.json` files, the score-validation output, the inference image, and the aggregated eval artifact. [`utils/evals/EVALS.md`](../utils/evals/EVALS.md) owns task and artifact behavior. [`validate_scores.py`](../utils/evals/validate_scores.py) rejects missing result files, below-threshold scores, and runs with no checked metrics. When expected concurrency metadata is available, it also rejects invalid/incomplete/failed batches. The workflow invokes it without `--expected-concs`, so reviewers must verify `meta_env.json` independently for single-concurrency artifacts.
+Eval completion is not just a green job. Preserve and inspect `meta_env.json`, the `results*.json` files, the score-validation output, the inference image, and the aggregated eval artifact. [`utils/evals/EVALS.md`](../utils/evals/EVALS.md) owns task and artifact behavior. [`validate_scores.py`](../infx/evals/validate_scores.py) rejects missing result files, below-threshold scores, and runs with no checked metrics. When expected concurrency metadata is available, it also rejects invalid/incomplete/failed batches. The workflow invokes it without `--expected-concs`, so reviewers must verify `meta_env.json` independently for single-concurrency artifacts.
 
 ## Evidence standard
 

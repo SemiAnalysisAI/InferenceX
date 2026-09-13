@@ -361,7 +361,7 @@ cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
 tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
 if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
-    copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME"
+    copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" || exit 1
 else
     echo "EVAL_ONLY=true: Skipping benchmark result collection"
 fi
@@ -462,8 +462,21 @@ else
     if [[ -n "${SALLOC_EXCLUDE:-}" ]]; then
         SALLOC_ARGS+=(--exclude="$SALLOC_EXCLUDE")
     fi
-    salloc "${SALLOC_ARGS[@]}"
-    JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
+    # Capture this allocation's ID; a runner name can also match an older job.
+    JOB_ID=$(
+        set -o pipefail
+        LC_ALL=C salloc "${SALLOC_ARGS[@]}" 2>&1 | tee /dev/stderr |
+            sed -n 's/.*Granted job allocation \([0-9][0-9]*\)$/\1/p'
+    ) || exit 1
+    [[ "$JOB_ID" =~ ^[0-9]+$ ]] || { echo 'ERROR: B300 allocation unavailable' >&2; exit 1; }
+    trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
+    if [[ "$MODEL_MOUNT_DIR" == "$MODEL_ROOT" ]]; then
+        # MODEL_ROOT is node-local: probe the allocated compute node, not the login host.
+        srun --jobid="$JOB_ID" test -r "$MODEL_PATH/config.json" || {
+            echo 'ERROR: readiness-blocked: staged model config is unavailable on the allocated node' >&2
+            exit 1
+        }
+    fi
 
     CONTAINER_MOUNTS=(
         "$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR"

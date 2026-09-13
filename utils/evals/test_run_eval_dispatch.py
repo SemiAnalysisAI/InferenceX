@@ -580,7 +580,7 @@ printf 'EVAL_RC=%s\n' "$eval_rc"
     assert "STALE_MINIMAX_ARTIFACT" not in output
     assert not (tmp_path / "python").exists()
     assert (
-        f"ADAPTER_ARG=<{REPO_ROOT / 'utils/evals/minimax_provider_eval.py'}>" in output
+        f"ADAPTER_ARG=<{REPO_ROOT / 'infx/evals/minimax_provider_eval.py'}>" in output
     )
     assert "ADAPTER_ARG=<test-model>" in output
     assert f"ADAPTER_ARG=<{results_dir}>" in output
@@ -658,7 +658,7 @@ printf 'RUNTIME=<%s>\n' "$prepared_runtime"
     )
     calls = calls_path.read_text()
 
-    assert f"PYTHON_ARG=<{REPO_ROOT / 'utils/evals/minimax_m3_full_eval.py'}>" in calls
+    assert f"PYTHON_ARG=<{REPO_ROOT / 'infx/evals/minimax_m3_full_eval.py'}>" in calls
     assert "PYTHON_ARG=<prepare-source>" in calls
     assert f"PYTHON_ARG=<{runtime_dir / 'source'}>" in calls
     assert "minimax_provider_eval.py" not in calls
@@ -710,8 +710,8 @@ printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
         check=True,
     )
     output = result.stdout + result.stderr
-    adapter = REPO_ROOT / "utils/evals/minimax_provider_eval.py"
-    fixture = REPO_ROOT / "utils/evals/minimax_m3_smoke.json"
+    adapter = REPO_ROOT / "infx/evals/minimax_provider_eval.py"
+    fixture = REPO_ROOT / "infx/evals/minimax_m3_smoke.json"
 
     for value in (
         adapter,
@@ -1294,7 +1294,7 @@ printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
         check=True,
     )
     output = result.stdout + result.stderr
-    adapter = BENCHMARK_LIB.parents[1] / "utils/evals/kimi_vendor_eval.py"
+    adapter = BENCHMARK_LIB.parents[1] / "infx/evals/kimi_vendor_eval.py"
 
     assert f"PYTHONPATH=<{tmp_path / 'runtime'}" in output
     assert "PYTHON_ARG=<->" in output
@@ -1967,8 +1967,8 @@ def test_include_path_absent_when_eval_include_path_unset():
     assert "--include_path" not in out, (
         f"Expected no '--include_path' in output:\n{out}"
     )
-    assert "--tasks utils/evals/gsm8k.yaml" in out, (
-        f"Expected '--tasks utils/evals/gsm8k.yaml' in output:\n{out}"
+    assert "--tasks infx/evals/gsm8k.yaml" in out, (
+        f"Expected '--tasks infx/evals/gsm8k.yaml' in output:\n{out}"
     )
 
 
@@ -1988,7 +1988,7 @@ run_swebench_eval
     env = {
         **os.environ,
         "BENCHMARK_LIB": str(BENCHMARK_LIB),
-        "TASK_YAML": str(BENCHMARK_LIB.parents[1] / "utils/evals/swebench_lite.yaml"),
+        "TASK_YAML": str(BENCHMARK_LIB.parents[1] / "infx/evals/swebench_lite.yaml"),
         "KV_OFFLOADING": "none",
     }
     result = subprocess.run(
@@ -1999,7 +1999,7 @@ run_swebench_eval
     )
     assert result.returncode == 9
     assert "TASK=swebench_lite" in result.stdout
-    assert f"INCLUDE={BENCHMARK_LIB.parents[1] / 'utils/evals'}" in result.stdout
+    assert f"INCLUDE={BENCHMARK_LIB.parents[1] / 'infx/evals'}" in result.stdout
 
 
 def test_modal_credentials_sanitizes_whitespace_contaminated_tokens(tmp_path):
@@ -2796,7 +2796,7 @@ exit "$eval_rc"
 
     assert result.returncode == 124
     assert "EVAL_RC=124" in output
-    assert f"ADAPTER_ARG=<{REPO_ROOT / 'utils/evals/bfcl_adapter.py'}>" in output
+    assert f"ADAPTER_ARG=<{REPO_ROOT / 'infx/evals/bfcl_adapter.py'}>" in output
     assert "ADAPTER_ARG=<test-model>" in output
     assert f"ADAPTER_ARG=<{results_dir}>" in output
     assert "ADAPTER_ARG=<--integration-error>" in output
@@ -2931,7 +2931,7 @@ def test_bfcl_runner_uses_fixed_adapter_contract_and_cleans_runtime(
 
     assert result.returncode == 0, result.stderr
     for value in (
-        str(REPO_ROOT / "utils/evals/bfcl_adapter.py"),
+        str(REPO_ROOT / "infx/evals/bfcl_adapter.py"),
         "--base-url",
         "http://127.0.0.1:9999/v1",
         "--api-key",
