@@ -187,6 +187,85 @@ def test_expression_evaluator_handles_truthiness_and_precedence() -> None:
         assert _eval(expression, context) is expected, expression
 
 
+@pytest.mark.parametrize("scope,expected", [
+    ({}, False),
+    ({"single_node": {"8k1k": [{"require-power": True}]}}, True),
+    ({"single_node": {"agentic": [{"require-power": True}]}}, True),
+    ({"multi_node": {"agentic": [{"require-power": True}]}}, True),
+    ({"agentic_evals": [{"require-power": True}]}, False),
+    ({"single_node": {"agentic": [{"require-power": True, "eval-only": True}]}}, False),
+    ({"single_node": {"agentic": [{"require-power": 1}]}}, False),
+])
+def test_required_power_manifest_records_only_benchmark_scope(tmp_path, scope, expected):
+    step = next(step for step in _WF["jobs"]["upload-changelog-metadata"]["steps"]
+                if step["name"] == "Extract and save changelog metadata")
+    matrix = {"changelog_metadata": {"fixture": "unchanged"}, **scope}
+    output = tmp_path / "outputs"
+    subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", step["run"]], cwd=tmp_path, check=True,
+        env={**os.environ, "SWEEP_MATRIX": json.dumps(matrix), "SWEEP_HEAD": "abc123",
+             "SWEEP_LABELS": "[]", "FULL_SWEEP": "false", "GITHUB_RUN_ID": "123",
+             "GITHUB_RUN_ATTEMPT": "2", "GITHUB_OUTPUT": str(output)},
+        capture_output=True, text=True, timeout=10,
+    )
+    assert output.read_text().strip() == f"has-required-power={str(expected).lower()}"
+    manifest = json.loads((tmp_path / "sweep_manifest.json").read_text())
+    assert manifest == {"head": "abc123", "run-id": 123, "run-attempt": 2,
+                        "full-sweep": False, "matrix": matrix}
+
+
+@pytest.mark.parametrize("required,reuse,expected", [
+    ("true", "false", True), ("false", "false", False), ("true", "true", False),
+])
+def test_required_power_manifest_upload_stays_with_its_source_run(required, reuse, expected):
+    step = next(step for step in _WF["jobs"]["upload-changelog-metadata"]["steps"]
+                if step.get("with", {}).get("name") == "required-power-sweep-manifest")
+    condition = step["if"].removeprefix("${{").removesuffix("}}")
+    assert _eval(condition, {"steps.metadata.outputs.has-required-power": required,
+                             "needs.setup.outputs.reuse-enabled": reuse}) is expected
+
+
+@pytest.mark.parametrize("job_name", ["trigger-ingest", "trigger-agentic-ingest"])
+@pytest.mark.parametrize("metadata_status", ["success", "failure", "skipped"])
+def test_ingest_requires_successful_metadata_upload(job_name, metadata_status):
+    # Resolve Actions' JSON lookups to empty AgentX buckets. The actual ingest
+    # condition, including failure handling, remains the code under test.
+    condition = re.sub(
+        r"toJson\(fromJson\(needs\.setup\.outputs\.search-space-config\)\.(single_node|multi_node)\['agentic'\]\)",
+        "'[]'", _WF["jobs"][job_name]["if"],
+    )
+    context = {
+        "github.event_name": "push", "github.ref": "refs/heads/main",
+        "needs.setup.result": "success", "needs.setup.outputs.reuse-enabled": "false",
+        "needs.upload-changelog-metadata.result": metadata_status,
+        "needs.collect-results.result": "success", "needs.collect-evals.result": "success",
+        "needs.sweep-agentic.result": "success", "needs.sweep-multi-node-agentic.result": "skipped",
+    }
+    assert _eval(condition, context) is (metadata_status == "success")
+
+
+@pytest.mark.parametrize("workflow,job_name", [
+    ("run-sweep.yml", "sweep-agentic"),
+    ("run-sweep.yml", "sweep-multi-node-agentic"),
+    ("e2e-tests.yml", "test-sweep-agentic"),
+    ("e2e-tests.yml", "test-sweep-multi-node-agentic"),
+])
+@pytest.mark.parametrize("required,eval_only,manual", [
+    (None, False, False), (False, False, False), (True, False, False),
+    (True, True, False), (False, False, True),
+])
+def test_agentic_workflows_forward_required_power(workflow, job_name, required, eval_only, manual):
+    definition = yaml.safe_load((REPO_ROOT / ".github/workflows" / workflow).read_text())
+    condition = definition["jobs"][job_name]["with"]["require-power"]
+    # Normalize property access for the existing expression evaluator.
+    condition = re.sub(r"\['([^']+)'\]", r".\1", condition)
+    condition = condition.removeprefix("${{").removesuffix("}}")
+    enabled = _eval(condition, {"matrix.config.require-power": required,
+                               "matrix.config.eval-only": eval_only,
+                               "inputs.require-power": manual})
+    assert enabled is ((manual and workflow == "e2e-tests.yml") or (required is True and not eval_only))
+
+
 # --------------------------------------------------------------------------
 # DAG evaluation: check-changelog -> reuse-sweep-gate -> setup
 # --------------------------------------------------------------------------

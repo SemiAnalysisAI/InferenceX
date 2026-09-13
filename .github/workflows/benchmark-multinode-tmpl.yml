@@ -173,7 +173,7 @@ on:
         type: string
         default: ""
       require-power:
-        description: "Fail fixed-sequence result processing when GPU power is invalid"
+        description: "Fail benchmark result processing when GPU power is invalid"
         type: boolean
         required: false
         default: false
@@ -555,6 +555,13 @@ jobs:
           # multinode launchers package server logs into this tarball.
           path: multinode_server_logs.tar.gz
           if-no-files-found: ignore
+
+      - name: Validate required AgentX power
+        if: ${{ success() && !inputs.eval-only && inputs.scenario-type == 'agentic-coding' && inputs.require-power }}
+        run: |
+          power_args=()
+          if [ "$DISAGG" = "true" ]; then power_args+=(--disagg); fi
+          python3 -m infx.results.agentic.validate_power "${power_args[@]}" "${RESULT_FILENAME}"_conc*.json
 
       - name: Upload agentic aggregated result
         if: ${{ always() && !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}

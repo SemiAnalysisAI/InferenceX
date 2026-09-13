@@ -977,6 +977,8 @@ def _agentic_entries(
         if is_multinode:
             entry[Fields.DISAGG.value] = disagg
         entry[Fields.SCENARIO_TYPE.value] = "agentic-coding"
+        if scenario.get(Fields.REQUIRE_POWER.value, scenario.get("require_power", False)):
+            entry[Fields.REQUIRE_POWER.value] = True
         if kv_offload_backend is not None:
             entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
         entry.update(component_metadata(benchmark, config))
