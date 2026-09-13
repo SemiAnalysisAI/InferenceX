@@ -389,17 +389,19 @@ def _record_multinode_adapter_failure(
     validation_result: Path,
     reasons: list[str],
 ) -> None:
-    # Preserve the verdict even when the aggregate is missing or malformed.
-    _write_multinode_failure_validation(validation_result, reasons)
-    aggregate = json.loads(agg_result.read_text(encoding="utf-8"))
-    if not isinstance(aggregate, dict):
-        raise ValueError("AgentX aggregate must be a JSON object")
-    aggregate = with_power_metrics(
-        aggregate, metric_keys=_ALL_POWER_METRIC_KEYS,
-        schema_version=POWER_METRIC_SCHEMA_VERSION,
-        power_valid=False, metrics={},
-    )
-    _write_json_atomic(agg_result, aggregate)
+    try:
+        aggregate = json.loads(agg_result.read_text(encoding="utf-8"))
+        if not isinstance(aggregate, dict):
+            raise ValueError("AgentX aggregate must be a JSON object")
+        aggregate = with_power_metrics(
+            aggregate, metric_keys=_ALL_POWER_METRIC_KEYS,
+            schema_version=POWER_METRIC_SCHEMA_VERSION,
+            power_valid=False, metrics={},
+        )
+        _write_json_atomic(agg_result, aggregate)
+    finally:
+        # Preserve the verdict even when the aggregate is missing or malformed.
+        _write_multinode_failure_validation(validation_result, reasons)
 
 
 def _write_multinode_failure_validation(validation_result: Path, reasons: list[str]) -> None:
