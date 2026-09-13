@@ -42,6 +42,17 @@ export OMP_NUM_THREADS=1
 export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_062126
 resolve_trace_source
 install_agentic_deps
+
+# Gate strictly (<=1%, ~2.9 GB on the 288 GB part) rather than the default 10%
+# (~28.8 GB). vLLM refuses to start unless free memory covers
+# gpu-memory-utilization * total, which is 259.19 of 287.98 GiB at 0.9, so the
+# default gate leaves nothing to spare: six of the eight points in run
+# 34736531646 aborted in init_device with 31-43 GiB of a prior job still
+# resident on the device. vLLM then sizes the KV pool from device-wide free
+# memory, so residual admitted here also moves the pool between otherwise
+# identical reruns.
+wait_for_amd_gpu_clean 1
+
 mkdir -p "$RESULT_DIR"
 SERVER_LOG="$RESULT_DIR/server.log"
 export VLLM_ENGINE_READY_TIMEOUT_S=3600

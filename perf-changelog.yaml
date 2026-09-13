@@ -7487,3 +7487,10 @@
     - "Extend conc-list to [1, 2, 4, 8, 16, 32, 64, 128]. At the old top of the ladder the sweep is still climbing steeply: output throughput per GPU rises 62% from conc 16 to 32 with no sign of a knee, energy per output token is still improving at 3.81 to 2.60 J, mean TTFT is flat near 0.9 s and KV occupancy peaked at 14%. The sweep ended before it found the throughput plateau, which is the region that determines serving cost."
     - "将 conc-list 扩展为 [1, 2, 4, 8, 16, 32, 64, 128]。在原并发阶梯顶端，吞吐仍在快速上升：每 GPU 输出吞吐从并发 16 到 32 提升 62%，未见拐点；每输出 token 能耗从 3.81 J 继续降至 2.60 J；平均 TTFT 稳定在约 0.9 s，KV 占用峰值仅 14%。原扫描在到达决定服务成本的吞吐平台区之前就结束了。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3068
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Hold the launch until the MI355X GPUs have released the prior job's memory, gating at 1% (~2.9 GB) as the other MI355X AgentX recipes do. vLLM refuses to start unless free memory covers gpu-memory-utilization * total, which is 259.19 of 287.98 GiB at 0.9, so the default 10% gate (~28.8 GB) leaves nothing to spare: six of the eight points in run 34736531646 aborted in init_device with 31-43 GiB still resident from a prior job, on two nodes that then failed every job they picked up. vLLM also sizes the KV pool from device-wide free memory, so residual admitted here moves the pool between otherwise identical reruns. Serving flags, DSpark settings, and the concurrency ladder are unchanged."
+    - "启动前等待 MI355X GPU 释放上一个任务的显存，与其他 MI355X AgentX 配方一致采用 1%（约 2.9 GB）的严格阀值。vLLM 要求空闲显存不低于 gpu-memory-utilization * 总量，在 0.9 下即 287.98 GiB 中的 259.19 GiB，因此默认 10%（约 28.8 GB）的阀值毫无余量：运行 34736531646 中八个并发点有六个在 init_device 阶段失败，设备上仍有上一个任务残留的 31-43 GiB，且相关两个节点随后接手的任务全部失败。vLLM 还依据设备级空闲显存确定 KV 池大小，因此被放行的残留会使同样配置的重复运行之间 KV 池发生漂移。服务参数、DSpark 设置与并发阶梯保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3068
