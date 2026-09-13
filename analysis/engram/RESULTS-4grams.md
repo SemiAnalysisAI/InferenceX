@@ -1926,6 +1926,135 @@ forward call count above the 5,000 floor.
 - **The two Chinese inversions** (`wiki_zh`, `chat_zh` under `decode_only`)
   are unexplained.
 
+# Part 3: is the penalty lost features, or the routing shift they cause?
+
+Removing Engram changes the residual stream at layers 1 and 14, so every MoE
+router downstream sees a different vector and may send the token to different
+experts. The ablation in Part 2 therefore charges two things to Engram at
+once: the features it contributed, and the cost of running the rest of the
+network through experts it would not otherwise have chosen. If the experts
+had co-adapted to the memory -- specialised on the assumption that certain
+tokens arrive already resolved -- the second term could dominate, and
+"memory stores facts, experts reason" would be too simple a story.
+
+## Method
+
+Pinning expert choice across arms needs identical token sequences, so this
+test is teacher-forced: the CRUXEval-O two-shot prompt followed by the
+reference assertion, scored on the answer tokens only (20,920 tokens over
+800 items). Each arm is one forward per item, `max_num_seqs=1`, so a
+sequence is identified by the hash of its token ids and an MoE layer by its
+call index. `analysis/engram/route_probe.py` wraps vLLM's router
+(`FusedMoERouter.select_experts`, the path this image takes even with the
+TRT-LLM MXFP4 kernel) and records the top-6 expert ids per token per layer
+in one arm, then forces them in another.
+
+Forcing works through the router's own arithmetic. The reference gate is
+`scores = sqrt(softplus(logits))`, selection by `topk(scores + bias)`,
+weights from the raw scores. Every non-pinned logit is set to −10⁴ (score
+exactly 0) and the selection bias is zeroed for the call, so the router
+must pick the pinned six and weights them with the model's own scores,
+renormalised as usual. On ~1e-4 of token-layer decisions the kernel's
+lower-precision path tied near-zero pinned scores (logits around −21) with
+the zeroed rest and picked the lowest indices; those rows are corrected in
+place to the recorded ids with reference-arithmetic weights, and counted.
+
+Six arms, one weight load, run [34765220267](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34765220267):
+
+| arm | Engram / routing | bits/tok | Δ vs baseline | share of gap | top-1 tokens | pin fallback rows |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `baseline` | on / free (recorded as R_on) | 0.2848 | +0.0000 | +0% | 93.38% | 0 |
+| `ablated` | off / free (recorded as R_off) | 0.3093 | +0.0245 | +100% | 92.21% | 0 |
+| `baseline_selfpin` | on / forced to R_on (control) | 0.2863 | +0.0015 | +6% | 93.36% | 1220 |
+| `ablated_selfpin` | off / forced to R_off (control) | 0.3112 | +0.0264 | +108% | 92.18% | 855 |
+| `ablated_pinned` | **off / forced to R_on** | 0.3375 | +0.0527 | +215% | 92.73% | 1149 |
+| `baseline_routeabl` | **on / forced to R_off** | 0.2935 | +0.0087 | +36% | 93.16% | 3159 |
+
+Verification: Engram contribution exactly 0.0 on every `off` arm, 0.50 mean
+relative norm on every `on` arm; 32,000 routing calls recorded or replayed
+per rank on all four TP ranks (800 items × 40 MoE layers), zero misses. The
+two self-pin controls sit within 0.0015 and 0.0019 bits of their free
+counterparts (6-8% of the ablation gap), which bounds the noise of the
+mechanism. Two earlier runs are **not measurements**: 34761927842 (one TP
+rank was never keyed, so ranks disagreed on expert choice) and 34763951637
+(aborted by design on the first pin deviation).
+
+## Result
+
+**The routing shift is not part of the penalty. It is compensation.**
+
+- Removing Engram but forcing the experts Engram-on would have chosen
+  (`ablated_pinned`) is *worse* than removing Engram and letting the router
+  re-route: 0.3375 vs 0.3093 bits/token, more than double the ablation gap.
+  The experts that suit the Engram-on residual do not suit the Engram-off
+  residual; the router's free choice under ablation recovers about half of
+  what the wrong experts would have cost.
+- Keeping every Engram feature but forcing the Engram-off routing
+  (`baseline_routeabl`) costs 0.0087 bits, 36% of the gap. So routing *is*
+  feature-specific: the same token with the same features loses a third of
+  the ablation gap just from being sent to the other run's experts.
+
+Read together: Engram and the experts are coupled, but in the direction
+opposite to the hypothesis. The coupling shows up as the router adapting its
+choice to whether the memory has fired, and that adaptation helps. Nothing
+here supports "the penalty is really a routing artefact"; the whole gap and
+then some is attributable to the lost features once routing is held fixed.
+
+## How different is the routing?
+
+Exact top-6 agreement between the Engram-on and Engram-off recordings, per
+layer, on the same tokens. Layer 0 precedes the first Engram injection and
+agrees perfectly, which is also the check that the recordings line up.
+
+| MoE layer | prompt: same set | shared of 6 | same top-1 | answer: same set | shared of 6 | same top-1 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0 | 100.0% | 100% | 100% | 100.0% | 100% | 100% |
+| 1 | 2.9% | 59% | 63% | 1.8% | 59% | 66% |
+| 2 | 3.2% | 59% | 63% | 2.9% | 64% | 73% |
+| 8 | 6.8% | 68% | 68% | 9.1% | 69% | 65% |
+| 14 | 3.9% | 62% | 53% | 5.5% | 65% | 53% |
+| 15 | 1.0% | 55% | 58% | 1.4% | 58% | 65% |
+| 20 | 1.4% | 62% | 47% | 4.6% | 61% | 42% |
+| 27 | 1.2% | 57% | 60% | 1.1% | 46% | 46% |
+| 33 | 1.6% | 52% | 55% | 1.0% | 50% | 44% |
+| 39 | 6.9% | 67% | 68% | 9.0% | 72% | 81% |
+
+Median over layers 1-39, answer span: same set 2.5%, 59% of the
+six experts shared, same top-1 expert 56%. A single n-gram lookup at
+layer 1 reshuffles expert assignment through the whole depth of the network
+and it never re-converges; there is no layer after 1 where more than 9% of
+tokens keep their expert set.
+
+## Two side findings
+
+1. **Teacher-forced, the ablation barely moves the answer likelihood.**
+   0.285 → 0.309 bits/token; the fraction of answer tokens where the
+   reference token is the greedy argmax drops from 93.4% to 92.2%. Against
+   Part 2's −16pp pass@1 under free generation that looks small, but it is
+   the same effect seen through a different lens: an answer has ~26 tokens,
+   and (0.922/0.934)^26 ≈ 0.72, i.e. a 28% relative loss in the chance that
+   every token comes out right, against the observed 25% relative drop in
+   pass@1 (0.65 → 0.49). A per-token nick compounds into a whole-answer
+   miss, which is why exact-match generation is so much more sensitive than
+   per-token likelihood.
+2. **The strict "every answer token is argmax" rate is ~0.3%** in every arm.
+   It is a formatting artefact -- the reference literal's quote style and the
+   closing tag rarely match the model's preferred rendering token for token --
+   so it is reported but carries no signal. The per-token top-1 rate is the
+   usable greedy statistic.
+
+## Caveats
+
+- Teacher-forced on the *reference* answer, not on the model's own greedy
+  path. It measures whether the correct answer stays likely, not which wrong
+  answer the model would produce instead.
+- The pinned arms alter which experts run, not how the router's weights are
+  computed; the self-pin controls bound the residual noise at ~0.002 bits.
+- Single prompt regime (raw two-shot completion), same as Part 2's CRUXEval.
+
+Raw artifact: `routing_ablation.json` (per-arm scores, comparison, verdict,
+per-layer agreement).
+
 ## Provenance
 
 | result | run |
@@ -1936,11 +2065,12 @@ forward call count above the 5,000 floor.
 | CRUXEval-O paired | 34706153348, 34707533583 |
 | CRUXEval phase arms | 34732450349 |
 | NLL boundary sweep | 34735263999 |
+| routing-pinned ablation (Part 3) | 34765220267 (invalid attempts: 34761927842, 34763951637) |
 | Terminal-Bench v2 (cancelled, no score) | 34729702998, 34729704839 |
 
 Raw artifacts: `engram_merged.json` (Part 1), `nll_phase_arms.json`,
 `nll_boundary_sweep.json`, `cruxeval_ablation.json`,
-`cruxeval_phase_arms.json`.
+`cruxeval_phase_arms.json`, `routing_ablation.json` (Part 3).
 
 The SSD/KV-offload feasibility probe is a separate investigation and lives in
 `analysis/ssd_offload/RESULTS.md`; it is not an Engram measurement.
