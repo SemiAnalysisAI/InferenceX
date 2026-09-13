@@ -7548,6 +7548,6 @@
   description:
     - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260910 to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913. Enable the v2 fused top-k path for GLM-5.x on ROCm after sgl-project/sglang#36684 and #36851."
     - "将 SGLang ROCm 镜像从 lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260910 更新到 lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913；在 sgl-project/sglang#36684 和 #36851 合入后，为 ROCm 上的 GLM-5.x 启用 v2 fused top-k 路径。"
-    - "Disable HiCache for the TP4/EP4 arm at concurrency 1 and 2; keep HiCache DRAM offloading for concurrency 4, 8, 10, and 12."
-    - "在 TP4/EP4 的并发 1 和 2 配置中关闭 HiCache；并发 4、8、10 和 12 继续使用 HiCache DRAM offloading。"
+    - "Remove concurrency 1 and 2 from the TP4/EP4 HiCache arm so those low-concurrency points run only on TP8/EP1 with KV offloading disabled; keep TP4/EP4 HiCache DRAM offloading for concurrency 4, 8, 10, and 12."
+    - "从 TP4/EP4 HiCache arm 中移除并发 1 和 2，使这些低并发点仅使用关闭 KV offloading 的 TP8/EP1；TP4/EP4 的并发 4、8、10 和 12 继续使用 HiCache DRAM offloading。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3081
