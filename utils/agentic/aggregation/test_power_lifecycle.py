@@ -17,6 +17,27 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 BENCHMARK_LIB = REPO_ROOT / "benchmarks" / "benchmark_lib.sh"
 
 
+@pytest.mark.parametrize("enabled,timeouts", [("0", ["1800", "1800"]), ("1", ["300", "330"])])
+def test_configure_diagnostic_preserves_normal_replay(enabled, timeouts):
+    script = f"""
+source {str(BENCHMARK_LIB)!r}
+AIPERF_CLI=/cached/aiperf
+build_replay_cmd /tmp/configure-check
+printf '%s\\n%s\\n%s\\n' "$AIPERF_DATASET_CONFIGURATION_TIMEOUT" "$AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT" "$REPLAY_CMD"
+"""
+    result = subprocess.run(
+        ["bash", "-c", script], capture_output=True, text=True, check=True,
+        env={**os.environ, "MODEL": "fixture/model", "CONC": "16", "DURATION": "300",
+             "AIPERF_CONFIGURE_DIAGNOSTIC": enabled, "AIPERF_EXPERIMENTAL_FAST": "0",
+             "AIPERF_WARMUP_REQUESTS_PER_LANE": "10"},
+    )
+    lines = result.stdout.splitlines()
+    assert lines[:2] == timeouts
+    assert ("--verbose" in lines[2]) == (enabled == "1")
+    assert "--warmup-requests-per-lane 10" in lines[2]
+    assert "--concurrency 16" in lines[2]
+
+
 def _run_lifecycle(
     tmp_path: Path,
     *,

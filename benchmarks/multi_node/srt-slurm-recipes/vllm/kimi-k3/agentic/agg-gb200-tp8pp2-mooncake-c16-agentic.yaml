@@ -15,7 +15,7 @@ dynamo:
   install: false
 
 slurm:
-  time_limit: "8:00:00"
+  time_limit: "0:30:00"
 
 health_check:
   interval_seconds: 10
@@ -130,6 +130,7 @@ benchmark:
   concurrencies: [16]
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
+    AIPERF_CONFIGURE_DIAGNOSTIC: "1"
     ENABLE_AGENTX_POWER: "1"
     REQUIRE_POWER: "1"
     INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"

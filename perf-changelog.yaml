@@ -7478,3 +7478,12 @@
     - "Enable required telemetry on the seven existing GB200 aggregate recipes, pin the AgentX producer, and validate power after telemetry drain while preserving failed-job artifacts."
     - "为 GB200 Kimi-K3 聚合部署启用必需实测功耗。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3045
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Diagnostic only: bound C16 Slurm to30minutes and expose AIPerf service configuration logs; this branch is not publishable benchmark evidence."
+    - "仅用于诊断：将 C16 Slurm 时限限制为三十分钟，并记录 AIPerf 服务配置日志；此分支不作为可发布的基准结果。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3045
