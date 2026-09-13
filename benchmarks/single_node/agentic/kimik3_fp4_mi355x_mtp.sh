@@ -70,9 +70,10 @@ SPEC_ARGS=()
 SPEC_ROWS=1
 KDA_ARGS=()
 case "$CONC" in
-    1|2|4|8)
+    1|2|4|8|10|12|14)
         DCP_SIZE="${DCP_SIZE:-1}"
-        SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-4}"
+        if [ "$CONC" -eq 1 ]; then SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-4}"
+        else SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"; fi
         case "$SPEC_NUM_TOKENS" in
             1) SYNTHETIC_ACCEPT_LEN=1.85 ;;
             2) SYNTHETIC_ACCEPT_LEN=2.51 ;;
