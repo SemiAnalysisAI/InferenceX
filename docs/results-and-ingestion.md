@@ -199,7 +199,8 @@ The GB200 GLM-5.2 aggregate AgentX recipe uses the shared custom-window
 producer, DCGM monitor, and post-job power adapter across its two four-GPU
 nodes. The launcher binds windows to the selected concurrencies and preserves
 native Slurm status, producer/exporter identity, and validation diagnostics
-before returning a failure. The serving configuration, including HiCache and
+before returning a failure. Missing or malformed aggregate JSON still produces a
+per-concurrency `power_validation.json` without fabricating an aggregate. The serving configuration, including HiCache and
 synthetic acceptance, and the ordinary Slurm time limit are unchanged.
 Other GB200 AgentX recipes retain their existing producer and power restrictions.
 
