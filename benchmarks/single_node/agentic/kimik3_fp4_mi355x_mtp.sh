@@ -96,11 +96,13 @@ case "$CONC" in
         SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 ))
         KDA_ARGS=(--additional-config '{"kda_prefill_backend":"triton"}')
         MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( CONC > 2 ? CONC : 2 ))}"
-        MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-16384}"
+        if [ "$CONC" -eq 1 ]; then MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-16384}"
+        else MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-8192}"; fi
         ;;
     *)
         DCP_SIZE="${DCP_SIZE:-8}"
-        MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-24576}"
+        if [ "$CONC" -gt 64 ]; then MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-24576}"
+        else MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-8192}"; fi
         if [ "$CONC" -lt 72 ]; then MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( CONC * 14 / 10 ))}"
         elif [ "$CONC" -eq 72 ]; then MAX_NUM_SEQS="${MAX_NUM_SEQS:-96}"
         else MAX_NUM_SEQS="${MAX_NUM_SEQS:-112}"; fi
