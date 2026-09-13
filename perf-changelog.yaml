@@ -7428,3 +7428,12 @@
     - "Add representative AMD coverage for fixed-sequence request diagnostics and multinode concurrency filename processing; shared processor changes also affect unlisted fixed-sequence recipes."
     - "增加固定序列请求诊断与多节点并发文件名处理的代表性 AMD 覆盖；共享处理器变更也影响未列出的固定序列配置。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3026
+
+- config-keys:
+    - kimik3-fp4-h200-vllm-agentic-latency
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required power for the H200 Kimi-K3 latency recipe and route their launch, concurrency injection, failure handling and result validation through the pinned producer and shared collector."
+    - "仅为 H200 Kimi-K3 latency 配方启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3044
