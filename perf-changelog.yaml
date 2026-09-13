@@ -7524,3 +7524,16 @@
     - "A controlled C64 900-second A/B on the current 8192-token checkpoint configuration, with identical synthetic acceptance, improved AIPerf total token throughput from 121,002.58 to 124,240.67 tok/s (+2.68%) and reduced P90 ITL from 35.79 to 32.20 ms (-10.03%), with zero request errors. The extra graphs add about 13 seconds of startup and 0.12 GB per GPU."
     - "Retain the post-review 8192-token state-checkpoint interval and default scheduler controls; this supersedes the earlier changelog statement that described the removed 32768-token and experimental scheduler overrides."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update rocm/atom-dev:nightly_202609071454 to nightly_202609121454 (digest sha256:972e37f6e0f7eb12de83188b07709ed0578a2eb4aebc20fbdcfcec562ca8d60c), containing ATOM c61fbfb0e5fabd478978ba04801fb80028240176 and AITER 4676838b5607542585a9a04d19f61b6055d341fa."
+    - "Include ROCm/ATOM#2190 so RCCL DEP appends the AITER EP sentinel and uses the routed top-k=6 tuning key, and ROCm/aiter#5467 for the DSV4 EP48 stage2 sorting-layout check and retuned 16K/32K/131K configurations."
+    - "The image also contains ROCm/aiter#4159. The recipe retains FP8 KV and its fused_qk_norm_rope_group_quant cache-write path; it does not enable the BF16 FlyDSL paged SWA branch introduced by that PR."
+    - "Preserve dense FULL decode graph captures, TP8/DPA8/EP8 native RCCL with real MTP-3 on C48+, and golden AL 2.49 on the TP8/EP1 C1-16 band. Retain the current 8192-token checkpoint interval and ATOM_DP_LB_REQ_EQUIV=512; earlier 32768/0 descriptions do not describe this configuration."
+    - "Record the requested image, installed ATOM/AITER source revisions, bundled DSV4 FMoE tuning rows, and tuning overrides in runtime_manifest.json alongside the existing server command artifact. New-image performance and accuracy are to be measured by the PR sweep."
+    - "固定使用包含 ATOM#2190、AITER#5467/#4159 的 20260912 nightly；保留现有 dense graph、FP8 KV、8K checkpoint 和请求权重 512，DEP 使用真实 MTP-3，并保存运行版本及 tuning 配置记录。#4159 的 BF16 FlyDSL paged SWA 分支不在本配方的 FP8 执行路径中；新镜像性能与精度由本次 PR sweep 验证。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912

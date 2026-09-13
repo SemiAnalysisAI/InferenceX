@@ -100,6 +100,93 @@ wait_for_amd_gpu_clean
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
+# Record the server interpreter's installed sources once, without importing GPU
+# packages or resolving AITER's merged tuning table. The bundled CSV is evidence
+# of image contents, not proof of which kernels a serving request executes.
+python3 - "$RESULT_DIR/runtime_manifest.json" <<'PY'
+import csv
+import hashlib
+import io
+import json
+import os
+import subprocess
+import sys
+from importlib import metadata, util
+from pathlib import Path
+
+
+def package_manifest(name: str, distribution: str) -> dict:
+    info = {"distribution": distribution, "version": None, "origin": None,
+            "package_dir": None, "git": {"head": None, "dirty": None}}
+    try:
+        info["version"] = metadata.version(distribution)
+    except (metadata.PackageNotFoundError, OSError) as exc:
+        info["version_error"] = str(exc)
+    try:
+        spec = util.find_spec(name)
+        if spec is None or spec.origin is None:
+            info["source_error"] = "Package source was not found"
+            return info
+        origin = Path(spec.origin).resolve()
+        info["origin"] = str(origin)
+        info["package_dir"] = str(origin.parent)
+
+        def git(*args: str) -> str:
+            return subprocess.run(
+                ["git", "-C", str(origin.parent), *args], check=True,
+                capture_output=True, text=True, timeout=5,
+                env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
+            ).stdout.strip()
+
+        root = Path(git("rev-parse", "--show-toplevel"))
+        # Do not mistake an unrelated enclosing checkout for the package repo.
+        git("ls-files", "--error-unmatch", "--", str(origin))
+        info["git"].update(root=str(root), head=git("rev-parse", "HEAD"))
+        info["git"]["dirty"] = bool(git("status", "--porcelain", "--untracked-files=no"))
+    except (OSError, ValueError, ImportError, subprocess.SubprocessError) as exc:
+        info["source_error"] = str(exc)
+    return info
+
+
+packages = {name: package_manifest(name, dist)
+            for name, dist in (("atom", "atom"), ("aiter", "amd-aiter"))}
+bundled = {"path": None, "sha256": None, "ep48_rows": [],
+           "scope": "Bundled CSV only; runtime overrides and kernel dispatch are not resolved"}
+aiter_dir = packages["aiter"]["package_dir"]
+if aiter_dir is not None:
+    path = Path(aiter_dir) / "configs/model_configs/dsv4_fp8fp4_tuned_fmoe.csv"
+    bundled["path"] = str(path)
+    try:
+        data = path.read_bytes()
+        bundled["sha256"] = hashlib.sha256(data).hexdigest()
+        for row in csv.DictReader(io.StringIO(data.decode("utf-8"))):
+            if (row.get("gfx") == "gfx950" and row.get("cu_num") == "256"
+                    and row.get("model_dim") == "7168"
+                    and row.get("inter_dim") == "3072" and row.get("expert") == "48"
+                    and row.get("topk") == "6"
+                    and row.get("token") in {"16384", "32768", "131072"}):
+                bundled["ep48_rows"].append({key: row.get(key) for key in (
+                    "gfx", "cu_num", "token", "model_dim", "inter_dim", "expert", "topk",
+                    "block_m", "kernelName1", "kernelName2",
+                )})
+    except (OSError, ValueError, csv.Error) as exc:
+        bundled["error"] = str(exc)
+else:
+    bundled["error"] = "AITER package source was not found"
+
+manifest = {
+    "requested_image": os.environ.get("IMAGE"),
+    "python_executable": sys.executable,
+    "server_command_file": "server_command.txt",
+    "packages": packages,
+    "aiter_overrides": {key: os.environ.get(key) for key in (
+        "AITER_CONFIG_FMOE", "AITER_BYPASS_TUNE_CONFIG",
+    )},
+    "bundled_dsv4_fmoe": bundled,
+}
+Path(sys.argv[1]).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+PY
+
 SERVER_PID=""
 cleanup_atom_server() {
     local exit_code=$?
