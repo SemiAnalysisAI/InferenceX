@@ -7530,3 +7530,15 @@
     - "Serialize shared Kimi-K3 DSpark downloads and validate or resume the cached draft before each cell starts serving."
     - "串行执行共享 Kimi-K3 DSpark 下载，在每个任务启动服务前校验或续传草稿缓存。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3040
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+    - kimik3-fp4-h200-vllm-agentic-latency
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Require validated power for the existing Kimi-K3 B200, H200 latency, and GB300 aggregate AgentX configurations before sweep publication."
+    - "在 sweep 发布前，为现有 Kimi-K3 B200、H200 latency 和 GB300 聚合 AgentX 配置要求经过验证的功耗。"
+  pr-link: XXX
