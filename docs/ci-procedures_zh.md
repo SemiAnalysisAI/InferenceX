@@ -218,6 +218,8 @@ RUN_ID=$(gh run list \
 
 Kimi-K3 的 B200、GB200 和 GB300 多节点配方启用必需的 DCGM 遥测，并在服务头节点运行自定义 AgentX 客户端。Launcher 选择固定提交的 AgentX 功耗运行时、记录提交 SHA，等待 Slurm 结束和遥测收尾，然后逐一验证所请求的并发点并保存结果。共享结果收集器会保留原生任务的失败状态，先保存可用的功耗诊断文件，再返回失败。H200 路由和 AMD 测量尾部修复属于独立变更，仍待各自集成与验证。启用必需遥测配置本身不代表硬件验证通过。
 
+GB300 Kimi-K3 聚合与分离部署 recipe 使用 exporter 端口 `19401`，因为节点系统服务占用了 `9401`。共享遥测阶段会将此端口传入 prefill 和 decode 两个 Slurm 分组。已有双节点 exporter 生命周期证据验证了端口归属与清理行为，但不能替代分离部署的请求账目、功耗窗口或 eval 验证。
+
 补测缺失功耗时，只生成缺失的配方与并发组合，设置 `require-power: true`，保持 `agentx-fast: false`，并留空时长覆盖。标准 AgentX Profile 为一小时。对新启用的运行时或集群，先验证一个缺失点，再调度其余点。配方渲染通过或 GitHub Runner 在线并不能证明实时采集已就绪，也不能证明 Slurm 有空闲资源。保留现有有效点，新性能与功耗必须来自同一次运行；不得把新运行的能耗附加到旧性能点上。手动 `e2e-tests.yml` 产物仍须经过正常审查和入库流程，才会显示在 Dashboard 中。
 
 B200 Kimi 配方采用 DCP8，且关闭 Mooncake Offload。Master Config 记录 `dcp-size: 8` 和 `kv-offloading: none` 以匹配实际命令；这项元数据修正不会启用 Offload。
