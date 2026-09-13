@@ -113,6 +113,47 @@ layer_a.forward_monolithic(x, logits, seq)  # same sequence again: counter wrapp
 assert rp._state["layer_calls"] == 1 and rp._state["stats"]["forwards"] == before + 1
 print("fallback: sequence boundary recovered from input_ids and the layer counter")
 
+# 4b. the modular (Python router) path: record, then replay through the
+#     router's own arithmetic with pinned logits and a zeroed bias
+class FakeRouter:
+    def __init__(self):
+        self.e_score_correction_bias = bias.clone()
+        self.renormalize, self.routed_scaling_factor, self.scoring_func = True, 1.5, "sqrtsoftplus"
+        self.seen = []
+
+    def select_experts(self, hidden_states, router_logits, topk_indices_dtype=None, *, input_ids=None):
+        self.seen.append((router_logits.clone(), self.e_score_correction_bias.clone()))
+        w, i = reference_gate(router_logits, self.e_score_correction_bias, K, True, self.routed_scaling_factor)
+        return w, i.to(torch.int32)
+
+
+rp._wrap_modular(FakeRouter)
+router = FakeRouter()
+rp._state["model_wrapped"] = True
+rp.set_mode(d, "record", "mod")
+rp._begin_forward(seq)
+w_free, i_free = router.select_experts(x, logits, input_ids=seq)
+assert torch.equal(rp._state["store"]["mod"][k_seq][0].long(), i_free.long())
+rp.set_mode(d, "replay", "mod")
+rp._begin_forward(seq)
+w_rep, i_rep = router.select_experts(x, logits + 0.7, input_ids=seq)   # drifted logits
+assert torch.equal(router.seen[-1][1], torch.zeros(E)) and torch.equal(router.e_score_correction_bias, bias)
+assert torch.equal(torch.sort(i_rep.long(), 1)[0], torch.sort(i_free.long(), 1)[0])
+# weights are the drifted model's own scores at the pinned experts, renormalised and scaled
+assert torch.allclose(w_rep, rp.reference_weights(logits + 0.7, i_rep, True, 1.5), atol=1e-6)
+assert rp._state["stats"]["pin_violations"] == 0 and not os.path.exists(os.path.join(d, rp.MISS))
+# warmup with no key in free mode is not a miss
+rp._state["key"] = None; rp.set_mode(d, "free")
+router.select_experts(x, logits, input_ids=None)
+assert not os.path.exists(os.path.join(d, rp.MISS))
+# a second flush with a different prompt fires again
+rp._state["model_wrapped"] = True
+rp.set_mode(d, "flush"); rp._begin_forward(torch.tensor([1000])); layer_a.forward_monolithic(x[:1], logits[:1], torch.tensor([1000]))
+rp.set_mode(d, "record", "mod"); rp._begin_forward(seq); router.select_experts(x, logits, input_ids=seq)
+rp.set_mode(d, "flush"); rp._begin_forward(torch.tensor([1001])); layer_a.forward_monolithic(x[:1], logits[:1], torch.tensor([1001]))
+st2 = rp.read_stats(d); assert st2["ranks"] == 1 and st2["record_calls"] == [1], st2
+print("modular path: record/replay via the router's own math, bias zeroed and restored, repeated flushes work")
+
 # 5. flush -> load -> agreement
 rp._state["model_wrapped"] = True
 rp.set_mode(d, "record", "abl")
@@ -156,9 +197,9 @@ out = types.SimpleNamespace(
     prompt_logprobs=[None, {11: LP(-0.1, 1)}, {12: LP(-0.7, 1)}, {13: LP(-2.0, 3)}],
 )
 s = ra.score_output(out, 2)
-assert s["tokens"] == 2 and abs(s["nll"] - 2.7) < 1e-9 and s["greedy"] is False
+assert s["tokens"] == 2 and abs(s["nll"] - 2.7) < 1e-9 and s["greedy"] is False and s["top1"] == 1
 s = ra.score_output(out, 1)
-assert s["tokens"] == 3 and s["greedy"] is False
+assert s["tokens"] == 3 and s["greedy"] is False and s["top1"] == 2
 out.prompt_logprobs[3] = {13: LP(-0.3, 1)}
 assert ra.score_output(out, 2)["greedy"] is True
 print("driver: answer-span boundary and greedy/NLL scoring behave")

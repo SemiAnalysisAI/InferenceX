@@ -90,7 +90,7 @@ def score_output(output, cut: int) -> dict:
     """Answer-span NLL (nats), token count, and whether every answer token was
     the greedy argmax (rank 1) from vLLM's prompt logprobs."""
     ids = output.prompt_token_ids
-    nll, n, all_top1 = 0.0, 0, True
+    nll, n, top1, all_top1 = 0.0, 0, 0, True
     for pos in range(cut, len(ids)):
         entry = (output.prompt_logprobs or [None] * len(ids))[pos]
         if entry is None:
@@ -101,9 +101,11 @@ def score_output(output, cut: int) -> dict:
         nll += -float(getattr(lp, "logprob", lp))
         n += 1
         rank = getattr(lp, "rank", None)
-        if rank is None or int(rank) != 1:
+        if rank is not None and int(rank) == 1:
+            top1 += 1
+        else:
             all_top1 = False
-    return {"nll": nll, "tokens": n, "greedy": bool(all_top1 and n > 0)}
+    return {"nll": nll, "tokens": n, "top1": top1, "greedy": bool(all_top1 and n > 0)}
 
 
 def _paired(base: list[bool], arm: list[bool]) -> dict:
@@ -182,15 +184,41 @@ def main() -> int:
     sampling = SamplingParams(max_tokens=1, temperature=0.0, prompt_logprobs=0)
     flush_sampling = SamplingParams(max_tokens=1, temperature=0.0)
 
+    flushes = [0]
+
     def flush() -> dict:
+        # A distinct prompt each time: the worker de-duplicates flushes by
+        # sequence key, so an identical prompt would flush only once.
+        flushes[0] += 1
         route_probe.set_mode(route_dir, "flush")
-        llm.generate(["flush the routing probe."], flush_sampling)
+        llm.generate(["flush the routing probe, pass %d." % flushes[0]], flush_sampling)
         route_probe.set_mode(route_dir, "free")
         return route_probe.read_stats(route_dir)
+
+    def arm_is_sound(arm: str, rstats: dict, expected_calls: int | None) -> str | None:
+        """Why this arm is not a measurement, or None. Checked as soon as the
+        arm finishes so a broken probe costs minutes, not the whole node."""
+        engram_mode, routing_mode, _ = ARMS[arm]
+        if rstats["ranks"] != args.tp:
+            return "only %d of %d ranks reported routing stats" % (rstats["ranks"], args.tp)
+        if rstats["miss"]:
+            return "a worker flagged a routing miss"
+        calls = rstats["record_calls" if routing_mode == "record" else "replay_calls"]
+        if not calls or min(calls) <= 0:
+            return "%s produced no %s calls" % (arm, routing_mode)
+        if len(set(calls)) != 1:
+            return "ranks disagree on %s calls: %s" % (routing_mode, calls)
+        if expected_calls is not None and calls[0] != expected_calls:
+            return "%s calls %d != %d recorded by baseline" % (routing_mode, calls[0], expected_calls)
+        if sum(rstats.get("pin_violations", [])) > 0:
+            return "pinned selection not honoured on %d tokens" % sum(rstats["pin_violations"])
+        return None
 
     per_arm: dict[str, dict] = {}
     keys: list[str] = []
     cuts: list[int] = []
+    expected_calls: int | None = None
+    aborted: str | None = None
     for arm in arms:
         engram_mode, routing_mode, tag = ARMS[arm]
         gate_probe.set_mode(meter_dir, engram_mode)
@@ -215,6 +243,7 @@ def main() -> int:
             items.append(s)
         total_nll = sum(s["nll"] for s in items)
         total_tok = sum(s["tokens"] for s in items)
+        total_top1 = sum(s["top1"] for s in items)
         greedy = [s["greedy"] for s in items]
         meter = gate_probe.read_meter(meter_dir)
         rstats = flush()
@@ -222,17 +251,25 @@ def main() -> int:
             "engram": engram_mode, "routing": routing_mode, "routing_tag": tag,
             "bits_per_token": round(total_nll / max(total_tok, 1) / LN2, 5),
             "answer_tokens": total_tok,
+            "top1_token_fraction": round(total_top1 / max(total_tok, 1), 5),
             "greedy_reproduces_reference": round(sum(greedy) / len(greedy), 4),
             "greedy_flags": greedy,
             "items": items,
             "engram_meter": meter,
             "routing_stats": rstats,
         }
-        logger.info("%s: %.4f bits/tok, greedy %.4f, meter mean %.4f max %.4f, routing %s",
-                    arm, per_arm[arm]["bits_per_token"],
+        logger.info("%s: %.4f bits/tok, top1 %.4f, greedy %.4f, meter mean %.4f max %.4f, routing %s",
+                    arm, per_arm[arm]["bits_per_token"], per_arm[arm]["top1_token_fraction"],
                     per_arm[arm]["greedy_reproduces_reference"],
                     meter.get("mean_rel_norm", float("nan")), meter.get("max_rel_norm", float("nan")),
-                    json.dumps({k: v for k, v in rstats.items() if k != "ranks"}))
+                    json.dumps(rstats))
+        problem = arm_is_sound(arm, rstats, expected_calls)
+        if problem:
+            logger.error("%s is not a measurement: %s -- aborting the remaining arms", arm, problem)
+            aborted = "%s: %s" % (arm, problem)
+            break
+        if arm == "baseline":
+            expected_calls = rstats["record_calls"][0]
 
     # ---- routing agreement between the two recordings
     boundaries = dict(zip(keys, cuts))
@@ -250,7 +287,7 @@ def main() -> int:
 
     # ---- deltas and verdict
     base = per_arm["baseline"]
-    abl = per_arm["ablated"]
+    abl = per_arm.get("ablated", base)
     gap_bits = abl["bits_per_token"] - base["bits_per_token"]
     gap_greedy = base["greedy_reproduces_reference"] - abl["greedy_reproduces_reference"]
     comparison = {}
@@ -274,7 +311,9 @@ def main() -> int:
         c = comparison.get(arm)
         if not c:
             return True  # not run
-        return abs(c["selfpin_delta_bits_vs_free"]) < 0.01 and c["selfpin_greedy_flips_vs_free"] <= max(2, len(rows) // 100)
+        # Same tokens, same experts, same weights: only kernel-level noise is
+        # allowed between a self-pinned arm and its free counterpart.
+        return abs(c["selfpin_delta_bits_vs_free"]) < 0.002 and c["selfpin_greedy_flips_vs_free"] <= 2
 
     replay_ok = all(
         not r["routing_stats"]["miss"] and sum(r["routing_stats"]["replay_calls"]) > 0
@@ -293,6 +332,8 @@ def main() -> int:
         for a, r in per_arm.items()
     )
     verdict = {
+        "aborted": aborted,
+        "arms_completed": list(per_arm),
         "engram_ablation": engram_ok,
         "engram_state_matches_every_arm": engram_state_ok,
         "routing_recorded": record_ok,
@@ -302,7 +343,8 @@ def main() -> int:
         "routing_path": sorted({p for r in per_arm.values() for p in r["routing_stats"].get("path", [])}),
         "moe_layers_seen": max(r["routing_stats"].get("layers", 0) for r in per_arm.values()),
     }
-    verdict["ok"] = bool(engram_ok.get("ok") and engram_state_ok and record_ok and replay_ok
+    verdict["ok"] = bool(aborted is None and set(per_arm) == set(arms)
+                         and engram_ok.get("ok") and engram_state_ok and record_ok and replay_ok
                          and verdict["selfpin_baseline_matches"] and verdict["selfpin_ablated_matches"])
 
     report = {

@@ -56,7 +56,7 @@ NEG = -1.0e4  # softplus(-1e4) is exactly 0 in fp32; sqrt(0) = 0
 
 def _fresh_stats() -> dict:
     return {"record_calls": 0, "replay_calls": 0, "free_calls": 0, "misses": 0,
-            "layers": 0, "bias_none": 0, "forwards": 0, "path": None}
+            "pin_violations": 0, "layers": 0, "bias_none": 0, "forwards": 0, "path": None}
 
 
 _lock = threading.Lock()
@@ -263,6 +263,7 @@ def _handle(route_dir: str, layer, router_logits: torch.Tensor):
             _flush(route_dir)
         _state["stats"]["free_calls"] += 1
         return router_logits, None
+    _state["flushed_key"] = None
 
     if mode == "free":
         _state["stats"]["free_calls"] += 1
@@ -328,7 +329,14 @@ def _wrap_monolithic(cls) -> None:
 
 
 def _wrap_modular(router_cls) -> None:
-    """Python-side routing (non-B200 backends). Best effort, same semantics."""
+    """Python-side routing (`FusedMoERouter.select_experts`), which is the path
+    this image actually takes even with the TRT-LLM MXFP4 kernel: the router
+    computes (weights, ids) and the kernel consumes them.
+
+    Replay goes through the router's own arithmetic rather than a
+    reimplementation: pinned logits and a zeroed bias are handed to the
+    original, so weights, dtype, renormalisation and scaling are exactly what
+    the free path produces. The returned set is checked against the pin."""
     original = router_cls.select_experts
 
     def select_experts(self, hidden_states, router_logits, *a, **kw):
@@ -336,23 +344,26 @@ def _wrap_modular(router_cls) -> None:
         if not route_dir:
             return original(self, hidden_states, router_logits, *a, **kw)
         _state["path"] = "modular"
+        _maybe_begin_from_input_ids(kw.get("input_ids"))
         mode, tag = _read_mode(route_dir)
-        out = original(self, hidden_states, router_logits, *a, **kw)
-        weights, ids = out[0], out[1]
         key = _state["key"]
-        if key is None:
-            _miss(route_dir, "no sequence key (modular)")
-            return out
-        idx = _next_layer_idx()
         if mode == "flush":
-            if _state["flushed_key"] != key:
+            if key is not None and _state["flushed_key"] != key:
                 _state["flushed_key"] = key
                 _flush(route_dir)
-            return out
+            _state["stats"]["free_calls"] += 1
+            return original(self, hidden_states, router_logits, *a, **kw)
+        _state["flushed_key"] = None
         if mode == "free":
             _state["stats"]["free_calls"] += 1
-            return out
+            return original(self, hidden_states, router_logits, *a, **kw)
+        if key is None:
+            _miss(route_dir, "no sequence key (modular)")
+            return original(self, hidden_states, router_logits, *a, **kw)
+        idx = _next_layer_idx()
         if mode == "record":
+            out = original(self, hidden_states, router_logits, *a, **kw)
+            ids = out[1]
             with _lock:
                 _state["store"].setdefault(tag, {}).setdefault(key, {})[idx] = (
                     ids.to(torch.int16).cpu()
@@ -360,17 +371,29 @@ def _wrap_modular(router_cls) -> None:
             _state["stats"]["record_calls"] += 1
             return out
         rec = _state["store"].get(tag, {}).get(key, {}).get(idx)
-        if rec is None or rec.shape[0] != ids.shape[0]:
-            _miss(route_dir, "no usable recording (modular) layer=%d" % idx)
-            return out
+        if rec is None:
+            _miss(route_dir, "no recording for tag=%r layer=%d (modular)" % (tag, idx))
+            return original(self, hidden_states, router_logits, *a, **kw)
+        if rec.shape[0] != router_logits.shape[0]:
+            _miss(route_dir, "token count %d != recorded %d (modular)" % (router_logits.shape[0], rec.shape[0]))
+            return original(self, hidden_states, router_logits, *a, **kw)
+        pinned = pin_logits(router_logits, rec)
+        saved = getattr(self, "e_score_correction_bias", None)
+        try:
+            if saved is not None:
+                self.e_score_correction_bias = torch.zeros_like(saved)
+            out = original(self, hidden_states, pinned, *a, **kw)
+        finally:
+            if saved is not None:
+                self.e_score_correction_bias = saved
+        got = torch.sort(out[1].to(torch.int64), dim=1)[0]
+        want = torch.sort(rec.to(out[1].device, torch.int64), dim=1)[0]
+        bad = int((got != want).any(dim=1).sum())
+        if bad:
+            _state["stats"]["pin_violations"] += bad
+            _say_once("pinviol", "pinned selection not honoured on %d tokens (layer %d)" % (bad, idx))
         _state["stats"]["replay_calls"] += 1
-        new_ids = rec.to(ids.device, ids.dtype)
-        new_w = reference_weights(
-            router_logits, new_ids, bool(getattr(self, "renormalize", True)),
-            float(getattr(self, "routed_scaling_factor", 1.0)),
-            getattr(self, "scoring_func", "sqrtsoftplus"),
-        ).to(weights.dtype)
-        return (new_w, new_ids) + tuple(out[2:])
+        return out
 
     router_cls.select_experts = select_experts
     router_cls._route_probe_installed = True
@@ -442,16 +465,24 @@ def install(deadline: float = 600.0, interval: float = 0.2) -> None:
         _say("FusedMoERouter wrap failed: %r" % (exc,))
 
     def _arm_model():
+        # Several model modules define a DeepseekV4Model (v4 and v4_1 packages)
+        # and they load at different moments. Keep wrapping whatever appears
+        # until a wrapped forward has actually run, so the class the engine
+        # instantiated is guaranteed to be covered.
         end = time.time() + deadline
+        wrapped_any = False
         while time.time() < end:
-            classes = [c for c in _find_model_classes() if not getattr(c, "_route_probe_installed", False)]
-            if classes:
-                for c in classes:
+            for c in _find_model_classes():
+                if not getattr(c, "_route_probe_installed", False):
                     _wrap_model_forward(c)
+                    wrapped_any = True
                     _say("wrapped %s.%s.forward" % (c.__module__, c.__name__))
+            if wrapped_any and _state["stats"]["forwards"] > 0:
                 return
             time.sleep(interval)
-        _say("DeepseekV4Model not found within %.0fs; relying on input_ids fallback" % deadline)
+        if not wrapped_any:
+            _state["model_wrapped"] = False
+            _say("DeepseekV4Model not found within %.0fs; relying on input_ids fallback" % deadline)
 
     threading.Thread(target=_arm_model, daemon=True, name="engram-route-arm").start()
     _state["installed"] = True
@@ -474,7 +505,7 @@ def read_stats(route_dir: str) -> dict:
                 ranks.append(json.load(fh))
             os.unlink(os.path.join(route_dir, name))
     agg = {"ranks": len(ranks), "miss": os.path.exists(os.path.join(route_dir, MISS))}
-    for k in ("record_calls", "replay_calls", "free_calls", "misses", "forwards", "bias_none"):
+    for k in ("record_calls", "replay_calls", "free_calls", "misses", "pin_violations", "forwards", "bias_none"):
         agg[k] = [r.get(k, 0) for r in ranks]
     agg["layers"] = max([r.get("layers", 0) for r in ranks] or [0])
     agg["path"] = sorted({r.get("path") for r in ranks if r.get("path")})
