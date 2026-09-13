@@ -86,11 +86,65 @@ assert f("x9j") == "x9ja"
 _ANSWER = re.compile(r"\[ANSWER\](.*?)(?:\[/ANSWER\]|$)", re.S)
 
 
-def build_prompt(code: str, value: str) -> str:
-    return (
+def build_prompt(code: str, value: str, open_answer: bool = True) -> str:
+    """The direct prompt. `open_answer` leaves the [ANSWER] tag open so a raw
+    completion has only the literal left to write; a chat turn gets the closed
+    question and writes the whole block itself after its reasoning."""
+    text = (
         f"{INSTRUCTION}\n{SHOTS}\n[PYTHON]\n{code}\n"
-        f"assert f({value}) == ??\n[/PYTHON]\n[ANSWER]\n"
+        f"assert f({value}) == ??\n[/PYTHON]\n"
     )
+    return text + "[ANSWER]\n" if open_answer else text
+
+
+THINK_END = "</think>"
+
+
+def strip_thinking(text: str) -> tuple[str, bool]:
+    """Visible answer of a thinking-mode generation, and whether the model
+    actually closed its reasoning block.
+
+    The V4.1 chat encoding ends the prompt with `<think>`, so the completion
+    opens inside the reasoning. Everything up to the last `</think>` is
+    working, not an answer; grading it would score the model's discarded
+    candidates. A generation with no `</think>` ran out of budget while still
+    thinking: it is graded wrong and counted separately, because a budget
+    failure is not an Engram effect."""
+    idx = text.rfind(THINK_END)
+    if idx < 0:
+        return "", False
+    return text[idx + len(THINK_END):], True
+
+
+def load_v41_encoder(model_path: str | None):
+    """`encode_messages` for the DeepSeek-V4.1 prompt format.
+
+    The checkpoint ships no `chat_template`; the format lives in code. vLLM's
+    `deepseek_v41` tokenizer mode -- which the served gsm8k arms used -- wraps
+    the same reference module, so prefer vLLM's copy and fall back to the one
+    in the model directory (`encoding/encoding.py`)."""
+    try:
+        from vllm.tokenizers.deepseek_v41_encoding import encode_messages
+        return encode_messages, "vllm.tokenizers.deepseek_v41_encoding"
+    except Exception as exc:  # pragma: no cover - depends on the image
+        logger.warning("vllm deepseek_v41 encoder unavailable: %r", exc)
+    import importlib.util
+    candidates = []
+    if model_path and os.path.isdir(model_path):
+        candidates.append(os.path.join(model_path, "encoding", "encoding.py"))
+    try:
+        from huggingface_hub import hf_hub_download
+        candidates.append(hf_hub_download(
+            "deepseek-ai/DeepSeek-V4.1-Flash", "encoding/encoding.py"))
+    except Exception as exc:
+        logger.warning("hf_hub_download of encoding.py failed: %r", exc)
+    for path in candidates:
+        if os.path.exists(path):
+            spec = importlib.util.spec_from_file_location("dsv41_encoding", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module.encode_messages, path
+    raise RuntimeError("no DeepSeek-V4.1 encoder found; cannot build chat prompts")
 
 
 def extract(text: str) -> str | None:
@@ -186,7 +240,20 @@ def main() -> int:
     # too small a budget truncates the answer rather than the reasoning.
     ap.add_argument("--max-tokens", type=int, default=2048)
     ap.add_argument("--out", default=(os.environ.get("RESULT_DIR", ".") + "/engram_cruxeval"))
+    # `auto` is the historical behaviour: a chat template if the tokenizer has
+    # one, raw completion otherwise (this checkpoint has none, so `auto` ran
+    # raw). `chat` renders the turn the way vLLM's `deepseek_v41` tokenizer
+    # mode does for /v1/chat/completions -- thinking on, reasoning effort
+    # `high` -- which is exactly the regime the gsm8k arms were served under.
+    ap.add_argument("--prompt-style", choices=["auto", "raw", "chat"], default="auto")
+    ap.add_argument("--reasoning-effort", default="high",
+                    help="chat only: low/high/xhigh/max or 1-100; vLLM's default is high")
+    ap.add_argument("--arms", default=",".join(ARMS),
+                    help="comma list from %s" % ",".join(ARMS))
     args = ap.parse_args()
+    arms = {a: ARMS[a] for a in args.arms.split(",") if a}
+    if "baseline" not in arms or "ablated" not in arms:
+        ap.error("--arms must include baseline and ablated")
     os.makedirs(args.out, exist_ok=True)
 
     meter_dir = "/dev/shm/engram_cruxeval"
@@ -209,33 +276,50 @@ def main() -> int:
     # copy does not always carry tokenizer_config's chat_template, and the
     # two-shot CRUXEval format is a completion-style prompt to begin with, so
     # raw continuation is a correct fallback rather than a degraded one.
-    tokenizer, template_source = None, None
-    for candidate in (args.model, os.environ.get("MODEL")):
-        if not candidate:
-            continue
-        try:
-            tok = AutoTokenizer.from_pretrained(candidate, trust_remote_code=True)
-        except Exception as exc:
-            logger.warning("tokenizer %s: %r", candidate, exc)
-            continue
-        if getattr(tok, "chat_template", None):
-            tokenizer, template_source = tok, candidate
-            break
-        tokenizer = tokenizer or tok
-    if template_source:
-        logger.info("using the chat template from %s", template_source)
+    tokenizer, template_source, encode_messages = None, None, None
+    if args.prompt_style == "chat":
+        encode_messages, template_source = load_v41_encoder(args.model)
+        logger.info("chat prompts via %s: thinking on, reasoning_effort=%s",
+                    template_source, args.reasoning_effort)
+    elif args.prompt_style == "auto":
+        for candidate in (args.model, os.environ.get("MODEL")):
+            if not candidate:
+                continue
+            try:
+                tok = AutoTokenizer.from_pretrained(candidate, trust_remote_code=True)
+            except Exception as exc:
+                logger.warning("tokenizer %s: %r", candidate, exc)
+                continue
+            if getattr(tok, "chat_template", None):
+                tokenizer, template_source = tok, candidate
+                break
+            tokenizer = tokenizer or tok
+        if template_source:
+            logger.info("using the chat template from %s", template_source)
+        else:
+            logger.warning("no chat_template available; using raw completion prompts")
     else:
-        logger.warning("no chat_template available; using raw completion prompts")
+        logger.info("raw completion prompts by request")
+    thinking = encode_messages is not None
+    effort = args.reasoning_effort
+    if isinstance(effort, str) and effort.isdigit():
+        effort = int(effort)
 
     prompts = []
     for row in rows:
-        text = build_prompt(row["code"], row["input"])
-        if template_source:
+        text = build_prompt(row["code"], row["input"], open_answer=not thinking)
+        if encode_messages is not None:
+            text = encode_messages(
+                [{"role": "user", "content": text}],
+                thinking_mode="thinking", reasoning_effort=effort,
+            )
+        elif template_source:
             text = tokenizer.apply_chat_template(
                 [{"role": "user", "content": text}],
                 tokenize=False, add_generation_prompt=True,
             )
         prompts.append(text)
+    logger.info("prompt[0] tail: %r", prompts[0][-160:])
 
     llm = LLM(
         model=args.model,
@@ -255,8 +339,12 @@ def main() -> int:
     )
     # Stop at the closing tag so a completion-style prompt does not run on to
     # invent a third exemplar; the tag is stripped before extraction anyway.
+    # A thinking-mode turn must not stop on the tags: the model writes candidate
+    # [ANSWER] blocks inside its reasoning and rejects them. It ends its turn
+    # with EOS, so let it.
     sampling = SamplingParams(
-        max_tokens=args.max_tokens, temperature=0.0, stop=["[/ANSWER]", "[PYTHON]"],
+        max_tokens=args.max_tokens, temperature=0.0,
+        stop=None if thinking else ["[/ANSWER]", "[PYTHON]"],
     )
 
     correct: dict[str, list[bool]] = {}
@@ -265,42 +353,56 @@ def main() -> int:
     coverage: dict[str, dict] = {}
     miss_path = os.path.join(meter_dir, gate_probe.PHASE_MISS)
     phase_miss = {}
-    for arm, mode in ARMS.items():
+    for arm, mode in arms.items():
         if os.path.exists(miss_path):
             os.unlink(miss_path)
         gate_probe.set_mode(meter_dir, mode)
         gate_probe.clear_meter(meter_dir)
         outputs = llm.generate(prompts, sampling)
-        flags, shown = [], []
-        empty = 0
+        flags, shown, recs = [], [], []
+        empty, unfinished, gen_tokens = 0, 0, 0
         for row, out in zip(rows, outputs):
             text = out.outputs[0].text if out.outputs else ""
+            gen_tokens += len(out.outputs[0].token_ids) if out.outputs else 0
             if not text.strip():
                 empty += 1
-            predicted = extract(text)
+            if thinking:
+                visible, closed = strip_thinking(text)
+                if not closed:
+                    unfinished += 1
+            else:
+                visible = text
+            predicted = extract(visible)
             ok = equivalent(predicted, row["output"])
             flags.append(ok)
+            rec = {"id": row.get("id"), "reference": row["output"],
+                   "predicted": predicted, "correct": ok}
+            if thinking:
+                rec["finished_thinking"] = closed
+            recs.append(rec)
             if len(shown) < 5:
-                shown.append({"id": row.get("id"), "reference": row["output"],
-                              "predicted": predicted, "correct": ok})
+                shown.append(rec)
         correct[arm] = flags
         samples[arm] = shown
-        records[arm] = [
-            {"id": row.get("id"), "reference": row["output"],
-             "predicted": extract(out.outputs[0].text if out.outputs else ""),
-             "correct": ok}
-            for row, out, ok in zip(rows, outputs, flags)
-        ]
+        records[arm] = recs
         stats = gate_probe.read_meter(meter_dir)
         phase_miss[arm] = os.path.exists(miss_path)
         coverage[arm] = dict(stats, empty_generations=empty,
-                             phase_mask_unavailable=phase_miss[arm])
+                             phase_mask_unavailable=phase_miss[arm],
+                             mean_generated_tokens=round(gen_tokens / max(len(rows), 1), 1))
+        if thinking:
+            coverage[arm]["unfinished_thinking"] = unfinished
+            if unfinished:
+                logger.warning("%s: %d/%d generations hit max_tokens=%d before "
+                               "closing </think>; graded wrong, not an Engram effect",
+                               arm, unfinished, len(rows), args.max_tokens)
         if phase_miss[arm]:
             logger.error("%s: the engine phase could not be determined on at "
                          "least one forward call; this arm is not a "
                          "measurement", arm)
-        logger.info("%s: pass@1=%.4f empty=%d meter=%s", arm,
-                    sum(flags) / max(len(flags), 1), empty, json.dumps(stats))
+        logger.info("%s: pass@1=%.4f empty=%d unfinished=%d gen_tok/item=%.0f meter=%s",
+                    arm, sum(flags) / max(len(flags), 1), empty, unfinished,
+                    gen_tokens / max(len(rows), 1), json.dumps(stats))
         if empty > len(rows) // 10:
             logger.error("%s: %d/%d generations were empty -- the score is not "
                          "a measurement of the model", arm, empty, len(rows))
@@ -329,8 +431,13 @@ def main() -> int:
         "task": "cruxeval-O (output prediction, no execution)",
         "model": args.model,
         "items": len(rows),
-        "prompt_style": ("chat-template:%s" % template_source) if template_source
-                        else "raw-completion",
+        "prompt_style": (
+            "chat-thinking:deepseek_v41 effort=%s via %s" % (effort, template_source)
+            if thinking else
+            ("chat-template:%s" % template_source) if template_source
+            else "raw-completion"),
+        "arms": list(arms),
+        "max_tokens": args.max_tokens,
         "pass@1": {arm: round(sum(f) / len(f), 4) for arm, f in correct.items()},
         "delta_pass@1": round(sum(abl) / len(abl) - sum(base) / len(base), 4),
         "arms_vs_baseline": {

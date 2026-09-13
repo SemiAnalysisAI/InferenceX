@@ -51,6 +51,19 @@ if [[ "$CONC" == 18 ]]; then
     CONC=16
 fi
 
+# conc 20 = CRUXEval-O again, served the way gsm8k was: the DeepSeek-V4.1 chat
+# encoding with thinking on and reasoning effort high (vLLM's chat defaults),
+# instead of the raw two-shot completion conc 15 ran. Same items, same arms;
+# only the prompt regime changes. The budget is raised because the model now
+# reasons before the [ANSWER] block, and a truncated reasoning trace would be
+# graded wrong for a reason that has nothing to do with Engram.
+if [[ "$CONC" == 20 ]]; then
+    export ENGRAM_CRUX_PROMPT=chat
+    export ENGRAM_CRUX_MAX_TOKENS="${ENGRAM_CRUX_MAX_TOKENS:-12288}"
+    export ENGRAM_CRUX_MAX_MODEL_LEN="${ENGRAM_CRUX_MAX_MODEL_LEN:-16384}"
+    CONC=15
+fi
+
 if [[ "$CONC" == 15 || "$CONC" == 16 ]]; then
     export GPU_COUNT="$TP"
     if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
@@ -71,6 +84,10 @@ if [[ "$CONC" == 15 || "$CONC" == 16 ]]; then
         exec python3 analysis/engram/cruxeval_ablation.py \
             --model "$MODEL_PATH" --tp "$TP" \
             --limit "${ENGRAM_CRUX_LIMIT:-0}" \
+            --prompt-style "${ENGRAM_CRUX_PROMPT:-auto}" \
+            --max-tokens "${ENGRAM_CRUX_MAX_TOKENS:-2048}" \
+            --max-model-len "${ENGRAM_CRUX_MAX_MODEL_LEN:-8192}" \
+            --arms "${ENGRAM_CRUX_ARMS:-baseline,ablated,prefill_only,decode_only}" \
             --out "$RESULT_DIR/engram_cruxeval"
     fi
     exec python3 analysis/engram/nll_ablation.py \

@@ -472,6 +472,21 @@ def test_cruxeval_prompt_shape():
     assert "assert f(3) == ??" in prompt
     assert prompt.rstrip().endswith("[ANSWER]")
     assert "[/ANSWER]" in prompt  # the two-shot exemplars are present
+    # The chat turn asks the closed question; the model opens the block itself.
+    chat = crux.build_prompt("def f(a):\n    return a * 2", "3", open_answer=False)
+    assert chat.rstrip().endswith("[/PYTHON]")
+    assert prompt.startswith(chat)
+
+
+def test_cruxeval_thinking_is_never_graded():
+    crux = _crux()
+    gen = ("Let me trace. f(3) == 5? No, a * 2 is 6.\n[ANSWER]\nassert f(3) == 5\n"
+           "[/ANSWER] no wait.</think>[ANSWER]\nassert f(3) == 6\n[/ANSWER]")
+    visible, closed = crux.strip_thinking(gen)
+    assert closed and crux.equivalent(crux.extract(visible), "6")
+    # Budget ran out inside the reasoning: nothing to grade, flagged as such.
+    visible, closed = crux.strip_thinking("still thinking about f(3) == 6")
+    assert not closed and visible == "" and crux.extract(visible) is None
 
 
 def _fake_forward_context(monkeypatch, query_start_loc):
