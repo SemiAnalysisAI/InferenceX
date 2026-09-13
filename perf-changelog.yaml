@@ -7428,3 +7428,12 @@
     - "Add representative AMD coverage for fixed-sequence request diagnostics and multinode concurrency filename processing; shared processor changes also affect unlisted fixed-sequence recipes."
     - "增加固定序列请求诊断与多节点并发文件名处理的代表性 AMD 覆盖；共享处理器变更也影响未列出的固定序列配置。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3026
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GB200 DeepSeek-V4-Pro FP4 Dynamo-vLLM AgentX MTP aggregate image from vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f (locally built 2026-07-26 dev image, VLLM_BUILD_COMMIT unknown, CUDA 13.0.1, arm64 digest sha256:209b467e0d4defd4a8e99c45ca436d176b0fa6603beb9c641448890af330e24c) to the vllm/vllm-openai:v0.29.0 release (commit 98dff2a8, CUDA 13.0.2, FlashInfer 0.6.18, torch 2.13.0, arm64 digest sha256:18372a7224938643461b846fb64c5c9d3d6e9727e82caf2dc3043e620c9d4d7a, published 2026-09-09)."
+    - "Lower gpu-memory-utilization from 0.94 to 0.90 in agg-gb200-tp8-c4-mtp2-agentic.yaml and agg-gb200-tp8-c8-mtp2-agentic.yaml: v0.29.0 profiles only ~3.8 GiB of peak activation and sized the KV cache to 62.5 GiB at 0.94, leaving no headroom for the lazily allocated sparse indexer logits workspace (VLLM_SPARSE_INDEXER_MAX_LOGITS_MB) that OOMed on the first long AgentX prefill in run 34662875814. Every other flag, environment variable, TP8/EP1 two-node topology, MTP num_speculative_tokens 3, golden acceptance length 2.49, Dynamo 1.2.1 router and cluster:gb200-nv runner are unchanged; the srt-slurm v1.0.45 numa-bind hash setup patch finds its fix already present in v0.29.0 and skips."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3065
