@@ -7496,10 +7496,19 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3046
 
 - config-keys:
+    - kimik3-fp4-h200-vllm-agentic-latency
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required power for the H200 Kimi-K3 latency recipe and route their launch, concurrency injection, failure handling and result validation through the pinned producer and shared collector."
+    - "仅为 H200 Kimi-K3 latency 配方启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3044
+
+- config-keys:
     - dsv41flashssd-fp4-b200-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
   description:
-    - "Serve the DeepSeek-V4.1-Flash Engram n-gram tables from node-local NVMe instead of pinned host DRAM, freeing ~257 GiB of host RAM at throughput parity on B200 TP4 (14,168 vs 13,632 tok/s mean over three 8k1k runs each)."
-    - "DeepSeek-V4.1-Flash 的 Engram 表改由本地 NVMe 提供，释放约 257 GiB 主机内存，吞吐持平。"
+    - "Serve the DeepSeek-V4.1-Flash Engram n-gram tables from node-local NVMe instead of pinned host DRAM, and hand the DRAM that frees to a KV tier the pinned recipe has no room for: vllm-simple and mooncake rows at dram-utilization 0.92, measured at throughput parity on B200 TP4 (14,168 vs 13,632 tok/s mean over three 8k1k runs each)."
+    - "DeepSeek-V4.1-Flash 的 Engram 表改由本地 NVMe 提供，释放的主机内存转给 KV 卸载，吞吐持平。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3080

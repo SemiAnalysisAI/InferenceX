@@ -542,3 +542,5 @@ A merge is not complete operationally until the `main` publication path and down
    ```
 
 Stop and escalate when the source run, merge run, artifact coverage, changelog metadata, or downstream event is ambiguous. Never substitute a convenient run ID or claim publication from an Actions dispatch alone.
+
+The former `kimik3-fp4-h200-vllm-agentic` key is split into `-latency`, `-balanced`, and `-simple` keys. Together they preserve all 35 original points (10/12/13), recipe fingerprints, and dashboard series. Each key selects one complete recipe and its default evals; power rollout follows that recipe's `telemetry.enabled` setting. Use `kimik3-fp4-h200-vllm-agentic-*` to select all three. A partial recipe run does not qualify the other keys.
