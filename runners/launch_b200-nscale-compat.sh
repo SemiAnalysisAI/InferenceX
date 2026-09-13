@@ -56,7 +56,7 @@ elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/scratch/models/GLM-5-FP8"
     export SRT_SLURM_MODEL_PREFIX="glm5-fp8"
 elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/scratch/models/GLM-5.1-FP8"
+    export MODEL_PATH="${MODEL_PATH:-/scratch/models/GLM-5.1-FP8}"
     export SRT_SLURM_MODEL_PREFIX="glm5.1-fp8"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/GLM-5-NVFP4"
@@ -472,7 +472,7 @@ EOF
     tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
-        copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME"
+        copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" || exit 1
     else
         echo "EVAL_ONLY=true: Skipping benchmark result collection"
     fi

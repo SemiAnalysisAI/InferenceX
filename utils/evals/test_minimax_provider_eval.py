@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-import minimax_provider_eval as mpe
+import infx.evals.minimax_provider_eval as mpe
 
 
 def _native_outputs(

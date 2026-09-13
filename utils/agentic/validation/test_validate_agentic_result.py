@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from utils.agentic.validation.validate_agentic_result import validate_result
+from infx.results.agentic.validate_agentic_result import validate_result
 
 
 def _write_aggregate(tmp_path: Path, aggregate: dict, *, per_run: bool = False) -> Path:

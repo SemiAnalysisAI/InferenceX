@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from validate_reusable_sweep_artifacts import (
+from infx.workflows.validate_reusable_sweep_artifacts import (
     _result_order,
     _raw_result_error,
     agentic_key,
@@ -36,7 +36,7 @@ def test_reuse_preserves_stricter_and_distinct_metric_selection(
     tmp_path: Path, metrics: dict, config: dict, expected_score: float | None,
     expected_error: str | None,
 ) -> None:
-    from collect_eval_results import collect_eval_rows
+    from infx.results.collect_eval_results import collect_eval_rows
 
     (tmp_path / "meta_env.json").write_text("{}")
     path = tmp_path / "results.json"
@@ -78,7 +78,7 @@ def test_result_order_preserves_nanoseconds_and_legacy_fallback(
 
 
 def test_result_order_breaks_equal_recency_by_filename(tmp_path: Path) -> None:
-    from collect_eval_results import detect_lm_eval_jsons
+    from infx.results.collect_eval_results import detect_lm_eval_jsons
 
     early = tmp_path / "results_a_1970-01-01T00-00-01.1.json"
     late = tmp_path / "results_z_1970-01-01T00-00-01.100000000.json"
@@ -792,6 +792,26 @@ def test_eval_validation_rejects_malformed_batch_metadata(
         errors = validate_eval_artifacts(root)
 
         assert any(expected in error for error in errors), errors
+
+
+def test_reuse_reports_unexpected_results_before_missing_concurrency(tmp_path: Path) -> None:
+    from infx.workflows.validate_reusable_sweep_artifacts import raw_eval_key_rows
+
+    write_raw_batched_eval_artifact(tmp_path, [16, 4])
+    artifact = tmp_path / "eval_gptoss_8k1k_batch"
+    (artifact / "results_test_conc4.json").unlink()
+    for name in ("results_test.json", "results_test_conc8.json"):
+        (artifact / name).write_text(json.dumps(raw_eval_result()))
+
+    rows, errors = raw_eval_key_rows(tmp_path)
+
+    assert len(rows) == 1
+    prefix = "raw eval artifact 'eval_gptoss_8k1k_batch'"
+    assert set(errors[:-1]) == {
+        f"{prefix} has batched result 'results_test.json' without a concurrency suffix",
+        f"{prefix} has result 'results_test_conc8.json' for unexpected concurrency 8",
+    }
+    assert errors[-1] == f"{prefix} has no recognized eval result for concurrency 4"
 
 
 def test_fixed_sequence_validation_accepts_unique_source_rows(tmp_path: Path) -> None:
