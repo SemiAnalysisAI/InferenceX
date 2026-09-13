@@ -7428,3 +7428,10 @@
     - "Add representative AMD coverage for fixed-sequence request diagnostics and multinode concurrency filename processing; shared processor changes also affect unlisted fixed-sequence recipes."
     - "增加固定序列请求诊断与多节点并发文件名处理的代表性 AMD 覆盖；共享处理器变更也影响未列出的固定序列配置。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3026
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto
+  description:
+    - "Update the SGLang image from lmsysorg/sglang:nightly-dev-cu13-20260831-bb5e6198 to the v0.5.19 release image lmsysorg/sglang:v0.5.19-cu130 pinned by digest sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9 in the master config and the three referenced GB300 aggregated recipes; model, MTP, HiCache, topology, concurrency and evals are unchanged."
+    - "将 SGLang 镜像从 lmsysorg/sglang:nightly-dev-cu13-20260831-bb5e6198 更新为按摘要 sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9 固定的 v0.5.19 正式版镜像 lmsysorg/sglang:v0.5.19-cu130，同步更新主配置与三个引用的 GB300 聚合配方；模型、MTP、HiCache、拓扑、并发与评测保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3066
