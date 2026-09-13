@@ -122,6 +122,12 @@ Keep `native_power/node-<rank>/gpu_metrics.csv`, the start/end device identity s
 
 Host `timedatectl NTPSynchronized` is recorded as clock context. The shared collector accepts `yes` or `true` as synchronized; other or missing values remain unsynchronized. It does not measure the offset between nodes; common-window trace coverage is still required, and runtime clock alignment remains part of fleet qualification. Missing clock context, a replaced UUID, a missing node or an incomplete collector lifecycle makes power unavailable. Local fixtures prove the format and failure behavior, not GPU runtime or dashboard publication.
 
+## Native TileRT power
+
+For GLM-5.1 on B200 Nscale, `MODEL_PATH` can select an existing shared checkpoint instead of the default `/scratch/models/GLM-5.1-FP8`. When it selects an HF snapshot, also set `HF_HUB_CACHE_HOST_PATH` to the existing cache root; TileRT mounts that root at the same absolute path so snapshot links to sibling blobs remain readable. Keep `TILERT_WEIGHTS_DIR` pointed at the separately converted decode weights.
+
+Only fixed 8192/1024 `glm5.1-fp8-b200-tilert` requires native power. TileRT runs inside its returned `salloc` allocation, retains both role exit codes and drains collectors before staging audits. Exactly one physical node per role is supported. Other sequence lengths, AgentX and eval-only do not enable this collector. Hardware qualification and publication remain pending.
+
 ## Register an srt-slurm recipe
 
 Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md). Checked-in recipes: [`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/).

@@ -122,6 +122,12 @@ AMD SGLang/ATOM/vLLM launcher 为 8192 输入、1024 输出的运行启用原生
 
 宿主机的 `timedatectl NTPSynchronized` 状态作为时钟上下文记录。共享采集器将 `yes` 或 `true` 视为已同步；其他值或缺失值均视为未同步。它不测量节点间时钟偏移；仍需验证共同窗口的轨迹覆盖，并在集群运行验证中检查时钟对齐。缺失时钟上下文、UUID 被替换、节点缺失或采集生命周期未完成都会使功耗不可用。本地 fixture 只证明格式和失败处理行为，不能证明 GPU 运行或 dashboard 发布完成。
 
+## TileRT 原生功耗
+
+B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默认的 `/scratch/models/GLM-5.1-FP8`。若指定 HF snapshot，还需把 `HF_HUB_CACHE_HOST_PATH` 设为现有缓存根目录；TileRT 按相同绝对路径挂载整个缓存，使 snapshot 指向同级 blobs 的软链接可读。`TILERT_WEIGHTS_DIR` 仍指向单独转换的 decode 权重。
+
+仅固定 8192/1024 的 `glm5.1-fp8-b200-tilert` 要求原生功耗。TileRT 在 `salloc` 返回的分配内运行，保留两个角色的退出码，并在保存审计数据前等待采集器排空。每个角色仅支持一个物理节点。其他序列长度、AgentX 和 eval-only 不启用此采集器。硬件资格验证与发布仍待完成。
+
 ## 注册 srt-slurm 配方
 
 映射来源：[`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md)。检入的配方：[`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/)。
