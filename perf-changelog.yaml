@@ -7494,3 +7494,13 @@
     - "Use port 19401 for the GB300 aggregate exporter; the two-node shared lifecycle check verified ownership, all eight GPU telemetry streams, and preservation of the system service on port 9401. Full Kimi-K3 qualification remains pending."
     - "GB300 聚合部署改用已验证的 19401 功耗端口；完整 Kimi-K3 基准验证仍待完成。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3046
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Serve amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2 instead of amd/Qwen3.5-397B-A17B-MXFP4 on the MI355X SGLang fixed-seq-len arms."
+    - "Bump the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260829 to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260912."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2793
