@@ -42,20 +42,32 @@ df -hT 2>&1 || df -h 2>&1 || true
 echo "=== mounts ==="
 mount 2>&1 | grep -vE ' (proc|sysfs|devpts|cgroup|tmpfs|overlay)' || true
 
-# Prefer an explicitly supplied path, else the largest writable local fs.
+# Pick a LOCAL disk. The first run of this probe picked /ix and measured NFS
+# at 260 MB/s: the candidate list had no entry on the node's own storage, and
+# NFS simply had the most free space. This node's 8x3.5T NVMe RAID0 (md0) is
+# mounted at /, with 16T free, so prefer a directory there. tmpfs is excluded
+# outright -- /tmp here is 1 TB of RAM, which would measure nothing at all.
 pick_scratch() {
     if [[ -n "${SSD_PROBE_DIR:-}" ]]; then printf '%s' "$SSD_PROBE_DIR"; return; fi
-    local best="" best_avail=0 d avail
-    for d in /raid /local /scratch /mnt/local /mnt/nvme /mnt/resource /ephemeral "$RESULT_DIR" /tmp; do
-        [[ -d "$d" ]] || continue
-        mkdir -p "$d/.ssdprobe" 2>/dev/null || continue
+    local best="" best_avail=0 d avail fstype
+    for d in /raid /local /scratch /mnt/local /mnt/nvme /mnt/resource /ephemeral \
+             /var/tmp/ssdprobe /ssdprobe "$RESULT_DIR"; do
+        mkdir -p "$d" 2>/dev/null || continue
+        [[ -w "$d" ]] || continue
+        fstype=$(df -PT "$d" 2>/dev/null | awk 'NR==2{print $2}')
+        # Neither RAM nor the network is the thing under test.
+        case "$fstype" in tmpfs|ramfs|nfs|nfs4|cifs|fuse.*) continue;; esac
         avail=$(df -Pk "$d" 2>/dev/null | awk 'NR==2{print $4}') || continue
-        rmdir "$d/.ssdprobe" 2>/dev/null || true
         if [[ -n "$avail" && "$avail" -gt "$best_avail" ]]; then best_avail=$avail; best=$d; fi
     done
-    printf '%s' "${best:-/tmp}"
+    printf '%s' "$best"
 }
 SCRATCH="$(pick_scratch)"
+if [[ -z "$SCRATCH" ]]; then
+    echo "No writable local (non-tmpfs, non-network) filesystem on this node." >&2
+    echo "An SSD-offload benchmark here would be measuring NFS or RAM." >&2
+    exit 1
+fi
 DISK_DIR="$SCRATCH/lmcache_disk"
 mkdir -p "$DISK_DIR"
 DISK_AVAIL_GB=$(( $(df -Pk "$DISK_DIR" | awk 'NR==2{print $4}') / 1024 / 1024 ))
@@ -76,7 +88,7 @@ echo "dd read:  $DD_R"
 # ---- 2. LMCache with a disk tier and almost no DRAM tier --------------------
 python3 -m pip install -q --no-input "lmcache==${LMCACHE_VERSION:-0.3.10}" 2>&1 | tail -3 || {
     echo "lmcache install failed" >&2; exit 1; }
-python3 -c "import lmcache; print('lmcache', lmcache.__version__)"
+python3 -c "import importlib.metadata as m; import lmcache; print('lmcache', m.version('lmcache'))"
 
 DISK_GB="${SSD_PROBE_DISK_GB:-200}"
 if (( DISK_GB > DISK_AVAIL_GB - 20 )); then DISK_GB=$(( DISK_AVAIL_GB - 20 )); fi
