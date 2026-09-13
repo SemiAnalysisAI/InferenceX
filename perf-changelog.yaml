@@ -7487,3 +7487,11 @@
     - "Use port 19401 for the GB300 aggregate exporter; the two-node shared lifecycle check verified ownership, all eight GPU telemetry streams, and preservation of the system service on port 9401. Full Kimi-K3 qualification remains pending."
     - "GB300 聚合部署改用已验证的 19401 功耗端口；完整 Kimi-K3 基准验证仍待完成。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3046
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang-mtp
+  description:
+    - "Update SGLang ROCm image from lmsysorg/sglang:v0.5.12-rocm720-mi30x (v0.5.12 release, build commit sgl-project/sglang@127b9e3283f7c2a43234b852ff5c9f1796d53624) to the v0.5.19 release image lmsysorg/sglang:v0.5.19-rocm720-mi30x (digest sha256:a0ffcdd013af6d79c9b7c4348c42b14a79a48f6c43dd3ca0235ec3802da45f75, build commit sgl-project/sglang@0bcd822377da7b5718e674eaf9c870d349424dd1, Docker Hub last pushed 2026-09-04T21:24:05Z). Both images build docker/rocm.Dockerfile stage gfx942-rocm720 on rocm/pytorch:rocm7.2_ubuntu22.04_py3.10_pytorch_release_2.9.1; AITER moves from a6bb4993 to c16d44b9."
+    - "Add --skip-server-warmup to benchmarks/single_node/fixed_seq_len/qwen3.5_fp8_mi325x_mtp.sh: on v0.5.19 the engine's own startup warmup issues one VLM warmup request per tokenizer worker (six concurrent), which at concurrency 4 exceeds --cuda-graph-max-bs and takes the eager EAGLE draft path that raises a HIP illegal memory access on gfx942 (run 34743206968); the benchmark client and lm-eval never exceed the configured concurrency. aiter attention with allreduce fusion, EAGLE MTP with 3 steps, top-k 1 and 4 draft tokens, radix cache disabled, mem-fraction-static 0.75, TP8 8k/1k concurrency 4 through 64 and the gsm8k eval policy are unchanged."
+    - "将 SGLang ROCm 镜像从 lmsysorg/sglang:v0.5.12-rocm720-mi30x 更新为 v0.5.19 发布镜像 lmsysorg/sglang:v0.5.19-rocm720-mi30x，并在配方脚本中加入 --skip-server-warmup 以绕过 v0.5.19 启动预热在并发 4 下超出 CUDA graph 批大小范围而触发的 HIP 非法内存访问；TP8 拓扑、EAGLE MTP 设置、8k/1k 并发 4-64 与 gsm8k 评测策略保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3072
