@@ -1,5 +1,5 @@
-name: End-to-End Tests
-run-name: e2e Test - ${{ inputs.test-name || inputs.generate-cli-command || github.event.inputs.generate-cli-command }}
+name: Read-only HF cache audit
+run-name: Read-only HF cache audit - ${{ inputs.test-name || inputs.generate-cli-command || github.event.inputs.generate-cli-command }}
 
 permissions:
     contents: read
@@ -738,52 +738,3 @@ jobs:
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
             ref: ${{ inputs.ref }}
-
-    collect-results:
-        needs: [test-sweep-multi-node, test-sweep-single-node, test-sweep-agentic, test-sweep-multi-node-agentic]
-        if: ${{ always() && (needs.test-sweep-multi-node.result != 'skipped' || needs.test-sweep-single-node.result != 'skipped' || needs.test-sweep-agentic.result != 'skipped' || needs.test-sweep-multi-node-agentic.result != 'skipped') }}
-        uses: ./.github/workflows/collect-results.yml
-        secrets: inherit
-        with:
-            result-prefix: "bmk"
-
-    collect-evals:
-        needs: [test-sweep-evals, test-sweep-multi-node-evals, test-sweep-agentic-evals, test-sweep-multi-node-agentic-evals]
-        if: ${{ always() && (needs.test-sweep-evals.result != 'skipped' || needs.test-sweep-multi-node-evals.result != 'skipped' || needs.test-sweep-agentic-evals.result != 'skipped' || needs.test-sweep-multi-node-agentic-evals.result != 'skipped') }}
-        uses: ./.github/workflows/collect-evals.yml
-        secrets: inherit
-
-    calc-success-rate:
-        needs: [collect-results, collect-evals]
-        if: ${{ always() }}
-        runs-on: ubuntu-latest
-
-        env:
-            RESULTS_DIR: "results/"
-            STATS_FILENAME: "run_stats"
-            GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
-
-        steps:
-            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-              with:
-                  token: ${{ secrets.REPO_PAT }}
-                  fetch-depth: 0
-
-            - name: Download results artifacts
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-              with:
-                  path: ${{ env.RESULTS_DIR }}
-                  pattern: results_*
-
-            - name: Set up uv
-              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-
-            - name: Calculate success rate
-              run: >-
-                  uv run --no-project --exclude-newer PT12H --python 3.12 --with PyGithub --with pyyaml
-                  python -m infx.workflows.calc_success_rate "$STATS_FILENAME"
-
-            - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-              with:
-                  name: "run-stats"
-                  path: ${{ env.STATS_FILENAME }}.json

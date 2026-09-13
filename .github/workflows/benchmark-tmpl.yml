@@ -169,60 +169,6 @@ on:
         required: false
         type: string
         default: ""
-env:
-  RANDOM_RANGE_RATIO: 0.8
-  HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-  HF_HUB_CACHE: '/mnt/hf_hub_cache/'
-  EXP_NAME: ${{ inputs.exp-name }}
-  RECIPE_FINGERPRINT: ${{ inputs.recipe-fingerprint }}
-  MODEL: ${{ inputs.model }}
-  MODEL_PREFIX: ${{ inputs.model-prefix }}
-  ISL: ${{ inputs.isl }}
-  OSL: ${{ inputs.osl }}
-  MAX_MODEL_LEN: ${{ inputs.max-model-len }}
-  IMAGE: ${{ inputs.image }}
-  FRAMEWORK: ${{ inputs.framework }}
-  PRECISION: ${{ inputs.precision }}
-  TP: ${{ inputs.tp }}
-  PP_SIZE: ${{ inputs.pp }}
-  DCP_SIZE: ${{ inputs.dcp-size }}
-  PCP_SIZE: ${{ inputs.pcp-size }}
-  EP_SIZE: ${{ inputs.ep }}
-  DP_ATTENTION: ${{ inputs.dp-attn }}
-  CONC: ${{ inputs.conc }}
-  SPEC_DECODING: ${{ inputs.spec-decoding }}
-  DISAGG: ${{ inputs.disagg }}
-  RUN_EVAL: ${{ inputs.run-eval }}
-  EVAL_ONLY: ${{ inputs.eval-only }}
-  EVAL_FRAMEWORK: ${{ inputs.eval-framework }}
-  EVAL_SUITE: ${{ inputs.eval-suite }}
-  # Agentic-coding env. Fixed-seq-len jobs leave these empty.
-  SCENARIO_TYPE: ${{ inputs.scenario-type }}
-  SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
-  IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
-  KV_OFFLOADING: ${{ inputs.kv-offloading }}
-  KV_OFFLOAD_BACKEND: ${{ inputs.kv-offload-backend }}
-  KV_OFFLOAD_BACKEND_METADATA: ${{ inputs.kv-offload-backend-metadata }}
-  ROUTER_METADATA: ${{ inputs.router }}
-  KV_P2P_TRANSFER: ${{ inputs.kv-p2p-transfer }}
-  TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
-  DURATION: ${{ inputs.duration }}
-  REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
-  AIPERF_EXPERIMENTAL_FAST: ${{ inputs.agentx-fast && '1' || '0' }}
-  EVAL_LIMIT: ${{ inputs.eval-limit }}
-  SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
-  AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
-  RESULT_DIR: /workspace/results
-  PYTHONDONTWRITEBYTECODE: '1'
-  PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
-  # GPU runners lack Docker for SWE-bench scoring.
-  SWEBENCH_USE_MODAL: 'true'
-  MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-  MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
-
-permissions:
-  contents: read
-
 jobs:
   benchmark:
     runs-on: >-
@@ -267,255 +213,197 @@ jobs:
         ) ||
         format('[{0}]', toJSON(inputs.runner))
       ) }}
-    timeout-minutes: 500
-    name: >-
-      ${{ inputs.klaud-run && 'klaud | ' || '' }}p${{ inputs.priority }} | ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework == 'sglang' && 'sgl' || inputs.framework == 'dynamo-sglang' && 'dyn-sgl' || inputs.framework == 'sglang-disagg' && 'sgl-disagg' || inputs.framework }}
-      TP${{ inputs.tp }}${{ inputs.pp != '' && inputs.pp != '1' && format('/PP{0}', inputs.pp) || '' }}${{ inputs.dcp-size != '' && inputs.dcp-size != '1' && format('/DCP{0}', inputs.dcp-size) || '' }}${{ inputs.pcp-size != '' && inputs.pcp-size != '1' && format('/PCP{0}', inputs.pcp-size) || '' }}${{ inputs.ep != '' && inputs.ep != '1' && format('/EP{0}', inputs.ep) || '' }}${{ inputs.dp-attn && '/DPA' || '' }}
-      ${{ inputs.spec-decoding != 'none' && inputs.spec-decoding || '' }}
-      ${{ inputs.kv-offloading != '' && inputs.kv-offloading != 'none' && format('{0} KV offload', inputs.kv-offloading) || '' }}
-      ${{ inputs.kv-offload-backend != '' && inputs.kv-offload-backend != 'none' && inputs.kv-offload-backend != 'default' && inputs.kv-offload-backend || '' }}
-      c${{ inputs.conc }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
+    timeout-minutes: 6
+    name: Read-only HF cache probe for PR 2912
     steps:
-      - name: Resource cleanup (pre-run)
-        run: &resource-cleanup |
-          # Containerized AMD Slurm jobs can leave root-owned artifacts when
-          # interrupted before their launcher EXIT trap runs. Repair ownership
-          # before checkout cleanup and again after the job via this shared step.
-          if [[ "${{ inputs.runner }}" == "cluster:mi355x-amds" && -d "$GITHUB_WORKSPACE" ]]; then
-            sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
-          fi
-
-          # Cleanup Docker resources
-          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-            echo "[Docker] Cleaning up resources ..."
-            docker ps -aq | xargs -r docker rm -f
-            docker network prune -f
-            while [ -n "$(docker ps -aq)" ]; do
-              docker ps -a
-              sleep 5
-            done
-          fi
-
-          # Cleanup SLURM resources
-          if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
-            scancel --name="${{ runner.name }}" || true
-            while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
-              squeue --name="${{ runner.name }}"
-              sleep 5
-            done
-          fi
-
-      - name: Repair stale git state (pre-run)
+      - name: Inspect model cache as the runner and remapped container user
         run: |
-          # Interrupted runs leave index.lock files and corrupt submodule git
-          # dirs behind in the persistent self-hosted workspace, and both make
-          # actions/checkout fail before any benchmark starts. The runner
-          # executes one job at a time, so any lock found here is stale by
-          # definition. Grouping dirs (e.g. .git/modules/utils) hold only
-          # nested module dirs, so any dir carrying top-level files is a
-          # module git dir — a truncated clone may lack HEAD entirely, and a
-          # git dir whose HEAD does not resolve to a commit is dropped
-          # together with its worktree so checkout re-clones it.
-          repo_dir="${{ github.workspace }}"
-          if [ -d "${repo_dir}/.git" ]; then
-            find "${repo_dir}/.git" -name index.lock -type f -delete || true
-            for gitdir in "${repo_dir}"/.git/modules/* "${repo_dir}"/.git/modules/*/*; do
-              [ -d "${gitdir}" ] || continue
-              [ -n "$(find "${gitdir}" -maxdepth 1 -type f -print -quit)" ] || continue
-              if ! git --git-dir="${gitdir}" rev-parse --verify 'HEAD^{commit}' >/dev/null 2>&1; then
-                rel="${gitdir##*/.git/modules/}"
-                echo "[git-repair] Removing corrupt submodule state: ${rel}"
-                rm -rf "${gitdir}" "${repo_dir:?}/${rel}"
-              fi
-            done
-          fi
+          AUDIT_SCRIPT=$(cat <<'PY'
+          #!/usr/bin/env python3
+          """Bounded, read-only HF cache audit. File bytes are never included in output."""
+          import argparse
+          import json
+          import os
+          import shutil
+          import socket
+          import stat
+          import subprocess
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          token: ${{ secrets.REPO_PAT }}
-          fetch-depth: 0
-          ref: ${{ inputs.ref || github.sha }}
-          clean: true
-          submodules: true
+          MODEL = "deepseek-ai/DeepSeek-V4-Pro"
+          REVISION = "b5968e9190ef611bbf34a7229255be88a0e937c1"
+          LIMIT = 200
 
-      - name: Launch job script
-        env:
-          RUNNER_NAME: ${{ runner.name }}
-          RUNNER_TYPE: ${{ inputs.runner }}
-          RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}-pp${{ env.PP_SIZE }}-dcp${{ env.DCP_SIZE }}-pcp${{ env.PCP_SIZE }}-ep${{ env.EP_SIZE }}-dpa${{ env.DP_ATTENTION }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ env.CONC }}_${{ runner.name }}
-          # Suppress per-job eval markdown from being appended to the step summary.
-          # We'll publish a single combined eval table in the collection job instead.
-          GITHUB_STEP_SUMMARY: ''
-        run: |
-          if [[ -f utils/result_filename.py ]]; then
-            RESULT_FILENAME=$(python3 utils/result_filename.py)
-          else
-            # Older measured commits predate the helper; preserve safe identity.
-            RESULT_FILENAME=$(printf '%s\0' "$RESULT_FILENAME_BASE" "$RECIPE_FINGERPRINT" | sha256sum)
-            RESULT_FILENAME="${RESULT_FILENAME%% *}"
-          fi
-          export RESULT_FILENAME
-          export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
-          echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
 
-          # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
-          echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
+          def error(exc):
+              return {"type": type(exc).__name__, "errno": getattr(exc, "errno", None),
+                      "message": str(exc)[:400]}
 
-          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
-          if [ "${{ inputs.eval-only }}" = "true" ]; then
-            echo "Eval-only mode: skipping benchmark result file check"
-            # Verify eval produced results
-            if ! ls results*.json 1>/dev/null 2>&1; then
-              echo "Eval-only run failed: no results*.json files found." >&2
-              exit 1
-            fi
-          else
-            FOUND_RESULT_FILE=
-            for i in {1..10}; do
-              if [ -f "$RESULT_FILENAME.json" ]; then
-                FOUND_RESULT_FILE=true
-                break
-              fi
-              echo "Waiting for result file... (attempt $i)"
-              sleep 1
-            done
+          def command(argv, timeout=2):
+              try:
+                  result = subprocess.run(argv, capture_output=True, text=True, timeout=timeout,
+                                          check=False, stdin=subprocess.DEVNULL)
+                  return {"returncode": result.returncode, "stdout": result.stdout[:8192],
+                          "stderr": result.stderr[:1024]}
+              except Exception as exc:
+                  return {"error": error(exc)}
 
-            if [ -z "$FOUND_RESULT_FILE" ]; then
-              echo "Run failed: Benchmark result $RESULT_FILENAME.json not found." >&2
-              exit 1
-            fi
 
-            if [ "${{ inputs.scenario-type }}" = "agentic-coding" ]; then
-              python3 -m utils.agentic.validation.validate_agentic_result \
-                results/aiperf_artifacts \
-                --failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"
-            fi
-          fi
+          def stat_info(path, follow=True):
+              try:
+                  s = os.stat(path, follow_symlinks=follow)
+                  return {"ok": True, "mode": oct(stat.S_IMODE(s.st_mode)),
+                          "mode_text": stat.filemode(s.st_mode), "uid": s.st_uid,
+                          "gid": s.st_gid, "size": s.st_size, "device": s.st_dev,
+                          "inode": s.st_ino, "regular": stat.S_ISREG(s.st_mode),
+                          "directory": stat.S_ISDIR(s.st_mode), "symlink": stat.S_ISLNK(s.st_mode)}
+              except Exception as exc:
+                  return {"ok": False, "error": error(exc)}
 
-      - name: Process result
-        if: ${{ always() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
-        env:
-          RUNNER_TYPE: ${{ inputs.runner }}
-        run: |
-          if [ ! -f "$RESULT_FILENAME.json" ]; then
-            echo "no raw result to process: $RESULT_FILENAME.json" >&2
-            exit 1
-          fi
-          python3 utils/process_result.py
 
-      - name: Upload result
-        if: ${{ success() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: bmk_${{ env.RESULT_FILENAME }}
-          path: agg_${{ env.RESULT_FILENAME }}.json
+          def describe(path):
+              result = {"path": path, "lstat": stat_info(path, False), "stat": stat_info(path)}
+              if result["lstat"].get("symlink"):
+                  try:
+                      result["readlink"] = os.readlink(path)
+                  except Exception as exc:
+                      result["readlink_error"] = error(exc)
+              return result
 
-      - name: Upload agentic aggregated result
-        if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: bmk_agentic_${{ env.RESULT_FILENAME }}
-          path: ${{ env.RESULT_FILENAME }}.json
 
-      - name: Upload agentic raw results
-        if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: agentic_${{ env.RESULT_FILENAME }}
-          path: |
-            results/**
-            !results/aiperf_artifacts/inputs.json
-            !results/aiperf_artifacts/profile_export_raw.jsonl
-          if-no-files-found: ignore
+          def read_probe(path):
+              fd = None
+              try:
+                  fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC)
+                  if not stat.S_ISREG(os.fstat(fd).st_mode):
+                      return {"ok": False, "skipped": "not a regular file"}
+                  return {"ok": True, "bytes_read": len(os.read(fd, 1))}
+              except Exception as exc:
+                  return {"ok": False, "error": error(exc)}
+              finally:
+                  if fd is not None:
+                      os.close(fd)
 
-      - name: Upload server logs
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ${{ inputs.eval-only && 'eval_server_logs_' || 'server_logs_' }}${{ env.RESULT_FILENAME }}
-          # fixed-seq writes server.log at root; agentic writes logs under results/.
-          path: |
-            server.log
-            results/*.log
-            results/*_config.json
-          if-no-files-found: ignore
 
-      - name: Upload GPU metrics
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ${{ inputs.eval-only && 'eval_gpu_metrics_' || 'gpu_metrics_' }}${{ env.RESULT_FILENAME }}
-          path: |
-            gpu_metrics.csv
-            gpu_metrics*_context.json
-            gpu_metrics_energy_start.csv
-            gpu_metrics_energy_end.csv
-            gpu_metrics_identity.json
-            gpu_metrics_identity.csv
-            results/gpu_metrics*.csv
-            results/gpu_metrics*_context.json
-            results/gpu_metrics_identity.json
-          if-no-files-found: ignore
+          def read_map(path):
+              try:
+                  with open(path, "r", encoding="ascii") as stream:
+                      data = stream.read(4096)
+                  return {"ok": True, "ranges": [dict(zip(("inside", "outside", "count"),
+                                                          map(int, line.split())))
+                                                  for line in data.splitlines()]}
+              except Exception as exc:
+                  return {"ok": False, "error": error(exc)}
 
-      - name: Upload power audit bundle
-        if: ${{ always() && !inputs.eval-only }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: power_audit_${{ env.RESULT_FILENAME }}
-          path: |
-            ${{ env.RESULT_FILENAME }}.json
-            agg_${{ env.RESULT_FILENAME }}.json
-            gpu_metrics.csv
-            gpu_metrics*_context.json
-            gpu_metrics_energy_start.csv
-            gpu_metrics_energy_end.csv
-            gpu_metrics_identity.json
-            gpu_metrics_identity.csv
-            power_validation_${{ env.RESULT_FILENAME }}.json
-            results/gpu_metrics*.csv
-            results/gpu_metrics*_context.json
-            results/gpu_metrics_identity.json
-            results/agentic_power_window.json
-            results/agentic_power_timezone_offset.txt
-            results/power_validation.json
-          if-no-files-found: ignore
 
-      - name: Upload eval results (if any)
-        if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: eval_${{ env.RESULT_FILENAME }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ github.run_attempt }}
-          path: |
-            meta_env.json
-            results*.json
-            *_report.json
-            *_results.jsonl
-            *_artifacts.tar.gz
-            sample*.jsonl
-            agent_preds.json
-            predictions.jsonl
-            swebench_report_*.json
-            *.traj*
-          if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
+          class Parser(argparse.ArgumentParser):
+              def error(self, message):
+                  raise ValueError(message)
 
-      - name: Verify eval scores
-        if: ${{ (success() || failure()) && inputs.eval-only }}
-        run: python3 utils/evals/validate_scores.py
 
-      - name: Cleanup eval outputs (post-upload)
-        if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
-        run: |
-          rm -f meta_env.json || true
-          # Remove any eval results JSONs that were moved into workspace
-          rm -f results*.json || true
-          rm -f -- ./*_report.json || true
-          rm -f -- ./*_results.jsonl || true
-          rm -f sample*.jsonl || true
-          rm -f -- ./*_artifacts.tar.gz || true
-          rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true
-          
-      - name: Resource cleanup (post-run)
-        if: always()
-        run: *resource-cleanup
+          def audit(args, result):
+              cache = os.path.abspath(args.cache_root)
+              snapshot = os.path.join(cache, "models--deepseek-ai--DeepSeek-V4-Pro", "snapshots", REVISION)
+              result.update(cache_root=cache, snapshot=snapshot, hostname=socket.gethostname(),
+                            identity={"uid": os.getuid(), "euid": os.geteuid(), "gid": os.getgid(),
+                                      "egid": os.getegid(), "groups": os.getgroups(),
+                                      "id": command(["id"]), "uid_map": read_map("/proc/self/uid_map"),
+                                      "gid_map": read_map("/proc/self/gid_map")},
+                            parent_paths=[], files=[], scan_errors=[])
+              parents = set()
+
+              def add_parents(path):
+                  chain = []
+                  while path not in parents and len(chain) < 64:
+                      chain.append(path)
+                      parent = os.path.dirname(path)
+                      if parent == path:
+                          break
+                      path = parent
+                  for item in reversed(chain):
+                      if len(parents) >= 64:
+                          result["parent_paths_truncated"] = True
+                          break
+                      parents.add(item)
+                      result["parent_paths"].append(describe(item))
+
+              add_parents(snapshot)
+              pending, visited = [snapshot], 0
+              while pending and visited < LIMIT:
+                  directory = pending.pop()
+                  try:
+                      with os.scandir(directory) as entries:
+                          for entry in entries:
+                              if visited >= LIMIT:
+                                  result["scan_truncated"] = True
+                                  break
+                              visited += 1
+                              record = describe(entry.path)
+                              if record["lstat"].get("directory"):
+                                  pending.append(entry.path)
+                                  add_parents(entry.path)
+                                  continue
+                              record["category"] = ("safetensors" if entry.name.endswith(".safetensors")
+                                                    else "metadata")
+                              try:
+                                  resolved = os.path.realpath(entry.path)
+                                  record["resolved_target"] = {"path": resolved, "stat": stat_info(resolved)}
+                                  add_parents(os.path.dirname(resolved))
+                              except Exception as exc:
+                                  record["resolved_target_error"] = error(exc)
+                              record["read_probe"] = (read_probe(entry.path) if record["stat"].get("regular")
+                                                      or not record["stat"]["ok"] else
+                                                      {"ok": False, "skipped": "not a regular file"})
+                              result["files"].append(record)
+                  except Exception as exc:
+                      result["scan_errors"].append({"path": directory, "error": error(exc)})
+              result.update(entries_visited=visited, scan_truncated=bool(pending) or result.get("scan_truncated", False))
+              result["summary"] = {}
+              for category in ("metadata", "safetensors"):
+                  files = [r for r in result["files"] if r["category"] == category]
+                  failed = [r["path"] for r in files if "error" in r["read_probe"]]
+                  skipped = [r["path"] for r in files if "skipped" in r["read_probe"]]
+                  result["summary"][category] = {"examined": len(files),
+                                                "readable": sum(r["read_probe"]["ok"] for r in files),
+                                                "read_failures": failed, "skipped": skipped}
+              result["summary"]["complete_scan"] = not result["scan_truncated"] and not result["scan_errors"]
+              result["summary"]["metadata_definition"] = "All snapshot files except *.safetensors; may include documentation/assets."
+              if args.getfacl:
+                  acl = shutil.which("getfacl")
+                  result["getfacl"] = {"available": bool(acl), "limit": 24, "paths": []}
+                  candidates = [r["path"] for r in result["parent_paths"]]
+                  for record in sorted(result["files"], key=lambda r: (r["read_probe"]["ok"], r["path"])):
+                      candidates += [record["path"], record.get("resolved_target", {}).get("path", record["path"])]
+                  unique = list(dict.fromkeys(candidates))
+                  result["getfacl"]["truncated"] = len(unique) > 24
+                  if acl:
+                      for path in unique[:24]:
+                          result["getfacl"]["paths"].append({"path": path, **command([acl, "-cpn", "--", path], 1)})
+
+
+          def main():
+              result = {"schema_version": 1, "model": MODEL, "revision": REVISION, "entry_limit": LIMIT}
+              code = 0
+              try:
+                  parser = Parser(description=__doc__)
+                  parser.add_argument("--cache-root", required=True)
+                  parser.add_argument("--getfacl", action="store_true", help="Audit up to 24 exact paths; never recursive.")
+                  audit(parser.parse_args(), result)
+              except Exception as exc:
+                  result["fatal_error"] = error(exc)
+                  code = 1
+              print(json.dumps(result, indent=2, sort_keys=True))
+              return code
+
+
+          if __name__ == "__main__":
+              raise SystemExit(main())
+          PY
+          )
+          python3 -c "$AUDIT_SCRIPT" --cache-root /it-share/hf-hub-cache --getfacl
+          srun --partition=compute --nodes=1 --ntasks=1 --cpus-per-task=1 --time=00:02:00 --immediate=30 \
+            --nodelist=mia1-p01-g11 --job-name="pr2912-hf-cache-audit-${GITHUB_RUN_ID}" \
+            --container-image=/var/lib/squash/rocm_atom-dev_nightly_202609121454.sqsh \
+            --container-mounts=/it-share/hf-hub-cache/:/mnt/hf_hub_cache/:ro \
+            --container-workdir=/tmp --container-remap-root --no-container-entrypoint \
+            python3 -c "$AUDIT_SCRIPT" --cache-root /mnt/hf_hub_cache --getfacl
