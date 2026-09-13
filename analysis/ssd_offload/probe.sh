@@ -114,7 +114,10 @@ cat "$LMCACHE_CFG"
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_V2_MODEL_RUNNER=1
 export PYTHONUNBUFFERED=1
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+# No expandable_segments: vLLM refuses LMCacheConnectorV1 alongside it, because
+# the VMM allocator can remap KV virtual addresses out from under memory the
+# connector has pinned. Carried in by copy from the engram driver; not needed here.
+unset PYTORCH_CUDA_ALLOC_CONF
 
 # benchmark_lib on this branch has no select_available_server_port, and pyxis
 # shares the host network, so 8888 can already belong to a host service.
