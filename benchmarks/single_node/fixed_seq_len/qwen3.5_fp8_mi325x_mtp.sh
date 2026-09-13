@@ -9,8 +9,8 @@ check_env_vars \
     ISL \
     OSL \
     RANDOM_RANGE_RATIO \
-    RESULT_FILENAME
-    EP_SIZE \
+    RESULT_FILENAME \
+    EP_SIZE
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -69,7 +69,6 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    EP_SIZE \
     --result-dir /workspace/ \
     --use-chat-template
 
