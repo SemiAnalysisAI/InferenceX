@@ -116,6 +116,8 @@ The runner-name prefix is load-bearing: workflow routing uses `launch_${RUNNER_N
 
 ## Native llm-d power
 
+This integration depends on the Slurm completion and normal worker shutdown changes proposed in [#3052](https://github.com/SemiAnalysisAI/InferenceX/pull/3052); those changes remain an unmerged prerequisite.
+
 Only fixed 8192/1024 `dsv4-fp4-gb200-llmd-vllm` requires native power. Every serving node collects its selected devices; the coordinator waits for readiness and drain before normal shutdown. Results and audits are retained together. Other sequence lengths, AgentX and eval-only do not enable this collector. Hardware qualification and publication remain pending.
 
 ## Register an srt-slurm recipe

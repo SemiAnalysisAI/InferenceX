@@ -17,6 +17,23 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 MODULE_COMMAND = [sys.executable, "-m", "infx.results.fixed_sequence"]
 
 
+def test_single_node_workflow_reports_missing_raw_result(tmp_path, single_node_env_vars):
+    workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-tmpl.yml').read_text())
+    step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
+                if step.get('name') == 'Process result')
+    shutil.copytree(REPO_ROOT / 'infx', tmp_path / 'infx')
+    (tmp_path / 'utils').mkdir()
+    shutil.copy(REPO_ROOT / 'utils/process_result.py', tmp_path / 'utils/process_result.py')
+    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=tmp_path,
+                            env={**os.environ, **single_node_env_vars, 'RESULT_FILENAME': 'missing',
+                                 'PATH': f"{Path(sys.executable).parent}:{os.environ['PATH']}"},
+                            capture_output=True, text=True, timeout=10)
+    assert result.returncode == 1
+    assert 'no raw result to process: missing.json' in result.stderr
+    assert 'Traceback' not in result.stderr
+    assert not (tmp_path / 'agg_missing.json').exists()
+
+
 @pytest.mark.parametrize("workflow_name", ["benchmark-tmpl.yml", "benchmark-multinode-tmpl.yml", "profile.yml"])
 def test_workflow_processes_results_through_compatibility_entrypoint(
     tmp_path, workflow_name, single_node_env_vars, multinode_env_vars, sample_benchmark_result,

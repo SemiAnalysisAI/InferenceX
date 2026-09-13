@@ -116,6 +116,8 @@ runner 名称前缀是关键契约：workflow 通过 `launch_${RUNNER_NAME%%_*}.
 
 ## llm-d 原生功耗
 
+此集成依赖 [#3052](https://github.com/SemiAnalysisAI/InferenceX/pull/3052) 中的 Slurm 完成状态检查和工作进程正常退出变更；这些前置变更尚未合并。
+
 仅固定 8192/1024 的 `dsv4-fp4-gb200-llmd-vllm` 要求原生功耗。每个服务节点采集所选设备；协调进程等待 ready 与 drain 后正常退出。结果与审计数据共同保留。其他序列长度、AgentX 和 eval-only 不启用此采集器。硬件资格验证与发布仍待完成。
 
 ## 注册 srt-slurm 配方
