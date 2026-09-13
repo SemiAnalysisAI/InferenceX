@@ -11,6 +11,12 @@ set -eo pipefail
 # $ENGRAM_SSD_DIR and gathers rows on the host, leaving ~257 GiB of host RAM
 # free at no cost to decode throughput.
 #
+# The row gather runs on a worker while the decoder layers execute. The forward
+# thread issues the id copy on the stream that produced the ids and records an
+# event; the worker waits on it and then does numpy and filesystem work only,
+# touching no CUDA, which is what keeps it clear of cudagraph capture. That cut
+# mean TTFT from about 940 ms to 711 ms at 8k1k concurrency 16.
+#
 # Measured against dsv41flash-fp4-b200-vllm-agentic-dspark on B200 TP4 at
 # 8k1k, concurrency 16, CUDA graphs, three runs per arm:
 #   disk     14,168 tok/s mean (1.4% spread), 95 GB host RAM
