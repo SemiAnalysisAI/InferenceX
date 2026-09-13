@@ -1,5 +1,5 @@
 name: B300 controller diagnostic round 2
-run-name: powerx3040-controller-${{ github.run_id }}
+run-name: powerx3040-allocation-recovery-${{ github.run_id }}
 
 # Push-button (workflow_dispatch) collection of a SPEED-Bench acceptance-length
 # (AL) matrix: thinking_on/off x MTP levels, for the given model (defaults to
@@ -200,6 +200,18 @@ jobs:
           if command -v journalctl >/dev/null; then
             journalctl --no-pager -u slurmctld --since='2026-09-12 08:58:40' --until='2026-09-12 09:00:00' 2>&1 | grep -E '(2138|2168|[Pp]ermission|[Nn]o journal|[Nn]o entries)' || true
           fi
+          timeout 20s sacct -X -u "$(id -un)" --starttime=2026-09-12 \
+            --parsable2 --format=JobIDRaw,JobName%100,State,Start,End,ElapsedRaw,ExitCode,NodeList,AllocTRES | tail -80
+          salloc --version
+          hostname -f
+          ip -brief -4 address show
+          scontrol show config | grep -E '^[[:space:]]*(SlurmctldHost|SlurmctldAddr|SlurmctldPort|SlurmdPort|SrunPortRange|SlurmctldParameters|CommunicationParameters|MessageTimeout)[[:space:]=]'
+          # Verify the public host identity through authenticated CI before trusting SSH.
+          if [[ -r /etc/ssh/ssh_host_ed25519_key.pub ]]; then
+            cat /etc/ssh/ssh_host_ed25519_key.pub
+          fi
+          timeout 10s enroot list || true
+          stat /data/home/sa-gha-runner/squash/vllm_vllm-openai_nightly-dev-x86_64-cu13-3696c77.sqsh || true
       - name: Upload controller evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
