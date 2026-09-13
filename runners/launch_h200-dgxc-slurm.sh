@@ -12,6 +12,8 @@ AIPERF_MMAP_CACHE_HOST_PATH="${AIPERF_MMAP_CACHE_HOST_PATH:-/home/sa-shared/ghar
 # commit and re-running the H200 hardware gate.
 POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
 POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
+AGENTX_POWER_SRT_SLURM_PIN="80d7203e424f903c9017de4608ee2044afce9574"
+SELECTED_POWER_SRT_SLURM_PIN="$POWER_SRT_SLURM_PIN"
 
 set -x
 
@@ -44,16 +46,18 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         USES_DCGM_POWER=1
     fi
 
-    # Only explicitly reviewed H200 FP8 AgentX recipes may use dcgm-power.
-    # Future recipes must earn a separate cluster smoke instead of inheriting
-    # this lane.
-    if ! powerx_fixed_8k1k && [[ "$USES_DCGM_POWER" == "1" && (
+    USES_KIMIK3_POWER=0
+    if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
+        "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" ]]; then
+        USES_KIMIK3_POWER=1
+        SELECTED_POWER_SRT_SLURM_PIN="$AGENTX_POWER_SRT_SLURM_PIN"
+    elif ! powerx_fixed_8k1k && [[ "$USES_DCGM_POWER" == "1" && (
         "$IS_AGENTIC" != "1" ||
         "$FRAMEWORK" != "dynamo-sglang" ||
         ( "$MODEL_PREFIX" != "glm5.2" && "$MODEL_PREFIX" != "dsv4" ) ||
         "$PRECISION" != "fp8"
     ) ]]; then
-        echo "Error: H200 dcgm-power is validated only for AgentX dynamo-sglang glm5.2/fp8 or dsv4/fp8" >&2
+        echo "Error: H200 dcgm-power requires AgentX dynamo-sglang glm5.2/dsv4 FP8 or Kimi-K3 vLLM FP4" >&2
         exit 1
     fi
 
@@ -140,9 +144,17 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             cd "$SRT_REPO_DIR"
         fi
     elif [[ $IS_AGENTIC == "1" && $FRAMEWORK == "vllm" && $MODEL_PREFIX == "kimik3" ]]; then
-        git clone https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-        git checkout df5baa93f4caf5169dea2a4236ad2cc742fe40e7
+        if [[ "$USES_KIMIK3_POWER" == "1" ]]; then
+            git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
+            cd "$SRT_REPO_DIR"
+            git checkout "$SELECTED_POWER_SRT_SLURM_PIN"
+            test "$(git rev-parse HEAD)" = "$SELECTED_POWER_SRT_SLURM_PIN" || exit 1
+            git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+        else
+            git clone https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR"
+            cd "$SRT_REPO_DIR"
+            git checkout df5baa93f4caf5169dea2a4236ad2cc742fe40e7
+        fi
         mkdir -p recipes/vllm/kimi-k3/agentic
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
             recipes/vllm/kimi-k3/agentic
@@ -378,7 +390,13 @@ EOF
 
     echo "Found logs directory: $LOGS_DIR"
 
-    if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" ]]; then
+    AGENTX_POWER_RC=0
+    if [[ "$USES_KIMIK3_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+        read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+        collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" \
+            "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" \
+            "$SELECTED_POWER_SRT_SLURM_PIN" "${POWER_CONCURRENCIES[@]}" || AGENTX_POWER_RC=$?
+    elif [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
         POWER_LOGS_ROOT=$(cd "$LOGS_DIR" && pwd -P)
         read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
         for concurrency in "${POWER_CONCURRENCIES[@]}"; do
@@ -387,7 +405,7 @@ EOF
                 --agg-result "$GITHUB_WORKSPACE/${RESULT_FILENAME}_conc${concurrency}.json"
                 --power-dir "$POWER_LOGS_ROOT/power"
                 --logs-root "$POWER_LOGS_ROOT"
-                --expected-producer-sha "$POWER_SRT_SLURM_PIN"
+                --expected-producer-sha "$SELECTED_POWER_SRT_SLURM_PIN"
             )
             case "${REQUIRE_POWER:-0}" in
                 1|true|TRUE|yes|YES) power_args+=(--require-power) ;;
@@ -395,7 +413,7 @@ EOF
             (
                 cd "$GITHUB_WORKSPACE"
                 python -m infx.results.agentic.power_adapter "${power_args[@]}"
-            ) || exit 1
+            ) || AGENTX_POWER_RC=$?
         done
     fi
     if [[ "$USES_DCGM_POWER" == "1" ]]; then
@@ -411,6 +429,11 @@ EOF
         cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
     fi
     bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
+
+    if [[ "$AGENTX_POWER_RC" != "0" && "$SRT_JOB_RC" == "0" ]]; then
+        echo "ERROR: AgentX power validation failed; available audit and server artifacts were staged" >&2
+        exit "$AGENTX_POWER_RC"
+    fi
 
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
         copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME"
