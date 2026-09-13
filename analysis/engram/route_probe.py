@@ -386,12 +386,35 @@ def _wrap_modular(router_cls) -> None:
         finally:
             if saved is not None:
                 self.e_score_correction_bias = saved
-        got = torch.sort(out[1].to(torch.int64), dim=1)[0]
-        want = torch.sort(rec.to(out[1].device, torch.int64), dim=1)[0]
-        bad = int((got != want).any(dim=1).sum())
-        if bad:
-            _state["stats"]["pin_violations"] += bad
-            _say_once("pinviol", "pinned selection not honoured on %d tokens (layer %d)" % (bad, idx))
+        weights, ids = out[0], out[1]
+        got = torch.sort(ids.to(torch.int64), dim=1)[0]
+        want = torch.sort(rec.to(ids.device, torch.int64), dim=1)[0]
+        rows = (got != want).any(dim=1).nonzero(as_tuple=True)[0]
+        if rows.numel():
+            # The router kernel occasionally departs from the forced set
+            # (~1e-4 of decisions in run 34763951637). Honour the pin by
+            # construction for those rows: recorded ids, weights from the
+            # reference arithmetic on the model's own logits.
+            _state["stats"]["pin_violations"] += int(rows.numel())
+            fixed_ids = ids.clone()
+            fixed_w = weights.clone()
+            rec_dev = rec.to(ids.device)
+            fixed_ids[rows] = rec_dev[rows].to(ids.dtype)
+            fixed_w[rows] = reference_weights(
+                router_logits[rows], rec_dev[rows],
+                bool(getattr(self, "renormalize", True)),
+                float(getattr(self, "routed_scaling_factor", 1.0)),
+                getattr(self, "scoring_func", "sqrtsoftplus"),
+            ).to(weights.dtype)
+            if len(_state["said"]) < 40:
+                r0 = int(rows[0])
+                lg = router_logits[r0].float()
+                _say("pin fallback layer %d rows=%d first_row=%d want=%s got=%s logits@want=%s logits@got=%s bias=%s" % (
+                    idx, int(rows.numel()), r0, want[r0].tolist(), got[r0].tolist(),
+                    [round(v, 3) for v in lg[want[r0]].tolist()],
+                    [round(v, 3) for v in lg[got[r0]].tolist()],
+                    "zeroed" if saved is not None else "none"))
+            out = (fixed_w, fixed_ids) + tuple(out[2:])
         _state["stats"]["replay_calls"] += 1
         return out
 
