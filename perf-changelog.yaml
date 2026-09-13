@@ -7458,3 +7458,12 @@
     - "Preserve an explicit prepared GLM-5.1 model path and mount shared HF cache blobs in native TileRT containers."
     - "保留显式指定的 GLM-5.1 预备模型路径，并在原生 TileRT 容器中挂载共享 HF 缓存 blobs。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3057
+
+- config-keys:
+    - glm5.1-fp8-b200-tilert
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Preserve explicit registries during native TileRT Enroot imports while reusing valid cached squash images."
+    - "原生 TileRT 导入镜像时保留显式仓库地址，并继续复用有效的 squash 缓存。"
+  pr-link: TBD
