@@ -1912,12 +1912,11 @@ forward call count above the 5,000 floor.
 
 - **Terminal-Bench 4.0 has no result.** The harness is validated; the eval is
   not done. Everything above is single-turn, so there is no agentic evidence.
-- **gsm8k vs CRUXEval remain confounded.** gsm8k ran 5-shot through the chat
-  template with chain of thought; CRUXEval ran as a raw few-shot completion
-  (this checkpoint copy ships no `chat_template`). Pattern completion is
-  exactly the regime where an n-gram memory should matter most, so prompt
-  regime is a live alternative to "task" as the explanation. A
-  raw-completion gsm8k arm would settle it and has not been run.
+- **gsm8k vs CRUXEval were confounded by prompt regime** -- resolved in
+  Part 4: rendered like gsm8k (chat encoding, thinking on), CRUXEval's
+  ablation loss on finished items is −2.9pp, not −16pp, and the model's
+  reasoning traces grow 6.6x. A raw-completion gsm8k arm would close the
+  symmetric case and has not been run.
 - **CRUXEval baselines differ across runs** (0.6388 twice, 0.6512 in the
   four-arm run). Same items, same temperature 0.0; the four-arm run batches
   differently and the checkpoint is not bitwise-deterministic across batch
@@ -2055,6 +2054,108 @@ tokens keep their expert set.
 Raw artifact: `routing_ablation.json` (per-arm scores, comparison, verdict,
 per-layer agreement).
 
+# Part 4: CRUXEval under the chat encoding, the regime gsm8k was served in
+
+Part 2's sharpest contrast -- gsm8k unmoved, CRUXEval −16pp -- was measured
+in two different prompt regimes. gsm8k went through vLLM's `deepseek_v41`
+chat encoding with thinking on, so the model reasoned before answering.
+CRUXEval ran as a raw two-shot completion with the `[ANSWER]` tag already
+open and sampling stopped at the closing tag, so the literal had to come out
+in a single pass with no reasoning at all. This part re-runs CRUXEval the
+way gsm8k was run. Same 800 items, same four arms, same grader; only the
+rendering changes. Run [34759384751](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34759384751),
+B200 TP4, 3h17m.
+
+## Method
+
+`cruxeval_ablation.py --prompt-style chat` renders each item with the
+reference DeepSeek-V4.1 encoder (`vllm.tokenizers.deepseek_v41_encoding`,
+the same module the served chat endpoint uses): thinking on, reasoning
+effort `high`, which are vLLM's chat defaults. The prompt ends at the
+assistant header with an open `<think>`; the tag stop strings are dropped
+so the model is not cut off mid-reasoning, and only the text after the last
+`</think>` is graded. Output budget 12,288 tokens. A generation that runs
+out of budget while still thinking is graded wrong and counted separately,
+because a budget failure is not an Engram effect -- and it turned out to
+matter.
+
+## Result
+
+| arm | pass@1 (all 800) | Δ vs baseline | unfinished reasoning | gen tokens / item | both-finished n | pass@1 on those | Δ on those | flips base/arm |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `baseline` | 0.9938 | — | 3 | 335 | 797 | 0.9975 | +0.0000 | 0/0 |
+| `ablated` | 0.8750 | -0.1187 (9.45σ) | 76 | 2215 | 722 | 0.9681 | -0.0291 | 22/1 |
+| `prefill_only` | 0.9675 | -0.0262 (4.17σ) | 21 | 701 | 778 | 0.9949 | -0.0026 | 3/1 |
+| `decode_only` | 0.9463 | -0.0475 (5.71σ) | 22 | 1018 | 776 | 0.9742 | -0.0232 | 19/1 |
+
+Three things, in order of size:
+
+1. **With reasoning allowed the model nearly solves CRUXEval-O**: 99.4%
+   against 65.1% under raw completion. The task the raw run measured was
+   "produce the literal in one pass"; this one is "work it out".
+2. **The headline ablation loss is −11.9pp, but three quarters of it is
+   the reasoning budget, not the answer.** Removing Engram makes the model
+   think 6.6x longer (2,215 vs 335 generated tokens per item), and 76 items
+   never close their `</think>` inside 12,288 tokens; every one of those is
+   graded wrong. On the 722 items where both arms finished, the loss is
+   **−2.9pp** (22 items lost, 1 gained), against −16.3pp under raw
+   completion. Given room to reason, the model recovers most of what the
+   memory provided -- at a large token cost.
+3. **The phase split is now balanced.** Under raw completion `prefill_only`
+   recovered ~75% of the loss and `decode_only` ~2%. Here both halves carry
+   loss and both help: shutting the gate over the prompt only costs −2.6pp,
+   shutting it over the generation only costs −4.8pp; on finished items
+   −0.3pp and −2.3pp. With a reasoning trace, Engram acting on the
+   *generated* tokens matters more than on the prompt -- the trace is where
+   the answer is now being assembled, and it is long.
+
+By answer kind (all 800, unfinished counted wrong):
+
+| kind | items | baseline | ablated Δ | prefill_only Δ | decode_only Δ |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| bool/None | 49 | 1.0000 | -0.1633 | +0.0000 | -0.0408 |
+| container | 280 | 1.0000 | -0.0571 | -0.0250 | -0.0214 |
+| number | 98 | 1.0000 | -0.0612 | -0.0204 | -0.0306 |
+| str | 371 | 0.9865 | -0.1725 | -0.0296 | -0.0728 |
+
+Strings lose the most and booleans the least under ablation, the reverse of
+the copy story once again; under chat the numbers and containers barely
+move.
+
+## What this settles about Part 2
+
+The gsm8k-versus-CRUXEval contrast was mostly a prompt-regime effect.
+The −16pp was measured in a regime the model was never asked to reason in,
+and pattern completion in one pass is exactly where an n-gram memory should
+be worth the most. Rendered like gsm8k, CRUXEval loses 3pp on items the
+model finishes, which is the same order as gsm8k's null (+0.08pp inside a
+±0.5pp standard error) once the harder task is taken into account. "Code
+versus math" is not the variable; "reasoning permitted versus forbidden"
+is.
+
+The new fact is the length blow-up. Without Engram the model's traces are
+6.6x longer and 9.5% of them do not terminate in a budget 37x the baseline
+mean. The memory is doing something the reasoning loop otherwise has to
+replace with verification, and that replacement is expensive. This is the
+agentic-cost angle Terminal-Bench was meant to measure and did not: in a
+tool loop, a 6.6x longer trace per step is the whole story.
+
+## Caveats
+
+- 12,288 tokens is generous but finite; the 76 unfinished ablated items
+  could in principle contain more losses or more recoveries. The
+  both-finished −2.9pp is a conditional estimate, not a lower bound.
+- The extraction grades the last `[ANSWER]` block after the last `</think>`;
+  a trace that emits its final answer inside the think block and nothing
+  after is graded wrong. `empty=0` on every arm and 99.7% baseline on
+  finished items say this is rare.
+- One seed, temperature 0; the checkpoint is not bitwise deterministic
+  across batch shapes, so single-item flips carry no weight. The 22/1 split
+  does.
+
+Raw artifacts: `cruxeval_chat.json`, `cruxeval_chat_items.json` (per item,
+with `finished_thinking`).
+
 ## Provenance
 
 | result | run |
@@ -2066,11 +2167,13 @@ per-layer agreement).
 | CRUXEval phase arms | 34732450349 |
 | NLL boundary sweep | 34735263999 |
 | routing-pinned ablation (Part 3) | 34765220267 (invalid attempts: 34761927842, 34763951637) |
+| CRUXEval under the chat encoding (Part 4) | 34759384751 |
 | Terminal-Bench v2 (cancelled, no score) | 34729702998, 34729704839 |
 
 Raw artifacts: `engram_merged.json` (Part 1), `nll_phase_arms.json`,
 `nll_boundary_sweep.json`, `cruxeval_ablation.json`,
-`cruxeval_phase_arms.json`, `routing_ablation.json` (Part 3).
+`cruxeval_phase_arms.json`, `routing_ablation.json` (Part 3),
+`cruxeval_chat.json` and `cruxeval_chat_items.json` (Part 4).
 
 The SSD/KV-offload feasibility probe is a separate investigation and lives in
 `analysis/ssd_offload/RESULTS.md`; it is not an Engram measurement.
