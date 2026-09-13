@@ -51,6 +51,7 @@ python3 -m sglang.launch_server \
     --speculative-num-steps 3 \
     --speculative-eagle-topk 1 \
     --speculative-num-draft-tokens 4 \
+    --skip-server-warmup \
     --mem-fraction-static 0.75 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
