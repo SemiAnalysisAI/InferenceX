@@ -1769,4 +1769,4 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
     - dram-utilization: 0.60
       search-space:
       # Follow upstream AMD Engram defaults; omit the CUDA-only config flag.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }

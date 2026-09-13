@@ -50,12 +50,16 @@ export PYTHONUNBUFFERED=1
 
 # Upstream default. The previous 2*CONC cap sat below AgentX's subagent
 # fan-out, so at CONC=1 the engine admitted 2 requests and left the rest
-# queued on scheduling capacity. Pinned rather than inherited so CAPTURE_SIZE
-# below stays consistent with it.
+# queued on scheduling capacity.
 MAX_NUM_SEQS=128
 NUM_SPEC_TOKENS=5
+# Size graph capture to the point being measured: each of the CONC lanes submits
+# one real token plus NUM_SPEC_TOKENS drafts per step, so that product bounds
+# the decode batch. Deriving from MAX_NUM_SEQS instead pinned every point at
+# 1024, spending 38.1 GiB per GPU on shapes the workload cannot reach and
+# leaving a 33.6M-token KV pool.
 CAPTURE_SIZE=1
-while (( CAPTURE_SIZE < MAX_NUM_SEQS * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
+while (( CAPTURE_SIZE < CONC * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
     CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
 done
 
