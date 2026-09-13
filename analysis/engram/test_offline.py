@@ -472,3 +472,68 @@ def test_cruxeval_prompt_shape():
     assert "assert f(3) == ??" in prompt
     assert prompt.rstrip().endswith("[ANSWER]")
     assert "[/ANSWER]" in prompt  # the two-shot exemplars are present
+
+
+def _fake_forward_context(monkeypatch, query_start_loc):
+    """Stand in for vllm.forward_context with a chosen batch shape."""
+    import types
+
+    md = types.SimpleNamespace(query_start_loc=query_start_loc)
+    ctx = types.SimpleNamespace(attn_metadata={"layer0": md})
+    module = types.ModuleType("vllm.forward_context")
+    module.get_forward_context = lambda: ctx
+    monkeypatch.setitem(sys.modules, "vllm.forward_context", module)
+
+
+def test_engine_phase_mask_splits_a_mixed_batch(monkeypatch):
+    """One request prefilling 5 tokens, two decoding 1 each."""
+    _fake_forward_context(monkeypatch, torch.tensor([0, 5, 6, 7]))
+    dev = torch.device("cpu")
+    pre = gate_probe.engine_phase_mask("prefill", 7, dev)
+    dec = gate_probe.engine_phase_mask("decode", 7, dev)
+    assert pre.tolist() == [True] * 5 + [False, False]
+    assert dec.tolist() == [False] * 5 + [True, True]
+    assert bool((pre ^ dec).all()), "the two phases must partition the batch"
+
+
+def test_engine_phase_mask_refuses_when_it_cannot_tell(monkeypatch):
+    """A guess here would still produce a plausible number, so return None."""
+    dev = torch.device("cpu")
+    # Token count disagrees with the metadata (e.g. sequence-parallel slicing).
+    _fake_forward_context(monkeypatch, torch.tensor([0, 5, 6, 7]))
+    assert gate_probe.engine_phase_mask("decode", 4, dev) is None
+    # No usable metadata at all.
+    import types
+
+    module = types.ModuleType("vllm.forward_context")
+    module.get_forward_context = lambda: types.SimpleNamespace(attn_metadata=None)
+    monkeypatch.setitem(sys.modules, "vllm.forward_context", module)
+    assert gate_probe.engine_phase_mask("prefill", 7, dev) is None
+    assert gate_probe.phase_mask("prefill", 0, 7, dev) is None
+
+
+def test_meter_marks_the_run_invalid_when_the_phase_is_unknown(tmp_path, monkeypatch):
+    """A missing phase must not silently degrade to leaving Engram on."""
+    import types
+
+    class Fake:
+        def forward(self, hidden_states, hash_ids, token_mask=None):
+            return hidden_states + 0.01 * torch.ones_like(hidden_states)
+
+    module = types.ModuleType("vllm.forward_context")
+    module.get_forward_context = lambda: types.SimpleNamespace(attn_metadata=None)
+    monkeypatch.setitem(sys.modules, "vllm.forward_context", module)
+    meter = str(tmp_path)
+    saved = gate_probe._find_engram_class
+    gate_probe._find_engram_class = lambda: Fake
+    os.environ[gate_probe.METER_DIR_ENV] = meter
+    try:
+        gate_probe.install_meter()
+        obj = Fake()
+        obj.layer_hash_index = 0
+        gate_probe.set_mode(meter, "decode")
+        Fake.forward(obj, torch.randn(4, 2, 4), torch.zeros(4, 2, dtype=torch.long))
+        assert os.path.exists(os.path.join(meter, gate_probe.PHASE_MISS))
+    finally:
+        gate_probe._find_engram_class = saved
+        os.environ.pop(gate_probe.METER_DIR_ENV, None)

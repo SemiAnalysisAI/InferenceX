@@ -41,7 +41,16 @@ logger = logging.getLogger("engram-cruxeval")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from engram import gate_probe  # noqa: E402
 
-ARMS = {"baseline": "all", "ablated": "none"}
+# Unlike the likelihood run, this task generates, so prefill and decode are
+# the real engine phases rather than a positional split: prefill_only leaves
+# Engram on while the prompt is read and shuts it for every generated token,
+# decode_only does the reverse.
+ARMS = {
+    "baseline": "all",
+    "ablated": "none",
+    "prefill_only": "prefill",
+    "decode_only": "decode",
+}
 
 # The CRUXEval-O direct prompt, two-shot, from the paper's released harness.
 INSTRUCTION = (
@@ -254,7 +263,11 @@ def main() -> int:
     samples: dict[str, list[dict]] = {}
     records: dict[str, list[dict]] = {}
     coverage: dict[str, dict] = {}
+    miss_path = os.path.join(meter_dir, gate_probe.PHASE_MISS)
+    phase_miss = {}
     for arm, mode in ARMS.items():
+        if os.path.exists(miss_path):
+            os.unlink(miss_path)
         gate_probe.set_mode(meter_dir, mode)
         gate_probe.clear_meter(meter_dir)
         outputs = llm.generate(prompts, sampling)
@@ -279,7 +292,13 @@ def main() -> int:
             for row, out, ok in zip(rows, outputs, flags)
         ]
         stats = gate_probe.read_meter(meter_dir)
-        coverage[arm] = dict(stats, empty_generations=empty)
+        phase_miss[arm] = os.path.exists(miss_path)
+        coverage[arm] = dict(stats, empty_generations=empty,
+                             phase_mask_unavailable=phase_miss[arm])
+        if phase_miss[arm]:
+            logger.error("%s: the engine phase could not be determined on at "
+                         "least one forward call; this arm is not a "
+                         "measurement", arm)
         logger.info("%s: pass@1=%.4f empty=%d meter=%s", arm,
                     sum(flags) / max(len(flags), 1), empty, json.dumps(stats))
         if empty > len(rows) // 10:
@@ -292,15 +311,15 @@ def main() -> int:
     for kind in sorted(set(kinds)):
         sel = [i for i, k in enumerate(kinds) if k == kind]
         b = [correct["baseline"][i] for i in sel]
-        a = [correct["ablated"][i] for i in sel]
-        by_kind[kind] = {
-            "items": len(sel),
-            "pass@1_baseline": round(sum(b) / len(sel), 4),
-            "pass@1_ablated": round(sum(a) / len(sel), 4),
-            "delta": round((sum(a) - sum(b)) / len(sel), 4),
-            "only_baseline_correct": sum(1 for x, y in zip(b, a) if x and not y),
-            "only_ablated_correct": sum(1 for x, y in zip(b, a) if y and not x),
-        }
+        by_kind[kind] = {"items": len(sel)}
+        for arm, flags in correct.items():
+            a = [flags[i] for i in sel]
+            by_kind[kind][arm] = {
+                "pass@1": round(sum(a) / len(sel), 4),
+                "delta": round((sum(a) - sum(b)) / len(sel), 4),
+                "only_baseline_correct": sum(1 for x, y in zip(b, a) if x and not y),
+                "only_arm_correct": sum(1 for x, y in zip(b, a) if y and not x),
+            }
         logger.info("kind %s: %s", kind, json.dumps(by_kind[kind]))
 
     base, abl = correct["baseline"], correct["ablated"]
@@ -314,6 +333,19 @@ def main() -> int:
                         else "raw-completion",
         "pass@1": {arm: round(sum(f) / len(f), 4) for arm, f in correct.items()},
         "delta_pass@1": round(sum(abl) / len(abl) - sum(base) / len(base), 4),
+        "arms_vs_baseline": {
+            arm: {
+                "pass@1": round(sum(f) / len(f), 4),
+                "delta": round((sum(f) - sum(base)) / len(base), 4),
+                "only_baseline_correct": sum(1 for b, a in zip(base, f) if b and not a),
+                "only_arm_correct": sum(1 for b, a in zip(base, f) if a and not b),
+                "mcnemar": _mcnemar(
+                    sum(1 for b, a in zip(base, f) if b and not a),
+                    sum(1 for b, a in zip(base, f) if a and not b),
+                ),
+            }
+            for arm, f in correct.items() if arm != "baseline"
+        },
         "paired": {
             "both_correct": sum(1 for b, a in zip(base, abl) if b and a),
             "both_wrong": sum(1 for b, a in zip(base, abl) if not b and not a),
@@ -326,6 +358,8 @@ def main() -> int:
         "samples": samples,
     }
     verdict = gate_probe.ablation_verdict(coverage.get("baseline"), coverage.get("ablated"))
+    verdict["phase_mask_unavailable"] = {a: bool(v) for a, v in phase_miss.items()}
+    verdict["ok"] = bool(verdict["ok"] and not any(phase_miss.values()))
     report["ablation_verdict"] = verdict
 
     with open(os.path.join(args.out, "cruxeval_ablation.json"), "w") as handle:

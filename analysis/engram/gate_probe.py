@@ -372,7 +372,17 @@ _MODE_FILE = "ENGRAM_MODE.json"
 #   none   -- full ablation (the original ABLATE_NOW behaviour)
 #   prefix -- positions < boundary only
 #   suffix -- positions >= boundary only
-MODES = ("all", "none", "prefix", "suffix")
+#   prefill -- tokens belonging to a request that is prefilling this step
+#   decode  -- tokens belonging to a request that is decoding this step
+# The first four are positional within a call; the last two are the real
+# engine phase, which only means something when the model is generating.
+MODES = ("all", "none", "prefix", "suffix", "prefill", "decode")
+ENGINE_MODES = ("prefill", "decode")
+
+# Set when a phase mask could not be derived. A driver that sees this must
+# refuse to report, because the alternative is silently measuring the wrong
+# thing: the call would otherwise fall back to leaving Engram fully on.
+PHASE_MISS = "PHASE_MISS"
 
 
 def set_mode(meter_dir: str, mode: str, boundary: int = 0) -> None:
@@ -424,6 +434,50 @@ def _read_mode(meter_dir: str):
     return "all", 0
 
 
+def _query_lens():
+    """Per-request token counts for the forward call in flight, or None.
+
+    vLLM batches prefill and decode together, so the phase is a property of
+    each request in the batch, not of the call. `query_start_loc` is the one
+    piece of metadata that says how many tokens each request contributed:
+    more than one means that request is prefilling (or chunk-prefilling),
+    exactly one means it is decoding.
+    """
+    try:
+        from vllm.forward_context import get_forward_context
+
+        ctx = get_forward_context()
+    except Exception:
+        return None
+    md = getattr(ctx, "attn_metadata", None)
+    if isinstance(md, dict):  # V1 keys attention metadata per layer
+        md = next(iter(md.values()), None)
+    starts = getattr(md, "query_start_loc", None)
+    if starts is None or starts.numel() < 2:
+        return None
+    starts = starts.to(torch.int64)
+    lens = starts[1:] - starts[:-1]
+    return lens[lens > 0]
+
+
+@torch.no_grad()
+def engine_phase_mask(mode, num_tokens, device):
+    """True for tokens whose request is in `mode` this step, or None.
+
+    Returning None rather than a guess is deliberate: a wrong phase mask would
+    still produce a plausible number.
+    """
+    lens = _query_lens()
+    if lens is None:
+        return None
+    if int(lens.sum()) != int(num_tokens):
+        # Sequence-parallel slicing or a metadata shape we do not understand.
+        return None
+    decode = (lens == 1).to(device)
+    per_token = torch.repeat_interleave(decode, lens.to(device))
+    return per_token if mode == "decode" else ~per_token
+
+
 @torch.no_grad()
 def phase_mask(mode, boundary, num_tokens, device, token_mask=None):
     """Per-token gate mask for a phase-restricted Engram.
@@ -435,6 +489,10 @@ def phase_mask(mode, boundary, num_tokens, device, token_mask=None):
     """
     if mode == "none":
         mask = torch.zeros(num_tokens, dtype=torch.bool, device=device)
+    elif mode in ENGINE_MODES:
+        mask = engine_phase_mask(mode, num_tokens, device)
+        if mask is None:
+            return None
     else:
         idx = torch.arange(num_tokens, device=device)
         mask = idx < boundary if mode == "prefix" else idx >= boundary
@@ -487,7 +545,8 @@ def install_meter() -> None:
     if getattr(cls, "_gate_meter_installed", False):
         return
     original = cls.forward
-    state = {"returns_updated_hidden": None, "tokens_seen": []}
+    state = {"returns_updated_hidden": None, "phase_miss": False,
+             "phase_tokens": {}}
 
     def forward(self, hidden_states, hash_ids, token_mask=None):
         meter_dir = os.environ.get(METER_DIR_ENV)
@@ -503,8 +562,22 @@ def install_meter() -> None:
                 mode, boundary, hash_ids.shape[0],
                 hidden_states.device, token_mask,
             )
-            state["tokens_seen"].append(int(hash_ids.shape[0]))
-            returned = original(self, hidden_states, hash_ids, mask)
+            if mask is None:
+                # Do not fall back to leaving Engram on -- that would look like
+                # a measurement. Mark the run and let the driver refuse it.
+                if not state["phase_miss"]:
+                    state["phase_miss"] = True
+                    _say("phase mask unavailable for mode %r; run is invalid" % mode)
+                    try:
+                        open(os.path.join(meter_dir, PHASE_MISS), "w").close()
+                    except OSError:
+                        pass
+                returned = out
+            else:
+                state["phase_tokens"][mode] = (
+                    state["phase_tokens"].get(mode, 0) + int(mask.sum())
+                )
+                returned = original(self, hidden_states, hash_ids, mask)
         else:
             returned = out
         if meter_dir:
