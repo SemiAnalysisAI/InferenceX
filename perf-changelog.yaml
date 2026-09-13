@@ -7428,3 +7428,14 @@
     - "Add representative AMD coverage for fixed-sequence request diagnostics and multinode concurrency filename processing; shared processor changes also affect unlisted fixed-sequence recipes."
     - "增加固定序列请求诊断与多节点并发文件名处理的代表性 AMD 覆盖；共享处理器变更也影响未列出的固定序列配置。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3026
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required telemetry on the seven existing GB200 aggregate recipes, pin the AgentX producer, and validate power after telemetry drain while preserving failed-job artifacts."
+    - "为 GB200 Kimi-K3 聚合部署启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3045

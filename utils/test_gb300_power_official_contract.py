@@ -18,13 +18,15 @@ FORK_URL = "https://example.test/power-producer.git"
 PRODUCER_PIN = "a" * 40
 
 
-def _launcher_routing_source() -> str:
+def _launcher_routing_source(launcher_name: str = "launch_gb300-nv.sh") -> str:
     """Extract the real clone-routing chain, not a copy of its implementation."""
-    launcher = LAUNCHER_PATH.read_text()
-    route_start = launcher.index(
-        'if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" '
-        '&& $MODEL_PREFIX == "qwen3.5" ]]; then'
+    launcher = (REPO_ROOT / "runners" / launcher_name).read_text()
+    start_marker = (
+        'if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" ' '&& $MODEL_PREFIX == "qwen3.5" ]]; then'
+        if launcher_name == "launch_gb300-nv.sh"
+        else 'if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2"'
     )
+    route_start = launcher.index(start_marker, launcher.index('echo "Cloning srt-slurm repository..."'))
     route_end_marker = '\nfi\n\necho "Installing srtctl..."'
     route_end = launcher.index(route_end_marker, route_start) + len("\nfi")
     return launcher[route_start:route_end]
@@ -36,15 +38,16 @@ def _write_executable(path: Path, text: str) -> None:
 
 
 def _run_dsv4_route(
-    tmp_path: Path, uses_dcgm_power: bool, *, reported_head: str = ""
+    tmp_path: Path, uses_dcgm_power: bool, *, reported_head: str = "",
+    launcher_name: str = "launch_gb300-nv.sh", model: str = "dsv4"
 ) -> tuple[list[str], Path, Path, Path]:
     """Execute only the real launcher routing region in a temporary checkout."""
     workspace = tmp_path / "workspace"
     stub_bin = tmp_path / "bin"
-    source = (
-        workspace
-        / "benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k"
+    recipe_directory = (
+        "vllm/kimi-k3/agentic" if model == "kimik3" else "sglang/deepseek-v4/8k1k"
     )
+    source = workspace / "benchmarks/multi_node/srt-slurm-recipes" / recipe_directory
     source.mkdir(parents=True)
     (source / "overlay-marker.txt").write_text("from-workspace\n")
     stub_bin.mkdir()
@@ -98,7 +101,7 @@ exec /bin/cp -R "$2"/. "$3"
 """,
     )
 
-    routing = _launcher_routing_source()
+    routing = _launcher_routing_source(launcher_name)
     repo_dir = workspace / "srt-slurm-route-test"
     harness = tmp_path / "route.sh"
     harness.write_text(
@@ -106,14 +109,17 @@ exec /bin/cp -R "$2"/. "$3"
 set -eo pipefail
 POWER_SRT_SLURM_URL={FORK_URL}
 POWER_SRT_SLURM_PIN={PRODUCER_PIN}
-IS_AGENTIC=0
-FRAMEWORK=dynamo-sglang
-MODEL_PREFIX=dsv4
+AGENTX_POWER_SRT_SLURM_PIN={PRODUCER_PIN}
+USES_AGENTX_POWER={int(model == 'kimik3' and uses_dcgm_power)}
+IS_AGENTIC={int(model == 'kimik3')}
+FRAMEWORK={'dynamo-vllm' if model == 'kimik3' else 'dynamo-sglang'}
+MODEL_PREFIX={model}
 PRECISION=fp4
 SPEC_DECODING=
 USES_DCGM_POWER={int(uses_dcgm_power)}
 GITHUB_WORKSPACE={workspace!s}
 SRT_REPO_DIR={repo_dir!s}
+python3() {{ :; }}
 {routing}
 """
     )
@@ -123,7 +129,7 @@ SRT_REPO_DIR={repo_dir!s}
     env["STUB_HEAD"] = reported_head
     subprocess.run(["/bin/bash", str(harness)], env=env, check=True)
 
-    marker = repo_dir / "recipes/sglang/deepseek-v4/8k1k/overlay-marker.txt"
+    marker = repo_dir / "recipes" / recipe_directory / "overlay-marker.txt"
     return route_log.read_text().splitlines(), workspace, repo_dir, marker
 
 
@@ -257,6 +263,27 @@ def test_gb300_dsv4_recipe_images_match_their_master_configs():
             assert recipe_path.is_file(), (key, config_file)
             recipe_image = yaml.safe_load(recipe_path.read_text())["model"]["container"]
             assert recipe_image == config["image"], (key, config_file)
+
+
+@pytest.mark.parametrize("launcher_name", ["launch_gb200-nv.sh"])
+def test_kimi_agentx_route_uses_custom_power_producer(tmp_path, launcher_name):
+    log, workspace, repo_dir, marker = _run_dsv4_route(
+        tmp_path, True, launcher_name=launcher_name, model="kimik3"
+    )
+    assert f"git clone {FORK_URL} {repo_dir}" in log
+    assert f"git checkout {PRODUCER_PIN}" in log
+    assert (workspace / "power-producer-sha.txt").read_text() == f"{PRODUCER_PIN}\n"
+    assert marker.read_text() == "from-workspace\n"
+
+
+@pytest.mark.parametrize("launcher_name", ["launch_gb200-nv.sh"])
+def test_kimi_power_route_rejects_wrong_commit(tmp_path, launcher_name):
+    with pytest.raises(subprocess.CalledProcessError):
+        _run_dsv4_route(
+            tmp_path, True, reported_head="b" * 40,
+            launcher_name=launcher_name, model="kimik3",
+        )
+    assert not (tmp_path / "workspace/power-producer-sha.txt").exists()
 
 
 @pytest.mark.parametrize(

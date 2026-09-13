@@ -15,6 +15,7 @@ SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
 # srt-slurm merge lands.
 POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
 POWER_SRT_SLURM_PIN="6fc1bed01a0b82dae0088a105c03ce0cfb353443"
+AGENTX_POWER_SRT_SLURM_PIN="80d7203e424f903c9017de4608ee2044afce9574"
 
 # Enroot 3.x does not parse Docker's tag@digest syntax. For digest-pinned
 # images, use its explicit registry syntax and pass the digest as the
@@ -332,12 +333,15 @@ if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
     USES_DCGM_POWER=1
 fi
 
-# Note (wenyao): the producer pin follows the srt-slurm main lineage that the
-# dynamo-sglang lanes run on (fp8 validated end-to-end, fp4 recipes
-# parse-verified against the pin); other frameworks clone diverging refs
-# (aflowers branch, sa-submission), so fail fast for them instead.
-if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" ]]; then
-    echo "Error: dcgm-power lanes are only validated for FRAMEWORK=dynamo-sglang, got: $FRAMEWORK" >&2
+USES_AGENTX_POWER=0
+if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
+    "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" &&
+    "$FRAMEWORK" == "dynamo-vllm" &&
+    "$_RECIPE_REL" == recipes/vllm/kimi-k3/agentic/* ]]; then
+    USES_AGENTX_POWER=1
+fi
+if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" && "$USES_AGENTX_POWER" != "1" ]]; then
+    echo "Error: dcgm-power requires dynamo-sglang or the supported Kimi-K3 AgentX route" >&2
     exit 1
 fi
 
@@ -472,12 +476,20 @@ elif [[ "$IS_AGENTIC" == "1" && (( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" 
     fi
 # Kimi-K3 requires direct multi-node vLLM frontend support from srt-slurm.
 elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "kimik3" ]]; then
-    git clone --branch v1.0.53 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    test "$(git rev-parse HEAD)" = "217f94387abeddfed7149a71955dc523e07cd765" || {
-        echo "Error: NVIDIA/srt-slurm v1.0.53 resolved to an unexpected commit" >&2
-        exit 1
-    }
+    if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+        git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout "$AGENTX_POWER_SRT_SLURM_PIN" || exit 1
+        test "$(git rev-parse HEAD)" = "$AGENTX_POWER_SRT_SLURM_PIN" || exit 1
+        git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+    else
+        git clone --branch v1.0.53 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+        cd "$SRT_REPO_DIR" || exit 1
+        test "$(git rev-parse HEAD)" = "217f94387abeddfed7149a71955dc523e07cd765" || {
+            echo "Error: NVIDIA/srt-slurm v1.0.53 resolved to an unexpected commit" >&2
+            exit 1
+        }
+    fi
     python3 "$GITHUB_WORKSPACE/runners/patch_srt_vllm_dp_ranks.py" "$(pwd)" || exit 1
     mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
@@ -759,6 +771,12 @@ sed -i "s/^name:.*/name: \"${SRT_SLURM_JOB_NAME}\"/" "$CONFIG_PATH"
 python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
     "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
+if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+    read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+    python3 "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
+        "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
+fi
+
 # Don't leak the login-node venv to the compute-node orchestrator. sbatch's
 # default --export=ALL propagates VIRTUAL_ENV (set by `source
 # .venv/bin/activate` above) into job_script_minimal.j2, whose
@@ -822,12 +840,23 @@ trap 'exit 143' TERM HUP
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
-stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+AGENTX_POWER_RC=0
+stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || AGENTX_POWER_RC=$?
+if [[ "$AGENTX_POWER_RC" != "0" && "$USES_AGENTX_POWER" != "1" ]]; then
+    exit "$AGENTX_POWER_RC"
+fi
 
 set -x
 
 echo "Job $JOB_ID completed!"
 echo "Collecting results..."
+
+if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+    read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+    collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" "$INFMAX_WORKSPACE" \
+        "$GITHUB_WORKSPACE" "$RESULT_FILENAME" "$AGENTX_POWER_SRT_SLURM_PIN" \
+        "${POWER_CONCURRENCIES[@]}" || AGENTX_POWER_RC=$?
+fi
 
 if [ -d "$LOGS_DIR" ]; then
     echo "Found logs directory: $LOGS_DIR"
@@ -844,6 +873,11 @@ else
     echo "Warning: Logs directory not found at $LOGS_DIR"
 fi
 
+if [[ "$AGENTX_POWER_RC" != "0" ]]; then
+    echo "ERROR: AgentX job or power validation failed after staging audit artifacts" >&2
+    exit "$AGENTX_POWER_RC"
+fi
+
 if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
     if [ ! -d "$LOGS_DIR" ]; then
         exit 1
@@ -854,10 +888,12 @@ if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
         # INFMAX_WORKSPACE mount. Its aggregation step writes one
         # ${RESULT_FILENAME}_conc<N>.json there per point; stage those files
         # back to GITHUB_WORKSPACE for the workflow guard and artifact upload.
-        copy_agentic_results \
-            "$INFMAX_WORKSPACE" \
-            "$GITHUB_WORKSPACE" \
-            "$RESULT_FILENAME" || exit 1
+        if [[ "$USES_AGENTX_POWER" != "1" ]]; then
+            copy_agentic_results \
+                "$INFMAX_WORKSPACE" \
+                "$GITHUB_WORKSPACE" \
+                "$RESULT_FILENAME" || exit 1
+        fi
     else
         # Find all fixed-sequence result subdirectories.
         RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
