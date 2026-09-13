@@ -7474,7 +7474,7 @@
     - agentic-coding
   description:
     - "Update the vLLM ROCm nightly to eed1f3d0c6043bd494424a22443ee198dd56f657, which includes vllm-project/vllm#54855, and disable incompatible AITER fused shared experts for the mixed MXFP4/FP8 checkpoint."
-    - "Extend the single-node DPA AgentX sweep from concurrency 64 to 64/128. Manual validation found c128 delivered the best throughput among c64/c128/c256, while c256 regressed in both throughput and latency."
+    - "Extend the single-node DPA AgentX sweep from concurrency 64 to 64/128/192. Manual validation found c128 delivered the best throughput among c64/c128/c256; c192 fills the gap to locate the throughput knee before the c256 regression."
     - "将 vLLM ROCm nightly 更新至包含 vllm-project/vllm#54855 的 eed1f3d0c6043bd494424a22443ee198dd56f657，并针对 MXFP4/FP8 混合权重关闭不兼容的 AITER shared-expert fusion。"
-    - "将单节点 DPA AgentX 扫描从并发 64 扩展为 64/128。手工验证显示，在 c64/c128/c256 三个点中 c128 吞吐量最高，而 c256 的吞吐量和延迟均明显退化。"
+    - "将单节点 DPA AgentX 扫描从并发 64 扩展为 64/128/192。手工验证显示，在 c64/c128/c256 三个点中 c128 吞吐量最高；新增 c192 用于补齐中间区间并定位 c256 性能回退前的吞吐拐点。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3071

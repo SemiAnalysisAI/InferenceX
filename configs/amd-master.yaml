@@ -1324,8 +1324,8 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
       search-space:
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 32, 40, 48, 56, 64] }
       # Single-node validation found c128 to be the DPA throughput peak among
-      # c64/c128/c256; c256 had lower throughput and substantially worse latency.
-      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128], router: { name: vllm-router, version: "0.1.14" } }
+      # c64/c128/c256. Add c192 to locate the knee before the c256 regression.
+      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128, 192], router: { name: vllm-router, version: "0.1.14" } }
       # LMCache invalid-block recovery currently assumes one KV-cache group,
       # while MTP creates two. Restore these points after the upstream hybrid
       # KV recovery fix lands: https://github.com/vllm-project/vllm/pull/45497
