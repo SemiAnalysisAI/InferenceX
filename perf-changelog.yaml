@@ -7467,3 +7467,11 @@
     - "Collect shared measured GPU power for the existing two-node GB200 GLM-5.2 aggregate AgentX recipe with producer 80d7203e424f903c9017de4608ee2044afce9574, exact selected-concurrency windows, and post-job adapter validation. Preserve native status and invalid diagnostics before failure. Ordinary Slurm limits, serving settings, other AgentX recipes, and fixed-sequence producer pins are unchanged."
     - "为现有双节点 GB200 GLM-5.2 聚合 AgentX 配方接入共享 GPU 实测功耗，按所选并发绑定测量窗口，并在任务结束后通过适配器校验。返回失败前保留原生状态及无效诊断；普通 Slurm 时限、服务配置、其他 AgentX 配方和固定序列 producer 版本保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2928
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20260805-211ee642 to the digest-pinned v0.5.19-cu130 release (lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9)."
+    - "Move the aggregated TP8 recipe and the master router metadata from the Dynamo source commit 71eb001e to the 1.5.0.dev20260910 wheel, which follows the sglang server_args_config_parser move and the ServerArgs.get_model_config()/use_mla_backend() change and pins sglang==0.5.19; model, topology, MTP, HiCache and points are unchanged."
+    - "将 SGLang 镜像从 nightly-dev-cu13-20260805-211ee642 更新为按摘要固定的 v0.5.19-cu130 正式版；聚合 TP8 配方与主配置 router 元数据由 Dynamo 源码提交 71eb001e 改为 1.5.0.dev20260910 wheel（跟进 sglang server_args_config_parser 移动及 ServerArgs.get_model_config()/use_mla_backend() 改动，并固定 sglang==0.5.19）；模型、拓扑、MTP、HiCache 与配置点均未改动。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3075
