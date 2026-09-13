@@ -69,3 +69,53 @@ The ablated arm's contribution is exactly 0.0 on all 1,508 chunks / 12,064
 calls -- not small, zero -- because the all-False `token_mask` is applied by
 the shipped fused kernel itself. The baseline's minimum is 0.316, so Engram
 was demonstrably active in every chunk it was supposed to be.
+
+---
+
+# Boundary sweep (run 34735263999): is the NLL/CRUXEval divergence context-shaped?
+
+The likelihood run's `decode_only` recovers ~94% of the ablation loss; CRUXEval's
+recovers essentially nothing (0.4850 vs the ablated 0.4888). I proposed that the
+difference is how much context was prefilled with the gate shut -- half a
+3584-token chunk here, the entire prompt there -- and predicted, before running,
+that `decode_only`'s recovery would fall monotonically as the gate-shut prefix
+grows. 25 chunks/domain × 16 domains, four boundaries, one process.
+
+Median recovery of the full-ablation loss, across 16 domains:
+
+| gate-shut prefix | scored suffix | prefill_only | decode_only |
+| ---: | ---: | ---: | ---: |
+| 512 | 3072 | 0.103 | **0.980** |
+| 1792 | 1792 | 0.184 | **0.943** |
+| 3072 | 512 | 0.283 | **0.821** |
+| 3456 | 128 | 0.341 | **0.591** |
+
+**The prediction holds directionally, and fails on magnitude.** Recovery does
+fall monotonically, and the effect is not subtle -- on wiki_full, `decode_only`
+costs 0.031 bits/token at boundary 512 and 0.794 at 3456 (13.0σ). So how much
+context was built with the gate shut genuinely matters, which is the mechanism I
+claimed.
+
+But it is nowhere near enough to explain CRUXEval. Even with 3456 of 3584 tokens
+prefilled gate-shut -- a far more extreme starvation than CRUXEval's ~1-2k-token
+prompt -- `decode_only` still returns 59% of the loss. Extrapolating this curve
+to CRUXEval's prompt length predicts recovery around 90%; the measurement is
+~2%. **My context-length explanation is therefore at best a partial one, and I
+was wrong to lead with it as the likely resolution.** A second, task-shaped
+factor dominates: per-token likelihood is forgiving of a degraded prefix in a way
+that a single graded whole-answer exact match, produced through a long
+self-conditioned generation, is not.
+
+One confound in this sweep, which I did not control and which cuts against
+reading the curve too literally: raising the boundary both lengthens the
+gate-shut prefix *and* shrinks the scored suffix (76,800 scored tokens at 512
+down to 3,200 at 3456), so the scored tokens also sit deeper in context. The two
+move together by construction. Separating them needs a fixed-width scored window
+slid along a longer chunk, which this run does not do.
+
+Prefix and suffix contributions stay close to additive across the sweep (median
+`(prefill_only + decode_only) / ablated` = 0.92, 0.89, 0.92, 1.09), so the two
+halves remain largely independent at every split point.
+
+Verification: 12,256 Engram calls per arm over 1,532 chunks; ablated `worst`
+exactly 0.0 on every chunk, baseline `min` 0.362.
