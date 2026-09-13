@@ -15,7 +15,10 @@ set -eo pipefail
 # thread issues the id copy on the stream that produced the ids and records an
 # event; the worker waits on it and then does numpy and filesystem work only,
 # touching no CUDA, which is what keeps it clear of cudagraph capture. That cut
-# mean TTFT from about 940 ms to 711 ms at 8k1k concurrency 16.
+# Against an otherwise identical inline build at 8k1k concurrency 16: mean TTFT
+# 697 ms against 985 ms, P99 TTFT 4.1s against 6.5s, with throughput and TPOT
+# unchanged. The gain is the prefill tail, where a step gathers thousands of
+# rows and has decoder compute to hide them behind.
 #
 # Measured against dsv41flash-fp4-b200-vllm-agentic-dspark on B200 TP4 at
 # 8k1k, concurrency 16, CUDA graphs, three runs per arm:
