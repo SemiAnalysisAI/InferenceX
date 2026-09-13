@@ -28,7 +28,7 @@ glm5.1-fp8-b200-tilert:
           additional-settings:
           - PREFILL_IMAGE=vllm/vllm-openai:v0.26.0
           - PREFILL_NODES=1
-          - SALLOC_TIME_LIMIT=60
+          - SALLOC_TIME_LIMIT=59
           - B200_SQUASH_DIR=/data/home/sa-shared/containers
           - TILERT_WEIGHTS_DIR=/data/home/sa-shared/gharunners/tilert-cache/glm5.1-fp8-8shard
         decode:
@@ -53,7 +53,7 @@ glm5.1-fp8-b200-tilert:
           additional-settings:
           - PREFILL_IMAGE=vllm/vllm-openai:v0.26.0
           - PREFILL_NODES=1
-          - SALLOC_TIME_LIMIT=60
+          - SALLOC_TIME_LIMIT=59
           - B200_SQUASH_DIR=/data/home/sa-shared/containers
           - TILERT_WEIGHTS_DIR=/data/home/sa-shared/gharunners/tilert-cache/glm5.1-fp8-8shard
         decode:

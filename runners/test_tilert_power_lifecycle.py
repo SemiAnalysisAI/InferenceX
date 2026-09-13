@@ -22,8 +22,13 @@ def test_tilert_submit_keeps_decode_status_and_stages_both_roles(tmp_path, decod
         'salloc':'#!' + sys.executable + '\n' + r'''
 import json,os,pathlib,subprocess,sys
 args=sys.argv[1:]
+command=args[next(i for i, arg in enumerate(args) if not arg.startswith('--')):]
+if '/' not in command[0]:
+    # Slurm resolves its command before exec; do not silently skip EACCES.
+    command[0]=next(str(pathlib.Path(p)/command[0]) for p in os.environ['PATH'].split(os.pathsep)
+                    if (pathlib.Path(p)/command[0]).exists())
 try:
-    result=subprocess.run(args[args.index('env'):],env={**os.environ,'SLURM_JOB_ID':'123','SLURM_JOB_NODELIST':'node-[a-b]'})
+    result=subprocess.run(command,env={**os.environ,'SLURM_JOB_ID':'123','SLURM_JOB_NODELIST':'node-[a-b]'})
 finally:
     staged=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'LOGS/native_power'
     pathlib.Path(os.environ['RELEASE_RECEIPT']).write_text(json.dumps(
@@ -78,6 +83,9 @@ sys.exit(subprocess.run(args).returncode)
         path = bindir / name
         path.write_text(script)
         path.chmod(0o755)
+    # Allocation re-entry must not depend on the runner's writable user PATH.
+    (bindir / 'env').write_text('not an executable\n')
+    (bindir / 'env').chmod(0o600)
     env = {**os.environ, 'PATH':str(bindir)+os.pathsep+os.environ['PATH'],
            'GITHUB_WORKSPACE':str(repo),'B200_SQUASH_DIR':str(tmp_path/'squash'),
            'IMAGE':'synthetic-decode','PREFILL_IMAGE':'synthetic-prefill',

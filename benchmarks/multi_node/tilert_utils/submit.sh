@@ -23,10 +23,11 @@ PREFILL_SQUASH="$(squash_path "$PREFILL_IMAGE")"
 if [[ "${TILERT_IN_ALLOCATION:-0}" != 1 ]]; then
     # Run inside the allocation returned by this request. Looking up a runner
     # name can attach to an older job; salloc supplies the authoritative ID.
+    export TILERT_IN_ALLOCATION=1
     exec salloc --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT" \
         --nodes="$NODES" --gres=gpu:"$GPUS_PER_NODE" --exclusive --mem=0 \
         --time="${SALLOC_TIME_LIMIT:-480}" --job-name="$RUNNER_NAME" \
-        env TILERT_IN_ALLOCATION=1 bash "$0" "$@"
+        "$BASH" "$0" "$@"
 fi
 JOB_ID="${SLURM_JOB_ID:?salloc did not provide its allocation ID}"
 mapfile -t HOSTS < <(scontrol show hostnames "${SLURM_JOB_NODELIST:?salloc did not provide its nodes}")
