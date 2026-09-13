@@ -114,6 +114,14 @@ The runner-name prefix is load-bearing: workflow routing uses `launch_${RUNNER_N
 6. Verify every runner is **Idle** in [repository runner settings](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners) before adding it to sweep traffic.
 7. Verify launcher mounts for `_work`, HF cache, staged weights, and squash images from a compute node. Root containers must not leave root-owned files in the shared workspace.
 
+The B300 DSXE Kimi-K3 AgentX path mounts its pre-staged target under
+`/scratch/models` and separately exports and mounts `WRITABLE_MODELS_DIR` for
+DSpark weights. Keep the draft directory on that persistent mount when reusing
+the serving container; the read-only target mount cannot hold the draft.
+Concurrent cells serialize draft staging with a per-model lock. Each cell lets
+`hf download` validate or resume the existing cache before serving; a nonempty
+directory is not a completion signal.
+
 ## Native PowerX collection for fixed-sequence multinode runs
 
 The AMD SGLang/ATOM/vLLM launchers enable native SMI collection for 8192-input/1024-output runs. Every serving node starts `benchmarks/native_power_collect.sh`; the client waits for all `ready-<rank>` receipts, then requests `stop` and waits for all `done-<rank>` receipts before tearing down servers. The shared collector also accepts NVIDIA SMI for launchers that do not use the srt-slurm/DCGM contract.

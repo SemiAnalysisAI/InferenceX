@@ -114,6 +114,12 @@ runner 名称前缀是关键契约：workflow 通过 `launch_${RUNNER_NAME%%_*}.
 6. 将 runner 加入 sweep 流量前，在[仓库 runner 设置页](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners)确认每个 runner 都是 **Idle**。
 7. 从计算节点验证 launcher 对 `_work`、HF cache、预置权重和 squash 镜像的挂载。root 容器不得在共享 workspace 留下 root 所有的文件。
 
+B300 DSXE 的 Kimi-K3 AgentX 路径在 `/scratch/models` 下挂载预置目标模型，
+另行导出并挂载 `WRITABLE_MODELS_DIR` 以保存 DSpark 权重。复用服务容器时，
+草稿模型目录应保留在该持久化挂载中；只读目标模型挂载无法保存草稿模型。
+并发任务通过模型专用锁串行准备草稿权重。每个任务在启动服务前由 `hf download`
+校验或续传现有缓存；目录非空不代表下载完成。
+
 ## 固定序列长度多节点运行的原生 PowerX 采集
 
 AMD SGLang/ATOM/vLLM launcher 为 8192 输入、1024 输出的运行启用原生 SMI 采集。每个服务节点启动 `benchmarks/native_power_collect.sh`；客户端等待全部 `ready-<rank>` 回执，然后在基准结束后请求 `stop`，等待全部 `done-<rank>` 回执，再关闭服务。共享采集器也支持 NVIDIA SMI，供未采用 srt-slurm/DCGM 契约的 launcher 使用。

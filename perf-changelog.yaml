@@ -7505,6 +7505,43 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3044
 
 - config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace unavailable vLLM build 5894fdf with 3696c77 for the existing Kimi-K3 B300 DSXE route. This establishes a new runtime baseline."
+    - "将现有 Kimi-K3 B300 DSXE 路径不可用的 vLLM 镜像 5894fdf 更换为 3696c77，建立新的运行时基线。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3040
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Mount and export the persistent writable model root for Kimi-K3 DSpark weights alongside the pre-staged target on B300 DSXE."
+    - "在 B300 DSXE 上为 Kimi-K3 DSpark 权重挂载并导出持久化可写模型目录，与预加载目标模型一同使用。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3040
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Serialize shared Kimi-K3 DSpark downloads and validate or resume the cached draft before each cell starts serving."
+    - "串行执行共享 Kimi-K3 DSpark 下载，在每个任务启动服务前校验或续传草稿缓存。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3040
+
+- config-keys:
+    - qwen3.5-fp8-h100-sglang
+    - qwen3.5-fp8-h100-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Require validated GPU power for the existing Qwen3.5 FP8 H100 STP and MTP 8k1k sweeps. Preserve runtime, topology, concurrency and eval selection."
+    - "为现有 Qwen3.5 FP8 H100 STP 和 MTP 8k1k sweep 强制校验 GPU 功耗，保留运行时、拓扑、并发和评估选择。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3083
+
+- config-keys:
   - dsr1-fp4-mi355x-sglang
   - dsr1-fp4-mi355x-sglang-mtp
   - dsr1-fp4-mi355x-atom
