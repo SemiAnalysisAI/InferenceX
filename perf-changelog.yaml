@@ -7466,4 +7466,4 @@
   description:
     - "Preserve explicit registries during native TileRT Enroot imports while reusing valid cached squash images."
     - "原生 TileRT 导入镜像时保留显式仓库地址，并继续复用有效的 squash 缓存。"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3067
