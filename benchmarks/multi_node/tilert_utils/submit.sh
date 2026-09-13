@@ -19,6 +19,11 @@ DECODE_IMAGE="${DECODE_IMAGE:-$IMAGE}"
 squash_path() { echo "$SQUASH_DIR/$(echo "$1" | sed 's/[\/:@#]/_/g').sqsh"; }
 DECODE_SQUASH="$(squash_path "$DECODE_IMAGE")"
 PREFILL_SQUASH="$(squash_path "$PREFILL_IMAGE")"
+MODEL_MOUNTS="$MODEL_PATH:$MODEL_PATH"
+if [[ -n "${HF_HUB_CACHE_HOST_PATH:-}" ]]; then
+    # HF snapshots link to sibling blobs outside the snapshot directory.
+    MODEL_MOUNTS="$HF_HUB_CACHE_HOST_PATH:$HF_HUB_CACHE_HOST_PATH,$MODEL_MOUNTS"
+fi
 
 if [[ "${TILERT_IN_ALLOCATION:-0}" != 1 ]]; then
     # Run inside the allocation returned by this request. Looking up a runner
@@ -143,7 +148,7 @@ run_role() {
     export NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIVER_CAPABILITIES=compute,utility
     exec srun --jobid="$JOB_ID" --nodelist="$host" --ntasks=1 \
         --container-image="$squash_file" \
-        --container-mounts="$GITHUB_WORKSPACE:/workspace,$MODEL_PATH:$MODEL_PATH,$TILERT_WEIGHTS_DIR:$TILERT_WEIGHTS_DIR$POWERX_MOUNTS" \
+        --container-mounts="$GITHUB_WORKSPACE:/workspace,$MODEL_MOUNTS,$TILERT_WEIGHTS_DIR:$TILERT_WEIGHTS_DIR$POWERX_MOUNTS" \
         --container-workdir=/workspace --no-container-entrypoint \
         --container-env="$POWERX_ENV" \
         --export=ALL,TILERT_ROLE="$role",DECODE_HOST="$DECODE_HOST",PREFILL_HOST="$PREFILL_HOST",PORT="${PORT:-8888}" \
