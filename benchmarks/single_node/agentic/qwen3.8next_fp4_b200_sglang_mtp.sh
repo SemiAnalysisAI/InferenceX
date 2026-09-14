@@ -8,10 +8,9 @@ set -x
 # real target-model verification.
 #
 # The checkpoint is RadixArk/Qwen3.8-Flash-Next-NVFP4 (126 GiB,
-# quantization_config.quant_method = modelopt), so --quantization modelopt_fp4
-# matches the same flag the Qwen3.5 NVFP4 sibling uses. The model ships native
-# MTP modules (kept unquantized by the checkpoint's ignore list), so NEXTN
-# needs no external drafter.
+# quantization_config.quant_method = modelopt), which SGLang reads directly
+# from the checkpoint. The model ships native MTP modules (kept unquantized by
+# the checkpoint's ignore list), so NEXTN needs no external drafter.
 #
 # TP1: the cookbook's verified single-node command for this model is --tp 1 on
 # both Blackwell parts. 126 GiB of NVFP4 weights fit on one B200, so the
@@ -107,8 +106,17 @@ fi
 # requests. Leave room for subagent fan-out and avoid spending HBM on graphs
 # above the batch sizes that remain useful for this long-context workload.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
-CUDA_GRAPH_MAX_BS="$CONC"
+CUDA_GRAPH_MAX_BS="$MAX_RUNNING_REQUESTS"
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
+
+MEM_FRACTION_STATIC=0.80
+MAMBA_CACHE_ARGS=()
+# Keep the lower-concurrency settings unchanged. The concurrency-16 point uses
+# a larger static pool and an explicit Mamba cache cap.
+if [ "$CONC" -eq 16 ]; then
+    MEM_FRACTION_STATIC=0.90
+    MAMBA_CACHE_ARGS=(--max-mamba-cache-size 160)
+fi
 
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
@@ -159,7 +167,8 @@ SGLANG_CMD=(
     # this must stay explicit and sized to the AgentX concurrency.
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
-    --mem-fraction-static 0.80
+    --mem-fraction-static "$MEM_FRACTION_STATIC"
+    "${MAMBA_CACHE_ARGS[@]}"
     --stream-interval 50
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
     "${TOKENIZER_ARGS[@]}"

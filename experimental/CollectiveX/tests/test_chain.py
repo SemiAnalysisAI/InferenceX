@@ -228,16 +228,16 @@ class ChainedPairPeriod(unittest.TestCase):
                 self.assertEqual(ops_only(period), ["dispatch", "combine"] * iters)
                 # The staged cost is absent from the pair window, not merely from the trace.
                 for value in series["pair"]:
-                    self.assertAlmostEqual(value, (DISPATCH_MS + COMBINE_MS) * 1000.0)
+                    self.assertAlmostEqual(value, 8000.0)  # 3ms dispatch + 5ms combine
                 for value in series["start_to_start"]:
-                    self.assertAlmostEqual(value, (DISPATCH_MS + COMBINE_MS) * 1000.0)
+                    self.assertAlmostEqual(value, 8000.0)
                 for value in series["dispatch"]:
-                    self.assertAlmostEqual(value, DISPATCH_MS * 1000.0)
+                    self.assertAlmostEqual(value, 3000.0)
                 for value in series["combine"]:
-                    self.assertAlmostEqual(value, COMBINE_MS * 1000.0)
+                    self.assertAlmostEqual(value, 5000.0)
 
     def test_returns_one_sample_per_kept_iteration(self):
-        for iters, drop in ((8, 0), (8, 2), (6, 5)):
+        for iters, drop, kept, gaps in ((8, 0, 8, 7), (8, 2, 6, 5), (6, 5, 1, 0)):
             with self.subTest(iters=iters, drop=drop):
                 backend = _ChainBackend()
                 with trace_torch(backend.clock, backend.calls):
@@ -247,9 +247,9 @@ class ChainedPairPeriod(unittest.TestCase):
                     ["combine", "combined", "dispatch", "pair", "start_to_start"],
                 )
                 for key in ("pair", "dispatch", "combine"):
-                    self.assertEqual(len(series[key]), iters - drop)
+                    self.assertEqual(len(series[key]), kept)
                 # Start-to-start is a difference series: one fewer than the kept pairs.
-                self.assertEqual(len(series["start_to_start"]), max(iters - drop - 1, 0))
+                self.assertEqual(len(series["start_to_start"]), gaps)
 
     def test_the_dropped_iterations_are_the_head_of_each_chain(self):
         # `drop` discards pipeline fill, so it must cut the head of both chains -- the period
@@ -262,13 +262,11 @@ class ChainedPairPeriod(unittest.TestCase):
         )
         with trace_torch(backend.clock, backend.calls):
             series = backend.benchmark_chain(new_problem(), 0, iters, drop)
-        self.assertEqual(len(series["dispatch"]), iters - drop)
+        self.assertEqual(len(series["dispatch"]), 4)
         for value in series["dispatch"]:
-            self.assertAlmostEqual(value, DISPATCH_MS * 1000.0)
+            self.assertAlmostEqual(value, 3000.0)
         for value in series["pair"]:
-            self.assertAlmostEqual(
-                value, (DISPATCH_MS + STAGE_MS + COMBINE_MS) * 1000.0
-            )
+            self.assertAlmostEqual(value, 15000.0)  # 3ms dispatch + 7ms stage + 5ms combine
 
 
 class EventPlacement(unittest.TestCase):
@@ -362,7 +360,6 @@ class ChainComponentContract(unittest.TestCase):
 # ---- from test_run_sweep_chain.py -------------------------------------------------
 LADDER = [4, 8]
 CHAIN_ITERS, CHAIN_DROP, CHAIN_TRIALS = 8, 2, 2
-KEPT_PER_TRIAL = CHAIN_ITERS - CHAIN_DROP
 # What the stub backend reports for every chained iteration, distinct so a published number is
 # traceable to the op it came from; start_to_start sits a fixed GAP above the pair window.
 PAIR_US, DISPATCH_FLOOR_US, COMBINE_FLOOR_US = 50.0, 20.0, 25.0
@@ -733,7 +730,7 @@ class ChainedPublication(unittest.TestCase):
                 self.assertEqual(period["percentiles_us"]["p50"], PAIR_US)
                 self.assertEqual(period["origin"], "chained-median")
                 self.assertEqual(period["availability"], "measured")
-                self.assertEqual(period["sample_count"], KEPT_PER_TRIAL * CHAIN_TRIALS)
+                self.assertEqual(period["sample_count"], 12)  # six kept pairs in each of two trials
                 for op, expected in (
                     ("dispatch", DISPATCH_FLOOR_US), ("combine", COMBINE_FLOOR_US),
                 ):
@@ -843,40 +840,30 @@ class ChainOutputCheck(unittest.TestCase):
         # One table over the whole contract. The magnitude matters as much as the verdict: a
         # bare bool cost two wrong diagnoses of the same FP8 failures, because it cannot
         # separate a transport corruption from a tolerance too tight for an accumulator.
-        tol = ep_harness.COMBINE_REL_TOL
-        jitter = [value * (1.0 + tol / 2) for value in (1.0, -2.0)]
-        for label, chained, drained, ok, check in (
-            ("identical", [1.0, -3.5, 0.25], [1.0, -3.5, 0.25], True,
-             lambda e: self.assertEqual(e, 0.0)),
+        for label, chained, drained, ok, expected_error in (
+            ("identical", [1.0, -3.5, 0.25], [1.0, -3.5, 0.25], True, 0.0),
             # A rank that legitimately combined nothing under this routing.
-            ("empty", [], [], True, lambda e: self.assertEqual(e, 0.0)),
+            ("empty", [], [], True, 0.0),
             # Run-to-run jitter inside tolerance passes, and still reports its size -- a
             # magnitude creeping toward the gate is the early warning a bool cannot give.
-            ("jitter", jitter, [1.0, -2.0], True,
-             lambda e: self.assertAlmostEqual(e, tol / 2)),
+            ("jitter", [1.01, -2.02], [1.0, -2.0], True, 0.01),
             # The defect class this exists for lands orders of magnitude past tolerance.
-            ("corruption", [1.0, 2.0], [1.0, 4.0], False,
-             lambda e: self.assertGreater(e, 10 * tol)),
+            ("corruption", [1.0, 2.0], [1.0, 4.0], False, 0.5),
             # No elementwise error is defined across shapes; infinity stops a cross-rank MAX
             # reporting a small number for a structural mismatch.
-            ("shape", [1.0, 2.0], [1.0, 2.0, 3.0], False,
-             lambda e: self.assertEqual(e, float("inf"))),
+            ("shape", [1.0, 2.0], [1.0, 2.0, 3.0], False, float("inf")),
         ):
             with self.subTest(label):
                 got, error = ep_harness._chain_output_matches(_Vec(chained), _Vec(drained))
                 self.assertIs(got, ok)
-                check(error)
+                self.assertAlmostEqual(error, expected_error)
 
     def test_near_zero_elements_are_judged_against_the_magnitude_floor(self):
         # Relative error against a denominator of 1e-6 would be huge; the floor keeps
         # numerically-tiny elements from redding a healthy chain.
-        drained, chained = 1e-6, 1e-6 + 1e-4
-        self.assertGreater(
-            abs(chained - drained) / abs(drained), ep_harness.COMBINE_REL_TOL
-        )
-        self.assertTrue(
-            ep_harness._chain_output_matches(_Vec([chained]), _Vec([drained]))[0]
-        )
+        got, error = ep_harness._chain_output_matches(_Vec([0.000101]), _Vec([0.000001]))
+        self.assertTrue(got)
+        self.assertAlmostEqual(error, 0.005)  # 0.0001 difference under the 0.02 magnitude floor
 
 
 # ---- from test_summarize_headline.py ----------------------------------------------
