@@ -214,22 +214,10 @@ else
     export AITER_LOG_LEVEL=ERROR
 
     export SGLANG_MORI_DISPATCH_DTYPE=auto
-    # export MORI_COMBINE_DTYPE_PREFILL=fp8_direct_cast
-    # export MORI_COMBINE_DTYPE_DECODE=fp8
     export MORI_COMBINE_DTYPE_PREFILL=""
     export MORI_COMBINE_DTYPE_DECODE=""
     export SGLANG_MORI_QP_PER_TRANSFER=4
     export SGLANG_MORI_NUM_WORKERS=4
-    # Keep these as overridable defaults (not hard assignments), otherwise
-    # later tuning blocks cannot raise them for high-concurrency runs.
-    # export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
-
-    # export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-16384}"
-    # export MORI_IO_QP_MAX_CQE=32768
-    # export MORI_IO_QP_MAX_SGE=1
-
-    # export MORI_IO_TC_DISABLE=0
-
     export SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT=3600
     export SGLANG_DISAGGREGATION_WAITING_TIMEOUT=3600
 
@@ -293,7 +281,6 @@ else
     # event is queried during capture. CUDA graph stays fully enabled.
     export TORCH_NCCL_BLOCKING_WAIT="${TORCH_NCCL_BLOCKING_WAIT:-1}"
     export NCCL_BLOCKING_WAIT="${NCCL_BLOCKING_WAIT:-1}"
-    # export NCCL_DEBUG="${NCCL_DEBUG:-INFO}"
 
     # =========================================================================
     # DeepSeek-V4-Pro PD recipe overrides
@@ -345,21 +332,13 @@ else
         # Fixed inter-kernel switch threshold (not derived).
         export SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD=4096
 
-        # Overlap plan stream on for DSv4 (global default is 0)
-        # export SGLANG_ENABLE_OVERLAP_PLAN_STREAM=0
-
         # DSv4 model kernel routing
         export SGLANG_DEFAULT_THINKING=1
         export SGLANG_DSV4_REASONING_EFFORT=high
-        # export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
-        # export SGLANG_USE_AITER=1
         export SGLANG_USE_ROCM700A=0
-        # export SGLANG_OPT_USE_FUSED_COMPRESS=true
         export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
-        # export SGLANG_OPT_FP8_WO_A_GEMM=false
         export SGLANG_OPT_FP8_WO_A_FUSED_INVROPE=1
         export AITER_BF16_FP8_MOE_BOUND=0
-        # export SGLANG_EAGER_INPUT_NO_COPY=true
         export TORCH_BLAS_PREFER_HIPBLASLT=1
         # aiter batched GEMM for the absorbed MLA projections, carried by the v0.5.18
         # image and off by default in environ.py.

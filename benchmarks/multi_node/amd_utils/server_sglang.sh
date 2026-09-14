@@ -231,7 +231,6 @@ if [[ "$PREFILL_ENABLE_DP" == "true" ]] && [[ "$PREFILL_ENABLE_EP" == "true" ]];
     prefill_max_running_requests=$BENCH_MAX_CONC_VALUE
     prefill_dp_ranks=$PREFILL_TP_SIZE
     # MORI_MAX_DISPATCH_TOKENS_PREFILL stays at 8192 (no change)
-    # MORI_MOE_MAX_INPUT_TOKENS_PREFILL=$((MORI_MAX_DISPATCH_TOKENS_PREFILL * prefill_dp_ranks / 2))
     echo "[DP+EP override] Prefill: max-running-requests=$prefill_max_running_requests, MOE_MAX_INPUT=$MORI_MOE_MAX_INPUT_TOKENS_PREFILL"
 fi
 
@@ -281,7 +280,6 @@ if [[ "$DECODE_ENABLE_DP" == "true" ]] && [[ "$DECODE_ENABLE_EP" == "true" ]]; t
     decode_max_running_requests=$BENCH_MAX_CONC_VALUE
     decode_dp_ranks=$DECODE_TP_SIZE
     MORI_MAX_DISPATCH_TOKENS_DECODE=$((BENCH_MAX_CONC_VALUE / decode_dp_ranks))
-    # MORI_MOE_MAX_INPUT_TOKENS_DECODE=$((MORI_MAX_DISPATCH_TOKENS_DECODE * decode_dp_ranks * 7 / 10))
     # Update derived variable
     SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD=$((MORI_MAX_DISPATCH_TOKENS_DECODE * 2))
     export SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD
@@ -326,7 +324,6 @@ fi
 
 if [[ "$DECODE_MTP_SIZE" -gt 0 ]]; then
     MORI_MAX_DISPATCH_TOKENS_DECODE=$((MORI_MAX_DISPATCH_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
-    # MORI_MOE_MAX_INPUT_TOKENS_DECODE=$((MORI_MOE_MAX_INPUT_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
 fi
 
 # =============================================================================
@@ -1080,10 +1077,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
         # server_sglang.sh previously read ROUTER_PREFILL_POLICY, but the recipe
         # scripts export PREFILL_ROUTER_POLICY, so the recipe's policy override was
         # silently ignored and the router always fell back to this hardcoded
-        # default. Also comment out ROUTER_DECODE_POLICY for now (superseded by
-        # --dp-aware below).
+        # default. Decode routing is handled by --dp-aware below.
         ROUTER_PREFILL_POLICY="${PREFILL_ROUTER_POLICY:-consistent_hashing}"
-        # ROUTER_DECODE_POLICY="${ROUTER_DECODE_POLICY:-round_robin}"
         ROUTER_CACHE_THRESHOLD="${ROUTER_CACHE_THRESHOLD:-0.3}"
         ROUTER_BALANCE_ABS_THRESHOLD="${ROUTER_BALANCE_ABS_THRESHOLD:-2}"
         ROUTER_BALANCE_REL_THRESHOLD="${ROUTER_BALANCE_REL_THRESHOLD:-1.1}"
