@@ -214,3 +214,34 @@ exit "$2"
                             capture_output=True, text=True, timeout=5)
     assert result.returncode == node_rc, result.stderr
     assert (tmp_path / 'done').read_text().strip() == str(node_rc)
+
+
+@pytest.mark.parametrize(('eval_rc', 'stage_rc'), [(0, 0), (7, 0), (0, 9), (7, 9)])
+def test_tilert_eval_dispatches_shared_client_and_preserves_failure(tmp_path, eval_rc, stage_rc):
+    source = (ROOT / 'benchmarks/multi_node/tilert_utils/run_node.sh').read_text()
+    functions = source[source.index('run_bench_and_eval() {'):source.index('run_agentic_replay() {')]
+    command = '''
+source "$1/benchmarks/benchmark_lib.sh"
+FUNCNEST=40
+wait_for_server_ready() { return 0; }
+run_server_client() { printf '%s\\n' "$@" > client-args; return "$CLIENT_RC"; }
+append_lm_eval_summary() { touch staged; return "$STAGE_RC"; }
+''' + functions + '\nrun_bench_and_eval\n'
+    env = {**os.environ, 'RUN_EVAL': 'true', 'EVAL_ONLY': 'true',
+           'POWERX_NATIVE_ENABLED': '0', 'ROUTER_PORT': '9876', 'ROUTER_PID': '1',
+           'BENCHMARK_LOGS_DIR': str(tmp_path), 'CONC_LIST': '1', 'EVAL_CONC': '2',
+           'MODEL_NAME': 'test-model', 'MODEL': 'test-model', 'EVAL_MAX_MODEL_LEN': '9472',
+           'EVAL_FRAMEWORK': 'lm-eval', 'EVAL_SUITE': '', 'EVAL_TASKS_DIR': 'gsm8k',
+           'EVAL_RESULT_DIR': str(tmp_path / 'eval'), 'OPENAI_API_KEY': 'EMPTY',
+           'INFERENCEX_LM_EVAL_RUNTIME_READY': 'true', 'IS_AGENTIC': '0',
+           'SCENARIO_TYPE': 'single_turn', 'PYTHONPYCACHEPREFIX': str(tmp_path / 'pycache'),
+           'CLIENT_RC': str(eval_rc), 'STAGE_RC': str(stage_rc)}
+    result = subprocess.run(['bash', '-c', command, 'bash', str(ROOT)],
+                            env=env, cwd=tmp_path, capture_output=True, text=True, timeout=5)
+    assert result.returncode == (eval_rc or stage_rc), result.stderr + result.stdout
+    args = (tmp_path / 'client-args').read_text().splitlines()
+    assert args[:3] == ['python3', '-m', 'lm_eval']
+    model_args = args[args.index('--model_args') + 1].split(',')
+    assert 'base_url=http://0.0.0.0:9876/v1/chat/completions' in model_args
+    assert 'num_concurrent=2' in model_args
+    assert (tmp_path / 'staged').exists()
