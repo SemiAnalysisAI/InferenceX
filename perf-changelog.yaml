@@ -7469,7 +7469,101 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2928
 
 - config-keys:
-    - dsv4-fp4-mi355x-sglang-agentic-mtp
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  description:
+    - "Rerun the H100 DeepSeek V4.1 Flash AgentX curve at concurrency 1, 2, 4, 8, 16; retain TP8, GPU-resident KV, full traces, 1M context and DSpark5 synthetic AL 3.51"
+    - "重新运行 H100 DeepSeek V4.1 Flash AgentX 曲线，并发为 1、2、4、8、16；保留 TP8、GPU 驻留 KV、完整轨迹、1M 上下文及 DSpark5 合成 AL 3.51"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3070
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable the two GB300 aggregate recipes and their common launcher power route, with the pinned producer, strict result collection and retained diagnostics."
+    - "为 GB300 Kimi-K3 聚合部署启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3046
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use port 19401 for the GB300 aggregate exporter; the two-node shared lifecycle check verified ownership, all eight GPU telemetry streams, and preservation of the system service on port 9401. Full Kimi-K3 qualification remains pending."
+    - "GB300 聚合部署改用已验证的 19401 功耗端口；完整 Kimi-K3 基准验证仍待完成。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3046
+
+- config-keys:
+    - kimik3-fp4-h200-vllm-agentic-latency
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required power for the H200 Kimi-K3 latency recipe and route their launch, concurrency injection, failure handling and result validation through the pinned producer and shared collector."
+    - "仅为 H200 Kimi-K3 latency 配方启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3044
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace unavailable vLLM build 5894fdf with 3696c77 for the existing Kimi-K3 B300 DSXE route. This establishes a new runtime baseline."
+    - "将现有 Kimi-K3 B300 DSXE 路径不可用的 vLLM 镜像 5894fdf 更换为 3696c77，建立新的运行时基线。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3040
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Mount and export the persistent writable model root for Kimi-K3 DSpark weights alongside the pre-staged target on B300 DSXE."
+    - "在 B300 DSXE 上为 Kimi-K3 DSpark 权重挂载并导出持久化可写模型目录，与预加载目标模型一同使用。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3040
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Serialize shared Kimi-K3 DSpark downloads and validate or resume the cached draft before each cell starts serving."
+    - "串行执行共享 Kimi-K3 DSpark 下载，在每个任务启动服务前校验或续传草稿缓存。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3040
+
+- config-keys:
+    - qwen3.5-fp8-h100-sglang
+    - qwen3.5-fp8-h100-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Require validated GPU power for the existing Qwen3.5 FP8 H100 STP and MTP 8k1k sweeps. Preserve runtime, topology, concurrency and eval selection."
+    - "为现有 Qwen3.5 FP8 H100 STP 和 MTP 8k1k sweep 强制校验 GPU 功耗，保留运行时、拓扑、并发和评估选择。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3083
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Switch --moe-backend from aiter_triton_mxfp4_bf16 to aiter, which selects the CK a8w4 experts (mfma_moe1_silu_mul_afp8_wfp4_bf16 / mfma_moe2_afp8_wfp4_bf16) instead of the W4A16 _moe_gemm_a16w4 Triton kernel, matching the DSV4-Pro MI355X recipe. Decode traces at 131k context show MoE GEMM falling from 2.72 to 2.30 ms/step at conc 1, 4.91 to 4.27 at conc 4 and 9.06 to 7.18 at conc 16, for whole-step gains of 4.2%, 5.3% and 8.7%. AgentX conc 1 improves mean ITL 4.01 to 3.91 ms and mean TTFT 681 to 639 ms; gsm8k is unchanged at 0.9719 strict-match."
+    - "将 --moe-backend 从 aiter_triton_mxfp4_bf16 改为 aiter，从而选择 CK a8w4 专家内核（mfma_moe1_silu_mul_afp8_wfp4_bf16 / mfma_moe2_afp8_wfp4_bf16），取代 W4A16 的 _moe_gemm_a16w4 Triton 内核，与 DSV4-Pro MI355X 配方保持一致。131k 上下文的解码 trace 显示 MoE GEMM 在并发 1 时从 2.72 降至 2.30 ms/step，并发 4 从 4.91 降至 4.27，并发 16 从 9.06 降至 7.18，整步分别加速 4.2%、5.3% 和 8.7%。AgentX 并发 1 的平均 ITL 从 4.01 降至 3.91 ms，平均 TTFT 从 681 降至 639 ms；gsm8k strict-match 保持 0.9719 不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3058
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Pin the recipe to vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657, which includes the AITER mHC delayed-pre path from vllm-project/vllm#56503; the exact image passed the concurrency 1-32 and eval-only concurrency 32 cells in run 34710937012 and is recorded by merged vllm-project/recipes#968. Set AITER_TRITON_LOG_LEVEL=ERROR to suppress the repeated gfx950 Gluon-fallback warning that accounted for 98% of the validation server log; restore WARNING when diagnosing new AITER Triton failures."
+    - "将配方固定到 vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657，其中包含 vllm-project/vllm#56503 引入的 AITER mHC delayed-pre 路径；该精确镜像已在运行 34710937012 中通过并发 1–32 及仅评测并发 32，并由已合并的 vllm-project/recipes#968 记录。设置 AITER_TRITON_LOG_LEVEL=ERROR 以抑制占验证服务日志 98% 的 gfx950 Gluon 回退重复警告；诊断新的 AITER Triton 故障时应恢复 WARNING。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3058
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Replace the local 2*CONC max_num_seqs limit with an explicit reproducibility cap of 128 (the effective vllm serve default on MI355X is 1024). The old cap sat below AgentX subagent fan-out and produced queue times up to 16.2 seconds at concurrency 1; 128 removed that scheduling queue. The derived CUDA-graph capture ceiling is 1024 for each configured concurrency."
+    - "将本地 2*CONC 的 max_num_seqs 上限改为显式固定的可复现值 128（MI355X 上 vllm serve 的实际默认值为 1024）。旧上限低于 AgentX 子代理扇出，并发 1 时排队时间最高达 16.2 秒；128 消除了该调度排队。所有已配置并发点由此得到的 CUDA graph 捕获上限均为 1024。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3058
+
+- config-keys:
+      - dsv4-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
   description:
