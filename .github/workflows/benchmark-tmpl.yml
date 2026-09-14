@@ -3,7 +3,7 @@ on:
   workflow_call:
     inputs:
       config:
-        description: "Matrix JSON validated by infx.workflows.benchmark_schema before fan-out"
+        description: "Benchmark configuration as JSON"
         required: true
         type: string
       klaud-run:

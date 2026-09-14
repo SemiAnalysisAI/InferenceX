@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       config:
-        description: "Generated infx.matrix row as JSON"
+        description: "Benchmark configuration as JSON"
         required: true
         type: string
       klaud-run:
