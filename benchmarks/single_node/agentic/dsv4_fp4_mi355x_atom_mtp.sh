@@ -2,9 +2,9 @@
 set -euo pipefail
 set -x
 
-# Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on MI355X using
-# ATOM MTP. TP throughput runs use the committed golden synthetic acceptance;
-# DEP and eval-only runs use the model's real MTP acceptance.
+# Agentic trace replay benchmark for DeepSeek-V4-Pro-0813 FP4 on MI355X using
+# ATOM DSpark K6. All throughput runs use golden AL 3.77; eval uses real
+# acceptance. The historical _mtp filename is also routed from draft_model.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -22,14 +22,30 @@ if [[ -n "${ROCR_VISIBLE_DEVICES:-}" ]]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
+if [[ "$MODEL" != "deepseek-ai/DeepSeek-V4-Pro-0813" ]]; then
+    echo "ERROR: DSpark requires the DeepSeek-V4-Pro-0813 checkpoint, got $MODEL" >&2
+    exit 1
+fi
+export DSV4_MODEL_REVISION=72e1d3230f6c080a530b0a1d46f8eb4602340597
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
-        hf download "$MODEL" --local-dir "$MODEL_PATH"
+        hf download "$MODEL" --revision "$DSV4_MODEL_REVISION" --local-dir "$MODEL_PATH"
     fi
 else
-    hf download "$MODEL"
-    export MODEL_PATH="$MODEL"
+    # ATOM has no --revision flag. Serve the resolved immutable snapshot path.
+    MODEL_PATH=$(python3 - "$MODEL" "$DSV4_MODEL_REVISION" <<'PY'
+import sys
+from huggingface_hub import snapshot_download
+print(snapshot_download(repo_id=sys.argv[1], revision=sys.argv[2]))
+PY
+    )
 fi
+export MODEL_PATH
+export AGENTIC_TOKENIZER_PATH="$MODEL_PATH"
+mkdir -p "$RESULT_DIR"
+python3 "$(dirname "$0")/check_dsv4_dspark_checkpoint.py" \
+    --model-path "$MODEL_PATH" --revision "$DSV4_MODEL_REVISION" \
+    --output "$RESULT_DIR/checkpoint_preflight.json"
 
 rocm-smi || true
 amd-smi || true
@@ -178,6 +194,13 @@ manifest = {
     "requested_image": os.environ.get("IMAGE"),
     "python_executable": sys.executable,
     "server_command_file": "server_command.txt",
+    "checkpoint": json.loads((Path(sys.argv[1]).parent / "checkpoint_preflight.json").read_text()),
+    "speculation": {
+        "method": "dspark", "num_speculative_tokens": 6, "target_verify_length": 7,
+        "forced_acceptance_length": None if os.environ.get("EVAL_ONLY") == "true" else 3.77,
+        "confidence_schedule": False, "ragged": False,
+    },
+    "graph_evidence": "Requested FULL q7; capture completion must be checked in server.log",
     "packages": packages,
     "aiter_overrides": {key: os.environ.get(key) for key in (
         "AITER_CONFIG_FMOE", "AITER_BYPASS_TUNE_CONFIG",
@@ -216,17 +239,16 @@ if [ "$DP_ATTENTION" = "true" ]; then
     CUDAGRAPH_ARGS=(--cudagraph-capture-sizes "$CUDAGRAPH_CAPTURE_SIZES")
 fi
 
-# golden_al_distribution/dsv4_mtp.yaml: thinking_on, 3 draft tokens -> AL 2.49.
-# https://github.com/SemiAnalysisAI/InferenceX/blob/main/golden_al_distribution/dsv4_mtp.yaml
-# Native RCCL DEP was validated with the model's real acceptance, so only the
-# TP throughput band applies the synthetic golden value.
-NUM_SPEC_TOKENS=3
-SPEC_DECODE_AL=2.49
+# golden_al_distribution/dsv4-pro-0813-dspark.yaml: thinking_on, K6 -> AL 3.77.
+# K6 means six draft tokens plus one target token (q7), matching SGLang.
+# Apply the golden value to both throughput bands; eval must verify real drafts.
+NUM_SPEC_TOKENS=6
+SPEC_DECODE_AL=3.77
 SPEC_ARGS=(
-    --method mtp
+    --method dspark
     --num-speculative-tokens "$NUM_SPEC_TOKENS"
 )
-if [ "${EVAL_ONLY:-false}" != "true" ] && [ "$DP_ATTENTION" != "true" ]; then
+if [ "${EVAL_ONLY:-false}" != "true" ]; then
     SPEC_ARGS+=(--spec-decode-acceptance-length "$SPEC_DECODE_AL")
 fi
 

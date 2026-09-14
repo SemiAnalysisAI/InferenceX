@@ -3084,8 +3084,10 @@ build_replay_cmd() {
     # default, but a SERVED_MODEL_NAME override (above) is a wire name, not
     # necessarily a valid HF repo id (e.g. "Qwen3.5-397B-A17B-NVFP4-V2" vs
     # the real "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"), which 404s tokenizer
-    # loading. Always pass the real HF id explicitly.
-    REPLAY_CMD+=" --tokenizer $MODEL"
+    # loading. Recipes may pin the tokenizer to their validated local snapshot.
+    local tokenizer_arg
+    printf -v tokenizer_arg '%q' "${AGENTIC_TOKENIZER_PATH:-$MODEL}"
+    REPLAY_CMD+=" --tokenizer $tokenizer_arg"
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
     REPLAY_CMD+=" --stats-interval 30"

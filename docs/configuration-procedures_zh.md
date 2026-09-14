@@ -175,6 +175,29 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 7. 同时添加脚本 + 主配置条目 + launcher 路由 + changelog。
 8. 运行 Bash 语法和生成检查；检查 `spec-decoding`、draft/native 方法、token 数、chat-template 使用、capture 范围和解析出的脚本。
 
+### MI355X ATOM 上的 DeepSeek-V4-Pro-0813 DSpark
+
+`dsv4-fp4-mi355x-atom-agentic-mtp` 保留历史配置 key 和 `_mtp.sh` 文件名，
+矩阵元数据改为 `spec-decoding: draft_model`。AMD launcher 将这两种投机解码
+元数据都路由到该脚本，并为 0813 checkpoint 挂载共享 HF 缓存。配方固定 revision
+`72e1d3230f6c080a530b0a1d46f8eb4602340597`，以实际 snapshot 路径启动服务；
+显式传入的 `MODEL_PATH` 也必须通过相同检查。GPU 启动前核对 config/index 哈希、
+DSpark Markov/confidence head、全部 66 个分片的 header 与 payload 边界，
+并离线加载 tokenizer。这验证可读性和完整性，不计算完整权重文件哈希。
+
+全部十个 AgentX 性能点使用 DSpark K6（target 验证长度为 7）和已提交的
+golden AL 3.77。C1/2/4/8/16 使用 TP8/EP1；C48/64/96/128/256 使用
+TP8/DPA8/EP8 原生 RCCL。每个性能点运行 3600 秒。C256 全量 GSM8K 不传强制
+接受率参数。保留固定的 `nightly_202609121454` 镜像、GPU KV、FP8 KV/FP4 index、
+8192-token checkpoint 和 DEP dense FULL graph 阶梯。每个新服务进程重新捕获
+固定 q7 图；必须从 `server.log` 确认 target 和 DSpark draft capture 完成。
+confidence schedule 和 ragged verification 保持关闭。
+
+`AGENTIC_TOKENIZER_PATH` 可覆盖 AgentX 的 tokenizer 来源，默认仍为 `MODEL`；
+本配方将其设置为已验证的服务 snapshot。`checkpoint_preflight.json`、
+`runtime_manifest.json` 和 `server_command.txt` 保存模型/源码身份及请求的配置。
+成功启动、graph capture 和请求执行仍需运行时日志证明。
+
 ### DeepSeek-V4.1-Flash DSpark
 
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用

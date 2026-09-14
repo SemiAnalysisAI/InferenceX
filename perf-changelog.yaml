@@ -7537,3 +7537,14 @@
     - "Record the requested image, installed ATOM/AITER source revisions, bundled DSV4 FMoE tuning rows, and tuning overrides in runtime_manifest.json alongside the existing server command artifact. New-image performance and accuracy are to be measured by the PR sweep."
     - "固定使用包含 ATOM#2190、AITER#5467/#4159 的 20260912 nightly；保留现有 dense graph、FP8 KV、8K checkpoint 和请求权重 512，DEP 使用真实 MTP-3，并保存运行版本及 tuning 配置记录。#4159 的 BF16 FlyDSL paged SWA 分支不在本配方的 FP8 执行路径中；新镜像性能与精度由本次 PR sweep 验证。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Switch to deepseek-ai/DeepSeek-V4-Pro-0813 revision 72e1d3230f6c080a530b0a1d46f8eb4602340597 and DSpark K6 (target verify length 7), with draft_model metadata routed to the existing ATOM recipe. Validate the DSpark heads, tokenizer and all 66 shards before server startup; pin the AgentX tokenizer to the same snapshot."
+    - "Apply golden AL 3.77 to all ten 3600-second throughput points, including TP8 C1/2/4/8/16 and native RCCL DEP C48/64/96/128/256. The C256 full GSM8K eval retains real draft verification without forced acceptance. This supersedes the previous MTP-3 and TP-only golden acceptance configuration."
+    - "Preserve nightly_202609121454 with ATOM#2190 and AITER#5467/#4159, FP8 KV/FP4 index, 8192-token checkpoints, session affinity, request equivalence 512 and the dense FULL graph ladder. New servers capture fixed q7 target/draft graphs; confidence schedules and ragged verification remain disabled. Runtime manifests record checkpoint identity and DSpark settings."
+    - "切换至固定版本的 DeepSeek-V4-Pro-0813，全部并发启用 DSpark K6/q7；十个性能点统一使用 golden AL 3.77，C256 全量 GSM8K 使用真实验证。启动前检查 DSpark head、tokenizer 和 66 个权重分片，并统一服务与客户端 snapshot；保留已固定镜像、原生 RCCL DEP、dense FULL graph、GPU KV 和现有调度设置。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912
