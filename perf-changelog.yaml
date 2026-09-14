@@ -7542,6 +7542,27 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3083
 
 - config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Switch --moe-backend from aiter_triton_mxfp4_bf16 to aiter, which selects the CK a8w4 experts (mfma_moe1_silu_mul_afp8_wfp4_bf16 / mfma_moe2_afp8_wfp4_bf16) instead of the W4A16 _moe_gemm_a16w4 Triton kernel, matching the DSV4-Pro MI355X recipe. Decode traces at 131k context show MoE GEMM falling from 2.72 to 2.30 ms/step at conc 1, 4.91 to 4.27 at conc 4 and 9.06 to 7.18 at conc 16, for whole-step gains of 4.2%, 5.3% and 8.7%. AgentX conc 1 improves mean ITL 4.01 to 3.91 ms and mean TTFT 681 to 639 ms; gsm8k is unchanged at 0.9719 strict-match."
+    - "将 --moe-backend 从 aiter_triton_mxfp4_bf16 改为 aiter，从而选择 CK a8w4 专家内核（mfma_moe1_silu_mul_afp8_wfp4_bf16 / mfma_moe2_afp8_wfp4_bf16），取代 W4A16 的 _moe_gemm_a16w4 Triton 内核，与 DSV4-Pro MI355X 配方保持一致。131k 上下文的解码 trace 显示 MoE GEMM 在并发 1 时从 2.72 降至 2.30 ms/step，并发 4 从 4.91 降至 4.27，并发 16 从 9.06 降至 7.18，整步分别加速 4.2%、5.3% 和 8.7%。AgentX 并发 1 的平均 ITL 从 4.01 降至 3.91 ms，平均 TTFT 从 681 降至 639 ms；gsm8k strict-match 保持 0.9719 不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3058
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Pin the recipe to vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657, which includes the AITER mHC delayed-pre path from vllm-project/vllm#56503; the exact image passed the concurrency 1-32 and eval-only concurrency 32 cells in run 34710937012 and is recorded by merged vllm-project/recipes#968. Set AITER_TRITON_LOG_LEVEL=ERROR to suppress the repeated gfx950 Gluon-fallback warning that accounted for 98% of the validation server log; restore WARNING when diagnosing new AITER Triton failures."
+    - "将配方固定到 vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657，其中包含 vllm-project/vllm#56503 引入的 AITER mHC delayed-pre 路径；该精确镜像已在运行 34710937012 中通过并发 1–32 及仅评测并发 32，并由已合并的 vllm-project/recipes#968 记录。设置 AITER_TRITON_LOG_LEVEL=ERROR 以抑制占验证服务日志 98% 的 gfx950 Gluon 回退重复警告；诊断新的 AITER Triton 故障时应恢复 WARNING。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3058
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Replace the local 2*CONC max_num_seqs limit with an explicit reproducibility cap of 128 (the effective vllm serve default on MI355X is 1024). The old cap sat below AgentX subagent fan-out and produced queue times up to 16.2 seconds at concurrency 1; 128 removed that scheduling queue. The derived CUDA-graph capture ceiling is 1024 for each configured concurrency."
+    - "将本地 2*CONC 的 max_num_seqs 上限改为显式固定的可复现值 128（MI355X 上 vllm serve 的实际默认值为 1024）。旧上限低于 AgentX 子代理扇出，并发 1 时排队时间最高达 16.2 秒；128 消除了该调度排队。所有已配置并发点由此得到的 CUDA graph 捕获上限均为 1024。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3058
+
+- config-keys:
     - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
