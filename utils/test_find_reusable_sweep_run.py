@@ -365,56 +365,10 @@ def test_validate_reusable_run_accepts_successful_same_pr_run(monkeypatch) -> No
     )
 
 
-def test_validate_reusable_run_accepts_failed_run_when_explicitly_allowed(
+@pytest.mark.parametrize("conclusion", ["failure", "cancelled"])
+def test_validate_reusable_run_accepts_non_success_run_when_explicitly_allowed(
     monkeypatch,
-) -> None:
-    monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
-    monkeypatch.setattr(reuse, "pr_commit_shas", lambda *args: {"abc123"})
-
-    reuse.validate_reusable_run(
-        "SemiAnalysisAI/InferenceX",
-        "run-sweep.yml",
-        1321,
-        {
-            "id": 25763404168,
-            "event": "pull_request",
-            "status": "completed",
-            "conclusion": "failure",
-            "path": ".github/workflows/run-sweep.yml",
-            "head_sha": "abc123",
-        },
-        "token",
-        allow_failed=True,
-    )
-
-
-def test_validate_reusable_run_rejects_failed_run_by_default(monkeypatch) -> None:
-    monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
-    monkeypatch.setattr(reuse, "pr_commit_shas", lambda *args: {"abc123"})
-
-    try:
-        reuse.validate_reusable_run(
-            "SemiAnalysisAI/InferenceX",
-            "run-sweep.yml",
-            1321,
-            {
-                "id": 25763404168,
-                "event": "pull_request",
-                "status": "completed",
-                "conclusion": "failure",
-                "path": ".github/workflows/run-sweep.yml",
-                "head_sha": "abc123",
-            },
-            "token",
-        )
-    except RuntimeError as error:
-        assert "expected success" in str(error)
-    else:
-        raise AssertionError("expected an unpinned failed run to be rejected")
-
-
-def test_validate_reusable_run_accepts_cancelled_run_when_explicitly_allowed(
-    monkeypatch,
+    conclusion,
 ) -> None:
     """A fail-fast sweep concludes ``cancelled`` once a job is cut short.
 
@@ -432,7 +386,7 @@ def test_validate_reusable_run_accepts_cancelled_run_when_explicitly_allowed(
             "id": 25763404168,
             "event": "pull_request",
             "status": "completed",
-            "conclusion": "cancelled",
+            "conclusion": conclusion,
             "path": ".github/workflows/run-sweep.yml",
             "head_sha": "abc123",
         },
@@ -441,7 +395,11 @@ def test_validate_reusable_run_accepts_cancelled_run_when_explicitly_allowed(
     )
 
 
-def test_validate_reusable_run_rejects_cancelled_run_by_default(monkeypatch) -> None:
+@pytest.mark.parametrize("conclusion", ["failure", "cancelled"])
+def test_validate_reusable_run_rejects_non_success_run_by_default(
+    monkeypatch,
+    conclusion,
+) -> None:
     monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
     monkeypatch.setattr(reuse, "pr_commit_shas", lambda *args: {"abc123"})
 
@@ -454,7 +412,7 @@ def test_validate_reusable_run_rejects_cancelled_run_by_default(monkeypatch) -> 
                 "id": 25763404168,
                 "event": "pull_request",
                 "status": "completed",
-                "conclusion": "cancelled",
+                "conclusion": conclusion,
                 "path": ".github/workflows/run-sweep.yml",
                 "head_sha": "abc123",
             },
@@ -463,7 +421,7 @@ def test_validate_reusable_run_rejects_cancelled_run_by_default(monkeypatch) -> 
     except RuntimeError as error:
         assert "expected success" in str(error)
     else:
-        raise AssertionError("expected an unpinned cancelled run to be rejected")
+        raise AssertionError(f"expected an unpinned {conclusion} run to be rejected")
 
 
 def test_validate_reusable_run_accepts_run_for_older_pr_commit(monkeypatch) -> None:

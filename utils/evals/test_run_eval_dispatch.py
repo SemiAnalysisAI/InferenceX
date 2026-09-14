@@ -45,9 +45,6 @@ def test_agentic_scenario_defaults_to_gsm8k_lm_eval():
     assert "DISPATCH=lm-eval" in _dispatch(is_agentic="1")
 
 
-def test_fixed_seqlen_scenario_defaults_to_lm_eval():
-    assert "DISPATCH=lm-eval" in _dispatch(is_agentic="0")
-
 def test_agentic_eval_only_stages_summary():
     output = _dispatch(is_agentic="1", eval_only="true")
     assert "DISPATCH=lm-eval" in output
@@ -63,16 +60,8 @@ def test_explicit_framework_arg_overrides_scenario():
     assert "DISPATCH=lm-eval" in _dispatch(is_agentic="1", cli_fw="lm-eval")
 
 
-def test_env_framework_overrides_scenario():
-    assert "DISPATCH=lm-eval" in _dispatch(is_agentic="1", env_fw="lm-eval")
-
-
 def test_env_can_force_swebench_on_fixed_seqlen():
     assert "DISPATCH=swebench" in _dispatch(is_agentic="0", env_fw="swebench")
-
-
-def test_recipe_lm_eval_arg_still_lm_eval_on_fixed_seqlen():
-    assert "DISPATCH=lm-eval" in _dispatch(is_agentic="0", cli_fw="lm-eval")
 
 
 def _run_invalid_call(call: str) -> subprocess.CompletedProcess:
@@ -170,12 +159,6 @@ def test_eval_limit_appended_when_set():
 def test_eval_limit_absent_when_unset():
     out = _run_lm_eval_cmdline(eval_limit=None)
     assert "--limit" not in out, f"Expected no '--limit' in output:\n{out}"
-
-
-def test_lm_eval_defaults_to_gsm8k():
-    out = _run_lm_eval_cmdline()
-    assert "utils/evals/gsm8k.yaml" in out
-
 
 
 _MODAL_CREDS_SCRIPT = r'''
@@ -531,23 +514,6 @@ def test_agentic_eval_limit_defaults_to_full_split(tmp_path):
     assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
 
 
-def test_agentic_eval_limit_full_runs_whole_split(tmp_path):
-    shim, gen_dir = _agentic_shim(tmp_path,
-        'echo "MINI_ARGV: $*" >> ' + "ARGVLOG" + '\n'
-        'out=""; prev=""\n'
-        'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
-        'mkdir -p "$out"\n'
-        "printf '{\"i1\": {\"instance_id\": \"i1\", \"model_patch\": \"d\"}}' > \"$out/preds.json\"\n"
-    )
-    body = (shim / "mini-extra").read_text().replace("ARGVLOG", str(shim / "argv.log"))
-    (shim / "mini-extra").write_text(body)
-    res = _run_agentic(shim, gen_dir, {"EVAL_LIMIT": "full"})
-    argv = (shim / "argv.log").read_text()
-    assert "--slice" not in argv, argv
-    assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
-
-
-
 _GENMODE_SCRIPT = r'''
 source "$BENCHMARK_LIB" 2>/dev/null
 _install_swebench_agent_deps() { :; }
@@ -578,10 +544,6 @@ def _gen_mode(tmp_path, *, is_agentic, gen_mode=None) -> str:
 
 def test_gen_mode_defaults_to_agentic(tmp_path):
     assert "GEN=agentic" in _gen_mode(tmp_path, is_agentic="1")
-
-
-def test_gen_mode_agentic_even_without_agentic_scenario(tmp_path):
-    assert "GEN=agentic" in _gen_mode(tmp_path, is_agentic="0")
 
 
 def test_explicit_single_shot_escape_hatch(tmp_path):

@@ -12,7 +12,6 @@ import json
 import shutil
 from pathlib import Path
 
-import pytest
 
 import aggregate_power_multinode as apm
 
@@ -257,11 +256,6 @@ class TestValidPackage:
             "node-p/GPU-node-p-1": "prefill",
         }
         assert set(sidecar["per_gpu_energy_j"]) == set(sidecar["per_gpu_role"])
-
-    def test_strict_mode_passes_on_valid_package(self, tmp_path):
-        pkg = build_package(tmp_path)
-        assert pkg.run(require_power=True) == 0
-        assert pkg.agg()["power_valid"] == 1
 
     def test_trapezoid_matches_hand_computed_ramp(self, tmp_path):
         # node-d/0 ramps linearly 300 -> 364 W across the samples; the

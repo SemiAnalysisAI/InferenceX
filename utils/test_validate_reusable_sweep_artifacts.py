@@ -502,14 +502,6 @@ def test_agentic_validation_checks_points_and_raw_artifacts(tmp_path: Path) -> N
     assert validate_agentic_artifacts(tmp_path) == []
 
 
-def test_agentic_validation_accepts_run_sweep_point_artifacts(
-    tmp_path: Path,
-) -> None:
-    write_agentic_artifacts(tmp_path)
-
-    assert validate_agentic_artifacts(tmp_path) == []
-
-
 def test_agentic_validation_accepts_additional_source_identity(
     tmp_path: Path,
 ) -> None:

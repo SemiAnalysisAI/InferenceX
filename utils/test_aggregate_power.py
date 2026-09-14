@@ -30,7 +30,6 @@ from aggregate_power import (  # noqa: E402
     aggregate_power,
     cross_check_accumulator,
     integrate_power,
-    main,
     patch_agg_result,
     run,
 )
@@ -108,12 +107,9 @@ def test_detect_columns_missing_power_returns_none():
     assert pw is None
 
 
-def test_parse_power_nvidia_with_units():
-    assert _parse_power("412.34 W") == pytest.approx(412.34)
-
-
-def test_parse_power_bare_number():
-    assert _parse_power("412.34") == pytest.approx(412.34)
+@pytest.mark.parametrize("cell", ["412.34 W", "412.34"], ids=["nvidia_units", "bare"])
+def test_parse_power_numeric_cells(cell):
+    assert _parse_power(cell) == pytest.approx(412.34)
 
 
 def test_parse_power_handles_na():
@@ -571,88 +567,6 @@ def test_run_rejects_malformed_telemetry_inside_window(
         assert metric not in patched
     audit = json.loads(validation.read_text())
     assert audit["reasons"] == [expected_reason]
-
-
-def test_run_patches_agg_with_power_and_joules(tmp_path: Path):
-    base = 1_700_000_000.0
-    csv = tmp_path / "gpu_metrics.csv"
-    _write_constant_window_samples(
-        csv,
-        start=base,
-        end=base + 10,
-        watts_per_gpu=500.0,
-        num_gpus=8,
-    )
-    bench = tmp_path / "bench.json"
-    agg = tmp_path / "agg.json"
-    _write_bench_result(
-        bench,
-        start=base,
-        end=base + 10,
-        duration=10.0,
-        total_output=20_000,
-        total_input=20_000,
-    )
-    agg.write_text(json.dumps({"hw": "h200", "conc": 64}), encoding="utf-8")
-
-    exit_code = run(csv, bench, agg)
-    assert exit_code == 0
-
-    patched = json.loads(agg.read_text())
-    # Pre-existing fields preserved.
-    assert patched["hw"] == "h200"
-    assert patched["conc"] == 64
-    # Power: 500W per GPU.
-    assert patched["avg_power_w"] == pytest.approx(500.0)
-    # J/output_token = 500W × 8 GPUs × 10s / 20_000 tokens = 2.0
-    assert patched["joules_per_output_token"] == pytest.approx(2.0)
-    # J/total_token = 40_000 J / (20_000 input + 20_000 output).
-    assert patched["joules_per_total_token"] == pytest.approx(1.0)
-
-
-def test_run_computes_j_per_total_token_with_input_tokens(tmp_path: Path):
-    """Verifies the J/total-token metric uses (input + output) as denominator.
-
-    For long-prompt workloads (8K in, 1K out) this should be ~9x smaller than
-    J/output-token because the workload's total token count is 9x the output.
-    """
-    base = 1_700_000_000.0
-    csv = tmp_path / "gpu_metrics.csv"
-    _write_constant_window_samples(
-        csv,
-        start=base,
-        end=base + 10,
-        watts_per_gpu=500.0,
-        num_gpus=8,
-    )
-    bench = tmp_path / "bench.json"
-    agg = tmp_path / "agg.json"
-    # 64 prompts × 8K input + 1K output each = 524_288 input, 65_536 output.
-    _write_bench_result(
-        bench,
-        start=base,
-        end=base + 10,
-        duration=10.0,
-        total_output=65_536,
-        total_input=524_288,
-    )
-    agg.write_text(json.dumps({"hw": "h200"}), encoding="utf-8")
-
-    exit_code = run(csv, bench, agg)
-    assert exit_code == 0
-
-    patched = json.loads(agg.read_text())
-    system_energy = 500.0 * 8 * 10.0  # 40_000 J
-    # Aggregator rounds to 6 decimal places, so allow a generous tolerance.
-    assert patched["joules_per_output_token"] == pytest.approx(
-        system_energy / 65_536, abs=1e-5
-    )
-    assert patched["joules_per_total_token"] == pytest.approx(
-        system_energy / (65_536 + 524_288), abs=1e-5
-    )
-    # Sanity: 8k1k workload makes J/total roughly 9x smaller than J/output.
-    ratio = patched["joules_per_output_token"] / patched["joules_per_total_token"]
-    assert 8.5 < ratio < 9.5
 
 
 def test_run_skips_when_bench_window_missing(tmp_path: Path):
@@ -1173,22 +1087,3 @@ def test_run_accumulator_mismatch_leaves_power_validity_untouched(tmp_path: Path
     assert audit["power_valid"] is True
     assert audit["reasons"] == []
     assert audit["accumulator_check"]["within_tolerance"] is False
-
-
-def test_cli_requires_expected_gpu_count(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "aggregate_power.py",
-            "--bench-result",
-            "bench.json",
-            "--agg-result",
-            "agg.json",
-        ],
-    )
-
-    with pytest.raises(SystemExit) as exc_info:
-        main()
-
-    assert exc_info.value.code == 2

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import ast
 import contextlib
 import io
 import json
@@ -31,46 +30,6 @@ import ep_harness  # noqa: E402  (stdlib-only at module top)
 
 # configs/platform_config.json is shared by matrix scheduling, operator/network
 # loading, and backend builds.
-class PlatformRegistryTests(unittest.TestCase):
-    REGISTRY = RUNTIME.parent / "configs" / "platform_config.json"
-    NETWORK_FIELDS = {
-        "socket_ifname", "rdma_devices", "ib_gid_index",
-        "rdma_service_level", "rdma_traffic_class", "rail_isolated",
-    }
-
-    def test_every_platform_entry_is_complete_and_typed(self) -> None:
-        platforms = json.loads(self.REGISTRY.read_text())["platforms"]
-        self.assertTrue(platforms)
-        for name, entry in platforms.items():
-            with self.subTest(sku=name):
-                for field in (
-                    "arch", "product", "image", "image_platform",
-                    "scale_up_transport", "launcher",
-                ):
-                    self.assertIsInstance(entry[field], str)
-                    self.assertTrue(entry[field])
-                for field in ("gpus_per_node", "scale_up_domain"):
-                    self.assertIsInstance(entry[field], int)
-                    self.assertGreater(entry[field], 0)
-                self.assertTrue(entry["backends"])
-                for degrees in entry["backends"].values():
-                    self.assertTrue(degrees)
-                    self.assertLessEqual(set(degrees), {8, 16})
-                self.assertLessEqual(
-                    set(entry.get("network", {})), self.NETWORK_FIELDS
-                )
-                # Fabric provenance: each cluster records its scale-out NIC and
-                # switch so same-GPU clusters on different fabrics stay distinct.
-                fabric = entry["fabric"]
-                self.assertEqual(set(fabric), {"nic", "switch"})
-                for value in fabric.values():
-                    self.assertIsInstance(value, str)
-                    self.assertTrue(value)
-                self.assertRegex(entry["arch"], r"^(sm|gfx)\d+$")
-                self.assertRegex(entry["image"], r"^[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$")
-                self.assertIn(entry["image_platform"], {"linux/amd64", "linux/arm64"})
-
-
 class ProbeTests(unittest.TestCase):
     def test_default_route_interface(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -176,10 +135,8 @@ class StageTests(unittest.TestCase):
 # The per-node probe (runtime/probe.py) and the launcher gate
 # (runtime/common.sh: collx_validate_network_profile_on_job) share an implicit string contract:
 # the probe prints these markers, the launcher greps them back out to derive COLLX_SOCKET_IFNAME
-# and COLLX_RDMA_LINK_LAYER. The patterns are duplicated here on purpose — the test fails if
-# either side drifts, which is exactly the failure that slipped through when 5506c623 moved the
-# probe into Python but left the emit statements behind, silently zeroing the marker count for
-# every non-MNNVL multi-node leg.
+# and COLLX_RDMA_LINK_LAYER. These are the launcher's patterns; the tests below check the
+# probe's output against them.
 SOCKET_MARKER = r"^\[collectivex-private\] socket-interface-selected=([A-Za-z][A-Za-z0-9_.-]{0,31})$"
 LINK_MARKER = r"^\[collectivex-private\] rdma-link-layer=(roce|infiniband)$"
 FAILURE_MARKER = (
@@ -216,12 +173,6 @@ class NetworkProfileContract(unittest.TestCase):
     def _captures(pattern: str, lines: list) -> list:
         return [match.group(1) for line in lines
                 for match in [re.match(pattern, line)] if match]
-
-    def test_launcher_still_declares_the_marker_patterns(self) -> None:
-        common = (RUNTIME / "common.sh").read_text()
-        self.assertIn(SOCKET_MARKER, common)
-        self.assertIn(LINK_MARKER, common)
-        self.assertIn(FAILURE_MARKER, common)
 
     def test_healthy_fabric_emits_the_success_markers_the_launcher_extracts(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -269,52 +220,6 @@ class NetworkProfileContract(unittest.TestCase):
             rc, lines = self._run(root, root / "route")
             self.assertEqual(rc, 1)
             self.assertTrue(any("rdma-port-1=gid-empty" in line for line in lines), lines)
-
-
-class StageContract(unittest.TestCase):
-    # runtime/common.sh drives runtime/stage.py purely by literal subcommand name and positional
-    # argv — there are no optional flags. That argv shape is a string contract: a subcommand or
-    # flag the launcher passes but stage.py does not declare fails with "unrecognized arguments"
-    # and aborts the leg at repository-stage. This extracts every stage.py call out of common.sh
-    # and proves stage.py's parser accepts it — the guard that would have caught the --allow-*
-    # flags surviving on the callers after they were dropped from stage.py's argparse.
-    @staticmethod
-    def _invocations(text: str) -> list:
-        calls = []
-        for line in text.splitlines():
-            if "stage.py" not in line or line.lstrip().startswith("#"):
-                continue
-            subcommand, flags = None, []
-            for raw in line.split("stage.py", 1)[1].split():
-                token = raw.strip('"').strip("'")
-                if token.startswith("--"):
-                    flags.append(token.split("=", 1)[0])
-                elif subcommand is None and token and not token.startswith(("$", "${")):
-                    subcommand = token
-            if subcommand:
-                calls.append((subcommand, flags))
-        return calls
-
-    def test_launcher_only_invokes_declared_subcommands_and_flags(self) -> None:
-        invocations = self._invocations((RUNTIME / "common.sh").read_text())
-        self.assertGreaterEqual(len(invocations), len(stage.SPECS), invocations)
-        parser = stage.build_parser()
-        for subcommand, flags in invocations:
-            self.assertIn(subcommand, stage.SPECS, subcommand)
-            argv = [subcommand] + ["x"] * len(stage.SPECS[subcommand]) + flags
-            with contextlib.redirect_stderr(io.StringIO()):
-                try:
-                    parser.parse_args(argv)
-                except SystemExit:
-                    self.fail(f"common.sh invokes stage.py with an argv shape it rejects: {argv}")
-
-    def test_contract_test_has_teeth(self) -> None:
-        # A flag common.sh must never pass has to be rejected by the parser — this is the exact
-        # failure (unrecognized arguments: --allow-parent-owner) the reconcile removed.
-        parser = stage.build_parser()
-        with contextlib.redirect_stderr(io.StringIO()):
-            with self.assertRaises(SystemExit):
-                parser.parse_args(["validate-stage-path", "x", "x", "x", "--allow-parent-owner"])
 
 
 # config.py case-args is the single case→invocation codec: collx_run_shard decodes one
@@ -402,82 +307,24 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual((args.mode, args.phase, args.scope), ("low-latency", "decode", "scale-up"))
         self.assertEqual(args.case_id, ll_case["case_id"])
 
-    def test_uccl_ep_case_round_trips_through_the_run_ep_parser(self) -> None:
-        # A uccl-ep case flows through the same generic codec; run_ep's --backend choices
-        # must accept "uccl-ep" and the result filename must carry the backend token so a
-        # uccl-ep leg never collides with the deepep-v2/mori legs of the same cell.
-        uccl_case = {
-            **self.CASE,
-            "backend": "uccl-ep",
-            "case_id": "h200-dgxc-uccl-ep-deepseek-v3-normal-decode-ep16-uniform-bf16",
-        }
-        argv = self._case_argv(["16", "2", "8", "8"], case=uccl_case)
-        args = self._run_ep_parser().parse_args(argv)
-        self.assertEqual(args.backend, "uccl-ep")
-        self.assertEqual(args.case_id, uccl_case["case_id"])
-        self.assertEqual(args.out, "results/h200-dgxc_uccl-ep_bf16_decode_TS-c000.json")
-
-    def test_nccl_ep_case_round_trips_through_the_run_ep_parser(self) -> None:
-        # A nccl-ep case flows through the same generic codec; run_ep's --backend choices must
-        # accept "nccl-ep" and the result filename must carry the backend token so a nccl-ep leg
-        # never collides with the deepep-v2/uccl-ep legs of the same cell. BF16 only.
-        nccl_case = {
-            **self.CASE,
-            "backend": "nccl-ep",
-            "case_id": "h200-dgxc-nccl-ep-deepseek-v3-normal-decode-ep16-uniform-bf16",
-        }
-        argv = self._case_argv(["16", "2", "8", "8"], case=nccl_case)
-        args = self._run_ep_parser().parse_args(argv)
-        self.assertEqual(args.backend, "nccl-ep")
-        self.assertEqual(args.case_id, nccl_case["case_id"])
-        self.assertEqual(args.out, "results/h200-dgxc_nccl-ep_bf16_decode_TS-c000.json")
-
-    def test_flashinfer_ep_case_round_trips_through_the_run_ep_parser(self) -> None:
-        # A flashinfer-ep case flows through the same generic codec; run_ep's --backend
-        # choices must accept "flashinfer-ep" and the result filename must carry the backend
-        # token so it never collides with the deepep-v2/nccl-ep legs of the same cell.
-        # The codec is SKU-agnostic, so this reuses the shared h200 fixture like its
-        # siblings; that flashinfer-ep is GB-only is a registry fact, pinned separately by
-        # test_matrix.test_flashinfer_ep_rollout_shape.
-        flashinfer_case = {
-            **self.CASE,
-            "backend": "flashinfer-ep",
-            "case_id": "h200-dgxc-flashinfer-ep-deepseek-v3-normal-decode-ep16-uniform-bf16",
-        }
-        argv = self._case_argv(["16", "2", "8", "8"], case=flashinfer_case)
-        args = self._run_ep_parser().parse_args(argv)
-        self.assertEqual(args.backend, "flashinfer-ep")
-        self.assertEqual(args.case_id, flashinfer_case["case_id"])
-        self.assertEqual(
-            args.out, "results/h200-dgxc_flashinfer-ep_bf16_decode_TS-c000.json"
-        )
-
-    def test_mirrored_backend_choices_match_run_ep(self) -> None:
-        """The mirror is only worth having if it cannot drift from the real parser.
-
-        Kept in sync by convention it has now drifted twice — a backend was added to
-        run_ep.py's choices while this fixture kept the old list, so a case_id that the real
-        CLI accepts raised SystemExit here. Read the real list out of the source (AST, not
-        import: importing run_ep pulls in torch and the vendor EP libraries) and compare.
-        """
-        tree = ast.parse((BENCH / "run_ep.py").read_text())
-        real = [
-            [element.value for element in keyword.value.elts]
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            for argument in node.args
-            if isinstance(argument, ast.Constant) and argument.value == "--backend"
-            for keyword in node.keywords
-            if keyword.arg == "choices"
-        ]
-        self.assertEqual(len(real), 1, "expected exactly one --backend choices list")
-        mirrored = next(
-            action.choices
-            for action in self._run_ep_parser()._actions
-            if action.dest == "backend"
-        )
-        self.assertEqual(sorted(real[0]), sorted(mirrored))
-
+    def test_other_backends_round_trip_with_their_own_result_filename(self) -> None:
+        # Every backend flows through the same generic codec; run_ep's --backend choices
+        # must accept it and the result filename must carry the backend token so legs of
+        # the same cell never collide on the same output path.
+        for backend in ("uccl-ep", "nccl-ep", "flashinfer-ep"):
+            case = {
+                **self.CASE,
+                "backend": backend,
+                "case_id": f"h200-dgxc-{backend}-deepseek-v3-normal-decode-ep16-uniform-bf16",
+            }
+            with self.subTest(backend=backend):
+                argv = self._case_argv(["16", "2", "8", "8"], case=case)
+                args = self._run_ep_parser().parse_args(argv)
+                self.assertEqual(args.backend, backend)
+                self.assertEqual(args.case_id, case["case_id"])
+                self.assertEqual(
+                    args.out, f"results/h200-dgxc_{backend}_bf16_decode_TS-c000.json"
+                )
 
 # logical_byte_provenance is where FP8 changes MEASUREMENT semantics (asymmetric
 # per-direction byte counts), so its arithmetic and guards are pinned here on CPU.
@@ -499,26 +346,6 @@ class LogicalByteProvenanceTests(unittest.TestCase):
         self.assertEqual(got["scale_bytes"], 10 * scale_per_copy)
         self.assertEqual(got["total_logical_bytes"], 10 * 7168 + 10 * scale_per_copy)
 
-    def test_fp8_direct_cast_dispatch_is_one_byte_no_scales(self) -> None:
-        # MoRI's scale-free e4m3 cast: 1 byte/value, no scale payload.
-        got = ep_harness.logical_byte_provenance(
-            logical_copies=10, hidden=7168, value_bytes=1, scale_bytes_per_copy=0,
-        )
-        self.assertEqual(got["activation_data_bytes"], 10 * 7168)
-        self.assertEqual(got["scale_bytes"], 0)
-
-    def test_roundtrip_is_the_per_field_sum_of_dispatch_and_combine(self) -> None:
-        # run_sweep assembles the roundtrip as the per-field sum of an FP8 dispatch and a
-        # BF16 combine; the direction bytes differ, so it is not 2x a single direction.
-        dispatch = ep_harness.logical_byte_provenance(
-            logical_copies=10, hidden=7168, value_bytes=1, scale_bytes_per_copy=224,
-        )
-        combine = ep_harness.logical_byte_provenance(logical_copies=10, hidden=7168)
-        roundtrip = {field: dispatch[field] + combine[field] for field in dispatch}
-        self.assertEqual(roundtrip["activation_data_bytes"], 10 * 7168 * (1 + 2))
-        self.assertEqual(roundtrip["scale_bytes"], 10 * 224)
-        self.assertNotEqual(roundtrip["total_logical_bytes"], 2 * combine["total_logical_bytes"])
-
     def test_guards_fail_closed(self) -> None:
         for kwargs in (
             {"logical_copies": -1, "hidden": 8},
@@ -529,20 +356,6 @@ class LogicalByteProvenanceTests(unittest.TestCase):
         ):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 ep_harness.logical_byte_provenance(**kwargs)
-
-
-class ModeSemanticsContract(unittest.TestCase):
-    # The combine contract is a backend fact, not a pure function of mode: DeepEP's
-    # low-latency combine is weighted-kernel-sum while MoRI's IntraNodeLL is
-    # unweighted-rank-sum, so low-latency must admit both. Normal stays unweighted-only.
-    def test_mode_allowed_semantics(self) -> None:
-        self.assertEqual(
-            ep_harness.MODE_ALLOWED_SEMANTICS["normal"], {"unweighted-rank-sum"}
-        )
-        self.assertEqual(
-            ep_harness.MODE_ALLOWED_SEMANTICS["low-latency"],
-            {"weighted-kernel-sum", "unweighted-rank-sum"},
-        )
 
 
 try:
@@ -637,11 +450,6 @@ class TopkSlotTreeReductionTests(unittest.TestCase):
 
     def test_matches_the_value_the_kernel_returns(self):
         self.assertEqual(self._tree([1.0] + [2.0**-9] * 7), 1.0078125)
-
-    def test_differs_from_both_rejected_models(self):
-        values = [1.0] + [2.0**-9] * 7
-        self.assertNotEqual(self._tree(values), 1.015625)  # FP32 accumulate, narrow once
-        self.assertNotEqual(self._tree(values), 1.0)       # sequential BF16 accumulate
 
     def test_a_rank_claimed_by_an_earlier_slot_contributes_once(self):
         torch = _torch

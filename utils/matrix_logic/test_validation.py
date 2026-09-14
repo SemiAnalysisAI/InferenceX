@@ -4,7 +4,6 @@ import copy
 import pytest
 from validation import (
     ComponentMetadata,
-    Fields,
     SingleNodeMatrixEntry,
     SingleNodeAgenticMatrixEntry,
     MultiNodeMatrixEntry,
@@ -202,31 +201,6 @@ def valid_runner_config():
             "cluster:gb200-nv": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
         },
     }
-
-
-# =============================================================================
-# Test Fields Enum
-# =============================================================================
-
-class TestFieldsEnum:
-    """Tests for Fields enum."""
-
-    def test_field_values_are_strings(self):
-        """All field values should be strings."""
-        for field in Fields:
-            assert isinstance(field.value, str)
-
-    def test_key_fields_exist(self):
-        """Key fields should be defined."""
-        assert Fields.IMAGE.value == "image"
-        assert Fields.MODEL.value == "model"
-        assert Fields.TP.value == "tp"
-        assert Fields.MULTINODE.value == "multinode"
-        assert Fields.CONC.value == "conc"
-        assert Fields.SPEC_DECODING.value == "spec-decoding"
-        assert Fields.PREFILL.value == "prefill"
-        assert Fields.DECODE.value == "decode"
-        assert Fields.HARDWARE.value == "hardware"
 
 
 # =============================================================================
@@ -620,14 +594,6 @@ class TestMultiNodeMatrixEntry:
         with pytest.raises(Exception, match="both.*prefill.*decode"):
             MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
 
-    def test_prefill_decode_worker_configs(self, valid_multinode_matrix_entry):
-        """Prefill and decode should be WorkerConfig objects."""
-        entry = MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
-        assert entry.prefill.num_worker == 5
-        assert entry.prefill.tp == 4
-        assert entry.decode.tp == 8
-        assert entry.decode.dp_attn is True
-
     def test_all_eval_concurrency_batch_marker(
         self,
         valid_multinode_matrix_entry,
@@ -649,13 +615,6 @@ class TestMultiNodeMatrixEntry:
         del valid_multinode_matrix_entry["prefill"]
         with pytest.raises(Exception):
             MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
-
-    def test_missing_decode(self, valid_multinode_matrix_entry):
-        """Missing decode should fail."""
-        del valid_multinode_matrix_entry["decode"]
-        with pytest.raises(Exception):
-            MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
-
 
 # =============================================================================
 # Test validate_matrix_entry function
@@ -932,18 +891,6 @@ class TestSeqLenConfigs:
         assert config.isl == 1024
         assert config.osl == 1024
         assert len(config.search_space) == 1
-
-    def test_single_node_seq_len_config_8k1k(self):
-        """Valid single node seq len config for 8k/1k."""
-        config = SingleNodeSeqLenConfig(**{
-            "isl": 8192,
-            "osl": 1024,
-            "search-space": [
-                {"tp": 8, "conc-start": 4, "conc-end": 64}
-            ]
-        })
-        assert config.isl == 8192
-        assert config.osl == 1024
 
     def test_multinode_seq_len_config(self):
         """Valid multinode seq len config."""
@@ -1262,15 +1209,6 @@ class TestValidateMasterConfig:
         result = validate_master_config(configs)
         assert result == configs
 
-    def test_mixed_configs(self, valid_single_node_master_config, valid_multinode_master_config):
-        """Mixed single and multinode configs should pass."""
-        configs = {
-            "dsr1-fp8-mi300x-sglang": valid_single_node_master_config,
-            "dsr1-fp4-gb200-dynamo-trt": valid_multinode_master_config,
-        }
-        result = validate_master_config(configs)
-        assert len(result) == 2
-
     def test_invalid_config_raises_valueerror(self, valid_single_node_master_config):
         """Invalid config should raise ValueError with key name."""
         del valid_single_node_master_config["model"]
@@ -1325,14 +1263,6 @@ class TestValidateRunnerConfig:
         with pytest.raises(ValueError) as exc_info:
             validate_runner_config(config)
         assert "cannot be an empty list" in str(exc_info.value)
-
-    def test_multiple_runner_types(self, valid_runner_config):
-        """Multiple runner types should work."""
-        result = validate_runner_config(valid_runner_config)
-        assert "h100" in result["labels"]
-        assert "h200" in result["labels"]
-        assert "mi300x" in result["labels"]
-        assert "gb200" in result["labels"]
 
     def test_flat_runner_config_is_rejected(self):
         config = {

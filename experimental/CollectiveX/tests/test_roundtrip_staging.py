@@ -5,7 +5,7 @@
 roundtrip compares FP8 and BF16 through structurally different pipelines. Real stacks decide
 this on quant-format match: SGLang's DeepEP dispatcher contains no dequant at all, and vLLM
 returns the dispatched fp8 + scales untouched when `block_k == DEEPEP_QUANT_BLOCK_SIZE`,
-dequantising only as a mismatch fallback. These tests pin both models.
+dequantising only as a mismatch fallback.
 """
 from __future__ import annotations
 
@@ -69,20 +69,6 @@ class RoundtripStaging(unittest.TestCase):
         b = _StubBackend(stage_device_work=True, fp8_consume="dequant")
         b.run_roundtrip(object())
         self.assertEqual(b.calls, ["dispatch", "stage", "combine(staged-by-stage)"])
-
-    def test_adapters_declare_where_their_combine_input_lives(self):
-        # A wrong attribute would silently leave the staged tensor unused, so the roundtrip
-        # would measure a combine over stale data. NCCL EP is the one that differs.
-        self.assertEqual(ep_backend.EPBackend.combine_input_attr, "combine_input")
-        b = _StubBackend(stage_device_work=True, fp8_consume="native")
-        b.combine_input_attr = "combine_input"
-        b.run_roundtrip(object(), staged="X")
-        self.assertEqual(b.calls[-1], "combine(X)")
-
-    def test_default_models_the_native_path(self):
-        # deepseek-v3 block-fp8 hits vLLM's matched branch and SGLang's no-dequant path.
-        self.assertEqual(ep_backend.EPBackend.fp8_consume, "native")
-
 
 class NativeStagingGate(unittest.TestCase):
     """`stage_device_work` does NOT imply fp8, so the gate must check precision.

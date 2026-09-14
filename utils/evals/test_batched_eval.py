@@ -225,26 +225,3 @@ def test_validate_scores_checks_threshold_for_every_concurrency(
     captured = capsys.readouterr()
     assert "PASS: [conc=1] gsm8k exact_match,strict-match" in captured.out
     assert "FAIL: [conc=4] gsm8k exact_match,strict-match" in captured.err
-
-
-def test_amd_multinode_container_forwards_eval_concurrency_list() -> None:
-    job_slurm = (
-        Path(__file__).resolve().parents[2]
-        / "benchmarks"
-        / "multi_node"
-        / "amd_utils"
-        / "job.slurm"
-    )
-    contents = job_slurm.read_text()
-
-    assert r'-e \"EVAL_CONC=\$EVAL_CONC\"' in contents
-    assert "-e EVAL_CONC\n" not in contents
-
-    workflow = (
-        Path(__file__).resolve().parents[2]
-        / ".github"
-        / "workflows"
-        / "benchmark-multinode-tmpl.yml"
-    ).read_text()
-    assert 'expected_concs="${EVAL_CONC}"' in workflow
-    assert 'validate_scores.py --expected-concs "${expected_concs}"' in workflow

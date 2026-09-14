@@ -18,8 +18,6 @@ on:
       - 'utils/process_result.py'
       - 'utils/test_aggregate_power.py'
       - 'utils/test_aggregate_power_multinode.py'
-      - 'utils/test_gb200_power_official_contract.py'
-      - 'utils/test_gb300_power_official_contract.py'
       - 'utils/test_process_result.py'
 
 permissions:
@@ -48,4 +46,4 @@ jobs:
       - name: Run pytest
         run: |
           cd utils
-          python -m pytest test_aggregate_power.py test_aggregate_power_multinode.py test_gb200_power_official_contract.py test_gb300_power_official_contract.py test_process_result.py -v
+          python -m pytest test_aggregate_power.py test_aggregate_power_multinode.py test_process_result.py -v

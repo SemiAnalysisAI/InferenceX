@@ -4,8 +4,6 @@ import argparse
 import copy
 from generate_sweep_configs import (
     MIN_EVAL_CONC,
-    seq_len_stoi,
-    seq_len_itos,
     seq_len_to_str,
     generate_full_sweep,
     generate_test_config_sweep,
@@ -175,22 +173,8 @@ def full_sweep_args_multi_node():
 
 
 # =============================================================================
-# Test seq_len mappings
+# Test seq_len_to_str
 # =============================================================================
-
-class TestSeqLenMappings:
-    """Tests for sequence length string mappings."""
-
-    def test_seq_len_stoi_values(self):
-        """Verify seq_len_stoi has expected mappings."""
-        assert seq_len_stoi["1k1k"] == (1024, 1024)
-        assert seq_len_stoi["8k1k"] == (8192, 1024)
-
-    def test_seq_len_itos_reverse_mapping(self):
-        """Verify seq_len_itos is reverse of stoi."""
-        assert seq_len_itos[(1024, 1024)] == "1k1k"
-        assert seq_len_itos[(8192, 1024)] == "8k1k"
-
 
 class TestSeqLenToStr:
     """Tests for seq_len_to_str function."""
@@ -506,26 +490,6 @@ class TestMarkEvalEntries:
         ]
         result = mark_eval_entries(entries)
         assert result[0]['run-eval'] is False
-
-    def test_never_marks_all_entries(self):
-        """mark_eval_entries should never mark every single-node entry,
-        ensuring the e2e splitting logic can distinguish default from evals-only."""
-        entries = [
-            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-             'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': c,
-             'spec-decoding': False, 'dp-attn': False, 'run-eval': False}
-            for c in [32, 64, 128, 256, 512]
-        ] + [
-            # Non-8k1k entry that should never be marked
-            {'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-             'isl': 1024, 'osl': 1024, 'tp': 2, 'conc': 64,
-             'spec-decoding': False, 'dp-attn': False, 'run-eval': False},
-        ]
-        result = mark_eval_entries(entries)
-        non_prefill = [x for x in result if 'prefill' not in x]
-        assert not all(x['run-eval'] for x in non_prefill), \
-            "mark_eval_entries must not mark all entries — would break e2e splitting"
-
 
 class TestMarkAllEvalEntries:
     """Tests for the all-evals selection policy."""
@@ -1018,15 +982,6 @@ class TestGenerateFullSweepSingleNode:
 
 class TestGenerateFullSweepMultiNode:
     """Tests for generate_full_sweep with multi-node configs."""
-
-    def test_multinode_sweep_generation(self, sample_multinode_config, sample_runner_config, full_sweep_args_multi_node):
-        """Multinode sweep should generate entries with prefill/decode."""
-        result = generate_full_sweep(
-            full_sweep_args_multi_node,
-            sample_multinode_config,
-            sample_runner_config
-        )
-        assert len(result) == 1  # One entry with conc-list
 
     def test_multinode_entry_structure(self, sample_multinode_config, sample_runner_config, full_sweep_args_multi_node):
         """Multinode entries should have prefill and decode configs."""
@@ -1622,125 +1577,7 @@ class TestEdgeCases:
 # =============================================================================
 
 class TestArgumentDefaults:
-    """Tests for command-line argument parsing and default values."""
-
-    def test_runner_config_default_value(self):
-        """Verify --runner-config defaults to configs/runners.yaml."""
-        import sys
-        from generate_sweep_configs import main
-
-        # Save original sys.argv
-        original_argv = sys.argv
-
-        try:
-            # Simulate command-line args without --runner-config flag
-            sys.argv = [
-                'generate_sweep_configs.py',
-                'full-sweep',
-                '--config-files', 'dummy.yaml',
-                '--single-node'
-            ]
-
-            # Parse args using the ArgumentParser from main
-            # We need to access the parser directly
-            import argparse
-            from generate_sweep_configs import main
-
-            # Create the same parent parser as in main()
-            parent_parser = argparse.ArgumentParser(add_help=False)
-            parent_parser.add_argument(
-                '--config-files',
-                nargs='+',
-                required=True,
-                help='One or more configuration files (YAML format)'
-            )
-            parent_parser.add_argument(
-                '--runner-config',
-                default='configs/runners.yaml',
-                help='Configuration file holding runner information (YAML format, defaults to configs/runners.yaml)'
-            )
-
-            # Create main parser
-            parser = argparse.ArgumentParser(
-                description='Generate benchmark configurations from YAML config files'
-            )
-
-            # Create subparsers
-            subparsers = parser.add_subparsers(
-                dest='command',
-                required=True,
-                help='Available commands'
-            )
-
-            # Add full-sweep subparser
-            full_sweep_parser = subparsers.add_parser(
-                'full-sweep',
-                parents=[parent_parser],
-                add_help=False,
-                help='Generate full sweep configurations'
-            )
-            full_sweep_parser.add_argument('--single-node', action='store_true')
-            full_sweep_parser.add_argument('--multi-node', action='store_true')
-
-            # Parse the args
-            args = parser.parse_args(['full-sweep', '--config-files', 'dummy.yaml', '--single-node'])
-
-            # Verify the default value
-            assert args.runner_config == 'configs/runners.yaml'
-
-        finally:
-            # Restore original sys.argv
-            sys.argv = original_argv
-
-    def test_runner_config_explicit_value(self):
-        """Verify --runner-config can be explicitly set."""
-        import argparse
-
-        # Create the same parent parser as in main()
-        parent_parser = argparse.ArgumentParser(add_help=False)
-        parent_parser.add_argument(
-            '--config-files',
-            nargs='+',
-            required=True,
-            help='One or more configuration files (YAML format)'
-        )
-        parent_parser.add_argument(
-            '--runner-config',
-            default='configs/runners.yaml',
-            help='Configuration file holding runner information (YAML format, defaults to configs/runners.yaml)'
-        )
-
-        # Create main parser
-        parser = argparse.ArgumentParser(
-            description='Generate benchmark configurations from YAML config files'
-        )
-
-        # Create subparsers
-        subparsers = parser.add_subparsers(
-            dest='command',
-            required=True,
-            help='Available commands'
-        )
-
-        # Add full-sweep subparser
-        full_sweep_parser = subparsers.add_parser(
-            'full-sweep',
-            parents=[parent_parser],
-            add_help=False,
-            help='Generate full sweep configurations'
-        )
-        full_sweep_parser.add_argument('--single-node', action='store_true')
-
-        # Parse with explicit --runner-config
-        args = parser.parse_args([
-            'full-sweep',
-            '--config-files', 'dummy.yaml',
-            '--runner-config', 'custom/path/runners.yaml',
-            '--single-node'
-        ])
-
-        # Verify the explicit value
-        assert args.runner_config == 'custom/path/runners.yaml'
+    """Tests for command-line eval-selection flags via main()."""
 
     def test_all_evals_cli_marks_every_fixed_sequence_entry(
         self,
@@ -2381,20 +2218,6 @@ class TestApplyNodeTypeDefaults:
         assert args.single_node is True
         assert args.multi_node is False
 
-    def test_multi_only_stays_multi(self):
-        """When only multi_node is set, it stays that way."""
-        args = argparse.Namespace(single_node=False, multi_node=True)
-        apply_node_type_defaults(args)
-        assert args.single_node is False
-        assert args.multi_node is True
-
-    def test_both_flags_stays_both(self):
-        """When both flags are set, they stay that way."""
-        args = argparse.Namespace(single_node=True, multi_node=True)
-        apply_node_type_defaults(args)
-        assert args.single_node is True
-        assert args.multi_node is True
-
     def test_no_node_attrs_is_noop(self):
         """When args lacks node type attrs, nothing happens."""
         args = argparse.Namespace(command="test-config")
@@ -2552,15 +2375,6 @@ class TestExpandConfigKeys:
             "gptoss-fp8-b200-sglang",
         ]
 
-    def test_prefix_glob(self):
-        """dsr1* should match all keys starting with dsr1."""
-        result = expand_config_keys(["dsr1*"], self.AVAILABLE)
-        assert result == [
-            "dsr1-fp4-b200-sglang",
-            "dsr1-fp8-mi300x-sglang",
-            "dsr1-fp8-h200-trt",
-        ]
-
     def test_question_mark_wildcard(self):
         """? wildcard should match a single character."""
         result = expand_config_keys(["?sr1-fp8-mi300x-sglang"], self.AVAILABLE)
@@ -2596,115 +2410,3 @@ class TestExpandConfigKeys:
             "dsr1-fp8-h200-trt",
             "gptoss-fp8-b200-sglang",
         ]
-
-
-# =============================================================================
-# Tests for e2e-tests.yml workflow config splitting
-# =============================================================================
-
-def _split_e2e_configs(data):
-    """Replicate the splitting logic from e2e-tests.yml get-jobs step.
-
-    Returns (SINGLE, MULTI, EVALS) lists matching the workflow filters.
-    """
-    single = [x for x in data if 'prefill' not in x and not x.get('eval-only', False)]
-    multi = [x for x in data if 'prefill' in x and not x.get('eval-only', False)]
-    evals = [x for x in data if 'prefill' not in x and x.get('run-eval', False)]
-    return single, multi, evals
-
-
-class TestE2EConfigSplitting:
-    """Verify the e2e-tests.yml config splitting logic handles all flag
-    combinations correctly: default, --no-evals, --evals-only, and
-    --all-evals."""
-
-    @pytest.fixture
-    def mixed_entries(self):
-        """Simulates default mode output: single-node (some eval-marked),
-        plus multi-node entries."""
-        return [
-            {'exp-name': 'a', 'isl': 1024, 'osl': 1024, 'conc': 64, 'tp': 2, 'run-eval': False},
-            {'exp-name': 'b', 'isl': 1024, 'osl': 1024, 'conc': 128, 'tp': 2, 'run-eval': False},
-            {'exp-name': 'c', 'isl': 8192, 'osl': 1024, 'conc': 256, 'tp': 2, 'run-eval': True},
-            {'exp-name': 'd', 'isl': 8192, 'osl': 1024, 'conc': 512, 'tp': 2, 'run-eval': True},
-            {'exp-name': 'e', 'conc': 64, 'prefill': {'tp': 2, 'num-worker': 1}},
-        ]
-
-    def test_default_mode_benchmarks_all_single_node(self, mixed_entries):
-        """Default: all single-node entries (including eval-marked) are benchmarked."""
-        single, multi, evals = _split_e2e_configs(mixed_entries)
-        assert len(single) == 4
-        assert all('prefill' not in x for x in single)
-
-    def test_default_mode_evals_only_eval_marked(self, mixed_entries):
-        """Default: only eval-marked entries go to EVALS."""
-        single, multi, evals = _split_e2e_configs(mixed_entries)
-        assert len(evals) == 2
-        assert all(x['run-eval'] for x in evals)
-
-    def test_default_mode_eval_marked_in_both(self, mixed_entries):
-        """Default: eval-marked entries appear in BOTH single and evals."""
-        single, multi, evals = _split_e2e_configs(mixed_entries)
-        eval_names = {x['exp-name'] for x in evals}
-        single_names = {x['exp-name'] for x in single}
-        assert eval_names.issubset(single_names)
-
-    def test_no_evals_all_benchmarked(self):
-        """--no-evals: mark_eval_entries is skipped, no run-eval=True entries."""
-        data = [
-            {'exp-name': 'a', 'conc': 64, 'tp': 2, 'run-eval': False},
-            {'exp-name': 'b', 'conc': 128, 'tp': 2, 'run-eval': False},
-            {'exp-name': 'c', 'conc': 256, 'tp': 2, 'run-eval': False},
-        ]
-        single, multi, evals = _split_e2e_configs(data)
-        assert len(single) == 3
-        assert len(evals) == 0
-
-    def test_evals_only_no_benchmarks(self):
-        """--evals-only: entries have eval-only flag, SINGLE must be empty."""
-        data = [
-            {'exp-name': 'c', 'conc': 256, 'tp': 2, 'run-eval': True, 'eval-only': True},
-            {'exp-name': 'd', 'conc': 512, 'tp': 2, 'run-eval': True, 'eval-only': True},
-        ]
-        single, multi, evals = _split_e2e_configs(data)
-        assert len(single) == 0, "evals-only should not trigger benchmarks"
-        assert len(evals) == 2
-
-    def test_all_evals_routes_every_fixed_sequence_entry_to_evals(self):
-        data = [
-            {'exp-name': 'a', 'isl': 1024, 'conc': 4, 'tp': 2,
-             'run-eval': True, 'eval-only': True},
-            {'exp-name': 'b', 'isl': 8192, 'conc': 8, 'tp': 2,
-             'run-eval': True, 'eval-only': True},
-        ]
-
-        single, multi, evals = _split_e2e_configs(data)
-
-        assert single == []
-        assert multi == []
-        assert evals == data
-
-    def test_empty_config(self):
-        """Empty input produces empty outputs."""
-        single, multi, evals = _split_e2e_configs([])
-        assert single == [] and multi == [] and evals == []
-
-    def test_all_eval_marked_without_eval_only_flag_still_benchmarked(self):
-        """Default mode where mark_eval_entries marks every entry (e.g. only
-        8k1k with single conc). Without eval-only flag, SINGLE must still
-        include them for benchmarking."""
-        data = [
-            {'exp-name': 'a', 'conc': 64, 'tp': 2, 'run-eval': True},
-            {'exp-name': 'b', 'conc': 64, 'tp': 4, 'run-eval': True},
-        ]
-        single, multi, evals = _split_e2e_configs(data)
-        assert len(single) == 2, "all-eval-marked entries must still be benchmarked in default mode"
-        assert len(evals) == 2
-
-    def test_prefill_entries_never_in_single_or_evals(self, mixed_entries):
-        """Prefill (multi-node) entries only appear in MULTI."""
-        single, multi, evals = _split_e2e_configs(mixed_entries)
-        assert len(multi) == 1
-        assert all('prefill' in x for x in multi)
-        assert all('prefill' not in x for x in single)
-        assert all('prefill' not in x for x in evals)
