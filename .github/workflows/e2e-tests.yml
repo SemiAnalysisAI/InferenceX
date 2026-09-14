@@ -222,7 +222,7 @@ jobs:
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                 ref: ${{ github.sha }}
-            - name: Checkout priority scheduler tooling
+            - name: Checkout workflow tooling
               if: ${{ inputs.ref && inputs.ref != '' }}
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
@@ -288,6 +288,9 @@ jobs:
                       python "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py" \
                       "${GENERATE_ARGS[@]}")
                   fi
+                  CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | env PYTHONPATH="$PRIORITY_ROOT" \
+                    uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+                    python -P -m infx.workflows.benchmark_schema)
                   score_matrix() {
                     local family="$1"
                     env PYTHONPATH="$PRIORITY_ROOT" uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \

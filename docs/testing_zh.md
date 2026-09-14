@@ -118,14 +118,7 @@ python3 -m infx.workflows.validate_perf_changelog \
 
 ### 并行运行完整本地测试套件
 
-修改基准工作流的输入、环境变量或产物衔接时，还需使用 Node.js 20+ 运行契约测试：
-
-```bash
-npm ci --prefix utils/workflow_tests --ignore-scripts --no-audit --no-fund
-npm test --prefix utils/workflow_tests
-```
-
-这些测试使用 GitHub 的表达式库计算实际 YAML，并通过记录环境的启动器执行启动步骤，无需分配 GPU 即可检查配置传递及旧提交兼容性；它们不能证明推理性能或集群健康状况。
+现有 Python 测试套件也覆盖工作流契约。`utils/matrix_logic/test_validation.py` 测试工作流输入模式，并使用受控的生成器输出执行两个准备脚本。非法数据行必须在发布作业输出前失败；合法数据行必须保持不变，包括手动分派测量旧 checkout 的情况。`utils/test_process_result.py` 通过记录环境的启动器执行实际启动步骤，覆盖当前和旧版 checkout。这些测试不模拟 GitHub 表达式引擎，也不证明 GPU 性能；表达式修改需结合工作流验证和适用的 smoke 证据进行审查。
 
 安装好测试所需依赖后，在同一 Python 环境中添加 [`pytest-xdist`](https://pytest-xdist.readthedocs.io/en/stable/distribution.html)，使用四个 worker 运行全部本地测试套件：
 

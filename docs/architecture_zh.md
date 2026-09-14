@@ -188,6 +188,8 @@ flowchart LR
 
 可复用工作流在矩阵键与运行时环境变量之间构成显式适配器。单节点调用方通过一个 JSON `config` 输入传递已验证的 `infx.matrix` 数据行；`benchmark-tmpl.yml` 负责将其映射为 `MODEL_PREFIX`、`DCP_SIZE`、`SPEC_DECODING` 等变量。因此，新增配方字段时，只需修改模式/生成器及使用该字段的模板/运行时代码，无需在每个调用方重复添加转发字段。模板显式读取已知字段，不会将任意 JSON 键导出为环境变量。
 
+[`infx/workflows/benchmark_schema.py`](../infx/workflows/benchmark_schema.py) 通过扩展已有矩阵模型定义单节点工作流模式。Sweep 和手动运行的准备作业在添加优先级信息和发布作业输出之前验证数据行，因此非法输入会在 GPU 扇出前失败。验证会拒绝缺失的必填字段、未知键、错误的 JSON 类型、无效的元数据或拓扑，以及计划分组中的场景错配。合法 JSON 原样通过。仅用于验证的默认值允许旧数据行省略 `pp`、`dcp-size` 和 `pcp-size`，不会将这些默认值写入工作流输入。即使被测 checkout 较旧，手动运行也使用工作流工具 checkout 中的验证器。新增调用方也必须执行此预检；可复用模板本身只负责解析 JSON。
+
 调度、checkout 选择和执行覆盖选项仍使用显式工作流输入。`dp-attn` 也保留为布尔输入，以维持 GitHub 的类型检查。AgentX 的序列长度仍为零，旧版本缺失字段仍保留原有的空字符串行为。JSON 由 GitHub Actions 在 checkout 前解析，因此被测旧提交无需新增辅助程序。多节点和性能分析工作流继续使用现有接口。
 
 矩阵中的 `runner` 值也会驱动 `runs-on`。分配自托管运行器后，模板会获取其具体的 `${{ runner.name }}` 并启动：

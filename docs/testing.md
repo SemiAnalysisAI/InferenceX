@@ -118,14 +118,7 @@ A local matrix cannot prove Slurm allocation or llm-d endpoint discovery. Multi-
 
 ### Full local suite in parallel
 
-For benchmark workflow input, environment, or artifact wiring changes, also run the Node.js 20+ contract tests:
-
-```bash
-npm ci --prefix utils/workflow_tests --ignore-scripts --no-audit --no-fund
-npm test --prefix utils/workflow_tests
-```
-
-These tests evaluate the shipped YAML with GitHub's expression library and execute the launch step with a recording launcher. They check configuration propagation and historical checkout compatibility without allocating GPUs; they do not prove serving performance or cluster health.
+The existing Python suites cover workflow contracts too. `utils/matrix_logic/test_validation.py` tests the workflow input schemas and runs both preparation scripts with controlled generator output. Invalid rows must fail before publishing job outputs; accepted rows must remain unchanged, including when manual dispatch measures an older checkout. `utils/test_process_result.py` executes the shipped launch step with a recording launcher for current and historical checkouts. These tests do not emulate GitHub's expression engine or prove GPU performance; review expression changes with workflow validation and applicable smoke evidence.
 
 With the test dependencies installed, add [`pytest-xdist`](https://pytest-xdist.readthedocs.io/en/stable/distribution.html) to the same Python environment and run all local suites with four workers:
 

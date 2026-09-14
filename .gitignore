@@ -1,4 +1,3 @@
 **/__pycache__/**
 **/.coverage
-node_modules/
 experimental/multiturn/vllm_benchmark/results/

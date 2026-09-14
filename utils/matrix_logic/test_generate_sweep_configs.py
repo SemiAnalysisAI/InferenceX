@@ -3174,6 +3174,7 @@ def split_e2e_configs(tmp_path):
     boundary_stubs = r"""#!/bin/bash
 case "$*" in
   *generate_sweep_configs.py*|*infx.matrix.generate*) cat "$MATRIX_FIXTURE" ;;
+  *infx.workflows.benchmark_schema*) exec "$TEST_PYTHON" -P -m infx.workflows.benchmark_schema ;;
   *ci_priority.py*|*infx.workflows.ci_priority*) cat ;;
   *) exit 1 ;;
 esac
@@ -3182,6 +3183,7 @@ esac
     tools.mkdir()
     (tools / "uv").write_text(boundary_stubs)
     (tools / "uv").chmod(0o755)
+    (tmp_path / ".ci-priority").symlink_to(repo_root, target_is_directory=True)
 
     def run(entries):
         matrix_file = tmp_path / "matrix.json"
@@ -3196,6 +3198,7 @@ esac
                 "PATH": f"{tools}:{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}",
                 "GITHUB_WORKSPACE": str(tmp_path), "GITHUB_OUTPUT": str(output_file),
                 "MATRIX_FIXTURE": str(matrix_file), "PR_LABELS": "[]",
+                "TEST_PYTHON": sys.executable,
                 "CHANGELOG_BASE_REF": "", "CHANGELOG_HEAD_REF": "",
                 "TRIM_CONC": "false", "ALL_EVALS": "false", "EVALS_ONLY": "false",
             },
@@ -3211,12 +3214,18 @@ esac
 
 class TestE2EConfigSplitting:
     def test_workflow_routes_benchmarks_and_evals_without_crossing_scenarios(self, split_e2e_configs):
-        single = {"exp-name": "single", "run-eval": False}
-        single_eval = {"exp-name": "single-eval", "run-eval": True, "recipe-fingerprint": "recipe-a"}
-        single_eval_only = {"exp-name": "single-eval-only", "run-eval": True, "eval-only": True}
+        common = {"image": "engine:fixture", "model": "test/model", "model-prefix": "fixture",
+                  "precision": "fp8", "framework": "sglang", "runner": "fixture-node",
+                  "tp": 8, "pp": 1, "dcp-size": 1, "pcp-size": 1, "ep": 1,
+                  "dp-attn": False, "conc": 4, "spec-decoding": "none"}
+        single = {**common, "exp-name": "single", "run-eval": False,
+                  "isl": 1024, "osl": 1024, "max-model-len": 2248, "disagg": False}
+        single_eval = {**single, "exp-name": "single-eval", "run-eval": True, "recipe-fingerprint": "a" * 64}
+        single_eval_only = {**single, "exp-name": "single-eval-only", "run-eval": True, "eval-only": True}
         multi = {"exp-name": "multi", "prefill": {}, "run-eval": True}
         multi_eval_only = {**multi, "exp-name": "multi-eval-only", "eval-only": True}
-        agentic = {"exp-name": "agentic", "scenario-type": "agentic-coding", "run-eval": True}
+        agentic = {**common, "exp-name": "agentic", "scenario-type": "agentic-coding", "run-eval": True,
+                   "kv-offloading": "none", "total-cpu-dram-gb": 0, "duration": 3600}
         agentic_eval_only = {**agentic, "exp-name": "agentic-eval-only", "eval-only": True}
         multi_agentic = {**agentic, "exp-name": "multi-agentic", "prefill": {}}
         multi_agentic_eval_only = {**multi_agentic, "exp-name": "multi-agentic-eval-only", "eval-only": True}

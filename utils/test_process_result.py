@@ -1,5 +1,6 @@
 """Exercise the fixed-sequence module CLI with controlled environment and artifacts."""
 import json
+import hashlib
 import os
 import shutil
 import signal
@@ -15,6 +16,50 @@ from test_aggregate_power_multinode import PRODUCER_SHA, build_package
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MODULE_COMMAND = [sys.executable, "-m", "infx.results.fixed_sequence"]
+
+
+@pytest.mark.parametrize("historical", [False, True])
+def test_launch_step_preserves_environment_and_result_identity(tmp_path, single_node_env_vars, historical):
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/benchmark-tmpl.yml").read_text())
+    step = next(step for step in workflow["jobs"]["benchmark"]["steps"] if step.get("name") == "Launch job script")
+    # Actions supplies these input values; execute the shipped Bash, not a copy.
+    script = step["run"].replace("${{ inputs.eval-only }}", "false").replace(
+        "${{ inputs.scenario-type }}", "fixed-seq-len")
+    if not historical:
+        for file in ("utils/result_filename.py", "infx/__init__.py", "infx/results/__init__.py",
+                     "infx/results/result_filename.py"):
+            target = tmp_path / file
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(REPO_ROOT / file, target)
+    (tmp_path / "runners").mkdir()
+    (tmp_path / "runners/launch_fixture-node.sh").write_text('''python3 - <<'PY'
+import json, os
+with open('received.json', 'w') as output:
+    json.dump(dict(os.environ), output)
+PY
+printf '{}' > "$RESULT_FILENAME.json"
+''')
+    model = 'model "quoted"\n$(touch injected)'
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", script], cwd=tmp_path, capture_output=True, text=True, timeout=10,
+        env={**os.environ, **single_node_env_vars,
+             "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}", "PYTHONPATH": "",
+             "MODEL": model, "TP": "4", "PP_SIZE": "2", "PCP_SIZE": "2", "DCP_SIZE": "2", "CONC": "16",
+             "RUNNER_NAME": "fixture-node_03", "RUNNER_TYPE": "fixture-node",
+             "RESULT_FILENAME_BASE": "fixture", "RECIPE_FINGERPRINT": "",
+             "GITHUB_ENV": str(tmp_path / "github-env")},
+    )
+    assert result.returncode == 0, result.stderr
+    received = json.loads((tmp_path / "received.json").read_text())
+    assert received["MODEL"] == model
+    assert received["GPU_COUNT"] == "16"  # TP4 * PP2 * PCP2; DCP does not multiply GPUs.
+    assert received["CONC"] == "16"
+    assert received["RUNNER_TYPE"] == "fixture-node"
+    expected = hashlib.sha256(b"fixture\0\0").hexdigest() if historical else "fixture"
+    assert received["RESULT_FILENAME"] == expected
+    assert json.loads((tmp_path / f"{expected}.json").read_text()) == {}
+    assert (tmp_path / "github-env").read_text() == f"GPU_COUNT=16\nRESULT_FILENAME={expected}\n"
+    assert not (tmp_path / "injected").exists()
 
 
 def test_single_node_workflow_reports_missing_raw_result(tmp_path, single_node_env_vars):

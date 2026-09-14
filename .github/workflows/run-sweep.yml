@@ -337,6 +337,8 @@ jobs:
                   fi
 
                   CONFIG_JSON=$("${CMD[@]}")
+                  CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+                    python -m infx.workflows.benchmark_schema --plan)
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
                     python -m infx.workflows.ci_priority \
                     --event-name "${{ github.event_name }}" \

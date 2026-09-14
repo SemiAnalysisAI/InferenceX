@@ -3,7 +3,7 @@ on:
   workflow_call:
     inputs:
       config:
-        description: "Single-node matrix entry from infx.matrix, encoded as JSON"
+        description: "Matrix JSON validated by infx.workflows.benchmark_schema before fan-out"
         required: true
         type: string
       klaud-run:
