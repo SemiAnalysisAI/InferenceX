@@ -7567,9 +7567,8 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Append concurrency 32 and 56 points to the existing B200 Kimi-K3 vLLM AgentX DSpark curve. The sweep steps 24 -> 48 -> 96, so the throughput peak was bracketed but never measured; on our runs it is a plateau across 48-56 rather than a single point, and 56 holds the same throughput as 48 at lower interactivity."
-    - "Both recipes are copies of the existing c48 recipe with only the name, max-num-seqs and concurrency changed. Draft depth stays at 4 and the golden synthetic acceptance length stays at the 3.36 this config already injects, taken from golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml. Parallelism, the KV connector, memory settings, attention backends and the container image are untouched."
-    - "在现有 B200 Kimi-K3 vLLM AgentX DSpark 曲线上追加并发 32 和 56 的数据点。原 sweep 为 24 -> 48 -> 96，吞吐峰值被夹在中间却从未实测；在我们的实测中它是 48-56 的平台而非单点，且 56 以更低的交互性代价保持了与 48 相同的吞吐。"
-    - "两个 recipe 均为现有 c48 recipe 的副本，仅修改 name、max-num-seqs 和并发。草稿深度保持为 4，golden synthetic acceptance length 保持该配置既有的 3.36（取自 golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml）。并行方式、KV connector、显存设置、attention backend 和容器镜像均未改动。"
+    - "Move the B200 Kimi-K3 sweep from vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-728d3ad to the stock upstream nightly vllm/vllm-openai:nightly-2671fedfc7ae604761990603fc736c0c4f21de57. The pinned build came from a vLLM fork branch; every fix this configuration needed is now merged upstream (vllm-project/vllm#55924, #55472, #55745, #55499 and #54416), so the recipe runs on an unmodified upstream image with no patching. The whole curve is re-measured on the new image."
+    - "Add concurrencies 32 and 56. The sweep stepped 24 -> 48 -> 96, so the throughput peak was bracketed but never measured; 32 fills the gap below it and 56 resolves whether the top is a single point or a plateau. Both recipes are copies of the c48 recipe differing only in name, max-num-seqs and concurrency, with draft depth 4 and the golden synthetic acceptance length 3.36 this config already injects."
+    - "将 B200 Kimi-K3 sweep 的镜像从 vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-728d3ad 切换到上游 stock nightly vllm/vllm-openai:nightly-2671fedfc7ae604761990603fc736c0c4f21de57。原先固定的构建来自 vLLM fork 分支；该配置所需的修复均已合入上游（vllm-project/vllm#55924、#55472、#55745、#55499 和 #54416），因此可在未经修改的上游镜像上运行，无需任何补丁。整条曲线将在新镜像上重新测量。"
+    - "新增并发 32 和 56。原 sweep 为 24 -> 48 -> 96，吞吐峰值被夹在中间却从未实测；32 补上峰值下方的空档，56 用于确认曲线顶部是单点还是平台。两个 recipe 均为 c48 recipe 的副本，仅 name、max-num-seqs 和并发不同，草稿深度为 4，golden synthetic acceptance length 沿用该配置既有的 3.36。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3087
-  append-only: true
