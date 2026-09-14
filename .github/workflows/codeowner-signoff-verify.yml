@@ -206,16 +206,14 @@ jobs:
       # files. Check out the trusted default branch; all PR content is read
       # read-only via the GitHub API (gh / MCP), never from the working tree.
       - name: Checkout repository (trusted default branch only)
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ github.event.repository.default_branch }}
           token: ${{ secrets.CLAUDE_PAT }}
 
-      - name: Setup MCP Server
-        run: |
-          pip3 install -r .claude/requirements-mcp.txt
-          mkdir -p /tmp/inferencemax-mcp
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       # The verifier prompt lives in .github/codeowner-signoff-verify-prompt.md:
       # GitHub caps any ${{ }}-bearing workflow scalar at 21000 characters and
@@ -239,7 +237,7 @@ jobs:
           wc -c /tmp/codeowner-signoff-verify-prompt.md
 
       - name: Verify sign-off with Claude
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
         env:
           GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
           GITHUB_TOKEN: ${{ secrets.CLAUDE_PAT }}
@@ -257,8 +255,8 @@ jobs:
             {"fastMode": true}
 
           claude_args: |
-            --model 'claude-fable-5'
-            --mcp-config '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}, "inferencemax-repos": {"command": "python3", "args": ["${{ github.workspace }}/.claude/mcp/server.py"], "env": {"INFERENCEMAX_ROOT": "${{ github.workspace }}"}}}}'
+            --model 'claude-fable-5-1'
+            --mcp-config .github/mcp-ci.json '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}}}'
             --allowedTools "Read,Glob,Grep,WebFetch,mcp__github__*,mcp__github_ci__*,mcp__fetch__*,mcp__inferencemax-repos__*,Bash"
           prompt: |
             Read the file /tmp/codeowner-signoff-verify-prompt.md and follow the

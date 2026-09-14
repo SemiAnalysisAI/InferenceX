@@ -15,6 +15,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -23,14 +24,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from aggregate_power import (  # noqa: E402
+from infx.results.power.single_node import (  # noqa: E402
     _detect_columns,
     _parse_power,
     _parse_timestamp,
     aggregate_power,
     cross_check_accumulator,
     integrate_power,
-    main,
     patch_agg_result,
     run,
 )
@@ -108,12 +108,9 @@ def test_detect_columns_missing_power_returns_none():
     assert pw is None
 
 
-def test_parse_power_nvidia_with_units():
-    assert _parse_power("412.34 W") == pytest.approx(412.34)
-
-
-def test_parse_power_bare_number():
-    assert _parse_power("412.34") == pytest.approx(412.34)
+@pytest.mark.parametrize("cell", ["412.34 W", "412.34"], ids=["nvidia_units", "bare"])
+def test_parse_power_numeric_cells(cell):
+    assert _parse_power(cell) == pytest.approx(412.34)
 
 
 def test_parse_power_handles_na():
@@ -573,7 +570,128 @@ def test_run_rejects_malformed_telemetry_inside_window(
     assert audit["reasons"] == [expected_reason]
 
 
-def test_run_patches_agg_with_power_and_joules(tmp_path: Path):
+# AMDSMI 26.2.0 `metric -p -c -t -u -w 1 --csv` header (order-faithful subset,
+# measured on MI355X; see test_detect_columns_amd_watch_mode_real_header).
+_MI355X_WATCH_HEADER = (
+    "timestamp,gpu,gfx_activity,umc_activity,mm_activity,vcn_activity,"
+    "jpeg_activity,gfx_busy_inst_xcp_0,jpeg_busy_xcp_0,vcn_busy_xcp_0,"
+    "socket_power,gfx_voltage,soc_voltage,mem_voltage,throttle_status,"
+    "power_management,gfx_0_clk,mem_0_clk,edge,hotspot,mem"
+)
+
+
+def _mi355x_watch_row(timestamp: int, gpu: int, socket_power: str) -> str:
+    """One data row in the shape captured from run 32433563482 (conc1):
+    integer-second epoch, quoted list cells with embedded commas, N/A cells,
+    and a trailing carriage return."""
+    return (
+        f"{timestamp},{gpu},0,0,N/A,\"['N/A', 'N/A', 'N/A', 'N/A']\","
+        "\"['N/A', 'N/A']\",\"[0, 0, 0, 0, 0, 0, 0, 0]\",\"[0, 0]\",\"[0, 0]\","
+        f"{socket_power},N/A,N/A,N/A,N/A,ENABLED,1404,2000,N/A,40,25\r"
+    )
+
+
+def test_integrate_power_skips_na_power_rows_outside_window(tmp_path: Path):
+    """N/A-power teardown rows past the window end are counted, not poisonous."""
+    csv = tmp_path / "gpu_metrics.csv"
+    base = 1_700_000_000.0
+    lines = ["timestamp,gpu,socket_power,temperature"]
+    for offset in range(-2, 13):
+        for gpu in range(2):
+            lines.append(f"{base + offset},{gpu},500.0,65")
+    for gpu in range(2):
+        lines.append(f"{base + 11},{gpu},N/A,65")
+    csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    result = integrate_power(
+        csv,
+        start_unix=base,
+        end_unix=base + 10,
+        expected_num_gpus=2,
+    )
+
+    assert result.power_valid is True
+    assert result.invalid_reasons == ()
+    assert result.boundary_degenerate_rows == {"0": 1, "1": 1}
+    assert result.total_gpu_energy_j == pytest.approx(10_000.0)
+
+
+def test_integrate_power_does_not_bracket_with_zero_power_tail(tmp_path: Path):
+    """A 0 W teardown row past the window end must not fake end bracketing.
+
+    Legacy behavior accepted the 0 W row as a valid boundary sample, corrupting
+    the end interpolation with a bogus value; this intentionally flips that
+    case to an explicit benchmark_window_not_bracketed failure."""
+    csv = tmp_path / "gpu_metrics.csv"
+    base = 1_700_000_000.0
+    lines = ["timestamp,gpu,socket_power,temperature"]
+    # Good rows stop at end-4; the only post-end sample per GPU has power 0.
+    for offset in range(-1, 7):
+        for gpu in range(2):
+            lines.append(f"{base + offset},{gpu},500.0,65")
+    for gpu in range(2):
+        lines.append(f"{base + 11},{gpu},0,65")
+    csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    result = integrate_power(
+        csv,
+        start_unix=base,
+        end_unix=base + 10,
+        expected_num_gpus=2,
+    )
+
+    assert result.power_valid is False
+    assert "benchmark_window_not_bracketed" in result.invalid_reasons
+    assert result.boundary_degenerate_rows == {"0": 1, "1": 1}
+
+
+def test_integrate_power_preserves_boundary_counts_without_usable_samples(tmp_path: Path):
+    csv = tmp_path / "gpu_metrics.csv"
+    csv.write_text(
+        "timestamp,gpu,socket_power\n"
+        "1699999999,0,N/A\n"
+        "1700000011,0,0\n"
+        "1700000011,1,N/A\n",
+        encoding="utf-8",
+    )
+
+    result = integrate_power(
+        csv,
+        start_unix=1_700_000_000,
+        end_unix=1_700_000_010,
+        expected_num_gpus=2,
+    )
+
+    assert result.power_valid is False
+    assert "no_usable_power_samples" in result.invalid_reasons
+    assert result.boundary_degenerate_rows == {"0": 2, "1": 1}
+
+
+def test_integrate_power_keeps_zero_power_semantics_inside_window(tmp_path: Path):
+    """Frozen legacy behavior: an in-window 0 W sample still integrates."""
+    csv = tmp_path / "gpu_metrics.csv"
+    base = 1_700_000_000.0
+    lines = ["timestamp,gpu,socket_power,temperature"]
+    for offset in range(-1, 12):
+        watts = "0.0" if offset == 5 else "500.0"
+        lines.append(f"{base + offset},0,{watts},65")
+    csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    result = integrate_power(
+        csv,
+        start_unix=base,
+        end_unix=base + 10,
+        expected_num_gpus=1,
+    )
+
+    assert result.power_valid is True
+    assert result.invalid_reasons == ()
+    assert result.boundary_degenerate_rows == {}
+    # Trapezoids dip to 0 at t=5: 8 x 500 + 2 x 250 = 4500 J.
+    assert result.total_gpu_energy_j == pytest.approx(4_500.0)
+
+
+def test_run_writes_boundary_degenerate_rows_to_sidecar(tmp_path: Path):
     base = 1_700_000_000.0
     csv = tmp_path / "gpu_metrics.csv"
     _write_constant_window_samples(
@@ -581,70 +699,69 @@ def test_run_patches_agg_with_power_and_joules(tmp_path: Path):
         start=base,
         end=base + 10,
         watts_per_gpu=500.0,
-        num_gpus=8,
+        num_gpus=2,
     )
     bench = tmp_path / "bench.json"
     agg = tmp_path / "agg.json"
+    validation = tmp_path / "power_validation.json"
     _write_bench_result(
         bench,
         start=base,
         end=base + 10,
         duration=10.0,
-        total_output=20_000,
-        total_input=20_000,
+        total_output=2_000,
+        total_input=10_000,
     )
-    agg.write_text(json.dumps({"hw": "h200", "conc": 64}), encoding="utf-8")
+    agg.write_text(json.dumps({"hw": "mi355x"}), encoding="utf-8")
 
-    exit_code = run(csv, bench, agg)
+    exit_code = run(csv, bench, agg, expected_num_gpus=2, validation_result=validation)
+
     assert exit_code == 0
-
-    patched = json.loads(agg.read_text())
-    # Pre-existing fields preserved.
-    assert patched["hw"] == "h200"
-    assert patched["conc"] == 64
-    # Power: 500W per GPU.
-    assert patched["avg_power_w"] == pytest.approx(500.0)
-    # J/output_token = 500W × 8 GPUs × 10s / 20_000 tokens = 2.0
-    assert patched["joules_per_output_token"] == pytest.approx(2.0)
-    # J/total_token = 40_000 J / (20_000 input + 20_000 output).
-    assert patched["joules_per_total_token"] == pytest.approx(1.0)
+    audit = json.loads(validation.read_text())
+    # Present-and-empty for clean streams: readers can rely on the key.
+    assert audit["boundary_degenerate_rows"] == {}
 
 
-def test_run_computes_j_per_total_token_with_input_tokens(tmp_path: Path):
-    """Verifies the J/total-token metric uses (input + output) as denominator.
+def test_integrate_power_regression_mi355x_integer_ticks_end_gap(tmp_path: Path):
+    """Run-32433563482 conc1 regression: amd-smi integer-second ticks stop 4 s
+    before the fractional aiperf window end (last tick 1787277605 vs end
+    ...609.157497), so bracketing fails and the producer-side telemetry loss is
+    attributed as benchmark_window_not_bracketed on every GPU.
 
-    For long-prompt workloads (8K in, 1K out) this should be ~9x smaller than
-    J/output-token because the workload's total token count is 9x the output.
-    """
-    base = 1_700_000_000.0
+    The retrieved artifact's trailing rows all carry valid socket_power
+    (254-264 W) with N/A activity/voltage cells; the N/A- and 0-power teardown
+    rows appended past the window end are the documented synthetic degenerate
+    shapes, asserting they are counted rather than used for bracketing."""
     csv = tmp_path / "gpu_metrics.csv"
-    _write_constant_window_samples(
+    start = 1_787_277_560.155891
+    end = 1_787_277_609.157497
+    last_tick = 1_787_277_605
+    powers = [259, 255, 263, 264, 256, 254, 259, 259]
+    lines = [_MI355X_WATCH_HEADER]
+    for tick in range(1_787_277_555, last_tick + 1):
+        for gpu in range(8):
+            lines.append(_mi355x_watch_row(tick, gpu, str(powers[gpu])))
+        # amd-smi watch mode emits a blank line between tick groups.
+        lines.append("")
+    for gpu in range(8):
+        lines.append(_mi355x_watch_row(1_787_277_610, gpu, "N/A"))
+    for gpu in range(8):
+        lines.append(_mi355x_watch_row(1_787_277_611, gpu, "0"))
+    csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    result = integrate_power(
         csv,
-        start=base,
-        end=base + 10,
-        watts_per_gpu=500.0,
-        num_gpus=8,
+        start_unix=start,
+        end_unix=end,
+        expected_num_gpus=8,
     )
-    bench = tmp_path / "bench.json"
-    agg = tmp_path / "agg.json"
-    # 64 prompts × 8K input + 1K output each = 524_288 input, 65_536 output.
-    _write_bench_result(
-        bench,
-        start=base,
-        end=base + 10,
-        duration=10.0,
-        total_output=65_536,
-        total_input=524_288,
-    )
-    agg.write_text(json.dumps({"hw": "h200"}), encoding="utf-8")
 
-    exit_code = run(csv, bench, agg)
-    assert exit_code == 0
-
-    patched = json.loads(agg.read_text())
-    # 40,000 J over 65,536 output tokens and 589,824 total tokens.
-    assert patched["joules_per_output_token"] == pytest.approx(0.610352)
-    assert patched["joules_per_total_token"] == pytest.approx(0.067817)
+    assert result.power_valid is False
+    assert result.invalid_reasons == ("benchmark_window_not_bracketed",)
+    assert result.device_issues == {
+        str(gpu): ["benchmark_window_not_bracketed"] for gpu in range(8)
+    }
+    assert result.boundary_degenerate_rows == {str(gpu): 2 for gpu in range(8)}
 
 
 def test_run_skips_when_bench_window_missing(tmp_path: Path):
@@ -689,6 +806,81 @@ def test_patch_agg_result_preserves_original_when_write_fails(
         )
 
     assert agg.read_bytes() == original
+
+
+@pytest.fixture(params=["single", "multinode"])
+def patch_validated_power(request):
+    from infx.results.power.single_node import _patch_power_result
+    from infx.results.power.multinode import MultinodePowerAudit, _patch_agg
+
+    if request.param == "single":
+        return _patch_power_result
+    return lambda path, **kwargs: _patch_agg(path, MultinodePowerAudit(**kwargs))
+
+
+@pytest.mark.parametrize("valid", [True, False])
+def test_power_replacement_removes_stale_metrics(tmp_path, patch_validated_power, valid):
+    path = tmp_path / "agg.json"
+    path.write_text(json.dumps({
+        "hw": "fixture", "avg_power_w": 99, "total_gpu_energy_j": 50,
+        "power_invalid_reasons": ["stale"],
+        "power_audit": {"source": "previous-run.json"},
+    }))
+    patch_validated_power(path, power_valid=valid, metrics={
+        "avg_power_w": 12.34567, "joules_per_output_token": 0.12345678,
+    })
+    expected = {"hw": "fixture", "power_metric_schema_version": 2, "power_valid": int(valid)}
+    if valid:
+        expected.update(avg_power_w=12.346, joules_per_output_token=0.123457)
+    assert json.loads(path.read_text()) == expected
+
+
+@pytest.mark.parametrize("invalid", [None, float("nan"), float("inf"), -float("inf")])
+def test_power_replacement_rejects_nonfinite_without_overwriting(
+    tmp_path, patch_validated_power, invalid
+):
+    path = tmp_path / "agg.json"
+    original = b'{"hw":"fixture","avg_power_w":99}'
+    path.write_bytes(original)
+    with pytest.raises(ValueError, match="non-finite power metric: total_gpu_energy_j"):
+        patch_validated_power(path, power_valid=True, metrics={
+            "avg_power_w": 12, "total_gpu_energy_j": invalid,
+        })
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize(("raw", "error_type"), [
+    ("[]", TypeError), ('[["model","fixture"]]', TypeError),
+    ("null", AttributeError), ('"fixture"', AttributeError),
+    ("4", AttributeError), ("false", AttributeError),
+])
+def test_power_replacement_rejects_nonobject_json(
+    tmp_path, patch_validated_power, raw, error_type
+):
+    path = tmp_path / "agg.json"
+    path.write_text(raw)
+    with pytest.raises(error_type):
+        patch_validated_power(path, power_valid=False, metrics={})
+    assert path.read_text() == raw
+
+
+def test_power_transform_supports_another_metric_family_without_mutation():
+    from types import MappingProxyType
+    from infx.results.power import with_power_metrics
+
+    original = {"model": "fixture", "rack_energy_j": 99, "unrelated_metric": 7}
+    metrics = {"rack_energy_j": 12.34567, "joules_per_task": 0.12345678}
+    result = with_power_metrics(
+        MappingProxyType(original), metric_keys=("rack_energy_j", "joules_per_task"),
+        schema_version=3, power_valid=True, metrics=MappingProxyType(metrics),
+    )
+    assert result == {
+        "model": "fixture", "unrelated_metric": 7,
+        "power_metric_schema_version": 3, "power_valid": 1,
+        "rack_energy_j": 12.346, "joules_per_task": 0.123457,
+    }
+    assert original == {"model": "fixture", "rack_energy_j": 99, "unrelated_metric": 7}
+    assert metrics == {"rack_energy_j": 12.34567, "joules_per_task": 0.12345678}
 
 
 def test_run_emits_complete_whole_deployment_metric_contract(tmp_path: Path):
@@ -1155,20 +1347,267 @@ def test_run_accumulator_mismatch_leaves_power_validity_untouched(tmp_path: Path
     assert audit["accumulator_check"]["within_tolerance"] is False
 
 
-def test_cli_requires_expected_gpu_count(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "aggregate_power.py",
-            "--bench-result",
-            "bench.json",
-            "--agg-result",
-            "agg.json",
-        ],
+@pytest.fixture(params=["single", "multinode"])
+def power_artifacts(tmp_path, request):
+    from functools import partial
+    from test_aggregate_power_multinode import PRODUCER_SHA, build_package
+
+    package = build_package(tmp_path)
+    args = [
+        "--bench-result", str(package.bench_result),
+        "--agg-result", str(package.agg_result),
+        "--validation-result", str(package.validation_result),
+    ]
+    if request.param == "single":
+        telemetry = tmp_path / "gpu_metrics.csv"
+        _write_constant_window_samples(
+            telemetry, start=1000, end=1060, watts_per_gpu=350, num_gpus=4,
+        )
+        runner = partial(
+            run, telemetry, package.bench_result, package.agg_result,
+            expected_num_gpus=4, validation_result=package.validation_result,
+        )
+        args += ["--csv", str(telemetry), "--expected-num-gpus", "4"]
+        script = "aggregate_power"
+    else:
+        telemetry = package.power_dir / "manifest.json"
+        runner = package.run
+        args += [
+            "--power-dir", str(package.power_dir), "--logs-root", str(package.logs_root),
+            "--prefill-gpus", "2", "--decode-gpus", "2", "--expected-producer-sha", PRODUCER_SHA,
+        ]
+        script = "aggregate_power_multinode"
+    return {"package": package, "run": runner, "args": args, "script": script, "telemetry": telemetry}
+
+
+def _run_power_cli(case, *, module=False, args=None, environment=None):
+    repo = Path(__file__).resolve().parents[1]
+    command = [sys.executable, "-E", "-S"]
+    command += ["-m", f"utils.{case['script']}"] if module else [str(repo / "utils" / f"{case['script']}.py")]
+    return subprocess.run(
+        command + (case["args"] if args is None else args),
+        cwd=repo if module else case["package"].root,
+        env={"PATH": "/usr/bin:/bin", **(environment or {})},
+        text=True, capture_output=True, timeout=10,
     )
 
-    with pytest.raises(SystemExit) as exc_info:
-        main()
 
-    assert exc_info.value.code == 2
+@pytest.mark.parametrize("module", [False, True], ids=["script-outside-repo", "legacy-module"])
+def test_power_cli_preserves_energy_and_audit_contract(power_artifacts, module):
+    case = power_artifacts
+    result = _run_power_cli(case, module=module)
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+    # Four GPUs average 350 W for 60 s: 84,000 J, or 10,500 J per completed query.
+    aggregate = case["package"].agg()
+    assert aggregate["avg_power_w"] == 350
+    assert aggregate["total_gpu_energy_j"] == 84000
+    assert aggregate["joules_per_successful_query"] == 10500
+    assert aggregate["power_valid"] == 1
+    audit = case["package"].sidecar()
+    assert audit["power_valid"] is True
+    assert audit["benchmark_window"] == {
+        "start_time_unix": 1000, "end_time_unix": 1060,
+        "reported_duration_s": 60, "integration_duration_s": 60,
+        "completed": 8, "total_input_tokens": 32768, "total_output_tokens": 4096,
+    }
+    assert "total_gpu_energy_j=84000.00" in result.stdout
+
+
+@pytest.mark.parametrize(("env_value", "flag", "status"), [
+    ("", False, 0), ("YES", False, 1), ("false", True, 1), ("on", False, 0),
+])
+def test_power_cli_invalid_telemetry_preserves_strictness(power_artifacts, env_value, flag, status):
+    case = power_artifacts
+    case["telemetry"].unlink()
+    result = _run_power_cli(
+        case, args=case["args"] + (["--require-power"] if flag else []),
+        environment={"REQUIRE_POWER": env_value},
+    )
+    assert result.returncode == status, result.stderr
+    assert result.stdout == ""
+    assert "Power validation failed:" in result.stderr
+    assert case["package"].agg()["power_valid"] == 0
+    assert "total_gpu_energy_j" not in case["package"].agg()
+    audit = case["package"].sidecar()
+    assert audit["power_valid"] is False
+    assert audit["reasons"]
+
+
+@pytest.mark.parametrize(("args", "status"), [(["--help"], 0), ([], 2)])
+def test_power_cli_help_and_argument_errors_outside_repo(power_artifacts, args, status):
+    result = _run_power_cli(power_artifacts, args=args)
+    assert result.returncode == status
+    assert "usage:" in result.stdout + result.stderr
+    assert "Traceback" not in result.stderr
+    assert not power_artifacts["package"].validation_result.exists()
+
+
+@pytest.mark.parametrize("strict", [False, True])
+@pytest.mark.parametrize("failed_artifact", ["aggregate", "validation"])
+def test_power_artifact_replace_failure_preserves_published_state(
+    power_artifacts, monkeypatch, capsys, strict, failed_artifact,
+):
+    case = power_artifacts
+    package = case["package"]
+    original = package.agg_result.read_bytes()
+    failed_path = package.agg_result if failed_artifact == "aggregate" else package.validation_result
+    replace = Path.replace
+
+    def fail_replace(path, target):
+        if target == failed_path:
+            raise OSError("simulated rename failure")
+        return replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", fail_replace)
+    assert case["run"](require_power=strict) == (1 if strict else 0)
+    assert "simulated rename failure" in capsys.readouterr().err
+    if failed_artifact == "aggregate":
+        assert package.agg_result.read_bytes() == original
+        audit = package.sidecar()
+        assert audit["power_valid"] is False
+        assert "aggregate_result_unwritable" in audit["reasons"]
+        assert audit["metrics"] == {}
+    else:
+        assert package.agg()["power_valid"] == 1
+        assert not package.validation_result.exists()
+
+
+def test_power_sidecars_keep_audit_precision_and_omit_nonfinite_metrics(power_artifacts):
+    from infx.results.power import single_node as single
+    from infx.results.power import multinode
+
+    case = power_artifacts
+    package = case["package"]
+    metrics = {
+        "avg_power_w": 12.3456789, "joules_per_output_token": 0.12345678,
+        "total_gpu_energy_j": float("inf"), "joules_per_total_token": float("nan"),
+        "joules_per_input_token": None,
+    }
+    if case["script"] == "aggregate_power":
+        payload = single._validation_payload(
+            csv_path=case["telemetry"], bench_result=package.bench_result, benchmark=None,
+            integration=single._empty_integration(expected_num_gpus=4, reasons=[]),
+            power_valid=False, reasons=[], metrics=metrics, accumulator_check=None,
+        )
+    else:
+        payload = multinode._sidecar_payload(
+            audit=multinode.MultinodePowerAudit(metrics=metrics),
+            power_dir=package.power_dir, bench_result=package.bench_result, benchmark=None,
+        )
+    assert payload["benchmark_window"] is None
+    assert payload["metrics"] == {"avg_power_w": 12.345679, "joules_per_output_token": 0.123457}
+    json.dumps(payload, allow_nan=False)
+
+
+def test_packaged_power_runs_without_legacy_scripts(power_artifacts, tmp_path):
+    import shutil
+
+    repo = Path(__file__).resolve().parents[1]
+    isolated = tmp_path / "package-only"
+    shutil.copytree(repo / "infx", isolated / "infx")
+    module = "single_node" if power_artifacts["script"] == "aggregate_power" else "multinode"
+    result = subprocess.run(
+        [sys.executable, "-E", "-S", "-m", f"infx.results.power.{module}", *power_artifacts["args"]],
+        cwd=isolated, env={"PATH": "/usr/bin:/bin"},
+        text=True, capture_output=True, timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert power_artifacts["package"].agg()["total_gpu_energy_j"] == 84000
+    assert power_artifacts["package"].sidecar()["power_valid"] is True
+
+
+def test_power_percentiles_uses_synchronized_total_not_device_percentiles(tmp_path):
+    csv_path = tmp_path / "power.csv"
+    # Opposing device ramps keep the fleet draw constant at 600 W.
+    _write_amd_csv(csv_path, [(0, 0, 100), (1, 0, 500), (0, 1, 500), (1, 1, 100)])
+    result = integrate_power(csv_path, start_unix=0, end_unix=1, expected_num_gpus=2)
+    assert result.power_valid
+    assert result.p75_total_gpu_power_w == pytest.approx(600)
+    assert result.p75_power_w == pytest.approx(300)
+    assert result.p90_total_gpu_power_w == pytest.approx(600)
+    assert result.p90_power_w == pytest.approx(300)
+
+
+def test_power_percentiles_weights_time_and_clips_the_validated_window(tmp_path):
+    csv_path = tmp_path / "power.csv"
+    # Dense readings must not bias the uniform 150-250 W ramp inside the window.
+    _write_amd_csv(csv_path, [(0, 0, 100), (1, 0, 200), (1.9, 0, 290), (2, 0, 300)])
+    result = integrate_power(csv_path, start_unix=0.5, end_unix=1.5, expected_num_gpus=1)
+    assert result.power_valid
+    assert result.p75_power_w == pytest.approx(225)
+    assert result.p90_power_w == pytest.approx(240)
+
+
+def test_power_percentiles_is_withheld_for_invalid_telemetry(tmp_path):
+    csv_path = tmp_path / "power.csv"
+    _write_amd_csv(csv_path, [(0, 0, 100), (10, 0, 500)])
+    result = integrate_power(csv_path, start_unix=0, end_unix=10, expected_num_gpus=1)
+    assert not result.power_valid
+    assert result.p75_power_w is None
+    assert result.p75_total_gpu_power_w is None
+    assert result.p90_power_w is None
+
+
+def test_power_percentiles_aligns_asynchronous_gpu_samples(tmp_path):
+    csv_path = tmp_path / "power.csv"
+    _write_amd_csv(csv_path, [
+        (0, 0, 100), (1, 0, 300), (-0.5, 1, 600), (0.5, 1, 400), (1.5, 1, 200)
+    ])
+    result = integrate_power(csv_path, start_unix=0, end_unix=1, expected_num_gpus=2)
+    assert result.power_valid
+    assert result.p75_total_gpu_power_w == pytest.approx(600)
+    assert result.p75_power_w == pytest.approx(300)
+    assert result.p90_total_gpu_power_w == pytest.approx(600)
+    assert result.p90_power_w == pytest.approx(300)
+
+
+@pytest.mark.parametrize('step_name', ['Upload GPU metrics', 'Upload power audit bundle'])
+@pytest.mark.parametrize('directory', ['', 'results'])
+def test_uploaded_telemetry_replays_in_a_different_timezone(tmp_path, step_name, directory):
+    import os
+    import shutil
+    import yaml
+
+    repo = Path(__file__).resolve().parents[1]
+    source = tmp_path / 'source'
+    telemetry = source / directory
+    telemetry.mkdir(parents=True)
+    (telemetry / 'gpu_metrics.csv').write_text(
+        'timestamp,index,power.draw [W]\n'
+        '2024/01/01 00:00:00.000,0,100 W\n'
+        '2024/01/01 00:00:01.000,0,100 W\n'
+        '2024/01/01 00:00:02.000,0,100 W\n')
+    (telemetry / 'gpu_metrics_context.json').write_text('{"timestamp_timezone":"UTC"}')
+    workflow = yaml.safe_load((repo / '.github/workflows/benchmark-tmpl.yml').read_text())
+    step = next(step for job in workflow['jobs'].values() for step in job['steps']
+                if step.get('name') == step_name)
+    archive = tmp_path / 'downloaded'
+    for pattern in step['with']['path'].splitlines():
+        for file in source.glob(pattern):
+            destination = archive / file.relative_to(source)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(file, destination)
+    result = subprocess.run(
+        [sys.executable, '-c', """
+import sys, time
+from pathlib import Path
+from infx.results.power.single_node import integrate_power
+time.tzset()
+result = integrate_power(Path(sys.argv[1]), start_unix=1704067200, end_unix=1704067202,
+                         expected_num_gpus=1)
+assert result.power_valid, result.invalid_reasons
+assert result.total_gpu_energy_j == 200
+""", str(archive / directory / 'gpu_metrics.csv')],
+        cwd=tmp_path, env={**os.environ, 'TZ': 'Etc/GMT+8', 'PYTHONPATH': str(repo)},
+        capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize('context', ['{"timestamp_timezone":"PST"}', '{}', '{invalid'])
+def test_legacy_average_rejects_invalid_telemetry_context(tmp_path, context):
+    csv = tmp_path / 'gpu_metrics.csv'
+    csv.write_text('timestamp,index,power.draw [W]\n1,0,100\n2,0,100\n')
+    csv.with_name('gpu_metrics_context.json').write_text(context)
+    assert aggregate_power(csv, 1, 2) is None
