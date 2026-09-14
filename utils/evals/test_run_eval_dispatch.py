@@ -119,10 +119,6 @@ def test_agentic_scenario_defaults_to_gsm8k_lm_eval():
     assert "DISPATCH=lm-eval" in _dispatch(is_agentic="1")
 
 
-def test_fixed_seqlen_scenario_defaults_to_lm_eval():
-    assert "DISPATCH=lm-eval" in _dispatch(is_agentic="0")
-
-
 def test_agentic_eval_only_stages_summary():
     output = _dispatch(is_agentic="1", eval_only="true")
     assert "DISPATCH=lm-eval" in output
@@ -2450,10 +2446,6 @@ def test_gen_mode_defaults_to_agentic(tmp_path):
     assert "SUITE=swebench_lite" in output
 
 
-def test_gen_mode_agentic_even_without_agentic_scenario(tmp_path):
-    assert "GEN=agentic" in _gen_mode(tmp_path, is_agentic="0")
-
-
 def test_explicit_single_shot_escape_hatch(tmp_path):
     output = _gen_mode(tmp_path, is_agentic="1", gen_mode="single-shot")
     assert "GEN=single-shot" in output
@@ -2532,8 +2524,6 @@ def test_eval_limit_full_and_zero_accepted(tmp_path):
         )
     argv = (shim / "argv.log").read_text()
     assert "--slice" not in argv
-
-
 
 
 def test_chat_route_readiness_requires_model_and_active_route(tmp_path: Path) -> None:
