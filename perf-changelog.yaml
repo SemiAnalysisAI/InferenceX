@@ -7550,5 +7550,5 @@
     - "Both recipes are copies of the existing c48 recipe with only the name, max-num-seqs and concurrency changed. Draft depth stays at 4 and the golden synthetic acceptance length stays at the 3.36 this config already injects, taken from golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml. Parallelism, the KV connector, memory settings, attention backends and the container image are untouched."
     - "在现有 B200 Kimi-K3 vLLM AgentX DSpark 曲线上追加并发 32 和 56 的数据点。原 sweep 为 24 -> 48 -> 96，吞吐峰值被夹在中间却从未实测；在我们的实测中它是 48-56 的平台而非单点，且 56 以更低的交互性代价保持了与 48 相同的吞吐。"
     - "两个 recipe 均为现有 c48 recipe 的副本，仅修改 name、max-num-seqs 和并发。草稿深度保持为 4，golden synthetic acceptance length 保持该配置既有的 3.36（取自 golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml）。并行方式、KV connector、显存设置、attention backend 和容器镜像均未改动。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3087
   append-only: true
