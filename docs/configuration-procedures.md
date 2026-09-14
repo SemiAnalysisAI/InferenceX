@@ -134,6 +134,10 @@ For GLM-5.1 on B200 Nscale, `MODEL_PATH` can select an existing shared checkpoin
 
 Only fixed 8192/1024 `glm5.1-fp8-b200-tilert` requires native power. TileRT runs inside its returned `salloc` allocation, retains both role exit codes and drains collectors before staging audits. Exactly one physical node per role is supported. Other sequence lengths, AgentX and eval-only do not enable this collector. Hardware qualification and publication remain pending.
 
+## Opt-in NVIDIA SRT power
+
+With `REQUIRE_POWER=1`, fixed 8192/1024 SRT launches select runtime `3f3b7af26e34acc8b62b39971bec839a19ac57a2`. Preparation resolves the selected override, injects matrix concurrencies, translates the DeepSeek-V4 tokenizer setting and requires DCGM telemetry. The complete DSR1 B200 FP4 SGLang, B300 FP8 TRT, H100 FP8 SGLang and H200 FP8 TRT curves, plus Qwen3.5 GB200 FP8 SGLang and GB300 FP4 TRT MTP, enable this path through `require-power: true`. Retired DSV4 8k1k scenarios are not enabled. AgentX and eval-only retain existing routing. Available logs and producer provenance survive failure. Each hardware/framework scope needs its own full sweep and applicable evals.
+
 ## Register an srt-slurm recipe
 
 Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md). Checked-in recipes: [`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/).

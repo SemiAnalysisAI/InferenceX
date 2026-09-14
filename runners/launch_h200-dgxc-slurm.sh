@@ -18,6 +18,8 @@ SELECTED_POWER_SRT_SLURM_PIN="$POWER_SRT_SLURM_PIN"
 set -x
 
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+# shellcheck source=runners/powerx_8k1k.sh
+source "$(dirname "${BASH_SOURCE[0]}")/powerx_8k1k.sh"
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
@@ -31,6 +33,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # The producer pin decision is recipe-driven. Upstream-only recipes have
     # no workspace mirror and remain non-power.
     USES_DCGM_POWER=0
+    if powerx_fixed_8k1k; then USES_DCGM_POWER=1; fi
     _RECIPE_REL="${CONFIG_FILE%%:*}"
     _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
     if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
@@ -48,7 +51,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" ]]; then
         USES_KIMIK3_POWER=1
         SELECTED_POWER_SRT_SLURM_PIN="$AGENTX_POWER_SRT_SLURM_PIN"
-    elif [[ "$USES_DCGM_POWER" == "1" && (
+    elif ! powerx_fixed_8k1k && [[ "$USES_DCGM_POWER" == "1" && (
         "$IS_AGENTIC" != "1" ||
         "$FRAMEWORK" != "dynamo-sglang" ||
         ( "$MODEL_PREFIX" != "glm5.2" && "$MODEL_PREFIX" != "dsv4" ) ||
@@ -112,7 +115,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    if [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && (
+    if powerx_fixed_8k1k; then
+        powerx_clone_srt "$SRT_REPO_DIR" || exit 1
+    elif [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && (
         "$MODEL_PREFIX" == "glm5.2" || "$MODEL_PREFIX" == "dsv4"
     ) ]]; then
         if [[ "$USES_DCGM_POWER" == "1" ]]; then
@@ -316,7 +321,7 @@ EOF
         cp "$LOCAL_CONFIG_FILE" "$CONFIG_PATH"
     fi
 
-    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" ]]; then
         read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
         python "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
             "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}"
@@ -327,6 +332,10 @@ EOF
 
     echo "Submitting job with srtctl..."
 
+    if powerx_fixed_8k1k; then
+        powerx_prepare_srt || exit 1
+        CONFIG_PATH="${CONFIG_FILE%%:*}"
+    fi
     # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
     sed -i '/^health_check:/,/^[^ ]/{ /^health_check:/d; /^  /d; }' "$CONFIG_PATH"
@@ -358,17 +367,21 @@ EOF
     # srtctl creates logs in outputs/JOB_ID/logs/
     LOGS_DIR="outputs/$JOB_ID/logs"
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
-    trap 'rc=$?; bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT INT TERM HUP
+    if powerx_fixed_8k1k; then
+        trap 'rc=$?; powerx_snapshot_srt; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
+    else
+        trap 'rc=$?; bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
+    fi
+
+    trap 'exit 130' INT
+    trap 'exit 143' TERM HUP
 
     SRT_JOB_RC=0
-    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
-    if [[ "$SRT_JOB_RC" != "0" && "$USES_KIMIK3_POWER" != "1" ]]; then
-        exit "$SRT_JOB_RC"
-    fi
+    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" true || SRT_JOB_RC=$?
 
     set -x
 
-    echo "Job $JOB_ID completed!"
+    echo "Job $JOB_ID finished with status $SRT_JOB_RC; collecting evidence"
     echo "Collecting results..."
 
     if [ ! -d "$LOGS_DIR" ]; then
@@ -378,13 +391,13 @@ EOF
 
     echo "Found logs directory: $LOGS_DIR"
 
-    AGENTX_POWER_RC="$SRT_JOB_RC"
+    AGENTX_POWER_RC=0
     if [[ "$USES_KIMIK3_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
         read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
         collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" \
             "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" \
             "$SELECTED_POWER_SRT_SLURM_PIN" "${POWER_CONCURRENCIES[@]}" || AGENTX_POWER_RC=$?
-    elif [[ "$USES_DCGM_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+    elif [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
         POWER_LOGS_ROOT=$(cd "$LOGS_DIR" && pwd -P)
         read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
         for concurrency in "${POWER_CONCURRENCIES[@]}"; do
@@ -410,10 +423,15 @@ EOF
         cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
     fi
 
-    cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+    if powerx_fixed_8k1k; then
+        mkdir -p "$GITHUB_WORKSPACE/LOGS"
+        cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/"
+    else
+        cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+    fi
     bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 
-    if [[ "$AGENTX_POWER_RC" != "0" ]]; then
+    if [[ "$AGENTX_POWER_RC" != "0" && "$SRT_JOB_RC" == "0" ]]; then
         echo "ERROR: AgentX power validation failed; available audit and server artifacts were staged" >&2
         exit "$AGENTX_POWER_RC"
     fi
@@ -450,6 +468,8 @@ EOF
         sleep 10
     done
     find . -name '.nfs*' -delete 2>/dev/null || true
+
+    if [[ "$SRT_JOB_RC" != "0" ]]; then exit "$SRT_JOB_RC"; fi
 
 else
     SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"

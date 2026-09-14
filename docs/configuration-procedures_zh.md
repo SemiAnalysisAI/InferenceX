@@ -132,6 +132,10 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 
 仅固定 8192/1024 的 `glm5.1-fp8-b200-tilert` 要求原生功耗。TileRT 在 `salloc` 返回的分配内运行，保留两个角色的退出码，并在保存审计数据前等待采集器排空。每个角色仅支持一个物理节点。其他序列长度、AgentX 和 eval-only 不启用此采集器。硬件资格验证与发布仍待完成。
 
+## NVIDIA SRT 可选功耗
+
+固定 8192/1024 SRT 运行仅在 `REQUIRE_POWER=1` 时选择 runtime `3f3b7af26e34acc8b62b39971bec839a19ac57a2`。准备过程解析所选 override、注入矩阵并发度、转换 DeepSeek-V4 tokenizer 设置并要求 DCGM 遥测。通过 `require-power: true`，为 DSR1 B200 FP4 SGLang、B300 FP8 TRT、H100 FP8 SGLang、H200 FP8 TRT，以及 Qwen3.5 GB200 FP8 SGLang、GB300 FP4 TRT MTP 的完整曲线启用该路径；不启用已退役的 DSV4 8k1k 场景。AgentX 和 eval-only 保留原有路由。失败时保留已有日志与生产者版本。各硬件及框架范围仍需完整 sweep 和适用 eval。
+
 ## 注册 srt-slurm 配方
 
 映射来源：[`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md)。检入的配方：[`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/)。

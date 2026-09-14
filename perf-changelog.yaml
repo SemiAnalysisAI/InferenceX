@@ -7646,3 +7646,35 @@
     - "将 vLLM ROCm nightly 更新至包含 vllm-project/vllm#54855 的 eed1f3d0c6043bd494424a22443ee198dd56f657，并针对 MXFP4/FP8 混合权重关闭不兼容的 AITER shared-expert fusion。"
     - "将单节点 DPA AgentX 扫描从并发 64 扩展为 64/128/192。手工验证显示，在 c64/c128/c256 三个点中 c128 吞吐量最高；新增 c192 用于补齐中间区间并定位 c256 性能回退前的吞吐拐点。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3071
+
+- config-keys:
+    - dsr1-fp4-b200-dynamo-sglang
+    - dsr1-fp8-b300-dynamo-trt
+    - dsr1-fp8-h100-dynamo-sglang
+    - dsr1-fp8-h200-dynamo-trt
+    - qwen3.5-fp8-gb200-dynamo-sglang
+    - qwen3.5-fp4-gb300-dynamo-trt-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Require measured power for six complete NVIDIA SRT 8k1k curves with self-contained Slurm completion checks."
+    - "为六条完整的 NVIDIA SRT 8k1k 曲线强制采集功耗，并包含所需的 Slurm 完成状态检查。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3027
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Qualify shared Slurm completion on the complete existing B200 native Kimi AgentX curve."
+    - "用现有完整 B200 原生 Kimi AgentX 曲线验证共享 Slurm 完成状态。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3027
+
+- config-keys:
+    - dsr1-fp8-h100-dynamo-sglang
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Pin H100 SRT 8k1k startup to the fixed-sequence producer with bounded dependency preparation and owned infrastructure readiness; stop before submission when setup fails."
+    - "固定 H100 SRT 8k1k 的 producer，保留固定长度功耗能力，限制依赖准备时间并在就绪检查前登记基础服务；准备失败时禁止提交作业。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3027

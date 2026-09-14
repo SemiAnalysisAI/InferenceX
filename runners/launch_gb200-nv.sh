@@ -5,6 +5,8 @@
 set -x
 
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+# shellcheck source=runners/powerx_8k1k.sh
+source "$(dirname "${BASH_SOURCE[0]}")/powerx_8k1k.sh"
 
 export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
@@ -321,6 +323,7 @@ import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 # enabled dcgm-power telemetry block. Read the workspace mirror (it overlays
 # the srt-slurm clone later), since the pin decision precedes the clone.
 USES_DCGM_POWER=0
+if powerx_fixed_8k1k; then USES_DCGM_POWER=1; fi
 _RECIPE_REL="${CONFIG_FILE%%:*}"
 _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
 # Note (wenyao): a stray "enabled: true" outside the telemetry block must
@@ -339,7 +342,7 @@ fi
 # dynamo-sglang lanes run on (fp8 validated end-to-end, fp4 recipes
 # parse-verified against the pin); other frameworks clone diverging refs
 # (aflowers branch, sa-submission), so fail fast for them instead.
-if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" ]]; then
+if ! powerx_fixed_8k1k && [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" ]]; then
     echo "Error: dcgm-power lanes are only validated for FRAMEWORK=dynamo-sglang, got: $FRAMEWORK" >&2
     exit 1
 fi
@@ -444,7 +447,9 @@ fi
 
 # AgentX power needs the custom-window producer contract; the released GLM
 # metrics path can keep its existing producer.
-if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+if powerx_fixed_8k1k; then
+    powerx_clone_srt "$SRT_REPO_DIR" || exit 1
+elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
     if [[ "$USES_AGENTX_POWER" == "1" ]]; then
         git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
         cd "$SRT_REPO_DIR" || exit 1
@@ -759,6 +764,7 @@ fi
 echo "Submitting job with srtctl..."
 
 # Resolve the recipe path before editing or submitting it.
+powerx_prepare_srt || exit 1
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 if [[ ! -f "$CONFIG_PATH" ]]; then
     echo "Error: CONFIG_FILE does not exist after srt-slurm setup: $CONFIG_PATH" >&2
@@ -841,6 +847,7 @@ echo "Extracted JOB_ID: $JOB_ID"
 # collisions. Always clean up the exact submitted allocation on exit.
 cleanup_srt_job() {
     local rc=$?
+    powerx_snapshot_srt
     scancel "$JOB_ID" 2>/dev/null || true
     return "$rc"
 }
@@ -854,14 +861,12 @@ LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
 AGENTX_POWER_RC=0
-stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || AGENTX_POWER_RC=$?
-if [[ "$AGENTX_POWER_RC" != "0" && "$USES_AGENTX_POWER" != "1" ]]; then
-    exit 1
-fi
+SRT_JOB_RC=0
+stream_slurm_job_log "$JOB_ID" "$LOG_FILE" true || SRT_JOB_RC=$?
 
 set -x
 
-echo "Job $JOB_ID finished!"
+echo "Job $JOB_ID finished with status $SRT_JOB_RC; collecting evidence"
 echo "Collecting results..."
 
 if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
@@ -912,13 +917,18 @@ if [ -d "$LOGS_DIR" ]; then
         cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
         cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
     fi
-    cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+    if powerx_fixed_8k1k; then
+        mkdir -p "$GITHUB_WORKSPACE/LOGS"
+        cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/"
+    else
+        cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+    fi
     bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 else
     echo "Warning: Logs directory not found at $LOGS_DIR"
 fi
 
-if [[ "$AGENTX_POWER_RC" != "0" ]]; then
+if [[ "$AGENTX_POWER_RC" != "0" && "$SRT_JOB_RC" == "0" ]]; then
     echo "ERROR: AgentX job or power validation failed; available audit and server artifacts were staged" >&2
     exit "$AGENTX_POWER_RC"
 fi
@@ -989,3 +999,5 @@ fi
 if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
     copy_eval_artifacts "$LOGS_DIR/eval_results" "$GITHUB_WORKSPACE" || exit 1
 fi
+
+exit "$SRT_JOB_RC"

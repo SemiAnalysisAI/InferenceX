@@ -31,6 +31,7 @@ on:
       - "runners/launch_*.sh"
       - "runners/slurm_utils.sh"
       - "runners/test_slurm_utils.py"
+      - "benchmarks/multi_node/llm-d/**"
       - "utils/ci_priority.py"
       - "utils/test_ci_priority.py"
       - ".github/workflows/reuse-sweep-comment.yml"

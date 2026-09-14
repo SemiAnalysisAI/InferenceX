@@ -666,6 +666,7 @@ dsr1-fp8-b300-dynamo-trt:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       - spec-decoding: "mtp"
         conc-list: [40]
@@ -760,6 +761,7 @@ dsr1-fp8-b300-dynamo-trt:
     # 8k1k STP configs
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       - conc-list: [64]
         prefill:
@@ -1883,6 +1885,7 @@ dsr1-fp8-h200-dynamo-trt:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       # MTP configurations
       - spec-decoding: "mtp"
@@ -2344,6 +2347,7 @@ dsr1-fp8-h100-dynamo-sglang:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       # # STP: Max throughput TEP (1 prefill, 1 decode)
       # - conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
@@ -3697,6 +3701,7 @@ dsr1-fp4-b200-dynamo-sglang:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       # Non-MTP configurations
       - conc-list: [64, 128]
@@ -5010,6 +5015,7 @@ qwen3.5-fp8-gb200-dynamo-sglang:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       # 1P1D STP: TP4 prefill + TP4 decode (pure tensor parallel). 2 nodes (1+1).
       - spec-decoding: "none"
@@ -6731,6 +6737,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       # 1P2D: 1 prefill (TP1/EP1/dp-attn), 2 decode (TP8/EP8/no-dp-attn), conc=20
       - spec-decoding: "mtp"

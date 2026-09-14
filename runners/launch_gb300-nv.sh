@@ -6,6 +6,8 @@ set -exo pipefail
 
 # shellcheck source=runners/slurm_utils.sh
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+# shellcheck source=runners/powerx_8k1k.sh
+source "$(dirname "${BASH_SOURCE[0]}")/powerx_8k1k.sh"
 
 export SLURM_PARTITION="${SLURM_PARTITION:-batch_1}"
 export SBATCH_PARTITION="$SLURM_PARTITION"
@@ -179,6 +181,7 @@ import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 # recipe mirror (the same tree the clone step overlays), since the checkout
 # doesn't exist yet. Recipes that only exist upstream stay non-power.
 USES_DCGM_POWER=0
+if powerx_fixed_8k1k; then USES_DCGM_POWER=1; fi
 _RECIPE_REL="${CONFIG_FILE%%:*}"
 _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
 # Note (wenyao): a stray "enabled: true" outside the telemetry block must
@@ -200,7 +203,7 @@ if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
     "$_RECIPE_REL" == recipes/vllm/kimi-k3/agentic/* ]]; then
     USES_AGENTX_POWER=1
 fi
-if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" && "$USES_AGENTX_POWER" != "1" ]]; then
+if ! powerx_fixed_8k1k && [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" && "$USES_AGENTX_POWER" != "1" ]]; then
     echo "Error: dcgm-power requires dynamo-sglang or the supported Kimi-K3 AgentX route" >&2
     exit 1
 fi
@@ -242,7 +245,9 @@ SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RU
 SRTCTL_SETUP_SCRIPT=""
 rm -rf "$SRT_REPO_DIR"
 
-if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+if powerx_fixed_8k1k; then
+    powerx_clone_srt "$SRT_REPO_DIR" || exit 1
+elif [[ "$USES_AGENTX_POWER" == "1" ]]; then
     git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
     git checkout "$AGENTX_POWER_SRT_SLURM_PIN" || exit 1
@@ -575,6 +580,7 @@ fi
 # CONFIG_FILE may carry a ":zip_override_...[i]" selector suffix that only
 # `srtctl apply -f` parses; strip it to the real path for the sed. srtctl
 # below still receives the full CONFIG_FILE (with selector).
+powerx_prepare_srt || exit 1
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
@@ -657,46 +663,24 @@ _snapshot_server_logs() {
         # Copy + tar are independent best-effort; an in-flight write
         # from a worker .out file at SIGTERM time would otherwise abort
         # the whole script before either succeeds.
-        cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
+        if powerx_fixed_8k1k; then
+            mkdir -p "$GITHUB_WORKSPACE/LOGS"
+            cp -a "$LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/" 2>/dev/null || true
+        else
+            cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
+        fi
         tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" . 2>/dev/null || true
     fi
 }
 trap _snapshot_server_logs EXIT
 
 AGENTX_POWER_RC=0
-if [[ "$USES_AGENTX_POWER" == "1" ]]; then
-    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || AGENTX_POWER_RC=$?
-else
-    # Wait for log file to appear (also check job is still alive)
-    while ! ls "$LOG_FILE" &>/dev/null; do
-        if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
-            echo "ERROR: Job $JOB_ID failed before creating log file"
-            scontrol show job "$JOB_ID"
-            exit 1
-        fi
-        echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
-        sleep 5
-    done
-
-    # Poll for job completion in background
-    (
-        while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
-            sleep 10
-        done
-    ) &
-    POLL_PID=$!
-
-    echo "Tailing LOG_FILE: $LOG_FILE"
-
-    # Stream the log file until job completes (-F follows by name, polls instead of inotify for NFS)
-    tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
-
-    wait $POLL_PID
-fi
+SRT_JOB_RC=0
+stream_slurm_job_log "$JOB_ID" "$LOG_FILE" true || SRT_JOB_RC=$?
 
 set -x
 
-echo "Job $JOB_ID completed!"
+echo "Job $JOB_ID finished with status $SRT_JOB_RC; collecting evidence"
 echo "Collecting results..."
 
 if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
@@ -716,7 +700,7 @@ else
     echo "Warning: Logs directory not found at $LOGS_DIR"
 fi
 
-if [[ "$AGENTX_POWER_RC" != "0" ]]; then
+if [[ "$AGENTX_POWER_RC" != "0" && "$SRT_JOB_RC" == "0" ]]; then
     echo "ERROR: AgentX job or power validation failed; EXIT will stage audit artifacts" >&2
     exit "$AGENTX_POWER_RC"
 fi
@@ -781,3 +765,5 @@ for i in 1 2 3 4 5; do
     sleep 10
 done
 find . -name '.nfs*' -delete 2>/dev/null || true
+
+if [[ "$SRT_JOB_RC" != "0" ]]; then exit "$SRT_JOB_RC"; fi
