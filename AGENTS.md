@@ -19,12 +19,38 @@ Guidance for AI agents working with InferenceX.
 
 ## Test quality
 
-- Every test must catch a plausible regression in observable behavior. Do not add tests just to increase coverage or test counts. Delete redundant or tautological tests without replacing them when useful coverage already exists.
-- Use small, controlled inputs and independently determined expected results. Cover meaningful boundaries, invalid inputs, and failure paths. Exercise the real implementation, not a test-local copy of its parser, formula, or filtering logic.
-- Do not freeze current recipe counts, hardware/framework inventories, image tags, pins, enum values, or source-code strings in assertions. A config addition or harmless refactor should not require updating unrelated tests.
-- Fixed expected values are appropriate for hand-worked examples and externally consumed contracts. Keep those assertions focused on the behavior that matters; do not compute the expected result with the same helper or algorithm being tested.
-- Reuse existing fixtures and test files. Mock external collaborators when needed, not the behavior under test. Shared helpers in expectations require their own independent behavioral coverage.
-- Apply the reasoning in [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/20/tautological-tests/); see [the testing guide](docs/testing.md#test-quality) for review questions.
+**The one rule: a test must exercise the real implementation with concrete inputs and assert on what it computes, returns, writes, or raises. A test that inspects the code, the repo, or a config file instead of running behavior is not a test and must be deleted.** These rules are mandatory for every test added, modified, or reviewed in this repository. When in doubt, delete the test.
+
+### Forbidden: tests about the code rather than its behavior
+
+Never write, and always delete on sight, a test that does any of the following:
+
+1. **Reads source text and asserts on it.** Opening a `.sh`, `.py`, `.yml`, `.yaml`, `.cjs`, or `.md` file and asserting that a string, flag, regex, command, or line is present or absent, counting occurrences, or checking line order. This includes launchers, workflow files, skill files, and docs. Grepping is not testing.
+2. **Parses source structure.** Using `ast.parse`, `inspect.getsource`, `inspect.signature`, `hasattr`, `callable`, `__doc__`, or import-succeeds checks to assert that a function, class, constant, argument, or flag exists or has a given shape.
+3. **Git-greps the repo.** Asserting which files contain a literal, how many files match, or that a pin appears in exactly N places.
+4. **Pins checked-in config or data.** Asserting the contents of a recipe, master config, `runners.yaml`, `platform_config.json`, a registry dict, an enum, an image tag, a SHA, a port number, or the current count of recipes, SKUs, backends, or models. Validate config through the real validation code with controlled inputs instead.
+5. **Is tautological.** Asserting a constant equals its own literal; asserting a dict or fixture equals what the test just built; asserting only that a mock was called with the arguments the test itself passed; or computing the expected value with the same helper, formula, or algorithm the test is supposed to check.
+6. **Reimplements the code under test.** Any parser, filter, jq/YAML expression, argparse tree, formula, or state machine copied into the test file so the test can run against the copy. This also covers "mirror" parsers and "reference specs" cross-checked against a second in-test implementation.
+7. **Tests the test infrastructure.** Tests of fixtures, conftest helpers, in-test expression evaluators, or "this test has teeth" self-checks.
+8. **Is smoke-only.** Module imports, `--help` exits 0, or "does not raise" with no assertion on output.
+9. **Duplicates a covered path.** Several tests that reach the same branch with trivially different inputs. Keep one, or use `pytest.mark.parametrize` / `subTest`. A second test is justified only by a distinct branch, error path, or boundary.
+
+### Required: what every kept test looks like
+
+- Feeds small, controlled inputs into the real function, CLI, or script and asserts on the computed output, written artifact, exit code, or raised error.
+- Uses expected values worked out independently by hand, never derived by calling the implementation or its helpers.
+- Covers a specific branch, boundary, malformed input, or failure path that no other test already covers.
+- Mocks only external collaborators (network, GitHub, Slurm, clocks, GPUs), never the behavior under test. Shell scripts are tested by running them with stubbed binaries on `PATH` and checking what they produced, not by reading their text.
+- Would fail on a plausible regression in observable behavior, and would not fail on a harmless refactor, a rename, or the addition of a valid recipe or SKU.
+
+### Before adding or approving a test, answer all four
+
+1. Which line of the real implementation does this run, and what bug in it would make the assertion fail?
+2. Would this test still pass if the code were rewritten with identical behavior? If not, it is testing structure and must go.
+3. Would this test fail because someone added a recipe, bumped an image tag, or reworded a comment? If yes, it is pinning config or source and must go.
+4. Does an existing test already reach this branch? If yes, extend it or drop the new one.
+
+Deleting a test that fails these questions needs no replacement. Do not preserve test counts. See [the testing guide](docs/testing.md#test-quality) for the reasoning and [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/20/tautological-tests/) for the distinction between independent expectations and assertions that repeat the implementation.
 
 ## Non-negotiable benchmark invariants
 
