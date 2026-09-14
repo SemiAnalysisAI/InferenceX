@@ -7613,4 +7613,4 @@
     - "Refresh DeepSeek-V4-Pro-0813 FP8 H200 Dynamo+SGLang AgentX aggregate serving with DSpark K=6."
     - "Image: lmsysorg/sglang:nightly-dev-20260914-4358a161"
     - "Update simulated acceptance length from 2.49 to 3.77 and replace the removed cuda-graph-max-bs flag with cuda-graph-max-bs-decode."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3100
