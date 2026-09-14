@@ -34,7 +34,7 @@ for part in value.split(','):
     elif 0 <= bounds[0] <= bounds[1] < 8:
         ids.extend(range(bounds[0], bounds[1] + 1))
     else:
-        raise SystemExit('GPU range outside the single H200 node')
+        raise SystemExit('GPU range outside the single eight-GPU node')
 if len(ids) != len(set(ids)) or not ids or any(i >= 8 for i in ids):
     raise SystemExit('Invalid global GPU assignment')
 devices = {}
@@ -52,10 +52,13 @@ PY
 )
 h3_gpu_rows=$(nvidia-smi --id="$h3_gpu_uuids" --query-gpu=uuid,name --format=csv,noheader)
 H3_ASSIGNED_GPU_UUIDS=$(python3 - "$h3_gpu_rows" "$h3_gpu_uuids" <<'PY'
-import csv, re, sys
+import csv, os, re, sys
 rows = list(csv.reader(sys.argv[1].splitlines()))
-if not rows or any(len(row) != 2 or 'H200' not in row[1] or not re.fullmatch(r'GPU-[0-9a-fA-F-]{36}', row[0].strip()) for row in rows):
-    raise SystemExit('Assigned hardware is not a physical H200 GPU set')
+expected = os.environ.get('H3_EXPECTED_GPU_MODEL', 'H200')
+if expected not in {'H100', 'H200', 'B200'}:
+    raise SystemExit('Unsupported expected NVIDIA GPU model')
+if not rows or any(len(row) != 2 or not re.search(r'\b' + expected + r'\b', row[1]) or not re.fullmatch(r'GPU-[0-9a-fA-F-]{36}', row[0].strip()) for row in rows):
+    raise SystemExit('Assigned hardware does not match expected physical ' + expected + ' GPUs')
 observed = [row[0].strip() for row in rows]
 if sorted(observed) != sorted(sys.argv[2].split(',')):
     raise SystemExit('NVIDIA query differs from assigned physical UUIDs')

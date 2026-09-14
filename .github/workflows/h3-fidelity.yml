@@ -1,0 +1,60 @@
+name: H3 Retained Media Fidelity
+
+on:
+  workflow_call:
+    inputs:
+      source-run-ids:
+        description: "Two original H3 serving CI runs, baseline then candidate"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  compare:
+    name: Compare original C1 video and audio on CPU
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids }}
+      PYTHONPATH: ${{ github.workspace }}
+    steps:
+      - name: Authorize manual repository execution
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            if (context.eventName !== 'workflow_dispatch' ||
+                context.repo.owner !== 'SemiAnalysisAI' || context.repo.repo !== 'InferenceX' ||
+                !context.ref.startsWith('refs/heads/')) {
+              throw new Error('H3 fidelity requires manual dispatch of an InferenceX repository branch.');
+            }
+            for (const username of new Set([context.actor, process.env.GITHUB_TRIGGERING_ACTOR])) {
+              const {data} = await github.rest.repos.getCollaboratorPermissionLevel({
+                ...context.repo, username,
+              });
+              if (!['write', 'maintain', 'admin'].includes(data.permission)) {
+                throw new Error(username + ' must have write, maintain, or admin permission.');
+              }
+            }
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - name: Verify sealed sources and compare every C1 media pair
+        run: >-
+          uv run --no-project --python 3.12 --with 'av==16.1.0' --with 'numpy==2.3.5'
+          python experimental/video-generation/compare_serving_ci.py
+          --source-run-ids "$H3_SOURCE_RUN_IDS" --output "$RUNNER_TEMP/h3-fidelity"
+      - name: Preserve comparisons, original media and any failure
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: h3-fidelity-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/h3-fidelity/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

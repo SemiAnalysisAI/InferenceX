@@ -174,6 +174,17 @@ def analyze_power(role: dict, run: dict, samples: list[dict], events: list[dict]
     clock offset within 100 ms and journal/latency agreement within 250 ms.
     """
     global_reasons = []
+    sensors = set()
+    for sample in samples:
+        query = sample.get("power_query")
+        field = query.get("field", "power.draw") if isinstance(query, dict) else "power.draw" if query is None else "unverified"
+        sensors.add(field if isinstance(field, str) else "unverified")
+    sensor = "nvidia-smi power.draw"
+    if sensors == {"amd-smi power.socket_power"}:
+        sensor = "amd-smi power.socket_power"
+    elif sensors - {"power.draw"}:
+        sensor = "unverified or mixed power sources"
+        global_reasons.append("power_sensor_source_inconsistent")
     if not gpu_uuids or any(not isinstance(device, str) or not device for device in gpu_uuids) or len(set(gpu_uuids)) != len(gpu_uuids):
         global_reasons.append("invalid_gpu_inventory")
     if not _number(interval_seconds) or interval_seconds <= 0:
@@ -332,7 +343,7 @@ def analyze_power(role: dict, run: dict, samples: list[dict], events: list[dict]
                                                 "submit_to_observed_provider_terminal; excludes_client_download_and_decode"),
                           "peak": "maximum_observed_sensor_sample_in_window; not_instantaneous_electrical_peak",
                           "energy_per_valid_clip": "sum_generation_energy_including_failed_or_invalid_completed_attempts_divided_by_technically_valid_clips",
-                          "sensor": "nvidia-smi power.draw; H200 NVML trailing_one_second_average; phase_edges_have_sensor_averaging_uncertainty",
+                          "sensor": sensor + "; hardware_sensor_averaging_not_calibrated; phase_edges_have_sensor_averaging_uncertainty",
                           "clock_agreement_limit_seconds": _CLOCK_TOLERANCE_SECONDS,
                           "legacy_journal_agreement_limit_seconds": _LEGACY_JOURNAL_TOLERANCE_SECONDS},
             "clock_alignment": {"utc_minus_monotonic_seconds": offset, "observed_offset_spread_seconds": spread},

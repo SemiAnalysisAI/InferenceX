@@ -134,6 +134,8 @@ def verify_measurement_job(directory: Path, *, deadline: float, require_success:
         records = run.get("records", [])
         if not isinstance(records, list) or len(records) != len(expected_slots):
             raise ValueError("run must retain every planned warmup and measured outcome")
+        from .mvp_runtime_timing import verify_evidence as verify_server_timings
+        verify_server_timings(directory, role, run, required=spec.get("server_timing", False))
         valid_measured = 0
         attempted_seconds = 0.0
         for record, slot in zip(records, expected_slots):

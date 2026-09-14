@@ -43,10 +43,15 @@ _ROLES = ("baseline", "candidate")
 _SHA = re.compile(r"[0-9a-f]{64}")
 _REV = re.compile(r"[0-9a-f]{40}")
 _GPU = re.compile(r"GPU-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
+_AMD_GPU = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
 _LAUNCH = """import os
 from evaluator.mvp_gpu_job import cuda_devices
-if cuda_devices() != os.environ["VGBENCH_GPU_UUIDS"].split(","):
-    raise RuntimeError("Runtime CUDA device UUIDs differ from assigned GPUs")
+devices = cuda_devices
+if os.environ.get("VGBENCH_GPU_VENDOR") == "amd":
+    from evaluator.mvp_amd_gpu import hip_devices
+    devices = hip_devices
+if devices() != os.environ["VGBENCH_GPU_UUIDS"].split(","):
+    raise RuntimeError("Runtime device UUIDs differ from assigned GPUs")
 from sglang.cli.main import main
 main()
 """
@@ -154,7 +159,12 @@ def _number(value: Any, label: str, minimum: float, maximum: float, integer: boo
 def validate_gpu_job(spec: dict) -> dict:
     """Pure validation: no filesystem probes, network, GPU calls, or execution."""
     frozen = json.loads(canonical_json_bytes(spec))
-    _keys(frozen, {"schema_version", "job_id", "authorization", "allocation", "gpu_uuids", "port", "lock_directory", "baseline", "candidate", "model", "server", "plan", "policy", "limits"}, "GPU job", optional={"serving"})
+    _keys(frozen, {"schema_version", "job_id", "authorization", "allocation", "gpu_uuids", "port", "lock_directory", "baseline", "candidate", "model", "server", "plan", "policy", "limits"}, "GPU job", optional={"serving", "gpu_vendor", "server_timing"})
+    if "server_timing" in frozen and type(frozen["server_timing"]) is not bool:
+        raise ValueError("server_timing must be an explicit boolean")
+    vendor = frozen.get("gpu_vendor", "nvidia")
+    if vendor not in {"nvidia", "amd"}:
+        raise ValueError("unsupported GPU vendor")
     if "serving" in frozen:
         from .mvp_serving import settings
         load = frozen["serving"]
@@ -177,8 +187,9 @@ def validate_gpu_job(spec: dict) -> dict:
     if allocation["mode"] not in {"cooperative_shared", "dedicated_ci"} or not isinstance(allocation["label"], str) or not allocation["label"].strip() or len(allocation["label"]) > 500:
         raise ValueError("allocation requires an explicit operator-declared supported mode and label")
     devices = frozen["gpu_uuids"]
-    if not isinstance(devices, list) or not 1 <= len(devices) <= 8 or any(not isinstance(item, str) or not _GPU.fullmatch(item) for item in devices) or len(set(devices)) != len(devices):
-        raise ValueError("gpu_uuids must contain 1–8 distinct full NVIDIA GPU UUIDs; MIG is unsupported")
+    uuid_pattern = _AMD_GPU if vendor == "amd" else _GPU
+    if not isinstance(devices, list) or not 1 <= len(devices) <= 8 or any(not isinstance(item, str) or not uuid_pattern.fullmatch(item) for item in devices) or len(set(devices)) != len(devices):
+        raise ValueError("gpu_uuids must contain 1–8 distinct full GPU UUIDs for the declared vendor; partitioned GPUs are unsupported")
     _number(frozen["port"], "port", 1024, 65535, True)
     _absolute(frozen["lock_directory"], "lock_directory")
     for role in _ROLES:
@@ -214,7 +225,12 @@ def validate_gpu_job(spec: dict) -> dict:
     frozen["model"]["files"] = sorted(files, key=lambda item: item["path"])
     server = frozen["server"]
     _keys(server, {"ulysses_degree", "tp_size", "encoder_parallel", "performance_mode"}, "server",
-          optional={"dit_cpu_offload", "layerwise_offload"})
+          optional={"dit_cpu_offload", "layerwise_offload", "attention_backend"})
+    if vendor == "amd":
+        if server.get("attention_backend") != "aiter" or server["tp_size"] != 1 or server["ulysses_degree"] != len(devices):
+            raise ValueError("AMD H3 currently requires the documented AITER / pure Ulysses layout")
+    elif "attention_backend" in server:
+        raise ValueError("Explicit attention backend is currently supported only for AMD AITER")
     _number(server["ulysses_degree"], "server.ulysses_degree", 1, len(devices), True)
     _number(server["tp_size"], "server.tp_size", 1, len(devices), True)
     if len(devices) % server["ulysses_degree"] or len(devices) % server["tp_size"]:
@@ -277,6 +293,8 @@ def _server_argv(spec: dict, role: str) -> list[str]:
                      "--dit-layerwise-resident-layers", str(layerwise["resident_layers"])])
     else:
         args.extend(["--dit-cpu-offload", str(spec["server"]["dit_cpu_offload"]).lower()])
+    if spec["server"].get("attention_backend"):
+        args.extend(["--attention-backend", spec["server"]["attention_backend"]])
     return args
 
 
@@ -389,7 +407,7 @@ def cuda_devices() -> list[str]:
     return values
 
 
-def _runtime_env(source: str, gpu_uuids: list[str], nonce: str, cache: Path) -> dict[str, str]:
+def _runtime_env(source: str, gpu_uuids: list[str], nonce: str, cache: Path, gpu_vendor: str = "nvidia") -> dict[str, str]:
     # Do not inherit authentication, PYTHONPATH, remote endpoints, LD_PRELOAD, or
     # performance overrides. Never overwrite HOME/CODEX_HOME or user caches.
     result = {key: os.environ[key] for key in ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR") if key in os.environ}
@@ -406,6 +424,13 @@ def _runtime_env(source: str, gpu_uuids: list[str], nonce: str, cache: Path) -> 
                    "FLASHINFER_WORKSPACE_BASE": str(cache / "flashinfer"),
                    "HF_HOME": str(cache / "huggingface"), "HF_HUB_CACHE": str(cache / "huggingface" / "hub"),
                    "TRITON_CACHE_DIR": str(cache / "triton"), "CUDA_CACHE_PATH": str(cache / "cuda")})
+    if gpu_vendor == "amd":
+        mask = os.environ.get("ROCR_VISIBLE_DEVICES", "")
+        if not re.fullmatch(r"[0-7](?:,[0-7])*", mask) or len(set(mask.split(","))) != len(gpu_uuids):
+            raise ValueError("AMD runtime requires an explicit bound ROCR device mask")
+        logical = ",".join(str(index) for index in range(len(gpu_uuids)))
+        result.update(ROCR_VISIBLE_DEVICES=mask, HIP_VISIBLE_DEVICES=logical, CUDA_VISIBLE_DEVICES=logical,
+                      VGBENCH_GPU_VENDOR="amd", SGLANG_USE_AITER="1")
     return result
 
 
@@ -1053,11 +1078,22 @@ def _role(spec: dict, label: str, directory: Path, supervisor: _Supervisor, prob
     cache = metadata / "cache"
     cache.mkdir()
     nonce = uuid.uuid4().hex
-    env = _runtime_env(spec[label]["source"], spec["gpu_uuids"], nonce, cache)
+    env = _runtime_env(spec[label]["source"], spec["gpu_uuids"], nonce, cache, spec.get("gpu_vendor", "nvidia"))
     role = receipt["roles"][label] = {"status": "preflight", "source_identity": None, "cleanup": {"status": "not_started"}, "run_path": f"{label}/run.json"}
     _write(directory / "gpu-job.json", receipt)
     identity = _source_identity(spec, label, env, supervisor.deadline, supervisor.cancelled)
     role["source_identity"] = identity
+    if spec.get("server_timing"):
+        from . import mvp_runtime_timing as timing
+        timing.validate_source(Path(spec[label]["source"]))
+        timing_path = metadata / "server-timings.jsonl"
+        timing_path.touch(mode=0o600, exist_ok=False)
+        env.update(VGBENCH_SERVER_TIMING_PATH=str(timing_path.resolve()), VGBENCH_SERVER_TIMING_INSTANCE=nonce)
+        role["server_timing_evidence"] = {**timing.identity(), "instance_id": nonce,
+            "path": timing_path.relative_to(directory).as_posix(), "sha256": None,
+            "boundary": "HTTP handler receipt / accepted job / singleton forward / validated stored media ready",
+            "limitations": ["CPU monotonic boundaries; no additional GPU synchronization.",
+                            "HTTP receipt follows framework routing/form parsing; excludes network ingress."]}
     snapshot = probe.snapshot()
     role["gpu_before"] = snapshot
     if not _idle(snapshot, spec["limits"]["max_idle_memory_mib"]):
@@ -1069,10 +1105,14 @@ def _role(spec: dict, label: str, directory: Path, supervisor: _Supervisor, prob
     selected = [indices[device] for device in spec["gpu_uuids"]]
     if len(set(selected)) != len(selected) or any(type(index) is not int or index < 0 for index in selected):
         raise RuntimeError("GPU inventory has invalid or duplicate runtime indices")
-    env["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, selected))
+    if spec.get("gpu_vendor") != "amd":
+        env["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, selected))
     env["VGBENCH_GPU_UUIDS"] = ",".join(spec["gpu_uuids"])
     role["runtime_gpu_binding"] = {"cuda_visible_devices": env["CUDA_VISIBLE_DEVICES"], "expected_gpu_uuids": spec["gpu_uuids"],
                                    "verification": "child CUDA driver UUID check before SGLang import"}
+    if spec.get("gpu_vendor") == "amd":
+        role["runtime_gpu_binding"].update(rocr_visible_devices=env["ROCR_VISIBLE_DEVICES"],
+            hip_visible_devices=env["HIP_VISIBLE_DEVICES"], verification="child HIP PCI BDF to AMD SMI UUID check before SGLang import")
     _port_available(spec["port"])
     owner = None
     sampler = None
@@ -1104,6 +1144,8 @@ def _role(spec: dict, label: str, directory: Path, supervisor: _Supervisor, prob
         sampler.begin_measurement()
         client_env = _runtime_env("", [], nonce, cache)
         client_env["PYTHONPATH"] = str(Path(__file__).resolve().parent.parent)
+        if spec.get("server_timing"):
+            client_env.update({name: env[name] for name in ("VGBENCH_SERVER_TIMING_PATH", "VGBENCH_SERVER_TIMING_INSTANCE")})
         hardware = ",".join(spec["gpu_uuids"])
         argv = [sys.executable, "-m", "evaluator.cli", "run", str(directory / "plan.json"), "--runtime", "sglang",
                 "--endpoint", f"http://127.0.0.1:{spec['port']}", "--runtime-revision", spec[label]["revision"],
@@ -1158,6 +1200,11 @@ def _role(spec: dict, label: str, directory: Path, supervisor: _Supervisor, prob
             role["cleanup"] = owner.close(deadline=cleanup_end)
             role["cleanup"].update(status="failed", idle_after=False, reason="telemetry did not start; GPU idle unverified")
         role["finished_at"] = _now()
+        if spec.get("server_timing"):
+            timing_path = directory / role["server_timing_evidence"]["path"]
+            with timing_path.open("rb") as timing_stream:
+                os.fsync(timing_stream.fileno())
+            role["server_timing_evidence"]["sha256"] = _hash(timing_path, supervisor.total_deadline)
         role["power_configuration_after"] = probe.power_configuration(deadline=supervisor.total_deadline)
         partial = directory / label / "run.json"
         if partial.is_file():
@@ -1316,7 +1363,11 @@ def run_gpu_job(spec: dict, output_dir: Path, *, serving_smoke: bool = False) ->
             _write(directory / "gpu-job.json", receipt)
             receipt["model_identity"] = _model_manifest(spec, supervisor.deadline, supervisor.cancelled)
             supervisor.check()
-            probe = GpuProbe(spec["gpu_uuids"], spec["limits"]["command_seconds"])
+            if spec.get("gpu_vendor") == "amd":
+                from .mvp_amd_gpu import AmdGpuProbe
+                probe = AmdGpuProbe(spec["gpu_uuids"], spec["limits"]["command_seconds"])
+            else:
+                probe = GpuProbe(spec["gpu_uuids"], spec["limits"]["command_seconds"])
             with GpuLease(Path(spec["lock_directory"]), spec["gpu_uuids"], spec["job_id"]) as lease:
                 try:
                     for role in (("baseline",) if serving_smoke else _ROLES):

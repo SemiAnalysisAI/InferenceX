@@ -76,7 +76,7 @@ def summarize(run: dict) -> dict:
     on_time = sum(value <= deadline for value in values) if deadline is not None and (complete or not valid) else None
     durations = [(r.get("media") or {}).get("video", {}).get("duration_seconds") for r in valid]
     seconds = sum(durations) if all(_finite(value) and value > 0 for value in durations) else None
-    return {
+    result = {
         **load, "capacity_qualified": False,
         "client_ready_latency_seconds": {
             "values": values, "sample_count": len(values), "valid_clip_count": len(valid),
@@ -104,3 +104,25 @@ def summarize(run: dict) -> dict:
                         "Client polling observations are not server-side queue or execution timestamps.",
                         "Deadline goodput requires technical validity, not calibrated perceptual quality."],
     }
+    if any(record.get("server_timings") is not None for record in records):
+        def distribution(field):
+            samples = [(record.get("server_timings") or {}).get(field) for record in valid]
+            present = [value for value in samples if _finite(value) and value >= 0]
+            ordered = sorted(present) if len(present) == len(samples) else []
+            return {"values": sorted(present), "sample_count": len(present), "valid_clip_count": len(valid),
+                    "missing_count": len(samples) - len(present),
+                    "p50": statistics.median(ordered) if ordered else None,
+                    "p90": ordered[math.ceil(len(ordered) * .9) - 1] if len(ordered) >= 10 else None,
+                    "p95": ordered[math.ceil(len(ordered) * .95) - 1] if len(ordered) >= 20 else None}
+
+        result.update(queue_delay_seconds=distribution("queue_delay_seconds"),
+                      server_ready_latency_seconds=distribution("server_ready_latency_seconds"),
+                      server_execution_seconds=distribution("execution_seconds"),
+                      server_prequeue_seconds=distribution("prequeue_seconds"),
+                      server_postprocess_seconds=distribution("postprocess_seconds"))
+        timings = [record.get("server_timings") or {} for record in valid]
+        complete = bool(timings) and all(value.get("status") == "complete" for value in timings)
+        result["observed_batch_sizes"] = [value["observed_batch_size"] for value in timings] if complete else None
+        result["observed_replica_ids"] = sorted({value["replica_id"] for value in timings}) if complete else None
+        result["server_timing_population"] = "technically valid measured requests; partial coverage withholds percentiles"
+    return result

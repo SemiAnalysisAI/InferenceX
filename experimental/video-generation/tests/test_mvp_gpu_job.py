@@ -57,6 +57,25 @@ def snapshot(*, used=50, pid=None):
             "compute_apps": [{"gpu_uuid": GPU, "pid": pid, "memory_used_mib": used}] if pid else []}
 
 
+def test_amd_spec_binds_vendor_and_documented_attention_layout(spec, tmp_path, monkeypatch):
+    spec["gpu_vendor"] = "amd"
+    spec["gpu_uuids"] = [GPU.removeprefix("GPU-")]
+    spec["server"]["attention_backend"] = "aiter"
+    frozen = gpu.validate_gpu_job(spec)
+    assert gpu._server_argv(frozen, "baseline")[-2:] == ["--attention-backend", "aiter"]
+    monkeypatch.setenv("ROCR_VISIBLE_DEVICES", "3")
+    env = gpu._runtime_env("/pinned/source", frozen["gpu_uuids"], "nonce", tmp_path, "amd")
+    assert env["ROCR_VISIBLE_DEVICES"] == "3"
+    assert env["HIP_VISIBLE_DEVICES"] == env["CUDA_VISIBLE_DEVICES"] == "0"
+    assert env["SGLANG_USE_AITER"] == "1"
+    monkeypatch.delenv("ROCR_VISIBLE_DEVICES")
+    with pytest.raises(ValueError, match="bound ROCR"):
+        gpu._runtime_env("/pinned/source", frozen["gpu_uuids"], "nonce", tmp_path, "amd")
+    del spec["gpu_vendor"]
+    with pytest.raises(ValueError, match="declared vendor"):
+        gpu.validate_gpu_job(spec)
+
+
 def controlled_receipt(spec):
     roles = {}
     for label in ("baseline", "candidate"):

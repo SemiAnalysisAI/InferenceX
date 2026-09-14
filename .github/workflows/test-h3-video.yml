@@ -7,6 +7,7 @@ on:
       - 'experimental/video-generation/**'
       - 'utils/aggregate_power.py'
       - '.github/workflows/h3-video.yml'
+      - '.github/workflows/h3-fidelity.yml'
       - '.github/workflows/test-h3-video.yml'
       - '.github/workflows/e2e-tests.yml'
   push:
@@ -14,6 +15,7 @@ on:
       - 'experimental/video-generation/**'
       - 'utils/aggregate_power.py'
       - '.github/workflows/h3-video.yml'
+      - '.github/workflows/h3-fidelity.yml'
       - '.github/workflows/test-h3-video.yml'
       - '.github/workflows/e2e-tests.yml'
 
@@ -44,4 +46,4 @@ jobs:
         run: >-
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck=
           .github/workflows/h3-video.yml .github/workflows/test-h3-video.yml
-          .github/workflows/e2e-tests.yml
+          .github/workflows/e2e-tests.yml .github/workflows/h3-fidelity.yml

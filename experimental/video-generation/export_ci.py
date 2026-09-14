@@ -57,9 +57,9 @@ def verified_execution(run_id: str, *, inventory: bool = False) -> tuple[dict, d
             and ((run["status"] == "completed" and run["conclusion"] == "success") or current_export),
             "Source must be a successful manual InferenceX execution or this run's completed H3 job")
     jobs = api(f"actions/runs/{run_id}/attempts/{run['run_attempt']}/jobs")
-    job_name = "H3 H200 hardware inventory" if inventory else "H3 video H200 smoke"
+    job_pattern = re.escape("H3 H200 hardware inventory") if inventory else r"H3 video (?:H100|H200|B200|MI355X) smoke"
     selected = [job for job in jobs["jobs"] if re.fullmatch(
-        r"(?:h3-video / )?p[0-9]+(?:\.[0-9]+)? \| " + re.escape(job_name), job["name"])]
+        r"(?:h3-video / )?p[0-9]+(?:\.[0-9]+)? \| " + job_pattern, job["name"])]
     ci.need(len(selected) == 1 and selected[0]["status"] == "completed"
             and selected[0]["conclusion"] == "success", "Source lacks a successful H3 Slurm job")
     name = f"h3-{'hardware' if inventory else 'video'}-{run_id}-{run['run_attempt']}"

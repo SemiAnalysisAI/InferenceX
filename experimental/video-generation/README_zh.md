@@ -46,12 +46,12 @@ launcher 当作进入脚本。
 设备枚举不一致时启动失败；归属锁和遥测仍使用分配的 UUID。
 
 adapter 在申请资源前恢复本任务的分配收据。导入的收据必须匹配任务标识、Unix
-所有者和调度器中的精确分配身份；提交结果不明确时禁止重复申请。固定站点是
-`main` / `sa-shared`。新建独占分配预留八张 GPU；示例 step 使用四张
+所有者和调度器中的精确分配身份；提交结果不明确时禁止重复申请。默认 H200 站点是
+`main` / `sa-shared`，其他站点通过 `site` 明确记录，见下文。新建独占分配预留八张 GPU；示例 step 使用四张
 GPU、32 个 CPU 和 1 TiB 主机内存。固定版本的四 rank 加载器在 CPU 暂存权重时
 超过了 256 GiB；1 TiB 是实际运行验证过的额度，并非测得的最低需求。预算按预留容量计算。
 
-`resources.minutes` 是整个分配的时间上限，最多 90 分钟。step 为外层清理
+`resources.minutes` 是整个分配的时间上限，最多 240 分钟。step 为外层清理
 预留五分钟，supervisor 的上限加十分钟必须不超过分配上限。例如：分配
 90 分钟、step 85 分钟、supervisor 75 分钟。复用分配必须有足够剩余时间。
 保留准备好的 rootfs，仅清理属于本次任务的进程和 step，仅释放本次执行拥有的
@@ -164,3 +164,38 @@ bash -n runtime-entry.example.sh
 artifact 检查是独立的验收证据。
 
 编译缓存保留在持久化存储中，不上传为测量证据。
+
+## 跨硬件服务测量
+
+`h3-preparation=site-preflight` 仅记录所选 CI runner 的身份、SSH 主机公钥、调度账户、共享运行时缓存候选和命令路径，
+不分配或查询 GPU。独立的 `h3-site-preflight` 产物不代表性能结果或运行时验收。
+该模式支持 `mi355x-amds`；AMD 视频生成仍未接入。预检不可同时重放历史结果。
+各硬件站点使用独立的工作流并发组，并保留原有 Slurm 校验。
+
+本地无法 SSH 到 AMD 时，可设置 `h3-preparation=amd-model`、
+`h3-cluster=mi355x-amds`，并通过 `h3-reuse-run-ids` 指定一个成功的 H200 来源。
+该 CPU 任务优先复用已校验的共享权重，否则在 `/it-share/data/wenyao-minimax-h3/work`
+准备来源清单中的模型，逐文件校验大小和 SHA256。`h3-model-preparation` 产物与
+持久化的 `model-ready.json` 仅记录准备结果，不代表 AMD 运行时通过验收，也不分配 GPU。
+
+`h3-preparation=amd-node` 通过原有队列和 Slurm 所有权回执单独检查实际 AMD 节点、
+设备遥测格式与缓存镜像元数据。上限为分配 8 张 GPU、15 分钟，读取步骤最多 10 分钟。
+保留查询与资源清理证据，不导入镜像，也不执行 H3 视频生成。
+
+站点配置可指定 `concurrencies` 子集（如 `[4]`），用新执行补齐缺失档位，
+无需重复已完成结果。省略时仍运行 `[1, 2, 4]`，产物与逐档证据格式保持不变。
+
+现有 `serving-smoke` 模式支持每档 4–200 条测量请求，数量由
+`plan.cases × plan.repetitions` 决定；并发档位保持 1、2、4。每档 20 条
+产生 60 条测量请求，`warmup_runs: 1` 时另有 3 条独立预热。失败和未启动
+请求保留在预先确定的分母中。跨硬件固定相同模型文件、提示词/种子、视频规格
+和质量要求，明确记录运行时构建与部署拓扑差异。小样本分位数属于初步结果，
+闭环并发扫描不能证明持续开放到达负载下的服务容量。
+
+默认配置保持 H200 的 `main` / `sa-shared`。可选 `site` 明确记录 `cluster`、
+`partition`、`account` 和 `gpu_model`；当前允许 `h200-dgxc`、`h100-dgxc`、
+`b200-nscale`。允许配置不等于实测通过。通过 `h3-cluster` 选择站点，
+`h3-site-config` 指向 runner 上已准备并审核的 JSON 文件；二者必须匹配。
+`resources.allocated_gpus` 单独记录全部分配卡数，`resources.gpus` 记录实际参与卡数；
+H100 整节点分配需记录 8 张卡。总分配上限提高至 240 分钟，保留原有清理余量。
+AMD 的运行时与设备接入尚未实现，不可用的硬件或指标不能用 fixture 数据代替。
