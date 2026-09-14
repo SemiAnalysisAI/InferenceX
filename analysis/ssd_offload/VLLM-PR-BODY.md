@@ -52,23 +52,54 @@ both layouts name shards correctly and a layout change invalidates the sidecar.
 
 Results
 
-B200 TP4, CUDA graphs, no eager. Fixed 8k1k at concurrency 16, three runs per
-arm: 14,168 tok/s mean against 13,632 for the pinned baseline, with 1.4%
-run-to-run spread against 12.4%, and host memory in use falling from 352 GB to
-95 GB.
+B200 TP4, CUDA graphs, no eager.
 
-Agentic traces across the concurrency sweep are less uniform. Median TPOT
-carries a near-constant offset of about 2.6 ms per token that does not scale
-with batch size, so it dominates where steps are short and disappears where
-they are not: at concurrency 4 total throughput is 25,417 tok/s against 34,897,
-at 16 it is 100,387 against 112,212, at 64 it is 336,073 against 348,969, and
-at 128 it is 106,897 against 76,717. The offset is the per-step host round
-trip, not device I/O; random 4 KiB reads on the array measure 70 microseconds,
-and the pages are cached in the steady state.
+Fixed 8k1k at concurrency 16, three runs per arm:
 
-Low-concurrency serving is therefore the weak case today. Reducing the round
-trip to one per step rather than one per Engram layer, and computing the hashes
-on the host so the gather can start before the forward, are the follow-ups.
+| | pinned + UVA | disk |
+|---|---:|---:|
+| throughput, mean of 3 | 13,632 tok/s | 14,168 tok/s |
+| run-to-run spread | 12.4% | 1.4% |
+| host memory in use | 352 GB | 95 GB |
+
+The row gather overlapped against the decoder layers, measured against an
+otherwise identical inline build run back to back:
+
+| 8k1k, conc 16 | inline | overlapped |
+|---|---:|---:|
+| throughput | 14,163 tok/s | 14,330 tok/s |
+| mean TTFT | 984.79 ms | 696.70 ms |
+| P99 TTFT | 6,508.53 ms | 4,145.65 ms |
+| median TTFT | 190.34 ms | 212.27 ms |
+| median TPOT | 8.71 ms | 8.42 ms |
+
+Agentic traces across the concurrency sweep, disk against the published
+baseline for the same recipe:
+
+| conc | baseline tok/s | disk tok/s | disk / baseline | baseline P90 TTFT | disk P90 TTFT |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 19,338 | 12,272 | 63% | 958 ms | 1,205 ms |
+| 2 | 25,059 | 14,587 | 58% | 558 ms | 695 ms |
+| 4 | 34,897 | 24,453 | 70% | 533 ms | 548 ms |
+| 8 | 61,151 | 47,598 | 78% | 477 ms | 497 ms |
+| 16 | 112,212 | 101,218 | 90% | 551 ms | 598 ms |
+| 32 | 226,006 | 207,582 | 92% | 784 ms | 685 ms |
+| 64 | 348,969 | 330,709 | 95% | 1,325 ms | 1,092 ms |
+| 128 | 76,717 | 112,567 | 147% | 290,749 ms | 193,493 ms |
+
+Median TPOT carries a near-constant offset of about 2.6 ms per token that does
+not scale with batch size, so it dominates where steps are short and vanishes
+where they are not. The offset is the per-step host round trip rather than
+device I/O: random 4 KiB reads on the array measure 70 microseconds, and the
+pages are cached in the steady state. Overlap does not change the throughput
+column, since short steps have little decoder compute to hide a gather behind,
+but it does move the tail at the concurrencies where prefill volume is largest.
+
+Low-concurrency serving is therefore the weak case today. Collapsing the round
+trip to one per step rather than one per Engram layer was tried and measured
+slower, so the remaining follow-up is computing the hashes on the host, which
+would let the gather start before the forward rather than waiting on the hash
+kernel.
 
 Tests
 
