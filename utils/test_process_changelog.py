@@ -630,7 +630,6 @@ exec "$TEST_PYTHON" "$@"
     assert all(value == [] for value in outputs.values())
 
 
-
 def test_validator_uses_trusted_entrypoints_while_reading_another_checkout(committed_planning_repo):
     root, base, head = committed_planning_repo
     source = Path(__file__).resolve().parents[1]
