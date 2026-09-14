@@ -209,6 +209,12 @@ case "$KV_OFFLOAD_BACKEND" in
                 # CPU only, chunk size 256, no hybrid state offload.
                 export LMCACHE_MAX_LOCAL_CPU_SIZE=256
                 export LMCACHE_CHUNK_SIZE=256
+                # SLRU prefix/LMCache policy for high-concurrency ATOM+LMCache tier
+                # (rocm/atom-dev:nightly_202609140645-lirzhang-triton-build and later).
+                export ATOM_PREFIX_CACHE_POLICY=slru
+                export ATOM_PREFIX_CACHE_PROTECTED_RATIO=0.5
+                export LMCACHE_CACHE_POLICY=ATOM_SLRU
+                export LMCACHE_LOOKUP_SERVER_WORKER_IDS=0,1,2,3
                 ;;
             *)
                 # TOTAL_CPU_DRAM_GB is the AGGREGATE budget from the matrix generator.
