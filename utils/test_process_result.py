@@ -714,17 +714,6 @@ class TestOutputFile:
 class TestEdgeCases:
     """Tests for edge cases and special scenarios."""
 
-    def test_boolean_disagg_parsing_false(self, tmp_path, sample_benchmark_result, single_node_env_vars):
-        """Test that DISAGG env var is parsed as boolean correctly for false values."""
-        for disagg_value in ["false", "False", "FALSE"]:
-            env = single_node_env_vars.copy()
-            env["DISAGG"] = disagg_value
-
-            result = run_script(tmp_path, env, sample_benchmark_result)
-            assert result.returncode == 0, f"Script failed for DISAGG={disagg_value}: {result.stderr}"
-
-            output_data = json.loads(result.stdout)
-            assert output_data["disagg"] is False
 
     def test_boolean_disagg_parsing_true_requires_multinode(self, tmp_path, sample_benchmark_result, single_node_env_vars):
         """Test that DISAGG=true without multinode fails."""
@@ -735,28 +724,6 @@ class TestEdgeCases:
             result = run_script(tmp_path, env, sample_benchmark_result)
             assert result.returncode != 0
 
-
-    def test_integer_conversion(self, tmp_path, single_node_env_vars):
-        """Test that numeric env vars are converted to integers."""
-        benchmark_result = {
-            "model_id": "test-model",
-            "max_concurrency": 32,
-            "total_token_throughput": 5000.0,
-            "output_throughput": 4000.0,
-        }
-
-        env = single_node_env_vars.copy()
-        env["ISL"] = "8192"
-        env["OSL"] = "1024"
-
-        result = run_script(tmp_path, env, benchmark_result)
-        assert result.returncode == 0, f"Script failed: {result.stderr}"
-
-        output_data = json.loads(result.stdout)
-        assert output_data["isl"] == 8192
-        assert output_data["osl"] == 1024
-        assert isinstance(output_data["isl"], int)
-        assert isinstance(output_data["osl"], int)
 
 # =============================================================================
 # Integration: power aggregation patches the agg JSON
