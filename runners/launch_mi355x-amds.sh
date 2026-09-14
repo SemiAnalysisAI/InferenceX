@@ -123,6 +123,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     wait $POLL_PID
 
+    source "$GITHUB_WORKSPACE/runners/slurm_utils.sh"
+    slurm_outcome_rc=0
+    verify_slurm_job_completion "$JOB_ID" || slurm_outcome_rc=$?
+
     set -x
 
     # FIXME: The below is bad and is a result of the indirection of the ways in which
@@ -249,6 +253,7 @@ PY
     sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
     # Log preservation and cleanup handled by EXIT trap (cleanup_and_save_logs)
+    exit "$slurm_outcome_rc"
 
 else
 

@@ -449,10 +449,12 @@ EOF
     tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
 
     wait $POLL_PID
+    SRT_JOB_RC=0
+    verify_slurm_job_completion "$JOB_ID" || SRT_JOB_RC=$?
 
     set -x
 
-    echo "Job $JOB_ID completed!"
+    echo "Job $JOB_ID finished with status $SRT_JOB_RC; collecting evidence"
     echo "Collecting results..."
 
     if [ ! -d "$LOGS_DIR" ]; then
@@ -503,6 +505,8 @@ EOF
         sleep 10
     done
     find . -name '.nfs*' -delete 2>/dev/null || true
+
+    if [[ "$SRT_JOB_RC" != "0" ]]; then exit "$SRT_JOB_RC"; fi
 
 else
 

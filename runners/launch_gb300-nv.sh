@@ -664,39 +664,12 @@ _snapshot_server_logs() {
 trap _snapshot_server_logs EXIT
 
 AGENTX_POWER_RC=0
-if [[ "$USES_AGENTX_POWER" == "1" ]]; then
-    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || AGENTX_POWER_RC=$?
-else
-    # Wait for log file to appear (also check job is still alive)
-    while ! ls "$LOG_FILE" &>/dev/null; do
-        if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
-            echo "ERROR: Job $JOB_ID failed before creating log file"
-            scontrol show job "$JOB_ID"
-            exit 1
-        fi
-        echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
-        sleep 5
-    done
-
-    # Poll for job completion in background
-    (
-        while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
-            sleep 10
-        done
-    ) &
-    POLL_PID=$!
-
-    echo "Tailing LOG_FILE: $LOG_FILE"
-
-    # Stream the log file until job completes (-F follows by name, polls instead of inotify for NFS)
-    tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
-
-    wait $POLL_PID
-fi
+SRT_JOB_RC=0
+stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
 
 set -x
 
-echo "Job $JOB_ID completed!"
+echo "Job $JOB_ID finished with status $SRT_JOB_RC; collecting evidence"
 echo "Collecting results..."
 
 if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
@@ -716,7 +689,7 @@ else
     echo "Warning: Logs directory not found at $LOGS_DIR"
 fi
 
-if [[ "$AGENTX_POWER_RC" != "0" ]]; then
+if [[ "$AGENTX_POWER_RC" != "0" && "$SRT_JOB_RC" == "0" ]]; then
     echo "ERROR: AgentX job or power validation failed; EXIT will stage audit artifacts" >&2
     exit "$AGENTX_POWER_RC"
 fi
@@ -781,3 +754,5 @@ for i in 1 2 3 4 5; do
     sleep 10
 done
 find . -name '.nfs*' -delete 2>/dev/null || true
+
+if [[ "$SRT_JOB_RC" != "0" ]]; then exit "$SRT_JOB_RC"; fi

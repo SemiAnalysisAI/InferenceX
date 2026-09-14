@@ -7635,3 +7635,13 @@
     - "Serve amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2 instead of amd/Qwen3.5-397B-A17B-MXFP4."
     - "Trim AgentX search space to TP4 none [1,4,8,12,16], TP2 none [1,4,8,12,16,20], TP2 HiCache [20,24,28,32,36,40]; drop the TP4 HiCache arm."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3069
+
+- config-keys:
+  - dsv4-fp4-gb200-llmd-vllm
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Require native power only for llm-d 8k1k and preserve per-node collector readiness,
+    drain and completion evidence.
+  - 仅对 llm-d 8k1k 要求原生功耗，并保留每节点采集器 ready、drain 和完成证据。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3056

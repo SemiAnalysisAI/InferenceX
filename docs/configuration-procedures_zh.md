@@ -132,6 +132,12 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 
 仅固定 8192/1024 的 `glm5.1-fp8-b200-tilert` 要求原生功耗。TileRT 在 `salloc` 返回的分配内运行，保留两个角色的退出码，并在保存审计数据前等待采集器排空。每个角色仅支持一个物理节点。其他序列长度、AgentX 和 eval-only 不启用此采集器。硬件资格验证与发布仍待完成。
 
+## llm-d 原生功耗
+
+此集成依赖 [#3052](https://github.com/SemiAnalysisAI/InferenceX/pull/3052) 中的 Slurm 完成状态检查和工作进程正常退出变更；这些前置变更尚未合并。
+
+仅固定 8192/1024 的 `dsv4-fp4-gb200-llmd-vllm` 要求原生功耗。每个服务节点采集所选设备；协调进程等待 ready 与 drain 后正常退出。结果与审计数据共同保留。其他序列长度、AgentX 和 eval-only 不启用此采集器。硬件资格验证与发布仍待完成。
+
 ## 注册 srt-slurm 配方
 
 映射来源：[`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md)。检入的配方：[`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/)。

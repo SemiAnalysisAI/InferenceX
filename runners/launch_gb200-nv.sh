@@ -161,7 +161,8 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     trap 'bundle_server_logs "$BENCHMARK_LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true' EXIT INT TERM HUP
 
     LOG_FILE="${BENCHMARK_LOGS_DIR}/slurm_job-${JOB_ID}.out"
-    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+    SRT_JOB_RC=0
+    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
 
     while IFS= read -r -d '' result_file; do
         copy_to_workspace "$result_file" "$GITHUB_WORKSPACE/$(basename "$result_file")" || exit 1
@@ -175,8 +176,10 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
         copy_eval_artifacts "$EVAL_DIR" "$GITHUB_WORKSPACE" || exit 1
     fi
 
+    mkdir -p "$GITHUB_WORKSPACE/LOGS"
+    cp -a "$BENCHMARK_LOGS_DIR/." "$GITHUB_WORKSPACE/LOGS/" || exit 1
     scancel "$JOB_ID" 2>/dev/null || true
-    exit 0
+    exit "$SRT_JOB_RC"
 fi
 
 # MODEL_PATH: Override with pre-downloaded paths on GB200 runner
@@ -854,14 +857,12 @@ LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
 AGENTX_POWER_RC=0
-stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || AGENTX_POWER_RC=$?
-if [[ "$AGENTX_POWER_RC" != "0" && "$USES_AGENTX_POWER" != "1" ]]; then
-    exit 1
-fi
+SRT_JOB_RC=0
+stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
 
 set -x
 
-echo "Job $JOB_ID finished!"
+echo "Job $JOB_ID finished with status $SRT_JOB_RC; collecting evidence"
 echo "Collecting results..."
 
 if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
@@ -918,7 +919,7 @@ else
     echo "Warning: Logs directory not found at $LOGS_DIR"
 fi
 
-if [[ "$AGENTX_POWER_RC" != "0" ]]; then
+if [[ "$AGENTX_POWER_RC" != "0" && "$SRT_JOB_RC" == "0" ]]; then
     echo "ERROR: AgentX job or power validation failed; available audit and server artifacts were staged" >&2
     exit "$AGENTX_POWER_RC"
 fi
@@ -989,3 +990,5 @@ fi
 if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
     copy_eval_artifacts "$LOGS_DIR/eval_results" "$GITHUB_WORKSPACE" || exit 1
 fi
+
+exit "$SRT_JOB_RC"

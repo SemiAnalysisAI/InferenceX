@@ -362,13 +362,10 @@ EOF
 
     SRT_JOB_RC=0
     stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
-    if [[ "$SRT_JOB_RC" != "0" && "$USES_KIMIK3_POWER" != "1" ]]; then
-        exit "$SRT_JOB_RC"
-    fi
 
     set -x
 
-    echo "Job $JOB_ID completed!"
+    echo "Job $JOB_ID finished with status $SRT_JOB_RC; collecting evidence"
     echo "Collecting results..."
 
     if [ ! -d "$LOGS_DIR" ]; then
@@ -378,7 +375,7 @@ EOF
 
     echo "Found logs directory: $LOGS_DIR"
 
-    AGENTX_POWER_RC="$SRT_JOB_RC"
+    AGENTX_POWER_RC=0
     if [[ "$USES_KIMIK3_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
         read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
         collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" \
@@ -413,7 +410,7 @@ EOF
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
     bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 
-    if [[ "$AGENTX_POWER_RC" != "0" ]]; then
+    if [[ "$AGENTX_POWER_RC" != "0" && "$SRT_JOB_RC" == "0" ]]; then
         echo "ERROR: AgentX power validation failed; available audit and server artifacts were staged" >&2
         exit "$AGENTX_POWER_RC"
     fi
@@ -450,6 +447,8 @@ EOF
         sleep 10
     done
     find . -name '.nfs*' -delete 2>/dev/null || true
+
+    if [[ "$SRT_JOB_RC" != "0" ]]; then exit "$SRT_JOB_RC"; fi
 
 else
     SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
