@@ -1,5 +1,5 @@
-name: B300 hang diagnostic capabilities (no GPU)
-run-name: pr3088-hang-capabilities-${{ github.run_id }}
+name: B300 native job 2746 state (no GPU)
+run-name: pr3088-native2746-state-${{ github.run_id }}
 'on':
   workflow_dispatch:
     inputs:
@@ -85,21 +85,21 @@ jobs:
         format('[{0},"nodes:1"]', toJSON(inputs.runner))
       ) }}
     timeout-minutes: 5
-    name: p${{ needs.setup.outputs.priority }} | B300 no-GPU attach capability
+    name: p${{ needs.setup.outputs.priority }} | B300 no-GPU native 2746 state
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         ref: ${{ inputs.ref || github.sha }}
         clean: true
         persist-credentials: false
-    - name: Read existing resource and attach capability
+    - name: Read native 2746 and existing runtime identity
       shell: bash
       run: SQUASH_FILE="$HOME/squash/vllm_vllm-openai_nightly-dev-x86_64-cu13-3696c77.sqsh" timeout --signal=TERM --kill-after=5s
-        90s bash diagnostics/pr3088-hang/capabilities.sh "$RUNNER_TEMP/pr3088-hang-capabilities"
-    - name: Preserve capability evidence
+        90s bash diagnostics/pr3088-hang/native2746-state.sh "$RUNNER_TEMP/pr3088-native2746-state"
+    - name: Preserve native state evidence
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: pr3088-hang-capabilities-${{ github.run_id }}
-        path: ${{ runner.temp }}/pr3088-hang-capabilities/
+        name: pr3088-native2746-state-${{ github.run_id }}
+        path: ${{ runner.temp }}/pr3088-native2746-state/
         if-no-files-found: error
