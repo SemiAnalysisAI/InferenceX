@@ -7594,3 +7594,21 @@
     - "Avoid recursive TileRT eval dispatch and preserve evaluation failures after artifact staging."
     - "避免 TileRT 评测分发无限递归，并在保存产物后保留评测失败状态。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3067
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required telemetry on the four GB300 disaggregated recipes using the launcher and collector introduced below this draft in the stack. Preserve the original bilingual backfill and validation guidance."
+    - "为 GB300 Kimi-K3 分离部署启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3047
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the GB300 disaggregated DCGM exporter to port 19401 to avoid the system listener on 9401. Preserve prefill/decode telemetry grouping; full disaggregated hardware qualification remains pending."
+    - "GB300 分离部署的 DCGM exporter 改用 19401，避免与 9401 系统服务冲突；保留 prefill/decode 分组，完整硬件验证仍待完成。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3047
