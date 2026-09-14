@@ -234,9 +234,16 @@ PY
     curl.write_text(
         '#!/usr/bin/env python3\n'
         'import os, sys\nfrom pathlib import Path\n'
-        'Path(sys.argv[sys.argv.index("--output") + 1]).write_text(os.environ["METRICS_BODY"])\n'
-        'with open(os.environ["METRICS_REQUESTS"], "a") as out:\n'
-        '    out.write(next(arg for arg in sys.argv if arg.startswith("http://")) + "\\n")\n'
+        'args = sys.argv[1:]\n'
+        'url = next((a for a in args if a.startswith("http://")), "")\n'
+        'if "--write-out" in args:\n'
+        '    print("404", end="")\n'
+        'else:\n'
+        '    out_path = args[args.index("--output") + 1]\n'
+        '    if out_path != "/dev/null":\n'
+        '        Path(out_path).write_text(os.environ["METRICS_BODY"])\n'
+        '    with open(os.environ["METRICS_REQUESTS"], "a") as f:\n'
+        '        f.write(url + "\\n")\n'
     )
     curl.chmod(0o755)
     endpoints = tmp_path / "endpoints.yaml"
