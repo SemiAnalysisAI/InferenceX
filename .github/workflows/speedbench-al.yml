@@ -127,7 +127,7 @@ jobs:
             exit 0
           fi
           # Saved PR-run identity, not the generic shared runner account/name.
-          old_ids=2659,2660,2663,2665,2666,2710,2646
+          old_ids=2659,2660,2663,2665,2666,2710,2646,2714,2715
           sacct -j "$old_ids" -P --format=JobID,JobName,User,State,ExitCode,NodeList,Start,End,AllocTRES > "$out/previous-accounting.txt"
           active=$(squeue -p batch_1 --noheader -o '%i|%u|%T|%N|%L|%j' |
             awk -F'|' -v ids="$old_ids" 'BEGIN {n=split(ids,a,","); for(i=1;i<=n;i++) owned[a[i]]=1} owned[$1]')

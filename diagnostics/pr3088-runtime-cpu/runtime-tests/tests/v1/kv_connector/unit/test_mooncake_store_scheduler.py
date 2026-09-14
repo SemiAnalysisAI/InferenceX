@@ -1194,7 +1194,7 @@ def test_load_failure_bypasses_external_lookup_until_allocation():
     assert scheduler.load_specs == {}
 
     scheduler.update_state_after_alloc(
-        request, SimpleNamespace(), num_external_tokens=0
+        request, SimpleNamespace(get_block_ids=lambda: ([1, 2],)), num_external_tokens=0
     )
     assert scheduler._load_failure_bypass_req_ids == set()
 

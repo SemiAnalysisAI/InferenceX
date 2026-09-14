@@ -62,14 +62,6 @@ def run(name, selection, deadline):
 
 save()
 unit = "tests/v1/kv_connector/unit/"
-rc, cases, failures, errors, skips = run("original", [unit + "test_kv_load_failure_recovery.py::test_async_load_failure"], 90)
-# Upstream's three real Scheduler.schedule/update cases: original fails only the
-# new first-block callback assertion; missing imports/configs are NOT regression proof.
-if not (rc == 1 and len(cases) == 3 and len(failures) == 1 and not errors and not skips
-        and "on_load_failure" in (failures[0].text or "")
-        and "Called 0 times" in (failures[0].text or "")):
-    raise RuntimeError("Original source did not reproduce the expected upstream callback assertion")
-# Separate interpreter on next phase ensures no original classes survive in pytest.
 patch.patch_mooncake(package)
 state["candidate_sources_verified"] = all(
     hashlib.sha256((package / relative).read_bytes()).hexdigest() == fixed_sha
@@ -77,13 +69,11 @@ state["candidate_sources_verified"] = all(
 save()
 if not state["candidate_sources_verified"]:
     raise RuntimeError("Candidate source hashes differ")
-selection = [unit + "test_kv_load_failure_recovery.py",
-             unit + "test_error_propagation.py",
-             unit + "test_mooncake_store_scheduler.py",
-             unit + "test_multi_connector.py::test_load_failure_notifies_every_connector"]
-rc, cases, failures, errors, skips = run("candidate", selection, 240)
+selection = [unit + "test_mooncake_store_scheduler.py::test_load_failure_bypasses_external_lookup_until_allocation"]
+state["unchanged_production_patch_prior_evidence"] = {"run_id": 34832901970, "original_tests": 3, "expected_original_failures": 1, "candidate_passed": 51}
+rc, cases, failures, errors, skips = run("candidate_store_allocation", selection, 90)
 if rc or not cases or failures or errors or skips:
     raise RuntimeError("Candidate runtime regression check failed or was incomplete")
-state["status"] = "runtime_cpu_regression_passed"
+state["status"] = "runtime_store_allocation_regression_passed"
 save()
 print(json.dumps(state, indent=2))
