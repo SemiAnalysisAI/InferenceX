@@ -688,3 +688,57 @@ def test_multinode_aggregation_rejects_invalid_aggregate_topology(
     assert aggregate["power_valid"] == 0
     assert aggregate["power_metric_schema_version"] == 2
     assert stale_metrics.keys().isdisjoint(aggregate)
+
+
+@pytest.mark.parametrize("payload", [None, "{", "[]"])
+def test_multinode_invalid_aggregate_retains_failure_verdict(
+    tmp_path: Path, payload: str | None,
+) -> None:
+    from infx.results.agentic.power_adapter import run_multinode_agentic_power
+
+    logs_root = tmp_path / "logs"
+    result_dir = logs_root / "agentic/conc_8"
+    agg_result = tmp_path / "agg.json"
+    if payload is not None:
+        agg_result.write_text(payload)
+
+    assert run_multinode_agentic_power(
+        result_dir=result_dir,
+        agg_result=agg_result,
+        power_dir=logs_root / "power",
+        logs_root=logs_root,
+        expected_producer_sha="a" * 40,
+        require_power=True,
+    ) == 1
+    verdict = json.loads((result_dir / "power_validation.json").read_text())
+    assert verdict["power_valid"] is False
+    assert "agentic_aggregate_invalid" in verdict["reasons"]
+    if payload is None:
+        assert not agg_result.exists()
+    else:
+        assert agg_result.read_text() == payload
+
+
+def test_multinode_failure_clears_stale_metrics_when_verdict_write_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from infx.results.agentic import power_adapter
+
+    aggregate_path = tmp_path / "aggregate.json"
+    aggregate_path.write_text(json.dumps({"power_valid": 1, "avg_power_w": 999}))
+
+    def fail_verdict(*args):
+        raise OSError("audit directory unavailable")
+
+    monkeypatch.setattr(power_adapter, "_write_multinode_failure_validation", fail_verdict)
+    assert power_adapter.run_multinode_agentic_power(
+        result_dir=tmp_path / "logs/agentic/conc_8",
+        agg_result=aggregate_path,
+        power_dir=tmp_path / "logs/power",
+        logs_root=tmp_path / "logs",
+        expected_producer_sha="a" * 40,
+        require_power=True,
+    ) == 1
+    aggregate = json.loads(aggregate_path.read_text())
+    assert aggregate["power_valid"] == 0
+    assert "avg_power_w" not in aggregate
