@@ -105,6 +105,8 @@ import_squash() {
 # Direct single-tray AgentX uses the existing shared image and HF caches.
 if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
     BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb200_${FRAMEWORK}_mtp.sh"
+    # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
+    export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
     [[ "${IS_AGENTIC:-0}" == "1" && "${SPEC_DECODING:-}" == "mtp" && -f "$BENCH_SCRIPT" ]] || {
         echo "Unsupported single-node recipe: $BENCH_SCRIPT" >&2
         exit 1

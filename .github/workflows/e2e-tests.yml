@@ -222,7 +222,7 @@ jobs:
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                 ref: ${{ github.sha }}
-            - name: Checkout priority scheduler tooling
+            - name: Checkout workflow tooling
               if: ${{ inputs.ref && inputs.ref != '' }}
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
@@ -288,6 +288,9 @@ jobs:
                       python "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py" \
                       "${GENERATE_ARGS[@]}")
                   fi
+                  CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | env PYTHONPATH="$PRIORITY_ROOT" \
+                    uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+                    python -P -m infx.workflows.benchmark_schema)
                   score_matrix() {
                     local family="$1"
                     env PYTHONPATH="$PRIORITY_ROOT" uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
@@ -327,46 +330,13 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-config) }}
         secrets: inherit
         with:
+            config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
-            isl: ${{ matrix.config.isl }}
-            osl: ${{ matrix.config.osl }}
-            max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
-            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
-            exp-name: ${{ matrix.config.exp-name }}
-            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ matrix.config.disagg }}
-            prefill-hardware: ${{ matrix.config.prefill.hardware }}
-            decode-hardware: ${{ matrix.config.decode.hardware }}
-
-            prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
-            prefill-tp: ${{ matrix.config.prefill.tp }}
-            prefill-pp: ${{ matrix.config.prefill.pp }}
-            prefill-dcp-size: ${{ matrix.config.prefill.dcp-size }}
-            prefill-pcp-size: ${{ matrix.config.prefill.pcp-size }}
-            prefill-ep: ${{ matrix.config.prefill.ep }}
-            prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
-            prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
-
-            decode-num-worker: ${{ matrix.config.decode.num-worker }}
-            decode-tp: ${{ matrix.config.decode.tp }}
-            decode-pp: ${{ matrix.config.decode.pp }}
-            decode-dcp-size: ${{ matrix.config.decode.dcp-size }}
-            decode-pcp-size: ${{ matrix.config.decode.pcp-size }}
-            decode-ep: ${{ matrix.config.decode.ep }}
-            decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
-            decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             run-eval: false
             require-power: ${{ inputs.require-power || (matrix.config['require-power'] == true && matrix.config['eval-only'] != true) }}
             power-producer-sha: ${{ inputs.power-producer-sha }}
@@ -383,46 +353,13 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-eval-config) }}
         secrets: inherit
         with:
+            config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
-            isl: ${{ matrix.config.isl }}
-            osl: ${{ matrix.config.osl }}
-            max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
-            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
-            exp-name: ${{ matrix.config.exp-name }}
-            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ matrix.config.disagg }}
-            prefill-hardware: ${{ matrix.config.prefill.hardware }}
-            decode-hardware: ${{ matrix.config.decode.hardware }}
-
-            prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
-            prefill-tp: ${{ matrix.config.prefill.tp }}
-            prefill-pp: ${{ matrix.config.prefill.pp }}
-            prefill-dcp-size: ${{ matrix.config.prefill.dcp-size }}
-            prefill-pcp-size: ${{ matrix.config.prefill.pcp-size }}
-            prefill-ep: ${{ matrix.config.prefill.ep }}
-            prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
-            prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
-
-            decode-num-worker: ${{ matrix.config.decode.num-worker }}
-            decode-tp: ${{ matrix.config.decode.tp }}
-            decode-pp: ${{ matrix.config.decode.pp }}
-            decode-dcp-size: ${{ matrix.config.decode.dcp-size }}
-            decode-pcp-size: ${{ matrix.config.decode.pcp-size }}
-            decode-ep: ${{ matrix.config.decode.ep }}
-            decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
-            decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             run-eval: true
             eval-only: true
             eval-conc: ${{ (inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework) == 'lm-eval' && matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
@@ -443,37 +380,14 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-config) }}
         secrets: inherit
         with:
+            config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
-            exp-name: ${{ matrix.config.exp-name }}
-            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
-            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
-            tp: ${{ matrix.config.tp }}
-            pp: ${{ matrix.config.pp }}
-            dcp-size: ${{ matrix.config.dcp-size }}
-            pcp-size: ${{ matrix.config.pcp-size }}
-            ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
-            conc: ${{ matrix.config.conc }}
-            kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
-            kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
-            total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
             agentx-fast: ${{ inputs.agentx-fast }}
-            isl: '0'
-            osl: '0'
-            max-model-len: '0'
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ 'false' }}
             run-eval: false
             require-power: ${{ inputs.require-power }}
             scenario-type: agentic-coding
@@ -490,37 +404,14 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-eval-config) }}
         secrets: inherit
         with:
+            config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
-            exp-name: ${{ matrix.config.exp-name }}
-            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
-            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
-            tp: ${{ matrix.config.tp }}
-            pp: ${{ matrix.config.pp }}
-            dcp-size: ${{ matrix.config.dcp-size }}
-            pcp-size: ${{ matrix.config.pcp-size }}
-            ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
-            conc: ${{ matrix.config.conc }}
-            kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
-            kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
-            total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
             agentx-fast: ${{ inputs.agentx-fast }}
-            isl: '0'
-            osl: '0'
-            max-model-len: '0'
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ 'false' }}
             run-eval: true
             eval-only: true
             eval-limit: ${{ inputs.eval-limit }}
@@ -541,48 +432,14 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-config) }}
         secrets: inherit
         with:
+            config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
-            exp-name: ${{ matrix.config.exp-name }}
-            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
-            isl: '0'
-            osl: '0'
-            max-model-len: '0'
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
-            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ matrix.config.disagg }}
-            prefill-hardware: ${{ matrix.config.prefill.hardware }}
-            decode-hardware: ${{ matrix.config.decode.hardware }}
-            prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
-            prefill-tp: ${{ matrix.config.prefill.tp }}
-            prefill-pp: ${{ matrix.config.prefill.pp }}
-            prefill-dcp-size: ${{ matrix.config.prefill.dcp-size }}
-            prefill-pcp-size: ${{ matrix.config.prefill.pcp-size }}
-            prefill-ep: ${{ matrix.config.prefill.ep }}
-            prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
-            prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
-            decode-num-worker: ${{ matrix.config.decode.num-worker }}
-            decode-tp: ${{ matrix.config.decode.tp }}
-            decode-pp: ${{ matrix.config.decode.pp }}
-            decode-dcp-size: ${{ matrix.config.decode.dcp-size }}
-            decode-pcp-size: ${{ matrix.config.decode.pcp-size }}
-            decode-ep: ${{ matrix.config.decode.ep }}
-            decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
-            decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             conc: ${{ matrix.config.conc[0] }}
-            kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
-            kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
             duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
             agentx-fast: ${{ inputs.agentx-fast }}
             run-eval: false
@@ -602,48 +459,14 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-eval-config) }}
         secrets: inherit
         with:
+            config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
-            exp-name: ${{ matrix.config.exp-name }}
-            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
-            isl: '0'
-            osl: '0'
-            max-model-len: '0'
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
-            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             conc-list: ${{ format('[{0}]', matrix.config['eval-conc']) }}
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ matrix.config.disagg }}
-            prefill-hardware: ${{ matrix.config.prefill.hardware }}
-            decode-hardware: ${{ matrix.config.decode.hardware }}
-            prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
-            prefill-tp: ${{ matrix.config.prefill.tp }}
-            prefill-pp: ${{ matrix.config.prefill.pp }}
-            prefill-dcp-size: ${{ matrix.config.prefill.dcp-size }}
-            prefill-pcp-size: ${{ matrix.config.prefill.pcp-size }}
-            prefill-ep: ${{ matrix.config.prefill.ep }}
-            prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
-            prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
-            decode-num-worker: ${{ matrix.config.decode.num-worker }}
-            decode-tp: ${{ matrix.config.decode.tp }}
-            decode-pp: ${{ matrix.config.decode.pp }}
-            decode-dcp-size: ${{ matrix.config.decode.dcp-size }}
-            decode-pcp-size: ${{ matrix.config.decode.pcp-size }}
-            decode-ep: ${{ matrix.config.decode.ep }}
-            decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
-            decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             conc: ${{ matrix.config['eval-conc'] }}
-            kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
-            kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
             duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
             run-eval: true
             eval-only: true
@@ -666,31 +489,12 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.single-node-config) }}
         secrets: inherit
         with:
+            config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
-            exp-name: ${{ matrix.config.exp-name }}
-            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
-            isl: ${{ matrix.config.isl }}
-            osl: ${{ matrix.config.osl }}
-            max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
-            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
-            tp: ${{ matrix.config.tp }}
-            pp: ${{ matrix.config.pp }}
-            dcp-size: ${{ matrix.config.dcp-size }}
-            pcp-size: ${{ matrix.config.pcp-size }}
-            ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
-            conc: ${{ matrix.config.conc }}
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ matrix.config.disagg }}
             run-eval: false
             require-power: ${{ inputs.require-power || (matrix.config['require-power'] == true && matrix.config['eval-only'] != true) }}
             ref: ${{ inputs.ref }}
@@ -706,31 +510,12 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.eval-config) }}
         secrets: inherit
         with:
+            config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
-            exp-name: ${{ matrix.config.exp-name }}
-            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
-            isl: ${{ matrix.config.isl }}
-            osl: ${{ matrix.config.osl }}
-            max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
-            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
-            tp: ${{ matrix.config.tp }}
-            pp: ${{ matrix.config.pp }}
-            dcp-size: ${{ matrix.config.dcp-size }}
-            pcp-size: ${{ matrix.config.pcp-size }}
-            ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
-            conc: ${{ matrix.config.conc }}
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ matrix.config.disagg }}
             run-eval: true
             eval-only: true
             eval-limit: ${{ inputs.eval-limit }}
