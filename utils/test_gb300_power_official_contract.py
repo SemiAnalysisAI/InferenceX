@@ -405,6 +405,10 @@ def test_h200_dsv4_serializes_model_download_and_imports_sglang_image():
     assert 'hf download "$DSV4_MODEL_REPO" --local-dir "$MODEL_PATH"' in launcher
     assert 'touch "$DSV4_MODEL_READY"' in launcher
     assert 'test -r "$MODEL_PATH/config.json"' in launcher
+    assert 'SRT_DEFAULT_TIME_LIMIT="4:00:00"' in launcher
+    assert '"$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang"' in launcher
+    assert 'SRT_DEFAULT_TIME_LIMIT="8:00:00"' in launcher
+    assert 'default_time_limit: "${SRT_DEFAULT_TIME_LIMIT}"' in launcher
 
     image_import_guard = launcher.split(
         "# Map container images to local squash files based on framework", 1

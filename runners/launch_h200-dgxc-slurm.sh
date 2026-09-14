@@ -303,13 +303,17 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
   ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
     fi
     echo "Creating srtslurm.yaml configuration..."
+    SRT_DEFAULT_TIME_LIMIT="4:00:00"
+    if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+        SRT_DEFAULT_TIME_LIMIT="8:00:00"
+    fi
     cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for H200
 
 # Default SLURM settings
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
-default_time_limit: "4:00:00"
+default_time_limit: "${SRT_DEFAULT_TIME_LIMIT}"
 # Resource defaults
 gpus_per_node: 8
 network_interface: ""
