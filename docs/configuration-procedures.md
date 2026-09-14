@@ -191,6 +191,13 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 
 ### DeepSeek-V4.1-Flash DSpark
 
+B300 c1 captures CUDA graphs through 64 tokens to cover concurrent subagents
+within one AgentX trajectory tree. The former 8-token limit covered only one
+six-token DSpark5 verification block. This is a targeted tail-latency candidate;
+compare full c1 CI replays using identical traces and validate P90/P99 request
+ITL and TTFT, including subagent requests. Other concurrency points keep their
+existing capture sizing.
+
 The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use
 `vllm/vllm-openai:deepseekv41-flash-0909` at TP4 on Blackwell SKUs with native five-token DSpark,
 probabilistic drafting. Throughput uses the [committed golden AL](../golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification. `--engram-config '{"cpu_offload":true}'`

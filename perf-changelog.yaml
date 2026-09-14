@@ -7594,3 +7594,12 @@
     - "Avoid recursive TileRT eval dispatch and preserve evaluation failures after artifact staging."
     - "避免 TileRT 评测分发无限递归，并在保存产物后保留评测失败状态。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3067
+
+- config-keys:
+    - dsv41flash-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Expand B300 c1 graph capture from 8 to 64 tokens for DSpark5 subagent fan-out; measure P90/P99 latency with the unchanged full AgentX trace and AL 3.51"
+    - "将 B300 c1 的图捕获从 8 扩展至 64 tokens 以覆盖 DSpark5 subagent 并发；保持完整 AgentX 轨迹和 AL 3.51，测量 P90/P99 延迟"
+  pr-link: TBD
