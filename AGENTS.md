@@ -11,6 +11,7 @@ Guidance for AI agents working with InferenceX.
 
 ## Agent-specific policy
 
+- Never commit directly to or push directly to `main`. Create a dedicated branch for every change and open a PR targeting `main`, including documentation-only changes and small fixes. Follow the review and merge process in [`CONTRIBUTING.md`](CONTRIBUTING.md); do not bypass required reviews, checks, or branch protections, including through admin overrides.
 - Repository skills are canonical under `.agents/skills/`. Add or update skills there. `.claude/skills/` contains compatibility symlinks for Claude discovery.
 - PR and issue titles, descriptions, and human-authored PR comments must include English and natural Simplified Chinese. Titles use `<English title> / <中文标题>`. In bodies and comments, keep English visible and put Chinese in one collapsed `<details><summary>中文</summary>` section. Keep code, commands, logs, stack traces, model names, hardware SKUs, framework names, flags, and identifiers unchanged. The exact CODEOWNER sign-off template is English-only. See [`docs/documentation-procedures.md`](docs/documentation-procedures.md) and [`.github/AGENT_OPERATIONS.md`](.github/AGENT_OPERATIONS.md#translation-terminology).
 - **Klaud Cold reports:** Follow the compact body/comment templates in [`docs/klaud-reporting.md`](docs/klaud-reporting.md), including cleanup and completion reports.
