@@ -7635,3 +7635,12 @@
     - "Serve amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2 instead of amd/Qwen3.5-397B-A17B-MXFP4."
     - "Trim AgentX search space to TP4 none [1,4,8,12,16], TP2 none [1,4,8,12,16,20], TP2 HiCache [20,24,28,32,36,40]; drop the TP4 HiCache arm."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3069
+
+- config-keys:
+    - kimik3-fp4-h200-vllm-agentic-balanced
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required measured power for the complete H200 Kimi-K3 balanced recipe through the shared recipe-gated launcher."
+    - "为 H200 Kimi-K3 balanced 完整配方启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3053
