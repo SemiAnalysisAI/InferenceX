@@ -1,15 +1,15 @@
-name: "kimi-k3-vllm-agg-gb300-dcp8-nospec-mooncake-agentic"
+name: "kimi-k3-vllm-agg-gb300-dcp8-dspark4-mooncake-agentic"
 
 model:
   path: "moonshotai/Kimi-K3"
-  container: "vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77"
+  container: "vllm/vllm-openai:nightly-dc36fcce902a63eab06c1b93a5c4a5ee178a0c56"
   precision: "fp4"
 
 identity:
   model:
     repo: "moonshotai/Kimi-K3"
   container:
-    image: "vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77"
+    image: "vllm/vllm-openai:nightly-dc36fcce902a63eab06c1b93a5c4a5ee178a0c56"
   frameworks:
     dynamo: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
 
@@ -75,12 +75,12 @@ backend:
     VLLM_RPC_TIMEOUT: "600000"
     VLLM_USE_RUST_FRONTEND: "1"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
-    VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
     PYTHONNOUSERSITE: "1"
     TORCH_CUDA_ARCH_LIST: "10.0"
     PYTHONHASHSEED: "42"
     VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "900"
     MC_SLICE_SIZE: "1048576"
+    MC_MAX_MR_SIZE: "4294967296"
     WITH_NVIDIA_PEERMEM: "0"
     VLLM_MOONCAKE_LOAD_RECV_THREADS: "4"
   vllm_config:
@@ -95,15 +95,17 @@ backend:
       language-model-only: true
       load-format: "fastsafetensors"
       moe-backend: "auto"
-      no-enable-flashinfer-autotune: true
+      enable-flashinfer-autotune: true
       enable-prefix-caching: true
       prefix-match-unit: 128
       kv-cache-dtype: "fp8"
+      mamba-ssm-cache-dtype: "bfloat16"
       stream-interval: 10
       attention-backend: "TOKENSPEED_MLA"
       attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
       max-cudagraph-capture-size: 1024
       kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_offload":false}}'
+      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"rejection_sample_method":"block"}'
 
 sbatch_directives:
   mem: "0"
@@ -131,7 +133,7 @@ telemetry:
 benchmark:
   type: custom
   client_placement: head
-  concurrencies: [48, 70]
+  concurrencies: [48, 52, 56]
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     ENABLE_AGENTX_POWER: "1"
