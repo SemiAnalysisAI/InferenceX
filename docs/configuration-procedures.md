@@ -128,7 +128,7 @@ DSXE `ibp*` names; EFA devices are excluded from this RDMA recipe. The embedded
 Mooncake ranks share that adapter. InfiniBand uses GID index 0 and RoCE retains
 index 3. If no compatible active adapter exists, startup fails before serving.
 On DSXE the container's libibverbs comes from the host through the enroot EFA
-hook, so the launcher mounts the host provider directory at `/host-libibverbs`
+hook, so the launcher mounts the host library directory at `/host-usr-lib`
 and the recipe loads its mlx5 provider through `RDMAV_DRIVERS`.
 
 ## Native TileRT power

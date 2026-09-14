@@ -134,8 +134,8 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         # libibverbs appends its own -rdmavNN suffix to an absolute RDMAV_DRIVERS
         # entry, so this can only load the provider built with the libibverbs
         # the launcher's host mount belongs to.
-        if [[ -d /host-libibverbs ]]; then
-            export RDMAV_DRIVERS=/host-libibverbs/libmlx5
+        if [[ -d /host-usr-lib/libibverbs ]]; then
+            export RDMAV_DRIVERS=/host-usr-lib/libibverbs/libmlx5
         fi
 
         cat > "$MOONCAKE_CONFIG_PATH" <<EOF

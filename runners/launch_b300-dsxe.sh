@@ -491,11 +491,11 @@ else
             CONTAINER_MOUNTS+=("$WRITABLE_MODELS_DIR:$WRITABLE_MODELS_DIR")
         fi
         # The enroot EFA hook binds the host libibverbs over the image's, and
-        # that libibverbs only loads providers built with it. The image's mlx5
-        # provider therefore never loads and the Mellanox rail vanishes from
-        # ibv_get_device_list; expose the host providers so the recipe can load
-        # the matching mlx5 one.
-        CONTAINER_MOUNTS+=("/usr/lib/x86_64-linux-gnu/libibverbs:/host-libibverbs:ro")
+        # libibverbs only loads providers built against its own private ABI, so
+        # the image's mlx5 provider never loads and the Mellanox rail vanishes.
+        # Mount the parent directory, not libibverbs/ alone: the host provider
+        # entry is a relative symlink into it.
+        CONTAINER_MOUNTS+=("/usr/lib/x86_64-linux-gnu:/host-usr-lib:ro")
     fi
     CONTAINER_MOUNTS_ARG=$(IFS=,; printf '%s' "${CONTAINER_MOUNTS[*]}")
 
