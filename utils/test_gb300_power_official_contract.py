@@ -395,6 +395,26 @@ def test_gb300_dsv4_recipe_images_match_their_master_configs():
             assert recipe_image == config["image"], (key, config_file)
 
 
+def test_h200_dsv4_serializes_model_download_and_imports_sglang_image():
+    launcher = (REPO_ROOT / "runners/launch_h200-dgxc-slurm.sh").read_text()
+
+    assert 'SLURM_ACCOUNT="sa-shared"' in launcher
+    assert 'DSV4_MODEL_REPO="deepseek-ai/DeepSeek-V4-Pro-0813"' in launcher
+    assert 'DSV4_MODEL_LOCK="${MODEL_PATH}.download.lock"' in launcher
+    assert 'flock -w 14400 9' in launcher
+    assert 'hf download "$DSV4_MODEL_REPO" --local-dir "$MODEL_PATH"' in launcher
+    assert 'touch "$DSV4_MODEL_READY"' in launcher
+    assert 'test -r "$MODEL_PATH/config.json"' in launcher
+
+    image_import_guard = launcher.split(
+        "# Map container images to local squash files based on framework", 1
+    )[1].split('if [[ "$USES_DCGM_POWER" == "1" ]]', 1)[0]
+    assert '$MODEL_PREFIX == "glm5.2" || $MODEL_PREFIX == "dsv4"' in image_import_guard
+    assert r'enroot import -o \"$SQUASH_FILE\" docker://$DOCKER_IMAGE' in image_import_guard
+    assert 'test -r "$SQUASH_FILE"' in image_import_guard
+    assert 'unsquashfs -l "$SQUASH_FILE"' in image_import_guard
+
+
 @pytest.mark.parametrize("launcher_name", ["launch_gb300-nv.sh"])
 def test_kimi_agentx_route_uses_recipe_power_gate(tmp_path, launcher_name):
     log, workspace, repo_dir, marker = _run_dsv4_route(

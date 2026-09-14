@@ -6,6 +6,7 @@ SLURM_PARTITION="main"
 SLURM_ACCOUNT="sa-shared"
 HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/models/gharunners/hf-hub-cache}"
 AIPERF_MMAP_CACHE_HOST_PATH="${AIPERF_MMAP_CACHE_HOST_PATH:-/home/sa-shared/gharunners/ai-perf-cache}"
+DSV4_MODEL_REPO="deepseek-ai/DeepSeek-V4-Pro-0813"
 
 # Immutable producer prerequisite for the GLM-5.2 AgentX lane. This fork is
 # intentionally long-lived; update the SHA only after reviewing a new fork
@@ -63,13 +64,17 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # local paths to avoid repeated downloading on the shared H200 cluster.
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp8" ]]; then
-            # The shared HF cache already contains the H200 FP8 checkpoint;
-            # default to that local path (overridable via DSV4_MODEL_PATH) so
-            # srtctl preflight finds the directory instead of trying to pull the
-            # hf: model ID, which fails on the compute node ("path is
-            # unavailable. Pull or register the model yourself").
-            export MODEL_PATH="${DSV4_MODEL_PATH:-${HF_HUB_CACHE_MOUNT}/DeepSeek-V4-Pro}"
-            export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+            # Stage the dated checkpoint into shared storage below before
+            # srtctl preflight. DSV4_MODEL_PATH remains available for clusters
+            # that manage the checkpoint out of band.
+            if [[ -n "${DSV4_MODEL_PATH:-}" ]]; then
+                export MODEL_PATH="$DSV4_MODEL_PATH"
+                DSV4_STAGE_MODEL=0
+            else
+                export MODEL_PATH="${HF_HUB_CACHE_MOUNT}/DeepSeek-V4-Pro-0813"
+                DSV4_STAGE_MODEL=1
+            fi
+            export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-0813"
         elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
             export MODEL_PATH="/models/DeepSeek-R1-0528"
             export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
@@ -174,6 +179,31 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     source .venv/bin/activate
     uv pip install -e .
 
+    # A full sweep starts several independent runner jobs at once. Serialize
+    # the initial DSV4 download into the shared model directory so those jobs
+    # cannot race on Hugging Face's per-file locks. The completion marker is
+    # written only after `hf download` verifies every repository file, making
+    # interrupted downloads resumable by the next job.
+    if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp8" && $DSV4_STAGE_MODEL == "1" ]]; then
+        DSV4_MODEL_READY="${MODEL_PATH}/.inference-max-download-complete"
+        DSV4_MODEL_LOCK="${MODEL_PATH}.download.lock"
+        if [[ ! -f "$DSV4_MODEL_READY" ]]; then
+            uv pip install huggingface-hub
+            mkdir -p "$(dirname "$MODEL_PATH")"
+            (
+                exec 9>"$DSV4_MODEL_LOCK"
+                flock -w 14400 9 || { echo "Error: Timed out waiting for $DSV4_MODEL_LOCK" >&2; exit 1; }
+                if [[ ! -f "$DSV4_MODEL_READY" ]]; then
+                    hf download "$DSV4_MODEL_REPO" --local-dir "$MODEL_PATH"
+                    touch "$DSV4_MODEL_READY"
+                fi
+            )
+        fi
+    fi
+    if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp8" ]]; then
+        test -r "$MODEL_PATH/config.json" || { echo "Error: DSV4 model path is unavailable: $MODEL_PATH" >&2; exit 1; }
+    fi
+
     if ! command -v srtctl &> /dev/null; then
         echo "Error: Failed to install srtctl"
         exit 1
@@ -201,7 +231,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     fi
 
-    if [[ $MODEL_PREFIX == "glm5.2" ]] && ! unsquashfs -l "$SQUASH_FILE" >/dev/null 2>&1; then
+    if [[ $FRAMEWORK == "dynamo-sglang" && (
+        $MODEL_PREFIX == "glm5.2" || $MODEL_PREFIX == "dsv4"
+    ) ]] && ! unsquashfs -l "$SQUASH_FILE" >/dev/null 2>&1; then
         DOCKER_IMAGE=$(echo "$IMAGE" | sed 's/#/\//g')
         LOCK_FILE="${SQUASH_FILE}.lock"
         mkdir -p "$(dirname "$SQUASH_FILE")"
@@ -219,6 +251,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
                 mkdir -p \"\$ENROOT_CACHE_PATH\"
                 enroot import -o \"$SQUASH_FILE\" docker://$DOCKER_IMAGE
             "
+    fi
+    if [[ $FRAMEWORK == "dynamo-sglang" && (
+        $MODEL_PREFIX == "glm5.2" || $MODEL_PREFIX == "dsv4"
+    ) ]]; then
+        test -r "$SQUASH_FILE" || { echo "Error: SGLang squash is not readable: $SQUASH_FILE" >&2; exit 1; }
+        unsquashfs -l "$SQUASH_FILE" >/dev/null || { echo "Error: SGLang squash is invalid: $SQUASH_FILE" >&2; exit 1; }
     fi
 
     if [[ "$USES_DCGM_POWER" == "1" ]]; then

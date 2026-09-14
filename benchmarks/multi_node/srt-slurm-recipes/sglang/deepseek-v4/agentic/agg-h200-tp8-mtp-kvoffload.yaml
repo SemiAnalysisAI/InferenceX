@@ -1,20 +1,23 @@
 name: "agg-h200-tp8-mtp-kvoffload"
 
-# DeepSeek-V4-Pro AgentX aggregated TP8 serving on one 8xH200 node. The recipe is
-# topology-invariant; configs/nvidia-master.yaml varies only concurrency to
-# produce the latency/throughput Pareto curve.
+# DeepSeek-V4-Pro-0813 AgentX aggregated TP8 serving on one 8xH200 node with
+# DSpark K=6. The recipe is topology-invariant; configs/nvidia-master.yaml
+# varies only concurrency to produce the latency/throughput Pareto curve.
 
 model:
-  path: "deepseek-v4-pro"
+  path: "deepseek-v4-pro-0813"
   container: "dynamo-sglang"
   precision: "fp8"
 
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
+  container:
+    image: "lmsysorg/sglang:nightly-dev-20260914-4358a161"
+
 dynamo:
   install: true
-  wheel: "1.3.0.dev20260718"
-
-slurm:
-  time_limit: "8:00:00"
+  wheel: "1.5.0.dev20260910"
 
 health_check:
   max_attempts: 1440
@@ -53,7 +56,7 @@ backend:
   aggregated_environment:
     SGLANG_DEFAULT_THINKING: "1"
     SGLANG_DSV4_REASONING_EFFORT: high
-    SGLANG_SIMULATE_ACC_LEN: "2.49"
+    SGLANG_SIMULATE_ACC_LEN: "3.77"
     SGLANG_SIMULATE_ACC_METHOD: match-expected
     SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
     PIP_BREAK_SYSTEM_PACKAGES: "1"
@@ -69,7 +72,7 @@ backend:
 
   sglang_config:
     aggregated:
-      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro-0813"
       enable-metrics: true
       trust-remote-code: true
       stream-interval: 50
@@ -80,7 +83,7 @@ backend:
       disable-flashinfer-autotune: true
       swa-full-tokens-ratio: 0.1
       max-running-requests: 32
-      cuda-graph-max-bs: 32
+      cuda-graph-max-bs-decode: 32
 
       scheduler-recv-interval: 30
       tp-size: 8
@@ -92,10 +95,11 @@ backend:
       hicache-write-policy: write_through
       hicache-io-backend: kernel
 
-      speculative-algorithm: EAGLE
-      speculative-num-steps: 3
+      speculative-algorithm: DSPARK
+      speculative-dspark-block-size: 6
+      speculative-num-steps: 1
       speculative-eagle-topk: 1
-      speculative-num-draft-tokens: 4
+      speculative-num-draft-tokens: 7
 
 srun_options:
   # The custom benchmark installs its isolated AIPerf environment at runtime.

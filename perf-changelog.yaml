@@ -7594,3 +7594,13 @@
     - "Avoid recursive TileRT eval dispatch and preserve evaluation failures after artifact staging."
     - "避免 TileRT 评测分发无限递归，并在保存产物后保留评测失败状态。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3067
+
+- config-keys:
+    - dsv4-fp8-h200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh DeepSeek-V4-Pro-0813 FP8 H200 Dynamo+SGLang AgentX aggregate serving with DSpark K=6."
+    - "Image: lmsysorg/sglang:nightly-dev-20260914-4358a161"
+    - "Update simulated acceptance length from 2.49 to 3.77 and replace the removed cuda-graph-max-bs flag with cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
