@@ -358,16 +358,6 @@ else
         export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
         # export SGLANG_OPT_FP8_WO_A_GEMM=false
         export SGLANG_OPT_FP8_WO_A_FUSED_INVROPE=1
-        # export SGLANG_OPT_USE_JIT_INDEXER_METADATA=false
-        # export SGLANG_OPT_USE_TOPK_V2=false
-        # export SGLANG_OPT_USE_AITER_INDEXER=${SGLANG_OPT_USE_AITER_INDEXER:-true}
-        # export SGLANG_OPT_USE_TILELANG_INDEXER=false
-        # export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
-        # export SGLANG_OPT_USE_TILELANG_MHC_POST=false
-        # export SGLANG_FP8_PAGED_MQA_LOGITS_TORCH=1
-        # export SGLANG_OPT_USE_FUSED_COMPRESS_TRITON=true
-        # export SGLANG_OPT_USE_MULTI_STREAM_OVERLAP=false
-        # export SGLANG_ROCM_USE_MULTI_STREAM=false
         export AITER_BF16_FP8_MOE_BOUND=0
         # export SGLANG_EAGER_INPUT_NO_COPY=true
         export TORCH_BLAS_PREFER_HIPBLASLT=1
@@ -376,13 +366,7 @@ else
         export SGLANG_OPT_USE_AITER_BATCHED_GEMM=1
         # DP-attention-only SGLang internal knobs (shared-expert TP1 placement,
         # gatherv/reduce-scatter collectives) plus the wider HW-queue count DP
-        # ranks need to overlap MoRI dispatch with compute. Mirrors the
-        # single-node dsv4-fp4-mi355x-sglang-agentic-mtp recipe's
-        # `if [ "$DP_ATTENTION" = "true" ]` block (InferenceX PR #2800):
-        # these must NOT apply to the TP-only (no-DP) arms. Multi-node splits
-        # DP-attention per role (PREFILL_ENABLE_DP / DECODE_ENABLE_DP); every
-        # current search-space arm sets both the same way, so either one
-        # flags the whole node.
+        # ranks need to overlap MoRI dispatch with compute.  
         if [[ "$PREFILL_ENABLE_DP" == "true" || "$DECODE_ENABLE_DP" == "true" ]]; then
             export SGLANG_SHARED_EXPERT_TP1=1
             export SGLANG_DP_SHARED_EXPERT_LOCAL=1

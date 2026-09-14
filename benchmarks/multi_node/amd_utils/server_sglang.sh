@@ -679,12 +679,7 @@ elif [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == umbp-linker* ]]; 
     # UMBPTreeConnector -> UMBPDirectLinker). Detect rather than pin: the image
     # decides which vocabulary is valid, and a pinned name means editing this
     # file on every image bump. Search the whole sglang.srt TREE, not
-    # server_args.py alone -- the flag lived in server_args.py on mori-0905 and
-    # moved into arg_groups/fields/memory.py by mori-0908 (0.5.19 split the
-    # server args into per-group dataclasses), so a detector pinned to
-    # server_args.py reports "this image cannot drive UMBP" on an image that
-    # can. find_spec, not sglang.__file__: sglang installs as a namespace
-    # package in these images, so __file__ is None.
+    # server_args.py alone.
     SGLANG_SRT_DIR="$(python3 -c 'import importlib.util as u, os; s = u.find_spec("sglang.srt.server_args"); print(os.path.dirname(s.origin) if s else "")' 2>/dev/null)"
     [[ -d "${SGLANG_SRT_DIR:-}" ]] || { echo "Error: cannot locate the installed sglang.srt tree" >&2; exit 1; }
     echo "[UMBP] probing $SGLANG_SRT_DIR for the linker flag vocabulary"
