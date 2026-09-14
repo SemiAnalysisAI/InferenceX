@@ -7496,6 +7496,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3046
 
 - config-keys:
+    - dsv41flash-fp4-h200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Rerun the existing H200 DeepSeek V4.1 Flash GPU-KV AgentX sweep at concurrency 1, 2, 4, 8, 16, 32, 64, 128 with the unchanged TP8, full-trace, 1M-context and DSpark5 AL 3.51 recipe"
+    - "使用现有 TP8、完整轨迹、1M 上下文和 DSpark5 AL 3.51 配方，重新运行 H200 DeepSeek V4.1 Flash GPU-KV AgentX sweep，并发为 1、2、4、8、16、32、64、128"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3077
+
+- config-keys:
     - kimik3-fp4-h200-vllm-agentic-latency
   scenario-type:
     - agentic-coding

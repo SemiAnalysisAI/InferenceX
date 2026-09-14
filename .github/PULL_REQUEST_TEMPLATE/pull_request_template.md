@@ -1,3 +1,5 @@
+<!-- Title: <English title> / <中文标题>. Keep English visible; put the Chinese translation in the collapsed section below. -->
+
 ## Description
 
 <!-- Provide a brief description of your changes -->
@@ -21,3 +23,10 @@ Fixes #
 - [ ] I have updated documentation if necessary
 - [ ] **For every change that can affect benchmark performance and every recipe addition or modification, I have appended a new entry to the physical end of `perf-changelog.yaml` and have not edited historical entries**
 - [ ] **Before merging via reuse, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) has commented `/reuse-sweep-run` on this PR**. Do this **only once there is a final full sweep that is all green with evals passing**, since after this comment the sweep label will no longer automatically kick off new sweeps. Remove and re-add the label to force one.
+
+<details>
+<summary>中文</summary>
+
+<!-- 翻译上方的改动说明、关联 issue、改动类型、验证结果及注意事项。引用共用的表格、代码和日志，保留证据链接；检查清单只需在上方填写一次。 -->
+
+</details>
