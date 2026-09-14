@@ -113,13 +113,23 @@ trap 'exit 130' INT
 
 import_image() {
     local image_ref="$1" squash_file="$2" host="$3"
+    local enroot_ref="${image_ref#docker://}"
+    local registry="${enroot_ref%%/*}"
+    # Enroot needs '#' for an explicit registry; '/' alone targets Docker Hub.
+    if [[ "$enroot_ref" != *#* && "$enroot_ref" == */* && (
+        "$registry" == *.* || "$registry" == *:* || "$registry" == localhost
+    ) ]]; then
+        enroot_ref="$registry#${enroot_ref#*/}"
+    fi
     local image_key; image_key=$(echo "$image_ref" | sed 's/[\/:@#]/_/g')
     local lock_file="$SQUASH_DIR/.locks/${image_key}.lock"
     mkdir -p "$SQUASH_DIR/.locks"
     srun --jobid="$JOB_ID" --nodelist="$host" --ntasks=1 bash -c "
         export ENROOT_CACHE_PATH=\$HOME/.cache/enroot; mkdir -p \$ENROOT_CACHE_PATH
         exec 9>\"$lock_file\"; flock -w 600 9 || exit 1
-        unsquashfs -l \"$squash_file\" >/dev/null 2>&1 || enroot import -o \"$squash_file\" docker://$image_ref
+        unsquashfs -l \"$squash_file\" >/dev/null 2>&1 || {
+            rm -f \"$squash_file\" && enroot import -o \"$squash_file\" \"docker://$enroot_ref\"
+        }
     "
 }
 import_image "$DECODE_IMAGE"  "$DECODE_SQUASH"  "$DECODE_HOST"  || exit 1
