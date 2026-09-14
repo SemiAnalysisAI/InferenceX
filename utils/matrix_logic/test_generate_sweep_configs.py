@@ -3241,3 +3241,60 @@ class TestE2EConfigSplitting:
         output = split_e2e_configs([])
 
         assert output and all(rows == [] for rows in output.values())
+
+
+@pytest.mark.parametrize("multinode", [False, True])
+@pytest.mark.parametrize("power_key", ["require-power", "require_power"])
+def test_require_power_is_scoped_to_one_fixed_sequence(multinode, power_key, sample_single_node_config,
+                                                       sample_multinode_config, sample_runner_config):
+    from infx.matrix.generate import expand_full_sweep, select_matrix_evals
+    from infx.matrix.validation import MultiNodeSeqLenConfig, SingleNodeSeqLenConfig
+
+    config = sample_multinode_config if multinode else sample_single_node_config
+    entry = next(iter(config.values()))
+    sequences = entry["scenarios"]["fixed-seq-len"]
+    if multinode:
+        sequences.append(copy.deepcopy(sequences[0]))
+        sequences[-1]["isl"] = 8192
+    before = expand_full_sweep(config, sample_runner_config)
+    assert all("require-power" not in row for row in before)
+    sequences[-1][power_key] = True
+    schema = MultiNodeSeqLenConfig if multinode else SingleNodeSeqLenConfig
+    schema.model_validate(sequences[-1])
+    after = expand_full_sweep(config, sample_runner_config)
+    assert len(before) == len(after)
+    for original, row in zip(before, after):
+        assert row == ({**original, "require-power": True} if original["isl"] == 8192 else original)
+    evals = select_matrix_evals(copy.deepcopy(after), mode="subset")
+    assert evals
+    assert all("require-power" not in row for row in evals)
+    sequences[0][power_key] = True
+    with pytest.raises(ValueError, match="only fixed-sequence 8192/1024"):
+        expand_full_sweep(config, sample_runner_config)
+
+
+@pytest.mark.parametrize("variant,concs,tp,workers,offload", [
+    ("latency", [1, 2, 3, 4, 5, 6, 7, 8, 10, 12], 16, 2, "none"),
+    ("balanced", [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16], 8, 4, "none"),
+    ("simple", [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32], 8, 4, "dram"),
+])
+def test_h200_recipe_keys_preserve_complete_scopes(
+    variant: str, concs: list[int], tp: int, workers: int, offload: str,
+) -> None:
+    from infx.matrix.generate import generate_config_matrix
+
+    repo = Path(__file__).resolve().parents[2]
+    master = yaml.safe_load((repo / "configs/nvidia-master.yaml").read_text())
+    runners = yaml.safe_load((repo / "configs/runners.yaml").read_text())
+    key = f"kimik3-fp4-h200-vllm-agentic-{variant}"
+    rows = generate_config_matrix([key], master, runners)
+    assert [row["conc"][0] for row in rows] == concs
+    assert {row["node-count"] for row in rows} == {4}
+    assert {row["duration"] for row in rows} == {3600}
+    assert {row["prefill"]["tp"] for row in rows} == {tp}
+    assert {row["prefill"]["num-worker"] for row in rows} == {workers}
+    assert {row["kv-offloading"] for row in rows} == {offload}
+    assert all(row["run-eval"] and row["eval-suite"] == "kimi_tool_call_schema" for row in rows)
+    recipes = {row["prefill"]["additional-settings"][0] for row in rows}
+    assert len(recipes) == 1
+    assert ("vllm-simple" if variant == "simple" else variant) in recipes.pop()
