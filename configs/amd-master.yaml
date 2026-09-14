@@ -1738,8 +1738,8 @@ glm5.2-fp4-mi355x-atom-agentic-mtp:
 
 
 dsv4-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907
-  model: deepseek-ai/DeepSeek-V4-Pro
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260911
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
   precision: fp4
@@ -1749,13 +1749,16 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 4, 16], spec-decoding: mtp }
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 48], spec-decoding: mtp }
-      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [128, 256], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 4, 16], spec-decoding: draft_model }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 48], spec-decoding: draft_model }
+      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [128, 256], spec-decoding: draft_model }
 
-# Official upstream ROCm image from the vLLM recipe; MI355X runtime validation is pending.
+# Upstream ROCm nightly rather than the deepseekv41-flash-0909 release tag: that
+# tag predates vllm-project/vllm#56503, which moves the mHC delayed pre block off
+# the eager Torch reference and onto AITER. MI355X run 34710937012 passed the
+# full concurrency 1-32 sweep and eval-only concurrency 32.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:deepseekv41-flash-0909
+  image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
