@@ -258,6 +258,8 @@ def recipe_node_count(prefill: dict, decode: dict) -> int | None:
         return None
 
     recipe = yaml.safe_load(recipe_path.read_text())
+    if recipe.get("schema") != 2:
+        raise ValueError(f"srt-slurm recipes must declare schema: 2: {recipe_path}")
     if "base" in recipe:
         # A file with several override variants has no single authoritative
         # node count. The selected master topology supplies the estimate.
@@ -270,12 +272,7 @@ def recipe_node_count(prefill: dict, decode: dict) -> int | None:
             0 if role.get("nodes") == "colocate" else int(role.get("nodes", 0))
             for role in roles.values()
         )
-    resources = recipe.get("resources", {})
-    if "agg_nodes" in resources:
-        return int(resources["agg_nodes"])
-    if "prefill_nodes" in resources and "decode_nodes" in resources:
-        return int(resources["prefill_nodes"]) + int(resources["decode_nodes"])
-    raise ValueError(f"Recipe has no supported node resource fields: {recipe_path}")
+    raise ValueError(f"Recipe has no worker roles: {recipe_path}")
 
 
 def worker_node_count(

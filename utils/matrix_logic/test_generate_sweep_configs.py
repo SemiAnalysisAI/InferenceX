@@ -155,16 +155,16 @@ def test_multinode_node_count_resolves_heterogeneous_worker_hardware(
     "recipes/test.yaml",
     "benchmarks/multi_node/srt-slurm-recipes/test.yaml",
 ])
-@pytest.mark.parametrize(("resources", "expected_nodes"), [
-    ({"agg_nodes": 3}, 3),
-    ({"prefill_nodes": 2, "decode_nodes": 3}, 5),
+@pytest.mark.parametrize(("roles", "expected_nodes"), [
+    ({"agg": {"nodes": 3}}, 3),
+    ({"prefill": {"nodes": 2}, "decode": {"nodes": 3}}, 5),
 ])
-def test_multinode_node_count_prefers_recipe_resources(
-    tmp_path, monkeypatch, config_file, resources, expected_nodes,
+def test_multinode_node_count_prefers_recipe_roles(
+    tmp_path, monkeypatch, config_file, roles, expected_nodes,
 ):
     recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/test.yaml"
     recipe.parent.mkdir(parents=True)
-    recipe.write_text(yaml.safe_dump({"resources": resources}))
+    recipe.write_text(yaml.safe_dump({"schema": 2, "roles": roles}))
     monkeypatch.setattr(
         generate_sweep_configs, "__file__",
         str(tmp_path / "infx/matrix/generate.py"),

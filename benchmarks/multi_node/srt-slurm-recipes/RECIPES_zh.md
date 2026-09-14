@@ -6,9 +6,11 @@ InferenceX 负责维护本目录中的配置。所有 NVIDIA srt-slurm 启动器
 
 统一版本由 [`utils/srt-slurm`](../../../utils/srt-slurm) 的 Git 子模块指针指定，目前为 [NVIDIA/srt-slurm#407](https://github.com/NVIDIA/srt-slurm/pull/407) 的合并提交。升级时更新该子模块指针，然后运行配置和集成检查。不要在启动器中新增按模型选择检出版本的分支。
 
+InferenceX 要求 srt-slurm 2.0 或更新版本，且配置必须声明 `schema: 2`。不支持旧版配置结构；加入本目录前必须先完成迁移。
+
 ## TileRT 例外
 
-GLM-5.1 TileRT 配置暂时保留 schema 1。当 `FRAMEWORK=tilert` 时，`setup_srt_slurm()` 直接从 SemiAnalysisAI/srt-slurm 分支仓库获取提交 `d1e6c97b3baf3e87103b6d83189544c3c7d61c38`，检出到作业目录。这是唯一的备用检出路径；由于统一的 NVIDIA 版本尚未包含 TileRT 后端和路由器，该例外的固定提交在共享函数中指定。TileRT 作业在准备阶段需要通过网络访问分支仓库。上游支持这些功能后，应删除此例外并迁移对应配置。
+当 `FRAMEWORK=tilert` 时，`setup_srt_slurm()` 直接从 SemiAnalysisAI/srt-slurm 分支仓库获取提交 `6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde`，检出到作业目录。该版本为 [SemiAnalysisAI/srt-slurm#13](https://github.com/SemiAnalysisAI/srt-slurm/pull/13) 中支持 schema 2 的 TileRT 移植。这是唯一的备用检出路径；由于统一的 NVIDIA 版本尚未包含 TileRT 后端和路由器，该例外的固定提交在共享函数中指定。TileRT 使用与 NVIDIA 相同的 schema 2 配置结构和原生评估调度。TileRT 作业在准备阶段需要通过网络访问分支仓库。上游支持这些功能后，应删除此分支仓库例外。
 
 ## Schema 2 与主配置
 
@@ -36,7 +38,8 @@ GLM-5.1 TileRT 配置暂时保留 schema 1。当 `FRAMEWORK=tilert` 时，`setup
 # 重写前先验证每个受支持的配置目录。
 srtctl migrate --verify -f benchmarks/multi_node/srt-slurm-recipes/sglang
 srtctl migrate --in-place -f benchmarks/multi_node/srt-slurm-recipes/sglang
-# 对 vllm、trtllm 和其他 NVIDIA 目录重复执行；排除 tilert。
+# 对 vllm、trtllm 和其他 NVIDIA 目录重复执行。
+# 迁移 tilert/ 时，使用固定提交的 TileRT 分支仓库。
 python -m pytest utils/matrix_logic/ -q
 python -m infx.matrix.generate full-sweep \
   --config-files configs/nvidia-master.yaml \

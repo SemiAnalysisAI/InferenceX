@@ -14,8 +14,7 @@ setup_srt_slurm() {
     local destination="$1" source="$INFERENCEX_SLURM_UTILS_DIR/../utils/srt-slurm"
     if [[ "${FRAMEWORK:-}" == "tilert" ]]; then
         # Sole fork exception until NVIDIA supports the TileRT backend and router.
-        SRT_SLURM_COMMIT=d1e6c97b3baf3e87103b6d83189544c3c7d61c38
-        SRTCTL_EVAL_ARGS=()
+        SRT_SLURM_COMMIT=6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde
         git init "$destination" || return 1
         git -C "$destination" remote add origin https://github.com/SemiAnalysisAI/srt-slurm.git || return 1
         git -C "$destination" fetch --depth=1 origin "$SRT_SLURM_COMMIT" || return 1
@@ -40,9 +39,6 @@ setup_srt_slurm() {
     # Both CONFIG_FILE spellings currently occur in master configs.
     ln -s ../../recipes benchmarks/multi_node/srt-slurm-recipes || return 1
     cp -R "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/." configs/ || return 1
-    if [[ "${FRAMEWORK:-}" == "tilert" && "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
-        python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" || return 1
-    fi
 }
 
 # Use the requested image's cache identity, never a convenient older squash file.

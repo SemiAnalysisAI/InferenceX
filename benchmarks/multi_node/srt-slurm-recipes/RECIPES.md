@@ -6,9 +6,11 @@ InferenceX owns the recipes in this directory. Every NVIDIA srt-slurm launcher u
 
 The shared version is the Git submodule pointer at [`utils/srt-slurm`](../../../utils/srt-slurm), currently the merge of [NVIDIA/srt-slurm#407](https://github.com/NVIDIA/srt-slurm/pull/407). Update that submodule pointer when upgrading, then run the recipe and integration checks. Do not add model-specific checkout branches to launchers.
 
+InferenceX requires srt-slurm 2.0 or newer and `schema: 2` recipes. Legacy recipe layouts are unsupported; migrate them before adding them to this tree.
+
 ## TileRT exception
 
-The GLM-5.1 TileRT recipe remains on schema 1. For `FRAMEWORK=tilert`, `setup_srt_slurm()` fetches the SemiAnalysisAI/srt-slurm fork directly at `d1e6c97b3baf3e87103b6d83189544c3c7d61c38` into the job checkout. This is the only alternate checkout; its pin lives in that helper because the TileRT backend and router are absent from the NVIDIA pin. TileRT jobs need network access to the fork at setup time. Remove the exception and migrate its recipe once those features are available upstream.
+For `FRAMEWORK=tilert`, `setup_srt_slurm()` fetches the SemiAnalysisAI/srt-slurm fork directly at `6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde` into the job checkout. This is the schema-2 TileRT port in [SemiAnalysisAI/srt-slurm#13](https://github.com/SemiAnalysisAI/srt-slurm/pull/13). It is the only alternate checkout; its pin lives in that helper because the TileRT backend and router are absent from the NVIDIA pin. TileRT uses the same schema-2 recipe layout and native post-eval dispatch as NVIDIA. TileRT jobs need network access to the fork at setup time. Remove the fork exception once those features are available upstream.
 
 ## Schema 2 and master configuration
 
@@ -36,7 +38,8 @@ Install the shared pin in an isolated environment, then use its CLI:
 # Verify each supported recipe directory before rewriting it.
 srtctl migrate --verify -f benchmarks/multi_node/srt-slurm-recipes/sglang
 srtctl migrate --in-place -f benchmarks/multi_node/srt-slurm-recipes/sglang
-# Repeat for vllm, trtllm and the other NVIDIA directories; exclude tilert.
+# Repeat for vllm, trtllm and the other NVIDIA directories.
+# Use the pinned TileRT fork when migrating tilert/.
 python -m pytest utils/matrix_logic/ -q
 python -m infx.matrix.generate full-sweep \
   --config-files configs/nvidia-master.yaml \

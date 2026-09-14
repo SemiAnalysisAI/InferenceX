@@ -29,14 +29,31 @@ jobs:
         run: |
           uv run --no-project --python 3.12 --with-editable "$GITHUB_WORKSPACE/utils/srt-slurm" python - <<'PYTHON'
           from pathlib import Path
+          import yaml
           from srtctl.core.config import validate_config_file
 
           root = Path("benchmarks/multi_node/srt-slurm-recipes")
           errors = []
           for recipe in sorted(root.rglob("*.yaml")):
+              if yaml.safe_load(recipe.read_text()).get("schema") != 2:
+                  errors.append(f"{recipe}: srt-slurm recipes must declare schema: 2")
               if "tilert" not in recipe.relative_to(root).parts:
                   errors.extend(f"{recipe}: {error}" for error in validate_config_file(recipe))
           print("\n".join(errors) if errors else "All NVIDIA recipes validated.")
+          raise SystemExit(bool(errors))
+          PYTHON
+      - name: Validate TileRT with its pinned runtime
+        run: |
+          source runners/slurm_utils.sh
+          FRAMEWORK=tilert setup_srt_slurm "$RUNNER_TEMP/srt-slurm-tilert"
+          uv run --no-project --python 3.12 --with-editable "$PWD" python - <<'PYTHON'
+          from pathlib import Path
+          from srtctl.core.config import validate_config_file
+
+          errors = []
+          for recipe in Path("recipes/tilert").rglob("*.yaml"):
+              errors.extend(f"{recipe}: {error}" for error in validate_config_file(recipe))
+          print("\n".join(errors) if errors else "All TileRT recipes validated.")
           raise SystemExit(bool(errors))
           PYTHON
       - name: Check integration behavior
