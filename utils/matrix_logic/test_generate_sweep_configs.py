@@ -2418,6 +2418,48 @@ def agentic_config(request, sample_single_node_config):
 
 
 class TestAgenticGeneration:
+    @pytest.mark.parametrize("power_key", ["require-power", "require_power"])
+    def test_required_power_is_scoped_to_agentic_scenario(
+        self, agentic_config, sample_runner_config, generate_agentic_sweep, power_key,
+    ):
+        from infx.matrix.generate import select_matrix_evals
+        from infx.matrix.validation import AgenticCodingConfig
+
+        config, benchmark = agentic_config
+        benchmark["conc-list"] = [8, 16]
+        scenarios = next(iter(config.values()))["scenarios"]["agentic-coding"]
+        other = copy.deepcopy(scenarios[0])
+        other["search-space"][0]["conc-list"] = [32]
+        scenarios.append(other)
+        before = generate_agentic_sweep(config, sample_runner_config)
+        scenarios[0][power_key] = False
+        assert generate_agentic_sweep(config, sample_runner_config) == before
+
+        scenarios[0][power_key] = True
+        AgenticCodingConfig.model_validate(scenarios[0])
+        after = generate_agentic_sweep(config, sample_runner_config)
+        assert len(after) == len(before)
+        for original, row in zip(before, after):
+            conc = original["conc"]
+            enabled = conc in (8, 16) if isinstance(conc, int) else conc in ([8], [16])
+            assert row == ({**original, "require-power": True} if enabled else original)
+        for mode in ("subset", "all"):
+            evals = select_matrix_evals(copy.deepcopy(after), mode=mode)
+            assert evals
+            assert all("require-power" not in row for row in evals)
+
+    @pytest.mark.parametrize("value", ["true", 1, None])
+    def test_required_power_rejects_non_boolean_config(self, agentic_config, value):
+        from pydantic import ValidationError
+        from infx.matrix.validation import AgenticCodingConfig
+
+        config, benchmark = agentic_config
+        benchmark["conc-list"] = [8]
+        scenario = next(iter(config.values()))["scenarios"]["agentic-coding"][0]
+        scenario["require-power"] = value
+        with pytest.raises(ValidationError, match="require-power"):
+            AgenticCodingConfig.model_validate(scenario)
+
     def test_point_order_and_input_preservation(
         self, agentic_config, sample_runner_config, generate_agentic_sweep,
     ):

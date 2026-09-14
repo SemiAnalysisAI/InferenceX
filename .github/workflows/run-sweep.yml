@@ -609,6 +609,7 @@ jobs:
             klaud-run: *klaud-run
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
+            require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
@@ -662,6 +663,7 @@ jobs:
             klaud-run: *klaud-run
             exp-name: ${{ matrix.config.exp-name }}
             recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
+            require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
@@ -999,6 +1001,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - name: Extract and save changelog metadata
+              id: metadata
               env:
                   SWEEP_MATRIX: ${{ needs.setup.outputs.search-space-config }}
                   SWEEP_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -1012,13 +1015,23 @@ jobs:
                   labels = set(json.loads(os.environ['SWEEP_LABELS']) or [])
                   incompatible = {'sweep-enabled', 'non-canary-full-sweep-enabled', 'full-sweep-fail-fast',
                                   'full-sweep-fail-fast-no-canary', 'evals-only', 'agentx-fast'}
-                  Path('changelog_metadata.json').write_text(json.dumps(matrix['changelog_metadata']))
                   Path('sweep_manifest.json').write_text(json.dumps({
                       'head': os.environ['SWEEP_HEAD'], 'run-id': int(os.environ['GITHUB_RUN_ID']),
                       'run-attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
                       'full-sweep': os.environ['FULL_SWEEP'] == 'true' and not labels & incompatible,
                       'matrix': matrix,
                   }))
+                  has_required_power = any(
+                      row.get('require-power') is True and row.get('eval-only') is not True
+                      for topology in ('single_node', 'multi_node')
+                      for rows in matrix.get(topology, {}).values()
+                      for row in rows
+                  )
+                  Path('changelog_metadata.json').write_text(json.dumps({
+                      **matrix['changelog_metadata'], 'require-power': has_required_power,
+                  }))
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+                      output.write(f'has-required-power={str(has_required_power).lower()}\n')
                   PY
 
             - name: Upload changelog artifact
@@ -1032,6 +1045,14 @@ jobs:
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   name: klaud-sweep-manifest
+                  path: sweep_manifest.json
+                  if-no-files-found: error
+
+            - name: Upload required power sweep manifest
+              if: ${{ steps.metadata.outputs.has-required-power == 'true' && needs.setup.outputs.reuse-enabled != 'true' }}
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: required-power-sweep-manifest
                   path: sweep_manifest.json
                   if-no-files-found: error
 
@@ -1116,6 +1137,7 @@ jobs:
             github.event_name == 'push' &&
             github.ref == 'refs/heads/main' &&
             needs.setup.result == 'success' &&
+            needs.upload-changelog-metadata.result == 'success' &&
             (
               (
                 toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) == 'null' ||

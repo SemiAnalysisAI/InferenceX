@@ -88,7 +88,11 @@ STP（Single Token Prediction，单 Token 预测）是每次前向传播生成�
 6. srt-slurm 必须同时更新配方和主条目；llm-d 必须同时更新 llm-d 配方/编排和主条目。
 7. 追加触发条目，先只生成受影响的 key，并检查每个生成点。
 
-固定序列 `8192/1024` 场景可设置 `require-power: true`，要求经过验证的实测功耗。矩阵将此标记传递给标准 sweep 和手动 E2E 吞吐作业；eval-only 和 AgentX 行不继承该标记。省略此字段可保留现有行为。仅在对应 runtime 和结果适配器同时交付时启用，然后验证完整选定范围。
+固定序列 `8192/1024` 和 `agentic-coding` 场景可在 `search-space` 同层设置 `require-power: true`，要求经过验证的实测功耗。矩阵将此标记传递给标准 sweep 和手动 E2E benchmark 作业；eval-only 行不继承该标记。省略此字段或设为 `false` 可保留现有行为。
+
+启用此要求的 AgentX 作业还会在 launcher 成功后检查每个返回的 aggregate：必须具有当前功耗 schema、数值 `power_valid: 1`，以及有限正数的平均功率、总能量和每输出 token 的焦耳数。分离部署还要求 prefill/decode 能量，以及各角色每输入/输出 token 的焦耳数。结果缺失或无效会使作业失败，诊断产物仍保留上传。该标记不会启用缺失的 collector 或 srt-slurm 配方 telemetry。仅在对应 runtime 和结果适配器同时交付时启用，然后验证完整选定范围。
+
+新 sweep 包含必需功耗 benchmark 行时，CI 会将现有 `sweep_manifest.json` 上传为 `required-power-sweep-manifest`，保留源 run、attempt、head 和完整矩阵。changelog 元数据同时记录 `require-power: true`，入库时据此拒绝缺少源 manifest 的必需功耗结果。Metadata 上传失败会阻止两种入库派发。复用 run 保留原始源 manifest；eval-only 标记不产生必需功耗范围。
 
 ## 注册并设置 runner
 

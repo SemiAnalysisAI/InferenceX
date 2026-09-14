@@ -475,7 +475,7 @@ jobs:
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ 'false' }}
             run-eval: false
-            require-power: ${{ inputs.require-power }}
+            require-power: ${{ inputs.require-power || (matrix.config['require-power'] == true && matrix.config['eval-only'] != true) }}
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
 
@@ -586,7 +586,7 @@ jobs:
             duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
             agentx-fast: ${{ inputs.agentx-fast }}
             run-eval: false
-            require-power: ${{ inputs.require-power }}
+            require-power: ${{ inputs.require-power || (matrix.config['require-power'] == true && matrix.config['eval-only'] != true) }}
             power-producer-sha: ${{ inputs.power-producer-sha }}
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
