@@ -7496,6 +7496,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3046
 
 - config-keys:
+    - dsv41flash-fp4-h200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Rerun the existing H200 DeepSeek V4.1 Flash GPU-KV AgentX sweep at concurrency 1, 2, 4, 8, 16, 32, 64, 128 with the unchanged TP8, full-trace, 1M-context and DSpark5 AL 3.51 recipe"
+    - "使用现有 TP8、完整轨迹、1M 上下文和 DSpark5 AL 3.51 配方，重新运行 H200 DeepSeek V4.1 Flash GPU-KV AgentX sweep，并发为 1、2、4、8、16、32、64、128"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3077
+
+- config-keys:
     - kimik3-fp4-h200-vllm-agentic-latency
   scenario-type:
     - agentic-coding
@@ -7561,6 +7570,30 @@
     - "Replace the local 2*CONC max_num_seqs limit with an explicit reproducibility cap of 128 (the effective vllm serve default on MI355X is 1024). The old cap sat below AgentX subagent fan-out and produced queue times up to 16.2 seconds at concurrency 1; 128 removed that scheduling queue. The derived CUDA-graph capture ceiling is 1024 for each configured concurrency."
     - "将本地 2*CONC 的 max_num_seqs 上限改为显式固定的可复现值 128（MI355X 上 vllm serve 的实际默认值为 1024）。旧上限低于 AgentX 子代理扇出，并发 1 时排队时间最高达 16.2 秒；128 消除了该调度排队。所有已配置并发点由此得到的 CUDA graph 捕获上限均为 1024。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3058
+
+- config-keys:
+      - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260911."
+    - "Move the MI355X DeepSeek-V4-Pro AgentX SGLang serving path from MTP to DSpark block size 6 and switch model to the DeepSeek-V4-Pro-0813 checkpoint, whose bundled dspark_* head."
+    - "DP-attention serving adds --enable-dp-lm-head, which SGLang requires for DSpark under DP attention, and TP-only serving adds --prefill-decode-interval 10 to fix scheduler issue."
+    - "Use --cuda-graph-max-bs-decode instead of --cuda-graph-max-bs: the 20260911 image split the flag per phase and ships no legacy alias, so the old spelling aborts argument parsing as an ambiguous prefix."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3001
+
+- config-keys:
+    - glm5.1-fp8-b200-tilert
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Preserve explicit registries during native TileRT Enroot imports and select prepared shared weights and squash images for both C1 recipes."
+    - "原生 TileRT 导入镜像时保留显式仓库地址，并让两个 C1 配方使用已准备的共享权重与 squash 镜像。"
+    - "Allow 90 minutes for the 8k1k recipe and its full GSM8K evaluation."
+    - "为 8k1k 配方及其完整 GSM8K 评测预留 90 分钟。"
+    - "Avoid recursive TileRT eval dispatch and preserve evaluation failures after artifact staging."
+    - "避免 TileRT 评测分发无限递归，并在保存产物后保留评测失败状态。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3067
 
 - config-keys:
     - kimik3-fp4-mi355x-vllm-agentic-mtp

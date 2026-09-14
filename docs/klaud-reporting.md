@@ -33,6 +33,8 @@ KLAUD=(uv run --no-project --exclude-newer PT12H --python 3.12 \
 
 The baseline file is created once; retries do not refetch it. The first baseline comment freezes the typed record. Conflicting replacement records are rejected. A correction requires a maintainer to review the evidence and make the correction explicit; do not silently revise the baseline during repairs.
 
+Freeze **every point in the original selected public baseline**. Since `prepare-baseline` starts from the selected base's generated family, reconcile its roster with the source-date public API before freezing and supplement any missing published points. Never shrink the baseline to overlapping points, the body preview or a smaller current family. Preserve each recipe/workload/topology/concurrency/dataset identity; equal counts or extra points elsewhere do not replace missing points.
+
 Create the draft body with `<!-- klaud-baseline -->`. The helper replaces that placeholder once, preserving anything other bots append outside it. If publication is interrupted after the baseline comment but before the body update, retrying the same record completes the body update. Later attempt reports never rewrite the body. Large reports write immutable content-addressed parts before updating their index, so an interrupted update cannot mix revisions.
 
 Comparison keys come from `reporting.point_key()` on the canonical generated point, excluding only image, point name, producer fingerprint and queue metadata. Preserve workload, topology, concurrency and all remaining settings. `reporting.values()` reads collector/API metrics and converts seconds to milliseconds. Do not invent an alias or key to make two points match. Dataset identity must match independently for AgentX. Missing/zero baselines, failed points and mismatched datasets/statistics produce N/A. Throughput change is `(new / old - 1) * 100`; eval scores are normalized to 0–1 and differences shown in percentage points, matching suite, metric, shape and sample counts.
@@ -111,6 +113,8 @@ uv run --no-project --python 3.12 --with 'pydantic>=2.10,<3' --with pyyaml \
 ```
 
 The verifier independently generates the unfiltered family from exact-head YAML with trusted helper code. An equivalent scenario filter can pass; an omitted/changed point or default eval cannot. It does not execute downloaded PR code. Generator-policy drift on an old run requires inspection rather than silently weakening validation.
+
+Klaud must also compare both the final matrix before dispatch and the completed final artifacts against **every frozen baseline point**. A green workflow or `check-final` alone does not prove original-baseline coverage. If any baseline point is omitted, or lacks a successful verified updated-image result at final validation, report the affected points and call `finish` with `outcome: failed` to clean up owned runs and close the PR; never mark it ready or validated. `N/A` permits an unproven delta, not a missing updated-image result. Targeted smoke subsets remain allowed; final coverage is mandatory. Existing maintainer-handoff and branch-retention rules still apply.
 
 After a confirmed blocker is fixed, a repository maintainer may explicitly release a closed candidate's retained branch:
 
