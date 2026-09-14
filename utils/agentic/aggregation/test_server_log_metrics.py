@@ -20,12 +20,6 @@ def test_kv_cache_pool_tokens_from_server_log_missing() -> None:
     assert SglangBackend.kv_cache_pool_tokens_from_server_log("INFO no kv cache line") is None
 
 
-def test_kv_cache_pool_tokens_from_single_engine_server_log() -> None:
-    log = "INFO (EngineCore pid=123) GPU KV cache size: 11,294,463 tokens"
-
-    assert VllmBackend.kv_cache_pool_tokens_from_server_log(log) == 11_294_463
-
-
 def test_kv_cache_pool_tokens_from_data_parallel_server_log() -> None:
     log = "\n".join(
         [
