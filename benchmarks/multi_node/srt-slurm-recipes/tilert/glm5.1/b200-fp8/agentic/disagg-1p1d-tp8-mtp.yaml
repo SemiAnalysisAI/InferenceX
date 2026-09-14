@@ -1,3 +1,4 @@
+schema: 2
 name: "b200-glm51-tilert-agentic-disagg-1p1d-tp8-mtp"
 
 model:
@@ -26,13 +27,6 @@ slurm:
 resources:
   gpu_type: "b200"
   gpus_per_node: 8
-  prefill_nodes: 1
-  decode_nodes: 1
-  prefill_workers: 1
-  decode_workers: 1
-  gpus_per_prefill: 8
-  gpus_per_decode: 8
-
 frontend:
   type: tilert-router
   enable_multiple_frontends: false
@@ -42,7 +36,7 @@ frontend:
     parser: none
     queue-timeout: 1800
 
-backend:
+engine:
   type: tilert
   prefill_container: "tilert-prefill"
   model_profile: "glm5"
@@ -54,21 +48,30 @@ backend:
   transport: nixl
   with_mtp: true
   speculative_tokens: 1
-  prefill_environment: &common_environment
-    HF_HOME: "/hf_hub_cache"
-    HF_HUB_CACHE: "/hf_hub_cache/hub"
-    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache/hub"
-    PYTHONUNBUFFERED: "1"
-    UCX_MEMTYPE_CACHE: "n"
-    UCX_MEMTYPE_REG_WHOLE: "n"
-  decode_environment:
-    <<: *common_environment
-  tilert_config:
-    prefill:
+roles:
+  prefill:
+    nodes: 1
+    workers: 1
+    gpus: 8
+    env: &common_environment
+      HF_HOME: "/hf_hub_cache"
+      HF_HUB_CACHE: "/hf_hub_cache/hub"
+      HUGGINGFACE_HUB_CACHE: "/hf_hub_cache/hub"
+      PYTHONUNBUFFERED: "1"
+      UCX_MEMTYPE_CACHE: "n"
+      UCX_MEMTYPE_REG_WHOLE: "n"
+    args:
       enforce-eager: true
       trust-remote-code: true
       gpu-memory-utilization: 0.75
 
+  decode:
+    nodes: 1
+    workers: 1
+    gpus: 8
+
+    env:
+      <<: *common_environment
 srun_options:
   container-writable: ""
   container-remap-root: ""
