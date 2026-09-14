@@ -234,17 +234,11 @@ if [[ "$IS_AGGREGATED" -eq 0 ]]; then
     fi
     if [[ -n "${MOONCAKE_CONFIG_PATH}" ]]; then
         # MultiConnector: NixlConnector handles direct P/D KV transfer;
+        # SimpleCPUOffloadConnector stages KV in CPU DRAM (~38 GB) as a buffer;
         # MooncakeStoreConnector enables cross-node prefix-cache lookup via RDMA.
-        # Prefill uses kv_both so it can both store new KV and load cache hits.
-        # Decode uses kv_consumer with lookup disabled (it only receives from NIXL).
-        if [[ "$ROLE" == "prefill" ]]; then
-            _KV_OUTER="kv_both"
-            _MC_EXTRA='"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false'
-        else
-            _KV_OUTER="kv_consumer"
-            _MC_EXTRA='"load_async":true,"lookup_async":false,"enable_lookup":false,"enable_cross_layers_blocks":false,"enable_offload":false'
-        fi
-        KV_TRANSFER_CONFIG="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"${_KV_OUTER}\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"${_KV_OUTER}\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{\"enforce_handshake_compat\":false,\"enable_cross_layers_blocks\":false,\"kv_lease_duration\":1800}},{\"kv_connector\":\"MooncakeStoreConnector\",\"kv_role\":\"${_KV_OUTER}\",\"kv_connector_extra_config\":{${_MC_EXTRA}}}]}}"
+        # Both roles use kv_both so decode can serve speculative-decode prefills.
+        _MC_EXTRA='"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false'
+        KV_TRANSFER_CONFIG="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{\"enforce_handshake_compat\":false,\"enable_cross_layers_blocks\":false,\"kv_lease_duration\":1800}},{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":40802189312}},{\"kv_connector\":\"MooncakeStoreConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{${_MC_EXTRA}}}]}}"
     else
         KV_TRANSFER_CONFIG="{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"$KV_ROLE\",\"kv_load_failure_policy\":\"fail\"}"
     fi
