@@ -54,7 +54,6 @@ export PYTHONHASHSEED=42
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 SERVER_PID=""
-
 cleanup_agentic_services() {
     local exit_code=$?
     trap - EXIT INT TERM
@@ -70,9 +69,10 @@ SPEC_ARGS=()
 SPEC_ROWS=1
 KDA_ARGS=()
 case "$CONC" in
-    1|2|4|8|10|12|14)
-        DCP_SIZE="${DCP_SIZE:-1}"
-        if [ "$CONC" -eq 1 ]; then SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-4}"
+    1|2|4|8|10|12|14|16)
+        DCP_SIZE=1
+        OFFLOAD_POLICY=none
+        if [ "$CONC" -eq 1 ]; then SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-6}"
         else SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"; fi
         case "$SPEC_NUM_TOKENS" in
             1) SYNTHETIC_ACCEPT_LEN=1.85 ;;
@@ -102,6 +102,7 @@ case "$CONC" in
         ;;
     *)
         DCP_SIZE="${DCP_SIZE:-8}"
+        OFFLOAD_POLICY=harness
         if [ "$CONC" -gt 64 ]; then MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-24576}"
         else MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-8192}"; fi
         if [ "$CONC" -lt 72 ]; then MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( CONC * 14 / 10 ))}"
@@ -124,15 +125,21 @@ if [ "$DCP_SIZE" -gt 1 ]; then
 fi
 
 OFFLOAD_ARGS=()
-if agentic_kv_offload_enabled; then
+OFFLOAD_LABEL="$OFFLOAD_POLICY"
+if [ "$OFFLOAD_POLICY" = "none" ]; then
+    :
+elif agentic_kv_offload_enabled; then
+    OFFLOAD_LABEL="${KV_OFFLOADING}"
     CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / TOTAL_RANKS ))
     OFFLOAD_ARGS=(--kv-transfer-config "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":$CPU_BYTES_PER_RANK,\"lazy_offload\":false}}")
+else
+    OFFLOAD_LABEL=none
 fi
 
 EP_ARGS=()
 if [ "${EP_SIZE:-1}" -gt 1 ]; then EP_ARGS=(--enable-expert-parallel); fi
 
-echo "[cfg] conc=$CONC dcp=$DCP_SIZE gmu=$GPU_MEM_UTIL mns=$MAX_NUM_SEQS ladder=1..$LADDER spec_rows=$SPEC_ROWS chunk=$MAX_BATCHED_TOKENS cudagraph=$CUDAGRAPH_MODE offload=${KV_OFFLOADING:-none}"
+echo "[cfg] conc=$CONC dcp=$DCP_SIZE gmu=$GPU_MEM_UTIL mns=$MAX_NUM_SEQS ladder=1..$LADDER spec_rows=$SPEC_ROWS chunk=$MAX_BATCHED_TOKENS cudagraph=$CUDAGRAPH_MODE offload=$OFFLOAD_LABEL"
 
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
@@ -170,7 +177,7 @@ printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
-python3 - <<'CCDPY' > /tmp/ccdmap.txt 2>/dev/null || true
+python3 - <<'CCDPY' > "$RESULT_DIR/ccdmap.txt" 2>/dev/null || true
 import subprocess, re, os, glob
 def expand(s):
     v=[]
@@ -208,7 +215,7 @@ CCDPY
 PIN_CCD="${PIN_CCD:-1}"
 pin_workers_to_ccd() {
     [ "$PIN_CCD" = "1" ] || return 0
-    [ -s /tmp/ccdmap.txt ] || return 0
+    [ -s "$RESULT_DIR/ccdmap.txt" ] || return 0
     local pinned=0
     while read -r _g _cpus; do
         for _p in $(pgrep -f "VLLM::Worker_TP${_g}([^0-9]|$)" 2>/dev/null); do
@@ -216,10 +223,9 @@ pin_workers_to_ccd() {
                 taskset -pc "$_cpus" "${_t##*/}" >/dev/null 2>&1 && pinned=$((pinned+1)) || true
             done
         done
-    done < /tmp/ccdmap.txt
+    done < "$RESULT_DIR/ccdmap.txt"
     echo "[pin-ccd] pinned $pinned threads"
 }
-
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
