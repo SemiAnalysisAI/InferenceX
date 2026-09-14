@@ -1,0 +1,43 @@
+name: Failed sweep retry CPU lane
+
+on:
+  workflow_call:
+    inputs:
+      lane:
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  cpu-lane:
+    name: CPU lane ${{ inputs.lane }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Exercise failure and fail-fast cancellation
+        shell: bash
+        env:
+          PROBE_LANE: ${{ inputs.lane }}
+        run: |
+          printf 'LANE_START run=%s attempt=%s lane=%s job=%s time=%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$PROBE_LANE" "$GITHUB_JOB" "$(date -u +%FT%TZ)"
+          case "$PROBE_LANE" in
+            fail|cancelled) ;;
+            *) echo 'Unexpected probe lane' >&2; exit 2 ;;
+          esac
+          case "$GITHUB_RUN_ATTEMPT" in
+            1)
+              if [[ "$PROBE_LANE" == fail ]]; then
+                sleep 20
+                echo 'INTENTIONAL_ATTEMPT_1_FAILURE'
+                exit 1
+              fi
+              sleep 90
+              echo 'ATTEMPT_1_SIBLING_FINISHED_WITHOUT_CANCELLATION'
+              ;;
+            2)
+              echo 'ATTEMPT_2_LANE_SUCCESS'
+              ;;
+            *) echo 'Probe permits only two attempts' >&2; exit 2 ;;
+          esac
+          printf 'LANE_END run=%s attempt=%s lane=%s time=%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$PROBE_LANE" "$(date -u +%FT%TZ)"
