@@ -45,6 +45,62 @@ DRY_RUN="${DRY_RUN:-0}"
 # GPU count (expandable for different hardware)
 GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 
+# =============================================================================
+# Preserve per-node run logs on every exit path
+# =============================================================================
+# /run_logs is the host's /tmp bind-mounted into the container, but the CI
+# runner only ever looks at $BENCHMARK_LOGS_DIR/logs/slurm_job-<id> on shared
+# storage -- and that copy used to happen exactly once, at the end of the happy
+# path. Any early exit left it unmade: launch_mi355x-amds.sh then logged
+# "agentic staging skipped; ... not found", built no multinode_server_logs.tar.gz,
+# and the workflow's always()-guarded upload had nothing to upload. So the one
+# class of failure that most needs server logs -- the server-up barrier timing
+# out because prefill never opened :8000 -- was the only one that shipped none,
+# leaving prefill_*.log and umbp_standalone_*.log unrecoverable.
+#
+# Copy on the way out instead, so a failed or cancelled run keeps its evidence.
+RUN_LOGS_PRESERVED=0
+preserve_run_logs() {
+    if [[ "${DRY_RUN:-0}" -ne 0 ]]; then
+        return 0
+    fi
+    if [[ "$RUN_LOGS_PRESERVED" -eq 1 ]]; then
+        return 0
+    fi
+    local src="/run_logs/slurm_job-${SLURM_JOB_ID}"
+    local dest="${BENCHMARK_LOGS_DIR:-/run_logs}/logs/slurm_job-${SLURM_JOB_ID}"
+    if [[ ! -d "$src" ]]; then
+        return 0
+    fi
+    # Copy the CONTENTS into an explicitly created destination rather than
+    # `cp -r "$src" .../logs/`: every node now runs this (that is the point --
+    # decode_*.log is as much evidence as prefill_*.log), and a second node
+    # copying the directory itself into an existing one would nest it as
+    # slurm_job-<id>/slurm_job-<id>. Log files are host-named, so merging the
+    # nodes into one directory is flat and collision-free.
+    mkdir -p "$dest" 2>/dev/null || return 0
+    if cp -r "$src/." "$dest/" 2>/dev/null; then
+        RUN_LOGS_PRESERVED=1
+        echo "Preserved run logs in $dest"
+    else
+        echo "WARNING: failed to preserve run logs from $src" >&2
+    fi
+}
+
+# Bash traps are not additive: a second `trap ... EXIT` silently replaces the
+# first. Everything that must run on the way out goes through this one handler.
+on_exit() {
+    if [[ -n "${UMBP_SA_PID:-}" ]]; then
+        kill "$UMBP_SA_PID" 2>/dev/null || true
+    fi
+    preserve_run_logs
+}
+# A bare EXIT trap does not fire when slurm SIGTERMs the task -- which is how
+# the healthy node dies once --kill-on-bad-exit tears the job down -- so trap
+# the signals explicitly and exit from the handler.
+trap on_exit EXIT
+trap 'on_exit; exit 143' TERM INT HUP
+
 
 # =============================================================================
 # Dependencies and Environment Setup
@@ -762,7 +818,9 @@ elif [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == umbp-linker* ]]; 
             "$UMBP_SA_BIN" "$UMBP_STANDALONE_ADDRESS" > "$UMBP_SA_LOG" 2>&1 &
         UMBP_SA_PID=$!
         echo "[UMBP] standalone server PID: $UMBP_SA_PID"
-        trap '[[ -n "${UMBP_SA_PID:-}" ]] && kill "$UMBP_SA_PID" 2>/dev/null || true' EXIT
+        # Reaping this PID is handled by on_exit (installed at the top of the
+        # script). A `trap ... EXIT` here would replace that handler and take
+        # the run-log preservation down with it.
 
         # Three waits, all bounded by wall time rather than by a guess at how
         # fast this node is. Bind time for a 549 GB tier measured 120 s on
@@ -1439,14 +1497,11 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
         fi
     fi
 
-    # Copy benchmark results to BENCHMARK_LOGS_DIR (mounted from host)
-    LOGS_OUTPUT="${BENCHMARK_LOGS_DIR:-/run_logs}/logs"
-    mkdir -p "$LOGS_OUTPUT"
-
-    if [[ "$DRY_RUN" -eq 0 ]]; then
-        cp -r /run_logs/slurm_job-${SLURM_JOB_ID} "$LOGS_OUTPUT/"
-        echo "Copied results to $LOGS_OUTPUT/slurm_job-${SLURM_JOB_ID}"
-    fi
+    # Copy benchmark results to BENCHMARK_LOGS_DIR (mounted from host).
+    # Same copy the EXIT handler makes; doing it here keeps the results on
+    # shared storage before the teardown below starts killing servers, and the
+    # handler's idempotence guard makes the later call a no-op.
+    preserve_run_logs
 
     echo "Killing the proxy server and prefill server"
 
