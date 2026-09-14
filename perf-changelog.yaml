@@ -7621,3 +7621,36 @@
   description:
     - "Image : vllm/vllm-openai-rocm:nightly-e7edf17cea217e52701f913cd8491fcacf2d9490"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3059
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Serve amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2 instead of amd/Qwen3.5-397B-A17B-MXFP4 on the MI355X SGLang fixed-seq-len arms."
+    - "Bump the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260829 to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2793
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913."
+    - "Rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode for sglang 0.5.19."
+    - "Prefill allreduce INT4; scheduler-recv-interval default 60."
+    - "Serve amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2 instead of amd/Qwen3.5-397B-A17B-MXFP4."
+    - "Trim AgentX search space to TP4 none [1,4,8,12,16], TP2 none [1,4,8,12,16,20], TP2 HiCache [20,24,28,32,36,40]; drop the TP4 HiCache arm."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3069
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the vLLM ROCm nightly to eed1f3d0c6043bd494424a22443ee198dd56f657, which includes vllm-project/vllm#54855, and disable incompatible AITER fused shared experts for the mixed MXFP4/FP8 checkpoint."
+    - "Extend the single-node DPA AgentX sweep from concurrency 64 to 64/128/192. Manual validation found c128 delivered the best throughput among c64/c128/c256; c192 fills the gap to locate the throughput knee before the c256 regression."
+    - "将 vLLM ROCm nightly 更新至包含 vllm-project/vllm#54855 的 eed1f3d0c6043bd494424a22443ee198dd56f657，并针对 MXFP4/FP8 混合权重关闭不兼容的 AITER shared-expert fusion。"
+    - "将单节点 DPA AgentX 扫描从并发 64 扩展为 64/128/192。手工验证显示，在 c64/c128/c256 三个点中 c128 吞吐量最高；新增 c192 用于补齐中间区间并定位 c256 性能回退前的吞吐拐点。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3071
