@@ -761,6 +761,7 @@ dsr1-fp8-b300-dynamo-trt:
     # 8k1k STP configs
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       - conc-list: [64]
         prefill:

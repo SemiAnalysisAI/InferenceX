@@ -136,7 +136,7 @@ Only fixed 8192/1024 `glm5.1-fp8-b200-tilert` requires native power. TileRT runs
 
 ## Opt-in NVIDIA SRT power
 
-With `REQUIRE_POWER=1`, fixed 8192/1024 SRT launches select runtime `3f3b7af26e34acc8b62b39971bec839a19ac57a2`. Preparation resolves the selected override, injects matrix concurrencies, translates the DeepSeek-V4 tokenizer setting and requires DCGM telemetry. No master scenario enables this path yet. AgentX and eval-only retain existing routing. Available logs and producer provenance survive failure. Each hardware/framework scope needs its own full sweep and applicable evals.
+With `REQUIRE_POWER=1`, fixed 8192/1024 SRT launches select runtime `3f3b7af26e34acc8b62b39971bec839a19ac57a2`. Preparation resolves the selected override, injects matrix concurrencies, translates the DeepSeek-V4 tokenizer setting and requires DCGM telemetry. The complete DSR1 B200 FP4 SGLang, B300 FP8 TRT, H100 FP8 SGLang and H200 FP8 TRT curves, plus Qwen3.5 GB200 FP8 SGLang and GB300 FP4 TRT MTP, enable this path through `require-power: true`. Retired DSV4 8k1k scenarios are not enabled. AgentX and eval-only retain existing routing. Available logs and producer provenance survive failure. Each hardware/framework scope needs its own full sweep and applicable evals.
 
 ## Register an srt-slurm recipe
 
