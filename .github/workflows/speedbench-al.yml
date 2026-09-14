@@ -63,6 +63,11 @@ on:
         description: "Git ref (branch/sha) to checkout"
         required: false
         type: string
+      slurm-state-only:
+        description: "Only report sinfo/squeue/sacct from the login node; submit no probe job"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -147,6 +152,7 @@ jobs:
       - name: Probe the RDMA provider ABI in the cached runtime
         env:
           TASK_JOB_NAME: pr3088-rdma-${{ github.run_id }}
+          SLURM_STATE_ONLY: ${{ inputs.slurm-state-only }}
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/pr3088-rdma"
@@ -156,7 +162,15 @@ jobs:
           git rev-parse HEAD
           test -r "$SQUASH_FILE"
           sinfo -p batch_1 -N -o '%N|%T|%G|%E'
-          squeue -p batch_1 -o '%i|%u|%j|%T|%N|%L'
+          squeue -p batch_1 -o '%i|%u|%j|%T|%M|%l|%N|%r'
+          if [[ "$SLURM_STATE_ONLY" == 'true' ]]; then
+            sacct -X -P --starttime=now-4hours \
+              --format=JobID,JobName,User,State,ExitCode,Start,End,Elapsed,NodeList,Reason
+            while read -r job; do
+              scontrol show job "$job" || true
+            done < <(squeue -p batch_1 -t PD --noheader --format='%i')
+            exit 0
+          fi
           # sbatch delivers the allocation without slurmctld calling back into
           # the login node; a queued salloc from here was killed (job 2549).
           jid=$(sbatch --parsable --job-name="$TASK_JOB_NAME" \
