@@ -7583,6 +7583,19 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3001
 
 - config-keys:
+    - glm5.1-fp8-b200-tilert
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Preserve explicit registries during native TileRT Enroot imports and select prepared shared weights and squash images for both C1 recipes."
+    - "原生 TileRT 导入镜像时保留显式仓库地址，并让两个 C1 配方使用已准备的共享权重与 squash 镜像。"
+    - "Allow 90 minutes for the 8k1k recipe and its full GSM8K evaluation."
+    - "为 8k1k 配方及其完整 GSM8K 评测预留 90 分钟。"
+    - "Avoid recursive TileRT eval dispatch and preserve evaluation failures after artifact staging."
+    - "避免 TileRT 评测分发无限递归，并在保存产物后保留评测失败状态。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3067
+
+- config-keys:
     - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
     - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
     - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp

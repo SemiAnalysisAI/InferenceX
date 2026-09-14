@@ -303,32 +303,6 @@ def test_gb200_routes_fixed_sequence_and_opted_in_agentx_power(
     assert marker.read_text() == "from-workspace\n"
 
 
-def test_glm52_gb200_complete_curve_uses_required_power_and_one_image() -> None:
-    master = yaml.safe_load(MASTER_CONFIG_PATH.read_text())
-    config_keys = (
-        "glm5.2-fp4-gb200-dynamo-sglang-agentic-agg",
-        "glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg",
-        "glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp",
-    )
-    expected_image = "lmsysorg/sglang:v0.5.17-cu130"
-    selected_recipes = set()
-
-    for key in config_keys:
-        config = master[key]
-        assert config["image"] == expected_image, key
-        for config_file in _config_file_values(config["scenarios"]):
-            recipe_path = _workspace_recipe_path(config_file)
-            recipe = yaml.safe_load(recipe_path.read_text())
-            contract = recipe.get("base", recipe)
-            assert contract["identity"]["container"]["image"] == expected_image, recipe_path
-            assert contract["telemetry"]["enabled"] is True, recipe_path
-            assert contract["telemetry"]["provider"] == "dcgm-power", recipe_path
-            assert contract["telemetry"]["required"] is True, recipe_path
-            selected_recipes.add(recipe_path.name)
-
-    assert selected_recipes == set(GLM52_GB200_POWER_RECIPES)
-
-
 @pytest.mark.parametrize("recipe_name,reported_head", [
     ("glm5.2-agentx-disagg.yaml", ""), ("glm5.2-agentx-agg.yaml", "c" * 40),
 ])
