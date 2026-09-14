@@ -7641,4 +7641,4 @@
     - kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg
   description:
     - "Retry and validate compute-node uv installation in the pinned AgentX srt-slurm runtime"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3106
