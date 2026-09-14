@@ -772,3 +772,28 @@ def test_terminal_verification_is_explicit_for_stream_callers(tmp_path, verify, 
     )
     assert result.returncode == expected, result.stderr
     assert (tmp_path / "slurm_job_42_outcome.txt").exists() is (verify == "true")
+
+
+@pytest.mark.parametrize("signal,expected", [("INT", 130), ("TERM", 143), ("HUP", 143)])
+def test_h200_launcher_signal_keeps_failed_status_and_single_cleanup(tmp_path, signal, expected):
+    launcher = (REPO_ROOT / "runners/launch_h200-dgxc-slurm.sh").read_text()
+    start = launcher.index('    LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"')
+    start = launcher.index("\n", start) + 1
+    block = launcher[start:launcher.index("    SRT_JOB_RC=0", start)]
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "server.log").write_text("server evidence\n")
+    shell = '''set -e
+source "$TEST_ROOT/runners/slurm_utils.sh"
+if [[ -f "$TEST_ROOT/runners/powerx_8k1k.sh" ]]; then source "$TEST_ROOT/runners/powerx_8k1k.sh"; fi
+scancel() { echo "$1" >> "$GITHUB_WORKSPACE/cancelled"; }
+''' + block + 'true; kill -"$SIGNAL" $$; exit 99\n'
+    result = subprocess.run(
+        ["bash", "-c", shell], capture_output=True, text=True,
+        env={**os.environ, "TEST_ROOT": str(REPO_ROOT), "GITHUB_WORKSPACE": str(tmp_path),
+             "LOGS_DIR": str(logs), "JOB_ID": "42", "SIGNAL": signal, "REQUIRE_POWER": "0"},
+        timeout=5,
+    )
+    assert result.returncode == expected, result.stderr
+    assert (tmp_path / "cancelled").read_text().splitlines() == ["42"]
+    assert (tmp_path / "multinode_server_logs.tar.gz").is_file()

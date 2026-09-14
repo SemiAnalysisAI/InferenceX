@@ -358,7 +358,10 @@ EOF
     # srtctl creates logs in outputs/JOB_ID/logs/
     LOGS_DIR="outputs/$JOB_ID/logs"
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
-    trap 'rc=$?; bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT INT TERM HUP
+    trap 'rc=$?; bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
+
+    trap 'exit 130' INT
+    trap 'exit 143' TERM HUP
 
     SRT_JOB_RC=0
     stream_slurm_job_log "$JOB_ID" "$LOG_FILE" true || SRT_JOB_RC=$?
