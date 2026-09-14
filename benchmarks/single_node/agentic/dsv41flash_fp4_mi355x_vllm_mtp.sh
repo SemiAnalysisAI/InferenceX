@@ -3,8 +3,8 @@ set -eo pipefail
 
 # DeepSeek-V4.1-Flash on MI355X: native DSpark and GPU-resident KV.
 # Follow upstream AMD defaults for Engram; storage behavior needs verification.
-# Image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
-# MI355X run 34710937012 passed concurrency 1-32 and eval-only concurrency 32.
+# Image: vllm/vllm-openai-rocm:nightly-TBD
+# The replacement image and MI355X validation are pending.
 # https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
@@ -47,14 +47,16 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_RUST_FRONTEND=1
 export PYTHONUNBUFFERED=1
 
-# Explicit reproducibility cap. Upstream vllm serve selects 1024 on GPUs with
-# at least 160 GiB, while the previous local 2*CONC cap sat below AgentX's
-# subagent fan-out. At CONC=1 it admitted 2 requests and left the rest queued
-# on scheduling capacity. Pinning 128 also keeps CAPTURE_SIZE deterministic.
-MAX_NUM_SEQS=128
+# Let vLLM select max_num_seqs; its API-server default is 1024 on MI355X.
+# Keep graph capture at the #3058 size through c64, then cover twice the outer
+# concurrency at c128 for AgentX subagent fan-out.
 NUM_SPEC_TOKENS=5
+GRAPH_NUM_SEQS=$((2 * CONC))
+if (( GRAPH_NUM_SEQS < 128 )); then
+    GRAPH_NUM_SEQS=128
+fi
 CAPTURE_SIZE=1
-while (( CAPTURE_SIZE < MAX_NUM_SEQS * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
+while (( CAPTURE_SIZE < GRAPH_NUM_SEQS * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
     CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
 done
 
@@ -92,7 +94,6 @@ VLLM_CMD=(
     --gpu-memory-utilization 0.9
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576
-    --max-num-seqs "$MAX_NUM_SEQS"
     --max-cudagraph-capture-size "$CAPTURE_SIZE"
     --max-num-batched-tokens 16384
     --disable-uvicorn-access-log
