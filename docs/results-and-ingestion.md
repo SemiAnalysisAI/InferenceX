@@ -14,10 +14,10 @@ Use this page to identify benchmark artifacts, inspect their contracts, and deci
 | --- | --- |
 | [`benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml), [`benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) | Per-config names, files, and upload rules for throughput, eval, and AgentX artifacts |
 | [`utils/process_result.py`](../utils/process_result.py) | Fixed-sequence throughput aggregate schema and derived per-GPU metrics |
-| [`utils/collect_results.py`](../utils/collect_results.py), [`collect-results.yml`](../.github/workflows/collect-results.yml) | Recursive benchmark collection into `agg_<prefix>.json` and `results_<prefix>` |
-| [`utils/collect_eval_results.py`](../utils/collect_eval_results.py), [`collect-evals.yml`](../.github/workflows/collect-evals.yml) | Eval discovery, metric extraction, batched-concurrency selection, and `eval_results_<prefix>` |
-| [`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py), [`request_metrics.py`](../utils/agentic/aggregation/request_metrics.py) | AgentX aggregate schema, raw-record filtering, request accounting, and derived metrics |
-| [`validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py) | AgentX pre-upload error-rate gate |
+| [`infx/results/collect_results.py`](../infx/results/collect_results.py), [`collect-results.yml`](../.github/workflows/collect-results.yml) | Recursive benchmark collection into `agg_<prefix>.json` and `results_<prefix>` |
+| [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py), [`collect-evals.yml`](../.github/workflows/collect-evals.yml) | Eval discovery, metric extraction, batched-concurrency selection, and `eval_results_<prefix>` |
+| [`infx.results.agentic`](../infx/results/agentic/__init__.py), [`request_metrics.py`](../infx/results/agentic/request_metrics.py), [`artifacts.py`](../infx/results/agentic/artifacts.py) | AgentX aggregate schema, raw-record filtering, request accounting, and derived metrics |
+| [`validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py) | AgentX pre-upload error-rate gate |
 | [`run-sweep.yml`](../.github/workflows/run-sweep.yml), [`recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) | App dispatch payload and source/merge run identities |
 | [InferenceX-app `prepare-ci-artifacts.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/prepare-ci-artifacts.ts), [`ci-artifact-preparation.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/ci-artifact-preparation.ts) | Cross-run artifact selection, attempts, and reuse provenance |
 | [InferenceX-app `ingest-ci-run.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/ingest-ci-run.ts) | End-to-end ingest ordering, pairing, skips, summaries, and refresh |
@@ -69,7 +69,7 @@ file:     agg_<RESULT_FILENAME>.json
 
 The multinode template encodes prefill and decode topology, worker counts, mode, concurrency, and runner in its base name. It can place several `agg_<RESULT_FILENAME>_*.json` files in one `bmk_<RESULT_FILENAME>` artifact.
 
-[`collect-results.yml`](../.github/workflows/collect-results.yml) normally receives `result-prefix: bmk`. It downloads `bmk_*`, and [`utils/collect_results.py`](../utils/collect_results.py) recursively loads every JSON file into one array. The handoff identity is then:
+[`collect-results.yml`](../.github/workflows/collect-results.yml) normally receives `result-prefix: bmk`. It downloads `bmk_*`, and [`infx/results/collect_results.py`](../infx/results/collect_results.py) recursively loads every JSON file into one array. The handoff identity is then:
 
 ```text
 artifact: results_bmk
@@ -92,9 +92,27 @@ The fixed-sequence transformer requires runner, framework, precision, speculativ
 | Latency and interactivity | Each benchmark input key ending in `ms` is converted from milliseconds to seconds with `_ms` removed. Keys containing `tpot` also produce an `intvty` reciprocal. |
 | Optional runtime metadata | `router` as exactly `{name, version}`, `kv_p2p_transfer`, and measured power patched from `gpu_metrics.csv` when available |
 
-Single-node GPU count is `tp * pp * pcp_size`. DCP does not multiply the physical GPU count. Multinode per-GPU denominators use the declared prefill and decode GPU counts. Invalid or missing required metadata fails transformation. Power aggregation is explicitly best effort and cannot fail the benchmark aggregate.
+Single-node GPU count is `tp * pp * pcp_size`. DCP does not multiply the physical GPU count. Multinode per-GPU denominators use the declared prefill and decode GPU counts. Invalid or missing required metadata fails transformation. Power aggregation is best effort by default; `REQUIRE_POWER=1` fails the job after preserving available results and audits when power validation fails.
 
 InferenceX-app treats routing fields as columns or config dimensions and stores numeric measurements in `benchmark_results.metrics` JSONB. The mapper supports v1 shared topology, v2 split prefill/decode topology, and nested v3 AgentX metrics. Unknown numeric metrics are retained and warned about, which permits schema growth without silently losing numeric data.
+
+### Fixed-sequence outcomes and PowerX audits
+
+The serving client records `benchmark_outcome` before saving its raw result. It retains the existing maximum request-failure rate of 5%, including the requested/completed/failed counts. The processor verifies this record, copies it to the aggregate, and returns failure even when telemetry is valid. Zero successful requests retain a diagnostic aggregate without fabricated reciprocal latency. Invalid request counts retain a failed diagnostic outcome with the raw `requested`/`completed` values and an `error`, without a fabricated failed count or rate; the client saves the raw JSON before exiting and the processor still rejects it. Legacy results without outcome metadata remain distinguishable; power validity alone never establishes benchmark success or answer quality.
+
+`power_invalid_reasons` and `power_audit` carry a bounded summary alongside numeric metrics. The summary includes the available measurement window, expected/observed GPU counts, sampling diagnostics, observed device identifiers and producer pin. Its `source` names the retained `power_validation_*.json` sidecar. Device identifiers retain the collector's semantics; local SMI indices are not physical UUID proof.
+
+For multinode fixed-sequence jobs, `utils/process_result.py --all` processes every available result before returning failure. It accepts `_c<N>_gpus_...`, `_conc<N>_gpus_...`, and AMD `_concurrency_<N>_req_rate_<R>_gpus_...` filenames, including `inf` request rates. It compares result concurrencies with `CONC_LIST`, rejects duplicate or contradictory point identities, and records omissions/errors in `result_processing_<RESULT_FILENAME>.json`. Aggregate workers pass `AGGREGATE_GPUS` with zero role GPU counts to telemetry validation; separate prefill/decode energy remains absent. For a `DISAGG=true` group with zero decode workers, the aggregate row intentionally sets `disagg: false` and reports `num_aggregate_gpu`; the filename, artifact name, and workflow inputs retain the group identity. Downstream consumers should use the row topology to interpret the measurement.
+
+The PR changelog selects representative NVIDIA and AMD coverage, not an exhaustive list of affected recipes; shared processing changes apply to every fixed-sequence recipe.
+
+Processing and diagnostic power-audit uploads run after launcher or validation failure, retaining raw and aggregate JSON. Normal `bmk_*` upload requires successful benchmark and processing steps, so an incomplete batch or failed Slurm job does not publish diagnostic rows. The main-branch ingest trigger can still publish other successful configurations from a partially failed sweep; it does not establish complete fleet coverage. Downstream importers can use the retained outcome to reject explicitly failed benchmarks.
+
+### Native multinode telemetry
+
+`native_power_collect.sh` and `native_power_lifecycle.sh` provide per-node collection and bounded ready/stop receipts. Launchers opt into the native package under `LOGS/native_power`; this prerequisite enables no new recipe. The adapter validates serving GPU identity, synchronized clocks, collector completion, and complete formal-window coverage. It preserves per-node failures, sample counts, and collector revision in the audit.
+
+The native collector sets UTC and records context beside its CSV for portable replay; existing benchmark monitors keep their current behavior. Its launcher integration requires separate hardware qualification. The offline adapter accepts this context without changing producers. Unusable samples outside the formal window do not establish coverage; `boundary_degenerate_rows` retains their per-GPU counts.
 
 ## Eval artifacts
 
@@ -112,7 +130,7 @@ DP-attention eval. Fixing the writer does not repair those artifacts or existing
 database rows: verify the original job configuration and server logs before
 correcting metadata, regenerating aggregates, and re-ingesting affected results.
 
-[`utils/collect_eval_results.py`](../utils/collect_eval_results.py) applies these rules:
+[`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py) applies these rules:
 
 1. An eval set is a root or immediate child directory containing `meta_env.json`.
 2. Candidate result files must parse as objects and contain `lm_eval_version`.
@@ -177,9 +195,18 @@ as a clean comparison, reconcile issued, completed, cancelled, and errored
 requests with raw profiling records and token totals. GPU-board energy is
 separate from estimated whole-system power.
 
+The GB200 GLM-5.2 aggregate AgentX recipe uses the shared custom-window
+producer, DCGM monitor, and post-job power adapter across its two four-GPU
+nodes. The launcher binds windows to the selected concurrencies and preserves
+native Slurm status, producer/exporter identity, and validation diagnostics
+before returning a failure. Missing or malformed aggregate JSON still produces a
+per-concurrency `power_validation.json` without fabricating an aggregate. The serving configuration, including HiCache and
+synthetic acceptance, and the ordinary Slurm time limit are unchanged.
+Other GB200 AgentX recipes retain their existing producer and power restrictions.
+
 ### Raw inputs and aggregate schema
 
-[`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py) resolves the current `results/aiperf_artifacts` layout and a one-child nested layout. It requires `profile_export.jsonl`. It reads these inputs when present:
+[`process_agentic_result.py`](../infx/results/agentic/process_agentic_result.py) resolves the current `results/aiperf_artifacts` layout and a one-child nested layout. It requires `profile_export.jsonl`. It reads these inputs when present:
 
 | Input | Role |
 | --- | --- |
@@ -215,9 +242,15 @@ Other important AgentX fields include:
 | Server metrics | `server_metrics.cache`, `kv_cache`, token totals, source details, and any `warnings` |
 | Compatibility | `kv_cache_pool_tokens` mirrors `server_metrics.kv_cache.gpu_total_tokens` |
 
+For a `dynamo-sglang` run with `sglang:` telemetry, the processor uses the
+SGLang adapter for cache, utilization, and token metrics. Logical GPU KV capacity
+remains `null` with a warning because TP ranks may report duplicate capacity
+values. Raw Dynamo frontend totals may include warmup requests. Missing host-hit
+counters do not imply zero CPU cache hits.
+
 The app flattens nested AgentX v3 values into canonical metric keys. Examples include `median_ttft`, `p95_e2el`, `total_tput_tps`, `tput_per_gpu`, `server_gpu_cache_hit_rate`, and `gpu_kv_cache_usage_pct`. It maps p50 to `median`. Full-response ITL fields take precedence when present, and interactivity percentiles are derived as the reciprocal of the matching ITL percentile so historical and current rows use one definition.
 
-Before normal upload, the single-node workflow runs [`validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py). It requires an aggregate object, a numeric non-negative `request_count.avg`, positive completed requests, and an error rate at or below the configured threshold. Passing this gate does not mean no requests failed. Failed request records remain visible through `request_accounting` but do not contribute to performance metrics.
+Before normal upload, the single-node workflow runs [`validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py). It requires an aggregate object, a numeric non-negative `request_count.avg`, positive completed requests, and an error rate at or below the configured threshold. Passing this gate does not mean no requests failed. Failed request records remain visible through `request_accounting` but do not contribute to performance metrics.
 
 ## App handoff and reused runs
 

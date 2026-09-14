@@ -88,15 +88,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # Map container images to local squash files based on framework
     NGINX_SQUASH_FILE="/mnt/nfs/lustre/containers/nginx_1.27.4.sqsh"
 
-    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-        # SGLang container mapping
-        SQUASH_FILE="/mnt/nfs/lustre/containers/lmsysorg_sglang_v0.5.8.post1-cu130.sqsh"
-        CONTAINER_KEY="lmsysorg/sglang:v0.5.8-cu130"
-    elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
-        # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
-        CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
-        SQUASH_FILE="/mnt/nfs/sa-shared/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
-    fi
+    resolve_h100_srt_container "$IMAGE" "$FRAMEWORK" || exit 1
+    check_staged_srt_assets "$MODEL_PATH" "$SQUASH_FILE" || exit 1
 
     export ISL="$ISL"
     export OSL="$OSL"
@@ -287,13 +280,31 @@ else
         fi
     "
 
+    # Prefer the framework-tagged script name, as the h200 launchers do, and
+    # keep the untagged name working for the recipes that predate frameworks.
+    BENCH_BASE="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_h100"
+    BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
+    if [[ ! -f "$BENCH_SCRIPT" ]]; then
+        BENCH_SCRIPT="${BENCH_BASE}${SPEC_SUFFIX}.sh"
+    fi
+
+    # DeepSeek-V4.1-Flash creates AgentX runtime directories next to the
+    # repository, which must not land under /workspace.
+    if [[ "$MODEL_PREFIX" == "dsv41flash" ]]; then
+        CONTAINER_MOUNT_DIR=/ix
+        export INFMAX_CONTAINER_WORKSPACE=/ix
+        export RESULT_DIR=/ix/results
+    else
+        CONTAINER_MOUNT_DIR=/workspace
+    fi
+
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
         --no-container-mount-home \
-        --container-workdir=/workspace/ \
+        --container-workdir=$CONTAINER_MOUNT_DIR/ \
         --no-container-entrypoint --export=ALL,PORT=8888,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
-        bash benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_h100${SPEC_SUFFIX}.sh
+        bash "$BENCH_SCRIPT"
 
     scancel $JOB_ID
 

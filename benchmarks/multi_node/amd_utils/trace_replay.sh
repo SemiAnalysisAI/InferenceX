@@ -99,7 +99,7 @@ DURATION="${DURATION:-1800}"
 export MODEL DURATION MAX_MODEL_LEN
 RESULT_DIR="${RESULT_DIR:-${profile_folder}}"
 # Base name for the per-conc aggregate written by the existing
-# utils.agentic.aggregation.process_agentic_result module.
+# infx.results.agentic.process_agentic_result module.
 # The workflow guard / upload steps expect a "${RESULT_FILENAME}_conc<N>.json"
 # file per concurrency, so each concurrency below is always suffixed with
 # _conc<N> (matching agentic_srt.sh on the gb200 path).
