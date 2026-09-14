@@ -232,7 +232,7 @@ wait_for_tcp() {
         fi
         sleep 5
     done
-    [[ $rc -eq 0 ]] && { exec 3>&- 2>/dev/null || true; echo "[wait_for_tcp] $host:$port ready"; }
+    [[ $rc -eq 0 ]] && echo "[wait_for_tcp] $host:$port ready"
     (( _xtrace )) && set -x
     return $rc
 }

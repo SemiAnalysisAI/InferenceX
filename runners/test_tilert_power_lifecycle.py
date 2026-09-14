@@ -245,3 +245,28 @@ append_lm_eval_summary() { touch staged; return "$STAGE_RC"; }
     assert 'base_url=http://0.0.0.0:9876/v1/chat/completions' in model_args
     assert 'num_concurrent=2' in model_args
     assert (tmp_path / 'staged').exists()
+
+
+def test_tilert_tcp_wait_preserves_caller_streams(tmp_path):
+    import re
+    import socket
+
+    source = (ROOT / 'benchmarks/multi_node/tilert_utils/run_node.sh').read_text()
+    function = re.search(r'^wait_for_tcp\(\) \{\n.*?^\}', source,
+                         flags=re.MULTILINE | re.DOTALL).group()
+    with socket.socket() as server:
+        server.bind(('127.0.0.1', 0))
+        server.listen(1)
+        command = function + '''
+exec 3>caller-fd
+wait_for_tcp 127.0.0.1 "$1" 0
+rc=$?
+printf 'eval diagnostic\\n' >&2
+printf 'caller stream\\n' >&3
+exit "$rc"
+'''
+        result = subprocess.run(['bash', '-c', command, 'bash', str(server.getsockname()[1])],
+                                cwd=tmp_path, capture_output=True, text=True, timeout=5)
+    assert result.returncode == 0, result.stderr
+    assert 'eval diagnostic' in result.stderr
+    assert (tmp_path / 'caller-fd').read_text() == 'caller stream\n'

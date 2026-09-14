@@ -128,7 +128,7 @@ TileRT's shared importer preserves Docker Hub image names and converts explicit 
 
 The GLM-5.1 B200 Nscale 1k1k and 8k1k recipes select the prepared shared checkpoint, converted TileRT weights and squash cache, with allocation limits of 45 minutes for 1k1k and 90 minutes for 8k1k, including its full GSM8K eval. Since C1 is below automatic eval selection, use the PR `all-evals` label alongside `full-sweep-fail-fast` for full qualification. TileRT was added after the general GLM-5.1 retirement in [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533); [MODELS.md](../MODELS.md) records this retained scope. Changes still require the normal PR sweep, applicable quality evidence, sign-off and reuse before publication.
 
-TileRT's eval wrapper calls the shared `run_eval` dispatcher without overriding its `run_lm_eval` client. It stages available artifacts after evaluation and preserves failures from either evaluation or staging.
+TileRT's eval wrapper calls the shared `run_eval` dispatcher without overriding its `run_lm_eval` client. It stages available artifacts after evaluation and preserves failures from either evaluation or staging. TCP readiness probes keep their socket inside a subshell and preserve the caller's diagnostic streams.
 
 For GLM-5.1 on B200 Nscale, `MODEL_PATH` can select an existing shared checkpoint instead of the default `/scratch/models/GLM-5.1-FP8`. When it selects an HF snapshot, also set `HF_HUB_CACHE_HOST_PATH` to the existing cache root; TileRT mounts that root at the same absolute path so snapshot links to sibling blobs remain readable. Keep `TILERT_WEIGHTS_DIR` pointed at the separately converted decode weights.
 
