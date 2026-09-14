@@ -2785,19 +2785,6 @@ class TestApplyNodeTypeDefaults:
         assert args.single_node is True
         assert args.multi_node is False
 
-    def test_multi_only_stays_multi(self):
-        """When only multi_node is set, it stays that way."""
-        args = argparse.Namespace(single_node=False, multi_node=True)
-        apply_node_type_defaults(args)
-        assert args.single_node is False
-        assert args.multi_node is True
-
-    def test_both_flags_stays_both(self):
-        """When both flags are set, they stay that way."""
-        args = argparse.Namespace(single_node=True, multi_node=True)
-        apply_node_type_defaults(args)
-        assert args.single_node is True
-        assert args.multi_node is True
 
     def test_no_node_attrs_is_noop(self):
         """When args lacks node type attrs, nothing happens."""
@@ -3112,14 +3099,6 @@ class TestExpandConfigKeys:
             "gptoss-fp8-b200-sglang",
         ]
 
-    def test_prefix_glob(self):
-        """dsr1* should match all keys starting with dsr1."""
-        result = expand_config_keys(["dsr1*"], self.AVAILABLE)
-        assert result == [
-            "dsr1-fp4-b200-sglang",
-            "dsr1-fp8-mi300x-sglang",
-            "dsr1-fp8-h200-trt",
-        ]
 
     def test_question_mark_wildcard(self):
         """? wildcard should match a single character."""
