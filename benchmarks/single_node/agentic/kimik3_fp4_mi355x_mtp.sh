@@ -33,7 +33,7 @@ export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MLA=1
 export VLLM_ROCM_USE_AITER_MOE=1
 export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
-export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION="${VLLM_ROCM_QUICK_REDUCE_QUANTIZATION:-NONE}"
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 export AITER_SITUV2_A8W4=1
 export AITER_FLYDSL_STAGE2_FP8="${AITER_FLYDSL_STAGE2_FP8:-1}"
@@ -95,7 +95,7 @@ case "$CONC" in
             echo "MTP: k=$SPEC_NUM_TOKENS synthetic_accept=$SYNTHETIC_ACCEPT_LEN draft_kv=$DRAFT_KV_DTYPE"
         fi
         SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 ))
-        KDA_ARGS=(--additional-config '{"kda_prefill_backend":"triton"}')
+        KDA_ARGS=(--additional-config '{"kda_prefill_backend":"fused"}')
         case "$CONC" in
             1)  SPEC_SEATS=2  ;;
             2)  SPEC_SEATS=4  ;;
