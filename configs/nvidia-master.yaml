@@ -10421,7 +10421,7 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 96, 128] }
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 80, 96, 128] }
 
 dsv41flashssd-fp4-b200-vllm-agentic-dspark:
   image: vllm/vllm-openai:deepseekv41-flash-0909
@@ -10441,7 +10441,7 @@ dsv41flashssd-fp4-b200-vllm-agentic-dspark:
       # Same layout as dsv41flash-fp4-b200-vllm-agentic-dspark, with the Engram
       # tables mapped from node-local NVMe instead of pinned host DRAM, and the
       # DRAM that frees handed to a KV tier the pinned recipe has no room for.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 96, 128] }
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 80, 96, 128] }
       # KV offload rows are held back, not dropped. SimpleCPUOffloadConnector
       # asserts block_size % hash_block_size == 0 in resolve_block_hashes, and
       # DeepSeek-V4.1-Flash's KV layout is heterogeneous, so the connector
