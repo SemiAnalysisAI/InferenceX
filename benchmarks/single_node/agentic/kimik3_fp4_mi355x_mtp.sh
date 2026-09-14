@@ -71,7 +71,7 @@ KDA_ARGS=()
 case "$CONC" in
     1|2|4|8|10|12|14|16)
         DCP_SIZE=1
-        OFFLOAD_POLICY=none
+        OFFLOAD_POLICY=harness
         if [ "$CONC" -eq 1 ]; then SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-6}"
         else SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"; fi
         case "$SPEC_NUM_TOKENS" in
@@ -96,7 +96,18 @@ case "$CONC" in
         fi
         SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 ))
         KDA_ARGS=(--additional-config '{"kda_prefill_backend":"triton"}')
-        MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( CONC * 2 > 2 ? CONC * 2 : 2 ))}"
+        case "$CONC" in
+            1)  SPEC_SEATS=2  ;;
+            2)  SPEC_SEATS=4  ;;
+            4)  SPEC_SEATS=8  ;;
+            8)  SPEC_SEATS=10 ;;
+            10) SPEC_SEATS=12 ;;
+            12) SPEC_SEATS=24 ;;
+            14) SPEC_SEATS=16 ;;
+            16) SPEC_SEATS=18 ;;
+            *)  SPEC_SEATS=$(( CONC + 2 )) ;;
+        esac
+        MAX_NUM_SEQS="${MAX_NUM_SEQS:-$SPEC_SEATS}"
         if [ "$CONC" -eq 1 ]; then MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-16384}"
         else MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-8192}"; fi
         ;;
@@ -112,7 +123,7 @@ case "$CONC" in
 esac
 export DCP_SIZE
 
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.89}"
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
 CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL_DECODE_ONLY}"
 
 LADDER=$(( MAX_NUM_SEQS * SPEC_ROWS ))
