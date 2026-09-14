@@ -482,6 +482,15 @@ else
         "$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR"
         "$MODEL_MOUNT_DIR:$MODEL_MOUNT_DIR"
     )
+    if [[ "$MODEL_PREFIX" == "kimik3" && "$FRAMEWORK" == "vllm" && "${IS_AGENTIC:-0}" == "1" ]]; then
+        # The pre-staged target is read-only; DSpark needs the writable,
+        # persistent model root as a separate mount.
+        mkdir -p "$WRITABLE_MODELS_DIR"
+        export WRITABLE_MODELS_DIR
+        if [[ "$MODEL_MOUNT_DIR" != "$WRITABLE_MODELS_DIR" ]]; then
+            CONTAINER_MOUNTS+=("$WRITABLE_MODELS_DIR:$WRITABLE_MODELS_DIR")
+        fi
+    fi
     CONTAINER_MOUNTS_ARG=$(IFS=,; printf '%s' "${CONTAINER_MOUNTS[*]}")
 
     srun --jobid="$JOB_ID" \

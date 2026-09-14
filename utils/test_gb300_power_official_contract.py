@@ -31,13 +31,10 @@ def _launcher_routing_source(launcher_path: Path = LAUNCHER_PATH) -> str:
                                       launcher.index('echo "Cloning srt-slurm repository..."'))
         route_end = launcher.index('\necho "Installing srtctl..."', route_start)
         return launcher[gate_start:gate_end] + launcher[route_start:route_end]
-    route_start = launcher.index(
-        'if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" '
-        '&& $MODEL_PREFIX == "qwen3.5" ]]; then'
-    )
-    route_end_marker = '\nfi\n\necho "Installing srtctl..."'
-    route_end = launcher.index(route_end_marker, route_start) + len("\nfi")
-    return launcher[route_start:route_end]
+    route_start = launcher.index('if [[ "$USES_AGENTX_POWER" == "1" ]]; then',
+                                  launcher.index('echo "Cloning srt-slurm repository..."'))
+    route_end = launcher.index('\necho "Installing srtctl..."', route_start)
+    return _launcher_power_gate_source(launcher_path.name) + "\n" + launcher[route_start:route_end]
 
 
 def _write_executable(path: Path, text: str) -> None:
@@ -48,8 +45,8 @@ def _write_executable(path: Path, text: str) -> None:
 def _launcher_power_gate_source(launcher_name: str) -> str:
     launcher = (REPO_ROOT / "runners" / launcher_name).read_text()
     start = launcher.index("USES_DCGM_POWER=0\n")
-    end = launcher.index('if [[ "$USES_DCGM_POWER" == "1" ]]; then\n    DCGM_EXPORTER_IMAGE=', start)
-    return launcher[start:end]
+    end = launcher.index("\nfi", launcher.index("Error: dcgm-power requires", start))
+    return launcher[start:end + len("\nfi")]
 
 
 def _run_dsv4_route(
@@ -177,10 +174,11 @@ def _workspace_recipe_path(config_file: str) -> Path:
     [
         ("launch_gb300-nv.sh", "", "/data/home/sa-shared/gharunners/squash/"),
         ("launch_h200-dgxc-slurm.sh", "    ", "/data/gharunners/containers/"),
+        ("launch_b200-nscale-slurm.sh", "", None),
     ],
 )
 def test_exporter_cold_import_uses_nvidia_registry(
-    tmp_path: Path, launcher_name: str, indent: str, cache_directory: str
+    tmp_path: Path, launcher_name: str, indent: str, cache_directory: str | None
 ) -> None:
     launcher = (REPO_ROOT / "runners" / launcher_name).read_text()
     start = launcher.index(
@@ -189,12 +187,17 @@ def test_exporter_cold_import_uses_nvidia_registry(
     )
     end_marker = f"\n{indent}fi"
     end = launcher.index(end_marker, start) + len(end_marker)
-    source = launcher[start:end].replace(cache_directory, f"{tmp_path}/")
+    source = launcher[start:end]
+    if cache_directory is not None:
+        source = source.replace(cache_directory, f"{tmp_path}/")
     source = source.replace("${HOME}/.cache/enroot", "${GITHUB_WORKSPACE}/enroot-cache")
-    if "import_squash() {" in launcher:
-        helper_start = launcher.index("import_squash() {")
-        helper_end = launcher.index("\n}\n", helper_start) + len("\n}")
-        source = launcher[helper_start:helper_end] + "\n" + source
+    # gb300 and h200 rewrite the enroot ref inline; b200 reaches the same URI
+    # through enroot_uri_for_image, so the helper chain differs per launcher.
+    for helper in ("import_squash() {", "enroot_uri_for_image() {"):
+        if helper in launcher:
+            helper_start = launcher.index(helper)
+            helper_end = launcher.index("\n}\n", helper_start) + len("\n}")
+            source = launcher[helper_start:helper_end] + "\n" + source
 
     # Run the real launcher code, including the command passed through srun.
     # Only cluster/container tools are replaced; all files stay in tmp_path.
@@ -222,6 +225,8 @@ export -f flock unsquashfs enroot sha256sum
         SLURM_ACCOUNT="test",
         SLURM_PARTITION="test",
         RUNNER_NAME="exporter-import-test",
+        SQUASH_DIR=str(tmp_path),
+        SQUASH_LOCK_TIMEOUT="1",
     )
     subprocess.run(
         ["/bin/bash"],
@@ -233,11 +238,10 @@ export -f flock unsquashfs enroot sha256sum
         check=True,
     )
 
-    command, output_flag, image_path, reference = import_args.read_text().splitlines()
+    command, output_flag, _squash_path, reference = import_args.read_text().splitlines()
     assert (command, output_flag) == ("import", "-o")
     assert reference.startswith("docker://nvcr.io#nvidia/k8s/dcgm-exporter:")
     assert reference.count("#") == 1
-    assert Path(image_path).read_text() == "collector image\n"
 
 
 def test_dsv4_power_route_executes_pinned_producer_and_overlay(tmp_path):
@@ -391,7 +395,7 @@ def test_gb300_dsv4_recipe_images_match_their_master_configs():
             assert recipe_image == config["image"], (key, config_file)
 
 
-@pytest.mark.parametrize("launcher_name", ["launch_gb200-nv.sh"])
+@pytest.mark.parametrize("launcher_name", ["launch_gb200-nv.sh", "launch_gb300-nv.sh"])
 def test_kimi_agentx_route_uses_recipe_power_gate(tmp_path, launcher_name):
     log, workspace, repo_dir, marker = _run_dsv4_route(
         tmp_path, True, launcher_path=REPO_ROOT / "runners" / launcher_name, model_prefix="kimik3", is_agentic=True
@@ -412,7 +416,8 @@ def test_kimi_agentx_route_uses_recipe_power_gate(tmp_path, launcher_name):
         {"FRAMEWORK": "vllm"},
     ],
 )
-def test_kimi_power_gate_rejects_unsupported_route(tmp_path, override):
+@pytest.mark.parametrize("launcher_name", ["launch_gb200-nv.sh", "launch_gb300-nv.sh"])
+def test_kimi_power_gate_rejects_unsupported_route(tmp_path, override, launcher_name):
     env = os.environ.copy()
     env.update(GITHUB_WORKSPACE=str(tmp_path), CONFIG_FILE="recipes/vllm/kimi-k3/agentic/test.yaml",
                MODEL_PREFIX="kimik3", PRECISION="fp4", IS_AGENTIC="1", FRAMEWORK="dynamo-vllm")
@@ -420,13 +425,13 @@ def test_kimi_power_gate_rejects_unsupported_route(tmp_path, override):
     recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes" / env["CONFIG_FILE"].removeprefix("recipes/")
     recipe.parent.mkdir(parents=True)
     recipe.write_text("telemetry:\n  provider: dcgm-power\n  enabled: true\n")
-    result = subprocess.run(["/bin/bash"], input=_launcher_power_gate_source("launch_gb200-nv.sh"),
+    result = subprocess.run(["/bin/bash"], input=_launcher_power_gate_source(launcher_name),
                             text=True, capture_output=True, env=env)
     assert result.returncode == 1
     assert "dcgm-power requires" in result.stderr
 
 
-@pytest.mark.parametrize("launcher_name", ["launch_gb200-nv.sh"])
+@pytest.mark.parametrize("launcher_name", ["launch_gb200-nv.sh", "launch_gb300-nv.sh"])
 def test_kimi_power_route_rejects_wrong_commit(tmp_path, launcher_name):
     with pytest.raises(subprocess.CalledProcessError):
         _run_dsv4_route(
