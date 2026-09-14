@@ -1657,16 +1657,6 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           dp-attn: true
           additional-settings:
           - "PREFILL_NODES=1"
-          # The recipe defaults PREFILL_ROUTER_POLICY to consistent_hashing, so
-          # the first PD linker run (CI 34335368832) routed by prefix affinity:
-          # 94.5% of prompt tokens came from the DEVICE radix cache and only
-          # 0.81% from the host/external tier -- the linker was barely exercised
-          # as a tier at all. round_robin breaks that affinity so requests land
-          # on a worker that does NOT already hold their KV, which is the regime
-          # the host tier exists for, and it matches the single-node linker arms,
-          # which all ran round_robin. benchmark-multinode-tmpl.yml exports these
-          # settings immediately before the recipe, so this wins over the
-          # recipe's ${PREFILL_ROUTER_POLICY:-consistent_hashing} default.
           - "PREFILL_ROUTER_POLICY=consistent_hashing"
           # Rank 0 opens the barrier port only after umbp_standalone_server has
           # registered the 1.5 TB tier for GPU access; that took 305.7s on n08-25
