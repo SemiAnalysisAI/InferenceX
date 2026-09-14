@@ -3201,12 +3201,17 @@ class TestE2EConfigSplitting:
                   "isl": 1024, "osl": 1024, "max-model-len": 2248, "disagg": False}
         single_eval = {**single, "exp-name": "single-eval", "run-eval": True, "recipe-fingerprint": "a" * 64}
         single_eval_only = {**single, "exp-name": "single-eval-only", "run-eval": True, "eval-only": True}
-        multi = {"exp-name": "multi", "prefill": {}, "run-eval": True}
+        worker = {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}
+        multi = {k: v for k, v in single.items() if k not in ("tp", "pp", "dcp-size", "pcp-size", "ep", "dp-attn")}
+        multi.update({"exp-name": "multi", "prefill": worker, "decode": worker,
+                      "node-count": 2, "conc": [4, 8], "run-eval": True})
         multi_eval_only = {**multi, "exp-name": "multi-eval-only", "eval-only": True}
         agentic = {**common, "exp-name": "agentic", "scenario-type": "agentic-coding", "run-eval": True,
                    "kv-offloading": "none", "total-cpu-dram-gb": 0, "duration": 3600}
         agentic_eval_only = {**agentic, "exp-name": "agentic-eval-only", "eval-only": True}
-        multi_agentic = {**agentic, "exp-name": "multi-agentic", "prefill": {}}
+        multi_agentic = {k: v for k, v in multi.items() if k not in ("isl", "osl", "max-model-len")}
+        multi_agentic.update({"exp-name": "multi-agentic", "scenario-type": "agentic-coding",
+                              "kv-offloading": "none", "total-cpu-dram-gb": 0, "duration": 3600})
         multi_agentic_eval_only = {**multi_agentic, "exp-name": "multi-agentic-eval-only", "eval-only": True}
 
         output = split_e2e_configs([

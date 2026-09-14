@@ -1,6 +1,7 @@
 """Exercise the fixed-sequence module CLI with controlled environment and artifacts."""
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -74,6 +75,54 @@ def test_single_node_workflow_reports_missing_raw_result(tmp_path, single_node_e
     assert 'no raw result to process: missing.json' in result.stderr
     assert 'Traceback' not in result.stderr
     assert not (tmp_path / 'agg_missing.json').exists()
+
+
+@pytest.mark.parametrize(("scenario", "eval_only", "artifacts", "diagnostic"), [
+    ("fixed-seq-len", False, {"fixture_conc4.json": {}}, None),
+    ("fixed-seq-len", False, {}, "No benchmark result files found"),
+    ("agentic-coding", False, {"fixture_conc4.json": {"num_requests_successful": 3},
+                               "fixture_conc8.json": {"num_requests_successful": 5}}, None),
+    ("agentic-coding", False, {"fixture_conc4.json": {"num_requests_successful": 3}},
+     "expected 2 agentic results, found 1"),
+    ("agentic-coding", False, {"fixture_conc4.json": {"num_requests_successful": 3},
+                               "fixture_conc8.json": {"num_requests_successful": 0}},
+     "zero successful requests"),
+    ("agentic-coding", True, {"results_fixture.json": {}}, None),
+    ("agentic-coding", True, {}, "no results*.json files found"),
+])
+def test_multinode_launch_checks_the_expected_result_batch(
+    tmp_path, multinode_env_vars, scenario, eval_only, artifacts, diagnostic,
+):
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/benchmark-multinode-tmpl.yml").read_text())
+    step = next(step for step in workflow["jobs"]["benchmark"]["steps"]
+                if step.get("name") == "Launch multi-node job script")
+    script = step["run"].replace("${{ inputs.eval-only }}", str(eval_only).lower()).replace(
+        "${{ inputs.scenario-type }}", scenario)
+    script = re.sub(r"\$\{\{ join\([^\n]*?additional-settings[^\n]*?\}\}", "", script)
+    for file in ("utils/result_filename.py", "infx/__init__.py", "infx/results/__init__.py",
+                 "infx/results/result_filename.py"):
+        target = tmp_path / file
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(REPO_ROOT / file, target)
+    (tmp_path / "runners").mkdir()
+    (tmp_path / "runners/launch_fixture-node.sh").write_text("exit 0\n")
+    for filename, payload in artifacts.items():
+        (tmp_path / filename).write_text(json.dumps(payload))
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", script], cwd=tmp_path, capture_output=True, text=True, timeout=10,
+        env={**os.environ, **multinode_env_vars,
+             "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}", "PYTHONPATH": "",
+             "RUNNER_NAME": "fixture-node_03", "RESULT_FILENAME_BASE": "fixture",
+             "RECIPE_FINGERPRINT": "", "CONC_LIST": "4 8", "GITHUB_ENV": str(tmp_path / "github-env")},
+    )
+    if diagnostic:
+        assert result.returncode == 1
+        assert diagnostic in result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+    published = dict(line.split("=", 1) for line in (tmp_path / "github-env").read_text().splitlines())
+    assert published == {"RESULT_FILENAME": "fixture", "EVAL_ARTIFACT_RECIPE": "",
+                         "EVAL_ARTIFACT_CONC": "809c025ba41f"}
 
 
 @pytest.mark.parametrize("workflow_name", ["benchmark-tmpl.yml", "benchmark-multinode-tmpl.yml", "profile.yml"])

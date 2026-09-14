@@ -1485,13 +1485,19 @@ CHANGELOG_METADATA = {
 
 
 class TestBenchmarkWorkflowSchema:
+    @pytest.mark.parametrize("multinode", [False, True])
     @pytest.mark.parametrize("agentic", [False, True])
     def test_accepts_historical_rows_without_inserting_defaults(
-        self, valid_single_node_matrix_entry, agentic, monkeypatch, capsys,
+        self, valid_single_node_matrix_entry, valid_multinode_matrix_entry,
+        multinode, agentic, monkeypatch, capsys,
     ):
-        row = copy.deepcopy(AGENTIC_EVAL_ROW if agentic else valid_single_node_matrix_entry)
-        for field in ("pp", "dcp-size", "pcp-size"):
-            del row[field]
+        if multinode:
+            row = copy.deepcopy(MULTINODE_AGENTIC_EVAL_ROW if agentic else valid_multinode_matrix_entry)
+        else:
+            row = copy.deepcopy(AGENTIC_EVAL_ROW if agentic else valid_single_node_matrix_entry)
+        for worker in ([row["prefill"], row["decode"]] if multinode else [row]):
+            for field in ("pp", "dcp-size", "pcp-size"):
+                worker.pop(field, None)
         raw = json.dumps([row], indent=2, ensure_ascii=False) + "\n"
         monkeypatch.setattr(sys, "argv", ["benchmark_schema"])
         monkeypatch.setattr(sys, "stdin", io.StringIO(raw))
@@ -1515,23 +1521,41 @@ class TestBenchmarkWorkflowSchema:
         with pytest.raises(ValueError, match="model-prefix"):
             benchmark_schema.validate_matrix([row])
 
+    @pytest.mark.parametrize("conc", [[], 4, [0], [1, "4"], [True]])
+    def test_rejects_invalid_multinode_batches(self, valid_multinode_matrix_entry, conc):
+        with pytest.raises(ValueError, match="conc"):
+            benchmark_schema.validate_matrix([{**valid_multinode_matrix_entry, "conc": conc}])
+
+    @pytest.mark.parametrize("multinode", [False, True])
     @pytest.mark.parametrize("bucket", ["evals", "agentic_evals", "1k1k", "agentic-coding"])
     def test_plan_rejects_rows_in_the_wrong_scenario_bucket(
-        self, valid_single_node_matrix_entry, bucket,
+        self, valid_single_node_matrix_entry, valid_multinode_matrix_entry, multinode, bucket,
     ):
-        fixed = valid_single_node_matrix_entry
+        fixed = valid_multinode_matrix_entry if multinode else valid_single_node_matrix_entry
+        agentic = MULTINODE_AGENTIC_EVAL_ROW if multinode else AGENTIC_EVAL_ROW
+        family = "multi_node" if multinode else "single_node"
+        prefix = "multinode_" if multinode else ""
         misplaced_rows = {
-            "evals": {"evals": [AGENTIC_EVAL_ROW]},
-            "agentic_evals": {"agentic_evals": [fixed]},
-            "1k1k": {"single_node": {"1k1k": [AGENTIC_EVAL_ROW]}},
-            "agentic-coding": {"single_node": {"agentic-coding": [fixed]}},
+            "evals": {prefix + "evals": [agentic]},
+            "agentic_evals": {prefix + "agentic_evals": [fixed]},
+            "1k1k": {family: {"1k1k": [agentic]}},
+            "agentic-coding": {family: {"agentic-coding": [fixed]}},
         }
         with pytest.raises(ValueError, match=bucket):
             benchmark_schema.validate_matrix(misplaced_rows[bucket], plan=True)
 
+    @pytest.mark.parametrize("family", ["single_node", "multi_node"])
+    def test_plan_rejects_the_wrong_topology(
+        self, valid_single_node_matrix_entry, valid_multinode_matrix_entry, family,
+    ):
+        row = valid_multinode_matrix_entry if family == "single_node" else valid_single_node_matrix_entry
+        with pytest.raises(ValueError, match=family):
+            benchmark_schema.validate_matrix({family: {"1k1k": [row]}}, plan=True)
+
     @pytest.mark.parametrize(("raw", "plan"), [
         ("{", False), ("{}", False), ("[null]", False),
         ('{"single_node": []}', True), ('{"evals": {}}', True),
+        ('{"multi_node": []}', True), ('{"multinode_agentic_evals": {}}', True),
     ])
     def test_invalid_json_or_container_shape_publishes_nothing(self, raw, plan, monkeypatch, capsys):
         monkeypatch.setattr(sys, "argv", ["benchmark_schema", *(["--plan"] if plan else [])])
@@ -1544,9 +1568,11 @@ class TestBenchmarkWorkflowSchema:
         assert "error:" in output.err
 
     @pytest.mark.parametrize("workflow_name", ["run-sweep", "e2e-tests"])
+    @pytest.mark.parametrize("multinode", [False, True])
     @pytest.mark.parametrize("invalid", [False, True])
     def test_real_preparation_steps_validate_before_publishing_job_outputs(
-        self, tmp_path, valid_single_node_matrix_entry, workflow_name, invalid,
+        self, tmp_path, valid_single_node_matrix_entry, valid_multinode_matrix_entry,
+        workflow_name, multinode, invalid,
     ):
         root = Path(__file__).resolve().parents[2]
         workflow = yaml.safe_load((root / f".github/workflows/{workflow_name}.yml").read_text())
@@ -1556,10 +1582,12 @@ class TestBenchmarkWorkflowSchema:
         script = re.sub(r"\$\{\{.*?\}\}", lambda m: (
             "push" if "event_name" in m[0] else "test-config" if "generate-cli-command" in m[0] else ""
         ), script)
-        row = dict(valid_single_node_matrix_entry)
+        row = dict(valid_multinode_matrix_entry if multinode else valid_single_node_matrix_entry)
+        field = "node-count" if multinode else "tp"
         if invalid:
-            row["tp"] = "wrong"
-        matrix = {"single_node": {"1k1k": [row]}} if workflow_name == "run-sweep" else [row]
+            row[field] = "wrong"
+        family = "multi_node" if multinode else "single_node"
+        matrix = {family: {"1k1k": [row]}} if workflow_name == "run-sweep" else [row]
         source = tmp_path / "generated.json"
         source.write_text(json.dumps(matrix))
         output = tmp_path / "job-output"
@@ -1600,11 +1628,13 @@ if sys.argv[1:3] != ['-m', 'infx.workflows.reuse']:
         )
         if invalid:
             assert result.returncode != 0
-            assert "tp" in result.stderr
+            assert field in result.stderr
             assert output.read_text() == ""
         else:
             assert result.returncode == 0, result.stderr
-            key = "search-space-config" if workflow_name == "run-sweep" else "single-node-config"
+            key = "search-space-config" if workflow_name == "run-sweep" else (
+                "multi-node-config" if multinode else "single-node-config"
+            )
             published = dict(line.split("=", 1) for line in output.read_text().splitlines())
             assert json.loads(published[key]) == matrix
 
