@@ -378,8 +378,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         echo "DRY RUN: $BENCH_CMD"
     else
         set -x
-        BENCHMARK_EXIT_CODE=0
-        eval "$BENCH_CMD" || BENCHMARK_EXIT_CODE=$?
+        eval "$BENCH_CMD"
         set +x
     fi
 
@@ -620,4 +619,4 @@ else
 fi
 
 echo "Script completed successfully"
-exit "${BENCHMARK_EXIT_CODE:-0}"
+exit 0
