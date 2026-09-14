@@ -114,6 +114,10 @@ Processing and diagnostic power-audit uploads run after launcher or validation f
 
 The native collector sets UTC and records context beside its CSV for portable replay; existing benchmark monitors keep their current behavior. Its launcher integration requires separate hardware qualification. The offline adapter accepts this context without changing producers. Unusable samples outside the formal window do not establish coverage; `boundary_degenerate_rows` retains their per-GPU counts.
 
+### Slurm completion receipts
+
+NVIDIA SRT launchers verify the terminal allocation state and exit code, consulting `scontrol` when `sacct` is missing or non-terminal and retaining `slurm_job_*_outcome.txt`. They stage available evidence before returning failure. The shared log-streaming helper enables this terminal check only when its caller explicitly requests it; llm-d retains its existing completion behavior.
+
 ## Eval artifacts
 
 ### Per-config identity and collection

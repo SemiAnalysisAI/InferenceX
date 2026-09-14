@@ -631,3 +631,169 @@ def test_mi355x_agentic_model_mount_and_routing(
     script = f"benchmarks/single_node/agentic/{prefix}_fp4_mi355x_vllm_mtp.sh"
     assert args[-2] == script
     assert (REPO_ROOT / script).is_file()
+
+
+@pytest.mark.parametrize('state,exit_code,expected', [
+    ('COMPLETED', '0:0', 0), ('FAILED', '1:0', 1), ('TIMEOUT', '0:15', 1),
+    ('COMPLETED', '1:0', 1), ('CANCELLED', '0:15', 1),
+])
+def test_slurm_terminal_allocation_status_is_required(tmp_path, state, exit_code, expected):
+    result = run_bash(
+        f'source "$1"; export GITHUB_WORKSPACE="$2"; '
+        f'sacct() {{ printf "42|{state}|{exit_code}\\n42.batch|COMPLETED|0:0\\n"; }}; '
+        'scontrol() { echo "JobId=42 JobState=COMPLETED ExitCode=0:0"; }; '
+        'verify_slurm_job_completion 42', SLURM_UTILS, tmp_path,
+    )
+    assert result.returncode == expected, result.stderr
+    assert (tmp_path / 'slurm_job_42_outcome.txt').read_text().strip() == f'42|{state}|{exit_code}'
+
+
+@pytest.mark.parametrize('accounting_state,controller_state,exit_code,expected', [
+    ('', 'COMPLETED', '0:0', 0),
+    ('RUNNING', 'COMPLETED', '0:0', 0),
+    ('COMPLETING', 'COMPLETED', '0:0', 0),
+    ('RUNNING', 'FAILED', '1:0', 1),
+    ('RUNNING', 'RUNNING', '0:0', 1),
+])
+def test_slurm_recent_completion_falls_back_to_controller(
+    tmp_path, accounting_state, controller_state, exit_code, expected,
+):
+    record = f'42|{accounting_state}|0:0' if accounting_state else ''
+    controller = f'JobId=42 JobState={controller_state} ExitCode={exit_code}'
+    result = run_bash(
+        'source "$1"; export GITHUB_WORKSPACE="$2"; '
+        f'sacct() {{ echo "{record}"; }}; '
+        f'scontrol() {{ echo "{controller}"; }}; '
+        'verify_slurm_job_completion 42', SLURM_UTILS, tmp_path,
+    )
+    assert result.returncode == expected, result.stderr
+    assert (tmp_path / 'slurm_job_42_outcome.txt').read_text().strip() == controller
+
+
+def test_slurm_unknown_terminal_state_is_not_success(tmp_path):
+    result = run_bash(
+        'source "$1"; export GITHUB_WORKSPACE="$2"; sacct() { return 1; }; '
+        'scontrol() { return 1; }; verify_slurm_job_completion 42', SLURM_UTILS, tmp_path,
+    )
+    assert result.returncode == 1
+    assert 'state=unknown' in result.stderr
+
+
+def test_slurm_exit_before_log_retains_terminal_receipt(tmp_path):
+    result = run_bash(
+        'source "$1"; export GITHUB_WORKSPACE="$2"; '
+        'slurm_job_is_active() { return 1; }; '
+        'sacct() { printf "42|FAILED|1:0\\n"; }; '
+        'stream_slurm_job_log 42 "$2/missing.log"', SLURM_UTILS, tmp_path,
+    )
+    assert result.returncode == 1
+    assert (tmp_path / 'slurm_job_42_outcome.txt').read_text().strip() == '42|FAILED|1:0'
+
+
+@pytest.mark.parametrize('exit_code,derived,expected', [('0:0', '7:0', 0), ('1:0', '0:0', 1)])
+def test_slurm_controller_checks_allocation_not_derived_exit(tmp_path, exit_code, derived, expected):
+    result = run_bash(
+        'source "$1"; export GITHUB_WORKSPACE="$2"; sacct() { return 1; }; '
+        f'scontrol() {{ echo "JobId=42 JobState=COMPLETED ExitCode={exit_code} DerivedExitCode={derived}"; }}; '
+        'verify_slurm_job_completion 42', SLURM_UTILS, tmp_path,
+    )
+    assert result.returncode == expected, result.stderr
+
+
+@pytest.mark.parametrize(
+    "hardware,native_rc,adapter_rc,kimi,expected_rc",
+    [
+        ("b200", 0, 42, True, 42),
+        ("h200", 0, 0, True, 0),
+        ("h200", 0, 42, True, 42),
+        ("h200", 1, 0, True, 1),
+        ("h200", 1, 42, True, 1),
+        ("h200", 7, 0, True, 7),
+        ("h200", 7, 42, True, 7),
+        ("h200", 7, 0, False, 7),
+    ],
+)
+def test_kimi_failed_power_stages_evidence_before_exit(
+    tmp_path: Path, hardware: str, native_rc: int, adapter_rc: int,
+    kimi: bool, expected_rc: int,
+) -> None:
+    filename = {"b200": "launch_b200-nscale-slurm.sh", "h200": "launch_h200-dgxc-slurm.sh"}[hardware]
+    source = (REPO_ROOT / "runners" / filename).read_text()
+    if hardware == "h200":
+        start = source.index("    SRT_JOB_RC=0")
+        end = source.index('\nelse\n    SQUASH_FILE=', start)
+        source = source[start:end]
+    else:
+        start = source.index('AGENTX_POWER_RC="$SRT_JOB_RC"')
+        end = source.index('exit "$AGENTX_POWER_RC"', start)
+        end = source.index("\n", end) + 1
+        source = source[start:end] + "fi\n"
+    logs = tmp_path / "source-logs"
+    logs.mkdir()
+    (logs / "server.log").write_text("retained server output\n")
+    for name in ("exporter-image.sha256", "power-producer-sha.txt"):
+        (tmp_path / name).write_text("retained\n")
+    harness = '''
+set -e
+if [[ -f "$TEST_ROOT/runners/powerx_8k1k.sh" ]]; then source "$TEST_ROOT/runners/powerx_8k1k.sh"; fi
+stream_slurm_job_log() { return "$TEST_NATIVE_RC"; }
+collect_agentic_power_results() {
+    mkdir -p "$2/power"
+    printf 'telemetry audit\\n' > "$2/power/validation.json"
+    return "$TEST_ADAPTER_RC"
+}
+bundle_server_logs() { printf 'server evidence\\n' > "$2"; }
+copy_fixed_sequence_results() { :; }
+'''
+    env = dict(os.environ, TEST_ROOT=str(REPO_ROOT), SRT_JOB_RC=str(native_rc), TEST_NATIVE_RC=str(native_rc),
+               TEST_ADAPTER_RC=str(adapter_rc), USES_AGENTX_POWER="1", USES_KIMIK3_POWER=str(int(kimi)),
+               USES_DCGM_POWER=str(int(kimi)), EVAL_ONLY="false", JOB_ID="123", CONC_LIST="1",
+               LOG_FILE=str(logs / "server.log"), RUN_EVAL="false",
+               GITHUB_WORKSPACE=str(tmp_path), LOGS_DIR=str(logs), RESULT_FILENAME="kimi-test",
+               SELECTED_POWER_SRT_SLURM_PIN="a" * 40)
+    result = subprocess.run(["bash"], input=harness + source, text=True, capture_output=True, cwd=tmp_path, env=env)
+    assert result.returncode == expected_rc, result.stderr
+    assert (tmp_path / "LOGS/server.log").read_text() == "retained server output\n"
+    if kimi:
+        assert (tmp_path / "LOGS/power/validation.json").read_text() == "telemetry audit\n"
+    assert (tmp_path / "multinode_server_logs.tar.gz").read_text() == "server evidence\n"
+
+
+
+@pytest.mark.parametrize("verify,expected", [("true", 1), ("false", 0)])
+def test_terminal_verification_is_explicit_for_stream_callers(tmp_path, verify, expected):
+    log = tmp_path / "job.log"
+    log.write_text("retained output\n")
+    result = run_bash(
+        'source "$1"; export GITHUB_WORKSPACE="$2"; '
+        'slurm_job_is_active() { return 1; }; tail() { :; }; '
+        'sacct() { printf "42|CANCELLED|0:15\\n"; }; '
+        'stream_slurm_job_log 42 "$2/job.log" "$3"', SLURM_UTILS, tmp_path, verify,
+    )
+    assert result.returncode == expected, result.stderr
+    assert (tmp_path / "slurm_job_42_outcome.txt").exists() is (verify == "true")
+
+
+@pytest.mark.parametrize("signal,expected", [("INT", 130), ("TERM", 143), ("HUP", 143)])
+def test_h200_launcher_signal_keeps_failed_status_and_single_cleanup(tmp_path, signal, expected):
+    launcher = (REPO_ROOT / "runners/launch_h200-dgxc-slurm.sh").read_text()
+    start = launcher.index('    LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"')
+    start = launcher.index("\n", start) + 1
+    block = launcher[start:launcher.index("    SRT_JOB_RC=0", start)]
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "server.log").write_text("server evidence\n")
+    shell = '''set -e
+source "$TEST_ROOT/runners/slurm_utils.sh"
+if [[ -f "$TEST_ROOT/runners/powerx_8k1k.sh" ]]; then source "$TEST_ROOT/runners/powerx_8k1k.sh"; fi
+scancel() { echo "$1" >> "$GITHUB_WORKSPACE/cancelled"; }
+''' + block + 'true; kill -"$SIGNAL" $$; exit 99\n'
+    result = subprocess.run(
+        ["bash", "-c", shell], capture_output=True, text=True,
+        env={**os.environ, "TEST_ROOT": str(REPO_ROOT), "GITHUB_WORKSPACE": str(tmp_path),
+             "LOGS_DIR": str(logs), "JOB_ID": "42", "SIGNAL": signal, "REQUIRE_POWER": "0"},
+        timeout=5,
+    )
+    assert result.returncode == expected, result.stderr
+    assert (tmp_path / "cancelled").read_text().splitlines() == ["42"]
+    assert (tmp_path / "multinode_server_logs.tar.gz").is_file()
