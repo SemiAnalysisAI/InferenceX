@@ -216,6 +216,16 @@ default remains `MODEL`. This recipe sets it to the validated server snapshot.
 record model/source identity and requested settings. Successful startup,
 graph capture and requests require runtime log evidence.
 
+The pinned AITER TP communication-fused MoE callback updates preallocated
+inference tensors outside `InferenceMode` when DSpark q7 needs token padding.
+The TP recipe applies a hash-guarded fix that restores `torch.inference_mode()`
+inside the Stage2 launch callback, including shared-partial staging. It keeps
+communication fusion and graph capture enabled. DEP does not use this TP
+backend and is unchanged. `aiter_runtime_fix.json` and `runtime_manifest.json`
+record the source and patched hashes; the AITER Git checkout is expected to
+report dirty on TP. Run `test_aiter_comm_fused_inference.py` in the pinned image
+to reproduce the original failure and verify padding and aligned callbacks.
+
 ### DeepSeek-V4.1-Flash DSpark
 
 The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use

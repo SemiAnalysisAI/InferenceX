@@ -7639,3 +7639,13 @@
     - "Preserve nightly_202609121454 with ATOM#2190 and AITER#5467/#4159, FP8 KV/FP4 index, 8192-token checkpoints, session affinity, request equivalence 512 and the dense FULL graph ladder. New servers capture fixed q7 target/draft graphs; confidence schedules and ragged verification remain disabled. Runtime manifests record checkpoint identity and DSpark settings."
     - "切换至固定版本的 DeepSeek-V4-Pro-0813，全部并发启用 DSpark K6/q7；十个性能点统一使用 golden AL 3.77，C256 全量 GSM8K 使用真实验证。启动前检查 DSpark head、tokenizer 和 66 个权重分片，并统一服务与客户端 snapshot；保留已固定镜像、原生 RCCL DEP、dense FULL graph、GPU KV 和现有调度设置。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Fix DSpark q7 startup on TP: the pinned AITER communication-fused MoE Stage2 callback updates inference buffers outside InferenceMode when token counts need padding. Restore torch.inference_mode inside that callback, including shared-partial staging, with an exact-source-hash guard. Preserve communication fusion, DSpark K6, golden AL 3.77 and graph capture."
+    - "Apply the runtime fix only to TP; native RCCL DEP does not use this backend. Record patch hashes in aiter_runtime_fix.json and runtime_manifest.json. The preceding DSpark C256 full GSM8K job passed all 1319 samples with strict 97.57% and flexible 97.50%, while TP C2/C4/C8 and local TP C16 reproduced this startup error. The interrupted sweep is superseded by the repaired sweep."
+    - "修复 DSpark q7 触发 TP MoE 补齐路径时在 InferenceMode 外写入 inference tensor 的启动错误；对固定源码哈希应用 callback 修复并记录补丁哈希，保留通信融合、K6、AL 3.77 和 graph。DEP 不使用该 backend，路径不变；前一轮 C256 全量精度已通过，TP 启动失败的 sweep 已停止并由修复后的新一轮替代。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912

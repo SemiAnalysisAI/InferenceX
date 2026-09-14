@@ -210,6 +210,15 @@ confidence schedule 和 ragged verification 保持关闭。
 `runtime_manifest.json` 和 `server_command.txt` 保存模型/源码身份及请求的配置。
 成功启动、graph capture 和请求执行仍需运行时日志证明。
 
+固定版本 AITER 的 TP 通信融合 MoE 在 DSpark q7 需要补齐 token 时，会在
+`InferenceMode` 外更新预分配的 inference tensor。TP 配方应用经过源码哈希
+校验的补丁，在 Stage2 launch callback 内恢复 `torch.inference_mode()`，
+同时覆盖 shared-partial 暂存路径，保留通信融合和 graph capture。DEP 不使用
+这一 TP backend，执行路径保持不变。`aiter_runtime_fix.json` 和
+`runtime_manifest.json` 记录补丁前后哈希；TP 的 AITER Git checkout 预期显示
+dirty。在固定镜像内运行 `test_aiter_comm_fused_inference.py`，可复现原始错误
+并验证补齐及已对齐的 callback。
+
 ### DeepSeek-V4.1-Flash DSpark
 
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用

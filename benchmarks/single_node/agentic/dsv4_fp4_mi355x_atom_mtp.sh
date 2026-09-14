@@ -43,6 +43,12 @@ fi
 export MODEL_PATH
 export AGENTIC_TOKENIZER_PATH="$MODEL_PATH"
 mkdir -p "$RESULT_DIR"
+if [ "$DP_ATTENTION" != "true" ]; then
+    # DSpark q7 reaches padded TP MoE buckets. The pinned AITER callback must
+    # restore InferenceMode before updating its preallocated inference tensors.
+    python3 "$(dirname "$0")/patch_aiter_comm_fused_inference.py" \
+        --output "$RESULT_DIR/aiter_runtime_fix.json"
+fi
 python3 "$(dirname "$0")/check_dsv4_dspark_checkpoint.py" \
     --model-path "$MODEL_PATH" --revision "$DSV4_MODEL_REVISION" \
     --output "$RESULT_DIR/checkpoint_preflight.json"
@@ -190,6 +196,7 @@ if aiter_dir is not None:
 else:
     bundled["error"] = "AITER package source was not found"
 
+fix_path = Path(sys.argv[1]).parent / "aiter_runtime_fix.json"
 manifest = {
     "requested_image": os.environ.get("IMAGE"),
     "python_executable": sys.executable,
@@ -202,6 +209,7 @@ manifest = {
     },
     "graph_evidence": "Requested FULL q7; capture completion must be checked in server.log",
     "packages": packages,
+    "runtime_fixes": [json.loads(fix_path.read_text())] if fix_path.exists() else [],
     "aiter_overrides": {key: os.environ.get(key) for key in (
         "AITER_CONFIG_FMOE", "AITER_BYPASS_TUNE_CONFIG",
     )},
