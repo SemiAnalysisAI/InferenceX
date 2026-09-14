@@ -119,6 +119,8 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         ;;
     mooncake)
         require_agentic_kv_offload_backend mooncake
+        # Temporary upstream #55297 backport; docs/waiver/3088.md is pending review.
+        python3 "$(dirname "$0")/../../../runners/patch_kimik3_mooncake_recovery.py"
         PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
         MOONCAKE_VERSION=0.3.11.post1
         agentic_pip_install --quiet --no-cache-dir --no-deps \
