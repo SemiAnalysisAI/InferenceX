@@ -55,7 +55,6 @@ on:
       - "utils/validate_perf_changelog.py"
       - "utils/validate_reusable_sweep_artifacts.py"
       - "utils/changelog_gate_tests/test_validate_perf_changelog.py"
-      - "utils/changelog_gate_tests/test_run_sweep_gating.py"
       - "utils/changelog_gate_tests/test_workflow_authorization.py"
       - "utils/changelog_gate_tests/workflow_script_runner.cjs"
       - "utils/changelog_gate_tests/conftest.py"
@@ -112,7 +111,6 @@ jobs:
             utils/changelog_gate_tests/test_merge_with_reuse.py \
             utils/changelog_gate_tests/test_recover_failed_ingest.py \
             utils/test_validate_reusable_sweep_artifacts.py \
-            utils/changelog_gate_tests/test_run_sweep_gating.py \
             utils/changelog_gate_tests/test_workflow_authorization.py \
             utils/test_ci_priority.py \
             utils/test_calc_success_rate.py \

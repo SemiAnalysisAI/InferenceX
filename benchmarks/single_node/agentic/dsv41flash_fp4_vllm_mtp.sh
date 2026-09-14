@@ -27,7 +27,7 @@ export PYTHONUNBUFFERED=1
 
 # Preserve the upstream scheduler defaults; size graph capture for the sweep.
 NUM_SPEC_TOKENS=5
-CAPTURE_SIZE=1
+CAPTURE_SIZE="${DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE:-1}"
 while (( CAPTURE_SIZE < CONC * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
     CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
 done
