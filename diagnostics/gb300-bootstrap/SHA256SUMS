@@ -1,0 +1,3 @@
+5d5d4d29c1f00b2d4e08c67df9e9d1d10be798d697aa7a73bfe6044ae5fc232f  baseline.Makefile
+5c2d403ca3418823a1f45868b1a92f3050fea4e364458470ce6eae6d6d481e94  candidate.Makefile
+b2ddd0f84e3c25a460b4818cfcbf15382e53b925c4af3cb3a4eb2564c5328fa3  srtslurm.yaml.example

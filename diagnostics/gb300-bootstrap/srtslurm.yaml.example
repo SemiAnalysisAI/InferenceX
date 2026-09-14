@@ -1,0 +1,89 @@
+# Example cluster configuration (srtslurm.yaml)
+# Copy this to srtslurm.yaml and customize for your cluster
+# This file is gitignored to keep cluster-specific settings private
+#
+# Discovery: srtctl searches cwd and up to 2 parent directories.
+# For deep directory structures, set SRTSLURM_CONFIG in your shell:
+#   export SRTSLURM_CONFIG="/path/to/srt-slurm/srtslurm.yaml"
+
+# SLURM defaults
+default_account: "your-gpu-account"
+default_partition: "gpu"
+default_time_limit: "04:00:00"
+
+# Default health check window for jobs that don't override `health_check:`
+# in the recipe. Useful on clusters with slow storage where large MoE models
+# need >30 min to cold-load (the schema default is max_attempts=180, ~30 min).
+# Recipes that set their own `health_check:` block override this.
+# default_health_check:
+#   max_attempts: 540        # 540 * 10s = 90 min
+#   interval_seconds: 10
+
+# SLURM directive compatibility
+# Set to false if your cluster doesn't support --gpus-per-node
+use_gpus_per_node_directive: true  # Default: true
+# Set to false if your cluster doesn't support --segment for segment-based scheduling
+use_segment_sbatch_directive: true  # Default: true
+# Set to true if your cluster requires --exclusive to be set.
+use_exclusive_sbatch_directive: false # Default: false
+# Container registry
+default_container: "/shared/containers/sglang-latest.sqsh"
+containers:
+  sglang-latest: "/shared/containers/sglang-v0.4.sqsh"
+  sglang-dev: "/shared/containers/sglang-dev.sqsh"
+  sglang-fp4: "/shared/containers/sglang-fp4.sqsh"
+  # DeepSeek-V4 cookbook images (pull via enroot from Docker Hub lmsysorg/sglang):
+  #   lmsysorg/sglang:deepseek-v4-blackwell         (B200 / x86_64)
+  #   lmsysorg/sglang:deepseek-v4-grace-blackwell   (GB200 / GB300 / aarch64)
+  #   lmsysorg/sglang:deepseek-v4-hopper            (H200)
+  dsv4-blackwell: "/shared/containers/sglang-deepseek-v4-blackwell.sqsh"
+  dsv4-grace-blackwell: "/shared/containers/sglang-deepseek-v4-grace-blackwell.sqsh"
+  dsv4-hopper: "/shared/containers/sglang-deepseek-v4-hopper.sqsh"
+  # NeMo Skills eval container for accuracy benchmarks (AIME / GPQA / etc.)
+  # via `benchmark.container_image: nemo-skills`. Has the `ns` CLI baked in.
+  # Pre-cache with: enroot import 'docker://nvcr.io#nvidia/eval-factory/nemo-skills:26.03'
+  # Or pass the URI directly in the recipe to let Pyxis auto-pull on first run.
+  nemo-skills: "/shared/containers/nvidia+eval-factory+nemo-skills+26.03.sqsh"
+
+# Model path aliases
+model_paths:
+  deepseek-r1: "/shared/models/deepseek/DeepSeek-R1"
+  deepseek-r1-distill: "/shared/models/deepseek/DeepSeek-R1-Distill-Qwen-32B"
+  # DeepSeek-V4 checkpoints (huggingface.co/deepseek-ai/DeepSeek-V4-Pro, -V4-Flash):
+  dsv4-pro: "/shared/models/deepseek/DeepSeek-V4-Pro"
+  dsv4-flash: "/shared/models/deepseek/DeepSeek-V4-Flash"
+  llama-3-70b: "/shared/models/meta/llama-3-70b"
+  llama-3-405b: "/shared/models/meta/llama-3-405b"
+
+# AI-powered failure analysis (optional)
+# When enabled, Claude Code CLI analyzes benchmark failures and writes ai_analysis.md
+# Uses OpenRouter for authentication (works well in headless/automated environments)
+# See: https://openrouter.ai/docs/guides/guides/claude-code-integration
+# ai_analysis:
+#   enabled: true
+#   
+#   # Authentication (required - can also use env vars OPENROUTER_API_KEY / GH_TOKEN)
+#   openrouter_api_key: "sk-or-v1-..."
+#   gh_token: "ghp_..."
+#   
+#   # GitHub repos to search for related PRs when analyzing failures
+#   repos_to_search:
+#     - sgl-project/sglang
+#     - ai-dynamo/dynamo
+#   pr_search_days: 14
+#   
+#   # Custom prompt template (optional - uses sensible default if omitted)
+#   # Available variables: {log_dir}, {repos}, {pr_days}
+#   # prompt: |
+#   #   You are analyzing benchmark failure logs for an LLM serving system.
+#   #   ...
+
+# Usage:
+# In your job config, you can now use:
+#   model:
+#     path: "deepseek-r1"         # Resolves to /shared/models/deepseek/DeepSeek-R1
+#     container: "sglang-fp4"     # Resolves to /shared/containers/sglang-fp4.sqsh
+#
+# And you can omit SLURM fields:
+#   slurm:
+#     time_limit: "02:00:00"      # account and partition filled from defaults

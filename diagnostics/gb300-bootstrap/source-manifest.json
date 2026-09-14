@@ -1,0 +1,17 @@
+[
+  {
+    "file": "baseline.Makefile",
+    "sha256": "5d5d4d29c1f00b2d4e08c67df9e9d1d10be798d697aa7a73bfe6044ae5fc232f",
+    "source": "https://github.com/edwingao28/srt-slurm/blob/80d7203e424f903c9017de4608ee2044afce9574/Makefile"
+  },
+  {
+    "file": "candidate.Makefile",
+    "sha256": "5c2d403ca3418823a1f45868b1a92f3050fea4e364458470ce6eae6d6d481e94",
+    "source": "https://github.com/edwingao28/srt-slurm/blob/24fa311bb4d7b2ca4761a41189ccf2e067372d09/Makefile"
+  },
+  {
+    "file": "srtslurm.yaml.example",
+    "sha256": "b2ddd0f84e3c25a460b4818cfcbf15382e53b925c4af3cb3a4eb2564c5328fa3",
+    "source": "https://github.com/edwingao28/srt-slurm/blob/80d7203e424f903c9017de4608ee2044afce9574/srtslurm.yaml.example"
+  }
+]
