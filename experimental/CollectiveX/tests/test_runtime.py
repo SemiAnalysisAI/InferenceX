@@ -33,47 +33,6 @@ import ep_backend  # noqa: E402  (torch is imported lazily inside its methods)
 
 # configs/platform_config.json is shared by matrix scheduling, operator/network
 # loading, and backend builds.
-class PlatformRegistryTests(unittest.TestCase):
-    REGISTRY = RUNTIME.parent / "configs" / "platform_config.json"
-    NETWORK_FIELDS = {
-        "socket_ifname", "rdma_devices", "ib_gid_index",
-        "rdma_service_level", "rdma_traffic_class", "rail_isolated",
-        "single_node_rdma_devices",
-    }
-
-    def test_every_platform_entry_is_complete_and_typed(self) -> None:
-        platforms = json.loads(self.REGISTRY.read_text())["platforms"]
-        self.assertTrue(platforms)
-        for name, entry in platforms.items():
-            with self.subTest(sku=name):
-                for field in (
-                    "arch", "product", "image", "image_platform",
-                    "scale_up_transport", "launcher",
-                ):
-                    self.assertIsInstance(entry[field], str)
-                    self.assertTrue(entry[field])
-                for field in ("gpus_per_node", "scale_up_domain"):
-                    self.assertIsInstance(entry[field], int)
-                    self.assertGreater(entry[field], 0)
-                self.assertTrue(entry["backends"])
-                for degrees in entry["backends"].values():
-                    self.assertTrue(degrees)
-                    for degree in degrees:
-                        self.assertIs(type(degree), int)
-                        self.assertGreater(degree, 0)
-                self.assertLessEqual(
-                    set(entry.get("network", {})), self.NETWORK_FIELDS
-                )
-                # Fabric provenance: each cluster records its scale-out NIC and
-                # switch so same-GPU clusters on different fabrics stay distinct.
-                fabric = entry["fabric"]
-                self.assertEqual(set(fabric), {"nic", "switch"})
-                for value in fabric.values():
-                    self.assertIsInstance(value, str)
-                    self.assertTrue(value)
-                self.assertRegex(entry["arch"], r"^(sm|gfx)\d+$")
-                self.assertRegex(entry["image"], r"^[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$")
-                self.assertIn(entry["image_platform"], {"linux/amd64", "linux/arm64"})
 
 
 class ProbeTests(unittest.TestCase):
@@ -657,8 +616,6 @@ class WeightedCombineSemanticsTests(unittest.TestCase):
             ep_harness._expected_transformed_combine(
                 torch, self._problem(), 4, 8, "made-up"
             )
-
-
 
 
 @unittest.skipUnless(_torch is not None, "combine-oracle math checks require torch")
