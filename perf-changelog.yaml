@@ -7646,3 +7646,14 @@
     - "将 vLLM ROCm nightly 更新至包含 vllm-project/vllm#54855 的 eed1f3d0c6043bd494424a22443ee198dd56f657，并针对 MXFP4/FP8 混合权重关闭不兼容的 AITER shared-expert fusion。"
     - "将单节点 DPA AgentX 扫描从并发 64 扩展为 64/128/192。手工验证显示，在 c64/c128/c256 三个点中 c128 吞吐量最高；新增 c192 用于补齐中间区间并定位 c256 性能回退前的吞吐拐点。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3071
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use FLASH_ATTN for the target model, select the Humming MXFP8 dense-linear backend, and enable Marlin atomic reduction for the MXFP8 MoE path."
+    - "目标模型改用 FLASH_ATTN，选择 Humming MXFP8 稠密线性后端，并为 MXFP8 MoE 路径启用 Marlin 原子归约。"
+    - "Use 0.95 GPU memory utilization for resident serving while retaining 0.90 for Mooncake DRAM offload, and remove the Mooncake concurrency-14 point."
+    - "常驻服务使用 0.95 GPU 显存利用率，Mooncake DRAM 卸载保持 0.90，并移除 Mooncake 并发 14 档位。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
