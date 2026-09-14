@@ -185,7 +185,7 @@
          for param in (self.weight, self.weight_scale_inv):
              set_weight_attrs(
                  param,
-@@ -758,20 +857,257 @@
+@@ -758,20 +857,261 @@
              )
          if cpu_offload:
              logger.info(
@@ -343,6 +343,10 @@
 +
 +    def stage_disk_rows_from_host(self, ids_host: torch.Tensor, num_tokens: int):
 +        """Resolve and read rows with no CUDA involvement, for a worker thread."""
++        # The overlap path is the only gather this configuration runs, so the
++        # sidecar that makes a shard reusable has to be written from here too.
++        # Writing it only in stage_disk_rows left every boot rebuilding 189 GiB.
++        self.finalize_disk_shard()
 +        ids = ids_host[:num_tokens].numpy()
 +        heads = self.head_start + np.arange(self.part_n_hash_cols)
 +        owned_head = heads < self.n_hash_cols
