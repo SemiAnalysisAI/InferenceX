@@ -210,7 +210,7 @@ fi
 # srt-slurm merge lands.
 POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
 POWER_SRT_SLURM_PIN="6fc1bed01a0b82dae0088a105c03ce0cfb353443"
-AGENTX_POWER_SRT_SLURM_PIN="80d7203e424f903c9017de4608ee2044afce9574"
+AGENTX_POWER_SRT_SLURM_PIN="4ae17a59ff7c37ed8bade7c0a4d4b505dd034cfb"
 
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
