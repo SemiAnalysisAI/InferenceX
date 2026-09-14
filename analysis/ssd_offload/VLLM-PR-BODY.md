@@ -9,7 +9,7 @@ file instead of holding it in anonymous pinned host memory. It builds on the
 Engram prefetch and DP sharding merged in #56512, reusing its
 `_allocate_weights` and `_storage` hooks.
 
-Enabling it
+## Enabling it
 
     vllm serve ... --engram-config '{"cpu_offload":true,"disk_offload_dir":"/raid/engram"}'
 
@@ -29,6 +29,15 @@ less free RAM than the tables can still load them. Later boots map the finished
 file and skip the checkpoint read. A half-written file, or one left by a
 different TP or EDP layout, is rebuilt rather than gathered from.
 
+The directory must be node-local storage. The gather is random 4 KiB reads
+scattered across the tables with no locality, which is the access pattern a
+network filesystem serves worst, and the per-step host round trip is already
+the binding cost at low concurrency. Pointing several servers at one shared
+export would read the same shards over the network on every step, and the
+build path has no cross-node locking, so concurrent first boots against one
+directory would interleave. Shared storage is usable as a staging origin,
+copied to a local directory before serving, but not as the serving path.
+
 A mapped file cannot be read through UVA, which needs page-locked memory, and
 pinning the mapping would return the table to RAM. Rows are therefore gathered
 on the host, deduplicated there, and dequantized on the device by
@@ -36,7 +45,7 @@ on the host, deduplicated there, and dequantized on the device by
 ue8m0 math. The gather is host work and is skipped during capture, since
 capture mode is global and rejects it from any thread.
 
-Composability
+## Composability
 
 Independent of the KV offload backends. The Engram mapping is clean page cache
 while a KV connector's pool is pinned, so the kernel evicts Engram pages under
@@ -50,7 +59,7 @@ Shard naming keys on the index from `_get_shard_info`, which is the TP rank
 under tensor parallelism and the EDP head rank under Engram DP sharding, so
 both layouts name shards correctly and a layout change invalidates the sidecar.
 
-Results
+## Results
 
 B200 TP4, CUDA graphs, no eager.
 
@@ -61,13 +70,6 @@ Fixed 8k1k at concurrency 16, three runs per arm:
 | throughput, 3 runs | 13,632 +/- 806 tok/s | 14,168 +/- 104 tok/s |
 | host memory in use | 352 GB | 95 GB |
 
-The means differ by 3.9%, which is inside the pinned arm's own variation, and
-its best run (14,496 tok/s) exceeds the disk arm's best (14,284 tok/s). This is
-parity on throughput, not a gain. What does differ is consistency: the pinned
-arm's median TPOT is bimodal across boots at 9.87, 8.57 and 9.78 ms, while the
-disk arm lands at the fast mode every time. Trading many small scattered reads
-across PCIe for one contiguous transfer is why the disk path keeps up despite
-doing strictly more work.
 
 The row gather overlapped against the decoder layers, measured against an
 otherwise identical inline build run back to back:
@@ -92,7 +94,14 @@ baseline for the same recipe:
 | 16 | 112,212 | 101,218 | 90% | 551 ms | 598 ms |
 | 32 | 226,006 | 207,582 | 92% | 784 ms | 685 ms |
 | 64 | 348,969 | 330,709 | 95% | 1,325 ms | 1,092 ms |
+| 96 | 222,396 | 301,346 | 135% | 18,217 ms | 4,992 ms |
 | 128 | 76,717 | 112,567 | 147% | 290,749 ms | 193,493 ms |
+
+The two arms cross between concurrency 64 and 96. The baseline loses 36 percent
+of its concurrency-64 throughput by 96 while the disk arm loses 9 percent, and
+by 128 the baseline has fallen to 22 percent of its own peak against 34 percent
+for disk. Freed host memory is what widens the margin there, so the disk path
+is strongest exactly where the pinned tables squeeze the rest of the system.
 
 Median TPOT carries a near-constant offset of about 2.6 ms per token that does
 not scale with batch size, so it dominates where steps are short and vanishes
@@ -108,10 +117,4 @@ slower, so the remaining follow-up is computing the hashes on the host, which
 would let the gather start before the forward rather than waiting on the hash
 kernel.
 
-Tests
 
-`tests/models/test_deepseek_v41_engram_disk_offload.py`, 7 passing on B200. The
-disk path is bit-identical to the UVA path at `atol=0` and `rtol=0` across
-token counts, unowned heads and out-of-slice ids write zeros, a second boot
-reuses the shard, a stale sidecar forces a rebuild, and the config rejects disk
-offload without `cpu_offload`.
