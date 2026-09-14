@@ -209,6 +209,8 @@ def test_required_power_manifest_records_only_benchmark_scope(tmp_path, scope, e
         capture_output=True, text=True, timeout=10,
     )
     assert output.read_text().strip() == f"has-required-power={str(expected).lower()}"
+    metadata = json.loads((tmp_path / "changelog_metadata.json").read_text())
+    assert metadata == {"fixture": "unchanged", "require-power": expected}
     manifest = json.loads((tmp_path / "sweep_manifest.json").read_text())
     assert manifest == {"head": "abc123", "run-id": 123, "run-attempt": 2,
                         "full-sweep": False, "matrix": matrix}

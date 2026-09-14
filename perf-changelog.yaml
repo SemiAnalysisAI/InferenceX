@@ -7541,4 +7541,4 @@
   description:
     - "Require validated power for the existing Kimi-K3 B200, H200 latency, and GB300 aggregate AgentX configurations before sweep publication."
     - "在 sweep 发布前，为现有 Kimi-K3 B200、H200 latency 和 GB300 聚合 AgentX 配置要求经过验证的功耗。"
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3084

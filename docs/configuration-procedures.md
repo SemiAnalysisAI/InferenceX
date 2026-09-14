@@ -92,7 +92,7 @@ Fixed-sequence `8192/1024` and `agentic-coding` scenarios may set `require-power
 
 Required AgentX jobs also check every returned aggregate after the launcher succeeds: each must have the current power schema, numeric `power_valid: 1`, and finite positive average power, total energy, and joules per output token. Disaggregated jobs also require prefill/decode energy and role-specific joules per input/output token. Missing or invalid results fail the job while diagnostic uploads remain available. This flag does not enable a missing collector or srt-slurm recipe telemetry. Enable it only alongside the corresponding runtime and result adapter, then qualify the complete selected scope.
 
-When a fresh sweep includes required-power benchmark rows, CI uploads its existing `sweep_manifest.json` as `required-power-sweep-manifest`, retaining the source run, attempt, head, and complete matrix. Metadata upload failure blocks both ingest dispatches. Reused runs keep the original source manifest; eval-only flags do not create a required-power scope.
+When a fresh sweep includes required-power benchmark rows, CI uploads its existing `sweep_manifest.json` as `required-power-sweep-manifest`, retaining the source run, attempt, head, and complete matrix. The changelog metadata also records `require-power: true`, allowing ingestion to reject a missing source manifest. Metadata upload failure blocks both ingest dispatches. Reused runs keep the original source manifest; eval-only flags do not create a required-power scope.
 
 ## Register and set up a runner
 

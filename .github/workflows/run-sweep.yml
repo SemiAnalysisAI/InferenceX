@@ -1015,7 +1015,6 @@ jobs:
                   labels = set(json.loads(os.environ['SWEEP_LABELS']) or [])
                   incompatible = {'sweep-enabled', 'non-canary-full-sweep-enabled', 'full-sweep-fail-fast',
                                   'full-sweep-fail-fast-no-canary', 'evals-only', 'agentx-fast'}
-                  Path('changelog_metadata.json').write_text(json.dumps(matrix['changelog_metadata']))
                   Path('sweep_manifest.json').write_text(json.dumps({
                       'head': os.environ['SWEEP_HEAD'], 'run-id': int(os.environ['GITHUB_RUN_ID']),
                       'run-attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
@@ -1028,6 +1027,9 @@ jobs:
                       for rows in matrix.get(topology, {}).values()
                       for row in rows
                   )
+                  Path('changelog_metadata.json').write_text(json.dumps({
+                      **matrix['changelog_metadata'], 'require-power': has_required_power,
+                  }))
                   with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
                       output.write(f'has-required-power={str(has_required_power).lower()}\n')
                   PY
