@@ -14,7 +14,7 @@ check_env_vars \
     MODEL TP CONC EP_SIZE KV_OFFLOADING \
     TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
-SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-30}
+SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-60}
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -90,7 +90,7 @@ export SGLANG_USE_AITER=1
 export SGLANG_USE_AITER_UNIFIED_ATTN=1
 export AITER_FLYDSL_FORCE=1
 export SGLANG_MAMBA_SSM_DTYPE=bfloat16
-export ROCM_QUICK_REDUCE_QUANTIZATION=INT8
+export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export SGLANG_TIMEOUT_KEEP_ALIVE=1800
 
 if [ "${EVAL_ONLY:-false}" != "true" ]; then
@@ -113,7 +113,7 @@ SGLANG_CMD=(
     --watchdog-timeout 1200
     --page-size 16
     --kv-cache-dtype fp8_e4m3
-    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --max-prefill-tokens 16384
     --chunked-prefill-size 16384

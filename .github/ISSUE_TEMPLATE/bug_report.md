@@ -7,6 +7,8 @@ assignees: ''
 
 ---
 
+<!-- Title: <English title> / <中文标题>. Keep English visible; put the Chinese translation in the collapsed section below. -->
+
 **Describe the bug**
 A clear and concise description of what the bug is.
 
@@ -36,3 +38,10 @@ If applicable, add screenshots to help explain your problem.
 
 **Additional context**
 Add any other context about the problem here.
+
+<details>
+<summary>中文</summary>
+
+<!-- 翻译上方的故障描述、复现步骤、预期行为、环境信息及补充说明。引用共用的截图、代码和日志，保留证据链接。 -->
+
+</details>

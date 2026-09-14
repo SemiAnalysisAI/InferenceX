@@ -10,6 +10,64 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize(('image', 'expected_uri', 'cached'), [
+    ('ghcr.io/tile-ai/tilert:0.1.5', 'docker://ghcr.io#tile-ai/tilert:0.1.5', None),
+    ('vllm/vllm-openai:v0.26.0', 'docker://vllm/vllm-openai:v0.26.0', None),
+    ('ghcr.io#tile-ai/tilert:0.1.5', 'docker://ghcr.io#tile-ai/tilert:0.1.5', None),
+    ('docker://ghcr.io#tile-ai/tilert:0.1.5', 'docker://ghcr.io#tile-ai/tilert:0.1.5', None),
+    ('registry.example:5000/team/image:tag', 'docker://registry.example:5000#team/image:tag', None),
+    ('ghcr.io/tile-ai/tilert:0.1.5', None, 'prepared image'),
+    pytest.param('ghcr.io/tile-ai/tilert:0.1.5', 'docker://ghcr.io#tile-ai/tilert:0.1.5',
+                 'partial image', id='partial-cache'),
+])
+def test_tilert_import_uses_registry_and_reuses_squash(tmp_path, image, expected_uri, cached):
+    bindir, squash = tmp_path / 'bin', tmp_path / 'squash'
+    bindir.mkdir()
+    squash.mkdir()
+    image_file = squash / (image.translate(str.maketrans('/:@#', '____')) + '.sqsh')
+    if cached is not None:
+        image_file.write_text(cached)
+    scripts = {
+        'scontrol': '#!/bin/sh\nprintf "node-a\\nnode-b\\n"\n',
+        'flock': '#!/bin/sh\nexit 0\n',
+        'unsquashfs': '#!/bin/sh\ngrep -qxE "prepared image|imported image" "$2"\n',
+        'enroot': '#!' + sys.executable + '\n' + '''
+import json, os, sys
+assert sys.argv[1:3] == ['import', '-o']
+with open(os.environ['IMPORT_RECEIPT'], 'a') as receipt:
+    receipt.write(json.dumps(sys.argv[4:]) + '\\n')
+with open(sys.argv[3], 'x') as image:
+    image.write('imported image')
+''',
+        'srun': '#!' + sys.executable + '\n' + '''
+import os, subprocess, sys
+args = sys.argv[1:]
+if any(arg.startswith('--container-image=') for arg in args):
+    sys.exit(0)
+command = args[next(i for i, arg in enumerate(args) if not arg.startswith('--')):]
+os.execvpe(command[0], command, os.environ)
+''',
+    }
+    for name, script in scripts.items():
+        path = bindir / name
+        path.write_text(script)
+        path.chmod(0o755)
+    receipt = tmp_path / 'imports.jsonl'
+    env = {**os.environ, 'PATH': str(bindir) + os.pathsep + os.environ['PATH'],
+           'GITHUB_WORKSPACE': str(tmp_path), 'B200_SQUASH_DIR': str(squash),
+           'IMAGE': image, 'DECODE_IMAGE': image, 'PREFILL_IMAGE': image,
+           'MODEL_PATH': str(tmp_path), 'TILERT_WEIGHTS_DIR': str(tmp_path / 'weights'),
+           'TILERT_IN_ALLOCATION': '1', 'SLURM_JOB_ID': '123',
+           'SLURM_JOB_NODELIST': 'node-[a-b]', 'ISL': '1024', 'OSL': '1024',
+           'REQUIRE_POWER': '0', 'IMPORT_RECEIPT': str(receipt), 'HOME': str(tmp_path)}
+    result = subprocess.run(['bash', str(ROOT / 'benchmarks/multi_node/tilert_utils/submit.sh')],
+                            env=env, capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    imports = [json.loads(line) for line in receipt.read_text().splitlines()] if receipt.exists() else []
+    assert imports == ([] if expected_uri is None else [[expected_uri]])
+    assert image_file.read_text() == ('prepared image' if expected_uri is None else 'imported image')
+
+
 @pytest.mark.parametrize('prepared_path', ['', '/shared/hf/hub/snapshots/revision'])
 def test_b200_tilert_preserves_prepared_model_path(prepared_path):
     env = {**os.environ, 'MODEL_PREFIX': 'glm5.1', 'PRECISION': 'fp8',
@@ -156,3 +214,59 @@ exit "$2"
                             capture_output=True, text=True, timeout=5)
     assert result.returncode == node_rc, result.stderr
     assert (tmp_path / 'done').read_text().strip() == str(node_rc)
+
+
+@pytest.mark.parametrize(('eval_rc', 'stage_rc'), [(0, 0), (7, 0), (0, 9), (7, 9)])
+def test_tilert_eval_dispatches_shared_client_and_preserves_failure(tmp_path, eval_rc, stage_rc):
+    source = (ROOT / 'benchmarks/multi_node/tilert_utils/run_node.sh').read_text()
+    functions = source[source.index('run_bench_and_eval() {'):source.index('run_agentic_replay() {')]
+    command = '''
+source "$1/benchmarks/benchmark_lib.sh"
+FUNCNEST=40
+wait_for_server_ready() { return 0; }
+run_server_client() { printf '%s\\n' "$@" > client-args; return "$CLIENT_RC"; }
+append_lm_eval_summary() { touch staged; return "$STAGE_RC"; }
+''' + functions + '\nrun_bench_and_eval\n'
+    env = {**os.environ, 'RUN_EVAL': 'true', 'EVAL_ONLY': 'true',
+           'POWERX_NATIVE_ENABLED': '0', 'ROUTER_PORT': '9876', 'ROUTER_PID': '1',
+           'BENCHMARK_LOGS_DIR': str(tmp_path), 'CONC_LIST': '1', 'EVAL_CONC': '2',
+           'MODEL_NAME': 'test-model', 'MODEL': 'test-model', 'EVAL_MAX_MODEL_LEN': '9472',
+           'EVAL_FRAMEWORK': 'lm-eval', 'EVAL_SUITE': '', 'EVAL_TASKS_DIR': 'gsm8k',
+           'EVAL_RESULT_DIR': str(tmp_path / 'eval'), 'OPENAI_API_KEY': 'EMPTY',
+           'INFERENCEX_LM_EVAL_RUNTIME_READY': 'true', 'IS_AGENTIC': '0',
+           'SCENARIO_TYPE': 'single_turn', 'PYTHONPYCACHEPREFIX': str(tmp_path / 'pycache'),
+           'CLIENT_RC': str(eval_rc), 'STAGE_RC': str(stage_rc)}
+    result = subprocess.run(['bash', '-c', command, 'bash', str(ROOT)],
+                            env=env, cwd=tmp_path, capture_output=True, text=True, timeout=5)
+    assert result.returncode == (eval_rc or stage_rc), result.stderr + result.stdout
+    args = (tmp_path / 'client-args').read_text().splitlines()
+    assert args[:3] == ['python3', '-m', 'lm_eval']
+    model_args = args[args.index('--model_args') + 1].split(',')
+    assert 'base_url=http://0.0.0.0:9876/v1/chat/completions' in model_args
+    assert 'num_concurrent=2' in model_args
+    assert (tmp_path / 'staged').exists()
+
+
+def test_tilert_tcp_wait_preserves_caller_streams(tmp_path):
+    import re
+    import socket
+
+    source = (ROOT / 'benchmarks/multi_node/tilert_utils/run_node.sh').read_text()
+    function = re.search(r'^wait_for_tcp\(\) \{\n.*?^\}', source,
+                         flags=re.MULTILINE | re.DOTALL).group()
+    with socket.socket() as server:
+        server.bind(('127.0.0.1', 0))
+        server.listen(1)
+        command = function + '''
+exec 3>caller-fd
+wait_for_tcp 127.0.0.1 "$1" 0
+rc=$?
+printf 'eval diagnostic\\n' >&2
+printf 'caller stream\\n' >&3
+exit "$rc"
+'''
+        result = subprocess.run(['bash', '-c', command, 'bash', str(server.getsockname()[1])],
+                                cwd=tmp_path, capture_output=True, text=True, timeout=5)
+    assert result.returncode == 0, result.stderr
+    assert 'eval diagnostic' in result.stderr
+    assert (tmp_path / 'caller-fd').read_text() == 'caller stream\n'

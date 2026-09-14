@@ -3,7 +3,8 @@ set -eo pipefail
 
 # DeepSeek-V4.1-Flash on MI355X: native DSpark and GPU-resident KV.
 # Follow upstream AMD defaults for Engram; storage behavior needs verification.
-# Image: vllm/vllm-openai-rocm:deepseekv41-flash-0909 (configured in amd-master.yaml); GPU validation is pending.
+# Image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
+# MI355X run 34710937012 passed concurrency 1-32 and eval-only concurrency 32.
 # https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
@@ -23,6 +24,13 @@ if [[ -n "${ROCR_VISIBLE_DEVICES:-}" ]]; then
 fi
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
+# AITER's Triton MoE GEMM repeatedly warns that Gluon is unavailable and falls
+# back to Triton. Gluon supports only gfx1250, so on this gfx950 recipe that
+# message was 98% of a gsm8k server log (411k of 417k lines, 30 MiB of 32 MiB).
+# This process-global threshold can also hide other AITER Triton warnings; set
+# it back to WARNING while diagnosing new startup or runtime failures. This is
+# log hygiene only: the observed emits cost 0.03% of wall time per worker.
+export AITER_TRITON_LOG_LEVEL=ERROR
 # DeepseekV41ForCausalLM is not torch-compiled upstream, so the default
 # cudagraph_mode=FULL_AND_PIECEWISE aborts at engine init with "piecewise CUDA
 # graphs unavailable" (run 34566727564). The model is built for the breakable
@@ -39,8 +47,11 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_RUST_FRONTEND=1
 export PYTHONUNBUFFERED=1
 
-# Match the sibling's scheduler headroom for AgentX subagent fan-out.
-MAX_NUM_SEQS=$((2 * CONC))
+# Explicit reproducibility cap. Upstream vllm serve selects 1024 on GPUs with
+# at least 160 GiB, while the previous local 2*CONC cap sat below AgentX's
+# subagent fan-out. At CONC=1 it admitted 2 requests and left the rest queued
+# on scheduling capacity. Pinning 128 also keeps CAPTURE_SIZE deterministic.
+MAX_NUM_SEQS=128
 NUM_SPEC_TOKENS=5
 CAPTURE_SIZE=1
 while (( CAPTURE_SIZE < MAX_NUM_SEQS * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
@@ -70,7 +81,14 @@ VLLM_CMD=(
     --tokenizer-mode deepseek_v41
     --tool-call-parser deepseek_v41 --enable-auto-tool-choice
     --reasoning-parser deepseek_v41
-    --moe-backend aiter_triton_mxfp4_bf16
+    # aiter, not aiter_triton_mxfp4_bf16: the plain name opens vLLM's full
+    # priority list and the CK kernel at its head wins. Despite the BF16
+    # backend name and this checkpoint's activation_scheme=dynamic, CK
+    # quantizes activations to FP8 internally and dispatches the a8w4 experts
+    # (mfma_moe1_silu_mul_afp8_wfp4_bf16 / mfma_moe2_afp8_wfp4_bf16) that the
+    # DSV4-Pro MI355X recipe already gets. Pinning the Triton name instead
+    # forced the W4A16 _moe_gemm_a16w4 kernel.
+    --moe-backend aiter
     --gpu-memory-utilization 0.9
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576
