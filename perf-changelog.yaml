@@ -7615,6 +7615,28 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3097
 
 - config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Serve amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2 instead of amd/Qwen3.5-397B-A17B-MXFP4 on the MI355X SGLang fixed-seq-len arms."
+    - "Bump the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260829 to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2793
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913."
+    - "Rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode for sglang 0.5.19."
+    - "Prefill allreduce INT4; scheduler-recv-interval default 60."
+    - "Serve amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2 instead of amd/Qwen3.5-397B-A17B-MXFP4."
+    - "Trim AgentX search space to TP4 none [1,4,8,12,16], TP2 none [1,4,8,12,16,20], TP2 HiCache [20,24,28,32,36,40]; drop the TP4 HiCache arm."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3069
+
+- config-keys:
     - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
