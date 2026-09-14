@@ -146,6 +146,8 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 
 不得只提交一侧：`srtctl` 读取配方，而矩阵生成读取主配置。仅改配方可能给结果贴错标签；仅改主配置不会改变实际部署的配方。
 
+AgentX 功耗注入将矩阵并发写入扁平配方的 `benchmark`，或 override 配方的 `base.benchmark`。保留 `CONFIG_FILE` 中的选择器，并使用固定版本的 producer 验证所选变体。Override 不得覆盖 `benchmark.concurrencies`；存在该字段时应先解析变体，再注入并发。DCGM 请求超时为 2 秒时，显式采集器回收超时必须大于 10 秒；GLM-5.2 GB200 配方使用 12 秒。
+
 ## 注册 llm-d 配方
 
 来源：[`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md)、[`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md)、[`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes/) 和当前 [`llmd-vllm` 基准 wrapper](../benchmarks/multi_node/dsv4_fp4_gb200_llmd-vllm-disagg.sh)。

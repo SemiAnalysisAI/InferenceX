@@ -148,6 +148,8 @@ Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchm
 
 Do not ship one side alone. `srtctl` reads the recipe, while matrix generation reads the master config. Recipe-only changes can mislabel results. Master-only changes do not alter the deployed recipe.
 
+AgentX power injection writes the matrix concurrencies to `benchmark` in flat recipes or `base.benchmark` in override recipes. Keep the selector in `CONFIG_FILE` and validate the selected variant with the pinned producer. Overrides must not replace `benchmark.concurrencies`; resolve such a variant before injection. With a 2-second DCGM request timeout, an explicit collector join timeout must exceed 10 seconds; the GLM-5.2 GB200 recipes use 12 seconds.
+
 ## Register an llm-d recipe
 
 Sources: [`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md), [`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md), [`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes/), and the current [`llmd-vllm` benchmark wrapper](../benchmarks/multi_node/dsv4_fp4_gb200_llmd-vllm-disagg.sh).

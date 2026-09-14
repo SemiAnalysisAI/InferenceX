@@ -7594,3 +7594,25 @@
     - "Avoid recursive TileRT eval dispatch and preserve evaluation failures after artifact staging."
     - "避免 TileRT 评测分发无限递归，并在保存产物后保留评测失败状态。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3067
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Publish the complete GLM-5.2 GB200 Dynamo-SGLang curve on v0.5.17 as one 11-point sweep: six aggregate points, two 1P1D points, and the C45/C48/C128 disaggregated points. Require validated DCGM power for every throughput point."
+    - "在 v0.5.17 上通过一次 11 点 sweep 发布完整的 GLM-5.2 GB200 Dynamo-SGLang 曲线：六个聚合点、两个 1P1D 点及 C45/C48/C128 分离部署点；每个吞吐点均要求有效 DCGM 功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3090
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Inject power measurement concurrencies into base/override AgentX recipes and allow 12 seconds for the GLM-5.2 GB200 collector to drain. Preserve the full selected curve and evals."
+    - "为 base/override AgentX 配方注入功耗测量并发，并为 GLM-5.2 GB200 采集器排空预留 12 秒；保留完整所选曲线与评测。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3090

@@ -321,13 +321,23 @@ import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 USES_DCGM_POWER=0
 _RECIPE_REL="${CONFIG_FILE%%:*}"
 _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
-# Note (wenyao): a stray "enabled: true" outside the telemetry block must
-# not flip the lane, so the match is scoped instead of file-wide greps.
+# Telemetry may be top-level or nested under a recipe base.
+# A stray "enabled: true" outside that block must not flip the lane.
 if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
-    /^telemetry:/ { t = 1; next }
-    t && /^[^ ]/  { t = 0 }
-    t && /^  provider: dcgm-power$/ { p = 1 }
-    t && /^  enabled: true$/        { e = 1 }
+    /^[[:space:]]*telemetry:[[:space:]]*$/ {
+        t = 1
+        indent = match($0, /[^[:space:]]/) - 1
+        next
+    }
+    t {
+        current = match($0, /[^[:space:]]/) - 1
+        if ($0 !~ /^[[:space:]]*$/ && current <= indent) {
+            t = 0
+            next
+        }
+        if ($0 ~ /^[[:space:]]+provider: dcgm-power[[:space:]]*$/) p = 1
+        if ($0 ~ /^[[:space:]]+enabled: true[[:space:]]*$/) e = 1
+    }
     END { exit !(p && e) }
 ' "$_RECIPE_SRC"; then
     USES_DCGM_POWER=1
@@ -344,13 +354,23 @@ fi
 
 USES_AGENTX_POWER=0
 if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" ]]; then
-    if [[ "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" &&
-        "$_RECIPE_REL" == "recipes/sglang/glm5.2/gb200-fp4/agentic/glm5.2-agentx-agg.yaml" ]]; then
-        USES_AGENTX_POWER=1
-    else
-        echo "Error: GB200 AgentX dcgm-power requires the GLM-5.2 aggregate recipe" >&2
+    if [[ "$MODEL_PREFIX" != "glm5.2" || "$PRECISION" != "fp4" ]]; then
+        echo "Error: GB200 AgentX dcgm-power requires a qualified GLM-5.2 FP4 recipe" >&2
         exit 1
     fi
+    case "$_RECIPE_REL" in
+        recipes/sglang/glm5.2/gb200-fp4/agentic/glm5.2-agentx-agg.yaml | \
+        recipes/sglang/glm5.2/gb200-fp4/agentic/glm5.2-agentx.yaml | \
+        recipes/sglang/glm5.2/gb200-fp4/agentic/disagg-gb200-1p6d-dep8-tp4-c45-mtp.yaml | \
+        recipes/sglang/glm5.2/gb200-fp4/agentic/disagg-gb200-1p4d-dep8-tp4-c48-mtp.yaml | \
+        recipes/sglang/glm5.2/gb200-fp4/agentic/disagg-gb200-2p1d-dep8-dep16-c128-mtp.yaml)
+            USES_AGENTX_POWER=1
+            ;;
+        *)
+            echo "Error: GB200 AgentX dcgm-power recipe is not qualified: $_RECIPE_REL" >&2
+            exit 1
+            ;;
+    esac
 fi
 
 if [[ "$USES_DCGM_POWER" == "1" ]]; then

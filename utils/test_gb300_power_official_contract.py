@@ -19,6 +19,13 @@ MASTER_CONFIG_PATH = REPO_ROOT / "configs/nvidia-master.yaml"
 FORK_URL = "https://example.test/power-producer.git"
 PRODUCER_PIN = "a" * 40
 AGENTX_PRODUCER_PIN = "b" * 40
+GLM52_GB200_POWER_RECIPES = (
+    "glm5.2-agentx-agg.yaml",
+    "glm5.2-agentx.yaml",
+    "disagg-gb200-1p6d-dep8-tp4-c45-mtp.yaml",
+    "disagg-gb200-1p4d-dep8-tp4-c48-mtp.yaml",
+    "disagg-gb200-2p1d-dep8-dep16-c128-mtp.yaml",
+)
 
 
 def _launcher_routing_source(launcher_path: Path = LAUNCHER_PATH) -> str:
@@ -64,9 +71,11 @@ def _run_dsv4_route(
     source = workspace / "benchmarks/multi_node/srt-slurm-recipes" / recipe_directory
     source.mkdir(parents=True)
     (source / "overlay-marker.txt").write_text("from-workspace\n")
+    telemetry = "telemetry:\n  enabled: true\n  provider: dcgm-power\n"
+    if recipe_name == "glm5.2-agentx.yaml":
+        telemetry = "base:\n  telemetry:\n    enabled: true\n    provider: dcgm-power\n"
     (source / recipe_name).write_text(
-        "telemetry:\n  enabled: true\n  provider: dcgm-power\n"
-        if uses_dcgm_power else "benchmark:\n  type: custom\n"
+        telemetry if uses_dcgm_power else "benchmark:\n  type: custom\n"
     )
     stub_bin.mkdir()
 
@@ -270,15 +279,23 @@ def test_dsv4_power_route_rejects_unexpected_checkout_before_publishing_stamp(tm
 
 
 @pytest.mark.parametrize(
-    ("model_prefix", "is_agentic", "expected_pin"),
-    [("dsv4", False, PRODUCER_PIN), ("glm5.2", True, AGENTX_PRODUCER_PIN)],
+    ("model_prefix", "is_agentic", "recipe_name", "expected_pin"),
+    [("dsv4", False, None, PRODUCER_PIN)]
+    + [
+        ("glm5.2", True, recipe_name, AGENTX_PRODUCER_PIN)
+        for recipe_name in GLM52_GB200_POWER_RECIPES
+    ],
 )
 def test_gb200_routes_fixed_sequence_and_opted_in_agentx_power(
-    tmp_path: Path, model_prefix: str, is_agentic: bool, expected_pin: str
+    tmp_path: Path,
+    model_prefix: str,
+    is_agentic: bool,
+    recipe_name: str | None,
+    expected_pin: str,
 ) -> None:
     log, workspace, repo_dir, marker = _run_dsv4_route(
         tmp_path, True, launcher_path=REPO_ROOT / "runners/launch_gb200-nv.sh",
-        model_prefix=model_prefix, is_agentic=is_agentic,
+        model_prefix=model_prefix, is_agentic=is_agentic, recipe_name=recipe_name,
     )
     assert f"git clone {FORK_URL} {repo_dir}" in log
     assert f"git checkout {expected_pin}" in log

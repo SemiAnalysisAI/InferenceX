@@ -179,6 +179,18 @@ base:
         watchdog-timeout: 1800
         enable-metrics: true
         enable-cache-report: true
+  telemetry:
+    enabled: true
+    provider: dcgm-power
+    default_frequency: 1.0
+    storage_subdir: power
+    required: true
+    startup_timeout_seconds: 120
+    request_timeout_seconds: 2
+    collector_join_timeout_seconds: 12
+    dcgm_exporter:
+      container_image: dcgm-exporter
+      port: 9401
   health_check:
     max_attempts: 1440
     interval_seconds: 10
