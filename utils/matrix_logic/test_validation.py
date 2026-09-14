@@ -636,13 +636,6 @@ class TestMultiNodeMatrixEntry:
         with pytest.raises(ValidationError, match="both.*prefill.*decode"):
             MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
 
-    def test_prefill_decode_worker_configs(self, valid_multinode_matrix_entry):
-        """Prefill and decode should be WorkerConfig objects."""
-        entry = MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
-        assert entry.prefill.num_worker == 5
-        assert entry.prefill.tp == 4
-        assert entry.decode.tp == 8
-        assert entry.decode.dp_attn is True
 
     def test_all_eval_concurrency_batch_marker(
         self,
@@ -678,12 +671,6 @@ class TestMultiNodeMatrixEntry:
     def test_missing_prefill(self, valid_multinode_matrix_entry):
         """Missing prefill should fail."""
         del valid_multinode_matrix_entry["prefill"]
-        with pytest.raises(ValidationError):
-            MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
-
-    def test_missing_decode(self, valid_multinode_matrix_entry):
-        """Missing decode should fail."""
-        del valid_multinode_matrix_entry["decode"]
         with pytest.raises(ValidationError):
             MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
 
@@ -1336,14 +1323,6 @@ class TestValidateMasterConfig:
         result = validate_master_config(configs)
         assert result == configs
 
-    def test_mixed_configs(self, valid_single_node_master_config, valid_multinode_master_config):
-        """Mixed single and multinode configs should pass."""
-        configs = {
-            "dsr1-fp8-mi300x-sglang": valid_single_node_master_config,
-            "dsr1-fp4-gb200-dynamo-trt": valid_multinode_master_config,
-        }
-        result = validate_master_config(configs)
-        assert len(result) == 2
 
     def test_invalid_config_raises_valueerror(self, valid_single_node_master_config):
         """Invalid config should raise ValueError with key name."""

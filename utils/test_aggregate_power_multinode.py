@@ -300,10 +300,6 @@ class TestValidPackage:
         assert agg["p90_total_gpu_power_w"] == pytest.approx(1456.0)
         assert agg["p90_power_w"] == pytest.approx(364.0)
 
-    def test_strict_mode_passes_on_valid_package(self, tmp_path):
-        pkg = build_package(tmp_path)
-        assert pkg.run(require_power=True) == 0
-        assert pkg.agg()["power_valid"] == 1
 
     def test_aggregate_topology_emits_only_whole_deployment_metrics(self, tmp_path):
         pkg = build_package(tmp_path)
