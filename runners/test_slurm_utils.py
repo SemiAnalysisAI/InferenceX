@@ -248,9 +248,12 @@ PY
     curl.chmod(0o755)
     endpoints = tmp_path / "endpoints.yaml"
     endpoints.write_text(yaml.safe_dump({"endpoints": [
-        {"address": "10.0.0.1", "port": "8200"},
-        {"address": "10.0.0.2", "port": "8200"},
-        {"address": "10.0.0.3", "port": "8000"},
+        {"address": "10.0.0.1", "port": "8200", "name": "vllm-node-0",
+         "labels": {"llm-d.ai/role": "combined"}},
+        {"address": "10.0.0.2", "port": "8200", "name": "vllm-node-1",
+         "labels": {"llm-d.ai/role": "combined"}},
+        {"address": "10.0.0.3", "port": "8000", "name": "vllm-node-2",
+         "labels": {"llm-d.ai/role": "combined"}},
     ]}))
     requests = tmp_path / "metrics-requests.txt"
     env = dict(os.environ, INFMAX_CONTAINER_WORKSPACE=str(tmp_path),
@@ -260,7 +263,7 @@ PY
                LLMD_ENDPOINTS_FILE=str(endpoints), MODEL_NAME="test-model", MODEL_PREFIX="dsv4",
                FRAMEWORK="llmd-vllm", DURATION="3600", IS_AGENTIC="1", KV_OFFLOADING="none",
                ENVOY_PORT="8080", VLLM_PORT="8200", BENCHMARK_LOGS_DIR=str(tmp_path / "logs"),
-               BENCH_MAX_CONCURRENCY="64")
+               BENCH_MAX_CONCURRENCY="64", DECODE_NODES="0")
     result = subprocess.run(["bash", str(REPO_ROOT / "benchmarks/multi_node/llm-d/agentic.sh")],
                             env=env, text=True, capture_output=True)
     if metrics_body.startswith("envoy_"):
