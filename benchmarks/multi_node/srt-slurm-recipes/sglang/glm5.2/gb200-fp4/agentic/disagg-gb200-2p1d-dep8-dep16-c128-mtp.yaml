@@ -8,10 +8,10 @@ identity:
     repo: nvidia/GLM-5.2-NVFP4
     revision: aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa
   container:
-    image: lmsysorg/sglang:nightly-dev-cu13-20260805-211ee642
+    image: lmsysorg/sglang:v0.5.17-cu130
   frameworks:
     dynamo: 71eb001e17fa73c742f0afe1a6ed96836cb135fd
-    sglang: nightly-dev-cu13-20260805-211ee642
+    sglang: 0.5.17
 resources:
   gpu_type: gb200
   gpus_per_node: 4
@@ -190,6 +190,18 @@ benchmark:
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
     AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
     HF_HUB_CACHE: /hf_hub_cache
+telemetry:
+  enabled: true
+  provider: dcgm-power
+  default_frequency: 1.0
+  storage_subdir: power
+  required: true
+  startup_timeout_seconds: 120
+  request_timeout_seconds: 2
+  collector_join_timeout_seconds: 10
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    port: 9401
 infra:
   etcd_nats_dedicated_node: false
   nats_max_payload_mb: 64

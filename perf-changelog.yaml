@@ -7581,3 +7581,14 @@
     - "DP-attention serving adds --enable-dp-lm-head, which SGLang requires for DSpark under DP attention, and TP-only serving adds --prefill-decode-interval 10 to fix scheduler issue."
     - "Use --cuda-graph-max-bs-decode instead of --cuda-graph-max-bs: the 20260911 image split the flag per phase and ships no legacy alias, so the old spelling aborts argument parsing as an ambiguous prefix."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3001
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Publish the complete GLM-5.2 GB200 Dynamo-SGLang curve on v0.5.17 as one 11-point sweep: six aggregate points, two 1P1D points, and the C45/C48/C128 disaggregated points. Require validated DCGM power for every throughput point."
+    - "在 v0.5.17 上通过一次 11 点 sweep 发布完整的 GLM-5.2 GB200 Dynamo-SGLang 曲线：六个聚合点、两个 1P1D 点及 C45/C48/C128 分离部署点；每个吞吐点均要求有效 DCGM 功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3090
