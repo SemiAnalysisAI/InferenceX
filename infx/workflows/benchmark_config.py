@@ -1,6 +1,7 @@
 """Prepare benchmark names and environment variables."""
 
 import json
+from decimal import Decimal
 
 
 def _text(value: object) -> str:
@@ -8,6 +9,14 @@ def _text(value: object) -> str:
         return ""
     if isinstance(value, bool):
         return str(value).lower()
+    if isinstance(value, int):
+        try:
+            number = float(value)
+        except OverflowError:
+            return "Infinity" if value > 0 else "-Infinity"
+        if abs(number) < 1e21:
+            return format(Decimal(str(number)), "f").removesuffix(".0")
+        return str(number)
     return str(value)
 
 
@@ -56,8 +65,8 @@ def prepare_config(row: dict) -> dict:
             )})
         disagg = row.get("disagg") is True
         parts.extend([
-            (f"{row['prefill']['num-worker']}P " if disagg else "") + f"({_topology(row['prefill'])})",
-            f"x {row['decode']['num-worker']}D ({_topology(row['decode'])})" if disagg else "",
+            (f"{env['PREFILL_NUM_WORKERS']}P " if disagg else "") + f"({_topology(row['prefill'])})",
+            f"x {env['DECODE_NUM_WORKERS']}D ({_topology(row['decode'])})" if disagg else "",
         ])
     else:
         env.update({name: _text(row.get(key)) for name, key in (

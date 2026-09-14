@@ -1486,6 +1486,17 @@ CHANGELOG_METADATA = {
 
 
 class TestBenchmarkWorkflowSchema:
+    @pytest.mark.parametrize(("value", "expected"), [
+        (2**53 - 1, "9007199254740991"),
+        (2**53 + 1, "9007199254740992"),
+        (1000000000000000128, "1000000000000000100"),
+        (10**20, "100000000000000000000"), (10**21, "1e+21"),
+    ])
+    def test_numeric_environment_uses_actions_number_format(self, valid_single_node_matrix_entry, value, expected):
+        prepared = prepare_config({**valid_single_node_matrix_entry, "conc": value, "ep": value})
+        assert prepared["env"]["CONC"] == prepared["env"]["EP_SIZE"] == expected
+        assert prepared["name"] == f"dsr1 fp4 mi355x sgl TP8/EP{expected}   "
+
     def test_single_node_name_and_environment(self, valid_single_node_matrix_entry):
         row = {**valid_single_node_matrix_entry, "pp": 2, "dcp-size": 2, "pcp-size": 4,
                "ep": 0, "dp-attn": True, "framework": "DYNAMO-SGLANG",
