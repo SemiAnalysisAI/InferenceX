@@ -273,17 +273,6 @@ def test_queue_tokens_are_stable_for_reordered_keys_but_distinct_for_duplicate_j
     assert queue_token(entry, "run", ("0",)) != queue_token(entry, "run", ("1",))
 
 
-def test_prepared_display_data_preserves_scheduling_identity(policy):
-    entry = {"runner": "b200", "framework": "sglang", "conc": 8}
-    prepared = {**entry, "workflow": {"name": "display label", "env": {"CONC": "8"}}}
-    original = annotate_jobs([entry], policy)[0]
-    result = annotate_jobs([prepared], policy)[0]
-    assert result.pop("workflow") == prepared["workflow"]
-    assert result == original
-    changed = annotate_jobs([{**prepared, "conc": 16}], policy)[0]
-    assert changed["queue-token"] != original["queue-token"]
-
-
 @pytest.mark.parametrize("framework,expected", [("vllm", "15"), ("vllm-disagg", "15"), ("vllmish", "10")])
 def test_framework_prefix_matching_requires_a_separator(policy, framework, expected):
     assert calculate_priority({"framework": framework}, policy) == Decimal(expected)

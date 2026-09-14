@@ -1,8 +1,8 @@
-"""Validate benchmark workflow inputs.
+"""Validate benchmark workflow inputs before fan-out, without rewriting them.
 
 The matrix models own recipe fields and cross-field rules. This boundary adds
 positive concurrency and permits older generators to omit parallelism fields.
-Defaults are used only for validation.
+Defaults are used only for validation; the original JSON reaches the workflow.
 """
 
 import argparse
@@ -11,8 +11,6 @@ import sys
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, ValidationError
-
-from infx.workflows.benchmark_config import prepare_config
 
 from infx.matrix.validation import (
     MultiNodeAgenticMatrixEntry,
@@ -55,7 +53,7 @@ class MultiNodeAgenticConfig(_BatchFields, MultiNodeAgenticMatrixEntry):
 
 def _validate_rows(
     rows: object, *, path: str, multinode: bool | None = None, agentic: bool | None = None,
-) -> list[dict]:
+) -> None:
     if not isinstance(rows, list):
         raise ValueError(f"{path}: expected a list of matrix rows")
     for index, row in enumerate(rows):
@@ -72,47 +70,38 @@ def _validate_rows(
             schema.model_validate(row, strict=True, by_alias=True, by_name=False)
         except ValidationError as error:
             raise ValueError(f"{location}: {error}") from error
-    return rows
 
 
-def validate_matrix(matrix: object, *, plan: bool = False) -> list[dict]:
+def validate_matrix(matrix: object, *, plan: bool = False) -> None:
     """Check single-node and multinode workflow rows; preserve the input."""
     if not plan:
-        return _validate_rows(matrix, path="matrix")
+        _validate_rows(matrix, path="matrix")
+        return
     if not isinstance(matrix, dict):
         raise ValueError("plan: expected an object")
-    validated = []
     for family, multinode in (("single_node", False), ("multi_node", True)):
         groups = matrix.get(family, {})
         if not isinstance(groups, dict):
             raise ValueError(f"{family}: expected scenario groups")
         for group, rows in groups.items():
-            validated.extend(_validate_rows(rows, path=f"{family}.{group}", multinode=multinode,
-                                            agentic=group == "agentic"))
+            _validate_rows(rows, path=f"{family}.{group}", multinode=multinode,
+                           agentic=group == "agentic")
         prefix = "multinode_" if multinode else ""
         for suffix, agentic in (("evals", False), ("agentic_evals", True)):
             bucket = prefix + suffix
-            validated.extend(_validate_rows(matrix.get(bucket, []), path=bucket, multinode=multinode, agentic=agentic))
-    return validated
+            _validate_rows(matrix.get(bucket, []), path=bucket, multinode=multinode, agentic=agentic)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", action="store_true", help="Read a changelog plan instead of a flat matrix")
-    parser.add_argument("--prepare", action="store_true", help="Add benchmark names and environment variables")
     args = parser.parse_args()
     raw = sys.stdin.read()
     try:
-        matrix = json.loads(raw)
-        rows = validate_matrix(matrix, plan=args.plan)
+        validate_matrix(json.loads(raw), plan=args.plan)
     except ValueError as error:
         parser.error(str(error))
-    if args.prepare:
-        for row in rows:
-            row["workflow"] = prepare_config(row)
-        sys.stdout.write(json.dumps(matrix, separators=(",", ":")))
-    else:
-        sys.stdout.write(raw)
+    sys.stdout.write(raw)
 
 
 if __name__ == "__main__":

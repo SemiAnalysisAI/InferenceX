@@ -12,7 +12,6 @@ import pytest
 import yaml
 from pydantic import ValidationError
 from infx.workflows import benchmark_schema
-from infx.workflows.benchmark_config import prepare_config
 from infx.matrix.validation import (
     ComponentMetadata,
     SingleNodeMatrixEntry,
@@ -1486,77 +1485,6 @@ CHANGELOG_METADATA = {
 
 
 class TestBenchmarkWorkflowSchema:
-    @pytest.mark.parametrize(("value", "expected"), [
-        (2**53 - 1, "9007199254740991"),
-        (2**53 + 1, "9007199254740992"),
-        (1000000000000000128, "1000000000000000100"),
-        (10**20, "100000000000000000000"), (10**21, "1e+21"),
-    ])
-    def test_numeric_environment_uses_actions_number_format(self, valid_single_node_matrix_entry, value, expected):
-        prepared = prepare_config({**valid_single_node_matrix_entry, "conc": value, "ep": value})
-        assert prepared["env"]["CONC"] == prepared["env"]["EP_SIZE"] == expected
-        assert prepared["name"] == f"dsr1 fp4 mi355x sgl TP8/EP{expected}   "
-
-    def test_single_node_name_and_environment(self, valid_single_node_matrix_entry):
-        row = {**valid_single_node_matrix_entry, "pp": 2, "dcp-size": 2, "pcp-size": 4,
-               "ep": 0, "dp-attn": True, "framework": "DYNAMO-SGLANG",
-               "image": "engine:test", "model": "test/model"}
-        prepared = prepare_config(row)
-        assert prepared["name"] == "dsr1 fp4 mi355x dyn-sgl TP8/PP2/DCP2/PCP4/EP0/DPA   "
-        assert prepared["env"] == {
-            "EXP_NAME": "dsr1_1k1k", "RECIPE_FINGERPRINT": "",
-            "MODEL": "test/model", "MODEL_PREFIX": "dsr1", "IMAGE": "engine:test",
-            "FRAMEWORK": "DYNAMO-SGLANG", "PRECISION": "fp4", "SPEC_DECODING": "none",
-            "ISL": "1024", "OSL": "1024", "MAX_MODEL_LEN": "2248", "DISAGG": "false",
-            "KV_OFFLOADING": "", "KV_OFFLOAD_BACKEND": "", "KV_OFFLOAD_BACKEND_METADATA": "",
-            "ROUTER_METADATA": "", "KV_P2P_TRANSFER": "", "TOTAL_CPU_DRAM_GB": "0",
-            "TP": "8", "PP_SIZE": "2", "DCP_SIZE": "2", "PCP_SIZE": "4", "EP_SIZE": "0", "CONC": "4",
-        }
-
-    @pytest.mark.parametrize(("disagg", "name"), [
-        (True, "dsr1 fp4 gb200 dynamo-trt 5P (TP4/EP4/DPA) x 1D (TP8/EP8/DPA)   "),
-        (False, "dsr1 fp4 gb200 dynamo-trt (TP4/EP4/DPA)    "),
-    ])
-    def test_multinode_name_and_worker_environment(self, valid_multinode_matrix_entry, disagg, name):
-        prepared = prepare_config({**valid_multinode_matrix_entry, "disagg": disagg})
-        assert prepared["name"] == name
-        env = prepared["env"]
-        assert {key: env[key] for key in (
-            "PREFILL_NUM_WORKERS", "PREFILL_TP", "PREFILL_EP", "PREFILL_DP_ATTN", "PREFILL_HARDWARE",
-            "DECODE_NUM_WORKERS", "DECODE_TP", "DECODE_EP", "DECODE_DP_ATTN", "DECODE_HARDWARE",
-        )} == {
-            "PREFILL_NUM_WORKERS": "5", "PREFILL_TP": "4", "PREFILL_EP": "4",
-            "PREFILL_DP_ATTN": "true", "PREFILL_HARDWARE": "gb200",
-            "DECODE_NUM_WORKERS": "1", "DECODE_TP": "8", "DECODE_EP": "8",
-            "DECODE_DP_ATTN": "true", "DECODE_HARDWARE": "h100",
-        }
-        assert env["PREFILL_PP_SIZE"] == env["DECODE_DCP_SIZE"] == env["DECODE_PCP_SIZE"] == ""
-        assert "CONC" not in env and "TOTAL_CPU_DRAM_GB" not in env
-
-    @pytest.mark.parametrize(("row", "name"), [
-        (AGENTIC_EVAL_ROW, "dsv4 fp4 cluster:b300-nv vllm TP8/EP8/DPA mtp  "),
-        (MULTINODE_AGENTIC_EVAL_ROW,
-         "dsv4 fp4 cluster:mi355x-amds sgl-disagg 1P (TP8) x 1D (TP8)  dram KV offload hicache"),
-    ])
-    def test_agentic_names_and_sequence_defaults(self, row, name):
-        prepared = prepare_config(row)
-        assert prepared["name"] == name
-        env = prepared["env"]
-        assert env["ISL"] == env["OSL"] == env["MAX_MODEL_LEN"] == "0"
-        if "prefill" not in row:
-            assert env["DISAGG"] == "false"
-            assert env["TOTAL_CPU_DRAM_GB"] == "0"
-            assert env["CONC"] == "224"
-
-    def test_metadata_is_serialized_without_changing_values(self):
-        row = {**AGENTIC_EVAL_ROW, "kv-offloading": "dram",
-               "kv-offload-backend": {"name": "default"},
-               "router": {"name": "route", "version": '中文\n"quoted"'}}
-        prepared = prepare_config(row)
-        assert prepared["name"] == "dsv4 fp4 cluster:b300-nv vllm TP8/EP8/DPA mtp dram KV offload "
-        assert prepared["env"]["KV_OFFLOAD_BACKEND_METADATA"] == '{\n  "name": "default"\n}'
-        assert prepared["env"]["ROUTER_METADATA"] == '{\n  "name": "route",\n  "version": "中文\\n\\"quoted\\""\n}'
-
     @pytest.mark.parametrize("multinode", [False, True])
     @pytest.mark.parametrize("agentic", [False, True])
     def test_accepts_historical_rows_without_inserting_defaults(
@@ -1579,7 +1507,6 @@ class TestBenchmarkWorkflowSchema:
     @pytest.mark.parametrize(("field", "value"), [
         ("tp", "8"), ("dp-attn", "false"), ("conc", [4]), ("conc", 0),
         ("pp", 0), ("pcp-size", None), ("unexpected", "value"),
-        ("workflow", {"env": {"PATH": "/untrusted"}}),
     ])
     def test_workflow_boundary_rejects_invalid_input(
         self, valid_single_node_matrix_entry, field, value,
@@ -1709,12 +1636,7 @@ if sys.argv[1:3] != ['-m', 'infx.workflows.reuse']:
                 "multi-node-config" if multinode else "single-node-config"
             )
             published = dict(line.split("=", 1) for line in output.read_text().splitlines())
-            prepared = json.loads(published[key])
-            prepared_row = prepared[family]["1k1k"][0] if workflow_name == "run-sweep" else prepared[0]
-            env = prepared_row.pop("workflow")["env"]
-            assert env["ISL"] == env["OSL"] == "1024"
-            assert env["PREFILL_TP" if multinode else "TP"] == ("4" if multinode else "8")
-            assert prepared == matrix
+            assert json.loads(published[key]) == matrix
 
 
 class TestChangelogMatrixEntry:
