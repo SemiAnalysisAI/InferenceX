@@ -1527,7 +1527,7 @@ class TestBenchmarkWorkflowSchema:
             benchmark_schema.validate_matrix([{**valid_multinode_matrix_entry, "conc": conc}])
 
     @pytest.mark.parametrize("multinode", [False, True])
-    @pytest.mark.parametrize("bucket", ["evals", "agentic_evals", "1k1k", "agentic-coding"])
+    @pytest.mark.parametrize("bucket", ["evals", "agentic_evals", "1k1k", "agentic"])
     def test_plan_rejects_rows_in_the_wrong_scenario_bucket(
         self, valid_single_node_matrix_entry, valid_multinode_matrix_entry, multinode, bucket,
     ):
@@ -1539,7 +1539,7 @@ class TestBenchmarkWorkflowSchema:
             "evals": {prefix + "evals": [agentic]},
             "agentic_evals": {prefix + "agentic_evals": [fixed]},
             "1k1k": {family: {"1k1k": [agentic]}},
-            "agentic-coding": {family: {"agentic-coding": [fixed]}},
+            "agentic": {family: {"agentic": [fixed]}},
         }
         with pytest.raises(ValueError, match=bucket):
             benchmark_schema.validate_matrix(misplaced_rows[bucket], plan=True)

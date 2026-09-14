@@ -8,6 +8,7 @@ on:
       - 'infx/**'
       - 'utils/matrix_logic/**'
       - '.github/workflows/benchmark-tmpl.yml'
+      - '.github/workflows/benchmark-multinode-tmpl.yml'
       - '.github/workflows/run-sweep.yml'
       - '.github/workflows/e2e-tests.yml'
 

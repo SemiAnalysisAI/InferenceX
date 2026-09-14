@@ -85,7 +85,7 @@ def validate_matrix(matrix: object, *, plan: bool = False) -> None:
             raise ValueError(f"{family}: expected scenario groups")
         for group, rows in groups.items():
             _validate_rows(rows, path=f"{family}.{group}", multinode=multinode,
-                           agentic=group == "agentic-coding")
+                           agentic=group == "agentic")
         prefix = "multinode_" if multinode else ""
         for suffix, agentic in (("evals", False), ("agentic_evals", True)):
             bucket = prefix + suffix
