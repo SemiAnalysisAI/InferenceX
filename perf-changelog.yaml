@@ -7621,4 +7621,4 @@
     - agentic-coding
   description:
     - "Refresh the Kimi-K3 GB300 AgentX Pareto configurations."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3105
