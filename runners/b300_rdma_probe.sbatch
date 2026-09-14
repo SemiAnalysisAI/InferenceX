@@ -37,7 +37,8 @@ ls /etc/enroot/mounts.d/ 2>&1 && cat /etc/enroot/mounts.d/*.fstab 2>&1
 mounts="$GITHUB_WORKSPACE:/workspace,$lib:/host-usr-lib:ro"
 [[ -d /opt/amazon ]] && mounts+=",/opt/amazon:/host-opt-amazon:ro"
 echo "== container probe with mounts $mounts"
-srun --mpi=none \
+# The node's Enroot PMI hook mounts PMIx step directories; MPI=none leaves them absent.
+srun --mpi=pmix \
     --container-image="$SQUASH_FILE" \
     --container-mounts="$mounts" \
     --no-container-mount-home \
@@ -45,4 +46,6 @@ srun --mpi=none \
     --container-workdir=/workspace \
     --no-container-entrypoint --export=ALL \
     bash runners/b300_runtime_diagnostic.sh
-echo "container probe rc=$?"
+probe_rc=$?
+echo "container probe rc=$probe_rc"
+exit "$probe_rc"

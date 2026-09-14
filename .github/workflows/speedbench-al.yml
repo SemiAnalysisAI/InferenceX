@@ -171,6 +171,8 @@ jobs:
           sacct -j "$jid" -P --format=JobID,State,ExitCode,Elapsed,NodeList,Reason
           cat "$GITHUB_WORKSPACE/diag/slurm-$jid.out"
           cp "$GITHUB_WORKSPACE/diag/slurm-$jid.out" "$out/slurm-$jid.out"
+          probe_status=$(sacct -X -n -P -j "$jid" --format=State,ExitCode)
+          [[ "$probe_status" == 'COMPLETED|0:0' ]]
       - name: Release only this probe
         if: always()
         env:
