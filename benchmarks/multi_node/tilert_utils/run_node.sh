@@ -232,7 +232,7 @@ wait_for_tcp() {
         fi
         sleep 5
     done
-    [[ $rc -eq 0 ]] && { exec 3>&- 2>/dev/null || true; echo "[wait_for_tcp] $host:$port ready"; }
+    [[ $rc -eq 0 ]] && echo "[wait_for_tcp] $host:$port ready"
     (( _xtrace )) && set -x
     return $rc
 }
@@ -261,11 +261,11 @@ run_bench_and_eval() {
             || { rc=$?; echo "[bench] WARNING: conc=$conc failed/timed out (rc=$rc)"; }
     done
     fi
-    run_lm_eval || rc=$?
+    run_tilert_eval || rc=$?
     return $rc
 }
 
-run_lm_eval() {
+run_tilert_eval() {
     [[ "${RUN_EVAL}" = "true" ]] || return 0
     if [[ -n "${EVAL_CONC:-}" ]]; then
         export EVAL_CONCURRENT_REQUESTS="$EVAL_CONC"
@@ -273,8 +273,13 @@ run_lm_eval() {
         export EVAL_CONCURRENT_REQUESTS="$(tr ' ' '\n' <<< "$CONC_LIST" | sort -n | tail -1)"
     fi
     export CONC="$EVAL_CONCURRENT_REQUESTS"
-    run_eval --port "$ROUTER_PORT"
-    append_lm_eval_summary
+    local eval_rc=0 stage_rc=0
+    run_eval --port "$ROUTER_PORT" || eval_rc=$?
+    append_lm_eval_summary || stage_rc=$?
+    if [[ "$eval_rc" -ne 0 ]]; then
+        return "$eval_rc"
+    fi
+    return "$stage_rc"
 }
 
 run_agentic_replay() {
