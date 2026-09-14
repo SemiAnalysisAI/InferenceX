@@ -201,7 +201,7 @@ qwen3.5-fp8-mi355x-sglang:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
 
 qwen3.5-fp8-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260828
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913@sha256:d1a7c4cae3870711a5548cfe38e0b33db4c61c8977b04f66b7ab9b3bc1769a64
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: mi355x
