@@ -121,7 +121,7 @@ collx_load_operator_config() {
   unset ENROOT_CACHE_PATH
   unset COLLX_EXCLUDE_NODES COLLX_NODELIST COLLX_LOCK_DIR COLLX_MASTER_PORT
   unset COLLX_SOCKET_IFNAME COLLX_RDMA_DEVICES COLLX_IB_GID_INDEX COLLX_RDMA_SERVICE_LEVEL
-  unset COLLX_RDMA_TRAFFIC_CLASS COLLX_RAIL_ISOLATED COLLX_SINGLE_NODE_RDMA_DEVICES
+  unset COLLX_RDMA_TRAFFIC_CLASS COLLX_RAIL_ISOLATED COLLX_SINGLE_NODE_RDMA_DEVICES COLLX_RDMA_FABRIC
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   config_path="${COLLECTIVEX_OPERATOR_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/inferencex/collectivex.json}"
   if [ ! -e "$config_path" ]; then
@@ -192,9 +192,25 @@ collx_export_gid_index_for_link_layer() {
       # RoCE runs must set it here or the CPU proxies fall back to GID 0 and mis-address the fabric.
       export UCCL_IB_GID_INDEX="$COLLX_IB_GID_INDEX"
       ;;
-    infiniband) ;;
+    infiniband|efa) ;;
     *) collx_die "unsupported RDMA link layer" ;;
   esac
+}
+
+# AWS EFA scale-out (b300-dsxe, p6-b300.48xlarge: 16 EFA devices per node). EFA is not a verbs
+# HCA: its ports report link_layer Unspecified, it has no GID table, service level or traffic
+# class, and NCCL reaches it only through the aws-ofi-nccl libfabric plugin, which the cluster's
+# enroot hook bind-mounts into every container (/opt/amazon/{efa,ofi-nccl} on the ld path). GIN
+# rides the plugin's ncclGinPlugin export (proxy or GDAKI; OFI_NCCL_GIN_TYPE selects). So the
+# whole IB/RoCE selector family (NCCL_IB_*, NVSHMEM_HCA_LIST/IBGDA, MORI_*, UCCL_IB_*) stays
+# unset: the plugin enumerates and rails the EFA devices itself, and the operator's rdma_devices
+# list is consumed only by the network-profile probe as the set of ports that must be ACTIVE.
+# NVSHMEM (deepep-v2) has its own libfabric transport; point it at EFA the same way.
+collx_apply_efa_profile() {
+  export NCCL_NET_PLUGIN=ofi
+  export FI_PROVIDER=efa FI_EFA_FORK_SAFE=1
+  export NVSHMEM_REMOTE_TRANSPORT=libfabric NVSHMEM_LIBFABRIC_PROVIDER=efa
+  unset NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_IBGDA_NIC_HANDLER NVSHMEM_HCA_LIST NVSHMEM_ENABLE_NIC_PE_MAPPING
 }
 
 # Convert private, runner-local network selectors into the public library
@@ -205,7 +221,7 @@ collx_apply_network_profile() {
   local selector rdma_name rdma_names="" ep_nic=""
   local -a selectors
   [[ "$nodes" =~ ^[1-9][0-9]*$ ]] || collx_die "invalid network placement"
-  unset NCCL_NET NCCL_SOCKET_IFNAME GLOO_SOCKET_IFNAME NCCL_IB_HCA
+  unset NCCL_NET NCCL_NET_PLUGIN NCCL_SOCKET_IFNAME GLOO_SOCKET_IFNAME NCCL_IB_HCA
   unset NCCL_IB_GID_INDEX NCCL_IB_SL NCCL_IB_MERGE_NICS NCCL_CROSS_NIC
   unset NVSHMEM_ENABLE_NIC_PE_MAPPING
   unset NVSHMEM_HCA_LIST NVSHMEM_IB_GID_INDEX NVSHMEM_IB_SL
@@ -239,6 +255,7 @@ collx_apply_network_profile() {
   { [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ]; } || return 0
   [ -n "${COLLX_RDMA_DEVICES:-}" ] \
     || collx_die "RDMA execution requires a private device selector"
+  [[ "${COLLX_RDMA_FABRIC:-}" =~ ^(efa)?$ ]] || collx_die "invalid private RDMA fabric"
   if [ -n "${COLLX_SOCKET_IFNAME:-}" ]; then
     [[ "$COLLX_SOCKET_IFNAME" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}$ ]] \
       || collx_die "invalid private socket interface selector"
@@ -252,6 +269,10 @@ collx_apply_network_profile() {
     rdma_names="${rdma_names}${rdma_names:+,}${rdma_name}"
     [ -n "$ep_nic" ] || ep_nic="$rdma_name"
   done
+  if [ "${COLLX_RDMA_FABRIC:-}" = efa ]; then
+    collx_apply_efa_profile
+    return 0
+  fi
   export NVSHMEM_HCA_LIST="$COLLX_RDMA_DEVICES"
   export NVSHMEM_ENABLE_NIC_PE_MAPPING=1
   # RCCL selects its own net plugin; NCCL_NET=IB breaks AMD SKUs.
@@ -312,7 +333,7 @@ collx_apply_network_profile() {
   export NVSHMEM_IB_ENABLE_IBGDA=1 NVSHMEM_IBGDA_NIC_HANDLER="$nic_handler"
   if [ -n "${COLLX_RDMA_LINK_LAYER:-}" ]; then
     case "$COLLX_RDMA_LINK_LAYER" in
-      roce|infiniband) ;;
+      roce|infiniband|efa) ;;
       *) collx_die "invalid validated RDMA link layer" ;;
     esac
     collx_export_gid_index_for_link_layer "$COLLX_RDMA_LINK_LAYER"
@@ -330,7 +351,9 @@ collx_restore_exact_hca_selector() {
     || { collx_log "ERROR: scale-out RDMA selector is unavailable"; return 1; }
   [[ "$COLLX_RDMA_DEVICES" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?(,[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?)*$ ]] \
     || { collx_log "ERROR: invalid scale-out RDMA selector"; return 1; }
-  export NCCL_IB_HCA="=$COLLX_RDMA_DEVICES"
+  # EFA devices are not verbs HCAs to NCCL: the libfabric plugin enumerates them itself and
+  # NCCL_IB_HCA would only steer the (unused) builtin IB transport. Leave it unset there.
+  [ "${COLLX_RDMA_FABRIC:-}" = efa ] || export NCCL_IB_HCA="=$COLLX_RDMA_DEVICES"
 }
 
 collx_default_route_interface() {
@@ -357,7 +380,7 @@ collx_validate_network_profile_on_job() {
   srun --jobid="$job_id" --nodes="$nodes" --ntasks="$nodes" --ntasks-per-node=1 \
     --chdir=/tmp --input=all --export="$(collx_host_exports)" \
     python3 /dev/stdin network-profile "${COLLX_SOCKET_IFNAME:-}" \
-      "$COLLX_RDMA_DEVICES" "${COLLX_IB_GID_INDEX:-}" \
+      "$COLLX_RDMA_DEVICES" "${COLLX_IB_GID_INDEX:-}" "${COLLX_RDMA_FABRIC:-}" \
     < "$COLLX_RUNTIME_DIR/probe.py" > "$log" 2>&1 || rc=$?
   if [ "$rc" != 0 ]; then
     marker="$(grep -aoE '(socket-interface|rdma-(device|port))-[0-9]+=(missing|down|inactive|default-route-missing|gid-missing|gid-empty|link-layer-missing|link-layer-invalid|link-layer-mixed)' "$log" \
@@ -381,12 +404,12 @@ collx_validate_network_profile_on_job() {
     unset COLLX_SOCKET_IFNAME
   fi
   link_layer="$(
-    sed -nE 's/^\[collectivex-private\] rdma-link-layer=(roce|infiniband)$/\1/p' "$log" \
+    sed -nE 's/^\[collectivex-private\] rdma-link-layer=(roce|infiniband|efa)$/\1/p' "$log" \
       | sort -u
   )"
-  marker_count="$(grep -Ec '^\[collectivex-private\] rdma-link-layer=(roce|infiniband)$' "$log")"
+  marker_count="$(grep -Ec '^\[collectivex-private\] rdma-link-layer=(roce|infiniband|efa)$' "$log")"
   case "$marker_count:$link_layer" in
-    "$nodes":roce|"$nodes":infiniband) ;;
+    "$nodes":roce|"$nodes":infiniband|"$nodes":efa) ;;
     *) return 1 ;;
   esac
   export COLLX_RDMA_LINK_LAYER="$link_layer"
