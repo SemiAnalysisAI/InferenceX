@@ -186,7 +186,9 @@ The emitted matrix is the executable CI contract, but it is not a durable source
 6. Benchmark, eval, and agentic rows use separate fan-out jobs because their required input shapes differ.
 7. Collection waits on the relevant jobs. Main-branch runs dispatch ingestion only after required collection and changelog-metadata work reaches an allowed state.
 
-The reusable workflows form an explicit adapter between matrix keys and runtime environment variables. For example, matrix `model-prefix`, `dcp-size`, `spec-decoding`, and `run-eval` become `MODEL_PREFIX`, `DCP_SIZE`, `SPEC_DECODING`, and `RUN_EVAL`. This projection is load-bearing. A new master field has no runtime effect until the generator emits it, the calling workflow forwards it, the template exposes it, and runtime code consumes it.
+The reusable workflows form an explicit adapter between matrix keys and runtime environment variables. Single-node callers pass the validated `infx.matrix` row as one JSON `config` input; `benchmark-tmpl.yml` owns its projection into variables such as `MODEL_PREFIX`, `DCP_SIZE`, and `SPEC_DECODING`. Adding a recipe field therefore requires its schema/generator and consuming template/runtime changes, without repeating the forwarding field in every caller. The template reads known fields explicitly rather than exporting arbitrary JSON keys.
+
+Scheduling, checkout selection, and execution overrides remain explicit workflow inputs. `dp-attn` also remains a boolean input to preserve GitHub's type check. AgentX keeps its zero sequence lengths, and omitted historical fields retain their previous empty-string behavior. The JSON is interpreted by GitHub Actions before checkout, so older measured commits need no new helper. Multinode and profiling still use their existing interfaces.
 
 The matrix `runner` value also drives `runs-on`. Once a self-hosted runner is assigned, the template obtains its concrete `${{ runner.name }}` and launches:
 

@@ -118,6 +118,15 @@ python3 -m infx.workflows.validate_perf_changelog \
 
 ### 并行运行完整本地测试套件
 
+修改基准工作流的输入、环境变量或产物衔接时，还需使用 Node.js 20+ 运行契约测试：
+
+```bash
+npm ci --prefix utils/workflow_tests --ignore-scripts --no-audit --no-fund
+npm test --prefix utils/workflow_tests
+```
+
+这些测试使用 GitHub 的表达式库计算实际 YAML，并通过记录环境的启动器执行启动步骤，无需分配 GPU 即可检查配置传递及旧提交兼容性；它们不能证明推理性能或集群健康状况。
+
 安装好测试所需依赖后，在同一 Python 环境中添加 [`pytest-xdist`](https://pytest-xdist.readthedocs.io/en/stable/distribution.html)，使用四个 worker 运行全部本地测试套件：
 
 ```bash
