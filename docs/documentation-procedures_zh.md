@@ -197,39 +197,59 @@ docs/<topic>_zh.md
 <English title> / <中文标题>
 ```
 
+标题不支持折叠区块；两种语言仍并列显示。
+
 正文要求：
 
 1. 完整填写现有 PR 或 issue 模板；不要删除必填字段或检查清单。
-2. 用英文写明摘要、动机、改动、验证、风险和来源链接。
-3. 添加 `## 中文说明` 章节，镜像英文中的实质内容。
-4. 代码块、命令、日志、堆栈跟踪、路径、标识符和 URL 保持不变。在原始块前后用中文解释其含义。
-5. 证据必须对称。英文部分链接了工作流、产物、issue 或源码时，中文部分必须保留相同链接。
+2. 先用英文写明摘要、动机、改动、验证、风险和来源链接，放在折叠区块之外。
+3. 在末尾添加一个 `<details>` 区块，以 `<summary>中文</summary>` 为标题，放入简体中文翻译。翻译所有实质内容，包括注意事项和未通过的检查。不添加 `open` 属性，使其默认折叠，并在区块内的 Markdown 前后保留空行。
+4. 数值表格、代码块、命令、日志和截图只展示一次，放在翻译区块之外。中文说明引用这些共用证据；路径、标识符和 URL 保持不变。
+5. 证据必须对称。中文说明应保留相同的工作流、产物、issue 和源码链接，或明确引用包含这些链接的共用表格或内容块。
 6. 只有实际观察到对应操作完成后，才能勾选 checklist 项。
 
 最小结构：
 
 ```markdown
 ## Summary
+
 - Explain what changed and why.
 
 ## Verification
+
 - Link or state the exact check that ran.
 
-## 中文说明
+<details>
+<summary>中文</summary>
+
 ### 摘要
+
 - 说明改动内容及原因。
 
 ### 验证
+
 - 保留相同的检查结果或链接。
+
+</details>
 ```
 
 ### 评论与审阅总结
 
-- 简短评论：单行使用 `<English> / <中文>`。
-- 较长评论：先写英文段落，再添加 `中文：` 段落或标题明确的中文章节。
-- 行内 review comment、对话评论和 review summary 都必须提供中文翻译。
+- 简短和较长评论都使用相同布局：先写英文，再添加一个默认折叠的 `中文` 区块。
+- 这也适用于行内 review comment、对话评论和 review summary。
 - 代码摘录和证据保持不变；翻译诊断、影响和所需修复。
 - CODEOWNER checklist 签核是例外：必须复制精确英文原文，不要在签核内容中追加翻译后的 checklist。
+
+```markdown
+The empty-input case still raises an exception. Please return an empty result.
+
+<details>
+<summary>中文</summary>
+
+输入为空时仍会抛出异常，请改为返回空结果。
+
+</details>
+```
 
 ### Commit
 
