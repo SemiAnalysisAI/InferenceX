@@ -1,4 +1,4 @@
-name: B300 PR3088 RDMA runtime check
+name: B300 PR3088 allocation failure inspection
 run-name: pr3088-rdma-runtime-recovery-${{ github.run_id }}
 
 on:
@@ -162,58 +162,35 @@ jobs:
         format('[{0},"nodes:1"]', toJSON(inputs.runner))
       ) }}
     timeout-minutes: 10
-    name: "p${{ needs.setup.outputs.priority }} | B300 cached runtime recovery"
+    name: "p${{ needs.setup.outputs.priority }} | B300 allocation logs only"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ inputs.ref || github.sha }}
           clean: true
           persist-credentials: false
-      - name: Recover resources and inspect cached runtime
-        env:
-          TASK_JOB_NAME: pr3088-rdma-${{ github.run_id }}
+      - name: Inspect failed Slurm allocation without requesting GPUs
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/pr3088-rdma"
-          exec > >(tee "$RUNNER_TEMP/pr3088-rdma/recovery.log") 2>&1
+          exec > >(tee "$RUNNER_TEMP/pr3088-rdma/controller.log") 2>&1
           date -u --iso-8601=seconds
-          git rev-parse HEAD
+          hostname
           id
-          sacct -j 2528 --format=JobID,JobName,User,State,NodeList,Start,End,Elapsed,AllocTRES -P || true
-          if squeue --jobs=2528 --noheader 2>/dev/null | grep -q .; then
-            echo 'Prior allocation2528 is still active; recover it instead of allocating.'
-            exit 1
-          fi
+          git rev-parse HEAD
+          sacct -j 2549 --format=JobID,JobName,User,State,ExitCode,DerivedExitCode,Reason,NodeList,Start,End,Elapsed,AllocTRES -P
+          scontrol show job 2549 || true
           squeue --me --format='%i|%j|%T|%N|%L|%b'
-          if squeue --me --noheader --format='%j' | grep -Eq '^pr3088-rdma-'; then
-            echo 'Existing task diagnostic found; recover its receipt before allocating.'
-            exit 1
+          sinfo -p batch_1 -N -o '%N|%T|%G|%E'
+          scontrol show node dsxe-sa-b300-prd0-gpu-02
+          scontrol show partition batch_1
+          scontrol show config | grep -E 'MessageTimeout|SrunPortRange|PrologFlags|SlurmctldHost|SlurmctldLogFile' || true
+          if [[ -r /var/log/slurm/slurmctld.log ]]; then
+            grep -F '2549' /var/log/slurm/slurmctld.log | tail -n 60 || true
+          else
+            echo 'Controller log is not readable from this runner.'
           fi
-          enroot list || true
-          echo 'Prior task used unnamed Pyxis; inspect allocated-node runtimes before entry.'
-          unsquashfs -s /data/home/sa-gha-runner/squash/vllm_vllm-openai_nightly-dev-x86_64-cu13-3696c77.sqsh
-      - name: Run bounded runtime diagnostic
-        env:
-          TASK_JOB_NAME: pr3088-rdma-${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          # Native Slurm time limit is enforced inside the launcher; this
-          # timeout additionally bounds queue wait, without allocating twice.
-          export RUNNER_NAME="$TASK_JOB_NAME"
-          timeout --signal=TERM --kill-after=30s 390 bash runners/launch_b300-dsxe.sh 2>&1 | tee "$RUNNER_TEMP/pr3088-rdma/launcher.log"
-      - name: Recover final task state and release only this diagnostic
-        if: always()
-        env:
-          TASK_JOB_NAME: pr3088-rdma-${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/pr3088-rdma"
-          while read -r job; do
-            [[ "$job" =~ ^[0-9]+$ ]] || continue
-            scontrol show job "$job"
-            scancel "$job"
-          done < <(squeue --me --name="$TASK_JOB_NAME" --noheader --format='%i')
-          sacct --name="$TASK_JOB_NAME" --starttime=now-1day --format=JobID,JobName,User,State,NodeList,Start,End,Elapsed,AllocTRES -P > "$RUNNER_TEMP/pr3088-rdma/accounting.txt"
+          journalctl -u slurmctld --since '2026-09-14 00:36:00 UTC' --until '2026-09-14 00:36:30 UTC' --no-pager 2>&1 | tail -n 40 || true
       - name: Upload runtime diagnostic evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
