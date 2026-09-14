@@ -123,7 +123,9 @@ B300 DSXE 的 Kimi-K3 AgentX 路径在 `/scratch/models` 下挂载预置目标�
 Kimi-K3 根据 sysfs 驱动选择一张活动的 Mellanox 网卡，支持 DSXE 的 `ibp*`
 名称；此 RDMA 配方排除 EFA 设备。嵌入式 Mooncake 的所有 rank 共用该网卡。
 InfiniBand 使用 GID 索引 0，RoCE 保持索引 3。没有兼容的活动网卡时，
-启动会在提供服务前失败。
+启动会在提供服务前失败。DSXE 容器内的 libibverbs 由 enroot EFA 钩子从主机
+挂入，因此启动脚本把主机驱动目录挂到 `/host-libibverbs`，配方通过
+`RDMAV_DRIVERS` 加载其中的 mlx5 驱动。
 
 ## TileRT 原生功耗
 

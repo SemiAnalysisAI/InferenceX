@@ -127,6 +127,9 @@ Kimi-K3 selects one active Mellanox adapter by its sysfs driver, including
 DSXE `ibp*` names; EFA devices are excluded from this RDMA recipe. The embedded
 Mooncake ranks share that adapter. InfiniBand uses GID index 0 and RoCE retains
 index 3. If no compatible active adapter exists, startup fails before serving.
+On DSXE the container's libibverbs comes from the host through the enroot EFA
+hook, so the launcher mounts the host provider directory at `/host-libibverbs`
+and the recipe loads its mlx5 provider through `RDMAV_DRIVERS`.
 
 ## Native TileRT power
 

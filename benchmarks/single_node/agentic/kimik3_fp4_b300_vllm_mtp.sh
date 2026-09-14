@@ -131,6 +131,12 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         # predictable device names (ibp*), while RoCE hosts use mlx5_*.
         select_mooncake_rdma_device
         echo "Mooncake rail: $MOONCAKE_RAIL"
+        # libibverbs appends its own -rdmavNN suffix to an absolute RDMAV_DRIVERS
+        # entry, so this can only load the provider built with the libibverbs
+        # the launcher's host mount belongs to.
+        if [[ -d /host-libibverbs ]]; then
+            export RDMAV_DRIVERS=/host-libibverbs/libmlx5
+        fi
 
         cat > "$MOONCAKE_CONFIG_PATH" <<EOF
 {
