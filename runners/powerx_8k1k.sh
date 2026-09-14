@@ -8,7 +8,7 @@ powerx_fixed_8k1k() {
 
 powerx_clone_srt() {
     local destination="$1"
-    local revision="3f3b7af26e34acc8b62b39971bec839a19ac57a2"
+    local revision="${2:-3f3b7af26e34acc8b62b39971bec839a19ac57a2}"
     git clone https://github.com/edwingao28/srt-slurm.git "$destination" || return
     cd "$destination" || return
     git checkout --detach "$revision" || return

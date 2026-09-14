@@ -170,3 +170,45 @@ powerx_clone_srt() { echo "cloned:$1"; }
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines() == ["cloned:selected-runtime", model_path, model_alias]
+
+
+@pytest.mark.parametrize("valid_revision", [True, False])
+def test_explicit_producer_revision_controls_checkout(tmp_path, valid_revision):
+    upstream = tmp_path / "upstream"
+    upstream.mkdir()
+    git_env = {**os.environ, "GIT_AUTHOR_NAME": "Fixture", "GIT_AUTHOR_EMAIL": "fixture@example.test",
+               "GIT_COMMITTER_NAME": "Fixture", "GIT_COMMITTER_EMAIL": "fixture@example.test"}
+    subprocess.run(["git", "init", "-q", str(upstream)], check=True, env=git_env)
+    (upstream / "recipes").mkdir()
+    (upstream / "recipes/retained.yaml").write_text("original\n")
+    subprocess.run(["git", "-C", str(upstream), "add", "."], check=True, env=git_env)
+    subprocess.run(["git", "-C", str(upstream), "commit", "-qm", "fixture"], check=True, env=git_env)
+    revision = subprocess.check_output(["git", "-C", str(upstream), "rev-parse", "HEAD"], text=True).strip()
+    workspace = tmp_path / "workspace"
+    recipes = workspace / "benchmarks/multi_node/srt-slurm-recipes"
+    recipes.mkdir(parents=True)
+    (recipes / "selected.yaml").write_text("selected\n")
+    result = subprocess.run(
+        ["bash", "-c", '''source "$HELPER"
+git() {
+    if [[ "$1" == clone ]]; then
+        command git clone "$FIXTURE_UPSTREAM" "$3"
+    else
+        command git "$@"
+    fi
+}
+powerx_clone_srt runtime "$REVISION"
+'''], cwd=workspace, capture_output=True, text=True,
+        env={**git_env, "GITHUB_WORKSPACE": str(workspace), "HELPER": str(ROOT / "runners/powerx_8k1k.sh"),
+             "FIXTURE_UPSTREAM": str(upstream), "REVISION": revision if valid_revision else "missing-revision"},
+        timeout=10,
+    )
+    if valid_revision:
+        assert result.returncode == 0, result.stderr
+        assert (workspace / "power-producer-sha.txt").read_text().strip() == revision
+        assert (workspace / "runtime/recipes/selected.yaml").read_text() == "selected\n"
+        assert (workspace / "runtime/recipes/retained.yaml").read_text() == "original\n"
+    else:
+        assert result.returncode != 0
+        assert not (workspace / "power-producer-sha.txt").exists()
+        assert not (workspace / "runtime/recipes/selected.yaml").exists()

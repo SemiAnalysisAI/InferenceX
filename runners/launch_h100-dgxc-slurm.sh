@@ -9,6 +9,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/powerx_8k1k.sh"
 # System-specific configuration for H100 DGXC Slurm cluster
 SLURM_PARTITION="hpc-gpu-1"
 SLURM_ACCOUNT="customer"
+H100_SRT_SLURM_PIN="c294b4b75900ca2da70fb6f34cd5e04b65ca0fdf"
 
 # Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
 # the h200 launchers, which have carried SPEC_SUFFIX since #392).
@@ -54,7 +55,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # TODO(CJQ): make first class upon srt-slurm upstream refactor
     if powerx_fixed_8k1k; then
-        powerx_clone_srt "$SRT_REPO_DIR" || exit 1
+        powerx_clone_srt "$SRT_REPO_DIR" "$H100_SRT_SLURM_PIN" || exit 1
+    elif [[ "$FRAMEWORK" == "dynamo-sglang" && "${IS_AGENTIC:-0}" != "1" &&
+            "${SCENARIO_TYPE:-fixed-seq-len}" == "fixed-seq-len" && "$ISL" == "8192" && "$OSL" == "1024" ]]; then
+        powerx_clone_srt "$SRT_REPO_DIR" "$H100_SRT_SLURM_PIN" || exit 1
     elif [[ "$IS_AGENTIC" == "1" ]]; then
         git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
@@ -168,7 +172,7 @@ EOF
     cat srtslurm.yaml
 
     echo "Running make setup..."
-    make setup ARCH=x86_64
+    make setup ARCH=x86_64 || exit 1
 
     # Export eval-related env vars for srt-slurm post-benchmark eval
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
