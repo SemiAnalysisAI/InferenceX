@@ -21,7 +21,7 @@ For each candidate, fetch the full rollup with `gh pr view`. A PR qualifies only
 
 - No check has conclusion `FAILURE`, `CANCELLED`, or `TIMED_OUT`
 - No check has status `QUEUED`, `IN_PROGRESS`, or `PENDING` (sweep finished, not still running)
-- At least one `Run Sweep` check has conclusion `SUCCESS` (sweep actually ran — not all skipped)
+- At least one `Run Sweep` check has conclusion `SUCCESS` (sweep actually ran, rather than all checks being skipped)
 
 Note: `gh` returns `conclusion: ""` (empty string, not `null`) for in-flight checks, so jq's `//` operator does **not** fall through to `.status`. Each check's effective state must be computed as `if conclusion is non-empty then conclusion else status`.
 

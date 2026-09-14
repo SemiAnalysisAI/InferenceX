@@ -1,9 +1,9 @@
 # How to Test Workflows
 
-In order to test configurations described in `configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `utils/matrix_logic/generate_sweep_configs.py` script. The usage for this script is shown below:
+In order to test configurations described in `configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `python -m infx.matrix.generate` command. The command usage is shown below:
 
 ```
-usage: generate_sweep_configs.py [-h] {full-sweep,test-config} ...
+usage: python -m infx.matrix.generate [-h] {full-sweep,test-config} ...
 
 Generate benchmark configurations from YAML config files
 
@@ -26,7 +26,7 @@ options:
 The `full-sweep` command generates benchmark configurations with optional filtering. You can specify `--single-node`, `--multi-node`, or both. If neither is specified, both types are generated.
 
 ```
-usage: generate_sweep_configs.py full-sweep
+usage: python -m infx.matrix.generate full-sweep
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
     [--no-evals | --evals-only] [--all-evals]
@@ -44,9 +44,9 @@ usage: generate_sweep_configs.py full-sweep
 
 If neither `--single-node` nor `--multi-node` is specified, both types are generated.
 
-By default, throughput runs for every generated config and eval-only jobs run for the selected 8k1k subset. `--no-evals` disables eval jobs, `--evals-only` emits only that selected subset, and adding `--all-evals` expands it to every fixed-sequence config. `--all-evals` alone is an equivalent eval-only shorthand; it cannot be combined with `--no-evals`.
+By default, throughput runs for every generated config and eval-only jobs run for the selected 8k1k subset. `--no-evals` disables eval jobs, `--evals-only` emits only that selected subset, and adding `--all-evals` expands it to every fixed-sequence config. `--all-evals` alone is an equivalent eval-only shorthand, but it cannot be combined with `--no-evals`.
 
-`--step-size` must be greater than 1 and applies to concurrency ranges. Explicit `conc-list` values are emitted directly and are filtered by `--min-conc` / `--max-conc` when provided; when both bounds are set, `--min-conc` must not exceed `--max-conc`.
+`--step-size` must be greater than 1 and applies to concurrency ranges. Explicit `conc-list` values are emitted directly and are filtered by `--min-conc` / `--max-conc` when provided. When both bounds are set, `--min-conc` must not exceed `--max-conc`.
 
 ### Examples
 
@@ -95,7 +95,7 @@ full-sweep --scenario-type agentic-coding --config-files configs/nvidia-master.y
 The `test-config` command generates the full sweep for one or more specific config keys. This is useful for testing individual configurations without filtering by model prefix, framework, etc.
 
 ```
-usage: generate_sweep_configs.py test-config
+usage: python -m infx.matrix.generate test-config
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
     [--no-evals | --evals-only] [--all-evals]
@@ -149,9 +149,9 @@ test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config
 
 ## PR Eval Modifiers
 
-Use `all-evals` and/or `evals-only` with one primary sweep label (`full-sweep-fail-fast` is the strongly recommended primary for full sweeps; use `full-sweep-enabled` only when jobs must keep running past a failure). `all-evals`
-covers every fixed-sequence config; each multi-node topology runs all
-`conc-list` values on one engine. `evals-only` suppresses throughput; together
+Use `all-evals` and/or `evals-only` with one primary sweep label. `full-sweep-fail-fast` is the strongly recommended primary for full sweeps. Use `full-sweep-enabled` only when jobs must keep running past a failure. `all-evals`
+covers every fixed-sequence config. Each multi-node topology runs all
+`conc-list` values on one engine. `evals-only` suppresses throughput. Together
 they run all evals only. The primary label still controls canary/fail-fast.
 `all-evals` full sweeps are reusable. Runs with `evals-only`, including runs
 with both modifiers, are not. Default full sweeps, including default evals,
@@ -177,24 +177,23 @@ one primary sweep label to approve the PR's exact current head SHA.
 both the approved head and GitHub's merge SHA, and runs the generated matrix
 with the trusted workflow's secrets.
 
-The approval is revision-specific. A later push is not trusted automatically;
-remove and re-add the primary sweep label to approve the new SHA. The trusted
+The approval is revision-specific. A later push is not trusted automatically.
+Remove and re-add the primary sweep label to approve the new SHA. The trusted
 dispatcher never checks out or executes PR code itself.
 
 This proof of concept produces benchmark and evaluation artifacts through the
 End-to-End Tests workflow. Those runs are not yet eligible for
 `/reuse-sweep-run`, which currently accepts only `run-sweep.yml` runs. The PoC
-also fans out the selected matrix immediately; it does not reproduce
+also fans out the selected matrix immediately. It does not reproduce
 `run-sweep.yml`'s canary-first sequencing.
 
 ## Reusing an Approved PR Full Sweep
 
-`[skip-sweep]` skips PR benchmark setup only; changelog and reuse checks still
+`[skip-sweep]` skips PR benchmark setup only. Changelog and reuse checks still
 run. Pushes to `main` ignore it.
 
-After an eligible full sweep (`full-sweep-enabled`,
-`non-canary-full-sweep-enabled`, or either fail-fast variant), an authorized
-maintainer can comment:
+An authorized maintainer can reuse an eligible completed sweep without keeping
+a sweep label on the PR:
 
 ```
 /reuse-sweep-run
@@ -207,9 +206,19 @@ in the PR. A run ID can pin an eligible successful or failed run:
 /reuse-sweep-run <run_id>
 ```
 
+Source validation checks identity and artifacts, not full-matrix coverage.
+A successful `sweep-enabled` trim sweep can also be selected automatically;
+reusing it publishes only its recorded points on `main`. Acceptance does not
+certify a green full sweep. Verify coverage and pin the run ID when a full sweep
+is required by the review process.
+
 The latest matching comment by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
-Comments do not trigger or cancel sweeps; later commits skip a new sweep after
-changelog/matrix validation.
+The bot reacts with 👍 after validating the request, or 👎 on rejection; details
+are in the Actions run summary. Edits replace the bot's old reaction. No separate
+comment is posted. Comments do not trigger or cancel GPU sweeps. Later commits
+skip a new sweep after changelog/matrix and source-run validation. Merge-time
+validation remains authoritative; an acknowledgment cannot override expired or
+invalid artifacts. `evals-only` and `agentx-fast` remain incompatible with reuse.
 Remove and re-add the sweep label to force one.
 
 `utils/merge_with_reuse.sh <pr-number>` is the supported merge path for reuse.
@@ -223,12 +232,12 @@ merge run. The normal ingestion code skips failed benchmark rows. Benchmark
 rows and public links retain source-run provenance. Source coverage is
 authoritative, so later matrix/eval policy changes do not invalidate reuse.
 
-Reuse fails closed when authorized but ineligible or invalid; without
+Reuse fails closed when authorized but ineligible or invalid. Without
 authorization, `main` runs the normal full sweep.
 
 ## Validation Architecture
 
-The benchmarking system uses a strict validation methodology to ensure correctness at every stage. This is implemented in `utils/matrix_logic/validation.py` using Pydantic models.
+The benchmarking system uses a strict validation methodology to ensure correctness at every stage. This is implemented in `infx/matrix/validation.py` using Pydantic models.
 
 ### Validation Methodology
 
@@ -240,7 +249,7 @@ The system validates **both ends** of the configuration pipeline:
 This dual-validation approach ensures:
 - No malformed configurations enter the pipeline
 - No invalid parameters reach the benchmark workflows
-- Workflow templates (`benchmark-tmpl.yml`, `benchmark-multinode-tmpl.yml`) can assume all inputs are valid—no runtime validation needed
+- Workflow templates (`benchmark-tmpl.yml`, `benchmark-multinode-tmpl.yml`) can assume all inputs are valid, with no runtime validation needed
 
 ### Input Validation: Master Config Files
 

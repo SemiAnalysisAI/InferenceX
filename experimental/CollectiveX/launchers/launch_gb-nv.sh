@@ -67,9 +67,13 @@ export COLLX_BACKEND_CACHE_ROOT=/cx-cache
 
 # ---- scheduler-allocation: salloc the trays ---------------------------------
 command -v salloc >/dev/null || collx_die "salloc not found"
-collx_salloc_jobid --partition="$PARTITION" --account="$ACCOUNT" --nodes="$NODES" \
-  --gres=gpu:"$GPN" --ntasks-per-node="$GPN" --exclusive --mem=0 --cpus-per-task=35 \
-  --time="$TIME_MIN"
+allocation=(--partition="$PARTITION" --account="$ACCOUNT" --nodes="$NODES"
+  --gres=gpu:"$GPN" --ntasks-per-node="$GPN" --exclusive --mem=0 --cpus-per-task=35
+  --time="$TIME_MIN")
+# Honour the registry's node denylist. Without this the key is accepted by
+# config.py and silently dropped here, so a quarantined tray keeps getting picked.
+[ -z "${COLLX_EXCLUDE_NODES:-}" ] || allocation+=(--exclude="$COLLX_EXCLUDE_NODES")
+collx_salloc_jobid "${allocation[@]}"
 [ -n "$JOB_ID" ] || collx_die "no JOB_ID from salloc"
 
 # ---- container-import: squash file resolved on the allocation ---------------

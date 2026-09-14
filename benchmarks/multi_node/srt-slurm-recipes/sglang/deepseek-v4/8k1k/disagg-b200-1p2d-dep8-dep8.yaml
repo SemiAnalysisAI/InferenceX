@@ -1,0 +1,155 @@
+name: "disagg-b200-1p2d-dep8-dep8-c256"
+
+
+model:
+  path: "deepseek-v4-pro"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260821-f825d729"
+  precision: "fp4"
+
+dynamo:
+  hash: "86f84b9486905c2bfaa4b756c9fa39f04ecf5ebd"
+  install: true
+
+sbatch_directives:
+  cpus-per-task: "144"
+  mem: "0"
+
+resources:
+  gpu_type: "b200"
+  gpus_per_node: 8
+  prefill_nodes: 1
+  prefill_workers: 1
+  gpus_per_prefill: 8
+  decode_nodes: 2
+  decode_workers: 2
+  gpus_per_decode: 8
+
+health_check:
+  max_attempts: 240
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+  env:
+    DYN_ROUTER_LOAD_BLOCK_SIZE: "1"
+  args:
+    router-mode: "kv"
+    router-kv-overlap-score-weight: 0
+    router-queue-threshold: 64
+    router-temperature: 0.5
+    no-kv-events: true
+
+backend:
+  type: sglang
+
+  prefill_environment:
+    PYTHONUNBUFFERED: "1"
+    SGLANG_RADIX_FORCE_MISS: "1"
+    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+    SGLANG_DEFAULT_THINKING: "1"
+    SGLANG_DSV4_REASONING_EFFORT: "max"
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+    SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "8192"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: "1"
+    SGLANG_OPT_USE_ONLINE_COMPRESS: "1"
+    SGLANG_OPT_FP8_WO_A_GEMM: "1"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
+    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+    SGLANG_LOG_FORWARD_ITERS: "1"
+    SGLANG_LOG_MS: "1"
+    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: "60"
+
+  decode_environment:
+    PYTHONUNBUFFERED: "1"
+    SGLANG_RADIX_FORCE_MISS: "1"
+    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+    SGLANG_DEFAULT_THINKING: "1"
+    SGLANG_DSV4_REASONING_EFFORT: "max"
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+    SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "1280"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: "1"
+    SGLANG_OPT_USE_ONLINE_COMPRESS: "1"
+    SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: "8"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
+    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+    SGLANG_LOG_FORWARD_ITERS: "1"
+    SGLANG_LOG_MS: "1"
+    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: "60"
+
+  sglang_config:
+    prefill:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      trust-remote-code: true
+      watchdog-timeout: 86400
+      skip-tokenizer-init: true
+      stream-interval: 60
+
+      tensor-parallel-size: 8
+      data-parallel-size: 8
+      expert-parallel-size: 8
+
+      enable-dp-attention: true
+      moe-a2a-backend: "megamoe"
+      moe-dense-tp-size: 1
+
+      disaggregation-mode: "prefill"
+      disaggregation-transfer-backend: nixl
+
+      mem-fraction-static: 0.80
+      max-running-requests: 1024
+      chunked-prefill-size: 65536
+
+    decode:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      trust-remote-code: true
+      watchdog-timeout: 86400
+      skip-tokenizer-init: true
+      stream-interval: 60
+
+      load-balance-method: "total_requests"
+      moe-a2a-backend: "megamoe"
+
+      disaggregation-mode: "decode"
+      disaggregation-transfer-backend: nixl
+      disaggregation-decode-polling-interval: 8
+
+      mem-fraction-static: 0.94
+      swa-full-tokens-ratio: 0.056
+      context-length: 9216
+      tensor-parallel-size: 8
+      data-parallel-size: 8
+      expert-parallel-size: 8
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      max-running-requests: 21504
+      cuda-graph-max-bs: 1280
+
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  concurrencies: "256"
+  req_rate: "inf"
+  use_chat_template: false
+
+telemetry:
+  enabled: true
+  provider: dcgm-power
+  default_frequency: 1.0
+  storage_subdir: power
+  required: true
+  startup_timeout_seconds: 120
+  request_timeout_seconds: 2
+  collector_join_timeout_seconds: 10
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    port: 9401

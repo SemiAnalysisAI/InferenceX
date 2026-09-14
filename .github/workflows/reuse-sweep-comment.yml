@@ -1,0 +1,37 @@
+name: Acknowledge Sweep Reuse
+run-name: Check sweep reuse for PR #${{ github.event.issue.number }}
+
+on:
+  issue_comment:
+    types: [created, edited]
+
+permissions: {}
+
+concurrency:
+  group: reuse-comment-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  acknowledge:
+    if: >-
+      github.event.issue.pull_request &&
+      (contains(github.event.comment.body, '/reuse-sweep-run') ||
+       contains(github.event.changes.body.from, '/reuse-sweep-run'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      issues: write # Add/remove reactions on the original request
+      pull-requests: read
+    steps:
+      - name: Checkout trusted workflow code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }} # issue_comment uses the default-branch commit
+          persist-credentials: false
+
+      - name: Validate request and update reaction
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -m infx.workflows.reuse_comment

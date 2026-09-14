@@ -17,13 +17,13 @@ gh pr list --repo SemiAnalysisAI/InferenceX --state open --limit 200 \
 
 ## Step 2 — per-PR state classification
 
-For each candidate, fetch the full rollup with `gh pr view`. Compute each check's effective state as `if (.conclusion // "") != "" then .conclusion else .status end` — `gh` returns `conclusion: ""` for in-flight checks, so jq's `//` does not fall through to `.status`.
+For each candidate, fetch the full rollup with `gh pr view`. Compute each check's effective state as `if (.conclusion // "") != "" then .conclusion else .status end`. `gh` returns `conclusion: ""` for in-flight checks, so jq's `//` does not fall through to `.status`.
 
 Classify the PR as:
-- **FAILED** — any check is `FAILURE`, `CANCELLED`, or `TIMED_OUT`. Skip these.
-- **RUNNING** — no failed checks, but at least one check is `QUEUED`, `IN_PROGRESS`, or `PENDING`.
-- **READY** — no failed checks, no pending checks, and at least one `Run Sweep` check is `SUCCESS` (sweep actually ran — not all skipped).
-- **NO_SWEEP** — no failed, no pending, but the sweep never produced a `SUCCESS` (all skipped or never ran). Skip these.
+- **FAILED.** Any check is `FAILURE`, `CANCELLED`, or `TIMED_OUT`. Skip these.
+- **RUNNING.** No checks have failed, but at least one check is `QUEUED`, `IN_PROGRESS`, or `PENDING`.
+- **READY.** No checks have failed or remain pending, and at least one `Run Sweep` check is `SUCCESS` (the sweep actually ran rather than skipping every check).
+- **NO_SWEEP.** No checks have failed or remain pending, but the sweep never produced a `SUCCESS` (all skipped or never ran). Skip these.
 
 ```bash
 : > /tmp/claude_pr_status.tsv
@@ -66,4 +66,4 @@ Print the result directly as a markdown table. READY rows first, then RUNNING. E
 
 If `/tmp/claude_pr_status.tsv` is empty, print: `_No claude/* PRs are currently READY or RUNNING — all open Claude PRs have failures or no sweep results._`
 
-Output the resulting markdown table to the user verbatim. This command is informational only — do **not** auto-merge.
+Output the resulting markdown table to the user verbatim. This command is informational only. Do **not** auto-merge.

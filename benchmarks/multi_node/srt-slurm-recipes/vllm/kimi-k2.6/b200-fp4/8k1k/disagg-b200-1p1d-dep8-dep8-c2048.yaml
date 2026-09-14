@@ -110,3 +110,16 @@ benchmark:
   concurrencies: '2048'
   req_rate: inf
   use_chat_template: true
+
+telemetry:
+  enabled: true
+  provider: dcgm-power
+  default_frequency: 1.0
+  storage_subdir: power
+  required: true
+  startup_timeout_seconds: 120
+  request_timeout_seconds: 2
+  collector_join_timeout_seconds: 10
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    port: 9401

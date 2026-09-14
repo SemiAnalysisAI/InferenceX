@@ -11,13 +11,16 @@
   "timing": {
     "iters_per_trial": 8,
     "trials_per_point": 256,
-    "warmup_iters_per_trial": 32
+    "warmup_iters_per_trial": 32,
+    "chain_iters_per_trial": 128,
+    "chain_trials_per_point": 4,
+    "chain_drop": 16
   },
   "workload": {
-    "name": "deepseek-v3",
+    "name": "deepseek-v4-pro",
     "hidden": 7168,
-    "topk": 8,
-    "routed_experts": 256,
+    "topk": 6,
+    "routed_experts": 384,
     "seed": 67,
     "token_ladders": {
       "decode": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],

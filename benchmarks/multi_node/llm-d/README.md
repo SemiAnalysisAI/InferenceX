@@ -35,8 +35,8 @@ $((LWS_WORKER_INDEX * 8))`.
 ## How `endpoints.yaml` is generated (file-discovery contract)
 
 The EPP runs in **no-Kubernetes mode**, using the `file-discovery` plugin
-from `llm-d-inference-scheduler` (branch `filediscovery-4`). At startup
-it reads `/tmp/endpoints.yaml`; the file lists every backend the EPP can
+from `llm-d-inference-scheduler` (branch `filediscovery-4`). At startup,
+it reads `/tmp/endpoints.yaml`. The file lists every backend the EPP can
 route to, with role labels.
 
 The file is generated at runtime by `server.sh` on the decode leader
@@ -120,7 +120,7 @@ you want to drain or add an instance mid-run.
   namespace, so they must be globally unique in the file).
 
 The IPs we collect from `ip route get 1.1.1.1` are always IPv4 on the
-H200 / B200 cluster's primary fabric; if you point at a different
+H200 / B200 cluster's primary fabric. If you point at a different
 interface and it returns an IPv6 address, EPP will reject the file at
 startup.
 

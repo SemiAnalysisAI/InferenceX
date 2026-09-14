@@ -1,17 +1,167 @@
 """Comprehensive tests for generate_sweep_configs.py"""
-import pytest
 import argparse
 import copy
-from generate_sweep_configs import (
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+import yaml
+
+from infx.matrix import generate as generate_sweep_configs
+from infx.matrix.generate import (
     MIN_EVAL_CONC,
-    seq_len_to_str,
-    generate_full_sweep,
-    generate_test_config_sweep,
-    mark_eval_entries,
-    mark_all_eval_entries,
+    add_multinode_node_count,
     apply_node_type_defaults,
     expand_config_keys,
+    filter_exp_names,
+    generate_full_sweep,
+    generate_test_config_sweep,
+    mark_all_eval_entries,
+    mark_eval_entries,
+    multinode_node_count,
+    multinode_worker_pair,
+    seq_len_to_str,
+    trim_conc,
 )
+
+
+def test_aggregated_multinode_node_count_uses_explicit_num_nodes():
+    entry = {
+        "runner": "unknown",
+        "disagg": False,
+        "prefill": {},
+        "decode": {},
+    }
+
+    add_multinode_node_count(entry, {}, num_nodes=3)
+
+    assert entry["node-count"] == 3
+
+
+def test_disaggregated_multinode_node_count_rejects_num_nodes():
+    entry = {
+        "runner": "unknown",
+        "disagg": True,
+        "prefill": {},
+        "decode": {},
+    }
+
+    with pytest.raises(ValueError, match="num-nodes.*disaggregated"):
+        add_multinode_node_count(entry, {}, num_nodes=3)
+
+
+def test_disaggregated_multinode_node_count_requires_hardware_inventory():
+    entry = {
+        "runner": "cluster:unknown",
+        "disagg": True,
+        "prefill": {"num-worker": 1, "tp": 8},
+        "decode": {"num-worker": 1, "tp": 8},
+    }
+
+    with pytest.raises(ValueError, match="Cannot resolve gpus-per-node"):
+        add_multinode_node_count(entry, {}, num_nodes=None)
+
+
+def test_aggregated_worker_expands_to_legacy_matrix_pair():
+    benchmark = {
+        "worker": {
+            "num-worker": 2,
+            "tp": 8,
+            "pp": 2,
+            "ep": 1,
+            "dp-attn": False,
+            "additional-settings": ["CONFIG_FILE=recipes/aggregate.yaml"],
+        }
+    }
+
+    prefill, decode = multinode_worker_pair(benchmark, disagg=False)
+
+    assert prefill == {
+        "num-worker": 2,
+        "tp": 8,
+        "pp": 2,
+        "dcp-size": 1,
+        "pcp-size": 1,
+        "ep": 1,
+        "dp-attn": False,
+        "additional-settings": ["CONFIG_FILE=recipes/aggregate.yaml"],
+    }
+    assert decode == {
+        "num-worker": 0,
+        "tp": 8,
+        "pp": 2,
+        "dcp-size": 1,
+        "pcp-size": 1,
+        "ep": 1,
+        "dp-attn": False,
+    }
+
+
+def test_multinode_node_count_uses_role_gpu_footprints(sample_runner_config):
+    prefill = {"num-worker": 3, "tp": 2, "pp": 1, "pcp-size": 1}
+    decode = {"num-worker": 2, "tp": 8, "pp": 1, "pcp-size": 1}
+
+    assert multinode_node_count(
+        prefill, decode, "cluster:b300-nv", sample_runner_config
+    ) == 3
+
+
+def test_multinode_node_count_honors_explicit_role_node_settings():
+    prefill = {
+        "num-worker": 1,
+        "tp": 8,
+        "additional-settings": ["PREFILL_NODES=2"],
+    }
+    decode = {
+        "num-worker": 1,
+        "tp": 8,
+        "additional-settings": ["DECODE_NODES=1"],
+    }
+
+    assert multinode_node_count(prefill, decode, "unknown", {}) == 3
+
+
+def test_multinode_node_count_resolves_heterogeneous_worker_hardware(
+    sample_runner_config,
+):
+    prefill = {"hardware": "gb200", "num-worker": 5, "tp": 4}
+    decode = {"hardware": "h100", "num-worker": 1, "tp": 8}
+
+    assert multinode_node_count(
+        prefill, decode, "gb200", sample_runner_config
+    ) == 6
+
+
+@pytest.mark.parametrize("config_file", [
+    "recipes/test.yaml",
+    "benchmarks/multi_node/srt-slurm-recipes/test.yaml",
+])
+@pytest.mark.parametrize(("resources", "expected_nodes"), [
+    ({"agg_nodes": 3}, 3),
+    ({"prefill_nodes": 2, "decode_nodes": 3}, 5),
+])
+def test_multinode_node_count_prefers_recipe_resources(
+    tmp_path, monkeypatch, config_file, resources, expected_nodes,
+):
+    recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/test.yaml"
+    recipe.parent.mkdir(parents=True)
+    recipe.write_text(yaml.safe_dump({"resources": resources}))
+    monkeypatch.setattr(
+        generate_sweep_configs, "__file__",
+        str(tmp_path / "infx/matrix/generate.py"),
+    )
+    prefill = {
+        "num-worker": 1, "tp": 8,
+        "additional-settings": [f"CONFIG_FILE={config_file}", "PREFILL_NODES=7"],
+    }
+    decode = {"num-worker": 1, "tp": 8, "additional-settings": ["DECODE_NODES=9"]}
+
+    # Recipe allocation wins over role overrides, even without an inventory.
+    assert multinode_node_count(prefill, decode, "unknown", {}) == expected_nodes
 
 
 # =============================================================================
@@ -113,8 +263,8 @@ def sample_runner_config():
     return {
         "labels": {
             "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],
-            "h200": ["h200-cw_0", "h200-cw_1", "h200-nb_0", "h200-nb_1"],
-            "b200": ["b200-nvd_0", "b200-nvd_1", "b200-dgxc_1"],
+            "h200": ["h200-cw_0", "h200-cw_1"],
+            "b200": ["b200-nvd_0", "b200-nvd_1", "b200-nscale_1"],
             "b300": ["b300-nv_0", "b300-nv_1"],
             "cluster:b300-nv": ["b300-nv_0", "b300-nv_1"],
             "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
@@ -123,9 +273,9 @@ def sample_runner_config():
         "hardware": {
             "cluster:h100-dgxc": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 8},
             "cluster:h200-dgxc": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
-            "cluster:b200-dgxc": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
+            "cluster:b200-nscale": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
             "cluster:b300-nv": {"available-cpu-dram-mib": 2964436, "gpus-per-node": 8},
-            "cluster:mi300x-amds": {"available-cpu-dram-mib": 2321924, "gpus-per-node": 8},
+            "cluster:mi300x-amd": {"available-cpu-dram-mib": 1547820, "gpus-per-node": 8},
             "cluster:mi355x-amds": {"available-cpu-dram-mib": 3095781, "gpus-per-node": 8},
             "cluster:gb200-nv": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
         },
@@ -173,7 +323,7 @@ def full_sweep_args_multi_node():
 
 
 # =============================================================================
-# Test seq_len_to_str
+# Test sequence length formatting
 # =============================================================================
 
 class TestSeqLenToStr:
@@ -217,6 +367,66 @@ class TestMarkEvalEntries:
         assert len(marked) == 1
         assert marked[0]["conc"] == 64
 
+    def test_marks_multinode_agentic_entry_at_highest_eligible_conc(self):
+        """Multi-node agentic (SWE-bench) eval selection mirrors the
+        fixed-seq-len multi-node policy: one eval row per parallelism
+        topology, at its highest eligible (>= MIN_EVAL_CONC) concurrency.
+
+        Each concurrency is its own matrix entry (chunk size 1) whose
+        exp-name embeds that concurrency, unlike fixed-seq-len multi-node
+        rows where exp-name never varies with conc — the grouping key must
+        still treat these as the same topology.
+        """
+        common = {
+            "scenario-type": "agentic-coding",
+            "model": "m", "runner": "b300", "framework": "sglang-disagg",
+            "precision": "fp4", "spec-decoding": "none", "disagg": True,
+            "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+            "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+        }
+        matrix_values = [
+            {**common, "conc": [8], "exp-name": "p1x8_d1x8_conc8"},
+            {**common, "conc": [16], "exp-name": "p1x8_d1x8_conc16"},
+            {**common, "conc": [32], "exp-name": "p1x8_d1x8_conc32"},
+        ]
+
+        result = mark_eval_entries(matrix_values, include_agentic=True)
+
+        marked = [e for e in result if e.get("run-eval")]
+        assert len(marked) == 1
+        assert marked[0]["conc"] == [32]
+        assert marked[0]["eval-conc"] == 32
+
+    def test_multinode_agentic_groups_are_independent_per_topology(self):
+        """Two distinct multi-node agentic topologies (e.g. differing by
+        prefill EP/DP) must each get their own eval row."""
+        base = {
+            "scenario-type": "agentic-coding",
+            "model": "m", "runner": "b300", "framework": "sglang-disagg",
+            "precision": "fp4", "spec-decoding": "none", "disagg": True,
+        }
+        topology_a = {
+            "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+            "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+        }
+        topology_b = {
+            "prefill": {"num-worker": 1, "tp": 8, "ep": 8, "dp-attn": True},
+            "decode": {"num-worker": 1, "tp": 8, "ep": 8, "dp-attn": True},
+        }
+        matrix_values = [
+            {**base, **topology_a, "conc": [16], "exp-name": "a_conc16"},
+            {**base, **topology_a, "conc": [32], "exp-name": "a_conc32"},
+            {**base, **topology_b, "conc": [64], "exp-name": "b_conc64"},
+            {**base, **topology_b, "conc": [96], "exp-name": "b_conc96"},
+        ]
+
+        result = mark_eval_entries(matrix_values, include_agentic=True)
+
+        marked = {e["exp-name"]: e for e in result if e.get("run-eval")}
+        assert set(marked) == {"a_conc32", "b_conc96"}
+        assert marked["a_conc32"]["eval-conc"] == 32
+        assert marked["b_conc96"]["eval-conc"] == 96
+
     def test_default_mode_does_not_mark_agentic(self):
         matrix_values = [
             {
@@ -237,6 +447,100 @@ class TestMarkEvalEntries:
         assert len(marked) == 0, (
             f"Expected 0 agentic entries marked run-eval in default mode, got {len(marked)}"
         )
+
+    def test_default_marks_every_supported_vendor_point(self):
+        matrix_values = [
+            {
+                "scenario-type": "agentic-coding",
+                "model-prefix": model_prefix,
+                "model": model_prefix,
+                "runner": "b300",
+                "framework": "vllm",
+                "precision": "fp4",
+                "tp": 8,
+                "conc": conc,
+            }
+            for model_prefix in ("kimik3", "minimaxm3")
+            for conc in (1, 64)
+        ]
+        matrix_values.append({
+            "scenario-type": "agentic-coding",
+            "model-prefix": "minimaxm3-bfcl",
+            "model": "unsupported",
+            "runner": "b300",
+            "framework": "vllm",
+            "precision": "fp4",
+            "tp": 8,
+            "conc": 64,
+        })
+
+        result = mark_eval_entries(matrix_values)
+
+        expected = {
+            "kimik3": ("kimi-vendor", "kimi_tool_call_schema"),
+            "minimaxm3": ("minimax-vendor", "minimax_m3_smoke"),
+        }
+        for model_prefix, eval_spec in expected.items():
+            rows = [row for row in result if row["model-prefix"] == model_prefix]
+            assert {row["conc"] for row in rows} == {1, 64}
+            assert all(row["run-eval"] is True for row in rows)
+            assert {
+                (row["eval-framework"], row["eval-suite"]) for row in rows
+            } == {eval_spec}
+
+        unsupported = result[-1]
+        assert unsupported["run-eval"] is False
+        assert "eval-framework" not in unsupported
+        assert all(row.get("eval-framework") != "bfcl" for row in result)
+
+    def test_default_marks_every_multinode_vendor_point(self):
+        common = {
+            "scenario-type": "agentic-coding",
+            "model-prefix": "kimik3",
+            "model": "kimi",
+            "runner": "gb200",
+            "framework": "sglang-disagg",
+            "precision": "fp4",
+            "spec-decoding": "none",
+            "disagg": True,
+            "prefill": {"num-worker": 1, "tp": 8},
+            "decode": {"num-worker": 1, "tp": 8},
+        }
+        matrix_values = [
+            {**common, "conc": [2], "exp-name": "kimi-conc2"},
+            {**common, "conc": [32], "exp-name": "kimi-conc32"},
+        ]
+
+        result = mark_eval_entries(matrix_values)
+
+        assert len(result) == 2
+        assert all(row["run-eval"] is True for row in result)
+        assert [row["eval-conc"] for row in result] == [2, 32]
+        assert all(row["eval-framework"] == "kimi-vendor" for row in result)
+        assert all(
+            row["eval-suite"] == "kimi_tool_call_schema" for row in result
+        )
+
+    def test_fixed_sequence_eval_uses_lm_eval_metadata(self):
+        matrix_values = [{
+            "model": "m",
+            "runner": "b200",
+            "framework": "vllm",
+            "precision": "fp8",
+            "isl": 8192,
+            "osl": 1024,
+            "spec-decoding": "none",
+            "dp-attn": False,
+            "tp": 8,
+            "conc": MIN_EVAL_CONC,
+        }]
+
+        result = mark_eval_entries(matrix_values)
+
+        assert result[0]["run-eval"] is True
+        assert result[0]["eval-framework"] == "lm-eval"
+        assert result[0]["eval-suite"] == ""
+
 
     def test_single_node_skips_eval_entries_below_min_conc(self):
         """Single-node eval selection should ignore conc values below MIN_EVAL_CONC."""
@@ -303,7 +607,7 @@ class TestMarkEvalEntries:
         matrix_values = [
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
-                "runner": "b200-multinode",
+                "runner": "cluster:b200-nscale",
                 "framework": "dynamo-trt",
                 "precision": "fp8",
                 "isl": 8192,
@@ -335,7 +639,7 @@ class TestMarkEvalEntries:
         matrix_values = [
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
-                "runner": "b200-multinode",
+                "runner": "cluster:b200-nscale",
                 "framework": "dynamo-trt",
                 "precision": "fp8",
                 "isl": 8192,
@@ -357,7 +661,7 @@ class TestMarkEvalEntries:
             },
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
-                "runner": "b200-multinode",
+                "runner": "cluster:b200-nscale",
                 "framework": "dynamo-trt",
                 "precision": "fp8",
                 "isl": 8192,
@@ -391,7 +695,7 @@ class TestMarkEvalEntries:
         def entry(prefill_workers, decode_workers, conc):
             return {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
-                "runner": "mi355x-disagg",
+                "runner": "cluster:mi355x-amds",
                 "framework": "vllm-disagg",
                 "precision": "fp8",
                 "isl": 8192,
@@ -428,7 +732,7 @@ class TestMarkEvalEntries:
         """Split concurrency rows for one parallelism should produce one eval job."""
         base_entry = {
             "model": "deepseek-ai/DeepSeek-R1-0528",
-            "runner": "mi355x-disagg",
+            "runner": "cluster:mi355x-amds",
             "framework": "sglang-disagg",
             "precision": "fp4",
             "isl": 8192,
@@ -490,6 +794,7 @@ class TestMarkEvalEntries:
         ]
         result = mark_eval_entries(entries)
         assert result[0]['run-eval'] is False
+
 
 class TestMarkAllEvalEntries:
     """Tests for the all-evals selection policy."""
@@ -641,7 +946,58 @@ class TestMarkAllEvalEntries:
 
         assert result[0]['run-eval'] is True
         assert 'eval-conc' not in result[0]
+
+    def test_marks_multinode_agentic_entries_for_gsm8k(self):
+        """Unlike fixed-seq-len multi-node evals, generic agentic rows with the
+        same topology merge but select only their highest concurrency through
+        eval-conc.
+        """
+        common = {
+            'scenario-type': 'agentic-coding',
+            'model': 'm', 'runner': 'r', 'framework': 'sglang-disagg',
+            'precision': 'fp4', 'spec-decoding': 'none', 'disagg': True,
+            'prefill': {'num-worker': 1, 'tp': 8, 'ep': 1, 'dp-attn': False},
+            'decode': {'num-worker': 1, 'tp': 8, 'ep': 1, 'dp-attn': False},
+        }
+        entries = [
+            {**common, 'conc': [2], 'exp-name': 'p1x8_d1x8_conc2'},
+            {**common, 'conc': [16], 'exp-name': 'p1x8_d1x8_conc16'},
+            {**common, 'conc': [32], 'exp-name': 'p1x8_d1x8_conc32'},
+        ]
+
+        result = mark_all_eval_entries(entries)
+
+        assert len(result) == 1
+        assert result[0]['run-eval'] is True
+        assert result[0]['conc'] == [2, 16, 32]
+        assert result[0]['eval-conc'] == 32
         assert 'eval-all-concs' not in result[0]
+
+    def test_keeps_every_multinode_vendor_point_separate(self):
+        common = {
+            "scenario-type": "agentic-coding",
+            "model-prefix": "minimaxm3",
+            "model": "minimax",
+            "runner": "gb200",
+            "framework": "sglang-disagg",
+            "precision": "fp4",
+            "spec-decoding": "none",
+            "disagg": True,
+            "prefill": {"num-worker": 1, "tp": 8},
+            "decode": {"num-worker": 1, "tp": 8},
+        }
+        entries = [
+            {**common, "conc": [2], "exp-name": "minimax-conc2"},
+            {**common, "conc": [32], "exp-name": "minimax-conc32"},
+        ]
+
+        result = mark_all_eval_entries(mark_eval_entries(entries))
+
+        assert len(result) == 2
+        assert [row["conc"] for row in result] == [[2], [32]]
+        assert [row["eval-conc"] for row in result] == [2, 32]
+        assert all(row["eval-framework"] == "minimax-vendor" for row in result)
+        assert all(row["eval-suite"] == "minimax_m3_smoke" for row in result)
 
 
 # =============================================================================
@@ -651,17 +1007,18 @@ class TestMarkAllEvalEntries:
 class TestGenerateFullSweepSingleNode:
     """Tests for generate_full_sweep with single-node configs."""
 
-    def test_basic_sweep_generation(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        """Basic single-node sweep should generate entries."""
+    def test_sweep_expands_each_sequence_length_across_concurrencies(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
+        """Each input sequence pair gets the complete requested concurrency range."""
         result = generate_full_sweep(
             full_sweep_args_single_node,
             sample_single_node_config,
             sample_runner_config
         )
-        assert len(result) > 0
-        # With step_size=2, conc goes 4, 8, 16, 32, 64 = 5 values per seq-len config
-        # 2 seq-len configs * 5 = 10 entries
-        assert len(result) == 10
+        assert [(row["isl"], row["osl"], row["conc"]) for row in result] == [
+            (isl, osl, conc)
+            for isl, osl in [(1024, 1024), (8192, 1024)]
+            for conc in [4, 8, 16, 32, 64]
+        ]
 
     def test_matrix_entry_structure(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         """Generated entries should have correct structure."""
@@ -926,9 +1283,10 @@ class TestGenerateFullSweepSingleNode:
             sample_single_node_config,
             sample_runner_config
         )
-        for entry in result:
-            expected_max_model_len = entry["isl"] + entry["osl"] + 256
-            assert entry["max-model-len"] == expected_max_model_len
+        assert {
+            (entry["isl"], entry["osl"], entry["max-model-len"])
+            for entry in result
+        } == {(1024, 1024, 2304), (8192, 1024, 9472)}
 
     def test_runner_node_filter(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         """Runner node filter should expand entries to individual matching nodes."""
@@ -943,7 +1301,6 @@ class TestGenerateFullSweepSingleNode:
         )
         # 2 amd nodes (mi300x-amd_0, mi300x-amd_1), 1 conc value = 2 entries
         assert len(result) == 2
-        assert all("amd" in entry["runner"] for entry in result)
         runners = [entry["runner"] for entry in result]
         assert "mi300x-amd_0" in runners
         assert "mi300x-amd_1" in runners
@@ -975,7 +1332,6 @@ class TestGenerateFullSweepSingleNode:
         assert all("amd" in entry["runner"] for entry in result)
 
 
-
 # =============================================================================
 # Test generate_full_sweep for multi-node
 # =============================================================================
@@ -991,8 +1347,6 @@ class TestGenerateFullSweepMultiNode:
             sample_runner_config
         )
         entry = result[0]
-        assert "prefill" in entry
-        assert "decode" in entry
         assert entry["prefill"]["num-worker"] == 5
         assert entry["decode"]["num-worker"] == 1
         assert entry["disagg"] is True
@@ -1040,7 +1394,6 @@ class TestGenerateFullSweepMultiNode:
             sample_runner_config
         )
         entry = result[0]
-        assert isinstance(entry["conc"], list)
         assert entry["conc"] == [2150]
 
     def test_single_node_flag_skips_multinode(self, sample_multinode_config, sample_runner_config, full_sweep_args_single_node):
@@ -1064,6 +1417,8 @@ class TestGenerateFullSweepMultiNode:
                 "framework": "dynamo-trt",
                 "runner": "h200",
                 "multinode": True,
+                "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "fixed-seq-len": [
 
@@ -1101,7 +1456,6 @@ class TestGenerateFullSweepMultiNode:
         )
         # Only h200-cw_0 and h200-cw_1 match "cw" filter
         assert len(result) == 2
-        assert all("cw" in entry["runner"] for entry in result)
         runners = [entry["runner"] for entry in result]
         assert "h200-cw_0" in runners
         assert "h200-cw_1" in runners
@@ -1327,6 +1681,8 @@ class TestEdgeCases:
                 "framework": "dynamo-trt",
                 "runner": "gb200",
                 "multinode": True,
+                "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "fixed-seq-len": [
 
@@ -1445,6 +1801,8 @@ class TestEdgeCases:
                 "framework": "dynamo-trt",
                 "runner": "gb200",
                 "multinode": True,
+                "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "fixed-seq-len": [
 
@@ -1493,6 +1851,8 @@ class TestEdgeCases:
                 "framework": "dynamo-trt",
                 "runner": "gb200",
                 "multinode": True,
+                "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "fixed-seq-len": [
 
@@ -1576,8 +1936,74 @@ class TestEdgeCases:
 # Test argument parsing and defaults
 # =============================================================================
 
-class TestArgumentDefaults:
-    """Tests for command-line eval-selection flags via main()."""
+class TestCommandLine:
+    """Tests for CLI input loading and sweep-selection behavior."""
+
+    @pytest.mark.parametrize("command", ["full-sweep", "test-config"])
+    @pytest.mark.parametrize("invalid", [False, True])
+    def test_script_from_another_directory(
+        self, tmp_path, sample_single_node_config, sample_runner_config,
+        command, invalid,
+    ):
+        """Direct scripts must resolve their own imports and caller-relative inputs."""
+        (tmp_path / "master config.yaml").write_text(yaml.safe_dump(sample_single_node_config))
+        (tmp_path / "runners.yaml").write_text(yaml.safe_dump(sample_runner_config))
+        script = Path(__file__).with_name("generate_sweep_configs.py")
+        args = [
+            command, "--config-files", "master config.yaml",
+            "--runner-config", "runners.yaml", "--seq-lens", "1k1k", "--no-evals",
+        ]
+        if command == "test-config":
+            args += ["--config-keys", "*"]
+        if invalid:
+            args += ["--all-evals"]
+
+        result = subprocess.run(
+            [sys.executable, str(script), *args], cwd=tmp_path,
+            capture_output=True, text=True, check=False,
+        )
+
+        if invalid:
+            assert result.returncode == 2
+            assert result.stdout == ""
+            assert "--all-evals cannot be combined with --no-evals" in result.stderr
+        else:
+            assert result.returncode == 0, result.stderr
+            assert result.stderr == ""
+            rows = json.loads(result.stdout)
+            assert [(r["isl"], r["osl"], r["conc"]) for r in rows] == [
+                (1024, 1024, 4), (1024, 1024, 8), (1024, 1024, 16),
+                (1024, 1024, 32), (1024, 1024, 64),
+            ]
+
+    @pytest.mark.parametrize("runner_file", [None, "custom runners.yaml"])
+    def test_cli_uses_selected_runner_file(
+        self, tmp_path, monkeypatch, sample_single_node_config,
+        sample_runner_config, runner_file,
+    ):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "master.yaml").write_text(yaml.safe_dump(sample_single_node_config))
+        (tmp_path / "configs").mkdir()
+        # An explicit override must not fall back to the default inventory.
+        (tmp_path / "configs/runners.yaml").write_text("invalid: default inventory")
+        selected_file = tmp_path / (runner_file or "configs/runners.yaml")
+        sample_runner_config["labels"]["mi300x"] = ["fixture-node-0", "fixture-node-1"]
+        selected_file.write_text(yaml.safe_dump(sample_runner_config))
+        argv = [
+            "generate_sweep_configs.py", "full-sweep",
+            "--config-files", "master.yaml", "--single-node", "--no-evals",
+            "--runner-node-filter", "fixture-node", "--seq-lens", "1k1k",
+            "--max-conc", "4",
+        ]
+        if runner_file is not None:
+            argv.extend(["--runner-config", runner_file])
+        monkeypatch.setattr(sys, "argv", argv)
+
+        result = generate_sweep_configs.main()
+
+        assert [(row["runner"], row["conc"]) for row in result] == [
+            ("fixture-node-0", 4), ("fixture-node-1", 4),
+        ]
 
     def test_all_evals_cli_marks_every_fixed_sequence_entry(
         self,
@@ -1588,7 +2014,8 @@ class TestArgumentDefaults:
         """--all-evals bypasses the default min-conc/highest-median policy but
         still only evaluates 8k1k (1k1k entries are excluded)."""
         import sys
-        import generate_sweep_configs
+
+        from infx.matrix import generate as generate_sweep_configs
 
         monkeypatch.setattr(
             generate_sweep_configs,
@@ -1627,7 +2054,8 @@ class TestArgumentDefaults:
         sample_runner_config,
     ):
         import sys
-        import generate_sweep_configs
+
+        from infx.matrix import generate as generate_sweep_configs
 
         monkeypatch.setattr(
             generate_sweep_configs,
@@ -1657,6 +2085,95 @@ class TestArgumentDefaults:
         assert all(entry['run-eval'] is True for entry in result)
         assert all(entry['eval-only'] is True for entry in result)
 
+    def test_trim_conc_reduces_generated_eval_matrix(
+        self,
+        monkeypatch,
+        sample_single_node_config,
+        sample_runner_config,
+    ):
+        import sys
+
+        from infx.matrix import generate as generate_sweep_configs
+
+        monkeypatch.setattr(
+            generate_sweep_configs,
+            'load_config_files',
+            lambda _: sample_single_node_config,
+        )
+        monkeypatch.setattr(
+            generate_sweep_configs,
+            'load_runner_file',
+            lambda _: sample_runner_config,
+        )
+        monkeypatch.setattr(sys, 'argv', [
+            'generate_sweep_configs.py',
+            'test-config',
+            '--config-files', 'dummy.yaml',
+            '--config-keys', 'dsr1-fp8-mi300x-sglang',
+            '--evals-only',
+            '--all-evals',
+            '--trim-conc',
+        ])
+
+        result = generate_sweep_configs.main()
+
+        assert len(result) == 1
+        assert result[0]['conc'] == 4
+        assert result[0]['run-eval'] is True
+        assert result[0]['eval-only'] is True
+
+    def test_trim_conc_updates_multinode_dispatch_concurrency(self):
+        low_entry = {
+            'prefill': {'num-worker': 1, 'tp': 8},
+            'decode': {'num-worker': 0, 'tp': 8},
+            'conc': [4],
+        }
+        high_entry = {
+            **low_entry,
+            'conc': [64],
+            'run-eval': True,
+            'eval-conc': 64,
+        }
+
+        result = trim_conc([high_entry, low_entry])
+
+        assert len(result) == 1
+        assert result[0]['conc'] == [4]
+        assert result[0]['eval-conc'] == 4
+        assert result[0]['run-eval'] is True
+
+    @pytest.mark.parametrize('entrypoint', ['cli', 'api'])
+    def test_smoke_keeps_canonical_eval_instead_of_throughput_minimum(
+        self, monkeypatch, sample_single_node_config, sample_runner_config, entrypoint,
+    ):
+        monkeypatch.setattr(generate_sweep_configs, 'load_config_files', lambda _: sample_single_node_config)
+        monkeypatch.setattr(generate_sweep_configs, 'load_runner_file', lambda _: sample_runner_config)
+        monkeypatch.setattr(sys, 'argv', ['generate_sweep_configs.py', 'test-config',
+                                         '--config-files', 'dummy.yaml', '--config-keys',
+                                         'dsr1-fp8-mi300x-sglang', '--smoke'])
+        if entrypoint == 'api':
+            result = generate_sweep_configs.generate_config_matrix(
+                ['dsr1-fp8-mi300x-sglang'], sample_single_node_config,
+                sample_runner_config, eval_mode='smoke',
+            )
+        else:
+            result = generate_sweep_configs.main()
+        benchmarks = [row for row in result if not row.get('eval-only')]
+        evals = [row for row in result if row.get('eval-only')]
+        assert {row['conc'] for row in benchmarks} == {4}
+        assert all(not row['run-eval'] for row in benchmarks)
+        assert {row['conc'] for row in evals} == {32}
+        assert all(row['run-eval'] for row in evals)
+
+    def test_multinode_smoke_preserves_representative_eval_concurrency(self):
+        from infx.matrix.generate import smoke_entries
+        entry = {'prefill': {'num-worker': 1, 'tp': 8}, 'decode': {'num-worker': 1, 'tp': 8},
+                 'conc': [4, 32, 64], 'run-eval': True, 'eval-conc': 64}
+        result = smoke_entries([entry])
+        assert [(row['conc'], row.get('eval-only', False), row['run-eval']) for row in result] == [
+            ([4], False, False), ([64], True, True)]
+        assert result[1]['eval-conc'] == 64
+
     def test_all_evals_batches_each_multinode_concurrency(
         self,
         monkeypatch,
@@ -1664,7 +2181,8 @@ class TestArgumentDefaults:
         sample_runner_config,
     ):
         import sys
-        import generate_sweep_configs
+
+        from infx.matrix import generate as generate_sweep_configs
 
         config = sample_multinode_config
         seq_entry = (
@@ -1706,7 +2224,8 @@ class TestArgumentDefaults:
 
     def test_all_evals_cannot_combine_with_no_evals(self, monkeypatch):
         import sys
-        import generate_sweep_configs
+
+        from infx.matrix import generate as generate_sweep_configs
 
         monkeypatch.setattr(sys, 'argv', [
             'generate_sweep_configs.py',
@@ -1859,8 +2378,101 @@ class TestGenerateTestConfigSweep:
 
         assert result == []
 
-    def test_runner_node_filter_expands_agentic_config_runner(self, sample_runner_config):
-        """Agentic test-config entries should support concrete runner targeting."""
+
+@pytest.fixture(params=["full-sweep", "test-config"])
+def agentic_mode(request):
+    return request.param
+
+
+@pytest.fixture
+def generate_agentic_sweep(agentic_mode, full_sweep_args_single_node):
+    def generate(config, runner_data, **filters):
+        args = copy.copy(full_sweep_args_single_node)
+        vars(args).update(
+            config_keys=list(config), conc=None, multi_node=True,
+            scenario_type=["agentic-coding"],
+        )
+        vars(args).update(filters)
+        generate = generate_full_sweep if agentic_mode == "full-sweep" else generate_test_config_sweep
+        return generate(args, config, runner_data)
+    return generate
+
+
+@pytest.fixture(params=["single", "aggregated", "disaggregated"])
+def agentic_config(request, sample_single_node_config):
+    config = copy.deepcopy(sample_single_node_config)
+    entry = next(iter(config.values()))
+    entry.update(runner="cluster:b300-nv", multinode=request.param != "single")
+    if request.param == "single":
+        benchmark = {"tp": 4, "kv-offloading": "none"}
+    elif request.param == "aggregated":
+        benchmark = {"num-nodes": 2, "worker": {"num-worker": 2, "tp": 8, "ep": 1, "dp-attn": False}}
+    else:
+        entry.update(disagg=True, **{"kv-p2p-transfer": "nixl"})
+        benchmark = {
+            "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+            "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+        }
+    entry["scenarios"] = {"agentic-coding": [{"search-space": [benchmark]}]}
+    return config, benchmark
+
+
+class TestAgenticGeneration:
+    def test_point_order_and_input_preservation(
+        self, agentic_config, sample_runner_config, generate_agentic_sweep,
+    ):
+        config, benchmark = agentic_config
+        benchmark["conc-list"] = [32, 8, 32]
+        original = copy.deepcopy(config)
+        entries = generate_agentic_sweep(config, sample_runner_config, runner_node_filter="b300-nv_")
+        if next(iter(config.values()))["multinode"]:
+            expected = [
+                ("b300-nv_0", [32]), ("b300-nv_0", [8]), ("b300-nv_0", [32]),
+                ("b300-nv_1", [32]), ("b300-nv_1", [8]), ("b300-nv_1", [32]),
+            ]
+        else:
+            expected = [
+                ("b300-nv_0", 32), ("b300-nv_1", 32),
+                ("b300-nv_0", 8), ("b300-nv_1", 8),
+                ("b300-nv_0", 32), ("b300-nv_1", 32),
+            ]
+        assert [(e["runner"], e["conc"]) for e in entries] == expected
+        assert config == original
+
+    @pytest.mark.parametrize(("full_filters", "exact_filters", "expected"), [
+        ({}, {}, [3, 6, 10]),
+        ({"min_conc": 5, "max_conc": 9}, {"conc": [6, 9]}, [6]),
+        ({"max_conc": 2}, {"conc": [2]}, []),
+        ({"min_conc": 11}, {"conc": [11]}, []),
+    ])
+    def test_range_boundaries(
+        self, agentic_config, sample_runner_config, generate_agentic_sweep,
+        agentic_mode, full_filters, exact_filters, expected,
+    ):
+        config, benchmark = agentic_config
+        benchmark.update({"conc-start": 3, "conc-end": 10})
+        filters = full_filters if agentic_mode == "full-sweep" else exact_filters
+        entries = generate_agentic_sweep(config, sample_runner_config, **filters)
+        points = [entry["conc"] for entry in entries]
+        assert points == ([[c] for c in expected] if next(iter(config.values()))["multinode"] else expected)
+
+    def test_step_size_and_parallelism_caps_keep_command_semantics(
+        self, agentic_config, sample_runner_config, generate_agentic_sweep, agentic_mode,
+    ):
+        config, benchmark = agentic_config
+        benchmark.update({"conc-start": 3, "conc-end": 10})
+        # Agentic rows ignore the fixed-sequence TP/EP caps. Only full-sweep
+        # takes a custom range step; test-config always doubles concurrency.
+        entries = generate_agentic_sweep(
+            config, sample_runner_config, step_size=3, max_tp=1, max_ep=0,
+        )
+        expected = [3, 9, 10] if agentic_mode == "full-sweep" else [3, 6, 10]
+        assert [e["conc"] for e in entries] == (
+            [[c] for c in expected] if next(iter(config.values()))["multinode"] else expected
+        )
+
+    def test_runner_node_filter_expands_agentic_config_runner(self, sample_runner_config, generate_agentic_sweep):
+        """Agentic entries support concrete runner targeting through both commands."""
         config = {
             "qwen-agentic-hicache": {
                 "image": "sglang-rocm",
@@ -1888,15 +2500,8 @@ class TestGenerateTestConfigSweep:
                 },
             }
         }
-        args = argparse.Namespace(
-            config_keys=["qwen-agentic-hicache"],
-            seq_lens=None,
-            conc=None,
-            scenario_type=["agentic-coding"],
-            runner_node_filter="b300-nv_1",
-        )
 
-        result = generate_test_config_sweep(args, config, sample_runner_config)
+        result = generate_agentic_sweep(config, sample_runner_config, runner_node_filter="b300-nv_1")
 
         assert len(result) == 1
         assert result[0]["runner"] == "b300-nv_1"
@@ -1904,7 +2509,7 @@ class TestGenerateTestConfigSweep:
         assert result[0]["total-cpu-dram-gb"] == 2399
         assert result[0]["duration"] == 3600
 
-    def test_agentic_node_dram_uses_explicit_gpu_count(self, sample_runner_config):
+    def test_agentic_node_dram_uses_explicit_gpu_count(self, sample_runner_config, generate_agentic_sweep):
         config = {
             "dsv4-b300-agentic": {
                 "image": "vllm/vllm-openai:v0.23.0",
@@ -1952,15 +2557,8 @@ class TestGenerateTestConfigSweep:
                 },
             },
         }
-        args = argparse.Namespace(
-            config_keys=["dsv4-b300-agentic"],
-            seq_lens=None,
-            conc=None,
-            scenario_type=["agentic-coding"],
-            runner_node_filter=None,
-        )
 
-        result = generate_test_config_sweep(args, config, sample_runner_config)
+        result = generate_agentic_sweep(config, sample_runner_config)
 
         budgets = {
             (entry["pp"], entry["dcp-size"], entry["pcp-size"]): entry["total-cpu-dram-gb"]
@@ -1974,7 +2572,8 @@ class TestGenerateTestConfigSweep:
         }
         assert all(entry["duration"] == 3600 for entry in result)
 
-    def test_agentic_node_dram_rejects_tp_above_runner_gpus(self, sample_runner_config):
+    @pytest.mark.parametrize("filters", [{}, {"min_conc": 999, "conc": [999]}])
+    def test_agentic_node_dram_rejects_tp_above_runner_gpus(self, sample_runner_config, generate_agentic_sweep, filters):
         config = {
             "dsv4-b300-agentic": {
                 "image": "vllm/vllm-openai:v0.23.0",
@@ -2001,18 +2600,13 @@ class TestGenerateTestConfigSweep:
         }
         runner_config = copy.deepcopy(sample_runner_config)
         runner_config["hardware"]["cluster:b300-nv"]["gpus-per-node"] = 2
-        args = argparse.Namespace(
-            config_keys=["dsv4-b300-agentic"],
-            seq_lens=None,
-            conc=None,
-            scenario_type=["agentic-coding"],
-            runner_node_filter=None,
-        )
 
         with pytest.raises(ValueError, match="exceeds gpus-per-node"):
-            generate_test_config_sweep(args, config, runner_config)
+            generate_agentic_sweep(config, runner_config, **filters)
 
-    def test_multinode_agentic_groups_concurrencies_per_search_entry(self):
+    def test_multinode_agentic_groups_concurrencies_per_search_entry(
+        self, sample_runner_config, generate_agentic_sweep
+    ):
         """One server allocation should run exactly one concurrency (one task per conc)."""
         config = {
             "dsv4-agentic-2p1d": {
@@ -2040,24 +2634,17 @@ class TestGenerateTestConfigSweep:
                 },
             }
         }
-        args = argparse.Namespace(
-            config_keys=["dsv4-agentic-2p1d"],
-            seq_lens=None,
-            conc=[16, 32, 64, 128, 256],
-            scenario_type=["agentic-coding"],
-            runner_node_filter=None,
-        )
 
-        result = generate_test_config_sweep(args, config)
+        result = generate_agentic_sweep(config, sample_runner_config)
 
         assert len(result) == 5
         assert [entry["conc"] for entry in result] == [[16], [32], [64], [128], [256]]
         assert [entry["exp-name"] for entry in result] == [
-            "dsv4_p2x4_d1x4_conc16",
-            "dsv4_p2x4_d1x4_conc32",
-            "dsv4_p2x4_d1x4_conc64",
-            "dsv4_p2x4_d1x4_conc128",
-            "dsv4_p2x4_d1x4_conc256",
+            "dsv4_p2x4ep4_d1x4_conc16",
+            "dsv4_p2x4ep4_d1x4_conc32",
+            "dsv4_p2x4ep4_d1x4_conc64",
+            "dsv4_p2x4ep4_d1x4_conc128",
+            "dsv4_p2x4ep4_d1x4_conc256",
         ]
         assert result[0]["prefill"]["pp"] == 2
         assert result[0]["prefill"]["dcp-size"] == 2
@@ -2065,8 +2652,9 @@ class TestGenerateTestConfigSweep:
         assert result[0]["decode"]["pp"] == 2
         assert result[0]["decode"]["dcp-size"] == 2
         assert result[0]["decode"]["pcp-size"] == 1
+        assert {entry["node-count"] for entry in result} == {9}
 
-    def test_multinode_agentic_preserves_kv_offload_fields(self, sample_runner_config):
+    def test_multinode_agentic_preserves_kv_offload_fields(self, sample_runner_config, generate_agentic_sweep):
         config = {
             "dsv4-agentic-hicache": {
                 "image": "sglang-rocm",
@@ -2092,15 +2680,8 @@ class TestGenerateTestConfigSweep:
                 },
             },
         }
-        args = argparse.Namespace(
-            config_keys=["dsv4-agentic-hicache"],
-            seq_lens=None,
-            conc=None,
-            scenario_type=["agentic-coding"],
-            runner_node_filter=None,
-        )
 
-        result = generate_test_config_sweep(args, config, sample_runner_config)
+        result = generate_agentic_sweep(config, sample_runner_config)
 
         assert len(result) == 1
         assert result[0]["kv-offloading"] == "dram"
@@ -2112,7 +2693,7 @@ class TestGenerateTestConfigSweep:
         assert result[0]["total-cpu-dram-gb"] == 2399
 
     def test_multinode_agentic_budget_ignores_decode_topology(
-        self, sample_runner_config
+        self, sample_runner_config, generate_agentic_sweep
     ):
         """Only prefill offloads today, so decode's topology does not shrink it."""
         config = {
@@ -2141,22 +2722,15 @@ class TestGenerateTestConfigSweep:
                 },
             },
         }
-        args = argparse.Namespace(
-            config_keys=["dsv4-agentic-hicache-asym"],
-            seq_lens=None,
-            conc=None,
-            scenario_type=["agentic-coding"],
-            runner_node_filter=None,
-        )
 
-        result = generate_test_config_sweep(args, config, sample_runner_config)
+        result = generate_agentic_sweep(config, sample_runner_config)
 
         assert len(result) == 1
         # prefill 8/8 -> full budget, regardless of decode tp=4.
         assert result[0]["total-cpu-dram-gb"] == 2399
 
     def test_multinode_agentic_rejects_node_misaligned_prefill(
-        self, sample_runner_config
+        self, sample_runner_config, generate_agentic_sweep
     ):
         """A prefill worker whose GPU footprint does not tile the node is rejected."""
         config = {
@@ -2185,16 +2759,9 @@ class TestGenerateTestConfigSweep:
                 },
             },
         }
-        args = argparse.Namespace(
-            config_keys=["dsv4-agentic-hicache-misaligned"],
-            seq_lens=None,
-            conc=None,
-            scenario_type=["agentic-coding"],
-            runner_node_filter=None,
-        )
 
         with pytest.raises(ValueError, match="does not divide"):
-            generate_test_config_sweep(args, config, sample_runner_config)
+            generate_agentic_sweep(config, sample_runner_config)
 
 
 # =============================================================================
@@ -2218,6 +2785,7 @@ class TestApplyNodeTypeDefaults:
         assert args.single_node is True
         assert args.multi_node is False
 
+
     def test_no_node_attrs_is_noop(self):
         """When args lacks node type attrs, nothing happens."""
         args = argparse.Namespace(command="test-config")
@@ -2232,6 +2800,122 @@ class TestApplyNodeTypeDefaults:
 
 class TestGenerateFullSweepMixed:
     """Tests for generate_full_sweep with both single-node and multi-node configs."""
+
+    @pytest.mark.parametrize(("multinode", "points", "expected"), [
+        (False, {"conc-start": 3, "conc-end": 10}, [5, 7]),
+        (True, {"conc-start": 3, "conc-end": 10}, [[6]]),
+        (False, {"conc-list": [10, 6, 3, 6]}, [6, 6]),
+        (True, {"conc-list": [10, 6, 3, 6]}, [[6, 6]]),
+    ])
+    def test_bounds_clip_single_node_ranges_before_expansion(
+        self, sample_single_node_config, sample_multinode_config,
+        sample_runner_config, full_sweep_args_both, multinode, points, expected,
+    ):
+        config = sample_multinode_config if multinode else sample_single_node_config
+        sequence = next(iter(config.values()))["scenarios"]["fixed-seq-len"][0]
+        benchmark = sequence["search-space"][0]
+        for name in ("conc-start", "conc-end", "conc-list"):
+            benchmark.pop(name, None)
+        benchmark.update(points)
+        before = copy.deepcopy(config)
+        vars(full_sweep_args_both).update(min_conc=5, max_conc=7, seq_lens=["1k1k"])
+
+        rows = generate_full_sweep(full_sweep_args_both, config, sample_runner_config)
+
+        assert [row["conc"] for row in rows] == expected
+        assert config == before
+
+    @pytest.mark.parametrize("command", ["full-sweep", "test-config"])
+    @pytest.mark.parametrize("node_names", [[], ["mi300x-amd_1", "mi300x-amd_1", "mi300x-amd_0"]])
+    def test_runner_filter_keeps_each_commands_label_and_duplicate_policy(
+        self, sample_single_node_config, sample_runner_config,
+        full_sweep_args_both, command, node_names,
+    ):
+        sample_runner_config["labels"]["mi300x"] = node_names
+        key, config = next(iter(sample_single_node_config.items()))
+        config["scenarios"]["fixed-seq-len"][0]["search-space"] = [{"tp": 8, "conc-list": [4]}]
+        vars(full_sweep_args_both).update(
+            config_keys=[key], runner_node_filter="mi300x", seq_lens=["1k1k"],
+        )
+        generate = generate_full_sweep if command == "full-sweep" else generate_test_config_sweep
+
+        rows = generate(full_sweep_args_both, sample_single_node_config, sample_runner_config)
+
+        if command == "full-sweep":
+            expected = ["mi300x-amd_1", "mi300x-amd_1", "mi300x-amd_0"] if node_names else []
+        else:
+            expected = ["mi300x", "mi300x-amd_1", "mi300x-amd_0"] if node_names else ["mi300x"]
+        assert [row["runner"] for row in rows] == expected
+
+    def test_typed_full_sweep_selects_configs_and_preserves_scenario_order(
+        self, sample_single_node_config, sample_runner_config,
+    ):
+        config = next(iter(sample_single_node_config.values()))
+        config["scenarios"]["agentic-coding"] = [{"search-space": [
+            {"tp": 4, "kv-offloading": "none", "conc-list": [16, 8]},
+        ]}]
+        excluded = copy.deepcopy(config)
+        excluded["framework"] = "vllm"
+        master = {"selected-vllm": excluded, "selected-sglang": config, "unselected": config}
+        before = copy.deepcopy(master)
+
+        rows = generate_sweep_configs.expand_full_sweep(
+            master, sample_runner_config,
+            options=generate_sweep_configs.FullSweepOptions(
+                model_prefix=["selected"], framework=["sglang"], precision=["fp8"],
+                runner_type=["mi300x"], runner_node_filter="amd_1",
+                seq_lens=["8k1k"], min_conc=5, max_conc=10,
+            ),
+        )
+
+        assert [(row.get("scenario-type", "fixed-seq-len"), row["conc"]) for row in rows] == [
+            ("fixed-seq-len", 5), ("fixed-seq-len", 10), ("agentic-coding", 8),
+        ]
+        assert [row["runner"] for row in rows] == ["mi300x-amd_1"] * 3
+        assert rows[0]["max-model-len"] == 9472
+        assert master == before
+
+    @pytest.mark.parametrize(("options", "message"), [
+        ({"step_size": 1}, "step_size must be greater than 1"),
+        ({"min_conc": 9, "max_conc": 3}, "min_conc must be less than or equal to max_conc"),
+        ({"runner_type": ["missing"]}, "Invalid runner type"),
+    ])
+    def test_typed_full_sweep_validates_options_even_without_configs(
+        self, sample_runner_config, options, message,
+    ):
+        with pytest.raises(ValueError, match=message):
+            generate_sweep_configs.expand_full_sweep(
+                {}, sample_runner_config,
+                options=generate_sweep_configs.FullSweepOptions(**options),
+            )
+
+    def test_unbounded_reversed_multinode_range_keeps_empty_batch(
+        self, sample_multinode_config, sample_runner_config, full_sweep_args_both,
+    ):
+        benchmark = next(iter(sample_multinode_config.values()))["scenarios"]["fixed-seq-len"][0]["search-space"][0]
+        benchmark.pop("conc-list")
+        benchmark.update({"conc-start": 10, "conc-end": 3})
+
+        rows = generate_full_sweep(full_sweep_args_both, sample_multinode_config, sample_runner_config)
+
+        assert [row["conc"] for row in rows] == [[]]
+        # Applying a lower bound filters out the empty batch entirely.
+        full_sweep_args_both.min_conc = 1
+        assert generate_full_sweep(full_sweep_args_both, sample_multinode_config, sample_runner_config) == []
+
+    @pytest.mark.parametrize("command", ["full-sweep", "test-config"])
+    def test_unmatched_runner_defers_scenario_access_only_for_selected_keys(
+        self, sample_single_node_config, sample_runner_config, full_sweep_args_both, command,
+    ):
+        key, config = next(iter(sample_single_node_config.items()))
+        config.pop("scenarios")
+        vars(full_sweep_args_both).update(config_keys=[key], runner_node_filter="missing")
+
+        if command == "test-config":
+            assert generate_test_config_sweep(full_sweep_args_both, sample_single_node_config, sample_runner_config) == []
+        else:
+            with pytest.raises(KeyError, match="scenarios"):
+                generate_full_sweep(full_sweep_args_both, sample_single_node_config, sample_runner_config)
 
     def test_both_flags_generates_mixed(self, sample_mixed_config, sample_runner_config, full_sweep_args_both):
         """Both flags True should produce both single-node and multinode entries."""
@@ -2345,6 +3029,46 @@ class TestGenerateFullSweepMixed:
 
 
 # =============================================================================
+# Test filter_exp_names
+# =============================================================================
+
+
+class TestFilterExpNames:
+    def test_selects_exact_names_in_matrix_order(self):
+        entries = [
+            {"exp-name": "deployment-a", "conc": 1},
+            {"exp-name": "deployment-b", "conc": 1},
+            {"exp-name": "deployment-c", "conc": 2},
+        ]
+
+        result = filter_exp_names(entries, ["deployment-b", "deployment-a"])
+
+        assert result == entries[:2]
+
+    @pytest.mark.parametrize(
+        ("entries", "names", "message"),
+        (
+            ([{"exp-name": "deployment-a"}], ["missing"], "not found"),
+            (
+                [{"exp-name": "deployment-a"}, {"exp-name": "deployment-a"}],
+                ["deployment-a"],
+                "multiple rows",
+            ),
+            (
+                [{"exp-name": "deployment-a"}],
+                ["deployment-a", "deployment-a"],
+                "duplicate values",
+            ),
+        ),
+    )
+    def test_rejects_missing_ambiguous_or_duplicate_names(
+        self, entries, names, message
+    ):
+        with pytest.raises(ValueError, match=message):
+            filter_exp_names(entries, names)
+
+
+# =============================================================================
 # Test expand_config_keys
 # =============================================================================
 
@@ -2374,6 +3098,7 @@ class TestExpandConfigKeys:
             "dsr1-fp8-mi300x-sglang",
             "gptoss-fp8-b200-sglang",
         ]
+
 
     def test_question_mark_wildcard(self):
         """? wildcard should match a single character."""
@@ -2410,3 +3135,145 @@ class TestExpandConfigKeys:
             "dsr1-fp8-h200-trt",
             "gptoss-fp8-b200-sglang",
         ]
+
+
+# =============================================================================
+# Tests for e2e-tests.yml workflow config splitting
+# =============================================================================
+
+@pytest.fixture
+def split_e2e_configs(tmp_path):
+    """Run the shipped workflow step; stub only generation and priority scoring."""
+    repo_root = Path(__file__).resolve().parents[2]
+    workflow = yaml.safe_load((repo_root / ".github/workflows/e2e-tests.yml").read_text())
+    step = next(step for step in workflow["jobs"]["get-jobs"]["steps"] if step.get("id") == "get-jobs")
+    # Actions resolves these expressions before invoking Bash. Their values
+    # are irrelevant to routing, so use a harmless nonempty command/context.
+    script = re.sub(r"\$\{\{.*?\}\}", "fixture", step["run"])
+    boundary_stubs = r"""#!/bin/bash
+case "$*" in
+  *generate_sweep_configs.py*|*infx.matrix.generate*) cat "$MATRIX_FIXTURE" ;;
+  *ci_priority.py*|*infx.workflows.ci_priority*) cat ;;
+  *) exit 1 ;;
+esac
+"""
+    tools = tmp_path / "bin"
+    tools.mkdir()
+    (tools / "uv").write_text(boundary_stubs)
+    (tools / "uv").chmod(0o755)
+
+    def run(entries):
+        matrix_file = tmp_path / "matrix.json"
+        matrix_file.write_text(json.dumps(entries))
+        output_file = tmp_path / "outputs"
+        output_file.write_text("")
+        subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", script],
+            cwd=tmp_path, check=True, capture_output=True, text=True, timeout=30,
+            env={
+                **os.environ,
+                "PATH": f"{tools}:{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}",
+                "GITHUB_WORKSPACE": str(tmp_path), "GITHUB_OUTPUT": str(output_file),
+                "MATRIX_FIXTURE": str(matrix_file), "PR_LABELS": "[]",
+                "CHANGELOG_BASE_REF": "", "CHANGELOG_HEAD_REF": "",
+                "TRIM_CONC": "false", "ALL_EVALS": "false", "EVALS_ONLY": "false",
+            },
+        )
+        return {
+            name: json.loads(value)
+            for line in output_file.read_text().splitlines()
+            for name, value in [line.split("=", 1)]
+        }
+
+    return run
+
+
+class TestE2EConfigSplitting:
+    def test_workflow_routes_benchmarks_and_evals_without_crossing_scenarios(self, split_e2e_configs):
+        single = {"exp-name": "single", "run-eval": False}
+        single_eval = {"exp-name": "single-eval", "run-eval": True, "recipe-fingerprint": "recipe-a"}
+        single_eval_only = {"exp-name": "single-eval-only", "run-eval": True, "eval-only": True}
+        multi = {"exp-name": "multi", "prefill": {}, "run-eval": True}
+        multi_eval_only = {**multi, "exp-name": "multi-eval-only", "eval-only": True}
+        agentic = {"exp-name": "agentic", "scenario-type": "agentic-coding", "run-eval": True}
+        agentic_eval_only = {**agentic, "exp-name": "agentic-eval-only", "eval-only": True}
+        multi_agentic = {**agentic, "exp-name": "multi-agentic", "prefill": {}}
+        multi_agentic_eval_only = {**multi_agentic, "exp-name": "multi-agentic-eval-only", "eval-only": True}
+
+        output = split_e2e_configs([
+            single, single_eval, single_eval_only, multi, multi_eval_only,
+            agentic, agentic_eval_only, multi_agentic, multi_agentic_eval_only,
+        ])
+
+        assert output == {
+            "single-node-config": [single, single_eval],
+            "eval-config": [single_eval, single_eval_only],
+            "multi-node-config": [multi],
+            "multi-node-eval-config": [multi, multi_eval_only],
+            "agentic-config": [agentic],
+            "agentic-eval-config": [agentic, agentic_eval_only],
+            "multi-node-agentic-config": [multi_agentic],
+            "multi-node-agentic-eval-config": [multi_agentic, multi_agentic_eval_only],
+        }
+
+    def test_empty_matrix_has_no_jobs(self, split_e2e_configs):
+        output = split_e2e_configs([])
+
+        assert output and all(rows == [] for rows in output.values())
+
+
+@pytest.mark.parametrize("multinode", [False, True])
+@pytest.mark.parametrize("power_key", ["require-power", "require_power"])
+def test_require_power_is_scoped_to_one_fixed_sequence(multinode, power_key, sample_single_node_config,
+                                                       sample_multinode_config, sample_runner_config):
+    from infx.matrix.generate import expand_full_sweep, select_matrix_evals
+    from infx.matrix.validation import MultiNodeSeqLenConfig, SingleNodeSeqLenConfig
+
+    config = sample_multinode_config if multinode else sample_single_node_config
+    entry = next(iter(config.values()))
+    sequences = entry["scenarios"]["fixed-seq-len"]
+    if multinode:
+        sequences.append(copy.deepcopy(sequences[0]))
+        sequences[-1]["isl"] = 8192
+    before = expand_full_sweep(config, sample_runner_config)
+    assert all("require-power" not in row for row in before)
+    sequences[-1][power_key] = True
+    schema = MultiNodeSeqLenConfig if multinode else SingleNodeSeqLenConfig
+    schema.model_validate(sequences[-1])
+    after = expand_full_sweep(config, sample_runner_config)
+    assert len(before) == len(after)
+    for original, row in zip(before, after):
+        assert row == ({**original, "require-power": True} if original["isl"] == 8192 else original)
+    evals = select_matrix_evals(copy.deepcopy(after), mode="subset")
+    assert evals
+    assert all("require-power" not in row for row in evals)
+    sequences[0][power_key] = True
+    with pytest.raises(ValueError, match="only fixed-sequence 8192/1024"):
+        expand_full_sweep(config, sample_runner_config)
+
+
+@pytest.mark.parametrize("variant,concs,tp,workers,offload", [
+    ("latency", [1, 2, 3, 4, 5, 6, 7, 8, 10, 12], 16, 2, "none"),
+    ("balanced", [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16], 8, 4, "none"),
+    ("simple", [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32], 8, 4, "dram"),
+])
+def test_h200_recipe_keys_preserve_complete_scopes(
+    variant: str, concs: list[int], tp: int, workers: int, offload: str,
+) -> None:
+    from infx.matrix.generate import generate_config_matrix
+
+    repo = Path(__file__).resolve().parents[2]
+    master = yaml.safe_load((repo / "configs/nvidia-master.yaml").read_text())
+    runners = yaml.safe_load((repo / "configs/runners.yaml").read_text())
+    key = f"kimik3-fp4-h200-vllm-agentic-{variant}"
+    rows = generate_config_matrix([key], master, runners)
+    assert [row["conc"][0] for row in rows] == concs
+    assert {row["node-count"] for row in rows} == {4}
+    assert {row["duration"] for row in rows} == {3600}
+    assert {row["prefill"]["tp"] for row in rows} == {tp}
+    assert {row["prefill"]["num-worker"] for row in rows} == {workers}
+    assert {row["kv-offloading"] for row in rows} == {offload}
+    assert all(row["run-eval"] and row["eval-suite"] == "kimi_tool_call_schema" for row in rows)
+    recipes = {row["prefill"]["additional-settings"][0] for row in rows}
+    assert len(recipes) == 1
+    assert ("vllm-simple" if variant == "simple" else variant) in recipes.pop()

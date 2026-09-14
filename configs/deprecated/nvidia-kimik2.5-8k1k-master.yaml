@@ -96,7 +96,7 @@ kimik2.5-fp4-b200-dynamo-trt:
   image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc21
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
-  runner: b200-multinode
+  runner: cluster:b200-dgxc
   precision: fp4
   framework: dynamo-trt
   router: { name: dynamo-router, version: "v1.3.0rc21" }

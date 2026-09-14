@@ -28,7 +28,7 @@ fi
 
 nvidia-smi
 
-# launch_b200-dgxc.sh rewrites MODEL to the pre-downloaded
+# launch_b200-nscale-slurm.sh rewrites MODEL to the pre-downloaded
 # /lustre/fsw/gharunners/models/MiniMax-M3-MXFP8 path; only download when
 # handed a bare HF id (b200-cw / b200-nb runners).
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi

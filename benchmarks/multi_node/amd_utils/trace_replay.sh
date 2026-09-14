@@ -99,13 +99,19 @@ DURATION="${DURATION:-1800}"
 export MODEL DURATION MAX_MODEL_LEN
 RESULT_DIR="${RESULT_DIR:-${profile_folder}}"
 # Base name for the per-conc aggregate written by the existing
-# utils.agentic.aggregation.process_agentic_result module.
+# infx.results.agentic.process_agentic_result module.
 # The workflow guard / upload steps expect a "${RESULT_FILENAME}_conc<N>.json"
 # file per concurrency, so each concurrency below is always suffixed with
 # _conc<N> (matching agentic_srt.sh on the gb200 path).
 RESULT_FILENAME_BASE="${RESULT_FILENAME:-agentic_bench}"
 
 mkdir -p "$RESULT_DIR"
+
+if [ "$PREFILL_ENABLE_DP" = "true" ]; then
+    set -x
+    export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
+    set +x
+fi
 
 resolve_trace_source
 install_agentic_deps

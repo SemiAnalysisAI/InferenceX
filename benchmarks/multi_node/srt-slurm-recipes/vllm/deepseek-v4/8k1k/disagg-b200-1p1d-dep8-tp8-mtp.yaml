@@ -31,6 +31,7 @@ frontend:
   type: dynamo
   enable_multiple_frontends: false
 backend:
+  set_cuda_visible_devices: true  # keep the aflowers/vllm-gb200-v0.20.0 provenance: bind GPUs via CVD, not --device-ids
   type: vllm
   connector: null
   prefill_environment:
@@ -112,3 +113,16 @@ benchmark:
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
+
+telemetry:
+  enabled: true
+  provider: dcgm-power
+  default_frequency: 1.0
+  storage_subdir: power
+  required: true
+  startup_timeout_seconds: 120
+  request_timeout_seconds: 2
+  collector_join_timeout_seconds: 10
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    port: 9401

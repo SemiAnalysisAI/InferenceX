@@ -10,11 +10,119 @@ export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
 SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
 
-# dcgm-power producer pin — single source of truth for power lanes. Swap
+# Fixed-sequence dcgm-power producer pin. Swap
 # URL+PIN here (and identically in launch_gb300-nv.sh) when the upstream
 # srt-slurm merge lands.
 POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
 POWER_SRT_SLURM_PIN="6fc1bed01a0b82dae0088a105c03ce0cfb353443"
+AGENTX_POWER_SRT_SLURM_PIN="80d7203e424f903c9017de4608ee2044afce9574"
+
+# Enroot 3.x does not parse Docker's tag@digest syntax. For digest-pinned
+# images, use its explicit registry syntax and pass the digest as the
+# manifest reference so the import remains immutable.
+enroot_uri_for_image() {
+    local image="$1"
+    local image_without_digest="$image"
+    local digest=""
+    local first_component registry repository repository_dir repository_name
+
+    if [[ "$image" == *@sha256:* ]]; then
+        image_without_digest="${image%@*}"
+        digest="${image##*@}"
+    fi
+
+    first_component="${image_without_digest%%/*}"
+    if [[ "$image_without_digest" == */* && ( "$first_component" == *.* || "$first_component" == *:* || "$first_component" == "localhost" ) ]]; then
+        registry="$first_component"
+        repository="${image_without_digest#*/}"
+    else
+        registry="registry-1.docker.io"
+        repository="$image_without_digest"
+    fi
+
+    if [[ -z "$digest" ]]; then
+        if [[ "$registry" == "registry-1.docker.io" ]]; then
+            printf 'docker://%s\n' "$image"
+        else
+            printf 'docker://%s#%s\n' "$registry" "$repository"
+        fi
+        return
+    fi
+
+    repository_dir="${repository%/*}"
+    repository_name="${repository##*/}"
+    repository_name="${repository_name%%:*}"
+    if [[ "$repository" == */* ]]; then
+        repository="${repository_dir}/${repository_name}"
+    else
+        repository="$repository_name"
+    fi
+    if [[ "$registry" == "registry-1.docker.io" && "$repository" != */* ]]; then
+        repository="library/$repository"
+    fi
+
+    printf 'docker://%s#%s:%s\n' "$registry" "$repository" "$digest"
+}
+
+# Concurrent matrix jobs import to the same shared-FS squash path.
+# Serialize imports and atomically replace invalid images so readers never
+# observe a partially written squash file.
+import_squash() {
+    local squash="$1" image="$2"
+    local lock="${squash}.lock"
+    local tmp="${squash}.tmp.$$"
+    local enroot_uri
+    enroot_uri=$(enroot_uri_for_image "$image") || exit 1
+    (
+        exec 9>"$lock"
+        flock -w 1800 9 || { echo "Failed to acquire lock for $squash" >&2; exit 1; }
+        if unsquashfs -l "$squash" > /dev/null 2>&1; then
+            echo "Squash file already exists and is valid, skipping import: $squash"
+        else
+            local enroot_runtime
+            enroot_runtime=$(mktemp -d "${TMPDIR:-/tmp}/enroot-import.XXXXXX") || exit 1
+            trap 'rm -rf -- "$enroot_runtime"' EXIT
+            export ENROOT_RUNTIME_PATH="$enroot_runtime"
+
+            rm -f "$squash" "$squash".tmp.*
+            if ! enroot import -o "$tmp" "$enroot_uri"; then
+                rm -f "$tmp"
+                echo "Error: enroot import failed for $enroot_uri" >&2
+                exit 1
+            fi
+            if ! unsquashfs -l "$tmp" > /dev/null 2>&1; then
+                rm -f "$tmp"
+                echo "Error: enroot import produced an invalid squash file: $tmp" >&2
+                exit 1
+            fi
+            mv -f "$tmp" "$squash" || exit 1
+        fi
+    ) || exit 1
+}
+
+# Direct single-tray AgentX uses the existing shared image and HF caches.
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
+    BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb200_${FRAMEWORK}_mtp.sh"
+    [[ "${IS_AGENTIC:-0}" == "1" && "${SPEC_DECODING:-}" == "mtp" && -f "$BENCH_SCRIPT" ]] || {
+        echo "Unsupported single-node recipe: $BENCH_SCRIPT" >&2
+        exit 1
+    }
+    HF_HUB_CACHE_HOST_PATH="/mnt/lustre01/users-public/sa-shared/hf-hub-cache"
+    mkdir -p "$HF_HUB_CACHE_HOST_PATH"
+    export MODEL_PATH="$MODEL" HF_HUB_CACHE=/hf-cache
+    export INFMAX_CONTAINER_WORKSPACE=/ix RESULT_DIR=/ix/results
+    SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    import_squash "$SQUASH_FILE" "$IMAGE"
+    srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
+        --nodes=1 --ntasks=1 --gpus="${TP:?}" --exclusive --mem=0 \
+        --time="${SALLOC_TIME_LIMIT:-480}" --job-name="$RUNNER_NAME" \
+        --mpi=none --container-image="$SQUASH_FILE" \
+        --container-mounts="$GITHUB_WORKSPACE:/ix,$HF_HUB_CACHE_HOST_PATH:/hf-cache" \
+        --no-container-mount-home --container-remap-root \
+        --container-workdir=/ix --no-container-entrypoint \
+        --export=ALL,PORT=8888 bash "$BENCH_SCRIPT"
+    exit $?
+fi
 
 if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
@@ -26,31 +134,7 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     fi
 
     SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-
-    # Enroot uses '#' between the registry and repository, e.g. docker://ghcr.io#org/image:tag.
-    case "$IMAGE" in
-        */*)
-            _registry="${IMAGE%%/*}"
-            _rest="${IMAGE#*/}"
-            if [[ "$_registry" == *.* || "$_registry" == *:* ]]; then
-                ENROOT_URL="docker://${_registry}#${_rest}"
-            else
-                ENROOT_URL="docker://${IMAGE}"  # bare hub repo
-            fi
-            ;;
-        *)  ENROOT_URL="docker://${IMAGE}" ;;
-    esac
-    echo "ENROOT_URL=$ENROOT_URL"
-
-    if [[ ! -s "$SQUASH_FILE" ]]; then
-        echo "enroot import -> $SQUASH_FILE"
-        enroot import -o "$SQUASH_FILE" "$ENROOT_URL" || {
-            echo "Error: enroot import failed for $ENROOT_URL" >&2
-            exit 1
-        }
-    else
-        echo "Reusing existing squash: $SQUASH_FILE"
-    fi
+    import_squash "$SQUASH_FILE" "$IMAGE"
 
     export LLMD_CONTAINER_ENGINE=pyxis
     export LLMD_SQUASH_FILE="$SQUASH_FILE"
@@ -119,6 +203,12 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/Qwen3.5-397B-A17B-FP8"
         export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
+    elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/Qwen3.5-397B-A17B-NVFP4-V2"
+        export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
+    elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/users-public/sa-shared/models/GLM-5.2-NVFP4"
+        export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
     elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
         # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp4")
         # in our GLM-5.1 sglang recipes.
@@ -154,8 +244,14 @@ elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         export MODEL_PATH="/mnt/lustre01/slurm-shared/glm-model/GLM-5-NVFP4"
         export SERVED_MODEL_NAME="glm-5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5-NVFP4"
+    elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
+        # Same checkpoint and model.path alias as the dynamo-vllm MiniMax-M3
+        # lanes; the dynamo-trt AgentX recipes use model.path: minimax-m3-nvfp4.
+        export MODEL_PATH="/mnt/lustre01/models/MiniMax-M3-NVFP4"
+        export SERVED_MODEL_NAME="nvidia/MiniMax-M3-NVFP4"
+        export SRT_SLURM_MODEL_PREFIX="minimax-m3-nvfp4"
     else
-        echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss, dsr1, kimik2.5, or glm5"
+        echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss, dsr1, kimik2.5, glm5, or minimaxm3 (fp4)"
         exit 1
     fi
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
@@ -189,8 +285,11 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M3-MXFP8"
         export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
+    elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/MiniMax-M3-NVFP4"
+        export SRT_SLURM_MODEL_PREFIX="minimax-m3-nvfp4"
     else
-        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, kimik3/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8, minimaxm3/fp8"
+        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, kimik3/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8, minimaxm3/fp4, minimaxm3/fp8"
         exit 1
     fi
 else
@@ -201,7 +300,7 @@ NGINX_IMAGE="nginx:1.27.4"
 
 uses_watchtower_shared_fs() {
     case "$MODEL_PREFIX" in
-        minimaxm2.5|minimaxm3|kimik2.5|kimik3|qwen3.5) return 0 ;;
+        minimaxm2.5|minimaxm3|kimik2.5|kimik3|qwen3.5|glm5.2) return 0 ;;
     esac
     # dsv4 multinode runs only under dynamo-vllm on watchtower, which likewise
     # needs the srt-slurm workspace/outputs on a compute-visible shared FS
@@ -212,84 +311,6 @@ uses_watchtower_shared_fs() {
 
 SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="${SQUASH_DIR}/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-
-# Enroot 3.x does not parse Docker's tag@digest syntax. For digest-pinned
-# images, use its explicit registry syntax and pass the digest as the
-# manifest reference so the import remains immutable.
-enroot_uri_for_image() {
-    local image="$1"
-    local image_without_digest="$image"
-    local digest=""
-    local first_component registry repository repository_dir repository_name
-
-    if [[ "$image" == *@sha256:* ]]; then
-        image_without_digest="${image%@*}"
-        digest="${image##*@}"
-    fi
-
-    first_component="${image_without_digest%%/*}"
-    if [[ "$image_without_digest" == */* && ( "$first_component" == *.* || "$first_component" == *:* || "$first_component" == "localhost" ) ]]; then
-        registry="$first_component"
-        repository="${image_without_digest#*/}"
-    else
-        registry="registry-1.docker.io"
-        repository="$image_without_digest"
-    fi
-
-    if [[ -z "$digest" ]]; then
-        if [[ "$registry" == "registry-1.docker.io" ]]; then
-            printf 'docker://%s\n' "$image"
-        else
-            printf 'docker://%s#%s\n' "$registry" "$repository"
-        fi
-        return
-    fi
-
-    repository_dir="${repository%/*}"
-    repository_name="${repository##*/}"
-    repository_name="${repository_name%%:*}"
-    if [[ "$repository" == */* ]]; then
-        repository="${repository_dir}/${repository_name}"
-    else
-        repository="$repository_name"
-    fi
-    if [[ "$registry" == "registry-1.docker.io" && "$repository" != */* ]]; then
-        repository="library/$repository"
-    fi
-
-    printf 'docker://%s#%s:%s\n' "$registry" "$repository" "$digest"
-}
-
-# Concurrent matrix jobs import to the same shared-FS squash path.
-# Serialize imports and atomically replace invalid images so readers never
-# observe a partially written squash file.
-import_squash() {
-    local squash="$1" image="$2"
-    local lock="${squash}.lock"
-    local tmp="${squash}.tmp.$$"
-    local enroot_uri
-    enroot_uri=$(enroot_uri_for_image "$image") || exit 1
-    (
-        exec 9>"$lock"
-        flock -w 1800 9 || { echo "Failed to acquire lock for $squash" >&2; exit 1; }
-        if unsquashfs -l "$squash" > /dev/null 2>&1; then
-            echo "Squash file already exists and is valid, skipping import: $squash"
-        else
-            rm -f "$squash" "$squash".tmp.*
-            if ! enroot import -o "$tmp" "$enroot_uri"; then
-                rm -f "$tmp"
-                echo "Error: enroot import failed for $enroot_uri" >&2
-                exit 1
-            fi
-            if ! unsquashfs -l "$tmp" > /dev/null 2>&1; then
-                rm -f "$tmp"
-                echo "Error: enroot import produced an invalid squash file: $tmp" >&2
-                exit 1
-            fi
-            mv -f "$tmp" "$squash" || exit 1
-        fi
-    ) || exit 1
-}
 
 import_squash "$SQUASH_FILE" "$IMAGE"
 import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
@@ -312,12 +333,24 @@ if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
     USES_DCGM_POWER=1
 fi
 
-# Note (wenyao): the producer pin descends from the fp8 srt-slurm lineage
-# (cargo/maturin bootstrap); a non-fp8 power recipe would silently clone the
-# wrong lineage, so fail fast instead.
-if [[ "$USES_DCGM_POWER" == "1" && "$PRECISION" != "fp8" ]]; then
-    echo "Error: dcgm-power lanes are only validated for PRECISION=fp8, got: $PRECISION" >&2
+# Note (wenyao): the producer pin follows the srt-slurm main lineage that the
+# dynamo-sglang lanes run on (fp8 validated end-to-end, fp4 recipes
+# parse-verified against the pin); other frameworks clone diverging refs
+# (aflowers branch, sa-submission), so fail fast for them instead.
+if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" ]]; then
+    echo "Error: dcgm-power lanes are only validated for FRAMEWORK=dynamo-sglang, got: $FRAMEWORK" >&2
     exit 1
+fi
+
+USES_AGENTX_POWER=0
+if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" ]]; then
+    if [[ "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" &&
+        "$_RECIPE_REL" == "recipes/sglang/glm5.2/gb200-fp4/agentic/glm5.2-agentx-agg.yaml" ]]; then
+        USES_AGENTX_POWER=1
+    else
+        echo "Error: GB200 AgentX dcgm-power requires the GLM-5.2 aggregate recipe" >&2
+        exit 1
+    fi
 fi
 
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
@@ -407,8 +440,83 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-# TODO(CJQ): make first class upon srt-slurm upstream refactor
-if [[ "$IS_AGENTIC" == "1" ]]; then
+# AgentX power needs the custom-window producer contract; the released GLM
+# metrics path can keep its existing producer.
+if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+    if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+        git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout "$AGENTX_POWER_SRT_SLURM_PIN" || exit 1
+        test "$(git rev-parse HEAD)" = "$AGENTX_POWER_SRT_SLURM_PIN" || {
+            echo "Error: srt-slurm HEAD does not match AgentX power producer $AGENTX_POWER_SRT_SLURM_PIN" >&2
+            exit 1
+        }
+        git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+    else
+        git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+        test "$(git rev-parse HEAD)" = "e4019633c9e2bc25f38c44b81edf52bb0504d937" || {
+            echo "Error: NVIDIA/srt-slurm v1.0.50 resolved to an unexpected commit" >&2
+            exit 1
+        }
+    fi
+    mkdir -p recipes/sglang/glm5.2/gb200-fp4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/gb200-fp4/agentic" \
+        recipes/sglang/glm5.2/gb200-fp4/agentic
+elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "minimaxm3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
+    SRT_SLURM_MINIMAX_PIN="d50ee7280c33d469df8708e363e23be2456e94fb"
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout "$SRT_SLURM_MINIMAX_PIN"
+    test "$(git rev-parse HEAD)" = "$SRT_SLURM_MINIMAX_PIN" || {
+        echo "Error: NVIDIA/srt-slurm MiniMax-M3 revision resolved to an unexpected commit" >&2
+        exit 1
+    }
+    mkdir -p recipes/vllm/minimax-m3/gb200-fp4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/gb200-fp4/agentic" \
+        recipes/vllm/minimax-m3/gb200-fp4/agentic
+# These AgentX submissions use released srt-slurm custom-benchmark metrics
+# discovery so AIPerf receives every logical worker endpoint.
+elif [[ "$IS_AGENTIC" == "1" && (( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ) || ( "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" )) ]]; then
+    git clone --branch v1.0.45 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    test "$(git rev-parse HEAD)" = "9d8d92b20c350a5d42f0709f5a0b64e30eb37d33" || {
+        echo "Error: NVIDIA/srt-slurm v1.0.45 resolved to an unexpected commit" >&2
+        exit 1
+    }
+    if [[ "$MODEL_PREFIX" == "qwen3.5" ]]; then
+        mkdir -p recipes/sglang/qwen3.5/gb200-fp4/agentic
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp4/agentic" \
+            recipes/sglang/qwen3.5/gb200-fp4/agentic
+    else
+        mkdir -p recipes/vllm/deepseek-v4/agentic
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
+            recipes/vllm/deepseek-v4/agentic
+    fi
+# Kimi-K3 requires direct multi-node vLLM frontend support from srt-slurm.
+elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "kimik3" ]]; then
+    git clone --branch v1.0.53 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    test "$(git rev-parse HEAD)" = "217f94387abeddfed7149a71955dc523e07cd765" || {
+        echo "Error: NVIDIA/srt-slurm v1.0.53 resolved to an unexpected commit" >&2
+        exit 1
+    }
+    python3 "$GITHUB_WORKSPACE/runners/patch_srt_vllm_dp_ranks.py" "$(pwd)" || exit 1
+    mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
+        recipes/vllm/kimi-k3/agentic || exit 1
+elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "minimaxm3" ]]; then
+    # Select this before the generic Agentic fallback. v1.0.91 carries
+    # srt-slurm #384 (numactl -m 0,1 on aggregated TRT-LLM workers).
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout v1.0.91 || exit 1
+    # Preserve the repository-relative CONFIG_FILE paths inside this checkout.
+    RECIPE_DIR="benchmarks/multi_node/srt-slurm-recipes/trtllm/minimax-m3/gb200-fp4/agentic"
+    mkdir -p "$RECIPE_DIR" || exit 1
+    cp -rT "$GITHUB_WORKSPACE/$RECIPE_DIR" "$RECIPE_DIR" || exit 1
+# TODO(CJQ): migrate the remaining Agentic model paths to released srt-slurm.
+elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic multi-node pins cquil11/srt-slurm-nv revisions that provide:
     #   - BenchmarkType.CUSTOM + benchmark.command + benchmark.env
     #     (the hook that hands off to benchmarks/multi_node/agentic_srt.sh)
@@ -419,21 +527,10 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
     #     must reach the agentic_srt.sh srun)
     git clone https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    if [[ "$MODEL_PREFIX" == "kimik3" ]]; then
-        # Kimi K3 additionally needs vLLM TP groups within data parallel and
-        # every DP engine metrics endpoint exposed to AIPerf.
-        git checkout b1fb626fbdbfe3306dcb51cb181ab35861ec3b1c
-        mkdir -p recipes/vllm/kimi-k3/agentic
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
-            recipes/vllm/kimi-k3/agentic
-        cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/kimik3-dspark-config-compat.sh" \
-            configs/kimik3-dspark-config-compat.sh
-    else
-        git checkout de59739b172e507e15ebf145bfe305f606e82fbf
-        mkdir -p recipes/vllm/deepseek-v4/agentic
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
-            recipes/vllm/deepseek-v4/agentic
-    fi
+    git checkout de59739b172e507e15ebf145bfe305f606e82fbf
+    mkdir -p recipes/vllm/deepseek-v4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
+        recipes/vllm/deepseek-v4/agentic
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -445,10 +542,25 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-    # Stay on NVIDIA/srt-slurm:main (default) — submission branch no
-    # longer needed; overlay our hand-rolled DSV4 sglang recipes onto it.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        # Note (wenyao): on this cluster the DSV4-Pro checkpoint lives on the
+        # compute-node /mnt/numa1 NVMe (same staging the agentic path and the
+        # llm-d sweeps load from); the lustre alias target the shared dsv4
+        # block exports is not present here. Scoped to the power lane so the
+        # non-power lane keeps whatever the external-cluster staging expects.
+        export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
+        git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+        git checkout "$POWER_SRT_SLURM_PIN" || exit 1
+        # The power lane must run the exact pinned producer SHA, never a moving branch.
+        test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
+        git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+    else
+        # Stay on NVIDIA/srt-slurm:main (default) — submission branch no
+        # longer needed; overlay our hand-rolled DSV4 sglang recipes onto it.
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+    fi
     mkdir -p recipes/sglang/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
@@ -507,6 +619,9 @@ else
     git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
 fi
+if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
+    python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" || exit 1
+fi
 
 echo "Installing srtctl..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -557,6 +672,13 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
     DEFAULT_MOUNTS_BLOCK="default_mounts:
   ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
   ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+    if uses_watchtower_shared_fs && [[ "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+        DYNAMO_WHEELS_CACHE_HOST_PATH="${SHARED_BASE}/dynamo-wheels"
+        mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
+        chmod 777 "$DYNAMO_WHEELS_CACHE_HOST_PATH" 2>/dev/null || true
+        DEFAULT_MOUNTS_BLOCK+="
+  ${DYNAMO_WHEELS_CACHE_HOST_PATH}: /configs/dynamo-wheels"
+    fi
 fi
 
 echo "Creating srtslurm.yaml configuration..."
@@ -654,10 +776,17 @@ if command -v squeue >/dev/null 2>&1; then
 fi
 sed -i "s/^name:.*/name: \"${SRT_SLURM_JOB_NAME}\"/" "$CONFIG_PATH"
 
-# Optionally inject synthetic acceptance into the recipe's speculative-config
-# when SYNTHETIC_ACCEPTANCE=true (no-op otherwise). Must run after the name
-# override and before srtctl apply so the rendered job picks it up.
-python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" "$CONFIG_PATH" "$FRAMEWORK"
+# The driver preserves both contracts: real verification for EVAL_ONLY and
+# synthetic acceptance for throughput when SYNTHETIC_ACCEPTANCE is enabled.
+# It is otherwise a no-op.
+python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
+    "$CONFIG_PATH" "$FRAMEWORK" || exit 1
+
+if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+    read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+    python3 "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
+        "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
+fi
 
 # Don't leak the login-node venv to the compute-node orchestrator. sbatch's
 # default --export=ALL propagates VIRTUAL_ENV (set by `source
@@ -668,13 +797,12 @@ python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" "$CONFIG_PATH
 # srtctl itself still resolves through PATH (.venv/bin is on it).
 unset VIRTUAL_ENV
 
-# --no-preflight is only used on the agentic path, where the recipe resolves
-# model.path to /mnt/numa1 (compute-node-only NVMe) that the login-node
-# runner can't see. Fixed-seq-len recipes keep enforcement on.
-PREFLIGHT_ARGS=()
-if [[ "$IS_AGENTIC" == "1" ]]; then
-    PREFLIGHT_ARGS=(--no-preflight)
-fi
+# GB200 recipes resolve model.path through mounts the login-node runner
+# can't reliably stat (compute-node-local NVMe, and lustre paths that
+# aren't cross-mounted on the runner pod), so srtctl's login-node model-FS
+# preflight fails before sbatch. Skip it on both the agentic and
+# fixed-seq-len paths.
+PREFLIGHT_ARGS=(--no-preflight)
 
 SRTCTL_APPLY_ARGS=(
     "${PREFLIGHT_ARGS[@]}"
@@ -723,12 +851,55 @@ trap 'exit 143' TERM HUP
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
-stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+AGENTX_POWER_RC=0
+stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || AGENTX_POWER_RC=$?
+if [[ "$AGENTX_POWER_RC" != "0" && "$USES_AGENTX_POWER" != "1" ]]; then
+    exit 1
+fi
 
 set -x
 
-echo "Job $JOB_ID completed!"
+echo "Job $JOB_ID finished!"
 echo "Collecting results..."
+
+if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+    mkdir -p "$LOGS_DIR/power"
+    # Accounting can lag squeue removal. Retry only a missing/nonterminal row.
+    for status_attempt in 1 2 3; do
+        echo "$status_attempt" > "$LOGS_DIR/power/native-job-status-attempts.txt"
+        sacct -X -n -P -j "$JOB_ID" --format=JobIDRaw,State,ExitCode \
+            > "$LOGS_DIR/power/native-job-status.txt" \
+            2>> "$LOGS_DIR/power/native-job-status.stderr" || true
+        if awk -F'|' -v job="$JOB_ID" '
+            $1 == job && $2 !~ /^(PENDING|RUNNING|COMPLETING)$/ { found = 1 }
+            END { exit !found }
+        ' "$LOGS_DIR/power/native-job-status.txt"; then
+            break
+        fi
+        if [[ "$status_attempt" != "3" ]]; then sleep 5; fi
+    done
+    if ! awk -F'|' -v job="$JOB_ID" '
+        $1 == job { found = 1; if ($2 != "COMPLETED" || $3 != "0:0") failed = 1 }
+        END { exit (!found || failed) }
+    ' "$LOGS_DIR/power/native-job-status.txt"; then
+        AGENTX_POWER_RC=1
+    fi
+    copy_agentic_results "$INFMAX_WORKSPACE" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" || AGENTX_POWER_RC=$?
+    POWER_LOGS_ROOT="$(pwd -P)/$LOGS_DIR"
+    read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+    for concurrency in "${POWER_CONCURRENCIES[@]}"; do
+        (
+            cd "$GITHUB_WORKSPACE" || exit 1
+            python3 -m utils.agentic.aggregation.power_adapter \
+                --result-dir "$POWER_LOGS_ROOT/agentic/conc_${concurrency}" \
+                --agg-result "$GITHUB_WORKSPACE/${RESULT_FILENAME}_conc${concurrency}.json" \
+                --power-dir "$POWER_LOGS_ROOT/power" \
+                --logs-root "$POWER_LOGS_ROOT" \
+                --expected-producer-sha "$AGENTX_POWER_SRT_SLURM_PIN" \
+                --require-power
+        ) || AGENTX_POWER_RC=$?
+    done
+fi
 
 if [ -d "$LOGS_DIR" ]; then
     echo "Found logs directory: $LOGS_DIR"
@@ -745,6 +916,11 @@ else
     echo "Warning: Logs directory not found at $LOGS_DIR"
 fi
 
+if [[ "$AGENTX_POWER_RC" != "0" ]]; then
+    echo "ERROR: AgentX job or power validation failed; available audit and server artifacts were staged" >&2
+    exit "$AGENTX_POWER_RC"
+fi
+
 if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
     if [ ! -d "$LOGS_DIR" ]; then
         exit 1
@@ -755,10 +931,12 @@ if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
         # INFMAX_WORKSPACE mount. Its aggregation step writes one
         # ${RESULT_FILENAME}_conc<N>.json there per point; stage those files
         # back to GITHUB_WORKSPACE for the workflow guard and artifact upload.
-        copy_agentic_results \
-            "$INFMAX_WORKSPACE" \
-            "$GITHUB_WORKSPACE" \
-            "$RESULT_FILENAME" || exit 1
+        if [[ "$USES_AGENTX_POWER" != "1" ]]; then
+            copy_agentic_results \
+                "$INFMAX_WORKSPACE" \
+                "$GITHUB_WORKSPACE" \
+                "$RESULT_FILENAME" || exit 1
+        fi
     else
         # Find all fixed-sequence result subdirectories.
         RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)

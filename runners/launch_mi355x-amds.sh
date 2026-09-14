@@ -180,8 +180,18 @@ PY
             shopt -s nullglob
             for eval_file in "$EVAL_DIR"/*; do
                 [ -f "$eval_file" ] || continue
-                cp "$eval_file" "$GITHUB_WORKSPACE/"
-                echo "Copied eval artifact: $(basename "$eval_file")"
+                eval_dest="$GITHUB_WORKSPACE/$(basename "$eval_file")"
+                rm -f "$eval_dest"
+                # Eval artifacts are created as root inside the container; sudo
+                # is required to overwrite any stale root-owned files in the
+                # workspace from prior runs on this runner.
+                if sudo cp "$eval_file" "$eval_dest"; then
+                    sudo chown "$(id -u):$(id -g)" "$eval_dest" 2>/dev/null || true
+                    echo "Copied eval artifact: $(basename "$eval_file")"
+                else
+                    echo "ERROR: failed to copy eval artifact: $(basename "$eval_file")" >&2
+                    exit 1
+                fi
             done
             shopt -u nullglob
         else
@@ -210,20 +220,8 @@ PY
                 echo "Staging agentic raw artifacts from $AGENTIC_SRC"
                 mkdir -p "$GITHUB_WORKSPACE/LOGS/agentic"
                 cp -r "$AGENTIC_SRC"/. "$GITHUB_WORKSPACE/LOGS/agentic/"
-                # The source artifacts are created inside the container as root
-                # (--container-remap-root), so depending on how the runner
-                # invokes this script the copies can end up root-owned and/or
-                # read-only (aiperf/server_sglang make some dirs mode 0555). If
-                # the staged tree isn't owned+writable by the runner user, the
-                # next checkout's `git clean` fails with
-                #   EACCES: permission denied, rmdir '.../LOGS/agentic'.
-                # chown to the invoking user (the same one that runs git clean)
-                # via sudo (already passwordless here for rm -rf). The follow-up
-                # chmod uses a+rwX (not just u+rwX): the *next* job against this
-                # same $GITHUB_WORKSPACE may be picked up by a different runner
-                # process running as a different OS user, which would otherwise
-                # fall outside the owner bits and still fail the same
-                # `git clean` with EACCES despite the chown above.
+                # Container artifacts arrive root-owned; chown/chmod so git clean
+                # and later jobs (possibly a different runner user) can remove LOGS/.
                 sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
                 chmod -R a+rwX "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
                 ls -laR "$GITHUB_WORKSPACE/LOGS/agentic"
@@ -259,7 +257,7 @@ else
     export PORT_OFFSET=${RUNNER_NAME: -1}
     export PORT=$(( 8888 + ${PORT_OFFSET} ))
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "atom" ]] && printf '_atom' || printf '')
-    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" || "$SPEC_DECODING" == "draft_model" ]] && printf '_mtp' || printf '')
 
     PARTITION="compute"
     SQUASH_FILE="/var/lib/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
@@ -306,6 +304,18 @@ else
         export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
     fi
 
+    # DSv4.1 weights live on the persistent shared cache. Mount this recipe
+    # outside /workspace so runtime setup does not create directories there.
+    CONTAINER_REPO=/workspace
+    if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4.1-Flash" ]]; then
+        export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
+        CONTAINER_REPO=/ix
+        export INFMAX_CONTAINER_WORKSPACE="$CONTAINER_REPO"
+        case "${RESULT_DIR:-}" in
+            /workspace/*) export RESULT_DIR="/ix/${RESULT_DIR#/workspace/}" ;;
+        esac
+    fi
+
     SCRIPT_BASE="${EXP_NAME%%_*}_${PRECISION}_mi355x"
     SCRIPT_FW="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
     SCRIPT_FALLBACK="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
@@ -317,13 +327,14 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_REPO/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
         $SLRUM_HOME_MOUNT \
         --container-writable \
-        --container-workdir=/workspace/ \
+        --container-workdir=$CONTAINER_REPO/ \
         --container-remap-root \
         --no-container-entrypoint --export=ALL,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
         bash "$BENCHMARK_SCRIPT"
+    benchmark_rc=$?
 
     scancel $JOB_ID
 
@@ -331,4 +342,6 @@ else
         echo "gpucore files exist. not good"
         rm -f gpucore.*
     fi
+
+    exit "$benchmark_rc"
 fi

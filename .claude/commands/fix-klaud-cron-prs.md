@@ -1,5 +1,5 @@
 ---
-description: Triage failing Claude-authored PRs — read sweep logs, debug, and push a candidate fix per PR
+description: Triage failing Claude-authored PRs by reading sweep logs, debugging failures, and pushing a candidate fix per PR
 ---
 
 For each open Claude-authored PR (`claude/*` branch) whose full-sweep validation produced at least one **FAILED** check, fetch the failing run's logs, diagnose the root cause, and push a candidate fix to the PR's branch.
@@ -10,7 +10,7 @@ This command modifies remote PR branches. **Pause for user confirmation** after 
 
 A PR qualifies only if:
 - `headRefName` starts with `claude/`
-- At least one `Run Sweep` check has conclusion `SUCCESS` **or** `FAILURE` (i.e. the sweep was enabled and produced real results — not all skipped)
+- At least one `Run Sweep` check has conclusion `SUCCESS` **or** `FAILURE` (i.e. the sweep was enabled and produced real results, rather than all checks being skipped)
 - At least one check has conclusion `FAILURE`, `CANCELLED`, or `TIMED_OUT`
 
 `gh pr list --json statusCheckRollup` truncates rollups, so enumerate candidates first, then re-query each PR individually.
@@ -40,7 +40,7 @@ Render the candidates as a markdown table with clickable PR links and **stop**. 
 
 ## Step 2 — per-PR diagnosis & fix loop
 
-For each confirmed PR, run the following loop. Do **not** parallelize — keep state local and obvious.
+For each confirmed PR, run the following loop. Do **not** parallelize. Keep state local and obvious.
 
 ### 2a. Check out the PR branch in a worktree
 
@@ -75,17 +75,17 @@ gh run view "$RUN_ID" --repo SemiAnalysisAI/InferenceX --log-failed \
 wc -l /tmp/sweep_failed_log_$PR.txt
 ```
 
-If the log file is very large (>2000 lines), grep it for the actual error signatures before reading — common patterns: `Error`, `Traceback`, `RuntimeError`, `CUDA`, `HIP`, `OOM`, `assert`, `KeyError`, `ModuleNotFound`, `connection refused`, `exit code`, `failed to launch`. Read the surrounding context (~50 lines) around each hit.
+If the log file is very large (>2000 lines), grep it for the actual error signatures before reading. Common patterns include `Error`, `Traceback`, `RuntimeError`, `CUDA`, `HIP`, `OOM`, `assert`, `KeyError`, `ModuleNotFound`, `connection refused`, `exit code`, and `failed to launch`. Read the surrounding context (~50 lines) around each hit.
 
 ### 2c. Diagnose
 
-Inspect the PR diff (`git -C "$WT" diff origin/main...HEAD`) and the failing-log excerpts together. Most `claude/issue-1154-*` PRs are image-bump PRs that touch a `*.yaml` recipe — failures are usually:
+Inspect the PR diff (`git -C "$WT" diff origin/main...HEAD`) and the failing-log excerpts together. Most `claude/issue-1154-*` PRs are image-bump PRs that touch a `*.yaml` recipe. Failures are usually:
 
 - Image tag typo / unavailable tag → fix the image reference.
 - Engine arg incompatibility with new image version → add/remove the affected flag in the recipe.
 - New required env var or container path → patch the recipe.
 - Resource ask too high for the runner → drop concurrency or tp.
-- Flaky infra (network, runner pickup) → not a code fix; flag and skip.
+- Flaky infra (network, runner pickup) → not a code fix. Flag and skip.
 
 State the suspected root cause in one or two sentences before proposing any edit.
 
@@ -116,4 +116,4 @@ Print a summary table:
 | [#NNNN](https://github.com/SemiAnalysisAI/InferenceX/pull/NNNN) | fix pushed (`<sha>`) | one-line diagnosis |
 | [#NNNN](https://github.com/SemiAnalysisAI/InferenceX/pull/NNNN) | skipped | reason (flake / unclear / too large) |
 
-Do **not** merge anything. The pushed commit will re-trigger sweep on the PR; review results via `/list-claude-pr-status` later.
+Do **not** merge anything. The pushed commit will re-trigger sweep on the PR. Review results via `/list-claude-pr-status` later.

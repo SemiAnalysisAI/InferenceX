@@ -83,8 +83,13 @@ if [[ "$KV_OFFLOADING" != "none" && "${KV_OFFLOAD_BACKEND:-}" == "hicache" ]]; t
   export HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-1}"
   # DSV4 uses page-size 256 (set in models.yaml); HiCache must match.
   export HICACHE_PAGE_SIZE="${HICACHE_PAGE_SIZE:-256}"
-  # HiCache ratio (host pool = ratio * GPU KV pool). Default derived in server_sglang.sh.
-  export HICACHE_RATIO="${HICACHE_RATIO:-}"
+  # HiCache ratio (host pool = ratio * GPU KV pool).
+  export HICACHE_RATIO="${HICACHE_RATIO:-3}"
+  # DSv4 wants the ratio-based pool, but server_sglang.sh prefers
+  # --hicache-size over --hicache-ratio when TOTAL_CPU_DRAM_GB is set.
+  # Opt out via FORCE_HICACHE_RATIO instead of unsetting TOTAL_CPU_DRAM_GB
+  # (also required client-side by benchmark_lib.sh when KV_OFFLOADING=dram).
+  export FORCE_HICACHE_RATIO=1
 
   # ── HiCache layout/backend by tier ──
   #   L3 (Mooncake): page_first + direct + write_through     + storage=mooncake
@@ -122,7 +127,7 @@ export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
 export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-32768}"
 
 # ── SGLang PD router policy + server metrics ──
-export PREFILL_ROUTER_POLICY="${PREFILL_ROUTER_POLICY:-cache_aware}"
+export PREFILL_ROUTER_POLICY="${PREFILL_ROUTER_POLICY:-consistent_hashing}"
 export ENABLE_METRICS="${ENABLE_METRICS:-1}"
 
 # ── MTP ──

@@ -411,13 +411,13 @@ if [ "$NODE_RANK" -eq 0 ]; then
             fi
 
             if [[ "$DRY_RUN" -eq 1 ]]; then
-                echo "DRY RUN: run_eval --framework lm-eval --port ${ROUTER_PORT} (conc=${EVAL_CONCURRENT_REQUESTS})"
+                echo "DRY RUN: run_eval --port ${ROUTER_PORT} (framework=${EVAL_FRAMEWORK:-lm-eval}, conc=${EVAL_CONCURRENT_REQUESTS})"
             else
-                MODEL_NAME="${MODEL_DIR}/${MODEL_NAME}" run_eval --framework lm-eval --port ${ROUTER_PORT}
+                MODEL_NAME="${MODEL_DIR}/${MODEL_NAME}" run_eval --port "${ROUTER_PORT}"
                 eval_rc=$?
 
                 if [[ $eval_rc -ne 0 ]]; then
-                    echo "ERROR: run_eval exited rc=$eval_rc; skipping metadata write and eval artifact staging" >&2
+                    echo "ERROR: run_eval exited rc=$eval_rc; preserving failure artifacts" >&2
                     EVAL_FAILED=1
                 else
                     export TP="${PREFILL_TP_SIZE}"
@@ -433,15 +433,15 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
                     MODEL_NAME="${MODEL_DIR}/${MODEL_NAME}" append_lm_eval_summary
 
-                    EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
-                    mkdir -p "$EVAL_COPY_DIR"
-                    for f in meta_env.json; do
-                        [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
-                    done
-                    find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
-                    find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                fi
 
-                    echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
+                EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
+                if stage_eval_artifacts \
+                    "$EVAL_COPY_DIR" /workspace "${EVAL_RESULT_DIR:-}"; then
+                    echo "Eval artifacts staged in $EVAL_COPY_DIR"
+                else
+                    echo "ERROR: failed to stage eval artifacts in $EVAL_COPY_DIR" >&2
+                    EVAL_FAILED=1
                 fi
             fi
 

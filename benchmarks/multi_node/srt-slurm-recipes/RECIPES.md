@@ -26,7 +26,7 @@ dsr1-fp8-h200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8-cu130-runtime
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: h200-multinode-slurm
+  runner: cluster:h200-dgxc
   precision: fp8
   framework: dynamo-sglang
   multinode: true
@@ -86,7 +86,7 @@ dsr1-fp8-h200-dynamo-sglang:
 ## 7. Validate
 
 ```bash
-python utils/matrix_logic/generate_sweep_configs.py full-sweep \
+python -m infx.matrix.generate full-sweep \
   --config-files configs/nvidia-master.yaml \
   --framework dynamo-sglang
 ```

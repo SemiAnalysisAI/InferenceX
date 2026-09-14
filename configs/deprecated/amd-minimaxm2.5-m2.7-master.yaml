@@ -29,29 +29,6 @@ minimaxm2.5-fp8-mi355x-vllm:
 # the original minimaxm2.5-fp8-mi355x-vllm entry is left identical to origin/main so
 # its fixed-seq-len sweep is unaffected.
 #   - image: 'vllm/vllm-openai-rocm:v0.19.0' -> 'vllm/vllm-openai-rocm:nightly-51f22dcfd068fe8f1e3192da2a1e825b930223cf'
-minimaxm2.5-fp8-mi355x-vllm-agentic:
-  # Nightly carrying vllm-project/vllm@20cac26b ("[Bug fix][KV Connector]
-  # add cpu_offload_blocks > 0 check before maybe_run_layer_kv_offload"),
-  # which enables SimpleCPUOffloadConnector on ROCm. Required for the
-  # cpu-offload sweep points to use the same offload path as the NVIDIA
-  # agentic-coding configs.
-  image: vllm/vllm-openai-rocm:nightly-51f22dcfd068fe8f1e3192da2a1e825b930223cf
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
-  runner: mi355x
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    # MI355X tp=4 ep=4: compute ceiling ~60 (empirical), KV cliff ~91 (analytical).
-    # Compute saturates first; cpu offload likely won't help, but worth confirming.
-    # AMD uses native OffloadingConnector (NOT SimpleCPUOffloadConnector).
-    - duration: 1800
-      search-space:
-      - { tp: 4, ep: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 56, 64, 72, 96] }
-      - { tp: 4, ep: 4, offloading: cpu,  conc-list: [48, 56, 64, 72, 96] }
-
 minimaxm2.5-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
   model: MiniMaxAI/MiniMax-M2.5
@@ -146,25 +123,6 @@ minimaxm2.5-fp8-mi300x-vllm:
 # the original minimaxm2.5-fp8-mi300x-vllm entry is left identical to origin/main so
 # its fixed-seq-len sweep is unaffected.
 #   - image: 'vllm/vllm-openai-rocm:v0.16.0' -> 'vllm/vllm-openai-rocm:nightly-51f22dcfd068fe8f1e3192da2a1e825b930223cf'
-minimaxm2.5-fp8-mi300x-vllm-agentic:
-  # Nightly carrying vllm-project/vllm@20cac26b — see mi355x config above.
-  image: vllm/vllm-openai-rocm:nightly-51f22dcfd068fe8f1e3192da2a1e825b930223cf
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
-  runner: mi300x
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    # MI300X tp=4: compute ceiling ~25 (estimated, between H100 and H200);
-    # KV cliff ~52. Compute saturates first.
-    # AMD uses native OffloadingConnector (NOT SimpleCPUOffloadConnector).
-    - duration: 1800
-      search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 20, 24, 28, 32, 40, 48] }
-      - { tp: 4, offloading: cpu,  conc-list: [16, 20, 24, 28, 32] }
-
 minimaxm2.5-fp8-mi325x-vllm:
   image: vllm/vllm-openai-rocm:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
@@ -190,31 +148,11 @@ minimaxm2.5-fp8-mi325x-vllm:
 # the original minimaxm2.5-fp8-mi325x-vllm entry is left identical to origin/main so
 # its fixed-seq-len sweep is unaffected.
 #   - image: 'vllm/vllm-openai-rocm:v0.18.0' -> 'vllm/vllm-openai-rocm:nightly-51f22dcfd068fe8f1e3192da2a1e825b930223cf'
-minimaxm2.5-fp8-mi325x-vllm-agentic:
-  # Nightly carrying vllm-project/vllm@20cac26b — see mi355x config above.
-  image: vllm/vllm-openai-rocm:nightly-51f22dcfd068fe8f1e3192da2a1e825b930223cf
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
-  runner: mi325x
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    # MI325X tp=4: cloned from MI300X recipe (slightly faster compute,
-    # similar HBM profile). Compute saturates first; cpu-offload window
-    # exercises the SimpleCPUOffloadConnector path enabled by the rocm
-    # nightly. Mirror MI300X conc grid for cross-vendor comparability.
-    - duration: 1800
-      search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 20, 24, 28, 32, 40, 48] }
-      - { tp: 4, offloading: cpu,  conc-list: [16, 20, 24, 28, 32] }
-
 minimaxm2.5-fp8-mi355x-vllm-disagg:
   image: vllm/vllm-openai-rocm:nightly-a6682d1d259cca69a9ae737ea5608fbbe7520031
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
-  runner: mi355x-disagg
+  runner: cluster:mi355x-amds
   precision: fp8
   framework: vllm-disagg
   multinode: true

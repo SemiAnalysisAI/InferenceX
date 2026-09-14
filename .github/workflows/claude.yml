@@ -21,19 +21,17 @@ jobs:
       actions: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ secrets.CLAUDE_PAT }}
 
-      - name: Setup MCP Server
-        run: |
-          pip3 install -r .claude/requirements-mcp.txt
-          mkdir -p /tmp/inferencemax-mcp
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
         env:
           GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
           GITHUB_TOKEN: ${{ secrets.CLAUDE_PAT }}
@@ -52,8 +50,8 @@ jobs:
             {"fastMode": true}
 
           claude_args: |
-            --model 'claude-fable-5'
-            --mcp-config '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}, "inferencemax-repos": {"command": "python3", "args": ["${{ github.workspace }}/.claude/mcp/server.py"], "env": {"INFERENCEMAX_ROOT": "${{ github.workspace }}"}}}}'
+            --model 'claude-fable-5-1'
+            --mcp-config .github/mcp-ci.json '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}}}'
             --allowedTools "Write,Edit,Read,Glob,Grep,WebFetch,mcp__github__*,mcp__github_inline_comment__create_inline_comment,mcp__github_ci__*,mcp__fetch__*,mcp__inferencemax-repos__*,Bash"
           prompt: |
             REPO: ${{ github.repository }}
@@ -221,7 +219,9 @@ jobs:
 
             ## Updating perf-changelog.yaml
 
-            See `AGENTS.md` → "Updating Docker Images" for entry format and rules. Required whenever you change image tags, env vars, or perf-affecting params in `configs/*-master.yaml` or `benchmarks/*.sh`. Use `XXX` as the PR-link placeholder until the PR exists.
+            See `docs/configuration-procedures.md` → "Update an image" and "Append the changelog safely" for entry format and rules. Required whenever you change image tags, env vars, or perf-affecting params in `configs/*-master.yaml` or `benchmarks/*.sh`. Use `XXX` as the PR-link placeholder until the PR exists.
+
+            If an entry uses `append-only: true`, require the generated base matrix to remain an immutable subset of the generated head matrix. New concurrency values or new recipe variants may be added inside a selected existing config/scenario, but no existing generated point may be removed or modified, and every addition must retain the target visual curve's single non-null image. Do not enforce a file allowlist: supporting code, benchmark scripts, launchers, helpers, and other files may change when their benchmark effect is exclusive to the corresponding newly appended points. All added changelog entries must be append-only, and eval modifiers are forbidden. Trace behavior through the complete diff; unguarded changes or paths reachable by an existing point are blocking.
 
             ## Spawning Additional Workers:
             You CAN spawn additional Claude workers by commenting "@claude" with a specific task.
@@ -252,7 +252,7 @@ jobs:
 
             ### Additional Knowledge
             - MI355 is gfx950 not gfx1201
-            - STP/MTP terminology: see `AGENTS.md` → "Terminology"
+            - STP/MTP terminology: see `docs/configuration-procedures.md` → "Add a model + hardware recipe"
 
             ### Expert Parallelism in Benchmark Scripts
             vLLM and SGLang handle expert parallelism differently. When writing or reviewing benchmark scripts for MoE models:

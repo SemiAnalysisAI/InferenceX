@@ -4,6 +4,16 @@ set -eo pipefail
 # System-specific configuration for H200 DGXC Slurm cluster
 SLURM_PARTITION="main"
 SLURM_ACCOUNT="sa-shared"
+HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/models/gharunners/hf-hub-cache}"
+AIPERF_MMAP_CACHE_HOST_PATH="${AIPERF_MMAP_CACHE_HOST_PATH:-/home/sa-shared/gharunners/ai-perf-cache}"
+
+# Immutable producer prerequisite for the GLM-5.2 AgentX lane. This fork is
+# intentionally long-lived; update the SHA only after reviewing a new fork
+# commit and re-running the H200 hardware gate.
+POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
+POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
+AGENTX_POWER_SRT_SLURM_PIN="80d7203e424f903c9017de4608ee2044afce9574"
+SELECTED_POWER_SRT_SLURM_PIN="$POWER_SRT_SLURM_PIN"
 
 set -x
 
@@ -11,13 +21,64 @@ source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
+    if [[ -z "${CONFIG_FILE:-}" ]]; then
+        echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2
+        exit 1
+    fi
+    CONFIG_PATH="${CONFIG_FILE%%:*}"
+    LOCAL_CONFIG_FILE="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${CONFIG_PATH#recipes/}"
+
+    # The producer pin decision is recipe-driven. Upstream-only recipes have
+    # no workspace mirror and remain non-power.
+    USES_DCGM_POWER=0
+    _RECIPE_REL="${CONFIG_FILE%%:*}"
+    _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
+    if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
+        /^telemetry:/ { t = 1; next }
+        t && /^[^ ]/  { t = 0 }
+        t && /^  provider: dcgm-power$/ { p = 1 }
+        t && /^  enabled: true$/        { e = 1 }
+        END { exit !(p && e) }
+    ' "$_RECIPE_SRC"; then
+        USES_DCGM_POWER=1
+    fi
+
+    USES_KIMIK3_POWER=0
+    if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
+        "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" ]]; then
+        USES_KIMIK3_POWER=1
+        SELECTED_POWER_SRT_SLURM_PIN="$AGENTX_POWER_SRT_SLURM_PIN"
+    elif [[ "$USES_DCGM_POWER" == "1" && (
+        "$IS_AGENTIC" != "1" ||
+        "$FRAMEWORK" != "dynamo-sglang" ||
+        ( "$MODEL_PREFIX" != "glm5.2" && "$MODEL_PREFIX" != "dsv4" ) ||
+        "$PRECISION" != "fp8"
+    ) ]]; then
+        echo "Error: H200 dcgm-power requires AgentX dynamo-sglang glm5.2/dsv4 FP8 or Kimi-K3 vLLM FP4" >&2
+        exit 1
+    fi
+
     # MODEL_PATH: Override with pre-downloaded paths on H200 runner
     # The yaml files specify HuggingFace model IDs for portability, but we use
     # local paths to avoid repeated downloading on the shared H200 cluster.
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-        if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
+        if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp8" ]]; then
+            # The shared HF cache already contains the H200 FP8 checkpoint;
+            # default to that local path (overridable via DSV4_MODEL_PATH) so
+            # srtctl preflight finds the directory instead of trying to pull the
+            # hf: model ID, which fails on the compute node ("path is
+            # unavailable. Pull or register the model yourself").
+            export MODEL_PATH="${DSV4_MODEL_PATH:-${HF_HUB_CACHE_MOUNT}/DeepSeek-V4-Pro}"
+            export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+        elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
             export MODEL_PATH="/models/DeepSeek-R1-0528"
             export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+        elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp8" ]]; then
+            export MODEL_PATH="${GLM52_FP8_MODEL_PATH:-/models/GLM-5.2-FP8}"
+            if [[ ! -d "$MODEL_PATH" ]]; then
+                export MODEL_PATH="hf:zai-org/GLM-5.2-FP8"
+            fi
+            export SRT_SLURM_MODEL_PREFIX="glm5.2-fp8"
         else
             echo "Unsupported model prefix/precision for dynamo-sglang: $MODEL_PREFIX/$PRECISION"
             exit 1
@@ -51,10 +112,44 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    if [[ $IS_AGENTIC == "1" && $FRAMEWORK == "vllm" && $MODEL_PREFIX == "kimik3" ]]; then
-        git clone https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-        git checkout df5baa93f4caf5169dea2a4236ad2cc742fe40e7
+    if [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && (
+        "$MODEL_PREFIX" == "glm5.2" || "$MODEL_PREFIX" == "dsv4"
+    ) ]]; then
+        if [[ "$USES_DCGM_POWER" == "1" ]]; then
+            # The pinned fork carries the v1.0.44 AgentX lifecycle plus the formal
+            # custom-benchmark dcgm-power contract used by the allowlisted recipes.
+            git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
+            cd "$SRT_REPO_DIR"
+            git checkout "$POWER_SRT_SLURM_PIN" || exit 1
+            test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
+            git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+        elif [[ "$MODEL_PREFIX" == "dsv4" ]]; then
+            # Non-power DSV4 runs keep the upstream release their perf-changelog
+            # provenance records. v1.0.38 also injects every logical SGLang worker
+            # leader's /metrics URL into AIPERF_SERVER_METRICS_URLS for custom
+            # benchmarks; v1.0.10 wired that only for built-in AIPerf runners, so
+            # the AgentX trace artifacts came back with no backend engine series
+            # behind them.
+            git clone --branch v1.0.38 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+            cd "$SRT_REPO_DIR"
+        else
+            # v1.0.44 includes the AgentX custom benchmark integration and passes
+            # every logical SGLang worker's Prometheus URL to AIPerf.
+            git clone --branch v1.0.44 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+            cd "$SRT_REPO_DIR"
+        fi
+    elif [[ $IS_AGENTIC == "1" && $FRAMEWORK == "vllm" && $MODEL_PREFIX == "kimik3" ]]; then
+        if [[ "$USES_KIMIK3_POWER" == "1" ]]; then
+            git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
+            cd "$SRT_REPO_DIR"
+            git checkout "$SELECTED_POWER_SRT_SLURM_PIN"
+            test "$(git rev-parse HEAD)" = "$SELECTED_POWER_SRT_SLURM_PIN" || exit 1
+            git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+        else
+            git clone https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR"
+            cd "$SRT_REPO_DIR"
+            git checkout df5baa93f4caf5169dea2a4236ad2cc742fe40e7
+        fi
         mkdir -p recipes/vllm/kimi-k3/agentic
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
             recipes/vllm/kimi-k3/agentic
@@ -65,6 +160,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
         git checkout sa-submission-q2-2026
+    fi
+    if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
+        python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
+            || exit 1
     fi
 
     echo "Installing srtctl..."
@@ -87,7 +186,11 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         # SGLang container mapping
-        SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/+/g').sqsh"
+        if [[ $MODEL_PREFIX == "glm5.2" ]]; then
+            SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+        else
+            SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/+/g').sqsh"
+        fi
         CONTAINER_KEY="$IMAGE"
     elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
@@ -96,6 +199,54 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     elif [[ $FRAMEWORK == "vllm" ]]; then
         CONTAINER_KEY="$IMAGE"
         SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    fi
+
+    if [[ $MODEL_PREFIX == "glm5.2" ]] && ! unsquashfs -l "$SQUASH_FILE" >/dev/null 2>&1; then
+        DOCKER_IMAGE=$(echo "$IMAGE" | sed 's/#/\//g')
+        LOCK_FILE="${SQUASH_FILE}.lock"
+        mkdir -p "$(dirname "$SQUASH_FILE")"
+        srun --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT" \
+            --nodes=1 --ntasks=1 --time=30 --job-name="$RUNNER_NAME" \
+            bash -c "
+                set -euo pipefail
+                exec 9>\"$LOCK_FILE\"
+                flock -w 1800 9
+                if unsquashfs -l \"$SQUASH_FILE\" >/dev/null 2>&1; then
+                    exit 0
+                fi
+                rm -f \"$SQUASH_FILE\"
+                export ENROOT_CACHE_PATH=\${HOME}/.cache/enroot
+                mkdir -p \"\$ENROOT_CACHE_PATH\"
+                enroot import -o \"$SQUASH_FILE\" docker://$DOCKER_IMAGE
+            "
+    fi
+
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
+        # enroot resolves bare paths against Docker Hub; nvcr.io pulls need the registry# form
+        DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\//nvcr.io#}"
+        DCGM_EXPORTER_SQSH="/data/gharunners/containers/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+        if ! unsquashfs -l "$DCGM_EXPORTER_SQSH" >/dev/null 2>&1; then
+            DCGM_EXPORTER_LOCK="${DCGM_EXPORTER_SQSH}.lock"
+            mkdir -p "$(dirname "$DCGM_EXPORTER_SQSH")"
+            srun --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT" \
+                --nodes=1 --ntasks=1 --time=30 --job-name="$RUNNER_NAME" \
+                bash -c "
+                    set -euo pipefail
+                    exec 9>\"$DCGM_EXPORTER_LOCK\"
+                    flock -w 1800 9
+                    if unsquashfs -l \"$DCGM_EXPORTER_SQSH\" >/dev/null 2>&1; then
+                        exit 0
+                    fi
+                    rm -f \"$DCGM_EXPORTER_SQSH\"
+                    export ENROOT_CACHE_PATH=\${HOME}/.cache/enroot
+                    mkdir -p \"\$ENROOT_CACHE_PATH\"
+                    enroot import -o \"$DCGM_EXPORTER_SQSH\" \"docker://$DCGM_EXPORTER_ENROOT_REF\"
+                "
+        fi
+        test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash is not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+        unsquashfs -l "$DCGM_EXPORTER_SQSH" >/dev/null || { echo "Error: DCGM exporter squash is invalid: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+        sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
     fi
 
     export ISL="$ISL"
@@ -126,6 +277,11 @@ gpus_per_node: 8
 network_interface: ""
 # Path to srtctl repo root (where the configs live)
 srtctl_root: "${SRTCTL_ROOT}"
+# Persistent AgentX dataset and Hugging Face caches mounted into every
+# server and benchmark container.
+default_mounts:
+  "${AIPERF_MMAP_CACHE_HOST_PATH}": "/aiperf_mmap_cache"
+  "${HF_HUB_CACHE_MOUNT}": "/hf_hub_cache"
 # Model path aliases
 model_paths:
   "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
@@ -144,28 +300,46 @@ use_exclusive_sbatch_directive: false
 ${DEFAULT_MOUNTS_BLOCK}
 EOF
 
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        sed -i "/^  nginx-sqsh:/a\\  dcgm-exporter: ${DCGM_EXPORTER_SQSH}" srtslurm.yaml
+        grep -q "^  dcgm-exporter: " srtslurm.yaml || { echo "Error: dcgm-exporter injection failed: nginx-sqsh anchor not found in srtslurm.yaml" >&2; exit 1; }
+    fi
+
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
 
     echo "Running make setup..."
     make setup ARCH=x86_64
 
+    if [[ -f "$LOCAL_CONFIG_FILE" ]]; then
+        mkdir -p "$(dirname "$CONFIG_PATH")"
+        cp "$LOCAL_CONFIG_FILE" "$CONFIG_PATH"
+    fi
+
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+        python "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
+            "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}"
+    fi
+
     # Export eval-related env vars for srt-slurm post-benchmark eval
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 
     echo "Submitting job with srtctl..."
 
-    if [[ -z "$CONFIG_FILE" ]]; then
-        echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2
-        echo "Config: MODEL_PREFIX=${MODEL_PREFIX} PRECISION=${PRECISION} FRAMEWORK=${FRAMEWORK}" >&2
-        exit 1
-    fi
-
     # Override the job name in the config file with the runner name
-    sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
-    sed -i '/^health_check:/,/^[^ ]/{ /^health_check:/d; /^  /d; }' "${CONFIG_FILE%%:*}"
-    printf '\nhealth_check:\n  max_attempts: 720\n  interval_seconds: 10\n' >> "${CONFIG_FILE%%:*}"
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
+    sed -i '/^health_check:/,/^[^ ]/{ /^health_check:/d; /^  /d; }' "$CONFIG_PATH"
+    printf '\nhealth_check:\n  max_attempts: 720\n  interval_seconds: 10\n' >> "$CONFIG_PATH"
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
+            "$CONFIG_PATH" "$FRAMEWORK" || exit 1
+    fi
+    WORKLOAD_TAG="${ISL}x${OSL}"
+    if [[ "$IS_AGENTIC" == "1" ]]; then
+        WORKLOAD_TAG="agentic"
+    fi
+    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h200,${MODEL_PREFIX},${PRECISION},${WORKLOAD_TAG},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
     # Extract JOB_ID from srtctl output
@@ -186,7 +360,11 @@ EOF
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
     trap 'rc=$?; bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT INT TERM HUP
 
-    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+    SRT_JOB_RC=0
+    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
+    if [[ "$SRT_JOB_RC" != "0" && "$USES_KIMIK3_POWER" != "1" ]]; then
+        exit "$SRT_JOB_RC"
+    fi
 
     set -x
 
@@ -200,52 +378,48 @@ EOF
 
     echo "Found logs directory: $LOGS_DIR"
 
+    AGENTX_POWER_RC="$SRT_JOB_RC"
+    if [[ "$USES_KIMIK3_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+        read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+        collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" \
+            "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" \
+            "$SELECTED_POWER_SRT_SLURM_PIN" "${POWER_CONCURRENCIES[@]}" || AGENTX_POWER_RC=$?
+    elif [[ "$USES_DCGM_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+        POWER_LOGS_ROOT=$(cd "$LOGS_DIR" && pwd -P)
+        read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+        for concurrency in "${POWER_CONCURRENCIES[@]}"; do
+            power_args=(
+                --result-dir "$POWER_LOGS_ROOT/agentic/conc_${concurrency}"
+                --agg-result "$GITHUB_WORKSPACE/${RESULT_FILENAME}_conc${concurrency}.json"
+                --power-dir "$POWER_LOGS_ROOT/power"
+                --logs-root "$POWER_LOGS_ROOT"
+                --expected-producer-sha "$SELECTED_POWER_SRT_SLURM_PIN"
+            )
+            case "${REQUIRE_POWER:-0}" in
+                1|true|TRUE|yes|YES) power_args+=(--require-power) ;;
+            esac
+            (
+                cd "$GITHUB_WORKSPACE"
+                python -m infx.results.agentic.power_adapter "${power_args[@]}"
+            ) || AGENTX_POWER_RC=$?
+        done
+    fi
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        mkdir -p "$LOGS_DIR/power"
+        cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
+        cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
+    fi
+
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
     bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 
+    if [[ "$AGENTX_POWER_RC" != "0" ]]; then
+        echo "ERROR: AgentX power validation failed; available audit and server artifacts were staged" >&2
+        exit "$AGENTX_POWER_RC"
+    fi
+
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
-        # Find all result subdirectories
-        RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
-
-        if [ -z "$RESULT_SUBDIRS" ]; then
-            echo "Warning: No result subdirectories found in $LOGS_DIR"
-        else
-            # Process results from all configurations
-            for result_subdir in $RESULT_SUBDIRS; do
-                echo "Processing result subdirectory: $result_subdir"
-
-                # Extract configuration info from directory name
-                CONFIG_NAME=$(basename "$result_subdir")
-
-                # Find all result JSON files
-                RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
-
-                for result_file in $RESULT_FILES; do
-                    if [ -f "$result_file" ]; then
-                        # Extract metadata from filename
-                        # Files may be "results_concurrency_N_gpus_G_ctx_C_gen_D.json" (disagg) or "results_concurrency_N_gpus_G.json" (non-disagg)
-                        filename=$(basename "$result_file")
-                        concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
-                        gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9][0-9]*\).*/\1/p')
-                        ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
-                        gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
-
-                        echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
-
-                        if [ -n "$ctx" ] && [ -n "$gen" ]; then
-                            WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
-                        else
-                            WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}.json"
-                        fi
-                        cp "$result_file" "$WORKSPACE_RESULT_FILE"
-
-                        echo "Copied result file to: $WORKSPACE_RESULT_FILE"
-                    fi
-                done
-            done
-        fi
-
-        echo "All result files processed"
+        copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME"
     else
         echo "EVAL_ONLY=true: Skipping benchmark result collection"
     fi
@@ -278,10 +452,7 @@ EOF
     find . -name '.nfs*' -delete 2>/dev/null || true
 
 else
-
-    HF_HUB_CACHE_MOUNT="/models/gharunners/hf-hub-cache"
-    AIPERF_MMAP_CACHE_HOST_PATH="/home/sa-shared/gharunners/ai-perf-cache"
-    SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
     # Convert pyxis image format (nvcr.io#path) to docker format (nvcr.io/path) for enroot import
     DOCKER_IMAGE=$(echo "$IMAGE" | sed 's/#/\//g')
@@ -320,10 +491,16 @@ else
         BENCH_SCRIPT="${BENCH_BASE}${LEGACY_FW_SUFFIX}${SPEC_SUFFIX}.sh"
     fi
 
-    if [[ "$IMAGE" == *deepseek-v4-hopper* ]]; then
+    # DeepSeek-V4.1-Flash creates AgentX runtime directories next to the
+    # repository, which must not land under /workspace.
+    if [[ "$IMAGE" == *deepseek-v4-hopper* || "$MODEL_PREFIX" == "dsv41flash" ]]; then
         CONTAINER_MOUNT_DIR=/ix
     else
         CONTAINER_MOUNT_DIR=/workspace
+    fi
+    if [[ "$MODEL_PREFIX" == "dsv41flash" ]]; then
+        export INFMAX_CONTAINER_WORKSPACE=/ix
+        export RESULT_DIR=/ix/results
     fi
 
     srun --jobid=$JOB_ID \
