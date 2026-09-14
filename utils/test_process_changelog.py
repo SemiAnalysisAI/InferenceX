@@ -667,13 +667,23 @@ def changelog_run(planning_repo, monkeypatch, capsys):
         process_changelog.main()
         captured = capsys.readouterr()
         assert captured.err == ""
-        monkeypatch.setattr(sys, "argv", ["benchmark_schema", "--plan"])
+        monkeypatch.setattr(sys, "argv", ["benchmark_schema", "--plan", "--prepare"])
         monkeypatch.setattr(sys, "stdin", io.StringIO(captured.out))
         benchmark_schema.main()
         validated = capsys.readouterr()
         assert validated.err == ""
-        assert validated.out == captured.out
-        return json.loads(validated.out)
+        prepared = json.loads(validated.out)
+        for key, value in prepared.items():
+            if key in ("single_node", "multi_node"):
+                rows = [row for group in value.values() for row in group]
+            elif key.endswith("evals"):
+                rows = value
+            else:
+                continue
+            for row in rows:
+                row.pop("workflow")
+        assert prepared == json.loads(captured.out)
+        return prepared
     return run
 
 

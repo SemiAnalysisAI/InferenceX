@@ -290,7 +290,7 @@ jobs:
                   fi
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | env PYTHONPATH="$PRIORITY_ROOT" \
                     uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-                    python -P -m infx.workflows.benchmark_schema)
+                    python -P -m infx.workflows.benchmark_schema --prepare)
                   score_matrix() {
                     local family="$1"
                     env PYTHONPATH="$PRIORITY_ROOT" uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \

@@ -186,9 +186,9 @@ flowchart LR
 6. 基准测试、评测和智能体数据行使用独立的扇出作业，因为它们所需的输入形态不同。
 7. 收集过程会等待相关作业。只有在所需的收集工作和变更日志元数据工作达到允许状态后，主分支运行才会分派摄取任务。
 
-可复用工作流在矩阵键与运行时环境变量之间构成显式适配器。单节点和多节点调用方通过一个 JSON `config` 输入传递已验证的 `infx.matrix` 数据行；`benchmark-tmpl.yml` 和 `benchmark-multinode-tmpl.yml` 负责将其映射为 `MODEL_PREFIX`、`DCP_SIZE`、`SPEC_DECODING` 等变量。因此，新增配方字段时，只需修改模式/生成器及使用该字段的模板/运行时代码，无需在每个调用方重复添加转发字段。模板显式读取已知字段，不会将任意 JSON 键导出为环境变量。
+单节点和多节点调用方通过一个 JSON `config` 输入传递准备好的矩阵数据行。[`infx/workflows/benchmark_config.py`](../infx/workflows/benchmark_config.py) 负责显示名称格式、场景默认值以及基准环境变量的显式映射。准备步骤将这些派生值放入 `workflow` 对象；模板使用其中的名称和环境变量，调度、密钥及执行覆盖选项仍保留在 YAML 中。新增配方字段时，只需修改模式/生成器及使用该字段的映射/运行时代码，无需在每个调用方重复添加转发字段。只有显式映射的环境变量会被导出。
 
-[`infx/workflows/benchmark_schema.py`](../infx/workflows/benchmark_schema.py) 通过扩展已有矩阵模型定义单节点和多节点工作流模式。Sweep 和手动运行的准备作业在添加优先级信息和发布作业输出之前验证数据行，因此非法输入会在 GPU 扇出前失败。验证会拒绝缺失的必填字段、未知键、错误的 JSON 类型、无效的元数据或拓扑、空并发批次或非正并发值，以及计划分组中的场景或拓扑错配。计划中的基准分组使用 `agentic`，数据行仍使用 `scenario-type: agentic-coding`；验证以工作流实际读取的分组为准。合法 JSON 原样通过。仅用于验证的默认值允许旧数据行省略 `pp`、`dcp-size` 和 `pcp-size`，不会将这些默认值写入工作流输入。即使被测 checkout 较旧，手动运行也使用工作流工具 checkout 中的验证器。新增调用方也必须执行此预检；可复用模板本身只负责解析 JSON。
+[`infx/workflows/benchmark_schema.py`](../infx/workflows/benchmark_schema.py) 通过扩展已有矩阵模型定义单节点和多节点工作流模式。Sweep 和手动运行的准备作业在添加优先级信息和发布作业输出之前验证数据行，因此非法输入会在 GPU 扇出前失败。验证会拒绝缺失的必填字段、未知键、错误的 JSON 类型、无效的元数据或拓扑、空并发批次或非正并发值，以及计划分组中的场景或拓扑错配。计划中的基准分组使用 `agentic`，数据行仍使用 `scenario-type: agentic-coding`；验证以工作流实际读取的分组为准。未指定 `--prepare` 时，CLI 将合法 JSON 原样输出。准备模式在全部数据行通过验证后添加派生的 `workflow` 对象，保留原始字段；输入不能自行提供该对象。仅用于验证的默认值允许旧数据行省略 `pp`、`dcp-size` 和 `pcp-size`，其运行时值仍为空。即使被测 checkout 较旧，手动运行也使用工作流工具 checkout 中的准备程序。新增调用方也必须执行此预检；可复用模板本身只负责解析 JSON。
 
 调度、checkout 选择和执行覆盖选项仍使用显式工作流输入。单节点 `dp-attn` 也保留为布尔输入，以维持 GitHub 的类型检查。AgentX 的序列长度仍为零，旧版本缺失字段仍保留原有的空字符串行为。JSON 由 GitHub Actions 在 checkout 前解析，因此被测旧提交无需新增辅助程序。多节点保留显式的 `node-count`、并发批次/评测覆盖和 CPU DRAM 覆盖输入；手动 AgentX 运行保留原有的内存默认值。性能分析工作流继续使用现有接口。
 

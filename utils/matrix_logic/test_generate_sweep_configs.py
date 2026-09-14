@@ -3153,7 +3153,7 @@ def split_e2e_configs(tmp_path):
     boundary_stubs = r"""#!/bin/bash
 case "$*" in
   *generate_sweep_configs.py*|*infx.matrix.generate*) cat "$MATRIX_FIXTURE" ;;
-  *infx.workflows.benchmark_schema*) exec "$TEST_PYTHON" -P -m infx.workflows.benchmark_schema ;;
+  *infx.workflows.benchmark_schema*) exec "$TEST_PYTHON" -P -m infx.workflows.benchmark_schema --prepare ;;
   *ci_priority.py*|*infx.workflows.ci_priority*) cat ;;
   *) exit 1 ;;
 esac
@@ -3219,6 +3219,11 @@ class TestE2EConfigSplitting:
             agentic, agentic_eval_only, multi_agentic, multi_agentic_eval_only,
         ])
 
+        for rows in output.values():
+            for row in rows:
+                prepared = row.pop("workflow")
+                assert prepared["env"]["MODEL"] == "test/model"
+                assert prepared["env"]["ISL"] == ("0" if row.get("scenario-type") == "agentic-coding" else "1024")
         assert output == {
             "single-node-config": [single, single_eval],
             "eval-config": [single_eval, single_eval_only],

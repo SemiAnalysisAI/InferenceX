@@ -184,7 +184,8 @@ def format_priority(score: Decimal) -> str:
 
 
 def queue_token(value: dict[str, Any], namespace: str, path: tuple[str, ...]) -> str:
-    canonical = json.dumps(value, sort_keys=True, separators=(",", ":"))
+    source = {key: item for key, item in value.items() if key != "workflow"}
+    canonical = json.dumps(source, sort_keys=True, separators=(",", ":"))
     material = f"{namespace}:{'/'.join(path)}:{canonical}".encode()
     return hashlib.sha256(material).hexdigest()[:32]
 
