@@ -237,8 +237,9 @@ fi
 # Node Selection
 # =============================================================================
 
-NUM_NODES=$((xP + yD))
-echo "NUM_NODES: $NUM_NODES (xP=$xP + yD=$yD)"
+# Workers can span multiple physical nodes. Preserve the submit-time count.
+NUM_NODES="${NUM_NODES:-$(( ((PREFILL_TP_SIZE + GPUS_PER_NODE - 1) / GPUS_PER_NODE) * xP + ((DECODE_TP_SIZE + GPUS_PER_NODE - 1) / GPUS_PER_NODE) * yD ))}"
+echo "NUM_NODES: $NUM_NODES (prefill workers=$xP, decode workers=$yD)"
 
 FULL_NODELIST=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
 SELECTED_NODES=$(echo "$FULL_NODELIST" | head -n $NUM_NODES)
@@ -318,6 +319,10 @@ export DRY_RUN="${DRY_RUN:-0}"
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
 export KEEP_CONTAINERS="${KEEP_CONTAINERS:-0}"
 export ENGINE=$ENGINE
+export POWERX_HOST_UID=$(id -u)
+export POWERX_HOST_GID=$(id -g)
+export POWERX_COLLECTOR_REVISION=$(git -C "$DI_REPO_DIR" rev-parse HEAD)
+mkdir -p "$BENCHMARK_LOGS_DIR/power-control-${SLURM_JOB_ID}"
 
 # Eval-related env vars (threaded from submit.sh)
 export RUN_EVAL="${RUN_EVAL:-false}"
@@ -377,6 +382,16 @@ else
     echo "[WARN] $RDMA_CHECK_SCRIPT not found; skipping RDMA QoS/DCQCN pre-flight check"
 fi
 
+stage_native_power() {
+    srun --overlap --nodelist="$SELECTED_NODELIST_SRUN" --ntasks="$NUM_NODES" bash -c '
+        src="/tmp/slurm_job-${SLURM_JOB_ID}/native_power/node-${SLURM_PROCID}"
+        if [[ -d "$src" ]]; then
+            mkdir -p "$BENCHMARK_LOGS_DIR/native_power"
+            cp -r "$src" "$BENCHMARK_LOGS_DIR/native_power/"
+        fi
+    '
+}
+
 cleanup() {
   echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning up container + stale logs..."
   # Backstop: on scancel/timeout/step-hang the foreground `exec docker run`
@@ -386,11 +401,13 @@ cleanup() {
   # other users' containers. (Ported from InferenceY 51ebfa88.)
   srun --nodelist="$SELECTED_NODELIST_SRUN" \
     bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true' 2>/dev/null || true
+  stage_native_power || true
   rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
   echo "[${SLURM_JOB_ID}] cleanup done."
 }
 
-trap cleanup INT TERM HUP
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM HUP
 
 # Force NFS cache refresh on all nodes
 echo "Refreshing NFS caches on all nodes..."
@@ -412,6 +429,12 @@ DOCKER_ENV_COMMON=(
     -e SLURM_JOB_ID=\$SLURM_JOB_ID
     -e SLURM_JOB_NODELIST=\$SLURM_JOB_NODELIST
     -e NNODES=\$NNODES
+    -e REQUIRE_POWER=\${REQUIRE_POWER:-0}
+    -e POWERX_HOST_UID=\$POWERX_HOST_UID
+    -e POWERX_HOST_GID=\$POWERX_HOST_GID
+    -e POWERX_COLLECTOR_REVISION=\$POWERX_COLLECTOR_REVISION
+    -e POWERX_NODE_NAME=\$POWERX_NODE_NAME
+    -e POWERX_CLOCK_SYNCHRONIZED=\$POWERX_CLOCK_SYNCHRONIZED
     -e NODE_RANK=\$SLURM_PROCID
     -e NODE0_ADDR=\$NODE0_ADDR
     -e MODEL_DIR=/models
@@ -601,6 +624,10 @@ set -euo pipefail
 
 echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 
+# Capture the host's synchronization state, not the container's missing D-Bus.
+export POWERX_NODE_NAME=\$(hostname)
+export POWERX_CLOCK_SYNCHRONIZED=\$(timedatectl show -p NTPSynchronized --value 2>/dev/null || true)
+
 # Per-node docker privilege detection
 eval \"\$DOCKER_CMD_DETECT\"
 echo \"[docker-detect] rank \$SLURM_PROCID: DOCKER_CMD=\$DOCKER_CMD\"
@@ -784,6 +811,17 @@ echo \"[rank 0] Main container exited (rc=\$DOCKER_EXIT_CODE). Stopping vllm-rou
 exit \$DOCKER_EXIT_CODE
 "
 
+BENCHMARK_STEP_RC=$?
+# Each host copies its own node-local, root-created artifacts as the runner user.
+# No raw telemetry is written as root into the shared checkout.
+if ! stage_native_power; then
+    echo 'PowerX: failed to stage native telemetry' >&2
+    case "${REQUIRE_POWER:-0}" in
+        1|true|TRUE|yes|YES)
+            if [[ "$BENCHMARK_STEP_RC" == 0 ]]; then BENCHMARK_STEP_RC=1; fi ;;
+    esac
+fi
+
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
     srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' '"$CLIENT_CONT_NAME"' 2>/dev/null || true'
 
@@ -794,3 +832,5 @@ if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
         '
     fi
 fi
+
+exit "$BENCHMARK_STEP_RC"

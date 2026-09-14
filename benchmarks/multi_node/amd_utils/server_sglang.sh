@@ -1064,7 +1064,8 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
         set +x
     else
         set -x
-        eval "$BENCH_CMD"
+        BENCHMARK_EXIT_CODE=0
+        eval "$BENCH_CMD" || BENCHMARK_EXIT_CODE=$?
         set +x
     fi
 
@@ -1371,4 +1372,4 @@ else
 fi
 
 echo "Script completed successfully"
-exit 0
+exit "${BENCHMARK_EXIT_CODE:-0}"
