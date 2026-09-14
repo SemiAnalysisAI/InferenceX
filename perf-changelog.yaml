@@ -7635,3 +7635,10 @@
     - "Serve amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2 instead of amd/Qwen3.5-397B-A17B-MXFP4."
     - "Trim AgentX search space to TP4 none [1,4,8,12,16], TP2 none [1,4,8,12,16,20], TP2 HiCache [20,24,28,32,36,40]; drop the TP4 HiCache arm."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3069
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-mtp
+  description:
+    - "Bump the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260828 to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913 pinned to digest sha256:d1a7c4cae3870711a5548cfe38e0b33db4c61c8977b04f66b7ab9b3bc1769a64."
+    - "Rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode because sglang 0.5.19 removed the deprecated alias (sgl-project/sglang#38375)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3107
