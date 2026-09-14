@@ -4,7 +4,7 @@
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --mem=64G
-#SBATCH --time=10
+#SBATCH --time=25
 # sbatch rather than salloc: a queued salloc needs slurmctld to call back into
 # the login node, which is blocked on DSXE (job 2549 died before any step).
 set -uo pipefail
@@ -25,6 +25,20 @@ for p in "$lib"/libibverbs/*.so /opt/amazon/efa/lib/libibverbs/*.so; do
 done
 echo "== host ibv_devices"
 ibv_devices 2>&1
+echo "== host rdma ports"
+for p in /sys/class/infiniband/*/ports/1; do
+    d=${p#/sys/class/infiniband/}; d=${d%%/*}
+    printf '%s state=%s phys=%s rate=%s link=%s lid=%s sm_lid=%s\n' "$d" \
+        "$(cat "$p/state" 2>&1)" "$(cat "$p/phys_state" 2>&1)" "$(cat "$p/rate" 2>&1)" \
+        "$(cat "$p/link_layer" 2>&1)" "$(cat "$p/lid" 2>&1)" "$(cat "$p/sm_lid" 2>&1)"
+done
+ibv_devinfo -v 2>&1 | grep -vE 'rdmap|efa' | grep -E 'hca_id|link_layer|active_mtu|max_msg|port_lid|sm_lid|state|rate|max_mr|dmabuf|odp' | head -40
+echo "== host peer-memory / kernel modules"
+ls /sys/kernel/mm/memory_peers/ 2>&1
+lsmod | grep -E 'nvidia|peermem|peer_mem|ib_core|mlx5|efa|nv_' 2>&1
+cat /proc/driver/nvidia/version 2>&1 | head -1
+uname -r
+command -v ib_write_bw && { ib_write_bw -d "$(ls /sys/class/infiniband | grep -v rdmap | head -1)" -x 0 -s 4194304 -n 200 -F >/tmp/ibw-srv.$$ 2>&1 & sleep 1; ib_write_bw -d "$(ls /sys/class/infiniband | grep -v rdmap | head -1)" -x 0 -s 4194304 -n 200 -F 127.0.0.1 2>&1 | tail -6; wait; } || echo "no ib_write_bw on host"
 echo "== enroot hooks"
 ls -l /etc/enroot/hooks.d/ 2>&1
 for h in /etc/enroot/hooks.d/*efa* /etc/enroot/hooks.d/*mellanox* /etc/enroot/hooks.d/*aia*; do

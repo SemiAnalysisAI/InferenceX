@@ -49,3 +49,12 @@ RDMAV_DRIVERS=/host-usr-lib/libibverbs/libmlx5 python3 runners/b300_rdma_devices
 echo "== mooncake transfer engine on $MOONCAKE_RAIL with RDMAV_DRIVERS"
 RDMAV_DRIVERS=/host-usr-lib/libibverbs/libmlx5 python3 runners/b300_rdma_devices.py --init "$MOONCAKE_RAIL"
 echo "transfer engine rc=$?"
+
+echo "== mooncake loopback bandwidth on $MOONCAKE_RAIL (recipe env)"
+nvidia-smi -L 2>&1 | head -1
+env RDMAV_DRIVERS=/host-usr-lib/libibverbs/libmlx5 MC_STORE_MEMCPY=1 MC_ENABLE_DEST_DEVICE_AFFINITY=1 \
+    MC_SLICE_SIZE=1048576 MC_WORKERS_PER_CTX=4 WITH_NVIDIA_PEERMEM=0 \
+    python3 runners/b300_mooncake_bandwidth.py "$MOONCAKE_RAIL" 2>&1 | grep -vE '^[IW][0-9]{4} .*(rpc_service|Metrics|InitGoogleLogging)'
+echo "== mooncake loopback bandwidth on $MOONCAKE_RAIL (mooncake defaults)"
+env RDMAV_DRIVERS=/host-usr-lib/libibverbs/libmlx5 \
+    python3 runners/b300_mooncake_bandwidth.py "$MOONCAKE_RAIL" 2>&1 | grep -vE '^[IW][0-9]{4} .*(rpc_service|Metrics|InitGoogleLogging)'
