@@ -99,8 +99,6 @@ After readiness, the shared helper snapshots the server and recognized persisten
 
 Client dependency setup uses uv's bounded HTTP retries and a 120-second read timeout, retaining its download cache. A network/download failure is infrastructure evidence, not a reason to change engine flags. H100 srt-slurm resolves the requested image to its own squash path and checks staged model/image assets; B300 checks node-local staged model configuration on the allocated compute node before launching its container. Missing assets are readiness blockers, never grounds to substitute an old image or different weights.
 
-GB300 Kimi-K3 AgentX pins an srt-slurm setup that retries the compute-node `uv` download and verifies both binaries' architecture before installation. A failed download or extraction stops setup; investigate that first if later eval steps report missing `meta_env.json`.
-
 Use the earliest specific signature:
 
 - **Image pull/tag failure:** verify the exact registry tag or digest exists before touching runtime flags. [`KLAUD_DEBUG.md` §6](../KLAUD_DEBUG.md#6-docker-image-tag-gotchas) warns against deriving release tags from dated nightlies.
