@@ -114,4 +114,4 @@ def test_unreadable_monitor_identity_remains_a_foreign_process(monkeypatch):
     def unreadable(pid):
         raise PermissionError("process identity unavailable")
     monkeypatch.setattr(amd, "monitor_process", unreadable)
-    assert not amd.is_system_monitor({"pid": 42, "memory_used_mib": 0}, {"status": "verified", "pid": 42})
+    assert not amd.is_system_monitor({"pid": 42, "memory_used_mib": 0}, {"status": "verified", "process": {"pid": 42}})
