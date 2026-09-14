@@ -7635,3 +7635,10 @@
     - "Serve amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2 instead of amd/Qwen3.5-397B-A17B-MXFP4."
     - "Trim AgentX search space to TP4 none [1,4,8,12,16], TP2 none [1,4,8,12,16,20], TP2 HiCache [20,24,28,32,36,40]; drop the TP4 HiCache arm."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3069
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-mooncake-dcp8-agg
+  description:
+    - "Retry and validate compute-node uv installation in the pinned AgentX srt-slurm runtime"
+  pr-link: TBD

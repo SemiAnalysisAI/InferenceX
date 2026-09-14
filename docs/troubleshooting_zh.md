@@ -99,6 +99,8 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 
 客户端依赖安装使用 uv 有限次 HTTP 重试和 120 秒读取超时，并保留下载缓存。网络或下载失败属于基础设施证据，不应据此更改 engine 参数。H100 srt-slurm 将请求镜像解析到其独立 squash 路径并检查已暂存的模型/镜像资源；B300 在分配到的计算节点上检查节点本地模型配置，再启动容器。资源缺失属于就绪性阻塞，不能替换为旧镜像或其他权重。
 
+GB300 Kimi-K3 AgentX 固定使用的 srt-slurm 版本会重试计算节点 `uv` 的下载，并在安装前检查两个二进制文件的架构。下载或解压失败会终止安装；如果后续 eval 步骤报告缺少 `meta_env.json`，应先排查这一安装错误。
+
 使用最早出现的具体特征：
 
 - **镜像拉取/tag 失败：**修改运行时标志前验证精确 registry tag 或 digest 是否存在。[`KLAUD_DEBUG.md` §6](../KLAUD_DEBUG.md#6-docker-image-tag-gotchas) 警告不要从带日期的 nightly 推导 release tag。
