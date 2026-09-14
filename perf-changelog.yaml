@@ -7617,3 +7617,12 @@
     - "Qualify shared Slurm completion on the complete existing B200 native Kimi AgentX curve."
     - "用现有完整 B200 原生 Kimi AgentX 曲线验证共享 Slurm 完成状态。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3052
+
+- config-keys:
+    - dsr1-fp8-h100-dynamo-sglang
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Pin H100 SRT 8k1k startup to the fixed-sequence producer with bounded dependency preparation and owned infrastructure readiness; stop before submission when setup fails."
+    - "固定 H100 SRT 8k1k 的 producer，保留固定长度功耗能力，限制依赖准备时间并在就绪检查前登记基础服务；准备失败时禁止提交作业。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3052

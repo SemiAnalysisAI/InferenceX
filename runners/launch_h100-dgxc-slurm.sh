@@ -7,6 +7,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
 # System-specific configuration for H100 DGXC Slurm cluster
 SLURM_PARTITION="hpc-gpu-1"
 SLURM_ACCOUNT="customer"
+H100_SRT_SLURM_PIN="c294b4b75900ca2da70fb6f34cd5e04b65ca0fdf"
 
 # Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
 # the h200 launchers, which have carried SPEC_SUFFIX since #392).
@@ -49,7 +50,15 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     # TODO(CJQ): make first class upon srt-slurm upstream refactor
-    if [[ "$IS_AGENTIC" == "1" ]]; then
+    if [[ "$FRAMEWORK" == "dynamo-sglang" && "${IS_AGENTIC:-0}" != "1" &&
+            "${SCENARIO_TYPE:-fixed-seq-len}" == "fixed-seq-len" && "$ISL" == "8192" && "$OSL" == "1024" ]]; then
+        git clone https://github.com/edwingao28/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout --detach "$H100_SRT_SLURM_PIN" || exit 1
+        test "$(git rev-parse HEAD)" = "$H100_SRT_SLURM_PIN" || exit 1
+        cp -a "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/." recipes/ || exit 1
+        git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+    elif [[ "$IS_AGENTIC" == "1" ]]; then
         git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
     else
@@ -129,7 +138,7 @@ EOF
     cat srtslurm.yaml
 
     echo "Running make setup..."
-    make setup ARCH=x86_64
+    make setup ARCH=x86_64 || exit 1
 
     # Export eval-related env vars for srt-slurm post-benchmark eval
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
