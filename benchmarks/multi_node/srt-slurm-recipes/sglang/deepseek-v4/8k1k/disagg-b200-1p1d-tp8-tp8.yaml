@@ -1,3 +1,4 @@
+schema: 2
 name: "disagg-b200-1p1d-tp8-tp8-c1"
 
 
@@ -7,9 +8,10 @@ model:
   precision: "fp4"
 
 dynamo:
-  hash: "86f84b9486905c2bfaa4b756c9fa39f04ecf5ebd"
   install: true
 
+  source:
+    rev: "86f84b9486905c2bfaa4b756c9fa39f04ecf5ebd"
 sbatch_directives:
   cpus-per-task: "144"
   mem: "0"
@@ -17,13 +19,6 @@ sbatch_directives:
 resources:
   gpu_type: "b200"
   gpus_per_node: 8
-  prefill_nodes: 1
-  prefill_workers: 1
-  gpus_per_prefill: 8
-  decode_nodes: 1
-  decode_workers: 1
-  gpus_per_decode: 8
-
 health_check:
   max_attempts: 240
 
@@ -32,33 +27,24 @@ frontend:
   enable_multiple_frontends: true
   num_additional_frontends: 8
 
-backend:
-  type: sglang
+engine: sglang
+roles:
+  prefill:
+    nodes: 1
+    workers: 1
+    gpus: 8
+    env:
+      PYTHONUNBUFFERED: "1"
+      SGLANG_RADIX_FORCE_MISS: "1"
+      SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+      SGLANG_DEFAULT_THINKING: "1"
+      SGLANG_DSV4_REASONING_EFFORT: "max"
+      SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+      SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
 
-  prefill_environment:
-    PYTHONUNBUFFERED: "1"
-    SGLANG_RADIX_FORCE_MISS: "1"
-    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
-    SGLANG_DEFAULT_THINKING: "1"
-    SGLANG_DSV4_REASONING_EFFORT: "max"
-    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
-    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
-    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
-
-  decode_environment:
-    PYTHONUNBUFFERED: "1"
-    SGLANG_RADIX_FORCE_MISS: "1"
-    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
-    SGLANG_DEFAULT_THINKING: "1"
-    SGLANG_DSV4_REASONING_EFFORT: "max"
-    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
-    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
-    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
-
-  sglang_config:
-    prefill:
+    args:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       model-path: "/model/"
       trust-remote-code: true
@@ -68,7 +54,7 @@ backend:
       disaggregation-transfer-backend: nixl
 
       tensor-parallel-size: 8
-      data-parallel-size:   1
+      data-parallel-size: 1
       expert-parallel-size: 1
 
       moe-runner-backend: "flashinfer_mxfp4"
@@ -79,7 +65,23 @@ backend:
       cuda-graph-max-bs: 512
       chunked-prefill-size: 65536
 
-    decode:
+  decode:
+    nodes: 1
+    workers: 1
+    gpus: 8
+
+    env:
+      PYTHONUNBUFFERED: "1"
+      SGLANG_RADIX_FORCE_MISS: "1"
+      SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+      SGLANG_DEFAULT_THINKING: "1"
+      SGLANG_DSV4_REASONING_EFFORT: "max"
+      SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+      SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
+
+    args:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       model-path: "/model/"
       trust-remote-code: true
@@ -89,7 +91,7 @@ backend:
       disaggregation-transfer-backend: nixl
 
       tensor-parallel-size: 8
-      data-parallel-size:   1
+      data-parallel-size: 1
       expert-parallel-size: 1
 
       moe-runner-backend: "flashinfer_mxfp4"
@@ -97,7 +99,7 @@ backend:
 
       mem-fraction-static: 0.9
       max-running-requests: 1024
-      cuda-graph-max-bs:    512
+      cuda-graph-max-bs: 512
       swa-full-tokens-ratio: 0.1
       context-length: 16384
 
@@ -111,13 +113,11 @@ benchmark:
 
 telemetry:
   enabled: true
-  provider: dcgm-power
-  default_frequency: 1.0
+  collect_interval_ms: 1000
   storage_subdir: power
   required: true
   startup_timeout_seconds: 120
   request_timeout_seconds: 2
-  collector_join_timeout_seconds: 10
   dcgm_exporter:
     container_image: dcgm-exporter
     port: 9401

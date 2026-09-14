@@ -1,3 +1,4 @@
+schema: 2
 name: "gb200-fp4-glm5_1k1k_lowlat_2"
 
 # Ported from upstream srt-slurm recipes/gb200-fp4/glm5.yaml (PR #211).
@@ -14,7 +15,8 @@ model:
   precision: "fp4"
 
 dynamo:
-  version: "1.2.1"
+  source:
+    pypi: "1.2.1"
 
 slurm:
   time_limit: "03:00:00"
@@ -29,53 +31,31 @@ sbatch_directives:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  prefill_nodes: 1
-  prefill_workers: 1
-  gpus_per_prefill: 4
-  decode_nodes: 8
-  decode_workers: 1
-  gpus_per_decode: 32
-
 frontend:
   type: dynamo
 
-backend:
-  type: sglang
+engine: sglang
+roles:
+  prefill:
+    nodes: 1
+    workers: 1
+    gpus: 4
+    env:
+      TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+      PYTHONUNBUFFERED: "1"
+      DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+      SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+      MC_TE_METRIC: "true"
+      MC_FORCE_MNNVL: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_CUMEM_ENABLE: "1"
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+      SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
 
-  prefill_environment:
-    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
-    PYTHONUNBUFFERED: "1"
-    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
-    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
-    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
-    MC_TE_METRIC: "true"
-    MC_FORCE_MNNVL: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_CUMEM_ENABLE: "1"
-    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
-    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
-    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
-
-  decode_environment:
-    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
-    PYTHONUNBUFFERED: "1"
-    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
-    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
-    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
-    MC_TE_METRIC: "true"
-    MC_FORCE_MNNVL: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_CUMEM_ENABLE: "1"
-    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
-    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
-    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
-    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "512"
-    SGLANG_MOE_NVFP4_DISPATCH: "1"
-
-  sglang_config:
-    prefill:
+    args:
       served-model-name: "GLM-5-FP4"
       trust-remote-code: true
       quantization: "modelopt_fp4"
@@ -102,7 +82,29 @@ backend:
       disable-radix-cache: true
       weight-loader-prefetch-checkpoints: true
       model-loader-extra-config: '{"enable_multithread_load": true}'
-    decode:
+  decode:
+    nodes: 8
+    workers: 1
+    gpus: 32
+
+    env:
+      TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+      PYTHONUNBUFFERED: "1"
+      DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+      SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+      MC_TE_METRIC: "true"
+      MC_FORCE_MNNVL: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_CUMEM_ENABLE: "1"
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+      SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+      SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "512"
+      SGLANG_MOE_NVFP4_DISPATCH: "1"
+
+    args:
       served-model-name: "GLM-5-FP4"
       trust-remote-code: true
       quantization: "modelopt_fp4"

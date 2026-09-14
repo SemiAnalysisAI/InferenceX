@@ -1,3 +1,4 @@
+schema: 2
 name: dsv4-gb200-vllm-agentic-mtp-agg-tp8
 
 model:
@@ -14,9 +15,10 @@ identity:
     dynamo: "1.3.1"
 
 dynamo:
-  version: "1.3.1"
   install: true
 
+  source:
+    pypi: "1.3.1"
 setup_script: vllm-container-deps.sh
 
 environment:
@@ -32,14 +34,17 @@ health_check:
 resources:
   gpu_type: gb200
   gpus_per_node: 4
-  agg_nodes: 2
-  agg_workers: 1
-  gpus_per_agg: 8
-
-infra:
-  etcd_nats_dedicated_node: false
-  nats_max_payload_mb: 32
-
+services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
 frontend:
   type: dynamo
   enable_multiple_frontends: false
@@ -49,26 +54,31 @@ frontend:
     router-session-affinity-ttl-secs: 14400
     kv-cache-block-size: 256
 
-backend:
+engine:
   type: vllm
-  connector: null
-  aggregated_environment:
-    HF_HUB_CACHE: /hf_hub_cache
-    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
-    VLLM_RPC_TIMEOUT: "600000"
-    VLLM_LOG_STATS_INTERVAL: "1"
-    VLLM_SERVER_DEV_MODE: "1"
-    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
-    VLLM_USE_NCCL_SYMM_MEM: "1"
-    NCCL_CUMEM_ENABLE: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_NVLS_ENABLE: "1"
-    UCX_MEMTYPE_CACHE: "n"
-    UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
-    UCX_TLS: "rc,cuda_copy"
-    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
-  vllm_config:
-    aggregated:
+  connector:
+roles:
+  agg:
+    nodes: 2
+    workers: 1
+    gpus: 8
+
+    env:
+      HF_HUB_CACHE: /hf_hub_cache
+      VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+      VLLM_RPC_TIMEOUT: "600000"
+      VLLM_LOG_STATS_INTERVAL: "1"
+      VLLM_SERVER_DEV_MODE: "1"
+      VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+      VLLM_USE_NCCL_SYMM_MEM: "1"
+      NCCL_CUMEM_ENABLE: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_NVLS_ENABLE: "1"
+      UCX_MEMTYPE_CACHE: "n"
+      UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
+      UCX_TLS: "rc,cuda_copy"
+      NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+    args:
       kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:20080","enable_kv_cache_events":true}'
       served-model-name: deepseek-ai/DeepSeek-V4-Pro
       kv-cache-dtype: fp8

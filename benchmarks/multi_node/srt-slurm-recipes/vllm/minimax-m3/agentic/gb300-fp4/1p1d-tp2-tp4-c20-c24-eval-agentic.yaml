@@ -1,3 +1,4 @@
+schema: 2
 name: "minimax-m3-vllm-disagg-gb300-1p1d-tp2-tp4-c20-c24-fp4-eval-agentic"
 
 model:
@@ -14,9 +15,10 @@ identity:
     dynamo: "1.4.0.dev20260730"
 
 dynamo:
-  version: "1.4.0.dev20260730"
   install: true
 
+  source:
+    pypi: "1.4.0.dev20260730"
 health_check:
   max_attempts: 2160
   interval_seconds: 10
@@ -26,17 +28,28 @@ resources:
   gpus_per_node: 4
   het_jobs: false
   spread_workers: false
-  prefill_nodes: 1
-  decode_nodes: 1
-  prefill_workers: 1
-  decode_workers: 1
-  gpus_per_prefill: 2
-  gpus_per_decode: 4
-
-infra:
-  etcd_nats_dedicated_node: false
-  nats_max_payload_mb: 32
-
+services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
+  - name: mooncake-master
+    type: mooncake-master
+    options:
+      store_config:
+        metadata_server: "P2PHANDSHAKE"
+        global_segment_size: "200GB"
+        local_buffer_size: "4GB"
+        protocol: "rdma"
+        device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+        mode: "embedded"
+        enable_offload: true
 environment:
   PYTHONHASHSEED: "0"
 
@@ -54,26 +67,39 @@ frontend:
     DYN_TOKENIZER_CACHE_BYTES: "8589934592"
     DYN_TCP_CONNECT_TIMEOUT: "120"
 
-backend:
+engine:
   type: vllm
-  connector: null
+  connector:
   dp_launch_mode: per_node
-  mooncake_kv_store:
-    env:
+roles:
+  prefill:
+    nodes: 1
+    workers: 1
+    gpus: 2
+    env: &worker_environment
+      HF_HUB_CACHE: "/hf_hub_cache"
+      HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+      TRANSFORMERS_CACHE: "/hf_hub_cache"
+      VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+      DYN_TCP_CONNECT_TIMEOUT: "120"
+      VLLM_FLOAT32_MATMUL_PRECISION: "high"
+      VLLM_FLASHINFER_ALLREDUCE_BACKEND: "trtllm"
+      VLLM_USE_NCCL_SYMM_MEM: "0"
+      VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
+      VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
+      UCX_MEMTYPE_CACHE: "n"
+      UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+      UCX_MODULE_DIR: "/usr/local/lib/python3.12/dist-packages/nixl_cu13.libs/ucx"
+      UCX_RNDV_PIPELINE_ERROR_HANDLING: "y"
+      NCCL_CUMEM_ENABLE: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_NVLS_ENABLE: "1"
+      NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
       MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
       MC_STORE_CLIENT_METRIC: "1"
       MC_STORE_CLIENT_METRIC_INTERVAL: "5"
       MC_TE_METRIC: "0"
-    store_config:
-      metadata_server: "P2PHANDSHAKE"
-      global_segment_size: "200GB"
-      local_buffer_size: "4GB"
-      protocol: "rdma"
-      device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
-      mode: "embedded"
-      enable_offload: true
-  vllm_config:
-    prefill:
+    args:
       served-model-name: "nvidia/MiniMax-M3-NVFP4"
       kv-cache-dtype: "fp8"
       block-size: 128
@@ -94,7 +120,20 @@ backend:
       speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
       kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"read_validation_timeout":30.0}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"lookup_async":true}}]}}'
       enable-cumem-allocator: true
-    decode:
+  decode:
+    nodes: 1
+    workers: 1
+    gpus: 4
+
+    env:
+      <<: *worker_environment
+      VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+
+      MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+      MC_STORE_CLIENT_METRIC: "1"
+      MC_STORE_CLIENT_METRIC_INTERVAL: "5"
+      MC_TE_METRIC: "0"
+    args:
       served-model-name: "nvidia/MiniMax-M3-NVFP4"
       kv-cache-dtype: "fp8"
       block-size: 128
@@ -117,29 +156,6 @@ backend:
       speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
       kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"read_validation_timeout":30.0}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"enable_lookup":false}}]}}'
       enable-cumem-allocator: true
-  prefill_environment: &worker_environment
-    HF_HUB_CACHE: "/hf_hub_cache"
-    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
-    TRANSFORMERS_CACHE: "/hf_hub_cache"
-    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
-    DYN_TCP_CONNECT_TIMEOUT: "120"
-    VLLM_FLOAT32_MATMUL_PRECISION: "high"
-    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "trtllm"
-    VLLM_USE_NCCL_SYMM_MEM: "0"
-    VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
-    VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
-    UCX_MEMTYPE_CACHE: "n"
-    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
-    UCX_MODULE_DIR: "/usr/local/lib/python3.12/dist-packages/nixl_cu13.libs/ucx"
-    UCX_RNDV_PIPELINE_ERROR_HANDLING: "y"
-    NCCL_CUMEM_ENABLE: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_NVLS_ENABLE: "1"
-    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
-  decode_environment:
-    <<: *worker_environment
-    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
-
 sbatch_directives:
   cpus-per-task: "72"
   mem: "0"

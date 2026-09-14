@@ -1,3 +1,4 @@
+schema: 2
 base:
   name: gb200-fp8-glm5-mtp
   model:
@@ -10,41 +11,27 @@ base:
   frontend:
     type: dynamo
   dynamo:
-    version: 1.2.1
-  backend:
-    type: sglang
-    prefill_environment:
-      TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
-      PYTHONUNBUFFERED: '1'
-      DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
-      SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
-      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
-      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
-      MC_TE_METRIC: 'true'
-      MC_FORCE_MNNVL: '1'
-      NCCL_MNNVL_ENABLE: '1'
-      NCCL_CUMEM_ENABLE: '1'
-      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
-      SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
-      DYN_REQUEST_PLANE: nats
-    decode_environment:
-      TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
-      PYTHONUNBUFFERED: '1'
-      DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
-      SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
-      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
-      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
-      MC_TE_METRIC: 'true'
-      MC_FORCE_MNNVL: '1'
-      NCCL_MNNVL_ENABLE: '1'
-      NCCL_CUMEM_ENABLE: '1'
-      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
-      SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
-      DYN_REQUEST_PLANE: nats
-    sglang_config:
-      prefill:
+    source:
+      pypi: 1.2.1
+  engine: sglang
+  roles:
+    prefill:
+      env:
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        PYTHONUNBUFFERED: '1'
+        DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+        MC_TE_METRIC: 'true'
+        MC_FORCE_MNNVL: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+        SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+        DYN_REQUEST_PLANE: nats
+      args:
         served-model-name: GLM-5-FP8
         trust-remote-code: true
         quantization: fp8
@@ -69,7 +56,23 @@ base:
         disable-radix-cache: true
         weight-loader-prefetch-checkpoints: true
         model-loader-extra-config: '{"enable_multithread_load": true}'
-      decode:
+    decode:
+      env:
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        PYTHONUNBUFFERED: '1'
+        DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+        MC_TE_METRIC: 'true'
+        MC_FORCE_MNNVL: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+        SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+        DYN_REQUEST_PLANE: nats
+      args:
         served-model-name: GLM-5-FP8
         trust-remote-code: true
         quantization: fp8
@@ -112,11 +115,16 @@ base:
 # ################# 8k1k #################
 zip_override_mtp_8k1k_hightpt:
   name: [8k1k-1p1d_dep16, 8k1k-2p1d_dep16, 8k1k-4p1d_dep16]
-  backend:
-    decode_environment:
-      SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '512'
-    sglang_config:
-      decode:
+  roles:
+    prefill:
+      nodes: [2, 4, 8]
+      workers: [1, 2, 4]
+    decode:
+      nodes: 4
+      workers: 1
+      env:
+        SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '512'
+      args:
         cuda-graph-max-bs: [111, 234, 535]
         data-parallel-size: 16
         deepep-config: /configs/deepep_config.json
@@ -136,24 +144,21 @@ zip_override_mtp_8k1k_hightpt:
     concurrencies: [[137], [620], [1305]]
     isl: 8192
     osl: 1024
-  resources:
-    decode_nodes: 4
-    decode_workers: 1
-    prefill_nodes: [2, 4, 8]
-    prefill_workers: [1, 2, 4]
+  resources: {}
 zip_override_mtp_8k1k_lowlat:
   name: [8k1k-1p4d_tp8, 8k1k-1p4d_tp8-conc56, 8k1k-1p8d_tp8, 8k1k-1p8d_tp8-conc12, 8k1k-1p8d_tp8-conc31]
-  backend:
-    sglang_config:
-      decode:
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+    decode:
+      nodes: [8, 8, 16, 16, 16]
+      workers: [4, 4, 8, 8, 8]
+      args:
         cuda-graph-max-bs: [28, 8, 12, 1, 2]
         max-running-requests: [28, 8, 12, 1, 2]
   benchmark:
     concurrencies: [[136], [56], [120], [12], [31]]
     isl: 8192
     osl: 1024
-  resources:
-    decode_nodes: [8, 8, 16, 16, 16]
-    decode_workers: [4, 4, 8, 8, 8]
-    prefill_nodes: 2
-    prefill_workers: 1
+  resources: {}

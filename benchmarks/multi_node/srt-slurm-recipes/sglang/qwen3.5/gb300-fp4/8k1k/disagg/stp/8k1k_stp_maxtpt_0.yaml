@@ -7,6 +7,7 @@
 # qwen3.5-dep16-fia2a-tbo-cc1024x2048x3072-dynamo-tot-nixl
 # (sa-qwen-3.5-8k1k-fp4-baseline-mid-pareto study).
 
+schema: 2
 name: "gb300-fp4-qwen3.5_8k1k_maxtpt_0"
 
 model:
@@ -15,7 +16,8 @@ model:
   precision: "fp4"
 
 dynamo:
-  version: "1.1.0"
+  source:
+    pypi: "1.1.0"
 
 frontend:
   type: dynamo
@@ -26,73 +28,35 @@ frontend:
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
-  prefill_nodes: 5
-  prefill_workers: 5
-  decode_nodes: 4
-  decode_workers: 1
+engine: sglang
+roles:
+  prefill:
+    nodes: 5
+    workers: 5
+    env:
+      NO_COLOR: "1"
+      TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+      SGLANG_ENABLE_SPEC_V2: "1"
+      PYTHONUNBUFFERED: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_CUMEM_ENABLE: "1"
+      NCCL_NVLS_ENABLE: "1"
+      MC_FORCE_MNNVL: "1"
+      SGLANG_ENABLE_JIT_DEEPGEMM: "true"
+      SGLANG_ENABLE_FLASHINFER_GEMM: "true"
+      SGLANG_FLASHINFER_FP4_GEMM_BACKEND: "cutlass"
+      FLASHINFER_DISABLE_VERSION_CHECK: "1"
+      SGLANG_DG_CACHE_DIR: "/configs/deepgemm-cache"
+      FLASHINFER_WORKSPACE_BASE: "/configs/flashinfer-cache"
+      SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+      SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+      SGLANG_ENABLE_NIXL: "1"
 
-backend:
-  type: sglang
-
-  prefill_environment:
-    NO_COLOR: "1"
-    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
-    SGLANG_ENABLE_SPEC_V2: "1"
-    PYTHONUNBUFFERED: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_CUMEM_ENABLE: "1"
-    NCCL_NVLS_ENABLE: "1"
-    MC_FORCE_MNNVL: "1"
-    SGLANG_ENABLE_JIT_DEEPGEMM: "true"
-    SGLANG_ENABLE_FLASHINFER_GEMM: "true"
-    SGLANG_FLASHINFER_FP4_GEMM_BACKEND: "cutlass"
-    FLASHINFER_DISABLE_VERSION_CHECK: "1"
-    SGLANG_DG_CACHE_DIR: "/configs/deepgemm-cache"
-    FLASHINFER_WORKSPACE_BASE: "/configs/flashinfer-cache"
-    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
-    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
-    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
-    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
-    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
-    SGLANG_ENABLE_NIXL: "1"
-
-  decode_environment:
-    NO_COLOR: "1"
-    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
-    SGLANG_ENABLE_SPEC_V2: "1"
-    PYTHONUNBUFFERED: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_CUMEM_ENABLE: "1"
-    NCCL_NVLS_ENABLE: "1"
-    MC_FORCE_MNNVL: "1"
-    MC_TE_METRIC: "true"
-    SGLANG_ENABLE_JIT_DEEPGEMM: "true"
-    SGLANG_ENABLE_FLASHINFER_GEMM: "true"
-    SGLANG_FLASHINFER_FP4_GEMM_BACKEND: "cutlass"
-    SGLANG_MOE_NVFP4_DISPATCH: "1"
-    SGLANG_CUTEDSL_MOE_NVFP4_DISPATCH: "1"
-    SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: "1"
-    SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: "1"
-    FLASHINFER_DISABLE_VERSION_CHECK: "1"
-    SGLANG_DG_CACHE_DIR: "/configs/deepgemm-cache"
-    FLASHINFER_WORKSPACE_BASE: "/configs/flashinfer-cache"
-    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
-    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
-    SGLANG_DECODE_BOOTSTRAP_TIMEOUT: "1000"
-    SGLANG_HACK_SEQ_BOOTSTRAP_ROOM: "1"
-    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
-    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
-    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
-    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
-    SGLANG_HEALTH_CHECK_TIMEOUT: "1800"
-    SGLANG_HEALTH_STARTING_OK: "1"
-    SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: "0"
-    SGLANG_ENABLE_NIXL: "1"
-
-  sglang_config:
-    prefill:
+    args:
       served-model-name: "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"
       model-path: "/model/"
       trust-remote-code: true
@@ -127,7 +91,45 @@ backend:
       moe-runner-backend: "flashinfer_trtllm"
       linear-attn-decode-backend: "flashinfer"
 
-    decode:
+  decode:
+    nodes: 4
+    workers: 1
+
+    env:
+      NO_COLOR: "1"
+      TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+      SGLANG_ENABLE_SPEC_V2: "1"
+      PYTHONUNBUFFERED: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_CUMEM_ENABLE: "1"
+      NCCL_NVLS_ENABLE: "1"
+      MC_FORCE_MNNVL: "1"
+      MC_TE_METRIC: "true"
+      SGLANG_ENABLE_JIT_DEEPGEMM: "true"
+      SGLANG_ENABLE_FLASHINFER_GEMM: "true"
+      SGLANG_FLASHINFER_FP4_GEMM_BACKEND: "cutlass"
+      SGLANG_MOE_NVFP4_DISPATCH: "1"
+      SGLANG_CUTEDSL_MOE_NVFP4_DISPATCH: "1"
+      SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: "1"
+      SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: "1"
+      FLASHINFER_DISABLE_VERSION_CHECK: "1"
+      SGLANG_DG_CACHE_DIR: "/configs/deepgemm-cache"
+      FLASHINFER_WORKSPACE_BASE: "/configs/flashinfer-cache"
+      SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+      SGLANG_DECODE_BOOTSTRAP_TIMEOUT: "1000"
+      SGLANG_HACK_SEQ_BOOTSTRAP_ROOM: "1"
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+      SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+      SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "1024"
+      SGLANG_HEALTH_CHECK_TIMEOUT: "1800"
+      SGLANG_HEALTH_STARTING_OK: "1"
+      SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: "0"
+      SGLANG_ENABLE_NIXL: "1"
+
+    args:
       served-model-name: "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"
       model-path: "/model/"
       trust-remote-code: true
@@ -178,13 +180,11 @@ benchmark:
 
 telemetry:
   enabled: true
-  provider: dcgm-power
-  default_frequency: 1.0
+  collect_interval_ms: 1000
   storage_subdir: power
   required: true
   startup_timeout_seconds: 120
   request_timeout_seconds: 2
-  collector_join_timeout_seconds: 10
   dcgm_exporter:
     container_image: dcgm-exporter
     port: 19401

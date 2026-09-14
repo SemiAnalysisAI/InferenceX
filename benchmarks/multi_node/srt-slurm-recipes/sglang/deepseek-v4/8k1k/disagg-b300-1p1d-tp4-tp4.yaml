@@ -1,3 +1,4 @@
+schema: 2
 name: "disagg-b300-1p1d-tp4-tp4"
 
 model:
@@ -6,9 +7,10 @@ model:
   precision: "fp4"
 
 dynamo:
-  hash: "41882ae9b07232eed4850fb1daf8c958abb2556a"
   install: true
 
+  source:
+    rev: "41882ae9b07232eed4850fb1daf8c958abb2556a"
 sbatch_directives:
   cpus-per-task: "144"
   mem: "0"
@@ -16,53 +18,33 @@ sbatch_directives:
 resources:
   gpu_type: "b300"
   gpus_per_node: 8
-  prefill_nodes: 1
-  prefill_workers: 1
-  gpus_per_prefill: 4
-  decode_nodes: 1
-  decode_workers: 1
-  gpus_per_decode: 4
-
 frontend:
   type: dynamo
   enable_multiple_frontends: true
   num_additional_frontends: 8
 
-backend:
-  type: sglang
+engine: sglang
+roles:
+  prefill:
+    nodes: 1
+    workers: 1
+    gpus: 4
+    env:
+      PYTHONUNBUFFERED: "1"
+      SGLANG_RADIX_FORCE_MISS: "1"
+      SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+      SGLANG_DEFAULT_THINKING: "1"
+      SGLANG_DSV4_REASONING_EFFORT: "max"
+      SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_CUMEM_ENABLE: "1"
+      MC_FORCE_MNNVL: "1"
+      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+      SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
+      UCX_TLS: "cuda_copy,rc"
 
-  prefill_environment:
-    PYTHONUNBUFFERED: "1"
-    SGLANG_RADIX_FORCE_MISS: "1"
-    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
-    SGLANG_DEFAULT_THINKING: "1"
-    SGLANG_DSV4_REASONING_EFFORT: "max"
-    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_CUMEM_ENABLE: "1"
-    MC_FORCE_MNNVL: "1"
-    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
-    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
-    UCX_TLS: "cuda_copy,rc"
-
-  decode_environment:
-    PYTHONUNBUFFERED: "1"
-    SGLANG_RADIX_FORCE_MISS: "1"
-    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
-    SGLANG_DEFAULT_THINKING: "1"
-    SGLANG_DSV4_REASONING_EFFORT: "max"
-    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_CUMEM_ENABLE: "1"
-    MC_FORCE_MNNVL: "1"
-    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
-    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
-    UCX_TLS: "cuda_copy,rc"
-
-  sglang_config:
-    prefill:
+    args:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       model-path: "/model/"
       trust-remote-code: true
@@ -85,7 +67,27 @@ backend:
       chunked-prefill-size: 32768
 
 
-    decode:
+  decode:
+    nodes: 1
+    workers: 1
+    gpus: 4
+
+    env:
+      PYTHONUNBUFFERED: "1"
+      SGLANG_RADIX_FORCE_MISS: "1"
+      SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+      SGLANG_DEFAULT_THINKING: "1"
+      SGLANG_DSV4_REASONING_EFFORT: "max"
+      SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_CUMEM_ENABLE: "1"
+      MC_FORCE_MNNVL: "1"
+      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+      SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
+      UCX_TLS: "cuda_copy,rc"
+
+    args:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       model-path: "/model/"
       trust-remote-code: true
@@ -121,13 +123,11 @@ benchmark:
 
 telemetry:
   enabled: true
-  provider: dcgm-power
-  default_frequency: 1.0
+  collect_interval_ms: 1000
   storage_subdir: power
   required: true
   startup_timeout_seconds: 120
   request_timeout_seconds: 2
-  collector_join_timeout_seconds: 10
   dcgm_exporter:
     container_image: dcgm-exporter
     port: 19401

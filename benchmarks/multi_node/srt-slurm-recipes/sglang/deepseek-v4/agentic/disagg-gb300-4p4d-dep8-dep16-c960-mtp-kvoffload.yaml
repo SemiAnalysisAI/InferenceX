@@ -1,3 +1,4 @@
+schema: 2
 name: "disagg-gb300-4p4d-dep8-dep16-c960-mtp-kvoffload"
 
 # Agentic-coding SGLang disaggregated recipe for DeepSeek-V4-Pro on GB300
@@ -21,7 +22,8 @@ identity:
 
 dynamo:
   install: true
-  wheel: "1.5.0.dev20260902"
+  source:
+    wheel: "1.5.0.dev20260902"
 
 slurm:
   time_limit: "8:00:00"
@@ -33,16 +35,17 @@ health_check:
 resources:
   gpu_type: gb300
   gpus_per_node: 4
-  prefill_nodes: 4
-  decode_nodes: 4
-  prefill_workers: 2
-  decode_workers: 1
-
-
-infra:
-  etcd_nats_dedicated_node: true
-  nats_max_payload_mb: 32
-
+services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: dedicated
+  - name: nats
+    type: nats
+    placement:
+      node: dedicated
+    options:
+      max_payload_mb: 32
 frontend:
   type: dynamo
   nginx_session_affinity: true
@@ -58,77 +61,46 @@ frontend:
     active-prefill-tokens-threshold: "None"
     active-prefill-tokens-threshold-frac: "None"
 
-backend:
-  type: sglang
+engine: sglang
+roles:
+  prefill:
+    nodes: 4
+    workers: 2
+    env:
+      SGLANG_ENABLE_PREFILL_WAR_READ_DONE: "1"
+      SGLANG_RAGGED_VERIFY_MODE: "static"
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
+      PIP_BREAK_SYSTEM_PACKAGES: '1'
+      PYTHONUNBUFFERED: '1'
+      OMP_NUM_THREADS: '1'
+      SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
+      SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
+      SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
+      SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
+      SGLANG_DEFAULT_THINKING: '1'
+      SGLANG_DSV4_REASONING_EFFORT: high
+      SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: '1'
+      SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
+      SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: '1'
+      SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: '1'
+      SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '9216'
+      SGLANG_OPT_USE_ONLINE_COMPRESS: '0'
+      NCCL_MNNVL_ENABLE: '1'
+      NCCL_CUMEM_ENABLE: '1'
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+      MC_FORCE_MNNVL: '1'
+      NCCL_TIMEOUT: '100000'
+      NCCL_MNNVL_UUID_QUERY_TIMEOUT: '100000'
+      SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
+      DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+      DYN_LOG: info,dynamo_runtime::pipeline::network::ingress::push_handler=warn
+      SGLANG_LOG_FORWARD_ITERS: '1'
+      SGLANG_LOG_MS: '1'
+      SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
+      SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
+      SGLANG_DSV4_MHC_PREWARM: '1'
 
-  prefill_environment:
-    SGLANG_ENABLE_PREFILL_WAR_READ_DONE: "1"
-    SGLANG_RAGGED_VERIFY_MODE: "static"
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
-    PIP_BREAK_SYSTEM_PACKAGES: '1'
-    PYTHONUNBUFFERED: '1'
-    OMP_NUM_THREADS: '1'
-    SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
-    SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
-    SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
-    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
-    SGLANG_DEFAULT_THINKING: '1'
-    SGLANG_DSV4_REASONING_EFFORT: high
-    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: '1'
-    SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
-    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: '1'
-    SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: '1'
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '9216'
-    SGLANG_OPT_USE_ONLINE_COMPRESS: '0'
-    NCCL_MNNVL_ENABLE: '1'
-    NCCL_CUMEM_ENABLE: '1'
-    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
-    MC_FORCE_MNNVL: '1'
-    NCCL_TIMEOUT: '100000'
-    NCCL_MNNVL_UUID_QUERY_TIMEOUT: '100000'
-    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
-    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
-    DYN_LOG: info,dynamo_runtime::pipeline::network::ingress::push_handler=warn
-    SGLANG_LOG_FORWARD_ITERS: '1'
-    SGLANG_LOG_MS: '1'
-    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
-    SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
-    SGLANG_DSV4_MHC_PREWARM: '1'
-
-  decode_environment:
-    SGLANG_RAGGED_VERIFY_MODE: "static"
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
-    PIP_BREAK_SYSTEM_PACKAGES: '1'
-    PYTHONUNBUFFERED: '1'
-    OMP_NUM_THREADS: '1'
-    SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
-    SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
-    SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
-    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
-    SGLANG_DEFAULT_THINKING: '1'
-    SGLANG_DSV4_REASONING_EFFORT: high
-    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: '1'
-    SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE: '1'
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
-    SGLANG_OPT_USE_ONLINE_COMPRESS: '0'
-    NCCL_MNNVL_ENABLE: '1'
-    NCCL_CUMEM_ENABLE: '1'
-    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
-    MC_FORCE_MNNVL: '1'
-    NCCL_TIMEOUT: '100000'
-    NCCL_MNNVL_UUID_QUERY_TIMEOUT: '100000'
-    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
-    SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
-    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
-    DYN_LOG: info,dynamo_runtime::pipeline::network::ingress::push_handler=warn
-    SGLANG_LOG_FORWARD_ITERS: '1'
-    SGLANG_LOG_MS: '1'
-    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
-    SGLANG_DSV4_MHC_PREWARM: '1'
-
-  sglang_config:
-    prefill:
+    args:
       host: 0.0.0.0
       served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
       enable-metrics: true
@@ -168,7 +140,44 @@ backend:
       hicache-ratio: 1
       hicache-io-backend: direct
 
-    decode:
+  decode:
+    nodes: 4
+    workers: 1
+
+
+    env:
+      SGLANG_RAGGED_VERIFY_MODE: "static"
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
+      PIP_BREAK_SYSTEM_PACKAGES: '1'
+      PYTHONUNBUFFERED: '1'
+      OMP_NUM_THREADS: '1'
+      SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
+      SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
+      SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
+      SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
+      SGLANG_DEFAULT_THINKING: '1'
+      SGLANG_DSV4_REASONING_EFFORT: high
+      SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: '1'
+      SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
+      SGLANG_OPT_DEEPGEMM_MEGA_MOE: '1'
+      SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
+      SGLANG_OPT_USE_ONLINE_COMPRESS: '0'
+      NCCL_MNNVL_ENABLE: '1'
+      NCCL_CUMEM_ENABLE: '1'
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+      MC_FORCE_MNNVL: '1'
+      NCCL_TIMEOUT: '100000'
+      NCCL_MNNVL_UUID_QUERY_TIMEOUT: '100000'
+      SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
+      SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
+      DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+      DYN_LOG: info,dynamo_runtime::pipeline::network::ingress::push_handler=warn
+      SGLANG_LOG_FORWARD_ITERS: '1'
+      SGLANG_LOG_MS: '1'
+      SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
+      SGLANG_DSV4_MHC_PREWARM: '1'
+
+    args:
       host: 0.0.0.0
       served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
       enable-metrics: true

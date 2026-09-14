@@ -1,6 +1,7 @@
 # Source: https://github.com/Inferact/srt-slurm-sa/blob/4a870cd5bc333bf8a312fc65ca1ea82cdab9b2df/recipes/vllm/deepseek-v4-pro/GB300/agentic/agentx-v1.0.1/1p3d-pdep4-dtp8-c3-kv-nixl-mtp-flashinfer-ar-lpt512-psi1.yaml
 # Adapted from the source topology to a 1P4D concurrency-4 point for the
 # InferenceX AgentX harness; eval-only runs continue to verify real MTP output.
+schema: 2
 name: "svf-vllm-disagg-gb300-1p4d-dep4-tp8-c4-mtp-agentic"
 
 # GB300 high-interactivity AgentX MTP3 topology: one DEP4 prefill worker
@@ -20,7 +21,8 @@ identity:
 
 dynamo:
   install: true
-  wheel: "1.4.0"
+  source:
+    wheel: "1.4.0"
   request_plane: tcp
 
 environment:
@@ -65,17 +67,17 @@ resources:
   gpus_per_node: 4
   het_jobs: false
   spread_workers: false
-  prefill_nodes: 1
-  decode_nodes: 8
-  prefill_workers: 1
-  decode_workers: 4
-  gpus_per_prefill: 4
-  gpus_per_decode: 8
-
-infra:
-  etcd_nats_dedicated_node: false
-  nats_max_payload_mb: 32
-
+services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
 frontend:
   type: dynamo
   enable_multiple_frontends: false
@@ -100,18 +102,23 @@ frontend:
     active-prefill-tokens-threshold: "None"
     active-prefill-tokens-threshold-frac: "None"
     tokenizer: "fastokens"
-  orchestrator_placement: first_decode
-
-backend:
+  placement:
+    node: first_decode
+engine:
   type: vllm
-  connector: null
+  connector:
   dp_launch_mode: per_node
   # vLLM KV routing needs prefill KV events so Dynamo can select the
   # cache-owning PDEP4 rank.
-  kv_events_config:
-    prefill: true
-  vllm_config:
-    prefill:
+roles:
+  prefill:
+    nodes: 1
+    workers: 1
+    gpus: 4
+    env:
+      VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
+
+    args:
       kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       safetensors-load-strategy: "prefetch"
@@ -141,7 +148,13 @@ backend:
       speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
       # MTP capture sizes are tokens: 64 seqs * (1 target + 3 drafts).
       max-cudagraph-capture-size: 256
-    decode:
+    kv_events: true
+  decode:
+    nodes: 8
+    workers: 4
+    gpus: 8
+
+    args:
       kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}}'
       # TP8 spans two GB300 nodes; custom all-reduce is single-node only, so
       # decode uses the FlashInfer allreduce path like the agg TP8 recipes.
@@ -165,9 +178,6 @@ backend:
       tokenizer-mode: "deepseek_v4"
       attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
       speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
-  prefill_environment:
-    VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
-
 setup_script: vllm-container-deps.sh
 
 sbatch_directives:
@@ -180,9 +190,7 @@ srun_options:
 benchmark:
   # The AgentX client uses localhost:8000, so colocate it with the Dynamo
   # frontend launched on the first decode node.
-  client_placement: first_decode
   type: custom
-  use_chat_template: true
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
@@ -222,3 +230,5 @@ benchmark:
     NUM_DATASET_ENTRIES: "393"
     HF_WEKA_DATASET: "semianalysisai/cc-traces-weka-062126"
     PUBLIC_DATASET: "semianalysis_cc_traces_weka_062126"
+  placement:
+    node: first_decode

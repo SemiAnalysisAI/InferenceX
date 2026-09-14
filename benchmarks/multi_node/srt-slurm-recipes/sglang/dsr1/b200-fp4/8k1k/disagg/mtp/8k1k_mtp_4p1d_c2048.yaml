@@ -6,6 +6,7 @@
 #   scheduler-recv-interval: 1 on decode.
 #   symm-mem + allreduce fusion retained.
 #   prefill stream-interval: 100; decode stream-interval: 34 (tuned for the c2048 batch cadence).
+schema: 2
 name: b200-fp4-dsr1_8k1k_mtp_4p1d_c2048
 model:
   path: "dsr1"
@@ -14,41 +15,40 @@ model:
 resources:
   gpu_type: b200
   gpus_per_node: 8
-  prefill_nodes: 2
-  prefill_workers: 4
-  gpus_per_prefill: 4
-  decode_nodes: 1
-  decode_workers: 1
 frontend:
   type: dynamo
 dynamo:
-  hash: "5b4bc1dd70965017a737c71b19db5a0aeaa88727"
   install: true
-backend:
-  prefill_environment: &env
-    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
-    PYTHONUNBUFFERED: '1'
-    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
-    DYN_REQUEST_PLANE: nats
-    SGLANG_ENABLE_JIT_DEEPGEMM: 'false'
-    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
-    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
-    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
-    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
-    SGLANG_PER_TOKEN_GROUP_QUANT_8BIT_V2: '1'
-    SGLANG_ENABLE_SPEC_V2: '1'
-    SGLANG_MOE_NVFP4_DISPATCH: '1'
-    SGLANG_FLASHINFER_FP4_GEMM_BACKEND: cutlass
-    MC_FORCE_MNNVL: '1'
-    NCCL_MNNVL_ENABLE: '1'
-    NCCL_CUMEM_ENABLE: '1'
-    SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
-    SGLANG_HACK_SEQ_BOOTSTRAP_ROOM: '1'
-  decode_environment: *env
-  sglang_config:
-    prefill:
+  source:
+    rev: "5b4bc1dd70965017a737c71b19db5a0aeaa88727"
+engine: sglang
+roles:
+  prefill:
+    nodes: 2
+    workers: 4
+    gpus: 4
+    env: &env
+      TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+      PYTHONUNBUFFERED: '1'
+      DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+      DYN_REQUEST_PLANE: nats
+      SGLANG_ENABLE_JIT_DEEPGEMM: 'false'
+      SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+      SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+      SGLANG_PER_TOKEN_GROUP_QUANT_8BIT_V2: '1'
+      SGLANG_ENABLE_SPEC_V2: '1'
+      SGLANG_MOE_NVFP4_DISPATCH: '1'
+      SGLANG_FLASHINFER_FP4_GEMM_BACKEND: cutlass
+      MC_FORCE_MNNVL: '1'
+      NCCL_MNNVL_ENABLE: '1'
+      NCCL_CUMEM_ENABLE: '1'
+      SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
+      SGLANG_HACK_SEQ_BOOTSTRAP_ROOM: '1'
+    args:
       served-model-name: deepseek-ai/DeepSeek-R1
       trust-remote-code: true
       quantization: modelopt_fp4
@@ -75,7 +75,11 @@ backend:
       disable-radix-cache: true
       stream-interval: 100
       watchdog-timeout: 1000000
-    decode:
+  decode:
+    nodes: 1
+    workers: 1
+    env: *env
+    args:
       served-model-name: deepseek-ai/DeepSeek-R1
       trust-remote-code: true
       quantization: modelopt_fp4

@@ -1,3 +1,4 @@
+schema: 2
 name: "agg-gb300-tp4-mtp-lowlatency"
 
 # Low-latency AgentX aggregate topology: one TP4 worker occupies one
@@ -16,7 +17,8 @@ identity:
 
 dynamo:
   install: true
-  wheel: "1.5.0.dev20260910"
+  source:
+    wheel: "1.5.0.dev20260910"
 
 slurm:
   time_limit: "4:00:00"
@@ -28,14 +30,17 @@ health_check:
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
-  agg_nodes: 1
-  agg_workers: 1
-  gpus_per_agg: 4
-
-infra:
-  etcd_nats_dedicated_node: false
-  nats_max_payload_mb: 32
-
+services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
 frontend:
   type: dynamo
   nginx_session_affinity: true
@@ -51,25 +56,29 @@ frontend:
     active-prefill-tokens-threshold: "None"
     active-prefill-tokens-threshold-frac: "None"
 
-backend:
-  type: sglang
-  aggregated_environment:
-    SGLANG_RAGGED_VERIFY_MODE: "static"
-    SGLANG_DEFAULT_THINKING: "1"
-    SGLANG_DSV4_REASONING_EFFORT: high
-    PIP_BREAK_SYSTEM_PACKAGES: "1"
-    SGLANG_JIT_DEEPGEMM_PRECOMPILE: "1"
-    SGLANG_ENABLE_PREFILL_WAR_READ_DONE: "1"
-    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
-    SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
-    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "1"
-    SGLANG_OPT_USE_ONLINE_COMPRESS: "0"
-    SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
-    SGLANG_OPT_USE_JIT_NORM: "1"
-    SGLANG_OPT_USE_TOPK_V2: "True"
+engine: sglang
+roles:
+  agg:
+    nodes: 1
+    workers: 1
+    gpus: 4
 
-  sglang_config:
-    aggregated:
+    env:
+      SGLANG_RAGGED_VERIFY_MODE: "static"
+      SGLANG_DEFAULT_THINKING: "1"
+      SGLANG_DSV4_REASONING_EFFORT: high
+      PIP_BREAK_SYSTEM_PACKAGES: "1"
+      SGLANG_JIT_DEEPGEMM_PRECOMPILE: "1"
+      SGLANG_ENABLE_PREFILL_WAR_READ_DONE: "1"
+      SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+      SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
+      SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "1"
+      SGLANG_OPT_USE_ONLINE_COMPRESS: "0"
+      SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
+      SGLANG_OPT_USE_JIT_NORM: "1"
+      SGLANG_OPT_USE_TOPK_V2: "True"
+
+    args:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro-0813"
       enable-metrics: true
       enable-cache-report: true

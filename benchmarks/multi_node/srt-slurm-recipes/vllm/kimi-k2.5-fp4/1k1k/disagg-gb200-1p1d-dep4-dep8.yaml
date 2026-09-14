@@ -1,3 +1,4 @@
+schema: 2
 name: "vllm-disagg-gb200-1p1d-dep4-dep8"
 
 model:
@@ -6,44 +7,35 @@ model:
   precision: "fp4"
 
 dynamo:
-  version: 1.2.1
   install: true
 
+  source:
+    pypi: 1.2.1
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  prefill_nodes: 1
-  decode_nodes: 2
-  prefill_workers: 1
-  decode_workers: 1
-  gpus_per_prefill: 4
-  gpus_per_decode: 8
-
 frontend:
   type: dynamo
   enable_multiple_frontends: true
   num_additional_frontends: 4
 
-backend:
+engine:
   type: vllm
-  connector: null
+  connector:
 
-  prefill_environment:
-    VLLM_USE_FLASHINFER_MOE_FP4: "1"
-    VLLM_USE_NCCL_SYMM_MEM: "1"
-    NCCL_CUMEM_ENABLE: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_NVLS_ENABLE: "1"
+roles:
+  prefill:
+    nodes: 1
+    workers: 1
+    gpus: 4
+    env:
+      VLLM_USE_FLASHINFER_MOE_FP4: "1"
+      VLLM_USE_NCCL_SYMM_MEM: "1"
+      NCCL_CUMEM_ENABLE: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_NVLS_ENABLE: "1"
 
-  decode_environment:
-    VLLM_USE_FLASHINFER_MOE_FP4: "1"
-    VLLM_USE_NCCL_SYMM_MEM: "1"
-    NCCL_CUMEM_ENABLE: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_NVLS_ENABLE: "1"
-
-  vllm_config:
-    prefill:
+    args:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "nvidia/Kimi-K2.5-NVFP4"
       kv-cache-dtype: "fp8"
@@ -67,7 +59,19 @@ backend:
       all2all-backend: "flashinfer_nvlink_one_sided"
       gpu-memory-utilization: 0.93
 
-    decode:
+  decode:
+    nodes: 2
+    workers: 1
+    gpus: 8
+
+    env:
+      VLLM_USE_FLASHINFER_MOE_FP4: "1"
+      VLLM_USE_NCCL_SYMM_MEM: "1"
+      NCCL_CUMEM_ENABLE: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_NVLS_ENABLE: "1"
+
+    args:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "nvidia/Kimi-K2.5-NVFP4"
       kv-cache-dtype: "fp8"

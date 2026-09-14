@@ -1,3 +1,4 @@
+schema: 2
 name: dsv4-gb200-vllm-agentic-mtp-disagg-2p1d-dep8-dep8
 
 model:
@@ -6,27 +7,30 @@ model:
   precision: fp4
 
 identity:
-  model: { repo: deepseek-ai/DeepSeek-V4-Pro }
-  container: { image: vllm/vllm-openai:nightly-3ee2df30337a301164c46ae444b76ee67e71c106 }
-  frameworks: { dynamo: "1.3.1" }
+  model: {repo: deepseek-ai/DeepSeek-V4-Pro}
+  container: {image: vllm/vllm-openai:nightly-3ee2df30337a301164c46ae444b76ee67e71c106}
+  frameworks: {dynamo: "1.3.1"}
 
-dynamo: { version: "1.3.1", install: true }
+dynamo: {install: true, source: {pypi: "1.3.1"}}
 setup_script: vllm-container-deps.sh
-environment: { ETCD_LEASE_TTL: "7200" }
-slurm: { time_limit: "8:00:00" }
-health_check: { max_attempts: 2160, interval_seconds: 10 }
+environment: {ETCD_LEASE_TTL: "7200"}
+slurm: {time_limit: "8:00:00"}
+health_check: {max_attempts: 2160, interval_seconds: 10}
 
 resources:
   gpu_type: gb200
   gpus_per_node: 4
-  prefill_nodes: 4
-  decode_nodes: 2
-  prefill_workers: 2
-  decode_workers: 1
-  gpus_per_prefill: 8
-  gpus_per_decode: 8
-
-infra: { etcd_nats_dedicated_node: false, nats_max_payload_mb: 32 }
+services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
 
 frontend:
   type: dynamo
@@ -41,29 +45,32 @@ frontend:
     router-session-affinity-ttl-secs: 14400
     kv-cache-block-size: 256
 
-backend:
+engine:
   type: vllm
-  connector: null
+  connector:
   dp_launch_mode: per_node
-  prefill_environment: &worker_environment
-    HF_HUB_CACHE: /hf_hub_cache
-    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
-    VLLM_RPC_TIMEOUT: "600000"
-    VLLM_LOG_STATS_INTERVAL: "1"
-    VLLM_SERVER_DEV_MODE: "1"
-    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
-    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
-    VLLM_USE_NCCL_SYMM_MEM: "1"
-    NCCL_CUMEM_ENABLE: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_NVLS_ENABLE: "1"
-    UCX_MEMTYPE_CACHE: "n"
-    UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
-    UCX_TLS: "rc,cuda_copy"
-    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
-  decode_environment: *worker_environment
-  vllm_config:
-    prefill: &dep8_config
+roles:
+  prefill:
+    nodes: 4
+    workers: 2
+    gpus: 8
+    env: &worker_environment
+      HF_HUB_CACHE: /hf_hub_cache
+      VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+      VLLM_RPC_TIMEOUT: "600000"
+      VLLM_LOG_STATS_INTERVAL: "1"
+      VLLM_SERVER_DEV_MODE: "1"
+      VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+      VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+      VLLM_USE_NCCL_SYMM_MEM: "1"
+      NCCL_CUMEM_ENABLE: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_NVLS_ENABLE: "1"
+      UCX_MEMTYPE_CACHE: "n"
+      UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
+      UCX_TLS: "rc,cuda_copy"
+      NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+    args: &dep8_config
       kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
       kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:20080","enable_kv_cache_events":true}'
       served-model-name: deepseek-ai/DeepSeek-V4-Pro
@@ -87,7 +94,13 @@ backend:
       enable-sleep-mode: true
       tokenizer-mode: deepseek_v4
       speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
-    decode:
+  decode:
+    nodes: 2
+    workers: 1
+    gpus: 8
+
+    env: *worker_environment
+    args:
       <<: *dep8_config
       attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_fp4_indexer_cache":true}'
       enforce-eager: false
@@ -98,8 +111,8 @@ backend:
       max-cudagraph-capture-size: 1024
       stream-interval: 10
 
-sbatch_directives: { cpus-per-task: "144", mem: "0" }
-srun_options: { container-remap-root: "" }
+sbatch_directives: {cpus-per-task: "144", mem: "0"}
+srun_options: {container-remap-root: ""}
 
 benchmark:
   type: custom

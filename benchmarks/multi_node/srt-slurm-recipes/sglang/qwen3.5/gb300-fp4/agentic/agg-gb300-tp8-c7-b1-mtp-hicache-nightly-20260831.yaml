@@ -1,3 +1,4 @@
+schema: 2
 name: agg-gb300-tp8-c7-b1-mtp-hicache-nightly-20260831
 model:
   path: qwen3.5-fp4
@@ -11,50 +12,48 @@ health_check:
 resources:
   gpu_type: gb300
   gpus_per_node: 4
-  agg_nodes: 2
-  agg_workers: 1
-  gpus_per_agg: 8
-infra:
-  nats_max_payload_mb: 8
 frontend:
   type: sglang
   enable_multiple_frontends: false
-backend:
-  type: sglang
-  aggregated_environment:
-    SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '1'
-    PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
-    NO_COLOR: '1'
-    PYTHONUNBUFFERED: '1'
-    PIP_BREAK_SYSTEM_PACKAGES: '1'
-    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
-    NCCL_MNNVL_ENABLE: '1'
-    NCCL_CUMEM_ENABLE: '1'
-    NCCL_NVLS_ENABLE: '0'
-    MC_FORCE_MNNVL: '1'
-    NVSHMEM_REMOTE_TRANSPORT: none
-    MC_TE_METRIC: 'true'
-    SGLANG_ENABLE_SPEC_V2: '1'
-    SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
-    SGLANG_ENABLE_JIT_DEEPGEMM: 'true'
-    SGLANG_FLASHINFER_FP4_GEMM_BACKEND: cutlass
-    SGLANG_MOE_NVFP4_DISPATCH: '1'
-    SGLANG_CUTEDSL_MOE_NVFP4_DISPATCH: '1'
-    SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '1'
-    SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
-    FLASHINFER_DISABLE_VERSION_CHECK: '1'
-    SGLANG_DG_CACHE_DIR: /tmp/agentx-pareto-v2/c7-mrr1/deepgemm-cache
-    FLASHINFER_WORKSPACE_BASE: /tmp/agentx-pareto-v2/c7-mrr1/flashinfer-cache
-    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
-    SGLANG_HEALTH_CHECK_TIMEOUT: '1800'
-    SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: '0'
-    SGLANG_CACHE_DIR: /tmp/agentx-pareto-v2/c7-mrr1/sglang-cache
-    SGLANG_FLASHINFER_AUTOTUNE_CACHE: '1'
-    SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
-    SGLANG_SCHEDULER_SKIP_ALL_GATHER: '1'
-  sglang_config:
-    aggregated:
+engine: sglang
+roles:
+  agg:
+    nodes: 2
+    workers: 1
+    gpus: 8
+    env:
+      SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '1'
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      NO_COLOR: '1'
+      PYTHONUNBUFFERED: '1'
+      PIP_BREAK_SYSTEM_PACKAGES: '1'
+      TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+      NCCL_MNNVL_ENABLE: '1'
+      NCCL_CUMEM_ENABLE: '1'
+      NCCL_NVLS_ENABLE: '0'
+      MC_FORCE_MNNVL: '1'
+      NVSHMEM_REMOTE_TRANSPORT: none
+      MC_TE_METRIC: 'true'
+      SGLANG_ENABLE_SPEC_V2: '1'
+      SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+      SGLANG_ENABLE_JIT_DEEPGEMM: 'true'
+      SGLANG_FLASHINFER_FP4_GEMM_BACKEND: cutlass
+      SGLANG_MOE_NVFP4_DISPATCH: '1'
+      SGLANG_CUTEDSL_MOE_NVFP4_DISPATCH: '1'
+      SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '1'
+      SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
+      FLASHINFER_DISABLE_VERSION_CHECK: '1'
+      SGLANG_DG_CACHE_DIR: /tmp/agentx-pareto-v2/c7-mrr1/deepgemm-cache
+      FLASHINFER_WORKSPACE_BASE: /tmp/agentx-pareto-v2/c7-mrr1/flashinfer-cache
+      SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+      SGLANG_HEALTH_CHECK_TIMEOUT: '1800'
+      SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: '0'
+      SGLANG_CACHE_DIR: /tmp/agentx-pareto-v2/c7-mrr1/sglang-cache
+      SGLANG_FLASHINFER_AUTOTUNE_CACHE: '1'
+      SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+      SGLANG_SCHEDULER_SKIP_ALL_GATHER: '1'
+    args:
       served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
       enable-cache-report: true
       model-path: /model/
@@ -95,7 +94,7 @@ backend:
       prefill-max-requests: 1
       cuda-graph-max-bs-decode: 1
       cuda-graph-bs-decode:
-      - 1
+        - 1
       disable-prefill-cuda-graph: true
       stream-interval: 20
       decode-log-interval: 10

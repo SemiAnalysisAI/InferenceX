@@ -1,64 +1,46 @@
+schema: 2
 name: kimi-k2.6-vllm-disagg-b200-1p1d-dep8-dep8-c2048
 model:
   path: kimi-k2.6-nvfp4
   container: vllm/vllm-openai:v0.25.1
   precision: fp4
 dynamo:
-  wheel: 1.3.0.dev20260721
   install: true
+  source:
+    wheel: 1.3.0.dev20260721
 resources:
   gpu_type: b200
   gpus_per_node: 8
-  prefill_nodes: 1
-  decode_nodes: 1
-  prefill_workers: 1
-  decode_workers: 1
-  gpus_per_prefill: 8
-  gpus_per_decode: 8
-infra:
-  etcd_nats_dedicated_node: true
 frontend:
   type: dynamo
   enable_multiple_frontends: false
-backend:
+engine:
   type: vllm
-  connector: null
+  connector:
   dp_launch_mode: per_gpu
-  prefill_environment:
-    PYTHONUNBUFFERED: '1'
-    VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
-    VLLM_USE_FLASHINFER_MOE_FP4: '1'
-    VLLM_USE_NCCL_SYMM_MEM: '0'
-    NCCL_CUMEM_ENABLE: '1'
-    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '900'
-    NCCL_WATCHDOG_TIMEOUT: '1800'
-    TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC: '1800'
-    TORCH_CUDA_ARCH_LIST: '10.0'
-    PYTHONNOUSERSITE: '1'
-    UCX_MEMTYPE_CACHE: n
-    UCX_MEMTYPE_REG_WHOLE: n
-    UCX_CUDA_IPC_ENABLE_MNNVL: n
-    UCX_MAX_RMA_RAILS: '1'
-    UCX_MAX_RNDV_RAILS: '1'
-    UCX_RNDV_SCHEME: put_zcopy
-  decode_environment:
-    PYTHONUNBUFFERED: '1'
-    VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
-    VLLM_USE_FLASHINFER_MOE_FP4: '1'
-    VLLM_USE_NCCL_SYMM_MEM: '0'
-    NCCL_CUMEM_ENABLE: '1'
-    NCCL_WATCHDOG_TIMEOUT: '1800'
-    TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC: '1800'
-    TORCH_CUDA_ARCH_LIST: '10.0'
-    PYTHONNOUSERSITE: '1'
-    UCX_MEMTYPE_CACHE: n
-    UCX_MEMTYPE_REG_WHOLE: n
-    UCX_CUDA_IPC_ENABLE_MNNVL: n
-    UCX_MAX_RMA_RAILS: '1'
-    UCX_MAX_RNDV_RAILS: '1'
-    UCX_RNDV_SCHEME: put_zcopy
-  vllm_config:
-    prefill:
+roles:
+  prefill:
+    nodes: 1
+    workers: 1
+    gpus: 8
+    env:
+      PYTHONUNBUFFERED: '1'
+      VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
+      VLLM_USE_FLASHINFER_MOE_FP4: '1'
+      VLLM_USE_NCCL_SYMM_MEM: '0'
+      NCCL_CUMEM_ENABLE: '1'
+      VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '900'
+      NCCL_WATCHDOG_TIMEOUT: '1800'
+      TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC: '1800'
+      TORCH_CUDA_ARCH_LIST: '10.0'
+      PYTHONNOUSERSITE: '1'
+      UCX_MEMTYPE_CACHE: n
+      UCX_MEMTYPE_REG_WHOLE: n
+      UCX_CUDA_IPC_ENABLE_MNNVL: n
+      UCX_MAX_RMA_RAILS: '1'
+      UCX_MAX_RNDV_RAILS: '1'
+      UCX_RNDV_SCHEME: put_zcopy
+    args:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both", "engine_id": "kimi-k26-prefill-dep8"}'
       served-model-name: nvidia/Kimi-K2.6-NVFP4
       kv-cache-dtype: fp8
@@ -80,7 +62,27 @@ backend:
       block-size: 128
       attention-config: '{"mla_prefill_backend": "TRTLLM_RAGGED"}'
       gpu-memory-utilization: 0.9
-    decode:
+  decode:
+    nodes: 1
+    workers: 1
+    gpus: 8
+    env:
+      PYTHONUNBUFFERED: '1'
+      VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
+      VLLM_USE_FLASHINFER_MOE_FP4: '1'
+      VLLM_USE_NCCL_SYMM_MEM: '0'
+      NCCL_CUMEM_ENABLE: '1'
+      NCCL_WATCHDOG_TIMEOUT: '1800'
+      TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC: '1800'
+      TORCH_CUDA_ARCH_LIST: '10.0'
+      PYTHONNOUSERSITE: '1'
+      UCX_MEMTYPE_CACHE: n
+      UCX_MEMTYPE_REG_WHOLE: n
+      UCX_CUDA_IPC_ENABLE_MNNVL: n
+      UCX_MAX_RMA_RAILS: '1'
+      UCX_MAX_RNDV_RAILS: '1'
+      UCX_RNDV_SCHEME: put_zcopy
+    args:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: nvidia/Kimi-K2.6-NVFP4
       kv-cache-dtype: fp8
@@ -113,13 +115,11 @@ benchmark:
 
 telemetry:
   enabled: true
-  provider: dcgm-power
-  default_frequency: 1.0
+  collect_interval_ms: 1000
   storage_subdir: power
   required: true
   startup_timeout_seconds: 120
   request_timeout_seconds: 2
-  collector_join_timeout_seconds: 10
   dcgm_exporter:
     container_image: dcgm-exporter
     port: 9401

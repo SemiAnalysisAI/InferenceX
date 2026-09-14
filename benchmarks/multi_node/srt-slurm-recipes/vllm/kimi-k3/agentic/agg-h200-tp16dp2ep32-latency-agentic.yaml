@@ -1,3 +1,4 @@
+schema: 2
 name: "kimik3-vllm-agg-h200-tp16dp2ep32-latency-agentic"
 
 model:
@@ -27,33 +28,34 @@ health_check:
 resources:
   gpu_type: "h200"
   gpus_per_node: 8
-  agg_nodes: 4
-  agg_workers: 1
-  gpus_per_agg: 32
-
 frontend:
   type: vllm
   enable_multiple_frontends: false
 
-backend:
+engine:
   type: vllm
-  connector: null
-  aggregated_environment:
-    CUDA_LAUNCH_BLOCKING: "1"
-    GLOO_SOCKET_IFNAME: "eth0"
-    HF_HUB_CACHE: "/hf_hub_cache"
-    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
-    NCCL_SOCKET_IFNAME: "eth0"
-    NCCL_CUMEM_ENABLE: "1"
-    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
-    PYTHONNOUSERSITE: "1"
-    TRANSFORMERS_CACHE: "/hf_hub_cache"
-    VLLM_ENGINE_READY_TIMEOUT_S: "7200"
-    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
-    VLLM_ROUTED_DOWN_PROJ_STREAM_TOKEN_THRESHOLD: "0"
-    VLLM_USE_V2_MODEL_RUNNER: "1"
-  vllm_config:
-    aggregated:
+  connector:
+roles:
+  agg:
+    nodes: 4
+    workers: 1
+    gpus: 32
+
+    env:
+      CUDA_LAUNCH_BLOCKING: "1"
+      GLOO_SOCKET_IFNAME: "eth0"
+      HF_HUB_CACHE: "/hf_hub_cache"
+      HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+      NCCL_SOCKET_IFNAME: "eth0"
+      NCCL_CUMEM_ENABLE: "1"
+      PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+      PYTHONNOUSERSITE: "1"
+      TRANSFORMERS_CACHE: "/hf_hub_cache"
+      VLLM_ENGINE_READY_TIMEOUT_S: "7200"
+      VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+      VLLM_ROUTED_DOWN_PROJ_STREAM_TOKEN_THRESHOLD: "0"
+      VLLM_USE_V2_MODEL_RUNNER: "1"
+    args:
       served-model-name: "moonshotai/Kimi-K3"
       tensor-parallel-size: 16
       data-parallel-size: 2
@@ -82,8 +84,7 @@ srun_options:
 
 telemetry:
   enabled: true
-  provider: dcgm-power
-  default_frequency: 1.0
+  collect_interval_ms: 1000
   storage_subdir: power
   required: true
   startup_timeout_seconds: 120

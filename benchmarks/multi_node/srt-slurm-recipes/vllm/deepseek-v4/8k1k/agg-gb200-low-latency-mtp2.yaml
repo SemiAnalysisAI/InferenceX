@@ -1,3 +1,4 @@
+schema: 2
 name: "svf-vllm-agg-gb200-low-latency-mtp2"
 
 model:
@@ -7,7 +8,8 @@ model:
 
 dynamo:
   install: true
-  wheel: "1.2.0.dev20260426"
+  source:
+    wheel: "1.2.0.dev20260426"
 
 setup_script: vllm-container-deps.sh
 
@@ -21,34 +23,35 @@ health_check:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  agg_nodes: 2
-  agg_workers: 1
-  gpus_per_agg: 8
-
 frontend:
   type: dynamo
   enable_multiple_frontends: false
 
-backend:
+engine:
   type: vllm
-  connector: null
-  aggregated_environment:
-    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
-    TILELANG_CLEANUP_TEMP_FILES: "1"
-    VLLM_USE_NCCL_SYMM_MEM: "1"
-    TORCH_SYMMMEM: "NVSHMEM"
-    NCCL_CUMEM_ENABLE: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_NVLS_ENABLE: "1"
-    VLLM_SERVER_DEV_MODE: "1"
-    VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
-    UCX_MEMTYPE_CACHE: "n"
-    UCX_MEMTYPE_REG_WHOLE: "n"
-    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
-    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
-    NCCL_P2P_LEVEL: NVL
-  vllm_config:
-    aggregated:
+  connector:
+roles:
+  agg:
+    nodes: 2
+    workers: 1
+    gpus: 8
+
+    env:
+      VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+      TILELANG_CLEANUP_TEMP_FILES: "1"
+      VLLM_USE_NCCL_SYMM_MEM: "1"
+      TORCH_SYMMMEM: "NVSHMEM"
+      NCCL_CUMEM_ENABLE: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_NVLS_ENABLE: "1"
+      VLLM_SERVER_DEV_MODE: "1"
+      VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
+      UCX_MEMTYPE_CACHE: "n"
+      UCX_MEMTYPE_REG_WHOLE: "n"
+      UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+      UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+      NCCL_P2P_LEVEL: NVL
+    args:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 8

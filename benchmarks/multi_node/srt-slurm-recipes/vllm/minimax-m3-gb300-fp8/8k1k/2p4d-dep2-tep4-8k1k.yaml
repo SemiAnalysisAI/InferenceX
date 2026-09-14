@@ -1,3 +1,4 @@
+schema: 2
 name: "minimax-m3-vllm-disagg-gb300-2p4d-dep2-tep4-fp8-8k1k"
 
 # 2P DEP2 prefill (TP1 DP2 EP, 2 GPU/worker) + 4D TEP4 decode (TP4 EP, 4 GPU/worker = 1 node each).
@@ -12,7 +13,8 @@ model:
 
 dynamo:
   install: true
-  version: 1.3.0.dev20260710
+  source:
+    pypi: 1.3.0.dev20260710
 
 health_check:
   max_attempts: 720
@@ -28,41 +30,29 @@ srun_options:
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
-  prefill_nodes: 1
-  decode_nodes: 4
-  prefill_workers: 2
-  decode_workers: 4
-  gpus_per_prefill: 2
-  gpus_per_decode: 4
-
 frontend:
   type: dynamo
   enable_multiple_frontends: false
 
-backend:
+engine:
   type: vllm
-  connector: null
+  connector:
 
-  prefill_environment:
-    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
-    VLLM_FLOAT32_MATMUL_PRECISION: "high"
-    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
-    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
-    NCCL_CUMEM_ENABLE: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_NVLS_ENABLE: "1"
+roles:
+  prefill:
+    nodes: 1
+    workers: 2
+    gpus: 2
+    env:
+      VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+      VLLM_FLOAT32_MATMUL_PRECISION: "high"
+      VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+      UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+      NCCL_CUMEM_ENABLE: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_NVLS_ENABLE: "1"
 
-  decode_environment:
-    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
-    VLLM_FLOAT32_MATMUL_PRECISION: "high"
-    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
-    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
-    NCCL_CUMEM_ENABLE: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_NVLS_ENABLE: "1"
-
-  vllm_config:
-    prefill:
+    args:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
       tensor-parallel-size: 1
@@ -80,7 +70,21 @@ backend:
       max-cudagraph-capture-size: 2048
       max-num-batched-tokens: 16384
 
-    decode:
+  decode:
+    nodes: 4
+    workers: 4
+    gpus: 4
+
+    env:
+      VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+      VLLM_FLOAT32_MATMUL_PRECISION: "high"
+      VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+      UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+      NCCL_CUMEM_ENABLE: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_NVLS_ENABLE: "1"
+
+    args:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
       tensor-parallel-size: 4

@@ -3,6 +3,7 @@
 # Host KV cache is set to 128 GiB per rank for the four-rank layout.
 # Forced acceptance is NOT set here: runners/inject_synthetic_acceptance.py injects TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS
 # (= AL - 1 = 1.78 for the committed golden AL 2.78) for throughput runs and leaves eval-only runs on real acceptance.
+schema: 2
 name: dynamo-agg-gb200-tp4-c40-b1-eagle3
 model:
   path: minimax-m3-nvfp4
@@ -10,7 +11,8 @@ model:
   precision: fp4
 dynamo:
   install: true
-  wheel: 1.4.0.dev20260807
+  source:
+    wheel: 1.4.0.dev20260807
   request_plane: tcp
 health_check:
   max_attempts: 270
@@ -18,72 +20,74 @@ health_check:
 resources:
   gpu_type: gb200
   gpus_per_node: 4
-  agg_nodes: 1
-  agg_workers: 1
-  gpus_per_agg: 4
-backend:
+engine:
   type: trtllm
   numa_memory_bind: true
   served_model_name: nvidia/MiniMax-M3-NVFP4
-  aggregated_environment:
-    HF_HUB_OFFLINE: '1'
-    TRANSFORMERS_OFFLINE: '1'
-    HF_HUB_CACHE: /hf_hub_cache
-    TQDM_DISABLE: '1'
-    HF_HUB_DISABLE_PROGRESS_BARS: '1'
-    TLLM_LOG_LEVEL: INFO
-    TLLM_PROFILE_LOG_RANKS: all
-    TRTLLM_SERVER_DISABLE_GC: '1'
-    TRTLLM_WORKER_DISABLE_GC: '1'
-    TRTLLM_ENABLE_PDL: '1'
-    NCCL_GRAPH_MIXING_SUPPORT: '0'
-    MIMALLOC_PURGE_DELAY: '0'
-    PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
-    PYTHONNOUSERSITE: '1'
-    TRTLLM_SERVE_ENABLE_MSGSPEC: '1'
-    TRTLLM_TORCH_COMPILE_CONTEXT_ONLY: '1'
-    DYN_PUBLISH_KV_EVENTS: '0'
-  trtllm_config:
-    aggregated:
+  publish_events_and_metrics: false
+roles:
+  agg:
+    nodes: 1
+    workers: 1
+    gpus: 4
+    env:
+      HF_HUB_OFFLINE: '1'
+      TRANSFORMERS_OFFLINE: '1'
+      HF_HUB_CACHE: /hf_hub_cache
+      TQDM_DISABLE: '1'
+      HF_HUB_DISABLE_PROGRESS_BARS: '1'
+      TLLM_LOG_LEVEL: INFO
+      TLLM_PROFILE_LOG_RANKS: all
+      TRTLLM_SERVER_DISABLE_GC: '1'
+      TRTLLM_WORKER_DISABLE_GC: '1'
+      TRTLLM_ENABLE_PDL: '1'
+      NCCL_GRAPH_MIXING_SUPPORT: '0'
+      MIMALLOC_PURGE_DELAY: '0'
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      PYTHONNOUSERSITE: '1'
+      TRTLLM_SERVE_ENABLE_MSGSPEC: '1'
+      TRTLLM_TORCH_COMPILE_CONTEXT_ONLY: '1'
+      DYN_PUBLISH_KV_EVENTS: '0'
+    args:
       max_seq_len: 1048576
       max_num_tokens: 16384
       max_batch_size: 40
       cuda_graph_config:
         enable_padding: true
         batch_sizes:
-        - 1
-        - 2
-        - 3
-        - 4
-        - 5
-        - 6
-        - 7
-        - 8
-        - 9
-        - 10
-        - 14
-        - 16
-        - 18
-        - 20
-        - 22
-        - 24
-        - 26
-        - 28
-        - 30
-        - 32
-        - 34
-        - 36
-        - 38
-        - 40
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 14
+          - 16
+          - 18
+          - 20
+          - 22
+          - 24
+          - 26
+          - 28
+          - 30
+          - 32
+          - 34
+          - 36
+          - 38
+          - 40
       torch_compile_config:
         enable_fullgraph: true
         enable_inductor: false
         enable_piecewise_cuda_graph: true
         capture_num_tokens:
-        - 1
-        - 512
-        - 1024
-        - 2048
+          - 1
+          - 512
+          - 1024
+          - 2048
         enable_userbuffers: true
         max_num_streams: 3
       moe_config:
@@ -118,7 +122,6 @@ backend:
       num_postprocess_workers: 8
       enable_attention_dp: false
       tensor_parallel_size: 4
-  publish_events_and_metrics: false
 frontend:
   type: dynamo
   enable_multiple_frontends: false

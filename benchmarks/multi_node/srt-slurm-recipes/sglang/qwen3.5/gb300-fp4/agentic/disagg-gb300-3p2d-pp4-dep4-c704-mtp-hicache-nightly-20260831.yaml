@@ -1,3 +1,4 @@
+schema: 2
 name: disagg-gb300-3p2d-pp4-dep4-c704-mtp-hicache-nightly-20260831
 model:
   path: qwen3.5-fp4
@@ -5,7 +6,8 @@ model:
   precision: fp4
 dynamo:
   install: true
-  hash: 61c37bc33c3e88da3facaa39fa2b5caf616740ba
+  source:
+    rev: 61c37bc33c3e88da3facaa39fa2b5caf616740ba
 slurm:
   time_limit: '8:00:00'
 health_check:
@@ -14,15 +16,17 @@ health_check:
 resources:
   gpu_type: gb300
   gpus_per_node: 4
-  prefill_nodes: 3
-  decode_nodes: 2
-  prefill_workers: 3
-  decode_workers: 2
-  gpus_per_prefill: 4
-  gpus_per_decode: 4
-infra:
-  etcd_nats_dedicated_node: true
-  nats_max_payload_mb: 8
+services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: dedicated
+  - name: nats
+    type: nats
+    placement:
+      node: dedicated
+    options:
+      max_payload_mb: 8
 frontend:
   type: dynamo
   nginx_session_affinity: true
@@ -39,80 +43,46 @@ frontend:
     router-replica-sync: true
     router-queue-threshold: None
     router-temperature: '1.0'
-backend:
-  type: sglang
-  prefill_environment:
+engine: sglang
+roles:
+  prefill:
+    nodes: 3
+    workers: 3
+    gpus: 4
+    env:
     # The 0831 image contains the PP+spec runtime merged by SGLang #35758,
     # but still carries the pre-merge PP+spec assert in validation_hook.py.
-    PYTHONOPTIMIZE: '1'
-    PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
-    SGLANG_DISAGG_STAGING_BUFFER: '1'
-    NO_COLOR: '1'
-    PYTHONUNBUFFERED: '1'
-    PIP_BREAK_SYSTEM_PACKAGES: '1'
-    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
-    NCCL_MNNVL_ENABLE: '1'
-    NCCL_CUMEM_ENABLE: '1'
-    NCCL_NVLS_ENABLE: '0'
-    MC_FORCE_MNNVL: '1'
-    NVSHMEM_REMOTE_TRANSPORT: none
-    SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
-    SGLANG_FLASHINFER_FP4_GEMM_BACKEND: cutlass
-    FLASHINFER_DISABLE_VERSION_CHECK: '1'
-    SGLANG_DG_CACHE_DIR: /tmp/agentx-upstream-main/prefill-deepgemm-cache
-    FLASHINFER_WORKSPACE_BASE: /tmp/agentx-upstream-main/prefill-flashinfer-cache
-    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
-    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
-    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
-    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
-    SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
-    SGLANG_FLASHINFER_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '8192'
-    SGLANG_DISAGG_STAGING_POOL_SIZE_MB: '8192'
-    SGLANG_PP_LAYER_PARTITION: 16,16,16,12
-    SGLANG_FLASHINFER_AUTOTUNE_CACHE: '1'
-    SGLANG_FLASHINFER_AUTOTUNE_EXTEND: '1'
-    SGLANG_CACHE_DIR: /tmp/agentx-upstream-main/prefill-sglang-cache
-  decode_environment:
-    SGLANG_USE_SYMM_MEM_DP_SYNC: 'true'
-    SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
-    PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
-    SGLANG_DISAGG_STAGING_BUFFER: '1'
-    NO_COLOR: '1'
-    PYTHONUNBUFFERED: '1'
-    PIP_BREAK_SYSTEM_PACKAGES: '1'
-    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
-    NCCL_MNNVL_ENABLE: '1'
-    NCCL_CUMEM_ENABLE: '1'
-    NCCL_NVLS_ENABLE: '0'
-    MC_FORCE_MNNVL: '1'
-    NVSHMEM_REMOTE_TRANSPORT: none
-    MC_TE_METRIC: 'true'
-    SGLANG_ENABLE_SPEC_V2: '1'
-    SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
-    SGLANG_ENABLE_JIT_DEEPGEMM: 'true'
-    SGLANG_FLASHINFER_FP4_GEMM_BACKEND: cutlass
-    SGLANG_MOE_NVFP4_DISPATCH: '1'
-    SGLANG_CUTEDSL_MOE_NVFP4_DISPATCH: '1'
-    SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '1'
-    SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
-    FLASHINFER_DISABLE_VERSION_CHECK: '1'
-    SGLANG_DG_CACHE_DIR: /tmp/agentx-upstream-main/decode-deepgemm-cache
-    FLASHINFER_WORKSPACE_BASE: /tmp/agentx-upstream-main/decode-flashinfer-cache
-    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
-    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
-    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
-    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
-    SGLANG_HEALTH_CHECK_TIMEOUT: '1800'
-    SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: '0'
-    SGLANG_DISAGG_STAGING_POOL_SIZE_MB: '8192'
-    SGLANG_CACHE_DIR: /tmp/agentx-upstream-main/decode-sglang-cache
-    SGLANG_FLASHINFER_AUTOTUNE_CACHE: '1'
-  sglang_config:
-    prefill:
+      PYTHONOPTIMIZE: '1'
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      SGLANG_DISAGG_STAGING_BUFFER: '1'
+      NO_COLOR: '1'
+      PYTHONUNBUFFERED: '1'
+      PIP_BREAK_SYSTEM_PACKAGES: '1'
+      TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+      NCCL_MNNVL_ENABLE: '1'
+      NCCL_CUMEM_ENABLE: '1'
+      NCCL_NVLS_ENABLE: '0'
+      MC_FORCE_MNNVL: '1'
+      NVSHMEM_REMOTE_TRANSPORT: none
+      SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+      SGLANG_FLASHINFER_FP4_GEMM_BACKEND: cutlass
+      FLASHINFER_DISABLE_VERSION_CHECK: '1'
+      SGLANG_DG_CACHE_DIR: /tmp/agentx-upstream-main/prefill-deepgemm-cache
+      FLASHINFER_WORKSPACE_BASE: /tmp/agentx-upstream-main/prefill-flashinfer-cache
+      SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+      SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+      SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+      SGLANG_FLASHINFER_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '8192'
+      SGLANG_DISAGG_STAGING_POOL_SIZE_MB: '8192'
+      SGLANG_PP_LAYER_PARTITION: 16,16,16,12
+      SGLANG_FLASHINFER_AUTOTUNE_CACHE: '1'
+      SGLANG_FLASHINFER_AUTOTUNE_EXTEND: '1'
+      SGLANG_CACHE_DIR: /tmp/agentx-upstream-main/prefill-sglang-cache
+    args:
       served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
       enable-metrics: true
       enable-cache-report: true
@@ -167,7 +137,48 @@ backend:
       speculative-moe-runner-backend: flashinfer_trtllm
       pp-async-batch-depth: 1
       disable-cuda-graph: true
-    decode:
+  decode:
+    nodes: 2
+    workers: 2
+    gpus: 4
+    env:
+      SGLANG_USE_SYMM_MEM_DP_SYNC: 'true'
+      SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      SGLANG_DISAGG_STAGING_BUFFER: '1'
+      NO_COLOR: '1'
+      PYTHONUNBUFFERED: '1'
+      PIP_BREAK_SYSTEM_PACKAGES: '1'
+      TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+      NCCL_MNNVL_ENABLE: '1'
+      NCCL_CUMEM_ENABLE: '1'
+      NCCL_NVLS_ENABLE: '0'
+      MC_FORCE_MNNVL: '1'
+      NVSHMEM_REMOTE_TRANSPORT: none
+      MC_TE_METRIC: 'true'
+      SGLANG_ENABLE_SPEC_V2: '1'
+      SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+      SGLANG_ENABLE_JIT_DEEPGEMM: 'true'
+      SGLANG_FLASHINFER_FP4_GEMM_BACKEND: cutlass
+      SGLANG_MOE_NVFP4_DISPATCH: '1'
+      SGLANG_CUTEDSL_MOE_NVFP4_DISPATCH: '1'
+      SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '1'
+      SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
+      FLASHINFER_DISABLE_VERSION_CHECK: '1'
+      SGLANG_DG_CACHE_DIR: /tmp/agentx-upstream-main/decode-deepgemm-cache
+      FLASHINFER_WORKSPACE_BASE: /tmp/agentx-upstream-main/decode-flashinfer-cache
+      SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+      SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+      SGLANG_HEALTH_CHECK_TIMEOUT: '1800'
+      SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: '0'
+      SGLANG_DISAGG_STAGING_POOL_SIZE_MB: '8192'
+      SGLANG_CACHE_DIR: /tmp/agentx-upstream-main/decode-sglang-cache
+      SGLANG_FLASHINFER_AUTOTUNE_CACHE: '1'
+    args:
       served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
       enable-metrics: true
       enable-cache-report: true

@@ -1,3 +1,4 @@
+schema: 2
 name: "minimax-m3-vllm-disagg-gb300-3p1d-dep2-dep8-mxfp8-8k1k-eagle3-c256"
 
 model:
@@ -17,7 +18,8 @@ identity:
 
 dynamo:
   install: true
-  version: "1.4.0.dev20260730"
+  source:
+    pypi: "1.4.0.dev20260730"
   request_plane: "nats"
 
 health_check:
@@ -34,36 +36,31 @@ srun_options:
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
-  prefill_nodes: 2
-  decode_nodes: 2
-  prefill_workers: 3
-  decode_workers: 1
-  gpus_per_prefill: 2
-  gpus_per_decode: 8
-
 frontend:
   type: "dynamo"
   enable_multiple_frontends: false
 
-backend:
+engine:
   type: "vllm"
-  connector: null
+  connector:
 
-  prefill_environment: &worker-environment
-    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
-    VLLM_FLOAT32_MATMUL_PRECISION: "high"
-    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
-    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
-    UCX_MODULE_DIR: "/usr/local/lib/python3.12/dist-packages/nixl_cu13.libs/ucx"
-    UCX_RNDV_PIPELINE_ERROR_HANDLING: "y"
-    NCCL_CUMEM_ENABLE: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_NVLS_ENABLE: "1"
+roles:
+  prefill:
+    nodes: 2
+    workers: 3
+    gpus: 2
+    env: &worker-environment
+      VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+      VLLM_FLOAT32_MATMUL_PRECISION: "high"
+      VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+      UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+      UCX_MODULE_DIR: "/usr/local/lib/python3.12/dist-packages/nixl_cu13.libs/ucx"
+      UCX_RNDV_PIPELINE_ERROR_HANDLING: "y"
+      NCCL_CUMEM_ENABLE: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_NVLS_ENABLE: "1"
 
-  decode_environment: *worker-environment
-
-  vllm_config:
-    prefill:
+    args:
       no-enable-flashinfer-autotune: true
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
@@ -83,10 +80,17 @@ backend:
       max-cudagraph-capture-size: 2048
       max-num-batched-tokens: 16384
 
-    decode:
+  decode:
+    nodes: 2
+    workers: 1
+    gpus: 8
+
+    env: *worker-environment
+    args:
       no-enable-flashinfer-autotune: true
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
-      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8", "minimax_m3_msa_decode_backend": "cutlass"}'
+      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8", "minimax_m3_msa_decode_backend":
+        "cutlass"}'
       speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
       tensor-parallel-size: 1
       data-parallel-size: 8

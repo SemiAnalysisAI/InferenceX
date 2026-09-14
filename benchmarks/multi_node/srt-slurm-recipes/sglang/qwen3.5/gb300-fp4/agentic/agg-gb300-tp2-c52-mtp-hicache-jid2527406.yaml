@@ -1,3 +1,4 @@
+schema: 2
 name: agg-gb300-tp2-c52-mtp-hicache-jid2527406
 model:
   path: qwen3.5-fp4
@@ -11,25 +12,24 @@ health_check:
 resources:
   gpu_type: gb300
   gpus_per_node: 2
-  agg_nodes: 1
-  agg_workers: 1
-  gpus_per_agg: 2
-infra:
-  nats_max_payload_mb: 8
 frontend:
   type: sglang
-backend:
-  aggregated_environment:
-    NCCL_NVLS_ENABLE: '1'
-    PYTHONNOUSERSITE: '1'
-    SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
-    SGLANG_SIMULATE_ACC_LEN: '3.39'
-    SGLANG_SIMULATE_ACC_METHOD: match-expected
-    SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
-    SGL_ENABLE_JIT_DEEPGEMM: 'false'
-    TORCH_CUDA_ARCH_LIST: '10.0'
-  sglang_config:
-    aggregated:
+engine: sglang
+roles:
+  agg:
+    nodes: 1
+    workers: 1
+    gpus: 2
+    env:
+      NCCL_NVLS_ENABLE: '1'
+      PYTHONNOUSERSITE: '1'
+      SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+      SGLANG_SIMULATE_ACC_LEN: '3.39'
+      SGLANG_SIMULATE_ACC_METHOD: match-expected
+      SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
+      SGL_ENABLE_JIT_DEEPGEMM: 'false'
+      TORCH_CUDA_ARCH_LIST: '10.0'
+    args:
       served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
       enable-cache-report: true
       enable-metrics: true
@@ -67,7 +67,6 @@ backend:
       hicache-mem-layout: page_first_direct
       hicache-write-policy: write_back
       mamba-max-states-per-path: 1
-  type: sglang
 sbatch_directives:
   mem: '0'
   cpus-per-task: '144'

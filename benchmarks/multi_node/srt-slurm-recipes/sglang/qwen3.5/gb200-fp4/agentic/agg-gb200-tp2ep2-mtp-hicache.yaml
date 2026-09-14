@@ -1,17 +1,23 @@
+schema: 2
 name: qwen35-gb200-dynsg-agentic-mtp-agg-tp2ep2-hicache-k5
 
-model: { path: qwen3.5-fp4, container: lmsysorg/sglang:nightly-dev-20260818-c0b6474b, precision: fp4 }
+model: {path: qwen3.5-fp4, container: lmsysorg/sglang:nightly-dev-20260818-c0b6474b, precision: fp4}
 identity:
-  model: { repo: nvidia/Qwen3.5-397B-A17B-NVFP4-V2 }
-  container: { image: lmsysorg/sglang:nightly-dev-20260818-c0b6474b }
-slurm: { time_limit: "8:00:00" }
-health_check: { max_attempts: 2160, interval_seconds: 10 }
-resources: { gpu_type: gb200, gpus_per_node: 4, agg_nodes: 1, agg_workers: 1, gpus_per_agg: 2 }
-infra: { nats_max_payload_mb: 8 }
+  model: {repo: nvidia/Qwen3.5-397B-A17B-NVFP4-V2}
+  container: {image: lmsysorg/sglang:nightly-dev-20260818-c0b6474b}
+slurm: {time_limit: "8:00:00"}
+health_check: {max_attempts: 2160, interval_seconds: 10}
+resources: {gpu_type: gb200, gpus_per_node: 4}
+services:
+  - name: nats
+    type: nats
+    options:
+      max_payload_mb: 8
 dynamo:
   install: true
+  source:
+    wheel: 1.4.2
   request_plane: tcp
-  wheel: 1.4.2
 environment:
   PIP_BREAK_SYSTEM_PACKAGES: "1"
 frontend:
@@ -22,19 +28,22 @@ frontend:
     router-mode: round-robin
     router-session-affinity-ttl-secs: 3600
 
-backend:
-  type: sglang
-  aggregated_environment:
-    PYTHONNOUSERSITE: "1"
-    NCCL_CUMEM_ENABLE: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_NVLS_ENABLE: "1"
-    SGLANG_ENABLE_FLASHINFER_GEMM: "true"
-    SGLANG_ENABLE_SPEC_V2: "1"
-    SGL_ENABLE_JIT_DEEPGEMM: "false"
-    TORCH_CUDA_ARCH_LIST: "10.0"
-  sglang_config:
-    aggregated:
+engine: sglang
+roles:
+  agg:
+    nodes: 1
+    workers: 1
+    gpus: 2
+    env:
+      PYTHONNOUSERSITE: "1"
+      NCCL_CUMEM_ENABLE: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_NVLS_ENABLE: "1"
+      SGLANG_ENABLE_FLASHINFER_GEMM: "true"
+      SGLANG_ENABLE_SPEC_V2: "1"
+      SGL_ENABLE_JIT_DEEPGEMM: "false"
+      TORCH_CUDA_ARCH_LIST: "10.0"
+    args:
       served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
       model-path: /model/
       trust-remote-code: true
@@ -88,11 +97,10 @@ backend:
       enable-metrics: true
       enable-cache-report: true
 
-sbatch_directives: { mem: "0", cpus-per-task: "144" }
-srun_options: { mem: "0", container-remap-root: "" }
+sbatch_directives: {mem: "0", cpus-per-task: "144"}
+srun_options: {mem: "0", container-remap-root: ""}
 benchmark:
   type: custom
-  use_chat_template: true
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace

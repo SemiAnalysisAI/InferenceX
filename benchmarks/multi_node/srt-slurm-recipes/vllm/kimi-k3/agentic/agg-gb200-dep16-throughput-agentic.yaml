@@ -1,3 +1,4 @@
+schema: 2
 name: "kimi-k3-vllm-agg-gb200-dep16-throughput-agentic"
 
 # Day-0 GB200 translation of the official throughput-oriented multi_node_dep
@@ -18,9 +19,10 @@ identity:
     dynamo: "1.3.0"
 
 dynamo:
-  hash: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
   install: true
 
+  source:
+    rev: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
 setup_script: kimik3-dspark-config-compat.sh
 
 environment:
@@ -36,14 +38,17 @@ health_check:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  agg_nodes: 4
-  agg_workers: 1
-  gpus_per_agg: 16
-
-infra:
-  etcd_nats_dedicated_node: false
-  nats_max_payload_mb: 32
-
+services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
 frontend:
   type: dynamo
   enable_multiple_frontends: false
@@ -61,33 +66,38 @@ frontend:
     router-min-initial-workers: 1
     kv-cache-block-size: 64
 
-backend:
+engine:
   type: vllm
-  connector: null
-  aggregated_environment:
-    HF_HUB_CACHE: "/hf_hub_cache"
-    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
-    TRANSFORMERS_CACHE: "/hf_hub_cache"
-    VLLM_ENGINE_READY_TIMEOUT_S: "7200"
-    VLLM_RPC_TIMEOUT: "600000"
-    VLLM_LOG_STATS_INTERVAL: "1"
-    VLLM_USE_V2_MODEL_RUNNER: "1"
-    VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
-    VLLM_ALLREDUCE_USE_FLASHINFER: "1"
-    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
-    NCCL_CUMEM_ENABLE: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_NVLS_ENABLE: "1"
-    UCX_MEMTYPE_CACHE: "n"
-    UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
-    UCX_TLS: "rc,cuda_copy"
-    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
-    NCCL_P2P_LEVEL: "NVL"
-    NVIDIA_GDRCOPY: "1"
-    PYTORCH_ALLOC_CONF: "expandable_segments:True"
-    DG_JIT_CACHE_DIR: "/tmp/dg-cache-kimi-k3-gb200-dep16-{job_id}"
-  vllm_config:
-    aggregated:
+  connector:
+roles:
+  agg:
+    nodes: 4
+    workers: 1
+    gpus: 16
+
+    env:
+      HF_HUB_CACHE: "/hf_hub_cache"
+      HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+      TRANSFORMERS_CACHE: "/hf_hub_cache"
+      VLLM_ENGINE_READY_TIMEOUT_S: "7200"
+      VLLM_RPC_TIMEOUT: "600000"
+      VLLM_LOG_STATS_INTERVAL: "1"
+      VLLM_USE_V2_MODEL_RUNNER: "1"
+      VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
+      VLLM_ALLREDUCE_USE_FLASHINFER: "1"
+      VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+      NCCL_CUMEM_ENABLE: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_NVLS_ENABLE: "1"
+      UCX_MEMTYPE_CACHE: "n"
+      UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
+      UCX_TLS: "rc,cuda_copy"
+      NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+      NCCL_P2P_LEVEL: "NVL"
+      NVIDIA_GDRCOPY: "1"
+      PYTORCH_ALLOC_CONF: "expandable_segments:True"
+      DG_JIT_CACHE_DIR: "/tmp/dg-cache-kimi-k3-gb200-dep16-{job_id}"
+    args:
       served-model-name: "moonshotai/Kimi-K3"
       tensor-parallel-size: 4
       pipeline-parallel-size: 1

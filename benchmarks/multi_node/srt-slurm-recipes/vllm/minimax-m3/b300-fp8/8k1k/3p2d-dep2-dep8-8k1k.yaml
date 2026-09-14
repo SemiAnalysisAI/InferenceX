@@ -1,3 +1,4 @@
+schema: 2
 name: "minimax-m3-vllm-disagg-b300-3p2d-fp8-dep2-dep8-8k1k"
 
 model:
@@ -8,35 +9,29 @@ model:
 resources:
   gpu_type: "b300"
   gpus_per_node: 8
-  prefill_nodes: 1
-  decode_nodes: 2
-  prefill_workers: 3
-  decode_workers: 2
-  gpus_per_prefill: 2
-  gpus_per_decode: 8
-
 dynamo:
   install: true
-  version: 1.3.0.dev20260710
+  source:
+    pypi: 1.3.0.dev20260710
 
 frontend:
   type: dynamo
   enable_multiple_frontends: false
 
-backend:
+engine:
   type: vllm
-  connector: null
+  connector:
 
-  prefill_environment:
-    VLLM_FLOAT32_MATMUL_PRECISION: high
-    UCX_TLS: "cuda_copy,rc"
+roles:
+  prefill:
+    nodes: 1
+    workers: 3
+    gpus: 2
+    env:
+      VLLM_FLOAT32_MATMUL_PRECISION: high
+      UCX_TLS: "cuda_copy,rc"
 
-  decode_environment:
-    VLLM_FLOAT32_MATMUL_PRECISION: high
-    UCX_TLS: "cuda_copy,rc"
-
-  vllm_config:
-    prefill:
+    args:
       tensor-parallel-size: 1
       data-parallel-size: 2
       data-parallel-rpc-port: 13345
@@ -54,7 +49,16 @@ backend:
       max-cudagraph-capture-size: 2048
       max-num-batched-tokens: 16384
 
-    decode:
+  decode:
+    nodes: 2
+    workers: 2
+    gpus: 8
+
+    env:
+      VLLM_FLOAT32_MATMUL_PRECISION: high
+      UCX_TLS: "cuda_copy,rc"
+
+    args:
       tensor-parallel-size: 1
       data-parallel-size: 8
       data-parallel-rpc-port: 13345

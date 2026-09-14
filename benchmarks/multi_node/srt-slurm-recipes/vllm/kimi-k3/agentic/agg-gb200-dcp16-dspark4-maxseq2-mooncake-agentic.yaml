@@ -1,4 +1,5 @@
 # GB200 TP16/DCP16 aggregate profile with DSpark K=4 and max-num-seqs 2.
+schema: 2
 name: "kimi-k3-vllm-agg-gb200-dcp16-dspark4-maxseq2-mooncake-agentic"
 
 model:
@@ -15,9 +16,10 @@ identity:
     dynamo: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
 
 dynamo:
-  hash: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
   install: true
 
+  source:
+    rev: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
 slurm:
   time_limit: "04:00:00"
 
@@ -28,14 +30,31 @@ health_check:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  agg_nodes: 4
-  agg_workers: 1
-  gpus_per_agg: 16
-
-infra:
-  etcd_nats_dedicated_node: false
-  nats_max_payload_mb: 32
-
+services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
+  - name: mooncake-master
+    type: mooncake-master
+    args:
+      - "--eviction_high_watermark_ratio=0.95"
+      - "--eviction_ratio=0.10"
+    options:
+      store_config:
+        metadata_server: "P2PHANDSHAKE"
+        global_segment_size: "96GB"
+        local_buffer_size: "4GB"
+        protocol: "rdma"
+        device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+        mode: "embedded"
+        enable_offload: false
 frontend:
   type: dynamo
   enable_multiple_frontends: false
@@ -51,46 +70,39 @@ frontend:
     DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
     DYN_TOKENIZER_CACHE_BYTES: "8589934592"
 
-backend:
+engine:
   type: vllm
-  connector: null
-  mooncake_kv_store:
-    master_extra_args:
-      - "--eviction_high_watermark_ratio=0.95"
-      - "--eviction_ratio=0.10"
-    store_config:
-      metadata_server: "P2PHANDSHAKE"
-      global_segment_size: "96GB"
-      local_buffer_size: "4GB"
-      protocol: "rdma"
-      device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
-      mode: "embedded"
-      enable_offload: false
-  aggregated_environment:
-    VLLM_ALLREDUCE_USE_FLASHINFER: "1"
-    VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
-    VLLM_USE_V2_MODEL_RUNNER: "1"
+  connector:
+roles:
+  agg:
+    nodes: 4
+    workers: 1
+    gpus: 16
+
+    env:
+      VLLM_ALLREDUCE_USE_FLASHINFER: "1"
+      VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
+      VLLM_USE_V2_MODEL_RUNNER: "1"
     # Preserve the measured collective fallback when moving to the built image.
-    VLLM_USE_DIRECT_DCP_A2A: "0"
-    VLLM_USE_DIRECT_DCP_Q_GATHER: "0"
-    VLLM_USE_DIRECT_DCP_KV_GATHER: "0"
-    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
-    VLLM_RPC_TIMEOUT: "600000"
-    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
-    VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
-    PYTHONNOUSERSITE: "1"
-    TORCH_CUDA_ARCH_LIST: "10.0"
-    PYTHONHASHSEED: "42"
-    VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "900"
-    MC_GID_INDEX: "3"
-    MC_STORE_MEMCPY: "1"
-    MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
-    MC_SLICE_SIZE: "1048576"
-    MC_WORKERS_PER_CTX: "4"
-    WITH_NVIDIA_PEERMEM: "0"
-    VLLM_MOONCAKE_LOAD_RECV_THREADS: "4"
-  vllm_config:
-    aggregated:
+      VLLM_USE_DIRECT_DCP_A2A: "0"
+      VLLM_USE_DIRECT_DCP_Q_GATHER: "0"
+      VLLM_USE_DIRECT_DCP_KV_GATHER: "0"
+      VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+      VLLM_RPC_TIMEOUT: "600000"
+      VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
+      VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
+      PYTHONNOUSERSITE: "1"
+      TORCH_CUDA_ARCH_LIST: "10.0"
+      PYTHONHASHSEED: "42"
+      VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "900"
+      MC_GID_INDEX: "3"
+      MC_STORE_MEMCPY: "1"
+      MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+      MC_SLICE_SIZE: "1048576"
+      MC_WORKERS_PER_CTX: "4"
+      WITH_NVIDIA_PEERMEM: "0"
+      VLLM_MOONCAKE_LOAD_RECV_THREADS: "4"
+    args:
       served-model-name: "moonshotai/Kimi-K3"
       tensor-parallel-size: 16
       decode-context-parallel-size: 16
@@ -124,7 +136,8 @@ sbatch_directives:
   mem: "0"
   cpus-per-task: "144"
   comment: >-
-    '{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will take extra loading time."}}'
+    '{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will
+    take extra loading time."}}'
 
 srun_options:
   mem: "0"

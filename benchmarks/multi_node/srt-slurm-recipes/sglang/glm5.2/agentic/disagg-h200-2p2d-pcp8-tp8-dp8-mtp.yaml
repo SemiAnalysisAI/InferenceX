@@ -1,3 +1,4 @@
+schema: 2
 name: "disagg-h200-2p2d-pcp8-tp8-dp8-mtp"
 
 # Refresh of the 2P2D topology from Actions run 30133535261 with EAGLE MTP.
@@ -12,7 +13,8 @@ model:
 
 dynamo:
   install: true
-  wheel: "1.3.0.dev1"
+  source:
+    wheel: "1.3.0.dev1"
 
 slurm:
   time_limit: "8:00:00"
@@ -20,17 +22,17 @@ slurm:
 resources:
   gpu_type: h200
   gpus_per_node: 8
-  prefill_nodes: 2
-  decode_nodes: 2
-  prefill_workers: 2
-  decode_workers: 2
-  gpus_per_prefill: 8
-  gpus_per_decode: 8
-
-infra:
-  etcd_nats_dedicated_node: true
-  nats_max_payload_mb: 32
-
+services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
 frontend:
   type: dynamo
   nginx_session_affinity: true
@@ -45,32 +47,22 @@ frontend:
     active-prefill-tokens-threshold: "None"
     active-prefill-tokens-threshold-frac: "None"
 
-backend:
-  type: sglang
-  prefill_environment:
-    HF_HOME: "/hf_hub_cache"
-    HF_HUB_CACHE: "/hf_hub_cache"
-    PIP_BREAK_SYSTEM_PACKAGES: "1"
-    PYTHONUNBUFFERED: "1"
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
-    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
-    SGLANG_OPT_USE_TOPK_V2: "1"
-    SGLANG_TIMEOUT_KEEP_ALIVE: "900"
-  decode_environment:
-    HF_HOME: "/hf_hub_cache"
-    HF_HUB_CACHE: "/hf_hub_cache"
-    PIP_BREAK_SYSTEM_PACKAGES: "1"
-    PYTHONUNBUFFERED: "1"
-    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
-    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
-    SGLANG_OPT_USE_TOPK_V2: "1"
-    SGLANG_TIMEOUT_KEEP_ALIVE: "900"
-    SGLANG_SIMULATE_ACC_LEN: "2.99"
-    SGLANG_SIMULATE_ACC_METHOD: "match-expected"
-    SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"
-
-  sglang_config:
-    prefill:
+engine: sglang
+roles:
+  prefill:
+    nodes: 2
+    workers: 2
+    gpus: 8
+    env:
+      HF_HOME: "/hf_hub_cache"
+      HF_HUB_CACHE: "/hf_hub_cache"
+      PIP_BREAK_SYSTEM_PACKAGES: "1"
+      PYTHONUNBUFFERED: "1"
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+      SGLANG_OPT_USE_TOPK_V2: "1"
+      SGLANG_TIMEOUT_KEEP_ALIVE: "900"
+    args:
       host: 0.0.0.0
       model-path: /model/
       served-model-name: zai-org/GLM-5.2-FP8
@@ -100,7 +92,25 @@ backend:
       enable-metrics: true
       enable-cache-report: true
 
-    decode:
+  decode:
+    nodes: 2
+    workers: 2
+    gpus: 8
+
+    env:
+      HF_HOME: "/hf_hub_cache"
+      HF_HUB_CACHE: "/hf_hub_cache"
+      PIP_BREAK_SYSTEM_PACKAGES: "1"
+      PYTHONUNBUFFERED: "1"
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+      SGLANG_OPT_USE_TOPK_V2: "1"
+      SGLANG_TIMEOUT_KEEP_ALIVE: "900"
+      SGLANG_SIMULATE_ACC_LEN: "2.99"
+      SGLANG_SIMULATE_ACC_METHOD: "match-expected"
+      SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"
+
+    args:
       host: 0.0.0.0
       model-path: /model/
       served-model-name: zai-org/GLM-5.2-FP8
@@ -139,19 +149,19 @@ srun_options:
 
 telemetry:
   enabled: true
-  provider: dcgm-power
-  default_frequency: 1.0
+  collect_interval_ms: 1000
   storage_subdir: power
   required: true
   startup_timeout_seconds: 120
   request_timeout_seconds: 2
-  collector_join_timeout_seconds: 10
   dcgm_exporter:
     container_image: dcgm-exporter
     port: 9401
 
 benchmark:
   type: custom
+  # Replaced with CONC_LIST by the launcher before submission.
+  concurrencies: [1]
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace

@@ -4,6 +4,7 @@
 # supplies the concurrency list; agentic_srt.sh replays every point against
 # this one server. Acceptance is pinned to the golden thinking-on AL for three
 # speculative tokens (golden_al_distribution/glm5.2_mtp.yaml).
+schema: 2
 name: agg-b200-tp8-c1-mtp
 model:
   path: glm-5.2-fp4
@@ -21,15 +22,34 @@ identity:
 resources:
   gpu_type: b200
   gpus_per_node: 8
-  agg_nodes: 1
-  agg_workers: 1
-  gpus_per_agg: 8
 dynamo:
   install: false
-backend:
-  type: sglang
-  sglang_config:
-    aggregated:
+engine: sglang
+roles:
+  agg:
+    nodes: 1
+    workers: 1
+    gpus: 8
+    env:
+      TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+      PYTHONUNBUFFERED: '1'
+      DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+      MC_TE_METRIC: 'true'
+      NCCL_CUMEM_ENABLE: '1'
+      SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+      SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
+      SGLANG_DEFAULT_THINKING: '1'
+      SGLANG_REASONING_EFFORT: max
+      SGLANG_HICACHE_DEBUG_LOG: '1'
+      SGLANG_HICACHE_DEBUG_SAMPLE_RATE: '16384'
+      SGLANG_MOE_NVFP4_DISPATCH: '1'
+      SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '1'
+      SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
+      SGLANG_SIMULATE_ACC_LEN: '2.99'
+      SGLANG_SIMULATE_ACC_METHOD: match-expected
+      SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
+      PIP_BREAK_SYSTEM_PACKAGES: '1'
+    args:
       served-model-name: nvidia/GLM-5.2-NVFP4
       trust-remote-code: true
       quantization: modelopt_fp4
@@ -64,25 +84,6 @@ backend:
       watchdog-timeout: 1800
       enable-metrics: true
       enable-cache-report: true
-  aggregated_environment:
-    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
-    PYTHONUNBUFFERED: '1'
-    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
-    MC_TE_METRIC: 'true'
-    NCCL_CUMEM_ENABLE: '1'
-    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-    SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
-    SGLANG_DEFAULT_THINKING: '1'
-    SGLANG_REASONING_EFFORT: max
-    SGLANG_HICACHE_DEBUG_LOG: '1'
-    SGLANG_HICACHE_DEBUG_SAMPLE_RATE: '16384'
-    SGLANG_MOE_NVFP4_DISPATCH: '1'
-    SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '1'
-    SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
-    SGLANG_SIMULATE_ACC_LEN: '2.99'
-    SGLANG_SIMULATE_ACC_METHOD: match-expected
-    SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
-    PIP_BREAK_SYSTEM_PACKAGES: '1'
 benchmark:
   type: custom
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
@@ -98,9 +99,17 @@ benchmark:
 health_check:
   max_attempts: 1440
   interval_seconds: 10
-infra:
-  etcd_nats_dedicated_node: false
-  nats_max_payload_mb: 64
+services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 64
 frontend:
   type: dynamo
   env:
