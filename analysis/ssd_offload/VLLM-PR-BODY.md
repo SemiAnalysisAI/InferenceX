@@ -58,9 +58,16 @@ Fixed 8k1k at concurrency 16, three runs per arm:
 
 | | pinned + UVA | disk |
 |---|---:|---:|
-| throughput, mean of 3 | 13,632 tok/s | 14,168 tok/s |
-| run-to-run spread | 12.4% | 1.4% |
+| throughput, 3 runs | 13,632 +/- 806 tok/s | 14,168 +/- 104 tok/s |
 | host memory in use | 352 GB | 95 GB |
+
+The means differ by 3.9%, which is inside the pinned arm's own variation, and
+its best run (14,496 tok/s) exceeds the disk arm's best (14,284 tok/s). This is
+parity on throughput, not a gain. What does differ is consistency: the pinned
+arm's median TPOT is bimodal across boots at 9.87, 8.57 and 9.78 ms, while the
+disk arm lands at the fast mode every time. Trading many small scattered reads
+across PCIe for one contiguous transfer is why the disk path keeps up despite
+doing strictly more work.
 
 The row gather overlapped against the decoder layers, measured against an
 otherwise identical inline build run back to back:
