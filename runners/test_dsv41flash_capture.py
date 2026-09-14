@@ -9,7 +9,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.parametrize("concurrency,floor,expected", [(1, "", 8), (1, "64", 64), (16, "64", 128)])
+@pytest.mark.parametrize("concurrency,floor,expected", [(1, "", 8), (1, "64", 64), (2, "64", 64), (4, "64", 64), (8, "64", 64), (16, "64", 128)])
 @pytest.mark.parametrize("eval_only", ["false", "true"])
 def test_capture_floor_keeps_speculative_and_context_settings(
     tmp_path: Path, concurrency: int, floor: str, expected: int, eval_only: str

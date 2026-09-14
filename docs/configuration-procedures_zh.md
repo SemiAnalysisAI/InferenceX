@@ -189,10 +189,9 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 
 ### DeepSeek-V4.1-Flash DSpark
 
-B300 c1 将 CUDA graph 捕获范围扩展至 64 tokens，以覆盖一个 AgentX 轨迹树中
-并发运行的 subagent。原来的 8-token 上限只能覆盖一个六 token 的 DSpark5 验证块。
-这是针对尾延迟的候选改进；应使用相同轨迹运行完整 c1 CI 回放，对比包含 subagent
-请求的 P90/P99 请求 ITL 和 TTFT。其他并发点沿用现有捕获大小。
+B300 将 CUDA graph 最小捕获范围设为 64 tokens，以覆盖 c1/c2/c4 的 AgentX
+子代理并发。c1 CI 对比中，请求 ITL P90/P99 从 38.74/41.42 ms 降至 2.62/3.45 ms。
+c2/c4 扩展仍需 CI 验证；c8 及以上沿用现有捕获大小。
 
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用
 `vllm/vllm-openai:deepseekv41-flash-0909`，在 Blackwell SKU 上采用 TP4、原生五 token DSpark、

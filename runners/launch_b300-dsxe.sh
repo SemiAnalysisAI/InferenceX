@@ -441,11 +441,8 @@ else
         CONTAINER_MOUNT_DIR=/ix
         export INFMAX_CONTAINER_WORKSPACE=/ix
         export RESULT_DIR=/ix/results
-        if [[ "${CONC:-}" == 1 ]]; then
-            # c1 is one trajectory tree, which can run several subagents.
-            # DSpark5 needs six verification tokens per active request.
-            export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
-        fi
+        # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
+        export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
     fi
 
     import_squash_image "$IMAGE" "$SQUASH_FILE"

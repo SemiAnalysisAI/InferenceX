@@ -191,12 +191,10 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 
 ### DeepSeek-V4.1-Flash DSpark
 
-B300 c1 captures CUDA graphs through 64 tokens to cover concurrent subagents
-within one AgentX trajectory tree. The former 8-token limit covered only one
-six-token DSpark5 verification block. This is a targeted tail-latency candidate;
-compare full c1 CI replays using identical traces and validate P90/P99 request
-ITL and TTFT, including subagent requests. Other concurrency points keep their
-existing capture sizing.
+B300 uses a minimum CUDA graph capture size of 64 tokens to cover concurrent
+AgentX subagents at c1/c2/c4. The c1 CI comparison reduced request ITL P90/P99
+from 38.74/41.42 ms to 2.62/3.45 ms. The c2/c4 extensions require CI confirmation;
+c8 and above retain their existing capture sizes.
 
 The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use
 `vllm/vllm-openai:deepseekv41-flash-0909` at TP4 on Blackwell SKUs with native five-token DSpark,
