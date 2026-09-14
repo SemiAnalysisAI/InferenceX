@@ -25,6 +25,46 @@ def test_injects_positive_unique_concurrencies_without_adding_telemetry(tmp_path
     assert recipe["benchmark"]["command"] == "run-agentx"
 
 
+def test_injects_base_benchmark_without_replacing_selected_override(tmp_path: Path):
+    from runners.inject_srt_power_concurrencies import inject_concurrencies
+
+    recipe = {
+        "base": {"benchmark": {"type": "custom", "command": "run-agentx"}},
+        "zip_override_frontier": {
+            "name": ["one-prefill-one-decode"],
+            "resources": {"prefill_workers": 1, "decode_workers": 1},
+            "benchmark": {"env": {"KEEP_OVERRIDE": "1"}},
+        },
+    }
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(yaml.safe_dump(recipe), encoding="utf-8")
+
+    inject_concurrencies(recipe_path, [10, 12])
+
+    injected = yaml.safe_load(recipe_path.read_text(encoding="utf-8"))
+    assert injected["base"]["benchmark"] == {
+        "type": "custom", "command": "run-agentx", "concurrencies": [10, 12],
+    }
+    assert injected["zip_override_frontier"] == recipe["zip_override_frontier"]
+
+
+@pytest.mark.parametrize("override", ["override_frontier", "zip_override_frontier"])
+def test_rejects_override_that_would_replace_injected_windows(tmp_path: Path, override: str):
+    from runners.inject_srt_power_concurrencies import inject_concurrencies
+
+    recipe_path = tmp_path / "recipe.yaml"
+    original = yaml.safe_dump({
+        "base": {"benchmark": {"type": "custom"}},
+        override: {"benchmark": {"concurrencies": [64]}},
+    })
+    recipe_path.write_text(original, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="override.*concurrencies"):
+        inject_concurrencies(recipe_path, [10])
+
+    assert recipe_path.read_text(encoding="utf-8") == original
+
+
 @pytest.mark.parametrize(
     "concurrencies",
     [[], [0], [-1], [8, 8], [True], [8, 1.5]],
@@ -44,7 +84,8 @@ def test_rejects_invalid_concurrency_contract(
 
 @pytest.mark.parametrize(
     "recipe_text",
-    ["[]\n", "name: missing-benchmark\n", "benchmark: []\n"],
+    ["[]\n", "name: missing-benchmark\n", "benchmark: []\n", "base: []\n",
+     "base:\n  benchmark: []\n"],
 )
 def test_rejects_recipe_without_benchmark_mapping(tmp_path: Path, recipe_text: str):
     from runners.inject_srt_power_concurrencies import inject_concurrencies

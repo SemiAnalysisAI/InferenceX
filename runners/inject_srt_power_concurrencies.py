@@ -30,10 +30,20 @@ def inject_concurrencies(recipe_path: Path, concurrencies: list[Any]) -> None:
         recipe = yaml.safe_load(recipe_path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as exc:
         raise ValueError(f"failed to load recipe: {exc}") from exc
-    if not isinstance(recipe, dict) or not isinstance(recipe.get("benchmark"), dict):
+    if not isinstance(recipe, dict):
         raise ValueError("recipe must contain a benchmark mapping")
+    target = recipe.get("base", recipe)
+    if not isinstance(target, dict) or not isinstance(target.get("benchmark"), dict):
+        raise ValueError("recipe must contain a benchmark mapping")
+    if "base" in recipe:
+        for name, override in recipe.items():
+            if not name.startswith(("override_", "zip_override_")) or not isinstance(override, dict):
+                continue
+            benchmark = override.get("benchmark")
+            if isinstance(benchmark, dict) and "concurrencies" in benchmark:
+                raise ValueError(f"{name} overrides benchmark.concurrencies; resolve the variant before injection")
 
-    recipe["benchmark"]["concurrencies"] = values
+    target["benchmark"]["concurrencies"] = values
     fd, temporary_name = tempfile.mkstemp(
         dir=recipe_path.parent,
         prefix=f".{recipe_path.name}.",

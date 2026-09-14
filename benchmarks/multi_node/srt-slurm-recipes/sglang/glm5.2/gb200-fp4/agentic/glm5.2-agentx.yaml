@@ -187,7 +187,7 @@ base:
     required: true
     startup_timeout_seconds: 120
     request_timeout_seconds: 2
-    collector_join_timeout_seconds: 10
+    collector_join_timeout_seconds: 12
     dcgm_exporter:
       container_image: dcgm-exporter
       port: 9401
