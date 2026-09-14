@@ -238,6 +238,12 @@ _PR = {"event": "pull_request", "draft": False}
 
 # (id, scenario, expected (check, reuse, setup))
 CASES = [
+    ("PR-sync-unlabeled-reuse-authorized",
+     {**_PR, "action": "synchronize", "labels": [], "reuse_auth": True},
+     ("success", "success", "SKIP")),
+    ("PR-sync-trim-reuse-authorized",
+     {**_PR, "action": "synchronize", "labels": ["sweep-enabled"], "reuse_auth": True},
+     ("success", "success", "SKIP")),
     ("PR-sync-full-noreuse",
      {**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"],
       "reuse_auth": False}, ("success", "success", "RUN")),
@@ -249,10 +255,10 @@ CASES = [
       "check": "failure"}, ("failure", "skipped", "SKIP")),
     ("PR-sync-trim-sweep-enabled",
      {**_PR, "action": "synchronize", "labels": ["sweep-enabled"]},
-     ("success", "skipped", "RUN")),
+     ("success", "success", "RUN")),
     ("PR-sync-all-evals-without-sweep-label",
      {**_PR, "action": "synchronize", "labels": ["all-evals"]},
-     ("success", "skipped", "SKIP")),
+     ("success", "success", "SKIP")),
     ("PR-sync-evals-only-without-sweep-label",
      {**_PR, "action": "synchronize", "labels": ["evals-only"]},
      ("success", "skipped", "SKIP")),
@@ -277,7 +283,7 @@ CASES = [
       "reuse_auth": True}, ("success", "skipped", "RUN")),
     ("PR-sync-no-sweep-label",
      {**_PR, "action": "synchronize", "labels": []},
-     ("success", "skipped", "SKIP")),
+     ("success", "success", "SKIP")),
     ("PR-sync-external-fork-defers-to-trusted-dispatch",
      {**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"],
       "head_repo": "external/InferenceX"},
@@ -336,7 +342,7 @@ CASES = [
       "labels": ["sweep-enabled"]}, ("success", "skipped", "RUN")),
     ("PR-draft-without-sweep-label",
      {**_PR, "action": "synchronize", "draft": True,
-      "labels": []}, ("success", "skipped", "SKIP")),
+      "labels": []}, ("success", "success", "SKIP")),
     ("PR-draft-fork-still-requires-trusted-dispatch",
      {**_PR, "action": "labeled", "draft": True, "label_name": "full-sweep-enabled",
       "labels": ["full-sweep-enabled"], "head_repo": "external/InferenceX"},
@@ -388,6 +394,38 @@ def test_changelog_validation_has_no_write_token_or_persisted_credential() -> No
     assert job["permissions"] == {"contents": "read"}
     checkout = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@"))
     assert checkout["with"]["persist-credentials"] == "false"
+
+
+@pytest.mark.parametrize("is_pr,body,previous,expected", [
+    (True, "/reuse-sweep-run 123", None, True),
+    (True, "withdrawn", "/reuse-sweep-run 123", True),
+    (True, "unrelated", None, False),
+    (False, "/reuse-sweep-run 123", None, False),
+])
+def test_reuse_acknowledgment_routes_new_and_edited_pr_commands(is_pr, body, previous, expected):
+    workflow = yaml.load(
+        (REPO_ROOT / ".github/workflows/reuse-sweep-comment.yml").read_text(),
+        Loader=yaml.BaseLoader,
+    )
+    assert _eval(workflow["jobs"]["acknowledge"]["if"], {
+        "github.event.issue.pull_request": is_pr,
+        "github.event.comment.body": body,
+        "github.event.changes.body.from": previous,
+    }) == expected
+
+
+def test_reuse_reactions_use_trusted_code_with_no_repository_write_token():
+    workflow = yaml.load(
+        (REPO_ROOT / ".github/workflows/reuse-sweep-comment.yml").read_text(),
+        Loader=yaml.BaseLoader,
+    )
+    assert workflow["on"] == {"issue_comment": {"types": ["created", "edited"]}}
+    job = workflow["jobs"]["acknowledge"]
+    assert job["permissions"] == {
+        "actions": "read", "contents": "read", "issues": "write", "pull-requests": "read",
+    }
+    checkout = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@"))
+    assert checkout["with"] == {"ref": "${{ github.sha }}", "persist-credentials": "false"}
 
 
 def test_priority_classifier_runs_only_for_enabled_pull_requests() -> None:

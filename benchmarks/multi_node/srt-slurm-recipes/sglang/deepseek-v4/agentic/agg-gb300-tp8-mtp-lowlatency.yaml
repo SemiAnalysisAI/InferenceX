@@ -12,11 +12,11 @@ identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
   container:
-    image: "lmsysorg/sglang:nightly-dev-cu13-20260829-89816a21"
+    image: "lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9"
 
 dynamo:
   install: true
-  wheel: "1.5.0.dev20260902"
+  wheel: "1.5.0.dev20260910"
 
 slurm:
   time_limit: "4:00:00"

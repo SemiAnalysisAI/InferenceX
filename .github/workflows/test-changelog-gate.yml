@@ -6,6 +6,8 @@ on:
     branches-ignore:
       - main
     paths:
+      - "infx/**"
+      - "utils/test_module_entrypoints.py"
       - ".claude/commands/recover-failed-ingest.md"
       - ".claude/mcp/**"
       - ".claude/requirements-mcp.txt"
@@ -31,6 +33,9 @@ on:
       - "runners/test_slurm_utils.py"
       - "utils/ci_priority.py"
       - "utils/test_ci_priority.py"
+      - ".github/workflows/reuse-sweep-comment.yml"
+      - "utils/test_acknowledge_sweep_reuse.py"
+      - "utils/test_github.py"
       - "utils/find_reusable_sweep_run.py"
       - "utils/test_find_reusable_sweep_run.py"
       - "utils/process_changelog.py"
@@ -44,6 +49,7 @@ on:
       - "utils/prepare_perf_changelog_merge.py"
       - "utils/recover_failed_ingest.py"
       - "utils/changelog_gate_tests/test_prepare_perf_changelog_merge.py"
+      - "utils/changelog_gate_tests/test_merge_with_reuse.py"
       - "utils/changelog_gate_tests/test_recover_failed_ingest.py"
       - "utils/test_validate_reusable_sweep_artifacts.py"
       - "utils/validate_perf_changelog.py"
@@ -100,12 +106,18 @@ jobs:
             python -m pytest \
             utils/changelog_gate_tests/test_validate_perf_changelog.py \
             utils/test_find_reusable_sweep_run.py \
+            utils/test_acknowledge_sweep_reuse.py \
+            utils/test_github.py \
             utils/changelog_gate_tests/test_prepare_perf_changelog_merge.py \
+            utils/changelog_gate_tests/test_merge_with_reuse.py \
             utils/changelog_gate_tests/test_recover_failed_ingest.py \
             utils/test_validate_reusable_sweep_artifacts.py \
             utils/changelog_gate_tests/test_run_sweep_gating.py \
             utils/changelog_gate_tests/test_workflow_authorization.py \
             utils/test_ci_priority.py \
+            utils/test_calc_success_rate.py \
+            utils/test_server_watch.py \
+            utils/test_module_entrypoints.py \
             utils/test_process_changelog.py \
             utils/test_collect_eval_results.py \
             utils/evals/test_batched_eval.py \
