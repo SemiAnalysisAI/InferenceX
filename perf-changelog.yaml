@@ -7561,3 +7561,14 @@
     - "Replace the local 2*CONC max_num_seqs limit with an explicit reproducibility cap of 128 (the effective vllm serve default on MI355X is 1024). The old cap sat below AgentX subagent fan-out and produced queue times up to 16.2 seconds at concurrency 1; 128 removed that scheduling queue. The derived CUDA-graph capture ceiling is 1024 for each configured concurrency."
     - "将本地 2*CONC 的 max_num_seqs 上限改为显式固定的可复现值 128（MI355X 上 vllm serve 的实际默认值为 1024）。旧上限低于 AgentX 子代理扇出，并发 1 时排队时间最高达 16.2 秒；128 消除了该调度排队。所有已配置并发点由此得到的 CUDA graph 捕获上限均为 1024。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3058
+
+- config-keys:
+      - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260911."
+    - "Move the MI355X DeepSeek-V4-Pro AgentX SGLang serving path from MTP to DSpark block size 6 and switch model to the DeepSeek-V4-Pro-0813 checkpoint, whose bundled dspark_* head."
+    - "DP-attention serving adds --enable-dp-lm-head, which SGLang requires for DSpark under DP attention, and TP-only serving adds --prefill-decode-interval 10 to fix scheduler issue."
+    - "Use --cuda-graph-max-bs-decode instead of --cuda-graph-max-bs: the 20260911 image split the flag per phase and ships no legacy alias, so the old spelling aborts argument parsing as an ambiguous prefix."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3001
