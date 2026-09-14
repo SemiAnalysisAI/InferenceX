@@ -7645,5 +7645,6 @@
     - "Follow the merged SGLang cookbook command with flashinfer linear-attention prefill and decode backends, bfloat16 Mamba SSM state, and checkpoint-derived quantization."
     - "Use the repository's committed thinking-on MTP=3 synthetic acceptance length of 2.32, while evaluation keeps real target-model verification."
     - "Size maximum running requests and CUDA graph capture to twice concurrency; use a 0.90 static memory fraction and a 160-slot Mamba cache at concurrency 16."
+    - "Enable six tokenizer workers for the TP1 AgentX recipe and require a complete staged NVFP4 checkpoint before launch."
     - "Route the qwen3.8next fp4 prefix in the B200 Nscale launcher to the staged Qwen3.8-Flash-Next NVFP4 checkpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2751

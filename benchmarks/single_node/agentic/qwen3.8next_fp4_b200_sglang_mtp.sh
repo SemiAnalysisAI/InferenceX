@@ -31,13 +31,33 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
-if [[ -n "${MODEL_PATH:-}" ]]; then
-    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
-        hf download "$MODEL" --local-dir "$MODEL_PATH"
-    fi
-else
-    hf download "$MODEL"
-    export MODEL_PATH="$MODEL"
+model_checkpoint_is_complete() {
+    local directory="$1"
+    local index="$directory/model.safetensors.index.json"
+
+    [[ -f "$index" ]] || return 1
+    [[ -z "$(find "$directory" -name '*.incomplete' -print -quit 2>/dev/null)" ]] || return 1
+    python3 - "$directory" <<'PYEOF'
+import json
+import os
+import sys
+
+directory = sys.argv[1]
+index = os.path.join(directory, "model.safetensors.index.json")
+try:
+    with open(index, encoding="utf-8") as index_file:
+        shards = set(json.load(index_file)["weight_map"].values())
+except (OSError, KeyError, TypeError, ValueError):
+    sys.exit(1)
+if not shards or any(not isinstance(shard, str) for shard in shards):
+    sys.exit(1)
+sys.exit(any(not os.path.isfile(os.path.join(directory, shard)) for shard in shards))
+PYEOF
+}
+
+if [[ -z "${MODEL_PATH:-}" ]] || ! model_checkpoint_is_complete "$MODEL_PATH"; then
+    echo "Error: complete staged Qwen3.8-Flash-Next NVFP4 checkpoint not found at ${MODEL_PATH:-<unset>}" >&2
+    exit 1
 fi
 nvidia-smi
 
@@ -94,13 +114,9 @@ PARALLEL_ARGS=(
     --ep-size "$EP_SIZE"
 )
 
-# TP4 needs parallel tokenization to keep 256k AgentX warmups below the client
-# request timeout. Keep TP2 on SGLang's single-worker default: multi-tokenizer
-# startup races with the TP2 HiCache shared-memory initialization path.
-TOKENIZER_ARGS=()
-if [ "$TP" -ge 4 ]; then
-    TOKENIZER_ARGS=(--tokenizer-worker-num 6)
-fi
+# Parallel tokenization keeps 256k AgentX warmups below the client timeout.
+# This B200 recipe runs at TP1, so enable the workers independently of TP.
+TOKENIZER_ARGS=(--tokenizer-worker-num 6)
 
 # AgentX concurrency counts live session trees rather than individual HTTP
 # requests. Leave room for subagent fan-out and avoid spending HBM on graphs

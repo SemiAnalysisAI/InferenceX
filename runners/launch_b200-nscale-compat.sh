@@ -94,10 +94,6 @@ elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "qwen3.8next" && $PRECISION == "fp4" ]]; then
     if [[ -n "${MODEL_PATH:-}" && -d "$MODEL_PATH" ]]; then
         :
-    elif [[ -d /scratch/models/Qwen3.8-Flash-Next-NVFP4 ]]; then
-        export MODEL_PATH="/scratch/models/Qwen3.8-Flash-Next-NVFP4"
-    elif [[ -d /scratch/models/Qwen3.8-Flash-Next ]]; then
-        export MODEL_PATH="/scratch/models/Qwen3.8-Flash-Next"
     else
         export MODEL_PATH="/scratch/models/Qwen3.8-Flash-Next-NVFP4"
     fi
