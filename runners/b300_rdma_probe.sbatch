@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
 #SBATCH --mem=64G
-#SBATCH --time=10
+#SBATCH --time=9
 set -euo pipefail
 out="$RUNNER_TEMP/pr3088-rdma"
 mkdir -p "$out"
