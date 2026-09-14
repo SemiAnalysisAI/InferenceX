@@ -277,7 +277,6 @@ def run_script_with_broken_aggregator(
     wrapper = f"""
 import runpy
 import sys
-import time
 import json
 import builtins
 from pathlib import Path
