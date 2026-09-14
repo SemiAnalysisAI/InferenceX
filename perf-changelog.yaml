@@ -7602,6 +7602,6 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Enable required telemetry on the seven existing GB200 aggregate recipes, pin the AgentX producer, and validate power after telemetry drain while preserving failed-job artifacts."
-    - "为 GB200 Kimi-K3 聚合部署启用必需实测功耗。"
+    - "Enable required telemetry on seven GB200 aggregate recipes, preserve failed-job artifacts, and reserve CUDA Graph memory in the five TP8/PP2 recipes."
+    - "为七个 GB200 Kimi-K3 聚合配方启用必需实测功耗并保留失败产物；五个 TP8/PP2 配方为 CUDA Graph 预留显存。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3045

@@ -86,7 +86,7 @@ backend:
       trust-remote-code: true
       load-format: fastsafetensors
       moe-backend: auto
-      gpu-memory-utilization: 0.92
+      gpu-memory-utilization: 0.87
       no-enable-flashinfer-autotune: true
       max-model-len: 1048576
       kv-cache-dtype: fp8
