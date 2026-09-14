@@ -114,11 +114,17 @@ runner 名称前缀是关键契约：workflow 通过 `launch_${RUNNER_NAME%%_*}.
 6. 将 runner 加入 sweep 流量前，在[仓库 runner 设置页](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners)确认每个 runner 都是 **Idle**。
 7. 从计算节点验证 launcher 对 `_work`、HF cache、预置权重和 squash 镜像的挂载。root 容器不得在共享 workspace 留下 root 所有的文件。
 
+B300 DSXE 的 Kimi-K3 AgentX 路径在 `/scratch/models` 下挂载预置目标模型，
+另行导出并挂载 `WRITABLE_MODELS_DIR` 以保存 DSpark 权重。复用服务容器时，
+草稿模型目录应保留在该持久化挂载中；只读目标模型挂载无法保存草稿模型。
+并发任务通过模型专用锁串行准备草稿权重。每个任务在启动服务前由 `hf download`
+校验或续传现有缓存；目录非空不代表下载完成。
+
 ## TileRT 原生功耗
 
-TileRT 的共享导入器保留 Docker Hub 镜像名称，并将 `ghcr.io/team/image:tag` 等显式仓库地址转换为 Enroot 的 `docker://ghcr.io#team/image:tag` 格式。已有的 `#` 地址保持不变。有效的缓存 squash 镜像会直接复用；命中缓存不能证明仓库导入路径有效。
+TileRT 的共享导入器保留 Docker Hub 镜像名称，并将 `ghcr.io/team/image:tag` 等显式仓库地址转换为 Enroot 的 `docker://ghcr.io#team/image:tag` 格式。已有的 `#` 地址保持不变。有效的缓存 squash 镜像会直接复用；命中缓存不能证明仓库导入路径有效。无效的缓存镜像会在持有导入锁时删除，再重新导入。
 
-GLM-5.1 B200 Nscale 的 1k1k 和 8k1k 配方使用已准备的共享 checkpoint、TileRT 转换权重和 squash 缓存，每个测试点的分配时限为 45 分钟。
+保留的 GLM-5.1 B200 Nscale 1k1k 和 8k1k 配方使用已准备的共享 checkpoint、TileRT 转换权重和 squash 缓存，每个测试点的分配时限为 45 分钟。[MODELS.md](../MODELS.md) 已宣布 GLM-5.1 和 1k1k 退役；保留配方不代表已支持当前模型，也不构成发布新结果的许可。
 
 B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默认的 `/scratch/models/GLM-5.1-FP8`。若指定 HF snapshot，还需把 `HF_HUB_CACHE_HOST_PATH` 设为现有缓存根目录；TileRT 按相同绝对路径挂载整个缓存，使 snapshot 指向同级 blobs 的软链接可读。`TILERT_WEIGHTS_DIR` 仍指向单独转换的 decode 权重。
 
@@ -392,6 +398,6 @@ python -m pytest utils/matrix_logic/ -v
 
 草案配方 `dsv41flash-fp4-mi355x-vllm-agentic-dspark` 将 [#2958](https://github.com/SemiAnalysisAI/InferenceX/pull/2958) 扩展至 MI355X AgentX：TP4、并发 1–32、原生五 token DSpark。吞吐测试使用[已提交的黄金 AL](../golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样，但与 CUDA 分支不同，同样关闭自适应验证：它会在设备端裁剪验证请求，而 ROCm 的 `DeepseekV4IndexerBackend` 不支持该操作，启用后引擎拒绝启动（[运行 34651830283](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34651830283)）。FP4 表示 MXFP4 专家权重；检查点还包含 MXFP8 权重。
 
-遵循[上游配方 #946](https://github.com/vllm-project/recipes/pull/946) 的 AMD 设置：`VLLM_ROCM_USE_AITER=1`、`VLLM_ROCM_USE_AITER_MOE=1` 和 `--moe-backend aiter_triton_mxfp4_bf16`。配方通过 `WEKA_LOADER_OVERRIDE` 固定使用完整语料 `semianalysis_cc_traces_weka_062126`。KV 驻留 GPU；Engram 沿用上游 AMD 默认设置。不要复制 NVIDIA 的 `--engram-config` 选项：上游目前在 ROCm 上拒绝该选项。MI355X launcher 使用共享 HF 缓存，并将此模型的仓库挂载至 `/ix`，同时导出 `INFMAX_CONTAINER_WORKSPACE=/ix`，确保 AgentX 依赖与输出路径位于该挂载中。
+遵循已合并的[上游配方 #968](https://github.com/vllm-project/recipes/pull/968) 中的 AMD 设置：`VLLM_ROCM_USE_AITER=1`、`VLLM_ROCM_USE_AITER_MOE=1` 和 `--moe-backend aiter`。通用 AITER 选择器允许 vLLM 选择 CK a8w4 专家内核，与 DSV4-Pro MI355X 配方一致。配方通过 `WEKA_LOADER_OVERRIDE` 固定使用完整语料 `semianalysis_cc_traces_weka_062126`。KV 驻留 GPU；Engram 沿用上游 AMD 默认设置。不要复制 NVIDIA 的 `--engram-config` 选项：上游目前在 ROCm 上拒绝该选项。MI355X launcher 使用共享 HF 缓存，并将此模型的仓库挂载至 `/ix`，同时导出 `INFMAX_CONTAINER_WORKSPACE=/ix`，确保 AgentX 依赖与输出路径位于该挂载中。
 
-**GPU 验证尚待完成：** 配方使用 `vllm/vllm-openai-rocm:deepseekv41-flash-0909`，即[上游 vLLM 配方](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash?hardware=mi355x)引用的镜像。该标签经 AMD 验证后于 2026-09-11 发布到 Docker Hub；发布前在运行 34466680355 中返回 HTTP 404。Engram 行为与服务兼容性仍需 GPU 验证。请按 [AgentX 流程](./eval-agentx-procedures_zh.md) 获取运行时证据；本地矩阵生成和镜像元数据不等于 GPU 验证。
+**GPU 验证：** [运行 34710937012](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34710937012) 使用精确固定的镜像，通过了并发 1、2、4、8、16、32 的吞吐测试以及仅评测并发 32。配方使用 `vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657`（摘要 `sha256:960228cf…`，发布于 2026-09-12）。较早的 `deepseekv41-flash-0909` 标签早于 [vllm-project/vllm#56503](https://github.com/vllm-project/vllm/pull/56503)，该 PR 将 mHC delayed pre 块从 eager Torch 参考实现切换到 AITER；已合并的[上游配方 #968](https://github.com/vllm-project/recipes/pull/968) 固定使用同一 nightly，并记录了完整的 InferenceX 命令。后续运行时证据请遵循 [AgentX 流程](./eval-agentx-procedures_zh.md)；仅有本地矩阵生成和镜像元数据不能证明 GPU 验证完成。

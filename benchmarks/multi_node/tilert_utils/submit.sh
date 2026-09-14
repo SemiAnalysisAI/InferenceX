@@ -127,7 +127,9 @@ import_image() {
     srun --jobid="$JOB_ID" --nodelist="$host" --ntasks=1 bash -c "
         export ENROOT_CACHE_PATH=\$HOME/.cache/enroot; mkdir -p \$ENROOT_CACHE_PATH
         exec 9>\"$lock_file\"; flock -w 600 9 || exit 1
-        unsquashfs -l \"$squash_file\" >/dev/null 2>&1 || enroot import -o \"$squash_file\" \"docker://$enroot_ref\"
+        unsquashfs -l \"$squash_file\" >/dev/null 2>&1 || {
+            rm -f \"$squash_file\" && enroot import -o \"$squash_file\" \"docker://$enroot_ref\"
+        }
     "
 }
 import_image "$DECODE_IMAGE"  "$DECODE_SQUASH"  "$DECODE_HOST"  || exit 1

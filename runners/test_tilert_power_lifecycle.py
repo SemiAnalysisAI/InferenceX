@@ -11,30 +11,33 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.parametrize(('image', 'expected_uri', 'cached'), [
-    ('ghcr.io/tile-ai/tilert:0.1.5', 'docker://ghcr.io#tile-ai/tilert:0.1.5', False),
-    ('vllm/vllm-openai:v0.26.0', 'docker://vllm/vllm-openai:v0.26.0', False),
-    ('ghcr.io#tile-ai/tilert:0.1.5', 'docker://ghcr.io#tile-ai/tilert:0.1.5', False),
-    ('docker://ghcr.io#tile-ai/tilert:0.1.5', 'docker://ghcr.io#tile-ai/tilert:0.1.5', False),
-    ('registry.example:5000/team/image:tag', 'docker://registry.example:5000#team/image:tag', False),
-    ('ghcr.io/tile-ai/tilert:0.1.5', None, True),
+    ('ghcr.io/tile-ai/tilert:0.1.5', 'docker://ghcr.io#tile-ai/tilert:0.1.5', None),
+    ('vllm/vllm-openai:v0.26.0', 'docker://vllm/vllm-openai:v0.26.0', None),
+    ('ghcr.io#tile-ai/tilert:0.1.5', 'docker://ghcr.io#tile-ai/tilert:0.1.5', None),
+    ('docker://ghcr.io#tile-ai/tilert:0.1.5', 'docker://ghcr.io#tile-ai/tilert:0.1.5', None),
+    ('registry.example:5000/team/image:tag', 'docker://registry.example:5000#team/image:tag', None),
+    ('ghcr.io/tile-ai/tilert:0.1.5', None, 'prepared image'),
+    pytest.param('ghcr.io/tile-ai/tilert:0.1.5', 'docker://ghcr.io#tile-ai/tilert:0.1.5',
+                 'partial image', id='partial-cache'),
 ])
 def test_tilert_import_uses_registry_and_reuses_squash(tmp_path, image, expected_uri, cached):
     bindir, squash = tmp_path / 'bin', tmp_path / 'squash'
     bindir.mkdir()
     squash.mkdir()
     image_file = squash / (image.translate(str.maketrans('/:@#', '____')) + '.sqsh')
-    if cached:
-        image_file.write_text('prepared image')
+    if cached is not None:
+        image_file.write_text(cached)
     scripts = {
         'scontrol': '#!/bin/sh\nprintf "node-a\\nnode-b\\n"\n',
         'flock': '#!/bin/sh\nexit 0\n',
-        'unsquashfs': '#!/bin/sh\ntest -s "$2"\n',
+        'unsquashfs': '#!/bin/sh\ngrep -qxE "prepared image|imported image" "$2"\n',
         'enroot': '#!' + sys.executable + '\n' + '''
-import json, os, pathlib, sys
+import json, os, sys
 assert sys.argv[1:3] == ['import', '-o']
 with open(os.environ['IMPORT_RECEIPT'], 'a') as receipt:
     receipt.write(json.dumps(sys.argv[4:]) + '\\n')
-pathlib.Path(sys.argv[3]).write_text('imported image')
+with open(sys.argv[3], 'x') as image:
+    image.write('imported image')
 ''',
         'srun': '#!' + sys.executable + '\n' + '''
 import os, subprocess, sys
@@ -61,8 +64,8 @@ os.execvpe(command[0], command, os.environ)
                             env=env, capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stderr
     imports = [json.loads(line) for line in receipt.read_text().splitlines()] if receipt.exists() else []
-    assert imports == ([] if cached else [[expected_uri]])
-    assert image_file.read_text() == ('prepared image' if cached else 'imported image')
+    assert imports == ([] if expected_uri is None else [[expected_uri]])
+    assert image_file.read_text() == ('prepared image' if expected_uri is None else 'imported image')
 
 
 @pytest.mark.parametrize('prepared_path', ['', '/shared/hf/hub/snapshots/revision'])
