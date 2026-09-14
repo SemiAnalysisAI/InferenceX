@@ -41,7 +41,6 @@ def _validate_rows(
         location = f"{path}[{index}]"
         if not isinstance(row, dict):
             raise ValueError(f"{location}: expected a matrix object")
-        # Manual generation includes multinode rows, routed to another template.
         if mixed and "prefill" in row:
             continue
         is_agentic = row.get("scenario-type") == "agentic-coding" if agentic is None else agentic

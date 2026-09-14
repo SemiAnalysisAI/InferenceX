@@ -26,7 +26,6 @@ def test_launch_step_computes_gpu_count_and_result_identity(
 ):
     workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/benchmark-tmpl.yml").read_text())
     step = next(step for step in workflow["jobs"]["benchmark"]["steps"] if step.get("name") == "Launch job script")
-    # Actions supplies these input values; execute the shipped Bash, not a copy.
     script = step["run"].replace("${{ inputs.eval-only }}", "false").replace(
         "${{ inputs.scenario-type }}", "fixed-seq-len")
     if not historical:
@@ -54,7 +53,7 @@ printf '{}' > "$RESULT_FILENAME.json"
     )
     assert result.returncode == 0, result.stderr
     received = json.loads((tmp_path / "received.json").read_text())
-    assert received["GPU_COUNT"] == "24"  # TP4 * PP2 * PCP3; DCP4 does not multiply GPUs.
+    assert received["GPU_COUNT"] == "24"
     assert received["RESULT_FILENAME"] == expected_filename
     published = dict(line.split("=", 1) for line in (tmp_path / "github-env").read_text().splitlines())
     assert published == {"GPU_COUNT": "24", "RESULT_FILENAME": expected_filename}

@@ -1553,7 +1553,6 @@ class TestBenchmarkWorkflowSchema:
         step_id = "setup" if workflow_name == "run-sweep" else "get-jobs"
         script = next(step["run"] for job in workflow["jobs"].values()
                       for step in job.get("steps", []) if step.get("id") == step_id)
-        # GitHub's event context is a fixture; the new validation call has no expressions.
         script = re.sub(r"\$\{\{.*?\}\}", lambda m: (
             "push" if "event_name" in m[0] else "test-config" if "generate-cli-command" in m[0] else ""
         ), script)
@@ -1567,8 +1566,6 @@ class TestBenchmarkWorkflowSchema:
         output.touch()
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
-        # Mock only generation, priority scoring, and reuse's network collaborator.
-        # Run the real schema CLI with precisely the Python arguments in the workflow.
         uv = bin_dir / "uv"
         uv.write_text(f"#!{sys.executable}\n" + '''import os, sys
 args = sys.argv[1:]
@@ -1590,7 +1587,6 @@ if sys.argv[1:3] != ['-m', 'infx.workflows.reuse']:
         python.chmod(0o755)
         if workflow_name == "e2e-tests":
             (tmp_path / ".ci-priority").symlink_to(root, target_is_directory=True)
-            # Historical measured code must not supply or shadow the workflow's schema.
             (tmp_path / "infx").mkdir()
             (tmp_path / "infx/__init__.py").write_text("raise RuntimeError('wrong tooling checkout')")
         result = subprocess.run(
