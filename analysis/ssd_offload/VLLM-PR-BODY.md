@@ -118,3 +118,80 @@ would let the gather start before the forward rather than waiting on the hash
 kernel.
 
 
+
+## What the tables are worth
+
+The alternative to paying for 189 GiB of tables is not loading them. That was
+measured on the same checkpoint and image before building the offload path,
+so the cost of the option is known. Ablation is done the module's own way, an
+all-False `token_mask` through the shipped fused kernel, and every ablated arm
+below records an Engram contribution of exactly 0.0 on every forward call.
+
+**The gate is shut almost everywhere and opens hard on a thin tail.** Over
+434.6M tokens across 16 English, Chinese and code corpora, the per-token gate
+has mean 0.024 and 99th percentile 0.21, with a maximum of 0.99999. The tail
+is rare multi-token strings whose later pieces are unguessable from the
+weights but fixed once the earlier pieces are known: proper nouns and titles
+at layer 1, templated structure at layer 14, code idioms the tokenizer splits
+into several pieces at both. ISBN publisher prefixes and copyright boilerplate
+top the Chinese tables; `Write a function to` tops MBPP.
+
+**Likelihood.** Removing Engram costs a median of 0.85 bits per token across
+the 16 domains, from 0.08 on Chinese chat to 2.64 on English Wikipedia,
+measured on 2.70M scored tokens. Domains whose strong n-grams are the most
+literal lose the most.
+
+**Tasks.** gsm8k does not move: 0.9697 against 0.9704 strict-match pass@1 over
+1,319 items, inside the standard error and nominally in favour of removal.
+CRUXEval-O output prediction, 800 items, the model reasoning before it
+answers with a 12,288-token budget:
+
+| arm | pass@1 | generated tokens per item | traces that never finished | pass@1 on items both arms finished |
+|---|---:|---:|---:|---:|
+| Engram on | 0.9938 | 335 | 3 | 0.9975 |
+| Engram off | 0.8750 | 2,215 | 76 | 0.9681 |
+| off over the prompt only | 0.9675 | 701 | 21 | 0.9949 |
+| off over the generation only | 0.9463 | 1,018 | 22 | 0.9742 |
+
+The headline loss is 11.9 points at 9.5 sigma on paired items, but most of it
+is the reasoning budget rather than the answer. Without the tables the model's
+traces run 6.6 times longer and 9.5 percent of them do not terminate inside a
+budget 37 times the baseline mean; each of those is graded wrong. On the 722
+items both arms finished the loss is 2.9 points, 22 lost against 1 gained.
+Given room to reason the model replaces most of what the memory provided, and
+pays for it in tokens. In a tool loop that per-step cost is the whole story,
+which is why the tables are worth serving rather than dropping. Shutting the
+gate over the generated tokens costs more than shutting it over the prompt.
+
+**The penalty is lost features, not a routing artefact.** Removing Engram
+changes the residual at layers 1 and 14, and every MoE router after that sees
+a different vector. Recording each layer's top-6 expert choice per token with
+Engram on and again with it off, the two runs pick the same set for a median
+of 2.6 percent of tokens at every layer after the first injection, share about
+3.6 of the six experts, and agree on the top-1 expert 57 percent of the time.
+Layer 0, ahead of Engram, agrees perfectly. That reshuffle could in principle
+have been the penalty rather than the features, so expert choice was pinned
+across arms on teacher-forced CRUXEval answers, 20,920 scored tokens, by
+masking the router logits so the kernel must select a recorded set with the
+model's own weights:
+
+| arm | bits per token | against Engram on |
+|---|---:|---:|
+| Engram on, routing free | 0.2848 | |
+| Engram off, routing free | 0.3093 | +0.0245 |
+| Engram on, forced to its own recorded routing | 0.2863 | +0.0015 |
+| Engram off, forced to its own recorded routing | 0.3112 | +0.0264 |
+| Engram off, forced to the Engram-on routing | 0.3375 | +0.0527 |
+| Engram on, forced to the Engram-off routing | 0.2935 | +0.0087 |
+
+The two self-pinned controls sit within 0.002 bits of their free arms, which
+bounds the mechanism's noise. Removing Engram while forcing the experts it
+would have chosen is worse than removing it and letting the router re-route,
+more than twice the ablation gap. The router's re-routing under ablation is
+compensation, not damage. Keeping every Engram feature but forcing the
+Engram-off routing costs 36 percent of the gap on its own, so the experts a
+token is sent to are specific to whether the memory fired. Held to a fixed
+routing, the whole gap and more is attributable to the missing tables.
+
+All of the above was measured with the tables in pinned host memory. The
+disk path serves the same rows, so it changes none of it.
