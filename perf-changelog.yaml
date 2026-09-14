@@ -7594,3 +7594,9 @@
     - "Avoid recursive TileRT eval dispatch and preserve evaluation failures after artifact staging."
     - "避免 TileRT 评测分发无限递归，并在保存产物后保留评测失败状态。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3067
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Discover active Mellanox RDMA devices by driver on DSXE and select the link-layer GID"
+  pr-link: TBD
