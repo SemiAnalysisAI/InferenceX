@@ -82,6 +82,9 @@ SAMPLES_HEADER = (
     "power_w",
 )
 
+# srt-slurm v2 appends optional utilization fields to the power samples.
+SAMPLES_HEADER_V2 = (*SAMPLES_HEADER, "gpu_util_pct", "sm_active")
+
 # Fixed by the producer contract (srt-slurm contract.MAX_SAMPLE_GAP_SECONDS),
 # NOT a multiple of the configured sample interval.
 MAX_SAMPLE_GAP_SECONDS = 3.0
@@ -331,8 +334,10 @@ def _check_wire_contract(manifest: dict) -> list[str]:
 # --- strict samples parsing (mirrors srt-slurm samples.read_samples) --------
 
 
-def _parse_sample_row(raw: list[str]) -> SampleRow | None:
-    if len(raw) != len(SAMPLES_HEADER):
+def _parse_sample_row(raw: list[str], expected_version: int = 1) -> SampleRow | None:
+    """Validate the selected CSV generation, including optional utilization."""
+    header = SAMPLES_HEADER_V2 if expected_version == 2 else SAMPLES_HEADER
+    if len(raw) != len(header):
         return None
     try:
         schema_version = int(raw[0])
@@ -340,10 +345,16 @@ def _parse_sample_row(raw: list[str]) -> SampleRow | None:
         scrape_seq = int(raw[2])
         gpu_index = int(raw[4])
         power_w = float(raw[6])
+        if expected_version == 2:
+            for cell, maximum in zip(raw[7:], (100.0, 1.0)):
+                if cell:
+                    value = float(cell)
+                    if not math.isfinite(value) or not 0 <= value <= maximum:
+                        return None
     except ValueError:
         return None
     hostname, gpu_uuid = raw[3], raw[5]
-    if schema_version != SCHEMA_VERSION or not hostname or not gpu_uuid:
+    if schema_version != expected_version or not hostname or not gpu_uuid:
         return None
     if not math.isfinite(timestamp_unix) or not math.isfinite(power_w) or power_w < 0:
         return None
@@ -369,10 +380,14 @@ def read_samples(path: Path) -> tuple[tuple[SampleRow, ...], tuple[str, ...]]:
         with open(path, newline="", encoding="utf-8") as handle:
             reader = csv.reader(handle)
             header = next(reader, None)
-            if header != list(SAMPLES_HEADER):
+            if header == list(SAMPLES_HEADER):
+                expected_version = 1
+            elif header == list(SAMPLES_HEADER_V2):
+                expected_version = 2
+            else:
                 return (), ("samples_csv_header_mismatch",)
             for raw in reader:
-                row = _parse_sample_row(raw)
+                row = _parse_sample_row(raw, expected_version)
                 if row is None:
                     reasons.append("samples_csv_malformed")
                     continue

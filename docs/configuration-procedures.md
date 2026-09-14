@@ -21,6 +21,18 @@ Use this page for benchmark configuration, recipe, image, and runner changes. It
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | Append-only benchmark trigger log |
 | [`AGENTS.md`](../AGENTS.md) | Repository-wide config, MTP, changelog, and sweep rules |
 
+## Dependency submodules
+
+Git records the exact dependency commits. [`.gitmodules`](../.gitmodules) defines the repositories: AIPerf at `utils/aiperf`, NVIDIA srt-slurm at `utils/srt-slurm`, and the documented TileRT fork exception at `utils/srt-slurm-tilert`.
+
+Initialize them before running benchmarks locally:
+
+```bash
+git submodule update --init
+```
+
+To upgrade, fetch and check out the desired commit inside the relevant submodule, then commit the updated submodule pointer in InferenceX. Benchmark workflows already initialize submodules. Slurm launchers make a local Git clone for each job so recipe staging and runtime writes do not modify the submodule, and record the actual commit for result provenance. No network clone is needed during launcher setup.
+
 ## Procedure index
 
 1. [Prepare a worktree](#prepare-a-worktree)

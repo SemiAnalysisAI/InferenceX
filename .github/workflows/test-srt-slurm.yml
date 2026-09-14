@@ -1,0 +1,54 @@
+name: Test srt-slurm integration
+
+on:
+  pull_request:
+    paths:
+      - 'benchmarks/multi_node/srt-slurm-recipes/**'
+      - 'benchmarks/multi_node/srt_eval.sh'
+      - 'configs/nvidia-master.yaml'
+      - 'infx/matrix/**'
+      - 'infx/results/power/multinode.py'
+      - 'runners/**'
+      - '.gitmodules'
+      - 'utils/srt-slurm'
+      - 'utils/test_aggregate_power_multinode.py'
+      - '.github/workflows/test-srt-slurm.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Initialize the pinned NVIDIA runtime
+        run: git submodule update --init utils/srt-slurm
+      - name: Validate migrated recipes
+        run: |
+          uv run --no-project --python 3.12 --with-editable "$GITHUB_WORKSPACE/utils/srt-slurm" python - <<'PYTHON'
+          from pathlib import Path
+          from srtctl.core.config import validate_config_file
+
+          root = Path("benchmarks/multi_node/srt-slurm-recipes")
+          errors = []
+          for recipe in sorted(root.rglob("*.yaml")):
+              if "tilert" not in recipe.relative_to(root).parts:
+                  errors.extend(f"{recipe}: {error}" for error in validate_config_file(recipe))
+          print("\n".join(errors) if errors else "All NVIDIA recipes validated.")
+          raise SystemExit(bool(errors))
+          PYTHON
+      - name: Check integration behavior
+        run: |
+          uv run --no-project --python 3.12 --with pytest --with pyyaml \
+            --with-editable "$GITHUB_WORKSPACE/utils/srt-slurm" \
+            python -m pytest runners/test_synthetic_injectors.py \
+              runners/test_slurm_utils.py \
+              utils/test_aggregate_power_multinode.py utils/test_inject_srt_power_concurrencies.py -q
+      - name: Check launcher syntax
+        run: |
+          for launcher in runners/launch_*.sh; do
+            if [[ -f "$launcher" ]]; then bash -n "$launcher"; fi
+          done
+          bash -n runners/slurm_utils.sh benchmarks/multi_node/srt_eval.sh

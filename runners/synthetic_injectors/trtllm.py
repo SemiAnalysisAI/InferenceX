@@ -13,6 +13,7 @@ import re
 import sys
 
 from . import register
+from ._roles import rewrite_role_environments
 
 _ENV_KEY = "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS"
 # A `*_environment:` mapping header under backend (aggregated/prefill/decode).
@@ -41,6 +42,12 @@ def rewrite(content, al, log):
     # Replace existing settings first so a recipe that already carries the
     # variable ends up with exactly one line per block.
     content = _ENV_LINE_RE.sub("", content)
+
+    if re.search(r"(?m)^roles:", content):
+        rewritten, count = rewrite_role_environments(content, ((_ENV_KEY, value),))
+        if count:
+            log(f"Set {_ENV_KEY}={value} (AL={al}) in {count} role environment block(s)")
+        return rewritten, count
 
     lines = content.splitlines(keepends=True)
     out, count, i = [], 0, 0

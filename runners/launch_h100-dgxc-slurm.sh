@@ -2,7 +2,7 @@
 set -e
 
 # shellcheck source=runners/slurm_utils.sh
-source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 
 # System-specific configuration for H100 DGXC Slurm cluster
 SLURM_PARTITION="hpc-gpu-1"
@@ -41,27 +41,14 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         exit 1
     fi
 
-    echo "Cloning srt-slurm repository..."
+    echo "Preparing job-local srt-slurm checkout..."
     SRT_REPO_DIR="srt-slurm"
     if [ -d "$SRT_REPO_DIR" ]; then
         echo "Removing existing $SRT_REPO_DIR..."
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    # TODO(CJQ): make first class upon srt-slurm upstream refactor
-    if [[ "$IS_AGENTIC" == "1" ]]; then
-        git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-    else
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-        git checkout sa-submission-q2-2026
-    fi
-    if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
-        python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
-            || exit 1
-    fi
-
+    setup_srt_slurm "$SRT_REPO_DIR" || exit 1
 
     echo "Installing srtctl..."
     export UV_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/bin"
@@ -150,7 +137,7 @@ EOF
         python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
             "${CONFIG_FILE%%:*}" "$FRAMEWORK" || exit 1
     fi
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
     # Extract JOB_ID from srtctl output

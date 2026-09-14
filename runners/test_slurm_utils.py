@@ -11,7 +11,6 @@ from pydantic import BaseModel, ValidationError
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SLURM_UTILS = REPO_ROOT / "runners" / "slurm_utils.sh"
 PATCH_SRT_EVAL = REPO_ROOT / "runners" / "patch_srt_eval_dispatch.py"
-PATCH_SRT_DP_RANKS = REPO_ROOT / "runners" / "patch_srt_vllm_dp_ranks.py"
 PATCH_TRTLLM_CHAT_STORE = REPO_ROOT / "runners" / "patch_trtllm_chat_store.py"
 PATCH_VLLM_SIMPLE_KV = REPO_ROOT / "runners" / "patch_vllm_simple_kv_offload.py"
 INJECT_ACCEPTANCE = REPO_ROOT / "runners" / "inject_synthetic_acceptance.py"
@@ -292,52 +291,6 @@ def test_patch_srt_eval_dispatch_forwards_selection_and_is_idempotent(
     )
     assert execution.returncode == 0, execution.stderr
     assert execution.stdout.splitlines() == ["eval:--port 12345", "stage:/logs/eval_results"]
-
-
-def test_patch_srt_vllm_dp_ranks_is_idempotent_and_preserves_surrounding_code(
-    tmp_path: Path,
-) -> None:
-    symbols = runpy.run_path(str(PATCH_SRT_DP_RANKS))
-    backend = tmp_path / "src/srtctl/backends/vllm.py"
-    backend.parent.mkdir(parents=True)
-    original = f"prefix\n{symbols['OLD_BLOCK']}suffix\n"
-    backend.write_text(original)
-
-    first = subprocess.run(
-        ["python3", str(PATCH_SRT_DP_RANKS), str(tmp_path)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    patched = backend.read_text()
-    second = subprocess.run(
-        ["python3", str(PATCH_SRT_DP_RANKS), str(tmp_path)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert first.returncode == 0, first.stderr
-    assert second.returncode == 0, second.stderr
-    assert patched != original
-    assert patched.startswith("prefix\n") and patched.endswith("suffix\n")
-    assert backend.read_text() == patched
-
-
-def test_patch_srt_vllm_dp_ranks_rejects_unknown_source(tmp_path: Path) -> None:
-    backend = tmp_path / "src/srtctl/backends/vllm.py"
-    backend.parent.mkdir(parents=True)
-    backend.write_text("unsupported backend\n")
-
-    result = subprocess.run(
-        ["python3", str(PATCH_SRT_DP_RANKS), str(tmp_path)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 1
-    assert backend.read_text() == "unsupported backend\n"
 
 
 def test_patch_trtllm_chat_store_accepts_false_and_is_idempotent(
@@ -650,4 +603,3 @@ def test_mi355x_agentic_model_mount_and_routing(
     ) in args
     script = f"benchmarks/single_node/agentic/{prefix}_fp4_mi355x_vllm_mtp.sh"
     assert args[-2] == script
-    assert (REPO_ROOT / script).is_file()

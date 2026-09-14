@@ -8162,7 +8162,7 @@ minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/minimax-m3/gb200-fp4/agentic/dynamo-agg-gb200-tp4-c5-b1-eagle3.yaml"
+          - "CONFIG_FILE=recipes/trtllm/minimax-m3/gb200-fp4/agentic/dynamo-agg-gb200-tp4-c5-b1-eagle3.yaml"
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
       - spec-decoding: mtp
@@ -8176,7 +8176,7 @@ minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/minimax-m3/gb200-fp4/agentic/dynamo-agg-gb200-tp4-c10-b1-eagle3.yaml"
+          - "CONFIG_FILE=recipes/trtllm/minimax-m3/gb200-fp4/agentic/dynamo-agg-gb200-tp4-c10-b1-eagle3.yaml"
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
       - spec-decoding: mtp
@@ -8190,7 +8190,7 @@ minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/minimax-m3/gb200-fp4/agentic/dynamo-agg-gb200-tp4-c15-b1-eagle3.yaml"
+          - "CONFIG_FILE=recipes/trtllm/minimax-m3/gb200-fp4/agentic/dynamo-agg-gb200-tp4-c15-b1-eagle3.yaml"
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
       - spec-decoding: mtp
@@ -8204,7 +8204,7 @@ minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/minimax-m3/gb200-fp4/agentic/dynamo-agg-gb200-tp4-c20-b1-eagle3.yaml"
+          - "CONFIG_FILE=recipes/trtllm/minimax-m3/gb200-fp4/agentic/dynamo-agg-gb200-tp4-c20-b1-eagle3.yaml"
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
       - spec-decoding: mtp
@@ -8218,7 +8218,7 @@ minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/minimax-m3/gb200-fp4/agentic/dynamo-agg-gb200-tp4-c25-b1-eagle3.yaml"
+          - "CONFIG_FILE=recipes/trtllm/minimax-m3/gb200-fp4/agentic/dynamo-agg-gb200-tp4-c25-b1-eagle3.yaml"
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
       - spec-decoding: mtp
@@ -8232,7 +8232,7 @@ minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/minimax-m3/gb200-fp4/agentic/dynamo-agg-gb200-tp4-c30-b1-eagle3.yaml"
+          - "CONFIG_FILE=recipes/trtllm/minimax-m3/gb200-fp4/agentic/dynamo-agg-gb200-tp4-c30-b1-eagle3.yaml"
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
       - spec-decoding: mtp
@@ -8246,7 +8246,7 @@ minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/minimax-m3/gb200-fp4/agentic/dynamo-agg-gb200-tp4-c40-b1-eagle3.yaml"
+          - "CONFIG_FILE=recipes/trtllm/minimax-m3/gb200-fp4/agentic/dynamo-agg-gb200-tp4-c40-b1-eagle3.yaml"
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
 
@@ -8846,7 +8846,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-1p4d-dep4-tep8-c4-b1-mtp.yaml"
+          - "CONFIG_FILE=recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-1p4d-dep4-tep8-c4-b1-mtp.yaml"
           - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 4
@@ -8863,7 +8863,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-1p6d-dep4-tep4-c24-b4-mtp.yaml"
+          - "CONFIG_FILE=recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-1p6d-dep4-tep4-c24-b4-mtp.yaml"
           - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 6
@@ -8880,7 +8880,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-1p1d-dep8-dep32-c388-b4-mtp.yaml"
+          - "CONFIG_FILE=recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-1p1d-dep8-dep32-c388-b4-mtp.yaml"
           - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 1
@@ -8897,7 +8897,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-2p1d-dep8-dep32-c736-b8-mtp.yaml"
+          - "CONFIG_FILE=recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-2p1d-dep8-dep32-c736-b8-mtp.yaml"
           - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 1
@@ -8914,7 +8914,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-3p1d-dep8-dep16-c1152-b32-mtp.yaml"
+          - "CONFIG_FILE=recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-3p1d-dep8-dep16-c1152-b32-mtp.yaml"
           - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 1
@@ -8931,7 +8931,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-5p1d-dep8-dep16-c2626-b96-mtp.yaml"
+          - "CONFIG_FILE=recipes/trtllm/deepseek-v4/agentx-gb300-20260811/dynamo-disagg-gb300-5p1d-dep8-dep16-c2626-b96-mtp.yaml"
           - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 1
@@ -9856,7 +9856,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-1p1d-tp8-c1-b1-mtp5.yaml"
+          - "CONFIG_FILE=recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-1p1d-tp8-c1-b1-mtp5.yaml"
           - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 1
@@ -9873,7 +9873,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-1p4d-tep4-c30-b2-mtp5.yaml"
+          - "CONFIG_FILE=recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-1p4d-tep4-c30-b2-mtp5.yaml"
           - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 4
@@ -9890,7 +9890,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-1p1d-tep8-c20-b5-mtp5.yaml"
+          - "CONFIG_FILE=recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-1p1d-tep8-c20-b5-mtp5.yaml"
           - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 1
@@ -9907,7 +9907,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-3p4d-tep4-c60-b5-mtp5.yaml"
+          - "CONFIG_FILE=recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-3p4d-tep4-c60-b5-mtp5.yaml"
           - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 4
@@ -9924,7 +9924,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-5p1d-dep16-c260-b16-mtp3.yaml"
+          - "CONFIG_FILE=recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-5p1d-dep16-c260-b16-mtp3.yaml"
           - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 1
@@ -9941,7 +9941,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-4p1d-dep8-c227-b16-mtp3.yaml"
+          - "CONFIG_FILE=recipes/trtllm/glm5.2/gb300-fp4/agentic/dynamo-disagg-gb300-4p1d-dep8-c227-b16-mtp3.yaml"
           - "SLURM_PARTITION=batch_1"
         decode:
           num-worker: 1

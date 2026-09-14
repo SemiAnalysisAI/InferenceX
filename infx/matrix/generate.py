@@ -257,7 +257,20 @@ def recipe_node_count(prefill: dict, decode: dict) -> int | None:
         # config topology remains the best available scheduling estimate.
         return None
 
-    resources = yaml.safe_load(recipe_path.read_text())["resources"]
+    recipe = yaml.safe_load(recipe_path.read_text())
+    if "base" in recipe:
+        # A file with several override variants has no single authoritative
+        # node count. The selected master topology supplies the estimate.
+        return None
+    roles = recipe.get("roles")
+    if roles:
+        # Schema 2 groups node allocations by role. A colocated decode role
+        # shares prefill nodes and does not reserve another allocation.
+        return sum(
+            0 if role.get("nodes") == "colocate" else int(role.get("nodes", 0))
+            for role in roles.values()
+        )
+    resources = recipe.get("resources", {})
     if "agg_nodes" in resources:
         return int(resources["agg_nodes"])
     if "prefill_nodes" in resources and "decode_nodes" in resources:

@@ -21,6 +21,18 @@
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | 只允许追加的基准触发日志 |
 | [`AGENTS.md`](../AGENTS.md) | 仓库级配置、MTP、changelog 和 sweep 规则 |
 
+## 依赖子模块
+
+Git 记录依赖的精确提交版本。[`.gitmodules`](../.gitmodules) 定义各仓库：AIPerf 位于 `utils/aiperf`，NVIDIA srt-slurm 位于 `utils/srt-slurm`，已记录的 TileRT 分支例外位于 `utils/srt-slurm-tilert`。
+
+本地运行基准测试前，先初始化子模块：
+
+```bash
+git submodule update --init
+```
+
+升级时，在对应子模块中获取并检出目标提交，再将更新后的子模块指针提交到 InferenceX。基准测试工作流已配置为自动初始化子模块。Slurm 启动器为每个作业创建本地 Git 克隆，避免配方准备和运行时写入修改子模块，并记录实际提交以供结果溯源。启动器准备阶段无需通过网络克隆仓库。
+
 ## 规程索引
 
 1. [准备 worktree](#准备-worktree)

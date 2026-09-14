@@ -76,3 +76,41 @@ def test_trtllm_spec_tokens_from_recipe():
     injector = get_injector("dynamo-trt")
     assert injector.spec_tokens_from_recipe(TRTLLM_RECIPE) == 3
     assert injector.spec_tokens_from_recipe("name: x\n") is None
+
+
+def test_schema2_injectors_target_worker_roles_and_preserve_aliases():
+    import yaml
+
+    recipe = '''schema: 2
+engine: sglang
+roles:
+  prefill:
+    nodes: 1
+    env: &common
+      KEEP: yes
+    args:
+      speculative-num-steps: 3
+  decode:
+    nodes: 1
+    env: *common
+  agg:
+    nodes: 1
+frontend:
+  env:
+    KEEP_FRONTEND: yes
+benchmark:
+  env:
+    KEEP_CLIENT: yes
+'''
+    for framework, variable in [("dynamo-sglang", "SGLANG_SIMULATE_ACC_LEN"),
+                                ("dynamo-trt", "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS")]:
+        injector = get_injector(framework)
+        rewritten, count = injector.rewrite(recipe, 2.5, _noop)
+        data = yaml.safe_load(rewritten)
+        assert count == 3
+        assert all(variable in role["env"] for role in data["roles"].values())
+        assert data["roles"]["decode"]["env"]["KEEP"] is True
+        assert data["frontend"] == yaml.safe_load(recipe)["frontend"]
+        assert data["benchmark"] == yaml.safe_load(recipe)["benchmark"]
+        real, _ = injector.rewrite_real(rewritten, _noop)
+        assert variable not in real
