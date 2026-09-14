@@ -96,7 +96,7 @@ case "$CONC" in
         fi
         SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 ))
         KDA_ARGS=(--additional-config '{"kda_prefill_backend":"triton"}')
-        MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( CONC > 2 ? CONC : 2 ))}"
+        MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( CONC * 2 > 2 ? CONC * 2 : 2 ))}"
         if [ "$CONC" -eq 1 ]; then MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-16384}"
         else MAX_BATCHED_TOKENS="${MAX_BATCHED_TOKENS:-8192}"; fi
         ;;
