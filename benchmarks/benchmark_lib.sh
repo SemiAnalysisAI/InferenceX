@@ -2102,7 +2102,7 @@ build_replay_cmd() {
     # has 393. Cap at 393 so all unique traces are loaded (the loader treats
     # this as a ``min(cap, available)`` ceiling, not a target — see
     # semianalysis_cc_traces_weka.py).
-    REPLAY_CMD+=" --num-dataset-entries 393"
+    REPLAY_CMD+=" --num-dataset-entries ${AIPERF_NUM_DATASET_ENTRIES:-393}"
     # 1-second timeslices on the server-metrics scrape so the post-run
     # plotter has per-window time series (KV usage, cache hit rate,
     # throughput, etc.). Matches kv-cache-tester's poll_interval=1.0
