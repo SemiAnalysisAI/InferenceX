@@ -122,6 +122,12 @@ Concurrent cells serialize draft staging with a per-model lock. Each cell lets
 `hf download` validate or resume the existing cache before serving; a nonempty
 directory is not a completion signal.
 
+
+Kimi-K3 selects one active Mellanox adapter by its sysfs driver, including
+DSXE `ibp*` names; EFA devices are excluded from this RDMA recipe. The embedded
+Mooncake ranks share that adapter. InfiniBand uses GID index 0 and RoCE retains
+index 3. If no compatible active adapter exists, startup fails before serving.
+
 ## Native TileRT power
 
 For GLM-5.1 on B200 Nscale, `MODEL_PATH` can select an existing shared checkpoint instead of the default `/scratch/models/GLM-5.1-FP8`. When it selects an HF snapshot, also set `HF_HUB_CACHE_HOST_PATH` to the existing cache root; TileRT mounts that root at the same absolute path so snapshot links to sibling blobs remain readable. Keep `TILERT_WEIGHTS_DIR` pointed at the separately converted decode weights.

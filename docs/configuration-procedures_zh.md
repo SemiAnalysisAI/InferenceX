@@ -120,6 +120,11 @@ B300 DSXE 的 Kimi-K3 AgentX 路径在 `/scratch/models` 下挂载预置目标�
 并发任务通过模型专用锁串行准备草稿权重。每个任务在启动服务前由 `hf download`
 校验或续传现有缓存；目录非空不代表下载完成。
 
+Kimi-K3 根据 sysfs 驱动选择一张活动的 Mellanox 网卡，支持 DSXE 的 `ibp*`
+名称；此 RDMA 配方排除 EFA 设备。嵌入式 Mooncake 的所有 rank 共用该网卡。
+InfiniBand 使用 GID 索引 0，RoCE 保持索引 3。没有兼容的活动网卡时，
+启动会在提供服务前失败。
+
 ## TileRT 原生功耗
 
 B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默认的 `/scratch/models/GLM-5.1-FP8`。若指定 HF snapshot，还需把 `HF_HUB_CACHE_HOST_PATH` 设为现有缓存根目录；TileRT 按相同绝对路径挂载整个缓存，使 snapshot 指向同级 blobs 的软链接可读。`TILERT_WEIGHTS_DIR` 仍指向单独转换的 decode 权重。

@@ -7561,3 +7561,9 @@
     - "Replace the local 2*CONC max_num_seqs limit with an explicit reproducibility cap of 128 (the effective vllm serve default on MI355X is 1024). The old cap sat below AgentX subagent fan-out and produced queue times up to 16.2 seconds at concurrency 1; 128 removed that scheduling queue. The derived CUDA-graph capture ceiling is 1024 for each configured concurrency."
     - "将本地 2*CONC 的 max_num_seqs 上限改为显式固定的可复现值 128（MI355X 上 vllm serve 的实际默认值为 1024）。旧上限低于 AgentX 子代理扇出，并发 1 时排队时间最高达 16.2 秒；128 消除了该调度排队。所有已配置并发点由此得到的 CUDA graph 捕获上限均为 1024。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3058
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Discover active Mellanox RDMA devices by driver on DSXE and select the link-layer GID"
+  pr-link: TBD

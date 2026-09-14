@@ -127,26 +127,9 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
-        # One rail for every rank. These nodes are rail-isolated, so two
-        # different RNICs cannot reach each other even within a node, and the
-        # embedded store's ranks are eight processes on one host.
-        #
-        # Chosen at runtime: mlx5_0 is down on some nodes (b300-016, b300-017),
-        # and a hardcoded rail has no fallback -- topology discovery finds 0
-        # HCAs and every rank dies in a 20-retry loop that reads like a store
-        # problem. Order starts at mlx5_0 so a healthy node is unchanged.
-        MOONCAKE_RAIL=""
-        for _d in mlx5_0 mlx5_1 mlx5_2 mlx5_3 mlx5_4 mlx5_5 mlx5_8 mlx5_9 \
-                  mlx5_10 mlx5_11 mlx5_16 mlx5_17 mlx5_20 mlx5_21 mlx5_22 mlx5_23; do
-            if grep -q ACTIVE "/sys/class/infiniband/$_d/ports/1/state" 2>/dev/null; then
-                MOONCAKE_RAIL="$_d"
-                break
-            fi
-        done
-        if [ -z "$MOONCAKE_RAIL" ]; then
-            echo "Error: no active RDMA rail on $(hostname); Mooncake cannot initialise" >&2
-            exit 1
-        fi
+        # The embedded store ranks share one Mellanox rail. DSXE uses
+        # predictable device names (ibp*), while RoCE hosts use mlx5_*.
+        select_mooncake_rdma_device
         echo "Mooncake rail: $MOONCAKE_RAIL"
 
         cat > "$MOONCAKE_CONFIG_PATH" <<EOF
@@ -162,7 +145,6 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 }
 EOF
         export MOONCAKE_CONFIG_PATH
-        export MC_GID_INDEX=3
         # Same-process transfers skip the transfer engine; off by default
         # whenever a non-TCP transport exists.
         export MC_STORE_MEMCPY=1
