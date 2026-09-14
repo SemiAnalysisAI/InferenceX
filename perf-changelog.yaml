@@ -7599,4 +7599,4 @@
     - kimik3-fp4-b300-vllm-agentic-dspark
   description:
     - "Discover active Mellanox RDMA devices by driver on DSXE and select the link-layer GID"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
