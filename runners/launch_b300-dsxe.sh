@@ -493,8 +493,22 @@ else
     fi
     CONTAINER_MOUNTS_ARG=$(IFS=,; printf '%s' "${CONTAINER_MOUNTS[*]}")
 
+    runtime_names=$(srun --jobid="$JOB_ID" enroot list)
+    printf 'Existing compute runtimes:\n%s\n' "$runtime_names"
+    CONTAINER_REUSE_ARGS=()
+    while read -r runtime_name; do
+        if [[ "$runtime_name" == pyxis_2528* ]]; then
+            CONTAINER_REUSE_ARGS=(--container-name="$runtime_name")
+            break
+        fi
+    done <<< "$runtime_names"
+    if [[ "${#CONTAINER_REUSE_ARGS[@]}" == 0 ]]; then
+        echo 'No prior task2528 runtime on this node; enter its cached image.'
+    fi
+
     srun --jobid="$JOB_ID" \
         --mpi=none \
+        "${CONTAINER_REUSE_ARGS[@]}" \
         --container-image="$SQUASH_FILE" \
         --container-mounts="$CONTAINER_MOUNTS_ARG" \
         --no-container-mount-home \
