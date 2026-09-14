@@ -161,8 +161,7 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     trap 'bundle_server_logs "$BENCHMARK_LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true' EXIT INT TERM HUP
 
     LOG_FILE="${BENCHMARK_LOGS_DIR}/slurm_job-${JOB_ID}.out"
-    SRT_JOB_RC=0
-    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
+    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
 
     while IFS= read -r -d '' result_file; do
         copy_to_workspace "$result_file" "$GITHUB_WORKSPACE/$(basename "$result_file")" || exit 1
@@ -177,7 +176,7 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     fi
 
     scancel "$JOB_ID" 2>/dev/null || true
-    exit "$SRT_JOB_RC"
+    exit 0
 fi
 
 # MODEL_PATH: Override with pre-downloaded paths on GB200 runner
@@ -861,7 +860,7 @@ LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
 AGENTX_POWER_RC=0
 SRT_JOB_RC=0
-stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
+stream_slurm_job_log "$JOB_ID" "$LOG_FILE" true || SRT_JOB_RC=$?
 
 set -x
 

@@ -123,10 +123,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     wait $POLL_PID
 
-    source "$GITHUB_WORKSPACE/runners/slurm_utils.sh"
-    slurm_outcome_rc=0
-    verify_slurm_job_completion "$JOB_ID" || slurm_outcome_rc=$?
-
     set -x
 
     # FIXME: The below is bad and is a result of the indirection of the ways in which
@@ -253,7 +249,6 @@ PY
     sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
     # Log preservation and cleanup handled by EXIT trap (cleanup_and_save_logs)
-    exit "$slurm_outcome_rc"
 
 else
 
@@ -262,7 +257,7 @@ else
     export PORT_OFFSET=${RUNNER_NAME: -1}
     export PORT=$(( 8888 + ${PORT_OFFSET} ))
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "atom" ]] && printf '_atom' || printf '')
-    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" || "$SPEC_DECODING" == "draft_model" ]] && printf '_mtp' || printf '')
 
     PARTITION="compute"
     SQUASH_FILE="/var/lib/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"

@@ -403,7 +403,7 @@ trap powerx_snapshot_srt EXIT
 # Waits for the log file to appear, fails fast if the job dies first, then
 # streams until the job leaves the queue.
 SRT_JOB_RC=0
-stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
+stream_slurm_job_log "$JOB_ID" "$LOG_FILE" true || SRT_JOB_RC=$?
 
 set -x
 

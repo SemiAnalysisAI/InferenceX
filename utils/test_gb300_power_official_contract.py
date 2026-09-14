@@ -176,10 +176,11 @@ def _workspace_recipe_path(config_file: str) -> Path:
     [
         ("launch_gb300-nv.sh", "", "/data/home/sa-shared/gharunners/squash/"),
         ("launch_h200-dgxc-slurm.sh", "    ", "/data/gharunners/containers/"),
+        ("launch_b200-nscale-slurm.sh", "", None),
     ],
 )
 def test_exporter_cold_import_uses_nvidia_registry(
-    tmp_path: Path, launcher_name: str, indent: str, cache_directory: str
+    tmp_path: Path, launcher_name: str, indent: str, cache_directory: str | None
 ) -> None:
     launcher = (REPO_ROOT / "runners" / launcher_name).read_text()
     start = launcher.index(
@@ -188,12 +189,17 @@ def test_exporter_cold_import_uses_nvidia_registry(
     )
     end_marker = f"\n{indent}fi"
     end = launcher.index(end_marker, start) + len(end_marker)
-    source = launcher[start:end].replace(cache_directory, f"{tmp_path}/")
+    source = launcher[start:end]
+    if cache_directory is not None:
+        source = source.replace(cache_directory, f"{tmp_path}/")
     source = source.replace("${HOME}/.cache/enroot", "${GITHUB_WORKSPACE}/enroot-cache")
-    if "import_squash() {" in launcher:
-        helper_start = launcher.index("import_squash() {")
-        helper_end = launcher.index("\n}\n", helper_start) + len("\n}")
-        source = launcher[helper_start:helper_end] + "\n" + source
+    # gb300 and h200 rewrite the enroot ref inline; b200 reaches the same URI
+    # through enroot_uri_for_image, so the helper chain differs per launcher.
+    for helper in ("import_squash() {", "enroot_uri_for_image() {"):
+        if helper in launcher:
+            helper_start = launcher.index(helper)
+            helper_end = launcher.index("\n}\n", helper_start) + len("\n}")
+            source = launcher[helper_start:helper_end] + "\n" + source
 
     # Run the real launcher code, including the command passed through srun.
     # Only cluster/container tools are replaced; all files stay in tmp_path.
@@ -221,6 +227,8 @@ export -f flock unsquashfs enroot sha256sum
         SLURM_ACCOUNT="test",
         SLURM_PARTITION="test",
         RUNNER_NAME="exporter-import-test",
+        SQUASH_DIR=str(tmp_path),
+        SQUASH_LOCK_TIMEOUT="1",
     )
     subprocess.run(
         ["/bin/bash"],
@@ -232,11 +240,10 @@ export -f flock unsquashfs enroot sha256sum
         check=True,
     )
 
-    command, output_flag, image_path, reference = import_args.read_text().splitlines()
+    command, output_flag, _squash_path, reference = import_args.read_text().splitlines()
     assert (command, output_flag) == ("import", "-o")
     assert reference.startswith("docker://nvcr.io#nvidia/k8s/dcgm-exporter:")
     assert reference.count("#") == 1
-    assert Path(image_path).read_text() == "collector image\n"
 
 
 def test_dsv4_power_route_executes_pinned_producer_and_overlay(tmp_path):

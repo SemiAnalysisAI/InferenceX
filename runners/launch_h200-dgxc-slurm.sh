@@ -376,7 +376,7 @@ EOF
     fi
 
     SRT_JOB_RC=0
-    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
+    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" true || SRT_JOB_RC=$?
 
     set -x
 
