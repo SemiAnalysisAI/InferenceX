@@ -116,7 +116,7 @@ The native collector sets UTC and records context beside its CSV for portable re
 
 ### Slurm completion receipts
 
-Shared Slurm waiting verifies the terminal allocation state and exit code, consulting `scontrol` when `sacct` is missing or non-terminal and retaining `slurm_job_*_outcome.txt`. Launchers stage available evidence before returning failure. llm-d workers exit using the coordinator’s atomically published status-bearing completion marker; normal completion no longer cancels the allocation.
+NVIDIA SRT launchers verify the terminal allocation state and exit code, consulting `scontrol` when `sacct` is missing or non-terminal and retaining `slurm_job_*_outcome.txt`. They stage available evidence before returning failure. The shared log-streaming helper enables this terminal check only when its caller explicitly requests it; llm-d retains its existing completion behavior.
 
 ## Eval artifacts
 

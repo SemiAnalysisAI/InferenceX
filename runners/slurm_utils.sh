@@ -94,7 +94,9 @@ stream_slurm_job_log() {
     echo "Tailing $log_file"
     tail -F -s 2 -n+1 "$log_file" --pid="$poll_pid" 2>/dev/null
     wait "$poll_pid"
-    verify_slurm_job_completion "$job_id"
+    if [[ "${3:-false}" == "true" ]]; then
+        verify_slurm_job_completion "$job_id"
+    fi
 }
 
 copy_to_workspace() {

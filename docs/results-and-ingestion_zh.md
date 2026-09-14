@@ -116,7 +116,7 @@ PR changelog 选择具有代表性的 NVIDIA 和 AMD 覆盖，并非所有受影
 
 ### Slurm 完成状态文件
 
-共享 Slurm 等待逻辑检查分配的最终状态和退出码；当 `sacct` 记录缺失或尚未进入最终状态时查询 `scontrol`，并保留 `slurm_job_*_outcome.txt`。启动器先保存已有证据再返回失败。llm-d 工作进程根据协调进程原子发布的完成状态退出；正常结束不再取消 Slurm 分配。
+NVIDIA SRT 启动器检查分配的最终状态和退出码；当 `sacct` 记录缺失或尚未进入最终状态时查询 `scontrol`，并保留 `slurm_job_*_outcome.txt`。启动器先保存已有证据再返回失败。共享日志流辅助函数仅在调用方明确请求时启用最终状态检查；llm-d 保留现有的结束行为。
 
 ## 评测工件
 
