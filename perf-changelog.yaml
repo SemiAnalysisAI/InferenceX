@@ -7831,4 +7831,4 @@
   description:
     - "Remove the TRT-LLM chat request schema patch; BFCL on stock TRT remains blocked on upstream store=false support."
     - "移除 TRT-LLM 聊天请求结构补丁；BFCL 在原生 TRT 上仍需上游支持 store=false。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
