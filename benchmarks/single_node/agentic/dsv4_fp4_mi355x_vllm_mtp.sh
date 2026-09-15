@@ -2,30 +2,14 @@
 set -eo pipefail
 set -x
 
-# Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on MI355X using vLLM,
-# with MTP speculative decoding and golden synthetic acceptance for throughput.
-# Mirrors the fixed-seq-len parallelism options (pure TP and DEP) so the
-# agentic sweep can probe both interactivity and throughput regimes:
-#   pure TP (DP_ATTENTION=false, EP_SIZE=1):  attention TP-sharded across
-#       all $TP GPUs in a single engine. Lower TPOT, lower batch.
-#   TP+EP   (DP_ATTENTION=false, EP_SIZE>1):  attention TP-sharded, MoE
-#       experts EP-sharded within the TP group.
-#   DEP     (DP_ATTENTION=true, EP_SIZE>1):   per-DP-rank attention with
-#       experts EP-sharded across DP ranks (per the vLLM blog recipe).
-#       Highest aggregate throughput at large CONC.
-#
-# Serving flags follow the validated MI355X recipe from
-# https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4-Pro?hardware=mi355x
-# https://github.com/SemiAnalysisAI/InferenceX/blob/main/benchmarks/single_node/fixed_seq_len/deprecated/dsv4_fp4_mi355x_vllm.sh
-# Image is configured in amd-master.yaml.
+# DeepSeek-V4-Pro FP4 on MI355X with vLLM MTP and golden synthetic acceptance.
+# Pure TP (DP_ATTENTION=false), TP+EP (EP_SIZE>1), and DEP (DP_ATTENTION=true)
+# arms. https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4-Pro?hardware=mi355x
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# KV_OFFLOADING=dram requires one of these.
-#   KV_OFFLOAD_BACKEND=vllm-native.
-#   KV_OFFLOAD_BACKEND=lmcache.
-#   KV_OFFLOAD_BACKEND=hicache.
+# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=vllm-native or lmcache.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -38,9 +22,6 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
-# `hf download` creates the target dir if missing and is itself idempotent.
-# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
-# Either way, MODEL_PATH is what the server is launched with.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -54,19 +35,17 @@ if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
-# ---- Resolve traces and install deps ----------------------------------------
 resolve_trace_source
 install_agentic_deps
 
-# Nightly ROCm image may be missing runtime deps; ensure they are present.
+# The nightly ROCm image lacks these runtime deps.
 agentic_pip_install --quiet Pillow fastapi uvicorn
 
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 
-# vllm-project/router expands the one HTTP backend into one logical worker per
-# DP rank and sends X-data-parallel-rank on forwarded requests. aiperf's
-# X-Correlation-ID is stable for every turn of a conversation; alias it to the
-# router's preferred X-Session-ID header.
+# vllm-router expands one HTTP backend into a logical worker per DP rank.
+# AIPerf's X-Correlation-ID is stable across a conversation's turns; alias it
+# to the router's X-Session-ID so every turn lands on the same rank.
 USE_VLLM_ROUTER=false
 VLLM_BACKEND_PORT="$PORT"
 if [ "$DP_ATTENTION" = "true" ]; then
@@ -79,16 +58,12 @@ if [ "$DP_ATTENTION" = "true" ]; then
     agentic_pip_install --quiet "vllm-router==$VLLM_ROUTER_VERSION"
 fi
 
-# AIPerf automatically scrapes the public endpoint's /metrics URL. That is the
-# vLLM engine for pure TP, but the native router for DP-attention. Explicitly
-# add the engine endpoint so every topology captures vLLM metrics; AIPerf
-# deduplicates it against the automatic endpoint in pure-TP runs.
+# AIPerf scrapes the public endpoint's /metrics, which is the router under
+# DP-attention; add the engine endpoint explicitly (deduplicated for pure TP).
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${VLLM_BACKEND_PORT}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 
-# DeepSeek-V4-Pro is an 805 GiB checkpoint. Cold Weka loads on MI355X take
-# roughly two hours for the 64 shards, so allow the engine core to finish
-# loading instead of timing out halfway through a healthy startup.
+# 805 GiB checkpoint; cold Weka loads take about two hours for the 64 shards.
 export VLLM_ENGINE_READY_TIMEOUT_S=10800
 
 # vllm-project/vllm#43447 keeps local SWA prefix-cache tails sparsely, while
@@ -96,10 +71,6 @@ export VLLM_ENGINE_READY_TIMEOUT_S=10800
 # store mask. 32k matches the trace-replay tuning validated for this workload.
 export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
 
-# VLLM_PREFIX_CACHE_RETENTION_INTERVAL only applies to sliding-window/Mamba
-# models; this vLLM build raises ValueError if it is set for DSv4.
-
-# ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 ROUTER_LOG="$RESULT_DIR/router.log"
 LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
@@ -115,23 +86,11 @@ if agentic_kv_offload_enabled; then
     case "$KV_OFFLOAD_BACKEND" in
       vllm-native)
         require_agentic_kv_offload_backend vllm-native
-        # ---- vLLM native config ----------------------------------------------------------
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
-        # MI355X nodes have ~2.7 TiB of host DRAM available for offload;
-        # reserve 2.5 TB for the offload pool (leaves ~200 GB headroom for
-        # worker RSS / page cache / slurm cgroup).
         TOTAL_CPU_DRAM_PARTITION_GB="$((TOTAL_CPU_DRAM_GB / (8 / TP)))"
-        # Use vLLM's regular native KV-offload path (OffloadingConnector),
-        # NOT the SimpleCPUOffloadConnector. The "vllm-native" backend resolves to
-        # OffloadingConnector by default; setting VLLM_USE_SIMPLE_KV_OFFLOAD=1
-        # would switch it to SimpleCPUOffloadConnector. We intentionally leave
-        # that env var UNSET here so the regular OffloadingConnector path is
-        # used. The shortcut --kv_offloading_backend native + --kv_offloading_size
-        # form constructs the KVTransferConfig at engine startup
-        # (vllm/config/vllm.py:662).
+        # OffloadingConnector, not SimpleCPUOffloadConnector: VLLM_USE_SIMPLE_KV_OFFLOAD
+        # must stay unset.
 
-        # Remove --disable-hybrid-kv-cache-manager and enable hybrid kv cache manager (default)
-        # This gives extra cache hit than disabling hybrid kv cache manager
         OFFLOAD_ARGS=(
             --kv_offloading_backend native
             --kv_offloading_size "$TOTAL_CPU_DRAM_PARTITION_GB"
@@ -140,7 +99,6 @@ if agentic_kv_offload_enabled; then
         ;;
       lmcache)
         require_agentic_kv_offload_backend lmcache
-        # ---- Lmcache config ----------------------------------------------------------
         LMCACHE_PID=""
 
         cleanup_lmcache_server() {
@@ -217,16 +175,13 @@ if agentic_kv_offload_enabled; then
             python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
 
             TOTAL_CPU_DRAM_PARTITION_GB="$((TOTAL_CPU_DRAM_GB / (8 / TP)))"
-            # Match the B200 Kimi LMCache setup: keep a 2.5 TB semantic CPU KV
-            # pool, but let the external MP server own that pool so vLLM does not
-            # split --kv-offloading-size across TP ranks through the integrated
-            # LMCache backend.
+            # The external MP server owns the pool so vLLM does not split
+            # --kv-offloading-size across TP ranks.
             LMCACHE_HOST="127.0.0.1"
             LMCACHE_PORT="5555"
             LMCACHE_HTTP_PORT="8080"
             # LMCacheMPConnector concatenates lmcache.mp.host and port into the
-            # ZMQ endpoint. Bind the server to a raw host, but pass the connector a
-            # ZMQ-style host string.
+            # ZMQ endpoint, so the connector gets a ZMQ-style host string.
             LMCACHE_CONNECT_HOST="tcp://$LMCACHE_HOST"
             LMCACHE_L1_SIZE_GB="${TOTAL_CPU_DRAM_PARTITION_GB}"
             if [ "$LMCACHE_L1_SIZE_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
@@ -234,12 +189,9 @@ if agentic_kv_offload_enabled; then
                 exit 1
             fi
             LMCACHE_L1_INIT_SIZE_GB="20"
-            # LMCache read locks are leases on chunks that lookup has promised
-            # vLLM can retrieve. The default 300s TTL is too short for this
-            # long-context agentic queue: TP8/conc32 can spend >300s between
-            # lookup and retrieve while GPU KV is saturated, which leaves the
-            # object present in L1 but no longer readable. Keep the 2.5 TB pool
-            # size unchanged and only extend the lookup-to-retrieve lease.
+            # Read locks are leases on chunks lookup promised vLLM can retrieve.
+            # TP8/conc32 can spend >300 s between lookup and retrieve while GPU
+            # KV is saturated, leaving the object in L1 but unreadable.
             LMCACHE_L1_READ_TTL_SECONDS="7200"
             LMCACHE_CHUNK_SIZE="256"
             LMCACHE_MAX_WORKERS="$TP"
@@ -308,9 +260,8 @@ if [ "$DP_ATTENTION" = "true" ]; then
     MAX_NUM_SEQS="$CONC"
 fi
 
-# DeepSeek-V4-Pro ships a native MTP head. AgentX throughput pins its
-# three-token draft to the committed thinking-on golden acceptance length;
-# eval-only runs use real target verification so accuracy remains meaningful.
+# Golden AL 2.49: committed thinking-on curve for a three-token MTP draft.
+# Eval-only runs use real target verification.
 NUM_SPEC_TOKENS=3
 SYNTHETIC_ACCEPT_LEN=2.49
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -360,8 +311,6 @@ VLLM_CMD=(
     "${OFFLOAD_ARGS[@]}"
 )
 
-# (srok), not yet
-    #--attention_config.use_fp4_indexer_cache=True
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
 "${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1 &

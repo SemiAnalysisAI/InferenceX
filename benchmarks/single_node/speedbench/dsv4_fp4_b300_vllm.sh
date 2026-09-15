@@ -2,14 +2,9 @@
 
 # DSV4-Pro B300 vLLM SPEED-Bench AL matrix collector.
 #
-# Produces the golden acceptance-length (AL) reference matrix consumed by the
-# synthetic-acceptance framework: for each thinking mode (on/off) and each MTP
-# level (num_speculative_tokens), measure the AL on a single SPEED-Bench
-# category (default: coding) and emit a YAML matrix identical in shape to
-# benchmarks/speedbench-reference-al.yaml.
-#
-# This is the "AL distribution collection" script wired into the
-# speedbench-al.yml GitHub Action (workflow_dispatch / push-button).
+# For each thinking mode (on/off) and MTP level (num_speculative_tokens), measure the
+# acceptance length (AL) on one SPEED-Bench category and emit a YAML matrix in the
+# golden_al_distribution shape. Wired into the speedbench-al.yml GitHub Action.
 #
 # Dispatch this collector through speedbench-al.yml.
 #
@@ -21,17 +16,15 @@ check_env_vars \
     CATEGORY CHAT_TEMPLATE_KWARGS_ON DP_ATTENTION EP_SIZE MODEL MODEL_PATH \
     MTP_LIST OUT_YAML PORT SPEEDBENCH_OUTPUT_LEN THINKING_MODES TP
 
-# Serve from the local weights dir resolved by the launcher (MODEL_PATH points
-# at the pre-staged copy, e.g. /scratch/models/DeepSeek-V4-Pro). A leading "/"
-# makes the download guard below a no-op.
+# MODEL_PATH is the launcher-resolved weights dir (e.g. /scratch/models/DeepSeek-V4-Pro).
+# A leading "/" makes the download guard below a no-op.
 SERVE_MODEL="${MODEL_PATH}"
 
 # Top-level key in the emitted YAML matrix comes from the model basename.
 MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
 CONCURRENCY="1"
 TEMPERATURE="1.0"
-# thinking-on chat_template_kwargs. MUST match the production/golden config:
-# the reference matrix (benchmarks/speedbench-reference-al.yaml) was measured
+# MUST match the golden config: benchmarks/speedbench-reference-al.yaml was measured
 # with reasoning_effort=high.
 
 SPEEDBENCH_DIR="/workspace/speed_bench_data"
@@ -43,7 +36,6 @@ mkdir -p "$RESULTS_DIR"
 nvidia-smi
 if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
 
-# ---- Download SPEED-Bench dataset ----
 echo "=== Downloading SPEED-Bench dataset ==="
 pip install -q datasets tiktoken
 curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/refs/heads/main/nemo_skills/dataset/speed-bench/prepare.py \
@@ -54,7 +46,6 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# Apply the shim once if any thinking-on cell is requested.
 if [[ " $THINKING_MODES " == *" on "* ]]; then
     if ! apply_chat_template_kwargs_shim; then
         echo "CRITICAL: --chat-template-kwargs shim failed — aborting"
@@ -82,10 +73,9 @@ fetch_metric() {
 }
 
 SERVER_PID=""
-# List all descendant PIDs of $1 recursively, matched by PARENT pid. This can
-# never include this script (the script is an ancestor of the server, not a
-# descendant), so it avoids the self-kill a name-based `pkill -f vllm` caused
-# (the script filename contains "vllm").
+# Descendant PIDs of $1 by PARENT pid. This can never include this script (an
+# ancestor of the server), unlike a name-based `pkill -f vllm`, which self-killed
+# because the script filename contains "vllm".
 _descendants() {
     local pid="$1" child
     for child in $(pgrep -P "$pid" 2>/dev/null || true); do
@@ -95,10 +85,9 @@ _descendants() {
 }
 cleanup_server() {
     if [[ -n "$SERVER_PID" ]]; then
-        # Snapshot the server's worker/EngineCore subprocesses BEFORE killing the
-        # parent: once the parent dies the children reparent to init and the tree
-        # link is lost. Killing the captured PIDs guarantees no orphaned worker
-        # survives to hold GPU memory and OOM the next server start.
+        # Snapshot the worker/EngineCore subprocesses BEFORE killing the parent: once it
+        # dies the children reparent to init and the tree link is lost. An orphaned
+        # worker holds GPU memory and OOMs the next server start.
         local descendants
         descendants=$(_descendants "$SERVER_PID")
         kill "$SERVER_PID" 2>/dev/null || true
@@ -107,7 +96,6 @@ cleanup_server() {
         for pid in $descendants; do
             kill -9 "$pid" 2>/dev/null || true
         done
-        # Wait for GPU memory to actually free before the next server starts.
         local waited=0
         while [[ $waited -lt 120 ]]; do
             local used
@@ -122,7 +110,6 @@ trap 'cleanup_server' EXIT
 
 start_gpu_monitor
 
-# Per-cell AL is collected into associative arrays keyed by "mode_mtp".
 declare -A AL_RESULT
 
 run_cell() {
@@ -216,7 +203,6 @@ done
 
 stop_gpu_monitor
 
-# ---- Emit the YAML matrix ----
 emit_mode_block() {
     local mode="$1"
     for mtp in $MTP_LIST; do

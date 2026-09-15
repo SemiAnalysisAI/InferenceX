@@ -2,39 +2,17 @@
 
 # GLM-5 B300 vLLM SPEED-Bench AL matrix collector.
 #
-# Produces the golden acceptance-length (AL) reference matrix consumed by the
-# synthetic-acceptance framework: for each thinking mode (on/off) and each MTP
-# level (num_speculative_tokens), measure the REAL AL on a single SPEED-Bench
-# category (default: coding) and emit a YAML matrix identical in shape to
-# benchmarks/speedbench-reference-al.yaml. This measures real MTP acceptance;
-# the synthetic value is injected downstream by the throughput recipe, not here.
+# For each thinking mode (on/off) and MTP level (num_speculative_tokens), measure the
+# REAL acceptance length (AL) on one SPEED-Bench category and emit a YAML matrix in
+# the golden_al_distribution shape. The synthetic value is injected downstream by the
+# throughput recipe, not here. Serves the NVFP4 build (GLM-5-NVFP4), like every model
+# in this matrix.
 #
-# Filename *_fp4_* matches both the speedbench-al.yml path convention
-# (benchmarks/single_node/speedbench/${model-prefix}_fp4_b300_vllm.sh) and the
-# served checkpoint: we serve the NVFP4 build (GLM-5-NVFP4), like every model in
-# this matrix. The official vLLM GLM recipe only documents FP8, but the B300 runs
-# use the NVFP4 checkpoint.
-#
-# Adapted from speedbench/dsv4_fp4_b300_vllm.sh. Differences vs DSV4 (deepseek_v4
-# is NOT reusable for GLM):
-#   - reasoning-parser    glm45          (was deepseek_v4)
-#   - tool-call-parser    glm47          (was deepseek_v4)
-#   - --chat-template-content-format=string   (GLM requirement per vLLM docs)
-#   - NO --tokenizer-mode deepseek_v4    (GLM uses the default/auto tokenizer)
-#   - --attention_config.use_fp4_indexer_cache is NOT passed (and must not be).
-#     Despite GLM-5 also being DSA sparse attention, that knob is wired ONLY for
-#     the DeepSeek dsv32 family: it is read solely by vllm/models/deepseek_v4/
-#     attention.py and the MLA indexer backend (vllm/v1/attention/backends/mla/
-#     indexer.py). GLM's DSA (GlmMoeDsaForCausalLM) is a separate codepath that
-#     never reads it, so setting it would be a no-op at best or a config error at
-#     worst. A GLM DSA-indexer OOM would need a GLM-specific option, not this one.
-#   - thinking on/off uses the enable_thinking chat_template key; thinking is ON
-#     by default for GLM, so the OFF cell MUST pass enable_thinking:false explicitly
-#
-# Checkpoint (B300 / Blackwell): NVFP4 build, basename GLM-5-NVFP4. NVIDIA's
-# GLM-5-NVFP4 model card serves it with vllm/vllm-openai:latest, and the runner's
-# vllm-openai:v0.21.0 (May) is newer than that 3/16 example, so it loads directly.
-# For tool calling + MTP together, vLLM docs recommend a recent build.
+# GLM requires --chat-template-content-format=string (vLLM docs). Do NOT pass
+# --attention_config.use_fp4_indexer_cache: despite GLM-5 also being DSA sparse
+# attention, that knob is read only by vllm/models/deepseek_v4/attention.py and the
+# MLA indexer backend; GLM's DSA (GlmMoeDsaForCausalLM) never reads it. Thinking is ON
+# by default for GLM, so the OFF cell MUST pass enable_thinking:false explicitly.
 #
 # Usage (inside the GLM vLLM container, on a B300 node):
 #   export MODEL=/scratch/models/GLM-5-NVFP4
@@ -55,9 +33,8 @@ GPU_MEM_UTIL="0.80"
 
 MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
 CONCURRENCY="1"
-# Provider-recommended sampling from the GLM-5 checkpoint generation_config.json
-# (temperature 1.0, top_p 0.95). vLLM's own default top_p is 1.0, so it MUST be
-# passed explicitly or the measured AL is taken at the wrong sampling settings.
+# Sampling from the GLM-5 generation_config.json (temperature 1.0, top_p 0.95). vLLM's
+# default top_p is 1.0, so it MUST be passed or the AL is measured at the wrong settings.
 TEMPERATURE="1.0"
 TOP_P="0.95"
 # GLM thinking toggles via the enable_thinking chat_template key (default ON).
@@ -74,7 +51,6 @@ mkdir -p "$RESULTS_DIR"
 nvidia-smi
 if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
 
-# ---- Download SPEED-Bench dataset ----
 echo "=== Downloading SPEED-Bench dataset ==="
 pip install -q datasets tiktoken
 curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/refs/heads/main/nemo_skills/dataset/speed-bench/prepare.py \
@@ -85,7 +61,6 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# Apply the shim once if any cell will pass chat_template_kwargs.
 NEED_SHIM=0
 if [[ " $THINKING_MODES " == *" on "*  && -n "$CHAT_TEMPLATE_KWARGS_ON"  ]]; then NEED_SHIM=1; fi
 if [[ " $THINKING_MODES " == *" off "* && -n "$CHAT_TEMPLATE_KWARGS_OFF" ]]; then NEED_SHIM=1; fi
@@ -234,7 +209,6 @@ done
 
 stop_gpu_monitor
 
-# ---- Emit the YAML matrix ----
 emit_mode_block() {
     local mode="$1"
     for mtp in $MTP_LIST; do

@@ -43,9 +43,8 @@ fi
 check_env_vars SCENARIO_SUBDIR
 SCENARIO_SUBDIR="${SCENARIO_SUBDIR#/}"
 SCENARIO_SUBDIR="${SCENARIO_SUBDIR%/}/"
-# Prefer a framework-tagged script (e.g. qwen3.5_fp4_rtx6000pro_sglang.sh) so
-# models with multiple inference engines can coexist; fall back to the name
-# without an engine suffix for scripts that haven't been retagged.
+# Prefer a framework-tagged script so engines can coexist; fall back to the
+# untagged name for scripts not yet retagged.
 BENCH_BASE="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_rtx6000pro"
 BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK:-}${SPEC_SUFFIX}.sh"
 if [[ ! -f "$GITHUB_WORKSPACE/$BENCH_SCRIPT" ]]; then

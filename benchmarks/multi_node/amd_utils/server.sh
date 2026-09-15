@@ -2,12 +2,10 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
 # Multi-Engine Disaggregated Server Dispatcher
-# =============================================================================
 # Dispatches to the engine-specific server launcher based on ENGINE env var.
 #   ENGINE=sglang-disagg (default) -> server_sglang.sh (SGLang + MoRI)
 #   ENGINE=vllm-disagg             -> server_vllm.sh  (vLLM + Nixl/MoRI-IO)
 #   ENGINE=atom-disagg             -> server_atom.sh  (ATOM + mooncake)
-# =============================================================================
 
 check_env_vars ENGINE WS_PATH
 if [[ -f /config/hicache_mc.env ]]; then

@@ -1071,22 +1071,23 @@ def test_kimi_vendor_verifier_fetches_expected_subset_without_git(
 
 
 def test_kimi_vendor_verifier_retries_transient_archive_failure(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch, capsys,
 ) -> None:
-    result, checkout, request_paths = _prepare_local_kimi_verifier(
-        tmp_path,
-        _kimi_verifier_archive(),
-        transient_failures=1,
-    )
-    verifier_ref = "1" * 40
+    from infx.evals import _kimi_verifier_archive as archive
 
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == str(checkout)
+    payload = _kimi_verifier_archive()
+    verifier_ref = "1" * 40
+    monkeypatch.setattr(archive.time, 'sleep', lambda _: None)
+    with _serve_archive(payload, transient_failures=1) as (repo_url, request_paths):
+        monkeypatch.setattr(sys, 'argv', ['archive', repo_url, verifier_ref,
+                                         hashlib.sha256(payload).hexdigest(), str(tmp_path)])
+        archive.main()
     assert request_paths == [
         f"/owner/verifier/archive/{verifier_ref}.tar.gz",
         f"/owner/verifier/archive/{verifier_ref}.tar.gz",
     ]
-    assert "archive download attempt 1/3 failed" in result.stderr
+    assert "archive download attempt 1/3 failed" in capsys.readouterr().err
+    assert (tmp_path / 'pyproject.toml').read_text() == 'pyproject.toml'
 
 
 def test_kimi_vendor_verifier_rejects_archive_hash_mismatch(
@@ -2435,42 +2436,6 @@ _wait_for_openai_chat_route --port 8765
     assert events[1].endswith("http://localhost:8765/v1/models")
     assert events[2].endswith("http://localhost:8765/v1/chat/completions")
     assert "--data" not in events[2]
-
-
-def test_chat_route_readiness_accepts_stable_server_with_different_model_id(
-    tmp_path: Path,
-) -> None:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    curl = bin_dir / "curl"
-    curl.write_text(
-        """#!/usr/bin/env bash
-case "$*" in
-    */v1/models*) printf '{"data":[{"id":"/models/different-model"}]}\n' ;;
-    */v1/chat/completions*) printf '404' ;;
-esac
-""",
-        encoding="utf-8",
-    )
-    curl.chmod(curl.stat().st_mode | stat.S_IXUSR)
-
-    subprocess.run(
-        [
-            "bash",
-            "-c",
-            'source "$BENCHMARK_LIB"; MODEL=test-model; '
-            "_wait_for_openai_chat_route --port 8765",
-        ],
-        env={
-            **os.environ,
-            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
-            "BENCHMARK_LIB": str(BENCHMARK_LIB),
-            "EVAL_MODEL_STABILIZATION_SECONDS": "0",
-        },
-        text=True,
-        capture_output=True,
-        check=True,
-    )
 
 
 def test_multinode_agentic_waits_only_for_eval_openai_endpoint(

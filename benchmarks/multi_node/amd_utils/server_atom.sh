@@ -1,4 +1,5 @@
 #!/bin/bash
+# ATOM disaggregated launcher: mooncake RDMA KV transfer and atomesh routing.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
 check_env_vars \
@@ -13,30 +14,12 @@ check_env_vars \
     RUN_EVAL EVAL_ONLY EVAL_FRAMEWORK BENCHMARK_LOGS_DIR MODEL_DIR \
     ATOM_WS_PATH
 
-# ATOM Disaggregated Server Launcher
-# =============================================================================
-# Uses atom.entrypoints.openai_server with mooncake RDMA KV transfer.
-# Mirrors server_sglang.sh topology (dynamic xP/yD) but adapts to ATOM's
-# explicit kv-transfer-config and atomesh router.
-#
-# Key differences from server_sglang.sh:
-#   - Engine: atom.entrypoints.openai_server  (not sglang.launch_server)
-#   - KV transfer: mooncake (--kv-transfer-config JSON)
-#   - Router: atomesh  (not sglang_router)
-#   - Prefill port: $PREFILL_PORT (default 8010) / Decode port: $DECODE_PORT (default 8020)
-#   - Router port: $ROUTER_PORT (default 8000)
-# =============================================================================
-
-# ATOM server tuning — YAML values take precedence over explicit caller settings
 EXTRA_SERVER_ARGS="${EXTRA_SERVER_ARGS:-}"
-
-# Dependencies and Environment Setup
-# =============================================================================
 
 source $ATOM_WS_PATH/setup_deps.sh
 source $ATOM_WS_PATH/env_atom.sh
 
-# Raise FD limit — lm-eval with high num_concurrent can exhaust the default 1024
+# lm-eval with high num_concurrent exhausts the default 1024 FD limit.
 ulimit -n 65536 2>/dev/null || ulimit -n 8192 2>/dev/null || true
 echo "ulimit -n (open files): $(ulimit -n)"
 
@@ -46,10 +29,6 @@ if [[ -z "$host_ip" ]]; then
 fi
 host_name=$(hostname)
 
-# =============================================================================
-# Model-Specific Configuration from YAML
-# =============================================================================
-# Load model-specific config from YAML (single parse for all fields)
 set -x
 _yaml_tmp=$(mktemp)
 python3 << PYEOF > "$_yaml_tmp"
@@ -82,9 +61,7 @@ source "$_yaml_tmp"
 rm -f "$_yaml_tmp"
 unset _yaml_tmp
 
-# Apply server-tuning: YAML > env var > shell default
-# (job.slurm injects BLOCK_SIZE/MEM_FRAC_STATIC/MAX_NUM_SEQS with hardcoded
-#  defaults into the Docker env, so env-first would always shadow the YAML.)
+# Model YAML overrides the caller-provided server tuning.
 BLOCK_SIZE="${_YAML_BLOCK_SIZE:-${BLOCK_SIZE}}"
 MEM_FRAC_STATIC="${_YAML_MEM_FRAC_STATIC:-${MEM_FRAC_STATIC}}"
 MAX_MODEL_LEN="${_YAML_MAX_MODEL_LEN:-${MAX_MODEL_LEN:-}}"
@@ -93,17 +70,12 @@ MAX_NUM_BATCHED_TOKENS="${_YAML_MAX_NUM_BATCHED_TOKENS:-${MAX_NUM_BATCHED_TOKENS
 SCHEDULER_DELAY_FACTOR="${_YAML_SCHEDULER_DELAY_FACTOR:-${SCHEDULER_DELAY_FACTOR:-}}"
 unset _YAML_BLOCK_SIZE _YAML_MEM_FRAC_STATIC _YAML_MAX_MODEL_LEN _YAML_MAX_NUM_SEQS _YAML_MAX_NUM_BATCHED_TOKENS _YAML_SCHEDULER_DELAY_FACTOR
 
-# =============================================================================
-# Cluster Topology Configuration
-# =============================================================================
-
 IFS=',' read -ra IP_ARRAY <<< "$IPADDRS"
 
 PREFILL_NODES_PER_WORKER=$(((PREFILL_TP_SIZE + GPUS_PER_NODE - 1) / GPUS_PER_NODE))
 DECODE_NODES_PER_WORKER=$(((DECODE_TP_SIZE + GPUS_PER_NODE - 1) / GPUS_PER_NODE))
 NODE_OFFSET=$((PREFILL_NODES_PER_WORKER * xP))
 
-# Build prefill IP list and atomesh --prefill args
 PREFILL_ARGS=""
 PREFILL_IPS=()
 for i in $(seq 0 $((xP - 1))); do
@@ -112,7 +84,6 @@ for i in $(seq 0 $((xP - 1))); do
     PREFILL_ARGS="$PREFILL_ARGS --prefill http://${IP_ARRAY[$idx]}:${PREFILL_PORT}"
 done
 
-# Build decode IP list and atomesh --decode args
 DECODE_ARGS=""
 DECODE_IPS=()
 for i in $(seq 0 $((yD - 1))); do
@@ -158,16 +129,13 @@ for _env_pair in ${MODEL_ENVS}; do
 done
 unset _env_pair
 
-# MTP args
 SPEC_ARGS=()
 if [[ -n "$MODEL_MTP_FLAGS" && "${DECODE_MTP_SIZE}" -gt 0 ]]; then
     SPEC_ARGS=(${MODEL_MTP_FLAGS} "$DECODE_MTP_SIZE")
 fi
 
-# KV cache arg - full flag string from YAML
 KV_CACHE_ARG="${MODEL_KV_ARG}"
 
-# Optional model length / batched-token cap
 MODEL_LEN_ARGS=""
 if [[ -n "$MAX_MODEL_LEN" ]]; then
     MODEL_LEN_ARGS="${MODEL_LEN_ARGS} --max-model-len ${MAX_MODEL_LEN}"
@@ -202,18 +170,9 @@ echo "::group::Environment Variables"
 env
 echo "::endgroup::"
 
-# =============================================================================
-# Node Role Assignment
-#
-# Role mapping (same as server_sglang.sh):
-#   rank 0                          -> prefill node 0 + router
-#   rank 1 .. (NODE_OFFSET-1)       -> remaining prefill nodes
-#   rank NODE_OFFSET ..             -> decode nodes
-# =============================================================================
+# Node roles: rank 0 -> prefill node 0 + router; 1..NODE_OFFSET-1 -> prefill;
+# NODE_OFFSET.. -> decode.
 if [ "$NODE_RANK" -eq 0 ]; then
-    # ──────────────────────────────────────────────────────────────────────────
-    # Node 0: prefill server (producer) + atomesh router
-    # ──────────────────────────────────────────────────────────────────────────
     echo "NODE INFO ======================================="
     echo "${host_name}:${host_ip} is Prefill Node 0 + Router"
     echo "Prefill TP=${PREFILL_TP_SIZE}, Decode TP=${DECODE_TP_SIZE}"
@@ -247,7 +206,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
         prefill0_pid=$!
     fi
 
-    # Wait for all prefill and decode servers to be ready
     echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "Waiting for all servers to be up (timeout=${WAIT_SERVER_TIMEOUT}s)..."
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -301,7 +259,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
         set +x
         proxy_pid=$!
 
-        # Wait for router to accept connections
         check_env_vars WAIT_LOCAL_ROUTER_TIMEOUT
         WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-$WAIT_LOCAL_ROUTER_TIMEOUT}"
         echo "[wait] router http://0.0.0.0:${ROUTER_PORT}/v1/models (timeout=${WAIT_ROUTER_TIMEOUT}s)"
@@ -343,11 +300,9 @@ if [ "$NODE_RANK" -eq 0 ]; then
         set +x
     fi
 
-    # Run evaluation if requested (before killing router)
     if [[ "${RUN_EVAL}" == "true" ]]; then
         echo "Running lm-eval evaluation on Node 0..."
 
-        # Health check: verify the router is still serving before running eval.
         EVAL_HEALTH_OK=false
         for _attempt in 1 2 3; do
             if curl -sf --max-time 10 "http://0.0.0.0:${ROUTER_PORT}/health" >/dev/null 2>&1; then
@@ -410,7 +365,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
         fi
     fi
 
-    # Copy results
     LOGS_OUTPUT="${BENCHMARK_LOGS_DIR}/logs"
     mkdir -p "$LOGS_OUTPUT"
     if [[ "$DRY_RUN" -eq 0 ]]; then
@@ -434,12 +388,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
 
 elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
-    # ──────────────────────────────────────────────────────────────────────────
-    # Prefill nodes 1..N (kv_producer)
-    # ──────────────────────────────────────────────────────────────────────────
     echo "${host_name}:${host_ip} is Prefill Node (rank ${NODE_RANK})"
 
-    # Determine which prefill worker this node belongs to, and its headnode IP
     prefill_worker_idx=$((NODE_RANK / PREFILL_NODES_PER_WORKER))
     PREFILL_HEADNODE_IP="${PREFILL_IPS[$prefill_worker_idx]}"
 
@@ -506,9 +456,6 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     if [[ "$DRY_RUN" -eq 0 ]]; then kill $prefill_pid 2>/dev/null; fi
 
 else
-    # ──────────────────────────────────────────────────────────────────────────
-    # Decode nodes (kv_consumer)
-    # ──────────────────────────────────────────────────────────────────────────
     RANK=$((NODE_RANK - NODE_OFFSET))
     echo "${host_name}:${host_ip} is Decode Node (rank ${RANK})"
 

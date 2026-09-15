@@ -2,19 +2,10 @@
 set -eo pipefail
 set -x
 
-# AgentX trace replay for Qwen3.8-Flash-Next NVFP4 on B200 with SGLang
-# native NEXTN MTP. Day-zero recipe; SGLang is the plan-of-record engine for
-# this model (MODELS.md). Throughput uses the golden synthetic AL; evals retain
-# real target-model verification.
-#
-# The checkpoint is RadixArk/Qwen3.8-Flash-Next-NVFP4 (126 GiB,
-# quantization_config.quant_method = modelopt), which SGLang reads directly
-# from the checkpoint. The model ships native MTP modules (kept unquantized by
-# the checkpoint's ignore list), so NEXTN needs no external drafter.
-#
-# TP1: the cookbook's verified single-node command for this model is --tp 1 on
-# both Blackwell parts. 126 GiB of NVFP4 weights fit on one B200, so the
-# model is not sharded and every rank-crossing collective disappears.
+# Qwen3.8-Flash-Next NVFP4 on B200 with SGLang native NEXTN MTP. The
+# RadixArk/Qwen3.8-Flash-Next-NVFP4 checkpoint (126 GiB, quant_method =
+# modelopt) ships native MTP modules, so NEXTN needs no external drafter, and
+# fits on one GPU, so the cookbook command is --tp 1.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -108,21 +99,17 @@ PARALLEL_ARGS=(
     --ep-size "$EP_SIZE"
 )
 
-# Parallel tokenization keeps 256k AgentX warmups below the client timeout.
-# This B200 recipe runs at TP1, so enable the workers independently of TP.
+# Parallel tokenization keeps 256k AgentX warmups below the client timeout (TP1 here).
 TOKENIZER_ARGS=(--tokenizer-worker-num 6)
 
-# AgentX concurrency counts live session trees rather than individual HTTP
-# requests. Leave room for subagent fan-out and avoid spending HBM on graphs
-# above the batch sizes that remain useful for this long-context workload.
+# AgentX concurrency counts live session trees; leave room for subagent
+# fan-out without spending HBM on graphs above useful batch sizes.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS="$MAX_RUNNING_REQUESTS"
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
 
 MEM_FRACTION_STATIC=0.80
 MAMBA_CACHE_ARGS=()
-# Keep the lower-concurrency settings unchanged. The concurrency-16 point uses
-# a larger static pool and an explicit Mamba cache cap.
 if [ "$CONC" -eq 16 ]; then
     MEM_FRACTION_STATIC=0.90
     MAMBA_CACHE_ARGS=(--max-mamba-cache-size 160)
@@ -138,11 +125,8 @@ export SGLANG_ENABLE_FLASHINFER_GEMM=true
 export SGLANG_TIMEOUT_KEEP_ALIVE=1800
 
 if [ "${EVAL_ONLY}" != "true" ]; then
-    # golden_al_distribution/qwen3.8next_mtp.yaml:
-    # qwen3.8-flash-next-fp8.thinking_on[3] = 2.32.
-    # --speculative-num-steps 3 with 4 draft tokens is 3 speculative tokens
-    # per verification step, i.e. the MTP=3 cell. AgentX replays run with
-    # thinking on, so the thinking_on row is the right one.
+    # golden_al_distribution/qwen3.8next_mtp.yaml: thinking_on[3] = 2.32
+    # (3 speculative tokens per step; AgentX replays run with thinking on).
     export SGLANG_SIMULATE_ACC_LEN=2.32
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
@@ -156,17 +140,13 @@ SGLANG_CMD=(
     --port "$PORT"
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
-    # Verified flags from the SGLang cookbook playground for this model on
-    # B200 / NVFP4 / single node. Quantization is read from the
-    # checkpoint, so no --quantization flag; the hybrid GDN linear-attention
-    # layers take their own backends rather than --attention-backend.
+    # Quantization is read from the checkpoint, so no --quantization flag; the
+    # hybrid GDN linear-attention layers take their own backends.
     --linear-attn-prefill-backend flashinfer
     --linear-attn-decode-backend flashinfer
-    # bfloat16 is mandatory on Blackwell: SGLang rejects the launch outright
-    # with "--linear-attn-decode-backend flashinfer on SM100+ requires
-    # --mamba-ssm-dtype bfloat16". Hopper wants the opposite -- flashinfer's
-    # gated_delta_rule_mtp verify kernel asserts a float32 state there -- so
-    # the H200 arm sets float32 and this one must not follow it.
+    # SGLang rejects flashinfer linear-attn decode on SM100+ without
+    # --mamba-ssm-dtype bfloat16; Hopper needs float32 instead (the
+    # gated_delta_rule_mtp verify kernel asserts a float32 state).
     --mamba-ssm-dtype bfloat16
     --speculative-algorithm NEXTN
     --speculative-num-steps 3

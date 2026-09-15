@@ -4,7 +4,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validat
 check_env_vars EVAL_ONLY IS_MULTINODE REQUIRE_POWER RUN_EVAL
 set -eo pipefail
 
-# System-specific configuration for H200 DGXC Slurm cluster
 SLURM_PARTITION="main"
 SLURM_ACCOUNT="sa-shared"
 check_env_vars HF_HUB_CACHE_MOUNT
@@ -24,7 +23,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     CONFIG_PATH="${CONFIG_FILE%%:*}"
     LOCAL_CONFIG_FILE="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${CONFIG_PATH#recipes/}"
 
-    # Power collection is enabled by the selected recipe.
     USES_DCGM_POWER=0
     _RECIPE_REL="${CONFIG_FILE%%:*}"
     _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
@@ -53,16 +51,13 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         exit 1
     fi
 
-    # MODEL_PATH: Override with pre-downloaded paths on H200 runner
-    # The yaml files specify HuggingFace model IDs for portability, but we use
-    # local paths to avoid repeated downloading on the shared H200 cluster.
+    # Recipes name HF model IDs; resolve them to pre-staged paths so the shared
+    # cluster does not re-download. SRT_SLURM_MODEL_PREFIX must match the
+    # recipe's model.path alias.
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp8" ]]; then
-            # The shared HF cache already contains the H200 FP8 checkpoint;
-            # default to that local path (overridable via DSV4_MODEL_PATH) so
-            # srtctl preflight finds the directory instead of trying to pull the
-            # hf: model ID, which fails on the compute node ("path is
-            # unavailable. Pull or register the model yourself").
+            # The shared HF cache already holds this checkpoint; srtctl preflight
+            # cannot pull the hf: model ID from the compute node.
             check_env_vars DSV4_MODEL_PATH
             export MODEL_PATH="${DSV4_MODEL_PATH}"
             export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
@@ -126,11 +121,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     echo "Configs available at: $SRT_REPO_DIR/"
 
-    # Map container images to local squash files based on framework
     NGINX_SQUASH_FILE="/data/containers/nginx+1.27.4.sqsh"
 
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-        # SGLang container mapping
         if [[ $MODEL_PREFIX == "glm5.2" ]]; then
             SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
         else
@@ -138,7 +131,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         fi
         CONTAINER_KEY="$IMAGE"
     elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
-        # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
         CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
         SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
     elif [[ $FRAMEWORK == "vllm" ]]; then
@@ -197,7 +189,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export ISL="$ISL"
     export OSL="$OSL"
 
-    # Create srtslurm.yaml for srtctl (used by both frameworks)
     SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
     DEFAULT_MOUNTS_BLOCK=""
     if [[ "$IS_AGENTIC" == "1" ]]; then
@@ -266,12 +257,11 @@ EOF
             "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}"
     fi
 
-    # Export eval-related env vars for srt-slurm post-benchmark eval
+    # Read by srt-slurm's post-benchmark eval.
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 
     echo "Submitting job with srtctl..."
 
-    # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
     sed -i '/^health_check:/,/^[^ ]/{ /^health_check:/d; /^  /d; }' "$CONFIG_PATH"
     printf '\nhealth_check:\n  max_attempts: 720\n  interval_seconds: 10\n' >> "$CONFIG_PATH"
@@ -286,7 +276,6 @@ EOF
     SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" --tags "h200,${MODEL_PREFIX},${PRECISION},${WORKLOAD_TAG},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
-    # Extract JOB_ID from srtctl output
     JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
 
     set +x
@@ -298,8 +287,6 @@ EOF
 
     echo "Extracted JOB_ID: $JOB_ID"
 
-    # Use the JOB_ID to find the logs directory
-    # srtctl creates logs in outputs/JOB_ID/logs/
     LOGS_DIR="outputs/$JOB_ID/logs"
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
     trap 'rc=$?; bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT INT TERM HUP
@@ -368,7 +355,6 @@ EOF
         echo "EVAL_ONLY=true: Skipping benchmark result collection"
     fi
 
-    # Collect eval results if eval was requested
     if [[ "${RUN_EVAL}" == "true" || "${EVAL_ONLY}" == "true" ]]; then
         EVAL_DIR="$LOGS_DIR/eval_results"
         if [ -d "$EVAL_DIR" ]; then
@@ -398,7 +384,7 @@ EOF
 else
     SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-    # Convert pyxis image format (nvcr.io#path) to docker format (nvcr.io/path) for enroot import
+    # enroot import wants nvcr.io/path, not the pyxis nvcr.io#path spelling.
     DOCKER_IMAGE=$(echo "$IMAGE" | sed 's/#/\//g')
     LOCK_FILE="${SQUASH_FILE}.lock"
 
@@ -412,8 +398,8 @@ else
     fi
     trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
 
-    # Use flock to serialize concurrent imports to the same squash file
-    # Override ENROOT_CACHE_PATH to avoid permission issues with system-wide cache on worker nodes
+    # Serialize concurrent imports of the same squash file. ENROOT_CACHE_PATH
+    # avoids permission issues with the system-wide cache on worker nodes.
     srun --jobid=$JOB_ID bash -c "
         export ENROOT_CACHE_PATH=\$HOME/.cache/enroot
         mkdir -p \$ENROOT_CACHE_PATH

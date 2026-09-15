@@ -14,22 +14,15 @@ check_env_vars \
     IS_AGENTIC KV_OFFLOADING MODEL_DIR SGLANG_WS_PATH HEADNODE_PORT
 
 # SGLang Disaggregated Server Launcher with Model-Specific Configurations
-# =============================================================================
 
-# Parallelism Configuration
 BENCH_MAX_CONC_VALUE=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
 
-# Dependencies and Environment Setup
-# =============================================================================
 source $SGLANG_WS_PATH/setup_deps.sh
 source $SGLANG_WS_PATH/env.sh
 
 host_ip=$(ip route get 1.1.1.1 | awk '/src/ {print $7}')
 host_name=$(hostname)
 
-# MORI_RDMA_TC configuration (optional)
-# If set by runner, use it for RDMA traffic class configuration
-# If not set, RDMA operations will proceed without QoS/traffic class settings
 if [[ -n "${MORI_RDMA_TC}" ]]; then
     echo "[INFO] Using MORI_RDMA_TC=$MORI_RDMA_TC for RDMA traffic class configuration"
     echo "[INFO] Host '$host_name' configured with MORI_RDMA_TC=$MORI_RDMA_TC"
@@ -38,9 +31,7 @@ else
     echo "[INFO] This is normal for clusters without QoS requirements."
 fi
 
-# =============================================================================
-# Model-Specific Configuration from YAML
-# =============================================================================
+# Model-specific configuration from models.yaml
 MODELS_YAML="${SGLANG_WS_PATH}/models.yaml"
 
 if [[ ! -f "$MODELS_YAML" ]]; then
@@ -48,9 +39,8 @@ if [[ ! -f "$MODELS_YAML" ]]; then
     exit 1
 fi
 
-# Load model config via inline Python (PyYAML is available in SGLang containers)
-# Formula evaluation (e.g. "SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK * TP * xP")
-# is done here in Python to avoid bash glob-expanding the * characters.
+# Formula evaluation (e.g. "SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK * TP * xP") is
+# done in Python so bash does not glob-expand the * characters.
 eval "$(python3 -c "
 import yaml, sys, os
 
@@ -164,7 +154,6 @@ print(f'DECODE_CUDA_GRAPH_BS_NO_DP_END=\"{e}\"')
 
 echo "Loaded model configuration for: $MODEL_NAME"
 
-# Compute DP-dependent prefill parameters
 if [[ "$PREFILL_ENABLE_DP" == "true" ]]; then
     prefill_cuda_graph_bs=($PREFILL_CUDA_GRAPH_BS_DP)
     prefill_max_running_requests=$PREFILL_MAX_RUNNING_REQUESTS_DP
@@ -181,16 +170,12 @@ else
     prefill_enable_two_batch_overlap="false"
 fi
 
-# When both DP and EP are enabled, override max-running-requests with max bench concurrency
 if [[ "$PREFILL_ENABLE_DP" == "true" ]] && [[ "$PREFILL_ENABLE_EP" == "true" ]]; then
     prefill_max_running_requests=$BENCH_MAX_CONC_VALUE
     prefill_dp_ranks=$PREFILL_TP_SIZE
-    # MORI_MAX_DISPATCH_TOKENS_PREFILL stays at 8192 (no change)
-    # MORI_MOE_MAX_INPUT_TOKENS_PREFILL=$((MORI_MAX_DISPATCH_TOKENS_PREFILL * prefill_dp_ranks / 2))
     echo "[DP+EP override] Prefill: max-running-requests=$prefill_max_running_requests, MOE_MAX_INPUT=$MORI_MOE_MAX_INPUT_TOKENS_PREFILL"
 fi
 
-# Compute DP-dependent decode parameters (3-way: DP > EP-only > no_dp)
 if [[ "$DECODE_ENABLE_DP" == "true" ]]; then
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_DP_START $DECODE_CUDA_GRAPH_BS_DP_END))
     decode_max_running_requests=$((DECODE_CUDA_GRAPH_BS_DP_END * DECODE_TP_SIZE))
@@ -204,29 +189,22 @@ else
     decode_max_running_requests=$DECODE_MAX_RUNNING_REQUESTS_NO_DP
     decode_context_length=$DECODE_CONTEXT_LENGTH_NO_DP
 fi
-# In PD-disaggregation the decode must admit requests against the SAME context
-# length as prefill; otherwise decode accepts over-length requests that prefill
-# rejects, and those requests hang forever waiting for a KV transfer that never
-# comes (the 8k1k conc-500 straggler). Fall back to the prefill value if the
-# decode context_length is not set in the model config, so the two always agree.
+# In PD-disaggregation decode must admit requests against the SAME context length
+# as prefill; otherwise decode accepts over-length requests that prefill rejects and
+# they hang forever waiting for a KV transfer. Fall back to the prefill value.
 if [[ -z "$decode_context_length" ]]; then
     decode_context_length=$prefill_context_length
 fi
 
-# When both DP and EP are enabled, override max-running-requests and dispatch tokens
 if [[ "$DECODE_ENABLE_DP" == "true" ]] && [[ "$DECODE_ENABLE_EP" == "true" ]]; then
     decode_max_running_requests=$BENCH_MAX_CONC_VALUE
     decode_dp_ranks=$DECODE_TP_SIZE
     MORI_MAX_DISPATCH_TOKENS_DECODE=$((BENCH_MAX_CONC_VALUE / decode_dp_ranks))
-    # MORI_MOE_MAX_INPUT_TOKENS_DECODE=$((MORI_MAX_DISPATCH_TOKENS_DECODE * decode_dp_ranks * 7 / 10))
-    # Update derived variable
     SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD=$((MORI_MAX_DISPATCH_TOKENS_DECODE * 2))
     export SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD
     echo "[DP+EP override] Decode: max-running-requests=$decode_max_running_requests, DISPATCH_TOKENS=$MORI_MAX_DISPATCH_TOKENS_DECODE, MOE_MAX_INPUT=$MORI_MOE_MAX_INPUT_TOKENS_DECODE, INTER_KERNEL_SWITCH=$SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD"
 fi
 
-# Build the composed config strings (equivalent to the old MODEL_PREFILL_CONFIGS / MODEL_DECODE_CONFIGS)
-# disable_cuda_graph (model-level) routes prefill to --disable-cuda-graph instead of --cuda-graph-bs.
 if [[ "$PREFILL_DISABLE_CUDA_GRAPH" == "True" ]] || [[ "$PREFILL_DISABLE_CUDA_GRAPH" == "true" ]]; then
     PREFILL_MODE_FLAGS="--mem-fraction-static ${PREFILL_MEM_FRACTION_STATIC} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --disable-cuda-graph "
 else
@@ -236,7 +214,7 @@ fi
 if [[ "$PREFILL_DISABLE_RADIX_CACHE" == "True" ]] || [[ "$PREFILL_DISABLE_RADIX_CACHE" == "true" ]]; then
     PREFILL_MODE_FLAGS="$PREFILL_MODE_FLAGS --disable-radix-cache"
 fi
-# Agentic runs: keep radix/prefix cache enabled by replacing --disable-radix-cache with empty.
+# Agentic runs need the radix/prefix cache.
 if [[ "${IS_AGENTIC}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
     PREFILL_MODE_FLAGS="${PREFILL_MODE_FLAGS//--disable-radix-cache/}"
 fi
@@ -266,29 +244,22 @@ fi
 
 if [[ "$DECODE_MTP_SIZE" -gt 0 ]]; then
     MORI_MAX_DISPATCH_TOKENS_DECODE=$((MORI_MAX_DISPATCH_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
-    # MORI_MOE_MAX_INPUT_TOKENS_DECODE=$((MORI_MOE_MAX_INPUT_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
 fi
 
-# =============================================================================
-# Cluster Topology Configuration
-# =============================================================================
+# Cluster topology
 IFS=',' read -ra IP_ARRAY <<< "$IPADDRS"
 
-# Ceiling division by GPUS_PER_NODE for nodes-per-worker
 PREFILL_NODES_PER_WORKER=$(((PREFILL_TP_SIZE + 7) / GPUS_PER_NODE))
 DECODE_NODES_PER_WORKER=$(((DECODE_TP_SIZE + 7) / GPUS_PER_NODE))
 NODE_OFFSET=$((PREFILL_NODES_PER_WORKER * xP))
 
-# Build prefill arguments dynamically based on xP
 PREFILL_HEADNODE_URLS=()
 PREFILL_ARGS=""
-# Per-worker Prometheus /metrics endpoints (port 8000) for aiperf's
-# --server-metrics scrape. The router on :30000 does not serve Prometheus, so
-# aiperf must scrape each prefill/decode worker directly (see ENABLE_METRICS).
+# Per-worker Prometheus /metrics endpoints for aiperf's --server-metrics scrape;
+# the router on :30000 does not serve Prometheus (see ENABLE_METRICS).
 SERVER_METRICS_URLS=()
-# Per-worker base URLs (port 8000) for direct cache flushing between
-# concurrency points. The router (:30000) does not fan /flush_cache out, so
-# trace_replay.sh must POST to each prefill/decode worker directly.
+# Per-worker base URLs for cache flushing between concurrency points; the router
+# does not fan /flush_cache out, so trace_replay.sh must POST to each worker.
 SERVER_FLUSH_URLS=()
 for i in $(seq 0 $((xP - 1))); do
     prefill_idx=$((i * PREFILL_NODES_PER_WORKER))
@@ -298,7 +269,6 @@ for i in $(seq 0 $((xP - 1))); do
     SERVER_FLUSH_URLS+=("http://${IP_ARRAY[$prefill_idx]}:8000")
 done
 
-# Build decode arguments dynamically based on yD
 DECODE_HEADNODE_URLS=()
 DECODE_ARGS=""
 for i in $(seq 0 $((yD - 1))); do
@@ -313,10 +283,6 @@ echo "Prefill worker headnode list: ${PREFILL_HEADNODE_URLS[@]}"
 echo "Decode  worker headnode list: ${DECODE_HEADNODE_URLS[@]}"
 echo "Server metrics endpoints:     ${SERVER_METRICS_URLS[@]}"
 echo "Server flush endpoints:       ${SERVER_FLUSH_URLS[@]}"
-
-# =============================================================================
-# Configuration Builder Functions
-# =============================================================================
 
 # KV_P2P_TRANSFER (from amd-master.yaml kv-p2p-transfer) overrides the
 # --disaggregation-transfer-backend baked into models.yaml base_flags.
@@ -342,7 +308,6 @@ build_server_config() {
     local enable_dp="$5"
     local decode_mtp_size="$6"
 
-    # Calculate EP and DP sizes based on enable flags
     local ep_size=1
     local dp_size=1
 
@@ -354,7 +319,6 @@ build_server_config() {
         dp_size=$tp_size
     fi
 
-    # Build parallelism arguments
     local parallel_args="--tp-size ${tp_size}"
 
     if [[ "$enable_ep" == "true" ]]; then
@@ -365,7 +329,6 @@ build_server_config() {
         parallel_args="$parallel_args --dp-size ${dp_size}"
     fi
 
-    # Get model-specific configuration from YAML-loaded variables
     local base_config
     base_config="$(apply_kv_p2p_transfer_override "$MODEL_BASE_FLAGS")"
     local mtp_config=""
@@ -373,31 +336,26 @@ build_server_config() {
     local ep_config=""
     local specific_config=""
 
-    # MTP config (only if MTP is enabled and mode is decode)
     if [ "$decode_mtp_size" -gt 0 ]; then
         mtp_config="${MODEL_MTP_FLAGS} --speculative-num-steps ${decode_mtp_size} --speculative-num-draft-tokens $((decode_mtp_size + 1))"
     fi
 
-    # DP config (only if DP is enabled)
     if [[ "$enable_dp" == "true" ]]; then
         dp_config="$MODEL_DP_FLAGS"
     fi
 
-    # EP config (only if EP is enabled): a2a backend, deepep mode, ep-dispatch algo.
-    # With ep=1 (EP disabled) these are dropped, so the MoE runs tensor-parallel (TP)
-    # instead of expert-parallel — even when dp-attention is on.
+# Without EP the a2a backend / deepep mode / ep-dispatch flags are dropped, so the
+# MoE runs tensor-parallel even when dp-attention is on.
     if [[ "$enable_ep" == "true" ]]; then
         ep_config="$MODEL_EP_FLAGS"
     fi
 
-    # Mode-specific config
     if [[ "$mode" == "prefill" ]]; then
         specific_config="$PREFILL_MODE_FLAGS"
     elif [[ "$mode" == "decode" ]]; then
         specific_config="$DECODE_MODE_FLAGS"
     fi
 
-    # Combine: parallel args + base config + ep config + mtp config + dp config + specific config
     local full_config="$parallel_args"
     if [[ -n "$base_config" ]]; then
         full_config="$full_config $base_config"
@@ -405,13 +363,10 @@ build_server_config() {
     if [[ -n "$ep_config" ]]; then
         full_config="$full_config $ep_config"
     fi
-    # MTP/speculative flags go to BOTH prefill and decode. In PD-disaggregation the
-    # draft (nextn) layers participate in prefill KV computation as well as decode
-    # verification, so the speculative config must match on both roles. Gating this to
-    # decode only left prefill without the nextn KV layer: prefill registered one fewer
-    # PD state component than decode, which newer sglang (v0.5.15+) rejects outright
-    # ("state component count mismatch") and older builds tolerated silently while
-    # feeding the decode's nextn verification uninitialized state (lossy greedy MTP).
+# MTP/speculative flags go to BOTH prefill and decode: in PD-disaggregation the
+# draft (nextn) layers take part in prefill KV computation, so the PD state component
+# count must match. sglang v0.5.15+ rejects a mismatch ("state component count
+# mismatch"); older builds silently fed decode uninitialized nextn state (lossy MTP).
     if [[ -n "$mtp_config" ]]; then
         full_config="$full_config $mtp_config"
     fi
@@ -425,11 +380,9 @@ build_server_config() {
     echo "$full_config"
 }
 
-# Build complete server configurations
 PREFILL_SERVER_CONFIG=$(build_server_config "prefill" "$MODEL_NAME" "$PREFILL_TP_SIZE" "$PREFILL_ENABLE_EP" "$PREFILL_ENABLE_DP" "$DECODE_MTP_SIZE")
 DECODE_SERVER_CONFIG=$(build_server_config "decode" "$MODEL_NAME" "$DECODE_TP_SIZE" "$DECODE_ENABLE_EP" "$DECODE_ENABLE_DP" "$DECODE_MTP_SIZE")
 
-# Expose Prometheus /metrics on the servers when requested (ENABLE_METRICS=1).
 if [[ "${ENABLE_METRICS}" == "1" ]]; then
     [[ "$PREFILL_SERVER_CONFIG" != *"--enable-metrics"* ]] && PREFILL_SERVER_CONFIG="$PREFILL_SERVER_CONFIG --enable-metrics"
     [[ "$DECODE_SERVER_CONFIG" != *"--enable-metrics"* ]] && DECODE_SERVER_CONFIG="$DECODE_SERVER_CONFIG --enable-metrics"
@@ -439,8 +392,7 @@ if [[ -n "$MODEL_NAME" ]]; then
     echo "Using model-specific configuration for: $MODEL_NAME"
 fi
 
-# sync.py barrier timeout for server-up (port 8000). DSV4 needs more headroom.
-# Override via SYNC_BARRIER_TIMEOUT if needed.
+# sync.py server-up barrier timeout; DSV4 needs more headroom.
 if [[ -z "${SYNC_BARRIER_TIMEOUT:-}" ]]; then
     case "${MODEL_NAME}" in
         *DeepSeek-V4*) SYNC_BARRIER_TIMEOUT=3000 ;;
@@ -449,13 +401,6 @@ if [[ -z "${SYNC_BARRIER_TIMEOUT:-}" ]]; then
 fi
 echo "SYNC_BARRIER_TIMEOUT=${SYNC_BARRIER_TIMEOUT}s (model=${MODEL_NAME})"
 
-# =============================================================================
-# Optional KV cache offloading (HiCache) — enabled when
-# KV_OFFLOADING != none AND KV_OFFLOAD_BACKEND == hicache.
-# HiCache extends RadixAttention, so radix cache MUST stay on (drop
-# --disable-radix-cache). The --hicache-* flags are appended to BOTH the
-# prefill and decode server configs.
-# =============================================================================
 KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-}"
 if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
 
@@ -464,17 +409,13 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     #   "mooncake"-> Mooncake distributed KV store (needs a mooncake_master)
     HICACHE_STORAGE_BACKEND="${HICACHE_STORAGE_BACKEND:-}"
 
-    # Layout / IO backend / write policy are backend-specific:
-    #   mooncake L3: page_first_direct + the "direct" IO backend (the Mooncake
-    #     store maps a page-contiguous segment for RDMA/zero-copy).  This layout
-    #     asserts host_pool > device_pool, so it needs a large CPU-DRAM budget.
-    #   L2-only (CPU DRAM): layer_first + the "kernel" IO backend.  layer_first
-    #     has no host>device constraint (the "direct" IO backend REQUIRES a
-    #     page_first layout, so it cannot be paired with layer_first).
     check_env_vars HICACHE_HOST_POOL_COUNT HICACHE_PAGE_SIZE HICACHE_PREFETCH_POLICY \
         HICACHE_IO_BACKEND HICACHE_WRITE_POLICY HICACHE_RATIO FORCE_HICACHE_RATIO \
         HICACHE_L2_MEM_LAYOUT HICACHE_L3_MEM_LAYOUT
     if [[ -z "${HICACHE_MEM_LAYOUT:-}" ]]; then
+# The mooncake L3 store maps a page-contiguous segment for RDMA/zero-copy, so it
+# needs the page_first layout with the direct IO backend; that layout asserts
+# host_pool > device_pool, so it needs a large CPU-DRAM budget.
         if [[ "$HICACHE_STORAGE_BACKEND" == "mooncake" ]]; then
             HICACHE_MEM_LAYOUT="$HICACHE_L3_MEM_LAYOUT"
         else
@@ -482,9 +423,6 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
         fi
     fi
 
-    # Mooncake master/connection settings (used only when storage=mooncake).
-    # The master runs once on node 0; every prefill/decode server connects to
-    # it via NODE0_ADDR so it is reachable across nodes.
     check_env_vars \
         MC_MASTER_PORT MC_METADATA_PORT MC_METRICS_PORT MC_MASTER_THREADS MC_EVICTION_HIGH_WATERMARK \
         MC_PROTOCOL MC_GLOBAL_SEG
@@ -492,38 +430,21 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     MC_MASTER_ADDR="${MC_MASTER_ADDR:-${NODE0_ADDR}:${MC_MASTER_PORT}}"
     MC_METADATA_SERVER="${MC_METADATA_SERVER:-http://${NODE0_ADDR}:${MC_METADATA_PORT}/metadata}"
 
-    # Emit the --hicache-storage-backend flags (empty unless mooncake).  The
-    # extra-config JSON is single-quoted so it survives the later `eval` of the
-    # launch command as a single argument.
+# The extra-config JSON is single-quoted so it survives the later eval of the
+# launch command as a single argument.
     build_storage_flags() {
         [[ "$HICACHE_STORAGE_BACKEND" != "mooncake" ]] && return 0
         local extra="{\"master_server_address\": \"${MC_MASTER_ADDR}\", \"protocol\": \"${MC_PROTOCOL}\", \"device_name\": \"${MC_DEVICE}\", \"local_hostname\": \"${host_ip}\", \"global_segment_size\": \"${MC_GLOBAL_SEG}\", \"metadata_server\": \"${MC_METADATA_SERVER}\", \"check_server\": false}"
         echo "--hicache-storage-backend mooncake --hicache-storage-backend-extra-config '${extra}' --enable-metrics --enable-cache-report"
     }
 
-    # HiCache capacity. Prefer an absolute per-rank pool derived from the
-    # per-node DRAM budget computed by the sweep generator (enforcement); fall
-    # back to --hicache-ratio (relative to the GPU KV pool) when no budget is
-    # provided, keeping configs that predate the budget unchanged.
-    # FORCE_HICACHE_RATIO lets a recipe opt into ratio-based sizing without
-    # unsetting TOTAL_CPU_DRAM_GB — that var is also the shared client-side
-    # gate (benchmark_lib.sh requires it whenever KV_OFFLOADING=dram) and is
-    # forwarded verbatim into client.env below, so unsetting it here would
-    # make the aiperf client container fail its own env validation before
-    # ever sending a request.
     HICACHE_SIZING_FLAGS="--hicache-ratio ${HICACHE_RATIO}"
-    # DeepSeek V4's hybrid HiCache pool rejects --hicache-size (requires
-    # --hicache-ratio), so the absolute per-node budget cannot be applied to it.
-    # See sglang _deepseek_v4_num_host_pages() (raises ValueError when
-    # server_args.hicache_size > 0):
-    # https://github.com/sgl-project/sglang/blob/9dd57ef8c48e2cd82292d849f01e2130c5203e67/python/sglang/srt/mem_cache/hybrid_cache/hybrid_pool_assembler.py#L262-L266
-    # FORCE_HICACHE_RATIO additionally lets a recipe opt into ratio-based sizing
-    # for any other model without unsetting TOTAL_CPU_DRAM_GB (see comment above).
+# DeepSeek V4's hybrid HiCache pool rejects --hicache-size (ratio only):
+# https://github.com/sgl-project/sglang/blob/9dd57ef8c48e2cd82292d849f01e2130c5203e67/python/sglang/srt/mem_cache/hybrid_cache/hybrid_pool_assembler.py#L262-L266
     if [[ "${FORCE_HICACHE_RATIO}" != "1" && -n "${TOTAL_CPU_DRAM_GB:-}" && "${TOTAL_CPU_DRAM_GB}" -gt 0 && "${MODEL_NAME}" != *DeepSeek-V4* ]]; then
-        # TOTAL_CPU_DRAM_GB is the prefill worker's per-node budget (only prefill
-        # offloads KV to CPU DRAM today); --hicache-size is per rank per host
-        # pool. A prefill server may span nodes (PREFILL_TP_SIZE is its total
-        # ranks), so divide by the ranks that land on one node.
+        # TOTAL_CPU_DRAM_GB is the prefill worker's per-node budget; --hicache-size is
+        # per rank per host pool. A prefill server may span nodes, so divide by the
+        # ranks that land on one node.
         prefill_ranks_per_node=$(( PREFILL_TP_SIZE < GPUS_PER_NODE ? PREFILL_TP_SIZE : GPUS_PER_NODE ))
         prefill_hicache_size_gb=$(( TOTAL_CPU_DRAM_GB / prefill_ranks_per_node / HICACHE_HOST_POOL_COUNT ))
         if (( prefill_hicache_size_gb < 1 )); then
@@ -542,7 +463,6 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     PREFILL_SERVER_CONFIG="${PREFILL_SERVER_CONFIG//--disable-radix-cache/}"
     DECODE_SERVER_CONFIG="${DECODE_SERVER_CONFIG//--disable-radix-cache/}"
 
-    # Prefill always gets HiCache.
     PREFILL_SERVER_CONFIG="$PREFILL_SERVER_CONFIG $(build_hicache_flags "$PREFILL_TP_SIZE")"
 
     DECODE_SERVER_CONFIG="$DECODE_SERVER_CONFIG --page-size ${HICACHE_PAGE_SIZE}"
@@ -562,15 +482,9 @@ if [[ "${EVAL_ONLY}" == "true" ]] || [[ "${RUN_EVAL}" == "true" ]]; then
     unset MORI_MOE_MAX_INPUT_TOKENS_DECODE
 fi
 
-# =============================================================================
-# Container Synchronization
-# =============================================================================
-
-# sync.py barrier/health-barrier exits 1 on timeout (and prints which
-# node/port never became ready), but without an explicit check here the
-# script would silently continue past a timed-out barrier -- printing a
-# misleading "success" message and launching the next stage against
-# servers/routers that never actually came up, instead of failing fast.
+# sync.py barrier exits 1 on timeout, but without an explicit check the script
+# would continue past a timed-out barrier and launch the next stage against
+# servers/routers that never came up.
 run_barrier_or_die() {
     local desc="$1" cmd="$2"
     if ! eval "$cmd"; then
@@ -589,14 +503,11 @@ run_barrier_or_die "container creation barrier" "python3 $SGLANG_WS_PATH/sync.py
     --wait-for-all-ports \
     --timeout 300"
 
-# =============================================================================
-# Node Role Assignment and Server Launch
-# =============================================================================
+# Node role assignment and server launch
 
 # Run a blocking command while watching the local server PID. If the server dies
-# (crash / OOM / killed) the blocking command is aborted and we return non-zero,
-# so the srun task exits non-zero and SLURM's --kill-on-bad-exit tears the whole
-# job down in seconds instead of waiting out the ~1800s barrier timeout.
+# the command is aborted and we return non-zero, so SLURM's --kill-on-bad-exit
+# tears the job down in seconds instead of waiting out the barrier timeout.
 wait_or_die() {            # $1 = server pid to watch; rest = blocking command
     local watch=$1; shift
     "$@" & local cmd=$!
@@ -633,15 +544,12 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     echo "================================================"
 
-    # Dump all resolved commands to a text file for debugging / reproducibility.
     CMD_DUMP="/run_logs/slurm_job-${SLURM_JOB_ID}/commands_${host_name}.txt"
     dump_cmd() { echo -e "\n# ── $1 ──\n$2" >> "$CMD_DUMP"; }
     echo "# Commands dump — $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > "$CMD_DUMP"
     echo "# Host: ${host_name} (${host_ip})  Node rank: ${NODE_RANK}" >> "$CMD_DUMP"
     echo "# Model: ${MODEL_NAME}  Image: ${DOCKER_IMAGE_NAME:-unknown}" >> "$CMD_DUMP"
 
-    # Start the Mooncake store master (L3 HiCache backend) on node 0 only.
-    # All prefill/decode servers connect to it via NODE0_ADDR:MC_MASTER_PORT.
     if [[ "${KV_OFFLOADING}" != "none" && "${KV_OFFLOAD_BACKEND:-}" == "hicache" && "${HICACHE_STORAGE_BACKEND:-}" == "mooncake" ]]; then
         echo "Starting Mooncake master on ${host_ip}:${MC_MASTER_PORT} (metadata :${MC_METADATA_PORT}, metrics :${MC_METRICS_PORT})"
         MC_MASTER_CMD="mooncake_master \
@@ -670,10 +578,9 @@ if [ "$NODE_RANK" -eq 0 ]; then
                 > "${MC_MASTER_LOG}" 2>&1 &
             mc_master_pid=$!
             sleep 3
-            # Fail loudly on a port collision. On shared nodes the Mooncake RPC
-            # port may already be taken by another user's master; in that case the
-            # metrics-port health check below can still pass against the foreign
-            # master while our RPC port is dead, and the prefill then hangs.
+            # On shared nodes the Mooncake RPC port may already be held by another
+            # user's master; the metrics-port check below can then pass against the
+            # foreign master while our RPC port is dead, and prefill hangs.
             if grep -qiE "Address already in use|bind .*error" "${MC_MASTER_LOG}" 2>/dev/null; then
                 echo "ERROR: mooncake_master failed to bind port ${MC_MASTER_PORT} (already in use)."
                 echo "       Set MC_MASTER_PORT/MC_METRICS_PORT to free ports and resubmit."
@@ -690,7 +597,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
         fi
     fi
 
-    # start the head prefill server
     PREFILL_MORI_MOE_ENV=""
     set -x
     if [[ -n "$MORI_MOE_MAX_INPUT_TOKENS_PREFILL" ]]; then
@@ -715,13 +621,11 @@ if [ "$NODE_RANK" -eq 0 ]; then
         echo "DRY RUN: $PREFILL_CMD"
     else
         set -x
-        # Launch under `setsid` so the server (python + its TP-scheduler
-        # children) sits in a dedicated process group; teardown can then
-        # `kill -- -$pgid` the WHOLE tree. Killing $prefill0_pid alone leaves
-        # children holding the process-sub tee's pipe, so the container's outer
-        # `| tee` never gets EOF and the container never exits (srun/CI hangs).
-        # Process substitution (not `| tee`) keeps $! as the setsid group leader,
-        # not tee's. Mirrors the router launch below.
+        # setsid puts the server and its TP-scheduler children in one process group so
+        # teardown can kill -- -$pgid the whole tree. Killing $prefill0_pid alone leaves
+        # children holding the tee pipe, so the container's outer | tee never gets EOF
+        # and the container never exits. Process substitution keeps $! as the setsid
+        # group leader rather than tee's pid.
         setsid bash -c "$PREFILL_CMD" \
             > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log >/dev/null) 2>&1 &
         set +x
@@ -746,32 +650,10 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "Congratulations!!! All prefill and decode servers are up . . ."
 
     if [[ "${IS_AGENTIC}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
-        # Agentic router config (main): long-context prefills can look unhealthy to
-        # the default circuit breaker during a concurrent burst. Disable the breaker
-        # and relax health-check sensitivity so a busy-but-alive worker is not
-        # ejected. cache_aware prefill routing exploits HiCache/radix prefix reuse
-        # across the agentic trace; round_robin decode keeps the single decode worker
-        # fed evenly. Override via ROUTER_RESILIENCE_FLAGS / ROUTER_POLICY_FLAGS.
         check_env_vars ROUTER_RESILIENCE_FLAGS
-        # server_sglang.sh previously read ROUTER_PREFILL_POLICY, but the recipe
-        # scripts export PREFILL_ROUTER_POLICY, so the recipe's policy override was
-        # silently ignored and the router always fell back to this hardcoded
-        # default. Also comment out ROUTER_DECODE_POLICY for now (superseded by
-        # --dp-aware below).
         ROUTER_PREFILL_POLICY="${PREFILL_ROUTER_POLICY}"
-        # ROUTER_DECODE_POLICY="${ROUTER_DECODE_POLICY:-round_robin}"
         ROUTER_POLICY_FLAGS="${ROUTER_POLICY_FLAGS:---policy ${ROUTER_PREFILL_POLICY} --dp-aware --cache-threshold ${ROUTER_CACHE_THRESHOLD} --balance-abs-threshold ${ROUTER_BALANCE_ABS_THRESHOLD} --balance-rel-threshold ${ROUTER_BALANCE_REL_THRESHOLD}}"
     else
-        # DI router config (8k1k branch, run 28696443568): with defaults the per-worker
-        # circuit stays OPEN for cb-timeout-duration-secs=60 before a half-open retrial.
-        # In that run every request 503'd from request #1 ("all circuits open or
-        # unhealthy") for ~31s and lm_eval (max_retries=5) then gave up -- i.e. the
-        # circuit was still open when the client budget ran out, so 0 result files were
-        # produced. Shortening the open->half-open window (and letting the router itself
-        # retry a failed worker selection) lets a transient trip re-close INSIDE the
-        # client retry budget instead of nuking the whole eval. The breaker stays fully
-        # ENABLED (thresholds unchanged); this only speeds recovery. Override via
-        # ROUTER_CB_ARGS / ROUTER_POLICY_FLAGS.
         check_env_vars ROUTER_DEFAULT_POLICY_FLAGS
         ROUTER_POLICY_FLAGS="${ROUTER_POLICY_FLAGS:-$ROUTER_DEFAULT_POLICY_FLAGS}"
         ROUTER_RESILIENCE_FLAGS="${ROUTER_RESILIENCE_FLAGS:-${ROUTER_CB_ARGS}}"
@@ -792,18 +674,12 @@ if [ "$NODE_RANK" -eq 0 ]; then
         echo "DRY RUN: $ROUTER_CMD"
     else
         ROUTER_LOG_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/router_${host_name}.log"
-        # sgl-router (Rust/tracing) emits ANSI color codes. NO_COLOR asks it to
-        # skip them at the source; the sed strip guarantees a clean file even if
-        # it doesn't honor NO_COLOR. Both branches use process substitution so
-        # $! stays the router pid, not sed's/tee's pid.
-        #
-        # Newer sglang-router (>=0.5.14) spawns the actual Rust worker
-        # (`sglang::router`, which binds :30000) as a child and lets the python
-        # launcher exit, so the worker reparents to init. It KEEPS its process
-        # group, though. We therefore launch under `setsid` to isolate the
-        # launcher+worker in a dedicated process group and record that pgid, so
-        # teardown can `kill -- -$proxy_pgid` the whole group even after the
-        # launcher is gone. `kill $proxy_pid` alone would miss the worker.
+        # sgl-router (Rust/tracing) emits ANSI color codes; NO_COLOR asks it to stop and
+        # the sed strip guarantees a clean file either way. Process substitution keeps $!
+        # as the router pid. sglang-router >=0.5.14 spawns the Rust worker (binds :30000)
+        # as a child and lets the python launcher exit, so the worker reparents to init
+        # but keeps its process group: launch under setsid and record the pgid so teardown
+        # can kill -- -$proxy_pgid after the launcher is gone.
         set -x
         if [[ "${SGLANG_ROUTER_STDOUT_LOGS}" == "1" ]]; then
             NO_COLOR=1 setsid bash -c "exec $ROUTER_CMD" > >(sed -u -r 's/\x1b\[[0-9;]*[a-zA-Z]//g' | tee "$ROUTER_LOG_FILE") 2>&1 &
@@ -815,7 +691,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
         proxy_pgid=$(ps -o pgid= -p "$proxy_pid" 2>/dev/null | tr -d ' ')
         : "${proxy_pgid:=$proxy_pid}"
 
-        # Wait for router to be ready via health endpoint
         HEALTH_BARRIER_CMD="python3 $SGLANG_WS_PATH/sync.py barrier \
             --node-ips ${NODE0_ADDR} \
             --node-ports 30000 \
@@ -829,21 +704,12 @@ if [ "$NODE_RANK" -eq 0 ]; then
             wait_or_die "$prefill0_pid" bash -c "$HEALTH_BARRIER_CMD" || exit 1
         fi
 
-        # ---- End-to-end router readiness canary (run 28696443568) ----
-        # The /readiness barrier above only proves the router PROCESS is up; it does
-        # NOT prove the router can reach a prefill worker and complete a generation.
-        # In that run the eval fired the instant /readiness passed and EVERY request
-        # 503'd ("No available prefill workers (all circuits open or unhealthy)") from
-        # request #1 -> lm_eval gave up -> 0 result files -> "Verify eval scores" failed.
-        # Gate the benchmark on ONE successful generation THROUGH the router so the eval
-        # never starts against a router whose prefill path is not yet actually serving.
-        #
-        # Run the poll loop under wait_or_die (like the barriers above) rather than
-        # inline: the canary is the FIRST real generation through prefill, so a
-        # prefill crash right after /readiness passes is plausible. Without
-        # wait_or_die watching prefill0_pid, that just looks like repeated 503s and
-        # the loop burns the full ROUTER_CANARY_TIMEOUT (default 600s) instead of
-        # detecting the dead pid and aborting in ~5s.
+        # /readiness only proves the router process is up, not that it can reach a
+        # prefill worker and complete a generation; an eval started on /readiness alone
+        # 503'd every request ("all circuits open or unhealthy") and produced no results.
+        # Gate on one successful generation through the router. Runs under wait_or_die
+        # so a prefill crash right after /readiness aborts in seconds instead of burning
+        # ROUTER_CANARY_TIMEOUT on repeated 503s.
         run_router_canary() {
             local canary_url="http://${NODE0_ADDR}:30000/v1/chat/completions"
             local canary_model="${MODEL_DIR}/${MODEL_NAME}"
@@ -878,29 +744,22 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "Benchmarking on ${host_name}:${host_ip}"
     cd $SGLANG_WS_PATH
 
-    # Export IS_MTP based on whether MTP is enabled
     if [ "$DECODE_MTP_SIZE" -gt 0 ]; then
         export IS_MTP=true
     else
         export IS_MTP=false
     fi
 
-    # Select the benchmark runner.
-    # IS_AGENTIC=1/true  → agentic trace replay (trace_replay.sh)
-    # IS_AGENTIC unset/0 → fixed-seq-len throughput benchmark (bench.sh)
     if [[ "${IS_AGENTIC}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
-        # Point aiperf's server-metrics scrape at the per-worker Prometheus
-        # /metrics endpoints. The router (:30000) that aiperf auto-detects from
-        # --url does not expose Prometheus, so without this the scrape finds no
-        # reachable endpoint and all server-side cache/KV fields come out null.
-        # Only set it when the workers were actually started with --enable-metrics.
+        # aiperf auto-detects the router from --url, which does not expose Prometheus;
+        # point the scrape at the per-worker /metrics endpoints or every server-side
+        # cache/KV field comes out null.
         if [[ "${ENABLE_METRICS}" == "1" && "${#SERVER_METRICS_URLS[@]}" -gt 0 ]]; then
             AIPERF_SERVER_METRICS_URLS=$(IFS=,; echo "${SERVER_METRICS_URLS[*]}")
             export AIPERF_SERVER_METRICS_URLS
             echo "AIPERF_SERVER_METRICS_URLS=${AIPERF_SERVER_METRICS_URLS}"
         fi
-        # Per-worker base URLs for cache flushing between concurrency points.
-        # trace_replay.sh consults these when CLEAR_CACHE_BETWEEN_CONC=1.
+        # trace_replay.sh flushes these workers directly when CLEAR_CACHE_BETWEEN_CONC=1.
         if [[ "${#SERVER_FLUSH_URLS[@]}" -gt 0 ]]; then
             SERVER_FLUSH_URLS_CSV=$(IFS=,; echo "${SERVER_FLUSH_URLS[*]}")
             export SERVER_FLUSH_URLS_CSV
@@ -931,21 +790,14 @@ if [ "$NODE_RANK" -eq 0 ]; then
     elif [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BENCH_CMD"
     elif [[ -n "${CLIENT_IMAGE:-}" && "$IS_AGENTIC_RUN" == "1" ]]; then
-        # Separate client image (node-0 sibling container): run the aiperf trace
-        # replay in its own sibling container built from CLIENT_IMAGE (which ships
-        # a pre-baked aiperf + deps) instead of rebuilding the aiperf venv inside
-        # this server container. The server/router stay up in this container while
-        # the client container drives the benchmark against the router on
-        # localhost (--network host). job.slurm mounts the host docker socket + CLI
-        # into this container and forwards HOST_REPO_DIR / HOST_MODEL_DIR /
-        # HOST_BENCH_LOGS / CLIENT_CONT_NAME so the sibling can be launched here.
+        # With CLIENT_IMAGE set, the aiperf trace replay runs in a sibling container
+        # (pre-baked aiperf) on this node against the router over --network host.
+        # job.slurm mounts the docker socket and forwards HOST_REPO_DIR / HOST_MODEL_DIR /
+        # HOST_BENCH_LOGS / CLIENT_CONT_NAME for this.
         CLIENT_ENV_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/client.env"
         mkdir -p "/run_logs/slurm_job-${SLURM_JOB_ID}"
-        # Forward the benchmark-relevant env (incl. runtime-computed metrics/flush
-        # URLs) to the client container; override the few paths/flags that differ
-        # inside the pre-baked image. Unset vars are skipped, so the client keeps
-        # its own defaults for anything not exported here.
         check_env_vars INFERENCEX_RUNTIME_ENV_VARS
+        # Unset vars are skipped so the client keeps its own defaults.
         {
             for _v in $INFERENCEX_RUNTIME_ENV_VARS \
                       ENGINE MODEL_NAME MODEL_PREFIX PRECISION FRAMEWORK SPEC_DECODING \
@@ -964,21 +816,11 @@ if [ "$NODE_RANK" -eq 0 ]; then
                       AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES ROUTER_PORT TQDM_MININTERVAL; do
                 if [[ -n "${!_v+x}" ]]; then
                     _val="${!_v}"
-                    # docker --env-file requires one KEY=VALUE per line with no
-                    # embedded newlines; KV_OFFLOAD_BACKEND_METADATA carries
-                    # pretty-printed multi-line JSON, which otherwise splits
-                    # into unparseable lines (e.g. '"name": "hicache",') and
-                    # aborts the client container launch. Re-serialize it to
-                    # compact single-line JSON (round-tripping through
-                    # json.loads/json.dumps) instead of naively stripping
-                    # newlines, so this stays correct even if a value ever
-                    # contained a literal newline inside a string. Empty/
-                    # "none"/"null" is the normal case when KV offloading is
-                    # disabled (job.slurm always sets this var, even to ""),
-                    # and must pass through untouched -- matching how
-                    # optional_kv_offload_backend_metadata() in
-                    # process_agentic_result.py treats those as "no metadata"
-                    # rather than invalid JSON.
+                    # docker --env-file needs one KEY=VALUE per line; KV_OFFLOAD_BACKEND_METADATA
+                    # carries pretty-printed multi-line JSON, so re-serialize it compact via
+                    # json.loads/json.dumps. Empty/"none"/"null" means no metadata (job.slurm
+                    # always sets the var) and must pass through untouched, matching
+                    # optional_kv_offload_backend_metadata() in process_agentic_result.py.
                     if [[ "$_v" == "KV_OFFLOAD_BACKEND_METADATA" && -n "$_val" && "$_val" != "null" ]]; then
                         _val="$(python3 -c 'import json, sys
 print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
@@ -990,16 +832,13 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
                 fi
             done
             echo "INFMAX_CONTAINER_WORKSPACE=/workspace"
-            # Do NOT pin AGENTIC_OUTPUT_DIR: it must default to /workspace (the
-            # host repo mount == GITHUB_WORKSPACE) so the aggregated
-            # ${RESULT_FILENAME}_conc<N>.json lands where the workflow guard globs
-            # it. /workspace is bind-mounted writable, same as the co-located path.
+            # AGENTIC_OUTPUT_DIR is deliberately not pinned: it must default to /workspace
+            # (the host repo mount) so ${RESULT_FILENAME}_conc<N>.json lands where the
+            # workflow guard globs it.
             echo "HF_HOME=/run_logs/hf_cache"
             echo "MODEL_DIR=/models"
-            # A pre-baked client image ships aiperf at CLIENT_AIPERF_VENV; when
-            # unset (e.g. reusing the server image, which carries no pre-baked
-            # venv), trace_replay builds aiperf on the fly from
-            # /workspace/utils/aiperf — same as the co-located path.
+            # Without a pre-baked venv (CLIENT_AIPERF_VENV unset, e.g. reusing the server
+            # image) trace_replay builds aiperf from /workspace/utils/aiperf.
             if [[ -n "${CLIENT_AIPERF_VENV:-}" ]]; then
                 echo "AIPERF_USE_PREBUILT=1"
                 echo "AIPERF_VENV=${CLIENT_AIPERF_VENV}"
@@ -1027,12 +866,10 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
         set +x
     fi
 
-    # Run evaluation if requested (before killing router)
     if [[ "${RUN_EVAL}" == "true" ]]; then
         echo "Running lm-eval (GSM8K) evaluation on Node 0..."
 
-        # Health check: verify the router is still serving before running eval.
-        # The throughput benchmark may have crashed/exhausted decode workers.
+        # The throughput benchmark may have crashed decode workers; skip eval if so.
         EVAL_HEALTH_OK=false
         for _attempt in 1 2 3; do
             if curl -sf --max-time 10 "http://0.0.0.0:30000/readiness" >/dev/null 2>&1; then
@@ -1051,8 +888,7 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
 
             source /workspace/benchmarks/benchmark_lib.sh
 
-            # Use EVAL_CONC from workflow if set, otherwise fall back to max of conc list.
-            # Export CONC before run_eval so meta_env.json matches validate_scores.py.
+            # CONC must be exported before run_eval so meta_env.json matches validate_scores.py.
             if [[ -n "${EVAL_CONC:-}" ]]; then
                 export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
             else
@@ -1060,7 +896,6 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
             fi
             export CONC="${EVAL_CONCURRENT_REQUESTS}"
 
-            # Override eval context length with model's configured context_length
             if [[ -n "$prefill_context_length" ]]; then
                 export EVAL_MAX_MODEL_LEN="$prefill_context_length"
             fi
@@ -1068,8 +903,8 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
             export ISL="${BENCH_INPUT_LEN}"
             export OSL="${BENCH_OUTPUT_LEN}"
             bridge_disagg_eval_metadata
-            # IS_MULTINODE, FRAMEWORK, PRECISION, MODEL_PREFIX, RUNNER_TYPE,
-            # RESULT_FILENAME are already set via Docker -e flags from job.slurm
+            # IS_MULTINODE, FRAMEWORK, PRECISION, MODEL_PREFIX, RUNNER_TYPE, RESULT_FILENAME
+            # arrive via Docker -e flags from job.slurm.
 
             if [[ "$DRY_RUN" -eq 1 ]]; then
                 echo "DRY RUN: run_eval --port 30000 (framework=${EVAL_FRAMEWORK}, conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
@@ -1107,7 +942,6 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
         fi
     fi
 
-    # Copy benchmark results to BENCHMARK_LOGS_DIR (mounted from host)
     LOGS_OUTPUT="${BENCHMARK_LOGS_DIR}/logs"
     mkdir -p "$LOGS_OUTPUT"
 
@@ -1119,15 +953,12 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
     echo "Killing the proxy server and prefill server"
 
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        # Kill the router's entire process group (isolated via setsid at launch).
-        # The python launcher (proxy_pid) has usually already exited after
-        # spawning the detached Rust worker; the worker reparents to init but
-        # stays in this process group, so a group-kill reliably closes :30000.
-        # `kill $proxy_pid` alone misses the worker and hangs decode/prefill.
+        # Group-kill the router (setsid at launch): the python launcher has usually
+        # exited after spawning the Rust worker, which reparents to init but stays in
+        # this group; kill $proxy_pid alone misses it and :30000 stays open.
         kill -TERM -"${proxy_pgid:-$proxy_pid}" 2>/dev/null || true
-        # Group-kill the prefill server tree (setsid at launch) so its
-        # TP-scheduler children die too and release the process-sub tee ->
-        # the container's outer `| tee` gets EOF and the container can exit.
+        # Group-kill the prefill tree so TP-scheduler children release the tee pipe
+        # and the container can exit.
         kill -TERM -"${prefill0_pgid:-$prefill0_pid}" 2>/dev/null || true
     fi
 
@@ -1172,9 +1003,8 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         echo "DRY RUN: $PREFILL_CMD"
     else
         set -x
-        # setsid isolates the server tree in its own process group so teardown
-        # can group-kill it (python + TP-scheduler children); otherwise the
-        # children hold the process-sub tee's pipe and the container never exits.
+        # setsid isolates the server tree so teardown can group-kill python + TP-scheduler
+        # children; otherwise they hold the tee pipe and the container never exits.
         setsid bash -c "$PREFILL_CMD" \
             > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log >/dev/null) 2>&1 &
         set +x
@@ -1210,8 +1040,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     echo "Killing the rank $NODE_RANK prefill server"
 
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        # Group-kill the whole server tree (setsid at launch) so TP-scheduler
-        # children die and the process-sub tee gets EOF -> container can exit.
+        # Group-kill so TP-scheduler children release the tee pipe and the container exits.
         kill -TERM -"${prefill_pgid:-$prefill_pid}" 2>/dev/null || true
     fi
 
@@ -1234,15 +1063,12 @@ else
     fi
     set +x
 
-    # Agentic trace replay doesn't reproduce real token-by-token traffic, so
-    # measured MTP/EAGLE acceptance there isn't representative (PR #2309
-    # review: https://github.com/SemiAnalysisAI/InferenceX/pull/2309#pullrequestreview-4778348624).
-    # Per the AgentX fairness guidelines (golden_al_distribution/README.md),
-    # agentic throughput benchmarks simulate acceptance at the model's
-    # committed golden AL instead of measuring real (non-representative)
-    # acceptance. Eval runs (RUN_EVAL / EVAL_ONLY) need real acceptance so
-    # GSM8K scores reflect actual MTP behavior. Golden curve source:
-    # golden_al_distribution/dsv4_mtp.yaml (thinking_on).
+    # Agentic trace replay does not reproduce real token-by-token traffic, so measured
+    # MTP acceptance there is not representative (PR #2309 review:
+    # https://github.com/SemiAnalysisAI/InferenceX/pull/2309#pullrequestreview-4778348624).
+    # Per golden_al_distribution/README.md, agentic throughput runs simulate acceptance at
+    # the model's golden AL (golden_al_distribution/dsv4_mtp.yaml, thinking_on); eval
+    # runs need real acceptance so GSM8K reflects actual MTP behavior.
     DECODE_SIM_ACC_ENV=""
     if [[ "$DECODE_MTP_SIZE" -gt 0 ]] && { [[ "${IS_AGENTIC}" == "1" ]] || [[ "${IS_AGENTIC:-}" == "true" ]]; }; then
         if [[ "${EVAL_ONLY}" == "true" ]] || [[ "${RUN_EVAL}" == "true" ]]; then
@@ -1282,9 +1108,8 @@ else
         echo "DRY RUN: $DECODE_CMD"
     else
         set -x
-        # setsid isolates the server tree in its own process group so teardown
-        # can group-kill it (python + TP-scheduler children); otherwise the
-        # children hold the process-sub tee's pipe and the container never exits.
+        # setsid isolates the server tree so teardown can group-kill python + TP-scheduler
+        # children; otherwise they hold the tee pipe and the container never exits.
         setsid bash -c "$DECODE_CMD" \
             > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/decode_${host_name}.log >/dev/null) 2>&1 &
 
@@ -1320,8 +1145,7 @@ else
 
     echo "Killing the rank $RANK decode server"
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        # Group-kill the whole server tree (setsid at launch) so TP-scheduler
-        # children die and the process-sub tee gets EOF -> container can exit.
+        # Group-kill so TP-scheduler children release the tee pipe and the container exits.
         kill -TERM -"${decode_pgid:-$decode_pid}" 2>/dev/null || true
     fi
 

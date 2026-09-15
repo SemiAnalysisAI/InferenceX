@@ -81,9 +81,8 @@ PARALLEL_ARGS=(
 # Parallel tokenization keeps 256k AgentX warmups below the client timeout.
 TOKENIZER_ARGS=(--tokenizer-worker-num 6)
 
-# AgentX concurrency counts live session trees rather than individual HTTP
-# requests. Leave room for subagent fan-out and avoid spending HBM on graphs
-# above the batch sizes that remain useful for this long-context workload.
+# AgentX concurrency counts live session trees; leave room for subagent
+# fan-out without spending HBM on graphs above useful batch sizes.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS="$CONC"
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64

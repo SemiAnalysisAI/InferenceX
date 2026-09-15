@@ -45,10 +45,9 @@ export NUM_NODES=$NUM_NODES
 export PREFILL_NODES=$PREFILL_NODES
 export DECODE_NODES=$DECODE_NODES
 export GPUS_PER_NODE=$GPUS_PER_NODE
-# Worker count per role (Option B): the role's nodes are split into this many
-# INDEPENDENT DP/EP engines (default 1 = one engine over all role nodes). Each
-# engine spans role_nodes/workers nodes, so DP_SIZE is PER-ENGINE. Matches how
-# dynamo/AMD and upstream oci-high-tpt run 2P high-tpt (2 prefill : 1 decode).
+# Each role's nodes split into this many INDEPENDENT DP/EP engines (default 1 = one
+# engine over all role nodes), so DP_SIZE is PER-ENGINE. Matches how dynamo/AMD and
+# upstream oci-high-tpt run 2P high-tpt (2 prefill : 1 decode).
 export PREFILL_WORKERS
 export DECODE_WORKERS
 if (( PREFILL_NODES % PREFILL_WORKERS != 0 )); then
@@ -66,7 +65,6 @@ export BENCH_OUTPUT_LEN=$OSL
 export BENCH_MAX_CONCURRENCY=$CONCURRENCIES
 export BENCH_REQUEST_RATE=$REQUEST_RATE
 export BENCH_RANDOM_RANGE_RATIO=$RANDOM_RANGE_RATIO
-# Match the AMD multinode default.
 export BENCH_NUM_PROMPTS_MULTIPLIER
 
 export RUN_EVAL

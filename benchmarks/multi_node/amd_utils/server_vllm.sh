@@ -11,7 +11,6 @@ check_env_vars \
     WS_PATH ROUTER_PORT SERVER_PORT PROXY_PING_PORT MODEL_PATH
 
 # vLLM Disaggregated Server Launcher with Model-Specific Configurations
-# =============================================================================
 #
 # Node role assignment (by NODE_RANK):
 #   0           -> Proxy/Router + first Prefill node  (kv_producer)
@@ -20,16 +19,11 @@ check_env_vars \
 #
 # Total nodes = xP + yD (router co-located with first prefill, like SGLang).
 
-# =============================================================================
-# Dependency Setup (idempotent; required when using base vLLM image)
-# =============================================================================
+# setup_deps.sh is idempotent; required on the base vLLM image.
 source "$(dirname "${BASH_SOURCE[0]}")/setup_deps.sh"
 
 # Prefer MODEL_PATH from job.slurm (handles HF cache snapshot resolution)
 
-# =============================================================================
-# Dependencies and Environment Setup
-# =============================================================================
 source $WS_PATH/env.sh
 
 host_ip=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {print $7}')
@@ -40,10 +34,6 @@ host_name=$(hostname)
 
 echo "[INFO] Management IP (barriers/proxy): $host_ip"
 echo "[INFO] RDMA IP (Nixl KV transfer): $rdma_ip"
-
-# =============================================================================
-# RDMA / Nixl Workarounds
-# =============================================================================
 
 setup_rdma_env() {
     # Pensando ionic (RoCEv2) point-to-point /31 route fix.
@@ -62,13 +52,11 @@ setup_rdma_env() {
         fi
     fi
 
-    # Patch Nixl UCX backend: set ucx_error_handling_mode=none.
-    # Required for ALL NIC types under high concurrency (C512+). Without this,
-    # UCX's default UCP_ERR_HANDLING_MODE_PEER triggers transport-level error
-    # recovery on ibv_post_send failures, preventing RIXL RDMA READ retries from
-    # recovering gracefully. This causes the prefill KV cache to fill to 100%
-    # and deadlock the pipeline. On ionic NICs this was already applied (rdmacm
-    # incompatibility); on mlx5 NICs it was incorrectly skipped.
+    # Nixl UCX backend: ucx_error_handling_mode=none. Under high concurrency (C512+)
+    # UCX's default UCP_ERR_HANDLING_MODE_PEER runs transport-level error recovery on
+    # ibv_post_send failures, which stops RIXL RDMA READ retries from recovering; the
+    # prefill KV cache then fills to 100% and the pipeline deadlocks. Needed on every
+    # NIC type, not just ionic.
     local nixl_api
     nixl_api=$(python3 -c "import rixl._api; print(rixl._api.__file__)" 2>/dev/null)
     if [[ -n "$nixl_api" ]]; then
@@ -88,9 +76,6 @@ if [[ -z "$UCX_NET_DEVICES" ]]; then
     exit 1
 fi
 
-# =============================================================================
-# Model-Specific Configuration from YAML
-# =============================================================================
 MODELS_YAML="${WS_PATH}/models_vllm.yaml"
 
 if [[ ! -f "$MODELS_YAML" ]]; then
@@ -133,7 +118,6 @@ print(f'PREFILL_MODEL_ENVS=\"{pev}\"')
 
 echo "Loaded model configuration for: $MODEL_NAME"
 
-# Apply tensor-parallel size and EP/DP flags from submit pipeline.
 if [[ -n "${PREFILL_TP_SIZE:-}" ]]; then
     if echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--tensor-parallel-size'; then
         PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--tensor-parallel-size ${PREFILL_TP_SIZE}/g")
@@ -164,10 +148,6 @@ fi
 echo "PREFILL_SERVER_CONFIG (after TP/EP/DP): $PREFILL_SERVER_CONFIG"
 echo "DECODE_SERVER_CONFIG (after TP/EP/DP): $DECODE_SERVER_CONFIG"
 
-# =============================================================================
-# Container Synchronization
-# =============================================================================
-
 echo "Waiting at the container creation barrier on $host_name"
 python3 $WS_PATH/sync.py barrier \
     --local-ip ${host_ip} \
@@ -178,9 +158,6 @@ python3 $WS_PATH/sync.py barrier \
     --wait-for-all-ports \
     --timeout 600
 
-# =============================================================================
-# Cluster Topology Configuration
-# =============================================================================
 IFS=',' read -ra IP_ARRAY <<< "$IPADDRS"
 
 PREFILL_ARGS=""
@@ -199,7 +176,6 @@ echo "Decode  node IPs: ${DECODE_ARGS}"
 
 # MoRI-IO proxy ZMQ registration port (must match vllm-router --vllm-discovery-address)
 
-# vLLM runtime environment (static vars moved to env.sh; these depend on per-node state)
 setup_vllm_env() {
     export VLLM_NIXL_SIDE_CHANNEL_HOST=${rdma_ip}
     export VLLM_NIXL_SIDE_CHANNEL_PORT=5600
@@ -208,9 +184,7 @@ setup_vllm_env() {
     done
 }
 
-# =============================================================================
-# Node Role Assignment and Server Launch
-# =============================================================================
+# Node role assignment and server launch
 
 if [ "$NODE_RANK" -eq 0 ]; then
     echo "NODE INFO ======================================="
@@ -235,7 +209,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
         echo "[PREFILL_ENV] $env_pair"
     done
 
-    # Router is started as an external container by job.slurm (VLLM_ROUTER_IMAGE)
     echo "Using external vllm-router container (started by job.slurm on this node)"
 
     SERVED_MODEL="${MODEL_NAME}"
@@ -269,7 +242,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     echo "Congratulations!!! All prefill and decode servers are up . . ."
 
-    # Wait for proxy /health to confirm it is accepting requests
     HEALTH_BARRIER_CMD="python3 $WS_PATH/sync.py barrier \
         --node-ips ${NODE0_ADDR} \
         --node-ports ${ROUTER_PORT} \
@@ -304,7 +276,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
         set +x
     fi
 
-    # Run evaluation if requested (before killing router)
     if [[ "${RUN_EVAL}" == "true" ]]; then
         echo "Running lm-eval evaluation on Node 0..."
 
@@ -377,7 +348,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
         fi
     fi
 
-    # Copy benchmark/eval results to BENCHMARK_LOGS_DIR (mounted from host)
     LOGS_OUTPUT="${BENCHMARK_LOGS_DIR}/logs"
     mkdir -p "$LOGS_OUTPUT"
 
@@ -510,10 +480,6 @@ else
     echo "Killing the decode server"
     [[ "$DRY_RUN" -eq 0 ]] && kill $decode_pid 2>/dev/null || true
 fi
-
-# echo "Killing the etcd server"
-# kill $etcd_pid 2>/dev/null || true
-# pkill -f etcd 2>/dev/null || true
 
 echo "Script completed successfully"
 exit 0

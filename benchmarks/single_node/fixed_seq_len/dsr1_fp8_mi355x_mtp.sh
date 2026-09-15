@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-# DeepSeek-R1-0528 FP8 on MI355X with EAGLE/MTP speculative decoding.
-# Mirrors dsr1_fp8_mi355x.sh and adds the speculative-* flags.
-
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars \
@@ -21,8 +18,7 @@ fi
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
-# Reference
-# https://rocm.docs.amd.com/en/docs-7.0-docker/benchmark-docker/inference-sglang-deepseek-r1-fp8.html
+# Reference: https://rocm.docs.amd.com/en/docs-7.0-docker/benchmark-docker/inference-sglang-deepseek-r1-fp8.html
 
 export SGLANG_USE_AITER=1
 export SGLANG_AITER_MLA_PERSIST=1

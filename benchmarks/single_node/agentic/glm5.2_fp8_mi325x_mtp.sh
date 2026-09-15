@@ -2,9 +2,7 @@
 set -eo pipefail
 set -x
 
-# Full-context AgentX refresh for GLM-5.2 FP8 on one 8xMI325X node.
-# The serving shape matches Actions run 29657732517 and adds native EAGLE
-# MTP with the committed thinking-on golden acceptance length.
+# GLM-5.2 FP8 on 8xMI325X with native EAGLE MTP; GPU-resident KV only.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -63,9 +61,8 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DSA_FUSE_TOPK=false
 export SGLANG_OPT_USE_TOPK_V2=false
 
-# Synthetic rejection sampling is only for performance replay. Evals retain
-# real target-model verification. The AL is GLM-5.2 thinking-on, K=3, from
-# golden_al_distribution/glm5.2_mtp.yaml.
+# Golden AL: golden_al_distribution/glm5.2_mtp.yaml, thinking_on, K=3.
+# Evals keep real target verification.
 if [[ "${EVAL_ONLY}" != "true" ]]; then
     export SGLANG_SIMULATE_ACC_LEN=2.99
     export SGLANG_SIMULATE_ACC_METHOD=match-expected

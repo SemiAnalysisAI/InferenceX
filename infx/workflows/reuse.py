@@ -76,7 +76,7 @@ def parse_reuse_command(
     body: str, command: str = "/reuse-sweep-run"
 ) -> tuple[bool, int | None]:
     """Use the last standalone command in a comment, preserving unpinned requests."""
-    matches = re.findall(rf"(?m)^\s*{re.escape(command)}(?:\s+(\d+))?\s*$", body)
+    matches = re.findall(rf"(?m)^\s*{re.escape(command)}(?:[^\S\r\n]+(\d+))?\s*$", body)
     if not matches:
         return False, None
     return True, int(matches[-1]) if matches[-1] else None

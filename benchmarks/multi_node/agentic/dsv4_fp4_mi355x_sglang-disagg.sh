@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
 
 # Agentic trace-replay recipe for a disaggregated SGLang server on MI355X
-# (DeepSeek-V4-Pro FP4, 1P1D TP8).
-#
-# CI-style sibling of dsr1_fp4_mi355x_sglang-disagg.sh: driven entirely by
-# environment variables and submits a SLURM job via submit.sh. The agentic /
-# HiCache-offload configuration mirrors the DSR1 recipe but uses DSV4-Pro
-# specific flags (dsv4 attention backend, page-size 256, SWA settings).
+# (DeepSeek-V4-Pro FP4, 1P1D TP8). Driven by environment variables; submits a SLURM
+# job via submit.sh.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../benchmark_lib.sh" --validation-only
@@ -45,39 +41,29 @@ fi
 
 set -x
 
-# Use upstreamed multi_node scripts (no external clone needed)
 cd "$GITHUB_WORKSPACE/benchmarks/multi_node/amd_utils" || exit 1
 
-# Set up SGL launch script-specific environment variables
 export TIME_LIMIT
 export MODEL_PATH=$MODEL_PATH
 export MODEL_NAME=$MODEL_NAME
 export CONTAINER_IMAGE=$IMAGE
 
-# ── Identity / result naming ──
 export MODEL_PREFIX
 export PRECISION
 export RESULT_FILENAME
 
-# ── Agentic benchmark params ──
 export DURATION
-# DSV4-Pro max model len for agentic traces (matches single-node recipe).
 export MAX_MODEL_LEN
 
-# ── Aiter fault mitigation ──
 # --disable-custom-all-reduce avoids a known aiter fault on MI355X.
 export DISABLE_CUSTOM_ALL_REDUCE
 
-# ── KV cache offloading (HiCache) ──
-# KV_OFFLOADING=none | dram (passed from YAML; default none for disagg).
-# KV_OFFLOAD_BACKEND selects the backend when offloading is on; this recipe
-# only implements HiCache, so "hicache" is the only supported value.
-# HICACHE_TIER: L2 -> GPU + CPU-DRAM host pool. L3 -> + Mooncake store.
+# KV_OFFLOADING=none | dram. KV_OFFLOAD_BACKEND selects the backend; this recipe only
+# implements hicache. HICACHE_TIER: L2 = GPU + CPU-DRAM host pool, L3 = + Mooncake.
 export KV_OFFLOADING
 if [[ "$KV_OFFLOADING" != "none" ]]; then
   check_env_vars KV_OFFLOAD_BACKEND
 fi
-# HiCache/Mooncake tunables only matter when KV offloading is enabled.
 if [[ "$KV_OFFLOADING" != "none" && "${KV_OFFLOAD_BACKEND:-}" == "hicache" ]]; then
   check_env_vars \
       HICACHE_TIER HICACHE_HOST_POOL_COUNT HICACHE_PAGE_SIZE HICACHE_RATIO HICACHE_MEM_LAYOUT \
@@ -88,19 +74,12 @@ if [[ "$KV_OFFLOADING" != "none" && "${KV_OFFLOAD_BACKEND:-}" == "hicache" ]]; t
   export HICACHE_HOST_POOL_COUNT
   # DSV4 uses page-size 256 (set in models.yaml); HiCache must match.
   export HICACHE_PAGE_SIZE
-  # HiCache ratio (host pool = ratio * GPU KV pool).
   export HICACHE_RATIO
-  # DSv4 wants the ratio-based pool, but server_sglang.sh prefers
-  # --hicache-size over --hicache-ratio when TOTAL_CPU_DRAM_GB is set.
-  # Opt out via FORCE_HICACHE_RATIO instead of unsetting TOTAL_CPU_DRAM_GB
-  # (also required client-side by benchmark_lib.sh when KV_OFFLOADING=dram).
+  # server_sglang.sh prefers --hicache-size over --hicache-ratio when TOTAL_CPU_DRAM_GB
+  # is set; opt out via FORCE_HICACHE_RATIO rather than unsetting TOTAL_CPU_DRAM_GB,
+  # which benchmark_lib.sh also requires client-side when KV_OFFLOADING=dram.
   export FORCE_HICACHE_RATIO=1
 
-  # ── HiCache layout/backend by tier ──
-  #   L3 (Mooncake): page_first + direct + write_through     + storage=mooncake
-  #   L2 (CPU DRAM): layer_first + direct + write_through_selective + storage=none
-  # NOTE: write_through_selective evicts only under GPU memory pressure, avoiding
-  # the mori RDMA race that causes GPU memory access faults with write_through.
   if [[ "${HICACHE_TIER^^}" == "L3" ]]; then
     export HICACHE_MEM_LAYOUT
     export HICACHE_IO_BACKEND
@@ -128,18 +107,14 @@ if [[ "$KV_OFFLOADING" != "none" && "${KV_OFFLOAD_BACKEND:-}" == "hicache" ]]; t
   export MC_METADATA_SERVER="${MC_METADATA_SERVER:-}"
 fi
 
-# ── MoRIIO RDMA Send Queue tuning ──
 export MORI_IO_SQ_BACKOFF_TIMEOUT_US
 export MORI_IO_QP_MAX_SEND_WR
 
-# ── SGLang PD router policy + server metrics ──
 export PREFILL_ROUTER_POLICY
 export ENABLE_METRICS
 
-# ── MTP ──
 export DECODE_MTP_SIZE
 
-# Derive EP/DP enable flags from the topology inputs.
 if [[ "${PREFILL_EP}" -eq 1 ]]; then
 export PREFILL_ENABLE_EP=false
 else

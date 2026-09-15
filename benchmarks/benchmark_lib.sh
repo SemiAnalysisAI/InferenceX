@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 
-# Shared benchmarking utilities for InferenceX
-
-# Check if required environment variables are set
-# Usage: check_env_vars VAR1 VAR2 VAR3 ...
-# Exits with code 1 if any variable is not set
+# Usage: check_env_vars VAR1 VAR2 ...; exits 1 if any is unset.
 check_env_vars() {
     local missing_vars=()
 
@@ -311,9 +307,7 @@ if [[ "$_benchmark_caller" == */agentic/* ||
 fi
 unset _benchmark_caller
 
-# --------------------------------
 # GPU monitoring helpers
-# --------------------------------
 
 GPU_MONITOR_PID=""
 GPU_MONITOR_VENDOR=""
@@ -322,8 +316,7 @@ GPU_METRICS_CSV="${GPU_METRICS_CSV:-gpu_metrics.csv}"
 NVIDIA_GPU_MONITOR_QUERY="timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory"
 export GPU_METRICS_CSV
 
-# Start background GPU monitoring that logs metrics every second to CSV.
-# Auto-detects NVIDIA (nvidia-smi) or AMD (amd-smi) GPUs.
+# Background nvidia-smi/amd-smi sampler writing CSV.
 # Usage: start_gpu_monitor [--output /path/to/output.csv] [--interval 1]
 start_gpu_monitor() {
     local output="$GPU_METRICS_CSV"
@@ -354,11 +347,9 @@ start_gpu_monitor() {
         echo "[GPU Monitor] Started NVIDIA (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
     elif command -v amd-smi &>/dev/null; then
         GPU_MONITOR_VENDOR="amd"
-        # Use amd-smi native watch mode (-w) which includes timestamps automatically.
-        # PYTHONUNBUFFERED defeats the tool's own stdout block buffering (amd-smi is
-        # Python; measured on MI355X: trailing ticks were lost at kill without it).
-        # Pipe through awk to: skip preamble lines, keep first CSV header, skip repeated
-        # headers, and flush every row so killing the pipe cannot discard buffered samples.
+        # amd-smi is Python and block-buffers stdout; without PYTHONUNBUFFERED the
+        # trailing ticks were lost at kill (measured on MI355X). awk keeps the first
+        # CSV header, drops repeated ones, and flushes every row for the same reason.
         PYTHONUNBUFFERED=1 amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
             | awk '/^timestamp,/{if(!h){print;h=1};next} h{print;fflush()}' > "$output" &
         GPU_MONITOR_PID=$!
@@ -375,18 +366,14 @@ start_gpu_monitor() {
     fi
 }
 
-# Stop the background GPU monitor and report file size.
 stop_gpu_monitor() {
     if [[ -n "$GPU_MONITOR_PID" ]] && kill -0 "$GPU_MONITOR_PID" 2>/dev/null; then
-        # benchmark_end_time_unix is recorded shortly before the benchmark
-        # process exits, so the stream must cover one more sample past it for
-        # deterministic boundary interpolation. NVIDIA appends a one-shot
-        # post-exit sample below; amd-smi one-shot CSV has no timestamp column,
-        # so the AMD path instead lets the watch stream emit final ticks before
-        # the kill. Two extra intervals: amd-smi stamps integer seconds, so a
-        # tick in the same second as the window end still fails bracketing —
-        # the stream needs a tick at the NEXT whole second (measured on MI355X:
-        # end=...153.325 vs last sample ...153.0).
+        # The stream must cover one sample past benchmark_end_time_unix for
+        # boundary interpolation. NVIDIA appends a one-shot sample below; amd-smi
+        # one-shot CSV has no timestamp column, so the AMD watch stream must emit
+        # final ticks before the kill. Two extra intervals because amd-smi stamps
+        # integer seconds: a tick in the same second as the window end still
+        # fails bracketing (MI355X: end=...153.325 vs last sample ...153.0).
         if [[ "$GPU_MONITOR_VENDOR" == "amd" ]]; then
             sleep $(( ${GPU_MONITOR_INTERVAL} + 2 ))
         fi
@@ -445,17 +432,13 @@ _write_amd_smi_sidecar() {
     fi
 }
 
-# Block until the GPUs have released a prior job's memory before starting a run.
-# Polls rocm-smi VRAM% every 10s for up to 15 minutes; succeeds once the busiest
-# GPU is at <= the threshold percent VRAM (default 10), otherwise returns 1 so the
-# caller aborts rather than starting a benchmark on GPUs still draining the
-# previous run's memory.
-#
-# Pass a stricter threshold when the run sizes its KV cache from the device-wide
-# free memory (torch.cuda.mem_get_info): on the 288 GB parts the default 10% gate
-# still admits ~28.8 GB of prior-job residual, which the engine then counts as
-# used, folds into its non_torch term, and subtracts from the KV pool -- so the
-# pool drifts run to run by whatever slipped under the gate.
+# Poll rocm-smi VRAM% every 10s for up to 15 min until the busiest GPU is at or
+# below the threshold percent (default 10); return 1 otherwise so the caller
+# aborts instead of starting on GPUs still draining the previous job.
+# Pass a stricter threshold when the run sizes its KV cache from device-wide free
+# memory (torch.cuda.mem_get_info): on 288 GB parts the 10% gate admits ~28.8 GB
+# of residual, which the engine folds into non_torch and subtracts from the KV
+# pool, so the pool drifts run to run.
 wait_for_amd_gpu_clean() {
     local threshold="${1:-10}"
     local gpu_clean=false vram_max i
@@ -696,28 +679,9 @@ append_command() {
     printf '\n' >> "$output_file"
 }
 
-# Run benchmark serving with standardized parameters
-# All parameters are required except --endpoint, --use-chat-template, --dsv4, and --trust-remote-code
-# Parameters:
-#   --model: Model name
-#   --port: Server port
-#   --backend: Backend type - e.g., 'vllm' or 'openai'
-#   --endpoint: Optional API endpoint override
-#   --input-len: Random input sequence length
-#   --output-len: Random output sequence length
-#   --random-range-ratio: Random range ratio
-#   --num-prompts: Number of prompts
-#   --max-concurrency: Max concurrency
-#   --result-filename: Result filename without extension
-#   --result-dir: Result directory
-#   --use-chat-template: Optional flag to enable chat template
-#   --dsv4: Optional flag to use the DeepSeek-V4 chat template
-#           (encoding_dsv4.py) instead of the tokenizer's built-in jinja
-#           template. Implies --use-chat-template.
-#   --trust-remote-code: Optional flag to trust remote code from HuggingFace
-#   --server-pid: Optional server process ID to monitor during benchmark
+# --dsv4 renders prompts with the DeepSeek-V4 template (encoding_dsv4.py) instead
+# of the tokenizer's jinja template and implies --use-chat-template.
 run_benchmark_serving() {
-    # In eval-only mode, skip the throughput benchmark entirely.
     if [ "${EVAL_ONLY}" = "true" ]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"
         return 0
@@ -825,7 +789,6 @@ run_benchmark_serving() {
         esac
     done
     
-    # Validate all required parameters
     if [[ -z "$model" ]]; then
         echo "Error: --model is required"
         return 1
@@ -871,8 +834,7 @@ run_benchmark_serving() {
         workspace_dir=$(pwd)
     fi
 
-    # Profiling support: when PROFILE=1, ensure profiler dir exists, add --profile flag,
-    # and cap num_prompts to keep traces small.
+    # PROFILE=1 caps num_prompts at max_concurrency to keep traces small.
     local profile_flag=()
     if [[ "${PROFILE:-}" == "1" ]]; then
         local _prof_dir="${SGLANG_TORCH_PROFILER_DIR:-${VLLM_TORCH_PROFILER_DIR:-}}"
@@ -883,7 +845,6 @@ run_benchmark_serving() {
         num_prompts="$max_concurrency"
     fi
 
-    # Build benchmark command
     local benchmark_cmd=(
         env PYTHONPATH="$workspace_dir${PYTHONPATH:+:$PYTHONPATH}"
         python3 -m infx.bench_serving.benchmark_serving
@@ -910,18 +871,14 @@ run_benchmark_serving() {
         benchmark_cmd+=(--endpoint "$endpoint")
     fi
     
-    # Add --use-chat-template if requested
     if [[ "$use_chat_template" == true ]]; then
         benchmark_cmd+=(--use-chat-template)
     fi
 
-    # Add --dsv4 if requested (requires --use-chat-template, which we
-    # auto-enable when --dsv4 is passed in).
     if [[ "$dsv4" == true ]]; then
         benchmark_cmd+=(--dsv4)
     fi
 
-    # Add --trust-remote-code if requested
     if [[ "$trust_remote_code" == true ]]; then
         benchmark_cmd+=(--trust-remote-code)
     fi
@@ -945,7 +902,6 @@ run_benchmark_serving() {
     run_server_client "${benchmark_cmd[@]}" || benchmark_exit_code=$?
     set +x
 
-    # If profiling, move trace to relay-upload location
     if [[ "${PROFILE:-}" == "1" ]]; then
         move_profile_trace_for_relay
     fi
@@ -954,9 +910,7 @@ run_benchmark_serving() {
 }
 
 
-# --------------------------------
 # Profiling trace helpers
-# --------------------------------
 
 _find_latest_profile_trace() {
     local latest=""
@@ -1053,9 +1007,7 @@ move_profile_trace_for_relay() {
 }
 
 
-# ------------------------------
 # Eval (lm-eval-harness) helpers
-# ------------------------------
 
 _install_lm_eval_deps() {
     # torchvision causes circular imports in ATOM; TRT-LLM/SGLang need it at module level.
@@ -1954,12 +1906,8 @@ except Exception:
 "
 }
 
-# Compute the context length for eval-only mode.
-# Uses the requested benchmark context capped at the model's native max.
-# Sets EVAL_MAX_MODEL_LEN (needed by run_lm_eval).
-# Echoes the computed value for scripts to capture.
-#
-# Usage: local ctx=$(compute_eval_context_length "$MODEL" "${current_ctx}")
+# Requested benchmark context capped at the model's native max. Sets
+# EVAL_MAX_MODEL_LEN (read by run_lm_eval) and echoes the value.
 compute_eval_context_length() {
     local model="$1"
     local benchmark_ctx="${2:-0}"
@@ -1974,7 +1922,6 @@ compute_eval_context_length() {
     if [ "$native_max" -gt 0 ] 2>/dev/null && [ "$eval_ctx" -gt "$native_max" ]; then
         eval_ctx="$native_max"
     fi
-    # If eval_ctx is still 0 (both benchmark_ctx and native_max were 0), fall back
     if [ "$eval_ctx" -le 0 ] 2>/dev/null; then
         echo "WARN: compute_eval_context_length could not determine context length for $model" >&2
         eval_ctx="${MAX_MODEL_LEN:-16384}"
@@ -1983,9 +1930,7 @@ compute_eval_context_length() {
     echo "$eval_ctx"
 }
 
-# Convenience wrapper: compute eval context from ISL/OSL and export EVAL_MAX_MODEL_LEN.
-# Call directly (not in a subshell) so the export persists.
-# Scripts then wire $EVAL_MAX_MODEL_LEN into whichever server variable they need.
+# Call directly, not in a subshell, so the EVAL_MAX_MODEL_LEN export persists.
 setup_eval_context() {
     EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$((ISL + OSL + 256))")
     export EVAL_MAX_MODEL_LEN
@@ -2001,9 +1946,8 @@ run_lm_eval() {
     local top_p=1
     local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-${CONC}}"
     check_env_vars concurrent_requests
-    # SWE-bench adds a repo-local task YAML, so pass its task directory via
-    # --include_path. Full-dataset runs remain the default; --limit is passed
-    # only when EVAL_LIMIT explicitly requests a smaller smoke-test slice.
+    # SWE-bench adds a repo-local task YAML, hence --include_path. --limit is
+    # passed only when EVAL_LIMIT requests a smoke-test slice.
     local eval_limit="${EVAL_LIMIT:-}"
     local include_path="${EVAL_INCLUDE_PATH:-}"
 
@@ -2054,15 +1998,15 @@ run_lm_eval() {
     export OPENAI_API_KEY=${OPENAI_API_KEY}
     MODEL_NAME=${MODEL_NAME:-$MODEL} # Prefer MODEL_NAME, else MODEL
 
-    # Cap output tokens: must fit within context window (leave room for input),
-    # and avoid excessive KV cache reservation per request on TRT.
+    # Leave room for input within the context window and avoid excessive
+    # per-request KV cache reservation on TRT.
     local max_output_tokens=$(( eval_context_len > 4096 ? eval_context_len - 4096 : eval_context_len / 2 ))
     if [ "$max_output_tokens" -gt 16384 ]; then
         max_output_tokens=16384
     fi
     echo "Eval budget: eval_context_len=${eval_context_len}, max_output_tokens=${max_output_tokens}"
 
-    # Export for append_lm_eval_summary to pick up
+    # Read by append_lm_eval_summary.
     export EVAL_RESULT_DIR="$results_dir"
     set -x
     run_server_client python3 -m lm_eval --model local-chat-completions --apply_chat_template \
@@ -2356,10 +2300,8 @@ append_lm_eval_summary() {
         return 0
     fi
 
-    # Copy the complete allowlisted eval artifact set before removing its temp dir.
     stage_eval_artifacts "$(pwd)" "$out_dir" || return $?
 
-    # Best-effort cleanup of the temp directory
     if [ -n "${out_dir}" ] && [ -d "${out_dir}" ]; then
         rm -rf --one-file-system "${out_dir}" || rm -rf "${out_dir}" || true
     fi
@@ -2841,9 +2783,7 @@ raise SystemExit(0 if any(model.get("id") == expected for model in models) else 
 }
 
 
-# ------------------------------
 # Unified eval entrypoint
-# ------------------------------
 
 run_eval() {
     check_env_vars EVAL_ONLY IS_AGENTIC
@@ -3028,9 +2968,7 @@ run_eval() {
 }
 
 
-# --------------------------------
 # Agentic trace replay helpers (aiperf driver)
-# --------------------------------
 
 AGENTIC_DIR="${INFMAX_CONTAINER_WORKSPACE}/utils/agentic-benchmark"
 AIPERF_DIR="${INFMAX_CONTAINER_WORKSPACE}/utils/aiperf"
@@ -3077,24 +3015,17 @@ install_agentic_deps() {
         return
     fi
 
-    # Install from the checked-out aiperf source with uv. This path does not
-    # require git, and rootless Enroot containers cannot mutate dpkg.
+    # uv install from the checked-out aiperf source: needs no git, and rootless
+    # Enroot containers cannot mutate dpkg.
 
     ensure_agentic_uv || return $?
     rm -rf "$AIPERF_VENV"
     mkdir -p "$AIPERF_UV_CACHE_DIR"
 
-    # Request an explicit interpreter version rather than binding to whatever
-    # `python3` resolves to in the server container. aiperf's pyproject.toml
-    # dropped Python 3.10 support (SemiAnalysisAI/aiperf#1107); the sglang-rocm
-    # /vllm-rocm images still ship 3.10.12 as their default python3, so
-    # `--python "$(command -v python3)"` pinned the venv to an interpreter that
-    # can no longer satisfy `requires-python = ">=3.11,<3.14"`, leaving the venv
-    # without aiperf/hf installed (silent until the aiperf/hf calls below hit
-    # "No such file or directory"). uv auto-downloads a standalone build of the
-    # requested version when the system doesn't have one (same network path
-    # already used to fetch uv itself above), so this doesn't depend on the
-    # container image bundling a new-enough Python.
+    # Pin the interpreter version instead of the container's python3: aiperf
+    # dropped Python 3.10 (SemiAnalysisAI/aiperf#1107) while sglang-rocm/vllm-rocm
+    # images still default to 3.10.12, which left the venv without aiperf/hf.
+    # uv downloads a standalone build when the system lacks one.
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
         "$AIPERF_UV_BIN" venv --python "${AIPERF_PYTHON_VERSION}" "$AIPERF_VENV" || return $?
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" UV_HTTP_TIMEOUT=120 UV_HTTP_RETRIES=3 \
@@ -3121,18 +3052,10 @@ ensure_hf_cli() {
 }
 
 resolve_trace_source() {
-    # Per-recipe override: set WEKA_LOADER_OVERRIDE to one of the aiperf
-    # public-dataset loader names allowed by the inferencex-agentx-mvp
-    # scenario. Used by recipes whose servers have non-default context
-    # caps (e.g. minimaxm2.5 at max_model_len ~256k can't replay the
-    # unfiltered corpus and switches to the 256k-capped variant), or
-    # by recipes that want to pin an older corpus generation.
-    #
-    # Default (no override): the 062126 v7 corpus, selected by the model
-    # family's native context length. Models with a 1M-token default context
-    # use the unfiltered corpus; shorter-context families use the 256k-capped
-    # variant. Any recipe can still pin a specific corpus via
-    # WEKA_LOADER_OVERRIDE.
+    # WEKA_LOADER_OVERRIDE picks an aiperf public-dataset loader for recipes
+    # with non-default context caps (minimaxm2.5 at ~256k cannot replay the
+    # unfiltered corpus) or to pin an older corpus. Default: the 062126 v7
+    # corpus; 1M-context families take the unfiltered variant, others 256k.
     local default_loader
     case "${MODEL_PREFIX:-}" in
         dsv4*|glm5.2*|minimaxm3*|kimik3*)
@@ -3194,9 +3117,7 @@ resolve_trace_source() {
     esac
     TRACE_SOURCE_FLAG="--public-dataset $loader"
     echo "Loading traces via aiperf public-dataset: $loader ($dataset) [MODEL_PREFIX=${MODEL_PREFIX:-unset}]"
-    # Pre-download the dataset into the shared HF_HUB_CACHE (same mount used
-    # for model weights) so subsequent runs read from cache instead of
-    # re-downloading every job.
+    # Pre-download into the shared HF_HUB_CACHE so later jobs hit cache.
     ensure_hf_cli
     "$AIPERF_HF_CLI" download --repo-type dataset "$dataset"
 }
@@ -3211,162 +3132,106 @@ build_replay_cmd() {
         AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS AIPERF_EXPERIMENTAL_FAST \
         AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID AIPERF_UNSAFE_OVERRIDE \
         AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING AIPERF_WARMUP_REQUESTS_PER_LANE
-    # aiperf invocation for the inferencex-agentx-mvp scenario.
-    #
-    # Pre-canned assistant replay is the default: recorded assistant responses
-    # are used for future prompt construction, and live server responses are
-    # discarded. Set AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1 explicitly
-    # to use live-assistant mode, where the loader emits user-only deltas and
-    # the worker threads the server's live assistant response back into the
-    # session.
-    #
-    # The scenario plugin locks --cache-bust first_turn_prefix and a 10-second
-    # whole-system idle cap. InferenceX also applies a 300-second per-trajectory
-    # runtime idle cap below. Source end-to-start delays remain intact; either
-    # cap advances pending timers only while its scope is idle. See
-    # utils/aiperf/docs/tutorials/agentx-mvp.md.
+    # Recorded assistant responses drive prompt construction by default;
+    # AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1 threads the live response
+    # back into the session instead. The scenario plugin locks --cache-bust
+    # first_turn_prefix and a 10s whole-system idle cap; the 300s per-trajectory
+    # cap below is ours. See utils/aiperf/docs/tutorials/agentx-mvp.md.
     local result_dir="$1"
     local duration="$DURATION"
     local warmup_requests_per_lane="${AIPERF_WARMUP_REQUESTS_PER_LANE}"
 
-    # Fast mode minimizes setup by advancing each trajectory lane only once
-    # and shortens profiling to 20 minutes.
+    # Fast mode: one advance per lane and a 20-minute profile.
     if [[ "${AIPERF_EXPERIMENTAL_FAST}" == "1" ]]; then
         duration=1200
         warmup_requests_per_lane=1
     fi
 
     export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES="${AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES}"
-    # Dataset configuration (load + reconstruct + inputs.json + mmap)
-    # routinely takes 4-5 min for the Weka corpus on fast /tmp
-    # (B300) but can stretch to 14 min on slower /tmp + parallel contention
-    # (observed on H200 where all 14 R3 jobs hit aiperf's 900s Configure
-    # Profiling timeout simultaneously). Bump to 1800s to absorb 3x
-    # worst-case slowdown — the post-setup measurement window is unaffected.
+    # Dataset configuration takes 4-5 min on fast /tmp (B300) but reached 14 min
+    # on H200 when 14 parallel jobs hit aiperf's default 900s Configure Profiling
+    # timeout; 1800s absorbs that without touching the measurement window.
     export AIPERF_DATASET_CONFIGURATION_TIMEOUT=1800
-    # aiperf validates that SERVICE_PROFILE_CONFIGURE_TIMEOUT >=
-    # DATASET_CONFIGURATION_TIMEOUT at startup. Bump it in lockstep.
+    # aiperf requires SERVICE_PROFILE_CONFIGURE_TIMEOUT >= DATASET_CONFIGURATION_TIMEOUT.
     export AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT=1800
-    # Headless realtime metrics are opt-in on current AIPerf main. Enable the
-    # rolling TTFT/ITL/throughput block and emit it every 30 seconds.
+    # Headless realtime metrics are opt-in on AIPerf main.
     export AIPERF_UI_REALTIME_METRICS_ENABLED=true
     REPLAY_CMD="$AIPERF_CLI profile --scenario inferencex-agentx-mvp"
     REPLAY_CMD+=" --url ${AIPERF_SERVER_URL:-http://localhost:$PORT}"
     REPLAY_CMD+=" --endpoint /v1/chat/completions"
     REPLAY_CMD+=" --endpoint-type chat"
     REPLAY_CMD+=" --streaming"
-    # SERVED_MODEL_NAME overrides $MODEL when the frontend registers the
-    # model under a different name than the recipe's model.path alias (e.g.
-    # dynamo-trt srt-slurm recipes serve "DeepSeek-V4-Pro" while $MODEL is
-    # the HF id "deepseek-ai/DeepSeek-V4-Pro"). Mismatches 404 at warmup.
+    # SERVED_MODEL_NAME covers frontends that register the model under a wire
+    # name (dynamo-trt serves "DeepSeek-V4-Pro" while $MODEL is the HF id);
+    # a mismatch 404s at warmup.
     REPLAY_CMD+=" --model ${SERVED_MODEL_NAME:-$MODEL}"
-    # aiperf's dataset manager resolves the tokenizer from --model by
-    # default, but a SERVED_MODEL_NAME override (above) is a wire name, not
-    # necessarily a valid HF repo id (e.g. "Qwen3.5-397B-A17B-NVFP4-V2" vs
-    # the real "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"), which 404s tokenizer
-    # loading. Always pass the real HF id explicitly.
+    # The tokenizer defaults to --model, and a wire name is not necessarily a
+    # valid HF repo id, so pass the real id explicitly.
     REPLAY_CMD+=" --tokenizer $MODEL"
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
     REPLAY_CMD+=" --stats-interval 30"
     REPLAY_CMD+=" --random-seed 42"
-    # Fail runs early once the live error ratio crosses the configured limit.
-    # Recipes with correlated low-concurrency trajectories may allow a larger
-    # live sample while retaining AIPERF_FAILED_REQUEST_THRESHOLD as the strict
-    # post-run validity gate below.
+    # Live abort threshold; recipes with correlated low-concurrency trajectories
+    # may loosen it while AIPERF_FAILED_REQUEST_THRESHOLD stays the post-run gate.
     REPLAY_CMD+=" --failed-request-threshold $AIPERF_LIVE_FAILED_REQUEST_THRESHOLD"
-    # Sample each trajectory's warmup start position uniformly from
-    # [25%, 75%] of the trace's turn count, clamped by AIPerf to leave at
-    # least one profile turn after warmup.
+    # AIPerf clamps the start ratio so at least one profile turn follows warmup.
     REPLAY_CMD+=" --trajectory-start-min-ratio 0.25"
     REPLAY_CMD+=" --trajectory-start-max-ratio 0.75"
-    # After the normal t* snapshot primers, advance every trajectory lane by
-    # this many additional one-token requests with no idle delay. Profiling
-    # begins after those requests drain and resumes from the resulting live
-    # state. Do not pass --burst-phase-starts: AIPerf main's spread default
-    # preserves each lane's recorded phase-start offset.
+    # Extra one-token requests per lane after the t* snapshot primers; profiling
+    # resumes from the resulting live state. Do not pass --burst-phase-starts:
+    # the spread default preserves each lane's recorded phase-start offset.
     REPLAY_CMD+=" --warmup-requests-per-lane $warmup_requests_per_lane"
-    # Limit observed end-to-start idle time across each complete trajectory
-    # tree, including root and subagent streams. AIPerf advances that tree's
-    # pending timers uniformly without bypassing spawn/join dependencies or
-    # changing request order.
+    # Caps end-to-start idle time per trajectory tree (root plus subagents)
+    # without reordering requests or bypassing spawn/join dependencies.
     REPLAY_CMD+=" --trace-idle-gap-cap-seconds $AIPERF_TRACE_IDLE_GAP_CAP_SECONDS"
-    # Give long-context warmup requests up to 30 minutes to drain before
-    # declaring warmup failed. Recipes whose saturation arms carry a larger
-    # in-flight working set may override via AGENTIC_WARMUP_GRACE_PERIOD
-    # (grace is a maximum wait, not a fixed sleep — drain exits when done).
-    # cancelling any remaining requests and starting profiling.
+    # Maximum wait for warmup to drain, not a fixed sleep; saturation arms with a
+    # larger in-flight set can raise AGENTIC_WARMUP_GRACE_PERIOD.
     REPLAY_CMD+=" --warmup-grace-period ${AGENTIC_WARMUP_GRACE_PERIOD}"
-    # Use server-reported usage fields (prompt_tokens / completion_tokens) for
-    # ISL/OSL instead of client-side tokenizer.encode(). Auto-enables
-    # stream_options.include_usage on the OpenAI chat endpoint. Skips the
-    # heavy per-record tokenization in the records pipeline that was pinning
-    # CPU on minimax-m2.5 at high concurrency. Lossless for vLLM (server
-    # usage is authoritative).
+    # Server usage fields for ISL/OSL instead of client-side tokenize; the
+    # per-record tokenization was pinning CPU on minimax-m2.5 at high concurrency.
     REPLAY_CMD+=" --use-server-token-count"
     if [ -n "${AIPERF_EXTRA_INPUTS:-}" ]; then
         REPLAY_CMD+=" --extra-inputs $AIPERF_EXTRA_INPUTS"
     fi
-    # Dynamo's KV router needs an explicit conversation session binding to
-    # keep later turns on the prefill worker that owns their prefix blocks.
-    # X-Correlation-ID is useful tracing metadata but does not establish that
-    # binding by itself. AIPerf emits nvext.session_control bind/close actions
-    # keyed by the stable conversation correlation ID when this flag is set.
-    # Opt-out: recipes set AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING=0 to skip this.
-    # aiperf's conv-aware routing emits nvext.session_control, a removed POC field
-    # (dynamo #9920 / v1.3.0-dev) that current dynamo builds reject with a 400
-    # (they moved to router/routing_constraints/agent_context). Default stays on.
-    # New recipes instead set AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=true
-    # to route by X-Dynamo-Session-ID header, which needs no routing CLI flag.
+    # Dynamo's KV router needs an explicit session binding to keep later turns on
+    # the prefill worker owning their prefix blocks; X-Correlation-ID alone does
+    # not establish it. This flag emits nvext.session_control, which dynamo builds
+    # after #9920 (v1.3.0-dev) reject with 400; recipes on those builds set
+    # AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=true (header routing)
+    # or AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING=0.
     if [[ "${FRAMEWORK:-}" == dynamo-* \
           && "${AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING}" != "0" \
           && "${AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID}" != "true" ]]; then
         REPLAY_CMD+=" --use-dynamo-conv-aware-routing"
-        # The upstream 300s affinity TTL is shorter than an overloaded
-        # high-concurrency agentic request. Keep bindings alive across long
-        # prefills, generation, and capped inter-turn delay. This controls the
-        # router's inactivity lease; it does not relax HTTP/request failures.
+        # The upstream 300s affinity TTL is shorter than an overloaded agentic
+        # request; this is the router's inactivity lease, not an HTTP timeout.
         REPLAY_CMD+=" --dynamo-session-timeout-seconds ${AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS}"
     fi
-    # Disable DCGM GPU telemetry collection. aiperf's GpuMetricTimeSeries
-    # freezes its metric schema on the first DCGM scrape, then KeyErrors when
-    # an optional field (xid_errors, power_violation, encoder_utilization)
-    # first appears mid-run. We don't consume the gpu_telemetry artifact in
-    # downstream processing, and the server-metrics path (Prometheus /metrics
-    # from vLLM) is unaffected by this flag and still gives us KV usage,
-    # prefix cache hit rate, etc.
+    # aiperf's GpuMetricTimeSeries freezes its schema on the first DCGM scrape
+    # and KeyErrors when an optional field (xid_errors, power_violation) first
+    # appears mid-run. The gpu_telemetry artifact is unused downstream; the
+    # Prometheus server-metrics path is unaffected.
     REPLAY_CMD+=" --no-gpu-telemetry"
-    # aiperf's dataset manager (separate from the inference parser) loads
-    # the model's tokenizer for trace-prompt tokenization regardless of
-    # --use-server-token-count. Models like kimi (amd/Kimi-K2.5-MXFP4,
-    # moonshotai/Kimi-K2.5) ship a custom tokenizer in their HF repo and
-    # need trust_remote_code=True to load. Benign for models without
-    # custom tokenizer code, so we set it unconditionally.
+    # The dataset manager loads the tokenizer regardless of
+    # --use-server-token-count, and Kimi checkpoints ship a custom tokenizer
+    # that needs trust_remote_code. Benign for other models.
     REPLAY_CMD+=" --tokenizer-trust-remote-code"
-    # Keep replay inputs inside the same context window used to launch the
-    # server. The WEKA corpus contains a few very long parent/subagent traces;
-    # if we mmap and replay them against a smaller-context server they become
-    # deterministic 4xxs and can still pressure the engine while queued.
+    # The WEKA corpus has a few traces longer than smaller-context servers
+    # accept; replayed unfiltered they become deterministic 4xxs that still
+    # pressure the engine while queued.
     if [ -n "${MAX_MODEL_LEN:-}" ] && [ "$MAX_MODEL_LEN" != "0" ]; then
         REPLAY_CMD+=" --max-context-length $MAX_MODEL_LEN"
     fi
-    # Default --num-dataset-entries is 100; the with-subagents Weka corpus
-    # has 393. Cap at 393 so all unique traces are loaded (the loader treats
-    # this as a ``min(cap, available)`` ceiling, not a target — see
-    # semianalysis_cc_traces_weka.py).
+    # Default is 100; the with-subagents corpus has 393 unique traces. The loader
+    # treats this as min(cap, available), see semianalysis_cc_traces_weka.py.
     REPLAY_CMD+=" --num-dataset-entries 393"
-    # 1-second timeslices on the server-metrics scrape so the post-run
-    # plotter has per-window time series (KV usage, cache hit rate,
-    # throughput, etc.). Matches kv-cache-tester's poll_interval=1.0
-    # snapshot cadence so metrics_plots.png is visually comparable.
-    # Without this, aiperf only emits aggregate stats and the 6x2 panels
-    # collapse to flat lines.
+    # Per-second server-metrics slices feed the post-run plotter; matches
+    # kv-cache-tester's poll_interval=1.0 so metrics_plots.png is comparable.
+    # Without it aiperf emits only aggregates and the panels are flat lines.
     REPLAY_CMD+=" --slice-duration 1.0"
-    # Multi-node launchers can provide the Prometheus endpoints for every
-    # inference worker as a comma-separated list. AIPerf accepts multiple
-    # values after one --server-metrics flag and preserves endpoint_url on
-    # every exported series. The inference frontend's automatically detected
-    # /metrics endpoint remains enabled as well.
+    # Multi-node launchers pass every worker's Prometheus endpoint; AIPerf takes
+    # several values after one --server-metrics flag and keeps endpoint_url per series.
     if [ -n "${AIPERF_SERVER_METRICS_URLS:-}" ]; then
         local metrics_url
         local -a metrics_urls
@@ -3381,10 +3246,8 @@ build_replay_cmd() {
         done
     fi
     REPLAY_CMD+=" --output-artifact-dir $result_dir/aiperf_artifacts"
-    # The inferencex-agentx-mvp scenario enforces a 900s minimum
-    # benchmark duration. For smoke tests with shorter durations, opt
-    # into --unsafe-override (the run's submission_valid will be flagged
-    # false; that's expected for non-canonical runs).
+    # The scenario enforces a 900s minimum duration; shorter smoke tests need
+    # --unsafe-override and are flagged submission_valid=false.
     if [ "$duration" -lt 900 ] || [ "${AIPERF_UNSAFE_OVERRIDE}" = "true" ]; then
         REPLAY_CMD+=" --unsafe-override"
     fi
@@ -3393,10 +3256,8 @@ build_replay_cmd() {
 
 write_agentic_result_json() {
     check_env_vars INFMAX_CONTAINER_WORKSPACE
-    # Aggregate aiperf's profile_export.{json,jsonl} + server_metrics_export.json
-    # into $AGENTIC_OUTPUT_DIR/$RESULT_FILENAME.json. The workflow checks that
-    # this file exists; run_agentic_replay_and_write_outputs separately rejects
-    # aggregates whose request error rate exceeds the configured limit.
+    # Writes $AGENTIC_OUTPUT_DIR/$RESULT_FILENAME.json; the workflow checks that
+    # file exists, and the caller separately rejects high error rates.
     local result_dir="$1"
     (
         cd "$INFMAX_CONTAINER_WORKSPACE"
@@ -3404,9 +3265,8 @@ write_agentic_result_json() {
             "$AIPERF_PYTHON" -m infx.results.agentic.process_agentic_result
     )
 
-    # Generate metrics_plots.png from the same aiperf artifacts. Best-effort:
-    # don't fail the launcher if plot generation has trouble (e.g. matplotlib
-    # missing in a stripped-down image). The agg JSON is the success gate.
+    # Best-effort metrics_plots.png (matplotlib may be missing in stripped-down
+    # images); the agg JSON above is the success gate.
     PYTHONPATH="$INFMAX_CONTAINER_WORKSPACE${PYTHONPATH:+:$PYTHONPATH}" "$AIPERF_PYTHON" -m infx.results.generate_aiperf_plots "$result_dir" 2>&1 || true
 }
 
@@ -3417,8 +3277,7 @@ validate_required_agentic_server_metrics() {
     local metrics_json="$metrics_dir/server_metrics_export.json"
     local metrics_csv="$metrics_dir/server_metrics_export.csv"
 
-    # Opt-in so existing AgentX configurations retain their current contract.
-    # Recipes that require trace charts set a metric prefix (for example
+    # Opt-in: recipes that require trace charts set a metric prefix (for example
     # `sglang:`) and fail loudly instead of publishing a partial trace artifact.
     if [ -z "$required_prefix" ]; then
         return 0
@@ -3429,9 +3288,8 @@ validate_required_agentic_server_metrics() {
         return 1
     fi
 
-    # Avoid parsing the potentially multi-GiB JSON into memory. AIPerf writes
-    # metric names as JSON object keys, so a fixed-string scan establishes that
-    # backend engine metrics—not only frontend/router metrics—were captured.
+    # The JSON can be multi-GiB, so scan for the key instead of parsing; metric
+    # names are object keys, so a hit proves backend engine metrics were captured.
     if ! grep -F -m 1 -q "\"${required_prefix}" "$metrics_json"; then
         echo "ERROR: $metrics_json contains no metric with required prefix '$required_prefix'" >&2
         return 1
@@ -3490,9 +3348,8 @@ run_agentic_replay_and_write_outputs() (
     }
 
     if [ "$agentx_power_enabled" = "1" ] || [ "$agentx_multinode_power_enabled" = "1" ]; then
-        # AIPerf currently exports naive local datetimes while SMI emits the
-        # same host wall clock. Capture the launch-time offset so the adapter
-        # can attach it explicitly before normalizing the profiling window.
+        # AIPerf exports naive local datetimes and SMI the same host wall clock;
+        # the adapter needs the offset to normalize the profiling window.
         date +%z > "$result_dir/agentic_power_timezone_offset.txt"
     fi
 
@@ -3510,9 +3367,8 @@ run_agentic_replay_and_write_outputs() (
     if [ "$agentx_power_enabled" = "1" ]; then
         start_gpu_monitor --output "$result_dir/gpu_metrics.csv"
         agentx_monitor_stopped=0
-        # This function runs in a subshell, so these handlers cannot replace
-        # launcher-owned traps. The stopped flag keeps explicit and signal/EXIT
-        # cleanup idempotent.
+        # This function runs in a subshell, so these traps cannot clobber
+        # launcher-owned ones; the stopped flag keeps cleanup idempotent.
         trap '_stop_agentx_power_monitor' EXIT
         trap '_stop_agentx_power_monitor; exit 130' INT
         trap '_stop_agentx_power_monitor; exit 143' TERM

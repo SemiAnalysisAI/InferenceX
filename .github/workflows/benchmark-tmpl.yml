@@ -138,7 +138,7 @@ env:
   REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   AIPERF_EXPERIMENTAL_FAST: ${{ inputs.agentx-fast && '1' || '0' }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
-  SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
+  SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode || 'agentic' }}
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'

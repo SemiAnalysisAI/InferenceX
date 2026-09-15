@@ -1,11 +1,6 @@
 #!/bin/bash
-# Dual-Engine Disaggregated Benchmark Runner
-#
-# ENGINE=sglang (default): SGLang benchmark
-# ENGINE=vllm:             vLLM benchmark
-#
-# Produces JSON result files via benchmark_serving.py so that the CI pipeline
-# can collect and process results.
+# Disaggregated fixed-seq-len benchmark runner; writes JSON results via
+# benchmark_serving.py for the CI pipeline.
 #
 # Usage: bash bench.sh <n_prefill> <n_decode> <prefill_gpus> <decode_gpus> \
 #            <model_dir> <model_name> <log_path> <isl> <osl> \
@@ -72,23 +67,18 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
     echo "num_prompts: $num_prompts"
     echo "export_file: $export_file"
 
-    # Engine-specific extra flags
     extra_flags=""
-    # vllm
     if [[ "$ENGINE" == "vllm-disagg" ]]; then
         extra_flags="--trust-remote-code --tokenizer $MODEL_PATH"
-    # atom
     elif [[ "$ENGINE" == "atom-disagg" ]]; then
         extra_flags="--trust-remote-code --tokenizer $MODEL_PATH"
         if [ "$IS_MTP" = "true" ]; then
-            # just override extra_flags as dsv3 use different tokenizer path
             if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
                 extra_flags="--dsv4"
             else
                 extra_flags="--use-chat-template"
             fi
         fi
-    # sglang
     else
         if [ "$IS_MTP" = "true" ]; then
             if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
@@ -115,7 +105,6 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
 
     echo "-----------------------------------------"
 
-    # vLLM: cooldown between rounds for idle KV block reaper
     if [[ "$ENGINE" == "vllm-disagg" ]]; then
         echo "[BENCH] Cooldown: waiting 10s for idle KV block reaper..."
         sleep 10

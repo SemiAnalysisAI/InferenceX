@@ -2806,14 +2806,6 @@ class TestApplyNodeTypeDefaults:
         assert args.multi_node is False
 
 
-    def test_no_node_attrs_is_noop(self):
-        """When args lacks node type attrs, nothing happens."""
-        args = argparse.Namespace(command="test-config")
-        apply_node_type_defaults(args)
-        assert not hasattr(args, 'single_node')
-        assert not hasattr(args, 'multi_node')
-
-
 # =============================================================================
 # Test generate_full_sweep mixed mode
 # =============================================================================

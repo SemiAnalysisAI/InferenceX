@@ -10,8 +10,6 @@ PARTITION="compute"
 SQUASH_FILE="/raid/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 
-# Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
-# the h200 launchers, which have carried SPEC_SUFFIX since #392).
 SPEC_SUFFIX=$([[ "${SPEC_DECODING:-}" == "mtp" ]] && printf '_mtp' || printf '')
 
 check_env_vars GPU_COUNT
@@ -31,7 +29,7 @@ export TRITON_CACHE_DIR="/tmp/triton-cache-$JOB_ID"
 
 trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
 
-# Use flock to serialize concurrent imports to the same squash file
+# Concurrent jobs import to the same squash file; serialize them.
 srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c "
     set -eo pipefail
     exec 9>\"$LOCK_FILE\"

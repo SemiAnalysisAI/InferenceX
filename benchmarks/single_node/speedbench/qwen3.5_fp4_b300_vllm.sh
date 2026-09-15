@@ -2,28 +2,14 @@
 
 # Qwen3.5-397B-A17B B300 vLLM SPEED-Bench AL matrix collector.
 #
-# Produces the golden acceptance-length (AL) reference matrix consumed by the
-# synthetic-acceptance framework: for each thinking mode (on/off) and each MTP
-# level (num_speculative_tokens), measure the REAL AL on a single SPEED-Bench
-# category (default: coding) and emit a YAML matrix identical in shape to
-# benchmarks/speedbench-reference-al.yaml. This measures real MTP acceptance;
-# the synthetic value is injected downstream by the throughput recipe, not here.
+# For each thinking mode (on/off) and MTP level (num_speculative_tokens), measure the
+# REAL acceptance length (AL) on one SPEED-Bench category and emit a YAML matrix in
+# the golden_al_distribution shape. The synthetic value is injected downstream by the
+# throughput recipe, not here. Serves the NVFP4 build (Qwen3.5-397B-A17B-NVFP4).
 #
-# Adapted from speedbench/dsv4_fp4_b300_vllm.sh. Differences vs DSV4 (deepseek_v4
-# is NOT reusable for Qwen):
-#   - reasoning-parser    qwen3          (was deepseek_v4)
-#   - tool-call-parser    qwen3_coder    (was deepseek_v4)
-#   - NO --tokenizer-mode deepseek_v4    (Qwen uses the default/auto tokenizer)
-#   - NO --attention_config.use_fp4_indexer_cache (DSV4 sparse-attn only)
-#   - --max-cudagraph-capture-size 512   (Qwen3.5 is a mamba hybrid; a large
-#                                         capture size trips the causal_conv1d
-#                                         assert, see vLLM docs / PR #34571)
-#   - thinking on/off uses the enable_thinking chat_template key, and OFF is
-#     passed explicitly (Qwen does not treat "no kwargs" as off the way deepseek does)
-#
-# Checkpoint (B300 / Blackwell): NVFP4 build, basename Qwen3.5-397B-A17B-NVFP4.
-# NVIDIA's Qwen3.5-397B-A17B-NVFP4 model card serves it with vllm/vllm-openai:latest;
-# the runner's vllm-openai:v0.21.0 (May) is newer and loads it.
+# --max-cudagraph-capture-size 512: Qwen3.5 is a mamba hybrid and a large capture
+# size trips the causal_conv1d assert (vLLM PR #34571). Thinking OFF must be passed
+# explicitly via enable_thinking (Qwen does not treat "no kwargs" as off).
 #
 # Dispatch this collector through speedbench-al.yml.
 #
@@ -39,19 +25,17 @@ SERVE_MODEL="${MODEL_PATH}"
 
 MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
 CONCURRENCY="1"
-# Provider-recommended sampling — DIFFERS by mode (per the Qwen3.5 model card):
+# Model-card sampling DIFFERS by mode and MUST be passed per-mode or the AL is
+# measured at the wrong settings:
 #   thinking : temperature 0.6, top_p 0.95, top_k 20, presence_penalty 0.0
 #   instruct : temperature 0.7, top_p 0.8,  top_k 20, presence_penalty 1.5
-# (min_p 0.0 / repetition_penalty 1.0 are vLLM defaults.) These MUST be passed
-# per-mode or the measured AL is taken at the wrong sampling settings.
 TEMPERATURE_ON="0.6";  TOP_P_ON="0.95";  TOP_K_ON="20";  PRESENCE_PENALTY_ON="0.0"
 TEMPERATURE_OFF="0.7"; TOP_P_OFF="0.8"; TOP_K_OFF="20"; PRESENCE_PENALTY_OFF="1.5"
-# Optional sampling seed for run-to-run variance checks. Unset -> vLLM default
-# (deterministic seed=0); set to different values to measure temperature>0 variance.
+# Unset -> vLLM default (deterministic seed=0); vary it to measure temperature>0
+# variance.
 SEED="${SEED:-}"
-# Optional: also save per-request completions (--save-detailed) to eyeball that
-# thinking_on actually emits <think> reasoning and thinking_off does not. Off by
-# default (bloats the result JSON with all completions). Set SAVE_DETAILED=1.
+# --save-detailed keeps per-request completions to eyeball that thinking_on emits
+# <think> and thinking_off does not; off by default (bloats the result JSON).
 SAVE_DETAILED="${SAVE_DETAILED:-}"
 # Qwen thinking toggles via the enable_thinking chat_template key.
 CHAT_TEMPLATE_KWARGS_OFF='{"enable_thinking": false}'
@@ -67,7 +51,6 @@ mkdir -p "$RESULTS_DIR"
 nvidia-smi
 if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
 
-# ---- Download SPEED-Bench dataset ----
 echo "=== Downloading SPEED-Bench dataset ==="
 pip install -q datasets tiktoken
 curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/refs/heads/main/nemo_skills/dataset/speed-bench/prepare.py \
@@ -78,7 +61,6 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# Apply the shim once if any cell will pass chat_template_kwargs.
 NEED_SHIM=0
 if [[ " $THINKING_MODES " == *" on "*  && -n "$CHAT_TEMPLATE_KWARGS_ON"  ]]; then NEED_SHIM=1; fi
 if [[ " $THINKING_MODES " == *" off "* && -n "$CHAT_TEMPLATE_KWARGS_OFF" ]]; then NEED_SHIM=1; fi
@@ -238,7 +220,6 @@ done
 
 stop_gpu_monitor
 
-# ---- Emit the YAML matrix ----
 emit_mode_block() {
     local mode="$1"
     for mtp in $MTP_LIST; do

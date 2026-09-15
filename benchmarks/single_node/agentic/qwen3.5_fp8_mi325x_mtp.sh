@@ -41,9 +41,8 @@ export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_062126_256k
 resolve_trace_source
 install_agentic_deps
 
-# This is a single aggregate SGLang engine, so one logical backend metrics
-# endpoint is authoritative. build_replay_cmd also discovers the public
-# endpoint; AIPerf deduplicates the explicit copy.
+# Single aggregate engine: one backend metrics endpoint; AIPerf deduplicates
+# the public copy build_replay_cmd discovers.
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="sglang:"
 
@@ -93,9 +92,8 @@ export SGLANG_USE_AITER=1
 export SGLANG_USE_AITER_UNIFIED_ATTN=1
 export SGLANG_TIMEOUT_KEEP_ALIVE=1800
 
-# Synthetic rejection sampling is only for performance replay. The AL is the
-# committed Qwen3.5 thinking-on value for three speculative tokens. Evals use
-# real target-model verification.
+# Golden AL 3.39: committed Qwen3.5 thinking-on value for three speculative
+# tokens. Evals use real target-model verification.
 if [ "${EVAL_ONLY}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=3.39
     export SGLANG_SIMULATE_ACC_METHOD=match-expected

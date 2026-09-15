@@ -148,7 +148,7 @@ env:
   EVAL_SUITE: ${{ inputs.eval-suite }}
   EVAL_CONC: ${{ inputs.eval-conc }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
-  SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
+  SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode || 'agentic' }}
   # GPU/multi-node runners lack Docker for SWE-bench scoring.
   SWEBENCH_USE_MODAL: 'true'
   MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
@@ -362,10 +362,8 @@ jobs:
               fi
             done
           else
-            # Check if at least one result file was created
-            if ls ${RESULT_FILENAME}_*.json 1> /dev/null 2>&1; then
-              echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
-              echo "Found result files: $(ls ${RESULT_FILENAME}_*.json)"
+            if ls -- "${RESULT_FILENAME}"_*.json 1> /dev/null 2>&1; then
+              printf 'Found result file: %s\n' "${RESULT_FILENAME}"_*.json
             else
               echo "Run failed: No benchmark result files found for ${RESULT_FILENAME}_*.json" >&2
               exit 1

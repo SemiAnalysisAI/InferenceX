@@ -36,7 +36,7 @@ fi
 export PORT=$((40000 + (JOB_ID % 10000)))
 trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
 
-# Use flock to serialize concurrent imports to the same node-local squash file.
+# Concurrent jobs import to the same node-local squash file; serialize them.
 srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c "
     set -eo pipefail
     exec 9>\"$LOCK_FILE\"
