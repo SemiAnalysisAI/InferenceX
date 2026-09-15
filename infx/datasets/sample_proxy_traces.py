@@ -947,7 +947,7 @@ def main() -> int:
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)-5s %(message)s",
-        datefmt="%hash_ids:%M:%S",
+        datefmt="%H:%M:%S",
     )
     url = get_db_url(args)
     t0 = time.time()
