@@ -61,8 +61,9 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 # inter-turn idle gaps can reuse a socket exactly as the server closes it.
 # Outlast the client pool so the race cannot occur.
 export SGLANG_TIMEOUT_KEEP_ALIVE=900
-# PR #36684 & PR #36851 turned the v2 fused top-k on for GLM-5.x on ROCm.
-export SGLANG_OPT_USE_TOPK_V2=true
+# Use the precompiled HIP Top-K path; at c8 it improves P90 interactivity with
+# essentially unchanged throughput per GPU compared with fused Top-K v2.
+export SGLANG_OPT_USE_TOPK_V2=false
  
 # HiCache L2 (host DRAM), optionally extended with Mooncake L3.
 # KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=hicache or mooncake.
