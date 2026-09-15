@@ -7668,3 +7668,10 @@
     - "Enable six tokenizer workers for the TP1 AgentX recipe and require a complete staged NVFP4 checkpoint before launch."
     - "Route the qwen3.8next fp4 prefix in the B200 Nscale launcher to the staged Qwen3.8-Flash-Next NVFP4 checkpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2751
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.12-rocm720-mi30x to lmsysorg/sglang:v0.5.19-rocm720-mi30x (Docker Hub digest sha256:a0ffcdd013af6d79c9b7c4348c42b14a79a48f6c43dd3ca0235ec3802da45f75, same ROCm 7.2 gfx942 flavor)"
+    - "Recipe flags unchanged; all still parse in SGLang v0.5.19"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3113
