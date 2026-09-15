@@ -54,6 +54,8 @@ def scenario(operation):
 
 def run_workflow(operation, case):
     job = next(iter(workflow(operation)["jobs"].values()))
+    if operation == "codeowner-signoff-verify":
+        return run_scripts([next(step for step in job["steps"] if step.get("id") == "resolve")], case)
     return run_scripts([step for step in job["steps"] if "script" in step.get("with", {})], case)
 
 
@@ -430,7 +432,7 @@ def test_prepare_requires_a_trusted_assessment_of_the_commit(source, accepted, m
         case['data']['timeline'].append({'event': 'labeled', 'label': {'name': 'codeowner-signoff-verified'},
                                         'actor': {'login': 'contributor' if source == 'contributor-label'
                                                   else 'github-actions[bot]'}})
-    case['needs'] = {'gate': {'outputs': {'pr-number': '42', 'head-sha': 'b' * 40}}}
+    case['stepsState']['scope']['outputs'].update({'pr-number': '42', 'head-sha': 'b' * 40})
     step = next(step for step in workflow('codeowner-signoff-verify')['jobs']['verify']['steps']
                 if step.get('id') == 'prepare')
     result = run_scripts([step], case)
@@ -578,11 +580,12 @@ def test_workflow_carries_signoff_before_preparing_verification(change, expected
         case['permission'] = {'permission': 'write', 'role_name': 'write'}
     elif change == 'first-signoff':
         case['data']['comments'] = []
-    case['needs'] = {'gate': {'outputs': {
-        'pr-number': '42', 'head-sha': 'c' * 40, 'proceed': 'true',
-    }}}
+    case['stepsState'] = {
+        'scope': {'outputs': {'pr-number': '42', 'head-sha': 'c' * 40, 'required': 'true'}},
+        'resolve': {'outputs': {'proceed': 'true'}},
+    }
     steps = workflow('codeowner-signoff-verify')['jobs']['verify']['steps']
-    scripts = [step for step in steps if 'script' in step.get('with', {})]
+    scripts = [step for step in steps if 'script' in step.get('with', {}) and step.get('id') != 'resolve']
     result = run_scripts(scripts[:2], case)
     assert result['failures'] == []
     assert result['outputs']['prepare']['verify'] == verify

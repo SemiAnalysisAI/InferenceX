@@ -83,10 +83,12 @@ def main() -> None:
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
     number = (event.get("pull_request") or event.get("issue") or {}).get("number")
     if number is None:
-        match = re.search(r"/pull/(\d+)", event.get("inputs", {}).get("comment_url", ""))
-        if match is None:
-            raise ValueError("A pull request number or sign-off comment URL is required")
-        number = int(match[1])
+        inputs = event.get("inputs", {})
+        number = inputs.get("pr-number")
+        match = re.search(r"/pull/(\d+)", inputs.get("comment_url", ""))
+        if match is None or str(number) != match[1] or int(number) < 1:
+            raise ValueError("pr-number must match the pull request in comment_url")
+        number = int(number)
     outputs = check_scope(os.environ["GITHUB_REPOSITORY"], number, os.environ["GH_TOKEN"])
     write_outputs(os.environ["GITHUB_OUTPUT"], outputs)
 

@@ -143,7 +143,7 @@ def test_scope_failures_never_publish_a_success(scope_case, problem):
 @pytest.mark.parametrize("event", [
     {"pull_request": {"number": 7}},
     {"issue": {"number": 7}},
-    {"inputs": {"comment_url": "https://github.com/example/repo/pull/7#pullrequestreview-9"}},
+    {"inputs": {"pr-number": "7", "comment_url": "https://github.com/example/repo/pull/7#pullrequestreview-9"}},
 ])
 def test_unowned_changes_publish_not_applicable_and_disable_verifier(scope_case, monkeypatch, tmp_path, event):
     scope_case["files"] = [{"filename": "infx/github.py"}]
@@ -159,3 +159,18 @@ def test_unowned_changes_publish_not_applicable_and_disable_verifier(scope_case,
         "context": "codeowner-signoff-verify", "state": "success",
         "description": "Not applicable: no non-admin/non-core CODEOWNER changes",
     }]
+
+
+@pytest.mark.parametrize("number,url", [
+    (None, "https://github.com/example/repo/pull/7#issuecomment-9"),
+    ("8", "https://github.com/example/repo/pull/7#issuecomment-9"),
+    ("0", "https://github.com/example/repo/pull/0#issuecomment-9"),
+    ("7", "not-a-pull-request"),
+])
+def test_manual_runs_cannot_update_a_pr_outside_their_concurrency_group(scope_case, monkeypatch, tmp_path, number, url):
+    event_path = tmp_path / "event.json"
+    event_path.write_text(json.dumps({"inputs": {"pr-number": number, "comment_url": url}}))
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event_path))
+    with pytest.raises(ValueError, match="pr-number must match"):
+        signoff_scope.main()
+    assert scope_case["requests"] == []

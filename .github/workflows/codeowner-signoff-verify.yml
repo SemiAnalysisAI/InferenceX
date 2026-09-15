@@ -11,6 +11,10 @@ on:
     types: [created, edited]
   workflow_dispatch:
     inputs:
+      pr-number:
+        description: PR number
+        required: true
+        type: number
       comment_url:
         description: >-
           URL of the sign-off comment/review to verify, e.g.
@@ -23,8 +27,8 @@ permissions:
   contents: read
 
 jobs:
-  gate:
-    name: Check ownership
+  verify:
+    name: Check sign-off
     if: |
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'pull_request_target' ||
@@ -36,22 +40,20 @@ jobs:
       (github.event_name == 'pull_request_review_comment' &&
        contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER'))
     runs-on: ubuntu-latest
+    concurrency:
+      group: codeowner-signoff-pr-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr-number }}
+      cancel-in-progress: false
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
+      issues: write
+      actions: read
       statuses: write
-    outputs:
-      proceed: ${{ steps.resolve.outputs.proceed }}
-      signoff-required: ${{ steps.scope.outputs.required }}
-      pr-number: ${{ steps.scope.outputs.pr-number }}
-      head-sha: ${{ steps.scope.outputs.head-sha }}
-      signoff-author: ${{ steps.resolve.outputs.signoff-author }}
-      signoff-kind: ${{ steps.resolve.outputs.signoff-kind }}
-      signoff-fetch-cmd: ${{ steps.resolve.outputs.signoff-fetch-cmd }}
     steps:
       - name: Checkout trusted workflow code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
@@ -221,44 +223,18 @@ jobs:
             core.setOutput('signoff-kind', kind);
             core.setOutput('signoff-fetch-cmd', fetchCmd);
 
-  verify:
-    name: Update sign-off
-    needs: gate
-    if: needs.gate.outputs.signoff-required == 'true'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: codeowner-signoff-pr-${{ needs.gate.outputs.pr-number }}
-      cancel-in-progress: false
-    permissions:
-      contents: read
-      pull-requests: write
-      issues: write
-      actions: read
-      statuses: write
-    steps:
-      # SECURITY: this is a privileged job (write perms + secrets) triggered by
-      # comment events, so it must NOT check out untrusted PR head code — the
-      # setup step and the MCP server would then execute attacker-controlled
-      # files. Check out the trusted default branch; all PR content is read
-      # read-only via the GitHub API (gh / MCP), never from the working tree.
-      - name: Checkout repository (trusted default branch only)
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.repository.default_branch }}
-          persist-credentials: false
-
       - name: Carry the PR's passing checklist onto its latest head
         if: >-
-          github.event_name == 'pull_request_target' ||
+          steps.scope.outputs.required == 'true' &&
+          (github.event_name == 'pull_request_target' ||
           (github.event_name == 'issue_comment' && github.event.action == 'deleted' &&
            github.event.issue.pull_request &&
            (github.event.comment.user.login == 'Klaud-Cold' ||
             github.event.comment.user.login == 'github-actions[bot]') &&
-           startsWith(github.event.comment.body || '', '<!-- codeowner-signoff-verify'))
+           startsWith(github.event.comment.body || '', '<!-- codeowner-signoff-verify')))
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
+          PR_NUMBER: ${{ steps.scope.outputs.pr-number }}
         with:
           script: |
             const { carry } = require('./.github/scripts/codeowner-signoff.cjs');
@@ -266,19 +242,15 @@ jobs:
 
       - name: Reuse an existing passing checklist
         id: prepare
-        if: needs.gate.outputs.proceed == 'true'
+        if: steps.resolve.outputs.proceed == 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
-          HEAD_SHA: ${{ needs.gate.outputs.head-sha }}
+          PR_NUMBER: ${{ steps.scope.outputs.pr-number }}
+          HEAD_SHA: ${{ steps.scope.outputs.head-sha }}
         with:
           script: |
             const { prepare } = require('./.github/scripts/codeowner-signoff.cjs');
             await prepare({ github, context, core, prNumber: Number(process.env.PR_NUMBER), headSha: process.env.HEAD_SHA });
-
-      - name: Set up uv
-        if: steps.prepare.outputs.verify == 'true'
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       # The verifier prompt lives in .github/codeowner-signoff-verify-prompt.md:
       # GitHub caps any ${{ }}-bearing workflow scalar at 21000 characters and
@@ -290,11 +262,11 @@ jobs:
         if: steps.prepare.outputs.verify == 'true'
         env:
           REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
-          HEAD_SHA: ${{ needs.gate.outputs.head-sha }}
-          SIGNOFF_AUTHOR: ${{ needs.gate.outputs.signoff-author }}
-          SIGNOFF_KIND: ${{ needs.gate.outputs.signoff-kind }}
-          SIGNOFF_FETCH_CMD: ${{ needs.gate.outputs.signoff-fetch-cmd }}
+          PR_NUMBER: ${{ steps.scope.outputs.pr-number }}
+          HEAD_SHA: ${{ steps.scope.outputs.head-sha }}
+          SIGNOFF_AUTHOR: ${{ steps.resolve.outputs.signoff-author }}
+          SIGNOFF_KIND: ${{ steps.resolve.outputs.signoff-kind }}
+          SIGNOFF_FETCH_CMD: ${{ steps.resolve.outputs.signoff-fetch-cmd }}
         run: |
           # These placeholders must remain literal for envsubst.
           # shellcheck disable=SC2016
@@ -338,8 +310,8 @@ jobs:
         if: always() && steps.prepare.outputs.verify == 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          HEAD_SHA: ${{ needs.gate.outputs.head-sha }}
-          PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
+          HEAD_SHA: ${{ steps.scope.outputs.head-sha }}
+          PR_NUMBER: ${{ steps.scope.outputs.pr-number }}
           VERIFICATION_SUCCEEDED: ${{ steps.claude.outcome == 'success' }}
         with:
           script: |
