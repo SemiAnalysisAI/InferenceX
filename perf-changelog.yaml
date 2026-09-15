@@ -7798,3 +7798,12 @@
   description:
     - "Temporary PR #3126 validation: one Qwen2.5-0.5B point on idle H200 CoreWeave capacity, 128 input / 32 output tokens, TP1, concurrency 1, four requests. Do not merge."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3128
+
+- config-keys:
+    - smokeqwen-bf16-h200-vllm
+  scenario-type:
+    - fixed-seq-len
+  no-evals: true
+  description:
+    - "Use the standard 1k/1k workflow group for the one-point sticky-comment smoke; retain TP1, concurrency 1, and four requests. Do not merge."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3128

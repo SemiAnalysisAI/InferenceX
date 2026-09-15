@@ -10664,8 +10664,8 @@ smokeqwen-bf16-h200-vllm:
   multinode: false
   scenarios:
     fixed-seq-len:
-      - isl: 128
-        osl: 32
+      - isl: 1024
+        osl: 1024
         search-space:
           - tp: 1
             conc-list: [1]

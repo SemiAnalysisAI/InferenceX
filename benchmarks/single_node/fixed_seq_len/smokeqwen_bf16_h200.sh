@@ -8,7 +8,7 @@ SERVER_LOG=/workspace/server.log
 start_gpu_monitor
 vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     --dtype bfloat16 --tensor-parallel-size "$TP" \
-    --enforce-eager --max-model-len 512 --max-num-seqs 1 \
+    --enforce-eager --max-model-len 2304 --max-num-seqs 1 \
     --gpu-memory-utilization 0.1 > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null || true; stop_gpu_monitor' EXIT
