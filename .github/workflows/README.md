@@ -1,9 +1,9 @@
 # How to Test Workflows
 
-In order to test configurations described in `configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `utils/matrix_logic/generate_sweep_configs.py` script. The usage for this script is shown below:
+In order to test configurations described in `configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `python -m infx.matrix.generate` command. The command usage is shown below:
 
 ```
-usage: generate_sweep_configs.py [-h] {full-sweep,test-config} ...
+usage: python -m infx.matrix.generate [-h] {full-sweep,test-config} ...
 
 Generate benchmark configurations from YAML config files
 
@@ -26,7 +26,7 @@ options:
 The `full-sweep` command generates benchmark configurations with optional filtering. You can specify `--single-node`, `--multi-node`, or both. If neither is specified, both types are generated.
 
 ```
-usage: generate_sweep_configs.py full-sweep
+usage: python -m infx.matrix.generate full-sweep
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
     [--no-evals | --evals-only] [--all-evals]
@@ -95,7 +95,7 @@ full-sweep --scenario-type agentic-coding --config-files configs/nvidia-master.y
 The `test-config` command generates the full sweep for one or more specific config keys. This is useful for testing individual configurations without filtering by model prefix, framework, etc.
 
 ```
-usage: generate_sweep_configs.py test-config
+usage: python -m infx.matrix.generate test-config
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
     [--no-evals | --evals-only] [--all-evals]
@@ -237,7 +237,7 @@ authorization, `main` runs the normal full sweep.
 
 ## Validation Architecture
 
-The benchmarking system uses a strict validation methodology to ensure correctness at every stage. This is implemented in `utils/matrix_logic/validation.py` using Pydantic models.
+The benchmarking system uses a strict validation methodology to ensure correctness at every stage. This is implemented in `infx/matrix/validation.py` using Pydantic models.
 
 ### Validation Methodology
 

@@ -76,6 +76,63 @@ def _integrate_device(
     return energy_j
 
 
+def _percentile_total_power(
+    device_samples: list[list[tuple[float, float]]],
+    *,
+    start_unix: float,
+    end_unix: float,
+    quantile: float,
+) -> float:
+    """Time-weighted quantile of synchronized fleet power with linear interpolation.
+
+    Sum device curves before taking the percentile. Each linear segment's
+    distribution is uniform over its power range, weighted by elapsed time;
+    constant segments contribute a point mass. Sampling cadence cannot bias
+    the result. Call only after all streams and their shared window validate.
+    """
+    slope_changes: dict[float, float] = {start_unix: 0.0, end_unix: 0.0}
+    total_power = 0.0
+    for samples in device_samples:
+        first = _interpolate_power(samples, start_unix)
+        total_power += first
+        clipped = [(start_unix, first)]
+        clipped.extend((t, p) for t, p in samples if start_unix < t < end_unix)
+        clipped.append((end_unix, _interpolate_power(samples, end_unix)))
+        for (left_t, left_p), (right_t, right_p) in zip(clipped, clipped[1:]):
+            slope = (right_p - left_p) / (right_t - left_t)
+            slope_changes[left_t] = slope_changes.get(left_t, 0.0) + slope
+            slope_changes[right_t] = slope_changes.get(right_t, 0.0) - slope
+
+    # The union of all device timestamps gives the exact knots of their sum.
+    segments: list[tuple[float, float, float]] = []
+    slope = 0.0
+    times = sorted(slope_changes)
+    for left_t, right_t in zip(times, times[1:]):
+        slope += slope_changes[left_t]
+        next_power = total_power + slope * (right_t - left_t)
+        segments.append((
+            min(total_power, next_power), max(total_power, next_power), right_t - left_t
+        ))
+        total_power = next_power
+    lower = min(low for low, _, _ in segments)
+    upper = max(high for _, high, _ in segments)
+    target_time = (end_unix - start_unix) * quantile
+    # Bisection includes point masses without averaging device percentiles.
+    for _ in range(60):
+        value = lower + (upper - lower) / 2
+        time_below = sum(
+            duration if value >= high
+            else duration * (value - low) / (high - low) if value > low
+            else 0.0
+            for low, high, duration in segments
+        )
+        if time_below >= target_time:
+            upper = value
+        else:
+            lower = value
+    return upper
+
+
 def _load_benchmark_data(
     bench_result_path: Path,
 ) -> tuple[BenchmarkData | None, list[str]]:

@@ -3,7 +3,7 @@
 Graded QA jobs (`gsm8k`, `gpqa`) catch accuracy regressions from parallelism,
 concurrency, kernels, and other throughput optimizations. They run separately
 from throughput. Selection lives in `mark_eval_entries()` in
-`utils/matrix_logic/generate_sweep_configs.py`.
+`infx.matrix.generate`.
 
 ## Selection
 
@@ -69,14 +69,14 @@ Generate the complete deployment-smoke matrices with:
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  python utils/matrix_logic/generate_sweep_configs.py full-sweep \
+  python -m infx.matrix.generate full-sweep \
   --config-files configs/nvidia-master.yaml configs/amd-master.yaml \
   --model-prefix kimik3 \
   --scenario-type agentic-coding \
   --evals-only --all-evals --trim-conc
 
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  python utils/matrix_logic/generate_sweep_configs.py full-sweep \
+  python -m infx.matrix.generate full-sweep \
   --config-files configs/nvidia-master.yaml configs/amd-master.yaml \
   --model-prefix minimaxm3 \
   --scenario-type agentic-coding \
@@ -123,7 +123,7 @@ export EVAL_SUITE=kimi_tool_call_schema
 export EVAL_RESULT_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
 run_eval --port "$PORT"
 append_lm_eval_summary
-python3 utils/evals/validate_scores.py
+python3 -m infx.evals.validate_scores
 ```
 
 The framework selects a suite-specific subprocess adapter, while the suite
@@ -165,7 +165,7 @@ The selection is `TestAdditionalProperties:1`, parametrized upstream in
 non-streaming and streaming modes. Each mode runs once through the unchanged
 upstream pytest harness. The unchanged native report remains one final outcome
 per mode. It is uploaded as `kimi_vendor_report.json`, and
-`utils/evals/kimi_vendor_eval.py` projects those two outcomes into the existing
+`infx/evals/kimi_vendor_eval.py` projects those two outcomes into the existing
 eval result shape. Both outcomes are recorded with a `0.0`
 `kimi_tool_call_schema` threshold, so model quality remains diagnostic. Setup,
 timeout, and collection failures emit a zero-score result with error metadata.
@@ -210,10 +210,10 @@ export EVAL_SUITE=minimax_m3_smoke
 export EVAL_RESULT_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
 run_eval --port "$PORT"
 append_lm_eval_summary
-python3 utils/evals/validate_scores.py
+python3 -m infx.evals.validate_scores
 ```
 
-`utils/evals/minimax_m3_smoke.json` is derived from
+`infx/evals/minimax_m3_smoke.json` is derived from
 [MiniMax-AI/MiniMax-Provider-Verifier](https://github.com/MiniMax-AI/MiniMax-Provider-Verifier)
 `sample.jsonl` at commit
 `c899f95e17bfc4a338ddd4cb1638279125885e55`. The vendored fixture retains
@@ -267,11 +267,11 @@ export EVAL_SUITE=minimax_m3_full
 export MODEL_NAME='<served model identifier>'
 run_eval --port "$PORT"
 append_lm_eval_summary
-python3 utils/evals/validate_scores.py
+python3 -m infx.evals.validate_scores
 ```
 
 The runner downloads only the eight source and validator files allowlisted in
-`utils/evals/minimax_m3_full_eval.py` at commit
+`infx/evals/minimax_m3_full_eval.py` at commit
 `c899f95e17bfc4a338ddd4cb1638279125885e55`, verifies each SHA256, and executes
 the pinned `verify.py` once. It uses five workers, a 600-second request timeout,
 three upstream retries, and a seven-hour whole-suite timeout. The workflow
@@ -300,7 +300,7 @@ export EVAL_SUITE=bfcl_smoke
 export EVAL_RESULT_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
 run_eval --port "$PORT"
 append_lm_eval_summary
-python3 utils/evals/validate_scores.py
+python3 -m infx.evals.validate_scores
 ```
 
 The validator reads BFCL's declared `acc` metric from the compatibility result,
@@ -529,7 +529,7 @@ For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it conta
 Eval results are collected by `.github/workflows/collect-evals.yml`:
 
 1. Downloads all `eval_*` artifacts
-2. Runs `utils/collect_eval_results.py` to aggregate results
+2. Runs `infx/results/collect_eval_results.py` to aggregate results
 3. Outputs `agg_eval_<exp_name>.json` with all eval metrics
 4. Publishes a summary table to GitHub Step Summary
 
@@ -578,31 +578,31 @@ attempt cannot replace a newer failed retry.
 | `EVAL_ONLY` | `false` | Skip throughput, only run evals (set by workflow) |
 | `EVAL_FRAMEWORK` | Workflow: `auto`; benchmark runner: `lm-eval` | Eval runner (`lm-eval`, `swebench`, `kimi-vendor`, `minimax-vendor`, or `bfcl`). `auto` resolves from matrix metadata before reusable workflow dispatch |
 | `EVAL_SUITE` | Matrix-selected for automatic vendor evals; otherwise basename of `EVAL_TASKS_DIR` or `gsm8k` | Provider suite selector and artifact identity. Explicit workflow overrides remain supported |
-| `EVAL_TASKS_DIR` | `utils/evals/gsm8k.yaml` | Path to lm-eval task YAML |
+| `EVAL_TASKS_DIR` | `infx/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
 | `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval. A space-separated list enables sequential batched evals against one live engine |
 | `EVAL_LIMIT` | empty | Limit eval to first N instances (smoke tests). Empty means the full set |
 
 ### Score validation
-`utils/evals/validate_scores.py` checks eval results against thresholds in `utils/evals/thresholds.yaml`. Runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
+`infx/evals/validate_scores.py` checks eval results against thresholds in `infx/evals/thresholds.yaml`. Runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
 
 ### Adding a new eval task
 
-1. Create a task YAML in `utils/evals/` following the lm-eval task format.
-2. Set `EVAL_TASKS_DIR=utils/evals/<your_task>.yaml` when running benchmarks.
-3. Update `utils/collect_eval_results.py` if new metrics need extraction.
+1. Create a task YAML in `infx/evals/` following the lm-eval task format.
+2. Set `EVAL_TASKS_DIR=infx/evals/<your_task>.yaml` when running benchmarks.
+3. Update `infx/results/collect_eval_results.py` if new metrics need extraction.
 
 ### Adding a provider verifier
 
-1. Add a provider-specific adapter under `utils/evals/`.
+1. Add a provider-specific adapter under `infx/evals/`.
 2. Add an explicit framework case in `run_eval`; keep suite-specific policy in
    that adapter's shell runner.
 3. Install dependencies in a provider-specific isolated runtime.
 4. Emit `result_format: inferencex-eval-v1`, preserve the native report in an
    explicitly uploaded suite-specific path, set `EVAL_SUITE`, and add a threshold.
 
-### Runtime patches (`utils/evals/patches/`)
+### Runtime patches (`infx/evals/patches/`)
 
 The benchmark helpers invoke these standalone scripts against pinned dependencies.
 Source rewrites are anchor-checked, idempotent, and atomic.
@@ -630,8 +630,8 @@ run_eval --framework swebench --port "$PORT"
 append_lm_eval_summary
 ```
 
-- Task metadata and single-shot prompt: `utils/evals/swebench_lite.yaml`.
-- Scoring: `utils/evals/swebench_score.py` (diff extraction → `predictions.jsonl` →
+- Task metadata and single-shot prompt: `infx/evals/swebench_lite.yaml`.
+- Scoring: `infx/evals/swebench_score.py` (diff extraction → `predictions.jsonl` →
   `python -m swebench.harness.run_evaluation` → resolved-rate → results JSON). Offline
   `--report` mode skips Docker for testing.
 - Generation modes (`SWEBENCH_GEN_MODE`) include `agentic`, the default, which runs the
@@ -660,6 +660,6 @@ append_lm_eval_summary
 
 ## Task files
 The following files are task definitions from lm-eval. More information on changes lives within the files:
-- `utils/evals/gsm8k.yaml`
-- `utils/evals/gpqa_diamond.yaml`
-- `utils/evals/swebench_lite.yaml` (generation only, scored by `swebench_score.py`)
+- `infx/evals/gsm8k.yaml`
+- `infx/evals/gpqa_diamond.yaml`
+- `infx/evals/swebench_lite.yaml` (generation only, scored by `swebench_score.py`)
