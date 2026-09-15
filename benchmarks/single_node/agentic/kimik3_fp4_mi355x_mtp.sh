@@ -2,7 +2,7 @@
 set -euo pipefail
 set -x
 source "$(dirname "$0")/../../benchmark_lib.sh"
-wait_for_amd_gpu_clean 5
+wait_for_amd_gpu_clean
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
@@ -33,7 +33,7 @@ export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MLA=1
 export VLLM_ROCM_USE_AITER_MOE=1
 export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
-export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION="${VLLM_ROCM_QUICK_REDUCE_QUANTIZATION:-NONE}"
 
 export AITER_SITUV2_A8W4=1
 export AITER_FLYDSL_STAGE2_FP8="${AITER_FLYDSL_STAGE2_FP8:-1}"
@@ -42,7 +42,7 @@ export AITER_DISABLE_FMHA_OPUS=1
 export SAFETENSORS_FAST_GPU=1
 export GPU_ARCHS=gfx950
 export HSA_NO_SCRATCH_RECLAIM=1
-export VLLM_USE_BREAKABLE_CUDAGRAPH=0
+export VLLM_USE_BREAKABLE_CUDAGRAPH="${VLLM_USE_BREAKABLE_CUDAGRAPH:-0}"
 export VLLM_K3_KDA_SAFE_STAGES=1
 export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1
 export VLLM_ENGINE_READY_TIMEOUT_S=7200
@@ -67,13 +67,17 @@ trap 'exit 143' TERM
 
 SPEC_ARGS=()
 SPEC_ROWS=1
-KDA_ARGS=()
+KDA_ARGS=(--additional-config "{\"kda_prefill_backend\":\"${KDA_PREFILL_BACKEND:-triton}\"}")
 case "$CONC" in
     1|2|4|8|10|12|14|16)
         DCP_SIZE=1
         OFFLOAD_POLICY=harness
-        if [ "$CONC" -eq 1 ]; then SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-7}"
-        else SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"; fi
+        case "$CONC" in
+            1)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-6}}" ;;
+            4)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-5}}" ;;
+            12) SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-4}}" ;;
+            *)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-3}}" ;;
+        esac
         case "$SPEC_NUM_TOKENS" in
             1) SYNTHETIC_ACCEPT_LEN=1.85 ;;
             2) SYNTHETIC_ACCEPT_LEN=2.51 ;;
@@ -95,7 +99,6 @@ case "$CONC" in
             echo "MTP: k=$SPEC_NUM_TOKENS synthetic_accept=$SYNTHETIC_ACCEPT_LEN draft_kv=$DRAFT_KV_DTYPE"
         fi
         SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 ))
-        KDA_ARGS=(--additional-config '{"kda_prefill_backend":"fused"}')
         case "$CONC" in
             1)  SPEC_SEATS=2  ;;
             2)  SPEC_SEATS=4  ;;
@@ -123,7 +126,7 @@ case "$CONC" in
 esac
 export DCP_SIZE
 
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.89}"
 CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL_DECODE_ONLY}"
 
 LADDER=$(( MAX_NUM_SEQS * SPEC_ROWS ))
