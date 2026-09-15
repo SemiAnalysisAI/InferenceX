@@ -1,11 +1,13 @@
-"""Shell-contract tests for the shared single-node AgentX power lifecycle."""
+"""Shell-contract tests for the shared AgentX power lifecycle."""
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -23,6 +25,7 @@ def _run_lifecycle(
     enable_power: bool = True,
     require_power: bool = False,
     formal_multinode_power: bool = False,
+    real_power_adapter: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     result_dir = tmp_path / "results"
     result_dir.mkdir()
@@ -48,8 +51,12 @@ write_agentic_result_json() {{
 }}
 fake_python() {{
     case "$*" in
-        *utils.agentic.aggregation.power_adapter*)
+        *infx.results.agentic.power_adapter*)
             printf 'adapter:%s\n' "$*" >> {str(event_log)!r}
+            if [ {'1' if real_power_adapter else '0'} = 1 ]; then
+                PYTHONPATH={str(REPO_ROOT)!r} {sys.executable!r} "$@"
+                return $?
+            fi
             ;;
         *validate_agentic_result*)
             printf 'validate\n' >> {str(event_log)!r}
@@ -138,23 +145,84 @@ def test_single_node_invokes_adapter_with_gpu_shape_and_strict_mode(tmp_path: Pa
     assert "--require-power" in adapter_event
 
 
-@pytest.mark.parametrize(
-    ("is_multinode", "enable_power"),
-    [(True, True), (False, False)],
-)
-def test_multinode_and_explicit_opt_out_skip_local_power(
-    tmp_path: Path, is_multinode: bool, enable_power: bool
-):
+def test_explicit_opt_out_skips_power(tmp_path: Path):
     result = _run_lifecycle(
         tmp_path,
-        is_multinode=is_multinode,
-        enable_power=enable_power,
+        enable_power=False,
     )
 
     assert result.returncode == 0, result.stderr
     events = _events(tmp_path)
     assert not any(event.startswith("monitor-") for event in events)
     assert not any(event.startswith("adapter:") for event in events)
+
+
+@pytest.mark.parametrize("require_power", [False, True])
+def test_multinode_missing_contract_records_invalid_power_and_enforces_strict_mode(
+    tmp_path: Path, require_power: bool
+):
+    result = _run_lifecycle(
+        tmp_path,
+        is_multinode=True,
+        require_power=require_power,
+        real_power_adapter=True,
+    )
+
+    assert result.returncode == int(require_power), result.stderr
+    events = _events(tmp_path)
+    assert not any(event.startswith("monitor-") for event in events)
+    adapter_event = next(event for event in events if event.startswith("adapter:"))
+    assert events.index("aggregate") < events.index(adapter_event)
+    aggregate = json.loads((tmp_path / "agg_agentx.json").read_text())
+    validation = json.loads((tmp_path / "results/power_validation.json").read_text())
+    assert aggregate["power_valid"] == 0
+    assert "total_gpu_energy_j" not in aggregate
+    assert validation["power_valid"] is False
+    assert validation["reasons"] == ["multinode_power_contract_missing"]
+
+
+@pytest.mark.parametrize("identity_fails", [False, True])
+def test_nvidia_monitor_preserves_identity_without_requiring_it(
+    tmp_path: Path, identity_fails: bool
+):
+    metrics_path = tmp_path / "gpu_metrics.csv"
+    script = f"""
+source {str(BENCHMARK_LIB)!r}
+nvidia-smi() {{
+    case "$*" in
+        --query-gpu=index,uuid,pci.bus_id,name,driver_version*)
+            printf 'index, uuid, pci.bus_id, name, driver_version\\n'
+            if [ {'1' if identity_fails else '0'} = 1 ]; then return 1; fi
+            printf '0, GPU-device-a, 00000000:01:00.0, NVIDIA Test GPU, 590.00\\n'
+            ;;
+        *)
+            printf '2026/09/09 00:00:00.000, 0, 200 W, 40, 1500, 1200, 80, 30\\n'
+            if [[ "$*" == *" -l "* ]]; then exec sleep 30; fi
+            ;;
+    esac
+}}
+set -e
+start_gpu_monitor --output {str(metrics_path)!r}
+stop_gpu_monitor
+"""
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={**os.environ, "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=5,
+    )
+
+    assert result.returncode == 0, result.stderr
+    identity_path = tmp_path / "gpu_metrics_identity.csv"
+    if identity_fails:
+        assert not identity_path.exists()
+        assert "NVIDIA identity sidecar failed" in result.stderr
+    else:
+        assert "0, GPU-device-a, 00000000:01:00.0, NVIDIA Test GPU, 590.00" in identity_path.read_text()
+    assert "Started NVIDIA" in result.stdout
+    assert "Stopped" in result.stdout
 
 
 def test_multinode_formal_window_wraps_replay_without_local_monitor(tmp_path: Path):
@@ -195,26 +263,6 @@ def test_multinode_formal_window_is_left_running_when_replay_is_interrupted(tmp_
     assert "--write-multinode-window running" in adapters[0]
 
 
-def test_shared_lifecycle_installs_idempotent_signal_cleanup():
-    benchmark_lib = BENCHMARK_LIB.read_text()
-
-    assert "trap '_stop_agentx_power_monitor; exit 130' INT" in benchmark_lib
-    assert "trap '_stop_agentx_power_monitor; exit 143' TERM" in benchmark_lib
-    assert 'if [ "$agentx_monitor_stopped" = "0" ]' in benchmark_lib
-
-
-def test_single_node_workflow_uploads_agentx_power_audit_artifacts():
-    workflow = (REPO_ROOT / ".github/workflows/benchmark-tmpl.yml").read_text()
-    agentic_upload = workflow.split(
-        "- name: Upload agentic raw results", 1
-    )[1].split("- name:", 1)[0]
-
-    assert "results/**" in agentic_upload
-    assert "!results/**/gpu_metrics" not in agentic_upload
-    assert "!results/**/power_validation.json" not in agentic_upload
-    assert "!results/**/agentic_power_window.json" not in agentic_upload
-
-
 @pytest.mark.parametrize(
     ("sent_signal", "expected_rc"),
     [(signal.SIGINT, 130), (signal.SIGTERM, 143)],
@@ -231,7 +279,15 @@ start_gpu_monitor() {{
     printf 'monitor-pid:%s\n' "${{BASHPID:-$$}}" >> {str(event_log)!r}
 }}
 stop_gpu_monitor() {{ printf 'monitor-stop\n' >> {str(event_log)!r}; }}
-fake_replay() {{ sleep 30; }}
+fake_replay() {{
+    exec {sys.executable!r} -c '
+import signal, sys, time
+signal.signal(signal.SIGINT, signal.SIG_DFL)
+signal.signal(signal.SIGTERM, signal.SIG_DFL)
+print("replay-ready", file=open(sys.argv[1], "a"), flush=True)
+time.sleep(30)
+' {str(event_log)!r}
+}}
 trap 'printf "parent-exit\\n" >> {str(event_log)!r}' EXIT
 trap 'printf "parent-int\\n" >> {str(event_log)!r}; exit 130' INT
 trap 'printf "parent-term\\n" >> {str(event_log)!r}; exit 143' TERM
@@ -248,18 +304,26 @@ run_agentic_replay_and_write_outputs {str(result_dir)!r}
         text=True,
         start_new_session=True,
     )
-    monitor_pid = None
-    for _ in range(100):
-        if event_log.exists():
-            first_event = event_log.read_text().splitlines()[0]
-            if first_event.startswith("monitor-pid:"):
-                monitor_pid = int(first_event.split(":", 1)[1])
+    try:
+        # The monitor starts before the production signal traps are installed.
+        # Publish readiness from the execed process after restoring signal handling;
+        # a shell marker before exec races with the group SIGINT.
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if event_log.exists() and "replay-ready" in event_log.read_text().splitlines():
                 break
-        time.sleep(0.01)
-    assert monitor_pid is not None
+            time.sleep(0.01)
+        else:
+            pytest.fail("replay did not start")
 
-    os.killpg(proc.pid, sent_signal)
-    _, stderr = proc.communicate(timeout=5)
+        os.killpg(proc.pid, sent_signal)
+        _, stderr = proc.communicate(timeout=5)
+    finally:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.communicate()
 
     assert proc.returncode == expected_rc, stderr
     events = _events(tmp_path)

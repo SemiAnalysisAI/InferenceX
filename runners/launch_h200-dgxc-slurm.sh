@@ -12,6 +12,8 @@ AIPERF_MMAP_CACHE_HOST_PATH="${AIPERF_MMAP_CACHE_HOST_PATH:-/home/sa-shared/ghar
 # commit and re-running the H200 hardware gate.
 POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
 POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
+AGENTX_POWER_SRT_SLURM_PIN="80d7203e424f903c9017de4608ee2044afce9574"
+SELECTED_POWER_SRT_SLURM_PIN="$POWER_SRT_SLURM_PIN"
 
 set -x
 
@@ -41,16 +43,18 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         USES_DCGM_POWER=1
     fi
 
-    # Only explicitly reviewed H200 FP8 AgentX recipes may use dcgm-power.
-    # Future recipes must earn a separate cluster smoke instead of inheriting
-    # this lane.
-    if [[ "$USES_DCGM_POWER" == "1" && (
+    USES_KIMIK3_POWER=0
+    if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
+        "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" ]]; then
+        USES_KIMIK3_POWER=1
+        SELECTED_POWER_SRT_SLURM_PIN="$AGENTX_POWER_SRT_SLURM_PIN"
+    elif [[ "$USES_DCGM_POWER" == "1" && (
         "$IS_AGENTIC" != "1" ||
         "$FRAMEWORK" != "dynamo-sglang" ||
         ( "$MODEL_PREFIX" != "glm5.2" && "$MODEL_PREFIX" != "dsv4" ) ||
         "$PRECISION" != "fp8"
     ) ]]; then
-        echo "Error: H200 dcgm-power is validated only for AgentX dynamo-sglang glm5.2/fp8 or dsv4/fp8" >&2
+        echo "Error: H200 dcgm-power requires AgentX dynamo-sglang glm5.2/dsv4 FP8 or Kimi-K3 vLLM FP4" >&2
         exit 1
     fi
 
@@ -135,9 +139,17 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             cd "$SRT_REPO_DIR"
         fi
     elif [[ $IS_AGENTIC == "1" && $FRAMEWORK == "vllm" && $MODEL_PREFIX == "kimik3" ]]; then
-        git clone https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-        git checkout df5baa93f4caf5169dea2a4236ad2cc742fe40e7
+        if [[ "$USES_KIMIK3_POWER" == "1" ]]; then
+            git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
+            cd "$SRT_REPO_DIR"
+            git checkout "$SELECTED_POWER_SRT_SLURM_PIN"
+            test "$(git rev-parse HEAD)" = "$SELECTED_POWER_SRT_SLURM_PIN" || exit 1
+            git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+        else
+            git clone https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR"
+            cd "$SRT_REPO_DIR"
+            git checkout df5baa93f4caf5169dea2a4236ad2cc742fe40e7
+        fi
         mkdir -p recipes/vllm/kimi-k3/agentic
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
             recipes/vllm/kimi-k3/agentic
@@ -148,6 +160,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
         git checkout sa-submission-q2-2026
+    fi
+    if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
+        python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
+            || exit 1
     fi
 
     echo "Installing srtctl..."
@@ -207,6 +223,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     if [[ "$USES_DCGM_POWER" == "1" ]]; then
         DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
+        # enroot resolves bare paths against Docker Hub; nvcr.io pulls need the registry# form
+        DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\//nvcr.io#}"
         DCGM_EXPORTER_SQSH="/data/gharunners/containers/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
         if ! unsquashfs -l "$DCGM_EXPORTER_SQSH" >/dev/null 2>&1; then
             DCGM_EXPORTER_LOCK="${DCGM_EXPORTER_SQSH}.lock"
@@ -223,7 +241,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
                     rm -f \"$DCGM_EXPORTER_SQSH\"
                     export ENROOT_CACHE_PATH=\${HOME}/.cache/enroot
                     mkdir -p \"\$ENROOT_CACHE_PATH\"
-                    enroot import -o \"$DCGM_EXPORTER_SQSH\" docker://$DCGM_EXPORTER_IMAGE
+                    enroot import -o \"$DCGM_EXPORTER_SQSH\" \"docker://$DCGM_EXPORTER_ENROOT_REF\"
                 "
         fi
         test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash is not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
@@ -313,6 +331,10 @@ EOF
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
     sed -i '/^health_check:/,/^[^ ]/{ /^health_check:/d; /^  /d; }' "$CONFIG_PATH"
     printf '\nhealth_check:\n  max_attempts: 720\n  interval_seconds: 10\n' >> "$CONFIG_PATH"
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
+            "$CONFIG_PATH" "$FRAMEWORK" || exit 1
+    fi
     WORKLOAD_TAG="${ISL}x${OSL}"
     if [[ "$IS_AGENTIC" == "1" ]]; then
         WORKLOAD_TAG="agentic"
@@ -338,7 +360,11 @@ EOF
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
     trap 'rc=$?; bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT INT TERM HUP
 
-    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+    SRT_JOB_RC=0
+    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
+    if [[ "$SRT_JOB_RC" != "0" && "$USES_KIMIK3_POWER" != "1" ]]; then
+        exit "$SRT_JOB_RC"
+    fi
 
     set -x
 
@@ -352,7 +378,13 @@ EOF
 
     echo "Found logs directory: $LOGS_DIR"
 
-    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    AGENTX_POWER_RC="$SRT_JOB_RC"
+    if [[ "$USES_KIMIK3_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+        read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+        collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" \
+            "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" \
+            "$SELECTED_POWER_SRT_SLURM_PIN" "${POWER_CONCURRENCIES[@]}" || AGENTX_POWER_RC=$?
+    elif [[ "$USES_DCGM_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
         POWER_LOGS_ROOT=$(cd "$LOGS_DIR" && pwd -P)
         read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
         for concurrency in "${POWER_CONCURRENCIES[@]}"; do
@@ -361,16 +393,18 @@ EOF
                 --agg-result "$GITHUB_WORKSPACE/${RESULT_FILENAME}_conc${concurrency}.json"
                 --power-dir "$POWER_LOGS_ROOT/power"
                 --logs-root "$POWER_LOGS_ROOT"
-                --expected-producer-sha "$POWER_SRT_SLURM_PIN"
+                --expected-producer-sha "$SELECTED_POWER_SRT_SLURM_PIN"
             )
             case "${REQUIRE_POWER:-0}" in
                 1|true|TRUE|yes|YES) power_args+=(--require-power) ;;
             esac
             (
                 cd "$GITHUB_WORKSPACE"
-                python -m utils.agentic.aggregation.power_adapter "${power_args[@]}"
-            ) || exit 1
+                python -m infx.results.agentic.power_adapter "${power_args[@]}"
+            ) || AGENTX_POWER_RC=$?
         done
+    fi
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
         mkdir -p "$LOGS_DIR/power"
         cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
         cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
@@ -379,49 +413,13 @@ EOF
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
     bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 
+    if [[ "$AGENTX_POWER_RC" != "0" ]]; then
+        echo "ERROR: AgentX power validation failed; available audit and server artifacts were staged" >&2
+        exit "$AGENTX_POWER_RC"
+    fi
+
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
-        # Find all result subdirectories
-        RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
-
-        if [ -z "$RESULT_SUBDIRS" ]; then
-            echo "Warning: No result subdirectories found in $LOGS_DIR"
-        else
-            # Process results from all configurations
-            for result_subdir in $RESULT_SUBDIRS; do
-                echo "Processing result subdirectory: $result_subdir"
-
-                # Extract configuration info from directory name
-                CONFIG_NAME=$(basename "$result_subdir")
-
-                # Find all result JSON files
-                RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
-
-                for result_file in $RESULT_FILES; do
-                    if [ -f "$result_file" ]; then
-                        # Extract metadata from filename
-                        # Files may be "results_concurrency_N_gpus_G_ctx_C_gen_D.json" (disagg) or "results_concurrency_N_gpus_G.json" (non-disagg)
-                        filename=$(basename "$result_file")
-                        concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
-                        gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9][0-9]*\).*/\1/p')
-                        ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
-                        gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
-
-                        echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
-
-                        if [ -n "$ctx" ] && [ -n "$gen" ]; then
-                            WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
-                        else
-                            WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}.json"
-                        fi
-                        cp "$result_file" "$WORKSPACE_RESULT_FILE"
-
-                        echo "Copied result file to: $WORKSPACE_RESULT_FILE"
-                    fi
-                done
-            done
-        fi
-
-        echo "All result files processed"
+        copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME"
     else
         echo "EVAL_ONLY=true: Skipping benchmark result collection"
     fi
@@ -493,10 +491,16 @@ else
         BENCH_SCRIPT="${BENCH_BASE}${LEGACY_FW_SUFFIX}${SPEC_SUFFIX}.sh"
     fi
 
-    if [[ "$IMAGE" == *deepseek-v4-hopper* ]]; then
+    # DeepSeek-V4.1-Flash creates AgentX runtime directories next to the
+    # repository, which must not land under /workspace.
+    if [[ "$IMAGE" == *deepseek-v4-hopper* || "$MODEL_PREFIX" == "dsv41flash" ]]; then
         CONTAINER_MOUNT_DIR=/ix
     else
         CONTAINER_MOUNT_DIR=/workspace
+    fi
+    if [[ "$MODEL_PREFIX" == "dsv41flash" ]]; then
+        export INFMAX_CONTAINER_WORKSPACE=/ix
+        export RESULT_DIR=/ix/results
     fi
 
     srun --jobid=$JOB_ID \

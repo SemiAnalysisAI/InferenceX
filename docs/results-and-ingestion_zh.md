@@ -14,10 +14,10 @@
 | --- | --- |
 | [`benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml)、[`benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) | 吞吐量、评测和 AgentX 工件的单配置名称、文件及上传规则 |
 | [`utils/process_result.py`](../utils/process_result.py) | 固定序列吞吐量聚合架构及派生的每 GPU 指标 |
-| [`utils/collect_results.py`](../utils/collect_results.py)、[`collect-results.yml`](../.github/workflows/collect-results.yml) | 将基准结果递归收集为 `agg_<prefix>.json` 和 `results_<prefix>` |
-| [`utils/collect_eval_results.py`](../utils/collect_eval_results.py)、[`collect-evals.yml`](../.github/workflows/collect-evals.yml) | 评测发现、指标提取、批量并发选择及 `eval_results_<prefix>` |
-| [`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py)、[`request_metrics.py`](../utils/agentic/aggregation/request_metrics.py) | AgentX 聚合架构、原始记录过滤、请求计数和派生指标 |
-| [`validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py) | AgentX 上传前错误率门禁 |
+| [`infx/results/collect_results.py`](../infx/results/collect_results.py)、[`collect-results.yml`](../.github/workflows/collect-results.yml) | 将基准结果递归收集为 `agg_<prefix>.json` 和 `results_<prefix>` |
+| [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py)、[`collect-evals.yml`](../.github/workflows/collect-evals.yml) | 评测发现、指标提取、批量并发选择及 `eval_results_<prefix>` |
+| [`infx.results.agentic`](../infx/results/agentic/__init__.py)、[`request_metrics.py`](../infx/results/agentic/request_metrics.py)、[`artifacts.py`](../infx/results/agentic/artifacts.py) | AgentX 聚合架构、原始记录过滤、请求计数和派生指标 |
+| [`validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py) | AgentX 上传前错误率门禁 |
 | [`run-sweep.yml`](../.github/workflows/run-sweep.yml)、[`recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) | 应用分发载荷及 source/merge 运行身份 |
 | [InferenceX-app `prepare-ci-artifacts.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/prepare-ci-artifacts.ts)、[`ci-artifact-preparation.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/ci-artifact-preparation.ts) | 跨运行工件选择、attempt 及复用来源信息 |
 | [InferenceX-app `ingest-ci-run.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/ingest-ci-run.ts) | 端到端摄取顺序、配对、跳过、汇总和刷新 |
@@ -69,7 +69,7 @@ file:     agg_<RESULT_FILENAME>.json
 
 多节点模板在基础名称中编码 prefill 和 decode 拓扑、worker 数、模式、并发及 runner。一个 `bmk_<RESULT_FILENAME>` 工件中可以包含多个 `agg_<RESULT_FILENAME>_*.json` 文件。
 
-[`collect-results.yml`](../.github/workflows/collect-results.yml) 通常接收 `result-prefix: bmk`。它下载 `bmk_*`，[`utils/collect_results.py`](../utils/collect_results.py) 再递归加载每个 JSON 文件，形成一个数组。交接身份为：
+[`collect-results.yml`](../.github/workflows/collect-results.yml) 通常接收 `result-prefix: bmk`。它下载 `bmk_*`，[`infx/results/collect_results.py`](../infx/results/collect_results.py) 再递归加载每个 JSON 文件，形成一个数组。交接身份为：
 
 ```text
 artifact: results_bmk
@@ -92,9 +92,27 @@ shape:    array of benchmark row objects
 | 延迟和交互性 | 基准输入中每个以 `ms` 结尾的键都会从毫秒换算为秒，并移除 `_ms`。包含 `tpot` 的键还会产生其倒数 `intvty`。 |
 | 可选运行时元数据 | 形式必须精确为 `{name, version}` 的 `router`、`kv_p2p_transfer`，以及在可用时由 `gpu_metrics.csv` 补入的实测功耗 |
 
-单节点 GPU 数为 `tp * pp * pcp_size`。DCP 不会增加物理 GPU 数。多节点每 GPU 指标的分母使用声明的 prefill 和 decode GPU 数。无效或缺失的必需元数据会使转换失败。功耗聚合明确采用尽力而为模式，不能导致基准聚合失败。
+单节点 GPU 数为 `tp * pp * pcp_size`。DCP 不会增加物理 GPU 数。多节点每 GPU 指标的分母使用声明的 prefill 和 decode GPU 数。无效或缺失的必需元数据会使转换失败。功耗聚合默认尽力而为；当设置 `REQUIRE_POWER=1` 时，功耗验证失败会在保留已有结果和审计后使任务失败。
 
 InferenceX-app 将路由字段作为列或配置维度，并把数值测量存入 `benchmark_results.metrics` JSONB。映射器支持共享拓扑的 v1、拆分 prefill/decode 拓扑的 v2，以及嵌套 AgentX 指标的 v3。未知数值指标会被保留并产生警告，因此架构可以扩展，同时不会无提示地丢失数值数据。
+
+### 固定序列基准结果状态与 PowerX 审计
+
+服务客户端在保存原始结果前写入 `benchmark_outcome`，保留现有的 5% 最大请求失败率，以及请求总数、完成数和失败数。处理器检查该记录并复制到聚合结果中；即使遥测有效，请求失败率超限仍返回失败。零成功请求会保留诊断聚合结果，但不会生成不存在的延迟倒数。请求计数无效时，失败诊断状态保留原始 `requested`/`completed` 值和 `error`，不生成无依据的失败数或失败率；客户端先保存原始 JSON 再退出，处理器仍拒绝该结果。没有状态元数据的历史结果仍可区分；功耗有效不能证明基准成功或答案质量。
+
+`power_invalid_reasons` 和 `power_audit` 在数值指标旁携带有界摘要，包括可用的测量窗口、预期与观测 GPU 数、采样诊断、观测设备标识和生产者版本。`source` 指向保留的 `power_validation_*.json` 工件名称。设备标识保留采集器原有语义，本地 SMI 序号不是物理 UUID 的证明。
+
+对于多节点固定序列任务，`utils/process_result.py --all` 先处理所有已有结果，再返回失败。它接受 `_c<N>_gpus_...`、`_conc<N>_gpus_...` 和 AMD 的 `_concurrency_<N>_req_rate_<R>_gpus_...` 文件名，也支持 `inf` 请求速率。它将结果并发度与 `CONC_LIST` 比较，拒绝重复或矛盾的点身份，并将遗漏和错误记录到 `result_processing_<RESULT_FILENAME>.json`。共享工作池通过 `AGGREGATE_GPUS` 及零值角色 GPU 数进行遥测验证；独立的 prefill/decode 能耗保持缺失。当 `DISAGG=true` 的配置组中某个点没有 decode worker 时，聚合行会有意设置 `disagg: false` 并记录 `num_aggregate_gpu`；文件名、工件名和工作流输入仍保留配置组身份。下游应按聚合行的拓扑解释测量结果。
+
+PR changelog 选择具有代表性的 NVIDIA 和 AMD 覆盖，并非所有受影响配置的完整列表；共享处理逻辑的变更适用于所有固定序列配置。
+
+启动器或验证失败后仍会运行处理和功耗诊断上传，并在审计工件中保留原始及聚合 JSON。正常 `bmk_*` 上传要求基准和处理步骤成功，因此不完整批次或 Slurm 失败不会发布诊断数据。主分支的入库触发器仍可发布部分失败 sweep 中其他成功配置的数据；这并不证明整个硬件范围已完成覆盖。下游导入器可利用保留的状态拒绝明确失败的基准结果。
+
+### 原生多节点遥测
+
+`native_power_collect.sh` 和 `native_power_lifecycle.sh` 提供每节点采集及有时限的就绪/停止状态文件。启动器可使用 `LOGS/native_power` 下的原生产物；此前置改动不会启用新 recipe。适配器验证服务 GPU 身份、时钟同步、采集完成及正式窗口完整覆盖，并在审计中保留节点故障、样本数和采集器版本。
+
+原生采集器单独设置 UTC，并在 CSV 旁记录上下文以支持跨环境回放；现有基准监控行为保持不变。启动器接入需要另行完成硬件验证。离线适配器接受该上下文，不改变现有生产端。正式窗口外的无效样本不能构成覆盖；`boundary_degenerate_rows` 保留其逐 GPU 计数。
 
 ## 评测工件
 
@@ -102,7 +120,16 @@ InferenceX-app 将路由字段作为列或配置维度，并把数值测量存�
 
 每个评测上传名为 `eval_<EXP_NAME>_<RESULT_FILENAME>`。当前允许的载荷包括 `meta_env.json`、`results*.json`、样本 JSONL、预测、SWE-bench 报告和轨迹文件。收集器只使用元数据和 lm-eval 结果 JSON 来生成聚合记录。
 
-[`utils/collect_eval_results.py`](../utils/collect_eval_results.py) 执行以下规则：
+共享评测元数据写入器保留单节点的 `DP_ATTENTION`，并将其作为
+`prefill_dp_attention` 和 `decode_dp_attention` 的默认值。只有
+`IS_MULTINODE=true` 的任务才会转换独立的 prefill/decode 环境变量；
+这类任务两侧的 DP attention 设置可以不同。收集器不会根据工件名称或
+服务端日志重建拓扑。受旧版无条件转换逻辑影响的历史工件，可能将实际启用
+DP attention 的单节点评测记录为 `false`。修复写入器不会修复这些工件或
+已有数据库记录：应先核实原始任务配置和服务端日志，再更正元数据、重新生成
+聚合结果并重新摄取受影响的数据。
+
+[`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py) 执行以下规则：
 
 1. 评测集是包含 `meta_env.json` 的根目录或一级子目录。
 2. 候选结果文件必须能解析为对象并包含 `lm_eval_version`。
@@ -149,9 +176,29 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 
 服务器日志是单独的 `server_logs_<RESULT_FILENAME>` 工件。应用会使用完全移除前缀后的后缀作为回退，从而让 AgentX 记录找到不含 `agentic_` 前缀的日志工件。
 
+普通单节点 AgentX 提交默认启用共享 GPU 功耗监控。
+`power_audit_<RESULT_FILENAME>` 工件保留 `results/` 中的原始遥测、GPU 身份、
+正式测量窗口、时区偏移和校验结果。多节点运行在同一审计工件中保留
+`LOGS/power/` 下的部署遥测，以及 `LOGS/agentic/` 下各并发的窗口和校验文件。
+即使基准测试失败，已有的审计文件和 AgentX 聚合结果仍会上传。
+文件缺失不代表路径支持功耗采集：多节点配方还需要兼容的 producer 和 launcher 适配器。
+缺少测量窗口接口时，聚合结果记录 `power_valid: 0`，审计原因标记为
+`multinode_power_contract_missing`；设置 `REQUIRE_POWER=1` 还会在保留已有结果后使任务失败。
+
+`power_valid: 1` 与 `power_metric_schema_version: 2` 只表示 GPU 遥测有效，
+不代表请求计数或模型质量通过验证。用于可靠对比前，应将已发出、已完成、已取消及
+出错请求数与原始 profiling 记录和 token 总数核对。GPU 板卡能耗与整机功耗估算分开报告。
+
+GB200 GLM-5.2 聚合部署的 AgentX 配方通过共享 custom-window producer、DCGM
+监控器和任务结束后的功耗适配器，覆盖两个各含四块 GPU 的节点。launcher 按实际
+选择的并发数绑定测量窗口，在返回失败前保留 Slurm 原生状态、producer 和 exporter
+身份以及校验诊断。聚合 JSON 缺失或损坏时，仍生成该并发点的
+`power_validation.json`，且不伪造聚合结果。普通 Slurm 时限以及包括 HiCache 和合成接受率在内的
+服务配置保持不变。其他 GB200 AgentX 配方继续使用原有 producer 与功耗限制。
+
 ### 原始输入和聚合架构
 
-[`process_agentic_result.py`](../utils/agentic/aggregation/process_agentic_result.py) 可解析当前的 `results/aiperf_artifacts` 布局，也可解析只含一个子目录的嵌套布局。它要求存在 `profile_export.jsonl`，并在存在时读取以下输入：
+[`process_agentic_result.py`](../infx/results/agentic/process_agentic_result.py) 可解析当前的 `results/aiperf_artifacts` 布局，也可解析只含一个子目录的嵌套布局。它要求存在 `profile_export.jsonl`，并在存在时读取以下输入：
 
 | 输入 | 作用 |
 | --- | --- |
@@ -162,7 +209,20 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 
 每条非空 JSONL 记录都会增加 `records_total`。`metadata.benchmark_phase` 不等于 `profiling` 的记录是 warmup 诊断，会被排除。含真值 `error` 的记录也会被排除并分类。没有 phase 的旧记录按 profiling 处理。保留记录数成为 `num_requests_successful`。完整计数保存在 `request_accounting` 中，包括 profiled、总丢弃、warmup 丢弃、错误丢弃和 `error_categories`。
 
-AgentX 聚合的顶层身份和拓扑字段与基准摄取兼容。重要 AgentX 字段包括：
+`request_metrics.tokens.output_expected` 只读取 AIPerf 在
+`metadata.dataset.hf_dataset_name` 中明确声明的数据集的本地 trace 元数据。
+由于导出内容没有记录实际解析到的数据集 revision，对应缓存必须恰好只有一个 snapshot。
+缺少数据集身份、缺少元数据或存在多个 snapshot 时，该分布保持为空；
+不会根据缓存修改时间或其他数据集进行猜测。实际 token 数、GPU 能耗的分母及
+AIPerf 理论缓存命中率继续使用各自原有的数据来源。
+
+AgentX 聚合的顶层身份和拓扑字段与基准摄取兼容。
+
+`num_gpus` 明确记录共享处理器使用的物理 GPU 数。单节点运行使用
+`tp * pp * pcp_size`，EP 和 DCP 共享设备。使用结果时应优先读取该字段，
+避免仅根据并行参数推断 GPU 数。
+
+其他重要 AgentX 字段包括：
 
 | 字段组 | 重要字段 |
 | --- | --- |
@@ -173,9 +233,14 @@ AgentX 聚合的顶层身份和拓扑字段与基准摄取兼容。重要 AgentX
 | 服务器指标 | `server_metrics.cache`、`kv_cache`、token 总数、来源详情，以及可能存在的 `warnings` |
 | 兼容性 | `kv_cache_pool_tokens` 镜像 `server_metrics.kv_cache.gpu_total_tokens` |
 
+当 `dynamo-sglang` 运行包含 `sglang:` 遥测时，处理器使用 SGLang 适配器
+聚合缓存、利用率和 token 指标。逻辑 GPU KV 容量保持 `null` 并附带警告，
+因为多个 TP rank 可能重复报告容量值。原始 Dynamo 前端总数可能包含预热请求。
+缺少主机命中计数并不代表 CPU 缓存命中为零。
+
 应用会将嵌套 AgentX v3 值展平为规范指标键。例如 `median_ttft`、`p95_e2el`、`total_tput_tps`、`tput_per_gpu`、`server_gpu_cache_hit_rate` 和 `gpu_kv_cache_usage_pct`。p50 映射为 `median`。存在 full-response ITL 字段时优先使用它。交互性百分位数按对应 ITL 百分位数的倒数派生，使历史记录和当前记录采用同一定义。
 
-正常上传前，单节点工作流会运行 [`validate_agentic_result.py`](../utils/agentic/validation/validate_agentic_result.py)。它要求聚合为对象，`request_count.avg` 是非负数值，已完成请求数为正，错误率不高于配置阈值。通过该门禁不表示没有失败请求。失败请求记录仍可通过 `request_accounting` 观察，但不参与性能指标计算。
+正常上传前，单节点工作流会运行 [`validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py)。它要求聚合为对象，`request_count.avg` 是非负数值，已完成请求数为正，错误率不高于配置阈值。通过该门禁不表示没有失败请求。失败请求记录仍可通过 `request_accounting` 观察，但不参与性能指标计算。
 
 ## 应用交接和复用运行
 
@@ -342,6 +407,17 @@ jq -s '{rows:length,
 printf 'temporary inspection directory: %s\n' "$tmp"
 rm -rf -- "$tmp"
 ```
+
+## GPU 实测功耗 P75 和 P90
+
+通过验证的单节点 SMI 和多节点 DCGM 结果还会输出 `p75_total_gpu_power_w`、
+`p75_power_w`、`p90_total_gpu_power_w` 与 `p90_power_w`。两个整组指标使用与能耗
+积分相同的正式基准测试窗口，对参与测量的所有 GPU 板卡功耗之和计算按时间加权的
+第 75 和第 90 百分位数。各设备采样通过分段线性插值按时间对齐后求和，分位数按
+持续时间加权，而不是按采样数量加权。两个按芯片均摊的指标分别将对应的整组 GPU
+功耗分位数除以参与测量的 GPU 数量，因此既不是单个 GPU 的分位数，也不是
+各设备分位数的平均值。遥测验证失败时，四项指标都不发布。旧结果需要使用原始
+遥测重新计算；不能从平均功耗推算 P75 或 P90。验证 sidecar 会记录 `power_percentile_method`。
 
 ## 验证和停止条件
 

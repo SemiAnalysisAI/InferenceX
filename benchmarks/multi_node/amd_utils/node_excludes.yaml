@@ -1,0 +1,14 @@
+# Per (framework, model) SLURM node exclusions, consumed by submit.sh.
+#
+# A rule applies when FRAMEWORK matches "framework" exactly and MODEL_NAME is
+# in "models"; its exclude_nodes are then passed to sbatch --exclude. Any
+# (framework, model) combination with no matching rule gets an empty exclude
+# list (i.e. no nodes excluded).
+#
+# SLURM_EXCLUDE_NODES env var, if set, always overrides this file.
+
+rules:
+  - framework: vllm-disagg
+    models:
+      - Kimi-K2.5-MXFP4
+    exclude_nodes: mia1-p01-g09,mia1-p01-g10,mia1-p01-g11,mia1-p01-g12

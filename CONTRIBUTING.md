@@ -42,6 +42,7 @@ A full benchmark sweep is expensive GPU time, and the runners are shared by ever
 - After your PR has an eligible green full sweep, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) comments `/reuse-sweep-run` on the PR (optionally pinning a specific run: `/reuse-sweep-run <run_id>`).
 - The merge-to-`main` run then validates and ingests the PR sweep's artifacts instead of re-running the whole sweep on `main`.
 - **This reduces CI queue time for everyone.** Each reused merge frees hours of GPU runner time for other PRs, so please prefer the reuse path over merging without it. A green sweep alone is not enough. The `/reuse-sweep-run` comment must be on record (the sign-off verification checks for it), otherwise `main` silently re-runs the full sweep.
+- Reuse does not require retaining a sweep label. The bot reacts to the command with 👍 when accepted or 👎 when rejected, with details in the Actions run summary; source artifacts are revalidated at merge.
 - `utils/merge_with_reuse.sh <pr-number>` is the supported merge path. It posts the command, syncs the branch with `main`, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
 
 ## Adding points to the latest curve with `append-only`

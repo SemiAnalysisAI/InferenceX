@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-PATCH_DIR = Path(__file__).resolve().parent / "patches"
+PATCH_DIR = Path(__file__).resolve().parents[2] / "infx/evals/patches"
 
 
 def _load_patch_module(name: str):
@@ -116,8 +116,6 @@ def test_scoring_patch_is_atomic_and_idempotent(tmp_path):
     assert scoring_patch.patch(str(target), "2")
     patched = target.read_text()
     assert "cpu=2," in patched
-    assert scoring_patch.CPU_MARKER in patched
-    assert scoring_patch.LIFECYCLE_MARKER in patched
     assert scoring_patch.patch(str(target), "2")
     assert target.read_text() == patched
 

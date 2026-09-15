@@ -12,6 +12,7 @@
 
 - [事实来源](#事实来源)
 - [测试层级](#测试层级)
+- [测试质量](#测试质量)
 - [本地检查](#本地检查)
 - [冒烟、扫描与评测](#冒烟扫描与评测)
 - [证据标准](#证据标准)
@@ -41,6 +42,19 @@
 
 较后层级变绿不会弥补较早层级缺少证据。例如，绿色收集器可能只聚合了空集合，因此评审必须检查底层实际执行的任务和制品。
 
+## 测试质量
+
+测试应保护实际行为，而不是凑覆盖率。评审时，要明确每个测试能发现什么实际缺陷，以及它是否运行了真正交付的实现。
+
+- 优先使用小规模输入和人工推导的预期结果，覆盖相关边界、无效输入或失败场景。不要照搬实现中的计算过程，也不要调用同一个辅助函数生成预期结果。
+- 不要把当前配方数量、模型或硬件清单、镜像 pin、枚举定义或源码文本写成快照断言。新增有效配方或进行等价重构，不应迫使开发者修改无关断言。
+- 保留真正的契约：数值结果、无效输入拒绝行为、稳定的产物格式，以及由不同组件独立读取的配置之间的一致性。只断言使用方真正依赖的部分。
+- 必要时可以模拟外部服务或进程，但必须运行被测行为本身。测试里复制的解析器、过滤逻辑或假实现，无法发现真实实现中的回归。
+- 在涉及时间的测试中控制时钟和长时间等待，以可观察到的就绪状态进行同步。测试进程终止或产物写入契约时，应保留真实操作，并为等待和清理设置上限，避免回归导致测试进程一直挂起。
+- 冗余测试应直接删除，不必一一补上。只有存在实质性覆盖缺口时才扩展已有 fixture；不要为了维持测试数量而新建测试框架。
+
+参见 [Randy Coulman 的 Tautological Tests](https://randycoulman.com/blog/2016/12/20/tautological-tests/)，了解独立预期结果与仅仅重复实现的断言之间的区别。
+
 ## 本地检查
 
 从仓库根目录运行检查，并用实际变更路径或键替换占位符。
@@ -58,14 +72,14 @@ bash -n runners/launch_<cluster>.sh
 ### 先精确配置，再过滤配置族
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
-  utils/matrix_logic/generate_sweep_configs.py test-config \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+  python -m infx.matrix.generate test-config \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --config-keys <exact-key>
 
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
-  utils/matrix_logic/generate_sweep_configs.py full-sweep \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+  python -m infx.matrix.generate full-sweep \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --model-prefix <prefix> \
@@ -83,23 +97,37 @@ uv run --no-project --with pydantic --with pyyaml --python 3.12 \
 | --- | --- |
 | 矩阵模式或生成 | `python -m pytest utils/matrix_logic/ -v` |
 | Changelog 内容或 PR 门禁 | `python -m pytest utils/test_process_changelog.py utils/changelog_gate_tests/ -v` |
-| 结果处理 | `python -m pytest utils/test_process_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
-| 评测分发、批处理或补丁 | `python -m pytest utils/evals/ -v` |
+| 结果处理与拓扑 | `python -m pytest utils/test_process_result.py utils/agentic/aggregation/test_process_agentic_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
+| AgentX 聚合与工件加载 | `python -m pytest utils/agentic/aggregation/ -v` |
+| 评测分发、批处理或补丁 | `python -m pytest infx/evals/ -v` |
 | 评测收集 | `python -m pytest utils/test_collect_eval_results.py -v` |
-| 扫描复用或可复用制品 | `python -m pytest utils/test_find_reusable_sweep_run.py utils/test_validate_reusable_sweep_artifacts.py -v` |
+| 扫描复用或可复用制品 | `python -m pytest utils/test_github.py utils/test_find_reusable_sweep_run.py utils/test_acknowledge_sweep_reuse.py utils/test_validate_reusable_sweep_artifacts.py -v` |
 
 若编辑了 changelog，还要使用真实 base 和 head ref 运行 setup 所用的同一矩阵兼容性验证器：
 
 ```bash
-python3 utils/validate_perf_changelog.py \
+python3 -m infx.workflows.validate_perf_changelog \
   --changelog-file perf-changelog.yaml \
   --base-ref <base-ref> \
   --head-ref <head-ref>
 ```
 
-其契约实现在 [`validate_perf_changelog.py`](../utils/validate_perf_changelog.py) 中。该检查会验证生成矩阵并拒绝禁止的内容变更，但其差异读取器可能看不到仅空白的历史删除。应把精确字节差异检查作为独立证据门禁；不要改写或规范化 `perf-changelog.yaml` 历史字节。
+其契约实现在 [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py) 中。该检查会验证生成矩阵并拒绝禁止的内容变更，但其差异读取器可能看不到仅空白的历史删除。应把精确字节差异检查作为独立证据门禁；不要改写或规范化 `perf-changelog.yaml` 历史字节。
 
 本地矩阵不能证明 Slurm 分配或 llm-d 端点发现。多节点配方变更仍然需要上游配方检查器，并在目标集群上实际执行；详见[配置验证](./configuration-procedures.md#validate)。
+
+### 并行运行完整本地测试套件
+
+现有 Python 测试套件也覆盖工作流契约。`utils/matrix_logic/test_validation.py` 测试工作流输入模式，并使用受控的生成器输出执行两个准备脚本。非法数据行必须在发布作业输出前失败；合法数据行必须保持不变，包括手动分派测量旧 checkout 的情况。`utils/test_process_result.py` 通过记录环境的启动器执行实际启动步骤，覆盖当前和旧版 checkout。这些测试不模拟 GitHub 表达式引擎，也不证明 GPU 性能；表达式修改需结合工作流验证和适用的 smoke 证据进行审查。
+
+安装好测试所需依赖后，在同一 Python 环境中添加 [`pytest-xdist`](https://pytest-xdist.readthedocs.io/en/stable/distribution.html)，使用四个 worker 运行全部本地测试套件：
+
+```bash
+python -m pip install pytest-xdist
+python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
+```
+
+串行调试时使用 `-n 0`。测试必须隔离临时文件和端口，并确保各 worker 收集到的参数化用例一致。changelog-gate CI 任务同样使用四个 worker；并行执行不改变其测试范围和断言。
 
 ## 冒烟、扫描与评测
 
@@ -122,7 +150,7 @@ python3 utils/validate_perf_changelog.py \
 
 吞吐与评测是独立任务。默认扫描对选中的 8k1k 子集进行评测；`all-evals` 扩大评测选择，`evals-only` 抑制吞吐。根据变更范围选择修饰标签，但不要用仅评测或预检运行替代所需的全量扫描。
 
-评测完成不能只看绿色任务。保留并检查 `meta_env.json`、`results*.json` 文件、分数验证输出、推理镜像和聚合评测制品。[`utils/evals/EVALS.md`](../utils/evals/EVALS.md) 负责任务与制品行为。[`validate_scores.py`](../utils/evals/validate_scores.py) 会拒绝缺失结果文件、低于阈值的分数和没有任何已检查指标的运行；当存在预期并发元数据时，它还会拒绝无效、不完整或失败的批次。工作流调用时没有传入 `--expected-concs`，因此评审者必须独立验证单并发制品中的 `meta_env.json`。
+评测完成不能只看绿色任务。保留并检查 `meta_env.json`、`results*.json` 文件、分数验证输出、推理镜像和聚合评测制品。[`utils/evals/EVALS.md`](../utils/evals/EVALS.md) 负责任务与制品行为。[`validate_scores.py`](../infx/evals/validate_scores.py) 会拒绝缺失结果文件、低于阈值的分数和没有任何已检查指标的运行；当存在预期并发元数据时，它还会拒绝无效、不完整或失败的批次。工作流调用时没有传入 `--expected-concs`，因此评审者必须独立验证单并发制品中的 `meta_env.json`。
 
 ## 证据标准
 

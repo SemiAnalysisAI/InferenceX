@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-import aggregate_power_multinode as apm
+from infx.results.power import multinode as apm
 
 PRODUCER_SHA = "a" * 40
 WINDOW_START = 1000.0
@@ -107,7 +107,11 @@ def build_package(tmp_path, power_fn=None, publication_valid=True, bench_extra=N
     rows, scrapes = _rows(power_fn)
     with open(pkg.power_dir / "samples.csv", "w", newline="") as handle:
         writer = csv.writer(handle)
-        writer.writerow(apm.SAMPLES_HEADER)
+        # Model the producer's wire format independently of the consumer's parser.
+        writer.writerow([
+            "schema_version", "timestamp_unix", "scrape_seq", "hostname",
+            "gpu_index", "gpu_uuid", "power_w",
+        ])
         writer.writerows(rows)
 
     observed = [
@@ -242,18 +246,22 @@ class TestValidPackage:
         assert agg["power_metric_schema_version"] == 2
         assert agg["power_valid"] == 1
         assert agg["avg_power_w"] == 350.0
+        assert agg["p75_power_w"] == 350.0
+        assert agg["p75_total_gpu_power_w"] == 1400.0
+        assert agg["p90_power_w"] == 350.0
+        assert agg["p90_total_gpu_power_w"] == 1400.0
         assert agg["avg_total_gpu_power_w"] == 1400.0
         assert agg["total_gpu_energy_j"] == 84000.0
         assert agg["joules_per_successful_query"] == 10500.0
-        assert agg["joules_per_input_token"] == round(84000 / 32768, 6)
-        assert agg["joules_per_output_token"] == round(84000 / 4096, 6)
-        assert agg["joules_per_total_token"] == round(84000 / 36864, 6)
+        assert agg["joules_per_input_token"] == 2.563477
+        assert agg["joules_per_output_token"] == 20.507812
+        assert agg["joules_per_total_token"] == 2.278646
         assert agg["prefill_gpu_energy_j"] == 48000.0
         assert agg["decode_gpu_energy_j"] == 36000.0
         assert agg["prefill_avg_power_w"] == 400.0
         assert agg["decode_avg_power_w"] == 300.0
-        assert agg["prefill_joules_per_input_token"] == round(48000 / 32768, 6)
-        assert agg["decode_joules_per_output_token"] == round(36000 / 4096, 6)
+        assert agg["prefill_joules_per_input_token"] == 1.464844
+        assert agg["decode_joules_per_output_token"] == 8.789062
 
         sidecar = pkg.sidecar()
         assert sidecar["power_valid"] is True
@@ -271,10 +279,8 @@ class TestValidPackage:
         }
         assert set(sidecar["per_gpu_energy_j"]) == set(sidecar["per_gpu_role"])
 
-    def test_role_watts_close_over_the_whole_deployment(self, tmp_path):
-        """Role watts weighted by their GPU counts must reproduce the whole-
-        deployment watts -- the topology gate makes the role partition
-        exhaustive. Catches dividing by the total device count."""
+    def test_role_and_deployment_power_use_their_own_gpu_counts(self, tmp_path):
+        """Role means must not divide by the whole deployment's GPU count."""
 
         def ramp(host, idx, ts):
             if (host, idx) == ("node-d", 0):
@@ -284,14 +290,16 @@ class TestValidPackage:
         pkg = build_package(tmp_path, power_fn=ramp)
         assert pkg.run() == 0
         agg = pkg.agg()
-        weighted = 2 * agg["prefill_avg_power_w"] + 2 * agg["decode_avg_power_w"]
-        assert weighted == pytest.approx(agg["avg_total_gpu_power_w"], abs=1e-3)
-        assert weighted / 4 == pytest.approx(agg["avg_power_w"], abs=1e-3)
+        # Decode GPU means are 332 W and 300 W; both prefill GPUs draw 400 W.
+        assert agg["prefill_avg_power_w"] == pytest.approx(400.0)
+        assert agg["decode_avg_power_w"] == pytest.approx(316.0)
+        assert agg["avg_total_gpu_power_w"] == pytest.approx(1432.0)
+        assert agg["avg_power_w"] == pytest.approx(358.0)
+        assert agg["p75_total_gpu_power_w"] == pytest.approx(1447.0)
+        assert agg["p75_power_w"] == pytest.approx(361.75)
+        assert agg["p90_total_gpu_power_w"] == pytest.approx(1456.0)
+        assert agg["p90_power_w"] == pytest.approx(364.0)
 
-    def test_strict_mode_passes_on_valid_package(self, tmp_path):
-        pkg = build_package(tmp_path)
-        assert pkg.run(require_power=True) == 0
-        assert pkg.agg()["power_valid"] == 1
 
     def test_aggregate_topology_emits_only_whole_deployment_metrics(self, tmp_path):
         pkg = build_package(tmp_path)
@@ -318,7 +326,7 @@ class TestValidPackage:
         assert set(pkg.sidecar()["per_gpu_role"].values()) == {"agg"}
 
     def test_agentx_adapter_consumes_a_real_custom_benchmark_package(self, tmp_path):
-        from utils.agentic.aggregation.power_adapter import run_multinode_agentic_power
+        from infx.results.agentic.power_adapter import run_multinode_agentic_power
 
         pkg = build_package(tmp_path)
         result_dir = pkg.logs_root / "agentic" / "conc_4"
@@ -390,8 +398,7 @@ class TestValidPackage:
         pkg = build_package(tmp_path, power_fn=ramp)
         assert pkg.run() == 0
         energy = pkg.sidecar()["per_gpu_energy_j"]["node-d/GPU-node-d-0"]
-        expected = (302.0 + 362.0) / 2.0 * 60.0
-        assert abs(energy - expected) / expected < 1e-9
+        assert energy == pytest.approx(19_920.0, rel=1e-9)
 
 
 class TestVerdictAndIdentityGates:

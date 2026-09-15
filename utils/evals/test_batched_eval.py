@@ -6,8 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from validate_scores import main as validate_scores_main
-from validate_scores import validate_batch_manifest
+from infx.evals.validate_scores import main as validate_scores_main
+from infx.evals.validate_scores import validate_batch_manifest
 
 
 def _run_batched_eval(
@@ -227,55 +227,101 @@ def test_validate_scores_checks_threshold_for_every_concurrency(
     assert "FAIL: [conc=4] gsm8k exact_match,strict-match" in captured.err
 
 
-def test_amd_multinode_container_forwards_eval_concurrency_list() -> None:
-    launcher = (
-        Path(__file__).resolve().parents[2]
-        / "runners"
-        / "launch_mi355x-amds-srt.sh"
-    )
-    contents = launcher.read_text()
+def test_validate_scores_reports_integration_failure_without_thresholding(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    result_path = tmp_path / "results_test.json"
+    result_path.write_text(json.dumps({
+        "integration_error": {
+            "type": "RuntimeError",
+            "message": "vendor verifier checkout failed",
+        },
+        "results": {
+            "gsm8k": {
+                "exact_match,strict-match": 0.0,
+            },
+        },
+        "n-samples": {"gsm8k": {"effective": 0}},
+    }))
+    monkeypatch.setattr(sys, "argv", [
+        "validate_scores.py",
+        "--meta-env",
+        str(tmp_path / "meta_env.json"),
+        "--results-glob",
+        str(result_path),
+    ])
 
-    assert '    "EVAL_CONC",' in contents
-    assert 'benchmark_env[key] = value' in contents
-    assert (
-        'benchmark_env["SRTCTL_LM_EVAL_RESULT_DIR"] = "/results/{job_id}/eval"'
-        in contents
-    )
-    assert 'export EVAL_SERVER_HOST="${SRT_FRONTEND_HOST}"' in contents
-    assert 'export SRTCTL_LM_EVAL_RESULT_DIR="${eval_root}"' in contents
-    assert 'copy_eval_artifacts "$RESULT_DIR/eval"' in contents
-
-    workflow = (
-        Path(__file__).resolve().parents[2]
-        / ".github"
-        / "workflows"
-        / "benchmark-multinode-tmpl.yml"
-    ).read_text()
-    assert 'expected_concs="${EVAL_CONC}"' in workflow
-    assert 'validate_scores.py --expected-concs "${expected_concs}"' in workflow
-
-
-def test_amd_srt_launcher_streams_canonical_slurm_stdout() -> None:
-    launcher = (
-        Path(__file__).resolve().parents[2]
-        / "runners"
-        / "launch_mi355x-amds-srt.sh"
-    ).read_text()
-
-    assert 'source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"' in launcher
-    assert 'LOG_FILE="${OUTPUT_LOG_DIR}/sweep_${JOB_ID}.log"' in launcher
-    assert 'stream_slurm_job_log "$JOB_ID" "$LOG_FILE"' in launcher
+    assert validate_scores_main() == 1
+    captured = capsys.readouterr()
+    assert "integration failure: RuntimeError: vendor verifier checkout failed" in captured.err
+    assert "gsm8k exact_match,strict-match" not in captured.err
 
 
-def test_amd_srt_launcher_preserves_mori_dispatch_pin() -> None:
-    launcher = (
-        Path(__file__).resolve().parents[2]
-        / "runners"
-        / "launch_mi355x-amds-srt.sh"
-    ).read_text()
+def test_validate_scores_rejects_invalid_effective_count_without_thresholding(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    result_path = tmp_path / "results_test.json"
+    result_path.write_text(json.dumps({
+        "results": {
+            "gsm8k": {
+                "exact_match,strict-match": 0.0,
+            },
+            "other": {
+                "exact_match,strict-match": 0.0,
+            },
+            "nonfinite": {
+                "exact_match,strict-match": 1.0,
+            },
+        },
+        "n-samples": {
+            "gsm8k": {"effective": "unknown"},
+            "other": {"effective": 0},
+            "nonfinite": {"effective": float("inf")},
+        },
+    }))
+    monkeypatch.setattr(sys, "argv", [
+        "validate_scores.py",
+        "--meta-env",
+        str(tmp_path / "meta_env.json"),
+        "--results-glob",
+        str(result_path),
+    ])
 
-    assert 'decode_environment.setdefault(' in launcher
-    assert '"SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK", str(dispatch_tokens)' in launcher
-    assert '"SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD"' in launcher
-    assert 'if "MORI_MAX_DISPATCH_TOKENS_DECODE" in decode_environment:' in launcher
-    assert "dispatch_tokens * (mtp_size + 1)" in launcher
+    assert validate_scores_main() == 1
+    captured = capsys.readouterr()
+    assert "gsm8k invalid effective sample count: 'unknown'" in captured.err
+    assert "gsm8k exact_match,strict-match" not in captured.err
+    assert "other invalid effective sample count: 0" in captured.err
+    assert "other exact_match,strict-match" not in captured.err
+
+    assert "nonfinite invalid effective sample count: inf" in captured.err
+    assert "nonfinite exact_match,strict-match" not in captured.err
+
+def test_validate_scores_accepts_legacy_result_without_effective_count(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    result_path = tmp_path / "results_test.json"
+    result_path.write_text(json.dumps({
+        "results": {
+            "gsm8k": {
+                "exact_match,strict-match": 1.0,
+            },
+        },
+    }))
+    monkeypatch.setattr(sys, "argv", [
+        "validate_scores.py",
+        "--meta-env",
+        str(tmp_path / "meta_env.json"),
+        "--results-glob",
+        str(result_path),
+    ])
+
+    assert validate_scores_main() == 0
+    captured = capsys.readouterr()
+    assert "PASS: gsm8k exact_match,strict-match" in captured.out

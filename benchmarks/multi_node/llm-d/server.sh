@@ -556,12 +556,13 @@ PY
     IFS='x' read -r -a CONCURRENCIES <<< "$BENCH_MAX_CONCURRENCY"
     # GPU counts embedded in the result filename as _gpus_/_ctx_/_gen_ tokens so the
     # CI "Process result" step (benchmark-multinode-tmpl.yml) can parse them and run
-    # process_result.py for llm-d using the standard InferenceX filename convention.
+    # process_result.py for llm-d -- same filename convention as amd_utils/bench.sh.
     # ctx = prefill GPUs, gen = decode GPUs; nodes*GPUS_PER_NODE is correct for any
     # PREFILL_WORKERS/DECODE_WORKERS split (e.g. high-tpt 2P -> 16 prefill GPUs).
     _bench_prefill_gpus=$(( PREFILL_NODES * GPUS_PER_NODE ))
     _bench_decode_gpus=$(( DECODE_NODES * GPUS_PER_NODE ))
     _bench_total_gpus=$(( _bench_prefill_gpus + _bench_decode_gpus ))
+    if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
     for max_concurrency in "${CONCURRENCIES[@]}"; do
         num_prompts=$(( max_concurrency * BENCH_NUM_PROMPTS_MULTIPLIER ))
         [[ "$num_prompts" -lt 16 ]] && num_prompts=16
@@ -601,6 +602,7 @@ PY
             "${bench_extra_args[@]}" \
             || echo "WARNING: benchmark conc=$max_concurrency failed/timed out (rc=$?)"
     done
+    fi
 
     # ---- Eval (optional) ----
     if [[ "${RUN_EVAL:-false}" == "true" ]]; then
@@ -624,7 +626,7 @@ PY
         # the host-side workflow checks look; the subshell keeps the cd local.
         (
             cd /workspace
-            run_eval --framework lm-eval --port "$ENVOY_PORT"
+            run_eval --port "$ENVOY_PORT"
             append_lm_eval_summary
         )
     fi

@@ -103,19 +103,19 @@ Required permissions (all of these endpoints require **admin access to the repos
      <ADDITIONAL_RUNNER_TAGS>
    ```
 
-   For example, configure 14 runners (`b300-nv_00` … `b300-nv_13`) on the B300 cluster:
+   For example, configure 18 runners (`b300-dsxe_00` … `b300-dsxe_17`) on the B300 DSXE cluster:
 
    ```bash
    ./InferenceX/utils/runner_setup/setup.sh \
      AOPHAHI... \
      https://github.com/actions/runner/releases/download/v2.335.1/actions-runner-linux-x64-2.335.1.tar.gz \
-     0 13 \
+     0 17 \
      ~/gharunners \
-     b300-nv \
+     b300-dsxe \
      slurm,b300
    ```
 
-   This creates `gharunner00/actions-runner` … `gharunner13/actions-runner` under the
+   This creates `gharunner00/actions-runner` … `gharunner17/actions-runner` under the
    base directory, all sharing one downloaded tarball.
 
 5. Start the runners:
@@ -134,7 +134,7 @@ Required permissions (all of these endpoints require **admin access to the repos
 ## Naming convention — read this before picking `BASE_RUNNER_NAME`
 
 Runner names are **load-bearing**. Each runner is named `<BASE_RUNNER_NAME>_<NN>`
-(zero-padded two-digit index), e.g. `b300-nv_07`, and two pieces of CI infrastructure
+(zero-padded two-digit index), e.g. `b300-dsxe_07`, and two pieces of CI infrastructure
 key off that name:
 
 1. **The launch script is selected from the name prefix.** The benchmark workflows run
@@ -144,7 +144,7 @@ key off that name:
    ```
 
    Everything before the first `_` must match an existing script in
-   [`runners/`](../../runners). For example, runner `b300-nv_07` maps to `runners/launch_b300-nv.sh`.
+   [`runners/`](../../runners). For example, runner `b300-dsxe_07` maps to `runners/launch_b300-dsxe.sh`.
    For a brand-new cluster, add a `runners/launch_<BASE_RUNNER_NAME>.sh` first.
    Corollary: `BASE_RUNNER_NAME` itself must not contain `_` (use hyphens).
 
@@ -170,7 +170,7 @@ key off that name:
 - Optional capacity tags, such as `b300-p1`, carve out dedicated
   benchmark subsets.
 
-The per-runner name label (`b300-nv_07`) is what `runs-on` resolves for sweep jobs, so
+The per-runner name label (`b300-dsxe_07`) is what `runs-on` resolves for sweep jobs, so
 always keep it (the script appends it automatically). A typical registered runner ends
 up with labels like:
 

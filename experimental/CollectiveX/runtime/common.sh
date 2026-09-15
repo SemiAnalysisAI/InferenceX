@@ -21,18 +21,45 @@ COLLX_DEEPEP_V2_REPO="https://github.com/deepseek-ai/DeepEP"
 # resolution for pip wheels. The backend cache is keyed on this value, so a change forces a rebuild.
 COLLX_DEEPEP_V2_COMMIT="01dc3aaac82068020353dce2c302e38153c0bfaa"
 
+# NVSHMEM wheel for the DeepEP V2 build. Must match the image's CUDA line: the cu12
+# wheel's r12 host library on the cu130 images survives on sm90/sm100 but poisons the
+# CUDA context during symmetric-heap init over MNNVL on sm103 (gb300) — buffer creation
+# returns, then every subsequent CUDA call fails cudaErrorUnknown. Stock in-image deep_ep
+# (built against this exact cu13 wheel) runs clean on the same nodes/driver, which is how
+# the wheel was isolated. Folded into the venv cache key, so a change forces a rebuild.
+COLLX_DEEPEP_V2_NVSHMEM_SPEC="nvidia-nvshmem-cu13==3.4.5"
+
+# Torch for the DeepEP V2 venv. 2.10.0+cu130's bundled CUDA userland poisons the CUDA
+# context during nvshmem symmetric-heap init over MNNVL on sm103/driver 580.159.03 (gb300):
+# buffer creation returns, every rank's next CUDA call fails cudaErrorUnknown. Isolated by
+# a same-recipe venv that differs ONLY in torch (2.11.0 green, 2.10.0 red, on the same
+# nodes; jobs 27760 vs 27430) — the pin, the nvshmem wheel, the rack and the driver were
+# each falsified first. 2.11.0 is also what the cu130 image itself ships. Folded into the
+# venv cache key, so a change forces a rebuild.
+COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
+
+# Build-recipe generation for the DeepEP venv cache key. Bump when the BUILD FLAGS
+# change without any pin changing — "dlarch1" marks the fix that pins the RDC
+# device-link arch via NVCC_PREPEND_FLAGS (the bare dlink defaulted to sm_75 and
+# produced unloadable kernels; venvs built before this carry .ready and would
+# otherwise be reused broken).
+COLLX_DEEPEP_V2_BUILD_GEN="dlarch1"
+
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
 
-# NCCL EP (NVIDIA's native MoE dispatch/combine on the NCCL Device API). Primary path is the
-# published nccl4py wheel — it bundles libnccl_ep.so's JIT runtime and pulls the matching
-# nvidia-nccl-cu13 (>= 2.30, carrying the Device API + GIN nccl.ep needs). The from-source pins
-# below are the fallback, deferred until on-metal bring-up shows the wheel is insufficient:
-# contrib/nccl_ep is absent from the v2.29.x / v2.30.4 release tags, so any such build must use
-# this post-merge master commit (which contains contrib/nccl_ep), NOT a release tag.
-COLLX_NCCL4PY_SPEC="nccl4py[cu13]==0.3.1"
-COLLX_NCCL_EP_REPO="https://github.com/NVIDIA/nccl"
-COLLX_NCCL_EP_COMMIT="9d22d5dfec8391ee65b56df139d471f8e08e921e"
+# NCCL EP v0.2 (NVIDIA's native MoE dispatch/combine on the NCCL Device API). Shipped as the
+# nccl-extensions package (github.com/NVIDIA/nccl-extensions): it owns the nccl.ep module
+# (libnccl_ep.so JIT runtime + bindings) — nccl4py stopped bundling nccl/ep at 0.4 — and pulls
+# nccl4py for nccl.core plus nvidia-nccl-cu13==2.30.7 (Device API + GIN). nccl4py is pinned
+# alongside so a cache rebuild resolves the same tree instead of whatever pip picks that day.
+# v0.2 ships the combine-recv fence the v0.1 port of DeepEP lacked (the #642 analogue:
+# fence_view_async_shared before mbarrier_arrive(emptyBarriers) in ll_ep.cuh — present in the
+# published wheel's headers), which is what releases the low-latency ladder clamp, and fixes
+# the x86 EP16 GIN fault on B200. Two whitespace-separated pip specs: the install site
+# word-splits this deliberately, and the whole string keys the shared cache dir, so this
+# change forces a reinstall.
+COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.1.0 nccl4py[cu13]==0.5.0"
 
 # Print bounded command output without maintaining a parallel failure taxonomy.
 collx_log_tail() {

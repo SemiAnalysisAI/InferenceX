@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Submit a multi-node llmd-vllm wide-EP P/D disagg benchmark job to SLURM.
-# Prints JOB_ID on stdout so the runner can poll for completion.
+# Modeled after benchmarks/multi_node/amd_utils/submit.sh; prints JOB_ID on
+# stdout so the runner can poll for completion.
 #
 # Topology (matches the llm-d wide-EP guide reference):
 #   1 prefill instance with DP=PREFILL_NODES * GPUS_PER_NODE
@@ -78,6 +79,15 @@ export BENCH_NUM_PROMPTS_MULTIPLIER="${BENCH_NUM_PROMPTS_MULTIPLIER:-10}"
 export RUN_EVAL="${RUN_EVAL:-false}"
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 export EVAL_CONC="${EVAL_CONC:-}"
+export EVAL_FRAMEWORK="${EVAL_FRAMEWORK:-lm-eval}"
+export EVAL_LIMIT="${EVAL_LIMIT:-}"
+export EVAL_SUITE="${EVAL_SUITE:-}"
+export SWEBENCH_GEN_MODE="${SWEBENCH_GEN_MODE:-}"
+export SWEBENCH_USE_MODAL="${SWEBENCH_USE_MODAL:-false}"
+export MODAL_TOKEN_ID="${MODAL_TOKEN_ID:-}"
+export MODAL_TOKEN_SECRET="${MODAL_TOKEN_SECRET:-}"
+export IS_AGENTIC="${IS_AGENTIC:-0}"
+export SCENARIO_TYPE="${SCENARIO_TYPE:-}"
 export FRAMEWORK="${FRAMEWORK:-llmd-vllm}"
 export PRECISION="${PRECISION:-}"
 export MODEL_PREFIX="${MODEL_PREFIX:-}"

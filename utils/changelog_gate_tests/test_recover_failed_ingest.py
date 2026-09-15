@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from recover_failed_ingest import (
+from infx.workflows.recover_failed_ingest import (
     RecoveryError,
     audit_changelog_bytes,
     create_synthetic_commit,
@@ -14,10 +15,33 @@ from recover_failed_ingest import (
     validate_reconstruction,
     validate_recovery_workflow,
 )
-from validate_perf_changelog import ChangelogValidationError
+from infx.workflows.validate_perf_changelog import ChangelogValidationError
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+@pytest.mark.parametrize("packaged", [False, True])
+def test_recovery_runs_the_selected_revisions_available_entrypoint(tmp_path, monkeypatch, packaged):
+    import infx.workflows.recover_failed_ingest as recovery
+
+    # The historical generator is a subprocess collaborator. Its fixture reads
+    # the selected checkout's data, without duplicating any matrix algorithm.
+    script = tmp_path / ("infx/matrix/plan.py" if packaged else "utils/process_changelog.py")
+    script.parent.mkdir(parents=True)
+    if packaged:
+        (tmp_path / "infx/__init__.py").touch()
+        (tmp_path / "infx/matrix/__init__.py").touch()
+    script.write_text('print(open("matrix.json").read())\n')
+    entry = {"pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1"}
+    matrix = {"single_node": {"8k1k": [{"conc": 16}]},
+              "changelog_metadata": {"entries": [entry]}}
+    (tmp_path / "matrix.json").write_text(json.dumps(matrix))
+    monkeypatch.setattr(recovery, "create_synthetic_commit", lambda *args: ("fixed", [entry]))
+    output, metadata = tmp_path / "config.json", tmp_path / "metadata.json"
+    result = recovery.build_config(tmp_path, "base", "merge", 1, "perf-changelog.yaml", output, metadata)
+    assert result["synthetic_sha"] == "fixed"
+    assert result["fixed_rows"] == 1
+    assert result["agentic_rows"] == result["eval_jobs"] == 0
+    assert json.loads(output.read_text())["single_node"] == {"8k1k": [{"conc": 16}]}
+    assert json.loads(metadata.read_text()) == {"entries": [entry], "base_ref": "base", "head_ref": "merge"}
 
 
 def block(key: str, link: str) -> bytes:
@@ -310,18 +334,3 @@ def test_synthetic_commit_uses_base_tree_plus_only_changelog(
         "perf-changelog.yaml"
     )
     assert git("show", f"{fixed_sha}:other.txt") == "base"
-
-
-def test_recovery_command_uses_normal_sweep_reuse_path() -> None:
-    command = (
-        REPO_ROOT / ".claude/commands/recover-failed-ingest.md"
-    ).read_text()
-
-    assert "git commit-tree" in command
-    assert '-p "$TARGET_PARENT"' in command
-    assert '-p "$SOURCE_HEAD_SHA"' in command
-    assert "/reuse-sweep-run $SOURCE_RUN_ID" in command
-    assert "full-sweep-enabled" in command
-    assert "Create the guarded recovery workflow" not in command
-    assert "validate-workflow" not in command
-    assert 'gh workflow run "recover-pr-' not in command

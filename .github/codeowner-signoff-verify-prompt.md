@@ -71,7 +71,7 @@ Then decide:
 The merge standard (and InferenceX's own reuse gate) requires a green full sweep,
 including evals, on a commit that is CURRENTLY part of this PR. A sweep that ran on a
 commit later rebased/force-pushed out does NOT count: at merge, `merge_with_reuse.sh`
-→ `validate_reusable_run` (in `utils/find_reusable_sweep_run.py`) rejects any source
+→ `validate_reusable_run` (in `infx/workflows/reuse.py`) rejects any source
 whose `head_sha` is not in `GET /pulls/<n>/commits`. So the whole question collapses
 to one fact: does a commit still in this PR carry green, executed sweep/eval checks?
 

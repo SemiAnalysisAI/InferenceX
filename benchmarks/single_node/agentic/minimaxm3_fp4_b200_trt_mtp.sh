@@ -11,12 +11,14 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-export EVAL_FRAMEWORK="lm-eval"
+export EVAL_FRAMEWORK="${EVAL_FRAMEWORK:-lm-eval}"
 
-check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EVAL_ONLY
+check_env_vars MODEL TP CONC PORT KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EVAL_ONLY
 
 DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3-GQA"
 NUM_SPEC_TOKENS=3
+export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/prometheus/metrics"
+export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="trtllm_kv_cache_utilization"
 # Golden AL for the GQA draft head: golden_al_distribution/minimaxm3_eagle3_gqa.yaml
 # minimax-m3.thinking_on[3].
 
@@ -43,6 +45,13 @@ fi
 nvidia-smi
 resolve_trace_source
 install_agentic_deps
+# rc23 gates Prometheus and its expensive per-step timing collector behind the
+# same option. Keep Prometheus request/iteration metrics without timing payloads.
+disable_trtllm_detailed_perf_metrics
+
+# BFCL's stock OpenAI client sends the standard `store=false` field. TRT-LLM
+# 1.3 rejects that field even though this server never persists responses.
+python3 "$(dirname "$0")/../../../runners/patch_trtllm_chat_store.py"
 
 # kv_cache_config.host_cache_size is pinned per topology in ser.yaml below
 # (200 GiB at TP8, 250 GiB at TP4 -- see $mem_off), NOT derived from
@@ -136,6 +145,8 @@ trust_remote_code: true
 reasoning_parser: minimax_m3
 stream_interval: 20
 print_iter_log: true
+enable_iter_perf_stats: true
+return_perf_metrics: true
 num_postprocess_workers: 8
 enable_attention_dp: false
 EOF
