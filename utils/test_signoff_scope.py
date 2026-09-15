@@ -157,7 +157,7 @@ def test_unowned_changes_publish_not_applicable_and_disable_verifier(scope_case,
     assert output.read_text() == "required=false\npr-number=7\nhead-sha=head\n"
     assert scope_case["statuses"] == [{
         "context": "codeowner-signoff-verify", "state": "success",
-        "description": "Not applicable: no non-admin/non-core CODEOWNER changes",
+        "description": "N/A",
     }]
 
 

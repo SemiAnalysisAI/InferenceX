@@ -69,7 +69,7 @@ def check_scope(repo: str, number: int, token: str) -> dict[str, str]:
             data={
                 "context": "codeowner-signoff-verify",
                 "state": "success",
-                "description": "Not applicable: no non-admin/non-core CODEOWNER changes",
+                "description": "N/A",
             },
         )
     return {
