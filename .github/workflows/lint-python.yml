@@ -3,20 +3,19 @@ name: Lint Python
 on:
   pull_request:
     paths:
-      - 'infx/**'
+      - '**/*.py'
+      - 'infx/ruff.toml'
       - '.github/workflows/lint-python.yml'
   push:
     branches:
       - main
     paths:
-      - 'infx/**'
+      - '**/*.py'
+      - 'infx/ruff.toml'
       - '.github/workflows/lint-python.yml'
 
 permissions:
   contents: read
-
-env:
-  RUFF_VERSION: "0.16.7"
 
 jobs:
   ruff:
@@ -33,7 +32,7 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: ruff check
-        run: uvx "ruff==${RUFF_VERSION}" check --output-format=github infx
+        run: uvx --exclude-newer PT12H ruff@latest check --output-format=github infx
 
       - name: ruff format --check
-        run: uvx "ruff==${RUFF_VERSION}" format --check --diff infx
+        run: uvx --exclude-newer PT12H ruff@latest format --check --diff infx

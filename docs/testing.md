@@ -59,6 +59,17 @@ See [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/2
 
 Run checks from the repository root and replace placeholders with the exact changed path or key.
 
+### Python lint and formatting
+
+Ruff checks `infx/` with the rules in [`infx/ruff.toml`](../infx/ruff.toml), targeting Python 3.12 and a line length of 100. CI runs on any Python-file change and uses the latest Ruff release at least 12 hours old.
+
+```bash
+uvx --exclude-newer PT12H ruff@latest check --fix infx
+uvx --exclude-newer PT12H ruff@latest format infx
+```
+
+Fix findings where practical. Justified exceptions use inline `# noqa: CODE`; unused ignores are checked. Preview rules and automatic unsafe fixes are not enabled.
+
 ### Parse and syntax
 
 ```bash
@@ -173,7 +184,7 @@ Record enough information for another reviewer to reproduce the claim without gu
 3. **Before CODEOWNER sign-off:** follow [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md), including its code-quality, architecture, image provenance, upstream recipe, patch/waiver, chat-template, and AgentX requirements where applicable.
 4. **For sweep/eval acceptance:** at least one commit currently in the PR has successful, non-skipped executed `single-node */` and `eval /` checks. A successful `collect-evals` alone is insufficient. Download the corresponding eval artifacts and confirm non-empty, passing accuracy and the same inference image. These are the executable rules in [verifier Checks 1 and 2](../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr).
 5. **For reuse at merge:** an authorized `OWNER`, `MEMBER`, or `COLLABORATOR` posts a whole-line `/reuse-sweep-run` command (optionally with the eligible source run ID) before the supported merge path. The verifier treats a missing or unauthorized command as a failure. See [verifier Check 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted) and [the reuse procedure](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep).
-6. **At merge:** a CODEOWNER's exact sign-off needs one independent PASS from [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml). Automation preserves acceptance with `codeowner-signoff-verified` and carries the required status onto subsequent heads without rerunning Claude, including after rebases. Each actual verification updates one PR verdict comment with the assessed SHA; carrying a PASS forward does not attest to review of new commits. Deleting the comment does not reset acceptance, and manual reassessment cannot revoke an earlier PASS. See [the contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off) for comment recovery and manual dispatch.
+6. **At merge:** the current head needs the CODEOWNER sign-off status defined in [the contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off). That guide owns verification, admin-update retention, revocation, and recovery rules.
 7. **After merge:** the author confirms the main-branch jobs pass, as required by [`CONTRIBUTING.md`](../CONTRIBUTING.md#after-merging).
 
 ## Stop conditions

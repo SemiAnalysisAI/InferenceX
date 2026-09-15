@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -12,13 +12,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 def utc(value: str | datetime) -> datetime:
     result = (
-        datetime.fromisoformat(value.replace("Z", "+00:00"))
-        if isinstance(value, str)
-        else value
+        datetime.fromisoformat(value.replace("Z", "+00:00")) if isinstance(value, str) else value
     )
     if result.tzinfo is None:
         raise ValueError("timestamp requires a timezone")
-    return result.astimezone(timezone.utc)
+    return result.astimezone(UTC)
 
 
 def stamp(value: datetime) -> str:
@@ -27,9 +25,7 @@ def stamp(value: datetime) -> str:
 
 def identity(value: Any) -> str:
     return hashlib.sha256(
-        json.dumps(
-            value, sort_keys=True, separators=(",", ":"), allow_nan=False
-        ).encode()
+        json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     ).hexdigest()
 
 
@@ -54,9 +50,7 @@ class CandidateReview(Contract):
     candidate_id: str = Field(pattern=r"^[0-9a-f]{16}-[0-9a-f]{16}$")
     decision: Literal["proceed", "duplicate", "uncertain"]
     family: str | None = Field(pattern=r"^configs/[^/:]+-master\.yaml:[^\s:]+$")
-    telemetry_clusters: list[
-        Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._+-]{0,63}$")]
-    ]
+    telemetry_clusters: list[Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._+-]{0,63}$")]]
     pull_requests: list[Annotated[int, Field(gt=0)]]
     reason: str = Field(min_length=1)
 
@@ -105,9 +99,7 @@ class CandidateOutcome(Contract):
         "handoff",
         "unexpected-error",
     ]
-    phase: Literal[
-        "resolve", "baseline", "targeted", "final-sweep", "cleanup", "unknown"
-    ]
+    phase: Literal["resolve", "baseline", "targeted", "final-sweep", "cleanup", "unknown"]
     pull_request: Annotated[int, Field(gt=0)] | None
     run_ids: list[Annotated[int, Field(gt=0)]] = Field(max_length=256)
     repairs_used: int | None = Field(ge=0)
@@ -118,9 +110,7 @@ class CandidateOutcome(Contract):
             raise ValueError("Completed outcomes require a known phase")
         if self.outcome in ("validated", "handoff") and self.pull_request is None:
             raise ValueError("This outcome requires a PR")
-        if self.outcome == "validated" and (
-            not self.run_ids or self.phase != "final-sweep"
-        ):
+        if self.outcome == "validated" and (not self.run_ids or self.phase != "final-sweep"):
             raise ValueError("Validated requires final-sweep evidence")
         if len(set(self.run_ids)) != len(self.run_ids):
             raise ValueError("Run IDs must be distinct")

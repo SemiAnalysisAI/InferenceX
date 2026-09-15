@@ -9,14 +9,18 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
-from typing import Annotated, Literal
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Annotated, Literal, Self
 
 from pydantic import AfterValidator, Field, field_validator, model_validator
 
 from . import github
 from .github import VerificationError
 from .models import Contract, identity
+
+if TYPE_CHECKING:
+    from infx.klaud.lifecycle import Session
+
 
 Number = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 SHA = Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
@@ -26,9 +30,7 @@ def public_prose(value: str) -> str:
     # Digest-pinned images are inline code, not GitHub mentions.
     prose = re.sub(r"`[A-Za-z0-9_./:+-]+@sha256:[0-9a-f]{64}`", "", value)
     if any(char in prose for char in ("@", "<", ">", "\n", "|")):
-        raise ValueError(
-            "Use one sentence of public prose without mentions, HTML or tables"
-        )
+        raise ValueError("Use one sentence of public prose without mentions, HTML or tables")
     return value
 
 
@@ -37,9 +39,7 @@ Text = Annotated[str, Field(min_length=1, max_length=700), AfterValidator(public
 
 class Prose(Contract):
     en: Text = Field(description="One concise English sentence")
-    zh: Text = Field(
-        description="Natural Simplified Chinese translation; preserve identifiers"
-    )
+    zh: Text = Field(description="Natural Simplified Chinese translation; preserve identifiers")
 
 
 class Values(Contract):
@@ -105,7 +105,7 @@ class Baseline(Contract):
         return urls
 
     @model_validator(mode="after")
-    def distinct(self):
+    def distinct(self) -> Self:
         unique_points(self.points)
         unique_evals(self.evals)
         return self
@@ -120,9 +120,7 @@ class Attempt(Contract):
     run_attempt: int = Field(gt=0)
     status: Literal["queued", "running", "passed", "failed", "cancelled", "deferred"]
     change: Prose
-    finding: Text | None = (
-        None  # Optional diagnostic evidence, not a visible summary paragraph.
-    )
+    finding: Text | None = None  # Optional diagnostic evidence, not a visible summary paragraph.
     next: Prose
     benchmarks_expected: int = Field(ge=0)
     benchmarks_passed: int = Field(ge=0)
@@ -132,7 +130,7 @@ class Attempt(Contract):
     evals: list[Evaluation] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def consistent(self):
+    def consistent(self) -> Self:
         unique_points(self.points)
         unique_evals(self.evals)
         if (
@@ -140,18 +138,14 @@ class Attempt(Contract):
             or self.evals_passed > self.evals_expected
         ):
             raise ValueError("Passed coverage exceeds expected coverage")
-        if (
-            self.kind == "initial"
-            and self.number != 0
-            or self.kind == "repair"
-            and not 1 <= self.number <= 5
+        if (self.kind == "initial" and self.number != 0) or (
+            self.kind == "repair" and not 1 <= self.number <= 5
         ):
             raise ValueError("Initial update is separate from the five-repair budget")
         if any(
             p.run_id not in (None, self.run_id)
             or p.head not in (None, self.head)
-            or p.run_attempt is not None
-            and p.run_attempt > self.run_attempt
+            or (p.run_attempt is not None and p.run_attempt > self.run_attempt)
             for p in [*self.points, *self.evals]
         ):
             raise ValueError("Attempt point provenance mismatch")
@@ -210,24 +204,18 @@ def values(row: dict) -> Values:
             output_tps_gpu=throughput.get("output_tput_tps"),
             ttft_ms=ttft * 1000 if ttft is not None else None,
             tpot_ms=tpot * 1000 if tpot is not None else None,
-            request_errors=row.get("request_accounting", {}).get(
-                "records_error_dropped"
-            ),
+            request_errors=row.get("request_accounting", {}).get("records_error_dropped"),
         )
     return Values(
         total_tps_gpu=metrics.get("tput_per_gpu"),
         output_tps_gpu=metrics.get("output_tput_per_gpu"),
-        ttft_ms=metrics["mean_ttft"] * 1000
-        if metrics.get("mean_ttft") is not None
-        else None,
-        tpot_ms=metrics["mean_tpot"] * 1000
-        if metrics.get("mean_tpot") is not None
-        else None,
+        ttft_ms=metrics["mean_ttft"] * 1000 if metrics.get("mean_ttft") is not None else None,
+        tpot_ms=metrics["mean_tpot"] * 1000 if metrics.get("mean_tpot") is not None else None,
         request_errors=metrics.get("errors"),
     )
 
 
-def number(value: float | int | None) -> str:
+def number(value: float | None) -> str:
     return "N/A" if value is None else f"{value:,.2f}".rstrip("0").rstrip(".")
 
 
@@ -238,19 +226,13 @@ def delta(old: float | None, new: float | None, comparable: bool = True) -> str:
 
 
 def translated(english: str, chinese: str) -> str:
-    return (
-        english
-        + "\n\n<details>\n<summary>中文</summary>\n\n"
-        + chinese
-        + "\n\n</details>"
-    )
+    return english + "\n\n<details>\n<summary>中文</summary>\n\n" + chinese + "\n\n</details>"
 
 
 def short_label(label: str) -> str:
     def shape(match: re.Match) -> str:
         return "/".join(
-            f"{int(n) // 1024}k" if int(n) > 0 and int(n) % 1024 == 0 else n
-            for n in match.groups()
+            f"{int(n) // 1024}k" if int(n) > 0 and int(n) % 1024 == 0 else n for n in match.groups()
         )
 
     return re.sub(r"\b(\d+)/(\d+)\b", shape, label, count=1)
@@ -260,14 +242,11 @@ def point_layout(points: list[Point]) -> tuple[str, list[str], str]:
     """Factor out only shared settings; retain full labels for ambiguous concurrencies."""
     labels = [short_label(p.label) for p in points]
     shapes = [
-        re.fullmatch(r"(.+) c\d+ (.+)", re.sub(r" [0-9a-f]{6}$", "", label))
-        for label in labels
+        re.fullmatch(r"(.+) c\d+ (.+)", re.sub(r" [0-9a-f]{6}$", "", label)) for label in labels
     ]
     common = {match.groups() for match in shapes if match}
     statistics = {p.values.latency_statistic for p in points}
-    latency = (
-        next(iter(statistics)).capitalize() + " latency" if len(statistics) == 1 else ""
-    )
+    latency = next(iter(statistics)).capitalize() + " latency" if len(statistics) == 1 else ""
     if (
         points
         and all(shapes)
@@ -284,7 +263,7 @@ def point_layout(points: list[Point]) -> tuple[str, list[str], str]:
     if len(statistics) > 1:
         labels = [
             f"{label} · {p.values.latency_statistic}"
-            for label, p in zip(labels, points)
+            for label, p in zip(labels, points, strict=False)
         ]
     return "Point", labels, latency
 
@@ -322,7 +301,7 @@ def point_table(
     old = {point.key: point for point in baseline.points} if baseline else {}
     heading, labels, settings = point_layout(points)
     rows, issues = [], {}
-    for point, label in zip(points, labels):
+    for point, label in zip(points, labels, strict=False):
         previous = old.get(point.key)
         comparable = bool(
             previous
@@ -330,8 +309,7 @@ def point_table(
             and previous.scenario == point.scenario
             and (
                 point.scenario != "agentic-coding"
-                or point.dataset
-                and point.dataset == previous.dataset
+                or (point.dataset and point.dataset == previous.dataset)
             )
             and previous.values.latency_statistic == point.values.latency_statistic
         )
@@ -349,8 +327,7 @@ def point_table(
             reasons.append(point.result)
         if b.request_errors:
             reasons.append(
-                f"{number(b.request_errors)} request error"
-                + ("s" if b.request_errors != 1 else "")
+                f"{number(b.request_errors)} request error" + ("s" if b.request_errors != 1 else "")
             )
         elif b.request_errors is None:
             reasons.append("request errors unavailable")
@@ -372,9 +349,7 @@ def point_table(
         ):
             reasons.append("Δ N/A where baseline is missing or zero")
         for reason in reasons:
-            issues.setdefault(reason, []).append(
-                f"c{label}" if heading == "Concurrency" else label
-            )
+            issues.setdefault(reason, []).append(f"c{label}" if heading == "Concurrency" else label)
     return "\n\n".join(
         part
         for part in (
@@ -386,14 +361,8 @@ def point_table(
     )
 
 
-def eval_table(
-    rows: list[Evaluation], baseline: Baseline | None, *, compare: bool = True
-) -> str:
-    previous = (
-        {(row.key, row.suite, row.metric): row for row in baseline.evals}
-        if baseline
-        else {}
-    )
+def eval_table(rows: list[Evaluation], baseline: Baseline | None, *, compare: bool = True) -> str:
+    previous = {(row.key, row.suite, row.metric): row for row in baseline.evals} if baseline else {}
     values, issues = [], {}
     for row in rows:
         old = previous.get((row.key, row.suite, row.metric))
@@ -416,9 +385,7 @@ def eval_table(
                 if old and row.samples is not None and old.samples == row.samples
                 else f"{number(old.samples if old else None)}/{samples} (old/new)"
             )
-        label = f"{row.suite}/{row.metric}" + (
-            f" · {short_label(row.label)}" if row.label else ""
-        )
+        label = f"{row.suite}/{row.metric}" + (f" · {short_label(row.label)}" if row.label else "")
         values.append([label, score, samples])
         if row.result != "passed":
             issues.setdefault(row.result, []).append(label)
@@ -453,10 +420,10 @@ def baseline_table(points: list[Point], *, context: bool = True) -> str:
             number(p.values.ttft_ms),
             number(p.values.tpot_ms),
         ]
-        for label, p in zip(labels, points)
+        for label, p in zip(labels, points, strict=False)
     ]
     issues = {}
-    for label, point in zip(labels, points):
+    for label, point in zip(labels, points, strict=False):
         if point.result != "passed":
             issues.setdefault(point.result, []).append(
                 f"c{label}" if heading == "Concurrency" else label
@@ -488,20 +455,13 @@ def baseline_table(points: list[Point], *, context: bool = True) -> str:
 
 def render_body(baseline: Baseline) -> str:
     _, _, settings = point_layout(baseline.points[:12])
-    sources = (
-        ", ".join(f"[API {i + 1}]({url})" for i, url in enumerate(baseline.sources))
-        or "N/A"
-    )
+    sources = ", ".join(f"[API {i + 1}]({url})" for i, url in enumerate(baseline.sources)) or "N/A"
     meta = " · ".join(part for part in (settings, f"Sources: {sources}") if part)
     english = (
         f"**Goal:** {baseline.goal.en}  \n**Baseline:** {baseline.date} · `{baseline.image}`  \n{meta}\n\n"
         + baseline_table(baseline.points[:12], context=False)
         + "\n\n"
-        + (
-            eval_table(baseline.evals, None, compare=False)
-            if baseline.evals
-            else "**Eval:** N/A"
-        )
+        + (eval_table(baseline.evals, None, compare=False) if baseline.evals else "**Eval:** N/A")
     )
     if len(baseline.points) > 12:
         english += f"\n\n12/{len(baseline.points)} points shown; remaining rows are in the baseline report."
@@ -534,12 +494,10 @@ def render_attempt(record: Attempt, baseline: Baseline | None, repository: str) 
         "deferred": "已延期",
     }[record.status]
     title, title_zh = titles[record.kind]
-    timestamp = f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M UTC}"
+    timestamp = f"{datetime.now(UTC):%Y-%m-%d %H:%M UTC}"
     link = f"[Run {record.run_id} / attempt {record.run_attempt}](https://github.com/{repository}/actions/runs/{record.run_id}/attempts/{record.run_attempt})"
     _, _, settings = point_layout(record.points)
-    meta = f"`{record.image}` · `{record.head[:12]}`" + (
-        f" · {settings}" if settings else ""
-    )
+    meta = f"`{record.image}` · `{record.head[:12]}`" + (f" · {settings}" if settings else "")
     results = "\n\n".join(
         part
         for part in (
@@ -562,25 +520,27 @@ def render_attempt(record: Attempt, baseline: Baseline | None, repository: str) 
     return translated(english, chinese)
 
 
-def marker(session, name: str) -> str:
+def marker(session: Session, name: str) -> str:
     return f"<!-- klaud-report:{session.parent['id']}:{session.candidate.id}:{name}\n"
 
 
-def stored(session, pull: dict, name: str) -> dict | None:
+def stored(session: Session, pull: dict, name: str) -> dict | None:
     matches = [
         c
-        for c in github.items(
-            session.repository, f"issues/{pull['number']}/comments?per_page=100"
-        )
-        if c["user"]["login"] == "Klaud-Cold"
-        and c["body"].startswith(marker(session, name))
+        for c in github.items(session.repository, f"issues/{pull['number']}/comments?per_page=100")
+        if c["user"]["login"] == "Klaud-Cold" and c["body"].startswith(marker(session, name))
     ]
     if len(matches) > 1:
         raise VerificationError("Ambiguous report comment")
     return matches[0] if matches else None
 
 
-def decode(comment: dict, model, session=None, pull=None):
+def decode[Record: Contract](
+    comment: dict,
+    model: type[Record],
+    session: Session | None = None,
+    pull: dict | None = None,
+) -> Record:
     value = json.loads(comment["body"].split("\n", 1)[1].split("\n-->", 1)[0])
     if "record" in value:
         record = value["record"]
@@ -595,12 +555,12 @@ def decode(comment: dict, model, session=None, pull=None):
     return model.model_validate(value)
 
 
-def baseline_for(session, pull: dict) -> Baseline | None:
+def baseline_for(session: Session, pull: dict) -> Baseline | None:
     comment = stored(session, pull, "baseline")
     return decode(comment, Baseline, session, pull) if comment else None
 
 
-def initialize_body(session, pull: dict, record: Baseline) -> None:
+def initialize_body(session: Session, pull: dict, record: Baseline) -> None:
     current = session.refresh(pull)
     body = current.get("body") or ""
     completed = "<!-- klaud-baseline-body -->"
@@ -618,7 +578,7 @@ def initialize_body(session, pull: dict, record: Baseline) -> None:
     github.write(session.repository, f"pulls/{pull['number']}", "PATCH", {"body": body})
 
 
-def publish(session, record: Baseline | Attempt) -> None:
+def publish(session: Session, record: Baseline | Attempt) -> None:
     pull = session.pulls()[0]
     session.refresh(pull)
     if isinstance(record, Baseline):
@@ -628,9 +588,7 @@ def publish(session, record: Baseline | Attempt) -> None:
         previous = stored(session, pull, name)
         if previous:
             if decode(previous, Baseline, session, pull) != record:
-                raise VerificationError(
-                    "Baseline is frozen; do not silently replace it"
-                )
+                raise VerificationError("Baseline is frozen; do not silently replace it")
             initialize_body(session, pull, record)
             return
         text = f"**Baseline:** {record.date} · `{record.image}`"
@@ -669,9 +627,7 @@ def publish(session, record: Baseline | Attempt) -> None:
             part_text = (
                 baseline_table(record.points[offset : offset + 20])
                 if isinstance(record, Baseline)
-                else point_table(
-                    record.points[offset : offset + 20], baseline_for(session, pull)
-                )
+                else point_table(record.points[offset : offset + 20], baseline_for(session, pull))
             )
             if part["evals"]:
                 part_text += "\n\n" + eval_table(
@@ -708,7 +664,7 @@ def publish(session, record: Baseline | Attempt) -> None:
         initialize_body(session, pull, record)
 
 
-def upsert(session, pull: dict, name: str, data: str, text: str) -> None:
+def upsert(session: Session, pull: dict, name: str, data: str, text: str) -> None:
     previous = stored(session, pull, name)
     # Only the typed allowlist enters the durable record, never raw API/log data.
     body = marker(session, name) + data + "\n-->\n" + text
@@ -717,18 +673,12 @@ def upsert(session, pull: dict, name: str, data: str, text: str) -> None:
             "Report exceeds GitHub comment size; split the point evidence before publication"
         )
     session.refresh(pull)
-    path = (
-        f"issues/comments/{previous['id']}"
-        if previous
-        else f"issues/{pull['number']}/comments"
-    )
-    github.write(
-        session.repository, path, "PATCH" if previous else "POST", {"body": body}
-    )
+    path = f"issues/comments/{previous['id']}" if previous else f"issues/{pull['number']}/comments"
+    github.write(session.repository, path, "PATCH" if previous else "POST", {"body": body})
 
 
 def publish_final(
-    session, run: dict, evidence: tuple[dict, list[dict], list[dict]]
+    session: Session, run: dict, evidence: tuple[dict, list[dict], list[dict]]
 ) -> None:
     """Normal finish and recovery publish the same artifact-derived final report."""
     from infx.workflows import validate_reusable_sweep_artifacts as reuse
@@ -739,9 +689,7 @@ def publish_final(
     generated = {
         (entry["recipe-fingerprint"], int(conc)): {**entry, "conc": int(conc)}
         for entry in benchmark_entries(matrix)
-        for conc in (
-            entry["conc"] if isinstance(entry["conc"], list) else [entry["conc"]]
-        )
+        for conc in (entry["conc"] if isinstance(entry["conc"], list) else [entry["conc"]])
     }
     points = []
     for row in rows:
@@ -771,9 +719,7 @@ def publish_final(
             run_id=run["id"],
             head=run["head_sha"],
         )
-        for row in sorted(
-            eval_rows, key=lambda row: (int(row["conc"]), row.get("eval_suite", ""))
-        )
+        for row in sorted(eval_rows, key=lambda row: (int(row["conc"]), row.get("eval_suite", "")))
     ]
     images = {row["image"] for row in rows}
     if len(images) != 1:
@@ -806,7 +752,7 @@ def publish_final(
     )
 
 
-def prepare_baseline(session, context: dict, model: str, goal: Prose) -> Baseline:
+def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -> Baseline:
     """Fetch once, accepting only exact producer fingerprints of the selected old family.
 
     Legacy public rows without full fingerprints remain unavailable rather than
@@ -815,9 +761,7 @@ def prepare_baseline(session, context: dict, model: str, goal: Prose) -> Baselin
     from .api import fetch
     from .validation import benchmark_entries, canonical_matrix
 
-    matrix = canonical_matrix(
-        session.repository, session.candidate.base, session.candidate.family
-    )
+    matrix = canonical_matrix(session.repository, session.candidate.base, session.candidate.family)
     feed = fetch("benchmarks", model=model, date=context["source"]["date"])
     info = fetch("workflow-info", date=context["source"]["date"])
     # Public database bigint IDs are serialized as strings; URLs use decimal IDs.
@@ -830,12 +774,8 @@ def prepare_baseline(session, context: dict, model: str, goal: Prose) -> Baselin
     points = []
     for entry in benchmark_entries(matrix):
         if entry["image"] != old_image:
-            raise VerificationError(
-                "Baseline source image no longer matches the selected base"
-            )
-        for conc in (
-            entry["conc"] if isinstance(entry["conc"], list) else [entry["conc"]]
-        ):
+            raise VerificationError("Baseline source image no longer matches the selected base")
+        for conc in entry["conc"] if isinstance(entry["conc"], list) else [entry["conc"]]:
             point = {**entry, "conc": conc}
             matched = [
                 row
@@ -856,8 +796,7 @@ def prepare_baseline(session, context: dict, model: str, goal: Prose) -> Baselin
             if (
                 run_id not in producers
                 or len(heads.get(run_id, ())) != 1
-                or run_attempt is not None
-                and run_attempt > int(producers[run_id]["run_attempt"])
+                or (run_attempt is not None and run_attempt > int(producers[run_id]["run_attempt"]))
             ):
                 published = None
             points.append(

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Process aiperf agentic-replay output into InferenceX aggregate JSON."""
 
 from __future__ import annotations
@@ -84,18 +83,14 @@ def main() -> int:
     if server_cache.get("cpu_cache_hit_rate") is not None:
         print(f"  CPU/offload cache hit rate: {server_cache['cpu_cache_hit_rate']:.1%}")
     if server_cache.get("external_cache_hit_rate") is not None:
-        print(
-            f"  External cache hit rate: {server_cache['external_cache_hit_rate']:.1%}"
-        )
+        print(f"  External cache hit rate: {server_cache['external_cache_hit_rate']:.1%}")
     if server_kv_cache.get("gpu_usage_pct") is not None:
         print(f"  GPU KV cache usage:  {server_kv_cache['gpu_usage_pct']:.1%}")
     if server_kv_cache.get("gpu_total_tokens") is not None:
         print(f"  GPU KV cache capacity: {server_kv_cache['gpu_total_tokens']} tokens")
     request_cache = request_metrics.get("cache", {})
     if request_cache.get("theoretical_cache_hit_rate") is not None:
-        print(
-            f"  Theoretical cache hit rate: {request_cache['theoretical_cache_hit_rate']:.1%}"
-        )
+        print(f"  Theoretical cache hit rate: {request_cache['theoretical_cache_hit_rate']:.1%}")
     throughput_per_gpu = request_metrics.get("throughput", {}).get("per_gpu", {})
     if throughput_per_gpu.get("total_tput_tps") is not None:
         print(f"  Throughput per GPU: {throughput_per_gpu['total_tput_tps']:.0f} tok/s")

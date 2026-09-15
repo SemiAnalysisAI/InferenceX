@@ -45,11 +45,15 @@ def _patch_swerex_environment(path: str) -> bool:
         path,
         [
             (
-                '        command = action.get("command", "") if isinstance(action, dict) else action\n'
-                "        try:",
-                '        command = action.get("command", "") if isinstance(action, dict) else action\n'
-                '        command = f"exec </dev/null\\n{command}"  # close inherited server stdin (SWE-ReX #281)\n'
-                "        try:",
+                (
+                    '        command = action.get("command", "") if isinstance(action, dict) else action\n'
+                    "        try:"
+                ),
+                (
+                    '        command = action.get("command", "") if isinstance(action, dict) else action\n'
+                    '        command = f"exec </dev/null\\n{command}"  # close inherited server stdin (SWE-ReX #281)\n'
+                    "        try:"
+                ),
                 "# close inherited server stdin (SWE-ReX #281)",
             ),
         ],
@@ -71,48 +75,58 @@ def main() -> int:
                 "",
             ),
             (
-                "        info = agent.run(task)\n"
-                '        exit_status = info.get("exit_status")\n'
-                '        result = info.get("submission")',
-                "        info = agent.run(task)\n"
-                '        exit_status = info.get("exit_status")\n'
-                '        result = info.get("submission")\n'
-                "        if not result and env is not None:\n"
-                "            try:\n"
-                '                _fb = env.execute("git diff")\n'
-                '                _fb_out = (_fb.get("output") or "").strip()\n'
-                '                if _fb.get("returncode") == 0 and _fb_out.startswith("diff --git"):\n'
-                '                    result = _fb_out + "\\n"\n'
-                '                    extra_info["submission_source"] = f"fallback_after_{exit_status}"\n'
-                "            except Exception:\n"
-                "                pass",
+                (
+                    "        info = agent.run(task)\n"
+                    '        exit_status = info.get("exit_status")\n'
+                    '        result = info.get("submission")'
+                ),
+                (
+                    "        info = agent.run(task)\n"
+                    '        exit_status = info.get("exit_status")\n'
+                    '        result = info.get("submission")\n'
+                    "        if not result and env is not None:\n"
+                    "            try:\n"
+                    '                _fb = env.execute("git diff")\n'
+                    '                _fb_out = (_fb.get("output") or "").strip()\n'
+                    '                if _fb.get("returncode") == 0 and _fb_out.startswith("diff --git"):\n'
+                    '                    result = _fb_out + "\\n"\n'
+                    '                    extra_info["submission_source"] = f"fallback_after_{exit_status}"\n'
+                    "            except Exception:\n"
+                    "                pass"
+                ),
                 "",
             ),
             (
-                '        exit_status, result = type(e).__name__, ""\n'
-                '        extra_info = {"traceback": traceback.format_exc(), "exception_str": str(e)}',
-                '        exit_status, result = type(e).__name__, ""\n'
-                '        extra_info = {"traceback": traceback.format_exc(), "exception_str": str(e)}\n'
-                "        if env is not None:\n"
-                "            try:\n"
-                '                _fb = env.execute("git diff")\n'
-                '                _fb_out = (_fb.get("output") or "").strip()\n'
-                '                if _fb.get("returncode") == 0 and _fb_out.startswith("diff --git"):\n'
-                '                    result = _fb_out + "\\n"\n'
-                '                    extra_info["submission_source"] = f"fallback_after_{exit_status}"\n'
-                "            except Exception:\n"
-                "                pass",
+                (
+                    '        exit_status, result = type(e).__name__, ""\n'
+                    '        extra_info = {"traceback": traceback.format_exc(), "exception_str": str(e)}'
+                ),
+                (
+                    '        exit_status, result = type(e).__name__, ""\n'
+                    '        extra_info = {"traceback": traceback.format_exc(), "exception_str": str(e)}\n'
+                    "        if env is not None:\n"
+                    "            try:\n"
+                    '                _fb = env.execute("git diff")\n'
+                    '                _fb_out = (_fb.get("output") or "").strip()\n'
+                    '                if _fb.get("returncode") == 0 and _fb_out.startswith("diff --git"):\n'
+                    '                    result = _fb_out + "\\n"\n'
+                    '                    extra_info["submission_source"] = f"fallback_after_{exit_status}"\n'
+                    "            except Exception:\n"
+                    "                pass"
+                ),
                 "",
             ),
             (
                 "    finally:\n        if agent is not None:",
-                "    finally:\n"
-                '        if env is not None and callable(getattr(env, "stop", None)):\n'
-                "            try:\n"
-                "                env.stop()\n"
-                "            except Exception:\n"
-                "                pass\n"
-                "        if agent is not None:",
+                (
+                    "    finally:\n"
+                    '        if env is not None and callable(getattr(env, "stop", None)):\n'
+                    "            try:\n"
+                    "                env.stop()\n"
+                    "            except Exception:\n"
+                    "                pass\n"
+                    "        if agent is not None:"
+                ),
                 "",
             ),
         ],
@@ -130,27 +144,33 @@ def main() -> int:
                 "# isolate InferenceX sandboxes",
             ),
             (
-                "        if self._sandbox is not None:\n"
-                "            exit_code = await self._sandbox.poll.aio()\n"
-                "            if exit_code is not None:\n"
-                "                await self._sandbox.terminate.aio()",
-                "        if self._sandbox is not None:\n"
-                "            try:\n"
-                "                await self._sandbox.terminate.aio()\n"
-                "            except Exception:\n"
-                "                pass",
+                (
+                    "        if self._sandbox is not None:\n"
+                    "            exit_code = await self._sandbox.poll.aio()\n"
+                    "            if exit_code is not None:\n"
+                    "                await self._sandbox.terminate.aio()"
+                ),
+                (
+                    "        if self._sandbox is not None:\n"
+                    "            try:\n"
+                    "                await self._sandbox.terminate.aio()\n"
+                    "            except Exception:\n"
+                    "                pass"
+                ),
                 "",
             ),
             (
                 "        await self._wait_until_alive(timeout=remaining_startup_timeout)",
-                "        try:\n"
-                "            await self._wait_until_alive(timeout=remaining_startup_timeout)\n"
-                "        except BaseException:\n"
-                "            try:\n"
-                "                await self._sandbox.terminate.aio()\n"
-                "            except Exception:\n"
-                "                pass\n"
-                "            raise",
+                (
+                    "        try:\n"
+                    "            await self._wait_until_alive(timeout=remaining_startup_timeout)\n"
+                    "        except BaseException:\n"
+                    "            try:\n"
+                    "                await self._sandbox.terminate.aio()\n"
+                    "            except Exception:\n"
+                    "                pass\n"
+                    "            raise"
+                ),
                 "",
             ),
         ],

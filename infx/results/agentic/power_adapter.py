@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
 import os
 import re
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -59,9 +60,7 @@ def _captured_timezone(result_dir: Path) -> tuple[timezone | None, str | None]:
     return timezone(direction * timedelta(hours=hours, minutes=minutes)), None
 
 
-def _parse_profile_timestamp(
-    value: Any, *, fallback_tz: timezone | None
-) -> float | None:
+def _parse_profile_timestamp(value: Any, *, fallback_tz: timezone | None) -> float | None:
     """Parse a timezone-aware ISO timestamp or Unix epoch seconds."""
     if isinstance(value, bool):
         return None
@@ -78,7 +77,7 @@ def _parse_profile_timestamp(
         if fallback_tz is None:
             return None
         parsed = parsed.replace(tzinfo=fallback_tz)
-    return parsed.astimezone(timezone.utc).timestamp()
+    return parsed.astimezone(UTC).timestamp()
 
 
 def build_power_window(
@@ -104,12 +103,10 @@ def build_power_window(
     parsed_datetimes: list[datetime] = []
     for value in (raw_start, raw_end):
         if isinstance(value, str):
-            try:
+            with contextlib.suppress(ValueError):
                 parsed_datetimes.append(
                     datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
                 )
-            except ValueError:
-                pass
     needs_captured_timezone = any(value.tzinfo is None for value in parsed_datetimes)
     fallback_tz = None
     if needs_captured_timezone:
@@ -253,11 +250,7 @@ def _multinode_window_contract(
     concurrency: int,
 ) -> tuple[Path, Path, Path] | None:
     """Resolve and validate the formal custom-benchmark window contract."""
-    if (
-        isinstance(concurrency, bool)
-        or not isinstance(concurrency, int)
-        or concurrency <= 0
-    ):
+    if isinstance(concurrency, bool) or not isinstance(concurrency, int) or concurrency <= 0:
         return None
     values = {name: os.environ.get(name, "") for name in _FORMAL_WINDOW_ENV}
     if any(not value for value in values.values()):
@@ -361,8 +354,7 @@ def write_multinode_power_window(
     boundary, reasons = build_power_window(result_dir)
     if boundary is None:
         return _fail_multinode_adapter(
-            "Failed to complete formal measurement-window contract: "
-            + ", ".join(reasons),
+            "Failed to complete formal measurement-window contract: " + ", ".join(reasons),
             require_power=require_power,
         )
     formal_result_payload = {"max_concurrency": concurrency, **boundary}
@@ -411,9 +403,7 @@ def _record_multinode_adapter_failure(
         _write_multinode_failure_validation(validation_result, reasons)
 
 
-def _write_multinode_failure_validation(
-    validation_result: Path, reasons: list[str]
-) -> None:
+def _write_multinode_failure_validation(validation_result: Path, reasons: list[str]) -> None:
     _write_json_atomic(
         validation_result,
         {
@@ -498,10 +488,10 @@ def run_multinode_agentic_power(
             require_power=require_power,
         )
 
-    assert prefill_gpus is not None
-    assert decode_gpus is not None
-    assert isinstance(disagg, bool)
-    assert bench_result is not None
+    assert prefill_gpus is not None  # noqa: S101
+    assert decode_gpus is not None  # noqa: S101
+    assert isinstance(disagg, bool)  # noqa: S101
+    assert bench_result is not None  # noqa: S101
     aggregate_gpus = 0
     if not disagg:
         aggregate_gpus = prefill_gpus + decode_gpus
@@ -576,11 +566,7 @@ def main() -> int:
             require_power=args.require_power,
         )
     if args.power_dir is not None:
-        if (
-            args.agg_result is None
-            or args.logs_root is None
-            or args.expected_producer_sha is None
-        ):
+        if args.agg_result is None or args.logs_root is None or args.expected_producer_sha is None:
             parser.error(
                 "--agg-result, --logs-root, and --expected-producer-sha are required with --power-dir"
             )
