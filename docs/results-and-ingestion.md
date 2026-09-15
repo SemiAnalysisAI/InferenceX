@@ -242,6 +242,13 @@ Other important AgentX fields include:
 | Server metrics | `server_metrics.cache`, `kv_cache`, token totals, source details, and any `warnings` |
 | Compatibility | `kv_cache_pool_tokens` mirrors `server_metrics.kv_cache.gpu_total_tokens` |
 
+For native SGLang, GPU KV capacity counts each worker/endpoint and DP pool once,
+collapsing replicated TP/PP/EP capacity gauges. Ranked series must identify their
+worker or endpoint and report a constant positive capacity that agrees across
+shards; otherwise capacity is omitted. Complete capacity telemetry takes precedence
+over server logs, which may omit a disaggregated role. Log-only and legacy unranked
+exports retain their existing fallback behavior.
+
 For a `dynamo-sglang` run with `sglang:` telemetry, the processor uses the
 SGLang adapter for cache, utilization, and token metrics. Logical GPU KV capacity
 remains `null` with a warning because TP ranks may report duplicate capacity
