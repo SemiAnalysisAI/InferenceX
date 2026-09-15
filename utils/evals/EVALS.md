@@ -366,6 +366,9 @@ record `api_format`; do not combine these scores with Chat Completions results.
 BFCL's upstream handlers differ in request formatting, including system versus
 developer roles. No request or response rewriting is added by InferenceX.
 
+MiniMax TRT launchers explicitly select the stock `--tool_parser minimax_m3`;
+the pinned TRT CLI defaults to no tool parser.
+
 The native Responses path is a compatibility candidate until validated on live
 hardware. A successful vendor smoke does not establish BFCL support. TRT now
 uses its native performance-metrics behavior as well; removing the executor

@@ -295,7 +295,8 @@ def _native_report(
     total_count = sum(score.total_count for score in scores or ())
     accuracy = correct_count / total_count if total_count else 0.0
     report: dict[str, Any] = {
-        "verifier": ADAPTER_NAME,
+        "verifier": (ADAPTER_NAME if suite.api_format == "chat-completions"
+                     else "bfcl-v4-openai-responses"),
         "task": suite.name,
         "model": model,
         "endpoint": base_url,

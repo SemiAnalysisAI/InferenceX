@@ -167,6 +167,7 @@ TRTLLM_CMD=(
     --host 0.0.0.0
     --port "$PORT"
     --chat_template "$MODEL_PATH/chat_template.jinja"
+    --tool_parser minimax_m3
     --config ser.yaml
 )
 printf '%q ' "${TRTLLM_CMD[@]}" | tee "$RESULT_DIR/trtllm_command.txt"
