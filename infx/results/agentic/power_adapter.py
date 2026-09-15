@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
 import os
 import re
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -19,14 +20,13 @@ from infx.results.power import (
     POWER_METRIC_SCHEMA_VERSION,
     with_power_metrics,
 )
-
+from infx.results.power.multinode import run as run_multinode_power
 from infx.results.power.single_node import (
     _patch_power_result,
     _write_json_atomic,
     invalid_validation_payload,
+    run as run_power,
 )
-from infx.results.power.single_node import run as run_power
-from infx.results.power.multinode import run as run_multinode_power
 
 from .artifacts import load_aggregate, load_records, resolve_artifact_dir
 
@@ -77,10 +77,12 @@ def _parse_profile_timestamp(value: Any, *, fallback_tz: timezone | None) -> flo
         if fallback_tz is None:
             return None
         parsed = parsed.replace(tzinfo=fallback_tz)
-    return parsed.astimezone(timezone.utc).timestamp()
+    return parsed.astimezone(UTC).timestamp()
 
 
-def build_power_window(result_dir: Path) -> tuple[dict[str, int | float] | None, list[str]]:
+def build_power_window(
+    result_dir: Path,
+) -> tuple[dict[str, int | float] | None, list[str]]:
     """Build a strict benchmark window from successful profiling requests."""
     artifact_dir = resolve_artifact_dir(result_dir)
     aggregate_path = artifact_dir / "profile_export_aiperf.json"
@@ -101,12 +103,10 @@ def build_power_window(result_dir: Path) -> tuple[dict[str, int | float] | None,
     parsed_datetimes: list[datetime] = []
     for value in (raw_start, raw_end):
         if isinstance(value, str):
-            try:
+            with contextlib.suppress(ValueError):
                 parsed_datetimes.append(
                     datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
                 )
-            except ValueError:
-                pass
     needs_captured_timezone = any(value.tzinfo is None for value in parsed_datetimes)
     fallback_tz = None
     if needs_captured_timezone:
@@ -257,9 +257,7 @@ def _multinode_window_contract(
         return None
     if values["SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE"] != "custom":
         return None
-    measured = _positive_concurrencies(
-        values["SRT_MEASUREMENT_WINDOW_CONCURRENCIES"]
-    )
+    measured = _positive_concurrencies(values["SRT_MEASUREMENT_WINDOW_CONCURRENCIES"])
     if measured is None or concurrency not in measured:
         return None
 
@@ -356,8 +354,7 @@ def write_multinode_power_window(
     boundary, reasons = build_power_window(result_dir)
     if boundary is None:
         return _fail_multinode_adapter(
-            "Failed to complete formal measurement-window contract: "
-            + ", ".join(reasons),
+            "Failed to complete formal measurement-window contract: " + ", ".join(reasons),
             require_power=require_power,
         )
     formal_result_payload = {"max_concurrency": concurrency, **boundary}
@@ -394,9 +391,11 @@ def _record_multinode_adapter_failure(
         if not isinstance(aggregate, dict):
             raise ValueError("AgentX aggregate must be a JSON object")
         aggregate = with_power_metrics(
-            aggregate, metric_keys=_ALL_POWER_METRIC_KEYS,
+            aggregate,
+            metric_keys=_ALL_POWER_METRIC_KEYS,
             schema_version=POWER_METRIC_SCHEMA_VERSION,
-            power_valid=False, metrics={},
+            power_valid=False,
+            metrics={},
         )
         _write_json_atomic(agg_result, aggregate)
     finally:
@@ -489,10 +488,10 @@ def run_multinode_agentic_power(
             require_power=require_power,
         )
 
-    assert prefill_gpus is not None
-    assert decode_gpus is not None
-    assert isinstance(disagg, bool)
-    assert bench_result is not None
+    assert prefill_gpus is not None  # noqa: S101
+    assert decode_gpus is not None  # noqa: S101
+    assert isinstance(disagg, bool)  # noqa: S101
+    assert bench_result is not None  # noqa: S101
     aggregate_gpus = 0
     if not disagg:
         aggregate_gpus = prefill_gpus + decode_gpus

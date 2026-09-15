@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-# DeepSeek-R1-0528 MXFP4 on MI355X with EAGLE/MTP speculative decoding.
-# Mirrors dsr1_fp4_mi355x.sh and adds the speculative-* flags.
-
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars \

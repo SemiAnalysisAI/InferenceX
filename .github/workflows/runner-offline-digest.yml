@@ -28,7 +28,7 @@ jobs:
           GH_TOKEN: ${{ secrets.RUNNERS_PAT }}
           REPO: ${{ github.repository }}
         run: |
-          set -euo pipefail
+          set -eo pipefail
 
           RUNNERS=$(gh api --paginate "/repos/$REPO/actions/runners?per_page=100" --jq '.runners[]' | jq -s '.')
           TOTAL=$(jq 'length' <<<"$RUNNERS")
@@ -67,7 +67,7 @@ jobs:
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          set -euo pipefail
+          set -eo pipefail
 
           DATE=$(date -u +%Y-%m-%d)
           PARENT_TEXT=":warning: *Runner digest — ${DATE}*: ${OFFLINE_COUNT}/${TOTAL} self-hosted runners offline in \`${REPO}\` (<${RUN_URL}|run>)"

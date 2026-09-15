@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Plot distributions over a directory of weka-format traces.
 
 Reads every <in-dir>/*.json (output of proxy_to_weka.py), walks the
@@ -28,31 +27,68 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
 
+if TYPE_CHECKING:
+    from matplotlib.axes import Axes
+
+
 PERCENTILES: tuple[int, ...] = (50, 75, 90, 99)
-PCT_COLORS: dict[int, str] = {50: "#1f77b4", 75: "#2ca02c", 90: "#ff7f0e", 99: "#d62728"}
+PCT_COLORS: dict[int, str] = {
+    50: "#1f77b4",
+    75: "#2ca02c",
+    90: "#ff7f0e",
+    99: "#d62728",
+}
 
 # One spec per metric: key, title, xlabel, label format string, whether
 # to use log-x in the "log" variant of the figure.
 PLOT_SPECS: list[dict] = [
-    {"key": "think_time_sec", "title": "Inter-turn latency (think_time)",
-     "xlabel": "seconds", "fmt": "{:,.3f}", "log_in_log_fig": True},
-    {"key": "isl_tokens", "title": "Input sequence length per request",
-     "xlabel": "tokens", "fmt": "{:,.0f}", "log_in_log_fig": True},
-    {"key": "osl_tokens", "title": "Output sequence length per request",
-     "xlabel": "tokens", "fmt": "{:,.0f}", "log_in_log_fig": True},
-    {"key": "cache_hit_rate", "title": "Per-request cache hit rate (local hash)",
-     "xlabel": "hits / total blocks", "fmt": "{:,.4f}", "log_in_log_fig": False},
-    {"key": "main_agent_turns_per_session", "title": "Main-agent turns per session",
-     "xlabel": "turns (top-level requests, excluding subagent inners)",
-     "fmt": "{:,.0f}", "log_in_log_fig": True},
-    {"key": "avg_agent_turn_depth_per_session",
-     "title": "Average agent turn depth per session (main + sub-agents)",
-     "xlabel": "mean turns per agent (over the session's main + each sub-agent)",
-     "fmt": "{:,.1f}", "log_in_log_fig": True},
+    {
+        "key": "think_time_sec",
+        "title": "Inter-turn latency (think_time)",
+        "xlabel": "seconds",
+        "fmt": "{:,.3f}",
+        "log_in_log_fig": True,
+    },
+    {
+        "key": "isl_tokens",
+        "title": "Input sequence length per request",
+        "xlabel": "tokens",
+        "fmt": "{:,.0f}",
+        "log_in_log_fig": True,
+    },
+    {
+        "key": "osl_tokens",
+        "title": "Output sequence length per request",
+        "xlabel": "tokens",
+        "fmt": "{:,.0f}",
+        "log_in_log_fig": True,
+    },
+    {
+        "key": "cache_hit_rate",
+        "title": "Per-request cache hit rate (local hash)",
+        "xlabel": "hits / total blocks",
+        "fmt": "{:,.4f}",
+        "log_in_log_fig": False,
+    },
+    {
+        "key": "main_agent_turns_per_session",
+        "title": "Main-agent turns per session",
+        "xlabel": "turns (top-level requests, excluding subagent inners)",
+        "fmt": "{:,.0f}",
+        "log_in_log_fig": True,
+    },
+    {
+        "key": "avg_agent_turn_depth_per_session",
+        "title": "Average agent turn depth per session (main + sub-agents)",
+        "xlabel": "mean turns per agent (over the session's main + each sub-agent)",
+        "fmt": "{:,.1f}",
+        "log_in_log_fig": True,
+    },
 ]
 
 
@@ -62,21 +98,31 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument(
-        "--in-dir", "-i", type=Path, required=True,
+        "--in-dir",
+        "-i",
+        type=Path,
+        required=True,
         help="Directory of weka *.json traces.",
     )
     p.add_argument(
-        "--out-dir", "-o", type=Path, required=True,
+        "--out-dir",
+        "-o",
+        type=Path,
+        required=True,
         help="Directory to write *.png plots into.",
     )
     p.add_argument(
-        "--bins", type=int, default=80,
+        "--bins",
+        type=int,
+        default=80,
         help="Number of histogram bins. Default: 80.",
     )
     p.add_argument(
-        "--linear-clip-pct", type=float, default=99.0,
+        "--linear-clip-pct",
+        type=float,
+        default=99.0,
         help="In the linear figure, clip the x-axis at this percentile "
-             "so heavy tails don't compress the bulk. Default: 99.",
+        "so heavy tails don't compress the bulk. Default: 99.",
     )
     return p.parse_args()
 
@@ -147,9 +193,7 @@ def collect_metrics(in_dir: Path) -> dict[str, list[float]]:
             main_turns_per_session.append(n_main)
         nonzero_agents = [c for c in agent_turn_counts if c > 0]
         if nonzero_agents:
-            avg_agent_depth_per_session.append(
-                sum(nonzero_agents) / len(nonzero_agents)
-            )
+            avg_agent_depth_per_session.append(sum(nonzero_agents) / len(nonzero_agents))
 
     return {
         "think_time_sec": think_times,
@@ -162,7 +206,7 @@ def collect_metrics(in_dir: Path) -> dict[str, list[float]]:
 
 
 def _draw_histogram(
-    ax,
+    ax: Axes,
     values: list[float],
     title: str,
     xlabel: str,
@@ -205,22 +249,34 @@ def _draw_histogram(
         else:
             lower = float(arr.min())
             upper = float(np.percentile(arr, linear_clip_pct))
-        ax.hist(arr, bins=bins, range=(lower, max(upper, lower + 1e-9)),
-                color="#888", edgecolor="#222", linewidth=0.4)
+        ax.hist(
+            arr,
+            bins=bins,
+            range=(lower, max(upper, lower + 1e-9)),
+            color="#888",
+            edgecolor="#222",
+            linewidth=0.4,
+        )
 
     for p, val in pct.items():
-        ax.axvline(val, linestyle="--", linewidth=1.4,
-                   color=PCT_COLORS[p],
-                   label=f"p{p} = {value_fmt.format(val)}")
+        ax.axvline(
+            val,
+            linestyle="--",
+            linewidth=1.4,
+            color=PCT_COLORS[p],
+            label=f"p{p} = {value_fmt.format(val)}",
+        )
 
     ax.set_xlabel(xlabel + (" (log)" if log_x else ""))
     ax.set_ylabel("count")
-    subtitle = "     ".join([
-        f"N = {len(arr):,}",
-        f"min = {value_fmt.format(arr.min())}",
-        f"max = {value_fmt.format(arr.max())}",
-        f"mean = {value_fmt.format(arr.mean())}",
-    ])
+    subtitle = "     ".join(
+        [
+            f"N = {len(arr):,}",
+            f"min = {value_fmt.format(arr.min())}",
+            f"max = {value_fmt.format(arr.max())}",
+            f"mean = {value_fmt.format(arr.mean())}",
+        ]
+    )
     ax.set_title(f"{title}\n{subtitle}", fontsize=10)
     ax.legend(loc="upper right", fontsize=9, framealpha=0.9)
     ax.grid(axis="y", alpha=0.25)
@@ -234,7 +290,7 @@ def plot_combined(
     linear_clip_pct: float,
 ) -> None:
     fig, axes = plt.subplots(3, 2, figsize=(20, 16))
-    for spec, ax in zip(PLOT_SPECS, axes.flat):
+    for spec, ax in zip(PLOT_SPECS, axes.flat, strict=False):
         log_x = use_log and spec["log_in_log_fig"]
         _draw_histogram(
             ax=ax,
@@ -248,7 +304,8 @@ def plot_combined(
         )
     fig.suptitle(
         f"Weka-trace distributions  ({'log-x' if use_log else 'linear-x'})",
-        fontsize=14, y=1.00,
+        fontsize=14,
+        y=1.00,
     )
     fig.tight_layout()
     fig.savefig(out_path, dpi=110, bbox_inches="tight")
@@ -264,13 +321,17 @@ def main() -> int:
 
     print("\nplotting:", flush=True)
     plot_combined(
-        metrics, args.out_dir / "distributions_log.png",
-        bins=args.bins, use_log=True,
+        metrics,
+        args.out_dir / "distributions_log.png",
+        bins=args.bins,
+        use_log=True,
         linear_clip_pct=args.linear_clip_pct,
     )
     plot_combined(
-        metrics, args.out_dir / "distributions_linear.png",
-        bins=args.bins, use_log=False,
+        metrics,
+        args.out_dir / "distributions_linear.png",
+        bins=args.bins,
+        use_log=False,
         linear_clip_pct=args.linear_clip_pct,
     )
     return 0

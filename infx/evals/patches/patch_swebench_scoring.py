@@ -36,13 +36,9 @@ def _cpu_value() -> str:
     try:
         parsed = float(value)
     except ValueError as error:
-        raise ValueError(
-            f"SWEBENCH_EVAL_SANDBOX_CPU={value!r} must be numeric"
-        ) from error
+        raise ValueError(f"SWEBENCH_EVAL_SANDBOX_CPU={value!r} must be numeric") from error
     if not math.isfinite(parsed) or parsed <= 0:
-        raise ValueError(
-            f"SWEBENCH_EVAL_SANDBOX_CPU={value!r} must be positive and finite"
-        )
+        raise ValueError(f"SWEBENCH_EVAL_SANDBOX_CPU={value!r} must be positive and finite")
     return value
 
 
@@ -56,9 +52,7 @@ def patch(path: str, cpu: str) -> bool:
     if not cpu_applied and source.count(CPU_ANCHOR) != 1:
         failures.append(f"{CPU_ANCHOR!r} found {source.count(CPU_ANCHOR)} times")
     if not lifecycle_applied and source.count(LIFECYCLE_ANCHOR) != 1:
-        failures.append(
-            f"lifecycle anchor found {source.count(LIFECYCLE_ANCHOR)} times"
-        )
+        failures.append(f"lifecycle anchor found {source.count(LIFECYCLE_ANCHOR)} times")
     if failures:
         for failure in failures:
             print(
