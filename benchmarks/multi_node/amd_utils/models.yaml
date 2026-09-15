@@ -403,7 +403,7 @@ DeepSeek-V4-Pro-DI:
   # DeepSeek-V4 built-in MTP: load via the EAGLE spec path with eagle-topk 1 (a single
   # MTP chain). NOT NEXTN -- the V3/R1 NEXTN loader crashes the dsv4 decode server at
   # init on the V4 architecture. Mirrors the sglang dsv4 recipes
-  # (srt-slurm-recipes/sglang/deepseek-v4/*: EAGLE + eagle-topk 1, in-checkpoint draft,
+  # (srt-slurm-recipes/dsv4/sglang/*: EAGLE + eagle-topk 1, in-checkpoint draft,
   # no draft-model-path). Consumed by build_server_config only when DECODE_MTP_SIZE > 0
   # (spec-decoding: mtp); a no-op for the spec-none base scenario (DECODE_MTP_SIZE=0).
   # build_server_config appends --speculative-num-steps/--speculative-num-draft-tokens

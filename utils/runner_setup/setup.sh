@@ -18,7 +18,6 @@ ADDITIONAL_RUNNER_TAGS="$7"
 REPO_URL="${8:-https://github.com/SemiAnalysisAI/InferenceX}"
 RUNNER_TAR=$(basename "$RUNNER_URL")
 
-# Download the tarball once
 if [ ! -f "${BASE_DIR}/${RUNNER_TAR}" ]; then
   echo "Downloading runner tarball..."
   curl -o "${BASE_DIR}/${RUNNER_TAR}" -L "$RUNNER_URL"

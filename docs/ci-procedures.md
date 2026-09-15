@@ -285,6 +285,12 @@ The [`PR Review` workflow](../.github/workflows/claude-pr-review.yml) installs a
 
 ### Rerun safely
 
+Before the first PASS, CODEOWNER verification recovers the latest eligible sign-off after head updates, reopening, or leaving draft. It verifies the current head using the existing checklist, including reviews missed during merge conflicts. Execution stays on the trusted default branch, and a pending status appears before Claude starts.
+
+Existing acceptance follows the [contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off): authenticated repository-admin updates from a covered head retain sign-off without calling Claude. Non-admin updates invalidate it without automatically calling Claude; edit the existing checklist or dispatch verification to approve those changes. An admin push after an unreviewed non-admin change does not restore acceptance. Missing update provenance fails closed. The trusted verdict records assessed and covered SHAs, and rejected reassessments revoke acceptance. The verifier writes a local verdict file; trusted workflow code owns comment and status publication.
+
+Starting Claude requires the actor's base `permission` to be `write` or `admin`, and `role_name` to be `write`, `maintain`, or `admin`. Unknown/custom roles, missing fields, bots, and lookup failures do not start verification. Catch-up applies the same checks to signers. A collaborator with write access can use the existing sign-off URL after an update by a non-writer or disallowed bot. Verification and PASS carry-forward jobs serialize per PR.
+
 Do not rerun an in-progress run blindly. A completed failed run can rerun only failed jobs and their dependents:
 
 ```bash
@@ -384,7 +390,7 @@ Reuse prevents an approved full PR sweep from being rerun on `main`. It is not a
 1. Reuse does not require a sweep label. Labels select new GPU work; removing a primary label does not invalidate an existing source run. Conflicting primary labels remain rejected by changelog validation and the merge helper.
 2. `evals-only` and `agentx-fast` make the run ineligible. A default full sweep and a full sweep with `all-evals` remain eligible.
 3. The source must be a completed PR `run-sweep.yml` run whose head SHA is still in the PR commit list and which has an unexpired `results_bmk`, `eval_results_all`, or `bmk_agentic_*` result artifact.
-4. An `OWNER`, `MEMBER`, or `COLLABORATOR` authorizes reuse with `/reuse-sweep-run` or `/reuse-sweep-run <run_id>`. The newest authorized matching command determines whether source selection is automatic or pinned.
+4. An `OWNER`, `MEMBER`, or `COLLABORATOR` authorizes reuse with `/reuse-sweep-run` or `/reuse-sweep-run <run_id>`. Keep the command and optional run ID on one line. The newest authorized matching command determines whether source selection is automatic or pinned.
 5. Unpinned selection requires the latest eligible source run to be successful. A pinned run is an explicit maintainer decision and may have conclusion `success`, `failure`, or `cancelled`. Downstream ingestion keeps only available/valid rows, so report it as partial rather than green.
 
 Reuse validation checks source identity and available artifacts, not full-matrix coverage. A successful `sweep-enabled` (trimmed) source is eligible, including for automatic selection, and publishes only its recorded points on `main`. Acceptance does not certify a green full sweep or satisfy that review requirement. To reuse a full sweep specifically, verify its coverage and pin its run ID.

@@ -10,7 +10,7 @@ def parse_component_metadata(
     label: str,
     *,
     version_optional: bool = False,
-    error_type: type[Exception] | type[SystemExit] = ValueError,
+    error_type: type[Exception | SystemExit] = ValueError,
 ) -> dict[str, str] | None:
     """Parse optional metadata, preserving the caller's validation policy."""
     if raw_value in (None, "", "null"):

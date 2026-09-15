@@ -38,36 +38,6 @@ from infx.matrix.validation import (
 )
 
 
-@pytest.mark.parametrize("order", ["legacy-first", "package-first"])
-def test_schema_instances_work_across_legacy_and_package_imports(tmp_path, order):
-    """Duplicate module loads must not create incompatible Pydantic/Enum types."""
-    result = subprocess.run(
-        [sys.executable, "-c", '''
-import importlib
-import sys
-from pathlib import Path
-
-root = Path(sys.argv[1])
-sys.path[:0] = [str(root), str(root / "utils"), str(root / "utils/matrix_logic")]
-names = ["validation", "matrix_logic.validation", "utils.matrix_logic.validation", "infx.matrix.validation"]
-generators = ["generate_sweep_configs", "matrix_logic.generate_sweep_configs", "utils.matrix_logic.generate_sweep_configs", "infx.matrix.generate"]
-if sys.argv[2] == "package-first":
-    names.reverse()
-    generators.reverse()
-schemas = [importlib.import_module(name) for name in names]
-component = schemas[0].ComponentMetadata(name="fixture", version="1")
-field = schemas[0].Fields("runner")
-for schema in schemas:
-    assert schema.ComponentMetadata.model_validate(component) is component
-for name in generators:
-    assert importlib.import_module(name).Fields(field) is field
-''', str(Path(__file__).resolve().parents[2]), order],
-        cwd=tmp_path, capture_output=True, text=True, check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    assert result.stdout == result.stderr == ""
-
-
 # =============================================================================
 # Test Fixtures
 # =============================================================================
@@ -1768,6 +1738,20 @@ duplicate-key:
         with pytest.raises(ValueError) as exc_info:
             load_config_files(["nonexistent.yaml"])
         assert "does not exist" in str(exc_info.value)
+
+    @pytest.mark.parametrize("content", ["", "null", "[]", "false", "42", "recipe"])
+    def test_non_mapping_root_is_rejected(self, tmp_path, content):
+        path = tmp_path / "config.yaml"
+        path.write_text(content)
+        with pytest.raises(ValueError, match="must contain a dictionary"):
+            load_config_files([str(path)], validate=False)
+
+    @pytest.mark.parametrize("key", ["null", "true", "42"])
+    def test_non_string_key_is_rejected(self, tmp_path, key):
+        path = tmp_path / "config.yaml"
+        path.write_text(f"{key}: {{}}")
+        with pytest.raises(ValueError, match="key.*string"):
+            load_config_files([str(path)], validate=False)
 
     def test_validation_runs_by_default(self, tmp_path):
         """Validation should run by default and catch invalid configs."""

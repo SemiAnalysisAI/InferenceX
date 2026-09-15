@@ -30,7 +30,9 @@ def load_records(path: Path) -> list[dict[str, Any]]:
     return records
 
 
-def load_records_with_accounting(path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def load_records_with_accounting(
+    path: Path,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Load profiling records from profile_export.jsonl.
 
     Warmup rows are diagnostics only. Older artifacts did not have
@@ -80,9 +82,10 @@ def _error_category(error: Any) -> str:
     else:
         message = error
 
+    message = str(message or "").strip()
     if not message:
         return "unknown"
-    first_line = str(message).strip().splitlines()[0]
+    first_line = message.splitlines()[0]
     return (first_line.split(":", 1)[0] or "unknown")[:120]
 
 
@@ -167,7 +170,8 @@ def _iter_trace_blobs(traces_dir: Path) -> Iterator[dict[str, Any]]:
 
 
 def iter_trace_blobs(
-    aggregate: Mapping[str, Any], env: Mapping[str, str],
+    aggregate: Mapping[str, Any],
+    env: Mapping[str, str],
 ) -> Iterator[dict[str, Any]]:
     """Read the declared dataset only when request processing consumes traces."""
     metadata = aggregate.get("metadata")
