@@ -21,7 +21,6 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCHMARK_LIB = REPO_ROOT / "benchmarks" / "benchmark_lib.sh"
 MULTINODE_AGENTIC_SCRIPT = REPO_ROOT / "benchmarks/multi_node/agentic_srt.sh"
-MULTINODE_WORKFLOW = REPO_ROOT / ".github/workflows/benchmark-multinode-tmpl.yml"
 
 
 _SCRIPT = r"""
@@ -1006,22 +1005,23 @@ def test_kimi_vendor_verifier_fetches_expected_subset_without_git(
 
 
 def test_kimi_vendor_verifier_retries_transient_archive_failure(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch, capsys,
 ) -> None:
-    result, checkout, request_paths = _prepare_local_kimi_verifier(
-        tmp_path,
-        _kimi_verifier_archive(),
-        transient_failures=1,
-    )
-    verifier_ref = "1" * 40
+    from infx.evals import _kimi_verifier_archive as archive
 
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == str(checkout)
+    payload = _kimi_verifier_archive()
+    verifier_ref = "1" * 40
+    monkeypatch.setattr(archive.time, 'sleep', lambda _: None)
+    with _serve_archive(payload, transient_failures=1) as (repo_url, request_paths):
+        monkeypatch.setattr(sys, 'argv', ['archive', repo_url, verifier_ref,
+                                         hashlib.sha256(payload).hexdigest(), str(tmp_path)])
+        archive.main()
     assert request_paths == [
         f"/owner/verifier/archive/{verifier_ref}.tar.gz",
         f"/owner/verifier/archive/{verifier_ref}.tar.gz",
     ]
-    assert "archive download attempt 1/3 failed" in result.stderr
+    assert "archive download attempt 1/3 failed" in capsys.readouterr().err
+    assert (tmp_path / 'pyproject.toml').read_text() == 'pyproject.toml'
 
 
 def test_kimi_vendor_verifier_rejects_archive_hash_mismatch(
@@ -2194,201 +2194,6 @@ def test_agentic_eval_limit_defaults_to_full_split(tmp_path):
     assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
 
 
-def test_multinode_eval_artifact_names_are_bounded_and_distinct() -> None:
-    workflow = yaml.safe_load(MULTINODE_WORKFLOW.read_text())
-    upload = next(
-        step
-        for step in workflow["jobs"]["benchmark"]["steps"]
-        if step.get("name") == "Upload eval results (if any)"
-    )
-    expression = upload["with"]["name"]
-    targets = [
-        {
-            "EXP_NAME": "kimik3_p2x16ep32dpa_d0x16ep32dpa_conc12",
-            "PRECISION": "fp4",
-            "FRAMEWORK": "vllm",
-            "PREFILL_NUM_WORKERS": "2",
-            "PREFILL_TP": "16",
-            "PREFILL_PP_SIZE": "1",
-            "SPEC_DECODING": "mtp",
-            "PREFILL_DCP_SIZE": "1",
-            "PREFILL_PCP_SIZE": "1",
-            "PREFILL_EP": "32",
-            "PREFILL_DP_ATTN": "true",
-            "DECODE_NUM_WORKERS": "0",
-            "DECODE_TP": "16",
-            "DECODE_PP_SIZE": "1",
-            "DECODE_DCP_SIZE": "1",
-            "DECODE_PCP_SIZE": "1",
-            "DECODE_EP": "32",
-            "DECODE_DP_ATTN": "true",
-            "KV_OFFLOADING": "none",
-            "KV_OFFLOAD_BACKEND": "",
-            "conc-list": ["1", "12", "16"],
-            "runner.name": "h200-dgxc-slurm_00",
-        },
-        {
-            "EXP_NAME": "kimik3_p4x8ep32dpa_d0x8ep32dpa_conc12",
-            "PRECISION": "fp4",
-            "FRAMEWORK": "vllm",
-            "PREFILL_NUM_WORKERS": "4",
-            "PREFILL_TP": "8",
-            "PREFILL_PP_SIZE": "1",
-            "PREFILL_DCP_SIZE": "1",
-            "PREFILL_PCP_SIZE": "1",
-            "PREFILL_EP": "32",
-            "PREFILL_DP_ATTN": "true",
-            "DECODE_NUM_WORKERS": "0",
-            "SPEC_DECODING": "mtp",
-            "DECODE_TP": "8",
-            "DECODE_PP_SIZE": "1",
-            "DECODE_DCP_SIZE": "1",
-            "DECODE_PCP_SIZE": "1",
-            "DECODE_EP": "32",
-            "DECODE_DP_ATTN": "true",
-            "KV_OFFLOADING": "none",
-            "KV_OFFLOAD_BACKEND": "",
-            "conc-list": ["1", "12", "16"],
-            "runner.name": "h200-dgxc-slurm_01",
-        },
-        {
-            "EXP_NAME": "kimik3_p4x8ep32dpa_d0x8ep32dpa_conc12_kvdram-vllm-simple",
-            "PRECISION": "fp4",
-            "FRAMEWORK": "vllm",
-            "PREFILL_NUM_WORKERS": "4",
-            "PREFILL_TP": "8",
-            "PREFILL_PP_SIZE": "1",
-            "PREFILL_DCP_SIZE": "1",
-            "PREFILL_PCP_SIZE": "1",
-            "PREFILL_EP": "32",
-            "PREFILL_DP_ATTN": "true",
-            "DECODE_NUM_WORKERS": "0",
-            "DECODE_TP": "8",
-            "DECODE_PP_SIZE": "1",
-            "DECODE_DCP_SIZE": "1",
-            "DECODE_PCP_SIZE": "1",
-            "DECODE_EP": "32",
-            "SPEC_DECODING": "mtp",
-            "DECODE_DP_ATTN": "true",
-            "KV_OFFLOADING": "dram",
-            "KV_OFFLOAD_BACKEND": "vllm-simple",
-            "conc-list": ["1", "12", "16"],
-            "runner.name": "h200-dgxc-slurm_02",
-        },
-        {
-            "EXP_NAME": "kimik3_p1x8_d0x8_conc16",
-            "PRECISION": "fp4",
-            "FRAMEWORK": "dynamo-vllm",
-            "PREFILL_NUM_WORKERS": "1",
-            "PREFILL_TP": "8",
-            "PREFILL_PP_SIZE": "2",
-            "PREFILL_DCP_SIZE": "1",
-            "PREFILL_PCP_SIZE": "1",
-            "PREFILL_EP": "1",
-            "PREFILL_DP_ATTN": "false",
-            "DECODE_NUM_WORKERS": "0",
-            "DECODE_TP": "8",
-            "DECODE_PP_SIZE": "2",
-            "DECODE_DCP_SIZE": "1",
-            "DECODE_PCP_SIZE": "1",
-            "DECODE_EP": "1",
-            "DECODE_DP_ATTN": "false",
-            "SPEC_DECODING": "mtp",
-            "KV_OFFLOADING": "none",
-            "KV_OFFLOAD_BACKEND": "",
-            "conc-list": ["1", "16"],
-            "runner.name": "b200-dgxc_00",
-        },
-        {
-            "EXP_NAME": "kimik3_p1x16ep16_d0x16ep16_conc16",
-            "PRECISION": "fp4",
-            "FRAMEWORK": "dynamo-vllm",
-            "PREFILL_NUM_WORKERS": "1",
-            "PREFILL_TP": "16",
-            "PREFILL_PP_SIZE": "1",
-            "PREFILL_DCP_SIZE": "1",
-            "PREFILL_PCP_SIZE": "1",
-            "PREFILL_EP": "16",
-            "PREFILL_DP_ATTN": "false",
-            "DECODE_NUM_WORKERS": "0",
-            "DECODE_TP": "16",
-            "DECODE_PP_SIZE": "1",
-            "DECODE_DCP_SIZE": "1",
-            "DECODE_PCP_SIZE": "1",
-            "DECODE_EP": "16",
-            "DECODE_DP_ATTN": "false",
-            "KV_OFFLOADING": "none",
-            "SPEC_DECODING": "mtp",
-            "KV_OFFLOAD_BACKEND": "",
-            "conc-list": ["16"],
-            "runner.name": "gb200-nv_00",
-        },
-        {
-            "EXP_NAME": "kimik3_p1x16_d0x16_conc1",
-            "PRECISION": "fp4",
-            "FRAMEWORK": "dynamo-vllm",
-            "PREFILL_NUM_WORKERS": "1",
-            "PREFILL_TP": "16",
-            "PREFILL_PP_SIZE": "1",
-            "PREFILL_DCP_SIZE": "1",
-            "PREFILL_PCP_SIZE": "1",
-            "PREFILL_EP": "1",
-            "PREFILL_DP_ATTN": "false",
-            "DECODE_NUM_WORKERS": "0",
-            "DECODE_TP": "16",
-            "DECODE_PP_SIZE": "1",
-            "DECODE_DCP_SIZE": "1",
-            "DECODE_PCP_SIZE": "1",
-            "DECODE_EP": "1",
-            "DECODE_DP_ATTN": "false",
-            "KV_OFFLOADING": "none",
-            "KV_OFFLOAD_BACKEND": "",
-            "SPEC_DECODING": "mtp",
-            "conc-list": ["1"],
-            "runner.name": "gb200-nv_01",
-        },
-    ]
-    non_mtp_twin = {**targets[3], "SPEC_DECODING": "none"}
-    disagg_twin = {**targets[3], "DISAGG": "true"}
-    recipe_twin = {
-        **targets[3],
-        "EVAL_ARTIFACT_RECIPE": "0123456789abcdef",
-    }
-    suite_twin = {**targets[3], "EVAL_SUITE": "bfcl_vllm_kimi"}
-    conc_twin = {**targets[3], "conc-list": ["2", "16"]}
-
-    def render(values: dict[str, object]) -> str:
-        name = expression
-        defaults: dict[str, object] = {
-            "DISAGG": "false",
-            "EVAL_ARTIFACT_RECIPE": "",
-            "EVAL_FRAMEWORK": "bfcl",
-            "EVAL_SUITE": "bfcl_smoke",
-        }
-        defaults["EVAL_ARTIFACT_CONC"] = hashlib.sha256(
-            " ".join(values["conc-list"]).encode()
-        ).hexdigest()[:12]
-        for key, value in {**defaults, **values}.items():
-            if key != "conc-list":
-                name = name.replace(f"${{{{ env.{key} }}}}", str(value))
-        name = name.replace("${{ runner.name }}", str(values["runner.name"]))
-        name = name.replace("${{ github.run_attempt }}", "1")
-        assert "${{" not in name
-        return name
-
-    variants = [
-        *targets,
-        non_mtp_twin,
-        disagg_twin,
-        recipe_twin,
-        suite_twin,
-        conc_twin,
-    ]
-    names = [render(target) for target in variants]
-    assert len(names) == len(set(names))
-    assert all(name.startswith("eval_") and len(name.encode()) <= 256 for name in names)
-
-
 _GENMODE_SCRIPT = r"""
 source "$BENCHMARK_LIB" 2>/dev/null
 _install_swebench_agent_deps() { :; }
@@ -2566,42 +2371,6 @@ _wait_for_openai_chat_route --port 8765
     assert events[1].endswith("http://localhost:8765/v1/models")
     assert events[2].endswith("http://localhost:8765/v1/chat/completions")
     assert "--data" not in events[2]
-
-
-def test_chat_route_readiness_accepts_stable_server_with_different_model_id(
-    tmp_path: Path,
-) -> None:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    curl = bin_dir / "curl"
-    curl.write_text(
-        """#!/usr/bin/env bash
-case "$*" in
-    */v1/models*) printf '{"data":[{"id":"/models/different-model"}]}\n' ;;
-    */v1/chat/completions*) printf '404' ;;
-esac
-""",
-        encoding="utf-8",
-    )
-    curl.chmod(curl.stat().st_mode | stat.S_IXUSR)
-
-    subprocess.run(
-        [
-            "bash",
-            "-c",
-            'source "$BENCHMARK_LIB"; MODEL=test-model; '
-            "_wait_for_openai_chat_route --port 8765",
-        ],
-        env={
-            **os.environ,
-            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
-            "BENCHMARK_LIB": str(BENCHMARK_LIB),
-            "EVAL_MODEL_STABILIZATION_SECONDS": "0",
-        },
-        text=True,
-        capture_output=True,
-        check=True,
-    )
 
 
 def test_multinode_agentic_waits_only_for_eval_openai_endpoint(

@@ -279,7 +279,14 @@ def run(
                     ).hexdigest(),
                 }
             )
-        except (OSError, ValueError, KeyError, TypeError, csv.Error) as exc:
+        except (
+            OSError,
+            ValueError,
+            KeyError,
+            TypeError,
+            OverflowError,
+            csv.Error,
+        ) as exc:
             reasons.append("native_node_invalid")
             node_errors.append(
                 {
@@ -289,12 +296,9 @@ def run(
                 }
             )
     if (
-        len(expected_nodes) != 1
-        or not expected_nodes
-        or type(next(iter(expected_nodes), None)) is not int
-        or set(ranks) != set(range(next(iter(expected_nodes), 0)))
+        expected_nodes != {len(ranks)}
+        or sorted(ranks) != list(range(len(ranks)))
         or len(set(nodes)) != len(nodes)
-        or len(ranks) != len(set(ranks))
     ):
         reasons.append("native_node_topology_mismatch")
     if len(jobs) != 1 or "" in jobs or len(revisions) != 1 or "" in revisions:

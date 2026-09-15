@@ -8,6 +8,7 @@ import os
 import re
 import signal
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -71,21 +72,34 @@ def healthy(required: dict[str, str]) -> bool:
     )
 
 
+def _signal_group(pgid: int, sig: signal.Signals) -> bool:
+    try:
+        os.killpg(pgid, sig)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        if sys.platform != "darwin":
+            raise
+        listing = subprocess.check_output(["ps", "-eo", "pgid=,stat="], text=True)
+        if any(
+            group == str(pgid) and not state.startswith(("Z", "X"))
+            for group, state in (line.split() for line in listing.splitlines())
+        ):
+            raise
+        return False
+
+
 def stop(client: subprocess.Popen) -> None:
     # The leader may already have exited while leaving its own workers behind.
-    try:
-        os.killpg(client.pid, signal.SIGTERM)
-    except ProcessLookupError:
+    if not _signal_group(client.pid, signal.SIGTERM):
         return
     try:
         client.wait(timeout=5)
     except subprocess.TimeoutExpired:
         pass
     finally:
-        try:
-            os.killpg(client.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+        _signal_group(client.pid, signal.SIGKILL)
         client.wait()
 
 

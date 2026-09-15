@@ -82,9 +82,10 @@ def _error_category(error: Any) -> str:
     else:
         message = error
 
+    message = str(message or "").strip()
     if not message:
         return "unknown"
-    first_line = str(message).strip().splitlines()[0]
+    first_line = message.splitlines()[0]
     return (first_line.split(":", 1)[0] or "unknown")[:120]
 
 
