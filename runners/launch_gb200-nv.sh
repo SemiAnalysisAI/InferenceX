@@ -590,12 +590,6 @@ if command -v squeue >/dev/null 2>&1; then
 fi
 sed -i "s/^name:.*/name: \"${SRT_SLURM_JOB_NAME}\"/" "$CONFIG_PATH"
 
-# The driver preserves both contracts: real verification for EVAL_ONLY and
-# synthetic acceptance for throughput when SYNTHETIC_ACCEPTANCE is enabled.
-# It is otherwise a no-op.
-python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-    "$CONFIG_PATH" "$FRAMEWORK" || exit 1
-
 if [[ "$USES_AGENTX_POWER" == "1" ]]; then
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
     python3 "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
@@ -632,7 +626,7 @@ fi
 # srtctl gives the GitHub-provided RUNNER_NAME precedence over config.name.
 # Override it only for submission so the rendered #SBATCH job name retains
 # the InferenceX namespace used above.
-SRTCTL_OUTPUT=$(RUNNER_NAME="$SRT_SLURM_JOB_NAME" srtctl apply "${SRTCTL_EVAL_ARGS[@]}" "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
+SRTCTL_OUTPUT=$(RUNNER_NAME="$SRT_SLURM_JOB_NAME" apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" throughput "${SRTCTL_EVAL_ARGS[@]}" "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')

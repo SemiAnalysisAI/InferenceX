@@ -333,10 +333,6 @@ EOF
     # so large-model loads (e.g. DSR1-FP8 ~680GB off shared FS) finish in time.
     # Uses ${CONFIG_FILE%%:*} because CONFIG_FILE may carry an :override[N] suffix.
     sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "${CONFIG_FILE%%:*}"
-    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
-        python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-            "${CONFIG_FILE%%:*}" "$FRAMEWORK" || exit 1
-    fi
 
     SRTCTL_PREFLIGHT_ARGS=()
     # Kimi K2.6 weights are staged on the Slurm compute nodes, not the login node.
@@ -344,7 +340,7 @@ EOF
         SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
     fi
 
-    SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" eval-only "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
     # Extract JOB_ID from srtctl output

@@ -12,7 +12,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SLURM_UTILS = REPO_ROOT / "runners" / "slurm_utils.sh"
 PATCH_TRTLLM_CHAT_STORE = REPO_ROOT / "runners" / "patch_trtllm_chat_store.py"
 PATCH_VLLM_SIMPLE_KV = REPO_ROOT / "runners" / "patch_vllm_simple_kv_offload.py"
-INJECT_ACCEPTANCE = REPO_ROOT / "runners" / "inject_synthetic_acceptance.py"
 
 
 def run_bash(command: str, *args: Path | str) -> subprocess.CompletedProcess[str]:
@@ -307,110 +306,6 @@ def test_patch_vllm_simple_kv_offload_rejects_unknown_source(
 
     assert result.returncode == 1
     assert worker.read_text() == "unsupported worker\n"
-
-
-def test_eval_only_restores_real_vllm_acceptance(tmp_path: Path) -> None:
-    recipe = tmp_path / "recipe.yaml"
-    recipe.write_text(
-        "speculative-config: "
-        """'{\"method\":\"dspark\",\"num_speculative_tokens\":2,"""
-        """\"rejection_sample_method\":\"synthetic\","""
-        """\"synthetic_acceptance_length\":2.51}'\n"""
-    )
-    env = {
-        **os.environ,
-        "EVAL_ONLY": "true",
-        "SYNTHETIC_ACCEPTANCE": "true",
-    }
-
-    result = subprocess.run(
-        ["python3", str(INJECT_ACCEPTANCE), str(recipe), "vllm"],
-        env=env,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr
-    speculative_config = json.loads(yaml.safe_load(recipe.read_text())["speculative-config"])
-    assert speculative_config["rejection_sample_method"] == "block"
-    assert "synthetic_acceptance_length" not in speculative_config
-
-
-def test_eval_only_removes_sglang_simulated_acceptance(tmp_path: Path) -> None:
-    recipe = tmp_path / "recipe.yaml"
-    recipe.write_text(
-        "schema: 2\nengine: sglang\nroles:\n"
-        "  decode:\n"
-        "    env:\n"
-        '      SGLANG_SIMULATE_ACC_LEN: "2.99"\n'
-        '      SGLANG_SIMULATE_ACC_METHOD: "match-expected"\n'
-        '      SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"\n'
-        "      KEEP_ME: unchanged\n"
-    )
-
-    result = subprocess.run(
-        ["python3", str(INJECT_ACCEPTANCE), str(recipe), "dynamo-sglang"],
-        env={**os.environ, "EVAL_ONLY": "true"},
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr
-    environment = yaml.safe_load(recipe.read_text())["roles"]["decode"]["env"]
-    assert environment == {"KEEP_ME": "unchanged"}
-
-
-def test_sglang_throughput_rejects_existing_simulated_acceptance(
-    tmp_path: Path,
-) -> None:
-    recipe = tmp_path / "recipe.yaml"
-    original = (
-        "schema: 2\nengine: sglang\nroles:\n"
-        "  agg:\n"
-        "    env:\n"
-        '      SGLANG_SIMULATE_ACC_LEN: "2.99"\n'
-        '      SGLANG_SIMULATE_ACC_METHOD: "match-expected"\n'
-        '      SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"\n'
-        "      KEEP_ME: unchanged\n"
-    )
-    recipe.write_text(original)
-
-    result = subprocess.run(
-        ["python3", str(INJECT_ACCEPTANCE), str(recipe), "dynamo-sglang"],
-        env={
-            **os.environ,
-            "SYNTHETIC_ACCEPTANCE": "true",
-            "SYNTHETIC_ACCEPTANCE_LENGTH": "3.39",
-        },
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode != 0
-    assert "already contains SGLANG_SIMULATE_ACC_" in result.stderr
-    assert recipe.read_text() == original
-
-
-def test_eval_only_acceptance_rewrite_allows_non_speculative_recipe(
-    tmp_path: Path,
-) -> None:
-    recipe = tmp_path / "recipe.yaml"
-    original = "schema: 2\nengine: vllm\nroles:\n  agg:\n    nodes: 1\n"
-    recipe.write_text(original)
-
-    result = subprocess.run(
-        ["python3", str(INJECT_ACCEPTANCE), str(recipe), "dynamo-vllm"],
-        env={**os.environ, "EVAL_ONLY": "true"},
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert recipe.read_text() == original
 
 
 @pytest.mark.parametrize(

@@ -8,6 +8,8 @@ on:
     paths:
       - "infx/**"
       - "utils/test_module_entrypoints.py"
+      - "utils/test_synthetic_acceptance.py"
+      - "utils/srt-slurm"
       - ".claude/commands/recover-failed-ingest.md"
       - ".claude/mcp/**"
       - ".claude/requirements-mcp.txt"
@@ -122,3 +124,11 @@ jobs:
             utils/evals/test_run_eval_dispatch.py \
             runners/test_slurm_utils.py \
             -v -n 4
+
+      - name: Test native srt-slurm acceptance overrides
+        run: |
+          git submodule update --init utils/srt-slurm
+          uv run --no-project --exclude-newer PT12H --python 3.12 \
+            --with pytest --with pyyaml --with marshmallow --with marshmallow-dataclass \
+            --with ruamel.yaml --with jinja2 --with pydantic --with requests --with rich \
+            python -m pytest utils/test_synthetic_acceptance.py -v

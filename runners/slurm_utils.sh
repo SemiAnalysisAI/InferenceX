@@ -70,17 +70,19 @@ check_staged_srt_assets() {
     fi
 }
 
-# Optionally inject synthetic acceptance into a recipe's speculative-config when
-# SYNTHETIC_ACCEPTANCE=true (no-op otherwise). Call after the job-name override
-# and before `srtctl apply` so the rendered job picks it up. Returns non-zero if
-# the injector fails, so a broken opt-in never reaches srtctl with an unrewritten
-# recipe; callers should propagate that rather than continuing.
-inject_synthetic_acceptance() {
-    local config_path="$1"
-    local framework="$2"
-
-    python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-        "$config_path" "$framework"
+# Keep runtime acceptance changes in srtctl's native --set/--unset arguments.
+# mode is throughput (honor SYNTHETIC_ACCEPTANCE) or eval-only (legacy callers
+# only restore real verification); EVAL_ONLY takes precedence in both modes.
+apply_srt_recipe() {
+    if [[ $# -lt 3 || -z "$1" || -z "$2" || ( "$3" != throughput && "$3" != eval-only ) ]]; then
+        echo "Usage: apply_srt_recipe config framework throughput|eval-only [srtctl arguments...]" >&2
+        return 1
+    fi
+    local config="$1" framework="$2" mode="$3"
+    shift 3
+    PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" \
+        python3 -m infx.recipes.synthetic_acceptance \
+        "$config" "$framework" "$mode" -- "$@"
 }
 
 slurm_job_is_active() {
