@@ -23,9 +23,8 @@ RESULT_FORMAT = "inferencex-eval-v1"
 ADAPTER_NAME = "bfcl-v4-openai-completions"
 DEFAULT_NUM_THREADS = 4
 REQUIRED_SCORE = 0.0
-FULL_SUITE_REQUEST_TIMEOUT_SECONDS = 180
-FULL_SUITE_REQUEST_MAX_RETRIES = 2
-KIMI_MAXIMUM_STEP_LIMIT = 10
+REQUEST_TIMEOUT_SECONDS = 180
+REQUEST_MAX_RETRIES = 2
 
 BFCL_PACKAGE = "bfcl-eval"
 BFCL_PACKAGE_VERSION = "2026.3.23"
@@ -439,14 +438,6 @@ def _clear_upstream_modules() -> None:
             sys.modules.pop(module_name, None)
 
 
-def _apply_suite_runtime_limits(suite: SuiteSpec) -> None:
-    """Apply pinned BFCL limits before importing its model handlers."""
-    if suite is KIMI_SUITE:
-        from bfcl_eval.constants import default_prompts as bfcl_prompts
-
-        bfcl_prompts.MAXIMUM_STEP_LIMIT = KIMI_MAXIMUM_STEP_LIMIT
-
-
 def _bounded_openai_handler(stock_handler: type[Any]) -> type[Any]:
     """Retain BFCL's handler while bounding its OpenAI transport."""
 
@@ -454,8 +445,8 @@ def _bounded_openai_handler(stock_handler: type[Any]) -> type[Any]:
         def _build_client_kwargs(self) -> dict[str, Any]:
             kwargs = super()._build_client_kwargs()
             kwargs.update(
-                timeout=FULL_SUITE_REQUEST_TIMEOUT_SECONDS,
-                max_retries=FULL_SUITE_REQUEST_MAX_RETRIES,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                max_retries=REQUEST_MAX_RETRIES,
             )
             return kwargs
 
@@ -577,7 +568,6 @@ def _run_upstream(
 ) -> None:
     """Lazily load and invoke the pinned BFCL API against an existing server."""
     suite, case_ids_by_category = _read_selected_suite(project_root)
-    _apply_suite_runtime_limits(suite)
     os.environ["BFCL_PROJECT_ROOT"] = str(project_root)
     os.environ["OPENAI_BASE_URL"] = base_url
     os.environ["OPENAI_API_KEY"] = api_key
@@ -589,11 +579,7 @@ def _run_upstream(
         OpenAICompletionsHandler,
     )
 
-    handler = (
-        OpenAICompletionsHandler
-        if suite is SMOKE_SUITE
-        else _bounded_openai_handler(OpenAICompletionsHandler)
-    )
+    handler = _bounded_openai_handler(OpenAICompletionsHandler)
 
     bfcl_model_config.MODEL_CONFIG_MAPPING[model] = ModelConfig(
         model_name=model,

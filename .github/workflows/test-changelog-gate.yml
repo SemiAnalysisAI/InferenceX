@@ -43,6 +43,8 @@ on:
       - "utils/test_collect_eval_results.py"
       - "utils/evals/validate_scores.py"
       - "utils/evals/test_batched_eval.py"
+      - "utils/evals/test_bfcl_eval.py"
+      - "utils/evals/test_bfcl_integration.py"
       - "utils/evals/test_run_eval_dispatch.py"
       - "utils/evals/_kimi_verifier_archive.py"
       - "utils/prepare_perf_changelog_merge.py"
@@ -118,5 +120,6 @@ jobs:
             utils/test_process_changelog.py \
             utils/test_collect_eval_results.py \
             utils/evals/test_batched_eval.py \
+            utils/evals/test_bfcl_eval.py \
             utils/evals/test_run_eval_dispatch.py \
             -v -n 4

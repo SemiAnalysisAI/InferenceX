@@ -337,9 +337,10 @@ typically `http://127.0.0.1:$PORT/v1`. The OpenAI SDK appends
 not download a model or call a remote inference API.
 
 The smoke fixes temperature to `0` and uses four BFCL worker threads. Request
-construction, response interpretation, and retry behavior remain those of the
-pinned stock BFCL OpenAI-completions handler and OpenAI SDK. The adapter only
-registers the served model against that stock handler. A 900-second external
+construction and response interpretation remain those of the pinned stock
+BFCL OpenAI-completions handler. All suites register a transport-only subclass
+that sets a 180-second per-attempt timeout and two OpenAI SDK retries; it does
+not rewrite requests, responses, dependency source, or scoring. A 900-second external
 process deadline bounds the smoke; each full suite uses its declared deadline.
 Dependency installation is separately bounded at 600 seconds. Dependency,
 setup, transport, timeout, and collection failures write
@@ -354,6 +355,25 @@ function names and JSON-encoded `function.arguments`; the response must also
 support a normal no-tool answer for the irrelevance case. Starting a nominally
 OpenAI-compatible server is not sufficient if it cannot parse that model's
 native tool-call syntax.
+
+BFCL sends `store=false` in its stock chat requests. Stock TRT-LLM
+`1.3.0rc23.post1` rejects this field; InferenceX does not patch its request
+schema. BFCL on that image therefore remains blocked on upstream support.
+A successful vendor smoke is not evidence that BFCL works on the same backend.
+
+The same model/suite uses identical cases and scoring on AMD and NVIDIA.
+Vendor evals remain automatic; BFCL is an explicit additional diagnostic.
+To test the real pinned BFCL package locally, including strict endpoint-error
+reporting, without launching a model:
+
+```bash
+uv run --no-project --python 3.12 --with pytest \
+  --with bfcl-eval==2026.3.23 --with soundfile==0.13.1 \
+  python -m pytest utils/evals/test_bfcl_integration.py -v
+```
+
+This fixture test exercises upstream generation and scoring, not live hardware
+compatibility or model quality. The test skips when BFCL is not installed.
 
 Configure the server's model-specific function-calling parser and, when the
 model's default template does not render tools correctly, its tool-aware chat
@@ -406,7 +426,9 @@ fix temperature to `0.001` and retain the stock handler's request construction,
 response interpretation, and retry behavior. A transport-only subclass pins
 the OpenAI SDK to two retries and a 180-second per-attempt timeout. MiniMax uses
 eight worker threads and a two-hour whole-suite timeout. Kimi uses 16 threads,
-caps multi-turn cases at ten steps, and uses a four-hour whole-suite timeout.
+uses the pinned upstream multi-turn step limit (20), and uses a four-hour
+whole-suite timeout. InferenceX does not override BFCL module globals. Older
+Kimi runs used a local ten-step override and are not directly comparable.
 
 The adapter builds a deterministic run-ID map from the pinned BFCL dataset.
 Single-turn suites select every case in their named categories. The Kimi
