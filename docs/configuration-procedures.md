@@ -176,10 +176,6 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 6. Append a changelog entry selecting all affected keys (wildcards are allowed when intentional), including old/new versions and material runtime changes.
 7. Generate each affected family and verify no stale tag survives in its runtime path.
 
-### MiniMax-M3 B200 vLLM offload
-
-The B200 MiniMax-M3 AgentX vLLM recipe uses upstream mixed-page KV offload registration from [vLLM #54756](https://github.com/vllm-project/vllm/pull/54756), without rewriting the installed worker. The latest stable release checked for this update, v0.29.0, lacks that fix, so the master config pins the newer published nightly by commit. Keep the existing resident and `vllm-simple` DRAM-offload points and validate both in the full sweep.
-
 ## Add or change MTP
 
 Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-negotiable-benchmark-invariants), [MTP appendix in the model+hardware playbook](../.claude/commands/add-model-hardware.md#appendix--mtp--eagle3-spec-decoding-variant), and current [`*_mtp.sh` siblings](../benchmarks/single_node/fixed_seq_len/).
