@@ -54,7 +54,10 @@ def analyze(records: list[dict], output_dir: Path) -> None:
     all_osl: list[int] = []
     for r in records:
         metrics = r.get("metrics", {})
-        if "input_sequence_length" not in metrics or "output_sequence_length" not in metrics:
+        if (
+            "input_sequence_length" not in metrics
+            or "output_sequence_length" not in metrics
+        ):
             continue
         all_isl.append(metrics["input_sequence_length"]["value"])
         all_osl.append(metrics["output_sequence_length"]["value"])
@@ -114,10 +117,30 @@ def _generate_plots(
         alpha=0.7,
         color="steelblue",
     )
-    ax.axvline(isl_stats["median"], color="red", linestyle="--", label=f"Median: {isl_stats['median']:,}")
-    ax.axvline(isl_stats["mean"], color="orange", linestyle="--", label=f"Mean: {isl_stats['mean']:,.0f}")
-    ax.axvline(isl_stats["p90"], color="green", linestyle=":", label=f"P90: {isl_stats['p90']:,}")
-    ax.axvline(isl_stats["p95"], color="purple", linestyle=":", label=f"P95: {isl_stats['p95']:,}")
+    ax.axvline(
+        isl_stats["median"],
+        color="red",
+        linestyle="--",
+        label=f"Median: {isl_stats['median']:,}",
+    )
+    ax.axvline(
+        isl_stats["mean"],
+        color="orange",
+        linestyle="--",
+        label=f"Mean: {isl_stats['mean']:,.0f}",
+    )
+    ax.axvline(
+        isl_stats["p90"],
+        color="green",
+        linestyle=":",
+        label=f"P90: {isl_stats['p90']:,}",
+    )
+    ax.axvline(
+        isl_stats["p95"],
+        color="purple",
+        linestyle=":",
+        label=f"P95: {isl_stats['p95']:,}",
+    )
     ax.set_xlabel("Input Sequence Length (tokens)")
     ax.set_ylabel("Count")
     ax.set_title(f"All Requests ISL (n={isl_stats['n']:,})")
@@ -135,10 +158,30 @@ def _generate_plots(
         alpha=0.7,
         color="coral",
     )
-    ax.axvline(osl_stats["median"], color="red", linestyle="--", label=f"Median: {osl_stats['median']:,}")
-    ax.axvline(osl_stats["mean"], color="orange", linestyle="--", label=f"Mean: {osl_stats['mean']:,.0f}")
-    ax.axvline(osl_stats["p90"], color="green", linestyle=":", label=f"P90: {osl_stats['p90']:,}")
-    ax.axvline(osl_stats["p95"], color="purple", linestyle=":", label=f"P95: {osl_stats['p95']:,}")
+    ax.axvline(
+        osl_stats["median"],
+        color="red",
+        linestyle="--",
+        label=f"Median: {osl_stats['median']:,}",
+    )
+    ax.axvline(
+        osl_stats["mean"],
+        color="orange",
+        linestyle="--",
+        label=f"Mean: {osl_stats['mean']:,.0f}",
+    )
+    ax.axvline(
+        osl_stats["p90"],
+        color="green",
+        linestyle=":",
+        label=f"P90: {osl_stats['p90']:,}",
+    )
+    ax.axvline(
+        osl_stats["p95"],
+        color="purple",
+        linestyle=":",
+        label=f"P95: {osl_stats['p95']:,}",
+    )
     ax.set_xlabel("Output Sequence Length (tokens)")
     ax.set_ylabel("Count")
     ax.set_title(f"All Requests OSL (n={osl_stats['n']:,})")
@@ -153,7 +196,9 @@ def _generate_plots(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Analyze benchmark workload distributions")
+    parser = argparse.ArgumentParser(
+        description="Analyze benchmark workload distributions"
+    )
     parser.add_argument("artifacts_dir", help="Path to aiperf_artifacts/ directory")
     parser.add_argument(
         "-o",

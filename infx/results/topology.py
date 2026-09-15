@@ -37,12 +37,18 @@ class Parallelism:
 
 
 def validate_parallelism(
-    *layouts: Parallelism, error_type: type[BaseException] = ValueError,
+    *layouts: Parallelism,
+    error_type: type[BaseException] = ValueError,
 ) -> None:
     """Validate PP/DCP/PCP after the caller has parsed all its inputs."""
-    if any(size <= 0 for layout in layouts for size in (layout.pp, layout.dcp_size, layout.pcp_size)):
+    if any(
+        size <= 0
+        for layout in layouts
+        for size in (layout.pp, layout.dcp_size, layout.pcp_size)
+    ):
         dimensions = (
-            "Multinode PP, DCP, and PCP sizes" if len(layouts) > 1
+            "Multinode PP, DCP, and PCP sizes"
+            if len(layouts) > 1
             else "PP_SIZE, DCP_SIZE, and PCP_SIZE"
         )
         raise error_type(f"{dimensions} must be positive integers.")

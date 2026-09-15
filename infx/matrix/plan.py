@@ -214,9 +214,15 @@ def _matrix_concurrencies(entry: dict) -> tuple[int, ...]:
     conc = entry.get("conc")
     if isinstance(conc, int):
         return (conc,)
-    if isinstance(conc, list) and conc and all(isinstance(value, int) for value in conc):
+    if (
+        isinstance(conc, list)
+        and conc
+        and all(isinstance(value, int) for value in conc)
+    ):
         return tuple(conc)
-    raise ValueError(f"append-only matrix entry has invalid concurrency value: {conc!r}")
+    raise ValueError(
+        f"append-only matrix entry has invalid concurrency value: {conc!r}"
+    )
 
 
 def append_only_delta(base_entries: list[dict], head_entries: list[dict]) -> list[dict]:
@@ -277,9 +283,7 @@ def append_only_delta(base_entries: list[dict], head_entries: list[dict]) -> lis
 
     base_images_by_series: dict[tuple, set[str | None]] = defaultdict(set)
     for entry in base_entries:
-        base_images_by_series[_matrix_visual_series_key(entry)].add(
-            entry.get("image")
-        )
+        base_images_by_series[_matrix_visual_series_key(entry)].add(entry.get("image"))
     for entry in delta:
         series_key = _matrix_visual_series_key(entry)
         base_images = base_images_by_series.get(series_key, set())
@@ -363,7 +367,8 @@ def group_unseen_scenarios(
     groups: dict[tuple[str, ...], list[str]] = defaultdict(list)
     for config in config_keys:
         unseen = tuple(
-            scenario for scenario in SCENARIO_TYPES
+            scenario
+            for scenario in SCENARIO_TYPES
             if scenario in scenarios and scenario not in seen[config]
         )
         if unseen:
@@ -395,17 +400,26 @@ class MatrixGenerationError(ValueError):
     """A current-revision generation failure, with its CLI diagnostic context."""
 
     def __init__(
-        self, keys: list[str], flags: list[str],
-        inputs: GenerationInputs | None, cause: Exception,
+        self,
+        keys: list[str],
+        flags: list[str],
+        inputs: GenerationInputs | None,
+        cause: Exception,
     ) -> None:
         super().__init__(str(cause))
         self.keys, self.flags, self.inputs, self.cause = keys, flags, inputs, cause
 
 
 def build_plan(
-    changelog_data: list[dict], *, base_ref: str, head_ref: str,
-    config_files: list[str] | None = None, runner_config: str = RUNNER_CONFIG,
-    trim: bool = False, all_evals: bool = False, evals_only: bool = False,
+    changelog_data: list[dict],
+    *,
+    base_ref: str,
+    head_ref: str,
+    config_files: list[str] | None = None,
+    runner_config: str = RUNNER_CONFIG,
+    trim: bool = False,
+    all_evals: bool = False,
+    evals_only: bool = False,
 ) -> ChangelogMatrixEntry:
     """Build the complete sweep from changelog entries and configuration paths.
 
@@ -417,11 +431,15 @@ def build_plan(
         raise ValueError("No valid YAML entries found in the changelog additions.")
 
     with ExitStack() as stack:
-        parsed_entries = [ChangelogEntry.model_validate(entry) for entry in changelog_data]
+        parsed_entries = [
+            ChangelogEntry.model_validate(entry) for entry in changelog_data
+        ]
         if any(entry.no_evals for entry in parsed_entries) and (
             all_evals or evals_only
         ):
-            raise ValueError("no-evals entries cannot use all-evals or evals-only modifiers")
+            raise ValueError(
+                "no-evals entries cannot use all-evals or evals-only modifiers"
+            )
         has_append_only = any(entry.append_only for entry in parsed_entries)
         if has_append_only and not all(entry.append_only for entry in parsed_entries):
             raise ValueError(
@@ -454,32 +472,39 @@ def build_plan(
         eval_scenarios_seen = defaultdict(set)
 
         config_files = MASTER_CONFIGS if config_files is None else config_files
-        head_inputs = GenerationInputs(config_files, GENERATE_SWEEPS_PY_SCRIPT, runner_config)
+        head_inputs = GenerationInputs(
+            config_files, GENERATE_SWEEPS_PY_SCRIPT, runner_config
+        )
         master_config = load_config_files(config_files)
         runner_data = None
 
         def generate_current(
-            keys: list[str], mode: EvalMode, scenarios: tuple[str, ...] | None,
+            keys: list[str],
+            mode: EvalMode,
+            scenarios: tuple[str, ...] | None,
         ) -> list[dict]:
             nonlocal runner_data
             try:
                 if runner_data is None:
                     runner_data = load_runner_file(runner_config)
                 return generate_config_matrix(
-                    keys, master_config, runner_data,
-                    scenario_types=scenarios, eval_mode=mode,
+                    keys,
+                    master_config,
+                    runner_data,
+                    scenario_types=scenarios,
+                    eval_mode=mode,
                 )
             except Exception as error:
                 raise MatrixGenerationError(
-                    keys, _generation_flags(mode, scenarios),
-                    head_inputs if mode == "none" else None, error,
+                    keys,
+                    _generation_flags(mode, scenarios),
+                    head_inputs if mode == "none" else None,
+                    error,
                 ) from error
 
         resolved_entries = []
         for entry in parsed_entries:
-            all_configs = get_config_keys_from_master(
-                entry.config_keys, master_config
-            )
+            all_configs = get_config_keys_from_master(entry.config_keys, master_config)
             resolved_entries.append((entry, all_configs))
 
         base_inputs = None
@@ -512,22 +537,23 @@ def build_plan(
         for entry, all_configs in resolved_entries:
             entry_scenarios = tuple(entry.scenario_type or SCENARIO_TYPES)
             expand_all_evals = all_evals or entry.all_evals
-            suppress_throughput = (
-                evals_only
-                or entry.evals_only
-                or entry.all_evals
-            )
+            suppress_throughput = evals_only or entry.evals_only or entry.all_evals
 
             if not suppress_throughput:
                 benchmark_groups = group_unseen_scenarios(
-                    all_configs, entry_scenarios, benchmark_scenarios_seen)
+                    all_configs, entry_scenarios, benchmark_scenarios_seen
+                )
                 for scenarios, benchmark_configs in benchmark_groups.items():
                     selection = scenarios if scenarios != SCENARIO_TYPES else None
-                    head_results = generate_current(benchmark_configs, "none", selection)
+                    head_results = generate_current(
+                        benchmark_configs, "none", selection
+                    )
                     if entry.append_only:
                         assert base_inputs is not None
                         base_results = generate_matrix(
-                            benchmark_configs, _generation_flags("none", selection), base_inputs,
+                            benchmark_configs,
+                            _generation_flags("none", selection),
+                            base_inputs,
                         )
                         head_results = append_only_delta(base_results, head_results)
                     all_benchmark_results.extend(head_results)
@@ -536,10 +562,13 @@ def build_plan(
                 continue
 
             eval_groups = group_unseen_scenarios(
-                all_configs, entry_scenarios, eval_scenarios_seen)
+                all_configs, entry_scenarios, eval_scenarios_seen
+            )
             for scenarios, eval_configs in eval_groups.items():
                 entry_eval_results = generate_current(
-                    eval_configs, "all" if expand_all_evals else "subset", scenarios,
+                    eval_configs,
+                    "all" if expand_all_evals else "subset",
+                    scenarios,
                 )
                 entry_eval_results = filter_eval_rows_by_prefill_ep(
                     entry_eval_results, entry.eval_min_prefill_ep
@@ -551,9 +580,12 @@ def build_plan(
 
         for result in all_benchmark_results:
             result["recipe-fingerprint"] = recipe_fingerprint(result)
-            node_type = "multi_node" if result.get("prefill") is not None else "single_node"
+            node_type = (
+                "multi_node" if result.get("prefill") is not None else "single_node"
+            )
             scenario = (
-                "agentic" if result.get("scenario-type") == "agentic-coding"
+                "agentic"
+                if result.get("scenario-type") == "agentic-coding"
                 else seq_len_to_str(result["isl"], result["osl"])
             )
             final_results[node_type][scenario].append(result)
@@ -561,7 +593,11 @@ def build_plan(
         # Fixed-sequence and AgentX eval jobs have different workflow inputs.
         for result in all_eval_results:
             prefix = "multinode_" if result.get("prefill") is not None else ""
-            suffix = "agentic_evals" if result.get("scenario-type") == "agentic-coding" else "evals"
+            suffix = (
+                "agentic_evals"
+                if result.get("scenario-type") == "agentic-coding"
+                else "evals"
+            )
             final_results[prefix + suffix].append(result)
 
         # Validate final results structure
@@ -595,15 +631,21 @@ def main() -> None:
 
     try:
         result = build_plan(
-            changelog_data, base_ref=args.base_ref, head_ref=args.head_ref,
-            trim=args.trim_conc, all_evals=args.all_evals, evals_only=args.evals_only,
+            changelog_data,
+            base_ref=args.base_ref,
+            head_ref=args.head_ref,
+            trim=args.trim_conc,
+            all_evals=args.all_evals,
+            evals_only=args.evals_only,
         )
     except MatrixGenerationError as error:
         # Preserve the legacy child diagnostics and failure status at the CLI.
         stderr = "".join(traceback.format_exception(error.cause))
         print(stderr)
         raise subprocess.CalledProcessError(
-            1, _matrix_command(error.keys, error.flags, error.inputs), stderr=stderr,
+            1,
+            _matrix_command(error.keys, error.flags, error.inputs),
+            stderr=stderr,
         ) from None
     print(result.model_dump_json(by_alias=True, exclude_none=True))
 
@@ -618,7 +660,9 @@ def _generation_flags(mode: EvalMode, scenarios: tuple[str, ...] | None) -> list
     return flags
 
 
-def _matrix_command(config_keys: list[str], flags: list[str], inputs: GenerationInputs | None) -> list[str]:
+def _matrix_command(
+    config_keys: list[str], flags: list[str], inputs: GenerationInputs | None
+) -> list[str]:
     command = [
         "python3",
         inputs.generator_script if inputs else GENERATE_SWEEPS_PY_SCRIPT,

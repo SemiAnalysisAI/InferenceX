@@ -39,17 +39,21 @@ name: CODEOWNER Sign-off Verify
 # @-mentions the reviewer who signed off and explains exactly what is wrong.
 #
 # The verdict is also published as a `codeowner-signoff-verify` commit status
-# on the PR head SHA (success only on "Verdict: PASS"). That status context is
+# on the PR head SHA (success after the first "Verdict: PASS"). That context is
 # a REQUIRED check in the "Protect main" ruleset, so a PR cannot be merged
 # (without org-admin bypass) until a sign-off has been posted AND independently
-# verified as passing on the current head commit.
+# verified as passing once for this PR. A durable PR label remembers that pass;
+# later commits receive success without invoking Claude again. The workflow owns
+# one PR-wide verdict comment and edits it on each explicit reassessment.
 #
 # It can also be run manually via workflow_dispatch by passing the URL of the
 # sign-off comment/review to verify.
 
 on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
   issue_comment:
-    types: [created, edited]
+    types: [created, edited, deleted]
   pull_request_review:
     types: [submitted, edited]
   pull_request_review_comment:
@@ -64,9 +68,8 @@ on:
         required: true
         type: string
 
-concurrency:
-  group: codeowner-signoff-verify-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: false
+permissions:
+  contents: read
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -79,7 +82,7 @@ jobs:
   gate:
     if: |
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+      (github.event_name == 'issue_comment' && github.event.action != 'deleted' && github.event.issue.pull_request &&
        contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER')) ||
       (github.event_name == 'pull_request_review' &&
        contains(github.event.review.body || '', 'As a PR reviewer and CODEOWNER')) ||
@@ -193,6 +196,9 @@ jobs:
     needs: gate
     if: ${{ needs.gate.outputs.proceed == 'true' }}
     runs-on: ubuntu-latest
+    concurrency:
+      group: codeowner-signoff-pr-${{ needs.gate.outputs.pr-number }}
+      cancel-in-progress: false
     permissions:
       contents: read
       pull-requests: write
@@ -212,7 +218,18 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           token: ${{ secrets.CLAUDE_PAT }}
 
+      - name: Reuse an existing passing checklist
+        id: prepare
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
+        with:
+          script: |
+            const { prepare } = require('./.github/scripts/codeowner-signoff.cjs');
+            await prepare({ github, context, core, prNumber: Number(process.env.PR_NUMBER) });
+
       - name: Set up uv
+        if: steps.prepare.outputs.verify == 'true'
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       # The verifier prompt lives in .github/codeowner-signoff-verify-prompt.md:
@@ -222,6 +239,7 @@ jobs:
       # as this workflow file; never PR head content) and handed to the action
       # as a file the tiny static prompt below points at.
       - name: Render verifier prompt
+        if: steps.prepare.outputs.verify == 'true'
         env:
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
@@ -230,6 +248,8 @@ jobs:
           SIGNOFF_KIND: ${{ needs.gate.outputs.signoff-kind }}
           SIGNOFF_FETCH_CMD: ${{ needs.gate.outputs.signoff-fetch-cmd }}
         run: |
+          # These placeholders must remain literal for envsubst.
+          # shellcheck disable=SC2016
           envsubst '${REPO} ${PR_NUMBER} ${HEAD_SHA} ${SIGNOFF_AUTHOR} ${SIGNOFF_KIND} ${SIGNOFF_FETCH_CMD}' \
             < .github/codeowner-signoff-verify-prompt.md \
             > /tmp/codeowner-signoff-verify-prompt.md
@@ -237,6 +257,8 @@ jobs:
           wc -c /tmp/codeowner-signoff-verify-prompt.md
 
       - name: Verify sign-off with Claude
+        id: claude
+        if: steps.prepare.outputs.verify == 'true'
         uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
         env:
           GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
@@ -257,56 +279,63 @@ jobs:
           claude_args: |
             --model 'claude-fable-5-1'
             --mcp-config .github/mcp-ci.json '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}}}'
-            --allowedTools "Read,Glob,Grep,WebFetch,mcp__github__*,mcp__github_ci__*,mcp__fetch__*,mcp__inferencemax-repos__*,Bash"
+            --allowedTools "Read,Write,Glob,Grep,WebFetch,mcp__github__*,mcp__github_ci__*,mcp__fetch__*,mcp__inferencemax-repos__*,Bash"
           prompt: |
             Read the file /tmp/codeowner-signoff-verify-prompt.md and follow the
             instructions in it exactly — it is your complete task specification,
             already rendered with this run's PR number, head SHA, and sign-off
             metadata.
 
-      # Publish the verdict as a commit status on the PR head SHA so it can act
-      # as a required check. Deterministic: reads the verdict comment posted
-      # above (matched by the sha-pinned marker) and maps "Verdict: PASS" to
-      # success, anything else — including a missing verdict — to failure.
-      # Runs on always() so a crashed verify step still reports failure rather
-      # than leaving the status stuck at "expected".
-      - name: Publish verdict as commit status on PR head
-        if: always()
+      # Claude writes a local verdict; deterministic code owns the sticky comment,
+      # durable PASS, and status publication (including verifier crashes).
+      - name: Update verdict comment and PR status
+        if: always() && steps.prepare.outputs.verify == 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           HEAD_SHA: ${{ needs.gate.outputs.head-sha }}
           PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
+          VERIFICATION_SUCCEEDED: ${{ steps.claude.outcome == 'success' }}
         with:
           script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const headSha = process.env.HEAD_SHA;
-            const prNumber = parseInt(process.env.PR_NUMBER, 10);
-            const marker = `<!-- codeowner-signoff-verify sha=${headSha} -->`;
-
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner, repo, issue_number: prNumber, per_page: 100,
+            const { publish } = require('./.github/scripts/codeowner-signoff.cjs');
+            await publish({
+              github, context, core,
+              prNumber: Number(process.env.PR_NUMBER),
+              headSha: process.env.HEAD_SHA,
+              verdictPath: '/tmp/codeowner-signoff-verdict.md',
+              verificationSucceeded: process.env.VERIFICATION_SUCCEEDED === 'true',
             });
-            const verdicts = comments.filter(c => c.body && c.body.includes(marker));
-            const latest = verdicts[verdicts.length - 1];
 
-            let state, description, target_url;
-            if (!latest) {
-              state = 'failure';
-              description = 'No verification verdict was posted for this commit';
-              target_url = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
-            } else if (latest.body.includes('**Verdict: PASS**')) {
-              state = 'success';
-              description = 'CODEOWNER sign-off independently verified';
-              target_url = latest.html_url;
-            } else {
-              state = 'failure';
-              description = 'Sign-off verification rejected - see verdict comment';
-              target_url = latest.html_url;
-            }
+  carry-forward:
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      (github.event_name == 'issue_comment' && github.event.action == 'deleted' &&
+       github.event.issue.pull_request &&
+       (github.event.comment.user.login == 'Klaud-Cold' ||
+        github.event.comment.user.login == 'github-actions[bot]') &&
+       startsWith(github.event.comment.body || '', '<!-- codeowner-signoff-verify'))
+    runs-on: ubuntu-latest
+    concurrency:
+      group: codeowner-signoff-pr-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      statuses: write
+    steps:
+      # Never execute PR head code in this privileged pull_request_target job.
+      - name: Checkout trusted default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
 
-            await github.rest.repos.createCommitStatus({
-              owner, repo, sha: headSha, state, description,
-              context: 'codeowner-signoff-verify', target_url,
-            });
-            core.info(`codeowner-signoff-verify=${state} on ${headSha}`);
+      - name: Carry the PR's passing checklist onto its latest head
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        with:
+          script: |
+            const { carry } = require('./.github/scripts/codeowner-signoff.cjs');
+            await carry({ github, context, core, prNumber: Number(process.env.PR_NUMBER) });

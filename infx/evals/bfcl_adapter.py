@@ -473,8 +473,6 @@ def _bounded_openai_handler(stock_handler: type[Any]) -> type[Any]:
     return BoundedOpenAICompletionsHandler
 
 
-
-
 def _write_id_map(
     project_root: Path, case_ids_by_category: Mapping[str, tuple[str, ...]]
 ) -> None:
@@ -621,6 +619,7 @@ def _run_upstream(
     from bfcl_eval.model_handler.api_inference.openai_completion import (
         OpenAICompletionsHandler,
     )
+
     handler = (
         OpenAICompletionsHandler
         if suite is SMOKE_SUITE
