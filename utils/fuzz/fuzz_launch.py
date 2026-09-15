@@ -16,10 +16,16 @@ from cases import CONCURRENCIES, ROOT, TEXT
 
 @pytest.mark.parametrize("multinode", [False, True])
 @pytest.mark.parametrize("scenario", ["fixed-seq-len", "agentic-coding"])
-@given(concs=CONCURRENCIES, eval_only=st.booleans(), historical=st.booleans(),
-       outcome=st.sampled_from(["success", "missing", "failed", "empty"]), base=TEXT,
+@given(concs=CONCURRENCIES, data=st.data(), historical=st.booleans(), base=TEXT,
        fingerprint=st.one_of(st.just(""), st.text(alphabet="0123456789abcdef", min_size=64, max_size=64)))
-def test_launch_publishes_identity_and_checks_outputs(multinode, scenario, concs, eval_only, historical, outcome, base, fingerprint):
+def test_launch_publishes_identity_and_checks_outputs(multinode, scenario, concs, data, historical, base, fingerprint):
+    cases = {
+        "fixed-seq-len": [(False, "success", 0), (False, "missing", 1), (False, "failed", 17), (False, "empty", 0),
+                          (True, "success", 0), (True, "missing", 1), (True, "failed", 17), (True, "empty", 0)],
+        "agentic-coding": [(False, "success", 0), (False, "missing", 1), (False, "failed", 17), (False, "empty", 1),
+                           (True, "success", 0), (True, "missing", 1), (True, "failed", 17), (True, "empty", 0)],
+    }
+    eval_only, outcome, expected_status = data.draw(st.sampled_from(cases[scenario]), label="result case")
     name = "benchmark-multinode-tmpl.yml" if multinode else "benchmark-tmpl.yml"
     workflow = yaml.safe_load((ROOT / ".github/workflows" / name).read_text())
     step = next(step for step in workflow["jobs"]["benchmark"]["steps"] if step.get("name", "").startswith("Launch "))
@@ -76,9 +82,6 @@ exit "$FUZZ_EXIT"
             assert received["FUZZ_SETTING"] == "forwarded"
         else:
             assert received["GPU_COUNT"] == published["GPU_COUNT"] == "24"
-        accepted = outcome not in {"missing", "failed"} and not (outcome == "empty" and scenario == "agentic-coding" and not eval_only)
-        assert (run.returncode == 0) is accepted, run.stderr
-        if outcome == "failed":
-            assert run.returncode == 17
+        assert run.returncode == expected_status, run.stderr
         if outcome == "missing" and not multinode and not eval_only:
             assert (root / "waits").read_text().splitlines() == ["wait"] * 10

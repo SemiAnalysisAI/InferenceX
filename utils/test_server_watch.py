@@ -30,12 +30,13 @@ def test_client_exit_code_preserved_and_healthy_server_left_alone():
 def test_required_worker_death_stops_client_while_wrapper_lives(tmp_path: Path):
     pidfile = tmp_path / 'client.pid'
     with subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)']) as wrapper, \
-            subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(1)']) as worker:
+            subprocess.Popen([sys.executable, '-c', 'import sys; sys.stdin.read()'], stdin=subprocess.PIPE) as worker:
         try:
             state = {**server_watch.snapshot(wrapper.pid), **server_watch.snapshot(worker.pid)}
             command = [sys.executable, '-c',
-                       'import os,time,pathlib; pathlib.Path(__import__("sys").argv[1]).write_text(str(os.getpid())); time.sleep(30)',
-                       str(pidfile)]
+                       'import os,time,pathlib,sys,signal; pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); '
+                       'os.kill(int(sys.argv[2]), signal.SIGTERM); time.sleep(30)',
+                       str(pidfile), str(worker.pid)]
             started = time.monotonic()
             assert server_watch.run(state, command, 0.02) == 1
             assert time.monotonic() - started < 5

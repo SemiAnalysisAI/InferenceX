@@ -20,7 +20,6 @@ function response(method, args) {
   if (method === 'issues.listComments') return data.comments;
   if (method === 'pulls.listReviews') return data.reviews;
   if (method === 'pulls.listReviewComments') return data.inlineComments;
-  if (method === 'repos.listCommitStatusesForRef') return data.statuses;
   if (method === 'issues.getComment') return data.comments.find(comment => comment.id === args.comment_id);
   if (method === 'pulls.getReview') return data.reviews.find(review => review.id === args.review_id);
   if (method === 'pulls.getReviewComment') return data.inlineComments.find(comment => comment.id === args.comment_id);

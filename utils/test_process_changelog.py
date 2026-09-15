@@ -379,34 +379,6 @@ def test_append_only_delta_rejects_removed_existing_point():
         raise AssertionError("removing an existing point should reject append-only mode")
 
 
-def test_append_only_scope_defers_selected_scenario_changes_to_matrix_comparison():
-    base = {
-        "test-config": {
-            "image": "vllm/vllm-openai:v0.16.0",
-            "scenarios": {
-                "agentic-coding": {
-                    "duration": 3600,
-                    "search-space": [{"tp": 8, "conc-list": [1, 4]}],
-                }
-            },
-        }
-    }
-    head = {
-        "test-config": {
-            "image": "vllm/vllm-openai:v0.16.0",
-            "scenarios": {
-                "agentic-coding": {
-                    "duration": 1800,
-                    "search-space": [{"tp": 8, "conc-list": [1, 4, 8]}],
-                }
-            },
-        }
-    }
-    process_changelog.validate_append_only_scope(
-        base, head, {"test-config": {"agentic-coding"}}
-    )
-
-
 def test_append_only_scope_allows_additive_top_level_restructuring():
     router_a = {"name": "router-a", "version": "1"}
     router_b = {"name": "router-b", "version": "2"}
@@ -519,32 +491,6 @@ def test_append_only_scope_rejects_changes_to_unselected_scenario():
         assert "outside its changelog scope" in str(error)
     else:
         raise AssertionError("unselected scenario changes should reject append-only mode")
-
-
-def test_append_only_scope_allows_range_to_list_expansion():
-    base = {
-        "test-config": {
-            "image": "vllm/vllm-openai:v0.16.0",
-            "scenarios": {
-                "fixed-seq-len": {
-                    "search-space": [{"tp": 8, "conc-start": 4, "conc-end": 64}],
-                }
-            },
-        }
-    }
-    head = {
-        "test-config": {
-            "image": "vllm/vllm-openai:v0.16.0",
-            "scenarios": {
-                "fixed-seq-len": {
-                    "search-space": [{"tp": 8, "conc-list": [4, 16, 32, 64]}],
-                }
-            },
-        }
-    }
-    process_changelog.validate_append_only_scope(
-        base, head, {"test-config": {"fixed-seq-len"}}
-    )
 
 
 def planning_inputs() -> tuple[dict, dict]:

@@ -127,11 +127,11 @@ uv run --no-project --exclude-newer PT12H --python 3.12 \
   --fuzz-examples 100 --fuzz-output .fuzz
 ```
 
-`--fuzz-examples` 控制每个参数化属性的样例数，而不是整个运行的总数。增加该值可延长测试；用 `-k launch`、`-k pipeline`、`-k collection` 或 `-k github` 缩小故障范围。配置清单检查还会运行当前配方，不固定配方数量或内容。缺少的运行器硬件条目使用现有矩阵 CI 测试夹具补齐；这些检查验证配方处理逻辑，不代表生产运行器元数据完整。
+`--fuzz-examples` 控制每个参数化属性的样例数，而不是整个运行的总数。增加该值可延长测试；用 `-k launch`、`-k pipeline`、`-k collection` 或 `-k github` 缩小故障范围。矩阵测试使用受控配方和运行器元数据，并给出明确的预期输出。
 
 Hypothesis 会缩减失败样例，并将其保存在 `.fuzz/examples`；使用相同输出目录重新运行即可重放。失败输出包含 `@reproduce_failure` 装饰器。使用 `--hypothesis-seed <integer>` 可重复生成同一批样例；显式指定种子会关闭数据库重放。`.fuzz/results.xml` 包含测试结果和 Hypothesis 统计信息；`.fuzz/run.json` 记录提交、运行前后的源码哈希、命令和运行时版本。将结果归属于某个代码状态前，请检查 `source_changed`。排查故障时，请同时保留控制台日志。
 
-测试目标涵盖配置生成、历史输入快照、Changelog 冲突解决、规划、schema 拒绝路径、调度标识、固定序列长度指标、AgentX 请求计数、服务工作进程的归属、功率积分与审计失败路径、文件名、评测收集、产物完整性、GitHub 复用和权限判断，以及 CODEOWNER 签署补查、裁定发布及接受状态保留。工作流启动测试执行仓库中的实际 shell，使用记录型启动器并跳过真实等待。权限测试通过模拟 GitHub 客户端运行实际工作流 JavaScript 和可信辅助模块；需要兼容 `actions/github-script` 的本地 Node 运行时，未安装 Node 时会跳过。无需执行 npm install。
+测试目标涵盖配置生成、历史输入快照、Changelog 冲突解决、规划、schema 拒绝路径、调度标识、固定序列长度指标、AgentX 请求计数、服务工作进程的归属、功率积分与审计失败路径、文件名、评测收集、GitHub 分页、按行解析的复用命令，以及异常权限响应的拒绝处理。工作流启动测试执行仓库中的实际 shell，使用记录型启动器并跳过真实等待。权限测试通过模拟 GitHub 客户端运行实际工作流 JavaScript；需要兼容 `actions/github-script` 的本地 Node 运行时，未安装 Node 时会跳过。无需执行 npm install。签署补查、裁定发布、产物复用资格及接受状态保留由专项测试覆盖，预期结果明确列出。
 
 这些测试阻止 Python 网络请求。GPU 执行、Slurm 分配、容器、真实 GitHub 权限和 Actions 表达式引擎不在本地测试范围内。生成样例全部通过不代表覆盖了所有可能路径。若需 Python 分支覆盖率，在命令中增加 `--with pytest-cov`，并向 pytest 传入 `--cov=infx --cov-branch --cov-report=html:.fuzz/coverage`；该统计不包含 JavaScript 或 shell 覆盖率。
 

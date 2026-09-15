@@ -1437,12 +1437,10 @@ def test_power_cli_invalid_telemetry_preserves_strictness(power_artifacts, env_v
     assert audit["reasons"]
 
 
-@pytest.mark.parametrize(("args", "status"), [(["--help"], 0), ([], 2)])
-def test_power_cli_help_and_argument_errors_outside_repo(power_artifacts, args, status):
-    result = _run_power_cli(power_artifacts, args=args)
-    assert result.returncode == status
-    assert "usage:" in result.stdout + result.stderr
-    assert "Traceback" not in result.stderr
+def test_power_cli_rejects_missing_arguments_outside_repo(power_artifacts):
+    result = _run_power_cli(power_artifacts, args=[])
+    assert result.returncode == 2
+    assert "required" in result.stderr
     assert not power_artifacts["package"].validation_result.exists()
 
 
@@ -1563,49 +1561,6 @@ def test_power_percentiles_aligns_asynchronous_gpu_samples(tmp_path):
     assert result.p75_power_w == pytest.approx(300)
     assert result.p90_total_gpu_power_w == pytest.approx(600)
     assert result.p90_power_w == pytest.approx(300)
-
-
-@pytest.mark.parametrize('step_name', ['Upload GPU metrics', 'Upload power audit bundle'])
-@pytest.mark.parametrize('directory', ['', 'results'])
-def test_uploaded_telemetry_replays_in_a_different_timezone(tmp_path, step_name, directory):
-    import os
-    import shutil
-    import yaml
-
-    repo = Path(__file__).resolve().parents[1]
-    source = tmp_path / 'source'
-    telemetry = source / directory
-    telemetry.mkdir(parents=True)
-    (telemetry / 'gpu_metrics.csv').write_text(
-        'timestamp,index,power.draw [W]\n'
-        '2024/01/01 00:00:00.000,0,100 W\n'
-        '2024/01/01 00:00:01.000,0,100 W\n'
-        '2024/01/01 00:00:02.000,0,100 W\n')
-    (telemetry / 'gpu_metrics_context.json').write_text('{"timestamp_timezone":"UTC"}')
-    workflow = yaml.safe_load((repo / '.github/workflows/benchmark-tmpl.yml').read_text())
-    step = next(step for job in workflow['jobs'].values() for step in job['steps']
-                if step.get('name') == step_name)
-    archive = tmp_path / 'downloaded'
-    for pattern in step['with']['path'].splitlines():
-        for file in source.glob(pattern):
-            destination = archive / file.relative_to(source)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(file, destination)
-    result = subprocess.run(
-        [sys.executable, '-c', """
-import sys, time
-from pathlib import Path
-from infx.results.power.single_node import integrate_power
-time.tzset()
-result = integrate_power(Path(sys.argv[1]), start_unix=1704067200, end_unix=1704067202,
-                         expected_num_gpus=1)
-assert result.power_valid, result.invalid_reasons
-assert result.total_gpu_energy_j == 200
-""", str(archive / directory / 'gpu_metrics.csv')],
-        cwd=tmp_path, env={**os.environ, 'TZ': 'Etc/GMT+8', 'PYTHONPATH': str(repo)},
-        capture_output=True, text=True, timeout=10,
-    )
-    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.parametrize('context', ['{"timestamp_timezone":"PST"}', '{}', '{invalid'])

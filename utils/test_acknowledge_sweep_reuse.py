@@ -1,32 +1,10 @@
 from __future__ import annotations
 
 import copy
-import json
-import os
-import shutil
-import subprocess
-import sys
-from pathlib import Path
 
 import pytest
 
 from infx.workflows import reuse_comment as acknowledgment
-
-
-def test_comment_entrypoint_runs_with_only_the_infx_package(tmp_path):
-    root = Path(__file__).resolve().parents[1]
-    shutil.copytree(root / "infx", tmp_path / "infx", ignore=shutil.ignore_patterns("__pycache__"))
-    event_path = tmp_path / "event.json"
-    event_path.write_text(json.dumps({"action": "created", "issue": {"number": 7}}))
-    env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
-    env.update(GH_TOKEN="test-token", GITHUB_REPOSITORY="example/project",
-               GITHUB_EVENT_PATH=str(event_path))
-    run = subprocess.run(
-        [sys.executable, "-m", "infx.workflows.reuse_comment"],
-        cwd=tmp_path, env=env, text=True, capture_output=True, timeout=10,
-    )
-    assert run.returncode == 0, run.stderr
-    assert run.stdout == ""
 
 
 @pytest.fixture

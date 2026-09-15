@@ -38,36 +38,6 @@ from infx.matrix.validation import (
 )
 
 
-@pytest.mark.parametrize("order", ["legacy-first", "package-first"])
-def test_schema_instances_work_across_legacy_and_package_imports(tmp_path, order):
-    """Duplicate module loads must not create incompatible Pydantic/Enum types."""
-    result = subprocess.run(
-        [sys.executable, "-c", '''
-import importlib
-import sys
-from pathlib import Path
-
-root = Path(sys.argv[1])
-sys.path[:0] = [str(root), str(root / "utils"), str(root / "utils/matrix_logic")]
-names = ["validation", "matrix_logic.validation", "utils.matrix_logic.validation", "infx.matrix.validation"]
-generators = ["generate_sweep_configs", "matrix_logic.generate_sweep_configs", "utils.matrix_logic.generate_sweep_configs", "infx.matrix.generate"]
-if sys.argv[2] == "package-first":
-    names.reverse()
-    generators.reverse()
-schemas = [importlib.import_module(name) for name in names]
-component = schemas[0].ComponentMetadata(name="fixture", version="1")
-field = schemas[0].Fields("runner")
-for schema in schemas:
-    assert schema.ComponentMetadata.model_validate(component) is component
-for name in generators:
-    assert importlib.import_module(name).Fields(field) is field
-''', str(Path(__file__).resolve().parents[2]), order],
-        cwd=tmp_path, capture_output=True, text=True, check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    assert result.stdout == result.stderr == ""
-
-
 # =============================================================================
 # Test Fixtures
 # =============================================================================

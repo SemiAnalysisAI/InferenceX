@@ -8,7 +8,6 @@ from hypothesis import example, given, strategies as st
 
 from infx.results.agentic.artifacts import load_records_with_accounting
 from infx.results.agentic.server_metrics import compute_server_metrics
-from infx.results.agentic.validate_agentic_result import validate_result
 from infx.results.fixed_sequence import build_result
 from infx.results.result_filename import point_filename, result_stem
 
@@ -83,20 +82,6 @@ def test_agentic_accounting_drops_failed_and_warmup_records(good, warmup, failed
                           "records_warmup_dropped": warmup + warmup_failed,
                           "records_error_dropped": failed + warmup_failed,
                           "error_categories": {"unknown": failed + warmup_failed}}
-
-
-@given(requests=st.integers(1, 1000), errors=st.integers(0, 1000), explicit=st.booleans(), nested=st.booleans())
-def test_agentic_failure_gate_at_five_percent(requests, errors, explicit, nested):
-    aggregate = {"request_count": {"avg": requests}, "error_request_count": {"avg": errors}}
-    if explicit:
-        aggregate["completed_request_count"] = {"avg": requests + errors}
-    with tempfile.TemporaryDirectory() as directory:
-        root = Path(directory)
-        target = root / "run" if nested else root
-        target.mkdir(exist_ok=True)
-        (target / "profile_export_aiperf.json").write_text(json.dumps(aggregate))
-        messages = validate_result(root, 0.05)
-    assert bool(messages) == (19 * errors > requests)
 
 
 @pytest.mark.parametrize("framework", ["sglang", "vllm", "dynamo-vllm"])

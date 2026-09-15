@@ -248,7 +248,7 @@ def signoff_case(event='pull_request_target'):
     case = scenario('trusted-external-sweep')
     case['context'].update(eventName=event, runId=99)
     case['context']['payload']['action'] = 'synchronize'
-    case['data'].update(comments=[], reviews=[], inlineComments=[], statuses=[])
+    case['data'].update(comments=[], reviews=[], inlineComments=[])
     case['data']['pull']['head']['sha'] = 'resolved-head'
     case['data']['pull']['merge_commit_sha'] = None
     return case
@@ -370,9 +370,6 @@ def test_unauthorized_signoff_requests_do_not_start_the_verifier(event, permissi
 def test_explicit_signoff_requests_resolve_the_original_signer(event, collection, fragment, kind, path, manual):
     case = signoff_case('workflow_dispatch' if manual else event)
     case['data'][collection] = [signoff()]
-    case['data']['statuses'] = [{'context': 'codeowner-signoff-verify', 'state': 'success',
-                                'target_url': 'https://github.com/example/repo/pull/42#issuecomment-123',
-                                'creator': {'login': 'github-actions[bot]'}}]
     if manual:
         separator = '' if fragment == 'discussion_r' else '-'
         case['context']['payload']['inputs'] = {'comment_url': f'https://github.com/example/repo/pull/42#{fragment}{separator}11'}
@@ -409,8 +406,8 @@ def run_signoff(method, case, **arguments):
 def test_prepare_keeps_prior_acceptance_and_only_marks_unverified_work_pending(source, accepted, manual):
     case = signoff_case('workflow_dispatch' if manual else 'issue_comment')
     if source.endswith('comment'):
-        case['data']['comments'] = [verdict_comment(author='contributor' if source == 'contributor-comment'
-                                                  else 'github-actions[bot]', legacy=source == 'legacy-comment')]
+        author = {'contributor-comment': 'contributor', 'legacy-comment': 'Klaud-Cold'}.get(source, 'github-actions[bot]')
+        case['data']['comments'] = [verdict_comment(author=author, legacy=source == 'legacy-comment')]
     if source.endswith('label'):
         case['data']['pull']['labels'].append({'name': 'codeowner-signoff-verified'})
         case['data']['timeline'].append({'event': 'labeled', 'label': {'name': 'codeowner-signoff-verified'},
