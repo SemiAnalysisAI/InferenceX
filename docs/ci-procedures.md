@@ -263,6 +263,8 @@ Manual `e2e-tests.yml` has no canary. Its `fail-fast` input defaults to false an
 
 ## Monitoring and reruns
 
+PR sweeps maintain one bot comment with `View unofficial run (performance)` and `View unofficial run (accuracy)` links. Each newer run updates that comment; rerunning an older run does not replace newer links. Existing PRs reuse their latest legacy visualizer comment, leaving earlier historical comments intact.
+
 ### Monitor the selected run
 
 ```bash
