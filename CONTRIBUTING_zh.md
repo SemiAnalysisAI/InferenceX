@@ -33,7 +33,7 @@ CODEOWNER 批准 PR 时，必须在批准评论中填写最新的 [PR_REVIEW_CHE
 - 签署可以以普通会话评论、review 总结或行内 review 评论的形式发布。这三种方式都会触发验证。
 - 请在 "Additional detail section" 中填写清单要求的链接（验证/评测工作流运行、对应的 [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR，以及任何例外理由）。
 
-签署发布后，CI 会独立复核决定合并的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、`/reuse-sweep-run` 命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack，以及投机解码是否使用 chat template。随后，CI 会为整个 PR 创建或更新同一条裁定评论，并注明实际评估的 SHA。旧版按提交生成的裁定评论会被复用；如果评论已删除，下次验证会创建替代评论。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
+签署发布后，CI 会独立复核决定合并的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、`/reuse-sweep-run` 命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack，以及投机解码是否使用 chat template。随后，CI 会为整个 PR 创建或更新同一条裁定评论，并注明实际评估的 SHA。未通过的条目直接显示；已通过和不适用（N/A）的条目统一放入折叠区域。旧版按提交生成的裁定评论会被复用；如果评论已删除，下次验证会创建替代评论。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
 
 **一次 PASS 即可满足该 PR 后续整个生命周期的这项门禁。** 自动化会添加 `codeowner-signoff-verified` 标签，记录首次 PASS。后续提交、rebase 或签署编辑都不会重新运行 Claude，也不会使该 PASS 失效。一个小型、可信的 `pull_request_target` 工作流会将必需的 `codeowner-signoff-verify` 成功状态延续到最新 head。延续的状态表示此前已获接受，并不表示 Claude 已审阅新增提交。
 

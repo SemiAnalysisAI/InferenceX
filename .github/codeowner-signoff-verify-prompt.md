@@ -407,8 +407,27 @@ single terse line. Rules:
   verdict word in bold and flanked by three status emojis on each side, EXACTLY as follows:
     on pass: `## ✅✅✅ **Verdict: PASS** ✅✅✅`
     on fail: `## ❌❌❌ **REJECTED** ❌❌❌`
-- Then ONE short line per check, each STARTING with its status emoji so pass/fail is
-  scannable at a glance:
+- Keep ONLY failing criteria in the main body, beneath the verdict header and
+  blocking summary. Put every PASS and N/A criterion in ONE collapsed HTML details
+  group after the failures. Use exactly this structure (replace the placeholders;
+  the rows below illustrate the format, not actual findings):
+
+  <details>
+  <summary>Passed and not applicable checks</summary>
+
+  ✅ Check N (<name>): PASS — <brief reason>
+
+  ➖ Check N (<name>): N/A — <reason>
+
+  </details>
+
+  Do not add the `open` attribute. Leave a blank line after `</summary>` and before
+  `</details>` so GitHub renders the Markdown. Separate check rows with blank lines.
+- Include each of Checks 0-12 exactly once, ordered by check number within its group.
+  Keep N/A reasons inside the collapsed group. Never hide a failing criterion there,
+  and never repeat passing or N/A criteria outside it. Omit the details group only
+  if every criterion fails.
+- Use ONE short row per check, starting with its status emoji:
     `✅ Check N (<name>): PASS — <brief reason>`
     `❌ Check N (<name>): FAIL — <root issue>`
     `➖ Check N (<name>): N/A — <reason>`
@@ -416,13 +435,13 @@ single terse line. Rules:
 - State conclusions, don't narrate your process. No multi-paragraph explanations, no
   restating the checklist, no hedging ("if X then maybe Y"). Make the call. Link the
   run/recipe instead of describing it.
-
-- If everything is to standard: write the verdict header + the thirteen one-line rows
-- If anything is NOT to standard: the verdict header must be immediately followed by a
-  line that @-mentions the sign-off author as `@${SIGNOFF_AUTHOR}`
-  with the blocking summary. Then the per-check lines, each failing one led by its root
-  issue (e.g. "No passing sweep/eval on any commit in this PR") with the supporting
-  link after.
+- If everything is to standard: write the PASS verdict header followed by the
+  collapsed group containing all thirteen PASS/N/A rows. No criteria appear expanded.
+- If anything is NOT to standard: immediately after the REJECTED header, write a
+  line that @-mentions the sign-off author as `@${SIGNOFF_AUTHOR}` with the blocking
+  summary. Then show only FAIL rows, each led by its root issue (e.g. "No passing
+  sweep/eval on any commit in this PR") with the supporting link after. Finish with
+  the collapsed PASS/N/A group.
 
 Use no emojis anywhere in the comment other than the ✅ / ❌ / ➖ status emojis
 specified above. Use only facts you verified. If a required artifact or run is
