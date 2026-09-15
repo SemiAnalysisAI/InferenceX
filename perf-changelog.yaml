@@ -7988,3 +7988,13 @@
     - "Use a B300-specific vLLM AgentX script with explicit FULL_AND_PIECEWISE CUDA graph capture sizes, concurrency-tiered batched-token limits, and an explicit maximum sequence count."
     - "Add a TP2 search-space variant at concurrency 2-128 while retaining the TP4 concurrency 1-128 variant."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3109
+
+- config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add aggregate TP8 GLM-5.2 FP8 H200 AgentX recipes with EAGLE MTP and HiCache at concurrencies 1, 2, 4, 8, 12, and 16."
+    - "Use one recipe per concurrency and cap max-running-requests and CUDA graph batch size at twice the trajectory concurrency."
+    - "Use SGLang nightly-dev-20260914-4358a161 with Dynamo 1.5.0.dev20260913 and retry truncated srt-slurm setup dependency downloads."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
