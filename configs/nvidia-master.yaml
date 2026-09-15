@@ -10652,3 +10652,20 @@ dsv41flash-fp4-h200-vllm-agentic-dspark:
       # 8x141 GB holds the 511 GB checkpoint minus the UVA-offloaded Engram
       # tables, so the KV cache stays GPU-resident across the full range.
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
+# Temporary one-point validation for PR #3126; do not merge.
+smokeqwen-bf16-h200-vllm:
+  image: vllm/vllm-openai:v0.22.0
+  model: Qwen/Qwen2.5-0.5B-Instruct
+  model-prefix: smokeqwen
+  runner: cluster:h200-cw
+  precision: bf16
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+      - isl: 128
+        osl: 32
+        search-space:
+          - tp: 1
+            conc-list: [1]
