@@ -7646,3 +7646,12 @@
     - "将 vLLM ROCm nightly 更新至包含 vllm-project/vllm#54855 的 eed1f3d0c6043bd494424a22443ee198dd56f657，并针对 MXFP4/FP8 混合权重关闭不兼容的 AITER shared-expert fusion。"
     - "将单节点 DPA AgentX 扫描从并发 64 扩展为 64/128/192。手工验证显示，在 c64/c128/c256 三个点中 c128 吞吐量最高；新增 c192 用于补齐中间区间并定位 c256 性能回退前的吞吐拐点。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3071
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Stage nightly-TBD for the pending ROCm image and extend the MI355X DeepSeek-V4.1-Flash TP4 AgentX sweep with concurrency 64 and 128. Use vLLM's MI355X API-server default max_num_seqs of 1024; keep the CUDA graph ceiling at 1024 tokens through c64 and raise it to 2048 at c128 to cover twice the outer concurrency."
+    - "为待发布的 ROCm 镜像暂设 nightly-TBD，并为 MI355X DeepSeek-V4.1-Flash TP4 AgentX 扫描新增并发 64 和 128。使用 vLLM 在 MI355X API server 上默认的 max_num_seqs 1024；c64 及以下保持 1024-token CUDA graph 上限，c128 提升至 2048，以覆盖两倍外层并发。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3111
