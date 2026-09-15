@@ -358,8 +358,18 @@ native tool-call syntax.
 
 BFCL sends `store=false` in its stock chat requests. Stock TRT-LLM
 `1.3.0rc23.post1` rejects this field; InferenceX does not patch its request
-schema. BFCL on that image therefore remains blocked on upstream support.
-A successful vendor smoke is not evidence that BFCL works on the same backend.
+schema. Its native Responses endpoint accepts that field. Select
+`eval-framework: bfcl` and `eval-suite: bfcl_responses_smoke` to exercise
+BFCL's stock `OpenAIResponsesHandler` through `/v1/responses`, with the same
+four smoke case IDs and request budgets. Reports use a distinct task name and
+record `api_format`; do not combine these scores with Chat Completions results.
+BFCL's upstream handlers differ in request formatting, including system versus
+developer roles. No request or response rewriting is added by InferenceX.
+
+The native Responses path is a compatibility candidate until validated on live
+hardware. A successful vendor smoke does not establish BFCL support. TRT now
+uses its native performance-metrics behavior as well; removing the executor
+rewrite can change timing overhead, so old throughput results need revalidation.
 
 The same model/suite uses identical cases and scoring on AMD and NVIDIA.
 Vendor evals remain automatic; BFCL is an explicit additional diagnostic.

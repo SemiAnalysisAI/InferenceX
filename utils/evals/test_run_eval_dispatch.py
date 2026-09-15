@@ -3080,3 +3080,12 @@ def test_select_available_server_port_avoids_an_existing_listener(occupied: bool
             assert selected == preferred
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
             server.bind(("0.0.0.0", selected))
+
+
+def test_bfcl_responses_smoke_uses_explicit_suite_and_smoke_budget(tmp_path: Path) -> None:
+    result, _ = _run_bfcl_adapter_command(tmp_path, suite="bfcl_responses_smoke")
+    assert result.returncode == 0, result.stderr
+    assert "ADAPTER_ARG=<--suite>" in result.stdout
+    assert "ADAPTER_ARG=<bfcl_responses_smoke>" in result.stdout
+    assert "ADAPTER_ARG=<4>" in result.stdout
+    assert "EVAL_COMPLETED_SUITE=bfcl_responses_smoke" in result.stdout

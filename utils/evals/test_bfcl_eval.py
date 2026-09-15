@@ -895,7 +895,7 @@ def test_handler_bounds_openai_requests() -> None:
     }
 
 
-@pytest.mark.parametrize("suite", [be.SMOKE_SUITE, be.MINIMAX_SUITE, be.KIMI_SUITE])
+@pytest.mark.parametrize("suite", [be.SMOKE_SUITE, be.RESPONSES_SMOKE_SUITE, be.MINIMAX_SUITE, be.KIMI_SUITE])
 def test_upstream_registration_preserves_stock_semantics(
     suite: be.SuiteSpec, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -945,6 +945,9 @@ def test_upstream_registration_preserves_stock_semantics(
         "bfcl_eval.model_handler.api_inference.openai_completion": ModuleType(
             "bfcl_eval.model_handler.api_inference.openai_completion"
         ),
+        "bfcl_eval.model_handler.api_inference.openai_response": ModuleType(
+            "bfcl_eval.model_handler.api_inference.openai_response"
+        ),
         "bfcl_eval.__main__": ModuleType("bfcl_eval.__main__"),
     }
     modules[
@@ -954,6 +957,7 @@ def test_upstream_registration_preserves_stock_semantics(
     modules[
         "bfcl_eval.model_handler.api_inference.openai_completion"
     ].OpenAICompletionsHandler = OpenAICompletionsHandler
+    modules["bfcl_eval.model_handler.api_inference.openai_response"].OpenAIResponsesHandler = OpenAICompletionsHandler
     modules["bfcl_eval.constants.default_prompts"] = prompts
     modules["bfcl_eval.constants"].default_prompts = prompts
     modules["bfcl_eval.__main__"].generate = generate
@@ -983,3 +987,20 @@ def test_upstream_registration_preserves_stock_semantics(
         "base_url": "http://127.0.0.1:8000/v1", "timeout": 180, "max_retries": 2,
     }
     assert prompts.MAXIMUM_STEP_LIMIT == 20
+
+
+def test_responses_suite_manifest_disambiguates_identical_smoke_cases(tmp_path: Path) -> None:
+    be._write_id_map(tmp_path, be.SMOKE_CASE_IDS)
+    assert be._read_selected_suite(tmp_path)[0] is be.SMOKE_SUITE
+    (tmp_path / "inferencex_suite.json").write_text(json.dumps({"suite": "bfcl_responses_smoke"}))
+    assert be._read_selected_suite(tmp_path) == (be.RESPONSES_SMOKE_SUITE, dict(be.SMOKE_CASE_IDS))
+    assert be._build_suite_case_ids(be.RESPONSES_SMOKE_SUITE) == dict(be.SMOKE_CASE_IDS)
+    assert be.RESPONSES_SMOKE_SUITE.projected_task("parallel") == "bfcl_responses_smoke_parallel"
+
+
+@pytest.mark.parametrize("suite", ["unknown", "bfcl_vllm_kimi"])
+def test_suite_manifest_rejects_unknown_or_mismatched_identity(tmp_path: Path, suite: str) -> None:
+    be._write_id_map(tmp_path, be.SMOKE_CASE_IDS)
+    (tmp_path / "inferencex_suite.json").write_text(json.dumps({"suite": suite}))
+    with pytest.raises(ValueError, match="supported suite"):
+        be._read_selected_suite(tmp_path)

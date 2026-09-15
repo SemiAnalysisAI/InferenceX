@@ -7829,6 +7829,8 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Remove the TRT-LLM chat request schema patch; BFCL on stock TRT remains blocked on upstream store=false support."
-    - "移除 TRT-LLM 聊天请求结构补丁；BFCL 在原生 TRT 上仍需上游支持 store=false。"
+    - "Remove the TRT-LLM chat request schema patch; stock Chat Completions still rejects BFCL store=false."
+    - "移除 TRT-LLM 聊天请求结构补丁；原生 Chat Completions 仍拒绝 BFCL 的 store=false。"
+    - "Remove the TRT executor metrics rewrite and add an explicit stock BFCL Responses smoke; native metrics overhead requires fresh performance validation."
+    - "移除 TRT 执行器指标改写，添加显式的上游 BFCL Responses smoke；原生指标采集开销需重新验证性能。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156

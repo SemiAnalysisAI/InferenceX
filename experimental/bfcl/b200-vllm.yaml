@@ -1,0 +1,15 @@
+# Resident-only diagnostic for PR #3156; upstream image selected by PR #3131.
+# PR #3156 的纯 GPU 驻留诊断配置；上游镜像与 PR #3131 一致。
+minimaxm3-fp4-b200-vllm-bfcl-probe:
+  image: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3
+  model: nvidia/MiniMax-M3-NVFP4
+  model-prefix: minimaxm3
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.683
+      search-space:
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1] }
