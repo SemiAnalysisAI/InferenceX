@@ -334,7 +334,7 @@ def _check_wire_contract(manifest: dict) -> list[str]:
 # --- strict samples parsing (mirrors srt-slurm samples.read_samples) --------
 
 
-def _parse_sample_row(raw: list[str], expected_version: int = 1) -> SampleRow | None:
+def _parse_sample_row(raw: list[str], expected_version: int) -> SampleRow | None:
     """Validate the selected CSV generation, including optional utilization."""
     header = SAMPLES_HEADER_V2 if expected_version == 2 else SAMPLES_HEADER
     if len(raw) != len(header):

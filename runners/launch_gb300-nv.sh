@@ -237,14 +237,14 @@ RUN_KEY=$(printf "%s" "${RESULT_FILENAME:-${RUNNER_NAME:-gb300-nv}}" | sha1sum |
 SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUN_KEY}"
 rm -rf "$SRT_REPO_DIR"
 
-setup_srt_slurm "$SRT_REPO_DIR" || exit 1
+setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" "$USES_DCGM_POWER" || exit 1
 
 if [[ "$FRAMEWORK" == "dynamo-trt" && "$MODEL_PREFIX" == "dsv4" ]]; then
     SRT_SLURM_MODEL_PREFIX="deepseek-ai/DeepSeek-V4-Pro"
 fi
 # Accuracy runs use real speculative verification and a frontend colocated
 # with the post-eval client on the allocation head.
-if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-trt" && "${EVAL_ONLY:-false}" == "true" ]]; then
+if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-trt" && "$EVAL_ONLY" == "true" ]]; then
     find recipes/trtllm -name '*.yaml' -exec sed -i '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' {} +
     if [[ "$MODEL_PREFIX" == "dsv4" ]]; then
         SRTCTL_EVAL_ARGS+=(--set frontend.placement.node=head)

@@ -268,8 +268,11 @@ def recipe_node_count(prefill: dict, decode: dict) -> int | None:
     if roles:
         # Schema 2 groups node allocations by role. A colocated decode role
         # shares prefill nodes and does not reserve another allocation.
+        for name, role in roles.items():
+            if "nodes" not in role:
+                raise ValueError(f"Recipe role {name!r} must specify nodes: {recipe_path}")
         return sum(
-            0 if role.get("nodes") == "colocate" else int(role.get("nodes", 0))
+            0 if role["nodes"] == "colocate" else int(role["nodes"])
             for role in roles.values()
         )
     raise ValueError(f"Recipe has no worker roles: {recipe_path}")

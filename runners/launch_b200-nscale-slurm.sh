@@ -103,7 +103,7 @@ export SERVED_MODEL_NAME=$MODEL
 echo "Preparing job-local srt-slurm checkout..."
 SRT_REPO_DIR="srt-slurm"
 rm -rf "$SRT_REPO_DIR"
-setup_srt_slurm "$SRT_REPO_DIR" || exit 1
+setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" "$USES_DCGM_POWER" || exit 1
 
 echo "Installing srtctl..."
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"

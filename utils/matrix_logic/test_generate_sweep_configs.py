@@ -105,6 +105,7 @@ def test_aggregated_worker_expands_to_legacy_matrix_pair():
     ({"agg": {"nodes": 3, "workers": 6}}, 3),
     ({"prefill": {"nodes": 2}, "decode": {"nodes": 4}}, 6),
     ({"prefill": {"nodes": 2}, "decode": {"nodes": "colocate"}}, 2),
+    ({"prefill": {"nodes": 2}, "decode": {"workers": 1}}, None),
 ])
 def test_multinode_node_count_reads_schema_two_roles(tmp_path, monkeypatch, roles, expected):
     recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/test.yaml"
@@ -113,7 +114,11 @@ def test_multinode_node_count_reads_schema_two_roles(tmp_path, monkeypatch, role
     import infx.matrix.generate as generate
     monkeypatch.setattr(generate, "__file__", str(tmp_path / "infx/matrix/generate.py"))
     prefill = {"additional-settings": ["CONFIG_FILE=recipes/test.yaml"]}
-    assert generate.recipe_node_count(prefill, {}) == expected
+    if expected is None:
+        with pytest.raises(ValueError, match="role 'decode' must specify nodes"):
+            generate.recipe_node_count(prefill, {})
+    else:
+        assert generate.recipe_node_count(prefill, {}) == expected
 
 
 def test_multinode_node_count_uses_role_gpu_footprints(sample_runner_config):

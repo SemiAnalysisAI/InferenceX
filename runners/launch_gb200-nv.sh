@@ -435,7 +435,7 @@ fi
 if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" == "dynamo-sglang" && "$MODEL_PREFIX" == "dsv4" && "$IS_AGENTIC" != "1" ]]; then
     export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
 fi
-setup_srt_slurm "$SRT_REPO_DIR" || exit 1
+setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" "$USES_DCGM_POWER" || exit 1
 
 echo "Installing srtctl..."
 curl -LsSf https://astral.sh/uv/install.sh | sh

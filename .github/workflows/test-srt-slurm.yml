@@ -45,7 +45,7 @@ jobs:
       - name: Validate TileRT with its pinned runtime
         run: |
           source runners/slurm_utils.sh
-          FRAMEWORK=tilert setup_srt_slurm "$RUNNER_TEMP/srt-slurm-tilert"
+          setup_srt_slurm "$RUNNER_TEMP/srt-slurm-tilert" tilert 0
           uv run --no-project --python 3.12 --with-editable "$PWD" python - <<'PYTHON'
           from pathlib import Path
           from srtctl.core.config import validate_config_file
