@@ -262,8 +262,8 @@ fi
 case "$CONC" in
     # No KV offload; the working set fits in HBM.
     1)
-        SYNTHETIC_ACCEPT_LEN=3.75
-        SPEC_NUM_TOKENS=6
+        SYNTHETIC_ACCEPT_LEN=3.84
+        SPEC_NUM_TOKENS=7
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=16384
         ;;
@@ -285,17 +285,48 @@ case "$CONC" in
         ;;
 esac
 
+# ---- DSpark draft: materialise a causal-flagged copy --------------------------
+# Inferact/Kimi-K3-DSpark ships "dflash_config": null, which vLLM reads as
+# non-causal. ROCM_AITER_MLA does not implement non-causal draft attention, so the
+# backend is rejected at config time ("non-causal attention not supported") and the
+# draft falls back to TRITON_MLA. Setting dflash_config.causal makes the selection
+# legal. This is a model-config change only -- no vLLM patch -- and gsm8k
+# (limit 128, real block acceptance) scores 1.00 strict / 1.00 flexible with it,
+# i.e. the flag is semantically correct here and not merely permissive.
+DSPARK_DRAFT_REPO="${DSPARK_DRAFT_REPO:-Inferact/Kimi-K3-DSpark}"
+DSPARK_DRAFT_PATH="${DSPARK_DRAFT_PATH:-/tmp/kimi-k3-dspark-causal}"
+if [ ! -f "$DSPARK_DRAFT_PATH/config.json" ]; then
+    mkdir -p "$DSPARK_DRAFT_PATH"
+    hf download "$DSPARK_DRAFT_REPO" --local-dir "$DSPARK_DRAFT_PATH"
+    python3 - "$DSPARK_DRAFT_PATH/config.json" <<'PYEOF'
+import json, sys
+p = sys.argv[1]
+cfg = json.load(open(p))
+cfg["dflash_config"] = {"causal": True}
+json.dump(cfg, open(p, "w"), indent=2)
+print(f"dspark draft: dflash_config -> {cfg['dflash_config']}")
+PYEOF
+fi
+
+# ---- CUDA graph mode ---------------------------------------------------------
+# FULL_AND_PIECEWISE requires either a torch-compiled model or breakable CUDA
+# graphs. Kimi-K3's AMD classes carry no @support_torch_compile and this recipe
+# runs VLLM_USE_BREAKABLE_CUDAGRAPH=0, so on rocm100 nightlies that pairing is
+# refused at startup. FULL captures the same decode shapes without that
+# requirement. Overridable for A/B.
+CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL}"
+
 SPEC_ARGS=()
 if [ "$SPEC_NUM_TOKENS" -gt 0 ]; then
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
+        "{\"model\":\"$DSPARK_DRAFT_PATH\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"ROCM_AITER_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
     )
 else
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+        "{\"model\":\"$DSPARK_DRAFT_PATH\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"ROCM_AITER_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
     )
     fi
 fi
@@ -304,7 +335,7 @@ fi
 MAX_NUM_SEQS=$((2 * CONC))
 MAX_CUDAGRAPH_CAPTURE_SIZE=$((MAX_NUM_SEQS * (1 + SPEC_NUM_TOKENS)))
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
-COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
+COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"$CUDAGRAPH_MODE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1

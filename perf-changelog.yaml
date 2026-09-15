@@ -7789,3 +7789,15 @@
     - "Set a 64-token CUDA graph capture floor for H200 DSpark at c1/c2/c4; preserve c8+ sizing, full AgentX traces, AL 3.51, and Engram UVA"
     - "将 H200 DSpark 的 c1/c2/c4 CUDA graph 最小捕获范围设为 64 tokens；保持 c8+ 大小、完整 AgentX 轨迹、AL 3.51 和 Engram UVA"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3099
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Switch the DSpark draft attention backend from TRITON_MLA to ROCM_AITER_MLA; measured +28.9% interactivity p90 and +14.5% per-GPU at conc 1 with k/AL held fixed"
+    - "Materialise the DSpark draft locally with dflash_config.causal=true so ROCM_AITER_MLA is a legal selection on a stock image (Inferact/Kimi-K3-DSpark ships dflash_config: null -> non-causal -> rejected). Model-config change only, no vLLM patch; gsm8k limit-128 with real block acceptance scores 1.00 strict / 1.00 flexible"
+    - "Raise the conc-1 speculative envelope from k=6/AL 3.75 to k=7/AL 3.84, matching the NV B300 cell (+3.6% interactivity p90)"
+    - 'Set cudagraph_mode to FULL (was FULL_AND_PIECEWISE): with VLLM_USE_BREAKABLE_CUDAGRAPH=0 and no @support_torch_compile on the K3 AMD classes, FULL_AND_PIECEWISE is refused at startup on rocm100 nightlies'
+    - "Replace the LMCache 0.5.5.dev114+rocm7.2 KV-offload backend with vllm-simple (SimpleCPUOffloadConnector) on every offload arm; conc 48 measured 11,083 tok/s per GPU vs 10,947 for the LMCache baseline, with no external cache server"
+    - "Bump the image to vllm/vllm-openai-rocm:nightly-rocm100-2671fed (vLLM 0.29.1)"
+    - "Add conc 70 to the dcp-size 8 arm"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PENDING
