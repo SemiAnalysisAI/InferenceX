@@ -186,9 +186,10 @@ def _trtllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
 
     sources: list[dict[str, Any]] = []
     for endpoint in sorted(endpoints):
-        series_filter = lambda series, endpoint=endpoint: str(
-            series.get("endpoint_url", "")
-        ) == endpoint
+
+        def series_filter(series, endpoint=endpoint):
+            return str(series.get("endpoint_url", "")) == endpoint
+
         prompt_tokens = sum_stat(
             metrics,
             "trtllm_prompt_tokens_total",

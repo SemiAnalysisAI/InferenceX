@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-
 SERVER_CACHE_FLAT_FIELDS = {
     "server_gpu_cache_hit_rate": None,
     "server_cpu_cache_hit_rate": None,

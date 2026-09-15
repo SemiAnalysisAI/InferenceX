@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import Any
 
 from .validate_perf_changelog import (
-    ChangelogValidationError,
     PR_LINK_PLACEHOLDERS,
+    ChangelogValidationError,
     compare_entries,
     parse_changelog,
     read_git_file,
@@ -35,8 +35,7 @@ class EntrySpan:
 def entry_spans(raw: bytes, entries: list[dict[str, Any]]) -> list[EntrySpan]:
     """Locate top-level entry blocks without normalizing their bytes."""
     starts = [
-        match.start()
-        for match in re.finditer(rb"(?m)^- config-keys:[^\r\n]*\n", raw)
+        match.start() for match in re.finditer(rb"(?m)^- config-keys:[^\r\n]*\n", raw)
     ]
     if len(starts) != len(entries):
         raise ChangelogValidationError(
@@ -103,7 +102,7 @@ def canonicalize_appended_links(
     spans = entry_spans(head_raw, head_entries)
     replacements: list[tuple[EntrySpan, bytes]] = []
     for index, entry in enumerate(
-        head_entries[len(base_entries):],
+        head_entries[len(base_entries) :],
         start=len(base_entries),
     ):
         link = str(entry.get("pr-link") or "")
@@ -114,12 +113,12 @@ def canonicalize_appended_links(
                 f"appended entry {index + 1} has unexpected pr-link {link!r}"
             )
         span = spans[index]
-        block = head_raw[span.start:span.content_end]
+        block = head_raw[span.start : span.content_end]
         replacements.append((span, replace_pr_link(block, expected_link)))
 
     result = head_raw
     for span, block in reversed(replacements):
-        result = result[:span.start] + block + result[span.content_end:]
+        result = result[: span.start] + block + result[span.content_end :]
 
     result_entries = parse_changelog(result, "prepared perf-changelog.yaml")
     result_additions, result_corrections = compare_entries(
@@ -160,13 +159,13 @@ def resolve_conflict_bytes(
         pr_spans = entry_spans(pr_raw, pr_entries)
         contribution_blocks: list[bytes] = []
         for index, entry in enumerate(
-            pr_entries[len(base_entries):],
+            pr_entries[len(base_entries) :],
             start=len(base_entries),
         ):
             if entry_signature(entry) in main_signatures:
                 continue
             span = pr_spans[index]
-            block = pr_raw[span.start:span.content_end]
+            block = pr_raw[span.start : span.content_end]
             contribution_blocks.append(replace_pr_link(block, expected_link))
 
         if not contribution_blocks:
@@ -179,9 +178,7 @@ def resolve_conflict_bytes(
     elif corrections:
         main_spans = entry_spans(main_raw, main_entries)
         replacements: list[tuple[EntrySpan, bytes]] = []
-        for index, (base_entry, pr_entry) in enumerate(
-            zip(base_entries, pr_entries)
-        ):
+        for index, (base_entry, pr_entry) in enumerate(zip(base_entries, pr_entries)):
             if base_entry == pr_entry:
                 continue
             if index >= len(main_entries):
@@ -205,7 +202,7 @@ def resolve_conflict_bytes(
                 )
 
             span = main_spans[index]
-            block = main_raw[span.start:span.content_end]
+            block = main_raw[span.start : span.content_end]
             replacements.append((span, replace_pr_link(block, desired_link)))
 
         if not replacements:
@@ -215,7 +212,7 @@ def resolve_conflict_bytes(
 
         result = main_raw
         for span, block in reversed(replacements):
-            result = result[:span.start] + block + result[span.content_end:]
+            result = result[: span.start] + block + result[span.content_end :]
     else:
         raise ChangelogValidationError(
             "the PR has no appended entry or pr-link correction to preserve"

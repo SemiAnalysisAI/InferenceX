@@ -20,7 +20,6 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-import numpy as np
 
 
 def _load_custom_client_csv(client_csv: Path, exp_dir: Path) -> pd.DataFrame | None:
@@ -41,18 +40,18 @@ def _load_aiperf_summary_csv(csv_path: Path) -> dict | None:
     """
     # The CSV has multiple sections with different column counts.
     # Read raw lines and split into per-metric and scalar sections.
-    lines = csv_path.read_text().strip().split('\n')
+    lines = csv_path.read_text().strip().split("\n")
     if len(lines) < 2:
         return None
 
     # Section 1: per-metric stats (header + data rows with 14 columns)
-    header = lines[0].split(',')
+    header = lines[0].split(",")
     per_metric = {}
     scalars = {}
     for line in lines[1:]:
         if not line.strip():
             continue
-        parts = line.split(',')
+        parts = line.split(",")
         if len(parts) == len(header):
             # Per-metric row
             per_metric[parts[0]] = {h: parts[i] for i, h in enumerate(header)}
@@ -84,7 +83,8 @@ def _load_aiperf_summary_csv(csv_path: Path) -> dict | None:
         "throughput_rps": scalar_val("Request Throughput (requests/sec)"),
         "output_throughput_tps": scalar_val("Output Token Throughput (tokens/sec)"),
         "total_throughput_tps": scalar_val("Total Token Throughput (tokens/sec)"),
-        "input_throughput_tps": scalar_val("Total Token Throughput (tokens/sec)") - scalar_val("Output Token Throughput (tokens/sec)"),
+        "input_throughput_tps": scalar_val("Total Token Throughput (tokens/sec)")
+        - scalar_val("Output Token Throughput (tokens/sec)"),
         "mean_ttft_ms": metric_stat("Time to First Token (ms)", "avg"),
         "p50_ttft_ms": metric_stat("Time to First Token (ms)", "p50"),
         "p90_ttft_ms": metric_stat("Time to First Token (ms)", "p90"),
@@ -124,9 +124,10 @@ def load_experiment(exp_dir: Path) -> dict | None:
     #   tp{N}_conc{M}_offload{mode}
     #   agentic_{model}_tp{N}_conc{M}_offload{mode}_{extra...}
     import re
+
     name = exp_dir.name
     match = re.search(
-        r'tp(\d+)_conc(\d+)_offload(none|cpu|ssd|lmcache-mp|lmcache|hicache)',
+        r"tp(\d+)_conc(\d+)_offload(none|cpu|ssd|lmcache-mp|lmcache|hicache)",
         name,
     )
     if not match:
@@ -179,25 +180,40 @@ def load_experiment(exp_dir: Path) -> dict | None:
                 total_time_sec = df["latency_ms"].sum() / 1000
 
             num_requests = len(df)
-            result.update({
-                "num_requests": num_requests,
-                "throughput_rps": num_requests / total_time_sec if total_time_sec > 0 else 0,
-                "input_throughput_tps": df["input_num_tokens"].sum() / total_time_sec if total_time_sec > 0 else 0,
-                "output_throughput_tps": df["output_num_tokens"].sum() / total_time_sec if total_time_sec > 0 else 0,
-                "total_throughput_tps": (df["input_num_tokens"].sum() + df["output_num_tokens"].sum()) / total_time_sec if total_time_sec > 0 else 0,
-                "mean_ttft_ms": df["ttft_ms"].mean(),
-                "p50_ttft_ms": df["ttft_ms"].median(),
-                "p90_ttft_ms": df["ttft_ms"].quantile(0.9),
-                "p99_ttft_ms": df["ttft_ms"].quantile(0.99),
-                "mean_tpot_ms": df["tpot_ms"].mean(),
-                "p50_tpot_ms": df["tpot_ms"].median(),
-                "p90_tpot_ms": df["tpot_ms"].quantile(0.9),
-                "p99_tpot_ms": df["tpot_ms"].quantile(0.99),
-                "mean_latency_ms": df["latency_ms"].mean(),
-                "p50_latency_ms": df["latency_ms"].median(),
-                "p90_latency_ms": df["latency_ms"].quantile(0.9),
-                "p99_latency_ms": df["latency_ms"].quantile(0.99),
-            })
+            result.update(
+                {
+                    "num_requests": num_requests,
+                    "throughput_rps": num_requests / total_time_sec
+                    if total_time_sec > 0
+                    else 0,
+                    "input_throughput_tps": df["input_num_tokens"].sum()
+                    / total_time_sec
+                    if total_time_sec > 0
+                    else 0,
+                    "output_throughput_tps": df["output_num_tokens"].sum()
+                    / total_time_sec
+                    if total_time_sec > 0
+                    else 0,
+                    "total_throughput_tps": (
+                        df["input_num_tokens"].sum() + df["output_num_tokens"].sum()
+                    )
+                    / total_time_sec
+                    if total_time_sec > 0
+                    else 0,
+                    "mean_ttft_ms": df["ttft_ms"].mean(),
+                    "p50_ttft_ms": df["ttft_ms"].median(),
+                    "p90_ttft_ms": df["ttft_ms"].quantile(0.9),
+                    "p99_ttft_ms": df["ttft_ms"].quantile(0.99),
+                    "mean_tpot_ms": df["tpot_ms"].mean(),
+                    "p50_tpot_ms": df["tpot_ms"].median(),
+                    "p90_tpot_ms": df["tpot_ms"].quantile(0.9),
+                    "p99_tpot_ms": df["tpot_ms"].quantile(0.99),
+                    "mean_latency_ms": df["latency_ms"].mean(),
+                    "p50_latency_ms": df["latency_ms"].median(),
+                    "p90_latency_ms": df["latency_ms"].quantile(0.9),
+                    "p99_latency_ms": df["latency_ms"].quantile(0.99),
+                }
+            )
         else:
             return result
 
@@ -208,9 +224,17 @@ def load_experiment(exp_dir: Path) -> dict | None:
                 if len(sdf) > 0:
                     final = sdf.iloc[-1]
                     if final.get("prefix_cache_queries", 0) > 0:
-                        result["gpu_hit_rate"] = 100 * final["prefix_cache_hits"] / final["prefix_cache_queries"]
+                        result["gpu_hit_rate"] = (
+                            100
+                            * final["prefix_cache_hits"]
+                            / final["prefix_cache_queries"]
+                        )
                     if final.get("cpu_prefix_cache_queries", 0) > 0:
-                        result["cpu_hit_rate"] = 100 * final["cpu_prefix_cache_hits"] / final["cpu_prefix_cache_queries"]
+                        result["cpu_hit_rate"] = (
+                            100
+                            * final["cpu_prefix_cache_hits"]
+                            / final["cpu_prefix_cache_queries"]
+                        )
             except Exception as e:
                 print(f"Warning: failed to load server metrics for {exp_dir.name}: {e}")
 
@@ -260,7 +284,11 @@ def main() -> None:
 
     # Run overview plots (throughput vs concurrency, workload consistency)
     try:
-        from plot_sweep_overview import plot_throughput_vs_concurrency, plot_workload_consistency
+        from plot_sweep_overview import (
+            plot_throughput_vs_concurrency,
+            plot_workload_consistency,
+        )
+
         pareto_input = output_dir / "pareto_input"
         summary_csv = pareto_input / "experiment_summary.csv"
         if summary_csv.exists():

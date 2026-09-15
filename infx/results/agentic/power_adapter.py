@@ -19,14 +19,13 @@ from infx.results.power import (
     POWER_METRIC_SCHEMA_VERSION,
     with_power_metrics,
 )
-
+from infx.results.power.multinode import run as run_multinode_power
 from infx.results.power.single_node import (
     _patch_power_result,
     _write_json_atomic,
     invalid_validation_payload,
+    run as run_power,
 )
-from infx.results.power.single_node import run as run_power
-from infx.results.power.multinode import run as run_multinode_power
 
 from .artifacts import load_aggregate, load_records, resolve_artifact_dir
 
@@ -60,7 +59,9 @@ def _captured_timezone(result_dir: Path) -> tuple[timezone | None, str | None]:
     return timezone(direction * timedelta(hours=hours, minutes=minutes)), None
 
 
-def _parse_profile_timestamp(value: Any, *, fallback_tz: timezone | None) -> float | None:
+def _parse_profile_timestamp(
+    value: Any, *, fallback_tz: timezone | None
+) -> float | None:
     """Parse a timezone-aware ISO timestamp or Unix epoch seconds."""
     if isinstance(value, bool):
         return None
@@ -80,7 +81,9 @@ def _parse_profile_timestamp(value: Any, *, fallback_tz: timezone | None) -> flo
     return parsed.astimezone(timezone.utc).timestamp()
 
 
-def build_power_window(result_dir: Path) -> tuple[dict[str, int | float] | None, list[str]]:
+def build_power_window(
+    result_dir: Path,
+) -> tuple[dict[str, int | float] | None, list[str]]:
     """Build a strict benchmark window from successful profiling requests."""
     artifact_dir = resolve_artifact_dir(result_dir)
     aggregate_path = artifact_dir / "profile_export_aiperf.json"
@@ -250,16 +253,18 @@ def _multinode_window_contract(
     concurrency: int,
 ) -> tuple[Path, Path, Path] | None:
     """Resolve and validate the formal custom-benchmark window contract."""
-    if isinstance(concurrency, bool) or not isinstance(concurrency, int) or concurrency <= 0:
+    if (
+        isinstance(concurrency, bool)
+        or not isinstance(concurrency, int)
+        or concurrency <= 0
+    ):
         return None
     values = {name: os.environ.get(name, "") for name in _FORMAL_WINDOW_ENV}
     if any(not value for value in values.values()):
         return None
     if values["SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE"] != "custom":
         return None
-    measured = _positive_concurrencies(
-        values["SRT_MEASUREMENT_WINDOW_CONCURRENCIES"]
-    )
+    measured = _positive_concurrencies(values["SRT_MEASUREMENT_WINDOW_CONCURRENCIES"])
     if measured is None or concurrency not in measured:
         return None
 
@@ -394,9 +399,11 @@ def _record_multinode_adapter_failure(
         if not isinstance(aggregate, dict):
             raise ValueError("AgentX aggregate must be a JSON object")
         aggregate = with_power_metrics(
-            aggregate, metric_keys=_ALL_POWER_METRIC_KEYS,
+            aggregate,
+            metric_keys=_ALL_POWER_METRIC_KEYS,
             schema_version=POWER_METRIC_SCHEMA_VERSION,
-            power_valid=False, metrics={},
+            power_valid=False,
+            metrics={},
         )
         _write_json_atomic(agg_result, aggregate)
     finally:
@@ -404,7 +411,9 @@ def _record_multinode_adapter_failure(
         _write_multinode_failure_validation(validation_result, reasons)
 
 
-def _write_multinode_failure_validation(validation_result: Path, reasons: list[str]) -> None:
+def _write_multinode_failure_validation(
+    validation_result: Path, reasons: list[str]
+) -> None:
     _write_json_atomic(
         validation_result,
         {
@@ -567,7 +576,11 @@ def main() -> int:
             require_power=args.require_power,
         )
     if args.power_dir is not None:
-        if args.agg_result is None or args.logs_root is None or args.expected_producer_sha is None:
+        if (
+            args.agg_result is None
+            or args.logs_root is None
+            or args.expected_producer_sha is None
+        ):
             parser.error(
                 "--agg-result, --logs-root, and --expected-producer-sha are required with --power-dir"
             )

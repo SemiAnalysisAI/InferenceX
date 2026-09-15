@@ -6,11 +6,18 @@ from typing import Any, Dict, List, Optional
 
 from tabulate import tabulate
 
+# Names with a redundant alias are re-exported for callers that import
+# them through this module.
 from infx.results.evals import (
-    EVAL_RESULT_FORMAT, as_int, build_row, build_rows, is_eval_result, result_order,
+    EVAL_RESULT_FORMAT as EVAL_RESULT_FORMAT,
+    as_int,
+    build_row as build_row,
+    build_rows,
+    is_eval_result,
+    result_concurrency as _result_concurrency,
+    result_order as result_order,
     select_latest_results,
 )
-from infx.results.evals import result_concurrency as _result_concurrency
 
 MODEL = "Model"
 HARDWARE = "Hardware"
@@ -41,7 +48,7 @@ SPEC_DECODING = "Spec Decode"
 def load_json(path: Path) -> Optional[Dict[str, Any]]:
     """Load JSON file and return dict, or None on error."""
     try:
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             return json.load(f)
     except Exception:
         return None
@@ -57,11 +64,11 @@ def find_eval_sets(root: Path) -> List[Path]:
     out: List[Path] = []
     try:
         # Handle flat structure (single artifact extracted directly into root)
-        if (root / 'meta_env.json').exists():
+        if (root / "meta_env.json").exists():
             out.append(root)
         # Handle nested structure (multiple artifacts in subdirectories)
         for d in root.iterdir():
-            if d.is_dir() and (d / 'meta_env.json').exists():
+            if d.is_dir() and (d / "meta_env.json").exists():
                 out.append(d)
     except Exception:
         pass
@@ -79,10 +86,8 @@ def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
     Result filenames contain sortable timestamps. Mtime remains a fallback for
     legacy names, with the filename as a deterministic tie-breaker.
     """
-    immediate_jsons = set(d.glob('results*.json'))
-    immediate_jsons.update(
-        p for p in d.glob('*.json') if p.name != 'meta_env.json'
-    )
+    immediate_jsons = set(d.glob("results*.json"))
+    immediate_jsons.update(p for p in d.glob("*.json") if p.name != "meta_env.json")
     lm_paths = []
 
     for p in immediate_jsons:
@@ -96,29 +101,29 @@ def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
 def pct(x: Any) -> str:
     """Format value as percentage."""
     try:
-        return f"{float(x)*100:.2f}%"
+        return f"{float(x) * 100:.2f}%"
     except Exception:
-        return 'N/A'
+        return "N/A"
 
 
 def se(x: Any) -> str:
     """Format stderr as percentage with ± prefix."""
     try:
-        return f" ±{float(x)*100:.2f}%"
+        return f" ±{float(x) * 100:.2f}%"
     except Exception:
-        return ''
+        return ""
 
 
 def collect_eval_rows(root: Path) -> List[Dict[str, Any]]:
     """Collect logical eval rows, expanding batched artifacts by concurrency."""
     rows: List[Dict[str, Any]] = []
     for d in find_eval_sets(root):
-        meta = load_json(d / 'meta_env.json') or {}
-        batch_concs = meta.get('eval_concs')
+        meta = load_json(d / "meta_env.json") or {}
+        batch_concs = meta.get("eval_concs")
         batched = isinstance(batch_concs, list)
         allowed_concs: Optional[set[int]] = None
         if batched:
-            completed_concs = meta.get('completed_eval_concs', batch_concs)
+            completed_concs = meta.get("completed_eval_concs", batch_concs)
             if isinstance(completed_concs, list):
                 allowed_concs = {as_int(conc, -1) for conc in completed_concs}
 
@@ -130,15 +135,19 @@ def collect_eval_rows(root: Path) -> List[Dict[str, Any]]:
                     allowed_concs is not None and conc not in allowed_concs
                 ):
                     continue
-                row_meta = {**meta, 'conc': conc}
+                row_meta = {**meta, "conc": conc}
 
-            rows.extend(build_rows(load_json(lm_path) or {}, row_meta, source=str(lm_path)))
+            rows.extend(
+                build_rows(load_json(lm_path) or {}, row_meta, source=str(lm_path))
+            )
     return rows
 
 
 def main():
     if len(sys.argv) < 3:
-        print('Usage: collect_eval_results.py <results_dir> <exp_name> [sort_by: model_prefix|hw]')
+        print(
+            "Usage: collect_eval_results.py <results_dir> <exp_name> [sort_by: model_prefix|hw]"
+        )
         sys.exit(1)
 
     root = Path(sys.argv[1])
@@ -146,72 +155,127 @@ def main():
 
     rows = collect_eval_rows(root)
 
-    single_node_rows = [r for r in rows if not r['is_multinode']]
-    multinode_rows = [r for r in rows if r['is_multinode']]
+    single_node_rows = [r for r in rows if not r["is_multinode"]]
+    multinode_rows = [r for r in rows if r["is_multinode"]]
 
     # Sort for stable output (default: by model_prefix)
-    sort_by = sys.argv[3] if len(sys.argv) > 3 else 'model_prefix'
+    sort_by = sys.argv[3] if len(sys.argv) > 3 else "model_prefix"
     single_node_sort_key = (
-        (lambda r: (
-            r['hw'], r['framework'], r['precision'], r.get('spec_decoding', ''),
-            r['isl'], r['osl'], r['tp'], r['ep'], r['conc'],
-        ))
-        if sort_by == 'hw'
-        else (lambda r: (
-            r['model_prefix'], r['hw'], r['framework'], r['precision'],
-            r.get('spec_decoding', ''), r['isl'], r['osl'],
-            r['tp'], r['ep'], r['conc'],
-        ))
+        (
+            lambda r: (
+                r["hw"],
+                r["framework"],
+                r["precision"],
+                r.get("spec_decoding", ""),
+                r["isl"],
+                r["osl"],
+                r["tp"],
+                r["ep"],
+                r["conc"],
+            )
+        )
+        if sort_by == "hw"
+        else (
+            lambda r: (
+                r["model_prefix"],
+                r["hw"],
+                r["framework"],
+                r["precision"],
+                r.get("spec_decoding", ""),
+                r["isl"],
+                r["osl"],
+                r["tp"],
+                r["ep"],
+                r["conc"],
+            )
+        )
     )
     multinode_sort_key = (
-        (lambda r: (
-            r['hw'], r['framework'], r['precision'], r.get('spec_decoding', ''),
-            r['isl'], r['osl'],
-            r['prefill_tp'], r['prefill_ep'], r['prefill_num_workers'],
-            r['decode_tp'], r['decode_ep'], r['decode_num_workers'], r['conc'],
-        ))
-        if sort_by == 'hw'
-        else (lambda r: (
-            r['model_prefix'], r['hw'], r['framework'], r['precision'],
-            r.get('spec_decoding', ''), r['isl'], r['osl'],
-            r['prefill_tp'], r['prefill_ep'], r['prefill_num_workers'],
-            r['decode_tp'], r['decode_ep'], r['decode_num_workers'], r['conc'],
-        ))
+        (
+            lambda r: (
+                r["hw"],
+                r["framework"],
+                r["precision"],
+                r.get("spec_decoding", ""),
+                r["isl"],
+                r["osl"],
+                r["prefill_tp"],
+                r["prefill_ep"],
+                r["prefill_num_workers"],
+                r["decode_tp"],
+                r["decode_ep"],
+                r["decode_num_workers"],
+                r["conc"],
+            )
+        )
+        if sort_by == "hw"
+        else (
+            lambda r: (
+                r["model_prefix"],
+                r["hw"],
+                r["framework"],
+                r["precision"],
+                r.get("spec_decoding", ""),
+                r["isl"],
+                r["osl"],
+                r["prefill_tp"],
+                r["prefill_ep"],
+                r["prefill_num_workers"],
+                r["decode_tp"],
+                r["decode_ep"],
+                r["decode_num_workers"],
+                r["conc"],
+            )
+        )
     )
     single_node_rows.sort(key=single_node_sort_key)
     multinode_rows.sort(key=multinode_sort_key)
 
     if not rows:
-        print('> No eval results found to summarize.')
+        print("> No eval results found to summarize.")
     else:
         # Print table using tabulate
         MODEL_PREFIX = "Model Prefix"
 
         if single_node_rows:
             headers = [
-                MODEL_PREFIX, HARDWARE, FRAMEWORK, PRECISION, SPEC_DECODING,
-                ISL, OSL, TP, EP, CONC, DP_ATTENTION,
-                TASK, SCORE, EM_STRICT, EM_FLEXIBLE, N_EFF, MODEL,
+                MODEL_PREFIX,
+                HARDWARE,
+                FRAMEWORK,
+                PRECISION,
+                SPEC_DECODING,
+                ISL,
+                OSL,
+                TP,
+                EP,
+                CONC,
+                DP_ATTENTION,
+                TASK,
+                SCORE,
+                EM_STRICT,
+                EM_FLEXIBLE,
+                N_EFF,
+                MODEL,
             ]
             table_rows = [
                 [
-                    r['model_prefix'],
-                    r['hw'],
-                    r['framework'].upper(),
-                    r['precision'].upper(),
-                    r['spec_decoding'],
-                    r['isl'],
-                    r['osl'],
-                    r['tp'],
-                    r['ep'],
-                    r['conc'],
-                    r['dp_attention'],
-                    r['task'],
+                    r["model_prefix"],
+                    r["hw"],
+                    r["framework"].upper(),
+                    r["precision"].upper(),
+                    r["spec_decoding"],
+                    r["isl"],
+                    r["osl"],
+                    r["tp"],
+                    r["ep"],
+                    r["conc"],
+                    r["dp_attention"],
+                    r["task"],
                     f"{pct(r['score'])}{se(r['score_se'])}",
                     f"{pct(r['em_strict'])}{se(r['em_strict_se'])}",
                     f"{pct(r['em_flexible'])}{se(r['em_flexible_se'])}",
-                    r['n_eff'] if r['n_eff'] is not None else '',
-                    r['model'],
+                    r["n_eff"] if r["n_eff"] is not None else "",
+                    r["model"],
                 ]
                 for r in single_node_rows
             ]
@@ -220,36 +284,53 @@ def main():
 
         if multinode_rows:
             headers = [
-                MODEL_PREFIX, HARDWARE, FRAMEWORK, PRECISION, SPEC_DECODING,
-                ISL, OSL,
-                PREFILL_TP, PREFILL_EP, PREFILL_DP_ATTN, PREFILL_WORKERS,
-                DECODE_TP, DECODE_EP, DECODE_DP_ATTN, DECODE_WORKERS,
-                CONC, TASK, SCORE, EM_STRICT, EM_FLEXIBLE, N_EFF, MODEL,
+                MODEL_PREFIX,
+                HARDWARE,
+                FRAMEWORK,
+                PRECISION,
+                SPEC_DECODING,
+                ISL,
+                OSL,
+                PREFILL_TP,
+                PREFILL_EP,
+                PREFILL_DP_ATTN,
+                PREFILL_WORKERS,
+                DECODE_TP,
+                DECODE_EP,
+                DECODE_DP_ATTN,
+                DECODE_WORKERS,
+                CONC,
+                TASK,
+                SCORE,
+                EM_STRICT,
+                EM_FLEXIBLE,
+                N_EFF,
+                MODEL,
             ]
             table_rows = [
                 [
-                    r['model_prefix'],
-                    r['hw'],
-                    r['framework'].upper(),
-                    r['precision'].upper(),
-                    r['spec_decoding'],
-                    r['isl'],
-                    r['osl'],
-                    r['prefill_tp'],
-                    r['prefill_ep'],
-                    r['prefill_dp_attention'],
-                    r['prefill_num_workers'],
-                    r['decode_tp'],
-                    r['decode_ep'],
-                    r['decode_dp_attention'],
-                    r['decode_num_workers'],
-                    r['conc'],
-                    r['task'],
+                    r["model_prefix"],
+                    r["hw"],
+                    r["framework"].upper(),
+                    r["precision"].upper(),
+                    r["spec_decoding"],
+                    r["isl"],
+                    r["osl"],
+                    r["prefill_tp"],
+                    r["prefill_ep"],
+                    r["prefill_dp_attention"],
+                    r["prefill_num_workers"],
+                    r["decode_tp"],
+                    r["decode_ep"],
+                    r["decode_dp_attention"],
+                    r["decode_num_workers"],
+                    r["conc"],
+                    r["task"],
                     f"{pct(r['score'])}{se(r['score_se'])}",
                     f"{pct(r['em_strict'])}{se(r['em_strict_se'])}",
                     f"{pct(r['em_flexible'])}{se(r['em_flexible_se'])}",
-                    r['n_eff'] if r['n_eff'] is not None else '',
-                    r['model'],
+                    r["n_eff"] if r["n_eff"] is not None else "",
+                    r["model"],
                 ]
                 for r in multinode_rows
             ]
@@ -258,12 +339,11 @@ def main():
             print("### Multi-Node Eval Results\n")
             print(tabulate(table_rows, headers=headers, tablefmt="github"))
 
-
     # Write JSON aggregate
-    out_path = Path(f'agg_eval_{exp_name}.json')
-    with open(out_path, 'w') as f:
+    out_path = Path(f"agg_eval_{exp_name}.json")
+    with open(out_path, "w") as f:
         json.dump(rows, f, indent=2)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

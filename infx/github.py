@@ -40,7 +40,9 @@ def api(
             return None if method == "DELETE" and not body else json.loads(body)
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"GitHub API {path} failed: HTTP {exc.code}: {body}") from exc
+        raise RuntimeError(
+            f"GitHub API {path} failed: HTTP {exc.code}: {body}"
+        ) from exc
 
 
 def paginate(

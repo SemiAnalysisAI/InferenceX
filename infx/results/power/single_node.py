@@ -31,14 +31,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from statistics import mean
 
-from . import POWER_METRIC_SCHEMA_VERSION, WHOLE_METRIC_KEYS, with_power_metrics
+from . import WHOLE_METRIC_KEYS
 from .common import (
     BenchmarkData,
     _append_reason,
     _integrate_device,
-    _percentile_total_power,
-    _interpolate_power,
     _load_benchmark_data,
+    _percentile_total_power,
     _write_json_atomic,
     audit_metrics,
     benchmark_window_payload,
@@ -48,7 +47,9 @@ from .common import (
 _POWER_COL_RE = re.compile(r"power", re.IGNORECASE)
 _POWER_EXCLUDE_RE = re.compile(r"limit|cap|max|min", re.IGNORECASE)
 _TIMESTAMP_COL_RE = re.compile(r"time", re.IGNORECASE)
-_GPU_INDEX_COL_RE = re.compile(r"^(index|gpu|gpu_id|gpu_index|card|device)$", re.IGNORECASE)
+_GPU_INDEX_COL_RE = re.compile(
+    r"^(index|gpu|gpu_id|gpu_index|card|device)$", re.IGNORECASE
+)
 _NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
 
 _INTEGRATION_METHOD = "per_device_trapezoidal_with_linear_boundary_interpolation"
@@ -86,7 +87,9 @@ class PowerIntegration:
         return len(self.observed_gpu_ids)
 
 
-def _parse_timestamp(value: str, *, naive_timezone: timezone | None = None) -> float | None:
+def _parse_timestamp(
+    value: str, *, naive_timezone: timezone | None = None
+) -> float | None:
     """Best-effort timestamp parse to Unix epoch seconds (local wall clock).
 
     Handles the formats observed in practice:
@@ -104,12 +107,16 @@ def _parse_timestamp(value: str, *, naive_timezone: timezone | None = None) -> f
     # nvidia-smi: "YYYY/MM/DD HH:MM:SS.ffffff"
     for fmt in ("%Y/%m/%d %H:%M:%S.%f", "%Y/%m/%d %H:%M:%S"):
         try:
-            return datetime.strptime(value, fmt).replace(tzinfo=naive_timezone).timestamp()
+            return (
+                datetime.strptime(value, fmt).replace(tzinfo=naive_timezone).timestamp()
+            )
         except ValueError:
             pass
     # ISO 8601 (amd-smi variants). fromisoformat tolerates 'T' or space separator
     # in Python 3.11+; older versions need 'T'.
-    iso_value = value.replace(" ", "T", 1) if " " in value and "T" not in value else value
+    iso_value = (
+        value.replace(" ", "T", 1) if " " in value and "T" not in value else value
+    )
     try:
         dt = datetime.fromisoformat(iso_value)
     except ValueError:
@@ -147,7 +154,11 @@ def _detect_columns(header: list[str]) -> tuple[str | None, str | None, str | No
     """
     timestamp_col = next((c for c in header if _TIMESTAMP_COL_RE.search(c)), None)
     power_col = next(
-        (c for c in header if _POWER_COL_RE.search(c) and not _POWER_EXCLUDE_RE.search(c)),
+        (
+            c
+            for c in header
+            if _POWER_COL_RE.search(c) and not _POWER_EXCLUDE_RE.search(c)
+        ),
         None,
     )
     gpu_col = next((c for c in header if _GPU_INDEX_COL_RE.match(c.strip())), None)
@@ -355,7 +366,10 @@ def integrate_power(
                 )
 
             for row in reader:
-                timestamp = _parse_timestamp((row.get(timestamp_col) or "").strip(), naive_timezone=timestamp_timezone)
+                timestamp = _parse_timestamp(
+                    (row.get(timestamp_col) or "").strip(),
+                    naive_timezone=timestamp_timezone,
+                )
                 if timestamp is None or not math.isfinite(timestamp):
                     _append_reason(reasons, "invalid_timestamp_sample")
                     continue
@@ -443,9 +457,7 @@ def integrate_power(
             left_index = bisect.bisect_right(times, start_unix) - 1
             right_index = bisect.bisect_left(times, end_unix)
             relevant = samples[left_index : right_index + 1]
-            gaps = [
-                right[0] - left[0] for left, right in zip(relevant, relevant[1:])
-            ]
+            gaps = [right[0] - left[0] for left, right in zip(relevant, relevant[1:])]
             max_gap = max(gaps, default=0.0)
             per_gpu_max_sample_gap_s[gpu_id] = max_gap
             if max_gap > max_sample_gap_s:
@@ -469,11 +481,19 @@ def integrate_power(
         avg_total_gpu_power_w = total_gpu_energy_j / duration_s
         avg_power_w = avg_total_gpu_power_w / len(observed_gpu_ids)
 
-    p75_total = None if reasons else _percentile_total_power(
-        device_samples, start_unix=start_unix, end_unix=end_unix, quantile=0.75
+    p75_total = (
+        None
+        if reasons
+        else _percentile_total_power(
+            device_samples, start_unix=start_unix, end_unix=end_unix, quantile=0.75
+        )
     )
-    p90_total = None if reasons else _percentile_total_power(
-        device_samples, start_unix=start_unix, end_unix=end_unix, quantile=0.9
+    p90_total = (
+        None
+        if reasons
+        else _percentile_total_power(
+            device_samples, start_unix=start_unix, end_unix=end_unix, quantile=0.9
+        )
     )
     return PowerIntegration(
         power_valid=not reasons,
@@ -486,9 +506,13 @@ def integrate_power(
         device_issues=device_issues,
         boundary_degenerate_rows=boundary_degenerate,
         avg_power_w=avg_power_w,
-        p75_power_w=p75_total / len(observed_gpu_ids) if p75_total is not None else None,
+        p75_power_w=p75_total / len(observed_gpu_ids)
+        if p75_total is not None
+        else None,
         p75_total_gpu_power_w=p75_total,
-        p90_power_w=p90_total / len(observed_gpu_ids) if p90_total is not None else None,
+        p90_power_w=p90_total / len(observed_gpu_ids)
+        if p90_total is not None
+        else None,
         p90_total_gpu_power_w=p90_total,
         avg_total_gpu_power_w=avg_total_gpu_power_w,
         total_gpu_energy_j=total_gpu_energy_j,
@@ -529,7 +553,10 @@ def _stream_samples_by_gpu(csv_path: Path) -> dict[str, list[tuple[float, float]
         if not timestamp_col or not power_col or not gpu_col:
             return {}
         for row in reader:
-            timestamp = _parse_timestamp((row.get(timestamp_col) or "").strip(), naive_timezone=timestamp_timezone)
+            timestamp = _parse_timestamp(
+                (row.get(timestamp_col) or "").strip(),
+                naive_timezone=timestamp_timezone,
+            )
             power = _parse_power((row.get(power_col) or "").strip())
             gpu_id = (row.get(gpu_col) or "").strip()
             if timestamp is None or power is None or not gpu_id:
@@ -683,7 +710,10 @@ def _patch_power_result(
 ) -> None:
     """Replace aggregate power fields with one validated metric set."""
     patch_power_metrics(
-        agg_path, metric_keys=_POWER_METRIC_KEYS, power_valid=power_valid, metrics=metrics,
+        agg_path,
+        metric_keys=_POWER_METRIC_KEYS,
+        power_valid=power_valid,
+        metrics=metrics,
     )
 
 
@@ -730,9 +760,16 @@ def invalid_validation_payload(
 ) -> dict:
     """Build a single-node audit when an adapter cannot supply a usable window."""
     return _validation_payload(
-        csv_path=csv_path, bench_result=bench_result, benchmark=None,
-        integration=_empty_integration(expected_num_gpus=expected_num_gpus, reasons=reasons),
-        power_valid=False, reasons=reasons, metrics={}, accumulator_check=None,
+        csv_path=csv_path,
+        bench_result=bench_result,
+        benchmark=None,
+        integration=_empty_integration(
+            expected_num_gpus=expected_num_gpus, reasons=reasons
+        ),
+        power_valid=False,
+        reasons=reasons,
+        metrics={},
+        accumulator_check=None,
     )
 
 
@@ -787,7 +824,10 @@ def run(
             _append_reason(reasons, "aggregate_result_unwritable")
             power_valid = False
             metrics = {}
-            print(f"[aggregate_power] Failed to patch {agg_result}: {exc}", file=sys.stderr)
+            print(
+                f"[aggregate_power] Failed to patch {agg_result}: {exc}",
+                file=sys.stderr,
+            )
 
     try:
         accumulator_check = cross_check_accumulator(csv_path)

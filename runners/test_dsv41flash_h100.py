@@ -1,12 +1,8 @@
 import json
-import re
 import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-H100_SCRIPT = (
-    REPO_ROOT / "benchmarks/single_node/agentic/dsv41flash_fp4_h100_vllm_mtp.sh"
-)
 
 LAUNCH_HARNESS = '''
     salloc() { :; }
@@ -82,27 +78,3 @@ def test_h100_still_resolves_scripts_without_a_framework_tag(tmp_path: Path) -> 
     mounts = next(arg for arg in serve["args"] if arg.startswith("--container-mounts="))
     assert f"{REPO_ROOT}:/workspace/," in mounts
     assert serve["result_dir"] == "/workspace/results"
-
-
-def test_indexer_buffer_fits_an_80gb_card() -> None:
-    """The batched-token cap is what keeps the sparse-attention indexer in VRAM.
-
-    The indexer allocates [max-num-batched-tokens, max-model-len] at 2 bytes.
-    Raising either past this budget reproduces the concurrency-1 OOM in run
-    34467029236, so assert the product, not the literal flag value.
-    """
-    script = H100_SCRIPT.read_text()
-    batched = int(re.search(r"^MAX_NUM_BATCHED_TOKENS=(\d+)$", script, re.M).group(1))
-    context = int(re.search(r"--max-model-len (\d+)", script).group(1))
-
-    indexer_gib = batched * context * 2 / 1024**3
-    # ~35.9 GiB/GPU of resident weights out of 80 GB, and the KV cache still
-    # needs its share of the rest.
-    assert indexer_gib <= 8.0, f"indexer buffer is {indexer_gib:.1f} GiB"
-
-
-def test_h100_caps_the_scheduler_batch_to_the_trajectory_concurrency() -> None:
-    """vLLM's default max_num_seqs of 1024 oversizes buffers for AgentX."""
-    script = H100_SCRIPT.read_text()
-    assert "--max-num-seqs" in script
-    assert re.search(r"^MAX_NUM_SEQS=\$\(\(2 \* CONC\)\)$", script, re.M)

@@ -24,7 +24,6 @@ from .validate_perf_changelog import (
     validate_raw_change,
 )
 
-
 DEFAULT_REPO = "SemiAnalysisAI/InferenceX"
 RUN_URL = re.compile(
     r"^https://github\.com/(?P<repo>[^/]+/[^/]+)/actions/runs/"
@@ -121,9 +120,7 @@ def select_failed_job(
 ) -> dict[str, Any]:
     """Select an explicit failed job, or the sole failed job in a run."""
     if requested_job_id is not None:
-        matches = [
-            job for job in jobs if int(job.get("id", 0)) == requested_job_id
-        ]
+        matches = [job for job in jobs if int(job.get("id", 0)) == requested_job_id]
         if len(matches) != 1:
             raise RecoveryError(
                 f"job {requested_job_id} was not found in the target run"
@@ -133,16 +130,13 @@ def select_failed_job(
             selected.get("status") != "completed"
             or selected.get("conclusion") != "failure"
         ):
-            raise RecoveryError(
-                f"job {requested_job_id} is not a completed failed job"
-            )
+            raise RecoveryError(f"job {requested_job_id} is not a completed failed job")
         return selected
 
     failed = [
         job
         for job in jobs
-        if job.get("status") == "completed"
-        and job.get("conclusion") == "failure"
+        if job.get("status") == "completed" and job.get("conclusion") == "failure"
     ]
     if len(failed) != 1:
         ids = ", ".join(str(job.get("id")) for job in failed) or "none"
@@ -256,9 +250,7 @@ def audit_changelog_bytes(raw: bytes, label: str) -> dict[str, Any]:
 
         identity = json.dumps(entry, sort_keys=True, separators=(",", ":"))
         if identity in seen:
-            warnings.append(
-                f"entry {index} exactly duplicates entry {seen[identity]}"
-            )
+            warnings.append(f"entry {index} exactly duplicates entry {seen[identity]}")
         else:
             seen[identity] = index
 
@@ -273,9 +265,7 @@ def create_worktree(ref: str, destination: Path) -> None:
     """Create a detached worktree at the exact historical merge."""
     if destination.exists():
         raise RecoveryError(f"worktree destination already exists: {destination}")
-    run_command(
-        ["git", "worktree", "add", "--detach", str(destination), ref]
-    )
+    run_command(["git", "worktree", "add", "--detach", str(destination), ref])
     actual = run_command(
         ["git", "rev-parse", "HEAD"],
         cwd=destination,
@@ -298,11 +288,9 @@ def validate_reconstruction(
             "repaired changelog does not preserve the recovery base byte-for-byte"
         )
 
-    suffix = repaired_raw[len(base_raw):]
+    suffix = repaired_raw[len(base_raw) :]
     expected_start = (
-        b"- config-keys:"
-        if base_raw.endswith(b"\n\n")
-        else b"\n- config-keys:"
+        b"- config-keys:" if base_raw.endswith(b"\n\n") else b"\n- config-keys:"
     )
     if not suffix.startswith(expected_start):
         raise RecoveryError(
@@ -361,9 +349,7 @@ def create_synthetic_commit(
         ["git", "status", "--porcelain"],
         cwd=worktree,
     ).stdout.splitlines()
-    unrelated = [
-        line for line in status_lines if line[3:] != changelog_path
-    ]
+    unrelated = [line for line in status_lines if line[3:] != changelog_path]
     if unrelated:
         raise RecoveryError(
             "recovery worktree has unrelated changes: " + ", ".join(unrelated)
@@ -489,9 +475,7 @@ def build_config(
             + len(config.get("multi_node", {}).get(key, []) or [])
             for key in ("1k1k", "8k1k")
         ),
-        "agentic_rows": len(
-            config.get("single_node", {}).get("agentic", []) or []
-        )
+        "agentic_rows": len(config.get("single_node", {}).get("agentic", []) or [])
         + len(config.get("multi_node", {}).get("agentic", []) or []),
         "eval_jobs": len(config.get("evals", []) or [])
         + len(config.get("agentic_evals", []) or [])
@@ -518,9 +502,7 @@ def validate_recovery_workflow(path: Path, pr_number: int) -> None:
     if not isinstance(confirm, dict):
         raise RecoveryError("recovery workflow needs a confirm input")
     if confirm.get("required") is not True or confirm.get("type") != "string":
-        raise RecoveryError(
-            "recovery confirm input must be a required string"
-        )
+        raise RecoveryError("recovery confirm input must be a required string")
 
     permissions = data.get("permissions")
     if not isinstance(permissions, dict) or any(
@@ -541,14 +523,9 @@ def validate_recovery_workflow(path: Path, pr_number: int) -> None:
     job_permissions = job.get("permissions")
     if job_permissions is not None and (
         not isinstance(job_permissions, dict)
-        or any(
-            value not in {"read", "none"}
-            for value in job_permissions.values()
-        )
+        or any(value not in {"read", "none"} for value in job_permissions.values())
     ):
-        raise RecoveryError(
-            "recovery job permissions must be explicitly read-only"
-        )
+        raise RecoveryError("recovery job permissions must be explicitly read-only")
 
     expected_confirmation = f"recover-pr-{pr_number}"
     confirmation_pattern = re.compile(

@@ -173,7 +173,7 @@ python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
 3. **CODEOWNER 签署前：**遵循 [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md)，包括适用的代码质量、架构、镜像来源、上游配方、补丁/豁免、聊天模板和 AgentX 要求。
 4. **扫描/评测验收：**当前仍在 PR 中的至少一个提交拥有成功、未跳过且实际执行的 `single-node */` 与 `eval /` 检查。仅 `collect-evals` 成功不够。下载对应评测制品，确认其非空、准确率达标且使用同一推理镜像。这些可执行规则位于[验证器检查 1 和 2](../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr)。
 5. **合并时复用：**获授权的 `OWNER`、`MEMBER` 或 `COLLABORATOR` 必须在受支持的合并路径前发布独占一行的 `/reuse-sweep-run` 命令（可附带合格来源 run ID）。验证器会把命令缺失或发布者未授权视为失败；参见[验证器检查 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted)和[复用流程](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
-6. **合并时：**CODEOWNER 的精确签署须由 [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) 独立接受。如果 PR head 变化，重新评估并签署新提交的证据。
+6. **合并时：**CODEOWNER 的精确签署只需由 [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) 独立验证并获得一次 PASS。自动化通过 `codeowner-signoff-verified` 保留接受状态，并将必需状态延续到后续 head（包括 rebase 后），无需重新运行 Claude。每次实际验证都会更新同一条 PR 裁定评论，注明所评估的 SHA；延续 PASS 不代表新增提交已被审阅。删除评论不会重置接受状态，手动重新评估也不会撤销已有 PASS。评论恢复和手动分发说明见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
 7. **合并后：**作者按照 [`CONTRIBUTING.md`](../CONTRIBUTING.md#after-merging) 的要求确认 main 分支任务通过。
 
 ## 停止条件

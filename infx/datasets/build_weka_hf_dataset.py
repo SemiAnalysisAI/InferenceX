@@ -37,6 +37,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 CAP_TOKENS = 256_000
 HERE = Path(__file__).resolve().parent
@@ -56,54 +57,98 @@ def parse_args() -> argparse.Namespace:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("--repo-base", required=True,
-                   help="HF dataset repo id for the unfiltered build.")
-    p.add_argument("--repo-256k", default=None,
-                   help="HF dataset repo id for the 256k-capped variant. "
-                        "Omit to skip the 256k build.")
-    p.add_argument("--base-max-isl", type=int, default=None,
-                   help="Per-request ISL cap applied to the BASE build only: "
-                        "drop any request whose weka `in` (hash-block count × "
-                        "64) exceeds this while preserving the surviving timeline. "
-                        "Use to remove the >~1M hash-block overcount artifacts "
-                        "(e.g. 990016 = closest 64-multiple to 990k). The 256k "
-                        "variant already excludes these via its own cap.")
-    p.add_argument("--work-dir", type=Path, required=True,
-                   help="Cache directory for sample/convert/upload payload.")
+    p.add_argument(
+        "--repo-base",
+        required=True,
+        help="HF dataset repo id for the unfiltered build.",
+    )
+    p.add_argument(
+        "--repo-256k",
+        default=None,
+        help="HF dataset repo id for the 256k-capped variant. "
+        "Omit to skip the 256k build.",
+    )
+    p.add_argument(
+        "--base-max-isl",
+        type=int,
+        default=None,
+        help="Per-request ISL cap applied to the BASE build only: "
+        "drop any request whose weka `in` (hash-block count × "
+        "64) exceeds this while preserving the surviving timeline. "
+        "Use to remove the >~1M hash-block overcount artifacts "
+        "(e.g. 990016 = closest 64-multiple to 990k). The 256k "
+        "variant already excludes these via its own cap.",
+    )
+    p.add_argument(
+        "--work-dir",
+        type=Path,
+        required=True,
+        help="Cache directory for sample/convert/upload payload.",
+    )
 
     # sampler pass-through
     p.add_argument("--min-trace-version", type=int, default=None)
     p.add_argument("--max-trace-version", type=int, default=None)
-    p.add_argument("--min-requests", type=int, default=None,
-                   help="Drop sessions with fewer than this many Anthropic requests.")
-    p.add_argument("--max-requests", type=int, default=None,
-                   help="Drop sessions with more than this many Anthropic requests.")
+    p.add_argument(
+        "--min-requests",
+        type=int,
+        default=None,
+        help="Drop sessions with fewer than this many Anthropic requests.",
+    )
+    p.add_argument(
+        "--max-requests",
+        type=int,
+        default=None,
+        help="Drop sessions with more than this many Anthropic requests.",
+    )
     p.add_argument("--min-main-turns", type=int, default=None)
     p.add_argument("--require-cli-min", type=str, default=None)
     p.add_argument("--max-parallel-subagents", type=int, default=None)
-    p.add_argument("--limit", type=int, default=None,
-                   help="Cap session count (for smoke tests). Implies --sampling top.")
+    p.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Cap session count (for smoke tests). Implies --sampling top.",
+    )
     p.add_argument("--sampling", choices=("top", "recent", "random"), default="top")
-    p.add_argument("--exclude-dynamic-workflow-bug", action="store_true",
-                   help="Drop sessions hit by the Claude Code CLI<2.1.174 "
-                        "dynamic-workflow bug (interleaved unlabeled subagents).")
-    p.add_argument("--dwbug-min-peak", type=int, default=None,
-                   help="Peak concurrent unlabeled-trajectory threshold for the "
-                        "dynamic-workflow-bug filter (sampler default 3).")
+    p.add_argument(
+        "--exclude-dynamic-workflow-bug",
+        action="store_true",
+        help="Drop sessions hit by the Claude Code CLI<2.1.174 "
+        "dynamic-workflow bug (interleaved unlabeled subagents).",
+    )
+    p.add_argument(
+        "--dwbug-min-peak",
+        type=int,
+        default=None,
+        help="Peak concurrent unlabeled-trajectory threshold for the "
+        "dynamic-workflow-bug filter (sampler default 3).",
+    )
 
     # auth
-    p.add_argument("--db-url", default=None,
-                   help="Postgres URL (else $AGENTIC_PROXY_DB_URL).")
-    p.add_argument("--hf-token", default=None,
-                   help="HF write token (else $HF_TOKEN or cached login).")
+    p.add_argument(
+        "--db-url", default=None, help="Postgres URL (else $AGENTIC_PROXY_DB_URL)."
+    )
+    p.add_argument(
+        "--hf-token",
+        default=None,
+        help="HF write token (else $HF_TOKEN or cached login).",
+    )
 
     # idempotency
-    p.add_argument("--skip-sample", action="store_true",
-                   help="Reuse work-dir/proxy/ if present.")
-    p.add_argument("--skip-convert", action="store_true",
-                   help="Reuse work-dir/per_trace/ if present.")
-    p.add_argument("--skip-upload", action="store_true",
-                   help="Build payloads but don't push to HF.")
+    p.add_argument(
+        "--skip-sample", action="store_true", help="Reuse work-dir/proxy/ if present."
+    )
+    p.add_argument(
+        "--skip-convert",
+        action="store_true",
+        help="Reuse work-dir/per_trace/ if present.",
+    )
+    p.add_argument(
+        "--skip-upload",
+        action="store_true",
+        help="Build payloads but don't push to HF.",
+    )
 
     return p.parse_args()
 
@@ -121,8 +166,12 @@ def stage_sample(args, work_dir: Path) -> Path:
         return proxy_dir
     proxy_dir.mkdir(parents=True, exist_ok=True)
     cmd: list = [
-        sys.executable, str(SAMPLER), "--out", str(proxy_dir),
-        "--sampling", args.sampling,
+        sys.executable,
+        str(SAMPLER),
+        "--out",
+        str(proxy_dir),
+        "--sampling",
+        args.sampling,
     ]
     for flag, val in [
         ("--min-trace-version", args.min_trace_version),
@@ -153,10 +202,16 @@ def stage_convert(args, proxy_dir: Path, work_dir: Path) -> Path:
         print(f"[convert] reusing {n} cached per-trace JSONs in {per_trace}")
         return per_trace
     per_trace.mkdir(parents=True, exist_ok=True)
-    _run([
-        sys.executable, str(CONVERTER),
-        "-i", str(proxy_dir), "-o", str(per_trace),
-    ])
+    _run(
+        [
+            sys.executable,
+            str(CONVERTER),
+            "-i",
+            str(proxy_dir),
+            "-o",
+            str(per_trace),
+        ]
+    )
     return per_trace
 
 
@@ -299,7 +354,8 @@ def _build_readme(
         "original relative offsets, including sub-agent overlap. If the first "
         "request was filtered, all surviving timestamps are shifted by one "
         "uniform offset so the earliest survivor starts at `t = 0`.\n"
-        if is_256k else ""
+        if is_256k
+        else ""
     )
 
     isl_note_block = (
@@ -321,7 +377,8 @@ def _build_readme(
         "Applied at request granularity (main-agent turns and sub-agent "
         "inner requests evaluated independently); a sub-agent group is "
         "dropped only if *every* inner request was over the cap.\n"
-        if (isl_cap is not None and not is_256k) else ""
+        if (isl_cap is not None and not is_256k)
+        else ""
     )
 
     plots_block = (
@@ -353,8 +410,11 @@ def _build_readme(
 
 def _filters_block(args, *, cap_256k: bool = False) -> str:
     bits = []
-    if args.min_trace_version is not None and args.max_trace_version is not None \
-            and args.min_trace_version == args.max_trace_version:
+    if (
+        args.min_trace_version is not None
+        and args.max_trace_version is not None
+        and args.min_trace_version == args.max_trace_version
+    ):
         bits.append(f"- Trace version: exactly v{args.min_trace_version}")
     else:
         if args.min_trace_version is not None:
@@ -370,11 +430,17 @@ def _filters_block(args, *, cap_256k: bool = False) -> str:
     if args.require_cli_min is not None:
         bits.append(f"- Claude Code CLI ≥ {args.require_cli_min} (every row)")
     if args.max_parallel_subagents is not None:
-        bits.append(f"- peak concurrent sub-agent groups ≤ {args.max_parallel_subagents}")
+        bits.append(
+            f"- peak concurrent sub-agent groups ≤ {args.max_parallel_subagents}"
+        )
     bits.append("- Non-image rows only (image content excluded at source)")
-    bits.append("- Classifier calls excluded "
-                "(`max_tokens<=64 AND no tools` → SUGGESTION MODE, title-gen, Security Monitor)")
-    bits.append("- Exact-duplicate proxy rows deduped by `(timestamp, model, in, out, dur_ms, agent_id)`")
+    bits.append(
+        "- Classifier calls excluded "
+        "(`max_tokens<=64 AND no tools` → SUGGESTION MODE, title-gen, Security Monitor)"
+    )
+    bits.append(
+        "- Exact-duplicate proxy rows deduped by `(timestamp, model, in, out, dur_ms, agent_id)`"
+    )
     if getattr(args, "exclude_dynamic_workflow_bug", False):
         peak = args.dwbug_min_peak or 3
         bits.append(
@@ -392,7 +458,7 @@ def _filters_block(args, *, cap_256k: bool = False) -> str:
             f"the surviving timeline."
         )
     if cap_256k:
-        bits.append(f"- 256k per-request cap (see *256k filter rule* below)")
+        bits.append("- 256k per-request cap (see *256k filter rule* below)")
     return "\n".join(bits)
 
 
@@ -418,11 +484,16 @@ def _build_payload(
     plots.mkdir(exist_ok=True)
     for script in (PLOT_WEKA, PLOT_SUBAGENT):
         try:
-            _run([
-                sys.executable, str(script),
-                "--in-dir", str(per_trace_dir),
-                "--out-dir", str(plots),
-            ])
+            _run(
+                [
+                    sys.executable,
+                    str(script),
+                    "--in-dir",
+                    str(per_trace_dir),
+                    "--out-dir",
+                    str(plots),
+                ]
+            )
         except subprocess.CalledProcessError as e:
             print(f"  WARN plot {script.name} failed: {e}", file=sys.stderr)
 
@@ -443,8 +514,6 @@ def _build_payload(
 # ---------------------------------------------------------------------------
 # Request-drop filters (256k total cap; ISL-only cap)
 # ---------------------------------------------------------------------------
-
-from typing import Callable
 
 
 def _is_oversize(req: dict, cap: int = CAP_TOKENS) -> bool:
@@ -506,9 +575,7 @@ def _filter_trace(trace: dict, is_oversize: Callable[[dict], bool]) -> dict | No
         req.get("t", 0.0)
         for entry in surviving
         for req in (
-            entry.get("requests", [])
-            if entry.get("type") == "subagent"
-            else [entry]
+            entry.get("requests", []) if entry.get("type") == "subagent" else [entry]
         )
     ]
     origin = min(request_times)
@@ -523,15 +590,11 @@ def _filter_trace(trace: dict, is_oversize: Callable[[dict], bool]) -> dict | No
             inner["t"] = inner.get("t", 0.0) - origin
 
         first_t = min(inner["t"] for inner in inners)
-        last_end = max(
-            inner["t"] + (inner.get("api_time") or 0.0)
-            for inner in inners
-        )
+        last_end = max(inner["t"] + (inner.get("api_time") or 0.0) for inner in inners)
         entry["t"] = first_t
         entry["duration_ms"] = int(round((last_end - first_t) * 1000.0))
         entry["total_tokens"] = sum(
-            (r.get("in") or 0) + (r.get("out") or 0)
-            for r in inners
+            (r.get("in") or 0) + (r.get("out") or 0) for r in inners
         )
 
     out["requests"] = surviving
@@ -549,9 +612,7 @@ def _filter_trace_isl(trace: dict, cap: int) -> dict | None:
     return _filter_trace(trace, lambda r: _is_oversize_isl(r, cap))
 
 
-def _stage_filter(
-    per_trace_dir: Path, out_dir: Path, filter_fn, tag: str
-) -> Path:
+def _stage_filter(per_trace_dir: Path, out_dir: Path, filter_fn, tag: str) -> Path:
     """Apply ``filter_fn`` to every per-trace JSON; write survivors to out_dir."""
     out_dir.mkdir(parents=True, exist_ok=True)
     kept = 0
@@ -585,8 +646,10 @@ def stage_isl_filter(per_trace_dir: Path, work_dir: Path, cap: int) -> Path:
     Used for the base build to drop requests whose `in` (hash-block count
     × 64) exceeds ``cap`` — the >~1M overcount artifacts."""
     return _stage_filter(
-        per_trace_dir, work_dir / "per_trace_isl",
-        lambda t: _filter_trace_isl(t, cap), f"isl<={cap}",
+        per_trace_dir,
+        work_dir / "per_trace_isl",
+        lambda t: _filter_trace_isl(t, cap),
+        f"isl<={cap}",
     )
 
 
@@ -600,6 +663,7 @@ def stage_upload(args, payload_dir: Path, repo_id: str, commit_msg: str) -> None
         print(f"[upload] --skip-upload: payload ready at {payload_dir}")
         return
     from huggingface_hub import HfApi, upload_folder
+
     token = args.hf_token or os.environ.get("HF_TOKEN")
     api = HfApi(token=token)
     api.create_repo(repo_id=repo_id, repo_type="dataset", exist_ok=True)
@@ -616,8 +680,15 @@ def stage_upload(args, payload_dir: Path, repo_id: str, commit_msg: str) -> None
 
 def _reconstruct_sampler_cmd(args) -> list:
     """The exact sample_proxy_traces.py invocation, for the README."""
-    cmd = ["python", "-m", "infx.datasets.sample_proxy_traces",
-           "--out", "<workdir>/proxy", "--sampling", args.sampling]
+    cmd = [
+        "python",
+        "-m",
+        "infx.datasets.sample_proxy_traces",
+        "--out",
+        "<workdir>/proxy",
+        "--sampling",
+        args.sampling,
+    ]
     for flag, val in [
         ("--min-trace-version", args.min_trace_version),
         ("--max-trace-version", args.max_trace_version),
@@ -663,28 +734,44 @@ def main() -> int:
         base_src = stage_isl_filter(per_trace_dir, work_dir, args.base_max_isl)
     base_payload = work_dir / "base"
     base_stats = _build_payload(
-        args, base_src, base_payload,
-        repo_id=args.repo_base, is_256k=False, sampler_cmd=sampler_cmd,
+        args,
+        base_src,
+        base_payload,
+        repo_id=args.repo_base,
+        is_256k=False,
+        sampler_cmd=sampler_cmd,
     )
     print(f"[base] {base_stats}")
     isl_note = f", isl<={args.base_max_isl}" if args.base_max_isl is not None else ""
-    stage_upload(args, base_payload, args.repo_base,
-                 commit_msg=f"build: {base_stats['traces']} traces "
-                            f"(v{args.min_trace_version or '?'}{'-'+str(args.max_trace_version) if args.max_trace_version and args.max_trace_version != args.min_trace_version else ''}{isl_note})")
+    stage_upload(
+        args,
+        base_payload,
+        args.repo_base,
+        commit_msg=f"build: {base_stats['traces']} traces "
+        f"(v{args.min_trace_version or '?'}{'-' + str(args.max_trace_version) if args.max_trace_version and args.max_trace_version != args.min_trace_version else ''}{isl_note})",
+    )
 
     # --- 256k variant
     if args.repo_256k:
         per_trace_256k = stage_256k(per_trace_dir, work_dir)
         cap_payload = work_dir / "256k"
         cap_stats = _build_payload(
-            args, per_trace_256k, cap_payload,
-            repo_id=args.repo_256k, is_256k=True,
-            sampler_cmd=sampler_cmd, parent_repo_id=args.repo_base,
+            args,
+            per_trace_256k,
+            cap_payload,
+            repo_id=args.repo_256k,
+            is_256k=True,
+            sampler_cmd=sampler_cmd,
+            parent_repo_id=args.repo_base,
         )
         print(f"[256k] {cap_stats}")
-        stage_upload(args, cap_payload, args.repo_256k,
-                     commit_msg=f"build: {cap_stats['traces']} traces "
-                                f"(256k cap, derived from {args.repo_base})")
+        stage_upload(
+            args,
+            cap_payload,
+            args.repo_256k,
+            commit_msg=f"build: {cap_stats['traces']} traces "
+            f"(256k cap, derived from {args.repo_base})",
+        )
 
     return 0
 

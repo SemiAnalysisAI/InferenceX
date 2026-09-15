@@ -8,6 +8,7 @@ import sys
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+POLL_SLEEP = '#!/bin/sh\nif [ "$1" = 1 ]; then exec /bin/sleep 0.01; fi\nexec /bin/sleep "$@"\n'
 
 
 @pytest.mark.parametrize(('image', 'expected_uri', 'cached'), [
@@ -28,6 +29,7 @@ def test_tilert_import_uses_registry_and_reuses_squash(tmp_path, image, expected
     if cached is not None:
         image_file.write_text(cached)
     scripts = {
+        'sleep': POLL_SLEEP,
         'scontrol': '#!/bin/sh\nprintf "node-a\\nnode-b\\n"\n',
         'flock': '#!/bin/sh\nexit 0\n',
         'unsquashfs': '#!/bin/sh\ngrep -qxE "prepared image|imported image" "$2"\n',
@@ -92,6 +94,7 @@ def test_tilert_submit_keeps_decode_status_and_stages_both_roles(tmp_path, decod
     for path in (repo, bindir):
         path.mkdir()
     commands = {
+        'sleep': POLL_SLEEP,
         'salloc':'#!' + sys.executable + '\n' + r'''
 import json,os,pathlib,subprocess,sys
 args=sys.argv[1:]

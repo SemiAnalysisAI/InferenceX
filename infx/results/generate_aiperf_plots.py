@@ -858,7 +858,9 @@ def main(argv: list[str]) -> int:
         axes[3, 0],
         server_metrics,
         (
-            first_metric_name(server_metrics, *atom_metric_names("lmcache_saved_tokens"))
+            first_metric_name(
+                server_metrics, *atom_metric_names("lmcache_saved_tokens")
+            )
             if atom_metrics
             else "vllm:kv_offload_bytes_gpu_to_cpu"
         ),

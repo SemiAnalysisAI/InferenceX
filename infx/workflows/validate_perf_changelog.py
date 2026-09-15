@@ -17,7 +17,6 @@ from yaml.resolver import BaseResolver
 
 from infx.matrix.validation import ChangelogEntry
 
-
 CANONICAL_PR_LINK = re.compile(
     r"https://github\.com/SemiAnalysisAI/InferenceX/pull/\d+"
 )
@@ -78,9 +77,7 @@ def read_git_file(ref: str, path: str) -> bytes:
     )
     if result.returncode != 0:
         detail = result.stderr.decode("utf-8", errors="replace").strip()
-        raise ChangelogValidationError(
-            f"could not read {path} at {ref}: {detail}"
-        )
+        raise ChangelogValidationError(f"could not read {path} at {ref}: {detail}")
     return result.stdout
 
 
@@ -103,9 +100,7 @@ def parse_changelog(raw: bytes, label: str) -> list[dict[str, Any]]:
     try:
         data = yaml.load(text, Loader=UniqueKeyLoader)
     except yaml.YAMLError as exc:
-        raise ChangelogValidationError(
-            f"{label} is not valid YAML: {exc}"
-        ) from exc
+        raise ChangelogValidationError(f"{label} is not valid YAML: {exc}") from exc
 
     if not isinstance(data, list):
         raise ChangelogValidationError(f"{label} root must be a YAML list")
@@ -122,9 +117,7 @@ def parse_changelog(raw: bytes, label: str) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     for index, entry in enumerate(data, start=1):
         if not isinstance(entry, dict):
-            raise ChangelogValidationError(
-                f"{label} entry {index} is not a mapping"
-            )
+            raise ChangelogValidationError(f"{label} entry {index} is not a mapping")
         try:
             ChangelogEntry.model_validate(entry)
         except Exception as exc:
@@ -150,13 +143,10 @@ def validate_added_pr_link(link: str, pr_number: int | None) -> None:
             )
         return
 
-    expected = (
-        f"https://github.com/SemiAnalysisAI/InferenceX/pull/{pr_number}"
-    )
+    expected = f"https://github.com/SemiAnalysisAI/InferenceX/pull/{pr_number}"
     if link not in PR_LINK_PLACEHOLDERS and link != expected:
         raise ChangelogValidationError(
-            f"new PR entry must use {expected!r} or an XXX placeholder; "
-            f"found {link!r}"
+            f"new PR entry must use {expected!r} or an XXX placeholder; found {link!r}"
         )
 
 
@@ -167,9 +157,7 @@ def compare_entries(
 ) -> tuple[list[dict[str, Any]], int]:
     """Validate append-only ordering and canonical pr-link-only corrections."""
     if len(head_entries) < len(base_entries):
-        raise ChangelogValidationError(
-            "perf-changelog.yaml entries were deleted"
-        )
+        raise ChangelogValidationError("perf-changelog.yaml entries were deleted")
 
     corrections = 0
     for index, base_entry in enumerate(base_entries):
@@ -191,12 +179,11 @@ def compare_entries(
             )
         if not CANONICAL_PR_LINK.fullmatch(new_link):
             raise ChangelogValidationError(
-                f"entry {index + 1} pr-link correction is not canonical: "
-                f"{new_link!r}"
+                f"entry {index + 1} pr-link correction is not canonical: {new_link!r}"
             )
         corrections += 1
 
-    additions = head_entries[len(base_entries):]
+    additions = head_entries[len(base_entries) :]
     if corrections and additions:
         raise ChangelogValidationError(
             "do not mix historical pr-link corrections with new changelog entries"
@@ -222,11 +209,9 @@ def validate_raw_change(
                 "restore the base file byte-for-byte and append at the end"
             )
 
-        suffix = head_raw[len(base_raw):]
+        suffix = head_raw[len(base_raw) :]
         expected_start = (
-            b"- config-keys:"
-            if base_raw.endswith(b"\n\n")
-            else b"\n- config-keys:"
+            b"- config-keys:" if base_raw.endswith(b"\n\n") else b"\n- config-keys:"
         )
         if not suffix.startswith(expected_start):
             raise ChangelogValidationError(
@@ -243,10 +228,7 @@ def validate_raw_change(
         appended_starts = entry_starts[-additions:]
         for start in appended_starts[1:]:
             prefix = head_raw[:start]
-            if (
-                not prefix.endswith(b"\n\n")
-                or prefix.endswith(b"\n\n\n")
-            ):
+            if not prefix.endswith(b"\n\n") or prefix.endswith(b"\n\n\n"):
                 raise ChangelogValidationError(
                     "appended changelog entries must have exactly one empty "
                     "separator line"
@@ -385,8 +367,7 @@ def main() -> int:
         return 1
 
     print(
-        f"Validated {args.changelog_file}: "
-        "final newline present and matrix generated"
+        f"Validated {args.changelog_file}: final newline present and matrix generated"
     )
     return 0
 
