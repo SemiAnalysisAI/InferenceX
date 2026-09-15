@@ -100,6 +100,7 @@ def parse_range(cuda_range, default_start, default_end):
 # Output shell variables
 print(f'MODEL_BASE_FLAGS=\"{m.get(\"base_flags\", \"\")}\"')
 print(f'MODEL_MTP_FLAGS=\"{m.get(\"mtp_flags\", \"\")}\"')
+print(f'MODEL_DSPARK_FLAGS=\"{m.get(\"dspark_flags\", \"\")}\"')
 print(f'MODEL_DP_FLAGS=\"{m.get(\"dp_flags\", \"\")}\"')
 print(f'MODEL_EP_FLAGS=\"{m.get(\"ep_flags\", \"\")}\"')
 
@@ -382,7 +383,14 @@ build_server_config() {
     local specific_config=""
 
     if [ "$decode_mtp_size" -gt 0 ]; then
-        mtp_config="${MODEL_MTP_FLAGS} --speculative-num-steps ${decode_mtp_size} --speculative-num-draft-tokens $((decode_mtp_size + 1))"
+        if [[ "${SPEC_DECODING:-}" == "draft_model" ]]; then
+            # DSpark proposes a whole block per step rather than walking a chain,
+            # so num-steps is pinned to 1 and decode_mtp_size is read as the block
+            # size gamma. The verify window is gamma + 1, same arithmetic as MTP.
+            mtp_config="${MODEL_DSPARK_FLAGS} --speculative-dspark-block-size ${decode_mtp_size} --speculative-num-steps 1 --speculative-num-draft-tokens $((decode_mtp_size + 1))"
+        else
+            mtp_config="${MODEL_MTP_FLAGS} --speculative-num-steps ${decode_mtp_size} --speculative-num-draft-tokens $((decode_mtp_size + 1))"
+        fi
     fi
 
     if [[ "$enable_dp" == "true" ]]; then
