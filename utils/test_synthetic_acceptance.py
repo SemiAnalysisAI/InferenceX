@@ -13,7 +13,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
 
-from infx.recipes.synthetic_acceptance import (
+from infx.srt_slurm.synthetic_acceptance import (
     build_overrides,
     plan_commands,
     selected_recipes,

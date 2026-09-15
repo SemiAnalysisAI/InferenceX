@@ -100,7 +100,7 @@ apply_srt_recipe() {
     local config="$1" framework="$2"
     shift 2
     PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" \
-        python3 -m infx.recipes.synthetic_acceptance \
+        python3 -m infx.srt_slurm.synthetic_acceptance \
         "$config" "$framework" -- "$@"
 }
 
