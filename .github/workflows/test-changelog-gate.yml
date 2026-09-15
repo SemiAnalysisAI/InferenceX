@@ -8,6 +8,7 @@ on:
     paths:
       - "infx/**"
       - "utils/test_module_entrypoints.py"
+      - "golden_al_distribution/*.yaml"
       - "utils/test_synthetic_acceptance.py"
       - "utils/srt-slurm"
       - ".claude/commands/recover-failed-ingest.md"

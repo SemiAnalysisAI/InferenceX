@@ -1,9 +1,4 @@
-"""Pass speculative-acceptance settings to srtctl through native overrides.
-
-The source recipe is read-only. srtctl owns selector expansion, application of
-``--set`` / ``--unset``, validation, and the saved runtime recipe. Eval-only
-runs restore real verification; ordinary RUN_EVAL behavior is unchanged.
-"""
+"""Select AgentX golden acceptance automatically and pass native srtctl overrides."""
 
 from __future__ import annotations
 
@@ -22,17 +17,7 @@ from typing import Any
 
 import yaml
 
-from infx.recipes.overrides import RecipeOverride, override_argv
-
-REFERENCE_PATH = (
-    Path(__file__).resolve().parents[2] / "benchmarks/speedbench-reference-al.yaml"
-)
-MODEL_KEYS = {
-    "dsv4": "deepseek-v4-pro",
-    "dsr1": "deepseek-r1",
-    "dsv4dspark": "deepseek-v4-pro-0813",
-    "dsv4dsparkprob": "deepseek-v4-pro-0813",
-}
+GOLDEN_DIR = Path(__file__).resolve().parents[2] / "golden_al_distribution"
 ENGINES = {
     "vllm": "vllm",
     "dynamo-vllm": "vllm",
@@ -48,75 +33,84 @@ SGLANG_VARIABLES = (
 TRT_VARIABLE = "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS"
 
 
-def enabled(environment: Mapping[str, str], name: str) -> bool:
-    return environment.get(name, "false").strip().lower() == "true"
+def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
+    args = role.get("args", {})
+    if engine == "vllm":
+        raw = args.get("speculative-config")
+        if raw is None:
+            return {}
+        spec = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(spec, dict):
+            raise ValueError("speculative-config must be a JSON object")
+        return dict(spec)
+    if engine == "sglang":
+        algorithm = str(args.get("speculative-algorithm", "")).lower()
+        if not algorithm:
+            return {}
+        return {
+            "method": "dspark" if algorithm == "dspark" else algorithm,
+            "num_speculative_tokens": args.get(
+                "speculative-dspark-block-size"
+                if algorithm == "dspark"
+                else "speculative-num-steps"
+            ),
+            "model": args.get("speculative-draft-model-path", ""),
+        }
+    spec = args.get("speculative_config") or {}
+    if not spec:
+        return {}
+    return {
+        "method": str(spec.get("decoding_type", "")).lower(),
+        "num_speculative_tokens": spec.get("max_draft_len"),
+        "model": spec.get("speculative_model", ""),
+    }
 
 
-def _spec_config(value: Any) -> dict[str, Any]:
-    parsed = json.loads(value) if isinstance(value, str) else value
-    if not isinstance(parsed, dict):
-        raise ValueError("speculative-config must be a JSON object")
-    return dict(parsed)
-
-
-def _spec_tokens(roles: Mapping[str, Any], engine: str) -> int:
-    for role in roles.values():
-        args = role.get("args", {})
-        if engine == "vllm" and "speculative-config" in args:
-            value = _spec_config(args["speculative-config"]).get(
-                "num_speculative_tokens"
-            )
-        elif engine == "sglang":
-            value = args.get("speculative-num-steps")
-        else:
-            spec = args.get("speculative_config", {})
-            value = spec.get("max_draft_len", spec.get("num_nextn_predict_layers"))
-        if value:
-            return int(value)
-    return 2
-
-
-def resolve_acceptance_length(
-    roles: Mapping[str, Any],
-    engine: str,
-    environment: Mapping[str, str],
-    reference: Mapping[str, Any] | None,
+def golden_length(
+    model: str, spec: Mapping[str, Any], thinking: str, golden_dir: Path
 ) -> float:
-    explicit = environment.get("SYNTHETIC_ACCEPTANCE_LENGTH", "").strip()
-    if explicit:
-        value = float(explicit)
-    else:
-        if reference is None:
+    method = str(spec.get("method", "")).lower()
+    # SGLang calls native model MTP EAGLE/NEXTN; the curve describes the model's head.
+    if method in ("eagle", "nextn"):
+        method = "eagle3" if model in ("kimik2.5", "minimaxm3") else "mtp"
+    curve = f"{model}_{method}"
+    if model in ("dsv4", "dsv4dspark", "dsv4dsparkprob") and method == "dspark":
+        curve = "dsv4-pro-0813-dspark"
+    elif model == "minimaxm3" and method == "eagle3":
+        if "gqa" in str(spec.get("model", "")).lower():
+            curve += "_gqa"
+    elif model == "kimik3" and method == "dspark":
+        # Existing AgentX Kimi recipes use the probabilistic/block curve when
+        # draft sampling is omitted. An explicit greedy recipe uses its own curve.
+        sampling = spec.get("draft_sample_method", "probabilistic")
+        if sampling == "probabilistic":
+            curve += "_probabilistic_sample_method_block_rejection_sample_method"
+        elif sampling != "greedy":
             raise ValueError(
-                "SYNTHETIC_ACCEPTANCE_LENGTH is unset and reference AL data is unavailable"
+                f"No Kimi DSpark golden curve for draft sampling {sampling!r}"
             )
-        prefix = environment.get("MODEL_PREFIX", "")
-        key = MODEL_KEYS.get(prefix, prefix)
-        if key not in reference:
-            raise ValueError(f'model key "{key}" not found in reference AL data')
-        block = reference[key]
-        nst = environment.get("NUM_SPEC_TOKENS", "").strip()
-        tokens = int(nst) if nst else _spec_tokens(roles, engine)
-        if isinstance(block, list):
-            block = {level: al for item in block for level, al in item.items()}
-        if isinstance(block, dict) and any(
-            str(k).startswith("thinking") for k in block
-        ):
-            mode = (
-                environment.get("THINKING_MODE", "thinking_on").strip() or "thinking_on"
-            )
-            if mode not in block:
-                raise ValueError(
-                    f"THINKING_MODE='{mode}' not found in reference AL data"
-                )
-            block = block[mode]
-        if not isinstance(block, dict) or tokens not in block:
-            raise ValueError(
-                f"num_spec_tokens={tokens} not found for {key} in reference AL data"
-            )
-        value = float(block[tokens])
-    if not math.isfinite(value) or value < 1:
-        raise ValueError("synthetic acceptance length must be finite and at least 1")
+    if not re.fullmatch(r"[a-z0-9_.-]+", curve):
+        raise ValueError(f"Invalid golden curve identity: {curve!r}")
+    tokens = spec.get("num_speculative_tokens")
+    if not isinstance(tokens, int) or isinstance(tokens, bool) or tokens <= 0:
+        raise ValueError(
+            "Speculative decoding requires a positive integer draft length"
+        )
+    path = golden_dir / f"{curve}.yaml"
+    if not path.is_file():
+        raise ValueError(f"No committed golden curve for {model}/{method}: {path.name}")
+    data = yaml.safe_load(path.read_text())
+    if not isinstance(data, dict) or len(data) != 1:
+        raise ValueError(f"Expected one model in golden curve {path.name}")
+    modes = next(iter(data.values()))
+    try:
+        value = float(modes[thinking][tokens])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError(
+            f"No golden acceptance for {curve}/{thinking}/{tokens} draft tokens"
+        ) from error
+    if not math.isfinite(value) or not 1 <= value <= tokens + 1:
+        raise ValueError(f"Invalid golden acceptance {value} in {path.name}")
     return value
 
 
@@ -125,128 +119,101 @@ def build_overrides(
     framework: str,
     environment: Mapping[str, str],
     *,
-    reference: Mapping[str, Any] | None = None,
-    enable_throughput: bool = True,
-    require_match: bool = True,
-) -> list[RecipeOverride]:
-    """Build overrides for one resolved recipe without mutating its mappings."""
-    real = enabled(environment, "EVAL_ONLY")
-    synthetic = enable_throughput and enabled(environment, "SYNTHETIC_ACCEPTANCE")
-    if not real and not synthetic:
-        return []
+    golden_dir: Path = GOLDEN_DIR,
+) -> list[str]:
+    """Infer acceptance from generation parameters; never accept a caller AL."""
     engine = ENGINES.get(framework)
     if engine is None:
-        if real:
-            return []
-        raise ValueError(f"no synthetic-acceptance backend for FRAMEWORK='{framework}'")
-    if "backend" in recipe and "roles" not in recipe:
-        raise ValueError("native acceptance overrides require a schema-2 roles recipe")
+        return []
     roles = recipe.get("roles", {})
-    if not isinstance(roles, dict) or any(
-        not isinstance(r, dict) for r in roles.values()
-    ):
-        raise ValueError("recipe roles must contain worker mappings")
-    roles = {
-        name: role
-        for name, role in roles.items()
-        if name in ("agg", "prefill", "decode")
-    }
-    al = (
-        None
-        if real
-        else resolve_acceptance_length(roles, engine, environment, reference)
+    synthetic = (
+        environment["EVAL_ONLY"].lower() != "true"
+        and environment["IS_AGENTIC"].lower() in ("1", "true")
+        and environment["SPEC_DECODING"] != "none"
     )
-    overrides: list[RecipeOverride] = []
+    # Prefill may have a different MTP depth; generation defines the AL target.
+    generation = roles.get("decode", roles.get("agg", {}))
+    spec = spec_parameters(generation, engine)
+    al = None
+    if synthetic and spec:
+        al = golden_length(
+            environment["MODEL_PREFIX"], spec, environment["THINKING_MODE"], golden_dir
+        )
+    overrides = []
     for name, role in roles.items():
+        if name not in ("agg", "prefill", "decode"):
+            continue
         prefix = f"roles.{name}"
+        worker_spec = spec_parameters(role, engine)
         if engine == "vllm":
-            raw = role.get("args", {}).get("speculative-config")
-            if raw is None:
+            if not worker_spec:
                 continue
-            spec = _spec_config(raw)
-            if real:
-                if (
-                    spec.get("rejection_sample_method") != "synthetic"
-                    and "synthetic_acceptance_length" not in spec
-                ):
-                    continue
-                spec["rejection_sample_method"] = "block"
-                spec.pop("synthetic_acceptance_length", None)
-            else:
-                spec.update(
+            if al is not None:
+                worker_spec.update(
                     rejection_sample_method="synthetic", synthetic_acceptance_length=al
                 )
-            overrides.append(
-                RecipeOverride(
-                    f"{prefix}.args.speculative-config",
-                    json.dumps(spec, separators=(",", ":")),
-                )
-            )
+            elif (
+                worker_spec.get("rejection_sample_method") == "synthetic"
+                or "synthetic_acceptance_length" in worker_spec
+            ):
+                worker_spec["rejection_sample_method"] = "block"
+                worker_spec.pop("synthetic_acceptance_length", None)
+            else:
+                continue
+            overrides += [
+                "--set",
+                f"{prefix}.args.speculative-config={json.dumps(worker_spec)}",
+            ]
         else:
             variables = SGLANG_VARIABLES if engine == "sglang" else (TRT_VARIABLE,)
-            env = role.get("env") or {}
-            if real:
-                overrides.extend(
-                    RecipeOverride(f"{prefix}.env.{key}", unset=True)
-                    for key in variables
-                    if key in env
-                )
-            else:
-                if engine == "sglang" and SGLANG_VARIABLES[0] in env:
-                    raise ValueError(
-                        "recipe already contains SGLANG_SIMULATE_ACC_* variables"
-                    )
+            if al is not None and worker_spec:
                 values = (
                     (f"{al:g}", "match-expected", "real-draft-token")
                     if engine == "sglang"
                     else (f"{al - 1:g}",)
                 )
-                overrides.extend(
-                    RecipeOverride(f"{prefix}.env.{key}", value)
-                    for key, value in zip(variables, values)
-                )
-    if not real and not overrides and require_match:
-        raise ValueError(
-            "SYNTHETIC_ACCEPTANCE=true but no speculative-config entries or worker roles were found"
-        )
+                for key, value in zip(variables, values):
+                    overrides += ["--set", f"{prefix}.env.{key}={json.dumps(value)}"]
+            else:
+                for key in variables:
+                    if key in (role.get("env") or {}):
+                        overrides += ["--unset", f"{prefix}.env.{key}"]
     return overrides
 
 
 def selected_recipes(
     raw: dict[str, Any], selector: str | None
 ) -> list[tuple[str | None, dict[str, Any]]]:
-    """Use upstream expansion, retaining a native selector for each variant."""
+    """Delegate expansion to SRT, retaining its selector for each submission."""
     if "base" not in raw:
         if selector is not None:
             raise ValueError("recipe selector requires an override-format recipe")
         return [(None, raw)]
     from srtctl.core.config import generate_override_configs
 
-    # Validate the original selection with upstream, including empty globs and
-    # bad indexes. Only selector routing lives here; merging/zipping stays there.
     selected = generate_override_configs(raw, selector=selector)
-    if selector == "base" or (
-        selector
-        and (selector.startswith("override_") and not any(c in selector for c in "*?"))
+    if (
+        selector == "base"
+        or (
+            selector
+            and selector.startswith("override_")
+            and not any(c in selector for c in "*?")
+        )
+        or (selector and re.fullmatch(r"zip_override_[\w-]+\[\d+\]", selector))
     ):
         return [(selector, selected[0][1])]
-    if selector and re.fullmatch(r"zip_override_[\w-]+\[\d+\]", selector):
-        return [(selector, selected[0][1])]
-    regular = sorted(k for k in raw if k.startswith("override_"))
-    zipped = sorted(k for k in raw if k.startswith("zip_override_"))
-    keys = (
-        regular + zipped
-        if selector is None
-        else [k for k in sorted(regular + zipped) if fnmatch.fnmatch(k, selector)]
+    keys = sorted(k for k in raw if k.startswith("override_")) + sorted(
+        k for k in raw if k.startswith("zip_override_")
     )
     result = []
     for key in keys:
-        variants = generate_override_configs(raw, selector=key)
-        for index, (_, recipe) in enumerate(variants):
-            native_selector = (
-                f"{key}[{index}]" if key.startswith("zip_override_") else key
-            )
-            result.append((native_selector, recipe))
+        if selector is not None and not fnmatch.fnmatch(key, selector):
+            continue
+        for index, (_, recipe) in enumerate(
+            generate_override_configs(raw, selector=key)
+        ):
+            name = f"{key}[{index}]" if key.startswith("zip_override_") else key
+            result.append((name, recipe))
     return result
 
 
@@ -256,79 +223,47 @@ def plan_commands(
     arguments: list[str],
     environment: Mapping[str, str],
     *,
-    enable_throughput: bool,
-    reference_path: Path = REFERENCE_PATH,
+    golden_dir: Path = GOLDEN_DIR,
 ) -> list[list[str]]:
-    """Plan all submissions before executing any; caller options stay intact."""
+    """Build native arguments for every selected variant before submitting jobs."""
     command = ["srtctl", "apply", *arguments]
-    real = enabled(environment, "EVAL_ONLY")
-    if not real and not (
-        enable_throughput and enabled(environment, "SYNTHETIC_ACCEPTANCE")
-    ):
+    if framework not in ENGINES:
         return [command]
-    if real and framework not in ENGINES:
-        return [command]
-    path, separator, selector = config.partition(":")
-    raw = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
+
+    path, _, selector = config.partition(":")
+    raw = yaml.safe_load(Path(path).read_text())
     if not isinstance(raw, dict):
-        raise ValueError("recipe must be a mapping")
-    # Existing native overrides can set a variant's speculative JSON. Resolve
-    # them first so adding acceptance settings preserves the caller's fields.
+        raise ValueError("Recipe must be a mapping")
     parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
     parser.add_argument("--set", action="append")
     parser.add_argument("--unset", action="append")
     existing, _ = parser.parse_known_args(arguments)
-    from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
-
     apply_overrides_to_recipe(raw, parse_overrides(existing.set, existing.unset))
-    reference = None
-    if not real and not environment.get("SYNTHETIC_ACCEPTANCE_LENGTH", "").strip():
-        reference = yaml.safe_load(reference_path.read_text(encoding="utf-8"))
-    variants = selected_recipes(raw, selector if separator else None)
     commands = []
-    any_overrides = False
-    for variant, recipe in variants:
-        overrides = build_overrides(
-            recipe,
-            framework,
-            environment,
-            reference=reference,
-            enable_throughput=enable_throughput,
-            require_match=len(variants) == 1,
+    for variant, recipe in selected_recipes(raw, selector or None):
+        arguments_to_add = build_overrides(
+            recipe, framework, environment, golden_dir=golden_dir
         )
-        any_overrides = any_overrides or bool(overrides)
-        # Native srtctl applies all --unset options after all --set options,
-        # regardless of argv order. Reject a caller removal that would silently
-        # erase an acceptance setting we are about to add.
+        parsed, _ = parser.parse_known_args(arguments_to_add)
         for removal in existing.unset or []:
             if any(
-                not item.unset
-                and (item.path == removal or item.path.startswith(f"{removal}."))
-                for item in overrides
+                item.split("=", 1)[0] == removal
+                or item.split("=", 1)[0].startswith(f"{removal}.")
+                for item in parsed.set or []
             ):
                 raise ValueError(
-                    f"caller --unset {removal} conflicts with acceptance overrides"
+                    f"Caller --unset {removal} conflicts with golden acceptance"
                 )
-        # Native overrides replace zipped leaves with a one-element broadcast.
-        # Check every resulting selection before submitting anything: changing
-        # the only zip dimension must not submit an earlier variant and then
-        # fail halfway through the group with an out-of-range index.
-        overridden = copy.deepcopy(raw)
+        # SRT broadcasts overrides into zip groups. Reject a collapsed selection
+        # before any job is submitted, rather than selecting the wrong variant.
+        materialized = copy.deepcopy(raw)
         apply_overrides_to_recipe(
-            overridden,
-            parse_overrides(
-                [item.argv()[1] for item in overrides if not item.unset],
-                [item.argv()[1] for item in overrides if item.unset],
-            ),
+            materialized, parse_overrides(parsed.set, parsed.unset)
         )
-        selected_recipes(overridden, variant)
+        selected_recipes(materialized, variant)
         selected_file = f"{path}:{variant}" if variant is not None else path
-        # argparse's final --file wins over the caller's original group/glob.
-        commands.append([*command, "--file", selected_file, *override_argv(overrides)])
-    if not real and not any_overrides:
-        raise ValueError(
-            "SYNTHETIC_ACCEPTANCE=true but no speculative-config entries or worker roles were found"
-        )
+        commands.append([*command, "--file", selected_file, *arguments_to_add])
     return commands
 
 
@@ -336,20 +271,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config")
     parser.add_argument("framework")
-    parser.add_argument("mode", choices=("throughput", "eval-only"))
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     arguments = args.arguments[1:] if args.arguments[:1] == ["--"] else args.arguments
     try:
-        commands = plan_commands(
-            args.config,
-            args.framework,
-            arguments,
-            os.environ,
-            enable_throughput=args.mode == "throughput",
-        )
-    except (OSError, ValueError, TypeError, yaml.YAMLError) as exc:
-        print(f"ERROR: acceptance overrides: {exc}", file=sys.stderr)
+        commands = plan_commands(args.config, args.framework, arguments, os.environ)
+    except (OSError, KeyError, ValueError, TypeError, yaml.YAMLError) as error:
+        print(f"ERROR: golden acceptance: {error}", file=sys.stderr)
         return 1
     for command in commands:
         result = subprocess.run(command, check=False)

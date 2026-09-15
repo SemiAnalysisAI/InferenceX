@@ -104,6 +104,7 @@ env:
   EXP_NAME: ${{ fromJSON(inputs.config).exp-name }}
   RECIPE_FINGERPRINT: ${{ fromJSON(inputs.config).recipe-fingerprint || '' }}
   MODEL: ${{ fromJSON(inputs.config).model }}
+  THINKING_MODE: thinking_on
   MODEL_PREFIX: ${{ fromJSON(inputs.config).model-prefix }}
   ISL: ${{ inputs.scenario-type == 'agentic-coding' && '0' || fromJSON(inputs.config).isl }}
   OSL: ${{ inputs.scenario-type == 'agentic-coding' && '0' || fromJSON(inputs.config).osl }}

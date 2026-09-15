@@ -1,4 +1,4 @@
-"""Exercise acceptance settings through the pinned native srtctl overrides."""
+"""Exercise automatic golden-AL selection through native srtctl overrides."""
 
 import copy
 import json
@@ -20,235 +20,276 @@ from infx.recipes.synthetic_acceptance import (
 )
 from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
 
+ENV = {
+    "MODEL_PREFIX": "dsv4",
+    "IS_AGENTIC": "1",
+    "SPEC_DECODING": "mtp",
+    "EVAL_ONLY": "false",
+    "THINKING_MODE": "thinking_on",
+}
 
-def apply_native(recipe, overrides):
+
+@pytest.fixture
+def golden_dir(tmp_path):
+    directory = tmp_path / "golden"
+    directory.mkdir()
+    for filename, model, acceptance in [
+        ("dsv4_mtp.yaml", "deepseek-v4-pro", 2.4),
+        ("dsv4-pro-0813-dspark.yaml", "deepseek-v4-pro-0813", 2.7),
+        ("kimik3_dspark.yaml", "kimi-k3", 2.8),
+        (
+            "kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml",
+            "kimi-k3",
+            2.9,
+        ),
+        ("minimaxm3_eagle3.yaml", "minimax-m3", 2.5),
+        ("minimaxm3_eagle3_gqa.yaml", "minimax-m3", 2.6),
+    ]:
+        (directory / filename).write_text(
+            yaml.safe_dump(
+                {
+                    model: {
+                        "thinking_on": {2: 1.8, 3: acceptance},
+                        "thinking_off": {3: 2.1},
+                    }
+                }
+            )
+        )
+    return directory
+
+
+def apply_native(recipe, argv):
     result = copy.deepcopy(recipe)
-    sets = [item.argv()[1] for item in overrides if not item.unset]
-    unsets = [item.argv()[1] for item in overrides if item.unset]
+    sets = [argv[i + 1] for i, arg in enumerate(argv[:-1]) if arg == "--set"]
+    unsets = [argv[i + 1] for i, arg in enumerate(argv[:-1]) if arg == "--unset"]
     apply_overrides_to_recipe(result, parse_overrides(sets, unsets))
     return result
 
 
-SYNTHETIC = {"SYNTHETIC_ACCEPTANCE": "true", "SYNTHETIC_ACCEPTANCE_LENGTH": "2.78"}
-
-
-@pytest.mark.parametrize("framework", ["vllm", "dynamo-vllm"])
-def test_vllm_preserves_per_role_json_and_restores_real_verification(framework):
-    recipe = {
+def vllm_recipe(method="mtp", **extra):
+    return {
         "roles": {
-            "prefill": {
+            "agg": {
                 "args": {
-                    "speculative-config": '{"method":"mtp","num_speculative_tokens":3,"custom":{"a":"x=y z"}}'
+                    "speculative-config": json.dumps(
+                        {"method": method, "num_speculative_tokens": 3, **extra}
+                    )
                 }
-            },
-            "decode": {
-                "args": {
-                    "speculative-config": '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic"}'
-                }
-            },
+            }
         }
     }
+
+
+@pytest.mark.parametrize(
+    "prefix,method,extra,expected",
+    [
+        ("dsv4", "mtp", {}, 2.4),
+        ("dsv4", "dspark", {}, 2.7),
+        ("kimik3", "dspark", {"draft_sample_method": "greedy"}, 2.8),
+        ("kimik3", "dspark", {"draft_sample_method": "probabilistic"}, 2.9),
+        ("minimaxm3", "eagle3", {"model": "Inferact/MiniMax-M3-EAGLE3"}, 2.5),
+        ("minimaxm3", "eagle3", {"model": "Inferact/MiniMax-M3-EAGLE3-GQA"}, 2.6),
+    ],
+)
+def test_automatic_curve_selection_preserves_json(
+    golden_dir, prefix, method, extra, expected
+):
+    recipe = vllm_recipe(method, custom={"literal": "x=y z"}, **extra)
     original = copy.deepcopy(recipe)
-    synthetic = apply_native(recipe, build_overrides(recipe, framework, SYNTHETIC))
-    assert json.loads(synthetic["roles"]["prefill"]["args"]["speculative-config"]) == {
-        "method": "mtp",
-        "num_speculative_tokens": 3,
-        "custom": {"a": "x=y z"},
-        "rejection_sample_method": "synthetic",
-        "synthetic_acceptance_length": 2.78,
+    env = {
+        **ENV,
+        "MODEL_PREFIX": prefix,
+        "SPEC_DECODING": method,
+        "SYNTHETIC_ACCEPTANCE": "false",
+        "SYNTHETIC_ACCEPTANCE_LENGTH": "99",
     }
-    assert json.loads(synthetic["roles"]["decode"]["args"]["speculative-config"]) == {
-        "method": "dspark",
-        "num_speculative_tokens": 5,
-        "draft_sample_method": "probabilistic",
-        "rejection_sample_method": "synthetic",
-        "synthetic_acceptance_length": 2.78,
-    }
-    restored = apply_native(
-        synthetic,
-        build_overrides(synthetic, framework, {**SYNTHETIC, "EVAL_ONLY": "true"}),
+    result = apply_native(
+        recipe, build_overrides(recipe, "vllm", env, golden_dir=golden_dir)
     )
-    assert json.loads(restored["roles"]["decode"]["args"]["speculative-config"]) == {
-        "method": "dspark",
-        "num_speculative_tokens": 5,
-        "draft_sample_method": "probabilistic",
-        "rejection_sample_method": "block",
+    spec = json.loads(result["roles"]["agg"]["args"]["speculative-config"])
+    assert spec == {
+        "method": method,
+        "num_speculative_tokens": 3,
+        **extra,
+        "custom": {"literal": "x=y z"},
+        "rejection_sample_method": "synthetic",
+        "synthetic_acceptance_length": expected,
     }
     assert recipe == original
 
 
-@pytest.mark.parametrize(
-    "framework,key,value",
-    [
-        ("dynamo-sglang", "SGLANG_SIMULATE_ACC_LEN", "2.78"),
-        ("trt", "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS", "1.78"),
-        ("dynamo-trt", "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS", "1.78"),
-    ],
-)
-def test_environment_overrides_target_workers_and_eval_removes_them(
-    framework, key, value
-):
-    recipe = yaml.safe_load("""roles:
-  prefill:
-    env: &common
-      KEEP: original
-  decode:
-    env: *common
-  agg:
-    nodes: 1
-frontend:
-  env:
-    KEEP: frontend
-benchmark:
-  env:
-    KEEP: client
-""")
-    rewritten = apply_native(recipe, build_overrides(recipe, framework, SYNTHETIC))
-    assert [role["env"][key] for role in rewritten["roles"].values()] == [
-        value,
-        value,
-        value,
-    ]
-    assert rewritten["roles"]["decode"]["env"]["KEEP"] == "original"
-    assert rewritten["frontend"] == {"env": {"KEEP": "frontend"}}
-    assert rewritten["benchmark"] == {"env": {"KEEP": "client"}}
-    if framework == "dynamo-sglang":
-        assert rewritten["roles"]["agg"]["env"] == {
-            "SGLANG_SIMULATE_ACC_LEN": "2.78",
-            "SGLANG_SIMULATE_ACC_METHOD": "match-expected",
-            "SGLANG_SIMULATE_ACC_TOKEN_MODE": "real-draft-token",
-        }
-    restored = apply_native(
-        rewritten, build_overrides(rewritten, framework, {"EVAL_ONLY": "true"})
+def test_thinking_mode_and_decode_priority(golden_dir):
+    recipe = vllm_recipe(num_speculative_tokens=2)
+    recipe["roles"]["decode"] = vllm_recipe()["roles"]["agg"]
+    recipe["roles"]["prefill"] = {"args": {"tensor-parallel-size": 8}}
+    result = apply_native(
+        recipe,
+        build_overrides(
+            recipe,
+            "dynamo-vllm",
+            {**ENV, "THINKING_MODE": "thinking_off"},
+            golden_dir=golden_dir,
+        ),
     )
-    assert restored["roles"] == {
-        "prefill": {"env": {"KEEP": "original"}},
-        "decode": {"env": {"KEEP": "original"}},
-        "agg": {"nodes": 1, "env": {}},
-    }
-
-
-def test_trt_replaces_existing_forced_acceptance():
-    recipe = {
-        "roles": {"agg": {"env": {"TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS": "9"}}}
-    }
-    rewritten = apply_native(recipe, build_overrides(recipe, "trt", SYNTHETIC))
-    assert rewritten["roles"]["agg"]["env"] == {
-        "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS": "1.78"
-    }
-
-
-@pytest.mark.parametrize(
-    "reference,environment,expected",
-    [
-        ({"deepseek-v4-pro": [{3: 2.51}]}, {"MODEL_PREFIX": "dsv4"}, "2.51"),
-        ({"custom": {3: 2.6}}, {"MODEL_PREFIX": "custom"}, "2.6"),
-        (
-            {"deepseek-v4-pro-0813": {"thinking_off": {5: 3.5}}},
-            {
-                "MODEL_PREFIX": "dsv4dspark",
-                "NUM_SPEC_TOKENS": "5",
-                "THINKING_MODE": "thinking_off",
-            },
-            "3.5",
-        ),
-    ],
-)
-def test_reference_lookup_preserves_model_aliases_and_token_selection(
-    reference, environment, expected
-):
-    recipe = {"roles": {"decode": {"args": {"speculative-num-steps": 3}}}}
-    env = {"SYNTHETIC_ACCEPTANCE": "true", **environment}
-    rewritten = apply_native(
-        recipe, build_overrides(recipe, "dynamo-sglang", env, reference=reference)
-    )
-    assert rewritten["roles"]["decode"]["env"]["SGLANG_SIMULATE_ACC_LEN"] == expected
-
-
-@pytest.mark.parametrize(
-    "environment,framework",
-    [({}, "vllm"), ({"RUN_EVAL": "true"}, "vllm"), ({"EVAL_ONLY": "true"}, "tilert")],
-)
-def test_disabled_and_unsupported_eval_paths_do_not_read_recipe(environment, framework):
-    assert plan_commands(
-        "missing.yaml",
-        framework,
-        ["-f", "missing.yaml"],
-        environment,
-        enable_throughput=True,
-    ) == [["srtctl", "apply", "-f", "missing.yaml"]]
-
-
-def test_eval_only_launcher_mode_does_not_enable_throughput_injection():
-    assert plan_commands(
-        "missing.yaml",
-        "vllm",
-        ["-f", "missing.yaml"],
-        SYNTHETIC,
-        enable_throughput=False,
-    ) == [["srtctl", "apply", "-f", "missing.yaml"]]
-
-
-@pytest.mark.parametrize(
-    "recipe,framework,environment,message",
-    [
-        ({}, "unknown", SYNTHETIC, "no synthetic-acceptance backend"),
-        ({"roles": {"agg": {}}}, "vllm", SYNTHETIC, "no speculative-config"),
-        (
-            {"roles": {"agg": {"args": {"speculative-config": "[]"}}}},
-            "vllm",
-            SYNTHETIC,
-            "JSON object",
-        ),
-        (
-            {"roles": {"agg": {"env": {"SGLANG_SIMULATE_ACC_LEN": "1"}}}},
-            "dynamo-sglang",
-            SYNTHETIC,
-            "already contains",
-        ),
-        (
-            {"roles": {"agg": {}}},
-            "trt",
-            {**SYNTHETIC, "SYNTHETIC_ACCEPTANCE_LENGTH": "nan"},
-            "finite",
-        ),
-    ],
-)
-def test_invalid_injection_fails_before_submission(
-    recipe, framework, environment, message
-):
-    with pytest.raises(ValueError, match=message):
-        build_overrides(recipe, framework, environment)
-
-
-def test_eval_only_accepts_real_non_speculative_recipe():
     assert (
-        build_overrides({"roles": {"agg": {"nodes": 1}}}, "vllm", {"EVAL_ONLY": "true"})
+        json.loads(result["roles"]["decode"]["args"]["speculative-config"])[
+            "synthetic_acceptance_length"
+        ]
+        == 2.1
+    )
+    assert result["roles"]["prefill"] == {"args": {"tensor-parallel-size": 8}}
+
+
+@pytest.mark.parametrize(
+    "framework,args,environment,expected",
+    [
+        (
+            "dynamo-sglang",
+            {
+                "speculative-algorithm": "DSpark",
+                "speculative-dspark-block-size": 3,
+                "speculative-num-steps": 2,
+            },
+            {"SPEC_DECODING": "dspark"},
+            {
+                "SGLANG_SIMULATE_ACC_LEN": "2.7",
+                "SGLANG_SIMULATE_ACC_METHOD": "match-expected",
+                "SGLANG_SIMULATE_ACC_TOKEN_MODE": "real-draft-token",
+            },
+        ),
+        (
+            "dynamo-sglang",
+            {"speculative-algorithm": "EAGLE", "speculative-num-steps": 3},
+            {},
+            {
+                "SGLANG_SIMULATE_ACC_LEN": "2.4",
+                "SGLANG_SIMULATE_ACC_METHOD": "match-expected",
+                "SGLANG_SIMULATE_ACC_TOKEN_MODE": "real-draft-token",
+            },
+        ),
+        (
+            "trt",
+            {
+                "speculative_config": {
+                    "decoding_type": "EAGLE3",
+                    "max_draft_len": 3,
+                    "speculative_model": "Inferact/MiniMax-M3-EAGLE3-GQA",
+                }
+            },
+            {"MODEL_PREFIX": "minimaxm3", "SPEC_DECODING": "eagle3"},
+            {"TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS": "1.6"},
+        ),
+    ],
+)
+def test_engine_token_selection_and_environment(
+    golden_dir, framework, args, environment, expected
+):
+    recipe = {
+        "roles": {"decode": {"args": args, "env": {"KEEP": "worker"}}},
+        "benchmark": {"env": {"KEEP": "client"}},
+    }
+    result = apply_native(
+        recipe,
+        build_overrides(
+            recipe, framework, {**ENV, **environment}, golden_dir=golden_dir
+        ),
+    )
+    assert result["roles"]["decode"]["env"] == {"KEEP": "worker", **expected}
+    assert result["benchmark"] == {"env": {"KEEP": "client"}}
+
+
+@pytest.mark.parametrize("environment", [{"EVAL_ONLY": "true"}, {"IS_AGENTIC": "0"}])
+@pytest.mark.parametrize("framework", ["vllm", "dynamo-sglang", "trt"])
+def test_real_runs_clear_synthetic_without_a_curve(tmp_path, framework, environment):
+    recipe = vllm_recipe(
+        "dspark", rejection_sample_method="synthetic", synthetic_acceptance_length=8
+    )
+    recipe["roles"]["agg"]["env"] = {
+        "KEEP": "yes",
+        "SGLANG_SIMULATE_ACC_LEN": "8",
+        "SGLANG_SIMULATE_ACC_METHOD": "match-expected",
+        "SGLANG_SIMULATE_ACC_TOKEN_MODE": "real-draft-token",
+        "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS": "7",
+    }
+    result = apply_native(
+        recipe,
+        build_overrides(
+            recipe, framework, {**ENV, **environment}, golden_dir=tmp_path / "absent"
+        ),
+    )
+    role = result["roles"]["agg"]
+    if framework == "vllm":
+        assert json.loads(role["args"]["speculative-config"]) == {
+            "method": "dspark",
+            "num_speculative_tokens": 3,
+            "rejection_sample_method": "block",
+        }
+    elif framework == "trt":
+        assert "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS" not in role["env"]
+    else:
+        assert not any(key.startswith("SGLANG_SIMULATE_ACC_") for key in role["env"])
+    assert role["env"]["KEEP"] == "yes"
+
+
+@pytest.mark.parametrize(
+    "curve",
+    [
+        None,
+        {"thinking_on": {2: 1.8}},
+        {"thinking_off": {3: 2.1}},
+        {"thinking_on": {3: float("nan")}},
+    ],
+)
+def test_missing_or_invalid_golden_rejects_injection(tmp_path, curve):
+    if curve is not None:
+        (tmp_path / "dsv4_mtp.yaml").write_text(
+            yaml.safe_dump({"deepseek-v4-pro": curve})
+        )
+    with pytest.raises(ValueError):
+        build_overrides(vllm_recipe(), "vllm", ENV, golden_dir=tmp_path)
+
+
+def test_non_speculative_passthrough_and_malformed_spec(tmp_path):
+    assert (
+        build_overrides(
+            {"roles": {"agg": {}}},
+            "vllm",
+            {**ENV, "SPEC_DECODING": "none"},
+            golden_dir=tmp_path,
+        )
         == []
     )
+    with pytest.raises(ValueError, match="JSON object"):
+        build_overrides(
+            {"roles": {"agg": {"args": {"speculative-config": "[]"}}}},
+            "vllm",
+            ENV,
+            golden_dir=tmp_path,
+        )
 
 
-def test_variant_plan_preserves_selected_json_and_native_caller_options(tmp_path):
+def test_variants_use_resolved_tokens_and_preserve_caller_arguments(
+    tmp_path, golden_dir
+):
     recipe = tmp_path / "recipe with spaces.yaml"
-    original = """schema: 2
-base:
-  name: worker
-  roles:
-    decode:
-      args:
-        speculative-config: '{"method":"mtp","num_speculative_tokens":2}'
-override_other:
-  roles:
-    decode:
-      args:
-        speculative-config: '{"method":"eagle3","num_speculative_tokens":4}'
-zip_override_test:
-  name: [first, second]
-  roles:
-    decode:
-      args:
-        speculative-config: ['{"method":"dspark","num_speculative_tokens":3}', '{"method":"mtp","num_speculative_tokens":5}']
-"""
+    raw = {
+        "schema": 2,
+        "base": {"name": "worker", **vllm_recipe()},
+        "zip_override_test": {
+            "name": ["first", "second"],
+            "roles": {
+                "agg": {
+                    "args": {
+                        "speculative-config": [
+                            '{"method":"mtp","num_speculative_tokens":2}',
+                            '{"method":"mtp","num_speculative_tokens":3}',
+                        ]
+                    }
+                }
+            },
+        },
+    }
+    original = yaml.safe_dump(raw)
     recipe.write_text(original)
     commands = plan_commands(
         f"{recipe}:zip_override_test",
@@ -259,83 +300,31 @@ zip_override_test:
             "--tags",
             "x y",
             "--set",
-            'post_eval.command=["bash","eval.sh"]',
+            'benchmark.env.KEEP="caller"',
         ],
-        SYNTHETIC,
-        enable_throughput=True,
+        ENV,
+        golden_dir=golden_dir,
     )
     assert len(commands) == 2
     for index, command in enumerate(commands):
         assert command[:2] == ["srtctl", "apply"]
         assert command[command.index("--tags") + 1] == "x y"
-        assert command[-4:-2] == ["--file", f"{recipe}:zip_override_test[{index}]"]
-        native = yaml.safe_load(original)
-        sets = [command[i + 1] for i, arg in enumerate(command[:-1]) if arg == "--set"]
-        apply_overrides_to_recipe(native, parse_overrides(sets, []))
-        resolved = selected_recipes(native, f"zip_override_test[{index}]")[0][1]
-        assert json.loads(
-            resolved["roles"]["decode"]["args"]["speculative-config"]
-        ) == {
-            "method": ["dspark", "mtp"][index],
-            "num_speculative_tokens": [3, 5][index],
-            "rejection_sample_method": "synthetic",
-            "synthetic_acceptance_length": 2.78,
-        }
-        assert resolved["post_eval"]["command"] == ["bash", "eval.sh"]
-    assert recipe.read_text() == original
-    assert [
-        selector for selector, _ in selected_recipes(yaml.safe_load(original), "*other")
-    ] == ["override_other"]
-
-
-def test_shell_adapter_forwards_arguments_and_failure_without_changing_recipe(tmp_path):
-    recipe = tmp_path / "recipe.yaml"
-    original = 'schema: 2\nroles:\n  agg:\n    args:\n      speculative-config: \'{"method":"mtp","num_speculative_tokens":3}\'\n'
-    recipe.write_text(original)
-    binary = tmp_path / "srtctl"
-    binary.write_text(
-        f"#!{sys.executable}\nimport json,sys\nprint(json.dumps(sys.argv[1:]))\nsys.exit(7)\n"
-    )
-    binary.chmod(0o755)
-    env = {
-        **os.environ,
-        **SYNTHETIC,
-        "EVAL_ONLY": "false",
-        "PATH": f"{tmp_path}:{os.environ['PATH']}",
-        "PYTHONPATH": str(ROOT / "utils/srt-slurm/src"),
-    }
-    result = subprocess.run(
-        [
-            "bash",
-            "-c",
-            'source "$1"; apply_srt_recipe "$2" vllm throughput -f "$2" --tags "a b"',
-            "bash",
-            str(ROOT / "runners/slurm_utils.sh"),
-            str(recipe),
-        ],
-        cwd=tmp_path,
-        env=env,
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 7, result.stderr
-    argv = json.loads(result.stdout)
-    assert argv[:5] == ["apply", "-f", str(recipe), "--tags", "a b"]
-    assert json.loads(yaml.safe_load(argv[-1].split("=", 1)[1])) == {
-        "method": "mtp",
-        "num_speculative_tokens": 3,
-        "rejection_sample_method": "synthetic",
-        "synthetic_acceptance_length": 2.78,
-    }
+        selector = f"zip_override_test[{index}]"
+        assert f"{recipe}:{selector}" in command
+        resolved = selected_recipes(apply_native(raw, command), selector)[0][1]
+        assert (
+            json.loads(resolved["roles"]["agg"]["args"]["speculative-config"])[
+                "synthetic_acceptance_length"
+            ]
+            == [1.8, 2.4][index]
+        )
+        assert resolved["benchmark"]["env"] == {"KEEP": "caller"}
     assert recipe.read_text() == original
 
 
-def test_caller_json_is_merged_and_materialized_by_native_srtctl(tmp_path):
-    from srtctl.cli.submit import materialize_config_path
-
+def test_caller_json_is_merged_before_golden_selection(tmp_path, golden_dir):
     recipe = tmp_path / "recipe.yaml"
-    original = 'schema: 2\nroles:\n  agg:\n    args:\n      speculative-config: \'{"method":"mtp"}\'\n'
-    recipe.write_text(original)
+    recipe.write_text(yaml.safe_dump(vllm_recipe()))
     commands = plan_commands(
         str(recipe),
         "vllm",
@@ -343,87 +332,107 @@ def test_caller_json_is_merged_and_materialized_by_native_srtctl(tmp_path):
             "-f",
             str(recipe),
             "--set",
-            'roles.agg.args.speculative-config={"method":"dspark","num_speculative_tokens":5,"model":"draft model"}',
+            'roles.agg.args.speculative-config={"method":"dspark","num_speculative_tokens":3,"model":"draft model"}',
         ],
-        SYNTHETIC,
-        enable_throughput=True,
+        ENV,
+        golden_dir=golden_dir,
     )
-    command = commands[0]
-    sets = [command[i + 1] for i, arg in enumerate(command[:-1]) if arg == "--set"]
-    with materialize_config_path(recipe, parse_overrides(sets, [])) as rendered:
-        config = yaml.safe_load(rendered.read_text())
-        assert json.loads(config["roles"]["agg"]["args"]["speculative-config"]) == {
-            "method": "dspark",
-            "num_speculative_tokens": 5,
-            "model": "draft model",
-            "rejection_sample_method": "synthetic",
-            "synthetic_acceptance_length": 2.78,
-        }
-        assert recipe.read_text() == original
-    assert not rendered.exists()
+    result = apply_native(yaml.safe_load(recipe.read_text()), commands[0])
+    assert json.loads(result["roles"]["agg"]["args"]["speculative-config"]) == {
+        "method": "dspark",
+        "num_speculative_tokens": 3,
+        "model": "draft model",
+        "rejection_sample_method": "synthetic",
+        "synthetic_acceptance_length": 2.7,
+    }
 
 
-def test_plan_validates_zip_cardinality_before_any_submission(tmp_path):
+def test_shell_forwards_options_and_submission_failure(tmp_path):
     recipe = tmp_path / "recipe.yaml"
-    recipe.write_text("""schema: 2
-base:
-  name: worker
-zip_override_tokens:
-  roles:
-    decode:
-      args:
-        speculative-config: ['{"method":"mtp","num_speculative_tokens":2}', '{"method":"mtp","num_speculative_tokens":3}']
-""")
-    # Native --set turns the only list dimension into a broadcast, so index 1
-    # would cease to exist. Reject the entire plan rather than submit index 0.
-    with pytest.raises(ValueError, match="out of range"):
-        plan_commands(
-            str(recipe), "vllm", ["-f", str(recipe)], SYNTHETIC, enable_throughput=True
+    recipe.write_text(
+        yaml.safe_dump(
+            vllm_recipe(
+                rejection_sample_method="synthetic", synthetic_acceptance_length=8
+            )
         )
-
-
-def test_caller_unset_cannot_silently_remove_generated_acceptance(tmp_path):
-    recipe = tmp_path / "recipe.yaml"
-    recipe.write_text("schema: 2\nroles:\n  agg:\n    env: {}\n")
-    with pytest.raises(ValueError, match="caller --unset roles.agg.env conflicts"):
-        plan_commands(
-            str(recipe),
-            "dynamo-sglang",
-            ["-f", str(recipe), "--unset", "roles.agg.env"],
-            SYNTHETIC,
-            enable_throughput=True,
-        )
-
-
-def test_invalid_recipe_cli_does_not_invoke_srtctl(tmp_path):
-    recipe = tmp_path / "recipe.yaml"
-    recipe.write_text("[]\n")
+    )
     binary = tmp_path / "srtctl"
-    binary.write_text("#!/bin/sh\nprintf unexpected-submission\n")
+    binary.write_text(
+        f"#!{sys.executable}\nimport json,sys\nprint(json.dumps(sys.argv[1:]))\nsys.exit(7)\n"
+    )
     binary.chmod(0o755)
     result = subprocess.run(
         [
-            sys.executable,
-            "-m",
-            "infx.recipes.synthetic_acceptance",
-            str(recipe),
-            "vllm",
-            "throughput",
-            "--",
-            "-f",
+            "bash",
+            "-c",
+            'source "$1"; apply_srt_recipe "$2" vllm -f "$2" --tags "a b"',
+            "bash",
+            str(ROOT / "runners/slurm_utils.sh"),
             str(recipe),
         ],
+        cwd=tmp_path,
         env={
             **os.environ,
-            **SYNTHETIC,
-            "EVAL_ONLY": "false",
+            **ENV,
+            "EVAL_ONLY": "true",
             "PATH": f"{tmp_path}:{os.environ['PATH']}",
-            "PYTHONPATH": str(ROOT),
+            "PYTHONPATH": os.pathsep.join(
+                [str(ROOT), str(ROOT / "utils/srt-slurm/src")]
+            ),
         },
-        cwd=tmp_path,
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 1
-    assert result.stdout == ""
-    assert "recipe must be a mapping" in result.stderr
+    assert result.returncode == 7, result.stderr
+    argv = json.loads(result.stdout)
+    assert argv[:5] == ["apply", "-f", str(recipe), "--tags", "a b"]
+    result_recipe = apply_native(yaml.safe_load(recipe.read_text()), argv)
+    assert (
+        json.loads(result_recipe["roles"]["agg"]["args"]["speculative-config"])[
+            "rejection_sample_method"
+        ]
+        == "block"
+    )
+
+
+@pytest.mark.parametrize("conflict", ["zip_cardinality", "caller_unset"])
+def test_invalid_plan_fails_before_any_submission(tmp_path, golden_dir, conflict):
+    recipe = tmp_path / "recipe.yaml"
+    raw = {"schema": 2, **vllm_recipe()}
+    arguments = ["-f", str(recipe)]
+    framework = "vllm"
+    if conflict == "zip_cardinality":
+        raw = {
+            "schema": 2,
+            "base": {"name": "worker"},
+            "zip_override_tokens": {
+                "roles": {
+                    "agg": {
+                        "args": {
+                            "speculative-config": [
+                                '{"method":"mtp","num_speculative_tokens":2}',
+                                '{"method":"mtp","num_speculative_tokens":3}',
+                            ]
+                        }
+                    }
+                }
+            },
+        }
+    else:
+        framework = "dynamo-sglang"
+        raw = {
+            "schema": 2,
+            "roles": {
+                "agg": {
+                    "args": {
+                        "speculative-algorithm": "EAGLE",
+                        "speculative-num-steps": 3,
+                    },
+                    "env": {},
+                }
+            },
+        }
+        arguments += ["--unset", "roles.agg.env"]
+    recipe.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError):
+        plan_commands(str(recipe), framework, arguments, ENV, golden_dir=golden_dir)

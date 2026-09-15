@@ -87,19 +87,21 @@ check_staged_srt_assets() {
     fi
 }
 
-# Keep runtime acceptance changes in srtctl's native --set/--unset arguments.
-# mode is throughput (honor SYNTHETIC_ACCEPTANCE) or eval-only (legacy callers
-# only restore real verification); EVAL_ONLY takes precedence in both modes.
+# AgentX acceptance comes from the committed golden curve; evals use real verification.
 apply_srt_recipe() {
-    if [[ $# -lt 3 || -z "$1" || -z "$2" || ( "$3" != throughput && "$3" != eval-only ) ]]; then
-        echo "Usage: apply_srt_recipe config framework throughput|eval-only [srtctl arguments...]" >&2
+    if [[ $# -lt 2 || -z "$1" || -z "$2" ]]; then
+        echo "Usage: apply_srt_recipe config framework [srtctl arguments...]" >&2
         return 1
     fi
-    local config="$1" framework="$2" mode="$3"
-    shift 3
+    check_env_vars MODEL_PREFIX IS_AGENTIC EVAL_ONLY SPEC_DECODING
+    if [[ "$IS_AGENTIC" == 1 || "$IS_AGENTIC" == true ]] && [[ "$EVAL_ONLY" != true && "$SPEC_DECODING" != none ]]; then
+        check_env_vars THINKING_MODE
+    fi
+    local config="$1" framework="$2"
+    shift 2
     PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" \
         python3 -m infx.recipes.synthetic_acceptance \
-        "$config" "$framework" "$mode" -- "$@"
+        "$config" "$framework" -- "$@"
 }
 
 slurm_job_is_active() {
