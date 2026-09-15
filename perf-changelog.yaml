@@ -7654,3 +7654,25 @@
     - "将 vLLM ROCm nightly 更新至包含 vllm-project/vllm#54855 的 eed1f3d0c6043bd494424a22443ee198dd56f657，并针对 MXFP4/FP8 混合权重关闭不兼容的 AITER shared-expert fusion。"
     - "将单节点 DPA AgentX 扫描从并发 64 扩展为 64/128/192。手工验证显示，在 c64/c128/c256 三个点中 c128 吞吐量最高；新增 c192 用于补齐中间区间并定位 c256 性能回退前的吞吐拐点。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3071
+
+- config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a 1P1D GLM-5.2 FP8 H200 AgentX configuration with six-step EAGLE MTP."
+    - "Enable prefill-only hierarchical KV cache offload to host DRAM with the layer_first memory layout; keep decode KV cache GPU-resident."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3021
+
+- config-keys:
+    - qwen3.8next-fp4-b200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a single-node Qwen3.8-Flash-Next NVFP4 AgentX configuration on B200 with SGLang native NEXTN MTP at TP1 and concurrency 1, 4, 8, and 16."
+    - "Follow the merged SGLang cookbook command with flashinfer linear-attention prefill and decode backends, bfloat16 Mamba SSM state, and checkpoint-derived quantization."
+    - "Use the repository's committed thinking-on MTP=3 synthetic acceptance length of 2.32, while evaluation keeps real target-model verification."
+    - "Size maximum running requests and CUDA graph capture to twice concurrency; use a 0.90 static memory fraction and a 160-slot Mamba cache at concurrency 16."
+    - "Enable six tokenizer workers for the TP1 AgentX recipe and require a complete staged NVFP4 checkpoint before launch."
+    - "Route the qwen3.8next fp4 prefix in the B200 Nscale launcher to the staged Qwen3.8-Flash-Next NVFP4 checkpoint."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2751
