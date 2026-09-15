@@ -7813,4 +7813,6 @@
   description:
     - "Update SGLang image from lmsysorg/sglang:v0.5.14-cu130 to lmsysorg/sglang:nightly-dev-cu13-20260915-8874c51a (2026-09-15 upstream cu13 nightly, sgl-project/sglang@8874c51a); raise --max-prefill-tokens and --chunked-prefill-size from 16384 to 32768 and add --mamba-full-memory-ratio 0.37 and --linear-attn-prefill-backend flashinfer; the TP8/TP4 EAGLE grid is unchanged"
     - "将 SGLang 镜像从 lmsysorg/sglang:v0.5.14-cu130 更新为 lmsysorg/sglang:nightly-dev-cu13-20260915-8874c51a（2026-09-15 上游 cu13 nightly，sgl-project/sglang@8874c51a）；将 --max-prefill-tokens 与 --chunked-prefill-size 从 16384 提高到 32768，并新增 --mamba-full-memory-ratio 0.37 和 --linear-attn-prefill-backend flashinfer；TP8/TP4 EAGLE 网格保持不变"
+    - "Rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode: the 2026-09-15 SGLang nightly splits the flag into decode/prefill variants and rejects the old spelling as ambiguous (run 35013444957, canary c4)"
+    - "将 --cuda-graph-max-bs 改为 --cuda-graph-max-bs-decode：2026-09-15 SGLang nightly 将该参数拆分为 decode/prefill 两个变体，旧写法因歧义被拒绝（运行 35013444957，canary c4）"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3144
