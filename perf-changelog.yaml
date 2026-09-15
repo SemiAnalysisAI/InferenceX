@@ -7807,3 +7807,10 @@
     - "Use FLASH_ATTN for the target model, select the Humming MXFP8 dense-linear backend, and enable Marlin atomic reduction for the MXFP8 MoE path."
     - "Use 0.95 GPU memory utilization for resident serving while retaining 0.90 for Mooncake DRAM offload, and remove the Mooncake concurrency-14 point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3108
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
+  description:
+    - "Add six compact GLM-5.2 NVFP4 AgentX recipes on B300 with Dynamo and TensorRT-LLM disaggregated serving."
+    - "Use TensorRT-LLM 1.3.0rc26, enable the DSA metadata and indexer settings, and provide a persistent JIT cache for the recipe workers."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
