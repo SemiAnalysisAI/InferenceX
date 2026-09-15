@@ -7761,4 +7761,4 @@
   description:
     - "Disable SGLANG_OPT_USE_TOPK_V2 so GLM-5.2 uses the precompiled HIP Top-K path on MI355X; at concurrency 8, P90 interactivity improves from 96.97 to 106.69 tok/s/user (+10.0%) while throughput per GPU changes from 9,553.2 to 9,539.0 tok/s (-0.15%)."
     - "关闭 SGLANG_OPT_USE_TOPK_V2，使 GLM-5.2 在 MI355X 上使用预编译 HIP Top-K 路径；并发 8 时，P90 interactivity 从 96.97 提升到 106.69 tok/s/user（+10.0%），单卡吞吐从 9,553.2 变为 9,539.0 tok/s（-0.15%）。"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3117
