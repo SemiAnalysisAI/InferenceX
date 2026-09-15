@@ -7807,3 +7807,23 @@
     - "Use FLASH_ATTN for the target model, select the Humming MXFP8 dense-linear backend, and enable Marlin atomic reduction for the MXFP8 MoE path."
     - "Use 0.95 GPU memory utilization for resident serving while retaining 0.90 for Mooncake DRAM offload, and remove the Mooncake concurrency-14 point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3108
+
+- config-keys:
+    - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.8-Flash-Next Quark MXFP4 AgentX on MI355X with SGLang, TP8/EP1 and concurrency 1/4/8/12/16."
+    - "Use the public AMD checkpoint, a digest-pinned upstream ROCm image, and no KV offloading."
+    - "Run with SGLang native NEXTN MTP (--speculative-algorithm NEXTN, 3 steps, eagle-topk 1, 4 draft tokens), the cookbook speculative card and the shape of the B200/B300/H200 qwen3.8next SGLang AgentX arms; spec-decode only per the AgentX policy. Throughput pins acceptance to the golden AL 2.32 (golden_al_distribution/qwen3.8next_mtp.yaml, thinking_on, K=3) through SGLANG_SIMULATE_ACC_*; EVAL_ONLY keeps real verification. --mem-fraction-static 0.85 (cookbook STP cell: 0.9) leaves headroom for the draft head, and the graph cap uses --cuda-graph-max-bs-decode like the other MI355X SGLang MTP arms."
+    - "使用 SGLang 原生 NEXTN MTP（3 步、eagle-topk 1、4 草稿 token），与 B200/B300/H200 的 qwen3.8next SGLang AgentX 配方同形；按 AgentX 政策仅运行投机解码。吞吐通过 SGLANG_SIMULATE_ACC_* 固定黄金 AL 2.32，评测保留真实验证；--mem-fraction-static 0.85，图捕获上限使用 --cuda-graph-max-bs-decode。"
+    - "Mount this recipe outside /workspace to preserve the image's SGLang and AITER packages."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3129
+
+- config-keys:
+    - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Translate this recipe's pinned Docker image to an Enroot-compatible digest URI on cold-cache imports; keep the original image identity and squash cache key."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3129
