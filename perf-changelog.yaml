@@ -7807,3 +7807,10 @@
     - "Use FLASH_ATTN for the target model, select the Humming MXFP8 dense-linear backend, and enable Marlin atomic reduction for the MXFP8 MoE path."
     - "Use 0.95 GPU memory utilization for resident serving while retaining 0.90 for Mooncake DRAM offload, and remove the Mooncake concurrency-14 point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3108
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Update vLLM image from vllm/vllm-openai:deepseekv41-flash-0909 to vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 (2026-09-15 upstream nightly, vllm-project/vllm@cd10ed6f); recipe script, DSpark settings, and the TP4 c1–128 grid are unchanged"
+    - "将 vLLM 镜像从 vllm/vllm-openai:deepseekv41-flash-0909 更新为 vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3（2026-09-15 上游 nightly，vllm-project/vllm@cd10ed6f）；配方脚本、DSpark 设置及 TP4 c1–128 网格保持不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3136
