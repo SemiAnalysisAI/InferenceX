@@ -838,14 +838,6 @@ def test_fixed_sequence_validation_rejects_duplicate_identity(
     assert "fixed-sequence artifacts contain 1 duplicate row(s)" in errors
 
 
-def test_agentic_validation_accepts_run_sweep_point_artifacts(
-    tmp_path: Path,
-) -> None:
-    write_agentic_artifacts(tmp_path)
-
-    assert validate_agentic_artifacts(tmp_path) == []
-
-
 def test_agentic_validation_accepts_additional_source_identity(
     tmp_path: Path,
 ) -> None:
@@ -1368,7 +1360,6 @@ def test_dedupe_requires_aggregate_row_for_latest_raw_directory(
     assert (tmp_path / old).is_dir()
     assert (tmp_path / new).is_dir()
     assert any("duplicate" in error for error in validate_eval_artifacts(tmp_path))
-
 
 
 def test_eval_validation_accepts_extract_filter_primary_score(

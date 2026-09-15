@@ -313,8 +313,8 @@ qwen3.5-fp8-mi355x-sglang-disagg:
           - "DECODE_MTP_SIZE=0"
 
 qwen3.5-fp4-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260829
-  model: amd/Qwen3.5-397B-A17B-MXFP4
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913
+  model: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
   model-prefix: qwen3.5
   runner: mi355x
   precision: fp4
@@ -345,8 +345,8 @@ qwen3.5-fp4-mi355x-atom:
       - { tp: 4, conc-start: 4, conc-end: 16 }
 
 qwen3.5-fp4-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260829
-  model: amd/Qwen3.5-397B-A17B-MXFP4
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913
+  model: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
   model-prefix: qwen3.5
   runner: mi355x
   precision: fp4
@@ -361,8 +361,8 @@ qwen3.5-fp4-mi355x-sglang-mtp:
       - { tp: 4, conc-start: 4, conc-end: 16, spec-decoding: mtp }
 
 qwen3.5-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260908
-  model: amd/Qwen3.5-397B-A17B-MXFP4
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913
+  model: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
   model-prefix: qwen3.5
   runner: cluster:mi355x-amds
   precision: fp4
@@ -372,10 +372,9 @@ qwen3.5-fp4-mi355x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40] }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16] }
       - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20] }
-      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40, 48, 56, 64] }
-      - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [20, 24, 28, 32] }
+      - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [20, 24, 28, 32, 36, 40] }
 
 qwen3.5-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260523
@@ -1311,7 +1310,7 @@ qwen3.5-fp8-mi325x-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 dsv4-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36
+  image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1323,7 +1322,9 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
     - dram-utilization: 0.60
       search-space:
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 32, 40, 48, 56, 64] }
-      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64], router: { name: vllm-router, version: "0.1.14" } }
+      # Single-node validation found c128 to be the DPA throughput peak among
+      # c64/c128/c256. Add c192 to locate the knee before the c256 regression.
+      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128, 192], router: { name: vllm-router, version: "0.1.14" } }
       # LMCache invalid-block recovery currently assumes one KV-cache group,
       # while MTP creates two. Restore these points after the upstream hybrid
       # KV recovery fix lands: https://github.com/vllm-project/vllm/pull/45497
@@ -1725,7 +1726,7 @@ dsv4-fp8-mi325x-vllm-mtp:
       - { tp: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
 
 minimaxm3-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-8a728663c1c3eeace834a95f5654fa653cc1998c
+  image: vllm/vllm-openai-rocm:nightly-2a02f6efe319c885e3ccbcecde402e0028f9ec1e
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: cluster:mi355x-amds
@@ -1736,8 +1737,8 @@ minimaxm3-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.20
       search-space:
-      - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 5, 8, 10, 12, 15, 20, 24, 28, 32], spec-decoding: mtp }
-      - { tp: 2, kv-offloading: none, conc-list: [1, 2, 5], spec-decoding: mtp }
+      - { tp: 4, kv-offloading: none, conc-list: [1, 4, 5, 8, 10, 12, 15, 20, 24, 32], spec-decoding: mtp }
+      - { tp: 2, kv-offloading: none, conc-list: [1, 2], spec-decoding: mtp }
 
 # GLM-5.2 FP4 agentic-coding benchmark on MI355X via SGLang with MTP speculative
 # decoding. Two arms:
