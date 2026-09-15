@@ -122,8 +122,8 @@ fi
 
 # ---- Parallelism ------------------------------------------------------------
 # The DP-attention path below is live: sglang-router fronts the DP ranks with
-# consistent hashing on the AIPerf correlation id, keeping multi-turn sessions
-# on the DP rank that holds their radix/hicache prefix.
+# cache-aware routing, which picks the rank holding the longest radix/hicache
+# prefix match for the incoming prompt.
 USE_SGLANG_ROUTER=false
 SGLANG_BACKEND_PORT="$PORT"
 # Small prefill chunks interleave long-context agentic prefills. The flag is
@@ -167,11 +167,11 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --enable-dp-attention-local-control-broadcast
         --tokenizer-worker-num "$TP"
         --stream-interval 20
-        --prefill-decode-interval "${PREFILL_DECODE_INTERVAL:-10}"
+        --prefill-decode-interval "${PREFILL_DECODE_INTERVAL:-20}"
         --prefill-delayer-token-usage-low-watermark "${DP_PREFILL_DELAYER_LOW_WATERMARK:-0.7}"
     )
 else
-    PARALLEL_ARGS+=(--prefill-decode-interval "${PREFILL_DECODE_INTERVAL:-10}")
+    PARALLEL_ARGS+=(--prefill-decode-interval "${PREFILL_DECODE_INTERVAL:-20}")
 fi
 
 if [ "$EP_SIZE" -gt 1 ]; then
@@ -275,7 +275,7 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     echo "Starting SGLang router on port $PORT for $TP DP ranks..."
     "${SGLANG_ROUTER_CMD[@]}" \
         --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
-        --policy consistent_hashing \
+        --policy cache_aware \
         --request-id-headers x-correlation-id \
         --dp-aware \
         --host 0.0.0.0 \
