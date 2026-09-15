@@ -7648,6 +7648,40 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3071
 
 - config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a 1P1D GLM-5.2 FP8 H200 AgentX configuration with six-step EAGLE MTP."
+    - "Enable prefill-only hierarchical KV cache offload to host DRAM with the layer_first memory layout; keep decode KV cache GPU-resident."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3021
+
+- config-keys:
+    - qwen3.8next-fp4-b200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a single-node Qwen3.8-Flash-Next NVFP4 AgentX configuration on B200 with SGLang native NEXTN MTP at TP1 and concurrency 1, 4, 8, and 16."
+    - "Follow the merged SGLang cookbook command with flashinfer linear-attention prefill and decode backends, bfloat16 Mamba SSM state, and checkpoint-derived quantization."
+    - "Use the repository's committed thinking-on MTP=3 synthetic acceptance length of 2.32, while evaluation keeps real target-model verification."
+    - "Size maximum running requests and CUDA graph capture to twice concurrency; use a 0.90 static memory fraction and a 160-slot Mamba cache at concurrency 16."
+    - "Enable six tokenizer workers for the TP1 AgentX recipe and require a complete staged NVFP4 checkpoint before launch."
+    - "Route the qwen3.8next fp4 prefix in the B200 Nscale launcher to the staged Qwen3.8-Flash-Next NVFP4 checkpoint."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2751
+
+- config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a GLM-5.2 NVFP4 B200 Dynamo-SGLang AgentX curve on the NScale runner."
+    - "Cover Pareto aggregate TP8 points at concurrency 1, 4, and 8, disaggregated 1P(DEP8)4D(TP4) at concurrency 48, and disaggregated 1P(DEP8)1D(DEP8) at concurrency 64."
+    - "Use lmsysorg/sglang:nightly-dev-20260910-00840301 with its bundled Dynamo 1.5.0.dev20260909, EAGLE speculative decoding, and 110 GB HiCache write-back DRAM offload per prefill rank."
+    - "Allow up to 3600 seconds for NIXL UCX engine initialization in the 1P(DEP8)4D(TP4) configuration while registering its larger set of HiCache pools."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2995
+
+- config-keys:
     - glm5.2-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
