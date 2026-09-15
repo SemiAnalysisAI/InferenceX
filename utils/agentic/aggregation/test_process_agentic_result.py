@@ -1051,6 +1051,23 @@ def test_processor_falls_back_to_sglang_max_total_num_tokens(tmp_path: Path):
     _assert_stable_server_metrics_schema(agg)
 
 
+def test_processor_emits_logical_sglang_tp_pool_capacity(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    metrics = json.loads(
+        (Path(__file__).parent / "fixtures/sglang-kv-capacity-pr2823.json").read_text()
+    )["4"]
+    (result_dir / "aiperf_artifacts/server_metrics_export.json").write_text(
+        json.dumps({"metrics": metrics})
+    )
+
+    agg = _run_processor(
+        result_dir, tmp_path / "out", env_overrides={"FRAMEWORK": "sglang"}
+    )
+
+    assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] == 6_338_048
+    assert agg["kv_cache_pool_tokens"] == 6_338_048
+
+
 def test_server_metrics_reject_unknown_backend() -> None:
     with pytest.raises(ValueError, match="Unsupported agentic server metrics backend"):
         compute_server_metrics(

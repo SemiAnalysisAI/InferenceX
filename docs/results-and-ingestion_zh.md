@@ -233,6 +233,11 @@ AgentX 聚合的顶层身份和拓扑字段与基准摄取兼容。
 | 服务器指标 | `server_metrics.cache`、`kv_cache`、token 总数、来源详情，以及可能存在的 `warnings` |
 | 兼容性 | `kv_cache_pool_tokens` 镜像 `server_metrics.kv_cache.gpu_total_tokens` |
 
+对于原生 SGLang，GPU KV 容量按 worker/endpoint 和 DP 缓存池分别计数，并去除
+TP/PP/EP rank 重复报告的容量。带 rank 的序列必须标明 worker 或 endpoint，且各
+分片报告的容量必须是相同且不变的正数；否则不输出容量。完整的容量遥测优先于
+可能缺少某个分离式角色的服务器日志。只有日志或不带 rank 的旧版导出仍使用原有回退逻辑。
+
 当 `dynamo-sglang` 运行包含 `sglang:` 遥测时，处理器使用 SGLang 适配器
 聚合缓存、利用率和 token 指标。逻辑 GPU KV 容量保持 `null` 并附带警告，
 因为多个 TP rank 可能重复报告容量值。原始 Dynamo 前端总数可能包含预热请求。

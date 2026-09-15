@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Iterable
 from typing import Any
@@ -9,11 +10,14 @@ from typing import Any
 from ..common import (
     gauge_stat,
     label_equals,
+    metric_series,
     normalize_fraction,
     rate,
+    series_stat,
     sum_by_label,
     sum_stat,
     sum_server_log_capacities,
+    to_float,
 )
 from .base import ServerMetricsBackend, counter_int
 
@@ -83,11 +87,7 @@ class SglangBackend(ServerMetricsBackend):
                 combine="max",
             )
         )
-        max_total_num_tokens = sum_stat(
-            metrics,
-            "sglang:max_total_num_tokens",
-            preferred_keys=("max", "avg", "total", "sum"),
-        )
+        max_total_num_tokens = self.kv_cache_pool_tokens_from_metrics(metrics)
 
         host_used = gauge_stat(
             metrics,
@@ -146,10 +146,65 @@ class SglangBackend(ServerMetricsBackend):
         metrics: dict[str, dict[str, Any]],
         server_logs: Iterable[str | None],
     ) -> int | None:
+        if "sglang:max_total_num_tokens" in metrics:
+            # Metrics cover all scraped roles; a log bundle may omit decode workers.
+            return self.kv_cache_pool_tokens_from_metrics(metrics)
         return sum_server_log_capacities(
             server_logs,
             self.kv_cache_pool_tokens_from_server_log,
         )
+
+    @staticmethod
+    def kv_cache_pool_tokens_from_metrics(
+        metrics: dict[str, dict[str, Any]],
+    ) -> int | None:
+        """Count each endpoint/DP pool once across replicated scheduler gauges."""
+        series_list = metric_series(metrics, "sglang:max_total_num_tokens")
+        if not any("tp_rank" in (series.get("labels") or {}) for series in series_list):
+            return counter_int(
+                sum_stat(
+                    metrics, "sglang:max_total_num_tokens",
+                    preferred_keys=("max", "avg", "total", "sum"),
+                )
+            )
+        pools: dict[tuple[Any, ...], float] = {}
+        shard_labels = {"tp_rank", "pp_rank", "ep_rank", "moe_ep_rank"}
+        for series in series_list:
+            value = series_stat(series, ("max", "avg", "total", "sum"))
+            if (
+                value is None or not math.isfinite(value)
+                or value <= 0 or not value.is_integer()
+            ):
+                return None
+            stats = series.get("stats", {})
+            if any(
+                stats.get(key) is not None and to_float(stats[key]) != value
+                for key in ("min", "avg")
+            ):
+                # A changing gauge does not establish one constant pool ceiling.
+                return None
+            labels = series.get("labels") or {}
+            if "tp_rank" in labels:
+                endpoint = (
+                    labels.get("worker_id") or series.get("worker_id")
+                    or series.get("endpoint_url")
+                )
+                if not endpoint or not str(labels["tp_rank"]).isdigit():
+                    return None
+                identity = (
+                    str(endpoint),
+                    tuple(sorted(
+                        (key, str(val)) for key, val in labels.items()
+                        if key not in shard_labels
+                    )),
+                )
+            else:
+                # Mixing ranked and unranked gauges cannot establish ownership.
+                return None
+            if identity in pools and pools[identity] != value:
+                return None
+            pools[identity] = value
+        return int(sum(pools.values())) if pools else None
 
     @classmethod
     def kv_cache_pool_tokens_from_server_log(cls, server_log: str | None) -> int | None:

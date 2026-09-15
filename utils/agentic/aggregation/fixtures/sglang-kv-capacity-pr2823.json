@@ -1,0 +1,30 @@
+{
+  "4": {"sglang:max_total_num_tokens": {"series": [
+    {"endpoint_url":"10.24.112.107:8000","labels":{"engine_type":"prefill","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"0"},"stats":{"avg":3211776.0,"min":3211776.0,"max":3211776.0}},
+    {"endpoint_url":"10.24.112.107:8000","labels":{"engine_type":"prefill","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"1"},"stats":{"avg":3211776.0,"min":3211776.0,"max":3211776.0}},
+    {"endpoint_url":"10.24.112.107:8000","labels":{"engine_type":"prefill","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"2"},"stats":{"avg":3211776.0,"min":3211776.0,"max":3211776.0}},
+    {"endpoint_url":"10.24.112.107:8000","labels":{"engine_type":"prefill","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"3"},"stats":{"avg":3211776.0,"min":3211776.0,"max":3211776.0}},
+    {"endpoint_url":"10.24.112.110:8000","labels":{"engine_type":"decode","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"0"},"stats":{"avg":3126272.0,"min":3126272.0,"max":3126272.0}},
+    {"endpoint_url":"10.24.112.110:8000","labels":{"engine_type":"decode","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"1"},"stats":{"avg":3126272.0,"min":3126272.0,"max":3126272.0}},
+    {"endpoint_url":"10.24.112.110:8000","labels":{"engine_type":"decode","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"2"},"stats":{"avg":3126272.0,"min":3126272.0,"max":3126272.0}},
+    {"endpoint_url":"10.24.112.110:8000","labels":{"engine_type":"decode","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"3"},"stats":{"avg":3126272.0,"min":3126272.0,"max":3126272.0}}
+  ]}},
+  "256": {"sglang:max_total_num_tokens": {"series": [
+    {"endpoint_url":"10.24.112.105:8000","labels":{"engine_type":"prefill","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"0","dp_rank":"0"},"stats":{"avg":15125760.0,"min":15125760.0,"max":15125760.0}},
+    {"endpoint_url":"10.24.112.105:8000","labels":{"engine_type":"prefill","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"1","dp_rank":"1"},"stats":{"avg":15125760.0,"min":15125760.0,"max":15125760.0}},
+    {"endpoint_url":"10.24.112.105:8000","labels":{"engine_type":"prefill","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"2","dp_rank":"2"},"stats":{"avg":15125760.0,"min":15125760.0,"max":15125760.0}},
+    {"endpoint_url":"10.24.112.105:8000","labels":{"engine_type":"prefill","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"3","dp_rank":"3"},"stats":{"avg":15125760.0,"min":15125760.0,"max":15125760.0}},
+    {"endpoint_url":"10.24.112.105:8000","labels":{"engine_type":"prefill","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"4","dp_rank":"4"},"stats":{"avg":15125760.0,"min":15125760.0,"max":15125760.0}},
+    {"endpoint_url":"10.24.112.105:8000","labels":{"engine_type":"prefill","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"5","dp_rank":"5"},"stats":{"avg":15125760.0,"min":15125760.0,"max":15125760.0}},
+    {"endpoint_url":"10.24.112.105:8000","labels":{"engine_type":"prefill","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"6","dp_rank":"6"},"stats":{"avg":15125760.0,"min":15125760.0,"max":15125760.0}},
+    {"endpoint_url":"10.24.112.105:8000","labels":{"engine_type":"prefill","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"7","dp_rank":"7"},"stats":{"avg":15125760.0,"min":15125760.0,"max":15125760.0}},
+    {"endpoint_url":"10.24.112.120:8000","labels":{"engine_type":"decode","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"0","dp_rank":"0"},"stats":{"avg":15028224.0,"min":15028224.0,"max":15028224.0}},
+    {"endpoint_url":"10.24.112.120:8000","labels":{"engine_type":"decode","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"1","dp_rank":"1"},"stats":{"avg":15028224.0,"min":15028224.0,"max":15028224.0}},
+    {"endpoint_url":"10.24.112.120:8000","labels":{"engine_type":"decode","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"2","dp_rank":"2"},"stats":{"avg":15028224.0,"min":15028224.0,"max":15028224.0}},
+    {"endpoint_url":"10.24.112.120:8000","labels":{"engine_type":"decode","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"3","dp_rank":"3"},"stats":{"avg":15028224.0,"min":15028224.0,"max":15028224.0}},
+    {"endpoint_url":"10.24.112.120:8000","labels":{"engine_type":"decode","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"4","dp_rank":"4"},"stats":{"avg":15028224.0,"min":15028224.0,"max":15028224.0}},
+    {"endpoint_url":"10.24.112.120:8000","labels":{"engine_type":"decode","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"5","dp_rank":"5"},"stats":{"avg":15028224.0,"min":15028224.0,"max":15028224.0}},
+    {"endpoint_url":"10.24.112.120:8000","labels":{"engine_type":"decode","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"6","dp_rank":"6"},"stats":{"avg":15028224.0,"min":15028224.0,"max":15028224.0}},
+    {"endpoint_url":"10.24.112.120:8000","labels":{"engine_type":"decode","model_name":"/models/DeepSeek-V4-Pro-0813","moe_ep_rank":"0","pp_rank":"0","tp_rank":"7","dp_rank":"7"},"stats":{"avg":15028224.0,"min":15028224.0,"max":15028224.0}}
+  ]}}
+}
