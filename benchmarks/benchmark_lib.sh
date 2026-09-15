@@ -2195,7 +2195,12 @@ append_lm_eval_summary() {
     fi
 
     # Copy the complete allowlisted eval artifact set before removing its temp dir.
-    stage_eval_artifacts "$(pwd)" "$out_dir" || return $?
+    local artifact_dir
+    local artifact_sources=("$out_dir")
+    while IFS= read -r -d '' artifact_dir; do
+        [ "$artifact_dir" = "$out_dir" ] || artifact_sources+=("$artifact_dir")
+    done < <(find "$out_dir" -type d -print0 2>/dev/null)
+    stage_eval_artifacts "$(pwd)" "${artifact_sources[@]}" || return $?
 
     # Best-effort cleanup of the temp directory
     if [ -n "${out_dir}" ] && [ -d "${out_dir}" ]; then
