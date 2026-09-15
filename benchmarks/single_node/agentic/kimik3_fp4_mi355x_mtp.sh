@@ -2,7 +2,7 @@
 set -euo pipefail
 set -x
 source "$(dirname "$0")/../../benchmark_lib.sh"
-wait_for_amd_gpu_clean 1
+wait_for_amd_gpu_clean 5
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
