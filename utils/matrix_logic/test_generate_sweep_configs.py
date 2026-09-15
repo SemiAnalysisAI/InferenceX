@@ -3276,3 +3276,60 @@ def test_require_power_is_scoped_to_one_fixed_sequence(multinode, power_key, sam
     sequences[0][power_key] = True
     with pytest.raises(ValueError, match="only fixed-sequence 8192/1024"):
         expand_full_sweep(config, sample_runner_config)
+
+
+@pytest.mark.parametrize("vendor", ["amd", "nvidia"])
+def test_real_vendor_evals_preserve_every_point_through_workflow(vendor, split_e2e_configs):
+    """Both hardware catalogs retain model-specific suites and all conc points."""
+    repo_root = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [sys.executable, "-m", "infx.matrix.generate", "full-sweep",
+         "--config-files", f"configs/{vendor}-master.yaml",
+         "--model-prefix", "kimik3", "minimaxm3",
+         "--scenario-type", "agentic-coding"],
+        cwd=repo_root, check=True, capture_output=True, text=True, timeout=60,
+    )
+    rows = json.loads(result.stdout)
+    assert rows, f"No vendor coverage in {vendor} catalog"
+    expected = {
+        "kimik3": ("kimi-vendor", "kimi_tool_call_schema"),
+        "minimaxm3": ("minimax-vendor", "minimax_m3_smoke"),
+    }
+    assert {row["model-prefix"] for row in rows} == set(expected)
+    for row in rows:
+        assert row["run-eval"] is True, row["exp-name"]
+        assert (row["eval-framework"], row["eval-suite"]) == expected[row["model-prefix"]]
+    output = split_e2e_configs(rows)
+    routed = output["agentic-eval-config"] + output["multi-node-agentic-eval-config"]
+    # Compare complete rows, not just counts: metadata loss must fail this test.
+    assert sorted(map(json.dumps, routed)) == sorted(map(json.dumps, rows))
+    assert output["eval-config"] == output["multi-node-eval-config"] == []
+
+
+@pytest.mark.parametrize("workflow_name", ["run-sweep.yml", "e2e-tests.yml"])
+def test_all_eval_callers_forward_model_selected_suite(workflow_name):
+    """Catch the #3020 omission in shipped YAML, including the manual auto path."""
+    repo_root = Path(__file__).resolve().parents[2]
+    workflow = yaml.safe_load((repo_root / ".github/workflows" / workflow_name).read_text())
+    callers = {
+        name: job for name, job in workflow["jobs"].items()
+        if job.get("uses", "").startswith("./.github/workflows/benchmark-")
+        and job.get("with", {}).get("eval-only") is True
+    }
+    assert len(callers) == 4, f"Review eval forwarding coverage for {set(callers)}"
+    if workflow_name == "run-sweep.yml":
+        expected = {
+            "eval-framework": "${{ matrix.config['eval-framework'] || 'lm-eval' }}",
+            "eval-suite": "${{ matrix.config['eval-suite'] || '' }}",
+        }
+    else:
+        expected = {
+            "eval-framework": "${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}",
+            "eval-suite": "${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}",
+        }
+    for name, job in callers.items():
+        for field, expression in expected.items():
+            assert job["with"].get(field) == expression, (name, field)
+        template = yaml.safe_load((repo_root / job["uses"]).read_text())
+        assert template["env"]["EVAL_FRAMEWORK"] == "${{ inputs.eval-framework }}"
+        assert template["env"]["EVAL_SUITE"] == "${{ inputs.eval-suite }}"

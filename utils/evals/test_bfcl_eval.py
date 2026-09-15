@@ -880,7 +880,7 @@ def test_score_total_must_match_every_selected_id(tmp_path: Path) -> None:
         )
 
 
-def test_full_suite_handler_bounds_openai_requests() -> None:
+def test_handler_bounds_openai_requests() -> None:
     class StockOpenAICompletionsHandler:
         def _build_client_kwargs(self) -> dict[str, Any]:
             return {"api_key": "stock-key"}
@@ -895,41 +895,29 @@ def test_full_suite_handler_bounds_openai_requests() -> None:
     }
 
 
-def test_kimi_suite_caps_multi_turn_steps(monkeypatch: pytest.MonkeyPatch) -> None:
-    constants = ModuleType("bfcl_eval.constants")
-    constants.__path__ = []
-    prompts = ModuleType("bfcl_eval.constants.default_prompts")
-    prompts.MAXIMUM_STEP_LIMIT = 20
-    constants.default_prompts = prompts
-    monkeypatch.setitem(sys.modules, "bfcl_eval.constants", constants)
-    monkeypatch.setitem(
-        sys.modules,
-        "bfcl_eval.constants.default_prompts",
-        prompts,
-    )
-
-    be._apply_suite_runtime_limits(be.MINIMAX_SUITE)
-    assert prompts.MAXIMUM_STEP_LIMIT == 20
-
-    be._apply_suite_runtime_limits(be.KIMI_SUITE)
-    assert prompts.MAXIMUM_STEP_LIMIT == 10
-
-
-def test_upstream_registration_uses_exact_stock_openai_handler(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("suite", [be.SMOKE_SUITE, be.MINIMAX_SUITE, be.KIMI_SUITE])
+def test_upstream_registration_preserves_stock_semantics(
+    suite: be.SuiteSpec, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project_root = tmp_path / "bfcl"
     be._write_id_map(project_root, be.SMOKE_CASE_IDS)
     model_config_mapping: dict[str, Any] = {}
+    prompts = ModuleType("bfcl_eval.constants.default_prompts")
+    prompts.MAXIMUM_STEP_LIMIT = 20
+    monkeypatch.setattr(be, "_read_selected_suite", lambda _: (suite, be.SMOKE_CASE_IDS))
 
     class ModelConfig:
         def __init__(self, **kwargs: Any) -> None:
             self.__dict__.update(kwargs)
 
     class OpenAICompletionsHandler:
-        pass
+        def _build_client_kwargs(self):
+            return {"base_url": "http://127.0.0.1:8000/v1"}
 
-    def generate(**_: Any) -> None:
+    def generate(**kwargs: Any) -> None:
+        assert prompts.MAXIMUM_STEP_LIMIT == 20
+        assert kwargs["test_category"] == list(suite.generation_categories)
+        assert kwargs["temperature"] == suite.temperature
         result_dir = project_root / "result" / "model-a"
         result_dir.mkdir(parents=True)
         for category, case_ids in be.SMOKE_CASE_IDS.items():
@@ -966,6 +954,8 @@ def test_upstream_registration_uses_exact_stock_openai_handler(
     modules[
         "bfcl_eval.model_handler.api_inference.openai_completion"
     ].OpenAICompletionsHandler = OpenAICompletionsHandler
+    modules["bfcl_eval.constants.default_prompts"] = prompts
+    modules["bfcl_eval.constants"].default_prompts = prompts
     modules["bfcl_eval.__main__"].generate = generate
     modules["bfcl_eval.__main__"].evaluate = evaluate
     for name, module in modules.items():
@@ -987,4 +977,9 @@ def test_upstream_registration_uses_exact_stock_openai_handler(
         num_threads=4,
     )
 
-    assert model_config_mapping["model-a"].model_handler is OpenAICompletionsHandler
+    handler = model_config_mapping["model-a"].model_handler
+    assert issubclass(handler, OpenAICompletionsHandler)
+    assert handler()._build_client_kwargs() == {
+        "base_url": "http://127.0.0.1:8000/v1", "timeout": 180, "max_retries": 2,
+    }
+    assert prompts.MAXIMUM_STEP_LIMIT == 20
