@@ -172,7 +172,7 @@ def build_overrides(
                     if engine == "sglang"
                     else (f"{al - 1:g}",)
                 )
-                for key, value in zip(variables, values):
+                for key, value in zip(variables, values, strict=True):
                     overrides += ["--set", f"{prefix}.env.{key}={json.dumps(value)}"]
             else:
                 for key in variables:
