@@ -1,5 +1,6 @@
 """Tests for changelog-driven sweep generation."""
 
+import io
 import json
 import os
 import re
@@ -15,6 +16,7 @@ import yaml
 from infx.matrix import plan as process_changelog
 from infx.matrix.generate import generate_test_config_sweep
 from infx.matrix.validation import validate_master_config
+from infx.workflows import benchmark_schema
 
 
 @pytest.fixture
@@ -630,7 +632,6 @@ exec "$TEST_PYTHON" "$@"
     assert all(value == [] for value in outputs.values())
 
 
-
 def test_validator_uses_trusted_entrypoints_while_reading_another_checkout(committed_planning_repo):
     root, base, head = committed_planning_repo
     source = Path(__file__).resolve().parents[1]
@@ -666,7 +667,13 @@ def changelog_run(planning_repo, monkeypatch, capsys):
         process_changelog.main()
         captured = capsys.readouterr()
         assert captured.err == ""
-        return json.loads(captured.out)
+        monkeypatch.setattr(sys, "argv", ["benchmark_schema", "--plan"])
+        monkeypatch.setattr(sys, "stdin", io.StringIO(captured.out))
+        benchmark_schema.main()
+        validated = capsys.readouterr()
+        assert validated.err == ""
+        assert validated.out == captured.out
+        return json.loads(validated.out)
     return run
 
 
