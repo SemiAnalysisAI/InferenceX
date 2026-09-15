@@ -316,6 +316,16 @@ else
         esac
     fi
 
+    # The Qwen bring-up image keeps SGLang and AITER under /workspace.
+    # Do not hide those packages with the repository bind mount.
+    if [[ "$MODEL" == "amd/Qwen3.8-Flash-Next-Quark-MXFP4" && "$FRAMEWORK" == "sglang" ]]; then
+        CONTAINER_REPO=/ix
+        export INFMAX_CONTAINER_WORKSPACE="$CONTAINER_REPO"
+        case "${RESULT_DIR:-}" in
+            /workspace/*) export RESULT_DIR="/ix/${RESULT_DIR#/workspace/}" ;;
+        esac
+    fi
+
     SCRIPT_BASE="${EXP_NAME%%_*}_${PRECISION}_mi355x"
     SCRIPT_FW="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
     SCRIPT_FALLBACK="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
