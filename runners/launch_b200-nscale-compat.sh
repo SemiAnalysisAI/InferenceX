@@ -91,6 +91,13 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/Kimi-K3"
     export SRT_SLURM_MODEL_PREFIX="kimik3"
+elif [[ $MODEL_PREFIX == "qwen3.8next" && $PRECISION == "fp4" ]]; then
+    if [[ -n "${MODEL_PATH:-}" && -d "$MODEL_PATH" ]]; then
+        :
+    else
+        export MODEL_PATH="/scratch/models/Qwen3.8-Flash-Next-NVFP4"
+    fi
+    export SRT_SLURM_MODEL_PREFIX="qwen3.8next-fp4"
 else
     echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
     echo "Available models under /scratch/models:"
