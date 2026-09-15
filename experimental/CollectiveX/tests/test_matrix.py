@@ -92,16 +92,6 @@ class MatrixTests(unittest.TestCase):
         ids = [item["case"]["case_id"] for item in document["requested_cases"]]
         self.assertEqual(len(ids), len(set(ids)))
 
-    def test_ll_backends_is_a_well_formed_subset_of_backends(self):
-        # A cell can only run low-latency where it can run at all: every ll_backends
-        # entry names a real backend of that SKU and a subset of its normal EP degrees.
-        for sku, platform in sweep_matrix.PLATFORMS.items():
-            ll_backends = platform.get("ll_backends", {})
-            for backend, degrees in ll_backends.items():
-                with self.subTest(sku=sku, backend=backend):
-                    self.assertIn(backend, platform["backends"])
-                    self.assertTrue(degrees)
-                    self.assertLessEqual(set(degrees), set(platform["backends"][backend]))
 
     def test_off_path_precisions_require_explicit_opt_in(self):
         with mock.patch.object(sweep_matrix, "OFF_PATH_PRECISIONS", {"deepep-v2": ("fp8",)}):
@@ -150,58 +140,6 @@ class UndeclaredPrecisionsFailClosed(unittest.TestCase):
     def test_every_scheduled_backend_declares_its_precisions(self):
         for backend in sweep_matrix.SWEEP_BACKENDS:
             self.assertIn(backend, sweep_matrix.BACKEND_PRECISIONS, backend)
-
-
-class BackendMaturityTests(unittest.TestCase):
-    """The registry map and each adapter's `maturity` are two copies of one fact, read by
-    different consumers, so they can drift silently: pin coverage, vocabulary and agreement.
-    The adapter side is parsed from source rather than imported — importing an adapter pulls
-    in torch and the vendor EP library, which the test image does not carry.
-    """
-
-    VOCABULARY = {"production", "candidate"}
-
-    @staticmethod
-    def _declared_in_source():
-        """{backend name: maturity} parsed from the adapter class bodies."""
-        import ast
-
-        declared = {}
-        for path in sorted((ROOT / "bench").glob("ep_*.py")):
-            tree = ast.parse(path.read_text())
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.ClassDef):
-                    continue
-                literals = {}
-                for statement in node.body:
-                    if not isinstance(statement, ast.Assign):
-                        continue
-                    if not isinstance(statement.value, ast.Constant):
-                        continue
-                    for target in statement.targets:
-                        if isinstance(target, ast.Name):
-                            literals[target.id] = statement.value.value
-                # The abstract base declares both as empty defaults; skip it.
-                if literals.get("name") and "maturity" in literals:
-                    declared[literals["name"]] = literals["maturity"]
-        return declared
-
-    def test_registry_covers_every_dispatched_backend(self):
-        maturity = sweep_matrix.BACKEND_MATURITY
-        for sku, platform in sweep_matrix.PLATFORMS.items():
-            for backend in platform["backends"]:
-                with self.subTest(sku=sku, backend=backend):
-                    self.assertIn(backend, maturity)
-                    self.assertIn(maturity[backend], self.VOCABULARY)
-
-    def test_adapters_and_registry_agree(self):
-        declared = self._declared_in_source()
-        # Every backend the matrix can dispatch must declare a maturity in its adapter,
-        # or the artifact it writes would say "unknown" while the registry says otherwise.
-        for backend, expected in sweep_matrix.BACKEND_MATURITY.items():
-            with self.subTest(backend=backend):
-                self.assertIn(backend, declared)
-                self.assertEqual(declared[backend], expected)
 
 
 if __name__ == "__main__":

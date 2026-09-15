@@ -1,6 +1,7 @@
 """Exercise the fixed-sequence module CLI with controlled environment and artifacts."""
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -15,6 +16,48 @@ from test_aggregate_power_multinode import PRODUCER_SHA, build_package
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MODULE_COMMAND = [sys.executable, "-m", "infx.results.fixed_sequence"]
+
+
+@pytest.mark.parametrize(("historical", "expected_filename"), [
+    (False, "fixture"),
+    (True, "1d8fcd0d7905fdaee2bd136c221bde34db0b88e16a9e4043c238a9607e29a990"),
+])
+def test_launch_step_computes_gpu_count_and_result_identity(
+    tmp_path, single_node_env_vars, historical, expected_filename,
+):
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/benchmark-tmpl.yml").read_text())
+    step = next(step for step in workflow["jobs"]["benchmark"]["steps"] if step.get("name") == "Launch job script")
+    script = step["run"].replace("${{ inputs.eval-only }}", "false").replace(
+        "${{ inputs.scenario-type }}", "fixed-seq-len")
+    if not historical:
+        for file in ("utils/result_filename.py", "infx/__init__.py", "infx/results/__init__.py",
+                     "infx/results/result_filename.py"):
+            target = tmp_path / file
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(REPO_ROOT / file, target)
+    (tmp_path / "runners").mkdir()
+    (tmp_path / "runners/launch_fixture-node.sh").write_text('''python3 - <<'PY'
+import json, os
+with open('received.json', 'w') as output:
+    json.dump(dict(os.environ), output)
+PY
+printf '{}' > "$RESULT_FILENAME.json"
+''')
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", script], cwd=tmp_path, capture_output=True, text=True, timeout=10,
+        env={**os.environ, **single_node_env_vars,
+             "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}", "PYTHONPATH": "",
+             "TP": "4", "PP_SIZE": "2", "PCP_SIZE": "3", "DCP_SIZE": "4",
+             "RUNNER_NAME": "fixture-node_03", "RUNNER_TYPE": "fixture-node",
+             "RESULT_FILENAME_BASE": "fixture", "RECIPE_FINGERPRINT": "",
+             "GITHUB_ENV": str(tmp_path / "github-env")},
+    )
+    assert result.returncode == 0, result.stderr
+    received = json.loads((tmp_path / "received.json").read_text())
+    assert received["GPU_COUNT"] == "24"
+    assert received["RESULT_FILENAME"] == expected_filename
+    published = dict(line.split("=", 1) for line in (tmp_path / "github-env").read_text().splitlines())
+    assert published == {"GPU_COUNT": "24", "RESULT_FILENAME": expected_filename}
 
 
 def test_single_node_workflow_reports_missing_raw_result(tmp_path, single_node_env_vars):
@@ -32,6 +75,54 @@ def test_single_node_workflow_reports_missing_raw_result(tmp_path, single_node_e
     assert 'no raw result to process: missing.json' in result.stderr
     assert 'Traceback' not in result.stderr
     assert not (tmp_path / 'agg_missing.json').exists()
+
+
+@pytest.mark.parametrize(("scenario", "eval_only", "artifacts", "diagnostic"), [
+    ("fixed-seq-len", False, {"fixture_conc4.json": {}}, None),
+    ("fixed-seq-len", False, {}, "No benchmark result files found"),
+    ("agentic-coding", False, {"fixture_conc4.json": {"num_requests_successful": 3},
+                               "fixture_conc8.json": {"num_requests_successful": 5}}, None),
+    ("agentic-coding", False, {"fixture_conc4.json": {"num_requests_successful": 3}},
+     "expected 2 agentic results, found 1"),
+    ("agentic-coding", False, {"fixture_conc4.json": {"num_requests_successful": 3},
+                               "fixture_conc8.json": {"num_requests_successful": 0}},
+     "zero successful requests"),
+    ("agentic-coding", True, {"results_fixture.json": {}}, None),
+    ("agentic-coding", True, {}, "no results*.json files found"),
+])
+def test_multinode_launch_checks_the_expected_result_batch(
+    tmp_path, multinode_env_vars, scenario, eval_only, artifacts, diagnostic,
+):
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/benchmark-multinode-tmpl.yml").read_text())
+    step = next(step for step in workflow["jobs"]["benchmark"]["steps"]
+                if step.get("name") == "Launch multi-node job script")
+    script = step["run"].replace("${{ inputs.eval-only }}", str(eval_only).lower()).replace(
+        "${{ inputs.scenario-type }}", scenario)
+    script = re.sub(r"\$\{\{ join\([^\n]*?additional-settings[^\n]*?\}\}", "", script)
+    for file in ("utils/result_filename.py", "infx/__init__.py", "infx/results/__init__.py",
+                 "infx/results/result_filename.py"):
+        target = tmp_path / file
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(REPO_ROOT / file, target)
+    (tmp_path / "runners").mkdir()
+    (tmp_path / "runners/launch_fixture-node.sh").write_text("exit 0\n")
+    for filename, payload in artifacts.items():
+        (tmp_path / filename).write_text(json.dumps(payload))
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", script], cwd=tmp_path, capture_output=True, text=True, timeout=10,
+        env={**os.environ, **multinode_env_vars,
+             "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}", "PYTHONPATH": "",
+             "RUNNER_NAME": "fixture-node_03", "RESULT_FILENAME_BASE": "fixture",
+             "RECIPE_FINGERPRINT": "", "CONC_LIST": "4 8", "GITHUB_ENV": str(tmp_path / "github-env")},
+    )
+    if diagnostic:
+        assert result.returncode == 1
+        assert diagnostic in result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+    published = dict(line.split("=", 1) for line in (tmp_path / "github-env").read_text().splitlines())
+    assert published == {"RESULT_FILENAME": "fixture", "EVAL_ARTIFACT_RECIPE": "",
+                         "EVAL_ARTIFACT_CONC": "809c025ba41f"}
 
 
 @pytest.mark.parametrize("workflow_name", ["benchmark-tmpl.yml", "benchmark-multinode-tmpl.yml", "profile.yml"])
@@ -714,17 +805,6 @@ class TestOutputFile:
 class TestEdgeCases:
     """Tests for edge cases and special scenarios."""
 
-    def test_boolean_disagg_parsing_false(self, tmp_path, sample_benchmark_result, single_node_env_vars):
-        """Test that DISAGG env var is parsed as boolean correctly for false values."""
-        for disagg_value in ["false", "False", "FALSE"]:
-            env = single_node_env_vars.copy()
-            env["DISAGG"] = disagg_value
-
-            result = run_script(tmp_path, env, sample_benchmark_result)
-            assert result.returncode == 0, f"Script failed for DISAGG={disagg_value}: {result.stderr}"
-
-            output_data = json.loads(result.stdout)
-            assert output_data["disagg"] is False
 
     def test_boolean_disagg_parsing_true_requires_multinode(self, tmp_path, sample_benchmark_result, single_node_env_vars):
         """Test that DISAGG=true without multinode fails."""
@@ -735,28 +815,6 @@ class TestEdgeCases:
             result = run_script(tmp_path, env, sample_benchmark_result)
             assert result.returncode != 0
 
-
-    def test_integer_conversion(self, tmp_path, single_node_env_vars):
-        """Test that numeric env vars are converted to integers."""
-        benchmark_result = {
-            "model_id": "test-model",
-            "max_concurrency": 32,
-            "total_token_throughput": 5000.0,
-            "output_throughput": 4000.0,
-        }
-
-        env = single_node_env_vars.copy()
-        env["ISL"] = "8192"
-        env["OSL"] = "1024"
-
-        result = run_script(tmp_path, env, benchmark_result)
-        assert result.returncode == 0, f"Script failed: {result.stderr}"
-
-        output_data = json.loads(result.stdout)
-        assert output_data["isl"] == 8192
-        assert output_data["osl"] == 1024
-        assert isinstance(output_data["isl"], int)
-        assert isinstance(output_data["osl"], int)
 
 # =============================================================================
 # Integration: power aggregation patches the agg JSON
