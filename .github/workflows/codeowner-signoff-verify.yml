@@ -289,8 +289,6 @@ jobs:
             already rendered with this run's PR number, head SHA, and sign-off
             metadata.
 
-      # Claude writes a local verdict; deterministic code owns the sticky comment,
-      # durable PASS, and status publication (including verifier crashes).
       - name: Update verdict comment and PR status
         if: always() && steps.prepare.outputs.verify == 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0

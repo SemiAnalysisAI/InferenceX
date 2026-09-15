@@ -39,9 +39,9 @@
 
 签署发布后，CI 会独立复核决定合并的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、`/reuse-sweep-run` 命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack，以及投机解码是否使用 chat template。随后，CI 会为整个 PR 创建或更新同一条裁定评论，并注明实际评估的 SHA。未通过的条目直接显示；已通过和不适用（N/A）的条目统一放入折叠区域。旧版按提交生成的裁定评论会被复用；如果评论已删除，下次验证会创建替代评论。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
 
-**一次 PASS 即可满足该 PR 后续整个生命周期的这项门禁。** 自动化会添加 `codeowner-signoff-verified` 标签，记录首次 PASS。后续提交、rebase 或签署编辑都不会重新运行 Claude，也不会使该 PASS 失效。一个小型、可信的 `pull_request_target` 工作流会将必需的 `codeowner-signoff-verify` 成功状态延续到最新 head。延续的状态表示此前已获接受，并不表示 Claude 已审阅新增提交。
+**管理员更新不会使签署失效，非管理员更新则会。** 可信工作流使用实际推送更新的 GitHub 认证用户，并要求仓库权限同时为 `permission: admin` 和 `role_name: admin`。提交中的作者姓名和邮箱不能获得豁免。若管理员更新从已覆盖的 head 开始，自动化会扩展覆盖范围，无需调用 Claude。非管理员更新（包括合并 `main`）需要重新验证签署；随后由管理员推送也不能消除这一要求。
 
-该标签由自动化管理，请勿手动添加。旧版验证器发布的可信自动化 PASS 评论可以迁移，但贡献者自行撰写的裁定文字不能获得 PASS。删除裁定评论不会清除接受状态。若需明确重新评估，可手动分发 `codeowner-signoff-verify.yml`，并传入签署的 `comment_url`；这会更新同一条裁定评论，但后续失败不会撤销已有 PASS。
+裁定评论记录实际验证的提交，以及后续管理员更新所覆盖的 head。旧的 `codeowner-signoff-verified` 终身有效标签会被移除，不再作为接受依据。可信的旧版裁定必须包含已验证 SHA；贡献者撰写的评论、缺失的来源信息或无法查询的权限都不能扩展覆盖范围。若无法将某次更新连接到已记录的覆盖 head，就需要验证。删除裁定评论也会移除该证明。验证新的非管理员改动时，应由原审阅者编辑已有检查清单，或由有权限的协作者传入其 `comment_url` 手动分发 `codeowner-signoff-verify.yml`。流程更新同一条裁定评论，重新评估被拒绝时会撤销接受状态。
 
 ## 使用 `/reuse-sweep-run` 在合并时复用 PR 的全绿 sweep
 

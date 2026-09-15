@@ -279,7 +279,7 @@ gh api "/repos/SemiAnalysisAI/InferenceX/actions/runs/$RUN_ID" \
 
 首次 PASS 前，CODEOWNER 验证会在 Head 更新、PR 重新打开或退出草稿状态后，补查最新的合格签署。它在当前 Head 上验证已有清单，无需在解决合并冲突后重复发布清单。验证使用可信默认分支代码；在 Claude 开始前发布 pending 状态。
 
-已有 PASS 的延续遵循[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)：自动化将成功状态延续至新 Head，不重新运行 Claude。手动重新评估会更新同一条裁定评论，但不会撤销已有 PASS。验证器只写入本地裁定文件，可信工作流负责发布评论和状态。
+已有 PASS 的延续遵循[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)：经认证的仓库管理员从已覆盖 head 推送更新时，保留签署且不调用 Claude。非管理员更新会使签署失效，但不会自动调用 Claude；可编辑已有检查清单或手动分发验证来批准这些改动。非管理员改动尚未审阅时，随后由管理员推送也不能恢复接受状态。缺少更新来源信息时默认拒绝。可信裁定记录已验证和已覆盖的 SHA，重新评估被拒绝时会撤销接受状态。验证器只写入本地裁定文件，可信工作流负责发布评论和状态。
 
 首次验证或重新评估时，Gate 要求触发者的基础 `permission` 为 `write` 或 `admin`，且 `role_name` 为 `write`、`maintain` 或 `admin`。未知或自定义角色、字段缺失、机器人触发和查询失败均不能启动 Claude；自动补查也按相同规则检查签署者。无写权限用户或未获允许的机器人更新 Head 后，可由具有写权限的协作者使用已有签署 URL 发起验证。同一 PR 的验证与 PASS 延续任务串行执行。
 
