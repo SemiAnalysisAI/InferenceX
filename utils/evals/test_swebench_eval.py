@@ -8,7 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import swebench_score as sbs
+import infx.evals.swebench_score as sbs
 
 
 
@@ -211,8 +211,8 @@ def test_predictions_only_writes_predictions_no_results(tmp_path):
 @pytest.mark.skipif(sys.version_info < (3, 10), reason="repo modules use py3.10 syntax")
 def test_results_json_flows_through_collect_and_validate(tmp_path, monkeypatch):
     pytest.importorskip("tabulate")
-    import collect_eval_results as cer
-    import validate_scores as vs
+    import infx.results.collect_eval_results as cer
+    import infx.evals.validate_scores as vs
 
     art = tmp_path / "eval"
     art.mkdir()

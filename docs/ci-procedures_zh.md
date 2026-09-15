@@ -20,6 +20,8 @@
 | 选择 PR 扫描标签 | [PR 主标签与修饰标签](#pr-主标签与修饰标签) |
 | 理解提前取消行为 | [Canary 与 Fail-fast 语义](#canary-与-fail-fast-语义) |
 | 诊断或重跑 Workflow | [监控与重跑](#监控与重跑) |
+| 检查特权 Workflow 的访问权限 | [基于仓库角色的授权](#基于仓库角色的授权) |
+| 管理 CI Python 依赖 | [CI Python 环境](#ci-python-环境) |
 | 将 PR Run 发布到预发布环境 | [暂存结果](#暂存结果) |
 | 合并时不重复已批准的扫描 | [产物复用与 merge-with-reuse](#产物复用与-merge-with-reuse) |
 | 恢复仅追加 Changelog 的冲突 | [Changelog 冲突恢复](#changelog-冲突恢复) |
@@ -32,16 +34,16 @@
 
 | 关注点 | 准确源码 |
 | --- | --- |
-| 生成器 CLI、过滤与 Eval 标记 | [`utils/matrix_logic/generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py) |
-| 严格的 Master Config 与矩阵 Schema | [`utils/matrix_logic/validation.py`](../utils/matrix_logic/validation.py) |
+| 生成器 CLI、过滤与 Eval 标记 | [`infx.matrix.generate`](../infx/matrix/generate.py) |
+| 严格的 Master Config 与矩阵 Schema | [`infx.matrix.validation`](../infx/matrix/validation.py) |
 | 生成器示例与复用策略 | [`.github/workflows/README.md`](../.github/workflows/README.md) |
 | 手动端到端输入与矩阵扇出 | [`.github/workflows/e2e-tests.yml`](../.github/workflows/e2e-tests.yml) |
 | PR/main 扫描 Gate、Canary、收集与入库派发 | [`.github/workflows/run-sweep.yml`](../.github/workflows/run-sweep.yml) |
 | 单节点与多节点产物上传 | [`.github/workflows/benchmark-tmpl.yml`](../.github/workflows/benchmark-tmpl.yml)、[`.github/workflows/benchmark-multinode-tmpl.yml`](../.github/workflows/benchmark-multinode-tmpl.yml) |
-| 吞吐量与 Eval 聚合 | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml)、[`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml)、[`utils/collect_results.py`](../utils/collect_results.py)、[`utils/collect_eval_results.py`](../utils/collect_eval_results.py) |
-| Changelog 字节、Diff 与矩阵 Gate | [`utils/validate_perf_changelog.py`](../utils/validate_perf_changelog.py)、[`utils/process_changelog.py`](../utils/process_changelog.py) |
-| 复用授权与源 Run 选择 | [`utils/find_reusable_sweep_run.py`](../utils/find_reusable_sweep_run.py) |
-| 受支持的复用合并与冲突准备 | [`utils/merge_with_reuse.sh`](../utils/merge_with_reuse.sh)、[`utils/prepare_perf_changelog_merge.py`](../utils/prepare_perf_changelog_merge.py) |
+| 吞吐量与 Eval 聚合 | [`.github/workflows/collect-results.yml`](../.github/workflows/collect-results.yml)、[`.github/workflows/collect-evals.yml`](../.github/workflows/collect-evals.yml)、[`infx/results/collect_results.py`](../infx/results/collect_results.py)、[`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py) |
+| Changelog 字节、Diff 与矩阵 Gate | [`infx/workflows/validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py)、[`infx.matrix.plan`](../infx/matrix/plan.py) |
+| 复用授权与源 Run 选择 | [`infx/workflows/reuse.py`](../infx/workflows/reuse.py) |
+| 受支持的复用合并与冲突准备 | [`utils/merge_with_reuse.sh`](../utils/merge_with_reuse.sh)、[`infx/workflows/prepare_perf_changelog_merge.py`](../infx/workflows/prepare_perf_changelog_merge.py) |
 | 预发布请求与回调 | [`.github/workflows/stage-results.yml`](../.github/workflows/stage-results.yml)、[`.github/workflows/stage-results-callback.yml`](../.github/workflows/stage-results-callback.yml) |
 | 复用 Agentic 入库的重新派发 | [`.github/workflows/recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) |
 | 合并后责任提醒 | [`.github/workflows/pr-recipe-reminder.yml`](../.github/workflows/pr-recipe-reminder.yml) |
@@ -72,8 +74,8 @@ gh workflow view e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref main --yam
 
 ```bash
 MATRIX=/tmp/inferencex-matrix.json
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
-  utils/matrix_logic/generate_sweep_configs.py test-config \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+  python -m infx.matrix.generate test-config \
   --config-files configs/nvidia-master.yaml \
   --config-keys dsr1-fp8-h200-sglang \
   --seq-lens 8k1k \
@@ -85,8 +87,8 @@ python3 -m json.tool "$MATRIX" >/dev/null
 多个 Key 应逐个放在 `--config-keys` 之后。通配模式必须加引号，防止 Shell 展开：
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
-  utils/matrix_logic/generate_sweep_configs.py test-config \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+  python -m infx.matrix.generate test-config \
   --config-files configs/nvidia-master.yaml \
   --config-keys '*-b200-*' \
   --conc 4 \
@@ -98,8 +100,8 @@ uv run --no-project --with pydantic --with pyyaml --python 3.12 \
 `full-sweep` 不一定表示所有配置。可按模型、精度、框架、Runner、序列长度、拓扑、并发、TP/EP 或 Scenario 类型缩小范围：
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
-  utils/matrix_logic/generate_sweep_configs.py full-sweep \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+  python -m infx.matrix.generate full-sweep \
   --config-files configs/nvidia-master.yaml \
   --single-node \
   --model-prefix dsr1 \
@@ -146,12 +148,12 @@ Eval 开关语义是明确的：
 对每个修改过的 YAML 文件执行语法解析。它能发现畸形 YAML，但不能验证 GitHub 表达式或 Workflow 依赖连线：
 
 ```bash
-uv run --no-project --with pyyaml --python 3.12 \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
   python -c 'import sys, yaml; [yaml.safe_load(open(path, encoding="utf-8")) for path in sys.argv[1:]]' \
   configs/nvidia-master.yaml perf-changelog.yaml .github/workflows/e2e-tests.yml
 ```
 
-对 Master Config 而言，矩阵生成就是严格验证：[`validation.py`](../utils/matrix_logic/validation.py) 禁止未知字段，并同时验证 Master 条目和输出矩阵条目。运行能覆盖改动的最小准确 `test-config` 或过滤后的 `full-sweep`。
+对 Master Config 而言，矩阵生成就是严格验证：[`validation.py`](../infx/matrix/validation.py) 禁止未知字段，并同时验证 Master 条目和输出矩阵条目。运行能覆盖改动的最小准确 `test-config` 或过滤后的 `full-sweep`。
 
 ### 验证仅追加 Changelog 契约
 
@@ -161,8 +163,8 @@ uv run --no-project --with pyyaml --python 3.12 \
 
 ```bash
 git fetch origin main
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
-  utils/validate_perf_changelog.py \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+  python -m infx.workflows.validate_perf_changelog \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \
   --head-ref HEAD
@@ -214,6 +216,10 @@ RUN_ID=$(gh run list \
 
 ## PR 主标签与修饰标签
 
+同仓库 PR 无论处于草稿还是 ready 状态，都由 sweep 标签授权 GPU 运行。草稿状态控制是否开始审阅，不决定 sweep 资格；fork PR 仍使用受信任调度路径。添加 sweep 标签或在保留标签时推送提交可以启动 sweep。标记为 ready 不会调度或重复运行。已带标签但尚无运行的草稿，可先移除再重新添加对应 sweep 标签来启动。
+
+同仓库检查既在 changelog 验证检出 PR 代码前执行，也在 GPU setup 前执行。验证明确使用只读 token，checkout 不持久保存凭据。外部 PR 仍须经单独的受信任调度器：具有写权限的维护者为打开且 ready 的 PR 添加标签，批准精确 head；后续外部提交需重新批准。仅添加标签不会使 fork 进入普通 sweep 流程。
+
 [`run-sweep.yml`](../.github/workflows/run-sweep.yml) 会拒绝多个主标签。必须且只能应用一个：
 
 | 主标签 | 矩阵范围 | Canary | 矩阵 Fail-fast |
@@ -249,6 +255,8 @@ Canary 和 Fail-fast 解决不同问题：
 
 ## 监控与重跑
 
+PR 扫描维护一条机器人评论，包含 `View unofficial run (performance)` 和 `View unofficial run (accuracy)` 链接。每个更新的 Run 都会编辑该评论；重跑旧 Run 不会覆盖更新的链接。已有 PR 会复用最新的旧格式可视化评论，更早的历史评论保持不变。
+
 ### 监控选定 Run
 
 ```bash
@@ -265,7 +273,15 @@ gh api "/repos/SemiAnalysisAI/InferenceX/actions/runs/$RUN_ID" \
 - **策略/Gate 失败：** 标签冲突、Changelog 无效、缺少授权、合并冲突或产物不合格。修正 Gate；重跑 GPU 无法解决。
 - **已被取代的 Run：** 后续 Commit 或被识别的标签变更通过 Workflow Concurrency 将其取消。应监控替代 Run，不要复活过期证据。
 
+[`PR Review` Workflow](../.github/workflows/claude-pr-review.yml) 安装固定版本的官方 Claude Code npm 包，并在将可执行文件路径传给审阅 Action 前检查 `claude --version`。安装或启动失败表示审阅没有执行，既不是代码审阅发现的问题，也不代表审阅通过。重试前应先检查安装步骤。
+
 ### 安全重跑
+
+首次 PASS 前，CODEOWNER 验证会在 Head 更新、PR 重新打开或退出草稿状态后，补查最新的合格签署。它在当前 Head 上验证已有清单，无需在解决合并冲突后重复发布清单。验证使用可信默认分支代码；在 Claude 开始前发布 pending 状态。
+
+已有 PASS 的延续遵循[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)：经认证的仓库管理员从已覆盖 head 推送更新时，保留签署且不调用 Claude。非管理员更新会使签署失效，但不会自动调用 Claude；可编辑已有检查清单或手动分发验证来批准这些改动。非管理员改动尚未审阅时，随后由管理员推送也不能恢复接受状态。缺少更新来源信息时默认拒绝。可信裁定记录已验证和已覆盖的 SHA，重新评估被拒绝时会撤销接受状态。验证器只写入本地裁定文件，可信工作流负责发布评论和状态。
+
+首次验证或重新评估时，Gate 要求触发者的基础 `permission` 为 `write` 或 `admin`，且 `role_name` 为 `write`、`maintain` 或 `admin`。未知或自定义角色、字段缺失、机器人触发和查询失败均不能启动 Claude；自动补查也按相同规则检查签署者。无写权限用户或未获允许的机器人更新 Head 后，可由具有写权限的协作者使用已有签署 URL 发起验证。同一 PR 的验证与 PASS 延续任务串行执行。
 
 不要盲目重跑仍在执行的 Run。已结束的失败 Run 可以只重跑失败 Job 及其依赖项：
 
@@ -281,9 +297,53 @@ gh run rerun <RUN_ID> --repo SemiAnalysisAI/InferenceX
 
 重跑沿用同一个 Workflow Run ID，但 Attempt 会增加。Artifact API 可能包含多个 Attempt 上传的产物；必须保留 `run_attempt` 并检查 Artifact 时间戳。`run-stats` 会有意统计所有 Attempt 的 Job。如果源码需要变化，不应重跑旧代码：推送修复并监控新 Run。移除再重新添加主扫描标签会强制创建新的 Labeled Run；后续 Commit 也可能使复用资格失效。
 
+## CI Python 环境
+
+需要 Python 包的托管 Job 使用固定 Commit 的 `astral-sh/setup-uv` Action，
+并通过 `uv run --no-project --exclude-newer PT12H --python 3.12` 运行命令。
+使用 `--with` 声明依赖，或通过 `--with-requirements` 复用已有的依赖文件；
+通常无需单独的依赖安装步骤。
+选项统一按以下顺序排列：`--no-project`、`--exclude-newer`、`--python`、
+`--with`、`--with-requirements`，最后是要执行的命令及其参数。
+
+12 小时冷却期同时适用于包索引中的直接依赖和传递依赖。缺少上传时间戳的
+分发文件不可用；不得为了通过依赖解析而关闭冷却期。CollectiveX 使用全新的
+虚拟环境和 `uv pip install --exclude-newer PT12H --torch-backend cpu`：仅从
+CPU 索引获取 PyTorch 包，其他依赖从 PyPI 获取，因为 CPU 索引中的这些依赖
+镜像缺少上传时间戳。该 Job 确认安装的 Wheel 不包含 CUDA 或 ROCm 后端。
+
+审阅 Workflow 共用 [`.github/mcp-ci.json`](../.github/mcp-ci.json)，
+通过 uv 和原有依赖文件启动 Python MCP Server。Server 使用 MCP 1.x API；
+依赖文件排除不兼容的 SDK 2.x，CI 在不克隆仓库的情况下验证 Server 构造与发现功能。
+Checkout Ref、凭据和审阅
+策略保持不变。矩阵和 CollectiveX 单元测试现在也会在草稿 PR 上运行，
+以便在请求审阅前验证 CI 环境变更。
+
+仅依赖标准库的辅助程序继续使用 Runner 自带的 Python。基准容器及其框架
+环境仍由现有启动器管理；此次 CI 依赖迁移不会修改这些环境。
+
+## 基于仓库角色的授权
+
+结果暂存和可信外部扫描派发直接通过 `actions/github-script` 检查仓库权限，
+使用其已通过 `GITHUB_TOKEN` 认证的客户端。两项操作都要求 Write、Maintain 或
+Admin 权限；Read、Triage 以及没有仓库访问权限的用户不能执行这些操作。
+
+授权要求原有基础 `permission` 和有效 `role_name` 均为 `admin`、`maintain` 或
+`write`。字段缺失或格式无效会终止 Workflow；未知角色和自定义角色会被拒绝，
+绝不回退到旧版权限字段来放行。API 错误也会终止 Workflow。这些更严格的拒绝
+行为属于有意变更；标准 Write 权限仍然足够。GitHub 的基础 `permission` 字段
+会将 Maintain 报告为 Write。拒绝消息会同时显示两个字段。组织成员身份和
+`author_association` 不会通过这些检查赋予访问权限，也无需查询团队成员身份的额外 Token。
+
+结果暂存检查评论作者；外部批准检查原始 `github.actor`，重跑时也不改用重跑者
+身份。授权检查保留在各自的可信 Workflow 中，无需仓库 Checkout 或 Python
+辅助程序。现有 PR、SHA、标签历史、Source Run、Artifact 和 CODEOWNER 检查
+保持不变。其他 Workflow（包括恢复流程）保留原有的授权和派发行为。
+执行凭据和 GitHub 保护措施仍在 Workflow 中明确配置。
+
 ## 暂存结果
 
-[`stage-results.yml`](../.github/workflows/stage-results.yml) 是维护者专用的 PR 结果预发布路径，不能替代合并或生产入库。
+[`stage-results.yml`](../.github/workflows/stage-results.yml) 允许具有 Write、Maintain 或 Admin 权限的用户将 PR 结果发布到预发布环境。它不会执行合并或生产入库。
 
 请求只有在全部满足下列条件时才可暂存：
 
@@ -310,13 +370,21 @@ gh run rerun <RUN_ID> --repo SemiAnalysisAI/InferenceX
 
 ### 资格与授权
 
-1. PR 必须保留且只保留一个完整扫描主标签：`full-sweep-enabled`、`non-canary-full-sweep-enabled`、`full-sweep-fail-fast` 或 `full-sweep-fail-fast-no-canary`。
+`infx.github` 提供仓库范围的 REST 调用、分页及评论表态基础操作，不包含扫描策略。`infx.workflows.reuse` 负责命令解析、授权查找及源 Run 的选择和验证。`infx.workflows.reuse_comment` 使用相同规则提供表态反馈。工作流通过 `python3 -m` 调用这些模块；现有 `utils/find_reusable_sweep_run.py` 命令和导入路径保持兼容。包仅使用标准库，从检出目录运行时无需安装。
+
+1. 复用不要求扫描标签。标签用于选择新的 GPU 工作；移除主标签不会使已有源 Run 失效。Changelog 验证和合并辅助脚本仍会拒绝冲突的主标签。
 2. `evals-only` 与 `agentx-fast` 会令 Run 不可复用。默认完整扫描以及带 `all-evals` 的完整扫描仍可复用。
 3. 源 Run 必须是已结束的 PR `run-sweep.yml` Run，其 Head SHA 仍在 PR Commit 列表中，并拥有未过期的 `results_bmk`、`eval_results_all` 或 `bmk_agentic_*` 结果产物。
-4. `OWNER`、`MEMBER` 或 `COLLABORATOR` 通过 `/reuse-sweep-run` 或 `/reuse-sweep-run <run_id>` 授权复用。最新的合格授权命令决定自动选择还是固定源 Run。
+4. `OWNER`、`MEMBER` 或 `COLLABORATOR` 通过 `/reuse-sweep-run` 或 `/reuse-sweep-run <run_id>` 授权复用。命令和可选的 Run ID 必须放在同一行。最新的合格授权命令决定自动选择还是固定源 Run。
 5. 不指定 ID 时，自动选择要求最新的合格源 Run 成功。指定 Run 是维护者的明确决定，允许结论为 `success`、`failure` 或 `cancelled`；下游入库只保留存在且有效的行，因此应将其报告为部分数据，而不是绿色 Run。
 
-评论本身不会触发 Run。在之后的 PR `synchronize` 事件上，复用 Gate 会在 Changelog 验证后跳过另一轮 PR 扫描。在 `main` 上，映射不明确、指向无效 Run 或与标签冲突的授权会 Fail Closed。没有授权时，`main` 执行正常扫描。
+复用验证检查源 Run 的身份和可用产物，不检查完整矩阵覆盖范围。成功的 `sweep-enabled`（裁剪扫描）源 Run 也可复用，包括自动选择；在 `main` 上只会发布该 Run 已记录的数据点。请求被接受不代表已通过完整扫描，也不能代替评审中的完整扫描要求。如需复用某次完整扫描，请先确认其覆盖范围，再固定该 Run ID。
+
+评论会触发轻量验证工作流，使用默认分支代码和 `GITHUB_TOKEN`。接受后在原评论上添加 👍，拒绝时添加 👎；拒绝原因显示在 Actions 运行摘要中。不发布额外评论，也不启动 GPU 工作。编辑命令时会清除机器人的旧表态并检查新请求。用户的表态保持不变，仍以最新的合格授权命令为准。
+
+接受表示验证当时存在合格的源 Run；表态本身不构成复用授权。PR 同步及合并时仍会重新验证源 Run，产物缺失、过期或源 Commit 无效时仍会 Fail Closed。不指定 Run ID 的请求保持现有规则，每次选择最新成功 Run；如需指定某次运行，请固定 Run ID。
+
+在之后的 PR `synchronize` 事件上，复用 Gate 只有在 Changelog 和源 Run 验证均通过后才会跳过另一轮 PR 扫描。在 `main` 上，映射不明确、指向无效 Run 或与标签冲突的授权会 Fail Closed。没有授权时，`main` 执行正常扫描。
 
 ### 受支持的合并路径
 
@@ -326,7 +394,7 @@ gh run rerun <RUN_ID> --repo SemiAnalysisAI/InferenceX
 utils/merge_with_reuse.sh <pr-number>
 ```
 
-[`merge_with_reuse.sh`](../utils/merge_with_reuse.sh) 会验证合格的成功源产物、发布授权、把 `origin/main` 合并进 PR Branch、只解决 `perf-changelog.yaml` 冲突、规范化追加条目中的 `XXX` Link、按需创建并推送 Synchronization Commit、等待 `check-changelog` 和全部 PR Check、再次确认 Head 未移动，最后执行 Admin Squash Merge。它会拒绝 Fork、脏 Working Tree、多个主标签、不兼容修饰标签、意外冲突、缺少产物、失败 Check 或移动过的 PR Head。
+[`merge_with_reuse.sh`](../utils/merge_with_reuse.sh) 会验证合格的成功源产物、发布固定到该 Run 的授权、把 `origin/main` 合并进 PR Branch、只解决 `perf-changelog.yaml` 冲突、规范化追加条目中的 `XXX` Link、按需创建并推送 Synchronization Commit、等待 `check-changelog` 和全部 PR Check、再次确认 Head 未移动，最后执行 Admin Squash Merge。它会拒绝 Fork、脏 Working Tree、多个主标签、不兼容修饰标签、意外冲突、缺少产物、失败 Check 或移动过的 PR Head。
 
 不要只手工复制该序列的一半。尤其是，只发表评论后直接 Squash Merge、却不执行 Synchronization/Check 阶段，可能导致 Merge Run 无法选择预期源 Run。
 
@@ -352,7 +420,7 @@ git merge origin/main
 当且仅当 `perf-changelog.yaml` 是未解决文件时，在三个冲突 Stage 仍存在的情况下使用字节保留 Helper：
 
 ```bash
-python3 utils/prepare_perf_changelog_merge.py resolve-conflict \
+python3 -m infx.workflows.prepare_perf_changelog_merge resolve-conflict \
   --changelog-file perf-changelog.yaml \
   --pr-number "$PR" \
   --repo SemiAnalysisAI/InferenceX
@@ -365,8 +433,8 @@ Helper 会从 Index Stage 1/2/3 读取 Merge Base、PR 与 Main 字节，验证 
 提交后，对 `origin/main` 运行准确 Gate：
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
-  utils/validate_perf_changelog.py \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+  python -m infx.workflows.validate_perf_changelog \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \
   --head-ref HEAD
@@ -425,7 +493,7 @@ jq -r '
 ' "$OUT/results_bmk/agg_bmk.json"
 ```
 
-Eval 聚合字段来自 [`utils/collect_eval_results.py`](../utils/collect_eval_results.py)：
+Eval 聚合字段来自 [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py)：
 
 ```bash
 jq -r '
@@ -467,3 +535,5 @@ jq -r 'to_entries[] | [.key, .value.n_success, .value.total] | @tsv' \
    ```
 
 当源 Run、Merge Run、Artifact 覆盖、Changelog Metadata 或下游 Event 含糊不清时，应停止并升级处理。绝不能替换成方便的 Run ID，也不能仅凭 Actions Dispatch 就宣称发布成功。
+
+原 `kimik3-fp4-h200-vllm-agentic` key 拆为 `-latency`、`-balanced` 和 `-simple` 三个 key，合计保留原来的全部 35 个点（10/12/13）、配方指纹及图表序列。每个 key 选择一份完整配方及其默认评估；功耗启用范围由该配方的 `telemetry.enabled` 决定。使用 `kimik3-fp4-h200-vllm-agentic-*` 可选择三份配方。局部配方运行不能证明其他 key 已通过资格验证。

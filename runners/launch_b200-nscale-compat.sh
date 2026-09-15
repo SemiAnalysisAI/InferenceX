@@ -1,11 +1,12 @@
 #!/usr/bin/bash
 
+# shellcheck source=runners/slurm_utils.sh
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
+
 # Compatibility launcher for B200 Nscale configurations that have not yet
 # moved to the native srt-slurm path in launch_b200-nscale-slurm.sh.
 SLURM_PARTITION="${SLURM_PARTITION:-batch_1}"
 SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
-POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
-POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
 
 set -x
 
@@ -14,12 +15,18 @@ set -x
 # portability, but we resolve to pre-staged paths here to avoid repeated
 # downloading on every Nscale node. Runs for both single-node and multinode
 # launches.
-if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "$IS_MULTINODE" != "true" ]]; then
+    export MODEL_PATH="$MODEL"
+    export HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
+    mkdir -p "$HF_HUB_CACHE_HOST_PATH"
+elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/DeepSeek-R1-0528-NVFP4-v2"
     export SRT_SLURM_MODEL_PREFIX="dsr1"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/scratch/models/DeepSeek-R1-0528"
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $MODEL == "deepseek-ai/DeepSeek-V4-Pro-0813" ]]; then
+    export MODEL_PATH="${MODEL_PATH:-/scratch/models/DeepSeek-V4-Pro-0813}"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     # Node-local weights are not visible on the runner/login node.
     export MODEL_PATH="/scratch/models/DeepSeek-V4-Pro-NVFP4"
@@ -47,7 +54,7 @@ elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/scratch/models/GLM-5-FP8"
     export SRT_SLURM_MODEL_PREFIX="glm5-fp8"
 elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/scratch/models/GLM-5.1-FP8"
+    export MODEL_PATH="${MODEL_PATH:-/scratch/models/GLM-5.1-FP8}"
     export SRT_SLURM_MODEL_PREFIX="glm5.1-fp8"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/GLM-5-NVFP4"
@@ -82,6 +89,13 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/Kimi-K3"
     export SRT_SLURM_MODEL_PREFIX="kimik3"
+elif [[ $MODEL_PREFIX == "qwen3.8next" && $PRECISION == "fp4" ]]; then
+    if [[ -n "${MODEL_PATH:-}" && -d "$MODEL_PATH" ]]; then
+        :
+    else
+        export MODEL_PATH="/scratch/models/Qwen3.8-Flash-Next-NVFP4"
+    fi
+    export SRT_SLURM_MODEL_PREFIX="qwen3.8next-fp4"
 else
     echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
     echo "Available models under /scratch/models:"
@@ -129,7 +143,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     if [[ -n "$_POWER_CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
         /^telemetry:/ { t = 1; next }
         t && /^[^ ]/  { t = 0 }
-        t && /^  provider: dcgm-power$/ { p = 1 }
+        t && /^  dcgm_exporter:/ { p = 1 }
         t && /^  enabled: true$/        { e = 1 }
         END { exit !(p && e) }
     ' "$_RECIPE_SRC"; then
@@ -147,79 +161,14 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     export SERVED_MODEL_NAME=$MODEL
 
-    echo "Cloning srt-slurm repository..."
+    echo "Preparing job-local srt-slurm checkout..."
     SRT_REPO_DIR="srt-slurm"
     if [ -d "$SRT_REPO_DIR" ]; then
         echo "Removing existing $SRT_REPO_DIR..."
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    # Kimi K3 aggregate profiles use the srt-slurm fork that supports direct
-    # multi-node vLLM. Pin the tested renderer so branch movement cannot change
-    # generated rank commands between sweep points.
-    if [[ "$USES_DCGM_POWER" == "1" ]]; then
-        git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout "$POWER_SRT_SLURM_PIN" || exit 1
-        test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
-        git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
-        mkdir -p recipes/vllm/deepseek-v4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-    elif [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "kimik3" ]]; then
-        git clone --branch klaud/direct-vllm-multinode --single-branch https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR" || exit 1
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout df5baa93f4caf5169dea2a4236ad2cc742fe40e7 || exit 1
-        mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
-            recipes/vllm/kimi-k3/agentic || exit 1
-    elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout aflowers/vllm-gb200-v0.20.0
-        mkdir -p recipes/vllm/deepseek-v4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-    elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
-        git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout c180328b98c3793ca84a1e24a030f90545eb7d5d || exit 1
-        mkdir -p recipes/vllm/kimi-k2.6
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.6" recipes/vllm/kimi-k2.6
-    elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        mkdir -p recipes/vllm/minimax-m3/b200-fp4
-        cp -rT \
-            "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/b200-fp4" \
-            recipes/vllm/minimax-m3/b200-fp4
-    elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout main
-    elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        # Pin srt-slurm: newer commits stopped honoring the hash-pinned dynamo
-        # build and fall back to a dynamo release that is incompatible with this
-        # sglang image (worker fails at import). This is the last commit before
-        # that change. Do not float on main -- the srtctl + dynamo-install
-        # toolchain is unpinned there.
-        git checkout a98738de9b2233459b5456e9ed71af09ce893f92
-        mkdir -p recipes/sglang/dsr1/b200-fp4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/dsr1/b200-fp4" recipes/sglang/dsr1/b200-fp4
-    elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout v1.0.29
-        mkdir -p recipes/trtllm/kimi-k25-nvfp4/b200-fp4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/kimi-k2.5/disagg/trtllm_dynamo/b200-fp4" recipes/trtllm/kimi-k25-nvfp4/b200-fp4
-    else
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout sa-submission-q2-2026
-    fi
-    if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
-        python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" || exit 1
-    fi
+    setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" "$USES_DCGM_POWER" || exit 1
 
     echo "Installing srtctl..."
     export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
@@ -395,7 +344,7 @@ EOF
         SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
     fi
 
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
     # Extract JOB_ID from srtctl output
@@ -463,48 +412,7 @@ EOF
     tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
-        # Find all result subdirectories
-        RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
-
-        if [ -z "$RESULT_SUBDIRS" ]; then
-            echo "Warning: No result subdirectories found in $LOGS_DIR"
-        else
-            # Process results from all configurations
-            for result_subdir in $RESULT_SUBDIRS; do
-                echo "Processing result subdirectory: $result_subdir"
-
-                # Extract configuration info from directory name
-                CONFIG_NAME=$(basename "$result_subdir")
-
-                # Find all result JSON files
-                RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
-
-                for result_file in $RESULT_FILES; do
-                    if [ -f "$result_file" ]; then
-                        # Extract metadata from filename
-                        # Files may be "results_concurrency_N_gpus_G_ctx_C_gen_D.json" (disagg) or "results_concurrency_N_gpus_G.json" (non-disagg)
-                        filename=$(basename "$result_file")
-                        concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
-                        gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9][0-9]*\).*/\1/p')
-                        ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
-                        gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
-
-                        echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
-
-                        if [ -n "$ctx" ] && [ -n "$gen" ]; then
-                            WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
-                        else
-                            WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}.json"
-                        fi
-                        cp "$result_file" "$WORKSPACE_RESULT_FILE"
-
-                        echo "Copied result file to: $WORKSPACE_RESULT_FILE"
-                    fi
-                done
-            done
-        fi
-
-        echo "All result files processed"
+        copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" || exit 1
     else
         echo "EVAL_ONLY=true: Skipping benchmark result collection"
     fi
@@ -540,7 +448,7 @@ else
 
     SQUASH_FILE="/data/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
-    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" || "$SPEC_DECODING" == "draft_model" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b200_vllm.sh) so models
     # with multiple inference engines can coexist; fall back to the historical
     # name without an engine suffix (`_trt` for trt, bare for everyone else).
@@ -560,6 +468,18 @@ else
         CONTAINER_MOUNT_DIR=/ix
     else
         CONTAINER_MOUNT_DIR=/workspace
+    fi
+
+    if [[ "$MODEL_PREFIX" == "dsv41flash" ]]; then
+        # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
+        export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
+        CONTAINER_MOUNT_DIR=/ix
+        export INFMAX_CONTAINER_WORKSPACE=/ix
+        export RESULT_DIR=/ix/results
+        export HF_HUB_CACHE=/hf-cache
+        CONTAINER_MOUNTS="$GITHUB_WORKSPACE:/ix,$HF_HUB_CACHE_HOST_PATH:/hf-cache,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache"
+    else
+        CONTAINER_MOUNTS="$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache"
     fi
 
     # The runner lease reserves the Slurm nodes before this single-node job is
@@ -592,7 +512,7 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
+        --container-mounts="$CONTAINER_MOUNTS" \
         --no-container-mount-home \
         --container-workdir=$CONTAINER_MOUNT_DIR \
         --no-container-entrypoint --export=ALL,PORT=8888,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \

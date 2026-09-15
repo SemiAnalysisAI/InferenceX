@@ -4,6 +4,8 @@ import hashlib
 import io
 import json
 import os
+import signal
+import socket
 import stat
 import subprocess
 import sys
@@ -19,7 +21,6 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCHMARK_LIB = REPO_ROOT / "benchmarks" / "benchmark_lib.sh"
 MULTINODE_AGENTIC_SCRIPT = REPO_ROOT / "benchmarks/multi_node/agentic_srt.sh"
-MULTINODE_WORKFLOW = REPO_ROOT / ".github/workflows/benchmark-multinode-tmpl.yml"
 
 
 _SCRIPT = r"""
@@ -115,10 +116,6 @@ def test_agentic_dependency_install_is_rootless_without_git(tmp_path: Path) -> N
 
 def test_agentic_scenario_defaults_to_gsm8k_lm_eval():
     assert "DISPATCH=lm-eval" in _dispatch(is_agentic="1")
-
-
-def test_fixed_seqlen_scenario_defaults_to_lm_eval():
-    assert "DISPATCH=lm-eval" in _dispatch(is_agentic="0")
 
 
 def test_agentic_eval_only_stages_summary():
@@ -256,9 +253,6 @@ run_kimi_vendor_eval() {
 run_lm_eval() {
     echo "DISPATCH=lm-eval SUITE=${EVAL_SUITE:-unset} COMPLETED=${EVAL_COMPLETED_SUITE:-unset}"
 }
-append_lm_eval_summary() {
-    echo "METADATA=${EVAL_COMPLETED_SUITE:-gsm8k}"
-}
 export EVAL_MAX_MODEL_LEN=16384
 export EVAL_CONCURRENT_REQUESTS=""
 export EVAL_ONLY=false
@@ -267,11 +261,9 @@ unset EVAL_SUITE
 export EVAL_FRAMEWORK=kimi-vendor
 run_eval --port 8888
 printf 'KIMI_COMPLETED=%s\n' "${EVAL_COMPLETED_SUITE:-unset}"
-append_lm_eval_summary
 export EVAL_FRAMEWORK=lm-eval
 run_eval --port 8888
 printf 'LM_COMPLETED=%s\n' "${EVAL_COMPLETED_SUITE:-unset}"
-append_lm_eval_summary
 printf 'FINAL_SUITE=%s\n' "${EVAL_SUITE-unset}"
 """
     result = subprocess.run(
@@ -285,10 +277,8 @@ printf 'FINAL_SUITE=%s\n' "${EVAL_SUITE-unset}"
     assert result.returncode == 0, result.stderr
     assert "DISPATCH=kimi-vendor SUITE=kimi_tool_call_schema" in result.stdout
     assert "KIMI_COMPLETED=kimi_tool_call_schema" in result.stdout
-    assert "METADATA=kimi_tool_call_schema" in result.stdout
     assert "DISPATCH=lm-eval SUITE=unset COMPLETED=unset" in result.stdout
     assert "LM_COMPLETED=unset" in result.stdout
-    assert "METADATA=gsm8k" in result.stdout
     assert "FINAL_SUITE=unset" in result.stdout
 
 
@@ -585,7 +575,7 @@ printf 'EVAL_RC=%s\n' "$eval_rc"
     assert "STALE_MINIMAX_ARTIFACT" not in output
     assert not (tmp_path / "python").exists()
     assert (
-        f"ADAPTER_ARG=<{REPO_ROOT / 'utils/evals/minimax_provider_eval.py'}>" in output
+        f"ADAPTER_ARG=<{REPO_ROOT / 'infx/evals/minimax_provider_eval.py'}>" in output
     )
     assert "ADAPTER_ARG=<test-model>" in output
     assert f"ADAPTER_ARG=<{results_dir}>" in output
@@ -663,7 +653,7 @@ printf 'RUNTIME=<%s>\n' "$prepared_runtime"
     )
     calls = calls_path.read_text()
 
-    assert f"PYTHON_ARG=<{REPO_ROOT / 'utils/evals/minimax_m3_full_eval.py'}>" in calls
+    assert f"PYTHON_ARG=<{REPO_ROOT / 'infx/evals/minimax_m3_full_eval.py'}>" in calls
     assert "PYTHON_ARG=<prepare-source>" in calls
     assert f"PYTHON_ARG=<{runtime_dir / 'source'}>" in calls
     assert "minimax_provider_eval.py" not in calls
@@ -715,8 +705,8 @@ printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
         check=True,
     )
     output = result.stdout + result.stderr
-    adapter = REPO_ROOT / "utils/evals/minimax_provider_eval.py"
-    fixture = REPO_ROOT / "utils/evals/minimax_m3_smoke.json"
+    adapter = REPO_ROOT / "infx/evals/minimax_provider_eval.py"
+    fixture = REPO_ROOT / "infx/evals/minimax_m3_smoke.json"
 
     for value in (
         adapter,
@@ -944,7 +934,7 @@ def _serve_archive(payload: bytes, *, transient_failures: int = 0):
             pass
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), ArchiveHandler)
-    thread = threading.Thread(target=server.serve_forever)
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01})
     thread.start()
     try:
         yield (
@@ -985,6 +975,7 @@ _prepare_kimi_vendor_verifier "$REPO_URL" "$VERIFIER_REF" "$ARCHIVE_SHA256"
                 "VERIFIER_REF": verifier_ref,
                 "ARCHIVE_SHA256": archive_sha256 or hashlib.sha256(payload).hexdigest(),
             },
+            cwd=tmp_path,
             text=True,
             capture_output=True,
         )
@@ -1014,22 +1005,23 @@ def test_kimi_vendor_verifier_fetches_expected_subset_without_git(
 
 
 def test_kimi_vendor_verifier_retries_transient_archive_failure(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch, capsys,
 ) -> None:
-    result, checkout, request_paths = _prepare_local_kimi_verifier(
-        tmp_path,
-        _kimi_verifier_archive(),
-        transient_failures=1,
-    )
-    verifier_ref = "1" * 40
+    from infx.evals import _kimi_verifier_archive as archive
 
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == str(checkout)
+    payload = _kimi_verifier_archive()
+    verifier_ref = "1" * 40
+    monkeypatch.setattr(archive.time, 'sleep', lambda _: None)
+    with _serve_archive(payload, transient_failures=1) as (repo_url, request_paths):
+        monkeypatch.setattr(sys, 'argv', ['archive', repo_url, verifier_ref,
+                                         hashlib.sha256(payload).hexdigest(), str(tmp_path)])
+        archive.main()
     assert request_paths == [
         f"/owner/verifier/archive/{verifier_ref}.tar.gz",
         f"/owner/verifier/archive/{verifier_ref}.tar.gz",
     ]
-    assert "archive download attempt 1/3 failed" in result.stderr
+    assert "archive download attempt 1/3 failed" in capsys.readouterr().err
+    assert (tmp_path / 'pyproject.toml').read_text() == 'pyproject.toml'
 
 
 def test_kimi_vendor_verifier_rejects_archive_hash_mismatch(
@@ -1298,7 +1290,7 @@ printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
         check=True,
     )
     output = result.stdout + result.stderr
-    adapter = BENCHMARK_LIB.parents[1] / "utils/evals/kimi_vendor_eval.py"
+    adapter = BENCHMARK_LIB.parents[1] / "infx/evals/kimi_vendor_eval.py"
 
     assert f"PYTHONPATH=<{tmp_path / 'runtime'}" in output
     assert "PYTHON_ARG=<->" in output
@@ -1971,8 +1963,8 @@ def test_include_path_absent_when_eval_include_path_unset():
     assert "--include_path" not in out, (
         f"Expected no '--include_path' in output:\n{out}"
     )
-    assert "--tasks utils/evals/gsm8k.yaml" in out, (
-        f"Expected '--tasks utils/evals/gsm8k.yaml' in output:\n{out}"
+    assert "--tasks infx/evals/gsm8k.yaml" in out, (
+        f"Expected '--tasks infx/evals/gsm8k.yaml' in output:\n{out}"
     )
 
 
@@ -1992,7 +1984,7 @@ run_swebench_eval
     env = {
         **os.environ,
         "BENCHMARK_LIB": str(BENCHMARK_LIB),
-        "TASK_YAML": str(BENCHMARK_LIB.parents[1] / "utils/evals/swebench_lite.yaml"),
+        "TASK_YAML": str(BENCHMARK_LIB.parents[1] / "infx/evals/swebench_lite.yaml"),
         "KV_OFFLOADING": "none",
     }
     result = subprocess.run(
@@ -2003,7 +1995,7 @@ run_swebench_eval
     )
     assert result.returncode == 9
     assert "TASK=swebench_lite" in result.stdout
-    assert f"INCLUDE={BENCHMARK_LIB.parents[1] / 'utils/evals'}" in result.stdout
+    assert f"INCLUDE={BENCHMARK_LIB.parents[1] / 'infx/evals'}" in result.stdout
 
 
 def test_modal_credentials_sanitizes_whitespace_contaminated_tokens(tmp_path):
@@ -2012,19 +2004,38 @@ def test_modal_credentials_sanitizes_whitespace_contaminated_tokens(tmp_path):
     script = r"""
 source "$BENCHMARK_LIB" 2>/dev/null
 export SWEBENCH_USE_MODAL=true
-export MODAL_TOKEN_ID='ak-clean123'
-export MODAL_TOKEN_SECRET="$(printf 'as-dirty456\n')"
 _ensure_modal_credentials
-grep -q 'token_secret = "as-dirty456"' "$HOME/.modal.toml" || { echo FILE_DIRTY; exit 1; }
-[ "$MODAL_TOKEN_SECRET" = "as-dirty456" ] || { echo ENV_DIRTY; exit 1; }
+grep -q '^token_id = "ak-clean123"$' "$HOME/.modal.toml" || { echo ID_DIRTY; exit 1; }
+grep -q '^token_secret = "as-clean456"$' "$HOME/.modal.toml" || { echo FILE_DIRTY; exit 1; }
+[ "$MODAL_TOKEN_ID" = "ak-clean123" ] && [ "$MODAL_TOKEN_SECRET" = "as-clean456" ] || { echo ENV_DIRTY; exit 1; }
 echo SANITIZED_OK
 """
-    env = {**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB), "HOME": str(home)}
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "HOME": str(home),
+        "MODAL_TOKEN_ID": " \t'ak-clean123'\r\n",
+        "MODAL_TOKEN_SECRET": ' \t"as-clean456"\r\n',
+    }
     res = subprocess.run(
         ["bash", "-c", script], env=env, text=True, capture_output=True
     )
     assert res.returncode == 0, res.stdout + res.stderr
     assert "SANITIZED_OK" in res.stdout
+
+
+# Advance the watchdog's clock by requested waits. The small real yield lets
+# child processes run; their sleep, signal handling, and exit status stay real.
+_AGENTIC_TEST_CLOCK = r"""
+_test_now=0
+date() {
+    if [[ "$*" == "+%s" ]]; then printf '%s\n' "$_test_now"; else command date "$@"; fi
+}
+sleep() {
+    _test_now=$((_test_now + $1))
+    command sleep 0.01
+}
+"""
 
 
 def test_agentic_generation_invokes_mini_swe_agent(tmp_path):
@@ -2049,7 +2060,7 @@ def test_agentic_generation_invokes_mini_swe_agent(tmp_path):
 
     gen_dir = tmp_path / "gen"
     gen_dir.mkdir()
-    script = r"""
+    script = _AGENTIC_TEST_CLOCK + r"""
 source "$BENCHMARK_LIB" 2>/dev/null
 _install_swebench_agent_deps() { :; }
 _ensure_modal_credentials() { :; }
@@ -2096,7 +2107,7 @@ def _agentic_shim(tmp_path, mini_body):
 
 
 def _run_agentic(shim, gen_dir, extra_env=None):
-    script = r"""
+    script = _AGENTIC_TEST_CLOCK + r"""
 source "$BENCHMARK_LIB" 2>/dev/null
 _install_swebench_agent_deps() { :; }
 _ensure_modal_credentials() { :; }
@@ -2115,7 +2126,7 @@ echo "GEN_RC=$?"
         **(extra_env or {}),
     }
     return subprocess.run(
-        ["bash", "-c", script], env=env, text=True, capture_output=True
+        ["bash", "-c", script], env=env, text=True, capture_output=True, timeout=10
     )
 
 
@@ -2125,14 +2136,25 @@ def test_agentic_watchdog_kills_hung_mini(tmp_path):
         'out=""; prev=""\n'
         'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
         'mkdir -p "$out"\n'
+        'printf "%s\\n" "$$" > "$out/mini.pid"\n'
         'printf \'{"i1": {"instance_id": "i1", "model_patch": "d"}}\' > "$out/preds.json"\n'
         "exec sleep 600 </dev/null >/dev/null 2>&1\n",
     )
-    res = _run_agentic(
-        shim, gen_dir, {"EVAL_LIMIT": "1", "SWEBENCH_AGENT_EXIT_GRACE": "2"}
-    )
-    assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
-    assert "hung after completing all instances" in res.stdout + res.stderr
+    pid_file = gen_dir / "agent_out/mini.pid"
+    try:
+        res = _run_agentic(
+            shim, gen_dir, {"EVAL_LIMIT": "1", "SWEBENCH_AGENT_EXIT_GRACE": "2"}
+        )
+        assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
+        assert "hung after completing all instances" in res.stdout + res.stderr
+        with pytest.raises(ProcessLookupError):
+            os.kill(int(pid_file.read_text()), 0)
+    finally:
+        if pid_file.exists():
+            try:
+                os.kill(int(pid_file.read_text()), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
 
 def test_agentic_salvage_partial_preds_on_failure(tmp_path):
@@ -2170,201 +2192,6 @@ def test_agentic_eval_limit_defaults_to_full_split(tmp_path):
     argv = (shim / "argv.log").read_text()
     assert "--slice" not in argv, argv
     assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
-
-
-def test_multinode_eval_artifact_names_are_bounded_and_distinct() -> None:
-    workflow = yaml.safe_load(MULTINODE_WORKFLOW.read_text())
-    upload = next(
-        step
-        for step in workflow["jobs"]["benchmark"]["steps"]
-        if step.get("name") == "Upload eval results (if any)"
-    )
-    expression = upload["with"]["name"]
-    targets = [
-        {
-            "EXP_NAME": "kimik3_p2x16ep32dpa_d0x16ep32dpa_conc12",
-            "PRECISION": "fp4",
-            "FRAMEWORK": "vllm",
-            "PREFILL_NUM_WORKERS": "2",
-            "PREFILL_TP": "16",
-            "PREFILL_PP_SIZE": "1",
-            "SPEC_DECODING": "mtp",
-            "PREFILL_DCP_SIZE": "1",
-            "PREFILL_PCP_SIZE": "1",
-            "PREFILL_EP": "32",
-            "PREFILL_DP_ATTN": "true",
-            "DECODE_NUM_WORKERS": "0",
-            "DECODE_TP": "16",
-            "DECODE_PP_SIZE": "1",
-            "DECODE_DCP_SIZE": "1",
-            "DECODE_PCP_SIZE": "1",
-            "DECODE_EP": "32",
-            "DECODE_DP_ATTN": "true",
-            "KV_OFFLOADING": "none",
-            "KV_OFFLOAD_BACKEND": "",
-            "conc-list": ["1", "12", "16"],
-            "runner.name": "h200-dgxc-slurm_00",
-        },
-        {
-            "EXP_NAME": "kimik3_p4x8ep32dpa_d0x8ep32dpa_conc12",
-            "PRECISION": "fp4",
-            "FRAMEWORK": "vllm",
-            "PREFILL_NUM_WORKERS": "4",
-            "PREFILL_TP": "8",
-            "PREFILL_PP_SIZE": "1",
-            "PREFILL_DCP_SIZE": "1",
-            "PREFILL_PCP_SIZE": "1",
-            "PREFILL_EP": "32",
-            "PREFILL_DP_ATTN": "true",
-            "DECODE_NUM_WORKERS": "0",
-            "SPEC_DECODING": "mtp",
-            "DECODE_TP": "8",
-            "DECODE_PP_SIZE": "1",
-            "DECODE_DCP_SIZE": "1",
-            "DECODE_PCP_SIZE": "1",
-            "DECODE_EP": "32",
-            "DECODE_DP_ATTN": "true",
-            "KV_OFFLOADING": "none",
-            "KV_OFFLOAD_BACKEND": "",
-            "conc-list": ["1", "12", "16"],
-            "runner.name": "h200-dgxc-slurm_01",
-        },
-        {
-            "EXP_NAME": "kimik3_p4x8ep32dpa_d0x8ep32dpa_conc12_kvdram-vllm-simple",
-            "PRECISION": "fp4",
-            "FRAMEWORK": "vllm",
-            "PREFILL_NUM_WORKERS": "4",
-            "PREFILL_TP": "8",
-            "PREFILL_PP_SIZE": "1",
-            "PREFILL_DCP_SIZE": "1",
-            "PREFILL_PCP_SIZE": "1",
-            "PREFILL_EP": "32",
-            "PREFILL_DP_ATTN": "true",
-            "DECODE_NUM_WORKERS": "0",
-            "DECODE_TP": "8",
-            "DECODE_PP_SIZE": "1",
-            "DECODE_DCP_SIZE": "1",
-            "DECODE_PCP_SIZE": "1",
-            "DECODE_EP": "32",
-            "SPEC_DECODING": "mtp",
-            "DECODE_DP_ATTN": "true",
-            "KV_OFFLOADING": "dram",
-            "KV_OFFLOAD_BACKEND": "vllm-simple",
-            "conc-list": ["1", "12", "16"],
-            "runner.name": "h200-dgxc-slurm_02",
-        },
-        {
-            "EXP_NAME": "kimik3_p1x8_d0x8_conc16",
-            "PRECISION": "fp4",
-            "FRAMEWORK": "dynamo-vllm",
-            "PREFILL_NUM_WORKERS": "1",
-            "PREFILL_TP": "8",
-            "PREFILL_PP_SIZE": "2",
-            "PREFILL_DCP_SIZE": "1",
-            "PREFILL_PCP_SIZE": "1",
-            "PREFILL_EP": "1",
-            "PREFILL_DP_ATTN": "false",
-            "DECODE_NUM_WORKERS": "0",
-            "DECODE_TP": "8",
-            "DECODE_PP_SIZE": "2",
-            "DECODE_DCP_SIZE": "1",
-            "DECODE_PCP_SIZE": "1",
-            "DECODE_EP": "1",
-            "DECODE_DP_ATTN": "false",
-            "SPEC_DECODING": "mtp",
-            "KV_OFFLOADING": "none",
-            "KV_OFFLOAD_BACKEND": "",
-            "conc-list": ["1", "16"],
-            "runner.name": "b200-dgxc_00",
-        },
-        {
-            "EXP_NAME": "kimik3_p1x16ep16_d0x16ep16_conc16",
-            "PRECISION": "fp4",
-            "FRAMEWORK": "dynamo-vllm",
-            "PREFILL_NUM_WORKERS": "1",
-            "PREFILL_TP": "16",
-            "PREFILL_PP_SIZE": "1",
-            "PREFILL_DCP_SIZE": "1",
-            "PREFILL_PCP_SIZE": "1",
-            "PREFILL_EP": "16",
-            "PREFILL_DP_ATTN": "false",
-            "DECODE_NUM_WORKERS": "0",
-            "DECODE_TP": "16",
-            "DECODE_PP_SIZE": "1",
-            "DECODE_DCP_SIZE": "1",
-            "DECODE_PCP_SIZE": "1",
-            "DECODE_EP": "16",
-            "DECODE_DP_ATTN": "false",
-            "KV_OFFLOADING": "none",
-            "SPEC_DECODING": "mtp",
-            "KV_OFFLOAD_BACKEND": "",
-            "conc-list": ["16"],
-            "runner.name": "gb200-nv_00",
-        },
-        {
-            "EXP_NAME": "kimik3_p1x16_d0x16_conc1",
-            "PRECISION": "fp4",
-            "FRAMEWORK": "dynamo-vllm",
-            "PREFILL_NUM_WORKERS": "1",
-            "PREFILL_TP": "16",
-            "PREFILL_PP_SIZE": "1",
-            "PREFILL_DCP_SIZE": "1",
-            "PREFILL_PCP_SIZE": "1",
-            "PREFILL_EP": "1",
-            "PREFILL_DP_ATTN": "false",
-            "DECODE_NUM_WORKERS": "0",
-            "DECODE_TP": "16",
-            "DECODE_PP_SIZE": "1",
-            "DECODE_DCP_SIZE": "1",
-            "DECODE_PCP_SIZE": "1",
-            "DECODE_EP": "1",
-            "DECODE_DP_ATTN": "false",
-            "KV_OFFLOADING": "none",
-            "KV_OFFLOAD_BACKEND": "",
-            "SPEC_DECODING": "mtp",
-            "conc-list": ["1"],
-            "runner.name": "gb200-nv_01",
-        },
-    ]
-    non_mtp_twin = {**targets[3], "SPEC_DECODING": "none"}
-    disagg_twin = {**targets[3], "DISAGG": "true"}
-    recipe_twin = {
-        **targets[3],
-        "EVAL_ARTIFACT_RECIPE": "0123456789abcdef",
-    }
-    suite_twin = {**targets[3], "EVAL_SUITE": "bfcl_vllm_kimi"}
-    conc_twin = {**targets[3], "conc-list": ["2", "16"]}
-
-    def render(values: dict[str, object]) -> str:
-        name = expression
-        defaults: dict[str, object] = {
-            "DISAGG": "false",
-            "EVAL_ARTIFACT_RECIPE": "",
-            "EVAL_FRAMEWORK": "bfcl",
-            "EVAL_SUITE": "bfcl_smoke",
-        }
-        defaults["EVAL_ARTIFACT_CONC"] = hashlib.sha256(
-            " ".join(values["conc-list"]).encode()
-        ).hexdigest()[:12]
-        for key, value in {**defaults, **values}.items():
-            if key != "conc-list":
-                name = name.replace(f"${{{{ env.{key} }}}}", str(value))
-        name = name.replace("${{ runner.name }}", str(values["runner.name"]))
-        name = name.replace("${{ github.run_attempt }}", "1")
-        assert "${{" not in name
-        return name
-
-    variants = [
-        *targets,
-        non_mtp_twin,
-        disagg_twin,
-        recipe_twin,
-        suite_twin,
-        conc_twin,
-    ]
-    names = [render(target) for target in variants]
-    assert len(names) == len(set(names)) == len(variants)
-    assert all(name.startswith("eval_") and len(name.encode()) <= 256 for name in names)
 
 
 _GENMODE_SCRIPT = r"""
@@ -2422,10 +2249,6 @@ def test_gen_mode_defaults_to_agentic(tmp_path):
     output = _gen_mode(tmp_path, is_agentic="1")
     assert "GEN=agentic" in output
     assert "SUITE=swebench_lite" in output
-
-
-def test_gen_mode_agentic_even_without_agentic_scenario(tmp_path):
-    assert "GEN=agentic" in _gen_mode(tmp_path, is_agentic="0")
 
 
 def test_explicit_single_shot_escape_hatch(tmp_path):
@@ -2508,8 +2331,6 @@ def test_eval_limit_full_and_zero_accepted(tmp_path):
     assert "--slice" not in argv
 
 
-
-
 def test_chat_route_readiness_requires_model_and_active_route(tmp_path: Path) -> None:
     bin_dir = tmp_path / "bin"
     events_path = tmp_path / "events"
@@ -2550,42 +2371,6 @@ _wait_for_openai_chat_route --port 8765
     assert events[1].endswith("http://localhost:8765/v1/models")
     assert events[2].endswith("http://localhost:8765/v1/chat/completions")
     assert "--data" not in events[2]
-
-
-def test_chat_route_readiness_accepts_stable_server_with_different_model_id(
-    tmp_path: Path,
-) -> None:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    curl = bin_dir / "curl"
-    curl.write_text(
-        """#!/usr/bin/env bash
-case "$*" in
-    */v1/models*) printf '{"data":[{"id":"/models/different-model"}]}\n' ;;
-    */v1/chat/completions*) printf '404' ;;
-esac
-""",
-        encoding="utf-8",
-    )
-    curl.chmod(curl.stat().st_mode | stat.S_IXUSR)
-
-    subprocess.run(
-        [
-            "bash",
-            "-c",
-            'source "$BENCHMARK_LIB"; MODEL=test-model; '
-            "_wait_for_openai_chat_route --port 8765",
-        ],
-        env={
-            **os.environ,
-            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
-            "BENCHMARK_LIB": str(BENCHMARK_LIB),
-            "EVAL_MODEL_STABILIZATION_SECONDS": "0",
-        },
-        text=True,
-        capture_output=True,
-        check=True,
-    )
 
 
 def test_multinode_agentic_waits_only_for_eval_openai_endpoint(
@@ -2770,7 +2555,7 @@ exit "$eval_rc"
 
     assert result.returncode == 124
     assert "EVAL_RC=124" in output
-    assert f"ADAPTER_ARG=<{REPO_ROOT / 'utils/evals/bfcl_adapter.py'}>" in output
+    assert f"ADAPTER_ARG=<{REPO_ROOT / 'infx/evals/bfcl_adapter.py'}>" in output
     assert "ADAPTER_ARG=<test-model>" in output
     assert f"ADAPTER_ARG=<{results_dir}>" in output
     assert "ADAPTER_ARG=<--integration-error>" in output
@@ -2905,7 +2690,7 @@ def test_bfcl_runner_uses_fixed_adapter_contract_and_cleans_runtime(
 
     assert result.returncode == 0, result.stderr
     for value in (
-        str(REPO_ROOT / "utils/evals/bfcl_adapter.py"),
+        str(REPO_ROOT / "infx/evals/bfcl_adapter.py"),
         "--base-url",
         "http://127.0.0.1:9999/v1",
         "--api-key",
@@ -3206,3 +2991,27 @@ _cleanup_vendor_eval "$cleanup_dir"
     assert f"SELECTED_PYTHON=<{python_root / 'venv/bin/python'}>" in result.stdout
     assert "--prefix" not in result.stdout
     assert not python_root.exists()
+
+
+@pytest.mark.parametrize("occupied", [False, True])
+def test_select_available_server_port_avoids_an_existing_listener(occupied: bool) -> None:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("0.0.0.0", 0))
+        preferred = listener.getsockname()[1]
+        if occupied:
+            listener.listen()
+        else:
+            listener.close()
+        result = subprocess.run(
+            ["bash", "-c", 'source "$BENCHMARK_LIB"; select_available_server_port; '
+             'python3 -c \'import os; print(os.environ["PORT"])\''],
+            env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB), "PORT": str(preferred)},
+            text=True, capture_output=True, check=True,
+        )
+        selected = int(result.stdout.strip())
+        if occupied:
+            assert selected != preferred
+        else:
+            assert selected == preferred
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+            server.bind(("0.0.0.0", selected))

@@ -1,5 +1,75 @@
 #!/usr/bin/env bash
 
+# Launchers source this file before changing into srt-slurm.
+INFERENCEX_SLURM_UTILS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+SRTCTL_EVAL_ARGS=(
+    --set 'post_eval.command=["bash", "{infmax_workspace}/benchmarks/multi_node/srt_eval.sh", "{endpoint}", "{infmax_workspace}"]'
+    --set 'post_eval.passthrough_env=["EVAL_FRAMEWORK", "EVAL_CONC", "EVAL_LIMIT", "EVAL_SUITE", "SWEBENCH_GEN_MODE", "SWEBENCH_USE_MODAL", "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET", "IS_AGENTIC", "SCENARIO_TYPE"]'
+)
+
+# Leaves the caller in the checkout, matching the launchers' installation flow.
+# Every recipe is owned by InferenceX; srt-slurm 2 no longer ships recipes/.
+setup_srt_slurm() {
+    if [[ $# -ne 3 || -z "$1" || -z "$2" || ( "$3" != 0 && "$3" != 1 ) ]]; then
+        echo "Usage: setup_srt_slurm destination framework uses_power (0 or 1)" >&2
+        return 1
+    fi
+    local destination="$1" framework="$2" uses_power="$3"
+    local source="$INFERENCEX_SLURM_UTILS_DIR/../utils/srt-slurm"
+    if [[ "$framework" == "tilert" ]]; then
+        # Sole fork exception until NVIDIA supports the TileRT backend and router.
+        SRT_SLURM_COMMIT=6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde
+        git init "$destination" || return 1
+        git -C "$destination" remote add origin https://github.com/SemiAnalysisAI/srt-slurm.git || return 1
+        git -C "$destination" fetch --depth=1 origin "$SRT_SLURM_COMMIT" || return 1
+        git -C "$destination" checkout --detach "$SRT_SLURM_COMMIT" || return 1
+    else
+        if [[ ! -e "$source/.git" ]]; then
+            echo "Missing srt-slurm submodule; run git submodule update --init before launching." >&2
+            return 1
+        fi
+        SRT_SLURM_COMMIT=$(git -C "$source" rev-parse HEAD) || return 1
+        # A local clone keeps job writes isolated and preserves upstream Git provenance.
+        git clone --no-hardlinks "$source" "$destination" || return 1
+    fi
+    cd "$destination" || return 1
+    [[ "$(git rev-parse HEAD)" == "$SRT_SLURM_COMMIT" ]] || return 1
+    git rev-parse HEAD > "$GITHUB_WORKSPACE/srt-slurm-sha.txt" || return 1
+    if [[ "$uses_power" == "1" ]]; then
+        cp "$GITHUB_WORKSPACE/srt-slurm-sha.txt" "$GITHUB_WORKSPACE/power-producer-sha.txt" || return 1
+    fi
+    mkdir -p recipes benchmarks/multi_node || return 1
+    cp -R "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/." recipes/ || return 1
+    # Both CONFIG_FILE spellings currently occur in master configs.
+    ln -s ../../recipes benchmarks/multi_node/srt-slurm-recipes || return 1
+    cp -R "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/." configs/ || return 1
+}
+
+# Use the requested image's cache identity, never a convenient older squash file.
+resolve_h100_srt_container() {
+    local image="$1" framework="$2"
+    [[ -n "$image" && "$image" != *[[:space:]]* ]] || return 1
+    CONTAINER_KEY="${image/nvcr.io\//nvcr.io#}"
+    case "$framework" in
+        dynamo-sglang)
+            SQUASH_FILE="/mnt/nfs/lustre/containers/$(printf '%s' "$image" | sed 's/[\/:@#]/_/g').sqsh"
+            ;;
+        dynamo-trt)
+            SQUASH_FILE="/mnt/nfs/sa-shared/containers/$(printf '%s' "${image#nvcr.io/}" | sed 's/[\/:@#]/+/g').sqsh"
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+check_staged_srt_assets() {
+    local model="$1" image="$2"
+    if [[ ! -r "$model/config.json" ]] || ! unsquashfs -s "$image" >/dev/null 2>&1; then
+        echo 'ERROR: readiness-blocked: staged model/config or requested container is unavailable' >&2
+        return 1
+    fi
+}
+
 # Optionally inject synthetic acceptance into a recipe's speculative-config when
 # SYNTHETIC_ACCEPTANCE=true (no-op otherwise). Call after the job-name override
 # and before `srtctl apply` so the rendered job picks it up. Returns non-zero if
@@ -63,6 +133,47 @@ copy_to_workspace() {
     echo "Copied $(basename "$source_file") to $destination_file"
 }
 
+# Preserve short SRT filenames and report failures even inside an `if`/`||` caller.
+copy_fixed_sequence_results() {
+    local logs_dir="$1" workspace="$2" result_filename="$3"
+    local result_subdirs result_subdir result_files result_file config_name
+    local filename concurrency gpus ctx gen workspace_result_file
+
+    result_subdirs=$(find "$logs_dir" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null) || return 1
+
+    if [ -z "$result_subdirs" ]; then
+        echo "Warning: No result subdirectories found in $logs_dir"
+    else
+        for result_subdir in $result_subdirs; do
+            echo "Processing result subdirectory: $result_subdir"
+            config_name=$(basename "$result_subdir")
+            result_files=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null) || return 1
+
+            for result_file in $result_files; do
+                if [ -f "$result_file" ]; then
+                    # Both disaggregated (_ctx_C_gen_D) and aggregated names occur.
+                    filename=$(basename "$result_file")
+                    concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
+                    gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9][0-9]*\).*/\1/p')
+                    ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
+                    gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
+
+                    echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
+
+                    workspace_result_file=$(PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.results.result_filename \
+                        --point "$result_filename" "$config_name" "$concurrency" "$gpus" "$ctx" "$gen") || return 1
+                    workspace_result_file="$workspace/$workspace_result_file"
+                    copy_to_workspace "$result_file" "$workspace_result_file" || return 1
+
+                    echo "Copied result file to: $workspace_result_file"
+                fi
+            done
+        done
+    fi
+
+    echo "All result files processed"
+}
+
 copy_agentic_results() {
     local source_dir="$1"
     local workspace="$2"
@@ -91,6 +202,52 @@ copy_agentic_results() {
     fi
 
     echo "Copied $copied agentic result file(s)"
+}
+
+collect_agentic_power_results() {
+    local job_id="$1" logs_dir="$2" source_dir="$3" workspace="$4"
+    local result_filename="$5" producer_sha="$6"
+    shift 6
+    local rc=0 concurrency attempt
+    [[ "$#" -gt 0 ]] || return 1
+    mkdir -p "$logs_dir/power" || return 1
+    logs_dir="$(cd "$logs_dir" && pwd -P)" || return 1
+    workspace="$(cd "$workspace" && pwd -P)" || return 1
+
+    # Accounting can lag squeue removal; retry only missing or nonterminal rows.
+    for attempt in 1 2 3; do
+        echo "$attempt" > "$logs_dir/power/native-job-status-attempts.txt"
+        sacct -X -n -P -j "$job_id" --format=JobIDRaw,State,ExitCode \
+            > "$logs_dir/power/native-job-status.txt" \
+            2>> "$logs_dir/power/native-job-status.stderr" || true
+        if awk -F'|' -v job="$job_id" '
+            $1 == job && $2 !~ /^(PENDING|RUNNING|COMPLETING)$/ { found = 1 }
+            END { exit !found }
+        ' "$logs_dir/power/native-job-status.txt"; then
+            break
+        fi
+        if [[ "$attempt" != "3" ]]; then sleep 5; fi
+    done
+    if ! awk -F'|' -v job="$job_id" '
+        $1 == job { found = 1; if ($2 != "COMPLETED" || $3 != "0:0") failed = 1 }
+        END { exit (!found || failed) }
+    ' "$logs_dir/power/native-job-status.txt"; then
+        rc=1
+    fi
+    copy_agentic_results "$source_dir" "$workspace" "$result_filename" || rc=$?
+    for concurrency in "$@"; do
+        (
+            cd "$workspace" || exit 1
+            PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.results.agentic.power_adapter \
+                --result-dir "$logs_dir/agentic/conc_${concurrency}" \
+                --agg-result "$workspace/${result_filename}_conc${concurrency}.json" \
+                --power-dir "$logs_dir/power" \
+                --logs-root "$logs_dir" \
+                --expected-producer-sha "$producer_sha" \
+                --require-power
+        ) || rc=$?
+    done
+    return "$rc"
 }
 
 copy_eval_artifacts() {

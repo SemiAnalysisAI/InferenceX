@@ -21,6 +21,18 @@ Use this page for benchmark configuration, recipe, image, and runner changes. It
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | Append-only benchmark trigger log |
 | [`AGENTS.md`](../AGENTS.md) | Repository-wide config, MTP, changelog, and sweep rules |
 
+## Dependency submodules
+
+Git records the exact dependency commits. [`.gitmodules`](../.gitmodules) defines the repositories: AIPerf at `utils/aiperf`, NVIDIA srt-slurm at `utils/srt-slurm`. TileRT is a documented manual fork checkout in `setup_srt_slurm()`, not a separate submodule.
+
+Initialize them before running benchmarks locally:
+
+```bash
+git submodule update --init
+```
+
+To upgrade, fetch and check out the desired commit inside the relevant submodule, then commit the updated submodule pointer in InferenceX. Benchmark workflows already initialize submodules. Slurm launchers make a local Git clone for each job so recipe staging and runtime writes do not modify the submodule, and record the actual commit for result provenance. NVIDIA setup clones locally; TileRT setup fetches its pinned fork commit over the network.
+
 ## Procedure index
 
 1. [Prepare a worktree](#prepare-a-worktree)
@@ -88,6 +100,8 @@ Sources: [`configs/CONFIGS.md`](../configs/CONFIGS.md), [`validation.py`](../uti
 6. For srt-slurm, update recipe and master entry together. For llm-d, update the llm-d recipe/orchestration and master entry together.
 7. Append the trigger entry, generate only the affected key first, and inspect every emitted point.
 
+Fixed-sequence `8192/1024` scenarios may set `require-power: true` to opt into validated measured power. The matrix passes this flag to standard sweeps and manual E2E throughput jobs; eval-only and AgentX rows do not inherit it. Omit the field to preserve existing behavior. Enable it only alongside the corresponding runtime and result adapter, then qualify the complete selected scope.
+
 ## Register and set up a runner
 
 Setup source: [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md). Config source: [`configs/CONFIGS.md#runners`](../configs/CONFIGS.md#runners).
@@ -112,12 +126,32 @@ The runner-name prefix is load-bearing: workflow routing uses `launch_${RUNNER_N
 6. Verify every runner is **Idle** in [repository runner settings](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners) before adding it to sweep traffic.
 7. Verify launcher mounts for `_work`, HF cache, staged weights, and squash images from a compute node. Root containers must not leave root-owned files in the shared workspace.
 
+The B300 DSXE Kimi-K3 AgentX path mounts its pre-staged target under
+`/scratch/models` and separately exports and mounts `WRITABLE_MODELS_DIR` for
+DSpark weights. Keep the draft directory on that persistent mount when reusing
+the serving container; the read-only target mount cannot hold the draft.
+Concurrent cells serialize draft staging with a per-model lock. Each cell lets
+`hf download` validate or resume the existing cache before serving; a nonempty
+directory is not a completion signal.
+
+## Native TileRT power
+
+TileRT's shared importer preserves Docker Hub image names and converts explicit registries such as `ghcr.io/team/image:tag` to Enroot's `docker://ghcr.io#team/image:tag` syntax. Existing `#` references are preserved. Valid cached squash images are reused without importing; a cache hit does not validate the registry import path. Invalid cached images are removed under the import lock before retrying the import.
+
+The GLM-5.1 B200 Nscale 1k1k and 8k1k recipes select the prepared shared checkpoint, converted TileRT weights and squash cache, with allocation limits of 45 minutes for 1k1k and 90 minutes for 8k1k, including its full GSM8K eval. Since C1 is below automatic eval selection, use the PR `all-evals` label alongside `full-sweep-fail-fast` for full qualification. TileRT was added after the general GLM-5.1 retirement in [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533); [MODELS.md](../MODELS.md) records this retained scope. Changes still require the normal PR sweep, applicable quality evidence, sign-off and reuse before publication.
+
+TileRT's eval wrapper calls the shared `run_eval` dispatcher without overriding its `run_lm_eval` client. It stages available artifacts after evaluation and preserves failures from either evaluation or staging. TCP readiness probes keep their socket inside a subshell and preserve the caller's diagnostic streams.
+
+For GLM-5.1 on B200 Nscale, `MODEL_PATH` can select an existing shared checkpoint instead of the default `/scratch/models/GLM-5.1-FP8`. When it selects an HF snapshot, also set `HF_HUB_CACHE_HOST_PATH` to the existing cache root; TileRT mounts that root at the same absolute path so snapshot links to sibling blobs remain readable. Keep `TILERT_WEIGHTS_DIR` pointed at the separately converted decode weights.
+
+Only fixed 8192/1024 `glm5.1-fp8-b200-tilert` requires native power. TileRT runs inside its returned `salloc` allocation, retains both role exit codes and drains collectors before staging audits. Exactly one physical node per role is supported. Other sequence lengths, AgentX and eval-only do not enable this collector. Hardware qualification and publication remain pending.
+
 ## Register an srt-slurm recipe
 
 Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md). Checked-in recipes: [`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/).
 
 1. Locate the exact upstream [NVIDIA/srt-slurm](https://github.com/NVIDIA/srt-slurm) recipe and record its commit-pinned source path.
-2. Stage the YAML under the matching checked-in recipe tree. Read the closest sibling and selected cluster launcher.
+2. Stage the YAML under `benchmarks/multi_node/srt-slurm-recipes/<model-prefix>/<engine>/<gpu>-<precision>/<workload>/`, following the naming rules in `RECIPES.md`. Read the closest sibling and selected cluster launcher.
 3. Map source fields to the master search-space entry: resource worker counts → `num-worker`, TP/EP/DP-attention → worker topology, benchmark concurrencies → `conc-list`, and recipe path → `additional-settings: ["CONFIG_FILE=..."]`.
 4. Add/update the matching [`nvidia-master.yaml`](../configs/nvidia-master.yaml) entry in the same change. Keep worker counts, TP/PP/EP/DCP/PCP, hardware, router, transfer engine, and concurrency labels synchronized.
 5. For an image bump, make recipe `model.container` exactly equal master `image`. The launcher uses the master image as the container-alias key.
@@ -167,6 +201,138 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 7. Add script + master entry + launcher routing + changelog together.
 8. Run Bash syntax and generation checks. Inspect `spec-decoding`, draft/native method, token count, chat-template use, capture range, and resolved script.
 
+### DeepSeek-V4.1-Flash DSpark
+
+The GB200 DSpark recipe uses a minimum CUDA graph capture size of 64 tokens to cover concurrent AgentX subagents. This raises c1/c2/c4 from 8/16/32 to 64; c8 and above retain their existing sizes. The full trace, AL 3.51, and Engram UVA settings are preserved; low-concurrency tail latency improvements require CI confirmation.
+The B200 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
+The GB300 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
+The H200 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
+
+B300 uses the same minimum capture size at c1/c2/c4. Its c1 CI comparison reduced request ITL P90/P99 from 38.74/41.42 ms to 2.62/3.45 ms; c2/c4 require CI confirmation.
+
+The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use
+`vllm/vllm-openai:deepseekv41-flash-0909` at TP4 on Blackwell SKUs with native five-token DSpark,
+probabilistic drafting. Throughput uses the [committed golden AL](../golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification. `--engram-config '{"cpu_offload":true}'`
+stores Engram embedding tables in pinned host DRAM accessed through UVA;
+`kv-offloading: none` describes the separate, GPU-resident KV cache. MXFP4 expert
+weights determine the recipe's `precision: fp4` label.
+
+The GPU-specific entry points share the text-only serving script, `deepseek_v41` tokenizer and
+parsers, 1M context, and the shared AgentX trace replay, power, metrics, and eval
+helpers. Concurrency is 1–128. Model-runner selection and scheduler batching follow the
+official single-node TP recipe defaults; graph capture covers concurrency times
+the six-token DSpark verification block. The launchers mount the repository at `/ix` for this recipe so
+AgentX runtime directories are not created under `/workspace`. Launcher-specific model paths and persistent caches are reused.
+The recipe probes the serving port on the compute node and selects an available
+port if the preferred one is occupied. Serving, replay, metrics, and eval share
+that endpoint.
+The GB300 launcher allows 7200 seconds for engine readiness. In [run 34504969146](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34504969146), the Rust frontend exhausted its 3600-second deadline while the engine was still capturing graphs; model loading alone took 18–23 minutes. This extends startup time without changing the benchmark duration or decoding settings.
+
+GPU sweep and eval evidence is required before calling any recipe validated.
+
+Source: [upstream recipe](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash).
+
+### DeepSeek-V4.1-Flash DSpark on H200
+
+`dsv41flash-fp4-h200-vllm-agentic-dspark` is the H200 AgentX arm of the
+DeepSeek-V4.1-Flash recipe. It shares `vllm/vllm-openai:deepseekv41-flash-0909` and the
+text-only serving script with the Blackwell arms: `deepseek_v41` tokenizer and parsers,
+1M context, native five-token DSpark with probabilistic drafting. Throughput uses the [committed golden AL](../golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification.
+
+The arm runs **TP8**, not the upstream TP4. Upstream verifies TP4 on one GB200 NVL4 tray
+and states that the same layout becomes TP8 per role on 8-GPU nodes, which is what an
+H200 DGXC node is.
+
+`precision: fp4` labels the checkpoint's MXFP4 routed expert weights, matching the
+Blackwell and MI355X arms on the identical checkpoint. Hopper has no FP4 tensor cores, so
+those weights run through the upconverting MoE path; the label describes the checkpoint,
+not the SKU's native arithmetic.
+
+`--engram-config '{"cpu_offload":true}'` keeps the Engram tables in pinned host DRAM
+reached through UVA, and `kv-offloading: none` describes the separate, GPU-resident KV
+cache. Measured on the cluster, the offload moves 11.80 GiB per rank per table for two
+tables across 8 ranks — 188.8 GiB — leaving roughly 35.9 GiB per GPU of resident weights
+out of 141 GiB.
+
+Trace corpus: the arm replays the uncapped `semianalysis_cc_traces_weka_062126` corpus,
+not the 256k-capped `..._062126_256k` variant, because the model serves 1M context. The
+recipe never names a corpus — `resolve_trace_source` picks the uncapped default only
+because its `dsv4*` case arm also matches the `dsv41flash` prefix. That is load-bearing
+and invisible at the call site, so `runners/test_dsv41flash_h200.py` pins it; narrowing
+the arm would silently downgrade this recipe's traces.
+
+**The H100 arm is separate.** H100 is not in the upstream hardware table, and the
+blocker is not the weights. At 1M context the sparse attention indexer allocates a
+`[max-num-batched-tokens, max-model-len]` logits buffer in
+`fp8_fp4_paged_mqa_logits`, which at the default 8192 batched tokens is exactly 16 GiB.
+That is a fixed startup cost paid during memory profiling, independent of concurrency, so
+it fails at concurrency 1 on an 80 GB card even though the resident weights fit. The H100
+arm therefore ships its own script with capped batched tokens instead of the shared
+symlink; see the H100 section below.
+
+The launcher mounts the repository at `/ix` for this recipe so AgentX runtime directories
+are not created under `/workspace`, and it already mounts the shared HF cache, so the
+script resolves the model through `HF_HUB_CACHE` rather than a per-node path. The recipe
+probes the serving port on the compute node and selects an available one if the preferred
+port is occupied; serving, replay, metrics, and eval share that endpoint.
+
+### DeepSeek-V4.1-Flash DSpark on H100
+
+Throughput uses the [committed golden AL](../golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification.
+
+`dsv41flash-fp4-h100-vllm-agentic-dspark` is the H100 AgentX arm of the
+DeepSeek-V4.1-Flash recipe, added after the H200 arm and deliberately separate from
+it. H100 is **not** in the upstream hardware table, which lists h200, gb200, gb300, and
+mi350x.
+
+Unlike the other SKUs, H100 does not use the shared `dsv41flash_fp4_vllm_mtp.sh`. It has
+its own copy, because the shared flags cannot serve 1M context on an 80 GB card. At 1M
+context the sparse attention indexer allocates a
+`[max-num-batched-tokens, max-model-len]` logits buffer in `fp8_fp4_paged_mqa_logits`:
+at the shared script's effective 8192 batched tokens that is 8192 x 1048576 x 2 bytes,
+exactly 16.00 GiB. It is a fixed cost paid during startup memory profiling, independent
+of concurrency, so it OOMed at concurrency 1 in run
+[34467029236](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34467029236)
+next to roughly 35.9 GiB per GPU of resident weights — trimming the concurrency list
+cannot help.
+
+The H100 script therefore caps `--max-num-batched-tokens` at 4096, putting the indexer
+buffer at 8 GiB. Capping `--max-model-len` instead would shrink it just as well, but a
+context cap forces the 256k-capped trace corpus onto a model that serves 1M, so batched
+tokens is the right lever. The script also sets `--max-num-seqs` to twice the trajectory
+concurrency rather than inheriting vLLM's default of 1024, sets
+`--gpu-memory-utilization 0.92`, and enables `expandable_segments` because the failing
+allocation left 1.04 GiB reserved but unallocated.
+
+Those caps were validated with a single concurrency-1 `agentx-fast` run
+([34485694183](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34485694183))
+before any sweep was dispatched, which is the right order here: a full sweep that OOMs at
+startup wastes every leg. That run came up healthy and reported the budget the
+concurrency list is now derived from:
+
+```
+Available KV cache memory: 13.47 GiB
+GPU KV cache size: 7,022,899 tokens
+Maximum concurrency for 1,048,576 tokens per request: 6.70x
+```
+
+The original arm swept concurrency 1–4 under that 6.70x full-context estimate. The
+follow-up sweep extends the same recipe to concurrency 8 and 16 to measure the real
+AgentX saturation curve; these points may preempt if several trajectories approach 1M
+tokens simultaneously. Buying more KV means
+shrinking the indexer further — `--max-num-batched-tokens 2048` would free about 4 GiB
+more — at the cost of chunking long-trace prefill harder. That trade is worth revisiting
+once there is throughput data across the range.
+
+`runners/launch_h100-dgxc-slurm.sh` previously resolved only the untagged
+`_h100[_mtp].sh` script name, so no framework-tagged script could run on this cluster at
+all. It now prefers `_h100_<framework>[_mtp].sh` first, as the h200 launchers have since
+#392, and falls back to the untagged name for the recipes that predate framework tags. It
+also mounts the repository at `/ix` for this recipe so AgentX runtime directories are not
+created under `/workspace`.
+
+Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml).
+
 ## Validate
 
 Run the smallest checks that cover the edited layers.
@@ -187,8 +353,8 @@ bash -n runners/launch_<cluster>.sh
 ### Exact-key schema + matrix generation
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
-  utils/matrix_logic/generate_sweep_configs.py test-config \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+  python -m infx.matrix.generate test-config \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --config-keys <exact-key>
@@ -197,8 +363,8 @@ uv run --no-project --with pydantic --with pyyaml --python 3.12 \
 ### Filtered family generation
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
-  utils/matrix_logic/generate_sweep_configs.py full-sweep \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+  python -m infx.matrix.generate full-sweep \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --model-prefix <prefix> \
@@ -273,3 +439,11 @@ Stop before dispatching GPU work or claiming the configuration complete when any
 - YAML, Bash, strict schema, exact-key generation, launcher simulation, or recipe validation fails.
 
 A configuration is ready for sweep only when the executable files agree, the exact key generates, the runtime route exists, the changelog selects it, and all layer-specific checks above pass.
+
+## DeepSeek-V4.1-Flash on MI355X
+
+The draft `dsv41flash-fp4-mi355x-vllm-agentic-dspark` recipe extends [#2958](https://github.com/SemiAnalysisAI/InferenceX/pull/2958) to MI355X AgentX: TP4, concurrency 1–32, native five-token DSpark. Throughput uses the [committed golden AL](../golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection but, unlike the CUDA arms, also keep adaptive verification disabled: it trims verification requests on device, which the ROCm `DeepseekV4IndexerBackend` does not support, and the engine refused to start with it enabled ([run 34651830283](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34651830283)). FP4 describes the MXFP4 experts; the checkpoint also contains MXFP8 weights.
+
+Follow the AMD overrides in the merged [upstream recipe #968](https://github.com/vllm-project/recipes/pull/968): `VLLM_ROCM_USE_AITER=1`, `VLLM_ROCM_USE_AITER_MOE=1`, and `--moe-backend aiter`. The generic AITER selector lets vLLM pick the CK a8w4 experts, matching the DSV4-Pro MI355X recipe. The recipe pins `semianalysis_cc_traces_weka_062126` (the unfiltered corpus) via `WEKA_LOADER_OVERRIDE`. KV stays GPU-resident; Engram follows upstream AMD defaults. Do not copy the NVIDIA `--engram-config` option: upstream currently rejects it on ROCm. The MI355X launcher uses the shared HF cache and mounts this model's repository at `/ix`, and exports `INFMAX_CONTAINER_WORKSPACE=/ix` so AgentX dependencies and outputs resolve inside that mount.
+
+**GPU validation:** [Run 34710937012](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34710937012) passed the exact pinned image for throughput at concurrency 1, 2, 4, 8, 16, and 32, plus eval-only concurrency 32. The recipe uses `vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657` (digest `sha256:960228cf…`, published 2026-09-12). The earlier `deepseekv41-flash-0909` tag predates [vllm-project/vllm#56503](https://github.com/vllm-project/vllm/pull/56503), which moves the mHC delayed pre block off the eager Torch reference and onto AITER; the merged [upstream recipe #968](https://github.com/vllm-project/recipes/pull/968) pins the same nightly and records the complete InferenceX command. Follow the [AgentX procedure](./eval-agentx-procedures.md#7-run-agentx-fast-feedback-versus-canonical-evidence) for future runtime evidence; local generation and registry metadata alone are not GPU proof.

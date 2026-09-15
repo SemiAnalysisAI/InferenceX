@@ -5,16 +5,12 @@
 # Self-contained because Nscale has its own Slurm and storage layout.
 #
 # Scope: multi-node Dynamo-vLLM DeepSeek-V4-Pro and Kimi K2.6 FP4 runs, plus
-# DeepSeek-V4-Pro FP4 Dynamo-SGLang STP and MTP runs, on the
-# b200-nscale runner label.
+# DeepSeek-V4-Pro FP4 Dynamo-SGLang STP and MTP runs, GLM-5.2 FP4
+# Dynamo-SGLang MTP runs, and Kimi-K3 AgentX on the b200-nscale runner label.
 # Anything else exits non-zero.
 
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
-POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
-POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
-TILERT_SRT_SLURM_URL="https://github.com/SemiAnalysisAI/srt-slurm.git"
-TILERT_SRT_SLURM_PIN="d1e6c97b3baf3e87103b6d83189544c3c7d61c38"
 
 # Node-local NVMe, not a shared filesystem: much faster for the ~1.6T
 # DeepSeek-V4-Pro load, and already pre-staged on every nscale compute node.
@@ -26,7 +22,7 @@ HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
 SQUASH_LOCK_TIMEOUT=3600
 
 # shellcheck source=runners/slurm_utils.sh
-source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 
 set -x
 
@@ -40,6 +36,10 @@ if [[ "$IS_MULTINODE" != "true" ]]; then
     run_compat_launcher
 fi
 
+if [[ "$FRAMEWORK" == "tilert" && "${IS_AGENTIC:-0}" != "1" ]]; then
+    run_compat_launcher
+fi
+
 if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/DeepSeek-V4-Pro}"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
@@ -49,6 +49,10 @@ elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/Kimi-K3}"
     export SRT_SLURM_MODEL_PREFIX="kimik3"
+elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/GLM-5.2-NVFP4}"
+    # This alias must match model.path in the checked-in GLM-5.2 recipes.
+    export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
 elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" && $FRAMEWORK == "tilert" ]]; then
     export SRT_SLURM_MODEL_PREFIX="glm5.1-fp8"
 else
@@ -58,11 +62,13 @@ fi
 if [[ $FRAMEWORK != "dynamo-vllm" ]] &&
    [[ $MODEL_PREFIX != "dsv4" || $PRECISION != "fp4" || $FRAMEWORK != "dynamo-sglang" ||
       ( $SPEC_DECODING != "none" && $SPEC_DECODING != "mtp" ) ]] &&
+   [[ $MODEL_PREFIX != "glm5.2" || $PRECISION != "fp4" || $FRAMEWORK != "dynamo-sglang" || $SPEC_DECODING != "mtp" ]] &&
    [[ $MODEL_PREFIX != "glm5.1" || $PRECISION != "fp8" || $FRAMEWORK != "tilert" || $SPEC_DECODING != "mtp" ]]; then
     run_compat_launcher
 fi
 
 USES_DCGM_POWER=0
+USES_AGENTX_POWER=0
 _POWER_CONFIG_FILE="${CONFIG_FILE:-}"
 if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
     _POWER_CONFIG_FILE="$EVAL_CONFIG_FILE"
@@ -72,89 +78,32 @@ _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE
 if [[ -n "$_POWER_CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
     /^telemetry:/ { t = 1; next }
     t && /^[^ ]/  { t = 0 }
-    t && /^  provider: dcgm-power$/ { p = 1 }
+    t && /^  dcgm_exporter:/ { p = 1 }
     t && /^  enabled: true$/        { e = 1 }
     END { exit !(p && e) }
 ' "$_RECIPE_SRC"; then
     USES_DCGM_POWER=1
 fi
-if [[ "$USES_DCGM_POWER" == "1" && (
+if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
+    "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
+    USES_AGENTX_POWER=1
+elif [[ "$USES_DCGM_POWER" == "1" && (
     "${IS_AGENTIC:-0}" == "1" ||
     "$PRECISION" != "fp4" ||
     ( "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" ) ||
     ( "$MODEL_PREFIX" == "kimik2.6" && "$FRAMEWORK" != "dynamo-vllm" ) ||
     ( "$MODEL_PREFIX" != "dsv4" && "$MODEL_PREFIX" != "kimik2.6" )
 ) ]]; then
-    echo "Error: B200 nscale dcgm-power is limited to fixed-sequence DSV4/Kimi-K2.6 FP4 lanes" >&2
+    echo "Error: B200 nscale dcgm-power requires a supported fixed-sequence lane or Kimi-K3 AgentX vLLM" >&2
     exit 1
 fi
 
 export SERVED_MODEL_NAME=$MODEL
 
-echo "Cloning srt-slurm repository..."
+echo "Preparing job-local srt-slurm checkout..."
 SRT_REPO_DIR="srt-slurm"
 rm -rf "$SRT_REPO_DIR"
-if [[ "$USES_DCGM_POWER" == "1" ]]; then
-    git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout "$POWER_SRT_SLURM_PIN" || exit 1
-    test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
-    git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
-    if [[ "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
-        mkdir -p recipes/sglang/deepseek-v4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
-    elif [[ "$MODEL_PREFIX" == "dsv4" ]]; then
-        mkdir -p recipes/vllm/deepseek-v4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-    else
-        mkdir -p recipes/vllm/kimi-k2.6
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.6" recipes/vllm/kimi-k2.6
-    fi
-elif [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "glm5.1" && $FRAMEWORK == "tilert" ]]; then
-    git clone "$TILERT_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout "$TILERT_SRT_SLURM_PIN" || exit 1
-    test "$(git rev-parse HEAD)" = "$TILERT_SRT_SLURM_PIN" || {
-        echo "Error: srt-slurm HEAD does not match TILERT_SRT_SLURM_PIN=$TILERT_SRT_SLURM_PIN" >&2
-        exit 1
-    }
-    mkdir -p recipes/tilert/glm5.1/b200-fp8/agentic || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/tilert/glm5.1/b200-fp8/agentic" \
-        recipes/tilert/glm5.1/b200-fp8/agentic || exit 1
-elif [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "kimik3" ]]; then
-    # Pin the tested renderer so branch movement cannot change generated rank
-    # commands between sweep points.
-    git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout 217f9438 || exit 1
-    mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
-        recipes/vllm/kimi-k3/agentic || exit 1
-elif [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-sglang" ]]; then
-    git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    # Pin the srt-slurm revision used by these checked-in recipes.
-    git checkout 04e87fcc505d6d851451781a5499ca19a02ec2b4 || exit 1
-    mkdir -p recipes/sglang/deepseek-v4
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
-elif [[ $MODEL_PREFIX == "dsv4" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout aflowers/vllm-gb200-v0.20.0 || exit 1
-    mkdir -p recipes/vllm/deepseek-v4
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-else
-    git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout c180328b98c3793ca84a1e24a030f90545eb7d5d || exit 1
-    mkdir -p recipes/vllm/kimi-k2.6
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.6" recipes/vllm/kimi-k2.6
-fi
-if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
-    python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
-        || exit 1
-fi
-
+setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" "$USES_DCGM_POWER" || exit 1
 
 echo "Installing srtctl..."
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
@@ -243,9 +192,8 @@ fi
 
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
-    DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\//nvcr.io#}"
     DCGM_EXPORTER_SQSH="$SQUASH_DIR/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_ENROOT_REF" || exit 1
+    import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_IMAGE" || exit 1
     test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
     unsquashfs -l "$DCGM_EXPORTER_SQSH" > /dev/null || { echo "Error: DCGM exporter squash invalid: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
     sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
@@ -340,21 +288,31 @@ CONFIG_PATH="${CONFIG_FILE%%:*}"
 
 # Override the job name in the config file with the runner name
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
-# Bump recipe health-check timeout from 360x10s=3600s to 720x10s=7200s so
-# large-model loads finish in time.
-sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "$CONFIG_PATH"
+# Give recipes at least 720 attempts without shortening a larger model-specific
+# load budget (GLM-5.2 intentionally requests 1440x10s).
+RECIPE_MAX_ATTEMPTS=$(sed -n 's/^  max_attempts: \([0-9][0-9]*\)$/\1/p' "$CONFIG_PATH" | head -1)
+if [[ $RECIPE_MAX_ATTEMPTS =~ ^[0-9]+$ ]] && (( RECIPE_MAX_ATTEMPTS < 720 )); then
+    sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "$CONFIG_PATH"
+fi
 
 inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
+
+if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+    read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+    python "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
+        "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
+fi
 
 SRTCTL_PREFLIGHT_ARGS=()
 # These weights are staged on the Slurm compute nodes, not the login node.
 if [[ $MODEL_PREFIX == "kimik2.6" ]] ||
    [[ $MODEL_PREFIX == "kimik3" ]] ||
+   [[ $MODEL_PREFIX == "glm5.2" ]] ||
    [[ $MODEL_PREFIX == "dsv4" ]]; then
     SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
 fi
 
-SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
@@ -373,7 +331,11 @@ LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
 # Waits for the log file to appear, fails fast if the job dies first, then
 # streams until the job leaves the queue.
-stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+SRT_JOB_RC=0
+stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
+if [[ "$SRT_JOB_RC" != "0" && "$USES_AGENTX_POWER" != "1" ]]; then
+    exit "$SRT_JOB_RC"
+fi
 
 set -x
 
@@ -385,6 +347,14 @@ if [ ! -d "$LOGS_DIR" ]; then
     exit 1
 fi
 
+AGENTX_POWER_RC="$SRT_JOB_RC"
+if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+    read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+    collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" \
+        "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" \
+        "$SRT_SLURM_COMMIT" "${POWER_CONCURRENCIES[@]}" || AGENTX_POWER_RC=$?
+fi
+
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     mkdir -p "$LOGS_DIR/power"
     cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
@@ -393,6 +363,11 @@ fi
 
 cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
 bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
+
+if [[ "$AGENTX_POWER_RC" != "0" ]]; then
+    echo "ERROR: AgentX power validation failed; available audit and server artifacts were staged" >&2
+    exit "$AGENTX_POWER_RC"
+fi
 
 if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
     RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)

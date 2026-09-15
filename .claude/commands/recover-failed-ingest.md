@@ -338,7 +338,7 @@ gh pr checks "$RECOVERY_PR" \
 
 `reuse-sweep-gate` appears only once the `pull_request` `run-sweep.yml` run for
 the new head SHA registers. Immediately after pushing, `gh pr checks` may list
-only CodeQL/`check-changelog`/`comment`. Confirm that run exists and carries
+only `check-changelog`/`comment`. Confirm that run exists and carries
 `reuse-sweep-gate` before trusting a green result, or watch it directly:
 
 ```bash

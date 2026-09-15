@@ -54,6 +54,7 @@ labels:
     - b200-nscale-slurm_07
     - b200-nscale-slurm_08
     - b200-nscale-slurm_09
+    - b200-nscale-slurm_10
   b200-nscale:
     - b200-nscale-slurm_00
     - b200-nscale-slurm_01
@@ -65,6 +66,7 @@ labels:
     - b200-nscale-slurm_07
     - b200-nscale-slurm_08
     - b200-nscale-slurm_09
+    - b200-nscale-slurm_10
   mi300x:
     - mi300x-amd_00
     - mi300x-amd_01
@@ -119,9 +121,24 @@ labels:
     - b300-dsxe_16
     - b300-dsxe_17
   gb300:
-    - gb300-nv_0
-    - gb300-nv_1
-    - gb300-nv_2
+    - gb300-nv_00
+    - gb300-nv_01
+    - gb300-nv_02
+    - gb300-nv_03
+    - gb300-nv_04
+    - gb300-nv_05
+    - gb300-nv_06
+    - gb300-nv_07
+    - gb300-nv_08
+    - gb300-nv_09
+    - gb300-nv_10
+    - gb300-nv_11
+    - gb300-nv_12
+    - gb300-nv_13
+    - gb300-nv_14
+    - gb300-nv_15
+    - gb300-nv_16
+    - gb300-nv_17
   rtx6000pro:
     - rtx6000pro-lat_00
   rtx6000pro-lat:
@@ -179,6 +196,7 @@ labels:
     - b200-nscale-slurm_07
     - b200-nscale-slurm_08
     - b200-nscale-slurm_09
+    - b200-nscale-slurm_10
   cluster:gb200-nv:
     - gb200-nv_0
     - gb200-nv_1
@@ -204,9 +222,24 @@ labels:
     - b300-dsxe_16
     - b300-dsxe_17
   cluster:gb300-nv:
-    - gb300-nv_0
-    - gb300-nv_1
-    - gb300-nv_2
+    - gb300-nv_00
+    - gb300-nv_01
+    - gb300-nv_02
+    - gb300-nv_03
+    - gb300-nv_04
+    - gb300-nv_05
+    - gb300-nv_06
+    - gb300-nv_07
+    - gb300-nv_08
+    - gb300-nv_09
+    - gb300-nv_10
+    - gb300-nv_11
+    - gb300-nv_12
+    - gb300-nv_13
+    - gb300-nv_14
+    - gb300-nv_15
+    - gb300-nv_16
+    - gb300-nv_17
   cluster:rtx6000pro-lat:
     - rtx6000pro-lat_00
   cluster:mi300x-amd:

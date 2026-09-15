@@ -20,7 +20,9 @@
 
 ## PR Review Checklist（CODEOWNER 签署）
 
-CODEOWNER 批准 PR 时，必须在批准评论中填写最新的 [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md)（[中文说明](docs/PR_REVIEW_CHECKLIST_zh.md)）模板。
+由一名符合条件的 CODEOWNER 审阅者在批准评论中填写最新的 [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md)（[中文说明](docs/PR_REVIEW_CHECKLIST_zh.md)）模板。
+
+**每个 PR 只需一名符合条件的 CODEOWNER 审阅者发布清单。** 发布前先检查是否已有清单；其他审阅者无需重复发布。需要更正条目、补充证据或重试验证时，原审阅者必须**编辑自己已有的清单评论**，不要另发一条。只有原评论被删除时才创建替代评论。
 
 友情提醒。请**正确**遵循最新的清单模板：
 
@@ -31,9 +33,15 @@ CODEOWNER 批准 PR 时，必须在批准评论中填写最新的 [PR_REVIEW_CHE
 
   我们的 CI 验证工作流 [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml) 正是通过这句话触发的。**如果你的批准评论没有遵循清单模板，包括这句话，签署验证 CI 将完全不会触发**，你的签署也不会计入合并要求。
 - 签署可以以普通会话评论、review 总结或行内 review 评论的形式发布。这三种方式都会触发验证。
+- 首次 PASS 前，更新 Head、重新打开 PR 或退出草稿状态会在当前 Head 上补查最新的合格签署，找回合并冲突期间遗漏的 Review，无需重复发布清单。
+- 启动 Claude 仍要求触发者具备合格的仓库写权限。如果更新来自无写权限用户或未获允许的机器人，具有写权限的协作者可发起首次验证。延续已有 PASS 无需重新验证。
 - 请在 "Additional detail section" 中填写清单要求的链接（验证/评测工作流运行、对应的 [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR，以及任何例外理由）。
 
-签署发布后，CI 会独立复核决定合并的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、`/reuse-sweep-run` 命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack，以及投机解码是否使用 chat template。随后，CI 会在 PR 上发布裁定评论。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
+签署发布后，CI 会独立复核决定合并的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、`/reuse-sweep-run` 命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack，以及投机解码是否使用 chat template。随后，CI 会为整个 PR 创建或更新同一条裁定评论，并注明实际评估的 SHA。未通过的条目直接显示；已通过和不适用（N/A）的条目统一放入折叠区域。旧版按提交生成的裁定评论会被复用；如果评论已删除，下次验证会创建替代评论。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
+
+**管理员更新不会使签署失效，非管理员更新则会。** 可信工作流使用实际推送更新的 GitHub 认证用户，并要求仓库权限同时为 `permission: admin` 和 `role_name: admin`。提交中的作者姓名和邮箱不能获得豁免。若管理员更新从已覆盖的 head 开始，自动化会扩展覆盖范围，无需调用 Claude。非管理员更新（包括合并 `main`）需要重新验证签署；随后由管理员推送也不能消除这一要求。
+
+裁定评论记录实际验证的提交，以及后续管理员更新所覆盖的 head。旧的 `codeowner-signoff-verified` 终身有效标签会被移除，不再作为接受依据。可信的旧版裁定必须包含已验证 SHA；贡献者撰写的评论、缺失的来源信息或无法查询的权限都不能扩展覆盖范围。若无法将某次更新连接到已记录的覆盖 head，就需要验证。删除裁定评论也会移除该证明。验证新的非管理员改动时，应由原审阅者编辑已有检查清单，或由有权限的协作者传入其 `comment_url` 手动分发 `codeowner-signoff-verify.yml`。流程更新同一条裁定评论，重新评估被拒绝时会撤销接受状态。
 
 ## 使用 `/reuse-sweep-run` 在合并时复用 PR 的全绿 sweep
 
@@ -42,6 +50,7 @@ CODEOWNER 批准 PR 时，必须在批准评论中填写最新的 [PR_REVIEW_CHE
 - 当你的 PR 拥有符合条件的全绿完整 sweep 后，授权维护者（`OWNER`/`MEMBER`/`COLLABORATOR`）在 PR 上评论 `/reuse-sweep-run`（也可固定某次运行：`/reuse-sweep-run <run_id>`）。
 - 合并到 `main` 的运行随后会验证并摄取该 PR sweep 的 artifacts，而不是在 `main` 上重新运行整个 sweep。
 - **这为每个人减少了 CI 排队时间。** 每次复用合并都会为其他 PR 释放数小时的 GPU runner 时间，因此请优先选择 reuse 路径，而不是不带它直接合并。仅有全绿 sweep 还不够。`/reuse-sweep-run` 评论必须在记录中（签署验证会检查这一点），否则 `main` 会静默地重新运行完整 sweep。
+- 复用不要求保留 sweep 标签。机器人会在命令被接受时添加 👍，拒绝时添加 👎，详情见 Actions 运行摘要；合并时仍会重新验证源产物。
 - `utils/merge_with_reuse.sh <pr-number>` 是受支持的合并路径。它会发布命令、将分支与 `main` 同步、等待检查并 squash 合并。资格详情见 [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
 
 ## AMD 集群：严禁在 runner 工作区留下 root 所属文件

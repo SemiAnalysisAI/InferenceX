@@ -16,7 +16,7 @@ set -x
 #
 # Serving flags follow the validated MI355X recipe from
 # https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4-Pro?hardware=mi355x
-# https://github.com/SemiAnalysisAI/InferenceX/blob/main/benchmarks/single_node/fixed_seq_len/dsv4_fp4_mi355x_vllm.sh
+# https://github.com/SemiAnalysisAI/InferenceX/blob/main/benchmarks/single_node/fixed_seq_len/deprecated/dsv4_fp4_mi355x_vllm.sh
 # Image is configured in amd-master.yaml.
 #
 # Required env vars:
@@ -403,7 +403,12 @@ set -x
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export VLLM_ROCM_USE_AITER_MOE=1
-export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
+# This checkpoint mixes packed MXFP4 routed experts with a full-width FP8
+# shared expert. The latest nightly otherwise admits the combination into the
+# fused path and fails while loading incompatible scales/shapes.
+export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=0
+# vLLM only clamps torch threads after weight loading; cap from process start.
+export OMP_NUM_THREADS=1
 
 sleep 180
 

@@ -20,7 +20,9 @@ Thanks for contributing! PRs are welcome. This page covers the review process ev
 
 ## The PR Review Checklist (CODEOWNER sign-off)
 
-When a CODEOWNER approves a PR, they must fill in the latest [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) template in their approval comment.
+One eligible CODEOWNER reviewer fills in the latest [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) template in their approval comment.
+
+**Only one eligible CODEOWNER reviewer needs to post the checklist for each PR.** Check for an existing checklist before posting; additional reviewers do not need to post their own copies. For corrections, missing evidence, or verification retries, the original reviewer must **edit their existing checklist comment** instead of adding a new one. Create a replacement only if the original comment was deleted.
 
 A friendly reminder. Please follow the latest checklist template **correctly**:
 
@@ -31,9 +33,15 @@ A friendly reminder. Please follow the latest checklist template **correctly**:
 
   Our CI verification workflow, [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml), triggers on exactly this phrase. **If your approval comment does not follow the checklist template, including that phrase, the sign-off verification CI will not trigger at all**, and your sign-off won't count toward merge.
 - The sign-off can be posted as a regular conversation comment, a review summary, or an inline review comment. All three trigger verification.
+- Before the first PASS, head updates, reopening a PR, and marking it ready recover the latest eligible existing sign-off on the current head. This catches reviews missed during merge conflicts without requiring a duplicate checklist.
+- Starting Claude still requires an eligible actor with repository write access. After an update by a non-writer or disallowed bot, a collaborator with write access can request the initial verification. Carrying an existing PASS forward does not require a new verification.
 - Fill in the "Additional detail section" with the links the checklist asks for (validation/eval workflow runs, the corresponding [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR, and any exception reasoning).
 
-Once the sign-off is posted, CI independently re-verifies the claims that gate a merge, including CODEOWNER status, a green sweep and evals on a commit in the PR, the linked recipe, the `/reuse-sweep-run` command, use of the latest checklist template, upstream [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) images, no architecture-changing benchmark hacks, and chat-template usage for speculative decoding. It then posts a verdict comment on the PR. Checkmarks are not taken on trust, so please only check items you have actually verified.
+Once the sign-off is posted, CI independently re-verifies the claims that gate a merge, including CODEOWNER status, a green sweep and evals on a commit in the PR, the linked recipe, the `/reuse-sweep-run` command, use of the latest checklist template, upstream [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) images, no architecture-changing benchmark hacks, and chat-template usage for speculative decoding. It then creates or updates one verdict comment for the PR, including the SHA actually assessed. Failing criteria stay visible; passing and N/A criteria appear together in a collapsed section. An existing verdict comment from the older per-commit format is reused; if the comment was deleted, the next verification creates a replacement. Checkmarks are not taken on trust, so please only check items you have actually verified.
+
+**Admin updates do not invalidate sign-off; non-admin updates do.** The trusted workflow uses the authenticated user who pushed the update and requires repository `permission: admin` and `role_name: admin`. Commit author names and emails do not grant this exemption. An admin update that starts from a covered head advances coverage without calling Claude. A non-admin update, including a merge from `main`, needs fresh sign-off verification; a later admin push cannot clear that requirement.
+
+The verdict comment records the assessed commit and the head covered by subsequent admin updates. The old `codeowner-signoff-verified` lifetime label is removed and cannot grant acceptance. Trusted legacy verdicts need an assessed SHA; contributor-authored comments, missing provenance, and unavailable permission information cannot extend coverage. If an update cannot be connected to the recorded covered head, verification is required. Deleting the verdict comment also removes that proof. To verify new non-admin changes, the original reviewer edits their existing checklist, or an authorized collaborator dispatches `codeowner-signoff-verify.yml` with its `comment_url`. This updates the same verdict comment, and a rejected reassessment revokes acceptance.
 
 ## Reusing your PR's green sweep at merge with `/reuse-sweep-run`
 
@@ -42,6 +50,7 @@ A full benchmark sweep is expensive GPU time, and the runners are shared by ever
 - After your PR has an eligible green full sweep, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) comments `/reuse-sweep-run` on the PR (optionally pinning a specific run: `/reuse-sweep-run <run_id>`).
 - The merge-to-`main` run then validates and ingests the PR sweep's artifacts instead of re-running the whole sweep on `main`.
 - **This reduces CI queue time for everyone.** Each reused merge frees hours of GPU runner time for other PRs, so please prefer the reuse path over merging without it. A green sweep alone is not enough. The `/reuse-sweep-run` comment must be on record (the sign-off verification checks for it), otherwise `main` silently re-runs the full sweep.
+- Reuse does not require retaining a sweep label. The bot reacts to the command with 👍 when accepted or 👎 when rejected, with details in the Actions run summary; source artifacts are revalidated at merge.
 - `utils/merge_with_reuse.sh <pr-number>` is the supported merge path. It posts the command, syncs the branch with `main`, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
 
 ## Adding points to the latest curve with `append-only`
