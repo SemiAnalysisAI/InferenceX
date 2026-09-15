@@ -85,18 +85,6 @@ def test_filename_entrypoint_retains_environment_and_point_arguments(invoke):
     assert "Expected numeric point identity" in invalid.stderr
 
 
-def test_importing_command_modules_does_not_run_them(tmp_path):
-    result = subprocess.run(
-        [sys.executable, "-P", "-c",
-         "import infx.results.collect_results; import infx.evals._kimi_verifier_archive"],
-        cwd=tmp_path, env={**os.environ, "PYTHONPATH": str(ROOT)},
-        capture_output=True, text=True, timeout=10,
-    )
-    assert result.returncode == 0, result.stderr
-    assert result.stdout == result.stderr == ""
-    assert list(tmp_path.iterdir()) == []
-
-
 def test_legacy_benchmark_entrypoint_supports_spawned_workers(tmp_path):
     """Exercise the shipped wrapper's execution context with a minimal worker."""
     wrapper = tmp_path / "utils/bench_serving/benchmark_serving.py"

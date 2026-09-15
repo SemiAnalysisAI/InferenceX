@@ -1087,7 +1087,7 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
         if [[ "$EVAL_HEALTH_OK" != "true" ]]; then
             echo "WARNING: Router health check failed after 3 attempts. Skipping eval."
         else
-            # Must run from repo root so utils/evals/gsm8k.yaml resolves
+            # Must run from repo root so infx/evals/gsm8k.yaml resolves
             pushd /workspace
 
             source /workspace/benchmarks/benchmark_lib.sh

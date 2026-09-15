@@ -24,7 +24,6 @@ set -x
 #
 # KV_OFFLOADING=dram requires one of these.
 #   KV_OFFLOAD_BACKEND=vllm-native.
-#   KV_OFFLOAD_BACKEND=mooncake.
 #   KV_OFFLOAD_BACKEND=lmcache.
 #   KV_OFFLOAD_BACKEND=hicache.
 
@@ -100,13 +99,11 @@ export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 ROUTER_LOG="$RESULT_DIR/router.log"
-MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 mkdir -p "$RESULT_DIR"
 
 SERVER_PID=""
 ROUTER_PID=""
-MOONCAKE_MASTER_PID=""
 
 OFFLOAD_ARGS=()
 
@@ -137,85 +134,6 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     )
 
     ;;
-  mooncake)
-    require_agentic_kv_offload_backend mooncake
-    # ---- Mooncake config ----------------------------------------------------------
-        # Embedded mode contributes one segment per GPU rank to a shared
-        # distributed store, so pre-divide the aggregate host-memory budget.
-        PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
-
-        #MOONCAKE_VERSION=0.3.11.post1
-        #apt-get update && apt-get install -y libcurl4 libibverbs1 rdma-core librdmacm1 libnuma1 liburing2
-        #agentic_pip_install --quiet --no-cache-dir --no-deps \
-        #    --force-reinstall "mooncake-transfer-engine-non-cuda==$MOONCAKE_VERSION"
-
-        git clone https://github.com/kvcache-ai/Mooncake.git
-        cd Mooncake
-        bash dependencies.sh
-        mkdir build
-        cd build
-        cmake ..
-        make -j
-        sudo make install # optional, make it ready to be used by vLLM/SGLang
-        cd ..
-        cd ..
-
-        python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
-        export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32
-        python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
-
-        MOONCAKE_MASTER_PORT=$((PORT + 12000))
-        MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
-        cat > "$MOONCAKE_CONFIG_PATH" <<EOF
-{
-  "mode": "embedded",
-  "metadata_server": "P2PHANDSHAKE",
-  "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
-  "global_segment_size": "${PER_RANK_GB}GB",
-  "local_buffer_size": "2GB",
-  "protocol": "tcp",
-  "device_name": "",
-  "enable_offload": false
-}
-EOF
-# (srok)
-  #"protocol": "rdma",
-  #"device_name": "mlx5_0",
-  #"local_buffer_size": "4GB",
-        export MOONCAKE_CONFIG_PATH
-        export MC_ENABLE_DEST_DEVICE_AFFINITY=1
-        export PYTHONHASHSEED=0
-        export MC_SLICE_SIZE=1048576
-        # (srok)
-        #export MC_WORKERS_PER_CTX=4
-        export MC_WORKERS_PER_CTX=8
-
-        MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO=0.80
-        MOONCAKE_EVICTION_RATIO=0.10
-        MOONCAKE_KV_LEASE_TTL=60s
-        #MOONCAKE_KV_LEASE_TTL=3600s
-
-        echo "Starting Mooncake master on port $MOONCAKE_MASTER_PORT..."
-        mooncake_master --port "$MOONCAKE_MASTER_PORT" \
-            --eviction_high_watermark_ratio="$MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO" \
-            --eviction_ratio="$MOONCAKE_EVICTION_RATIO" \
-            --default_kv_lease_ttl="$MOONCAKE_KV_LEASE_TTL" \
-            > "$MOONCAKE_MASTER_LOG" 2>&1 &
-
-        sleep 10
-        MOONCAKE_MASTER_PID=$!
-        if ! kill -0 "$MOONCAKE_MASTER_PID" 2>/dev/null; then
-            echo "Mooncake master died during startup." >&2
-            cat "$MOONCAKE_MASTER_LOG" >&2
-            exit 1
-        fi
-        unset VLLM_USE_SIMPLE_KV_OFFLOAD
-        OFFLOAD_ARGS=(
-            --kv-transfer-config
-            '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
-        )
-
-    ;;
   lmcache)
     require_agentic_kv_offload_backend lmcache
     # ---- Lmcache config ----------------------------------------------------------
@@ -236,7 +154,6 @@ EOF
         set +e
         stop_background_process_tree "$ROUTER_PID" "vLLM router"
         stop_background_process_tree "$SERVER_PID" "vLLM server" 60
-        stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master"
         exit "$exit_code"
     }
     trap cleanup_agentic_services EXIT
@@ -355,7 +272,7 @@ EOF
         )
     ;;
   *)
-    echo "Error: unsupported KV_OFFLOAD_BACKEND '${KV_OFFLOAD_BACKEND:-}' (expected: vllm-native, mooncake, lmcache)" >&2
+    echo "Error: unsupported KV_OFFLOAD_BACKEND '${KV_OFFLOAD_BACKEND:-}' (expected: vllm-native, lmcache)" >&2
     exit 1
     ;;
 esac

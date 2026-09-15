@@ -19,8 +19,8 @@ set -x
 #     sibling: 80 GB HBM3 has far less slack than H200's 141 GB HBM3e.
 #
 # Structure follows the proven H100 MTP AgentX replay path (HiCache host-DRAM
-# offload, the multi_tokenizer cached_tokens_details patch, aiperf-driven trace
-# replay). Attention stays on the flashinfer linear-attention backends (sm_90);
+# offload, aiperf-driven trace replay). Attention stays on the flashinfer
+# linear-attention backends (sm_90);
 # the trtllm_mha path is Blackwell-only.
 #
 # Speculative decoding is SGLANG_ENABLE_SPEC_V2=1 with NEXTN, 3 steps,
@@ -139,17 +139,6 @@ if [ "${EVAL_ONLY:-false}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=2.32
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
-fi
-
-SGLANG_MULTI_TOKENIZER=/sgl-workspace/sglang/python/sglang/srt/managers/multi_tokenizer_mixin.py
-if ! sed -n '/elif isinstance(output, BatchStrOutput):/,/input_token_logprobs_val=_extract_field_by_index/p' "$SGLANG_MULTI_TOKENIZER" \
-    | grep -q 'cached_tokens_details=_extract_field_by_index'; then
-    sed -i '/elif isinstance(output, BatchStrOutput):/,/input_token_logprobs_val=_extract_field_by_index/ {
-        /cached_tokens=_extract_field_by_index(output, "cached_tokens", i),/a\
-            cached_tokens_details=_extract_field_by_index(\
-                output, "cached_tokens_details", i\
-            ),
-    }' "$SGLANG_MULTI_TOKENIZER"
 fi
 
 { set +x; } 2>/dev/null
