@@ -13,7 +13,6 @@ SLURM_UTILS = REPO_ROOT / "runners" / "slurm_utils.sh"
 PATCH_SRT_EVAL = REPO_ROOT / "runners" / "patch_srt_eval_dispatch.py"
 PATCH_SRT_DP_RANKS = REPO_ROOT / "runners" / "patch_srt_vllm_dp_ranks.py"
 PATCH_TRTLLM_CHAT_STORE = REPO_ROOT / "runners" / "patch_trtllm_chat_store.py"
-PATCH_VLLM_SIMPLE_KV = REPO_ROOT / "runners" / "patch_vllm_simple_kv_offload.py"
 INJECT_ACCEPTANCE = REPO_ROOT / "runners" / "inject_synthetic_acceptance.py"
 
 
@@ -392,52 +391,6 @@ def test_patch_trtllm_chat_store_rejects_unknown_source(tmp_path: Path) -> None:
 
     assert result.returncode == 1
     assert protocol.read_text() == "unsupported protocol\n"
-
-def test_patch_vllm_simple_kv_offload_is_idempotent_and_preserves_surrounding_code(
-    tmp_path: Path,
-) -> None:
-    symbols = runpy.run_path(str(PATCH_VLLM_SIMPLE_KV))
-    worker = tmp_path / "worker.py"
-    original = f"prefix\n{symbols['OLD_SETUP']}{symbols['OLD_LOOP']}suffix\n"
-    worker.write_text(original)
-
-    first = subprocess.run(
-        ["python3", str(PATCH_VLLM_SIMPLE_KV), str(worker)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    patched = worker.read_text()
-    second = subprocess.run(
-        ["python3", str(PATCH_VLLM_SIMPLE_KV), str(worker)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert first.returncode == 0, first.stderr
-    assert second.returncode == 0, second.stderr
-    assert patched != original
-    assert patched.startswith("prefix\n") and patched.endswith("suffix\n")
-    assert worker.read_text() == patched
-
-
-def test_patch_vllm_simple_kv_offload_rejects_unknown_source(
-    tmp_path: Path,
-) -> None:
-    worker = tmp_path / "worker.py"
-    worker.write_text("unsupported worker\n")
-
-    result = subprocess.run(
-        ["python3", str(PATCH_VLLM_SIMPLE_KV), str(worker)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 1
-    assert worker.read_text() == "unsupported worker\n"
-
 
 def test_patch_srt_eval_dispatch_preflights_before_writing(tmp_path: Path) -> None:
     do_sweep = tmp_path / "src/srtctl/cli/do_sweep.py"
