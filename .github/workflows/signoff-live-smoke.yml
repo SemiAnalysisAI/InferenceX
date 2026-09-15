@@ -1,0 +1,136 @@
+name: Temporary PR 3125 live signoff smoke
+run-name: 'Signoff live smoke — ${{ github.event.head_commit.message }}'
+
+on:
+  push:
+    branches: [smoke/pr3125-signoff]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+  statuses: write
+
+concurrency:
+  group: temporary-pr3125-signoff-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact implementation from PR 3125
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 72d4d13cad94975e1565dceb57e8c12308cc52af
+          persist-credentials: false
+
+      - name: Exercise real GitHub comments, labels, and statuses
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const assert = require('node:assert/strict');
+            const fs = require('node:fs');
+            const { prepare, carry, publish } = require('./.github/scripts/codeowner-signoff.cjs');
+            const repo = context.repo;
+            const branch = 'smoke/pr3125-signoff';
+            const { data: pulls } = await github.rest.pulls.list({
+              ...repo, head: `${repo.owner}:${branch}`, state: 'open',
+            });
+            if (!pulls.length) {
+              core.info('Initial branch publication; waiting for the disposable draft PR.');
+              return;
+            }
+            assert.equal(pulls.length, 1);
+            const pr = pulls[0];
+            assert.equal(pr.draft, true, 'Only the disposable draft PR may be touched');
+            assert.equal(pr.head.ref, branch);
+            assert.notEqual(pr.number, 3125);
+            assert.equal(pr.head.sha, context.sha, 'Run must match the current disposable head');
+            const prNumber = pr.number;
+            const marker = '<!-- codeowner-signoff-verify -->';
+            const label = 'codeowner-signoff-verified';
+            const PASS = '## ✅✅✅ **Verdict: PASS** ✅✅✅\n\nSynthetic smoke-test verdict for PR #3125. This is not a CODEOWNER review.';
+            const FAIL = '## ❌❌❌ **REJECTED** ❌❌❌\n\nSynthetic smoke-test failure for PR #3125.';
+            const args = { github, context, core, prNumber, headSha: pr.head.sha,
+              verdictPath: '/tmp/signoff-smoke-verdict.md', verificationSucceeded: true };
+            const comments = async () => (await github.paginate(github.rest.issues.listComments, {
+              ...repo, issue_number: prNumber, per_page: 100,
+            })).filter(c => c.user.login === 'github-actions[bot]' && c.body.startsWith(marker));
+            const status = async () => (await github.rest.repos.getCombinedStatusForRef({
+              ...repo, ref: pr.head.sha,
+            })).data.statuses.find(s => s.context === 'codeowner-signoff-verify');
+            const publishText = async (body, extra = {}) => {
+              fs.writeFileSync(args.verdictPath, body);
+              await publish({ ...args, ...extra });
+            };
+            const findings = [];
+            const phase = context.payload.head_commit.message.split('\n')[0];
+            if (phase === 'smoke: initial verdicts') {
+              assert.equal((await comments()).length, 0);
+              assert.equal(await carry(args), false);
+              await publishText(FAIL);
+              let list = await comments();
+              assert.equal(list.length, 1);
+              const firstId = list[0].id;
+              assert.equal((await status()).state, 'failure');
+              findings.push(`Initial FAIL created comment ${firstId} and failure status.`);
+              await publishText(FAIL + '\nUpdated synthetic finding.');
+              list = await comments();
+              assert.equal(list.length, 1);
+              assert.equal(list[0].id, firstId);
+              assert.ok(list[0].body.includes('Updated synthetic finding.'));
+              await publishText(PASS);
+              list = await comments();
+              assert.equal(list.length, 1);
+              assert.equal(list[0].id, firstId);
+              assert.equal((await status()).state, 'success');
+              const { data: current } = await github.rest.pulls.get({ ...repo, pull_number: prNumber });
+              assert.ok(current.labels.some(l => l.name === label));
+              findings.push(`Updated FAIL and then PASS edited the same comment ${firstId}; success and durable label persisted.`);
+            } else if (phase === 'smoke: subsequent commit and deletion') {
+              let list = await comments();
+              assert.equal(list.length, 1);
+              const original = list[0];
+              assert.equal(await status(), undefined, 'This new commit must initially have no signoff status');
+              const outputs = {};
+              await prepare({ ...args, core: { info: core.info, setOutput: (k, v) => { outputs[k] = v; } } });
+              assert.equal(outputs.verify, 'false', 'Claude must be skipped after a previous PASS');
+              assert.equal((await status()).state, 'success');
+              list = await comments();
+              assert.equal(list.length, 1);
+              assert.equal(list[0].id, original.id);
+              assert.equal(list[0].body, original.body);
+              findings.push(`Real new head ${pr.head.sha} received success; verify=false; comment ${original.id} unchanged.`);
+              const manualContext = { repo: context.repo, eventName: 'workflow_dispatch' };
+              await prepare({ ...args, context: manualContext,
+                core: { info: core.info, setOutput: (k, v) => { outputs[k] = v; } } });
+              assert.equal(outputs.verify, 'true');
+              await publishText(FAIL, { context: manualContext });
+              list = await comments();
+              assert.equal(list.length, 1);
+              assert.equal(list[0].id, original.id);
+              assert.ok(list[0].body.includes('REJECTED'));
+              assert.equal((await status()).state, 'success');
+              findings.push('Explicit failed reassessment updated the original comment while retaining success.');
+              await github.rest.issues.deleteComment({ ...repo, comment_id: original.id });
+              assert.equal((await comments()).length, 0);
+              assert.equal(await carry(args), true);
+              list = await comments();
+              assert.equal(list.length, 1);
+              assert.notEqual(list[0].id, original.id);
+              assert.ok(list[0].body.includes('original verdict comment was deleted'));
+              assert.equal((await status()).state, 'success');
+              assert.equal((await status()).target_url, list[0].html_url);
+              findings.push(`Deleted comment ${original.id}; restored ${list[0].id} using label provenance alone; success links to replacement.`);
+            } else {
+              core.info(`No smoke phase for commit message: ${phase}`);
+              return;
+            }
+            for (const finding of findings) core.info(`PASS: ${finding}`);
+            await core.summary.addHeading('Live GitHub signoff smoke results')
+              .addLink(`Disposable PR #${prNumber}`, pr.html_url)
+              .addRaw('\n\nImplementation: `72d4d13cad94975e1565dceb57e8c12308cc52af` from PR #3125.\n\n')
+              .addList(findings)
+              .addRaw('\nUses real GitHub APIs and GITHUB_TOKEN. Verdicts are synthetic; Claude is not invoked. The temporary push workflow calls the unmodified production helper; default-branch event routing is not exercised.\n')
+              .write();
