@@ -7807,3 +7807,11 @@
     - "Use FLASH_ATTN for the target model, select the Humming MXFP8 dense-linear backend, and enable Marlin atomic reduction for the MXFP8 MoE path."
     - "Use 0.95 GPU memory utilization for resident serving while retaining 0.90 for Mooncake DRAM offload, and remove the Mooncake concurrency-14 point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3108
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use DeepSeek-V4-Pro-0813 DSpark6 on vLLM 591bb95 with MXFP4 indexer cache, DRAM utilization 0.90, a 7200s startup timeout, and DEP8 concurrency up to 192."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2302
