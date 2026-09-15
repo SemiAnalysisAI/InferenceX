@@ -7762,3 +7762,77 @@
     - "Set a 64-token CUDA graph capture floor for B300 DSpark at c1/c2/c4; preserve c8+ sizing, full AgentX traces, AL 3.51, and Engram UVA"
     - "将 B300 DSpark 的 c1/c2/c4 CUDA graph 最小捕获范围设为 64 tokens；保持 c8+ 大小、完整 AgentX 轨迹、AL 3.51 和 Engram UVA"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3116
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the ATOM image from rocm/atom-dev:nightly_202608280858 to rocm/atom-dev:nightly_202609071454 (digest sha256:f252ec9a30e3d17b91f15887ea32baa1a0c5503b775f5adf42ff7cee8cfff769), built from ROCm/ATOM merge commit 5a9c2068 containing native RCCL DEP."
+    - "Move the concurrency 48/64/96/128/256 ATOM AgentX band from DPA with TBO and the default MoE transport to native RCCL DEP (TP8/DPA8/EP8), while preserving the TP-only concurrency 1/2/4/8/16 band."
+    - "Match the validated DEP run: disable EPLB and TBO, use least-tokens routing with session affinity and zero request equivalence, set the state checkpoint interval to 32768 tokens, and use real MTP acceptance on DEP."
+    - "Carry over the validated AgentX transport, terminal-MTP, and AIPerf timeout/failure settings for stable multi-turn replay."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add exact CUDA-graph captures for DEP decode batches 3, 5-7, and 9-15, avoiding the default power-of-two padding work in attention, MoE, and RCCL collectives. Preserve 256/512 captures for C96+ where max-num-seqs exceeds 128."
+    - "A controlled C64 900-second A/B on the current 8192-token checkpoint configuration, with identical synthetic acceptance, improved AIPerf total token throughput from 121,002.58 to 124,240.67 tok/s (+2.68%) and reduced P90 ITL from 35.79 to 32.20 ms (-10.03%), with zero request errors. The extra graphs add about 13 seconds of startup and 0.12 GB per GPU."
+    - "Retain the post-review 8192-token state-checkpoint interval and default scheduler controls; this supersedes the earlier changelog statement that described the removed 32768-token and experimental scheduler overrides."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update rocm/atom-dev:nightly_202609071454 to nightly_202609121454 (digest sha256:972e37f6e0f7eb12de83188b07709ed0578a2eb4aebc20fbdcfcec562ca8d60c), containing ATOM c61fbfb0e5fabd478978ba04801fb80028240176 and AITER 4676838b5607542585a9a04d19f61b6055d341fa."
+    - "Include ROCm/ATOM#2190 so RCCL DEP appends the AITER EP sentinel and uses the routed top-k=6 tuning key, and ROCm/aiter#5467 for the DSV4 EP48 stage2 sorting-layout check and retuned 16K/32K/131K configurations."
+    - "The image also contains ROCm/aiter#4159. The recipe retains FP8 KV and its fused_qk_norm_rope_group_quant cache-write path; it does not enable the BF16 FlyDSL paged SWA branch introduced by that PR."
+    - "Preserve dense FULL decode graph captures, TP8/DPA8/EP8 native RCCL with real MTP-3 on C48+, and golden AL 2.49 on the TP8/EP1 C1-16 band. Retain the current 8192-token checkpoint interval and ATOM_DP_LB_REQ_EQUIV=512; earlier 32768/0 descriptions do not describe this configuration."
+    - "Record the requested image, installed ATOM/AITER source revisions, bundled DSV4 FMoE tuning rows, and tuning overrides in runtime_manifest.json alongside the existing server command artifact. New-image performance and accuracy are to be measured by the PR sweep."
+    - "固定使用包含 ATOM#2190、AITER#5467/#4159 的 20260912 nightly；保留现有 dense graph、FP8 KV、8K checkpoint 和请求权重 512，DEP 使用真实 MTP-3，并保存运行版本及 tuning 配置记录。#4159 的 BF16 FlyDSL paged SWA 分支不在本配方的 FP8 执行路径中；新镜像性能与精度由本次 PR sweep 验证。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Switch to deepseek-ai/DeepSeek-V4-Pro-0813 revision 72e1d3230f6c080a530b0a1d46f8eb4602340597 and DSpark K6 (target verify length 7), with draft_model metadata routed to the existing ATOM recipe. Validate the DSpark heads, tokenizer and all 66 shards before server startup; pin the AgentX tokenizer to the same snapshot."
+    - "Apply golden AL 3.77 to all ten 3600-second throughput points, including TP8 C1/2/4/8/16 and native RCCL DEP C48/64/96/128/256. The C256 full GSM8K eval retains real draft verification without forced acceptance. This supersedes the previous MTP-3 and TP-only golden acceptance configuration."
+    - "Preserve nightly_202609121454 with ATOM#2190 and AITER#5467/#4159, FP8 KV/FP4 index, 8192-token checkpoints, session affinity, request equivalence 512 and the dense FULL graph ladder. New servers capture fixed q7 target/draft graphs; confidence schedules and ragged verification remain disabled. Runtime manifests record checkpoint identity and DSpark settings."
+    - "切换至固定版本的 DeepSeek-V4-Pro-0813，全部并发启用 DSpark K6/q7；十个性能点统一使用 golden AL 3.77，C256 全量 GSM8K 使用真实验证。启动前检查 DSpark head、tokenizer 和 66 个权重分片，并统一服务与客户端 snapshot；保留已固定镜像、原生 RCCL DEP、dense FULL graph、GPU KV 和现有调度设置。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Fix DSpark q7 startup on TP: the pinned AITER communication-fused MoE Stage2 callback updates inference buffers outside InferenceMode when token counts need padding. Restore torch.inference_mode inside that callback, including shared-partial staging, with an exact-source-hash guard. Preserve communication fusion, DSpark K6, golden AL 3.77 and graph capture."
+    - "Apply the runtime fix only to TP; native RCCL DEP does not use this backend. Record patch hashes in aiter_runtime_fix.json and runtime_manifest.json. The preceding DSpark C256 full GSM8K job passed all 1319 samples with strict 97.57% and flexible 97.50%, while TP C2/C4/C8 and local TP C16 reproduced this startup error. The interrupted sweep is superseded by the repaired sweep."
+    - "修复 DSpark q7 触发 TP MoE 补齐路径时在 InferenceMode 外写入 inference tensor 的启动错误；对固定源码哈希应用 callback 修复并记录补丁哈希，保留通信融合、K6、AL 3.77 和 graph。DEP 不使用该 backend，路径不变；前一轮 C256 全量精度已通过，TP 启动失败的 sweep 已停止并由修复后的新一轮替代。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace rocm/atom-dev:nightly_202609121454 with rocm/atom-dev:pr2233-4f3a808 (digest sha256:543ac7d9659a4a13fcaf0c8b8b80ac99706944a74257be1f2252a72dc9f792f1), built from ATOM commit 4f3a8088 with the upstream ROCm/ATOM#2233 inference-mode fix."
+    - "Remove the runtime patch_aiter_comm_fused_inference.py source mutation, its test, and aiter_runtime_fix.json manifest handling. TP now relies on the fixed implementation shipped in the image while preserving communication fusion, DSpark K6, golden AL 3.77, and graph capture; this entry supersedes the preceding runtime-fix entry."
+    - "将镜像切换为包含 ROCm/ATOM#2233 上游修复的 rocm/atom-dev:pr2233-4f3a808（ATOM commit 4f3a8088）；移除运行时 AITER 源码补丁、对应测试及 aiter_runtime_fix.json 记录。TP 直接使用镜像内修复，同时保留通信融合、DSpark K6、golden AL 3.77 和 graph capture；本条取代前一条临时运行时修复记录。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use BF16 KV cache for every concurrency at or below 16 (C1/C2/C4/C8/C16), while retaining FP8 KV cache for the C48/C64/C96/C128/C256 native RCCL DEP band. Preserve the FP4 index cache and all other serving settings."
+    - "将 C16 及以下的全部任务（C1/C2/C4/C8/C16）切换为 BF16 KV cache；C48/C64/C96/C128/C256 原生 RCCL DEP 任务继续使用 FP8 KV cache。FP4 index cache 及其他服务配置保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912

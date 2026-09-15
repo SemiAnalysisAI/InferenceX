@@ -189,6 +189,39 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 7. Add script + master entry + launcher routing + changelog together.
 8. Run Bash syntax and generation checks. Inspect `spec-decoding`, draft/native method, token count, chat-template use, capture range, and resolved script.
 
+### DeepSeek-V4-Pro-0813 DSpark on MI355X ATOM
+
+`dsv4-fp4-mi355x-atom-agentic-mtp` keeps its historical key and `_mtp.sh`
+filename, while its matrix uses `spec-decoding: draft_model`. The AMD launcher
+routes both speculative metadata values to that script and mounts the shared
+HF cache for the 0813 checkpoint. The recipe pins revision
+`72e1d3230f6c080a530b0a1d46f8eb4602340597` and serves the resolved snapshot path;
+an explicit `MODEL_PATH` must pass the same checkpoint checks. Before GPU
+startup it verifies the config/index hashes, DSpark Markov/confidence heads,
+all 66 shard headers and payload boundaries, and offline tokenizer loading.
+This checks readability and completeness, not full weight-file hashes.
+
+All ten AgentX throughput points use DSpark K6 (target verification length 7)
+and the committed golden AL 3.77. C1/2/4/8/16 use TP8/EP1;
+C48/64/96/128/256 use TP8/DPA8/EP8 with native RCCL. Each point runs for
+3600 seconds. The C256 full GSM8K eval omits forced acceptance. Keep the
+pinned `rocm/atom-dev:pr2233-4f3a808` image and GPU-only KV. C1 through C16 use
+BF16 KV, while C48 and above retain FP8 KV; all points use the FP4 index cache,
+8192-token checkpoints and DEP dense FULL graph ladder. Fixed q7 graphs are
+captured in each new server; confirm target and DSpark draft capture in
+`server.log`. Confidence schedules and ragged verification remain disabled.
+
+`AGENTIC_TOKENIZER_PATH` optionally overrides AgentX's tokenizer source; its
+default remains `MODEL`. This recipe sets it to the validated server snapshot.
+`checkpoint_preflight.json`, `runtime_manifest.json` and `server_command.txt`
+record model/source identity and requested settings. Successful startup,
+graph capture and requests require runtime log evidence.
+
+The pinned image contains the upstream inference-mode fix from
+[ROCm/ATOM#2233](https://github.com/ROCm/ATOM/pull/2233) at ATOM commit
+`4f3a8088`. The recipe does not patch AITER source at runtime; TP communication
+fusion, DSpark K6 and graph capture use the implementation shipped in the image.
+
 ### DeepSeek-V4.1-Flash DSpark
 
 The GB200 DSpark recipe uses a minimum CUDA graph capture size of 64 tokens to cover concurrent AgentX subagents. This raises c1/c2/c4 from 8/16/32 to 64; c8 and above retain their existing sizes. The full trace, AL 3.51, and Engram UVA settings are preserved; low-concurrency tail latency improvements require CI confirmation.
