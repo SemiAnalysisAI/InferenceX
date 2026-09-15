@@ -100,6 +100,7 @@ def test_automatic_curve_selection_preserves_json(
         **ENV,
         "MODEL_PREFIX": prefix,
         "SPEC_DECODING": method,
+        "RUN_EVAL": "true",
         "SYNTHETIC_ACCEPTANCE": "false",
         "SYNTHETIC_ACCEPTANCE_LENGTH": "99",
     }
@@ -198,7 +199,10 @@ def test_engine_token_selection_and_environment(
     assert result["benchmark"] == {"env": {"KEEP": "client"}}
 
 
-@pytest.mark.parametrize("environment", [{"EVAL_ONLY": "true"}, {"IS_AGENTIC": "0"}])
+@pytest.mark.parametrize(
+    "environment",
+    [{"EVAL_ONLY": "true"}, {"IS_AGENTIC": "0"}, {"SPEC_DECODING": "none"}],
+)
 @pytest.mark.parametrize("framework", ["vllm", "dynamo-sglang", "trt"])
 def test_real_runs_clear_synthetic_without_a_curve(tmp_path, framework, environment):
     recipe = vllm_recipe(
@@ -211,11 +215,11 @@ def test_real_runs_clear_synthetic_without_a_curve(tmp_path, framework, environm
         "SGLANG_SIMULATE_ACC_TOKEN_MODE": "real-draft-token",
         "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS": "7",
     }
+    env = {**ENV, **environment}
+    del env["THINKING_MODE"]
     result = apply_native(
         recipe,
-        build_overrides(
-            recipe, framework, {**ENV, **environment}, golden_dir=tmp_path / "absent"
-        ),
+        build_overrides(recipe, framework, env, golden_dir=tmp_path / "absent"),
     )
     role = result["roles"]["agg"]
     if framework == "vllm":
