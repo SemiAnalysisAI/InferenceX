@@ -7807,3 +7807,10 @@
     - "Use FLASH_ATTN for the target model, select the Humming MXFP8 dense-linear backend, and enable Marlin atomic reduction for the MXFP8 MoE path."
     - "Use 0.95 GPU memory utilization for resident serving while retaining 0.90 for Mooncake DRAM offload, and remove the Mooncake concurrency-14 point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3108
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.14-cu130 to lmsysorg/sglang:nightly-dev-cu13-20260915-8874c51a (2026-09-15 upstream cu13 nightly, sgl-project/sglang@8874c51a); raise --max-prefill-tokens and --chunked-prefill-size from 16384 to 32768 and add --mamba-full-memory-ratio 0.37 and --linear-attn-prefill-backend flashinfer; the TP8/TP4 EAGLE grid is unchanged"
+    - "将 SGLang 镜像从 lmsysorg/sglang:v0.5.14-cu130 更新为 lmsysorg/sglang:nightly-dev-cu13-20260915-8874c51a（2026-09-15 上游 cu13 nightly，sgl-project/sglang@8874c51a）；将 --max-prefill-tokens 与 --chunked-prefill-size 从 16384 提高到 32768，并新增 --mamba-full-memory-ratio 0.37 和 --linear-attn-prefill-backend flashinfer；TP8/TP4 EAGLE 网格保持不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3144
