@@ -113,7 +113,7 @@ def test_pr_changes_during_scope_resolution_do_not_publish_an_exemption(scope_ca
     scope_case["during_listing"] = lambda: scope_case["pr"][changed].update(sha="new-commit")
     with pytest.raises(RuntimeError, match="PR changed"):
         signoff_scope.check_scope("example/repo", 7, "token")
-    assert scope_case["statuses"] == []
+    assert scope_case["statuses"][-1]["state"] == "error"
 
 
 def test_matching_an_owner_more_than_once_checks_their_role_once(scope_case):
@@ -126,7 +126,8 @@ def test_matching_an_owner_more_than_once_checks_their_role_once(scope_case):
 
 
 @pytest.mark.parametrize("problem", ["files", "codeowners", "permission", "incomplete", "invalid", "empty"])
-def test_scope_failures_never_publish_a_success(scope_case, problem):
+def test_scope_failures_revoke_an_earlier_exemption(scope_case, problem):
+    scope_case["statuses"].append({"context": "CODEOWNER sign-off", "state": "success", "description": "N/A"})
     if problem in {"files", "codeowners", "permission"}:
         scope_case["fail_path"] = {"files": "/pulls/7/files", "codeowners": "/contents/.github/CODEOWNERS", "permission": "/collaborators/admin/permission"}[problem]
     elif problem == "incomplete":
@@ -137,7 +138,10 @@ def test_scope_failures_never_publish_a_success(scope_case, problem):
         scope_case["codeowners"] = ""
     with pytest.raises(RuntimeError):
         signoff_scope.check_scope("example/repo", 7, "token")
-    assert scope_case["statuses"] == []
+    assert scope_case["statuses"][-1] == {
+        "context": "CODEOWNER sign-off", "state": "error",
+        "description": "Could not determine sign-off scope",
+    }
 
 
 @pytest.mark.parametrize("event", [

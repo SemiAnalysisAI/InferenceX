@@ -52,26 +52,34 @@ def required_owners(repo: str, pr: dict[str, Any], token: str) -> list[str]:
 
 def check_scope(repo: str, number: int, token: str) -> dict[str, str]:
     pr = github.api(repo, f"/pulls/{number}", token)
-    required = required_owners(repo, pr, token)
-    current = github.api(repo, f"/pulls/{number}", token)
-    if (current["head"]["sha"], current["base"]["sha"], current["changed_files"]) != (
-        pr["head"]["sha"],
-        pr["base"]["sha"],
-        pr["changed_files"],
-    ):
-        raise RuntimeError("PR changed while determining sign-off scope; retry on the current head")
-    if not required:
-        github.api(
-            repo,
-            f"/statuses/{pr['head']['sha']}",
-            token,
-            method="POST",
-            data={
-                "context": "CODEOWNER sign-off",
-                "state": "success",
-                "description": "N/A",
-            },
-        )
+    status = "error"
+    try:
+        required = required_owners(repo, pr, token)
+        current = github.api(repo, f"/pulls/{number}", token)
+        if (current["head"]["sha"], current["base"]["sha"], current["changed_files"]) != (
+            pr["head"]["sha"],
+            pr["base"]["sha"],
+            pr["changed_files"],
+        ):
+            raise RuntimeError(
+                "PR changed while determining sign-off scope; retry on the current head"
+            )
+        status = None if required else "success"
+    finally:
+        if status:
+            github.api(
+                repo,
+                f"/statuses/{pr['head']['sha']}",
+                token,
+                method="POST",
+                data={
+                    "context": "CODEOWNER sign-off",
+                    "state": status,
+                    "description": "N/A"
+                    if status == "success"
+                    else "Could not determine sign-off scope",
+                },
+            )
     return {
         "required": str(bool(required)).lower(),
         "pr-number": str(number),
