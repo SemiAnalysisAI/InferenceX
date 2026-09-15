@@ -58,8 +58,8 @@ CACHE_ARGS=()
 if require_agentic_kv_offload_backend hicache; then
     HICACHE_RATIO="${HICACHE_RATIO:-1.5}"
     HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
-    HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-    HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+    HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-kernel}"
+    HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first}"
     echo "HiCache CPU tier: ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT, dram_budget=${TOTAL_CPU_DRAM_GB} GB, tp=$TP"
     CACHE_ARGS=(
         --enable-hierarchical-cache
