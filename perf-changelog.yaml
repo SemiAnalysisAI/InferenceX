@@ -7512,3 +7512,11 @@
     - "Serve the DeepSeek-V4.1-Flash Engram n-gram tables from node-local NVMe instead of pinned host DRAM, freeing ~189 GiB of host memory for KV at throughput parity on B200 TP4 (14,168 vs 13,632 tok/s mean over three 8k1k runs each), with the row gather overlapped against the decoder layers (P99 TTFT 4.1s vs 6.5s inline)."
     - "DeepSeek-V4.1-Flash 的 Engram 表改由本地 NVMe 提供，释放的主机内存转给 KV 卸载，吞吐持平。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3080
+- config-keys:
+    - dsv41flashssd-fp4-gb200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Serve the DeepSeek-V4.1-Flash Engram n-gram tables from disk on GB200, with the table directory as an input so node-local and shared-filesystem placement can be measured against each other on the agentic-coding traces; a shared mount now has to be opted into via ENGRAM_SSD_SHARED=1 rather than passing the old local-disk guard silently."
+    - "在 GB200 上由磁盘提供 DeepSeek-V4.1-Flash 的 Engram 表，并可分别测量本地盘与共享文件系统两种放置方式。"
+  pr-link: TBD

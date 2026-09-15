@@ -2949,6 +2949,40 @@ ensure_hf_cli() {
     install_agentic_deps
 }
 
+require_engram_table_placement() {
+    # Decide and validate where the Engram tables live. $1 is the directory,
+    # $2 is 1 when a shared filesystem is intended and 0 (or unset) when the
+    # directory must be node-local.
+    #
+    # Every row gather on a shared filesystem is a potential network round
+    # trip, so a shared mount has to be asked for explicitly: benchmarking one
+    # by accident reads as a disk result and is not detectable afterwards from
+    # throughput alone.
+    local dir="$1" shared="${2:-0}" fstype
+    fstype="$(df -PT "$dir" | awk 'NR==2{print $2}')"
+    case "$fstype" in
+        nfs|nfs4|cifs|lustre|gpfs|beegfs|ceph|9p|tmpfs|ramfs)
+            if [[ "$shared" != 1 ]]; then
+                echo "Engram table dir $dir is $fstype, not local disk." >&2
+                echo "Set ENGRAM_SSD_SHARED=1 to benchmark a shared table deliberately." >&2
+                return 1
+            fi
+            echo "engram_placement=shared fstype=$fstype dir=$dir"
+            ;;
+        "")
+            echo "Could not determine the filesystem type of $dir." >&2
+            return 1
+            ;;
+        *)
+            if [[ "$shared" == 1 ]]; then
+                echo "ENGRAM_SSD_SHARED=1 but $dir is $fstype, which is local." >&2
+                return 1
+            fi
+            echo "engram_placement=local fstype=$fstype dir=$dir"
+            ;;
+    esac
+}
+
 resolve_trace_source() {
     # Per-recipe override: set WEKA_LOADER_OVERRIDE to one of the aiperf
     # public-dataset loader names allowed by the inferencex-agentx-mvp

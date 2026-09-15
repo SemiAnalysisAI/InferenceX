@@ -10449,6 +10449,26 @@ dsv41flashssd-fp4-b200-vllm-agentic-dspark:
       # the tables free the DRAM either way, and the recipe already carries the
       # vllm-simple and mooncake branches for when a connector can use it.
 
+dsv41flashssd-fp4-gb200-vllm-agentic-dspark:
+  image: vllm/vllm-openai:deepseekv41-flash-0909
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flashssd
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    # 0.92 for the same reason as the B200 SSD entry: Engram no longer pins
+    # ~189 GiB of host memory, so the KV pool gets it.
+    - dram-utilization: 0.92
+      search-space:
+      # Matches dsv41flash-fp4-gb200-vllm-agentic-dspark, with the Engram tables
+      # mapped from node-local /mnt/numa0 instead of pinned host DRAM. The
+      # shared-table variants of this measurement are not expressible as a
+      # single-node search space and are driven directly against this script.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
 dsv41flash-fp4-gb300-vllm-agentic-dspark:
   image: vllm/vllm-openai:deepseekv41-flash-0909
   model: deepseek-ai/DeepSeek-V4.1-Flash

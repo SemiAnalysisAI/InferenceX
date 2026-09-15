@@ -101,7 +101,10 @@ import_squash() {
 }
 
 # Direct single-tray AgentX uses the existing shared image and HF caches.
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
+# dsv41flashssd is the same recipe with the Engram tables served from disk; it
+# needs the node-local table directory mounted, which dsv41flash does not.
+if [[ ( "$MODEL_PREFIX" == "dsv41flash" || "$MODEL_PREFIX" == "dsv41flashssd" ) \
+      && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
     BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb200_${FRAMEWORK}_mtp.sh"
     [[ "${IS_AGENTIC:-0}" == "1" && "${SPEC_DECODING:-}" == "mtp" && -f "$BENCH_SCRIPT" ]] || {
         echo "Unsupported single-node recipe: $BENCH_SCRIPT" >&2
@@ -113,11 +116,21 @@ if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINO
     export INFMAX_CONTAINER_WORKSPACE=/ix RESULT_DIR=/ix/results
     SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     import_squash "$SQUASH_FILE" "$IMAGE"
+    # The Engram table directory has to exist on the host and be mounted at the
+    # same path inside, or the recipe's df-based local/shared guard inspects the
+    # container overlay instead of the real filesystem.
+    ENGRAM_MOUNT=""
+    if [[ "$MODEL_PREFIX" == "dsv41flashssd" ]]; then
+        ENGRAM_SSD_DIR="${ENGRAM_SSD_DIR:-/mnt/numa0/engram}"
+        mkdir -p "$ENGRAM_SSD_DIR"
+        export ENGRAM_SSD_DIR
+        ENGRAM_MOUNT=",$ENGRAM_SSD_DIR:$ENGRAM_SSD_DIR"
+    fi
     srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
         --nodes=1 --ntasks=1 --gpus="${TP:?}" --exclusive --mem=0 \
         --time="${SALLOC_TIME_LIMIT:-480}" --job-name="$RUNNER_NAME" \
         --mpi=none --container-image="$SQUASH_FILE" \
-        --container-mounts="$GITHUB_WORKSPACE:/ix,$HF_HUB_CACHE_HOST_PATH:/hf-cache" \
+        --container-mounts="$GITHUB_WORKSPACE:/ix,$HF_HUB_CACHE_HOST_PATH:/hf-cache$ENGRAM_MOUNT" \
         --no-container-mount-home --container-remap-root \
         --container-workdir=/ix --no-container-entrypoint \
         --export=ALL,PORT=8888 bash "$BENCH_SCRIPT"
