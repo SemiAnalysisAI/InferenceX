@@ -7797,4 +7797,4 @@
   no-evals: true
   description:
     - "Temporary PR #3126 validation: one Qwen2.5-0.5B point on idle H200 CoreWeave capacity, 128 input / 32 output tokens, TP1, concurrency 1, four requests. Do not merge."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3128
