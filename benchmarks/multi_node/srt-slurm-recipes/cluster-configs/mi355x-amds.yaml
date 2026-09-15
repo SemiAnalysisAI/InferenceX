@@ -14,7 +14,6 @@ network_interface: eno0
 use_gpus_per_node_directive: false
 use_segment_sbatch_directive: false
 use_exclusive_sbatch_directive: false
-runtime_config_transport: shared-filesystem
 
 default_sbatch_directives:
   gres: gpu:8

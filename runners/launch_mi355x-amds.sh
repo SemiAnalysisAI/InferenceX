@@ -10,7 +10,7 @@ if [[ -n "${CONFIG_FILE:-}" ]]; then
     : "${MODEL:?MODEL must identify the checkpoint}"
 
     SRT_SLURM_REPOSITORY="${SRT_SLURM_REPOSITORY:-https://github.com/SemiAnalysisAI/srt-slurm.git}"
-    SRT_SLURM_COMMIT="${SRT_SLURM_COMMIT:-9154233108ffdcd488ec697a827870648af8505b}"
+    SRT_SLURM_COMMIT="${SRT_SLURM_COMMIT:-ab40e28d99ec4085d02f2444f9b644486fbed8f1}"
     SHARED_BASE="${SRT_SLURM_SHARED_BASE:-/it-share/gharunners2/srt-slurm}"
     SHARED_AIPERF_CACHE="${AIPERF_MMAP_CACHE_HOST_PATH:-/it-share/aiperf-cache}"
     SHARED_RESULTS="${SHARED_BASE}/results"
@@ -36,7 +36,6 @@ if [[ -n "${CONFIG_FILE:-}" ]]; then
     cd "$SRT_REPO_DIR"
     uv venv --python 3.12
     uv pip install -e .
-    make setup ARCH="${SRT_SLURM_COMPUTE_ARCH:-x86_64}"
     source .venv/bin/activate
 
     python "$ADAPTER" prepare \
@@ -45,7 +44,10 @@ if [[ -n "${CONFIG_FILE:-}" ]]; then
         --results-root "$SHARED_RESULTS" --aiperf-cache "$SHARED_AIPERF_CACHE" \
         --image-cache "${SHARED_BASE}/containers"
     export SRTSLURM_CONFIG="${WORK_DIR}/srtslurm.yaml"
-    export SRTCTL_RUNTIME_SOURCE_DIR="$SRT_REPO_DIR"
+    # Use upstream's normal setup with the prepared cluster configuration;
+    # providing it first also keeps setup non-interactive in Actions.
+    cp "$SRTSLURM_CONFIG" "$SRT_REPO_DIR/srtslurm.yaml"
+    make setup ARCH="${SRT_SLURM_COMPUTE_ARCH:-x86_64}"
     PREPARED_RECIPE="${WORK_DIR}/recipe.yaml"
     if [[ "$CONFIG_FILE" == *:* ]]; then
         PREPARED_RECIPE="${PREPARED_RECIPE}:${CONFIG_FILE#*:}"
