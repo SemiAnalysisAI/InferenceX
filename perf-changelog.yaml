@@ -7817,3 +7817,11 @@
     - "Use the public AMD checkpoint, a digest-pinned upstream ROCm image, single-token prediction, and no KV offloading."
     - "Mount this recipe outside /workspace to preserve the image's SGLang and AITER packages."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3129
+
+- config-keys:
+    - qwen3.8next-fp4-mi355x-sglang-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Translate this recipe's pinned Docker image to an Enroot-compatible digest URI on cold-cache imports; keep the original image identity and squash cache key."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3129

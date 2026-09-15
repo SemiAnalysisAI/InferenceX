@@ -414,21 +414,23 @@ def test_eval_only_acceptance_rewrite_allows_non_speculative_recipe(
 
 
 @pytest.mark.parametrize(
-    ("model", "prefix", "mount", "cache"),
+    ("model", "prefix", "mount", "cache", "framework", "spec"),
     [
-        ("deepseek-ai/DeepSeek-V4.1-Flash", "dsv41flash", "/ix", "/it-share/hf-hub-cache/"),
-        ("deepseek-ai/DeepSeek-V4-Pro", "dsv4", "/workspace", "/it-share/hf-hub-cache/"),
+        ("deepseek-ai/DeepSeek-V4.1-Flash", "dsv41flash", "/ix", "/it-share/hf-hub-cache/", "vllm", "mtp"),
+        ("deepseek-ai/DeepSeek-V4-Pro", "dsv4", "/workspace", "/it-share/hf-hub-cache/", "vllm", "mtp"),
+        ("amd/Qwen3.8-Flash-Next-Quark-MXFP4", "qwen3.8next", "/ix", "/var/lib/hf-hub-cache/", "sglang", "none"),
     ],
 )
 def test_mi355x_agentic_model_mount_and_routing(
     tmp_path: Path, model: str, prefix: str, mount: str, cache: str,
+    framework: str, spec: str,
 ) -> None:
     capture = tmp_path / "launch.txt"
     env = {
         **os.environ,
         "IS_MULTINODE": "false", "MODEL": model,
-        "EXP_NAME": f"{prefix}_tp4_conc1", "FRAMEWORK": "vllm",
-        "PRECISION": "fp4", "SPEC_DECODING": "mtp",
+        "EXP_NAME": f"{prefix}_tp4_conc1", "FRAMEWORK": framework,
+        "PRECISION": "fp4", "SPEC_DECODING": spec,
         "SCENARIO_SUBDIR": "agentic/", "TP": "4", "GPU_COUNT": "4",
         "RUNNER_NAME": "mi355x-amds_01", "IMAGE": "test/image:mock",
         "GITHUB_WORKSPACE": str(REPO_ROOT), "HF_HUB_CACHE": "/mnt/hf_hub_cache/",
@@ -463,5 +465,83 @@ def test_mi355x_agentic_model_mount_and_routing(
         f"--container-mounts={REPO_ROOT}:{mount}/,{cache}:/mnt/hf_hub_cache/,"
         "/it-share/aiperf-cache/:/aiperf_mmap_cache"
     ) in args
-    script = f"benchmarks/single_node/agentic/{prefix}_fp4_mi355x_vllm_mtp.sh"
+    suffix = "_mtp" if spec == "mtp" else ""
+    script = f"benchmarks/single_node/agentic/{prefix}_fp4_mi355x_{framework}{suffix}.sh"
     assert args[-2] == script
+
+
+@pytest.mark.parametrize(
+    ("model", "framework", "image", "cache_valid", "expected_uri"),
+    [
+        ("amd/Qwen3.8-Flash-Next-Quark-MXFP4", "sglang",
+         "lmsysorg/sglang-rocm:fixture@sha256:abc123", False,
+         "docker://registry-1.docker.io#lmsysorg/sglang-rocm:sha256:abc123"),
+        ("amd/Qwen3.8-Flash-Next-Quark-MXFP4", "sglang",
+         "lmsysorg/sglang-rocm:fixture@sha256:abc123", True, None),
+        ("unrelated/model", "sglang",
+         "lmsysorg/sglang-rocm:fixture@sha256:abc123", False,
+         "docker://lmsysorg/sglang-rocm:fixture@sha256:abc123"),
+        ("amd/Qwen3.8-Flash-Next-Quark-MXFP4", "vllm",
+         "lmsysorg/sglang-rocm:fixture@sha256:abc123", False,
+         "docker://lmsysorg/sglang-rocm:fixture@sha256:abc123"),
+        ("amd/Qwen3.8-Flash-Next-Quark-MXFP4", "sglang",
+         "lmsysorg/sglang-rocm:fixture", False,
+         "docker://lmsysorg/sglang-rocm:fixture"),
+        ("amd/Qwen3.8-Flash-Next-Quark-MXFP4", "sglang",
+         "other/image:fixture@sha256:abc123", False,
+         "docker://other/image:fixture@sha256:abc123"),
+    ],
+)
+def test_mi355x_import_executes_scoped_digest_uri(
+    tmp_path: Path, model: str, framework: str, image: str,
+    cache_valid: bool, expected_uri: str | None,
+) -> None:
+    capture = tmp_path / "enroot.txt"
+    env = {
+        **os.environ,
+        "IS_MULTINODE": "false", "MODEL": model, "FRAMEWORK": framework,
+        "EXP_NAME": "qwen3.8next_tp8_conc1", "PRECISION": "fp4",
+        "SPEC_DECODING": "none", "SCENARIO_SUBDIR": "agentic/", "TP": "8",
+        "RUNNER_NAME": "mi355x-amds_01", "IMAGE": image,
+        "GITHUB_WORKSPACE": str(REPO_ROOT), "HF_HUB_CACHE": "/mnt/hf_hub_cache/",
+        "RESULT_DIR": "/workspace/results", "CAPTURE": str(capture),
+        "CACHE_ROOT": str(tmp_path), "CACHE_STATUS": "0" if cache_valid else "1",
+    }
+    result = subprocess.run(
+        ["bash", "-c", r'''
+        salloc() { :; }
+        squeue() { echo 123; }
+        scancel() { :; }
+        docker() { :; }
+        unsquashfs() { return "$CACHE_STATUS"; }
+        enroot() { printf '%s\n' "$@" > "$CAPTURE"; }
+        export -f docker unsquashfs enroot
+        srun() {
+            shift
+            if [[ "$1" == bash ]]; then
+                # Simulate the remote filesystem in scratch, then execute the
+                # launcher's actual import shell, including cache selection.
+                local remote_command="$3"
+                remote_command="${remote_command//\/var\/lib\/squash/$CACHE_ROOT}"
+                bash -c "$remote_command"
+            else
+                printf '%s\n' "$@" > "$CAPTURE.launch"
+            fi
+        }
+        source runners/launch_mi355x-amds.sh
+        '''], cwd=REPO_ROOT, env=env, capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    if expected_uri is None:
+        assert not capture.exists()
+        assert "skipping import" in result.stdout
+    else:
+        args = capture.read_text().splitlines()
+        assert args[:2] == ["import", "-o"]
+        assert args[3:] == [expected_uri]
+        if image == "lmsysorg/sglang-rocm:fixture@sha256:abc123":
+            assert Path(args[2]).name == "lmsysorg_sglang-rocm_fixture_sha256_abc123.sqsh"
+    assert any(
+        arg.startswith("--container-image=/var/lib/squash/")
+        for arg in Path(f"{capture}.launch").read_text().splitlines()
+    )

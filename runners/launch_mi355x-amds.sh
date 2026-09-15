@@ -262,6 +262,14 @@ else
     PARTITION="compute"
     SQUASH_FILE="/var/lib/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     LOCK_FILE="${SQUASH_FILE}.lock"
+    ENROOT_IMAGE_URI="docker://$IMAGE"
+    # Enroot 3.x treats Docker's @digest as a username separator. Keep the
+    # image/cache identity pinned, but use its manifest-reference syntax.
+    if [[ "$MODEL" == "amd/Qwen3.8-Flash-Next-Quark-MXFP4" &&
+          "$FRAMEWORK" == "sglang" &&
+          "$IMAGE" == lmsysorg/sglang-rocm:*@sha256:* ]]; then
+        ENROOT_IMAGE_URI="docker://registry-1.docker.io#lmsysorg/sglang-rocm:${IMAGE##*@}"
+    fi
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
@@ -279,7 +287,7 @@ else
             echo 'Squash file already exists and is valid, skipping import'
         else
             rm -f \"$SQUASH_FILE\"
-            enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+            enroot import -o \"$SQUASH_FILE\" \"$ENROOT_IMAGE_URI\"
         fi
     "
 
