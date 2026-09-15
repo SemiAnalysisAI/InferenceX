@@ -1,0 +1,164 @@
+schema: 2
+name: "svf-vllm-disagg-gb200-low-latency"
+
+# Mirrored from NVIDIA/srt-slurm aflowers/vllm-gb200-v0.20.0 branch:
+#   recipes/vllm/deepseek-v4-pro/GB200/8k1k/disagg-gb200-low-latency.yaml
+#
+# Topology: 1 prefill (DEP=8) + 1 decode (TP=8). 5 nodes total with a
+# dedicated NATS/etcd infra node. Single-concurrency point for low latency.
+#
+# Local deltas vs upstream:
+#   * model.path uses the deepseek-v4-pro-mxfp4 alias from
+#     runners/launch_gb200-nv.sh.
+#   * model.container set to vllm/vllm-openai:v0.25.1 to
+#     match nvidia-master.yaml image (which the launch script registers as
+#     the alias key in srtslurm.yaml). Upstream variants ship either the
+#     non-dynamo floating tag or a sha256 pin.
+#   * slurm.time_limit + health_check set to 8h / 1440 attempts to
+#     absorb cold-cache /mnt/numa1 model loads.
+model:
+  path: "deepseek-v4-pro-mxfp4"
+  container: "vllm/vllm-openai:v0.25.1"
+  precision: "fp4"
+
+dynamo:
+  install: true
+  source:
+    wheel: "1.3.0.dev1"
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+resources:
+  gpu_type: "gb200"
+  gpus_per_node: 4
+services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: dedicated
+  - name: nats
+    type: nats
+    placement:
+      node: dedicated
+frontend:
+  type: dynamo
+  enable_multiple_frontends: true
+  env:
+    DYN_REQUEST_PLANE_CODEC: "msgpack"
+engine:
+  type: vllm
+  connector:
+roles:
+  prefill:
+    nodes: 2
+    workers: 1
+    gpus: 8
+    env:
+      DYN_REQUEST_PLANE_CODEC: "msgpack"
+      TILELANG_CLEANUP_TEMP_FILES: "1"
+      VLLM_USE_NCCL_SYMM_MEM: "1"
+      NCCL_CUMEM_ENABLE: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_NVLS_ENABLE: "1"
+      VLLM_SERVER_DEV_MODE: "1"
+      VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
+      VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
+    # VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    # VLLM_MOE_ROUTING_SIMULATION_STRATEGY: "uniform_random"
+      UCX_MEMTYPE_CACHE: "n"
+      UCX_MEMTYPE_REG_WHOLE: "n"
+      UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+      UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+      NCCL_P2P_LEVEL: NVL
+    args:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      enforce-eager: true
+      max-model-len: 16384
+      max-num-seqs: 16
+      max-num-batched-tokens: 32768
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      no-async-scheduling: true
+      block-size: 256
+      gpu-memory-utilization: 0.8
+      no-disable-hybrid-kv-cache-manager: true
+      enable-sleep-mode: true
+      numa-bind: true
+      offload-group-size: 3
+      offload-num-in-group: 1
+      offload-prefetch-step: 2
+      # offload-params: "w13_weight w2_weight w13_weight_scale w2_weight_scale wq_b wo_a wo_b shared_experts"
+      tokenizer-mode: deepseek_v4
+  decode:
+    nodes: 2
+    workers: 1
+    gpus: 8
+
+    env:
+      DYN_REQUEST_PLANE_CODEC: "msgpack"
+      TILELANG_CLEANUP_TEMP_FILES: "1"
+      VLLM_USE_NCCL_SYMM_MEM: "1"
+      NCCL_CUMEM_ENABLE: "1"
+      NCCL_MNNVL_ENABLE: "1"
+      NCCL_NVLS_ENABLE: "1"
+      VLLM_SERVER_DEV_MODE: "1"
+    # VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    # VLLM_MOE_ROUTING_SIMULATION_STRATEGY: "uniform_random"
+      UCX_MEMTYPE_CACHE: "n"
+      UCX_MEMTYPE_REG_WHOLE: "n"
+      UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+      UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+      NCCL_P2P_LEVEL: NVL
+    args:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 8
+      pipeline-parallel-size: 1
+#      data-parallel-size: 8
+#      data-parallel-rpc-port: 13345
+#      enable-expert-parallel: true
+      max-model-len: 16384
+      max-num-seqs: 256
+      max-cudagraph-capture-size: 256
+      max-num-batched-tokens: 256
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      block-size: 256
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+      gpu-memory-utilization: 0.9
+      stream-interval: 50
+      no-disable-hybrid-kv-cache-manager: true
+      enable-sleep-mode: true
+      tokenizer-mode: deepseek_v4
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  concurrencies: "1"
+  req_rate: "inf"
+  use_chat_template: true
+  custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
+
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro"
+    revision: "b5968e9190ef611bbf34a7229255be88a0e937c1"
+  container:
+    image: "vllm/vllm-openai:v0.25.1"
+  frameworks:
+    dynamo: "1.3.0.dev1"
+    vllm: "0.25.1"

@@ -337,7 +337,7 @@ fi
 USES_AGENTX_POWER=0
 if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" ]]; then
     if [[ "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" &&
-        "$_RECIPE_REL" == "recipes/sglang/glm5.2/gb200-fp4/agentic/glm5.2-agentx-agg.yaml" ]]; then
+        "$_RECIPE_REL" == "recipes/glm5.2/sglang/gb200-fp4/agentx/agg.yaml" ]]; then
         USES_AGENTX_POWER=1
     else
         echo "Error: GB200 AgentX dcgm-power requires the GLM-5.2 aggregate recipe" >&2
