@@ -30,6 +30,7 @@ STAGED_MODELS=(
     DeepSeek-V4-Pro
     DeepSeek-V4-Pro-0813
     DeepSeek-V4-Pro-NVFP4
+    GLM-5.2-FP8
     GLM-5.2-NVFP4
     Kimi-K2.6-NVFP4
     Kimi-K3
@@ -51,7 +52,9 @@ declare -A MODEL_ALIASES=(
     [deepseek-v4-pro]="DeepSeek-V4-Pro"
     [deepseek-ai/DeepSeek-V4-Pro]="DeepSeek-V4-Pro"
     [glm-5.2-fp4]="GLM-5.2-NVFP4"
+    [glm-5.2-fp8]="GLM-5.2-FP8"
     [nvidia/GLM-5.2-NVFP4]="GLM-5.2-NVFP4"
+    [zai-org/GLM-5.2-FP8]="GLM-5.2-FP8"
     [kimi-k2.6-nvfp4]="Kimi-K2.6-NVFP4"
     [kimi-k3]="Kimi-K3"
     [kimik3]="Kimi-K3"
