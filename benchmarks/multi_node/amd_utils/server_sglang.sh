@@ -287,11 +287,19 @@ if [[ "$DECODE_ENABLE_DP" == "true" ]] && [[ "$DECODE_ENABLE_EP" == "true" ]]; t
 fi
 
 # Build the composed config strings (equivalent to the old MODEL_PREFILL_CONFIGS / MODEL_DECODE_CONFIGS)
-# disable_cuda_graph (model-level) routes prefill to --disable-cuda-graph instead of --cuda-graph-bs-prefill.
+# Inspect exact registered options: newer images removed the legacy alias, while
+# older images do not recognize the split phase flags. Do not rely on argparse
+# prefix matching, which makes --cuda-graph-bs ambiguous on the newer images.
+if ! CUDA_GRAPH_FLAGS=$(python3 "$SGLANG_WS_PATH/sglang_cli.py"); then
+    echo "ERROR: Could not resolve installed SGLang CUDA graph batch-size flags." >&2
+    exit 1
+fi
+read -r PREFILL_CUDA_GRAPH_FLAG DECODE_CUDA_GRAPH_FLAG <<< "$CUDA_GRAPH_FLAGS"
+# disable_cuda_graph (model-level) keeps its existing prefill behavior.
 if [[ "$PREFILL_DISABLE_CUDA_GRAPH" == "True" ]] || [[ "$PREFILL_DISABLE_CUDA_GRAPH" == "true" ]]; then
     PREFILL_MODE_FLAGS="--mem-fraction-static ${prefill_mem_fraction_static} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --disable-cuda-graph "
 else
-    PREFILL_MODE_FLAGS="--mem-fraction-static ${prefill_mem_fraction_static} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --cuda-graph-bs-prefill ${prefill_cuda_graph_bs[*]} "
+    PREFILL_MODE_FLAGS="--mem-fraction-static ${prefill_mem_fraction_static} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} ${PREFILL_CUDA_GRAPH_FLAG} ${prefill_cuda_graph_bs[*]} "
 fi
 
 if [[ "$PREFILL_DISABLE_RADIX_CACHE" == "True" ]] || [[ "$PREFILL_DISABLE_RADIX_CACHE" == "true" ]]; then
@@ -312,7 +320,7 @@ if [[ "$prefill_enable_two_batch_overlap" == "True" ]] || [[ "$prefill_enable_tw
     PREFILL_SDMA_ENV="MORI_ENABLE_SDMA=true"
 fi
 
-DECODE_MODE_FLAGS="--mem-fraction-static ${decode_mem_fraction_static} --max-running-requests ${decode_max_running_requests} --cuda-graph-bs-decode ${decode_cuda_graph_bs[*]} "
+DECODE_MODE_FLAGS="--mem-fraction-static ${decode_mem_fraction_static} --max-running-requests ${decode_max_running_requests} ${DECODE_CUDA_GRAPH_FLAG} ${decode_cuda_graph_bs[*]} "
 
 if [[ -n "$decode_context_length" ]]; then
     DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --context-length ${decode_context_length}"
