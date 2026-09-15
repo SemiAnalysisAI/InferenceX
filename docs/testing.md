@@ -31,7 +31,7 @@ These sources outrank this guide when behavior changes. Update the English page 
 
 ## Testing layers
 
-[`CI`](../.github/workflows/ci.yml) runs two independent jobs, **Lint** and **Tests**, for affected PRs (including forks), pushes to `main`, and manual runs. Each job checks the changed paths before setting up dependencies. Lint runs for Python files, `infx/ruff.toml`, or the CI workflow. Tests runs for code, test inputs, dependencies, or the workflows and scripts they exercise; a Ruff-config-only change skips tests. Markdown-only changes skip CI. Manual dispatch runs both jobs. PR filtering considers the full PR diff, and pushes use the changes since the preceding push.
+[`CI`](../.github/workflows/ci.yml) runs **Lint** and **Tests** in parallel when any `.py` file changes in a PR (including forks) or a push to `main`. GitHub handles path filtering; manual dispatch runs both jobs regardless of changed files. Changes only to docs, shell scripts, YAML, dependencies, or Ruff configuration do not trigger Python CI; run the applicable checks locally or dispatch CI manually.
 
 Tests runs every suite under `utils/`, `runners/`, and `experimental/CollectiveX/tests/` with four pytest workers, plus MCP compatibility. New tests in those directories are discovered automatically. The test environment uses Python 3.12 and CPU-only PyTorch; dependencies must be at least 12 hours old. A failing job does not cancel the other; a newer PR update cancels the superseded CI run. Branch pushes without a PR no longer start a separate changelog-test run.
 

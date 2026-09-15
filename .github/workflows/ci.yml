@@ -3,23 +3,10 @@ name: CI
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths: &ci-paths
-      - '**/*.py'
-      - '.github/workflows/**'
-      - '.github/scripts/**'
-      - '.github/mcp-ci.json'
-      - '.claude/mcp/**'
-      - '.claude/requirements-mcp.txt'
-      - 'infx/**'
-      - 'utils/**'
-      - 'runners/**'
-      - 'benchmarks/**'
-      - 'configs/**'
-      - 'experimental/CollectiveX/**'
-      - '!**/*.md'
+    paths: ['**/*.py']
   push:
     branches: [main]
-    paths: *ci-paths
+    paths: ['**/*.py']
   workflow_dispatch:
 
 permissions:
@@ -37,53 +24,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - check: Lint
-            paths: >-
-              :(glob)**/*.py infx/ruff.toml .github/workflows/ci.yml
-          - check: Tests
-            paths: >-
-              :(glob)**/*.py infx/ utils/ runners/ benchmarks/ configs/
-              experimental/CollectiveX/ .github/workflows/ .github/scripts/
-              .github/mcp-ci.json .claude/mcp/ .claude/requirements-mcp.txt
-              :(exclude,glob)**/*.md :(exclude)infx/ruff.toml
+        check: [Lint, Tests]
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: ${{ matrix.check == 'Tests' && '0' || '1' }}
           persist-credentials: false
 
-      - name: Check relevant changes
-        id: changes
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          CHECK_PATHS: ${{ matrix.paths }}
-        run: |
-          read -r -a paths <<< "$CHECK_PATHS"
-          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
-            needed=true
-          elif git diff --quiet "$BASE_SHA" "$GITHUB_SHA" -- "${paths[@]}"; then
-            needed=false
-          else
-            status=$?
-            [ "$status" -eq 1 ] || exit "$status"
-            needed=true
-          fi
-          echo "needed=$needed" >> "$GITHUB_OUTPUT"
-
       - name: Set up uv
-        if: steps.changes.outputs.needed == 'true'
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: Lint and format
-        if: matrix.check == 'Lint' && steps.changes.outputs.needed == 'true'
+        if: matrix.check == 'Lint'
         run: |
           uvx --exclude-newer PT12H ruff@latest check --output-format=github infx
           uvx --exclude-newer PT12H ruff@latest format --check --diff infx
 
       - name: Prepare test environment
-        if: matrix.check == 'Tests' && steps.changes.outputs.needed == 'true'
+        if: matrix.check == 'Tests'
         run: |
           uv venv --python 3.12 "$RUNNER_TEMP/test-venv"
           uv pip install --python "$RUNNER_TEMP/test-venv/bin/python" \
@@ -94,7 +53,7 @@ jobs:
           echo "$RUNNER_TEMP/test-venv/bin" >> "$GITHUB_PATH"
 
       - name: Verify MCP server compatibility
-        if: matrix.check == 'Tests' && steps.changes.outputs.needed == 'true'
+        if: matrix.check == 'Tests'
         run: |
           python - <<'PY'
           import asyncio
@@ -109,7 +68,7 @@ jobs:
           PY
 
       - name: Run tests
-        if: matrix.check == 'Tests' && steps.changes.outputs.needed == 'true'
+        if: matrix.check == 'Tests'
         run: |
           python -c "import torch; assert torch.version.cuda is None and torch.version.hip is None"
           python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
