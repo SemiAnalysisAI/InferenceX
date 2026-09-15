@@ -7816,4 +7816,4 @@
     - "Add Qwen3.8-Flash-Next Quark MXFP4 AgentX on MI355X with SGLang, TP8/EP1 and concurrency 1/4/8/12/16."
     - "Use the public AMD checkpoint, a digest-pinned upstream ROCm image, single-token prediction, and no KV offloading."
     - "Mount this recipe outside /workspace to preserve the image's SGLang and AITER packages."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PR_NUMBER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3129
