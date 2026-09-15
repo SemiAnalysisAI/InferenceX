@@ -4,7 +4,7 @@
 
 InferenceX 负责维护本目录中的配置。所有 NVIDIA srt-slurm 启动器均调用 [`runners/slurm_utils.sh`](../../../runners/slurm_utils.sh) 中的 `setup_srt_slurm()`，为作业创建固定版本子模块的本地 Git 克隆，并将整个目录复制到 `recipes/`。共享函数将实际提交记录到 `srt-slurm-sha.txt`；功耗测试路径还会将其复制到 `power-producer-sha.txt`，供结果校验使用。
 
-统一版本由 [`utils/srt-slurm`](../../../utils/srt-slurm) 的 Git 子模块指针指定，目前为 [NVIDIA/srt-slurm#407](https://github.com/NVIDIA/srt-slurm/pull/407) 的合并提交。升级时更新该子模块指针，然后运行配置和集成检查。不要在启动器中新增按模型选择检出版本的分支。
+统一版本由 [`utils/srt-slurm`](../../../utils/srt-slurm) 的 Git 子模块指针指定，目前为 [v2.2.1](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.2.1)（`984180e5b8755aef85e9995048b5a16cb5336bce`）。升级时更新该子模块指针，然后运行配置和集成检查。不要在启动器中新增按模型选择检出版本的分支。
 
 InferenceX 要求 srt-slurm 2.0 或更新版本，且配置必须声明 `schema: 2`。不支持旧版配置结构；加入本目录前必须先完成迁移。
 
@@ -69,6 +69,7 @@ python -m infx.matrix.generate full-sweep \
 
 本次迁移还修复了 `srtctl migrate` 无法自动处理的兼容性问题：
 
+- SGLang Model Gateway 配置使用 `frontend.type: sglang-router`；在 v2.2.1 中，`sglang` 表示不经过路由器的独立工作进程。
 - 对重复的 YAML 键，保留原 PyYAML 加载器实际采用的值。
 - DCGM 遥测使用 `collect_interval_ms: 1000`，替代 `provider` 和 `default_frequency`。采集器自动推导退出等待时间；原先显式设置的十秒不满足当前校验要求。保留原配置中服务发现进程的专用节点部署方式。固定的上游版本不支持在专用基础设施节点上启用遥测；该功耗兼容性问题仍待解决，不通过改变原有拓扑来绕过校验。H200 自定义配置声明默认并发数，提交前由启动器替换。
 - DeepSeek-V4 vLLM 基准测试使用受支持的 `custom_tokenizer` 加载器。删除已废弃的 `warmup_req_rate: inf` 字段；当前上游客户端的预热速率固定为每秒 250 个请求。

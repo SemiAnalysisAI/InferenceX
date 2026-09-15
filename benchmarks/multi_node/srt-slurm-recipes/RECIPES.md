@@ -4,7 +4,7 @@
 
 InferenceX owns the recipes in this directory. Every NVIDIA srt-slurm launcher uses `setup_srt_slurm()` in [`runners/slurm_utils.sh`](../../../runners/slurm_utils.sh), makes a job-local Git clone of the pinned submodule, and copies this entire tree into `recipes/`. The shared helper records the actual revision in `srt-slurm-sha.txt`; power lanes copy that revision into `power-producer-sha.txt` for result validation.
 
-The shared version is the Git submodule pointer at [`utils/srt-slurm`](../../../utils/srt-slurm), currently the merge of [NVIDIA/srt-slurm#407](https://github.com/NVIDIA/srt-slurm/pull/407). Update that submodule pointer when upgrading, then run the recipe and integration checks. Do not add model-specific checkout branches to launchers.
+The shared version is the Git submodule pointer at [`utils/srt-slurm`](../../../utils/srt-slurm), currently [v2.2.1](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.2.1) (`984180e5b8755aef85e9995048b5a16cb5336bce`). Update that submodule pointer when upgrading, then run the recipe and integration checks. Do not add model-specific checkout branches to launchers.
 
 InferenceX requires srt-slurm 2.0 or newer and `schema: 2` recipes. Legacy recipe layouts are unsupported; migrate them before adding them to this tree.
 
@@ -69,6 +69,7 @@ Validate recipes with the exact launcher pin, including all override variants. F
 
 The initial migration also resolves compatibility issues that `srtctl migrate` cannot fix itself:
 
+- SGLang Model Gateway recipes use `frontend.type: sglang-router`; in v2.2.1, `sglang` selects a direct worker without a router.
 - Duplicate YAML keys retain the value selected by the former PyYAML loader.
 - DCGM telemetry uses `collect_interval_ms: 1000` instead of `provider` and `default_frequency`. The collector derives its shutdown budget; an explicit ten-second budget is too short for the current validator. Dedicated discovery-service placement is preserved from the original recipes. The pinned upstream runtime rejects telemetry with dedicated infrastructure nodes; this remains a power compatibility blocker rather than changing the original topology to satisfy validation. H200 custom recipes declare a default concurrency that the launcher replaces before submission.
 - DeepSeek-V4 vLLM benchmarks use the supported `custom_tokenizer` loader. Retired `warmup_req_rate: inf` fields are removed; the current upstream client uses its fixed warmup rate of 250 requests per second.

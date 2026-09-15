@@ -9,7 +9,7 @@ slurm: {time_limit: "8:00:00"}
 health_check: {max_attempts: 2160, interval_seconds: 10}
 resources: {gpu_type: gb200, gpus_per_node: 4}
 frontend:
-  type: sglang
+  type: sglang-router
   args:
     worker-startup-timeout-secs: 3600
 
