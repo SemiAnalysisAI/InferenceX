@@ -121,7 +121,7 @@ if [[ ( "$MODEL_PREFIX" == "dsv41flash" || "$MODEL_PREFIX" == "dsv41flashssd" ) 
     # container overlay instead of the real filesystem.
     ENGRAM_MOUNT=""
     if [[ "$MODEL_PREFIX" == "dsv41flashssd" ]]; then
-        ENGRAM_SSD_DIR="${ENGRAM_SSD_DIR:-/mnt/numa0/engram}"
+        ENGRAM_SSD_DIR="${ENGRAM_SSD_DIR:-/mnt/numa1/models/engram}"
         mkdir -p "$ENGRAM_SSD_DIR"
         export ENGRAM_SSD_DIR
         ENGRAM_MOUNT=",$ENGRAM_SSD_DIR:$ENGRAM_SSD_DIR"

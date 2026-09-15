@@ -10464,7 +10464,7 @@ dsv41flashssd-fp4-gb200-vllm-agentic-dspark:
     - dram-utilization: 0.92
       search-space:
       # Matches dsv41flash-fp4-gb200-vllm-agentic-dspark, with the Engram tables
-      # mapped from node-local /mnt/numa0 instead of pinned host DRAM. The
+      # mapped from node-local /mnt/numa1 instead of pinned host DRAM. The
       # shared-table variants of this measurement are not expressible as a
       # single-node search space and are driven directly against this script.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }

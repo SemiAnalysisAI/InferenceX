@@ -18,7 +18,9 @@ set -eo pipefail
 #
 # GB200 nodes on the watchtower cluster have no /raid. Node-local storage is
 # /mnt/numa0 and /mnt/numa1 (14 T XFS on md0/md1, one per NUMA node); the only
-# storage every node sees is Lustre.
+# storage every node sees is Lustre. Both array roots are root-owned, and
+# /mnt/numa1/models is the one path a benchmark user can create under, hence
+# the default below -- change it if the cluster grows a proper scratch dir.
 #
 # The table is 23.60 GiB per rank per Engram layer and the model has two, so
 # TP4 holds ~189 GiB in host memory. It is a pure gather -- one row per head
@@ -94,7 +96,7 @@ python3 -c "from vllm.config.engram import EngramConfig; assert 'disk_offload_di
 # Where the table lives. Default is node-local; a shared filesystem has to be
 # asked for explicitly, because every row gather on one is a network round trip
 # and benchmarking that by accident is the failure this guard exists to prevent.
-ENGRAM_SSD_DIR="${ENGRAM_SSD_DIR:-/mnt/numa0/engram}"
+ENGRAM_SSD_DIR="${ENGRAM_SSD_DIR:-/mnt/numa1/models/engram}"
 ENGRAM_SSD_SHARED="${ENGRAM_SSD_SHARED:-0}"
 mkdir -p "$ENGRAM_SSD_DIR"
 require_engram_table_placement "$ENGRAM_SSD_DIR" "$ENGRAM_SSD_SHARED"
