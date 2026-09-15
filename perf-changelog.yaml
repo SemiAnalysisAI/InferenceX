@@ -7814,4 +7814,4 @@
     - agentic-coding
   description:
     - "Update B200 MiniMax-M3 AgentX to the latest vLLM image with upstream mixed-page KV offload support and remove the runtime offload patch."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3131
