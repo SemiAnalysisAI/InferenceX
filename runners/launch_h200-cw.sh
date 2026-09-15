@@ -23,11 +23,10 @@ if [ -z "$JOB_ID" ]; then
     exit 1
 fi
 
-# Use Docker image directly for openai/gpt-oss-120b with trt, otherwise use squash file
 if [[ "$MODEL" == "openai/gpt-oss-120b" && "$FRAMEWORK" == "trt" ]]; then
     CONTAINER_IMAGE=$IMAGE
 else
-    # Use flock to serialize concurrent imports to the same squash file
+    # Concurrent jobs import to the same squash file; serialize them.
     srun --jobid=$JOB_ID --job-name="$RUNNER_NAME" bash -c "
         exec 9>\"$LOCK_FILE\"
         flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }

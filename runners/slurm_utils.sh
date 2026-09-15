@@ -70,11 +70,9 @@ check_staged_srt_assets() {
     fi
 }
 
-# Optionally inject synthetic acceptance into a recipe's speculative-config when
-# SYNTHETIC_ACCEPTANCE=true (no-op otherwise). Call after the job-name override
-# and before `srtctl apply` so the rendered job picks it up. Returns non-zero if
-# the injector fails, so a broken opt-in never reaches srtctl with an unrewritten
-# recipe; callers should propagate that rather than continuing.
+# Injects synthetic acceptance when SYNTHETIC_ACCEPTANCE=true, no-op otherwise.
+# Call after the job-name override and before `srtctl apply`; propagate a
+# non-zero return so an unrewritten recipe never reaches srtctl.
 inject_synthetic_acceptance() {
     local config_path="$1"
     local framework="$2"
@@ -117,10 +115,8 @@ copy_to_workspace() {
     local source_file="$1"
     local destination_file="$2"
 
-    # A compute-visible runner workspace may be mounted directly into the
-    # benchmark container. In that case the staged result already is the
-    # workflow artifact, so copying it onto itself would fail with cp's
-    # "same file" error even though the benchmark succeeded.
+    # When the runner workspace is mounted into the container the staged result
+    # already is the artifact, and cp onto itself fails with "same file".
     if [[ -e "$destination_file" && "$source_file" -ef "$destination_file" ]]; then
         echo "Result already present at $destination_file"
         return 0
