@@ -290,7 +290,7 @@ Follow [`CONTRIBUTING.md`](../CONTRIBUTING.md) before requesting or posting sign
 6. Fill `Signed:` with the actual GitHub username. Do not sign for another reviewer.
 7. Post the exact English template as a conversation comment, review summary, or inline review comment. All three event types are supported by the verifier.
 8. Confirm [`.github/workflows/codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) triggered and read its verdict. The verifier re-derives merge-gating claims. Checkmarks alone are not accepted.
-9. If the PR head advances after sign-off, reassess the new diff and post a fresh sign-off. The previous evidence was tied to the reviewed commit.
+9. Once verification passes, later commits and rebases retain acceptance without another Claude run or fresh sign-off. Automation carries the required status onto the latest head; the single verdict comment identifies the SHA actually assessed. To explicitly reassess, manually dispatch the verifier with the sign-off's `comment_url`. This updates the verdict comment without revoking an earlier PASS. See [the contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off).
 10. Only an authorized maintainer may record `/reuse-sweep-run` and use the supported merge path. A CODEOWNER approval does not grant that authorization.
 
 Stop instead of signing when a required source, workflow link, recipe, exception rationale, or verification result is missing. Use unchecked boxes and concrete follow-up requests. Never convert an unknown into an approval claim.
