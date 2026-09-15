@@ -21,13 +21,14 @@ from __future__ import annotations
 import argparse
 import bisect
 import csv
+import itertools
 import json
 import math
 import os
 import re
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 from statistics import mean
 
@@ -47,9 +48,7 @@ from .common import (
 _POWER_COL_RE = re.compile(r"power", re.IGNORECASE)
 _POWER_EXCLUDE_RE = re.compile(r"limit|cap|max|min", re.IGNORECASE)
 _TIMESTAMP_COL_RE = re.compile(r"time", re.IGNORECASE)
-_GPU_INDEX_COL_RE = re.compile(
-    r"^(index|gpu|gpu_id|gpu_index|card|device)$", re.IGNORECASE
-)
+_GPU_INDEX_COL_RE = re.compile(r"^(index|gpu|gpu_id|gpu_index|card|device)$", re.IGNORECASE)
 _NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
 
 _INTEGRATION_METHOD = "per_device_trapezoidal_with_linear_boundary_interpolation"
@@ -87,9 +86,7 @@ class PowerIntegration:
         return len(self.observed_gpu_ids)
 
 
-def _parse_timestamp(
-    value: str, *, naive_timezone: timezone | None = None
-) -> float | None:
+def _parse_timestamp(value: str, *, naive_timezone: timezone | None = None) -> float | None:
     """Best-effort timestamp parse to Unix epoch seconds (local wall clock).
 
     Handles the formats observed in practice:
@@ -107,16 +104,12 @@ def _parse_timestamp(
     # nvidia-smi: "YYYY/MM/DD HH:MM:SS.ffffff"
     for fmt in ("%Y/%m/%d %H:%M:%S.%f", "%Y/%m/%d %H:%M:%S"):
         try:
-            return (
-                datetime.strptime(value, fmt).replace(tzinfo=naive_timezone).timestamp()
-            )
+            return datetime.strptime(value, fmt).replace(tzinfo=naive_timezone).timestamp()
         except ValueError:
             pass
     # ISO 8601 (amd-smi variants). fromisoformat tolerates 'T' or space separator
     # in Python 3.11+; older versions need 'T'.
-    iso_value = (
-        value.replace(" ", "T", 1) if " " in value and "T" not in value else value
-    )
+    iso_value = value.replace(" ", "T", 1) if " " in value and "T" not in value else value
     try:
         dt = datetime.fromisoformat(iso_value)
     except ValueError:
@@ -124,7 +117,7 @@ def _parse_timestamp(
     if dt.tzinfo is None:
         # Treat naive timestamps as local time (matches nvidia-smi convention).
         return dt.replace(tzinfo=naive_timezone).timestamp()
-    return dt.astimezone(timezone.utc).timestamp()
+    return dt.astimezone(UTC).timestamp()
 
 
 def _parse_power(value: str) -> float | None:
@@ -154,11 +147,7 @@ def _detect_columns(header: list[str]) -> tuple[str | None, str | None, str | No
     """
     timestamp_col = next((c for c in header if _TIMESTAMP_COL_RE.search(c)), None)
     power_col = next(
-        (
-            c
-            for c in header
-            if _POWER_COL_RE.search(c) and not _POWER_EXCLUDE_RE.search(c)
-        ),
+        (c for c in header if _POWER_COL_RE.search(c) and not _POWER_EXCLUDE_RE.search(c)),
         None,
     )
     gpu_col = next((c for c in header if _GPU_INDEX_COL_RE.match(c.strip())), None)
@@ -172,7 +161,7 @@ def _telemetry_timezone(csv_path: Path) -> timezone | None:
     payload = json.loads(context.read_text())
     if not isinstance(payload, dict) or payload.get("timestamp_timezone") != "UTC":
         raise ValueError("unsupported_telemetry_timezone")
-    return timezone.utc
+    return UTC
 
 
 def aggregate_power(
@@ -299,11 +288,7 @@ def integrate_power(
     larger than ``max_sample_gap_s``.
     """
     reasons: list[str] = []
-    if (
-        not math.isfinite(start_unix)
-        or not math.isfinite(end_unix)
-        or end_unix <= start_unix
-    ):
+    if not math.isfinite(start_unix) or not math.isfinite(end_unix) or end_unix <= start_unix:
         return _empty_integration(
             expected_num_gpus=expected_num_gpus,
             reasons=["invalid_benchmark_window"],
@@ -457,7 +442,7 @@ def integrate_power(
             left_index = bisect.bisect_right(times, start_unix) - 1
             right_index = bisect.bisect_left(times, end_unix)
             relevant = samples[left_index : right_index + 1]
-            gaps = [right[0] - left[0] for left, right in zip(relevant, relevant[1:])]
+            gaps = [right[0] - left[0] for left, right in itertools.pairwise(relevant)]
             max_gap = max(gaps, default=0.0)
             per_gpu_max_sample_gap_s[gpu_id] = max_gap
             if max_gap > max_sample_gap_s:
@@ -506,13 +491,9 @@ def integrate_power(
         device_issues=device_issues,
         boundary_degenerate_rows=boundary_degenerate,
         avg_power_w=avg_power_w,
-        p75_power_w=p75_total / len(observed_gpu_ids)
-        if p75_total is not None
-        else None,
+        p75_power_w=p75_total / len(observed_gpu_ids) if p75_total is not None else None,
         p75_total_gpu_power_w=p75_total,
-        p90_power_w=p90_total / len(observed_gpu_ids)
-        if p90_total is not None
-        else None,
+        p90_power_w=p90_total / len(observed_gpu_ids) if p90_total is not None else None,
         p90_total_gpu_power_w=p90_total,
         avg_total_gpu_power_w=avg_total_gpu_power_w,
         total_gpu_energy_j=total_gpu_energy_j,
@@ -572,9 +553,10 @@ def _trapezoid(samples: list[tuple[float, float]]) -> float:
     return float(
         sum(
             (right_time - left_time) * (left_power + right_power) / 2.0
-            for (left_time, left_power), (right_time, right_power) in zip(
-                samples, samples[1:]
-            )
+            for (left_time, left_power), (
+                right_time,
+                right_power,
+            ) in itertools.pairwise(samples)
         )
     )
 
@@ -610,15 +592,11 @@ def cross_check_accumulator(csv_path: Path) -> dict | None:
         gpu_id: end_energy[gpu_id] - start_energy[gpu_id] for gpu_id in matched_gpu_ids
     }
     unmatched_gpus = sorted(set(start_energy) ^ set(end_energy), key=_gpu_sort_key)
-    negative_delta_gpus = [
-        gpu_id for gpu_id, delta in per_gpu_delta_j.items() if delta < 0
-    ]
+    negative_delta_gpus = [gpu_id for gpu_id, delta in per_gpu_delta_j.items() if delta < 0]
 
     stream = _stream_samples_by_gpu(csv_path)
     integrated_gpu_ids = sorted(set(stream) & set(per_gpu_delta_j), key=_gpu_sort_key)
-    integrated_stream_j = float(
-        sum(_trapezoid(stream[gpu_id]) for gpu_id in integrated_gpu_ids)
-    )
+    integrated_stream_j = float(sum(_trapezoid(stream[gpu_id]) for gpu_id in integrated_gpu_ids))
     boundaries = [
         timestamp
         for gpu_id in integrated_gpu_ids
@@ -630,12 +608,8 @@ def cross_check_accumulator(csv_path: Path) -> dict | None:
     relative_error: float | None = None
     within_tolerance = False
     if accumulator_delta_j > 0:
-        relative_error = (
-            abs(accumulator_delta_j - integrated_stream_j) / accumulator_delta_j
-        )
-        within_tolerance = (
-            not negative_delta_gpus and relative_error <= _ACCUMULATOR_TOLERANCE
-        )
+        relative_error = abs(accumulator_delta_j - integrated_stream_j) / accumulator_delta_j
+        within_tolerance = not negative_delta_gpus and relative_error <= _ACCUMULATOR_TOLERANCE
 
     return {
         "available": True,
@@ -763,9 +737,7 @@ def invalid_validation_payload(
         csv_path=csv_path,
         bench_result=bench_result,
         benchmark=None,
-        integration=_empty_integration(
-            expected_num_gpus=expected_num_gpus, reasons=reasons
-        ),
+        integration=_empty_integration(expected_num_gpus=expected_num_gpus, reasons=reasons),
         power_valid=False,
         reasons=reasons,
         metrics={},
@@ -850,8 +822,7 @@ def run(
         )
     except OSError as exc:
         print(
-            f"[aggregate_power] Failed to write validation artifact "
-            f"{validation_result}: {exc}",
+            f"[aggregate_power] Failed to write validation artifact {validation_result}: {exc}",
             file=sys.stderr,
         )
         return 1 if require_power else 0

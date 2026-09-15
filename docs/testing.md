@@ -59,6 +59,27 @@ See [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/2
 
 Run checks from the repository root and replace placeholders with the exact changed path or key.
 
+### Python lint and formatting
+
+[`infx/ruff.toml`](../infx/ruff.toml) enables all stable Ruff rules for `infx/`, with the exceptions below. It targets Python 3.12 and uses the Ruff formatter with a line length of 100. CI runs on any Python-file change and pins Ruff 0.16.7; review newly enabled rules when upgrading that pin. Preview rules and automatic unsafe fixes are not enabled.
+
+```bash
+uvx --exclude-newer PT12H ruff==0.16.7 check --fix infx
+uvx --exclude-newer PT12H ruff==0.16.7 format infx
+```
+
+| Exceptions | Reason |
+| --- | --- |
+| `D`, `DOC`, `CPY`, `TD`, `FIX`, `W505`, `RUF002`, `RUF003` | Avoid mandatory prose, copyright headers, TODO metadata, and punctuation policing. |
+| `E501`, `W191`, `E111`, `E114`, `E117`, `Q`, `COM812`, `COM819` | Let the formatter own layout and quoting. |
+| `C901`, `PLR0911/12/13/15/17`, `PLR2004`, `PLW2901`, `FBT` | Fixed size limits and blanket bans on literals or loop-variable normalization can force unnecessary helpers and variables. Review complexity and boolean arguments in context. |
+| `EM`, `TRY003`, `TRY004`, `TRY300`, `TRY301`, `T201` | Keep direct error messages, established validation exception types, and CLI output. |
+| `ANN401`, `PLC0414`, `PLC0415`, `TC001`, `TC003` | Support dynamic JSON boundaries, explicit re-exports, optional dependencies, and ordinary type imports without unnecessary indirection. Other annotation rules remain enabled. |
+| `PTH110`, `PTH118`, `PTH122`, `PTH123`, `PTH207`, `FURB162` | Existing file APIs and timestamp normalization have observable edge cases; replacing them is not a lint-only change. |
+| `S603`, `S607` | Argument-vector subprocess calls and tools found on `PATH` are intentional. Shell-execution checks remain enabled; callers still own argument validation. |
+
+Inline `# noqa: CODE` exceptions cover reviewed uses: model tokenizer strings, deterministic benchmark randomness, fixed SQL fragments and HTTP origins, a custom `SafeLoader`, invariant assertions, best-effort collection, and compatibility arguments. Frozen option constructors are allowlisted for default arguments. Fix findings where practical and keep justified exceptions on the affected lines; do not disable a rule for an entire file. Ruff checks for unused ignores. Ruff does not replace a type checker, security review, or behavioral tests.
+
 ### Parse and syntax
 
 ```bash
@@ -173,7 +194,7 @@ Record enough information for another reviewer to reproduce the claim without gu
 3. **Before CODEOWNER sign-off:** follow [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md), including its code-quality, architecture, image provenance, upstream recipe, patch/waiver, chat-template, and AgentX requirements where applicable.
 4. **For sweep/eval acceptance:** at least one commit currently in the PR has successful, non-skipped executed `single-node */` and `eval /` checks. A successful `collect-evals` alone is insufficient. Download the corresponding eval artifacts and confirm non-empty, passing accuracy and the same inference image. These are the executable rules in [verifier Checks 1 and 2](../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr).
 5. **For reuse at merge:** an authorized `OWNER`, `MEMBER`, or `COLLABORATOR` posts a whole-line `/reuse-sweep-run` command (optionally with the eligible source run ID) before the supported merge path. The verifier treats a missing or unauthorized command as a failure. See [verifier Check 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted) and [the reuse procedure](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep).
-6. **At merge:** a CODEOWNER's exact sign-off needs one independent PASS from [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml). Automation preserves acceptance with `codeowner-signoff-verified` and carries the required status onto subsequent heads without rerunning Claude, including after rebases. Each actual verification updates one PR verdict comment with the assessed SHA; carrying a PASS forward does not attest to review of new commits. Deleting the comment does not reset acceptance, and manual reassessment cannot revoke an earlier PASS. See [the contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off) for comment recovery and manual dispatch.
+6. **At merge:** the current head needs the CODEOWNER sign-off status defined in [the contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off). That guide owns verification, admin-update retention, revocation, and recovery rules.
 7. **After merge:** the author confirms the main-branch jobs pass, as required by [`CONTRIBUTING.md`](../CONTRIBUTING.md#after-merging).
 
 ## Stop conditions

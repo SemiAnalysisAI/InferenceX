@@ -59,6 +59,27 @@
 
 从仓库根目录运行检查，并用实际变更路径或键替换占位符。
 
+### Python 静态检查与格式化
+
+[`infx/ruff.toml`](../infx/ruff.toml) 为 `infx/` 启用所有稳定版 Ruff 规则，并保留下表所列的例外。目标版本为 Python 3.12，使用 Ruff 格式化器，行长度设为 100。任何 Python 文件变更都会触发 CI，固定使用 Ruff 0.16.7；升级版本时需审阅新启用的规则。未启用预览规则或自动不安全修复。
+
+```bash
+uvx --exclude-newer PT12H ruff==0.16.7 check --fix infx
+uvx --exclude-newer PT12H ruff==0.16.7 format infx
+```
+
+| 例外 | 原因 |
+| --- | --- |
+| `D`、`DOC`、`CPY`、`TD`、`FIX`、`W505`、`RUF002`、`RUF003` | 不强制添加说明文字、版权头、TODO 元数据，也不机械限制标点。 |
+| `E501`、`W191`、`E111`、`E114`、`E117`、`Q`、`COM812`、`COM819` | 布局与引号由格式化器负责。 |
+| `C901`、`PLR0911/12/13/15/17`、`PLR2004`、`PLW2901`、`FBT` | 固定规模上限及对字面量、循环变量规范化的一刀切限制，可能迫使代码增加无必要的函数和变量。复杂度与布尔参数应结合上下文审阅。 |
+| `EM`、`TRY003`、`TRY004`、`TRY300`、`TRY301`、`T201` | 保留直接的错误消息、既有校验异常类型和 CLI 输出。 |
+| `ANN401`、`PLC0414`、`PLC0415`、`TC001`、`TC003` | 支持动态 JSON 边界、显式重新导出、可选依赖和普通类型导入，避免无必要的间接层。其他类型注解规则仍然启用。 |
+| `PTH110`、`PTH118`、`PTH122`、`PTH123`、`PTH207`、`FURB162` | 既有文件 API 和时间戳规范化存在可观察的边界行为，替换它们不能视为纯静态检查整理。 |
+| `S603`、`S607` | 使用参数数组启动子进程、通过 `PATH` 查找工具是有意设计。Shell 执行检查仍然启用；调用方仍须校验参数。 |
+
+行内 `# noqa: CODE` 例外涵盖已审阅的用法：模型 tokenizer 字符串、确定性的基准随机数、固定 SQL 片段和 HTTP 来源、自定义 `SafeLoader`、不变量断言、尽力收集结果及兼容参数。冻结的选项构造器允许用于默认参数。应尽量修复问题，确有理由保留的例外仅作用于相关代码行，不要对整个文件禁用规则。Ruff 会检查多余的忽略标记。Ruff 不能替代类型检查器、安全审阅或行为测试。
+
 ### 解析与语法
 
 ```bash
@@ -173,7 +194,7 @@ python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
 3. **CODEOWNER 签署前：**遵循 [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md)，包括适用的代码质量、架构、镜像来源、上游配方、补丁/豁免、聊天模板和 AgentX 要求。
 4. **扫描/评测验收：**当前仍在 PR 中的至少一个提交拥有成功、未跳过且实际执行的 `single-node */` 与 `eval /` 检查。仅 `collect-evals` 成功不够。下载对应评测制品，确认其非空、准确率达标且使用同一推理镜像。这些可执行规则位于[验证器检查 1 和 2](../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr)。
 5. **合并时复用：**获授权的 `OWNER`、`MEMBER` 或 `COLLABORATOR` 必须在受支持的合并路径前发布独占一行的 `/reuse-sweep-run` 命令（可附带合格来源 run ID）。验证器会把命令缺失或发布者未授权视为失败；参见[验证器检查 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted)和[复用流程](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
-6. **合并时：**CODEOWNER 的精确签署只需由 [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) 独立验证并获得一次 PASS。自动化通过 `codeowner-signoff-verified` 保留接受状态，并将必需状态延续到后续 head（包括 rebase 后），无需重新运行 Claude。每次实际验证都会更新同一条 PR 裁定评论，注明所评估的 SHA；延续 PASS 不代表新增提交已被审阅。删除评论不会重置接受状态，手动重新评估也不会撤销已有 PASS。评论恢复和手动分发说明见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
+6. **合并时：**当前 head 必须满足[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)定义的 CODEOWNER 签核状态要求。验证、管理员更新后的签核保留、撤销及恢复规则以该指南为准。
 7. **合并后：**作者按照 [`CONTRIBUTING.md`](../CONTRIBUTING.md#after-merging) 的要求确认 main 分支任务通过。
 
 ## 停止条件

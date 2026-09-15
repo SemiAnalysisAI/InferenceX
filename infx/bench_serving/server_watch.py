@@ -10,6 +10,7 @@ import signal
 import subprocess
 import sys
 from pathlib import Path
+from types import FrameType
 
 
 def process_state(pid: int) -> tuple[str, str] | None:
@@ -46,9 +47,7 @@ def snapshot(pid: int) -> dict[str, str]:
         descendants = expanded
     # These are persistent required engine processes, not transient tokenizer or
     # HTTP request subprocesses. The root alone would miss a dead scheduler.
-    worker = re.compile(
-        r"sglang::scheduler|EngineCore|VllmWorker|TPWorker|trtllm-worker"
-    )
+    worker = re.compile(r"sglang::scheduler|EngineCore|VllmWorker|TPWorker|trtllm-worker")
     required = {pid} | {
         int(p[0])
         for p in processes
@@ -111,7 +110,7 @@ def run(required: dict[str, str], command: list[str], interval: float = 2) -> in
         )
         return 1
 
-    def interrupted(_signum, _frame):
+    def interrupted(_signum: int, _frame: FrameType | None) -> None:
         raise KeyboardInterrupt
 
     previous = signal.signal(signal.SIGTERM, interrupted)

@@ -28,9 +28,7 @@ def benchmark_points(entries: list[dict]) -> set[tuple]:
     return {
         (entry["recipe-fingerprint"], int(conc), entry["image"])
         for entry in entries
-        for conc in (
-            entry["conc"] if isinstance(entry["conc"], list) else [entry["conc"]]
-        )
+        for conc in (entry["conc"] if isinstance(entry["conc"], list) else [entry["conc"]])
     }
 
 
@@ -62,10 +60,7 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
     ]
     return {
         "single_node": {
-            "all": [
-                {**row, "recipe-fingerprint": recipe_fingerprint(row)}
-                for row in entries
-            ]
+            "all": [{**row, "recipe-fingerprint": recipe_fingerprint(row)} for row in entries]
         },
         "evals": evals,
     }
@@ -79,20 +74,14 @@ def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:
         raise VerificationError("Matrix was generated from a different head")
     entries = metadata["entries"]
     if len(entries) != 1 or entries[0]["config-keys"] != [family.split(":", 1)[1]]:
-        raise VerificationError(
-            "Final changelog must select exactly the candidate family"
-        )
+        raise VerificationError("Final changelog must select exactly the candidate family")
     expected = benchmark_points(benchmark_entries(canonical))
     for entry in benchmark_entries(matrix):
         measured = {
-            key: value
-            for key, value in entry.items()
-            if key not in ("priority", "queue-token")
+            key: value for key, value in entry.items() if key not in ("priority", "queue-token")
         }
         if recipe_fingerprint(measured) != entry["recipe-fingerprint"]:
-            raise VerificationError(
-                "Matrix settings do not match their recipe fingerprint"
-            )
+            raise VerificationError("Matrix settings do not match their recipe fingerprint")
     count = sum(
         len(entry["conc"]) if isinstance(entry["conc"], list) else 1
         for entry in benchmark_entries(matrix)
@@ -100,9 +89,7 @@ def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:
     if count != len(benchmark_points(benchmark_entries(matrix))):
         raise VerificationError("Duplicate point in final matrix")
     if not expected or benchmark_points(benchmark_entries(matrix)) != expected:
-        raise VerificationError(
-            "Final matrix omits or changes canonical benchmark points"
-        )
+        raise VerificationError("Final matrix omits or changes canonical benchmark points")
     if expected_evals(matrix) != expected_evals(canonical):
         raise VerificationError("Final matrix does not match canonical default evals")
 
@@ -157,14 +144,11 @@ def check_coverage(
     expected = benchmark_points(benchmark_entries(matrix))
     paths = list((directory / "results_bmk").glob("*.json"))
     fixed = [
-        row
-        for _, row in reuse.json_rows(paths)
-        if row.get("scenario_type") != "agentic-coding"
+        row for _, row in reuse.json_rows(paths) if row.get("scenario_type") != "agentic-coding"
     ]
     agentic = [row for _, row in reuse.json_rows(reuse.agentic_point_files(directory))]
     actual = [
-        (row["recipe_fingerprint"], int(row["conc"]), row["image"])
-        for row in fixed + agentic
+        (row["recipe_fingerprint"], int(row["conc"]), row["image"]) for row in fixed + agentic
     ]
     errors = reuse.duplicate_identity_errors("benchmark", actual)
     errors += reuse.validate_identity_set("benchmark", expected, set(actual))
@@ -192,18 +176,17 @@ def select_artifacts(inventory: list[dict], run: dict, attempt: dict) -> list[di
         wanted = (
             name in ("klaud-sweep-manifest", "results_bmk")
             or name.startswith("bmk_agentic_")
-            or name.startswith("eval_")
-            and not name.startswith(("eval_server_logs_", "eval_gpu_metrics_"))
+            or (
+                name.startswith("eval_")
+                and not name.startswith(("eval_server_logs_", "eval_gpu_metrics_"))
+            )
         )
         if not wanted:
             continue
         if "/" in name or "\\" in name or name in (".", ".."):
             raise VerificationError("Invalid artifact name")
         producer = artifact.get("workflow_run", {})
-        if (
-            producer.get("id") != run["id"]
-            or producer.get("head_sha") != run["head_sha"]
-        ):
+        if producer.get("id") != run["id"] or producer.get("head_sha") != run["head_sha"]:
             raise VerificationError("Artifact run or head mismatch")
         if utc(artifact["created_at"]) < utc(run["created_at"]) or utc(
             artifact["created_at"]
@@ -226,51 +209,32 @@ def select_artifacts(inventory: list[dict], run: dict, attempt: dict) -> list[di
                 if any(
                     a["name"].startswith(prefix)
                     and a["name"] != name
-                    and not a["name"].startswith(
-                        ("eval_server_logs_", "eval_gpu_metrics_")
-                    )
+                    and not a["name"].startswith(("eval_server_logs_", "eval_gpu_metrics_"))
                     and utc(a["created_at"]) >= utc(attempt["run_started_at"])
                     for a in inventory
                 ):
-                    raise VerificationError(
-                        "Stale aggregate after a point producer reran"
-                    )
+                    raise VerificationError("Stale aggregate after a point producer reran")
     if "klaud-sweep-manifest" not in selected:
         raise VerificationError("Missing final-sweep manifest")
     return list(selected.values())
 
 
-def verify_sweep(
-    repository: str, run: dict, family: str
-) -> tuple[dict, list[dict], list[dict]]:
+def verify_sweep(repository: str, run: dict, family: str) -> tuple[dict, list[dict], list[dict]]:
     if run["status"] != "completed" or run["conclusion"] != "success":
         raise VerificationError("Final sweep has not passed")
-    attempt = github.read(
-        repository, f"actions/runs/{run['id']}/attempts/{run['run_attempt']}"
-    )
+    attempt = github.read(repository, f"actions/runs/{run['id']}/attempts/{run['run_attempt']}")
     inventory = select_artifacts(github.artifacts(repository, run["id"]), run, attempt)
     canonical = canonical_matrix(repository, run["head_sha"], family)
     with tempfile.TemporaryDirectory(prefix="klaud-validation-") as temp:
         directory = Path(temp)
         for artifact in inventory:
             github.download_json(repository, artifact, directory / artifact["name"])
-        manifest = json.loads(
-            (directory / "klaud-sweep-manifest/sweep_manifest.json").read_text()
-        )
+        manifest = json.loads((directory / "klaud-sweep-manifest/sweep_manifest.json").read_text())
         check_coverage(directory, manifest, run, family, canonical)
         paths = list((directory / "results_bmk").glob("*.json"))
         fixed = [
-            row
-            for _, row in reuse.json_rows(paths)
-            if row.get("scenario_type") != "agentic-coding"
+            row for _, row in reuse.json_rows(paths) if row.get("scenario_type") != "agentic-coding"
         ]
-        agentic = [
-            row for _, row in reuse.json_rows(reuse.agentic_point_files(directory))
-        ]
-        evals = [
-            row
-            for _, row in reuse.json_rows(
-                (directory / "eval_results_all").glob("*.json")
-            )
-        ]
+        agentic = [row for _, row in reuse.json_rows(reuse.agentic_point_files(directory))]
+        evals = [row for _, row in reuse.json_rows((directory / "eval_results_all").glob("*.json"))]
         return canonical, fixed + agentic, evals

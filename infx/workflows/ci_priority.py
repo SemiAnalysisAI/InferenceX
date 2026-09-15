@@ -34,9 +34,7 @@ def load_policy(path: str | Path) -> dict[str, Any]:
     with Path(path).open() as policy_file:
         policy = yaml.safe_load(policy_file)
     if policy.get("version") != 1:
-        raise ValueError(
-            f"Unsupported CI priority policy version: {policy.get('version')}"
-        )
+        raise ValueError(f"Unsupported CI priority policy version: {policy.get('version')}")
     return policy
 
 
@@ -80,11 +78,7 @@ def _entry_from_criteria(
     framework_criteria = tuple(policy["adjustments"].get("framework-prefix", {}))
     model_criteria = tuple(policy["adjustments"].get("model-prefix", {}))
     return {
-        "prefill": (
-            {}
-            if "multi-node" in criteria and entry.get("prefill") is not None
-            else None
-        ),
+        "prefill": ({} if "multi-node" in criteria and entry.get("prefill") is not None else None),
         "scenario-type": (
             "agentic-coding"
             if "agentic" in criteria and entry.get("scenario-type") == "agentic-coding"
@@ -106,10 +100,7 @@ def _entry_from_criteria(
             model_prefix
             if any(
                 criterion in criteria
-                and (
-                    model_prefix == criterion
-                    or model_prefix.startswith(f"{criterion}-")
-                )
+                and (model_prefix == criterion or model_prefix.startswith(f"{criterion}-"))
                 for criterion in model_criteria
             )
             else ""
@@ -129,8 +120,7 @@ def calculate_priority(
     waiver_labels = set(patchwork.get("waived-by", []))
     criteria = context.criteria
     if (
-        (criteria is not None and "patchwork" in criteria)
-        or context.labels & patch_labels
+        (criteria is not None and "patchwork" in criteria) or context.labels & patch_labels
     ) and not context.labels & waiver_labels:
         return _decimal(patchwork["score"]).quantize(SCORE_QUANTUM, ROUND_HALF_UP)
 
@@ -141,11 +131,7 @@ def calculate_priority(
     score += _decimal(adjustments.get("event", {}).get(context.event_name, 0))
 
     node_count = entry.get("node-count", 1)
-    if (
-        not isinstance(node_count, int)
-        or isinstance(node_count, bool)
-        or node_count < 1
-    ):
+    if not isinstance(node_count, int) or isinstance(node_count, bool) or node_count < 1:
         raise ValueError(f"node-count must be a positive integer, got {node_count!r}")
     score += _decimal(adjustments.get("additional-node", 0)) * (node_count - 1)
 
@@ -156,9 +142,7 @@ def calculate_priority(
     if entry.get("eval-only") is True:
         score += _decimal(adjustments.get("eval-only", 0))
 
-    score += _decimal(
-        adjustments.get("precision", {}).get(str(entry.get("precision", "")), 0)
-    )
+    score += _decimal(adjustments.get("precision", {}).get(str(entry.get("precision", "")), 0))
     score += _decimal(
         adjustments.get("spec-decoding", {}).get(str(entry.get("spec-decoding", "")), 0)
     )
@@ -170,9 +154,9 @@ def calculate_priority(
     )
 
     checklist = policy["labels"].get("checklist-complete", {})
-    if (
-        criteria is not None and "checklist-complete" in criteria
-    ) or context.labels & set(checklist.get("names", [])):
+    if (criteria is not None and "checklist-complete" in criteria) or context.labels & set(
+        checklist.get("names", [])
+    ):
         score += _decimal(checklist.get("adjustment", 0))
 
     return score.quantize(SCORE_QUANTUM, ROUND_HALF_UP)
@@ -209,9 +193,7 @@ def annotate_jobs(
         for key, item in value.items()
     }
     if "runner" in value and "framework" in value:
-        annotated["priority"] = format_priority(
-            calculate_priority(value, policy, context)
-        )
+        annotated["priority"] = format_priority(calculate_priority(value, policy, context))
         annotated["queue-token"] = queue_token(value, context.queue_namespace, _path)
         if (
             context.pr_number is not None
@@ -227,9 +209,7 @@ def _labels_from_json(raw_labels: str) -> frozenset[str]:
     value = json.loads(raw_labels)
     if value is None:
         return frozenset()
-    if not isinstance(value, list) or not all(
-        isinstance(label, str) for label in value
-    ):
+    if not isinstance(value, list) or not all(isinstance(label, str) for label in value):
         raise ValueError("--labels-json must be a JSON array of strings")
     return frozenset(value)
 
@@ -270,9 +250,7 @@ def main() -> int:
     )
     source = args.input.read_text() if args.input else sys.stdin.read()
     payload = json.loads(source)
-    json.dump(
-        annotate_jobs(payload, policy, context), sys.stdout, separators=(",", ":")
-    )
+    json.dump(annotate_jobs(payload, policy, context), sys.stdout, separators=(",", ":"))
     sys.stdout.write("\n")
     return 0
 
