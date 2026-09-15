@@ -105,6 +105,10 @@ print(f"_YAML_MAX_MODEL_LEN='{sh(m.get('max_model_len', ''))}'")
 print(f"_YAML_MAX_NUM_SEQS='{sh(m.get('max_num_seqs', ''))}'")
 print(f"_YAML_MAX_NUM_BATCHED_TOKENS='{sh(m.get('max_num_batched_tokens', ''))}'")
 print(f"_YAML_SCHEDULER_DELAY_FACTOR='{sh(m.get('scheduler_delay_factor', ''))}'")
+print(f"_YAML_ATTN_PREFILL_CHUNK_SIZE='{sh(m.get('attn_prefill_chunk_size', ''))}'")
+print(f"_YAML_STATE_CKPT_INTERVAL='{sh(m.get('state_checkpoint_interval_tokens', ''))}'")
+print(f"_YAML_LEVEL='{sh(m.get('level', ''))}'")
+print(f"_YAML_SPEC_DECODE_AL='{sh(m.get('spec_decode_acceptance_length', ''))}'")
 PYEOF
 # shellcheck source=/dev/null
 source "$_yaml_tmp"
@@ -120,7 +124,47 @@ MAX_MODEL_LEN="${_YAML_MAX_MODEL_LEN:-${MAX_MODEL_LEN:-}}"
 MAX_NUM_SEQS="${_YAML_MAX_NUM_SEQS:-${MAX_NUM_SEQS:-256}}"
 MAX_NUM_BATCHED_TOKENS="${_YAML_MAX_NUM_BATCHED_TOKENS:-${MAX_NUM_BATCHED_TOKENS:-}}"
 SCHEDULER_DELAY_FACTOR="${_YAML_SCHEDULER_DELAY_FACTOR:-${SCHEDULER_DELAY_FACTOR:-}}"
+ATTN_PREFILL_CHUNK_SIZE="${_YAML_ATTN_PREFILL_CHUNK_SIZE:-}"
+STATE_CKPT_INTERVAL="${_YAML_STATE_CKPT_INTERVAL:-}"
+LEVEL="${_YAML_LEVEL:-}"
+# Synthetic acceptance length: YAML > launcher env (SPEC_DECODE_AL).
+SPEC_DECODE_AL="${_YAML_SPEC_DECODE_AL:-${SPEC_DECODE_AL:-}}"
 unset _YAML_BLOCK_SIZE _YAML_MEM_FRAC_STATIC _YAML_MAX_MODEL_LEN _YAML_MAX_NUM_SEQS _YAML_MAX_NUM_BATCHED_TOKENS _YAML_SCHEDULER_DELAY_FACTOR
+unset _YAML_ATTN_PREFILL_CHUNK_SIZE _YAML_STATE_CKPT_INTERVAL _YAML_LEVEL _YAML_SPEC_DECODE_AL
+
+# =============================================================================
+# Agentic (AgentX trace-replay) run configuration
+# =============================================================================
+# Agentic runs (IS_AGENTIC) use the '<model>-AgentX' recipe and differ from the
+# throughput path: prefix caching on, per-request max-num-seqs = 2*conc, extra
+# ATOM server knobs, dp-sticky router, and an optional CPU KV-offload tier on
+# prefill. All of this is gated on IS_AGENTIC_RUN so the throughput path is
+# unchanged. Reference: ATOM recipes/DeepSeek-V4-Agentic-PD-Max.md.
+IS_AGENTIC_RUN=0
+if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
+    IS_AGENTIC_RUN=1
+fi
+
+# Largest concurrency in this allocation (BENCH_MAX_CONCURRENCY is x-delimited).
+_MAX_CONC=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
+
+# Prefix caching: agentic runs depend on cross-turn prefix reuse; throughput
+# runs keep the server's paged-only behavior.
+if [[ "$IS_AGENTIC_RUN" == "1" ]]; then
+    PREFIX_CACHE_ARG="--enable-prefix-caching"
+    # Recipe max-num-seqs is 2*concurrency (prefill and decode).
+    MAX_NUM_SEQS=$((2 * _MAX_CONC))
+else
+    PREFIX_CACHE_ARG="--no-enable_prefix_caching"
+fi
+
+# Agentic-only server knobs (applied when the model provides them).
+AGENTIC_SERVER_ARGS=""
+if [[ "$IS_AGENTIC_RUN" == "1" ]]; then
+    [[ -n "$ATTN_PREFILL_CHUNK_SIZE" ]] && AGENTIC_SERVER_ARGS+=" --attn-prefill-chunk-size ${ATTN_PREFILL_CHUNK_SIZE}"
+    [[ -n "$STATE_CKPT_INTERVAL" ]] && AGENTIC_SERVER_ARGS+=" --state-checkpoint-interval-tokens ${STATE_CKPT_INTERVAL}"
+    [[ -n "$LEVEL" ]] && AGENTIC_SERVER_ARGS+=" --level ${LEVEL}"
+fi
 
 # =============================================================================
 # Cluster Topology Configuration
@@ -200,6 +244,12 @@ unset _env_pair
 SPEC_ARGS=()
 if [[ -n "$MODEL_MTP_FLAGS" && "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
     SPEC_ARGS=(${MODEL_MTP_FLAGS} "$DECODE_MTP_SIZE")
+    # Agentic throughput runs simulate acceptance at the recipe's synthetic AL;
+    # eval runs (RUN_EVAL / EVAL_ONLY) need real target verification, so skip it.
+    if [[ "$IS_AGENTIC_RUN" == "1" && -n "$SPEC_DECODE_AL" \
+          && "${EVAL_ONLY:-false}" != "true" && "${RUN_EVAL:-false}" != "true" ]]; then
+        SPEC_ARGS+=(--spec-decode-acceptance-length "$SPEC_DECODE_AL")
+    fi
 fi
 
 # KV cache arg - full flag string from YAML
@@ -215,6 +265,32 @@ if [[ -n "$MAX_NUM_BATCHED_TOKENS" ]]; then
 fi
 if [[ -n "$SCHEDULER_DELAY_FACTOR" ]]; then
     MODEL_LEN_ARGS="${MODEL_LEN_ARGS} --scheduler-delay-factor ${SCHEDULER_DELAY_FACTOR}"
+fi
+
+# =============================================================================
+# PD KV-transfer connectors and router policy
+# =============================================================================
+# Decode is always a plain mooncake consumer. Prefill is a plain mooncake
+# producer, except on the agentic CPU-offload tier (KV_OFFLOADING=dram) where it
+# wraps mooncake + lmcache_offload in a "multi" connector (recipe
+# DeepSeek-V4-Agentic-PD-Max.md, "DP attention with CPU offload"). host_ip is
+# this node's handshake IP (resolved above).
+DECODE_KV_TRANSFER="{\"kv_role\":\"kv_consumer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}"
+PREFILL_KV_TRANSFER="{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}"
+if [[ "$IS_AGENTIC_RUN" == "1" && "${KV_OFFLOADING:-none}" == "dram" ]]; then
+    # lmcache.max_local_cpu_size is per worker; TOTAL_CPU_DRAM_GB is the
+    # aggregate CPU budget from the matrix (dram-utilization), so divide by
+    # GPUS_PER_NODE (one offload worker per GPU rank).
+    _per_worker_cpu_gb=$(( ${TOTAL_CPU_DRAM_GB:-0} / GPUS_PER_NODE ))
+    if [[ "$_per_worker_cpu_gb" -le 0 ]]; then _per_worker_cpu_gb=128; fi
+    PREFILL_KV_TRANSFER="{\"kv_connector\":\"multi\",\"connectors\":[{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}},{\"kv_connector\":\"lmcache_offload\",\"kv_role\":\"offload\",\"offload_layout\":\"hybrid\",\"max_pending_saves\":8,\"slot_sidecar_staging_slots\":${OFFLOAD_SLOT_STAGING_SLOTS:-4},\"lmcache.local_cpu\":true,\"lmcache.max_local_cpu_size\":${_per_worker_cpu_gb},\"lmcache.local_disk\":null,\"lmcache.max_local_disk_size\":0,\"lmcache.remote_url\":null,\"lmcache.chunk_size\":256,\"lmcache.cache_policy\":\"LRU\",\"lmcache.lookup_server_worker_ids\":[],\"lmcache.store_location\":\"LocalCPUBackend\",\"lmcache.retrieve_locations\":[\"LocalCPUBackend\"]}]}"
+fi
+
+# Router policy: DP-attention agentic tiers need prefix-affine dp-sticky routing
+# (idx2idx PD rank mapping); the TP tier and all throughput runs use random.
+ROUTER_POLICY_ARGS="--policy random"
+if [[ "$IS_AGENTIC_RUN" == "1" && "$PREFILL_ENABLE_DP" == "true" ]]; then
+    ROUTER_POLICY_ARGS="--dp-aware --policy dp_sticky --atom-pd-rank-mapping-policy idx2idx"
 fi
 
 
@@ -271,9 +347,10 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --max-num-seqs ${MAX_NUM_SEQS} \
         ${MODEL_LEN_ARGS} \
-        --no-enable_prefix_caching \
+        ${AGENTIC_SERVER_ARGS} \
+        ${PREFIX_CACHE_ARG} \
         ${ONLINE_QUANT_ARG} \
-        --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
+        --kv-transfer-config '${PREFILL_KV_TRANSFER}' \
         ${EXTRA_SERVER_ARGS}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -325,7 +402,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --pd-disaggregation \
         ${PREFILL_ARGS} \
         ${DECODE_ARGS} \
-        --policy random \
+        ${ROUTER_POLICY_ARGS} \
         --backend atom \
         --log-level info \
         --disable-health-check \
@@ -367,10 +444,30 @@ if [ "$NODE_RANK" -eq 0 ]; then
         export IS_MTP="true"
     fi
 
-    BENCH_CMD="bash $ATOM_WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
-        $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
-        ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
-        ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
+    # Select the benchmark runner.
+    #   IS_AGENTIC=1/true  -> AgentX trace replay (trace_replay.sh), driven by
+    #                         aiperf against the atomesh router on ROUTER_PORT.
+    #   IS_AGENTIC unset/0  -> fixed-seq-len throughput benchmark (bench.sh).
+    if [[ "$IS_AGENTIC_RUN" == "1" ]]; then
+        # trace_replay.sh targets ROUTER_PORT and derives MODEL from
+        # $MODEL_DIR/$MODEL_NAME, which matches the atom server's served-model
+        # name (its --model path). The atomesh router exposes no /flush_cache,
+        # and the CI matrix runs one concurrency per allocation, so disable the
+        # SGLang-specific between-conc cache clear.
+        export ROUTER_PORT
+        export DURATION="${DURATION:-1800}"
+        export CLEAR_CACHE_BETWEEN_CONC="${CLEAR_CACHE_BETWEEN_CONC:-0}"
+        # trace_replay.sh signature: model_path model_name concurrency_list log_path
+        BENCH_CMD="bash $ATOM_WS_PATH/trace_replay.sh \
+            $MODEL_DIR $MODEL_NAME \"${BENCH_MAX_CONCURRENCY}\" /run_logs/slurm_job-${SLURM_JOB_ID}"
+        echo "Benchmark runner: trace_replay.sh (agentic ATOM, router :${ROUTER_PORT}, KV_OFFLOADING=${KV_OFFLOADING:-none})"
+    else
+        BENCH_CMD="bash $ATOM_WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
+            $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
+            ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
+            ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
+        echo "Benchmark runner: bench.sh (fixed-seq-len)"
+    fi
 
     if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"
@@ -493,9 +590,10 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --max-num-seqs ${MAX_NUM_SEQS} \
         ${MODEL_LEN_ARGS} \
-        --no-enable_prefix_caching \
+        ${AGENTIC_SERVER_ARGS} \
+        ${PREFIX_CACHE_ARG} \
         ${ONLINE_QUANT_ARG} \
-        --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
+        --kv-transfer-config '${PREFILL_KV_TRANSFER}' \
         ${EXTRA_SERVER_ARGS}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -553,7 +651,12 @@ else
     _MAX_CONC=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
     CUDAGRAPH_SIZES='[1,2,4,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256]'
 
-    DECODE_MAX_NUM_SEQS="${_MAX_CONC}"
+    if [[ "$IS_AGENTIC_RUN" == "1" ]]; then
+        # Recipe max-num-seqs is 2*concurrency.
+        DECODE_MAX_NUM_SEQS=$((2 * _MAX_CONC))
+    else
+        DECODE_MAX_NUM_SEQS="${_MAX_CONC}"
+    fi
 
     DECODE_CMD="python3 -m atom.entrypoints.openai_server \
         --model ${MODEL_DIR}/${MODEL_NAME} \
@@ -566,9 +669,10 @@ else
         --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --max-num-seqs ${DECODE_MAX_NUM_SEQS} \
         ${MODEL_LEN_ARGS} \
-        --no-enable_prefix_caching \
+        ${AGENTIC_SERVER_ARGS} \
+        ${PREFIX_CACHE_ARG} \
         ${ONLINE_QUANT_ARG} \
-        --kv-transfer-config '{\"kv_role\":\"kv_consumer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
+        --kv-transfer-config '${DECODE_KV_TRANSFER}' \
         --cudagraph-capture-sizes "${CUDAGRAPH_SIZES}" \
         ${EXTRA_SERVER_ARGS}"
 

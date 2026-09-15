@@ -26,6 +26,11 @@
 #     max_num_seqs:  str  # --max-num-seqs value (overrides default of 256)
 #     max_num_batched_tokens: str  # --max-num-batched-tokens value (overrides default of unset)
 #     scheduler_delay_factor: str  # --scheduler-delay-factor value (overrides default of unset)
+#   Agentic-only (applied by server_atom.sh only when IS_AGENTIC=1):
+#     attn_prefill_chunk_size: str  # --attn-prefill-chunk-size value (unset = omit)
+#     state_checkpoint_interval_tokens: str  # --state-checkpoint-interval-tokens value (unset = omit)
+#     level: str  # --level value (unset = omit)
+#     spec_decode_acceptance_length: str  # --spec-decode-acceptance-length (synthetic AL on throughput runs; unset = omit)
 
 DeepSeek-V4-Pro:
   env: "ATOM_MOE_GU_ITLV=1 AITER_BF16_FP8_MOE_BOUND=0"
@@ -38,6 +43,37 @@ DeepSeek-V4-Pro:
   prefill_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
   decode_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
   mtp_flags: "--method mtp --num-speculative-tokens"
+
+# Agentic (AgentX trace-replay) variant of DeepSeek-V4-Pro on ATOM PD. Resolved
+# by job.slurm/server_atom.sh as '<MODEL_NAME>-AgentX' when IS_AGENTIC=1. Differs
+# from the throughput entry above per ATOM recipes/DeepSeek-V4-Agentic-PD-Max.md:
+# prefix caching (server_atom.sh IS_AGENTIC branch), FP8 KV/index cache, TBO on
+# prefill only, agentic prefill-chunk / state-checkpoint / level knobs, and MTP
+# with synthetic acceptance on throughput runs.
+DeepSeek-V4-Pro-AgentX:
+  env: "ATOM_MOE_GU_ITLV=1 AITER_BF16_FP8_MOE_BOUND=0 MC_GID_INDEX=1 NCCL_IB_DISABLE=1 ATOM_DISABLE_MMAP=true ATOM_PREFIX_CACHE_POLICY=lru ATOM_PREFIX_CACHE_PROTECTED_RATIO=0.5"
+  kv_cache_flags: "--kv_cache_dtype fp8"
+  # DP-attention tiers (conc 64+): TBO is prefill-only per the recipe.
+  tp_dp_flags: "--enable-dp-attention"
+  prefill_tp_dp_flags: "--enable-dp-attention --enable-tbo"
+  decode_tp_dp_flags: "--enable-dp-attention"
+  ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
+  prefill_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention --enable-tbo"
+  decode_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
+  # Load-bearing DP env for the agentic prefix-reuse path (recipe: session
+  # affinity keeps a trajectory on one rank).
+  tp_dp_env: "ATOM_NUMA_BIND=1 GPU_MAX_HW_QUEUES=5 ATOM_DP_SESSION_AFFINITY=1 ATOM_DP_LB_REQ_EQUIV=512 ATOM_DP_MASTER_PORT=29510 ATOM_DP_BASE_PORT=29610"
+  ep_dp_env: "ATOM_NUMA_BIND=1 GPU_MAX_HW_QUEUES=5 ATOM_DP_SESSION_AFFINITY=1 ATOM_DP_LB_REQ_EQUIV=512 ATOM_DP_MASTER_PORT=29510 ATOM_DP_BASE_PORT=29610"
+  mtp_flags: "--method mtp --num-speculative-tokens"
+  # config.py forces block-size 256 for V4 (lcm(4,128)); 16 is ignored/misleading.
+  block_size: "256"
+  mem_frac_static: "0.9"
+  max_num_batched_tokens: "16384"
+  # Agentic-only server knobs consumed by server_atom.sh IS_AGENTIC branch.
+  attn_prefill_chunk_size: "16384"
+  state_checkpoint_interval_tokens: "8192"
+  level: "3"
+  spec_decode_acceptance_length: "2.49"
 
 MiniMax-M3-MXFP4:
   env: "AITER_QUICK_REDUCE_QUANTIZATION=INT4 ATOM_FORCE_ATTN_TRITON=1"
