@@ -129,29 +129,37 @@ def dump(src, needle, path, what):
     else:
         lo = src.rfind("\n", 0, max(0, i - 600)) + 1
         hi = src.find("\n", i + 600)
-        print("  surrounding source:\n" + src[lo:hi if hi != -1 else None],
-              file=sys.stderr)
+        print(
+            "  surrounding source:\n" + src[lo : hi if hi != -1 else None],
+            file=sys.stderr,
+        )
 
 
 # --- Detect the three halves of #44244 independently ------------------------
 serve_ok = '"--chat-template-kwargs"' in serve_src
 
 sb_start, sb_end = speed_bench_block(ds_src)
-speed_bench_ok = sb_start is not None and "chat_template_kwargs" in ds_src[sb_start:sb_end]
+speed_bench_ok = (
+    sb_start is not None and "chat_template_kwargs" in ds_src[sb_start:sb_end]
+)
 
+sample = D.CustomDataset.sample
 sample_ok = (
-    "chat_template_kwargs" in inspect.signature(D.CustomDataset.sample).parameters
-    or '_ctk = kwargs.get("chat_template_kwargs") or {}'
-    in inspect.getsource(D.CustomDataset.sample)
+    "chat_template_kwargs" in inspect.signature(sample).parameters
+    or '_ctk = kwargs.get("chat_template_kwargs") or {}' in inspect.getsource(sample)
 )
 
 if serve_ok and speed_bench_ok and sample_ok:
-    print("upstream --chat-template-kwargs support detected "
-          "(vllm-project/vllm#44244); skipping shim")
+    print(
+        "upstream --chat-template-kwargs support detected "
+        "(vllm-project/vllm#44244); skipping shim"
+    )
     sys.exit(0)
 
-print(f"patching: serve_cli={serve_ok} speed_bench_dispatch={speed_bench_ok} "
-      f"custom_dataset_sample={sample_ok}")
+print(
+    f"patching: serve_cli={serve_ok} speed_bench_dispatch={speed_bench_ok} "
+    f"custom_dataset_sample={sample_ok}"
+)
 
 # --- Edit 1: serve.py declares the --chat-template-kwargs argument ----------
 if not serve_ok:
@@ -180,12 +188,18 @@ if not speed_bench_ok:
     block = ds_src[sb_start:sb_end]
     m = re.search(r"^([ \t]*)output_len=args\.speed_bench_output_len,\n", block, re.M)
     if not m:
-        dump(ds_src, "speed_bench_output_len", D.__file__,
-             "output_len anchor inside the speed_bench block")
+        dump(
+            ds_src,
+            "speed_bench_output_len",
+            D.__file__,
+            "output_len anchor inside the speed_bench block",
+        )
         sys.exit(1)
-    line = (m.group(1)
-            + 'chat_template_kwargs=getattr(args, "chat_template_kwargs", None),\n')
-    block = block[:m.end()] + line + block[m.end():]
+    line = (
+        m.group(1)
+        + 'chat_template_kwargs=getattr(args, "chat_template_kwargs", None),\n'
+    )
+    block = block[: m.end()] + line + block[m.end() :]
     ds_src = ds_src[:sb_start] + block + ds_src[sb_end:]
 
 # --- Edit 3: apply the kwarg in CustomDataset.sample's template call --------
@@ -207,8 +221,12 @@ if not sample_ok:
                         **_ctk,
                     )"""
     if ds_src.count(samp_old) != 1:
-        dump(ds_src, "apply_chat_template", D.__file__,
-             "CustomDataset.sample apply_chat_template anchor")
+        dump(
+            ds_src,
+            "apply_chat_template",
+            D.__file__,
+            "CustomDataset.sample apply_chat_template anchor",
+        )
         sys.exit(1)
     ds_src = ds_src.replace(samp_old, samp_new, 1)
 

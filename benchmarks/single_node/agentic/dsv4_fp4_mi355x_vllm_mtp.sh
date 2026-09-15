@@ -29,7 +29,9 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars \
+    MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR \
+    DURATION EP_SIZE DP_ATTENTION
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -108,174 +110,175 @@ ROUTER_PID=""
 OFFLOAD_ARGS=()
 
 if agentic_kv_offload_enabled; then
-case "${KV_OFFLOAD_BACKEND:-}" in
-  vllm-native)
-    require_agentic_kv_offload_backend vllm-native
-    # ---- vLLM native config ----------------------------------------------------------
-    unset VLLM_USE_SIMPLE_KV_OFFLOAD
-    # MI355X nodes have ~2.7 TiB of host DRAM available for offload;
-    # reserve 2.5 TB for the offload pool (leaves ~200 GB headroom for
-    # worker RSS / page cache / slurm cgroup).
-    TOTAL_CPU_DRAM_PARTITION_GB="$((TOTAL_CPU_DRAM_GB / (8 / TP)))"
-    # Use vLLM's regular native KV-offload path (OffloadingConnector),
-    # NOT the SimpleCPUOffloadConnector. The "vllm-native" backend resolves to
-    # OffloadingConnector by default; setting VLLM_USE_SIMPLE_KV_OFFLOAD=1
-    # would switch it to SimpleCPUOffloadConnector. We intentionally leave
-    # that env var UNSET here so the regular OffloadingConnector path is
-    # used. The shortcut --kv_offloading_backend native + --kv_offloading_size
-    # form constructs the KVTransferConfig at engine startup
-    # (vllm/config/vllm.py:662).
-
-    # Remove --disable-hybrid-kv-cache-manager and enable hybrid kv cache manager (default)
-    # This gives extra cache hit than disabling hybrid kv cache manager
-    OFFLOAD_ARGS=(
-        --kv_offloading_backend native
-        --kv_offloading_size "$TOTAL_CPU_DRAM_PARTITION_GB"
-    )
-
-    ;;
-  lmcache)
-    require_agentic_kv_offload_backend lmcache
-    # ---- Lmcache config ----------------------------------------------------------
-    LMCACHE_PID=""
-
-    cleanup_lmcache_server() {
-        if [[ -n "$LMCACHE_PID" ]] && kill -0 "$LMCACHE_PID" 2>/dev/null; then
-            kill "$LMCACHE_PID" 2>/dev/null || true
-            wait "$LMCACHE_PID" 2>/dev/null || true
-        fi
-    }
-
-    trap cleanup_lmcache_server EXIT
-
-    cleanup_agentic_services() {
-        local exit_code=$?
-        trap - EXIT INT TERM
-        set +e
-        stop_background_process_tree "$ROUTER_PID" "vLLM router"
-        stop_background_process_tree "$SERVER_PID" "vLLM server" 60
-        exit "$exit_code"
-    }
-    trap cleanup_agentic_services EXIT
-    trap 'exit 130' INT
-    trap 'exit 143' TERM
-
-    wait_for_lmcache_ready() {
-        { set +x; } 2>/dev/null
-        local attempts="${LMCACHE_READY_ATTEMPTS:-120}"
-        local tail_pid=""
-
-        while [ ! -f "$LMCACHE_LOG" ]; do
-            if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
-                echo "LMCache server died before creating log file. Exiting." >&2
-                exit 1
-            fi
-            sleep 10
-        done
-
-        tail -f -n +1 "$LMCACHE_LOG" &
-        tail_pid=$!
-
-        for ((i = 1; i <= attempts; i++)); do
-            if curl --output /dev/null --silent --fail "http://127.0.0.1:${LMCACHE_HTTP_PORT}/healthcheck"; then
-                kill "$tail_pid" 2>/dev/null || true
-                wait "$tail_pid" 2>/dev/null || true
-                return 0
-            fi
-            if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
-                echo "LMCache server died before becoming healthy. Log follows:" >&2
-                kill "$tail_pid" 2>/dev/null || true
-                wait "$tail_pid" 2>/dev/null || true
-                cat "$LMCACHE_LOG" >&2 || true
-                exit 1
-            fi
-            sleep 1
-        done
-
-        echo "Timed out waiting for LMCache server healthcheck. Log follows:" >&2
-        kill "$tail_pid" 2>/dev/null || true
-        wait "$tail_pid" 2>/dev/null || true
-        cat "$LMCACHE_LOG" >&2 || true
-        exit 1
-    }
-        { set +x; } 2>/dev/null
+    check_env_vars KV_OFFLOAD_BACKEND
+    case "$KV_OFFLOAD_BACKEND" in
+      vllm-native)
+        require_agentic_kv_offload_backend vllm-native
+        # ---- vLLM native config ----------------------------------------------------------
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
-
-        git clone https://github.com/LMCache/LMCache.git
-        cd LMCache
-        # https://github.com/LMCache/LMCache/pull/3853
-        git checkout 9229067cec0b3a63bb8a39368d101db7ac0bc3c1
-        pip install -r requirements/build.txt
-        pip install grpcio==1.78.0
-        CXX=hipcc BUILD_WITH_HIP=1 pip install -e .   --no-build-isolation
-        cd ..
-
-        python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
-
+        # MI355X nodes have ~2.7 TiB of host DRAM available for offload;
+        # reserve 2.5 TB for the offload pool (leaves ~200 GB headroom for
+        # worker RSS / page cache / slurm cgroup).
         TOTAL_CPU_DRAM_PARTITION_GB="$((TOTAL_CPU_DRAM_GB / (8 / TP)))"
-        # Match the B200 Kimi LMCache setup: keep a 2.5 TB semantic CPU KV
-        # pool, but let the external MP server own that pool so vLLM does not
-        # split --kv-offloading-size across TP ranks through the integrated
-        # LMCache backend.
-        LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
-        LMCACHE_PORT="${LMCACHE_PORT:-5555}"
-        LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
-        # LMCacheMPConnector concatenates lmcache.mp.host and port into the
-        # ZMQ endpoint. Bind the server to a raw host, but pass the connector a
-        # ZMQ-style host string.
-        LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
-        LMCACHE_L1_SIZE_GB="${TOTAL_CPU_DRAM_PARTITION_GB}"
-        if [ "$LMCACHE_L1_SIZE_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
-            echo "Error: LMCACHE_L1_SIZE_GB=$LMCACHE_L1_SIZE_GB exceeds configured capacity $TOTAL_CPU_DRAM_GB" >&2
-            exit 1
-        fi
-        LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
-        # LMCache read locks are leases on chunks that lookup has promised
-        # vLLM can retrieve. The default 300s TTL is too short for this
-        # long-context agentic queue: TP8/conc32 can spend >300s between
-        # lookup and retrieve while GPU KV is saturated, which leaves the
-        # object present in L1 but no longer readable. Keep the 2.5 TB pool
-        # size unchanged and only extend the lookup-to-retrieve lease.
-        LMCACHE_L1_READ_TTL_SECONDS="${LMCACHE_L1_READ_TTL_SECONDS:-7200}"
-        LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
-        LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
-        export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
-        export LMCACHE_BLOCKING_TIMEOUT_SECS=1200
-        LMCACHE_TX_MODE="lmcache_driven"
+        # Use vLLM's regular native KV-offload path (OffloadingConnector),
+        # NOT the SimpleCPUOffloadConnector. The "vllm-native" backend resolves to
+        # OffloadingConnector by default; setting VLLM_USE_SIMPLE_KV_OFFLOAD=1
+        # would switch it to SimpleCPUOffloadConnector. We intentionally leave
+        # that env var UNSET here so the regular OffloadingConnector path is
+        # used. The shortcut --kv_offloading_backend native + --kv_offloading_size
+        # form constructs the KVTransferConfig at engine startup
+        # (vllm/config/vllm.py:662).
 
-        echo "Starting LMCache MP server..."
-        LMCACHE_CMD=(
-            lmcache server
-            --host "$LMCACHE_HOST"
-            --port "$LMCACHE_PORT"
-            --http-host "$LMCACHE_HOST"
-            --http-port "$LMCACHE_HTTP_PORT"
-            --l1-size-gb "$LMCACHE_L1_SIZE_GB"
-            --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB"
-            --l1-read-ttl-seconds "$LMCACHE_L1_READ_TTL_SECONDS"
-            --chunk-size "$LMCACHE_CHUNK_SIZE"
-            --max-workers "$LMCACHE_MAX_WORKERS"
-            --eviction-policy LRU
-            --supported-transfer-mode "$LMCACHE_TX_MODE"
-        )
-        printf '%q ' "${LMCACHE_CMD[@]}" > "$RESULT_DIR/lmcache_command.txt"
-        printf '\n' >> "$RESULT_DIR/lmcache_command.txt"
-        "${LMCACHE_CMD[@]}" > "$LMCACHE_LOG" 2>&1 &
-        LMCACHE_PID=$!
-        echo "LMCache server PID: $LMCACHE_PID"
-        wait_for_lmcache_ready
-
-        PREFIX_CACHE_ARGS=(--enable-prefix-caching)
+        # Remove --disable-hybrid-kv-cache-manager and enable hybrid kv cache manager (default)
+        # This gives extra cache hit than disabling hybrid kv cache manager
         OFFLOAD_ARGS=(
-            --kv-transfer-config
-            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":6000.0}}"
+            --kv_offloading_backend native
+            --kv_offloading_size "$TOTAL_CPU_DRAM_PARTITION_GB"
         )
-    ;;
-  *)
-    echo "Error: unsupported KV_OFFLOAD_BACKEND '${KV_OFFLOAD_BACKEND:-}' (expected: vllm-native, lmcache)" >&2
-    exit 1
-    ;;
-esac
+
+        ;;
+      lmcache)
+        require_agentic_kv_offload_backend lmcache
+        # ---- Lmcache config ----------------------------------------------------------
+        LMCACHE_PID=""
+
+        cleanup_lmcache_server() {
+            if [[ -n "$LMCACHE_PID" ]] && kill -0 "$LMCACHE_PID" 2>/dev/null; then
+                kill "$LMCACHE_PID" 2>/dev/null || true
+                wait "$LMCACHE_PID" 2>/dev/null || true
+            fi
+        }
+
+        trap cleanup_lmcache_server EXIT
+
+        cleanup_agentic_services() {
+            local exit_code=$?
+            trap - EXIT INT TERM
+            set +e
+            stop_background_process_tree "$ROUTER_PID" "vLLM router"
+            stop_background_process_tree "$SERVER_PID" "vLLM server" 60
+            exit "$exit_code"
+        }
+        trap cleanup_agentic_services EXIT
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+
+        wait_for_lmcache_ready() {
+            { set +x; } 2>/dev/null
+            local attempts="${LMCACHE_READY_ATTEMPTS:-120}"
+            local tail_pid=""
+
+            while [ ! -f "$LMCACHE_LOG" ]; do
+                if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
+                    echo "LMCache server died before creating log file. Exiting." >&2
+                    exit 1
+                fi
+                sleep 10
+            done
+
+            tail -f -n +1 "$LMCACHE_LOG" &
+            tail_pid=$!
+
+            for ((i = 1; i <= attempts; i++)); do
+                if curl --output /dev/null --silent --fail "http://127.0.0.1:${LMCACHE_HTTP_PORT}/healthcheck"; then
+                    kill "$tail_pid" 2>/dev/null || true
+                    wait "$tail_pid" 2>/dev/null || true
+                    return 0
+                fi
+                if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
+                    echo "LMCache server died before becoming healthy. Log follows:" >&2
+                    kill "$tail_pid" 2>/dev/null || true
+                    wait "$tail_pid" 2>/dev/null || true
+                    cat "$LMCACHE_LOG" >&2 || true
+                    exit 1
+                fi
+                sleep 1
+            done
+
+            echo "Timed out waiting for LMCache server healthcheck. Log follows:" >&2
+            kill "$tail_pid" 2>/dev/null || true
+            wait "$tail_pid" 2>/dev/null || true
+            cat "$LMCACHE_LOG" >&2 || true
+            exit 1
+        }
+            { set +x; } 2>/dev/null
+            unset VLLM_USE_SIMPLE_KV_OFFLOAD
+
+            git clone https://github.com/LMCache/LMCache.git
+            cd LMCache
+            # https://github.com/LMCache/LMCache/pull/3853
+            git checkout 9229067cec0b3a63bb8a39368d101db7ac0bc3c1
+            pip install -r requirements/build.txt
+            pip install grpcio==1.78.0
+            CXX=hipcc BUILD_WITH_HIP=1 pip install -e .   --no-build-isolation
+            cd ..
+
+            python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
+
+            TOTAL_CPU_DRAM_PARTITION_GB="$((TOTAL_CPU_DRAM_GB / (8 / TP)))"
+            # Match the B200 Kimi LMCache setup: keep a 2.5 TB semantic CPU KV
+            # pool, but let the external MP server own that pool so vLLM does not
+            # split --kv-offloading-size across TP ranks through the integrated
+            # LMCache backend.
+            LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
+            LMCACHE_PORT="${LMCACHE_PORT:-5555}"
+            LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
+            # LMCacheMPConnector concatenates lmcache.mp.host and port into the
+            # ZMQ endpoint. Bind the server to a raw host, but pass the connector a
+            # ZMQ-style host string.
+            LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
+            LMCACHE_L1_SIZE_GB="${TOTAL_CPU_DRAM_PARTITION_GB}"
+            if [ "$LMCACHE_L1_SIZE_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
+                echo "Error: LMCACHE_L1_SIZE_GB=$LMCACHE_L1_SIZE_GB exceeds configured capacity $TOTAL_CPU_DRAM_GB" >&2
+                exit 1
+            fi
+            LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
+            # LMCache read locks are leases on chunks that lookup has promised
+            # vLLM can retrieve. The default 300s TTL is too short for this
+            # long-context agentic queue: TP8/conc32 can spend >300s between
+            # lookup and retrieve while GPU KV is saturated, which leaves the
+            # object present in L1 but no longer readable. Keep the 2.5 TB pool
+            # size unchanged and only extend the lookup-to-retrieve lease.
+            LMCACHE_L1_READ_TTL_SECONDS="${LMCACHE_L1_READ_TTL_SECONDS:-7200}"
+            LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
+            LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
+            export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
+            export LMCACHE_BLOCKING_TIMEOUT_SECS=1200
+            LMCACHE_TX_MODE="lmcache_driven"
+
+            echo "Starting LMCache MP server..."
+            LMCACHE_CMD=(
+                lmcache server
+                --host "$LMCACHE_HOST"
+                --port "$LMCACHE_PORT"
+                --http-host "$LMCACHE_HOST"
+                --http-port "$LMCACHE_HTTP_PORT"
+                --l1-size-gb "$LMCACHE_L1_SIZE_GB"
+                --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB"
+                --l1-read-ttl-seconds "$LMCACHE_L1_READ_TTL_SECONDS"
+                --chunk-size "$LMCACHE_CHUNK_SIZE"
+                --max-workers "$LMCACHE_MAX_WORKERS"
+                --eviction-policy LRU
+                --supported-transfer-mode "$LMCACHE_TX_MODE"
+            )
+            printf '%q ' "${LMCACHE_CMD[@]}" > "$RESULT_DIR/lmcache_command.txt"
+            printf '\n' >> "$RESULT_DIR/lmcache_command.txt"
+            "${LMCACHE_CMD[@]}" > "$LMCACHE_LOG" 2>&1 &
+            LMCACHE_PID=$!
+            echo "LMCache server PID: $LMCACHE_PID"
+            wait_for_lmcache_ready
+
+            PREFIX_CACHE_ARGS=(--enable-prefix-caching)
+            OFFLOAD_ARGS=(
+                --kv-transfer-config
+                "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":6000.0}}"
+            )
+        ;;
+      *)
+        echo "Error: unsupported KV_OFFLOAD_BACKEND '$KV_OFFLOAD_BACKEND' (expected: vllm-native, lmcache)" >&2
+        exit 1
+        ;;
+    esac
 fi
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)

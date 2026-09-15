@@ -49,23 +49,35 @@ def _compatibility(output_dir: Path) -> dict[str, Any]:
 
 
 def test_prepare_smoke_input_preserves_request_and_unicode(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fixture = tmp_path / "fixture.json"
-    fixture.write_text(json.dumps({
-        "source": mpe.UPSTREAM_SOURCE,
-        "ref": mpe.UPSTREAM_REF,
-        "indices": [71],
-        "license": "Test license\n",
-        "rows": [{"messages": [{"role": "user", "content": "Find café hours"}], "tools": []}],
-    }), encoding="utf-8")
+    fixture.write_text(
+        json.dumps({
+            "source": mpe.UPSTREAM_SOURCE,
+            "ref": mpe.UPSTREAM_REF,
+            "indices": [71],
+            "license": "Test license\n",
+            "rows": [{
+                "messages": [{"role": "user", "content": "Find café hours"}],
+                "tools": [],
+            }],
+        }),
+        encoding="utf-8",
+    )
     # Supply the trusted digests for this controlled input; run the real
     # fixture validation and JSONL writer, including Unicode preservation.
-    monkeypatch.setattr(mpe, "EXPECTED_LICENSE_SHA256",
-                        "c24d5f6da316a4bec6612e644e5fdcc0243fcb3a3ebcec4a2a16389ada6c520c")
-    monkeypatch.setattr(mpe, "EXPECTED_CASE_SHA256", {
-        71: "05b119b71e4dcc69cf439da009703721d993c5ec05c502da3c9daed79ec9a48a",
-    })
+    monkeypatch.setattr(
+        mpe,
+        "EXPECTED_LICENSE_SHA256",
+        "c24d5f6da316a4bec6612e644e5fdcc0243fcb3a3ebcec4a2a16389ada6c520c",
+    )
+    monkeypatch.setattr(
+        mpe,
+        "EXPECTED_CASE_SHA256",
+        {71: "05b119b71e4dcc69cf439da009703721d993c5ec05c502da3c9daed79ec9a48a"},
+    )
     destination = tmp_path / "smoke.jsonl"
 
     mpe.prepare_smoke_input(
