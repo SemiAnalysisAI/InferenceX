@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
 
-# Qwen-3.5-397B-A17B FP8 on H100 with EAGLE / MTP speculative decoding.
-# Mirrors qwen3.5_fp8_h100.sh; adds the speculative-* flags + SGLANG_ENABLE_SPEC_V2=1
-# and passes --use-chat-template per AGENTS.md.
-
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars \

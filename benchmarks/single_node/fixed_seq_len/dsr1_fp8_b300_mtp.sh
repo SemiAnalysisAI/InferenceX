@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 
-# NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
-# does not have a B300-specific recipe, so this script reuses the existing
-# DSR1 FP8 B200 SGLang MTP recipe as-is until B300-specific tuning is available.
+# https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1 has no B300-specific recipe; this reuses the B200 SGLang tuning.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -16,9 +14,6 @@ check_env_vars \
     RESULT_FILENAME \
     EP_SIZE
 
-# `hf download` creates the target dir if missing and is itself idempotent. 
-# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
-# Either way, MODEL_PATH is what the server is launched with.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -39,21 +34,18 @@ export SGLANG_ENABLE_JIT_DEEPGEMM=false
 
 SERVER_LOG=/workspace/server.log
 
-# MTP only supports TP=8 for now
 if [[ $TP -ne 8 ]]; then
   echo "MTP only supports TP=8, got TP=$TP!"
   exit 1
 fi
 
-# Default: recv every ~10 requests; if CONC >= 16, relax to ~30 requests between scheduler recv polls.
 if [[ $CONC -ge 16 ]]; then
   SCHEDULER_RECV_INTERVAL=30
 else
   SCHEDULER_RECV_INTERVAL=10
 fi
 
-# Setting these values (passed in to --cuda-graph-max-bs and --max-running-requests) as the maximum concurrency
-# this will help us save memory from being unnecessary used.
+# Capped so KV memory is not reserved for requests that never run.
 MAX_RUNNING_REQUESTS=512
 CUDA_GRAPH_MAX_BATCH_SIZE=512
 
@@ -63,7 +55,6 @@ MAX_PREFILL_TOKENS=16384
 
 echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
-# MTP (Multi-Token Prediction) Config - EAGLE speculative decoding
 SPECULATIVE_NUM_STEPS=2
 SPECULATIVE_DRAFT_TOKENS=3
 SPECULATIVE_EAGLE_TOPK=1
@@ -75,7 +66,6 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
 fi
-# Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
@@ -108,7 +98,6 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server \
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 pip install -q datasets pandas
@@ -126,12 +115,10 @@ run_benchmark_serving \
     --result-dir /workspace/ \
     --use-chat-template
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
 set +x

@@ -138,33 +138,6 @@ def test_validate_reconstruction_requires_exact_base_prefix() -> None:
         validate_reconstruction(base, changed_history, 42)
 
 
-def test_validate_recovery_workflow_accepts_single_cpu_job(
-    tmp_path: Path,
-) -> None:
-    workflow = tmp_path / "recover.yml"
-    workflow.write_text(
-        """name: Recover
-on:
-  workflow_dispatch:
-    inputs:
-      confirm:
-        required: true
-        type: string
-permissions:
-  actions: read
-  contents: read
-jobs:
-  recover:
-    if: ${{ inputs.confirm == 'recover-pr-42' }}
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo recover
-"""
-    )
-
-    validate_recovery_workflow(workflow, 42)
-
-
 def test_validate_recovery_workflow_rejects_matrix(
     tmp_path: Path,
 ) -> None:

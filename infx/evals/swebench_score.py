@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Score SWE-bench predictions and emit the repository's lm-eval result shape."""
 
 import argparse
@@ -7,8 +6,8 @@ import math
 import re
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, Optional
 
 DEFAULT_DATASET = "princeton-nlp/SWE-bench_Lite"
 DEFAULT_TASK = "swebench_lite"
@@ -20,10 +19,25 @@ _FENCED_DIFF_RE = re.compile(
 _DIFF_GIT_RE = re.compile(r"(?:^|\n)(diff --git .*)", re.DOTALL)
 
 _DIFF_LINE_PREFIXES = (
-    "diff ", "index ", "--- ", "+++ ", "@@", "+", "-", " ", "\\",
-    "old mode ", "new mode ", "new file mode ", "deleted file mode ",
-    "rename ", "copy ", "similarity ", "dissimilarity ",
-    "Binary files ", "GIT binary patch",
+    "diff ",
+    "index ",
+    "--- ",
+    "+++ ",
+    "@@",
+    "+",
+    "-",
+    " ",
+    "\\",
+    "old mode ",
+    "new mode ",
+    "new file mode ",
+    "deleted file mode ",
+    "rename ",
+    "copy ",
+    "similarity ",
+    "dissimilarity ",
+    "Binary files ",
+    "GIT binary patch",
 )
 
 
@@ -85,7 +99,7 @@ def _response_text(record: dict) -> str:
     return ""
 
 
-def _instance_id(record: dict) -> Optional[str]:
+def _instance_id(record: dict) -> str | None:
     doc = record.get("doc")
     if isinstance(doc, dict):
         for key in ("instance_id", "instance", "id"):
@@ -101,8 +115,7 @@ def iter_samples(samples_dir: Path) -> Iterator[dict]:
     files = sorted(samples_dir.rglob("samples_*.jsonl"))
     if not files:
         raise FileNotFoundError(
-            f"no samples_*.jsonl found under {samples_dir} -- did lm-eval run "
-            "with --log_samples?"
+            f"no samples_*.jsonl found under {samples_dir} -- did lm-eval run with --log_samples?"
         )
     for path in files:
         with path.open(encoding="utf-8", errors="replace") as fh:
@@ -146,16 +159,21 @@ def run_harness(
     run_id: str,
     work_dir: Path,
     max_workers: int,
-    namespace: Optional[str],
+    namespace: str | None,
     modal: bool = False,
-    timeout: Optional[int] = None,
+    timeout: int | None = None,
 ) -> None:
     """Invoke the official swebench harness (local Docker, or Modal sandboxes)."""
     cmd = [
-        sys.executable, "-m", "swebench.harness.run_evaluation",
-        "--dataset_name", dataset_name,
-        "--predictions_path", str(predictions_path),
-        "--run_id", run_id,
+        sys.executable,
+        "-m",
+        "swebench.harness.run_evaluation",
+        "--dataset_name",
+        dataset_name,
+        "--predictions_path",
+        str(predictions_path),
+        "--run_id",
+        run_id,
     ]
     if timeout is not None:
         cmd += ["--timeout", str(timeout)]
@@ -185,9 +203,7 @@ def find_report(work_dir: Path, model_name: str, run_id: str) -> Path:
             data = json.loads(path.read_text())
         except (json.JSONDecodeError, OSError):
             continue
-        if isinstance(data, dict) and (
-            "resolved_instances" in data or "resolved_ids" in data
-        ):
+        if isinstance(data, dict) and ("resolved_instances" in data or "resolved_ids" in data):
             return path
     raise FileNotFoundError(
         f"could not locate a swebench report under {work_dir} "
@@ -200,7 +216,7 @@ def parse_resolved(report: dict) -> tuple[int, int]:
 
     Sliced runs use submitted instances rather than the full dataset size.
     """
-    resolved: Optional[int] = None
+    resolved: int | None = None
     for key in ("resolved_instances", "resolved", "num_resolved"):
         if isinstance(report.get(key), int):
             resolved = report[key]
@@ -208,7 +224,7 @@ def parse_resolved(report: dict) -> tuple[int, int]:
     if resolved is None and isinstance(report.get("resolved_ids"), list):
         resolved = len(report["resolved_ids"])
 
-    total: Optional[int] = None
+    total: int | None = None
     for key in ("submitted_instances", "completed_instances", "total_instances"):
         val = report.get(key)
         if isinstance(val, int) and val > 0:
@@ -221,9 +237,7 @@ def parse_resolved(report: dict) -> tuple[int, int]:
                 break
 
     if resolved is None or total is None or total <= 0:
-        raise ValueError(
-            f"could not parse resolved/total from report keys {sorted(report)}"
-        )
+        raise ValueError(f"could not parse resolved/total from report keys {sorted(report)}")
     return resolved, total
 
 
@@ -233,7 +247,7 @@ def build_results_json(
     total: int,
     model_name: str,
     lm_eval_version: str,
-    report: Optional[dict],
+    report: dict | None,
 ) -> dict:
     """Publish resolved rate as the exact-match metric used by score validation."""
     rate = resolved / total
@@ -264,42 +278,56 @@ def build_results_json(
     }
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Score SWE-bench patches from lm-eval samples")
-    parser.add_argument("--samples-dir", default=None, help="dir containing lm-eval samples_*.jsonl (single-shot mode)")
     parser.add_argument(
-        "--predictions-file", default=None,
+        "--samples-dir",
+        default=None,
+        help="dir containing lm-eval samples_*.jsonl (single-shot mode)",
+    )
+    parser.add_argument(
+        "--predictions-file",
+        default=None,
         help="pre-built predictions.jsonl (agentic mode) -- skips samples parsing",
     )
     parser.add_argument("--out-dir", required=True, help="dir to write predictions + results JSON")
-    parser.add_argument("--model-name", required=True, help="served model name (model_name_or_path)")
+    parser.add_argument(
+        "--model-name", required=True, help="served model name (model_name_or_path)"
+    )
     parser.add_argument("--dataset-name", default=DEFAULT_DATASET)
     parser.add_argument("--task-name", default=DEFAULT_TASK)
     parser.add_argument("--run-id", default=None, help="harness run id (default: task name)")
     parser.add_argument("--max-workers", type=int, default=4)
     parser.add_argument(
-        "--instance-timeout", type=int, default=None,
+        "--instance-timeout",
+        type=int,
+        default=None,
         help="per-instance test timeout in seconds (harness default 1800)",
     )
     parser.add_argument(
-        "--namespace", default=None,
+        "--namespace",
+        default=None,
         help="local-Docker --namespace value (pass '' on arm/Mac to build images locally)",
     )
     parser.add_argument(
-        "--modal", action="store_true",
+        "--modal",
+        action="store_true",
         help="score on Modal remote sandboxes instead of local Docker (needs modal creds)",
     )
     parser.add_argument("--lm-eval-version", default="unknown")
     parser.add_argument(
-        "--predictions-only", action="store_true",
+        "--predictions-only",
+        action="store_true",
         help="write predictions.jsonl and stop (no scoring; score elsewhere)",
     )
     parser.add_argument(
-        "--no-run", action="store_true",
+        "--no-run",
+        action="store_true",
         help="skip the Docker harness; requires --report (offline/testing)",
     )
     parser.add_argument(
-        "--report", default=None,
+        "--report",
+        default=None,
         help="path to a pre-computed harness report JSON (implies --no-run)",
     )
     args = parser.parse_args(argv)
@@ -328,7 +356,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         write_predictions(predictions, predictions_path)
         print(f"[swebench] wrote {len(predictions)} predictions -> {predictions_path}")
     else:
-        print("ERROR: one of --samples-dir or --predictions-file is required", file=sys.stderr)
+        print(
+            "ERROR: one of --samples-dir or --predictions-file is required",
+            file=sys.stderr,
+        )
         return 1
 
     if args.predictions_only:
@@ -342,8 +373,13 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 1
     else:
         run_harness(
-            predictions_path, args.dataset_name, run_id,
-            out_dir, args.max_workers, args.namespace, modal=args.modal,
+            predictions_path,
+            args.dataset_name,
+            run_id,
+            out_dir,
+            args.max_workers,
+            args.namespace,
+            modal=args.modal,
             timeout=args.instance_timeout,
         )
         report_path = find_report(out_dir, args.model_name, run_id)
@@ -356,8 +392,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     resolved, total = parse_resolved(report)
 
     results = build_results_json(
-        args.task_name, resolved, total, args.model_name,
-        args.lm_eval_version, report,
+        args.task_name,
+        resolved,
+        total,
+        args.model_name,
+        args.lm_eval_version,
+        report,
     )
     results_path = out_dir / f"results_{args.task_name}.json"
     results_path.write_text(json.dumps(results, indent=2), encoding="utf-8")

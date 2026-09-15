@@ -293,6 +293,7 @@ trap 'printf "parent-int\\n" >> {str(event_log)!r}; exit 130' INT
 trap 'printf "parent-term\\n" >> {str(event_log)!r}; exit 143' TERM
 REPLAY_CMD=fake_replay
 ENABLE_AGENTX_POWER=1
+REQUIRE_POWER=0
 IS_MULTINODE=false
 run_agentic_replay_and_write_outputs {str(result_dir)!r}
 """
