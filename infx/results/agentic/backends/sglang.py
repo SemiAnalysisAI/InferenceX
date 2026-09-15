@@ -12,8 +12,8 @@ from ..common import (
     normalize_fraction,
     rate,
     sum_by_label,
-    sum_stat,
     sum_server_log_capacities,
+    sum_stat,
 )
 from .base import ServerMetricsBackend, counter_int
 

@@ -11,11 +11,6 @@
 
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
-POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
-POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
-AGENTX_POWER_SRT_SLURM_PIN="80d7203e424f903c9017de4608ee2044afce9574"
-TILERT_SRT_SLURM_URL="https://github.com/SemiAnalysisAI/srt-slurm.git"
-TILERT_SRT_SLURM_PIN="d1e6c97b3baf3e87103b6d83189544c3c7d61c38"
 
 # Node-local NVMe, not a shared filesystem: much faster for the ~1.6T
 # DeepSeek-V4-Pro load, and already pre-staged on every nscale compute node.
@@ -27,7 +22,7 @@ HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
 SQUASH_LOCK_TIMEOUT=3600
 
 # shellcheck source=runners/slurm_utils.sh
-source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 
 set -x
 
@@ -83,7 +78,7 @@ _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE
 if [[ -n "$_POWER_CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
     /^telemetry:/ { t = 1; next }
     t && /^[^ ]/  { t = 0 }
-    t && /^  provider: dcgm-power$/ { p = 1 }
+    t && /^  dcgm_exporter:/ { p = 1 }
     t && /^  enabled: true$/        { e = 1 }
     END { exit !(p && e) }
 ' "$_RECIPE_SRC"; then
@@ -105,90 +100,10 @@ fi
 
 export SERVED_MODEL_NAME=$MODEL
 
-echo "Cloning srt-slurm repository..."
+echo "Preparing job-local srt-slurm checkout..."
 SRT_REPO_DIR="srt-slurm"
 rm -rf "$SRT_REPO_DIR"
-if [[ "$USES_DCGM_POWER" == "1" ]]; then
-    SELECTED_POWER_SRT_SLURM_PIN="$POWER_SRT_SLURM_PIN"
-    if [[ "$USES_AGENTX_POWER" == "1" ]]; then
-        SELECTED_POWER_SRT_SLURM_PIN="$AGENTX_POWER_SRT_SLURM_PIN"
-    fi
-    git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout "$SELECTED_POWER_SRT_SLURM_PIN" || exit 1
-    test "$(git rev-parse HEAD)" = "$SELECTED_POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match selected power producer $SELECTED_POWER_SRT_SLURM_PIN" >&2; exit 1; }
-    git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
-    if [[ "$USES_AGENTX_POWER" == "1" ]]; then
-        mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
-            recipes/vllm/kimi-k3/agentic || exit 1
-    elif [[ "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
-        mkdir -p recipes/sglang/deepseek-v4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
-    elif [[ "$MODEL_PREFIX" == "dsv4" ]]; then
-        mkdir -p recipes/vllm/deepseek-v4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-    else
-        mkdir -p recipes/vllm/kimi-k2.6
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.6" recipes/vllm/kimi-k2.6
-    fi
-elif [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "glm5.1" && $FRAMEWORK == "tilert" ]]; then
-    git clone "$TILERT_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout "$TILERT_SRT_SLURM_PIN" || exit 1
-    test "$(git rev-parse HEAD)" = "$TILERT_SRT_SLURM_PIN" || {
-        echo "Error: srt-slurm HEAD does not match TILERT_SRT_SLURM_PIN=$TILERT_SRT_SLURM_PIN" >&2
-        exit 1
-    }
-    mkdir -p recipes/tilert/glm5.1/b200-fp8/agentic || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/tilert/glm5.1/b200-fp8/agentic" \
-        recipes/tilert/glm5.1/b200-fp8/agentic || exit 1
-elif [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "kimik3" ]]; then
-    # Pin the tested renderer so branch movement cannot change generated rank
-    # commands between sweep points.
-    git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout 217f9438 || exit 1
-    mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
-        recipes/vllm/kimi-k3/agentic || exit 1
-elif [[ $MODEL_PREFIX == "glm5.2" && $FRAMEWORK == "dynamo-sglang" ]]; then
-    # Pin the renderer used for the validated checked-in recipes.
-    git clone --branch v1.0.53 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    test "$(git rev-parse HEAD)" = "217f94387abeddfed7149a71955dc523e07cd765" || {
-        echo "Error: srt-slurm v1.0.53 did not resolve to the pinned commit" >&2
-        exit 1
-    }
-    mkdir -p recipes/sglang/glm5.2/b200-fp4/agentic || exit 1
-    cp -rT \
-        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/b200-fp4/agentic" \
-        recipes/sglang/glm5.2/b200-fp4/agentic || exit 1
-elif [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-sglang" ]]; then
-    git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    # Pin the srt-slurm revision used by these checked-in recipes.
-    git checkout 04e87fcc505d6d851451781a5499ca19a02ec2b4 || exit 1
-    mkdir -p recipes/sglang/deepseek-v4
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
-elif [[ $MODEL_PREFIX == "dsv4" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout aflowers/vllm-gb200-v0.20.0 || exit 1
-    mkdir -p recipes/vllm/deepseek-v4
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-else
-    git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout c180328b98c3793ca84a1e24a030f90545eb7d5d || exit 1
-    mkdir -p recipes/vllm/kimi-k2.6
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.6" recipes/vllm/kimi-k2.6
-fi
-if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
-    python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
-        || exit 1
-fi
-
+setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" "$USES_DCGM_POWER" || exit 1
 
 echo "Installing srtctl..."
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
@@ -397,7 +312,7 @@ if [[ $MODEL_PREFIX == "kimik2.6" ]] ||
     SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
 fi
 
-SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
@@ -437,7 +352,7 @@ if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
     collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" \
         "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" \
-        "$SELECTED_POWER_SRT_SLURM_PIN" "${POWER_CONCURRENCIES[@]}" || AGENTX_POWER_RC=$?
+        "$SRT_SLURM_COMMIT" "${POWER_CONCURRENCIES[@]}" || AGENTX_POWER_RC=$?
 fi
 
 if [[ "$USES_DCGM_POWER" == "1" ]]; then

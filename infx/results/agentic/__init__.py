@@ -32,19 +32,30 @@ def _required_env(env: Mapping[str, str], name: str) -> str:
     return value
 
 
-def _optional_component_metadata(env: Mapping[str, str], env_name: str) -> dict[str, str] | None:
+def _optional_component_metadata(
+    env: Mapping[str, str], env_name: str
+) -> dict[str, str] | None:
     return parse_component_metadata(
-        env.get(env_name), env_name, error_type=SystemExit,
+        env.get(env_name),
+        env_name,
+        error_type=SystemExit,
     )
 
 
-def _optional_kv_offload_backend_metadata(env: Mapping[str, str], env_name: str) -> dict[str, str] | None:
+def _optional_kv_offload_backend_metadata(
+    env: Mapping[str, str], env_name: str
+) -> dict[str, str] | None:
     return parse_component_metadata(
-        env.get(env_name), env_name, version_optional=True, error_type=SystemExit,
+        env.get(env_name),
+        env_name,
+        version_optional=True,
+        error_type=SystemExit,
     )
 
 
-def _validate_kv_offload_env(env: Mapping[str, str]) -> tuple[str, dict[str, str] | None]:
+def _validate_kv_offload_env(
+    env: Mapping[str, str],
+) -> tuple[str, dict[str, str] | None]:
     kv_offloading = _required_env(env, "KV_OFFLOADING")
     backend_name = env.get("KV_OFFLOAD_BACKEND", "")
     backend_metadata = _optional_kv_offload_backend_metadata(
@@ -55,7 +66,9 @@ def _validate_kv_offload_env(env: Mapping[str, str]) -> tuple[str, dict[str, str
             raise SystemExit("KV_OFFLOAD_BACKEND must be empty when KV_OFFLOADING=none")
     else:
         if not backend_name or backend_name == "none" or backend_metadata is None:
-            raise SystemExit("KV_OFFLOAD_BACKEND is required when KV_OFFLOADING is enabled")
+            raise SystemExit(
+                "KV_OFFLOAD_BACKEND is required when KV_OFFLOADING is enabled"
+            )
         if backend_metadata["name"] != backend_name:
             raise SystemExit(
                 "KV_OFFLOAD_BACKEND must match KV_OFFLOAD_BACKEND_METADATA.name"
@@ -70,24 +83,35 @@ def _gpu_shape(env: Mapping[str, str]) -> tuple[dict[str, Any], int, int, int, s
     dp_attention = env.get("DP_ATTENTION", "false")
     if not is_multinode:
         parallelism = Parallelism(
-            tp=tp, pp=_env_int(env, "PP_SIZE", 1), dcp_size=_env_int(env, "DCP_SIZE", 1),
-            pcp_size=_env_int(env, "PCP_SIZE", 1), ep=ep,
+            tp=tp,
+            pp=_env_int(env, "PP_SIZE", 1),
+            dcp_size=_env_int(env, "DCP_SIZE", 1),
+            pcp_size=_env_int(env, "PCP_SIZE", 1),
+            ep=ep,
         )
         validate_parallelism(parallelism, error_type=SystemExit)
-        fields = {"pp": parallelism.pp, "dcp_size": parallelism.dcp_size, "pcp_size": parallelism.pcp_size}
+        fields = {
+            "pp": parallelism.pp,
+            "dcp_size": parallelism.dcp_size,
+            "pcp_size": parallelism.pcp_size,
+        }
         return fields, parallelism.gpus_per_worker, tp, ep, dp_attention
 
     prefill_num_workers = _env_int(env, "PREFILL_NUM_WORKERS")
     prefill = Parallelism(
-        tp=_env_int(env, "PREFILL_TP"), pp=_env_int(env, "PREFILL_PP_SIZE", 1),
-        dcp_size=_env_int(env, "PREFILL_DCP_SIZE", 1), pcp_size=_env_int(env, "PREFILL_PCP_SIZE", 1),
+        tp=_env_int(env, "PREFILL_TP"),
+        pp=_env_int(env, "PREFILL_PP_SIZE", 1),
+        dcp_size=_env_int(env, "PREFILL_DCP_SIZE", 1),
+        pcp_size=_env_int(env, "PREFILL_PCP_SIZE", 1),
         ep=_env_int(env, "PREFILL_EP", 1),
     )
     prefill_dp_attention = env.get("PREFILL_DP_ATTN", "false")
     decode_num_workers = _env_int(env, "DECODE_NUM_WORKERS")
     decode = Parallelism(
-        tp=_env_int(env, "DECODE_TP"), pp=_env_int(env, "DECODE_PP_SIZE", 1),
-        dcp_size=_env_int(env, "DECODE_DCP_SIZE", 1), pcp_size=_env_int(env, "DECODE_PCP_SIZE", 1),
+        tp=_env_int(env, "DECODE_TP"),
+        pp=_env_int(env, "DECODE_PP_SIZE", 1),
+        dcp_size=_env_int(env, "DECODE_DCP_SIZE", 1),
+        pcp_size=_env_int(env, "DECODE_PCP_SIZE", 1),
         ep=_env_int(env, "DECODE_EP", 1),
     )
     decode_dp_attention = env.get("DECODE_DP_ATTN", "false")
@@ -196,7 +220,9 @@ def build_result(
         if isinstance(dataset, dict):
             agg["dataset"] = dataset
 
-    request_flat, request_nested = compute_request_metrics(records, aggregate, traces=traces)
+    request_flat, request_nested = compute_request_metrics(
+        records, aggregate, traces=traces
+    )
     _, server_nested, warnings = compute_server_metrics(
         server_metrics,
         framework=framework,

@@ -112,10 +112,7 @@ def _fetch_source(relative_path: str) -> bytes:
                         f"status={status!r}, url={response.geturl()!r}"
                     )
                 declared_size = response.headers.get("Content-Length")
-                if (
-                    declared_size is not None
-                    and int(declared_size) > MAX_SOURCE_BYTES
-                ):
+                if declared_size is not None and int(declared_size) > MAX_SOURCE_BYTES:
                     raise FullSuiteError(
                         f"pinned source {relative_path} exceeds the size limit"
                     )
@@ -157,9 +154,7 @@ def _validate_sample(content: bytes) -> None:
                 f"pinned sample.jsonl row {line_number} is invalid JSON"
             ) from exc
         if not isinstance(row, dict):
-            raise ValueError(
-                f"pinned sample.jsonl row {line_number} must be an object"
-            )
+            raise ValueError(f"pinned sample.jsonl row {line_number} must be an object")
 
 
 def verify_source_tree(source_dir: Path) -> None:
@@ -305,7 +300,9 @@ def _read_native_report(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise FullSuiteError(f"native summary is unavailable or invalid: {exc}") from exc
+        raise FullSuiteError(
+            f"native summary is unavailable or invalid: {exc}"
+        ) from exc
     if not isinstance(value, dict):
         raise FullSuiteError("native summary must be a JSON object")
     return value
@@ -360,7 +357,9 @@ def project_native_artifacts(*, output_dir: Path, model: str) -> Path:
     results = _read_native_results(output_dir / NATIVE_RESULTS_FILENAME)
     indices = [row.get("data_index") for row in results]
     if indices != list(range(1, EXPECTED_RESULT_COUNT + 1)):
-        raise FullSuiteError("native results must retain ordered data_index values 1..102")
+        raise FullSuiteError(
+            "native results must retain ordered data_index values 1..102"
+        )
     failed_indices = [
         row["data_index"] for row in results if row.get("status") != "success"
     ]

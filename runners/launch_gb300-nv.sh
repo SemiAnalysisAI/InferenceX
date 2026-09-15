@@ -5,7 +5,7 @@
 set -exo pipefail
 
 # shellcheck source=runners/slurm_utils.sh
-source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 
 export SLURM_PARTITION="${SLURM_PARTITION:-batch_1}"
 export SBATCH_PARTITION="$SLURM_PARTITION"
@@ -188,7 +188,7 @@ _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE
 if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
     /^telemetry:/ { t = 1; next }
     t && /^[^ ]/  { t = 0 }
-    t && /^  provider: dcgm-power$/ { p = 1 }
+    t && /^  dcgm_exporter:/ { p = 1 }
     t && /^  enabled: true$/        { e = 1 }
     END { exit !(p && e) }
 ' "$_RECIPE_SRC"; then
@@ -199,7 +199,7 @@ USES_AGENTX_POWER=0
 if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
     "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" &&
     "$FRAMEWORK" == "dynamo-vllm" &&
-    "$_RECIPE_REL" == recipes/vllm/kimi-k3/agentic/* ]]; then
+    "$_RECIPE_REL" == recipes/kimik3/vllm/*/agentx/* ]]; then
     USES_AGENTX_POWER=1
 fi
 if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" && "$USES_AGENTX_POWER" != "1" ]]; then
@@ -207,12 +207,6 @@ if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" && "$USES_AGE
     exit 1
 fi
 
-# dcgm-power producer pin — single source of truth for power lanes. Swap
-# URL+PIN here (and identically in launch_gb200-nv.sh) when the upstream
-# srt-slurm merge lands.
-POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
-POWER_SRT_SLURM_PIN="6fc1bed01a0b82dae0088a105c03ce0cfb353443"
-AGENTX_POWER_SRT_SLURM_PIN="80d7203e424f903c9017de4608ee2044afce9574"
 
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
@@ -238,250 +232,26 @@ fi
 export ISL="$ISL"
 export OSL="$OSL"
 
-echo "Cloning srt-slurm repository..."
+echo "Preparing job-local srt-slurm checkout..."
 RUN_KEY=$(printf "%s" "${RESULT_FILENAME:-${RUNNER_NAME:-gb300-nv}}" | sha1sum | cut -c1-12)
 SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUN_KEY}"
-SRTCTL_SETUP_SCRIPT=""
 rm -rf "$SRT_REPO_DIR"
 
-if [[ "$USES_AGENTX_POWER" == "1" ]]; then
-    git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout "$AGENTX_POWER_SRT_SLURM_PIN" || exit 1
-    test "$(git rev-parse HEAD)" = "$AGENTX_POWER_SRT_SLURM_PIN" || exit 1
-    git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
-    mkdir -p recipes/vllm/kimi-k3/agentic
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
-        recipes/vllm/kimi-k3/agentic
-elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qwen3.5" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout v1.0.50
-    TRTLLM_RECIPES_DIR="recipes/trtllm/qwen3.5/gb300-fp4/disagg/agentx"
-    mkdir -p "$TRTLLM_RECIPES_DIR"
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/gb300-fp4/disagg/agentx" \
-        "$TRTLLM_RECIPES_DIR"
-    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
-        find "$TRTLLM_RECIPES_DIR" -name "*.yaml" \
-            -exec sed -i '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' {} +
-    fi
-elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "glm5.2" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    # The GB300 AgentX recipes put the benchmark client on its own allocation node
-    # (client_dedicated_node), a schema added in srt-slurm v1.0.62; v1.0.72 is the
-    # release this runner's Dynamo TRT path already exercises.
-    git checkout v1.0.72
-    TRTLLM_RECIPES_DIR="benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2"
-    mkdir -p "$TRTLLM_RECIPES_DIR"
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2" \
-        "$TRTLLM_RECIPES_DIR"
-    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
-        find "$TRTLLM_RECIPES_DIR" -name "*.yaml" \
-            -exec sed -i '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' {} +
-    fi
-elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
-    # Qwen3.5 agentic uses NVIDIA/srt-slurm v1.0.38: the two features the
-    # cquil11 fork was pinned for are merged upstream (present in v1.0.36) —
-    #   - `srtctl apply --no-preflight` (skip the in-process model FS check):
-    #     model.path resolves to /scratch/models/Qwen3.5-397B-A17B-NVFP4
-    #     (compute-node-only NVMe), which the GHA runner pod can't stat, so
-    #     the Path.is_dir() preflight would fail before sbatch is ever
-    #     called. The engine still fails loudly at runtime if the path is
-    #     genuinely missing on the compute node.
-    #   - benchmark_stage propagates srun_options (container-remap-root must
-    #     reach the agentic_srt.sh srun).
-    # v1.0.38 additionally injects AIPERF_SERVER_METRICS_URLS for custom
-    # benchmarks using each logical SGLang worker leader. This is required for
-    # complete AgentX trace artifacts; the public frontend alone may expose no
-    # Prometheus endpoint or only Dynamo frontend metrics.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout v1.0.38
-    mkdir -p recipes/sglang/qwen3.5
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" \
-        recipes/sglang/qwen3.5
-elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-    # DSv4 GB300 SGLang agentic uses NVIDIA/srt-slurm v1.0.40. In addition to
-    # the nginx body-size fix, session-affinity frontend, and custom benchmark
-    # schema required by these recipes, this release injects every logical
-    # SGLang worker leader's /metrics URL into AIPERF_SERVER_METRICS_URLS and
-    # supports long-lived nginx keepalive for multi-turn AgentX replay.
-    # AgentX forwards that list to aiperf's --server-metrics argument so its
-    # trace artifacts include backend metrics for every engine.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout v1.0.40
-    mkdir -p recipes/sglang/deepseek-v4/agentic
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
-        recipes/sglang/deepseek-v4/agentic
-elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
-    SRT_SLURM_MODEL_PREFIX="deepseek-ai/DeepSeek-V4-Pro"
-    git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
+setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" "$USES_DCGM_POWER" || exit 1
 
-    mkdir -p benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4" \
-        benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 || exit 1
-    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
-        # srt-slurm v1.0.50 launches lm-eval on the allocation head and uses
-        # localhost:8000. Keep AgentX frontends on first_decode for throughput,
-        # but co-locate the eval-only frontend with lm-eval so loopback resolves.
-        find benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 -name "*.yaml" \
-            -exec sed -i \
-                -e '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' \
-                -e 's/^  orchestrator_placement: first_decode$/  orchestrator_placement: head/' \
-                {} +
-    fi
-elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.2" ]]; then
-    # GLM-5.2 GB300 sglang AgentX: srt-slurm main has the agentx-mvp scenario,
-    # the zip_override sweep selectors, and the multi-frontend session-affinity
-    # schema these recipes need.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout main
-    mkdir -p recipes/sglang/glm5.2/gb300-fp4
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/gb300-fp4" \
-        recipes/sglang/glm5.2/gb300-fp4
-elif [[ "$IS_AGENTIC" == "1" ]]; then
-    # Agentic recipes use NVIDIA/srt-slurm v1.0.36. This is the upstream
-    # version validated in InferenceX PR #2302 and includes per-node DP,
-    # matching Dynamo health counts, multi-node TP port handling, and
-    # Mooncake compatibility. Keep it pinned so sweeps are reproducible.
-    git clone --branch v1.0.36 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-
-    mkdir -p recipes/vllm/deepseek-v4/agentic || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
-        recipes/vllm/deepseek-v4/agentic || exit 1
-    mkdir -p recipes/vllm/minimax-m3/agentic || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/agentic" \
-        recipes/vllm/minimax-m3/agentic || exit 1
-    mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
-        recipes/vllm/kimi-k3/agentic || exit 1
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout aflowers/gb200-dsv4-recipes
-    mkdir -p recipes/vllm/deepseek-v4
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-    # Fixed-length DeepSeek-V4 recipes are version-controlled in this repository;
-    # overlay them onto the selected srt-slurm checkout. Power lanes use the
-    # exact producer pin and stamp it for strict result provenance; non-power
-    # lanes retain the v1.0.25 release that bootstraps cargo/maturin for the
-    # hash-pinned Dynamo source build before launch.
-    if [[ "$USES_DCGM_POWER" == "1" ]]; then
-        git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout "$POWER_SRT_SLURM_PIN" || exit 1
-        # The power lane must run the exact pinned producer SHA, never a moving branch.
-        test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
-        git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
-    else
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout v1.0.25 || exit 1
-    fi
-    mkdir -p recipes/sglang/deepseek-v4/8k1k || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k" \
-        recipes/sglang/deepseek-v4/8k1k || exit 1
-elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout main
-    if [[ $PRECISION == "fp4" ]]; then
-        mkdir -p recipes/sglang/glm5/gb300-fp4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/gb300-fp4" recipes/sglang/glm5/gb300-fp4
-    fi
-elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
-    # GLM-5.1 FP8 (gb300) recipes are version-controlled in-repo; overlay them
-    # onto the pinned submission branch.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
-    mkdir -p recipes/sglang/glm5.1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.1" recipes/sglang/glm5.1
-elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
-    # GLM-5.1 MTP recipe (recipes/gb300-fp4/glm5-mtp.yaml) lives on
-    # NVIDIA/srt-slurm:main — check it out; no in-repo overlay needed.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout main
-elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
-    # Overlay our version-controlled Qwen3.5 recipes onto the srt-slurm checkout.
-    # fp8 recipes pin dynamo by commit hash (source install), which needs the
-    # cargo/maturin bootstrap included in the srt-slurm v1.0.25 release — the
-    # sa-submission-q2-2026 sglang install path assumes maturin ships in the
-    # image, and the lmsysorg/sglang nightly-dev-cu13 image doesn't include it.
-    # Same branch the identical gb200-fp8 recipes run on. fp4 recipes pin
-    # dynamo by version (pip install) and stay on the submission branch they
-    # were validated against.
-    if [[ "$USES_DCGM_POWER" == "1" ]]; then
-        git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-        git checkout "$POWER_SRT_SLURM_PIN" || exit 1
-        # The power lane must run the exact pinned producer SHA, never a moving branch.
-        test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
-        git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
-    else
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-        if [[ $PRECISION == "fp8" ]]; then
-            git checkout v1.0.25
-        else
-            git checkout sa-submission-q2-2026
-        fi
-    fi
-    mkdir -p recipes/sglang/qwen3.5
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" recipes/sglang/qwen3.5
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    if [[ "${SPEC_DECODING:-}" == "mtp" ]]; then
-        git checkout v1.0.38
-    else
-        git checkout sa-submission-q2-2026
-    fi
-    mkdir -p recipes/vllm/minimax-m3-gb300-fp8
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3-gb300-fp8" recipes/vllm/minimax-m3-gb300-fp8
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout main
-    mkdir -p recipes/vllm/kimi-k2.5-fp4
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.5-fp4" recipes/vllm/kimi-k2.5-fp4
-elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
-    # DSv4 dynamo-trt recipes use the HuggingFace model ID as model.path,
-    # so override SRT_SLURM_MODEL_PREFIX to match the recipe's model path key.
+if [[ "$FRAMEWORK" == "dynamo-trt" && "$MODEL_PREFIX" == "dsv4" ]]; then
     SRT_SLURM_MODEL_PREFIX="deepseek-ai/DeepSeek-V4-Pro"
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
-elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout v1.0.72
-    mkdir -p recipes/trtllm/qwen3.5/gb300-fp4/disagg
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/gb300-fp4/disagg" \
-        recipes/trtllm/qwen3.5/gb300-fp4/disagg
-else
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
 fi
-
-if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
-    python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
-        || exit 1
+# Accuracy runs use real speculative verification and a frontend colocated
+# with the post-eval client on the allocation head.
+if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-trt" && "$EVAL_ONLY" == "true" ]]; then
+    find recipes -path 'recipes/*/trtllm/*' -name '*.yaml' -exec sed -i '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' {} +
+    if [[ "$MODEL_PREFIX" == "dsv4" ]]; then
+        SRTCTL_EVAL_ARGS+=(--set frontend.placement.node=head)
+    fi
 fi
 
 echo "Installing srtctl..."
-if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-trt" && ( "$MODEL_PREFIX" == "qwen3.5" || "$MODEL_PREFIX" == "glm5.2" || "$MODEL_PREFIX" == "dsv4" ) ]]; then
-    sed -i 's#git clone https://github.com/ai-dynamo/dynamo.git#git clone https://github.com/cquil11/dynamo.git#' src/srtctl/core/schema.py
-    grep -q 'git clone https://github.com/cquil11/dynamo.git' src/srtctl/core/schema.py || exit 1
-fi
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
 curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$UV_INSTALL_DIR:$PATH"
@@ -591,22 +361,8 @@ if [[ "$USES_AGENTX_POWER" == "1" ]]; then
         "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
 fi
 
-# --no-preflight skips srtctl's pre-submit model-path stat, which runs on
-# the GHA runner host (im-gb300-login-02, an x86 login node). It's required
-# whenever model.path resolves to the node-local /scratch NVMe that the login
-# node can't see:
-#   - the agentic path (DSv4-Pro checkpoint),
-#   - glm5.1, whose GLM-5.1-NVFP4 weights are prestaged on the compute-node
-#     /scratch/models, and
-#   - qwen3.5 fp8, whose weights are also on the compute-node /scratch/models
-#     and which runs on srt-slurm:v1.0.25 (the release that has the preflight),
-#   - qwen3.5 fp4 dynamo-trt, which runs on v1.0.72 without that preflight, and
-#   - the qwen3.5 fp4 and dsv4 sglang power lanes, which run the pinned
-#     producer (a main-lineage fork that has the preflight) against the same
-#     /scratch checkpoints.
-# The engine still fails loudly at runtime if the path is genuinely missing on
-# the compute node. Other fixed-seq-len recipes resolve model.path to a
-# login-visible location, so keep the precheck enforced for them.
+# Skip the login-host model check for checkpoints staged only on compute
+# nodes. The worker still validates the model path during startup.
 SRTCTL_APPLY_ARGS=(
     -f "$CONFIG_FILE"
     --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
@@ -614,11 +370,8 @@ SRTCTL_APPLY_ARGS=(
 if [[ "$IS_AGENTIC" == "1" || "$MODEL_PREFIX" == "glm5.1" || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" ) || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && ( "$FRAMEWORK" == "dynamo-trt" || "$USES_DCGM_POWER" == "1" ) ) || ( "$USES_DCGM_POWER" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ) ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
-if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
-    SRTCTL_APPLY_ARGS+=(--setup-script "$SRTCTL_SETUP_SCRIPT")
-fi
 
-SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
+SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_EVAL_ARGS[@]}" "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
@@ -704,7 +457,7 @@ echo "Collecting results..."
 if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
     collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" "$INFMAX_WORKSPACE" \
-        "$GITHUB_WORKSPACE" "$RESULT_FILENAME" "$AGENTX_POWER_SRT_SLURM_PIN" \
+        "$GITHUB_WORKSPACE" "$RESULT_FILENAME" "$SRT_SLURM_COMMIT" \
         "${POWER_CONCURRENCIES[@]}" || AGENTX_POWER_RC=$?
 fi
 

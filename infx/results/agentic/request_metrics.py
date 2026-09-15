@@ -116,7 +116,9 @@ def _e2e_normalized_interactivity_stats(
     )
 
 
-def compute_latency_stats(records: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]]:
+def compute_latency_stats(
+    records: list[dict[str, Any]],
+) -> tuple[dict[str, Any], dict[str, Any]]:
     ttfts = _ms_to_s(extract_per_record_floats(records, "time_to_first_token"))
     e2els = _ms_to_s(extract_per_record_floats(records, "request_latency"))
     itls = _ms_to_s(extract_per_record_floats(records, "inter_token_latency"))
@@ -153,12 +155,8 @@ def compute_latency_stats(records: list[dict[str, Any]]) -> tuple[dict[str, Any]
         "itl": _nest_stats("itl", itl_stats),
         "tpot": _nest_stats("tpot", tpot_stats),
         "intvty": _nest_stats("intvty", intvty_stats),
-        "e2e_norm_intvty": _nest_stats(
-            "e2e_norm_intvty", e2e_norm_intvty_stats
-        ),
-        "full_response_itl": _nest_stats(
-            "full_response_itl", full_response_itl_stats
-        ),
+        "e2e_norm_intvty": _nest_stats("e2e_norm_intvty", e2e_norm_intvty_stats),
+        "full_response_itl": _nest_stats("full_response_itl", full_response_itl_stats),
         "full_response_intvty": _nest_stats(
             "full_response_intvty", full_response_intvty_stats
         ),
@@ -166,7 +164,9 @@ def compute_latency_stats(records: list[dict[str, Any]]) -> tuple[dict[str, Any]
     return flat, nested
 
 
-def compute_qps_stats(records: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]]:
+def compute_qps_stats(
+    records: list[dict[str, Any]],
+) -> tuple[dict[str, Any], dict[str, Any]]:
     ends_ns = [
         int(record["metadata"]["request_end_ns"])
         for record in records
@@ -191,7 +191,11 @@ def compute_qps_stats(records: list[dict[str, Any]]) -> tuple[dict[str, Any], di
         flat = stats_for("qps", qps_values)
     else:
         flat = {"mean_qps": len(ends) / duration}
-    return flat, {"window_seconds": window, "samples": len(qps_values), **_nest_stats("qps", flat)}
+    return flat, {
+        "window_seconds": window,
+        "samples": len(qps_values),
+        **_nest_stats("qps", flat),
+    }
 
 
 def compute_workload_stats(

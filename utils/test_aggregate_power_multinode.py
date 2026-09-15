@@ -618,3 +618,38 @@ class TestManifestGates:
         pkg = build_package(tmp_path)
         _edit_manifest(pkg, status="incomplete", publication_valid=False)
         assert_invalid(pkg, "package_recompute_invalid")
+
+
+@pytest.mark.parametrize("utilization", [("", ""), ("75.5", "0.9")])
+def test_v2_samples_preserve_energy(tmp_path, utilization):
+    """The pinned producer's optional utilization columns preserve board energy."""
+    pkg = build_package(tmp_path)
+    path = pkg.power_dir / "samples.csv"
+    with path.open(newline="") as handle:
+        rows = list(csv.reader(handle))
+    with path.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(rows[0] + ["gpu_util_pct", "sm_active"])
+        writer.writerows([[2, *row[1:], *utilization] for row in rows[1:]])
+    assert pkg.run(require_power=True) == 0
+    assert pkg.agg()["power_valid"] == 1
+    assert pkg.agg()["total_gpu_energy_j"] == pytest.approx(84000)
+
+
+@pytest.mark.parametrize("row", [
+    [1, 1, 0, "node", 0, "GPU-0", 300, "", ""],
+    [2, 1, 0, "node", 0, "GPU-0", 300, "nan", ""],
+    [2, 1, 0, "node", 0, "GPU-0", 300, 101, ""],
+    [2, 1, 0, "node", 0, "GPU-0", 300, 50, 1.1],
+    [2, 1, 0, "node", 0, "GPU-0", 300],
+])
+def test_v2_samples_reject_mixed_versions_and_invalid_utilization(tmp_path, row):
+    path = tmp_path / "samples.csv"
+    with path.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["schema_version", "timestamp_unix", "scrape_seq", "hostname",
+                         "gpu_index", "gpu_uuid", "power_w", "gpu_util_pct", "sm_active"])
+        writer.writerow(row)
+    rows, reasons = apm.read_samples(path)
+    assert not rows
+    assert reasons == ("samples_csv_malformed",)

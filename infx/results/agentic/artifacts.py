@@ -30,7 +30,9 @@ def load_records(path: Path) -> list[dict[str, Any]]:
     return records
 
 
-def load_records_with_accounting(path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def load_records_with_accounting(
+    path: Path,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Load profiling records from profile_export.jsonl.
 
     Warmup rows are diagnostics only. Older artifacts did not have
@@ -133,9 +135,15 @@ def _hf_traces_dir(hf_dataset_name: str | None, env: Mapping[str, str]) -> Path 
         cache_root = Path(hub_cache)
     else:
         home = env.get("HF_HOME")
-        cache_root = Path(home) / "hub" if home else Path.home() / ".cache" / "huggingface" / "hub"
+        cache_root = (
+            Path(home) / "hub"
+            if home
+            else Path.home() / ".cache" / "huggingface" / "hub"
+        )
 
-    snap_root = cache_root / f"datasets--{hf_dataset_name.replace('/', '--')}" / "snapshots"
+    snap_root = (
+        cache_root / f"datasets--{hf_dataset_name.replace('/', '--')}" / "snapshots"
+    )
     if not snap_root.is_dir():
         return None
 
@@ -168,12 +176,15 @@ def _iter_trace_blobs(traces_dir: Path) -> Iterator[dict[str, Any]]:
 
 
 def iter_trace_blobs(
-    aggregate: Mapping[str, Any], env: Mapping[str, str],
+    aggregate: Mapping[str, Any],
+    env: Mapping[str, str],
 ) -> Iterator[dict[str, Any]]:
     """Read the declared dataset only when request processing consumes traces."""
     metadata = aggregate.get("metadata")
     dataset = metadata.get("dataset") if isinstance(metadata, dict) else None
-    hf_dataset_name = dataset.get("hf_dataset_name") if isinstance(dataset, dict) else None
+    hf_dataset_name = (
+        dataset.get("hf_dataset_name") if isinstance(dataset, dict) else None
+    )
     if not isinstance(hf_dataset_name, str):
         return
     traces_dir = _hf_traces_dir(hf_dataset_name, env)

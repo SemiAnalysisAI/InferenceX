@@ -19,9 +19,8 @@ import urllib.parse
 from typing import Any
 
 from .. import github
-# Preserve the existing helper imports used through the legacy entrypoint.
-from ..github import api as github_api, paginate as paginated_github_api
 
+# Preserve the existing helper imports used through the legacy entrypoint.
 
 DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR")
 REUSE_INCOMPATIBLE_LABELS = {"evals-only", "agentx-fast"}
@@ -73,7 +72,9 @@ def result(
     }
 
 
-def parse_reuse_command(body: str, command: str = "/reuse-sweep-run") -> tuple[bool, int | None]:
+def parse_reuse_command(
+    body: str, command: str = "/reuse-sweep-run"
+) -> tuple[bool, int | None]:
     """Use the last standalone command in a comment, preserving unpinned requests."""
     matches = re.findall(rf"(?m)^\s*{re.escape(command)}(?:[^\S\r\n]+(\d+))?\s*$", body)
     if not matches:
@@ -100,7 +101,9 @@ def find_reuse_request(
         association = str(comment.get("author_association") or "")
         if association not in allowed_author_associations:
             continue
-        matches, pinned_run_id = parse_reuse_command(str(comment.get("body") or ""), command)
+        matches, pinned_run_id = parse_reuse_command(
+            str(comment.get("body") or ""), command
+        )
         if not matches:
             continue
         return comment, pinned_run_id
@@ -115,7 +118,11 @@ def find_reuse_authorization(
     allowed_author_associations: set[str],
 ) -> tuple[bool, int | None]:
     comment, pinned_run_id = find_reuse_request(
-        repo, pr_number, token, command, allowed_author_associations,
+        repo,
+        pr_number,
+        token,
+        command,
+        allowed_author_associations,
     )
     return comment is not None, pinned_run_id
 
@@ -214,9 +221,7 @@ def validate_reusable_run(
         {"success", "failure", "cancelled"} if allow_failed else {"success"}
     )
     if run.get("conclusion") not in allowed_conclusions:
-        expected = (
-            "success, failure, or cancelled" if allow_failed else "success"
-        )
+        expected = "success, failure, or cancelled" if allow_failed else "success"
         raise RuntimeError(
             f"Reusable source run {run_id} has conclusion {run.get('conclusion')!r}; "
             f"expected {expected}."
@@ -295,7 +300,11 @@ def resolve_reusable_run(
         if not pr_shas:
             raise RuntimeError(f"PR #{pr_number} has no commits.")
         run = find_latest_successful_pr_run(
-            repo, workflow_id, str(pr.get("head", {}).get("ref") or ""), pr_shas, token,
+            repo,
+            workflow_id,
+            str(pr.get("head", {}).get("ref") or ""),
+            pr_shas,
+            token,
         )
         if not run:
             raise RuntimeError(
@@ -305,7 +314,12 @@ def resolve_reusable_run(
                 f"`{command} <run_id>`."
             )
     validate_reusable_run(
-        repo, workflow_id, pr_number, run, token, allow_failed=pinned_run_id is not None,
+        repo,
+        workflow_id,
+        pr_number,
+        run,
+        token,
+        allow_failed=pinned_run_id is not None,
     )
     return run
 
@@ -343,7 +357,9 @@ def main() -> int:
     }
 
     incompatible_labels = {
-        value.strip() for value in args.reuse_incompatible_label.split(",") if value.strip()
+        value.strip()
+        for value in args.reuse_incompatible_label.split(",")
+        if value.strip()
     }
 
     if args.event_name == "pull_request":
@@ -354,7 +370,9 @@ def main() -> int:
             )
         else:
             if args.pr_number is None:
-                raise RuntimeError("--pr-number is required for pull_request synchronize")
+                raise RuntimeError(
+                    "--pr-number is required for pull_request synchronize"
+                )
             authorized, pinned_run_id = find_reuse_authorization(
                 args.repo,
                 args.pr_number,
@@ -365,7 +383,12 @@ def main() -> int:
             if authorized:
                 pr = github.api(args.repo, f"/pulls/{args.pr_number}", token)
                 resolve_reusable_run(
-                    args.repo, args.workflow_id, args.pr_number, pr, token, pinned_run_id,
+                    args.repo,
+                    args.workflow_id,
+                    args.pr_number,
+                    pr,
+                    token,
+                    pinned_run_id,
                     incompatible_labels=incompatible_labels,
                     command=args.pinned_run_command,
                 )
@@ -445,7 +468,12 @@ def main() -> int:
     if not pr.get("merged_at"):
         raise RuntimeError(f"PR #{pr_number} is not marked as merged.")
     run = resolve_reusable_run(
-        args.repo, args.workflow_id, pr_number, pr, token, pinned_run_id,
+        args.repo,
+        args.workflow_id,
+        pr_number,
+        pr,
+        token,
+        pinned_run_id,
         incompatible_labels=incompatible_labels,
         command=args.pinned_run_command,
     )

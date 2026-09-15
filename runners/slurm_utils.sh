@@ -3,6 +3,49 @@
 # Launchers source this file before changing into srt-slurm.
 INFERENCEX_SLURM_UTILS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+SRTCTL_EVAL_ARGS=(
+    --set 'post_eval.command=["bash", "{infmax_workspace}/benchmarks/multi_node/srt_eval.sh", "{endpoint}", "{infmax_workspace}"]'
+    --set 'post_eval.passthrough_env=["EVAL_FRAMEWORK", "EVAL_CONC", "EVAL_LIMIT", "EVAL_SUITE", "SWEBENCH_GEN_MODE", "SWEBENCH_USE_MODAL", "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET", "IS_AGENTIC", "SCENARIO_TYPE"]'
+)
+
+# Leaves the caller in the checkout, matching the launchers' installation flow.
+# Every recipe is owned by InferenceX; srt-slurm 2 no longer ships recipes/.
+setup_srt_slurm() {
+    if [[ $# -ne 3 || -z "$1" || -z "$2" || ( "$3" != 0 && "$3" != 1 ) ]]; then
+        echo "Usage: setup_srt_slurm destination framework uses_power (0 or 1)" >&2
+        return 1
+    fi
+    local destination="$1" framework="$2" uses_power="$3"
+    local source="$INFERENCEX_SLURM_UTILS_DIR/../utils/srt-slurm"
+    if [[ "$framework" == "tilert" ]]; then
+        # Sole fork exception until NVIDIA supports the TileRT backend and router.
+        SRT_SLURM_COMMIT=6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde
+        git init "$destination" || return 1
+        git -C "$destination" remote add origin https://github.com/SemiAnalysisAI/srt-slurm.git || return 1
+        git -C "$destination" fetch --depth=1 origin "$SRT_SLURM_COMMIT" || return 1
+        git -C "$destination" checkout --detach "$SRT_SLURM_COMMIT" || return 1
+    else
+        if [[ ! -e "$source/.git" ]]; then
+            echo "Missing srt-slurm submodule; run git submodule update --init before launching." >&2
+            return 1
+        fi
+        SRT_SLURM_COMMIT=$(git -C "$source" rev-parse HEAD) || return 1
+        # A local clone keeps job writes isolated and preserves upstream Git provenance.
+        git clone --no-hardlinks "$source" "$destination" || return 1
+    fi
+    cd "$destination" || return 1
+    [[ "$(git rev-parse HEAD)" == "$SRT_SLURM_COMMIT" ]] || return 1
+    git rev-parse HEAD > "$GITHUB_WORKSPACE/srt-slurm-sha.txt" || return 1
+    if [[ "$uses_power" == "1" ]]; then
+        cp "$GITHUB_WORKSPACE/srt-slurm-sha.txt" "$GITHUB_WORKSPACE/power-producer-sha.txt" || return 1
+    fi
+    mkdir -p recipes benchmarks/multi_node || return 1
+    cp -R "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/." recipes/ || return 1
+    # Both CONFIG_FILE spellings currently occur in master configs.
+    ln -s ../../recipes benchmarks/multi_node/srt-slurm-recipes || return 1
+    cp -R "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/." configs/ || return 1
+}
+
 # Use the requested image's cache identity, never a convenient older squash file.
 resolve_h100_srt_container() {
     local image="$1" framework="$2"

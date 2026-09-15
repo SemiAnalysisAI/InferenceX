@@ -70,6 +70,7 @@ def resolve_threshold(config: dict, prefix: str | None, task: str, fallback: flo
         return default[task], "default"
     return fallback, "min-score"
 
+
 def invalid_effective_count(data: dict, task: str) -> tuple[bool, object]:
     """Return whether an explicitly present effective count is invalid."""
     if "n-samples" not in data:
@@ -88,6 +89,7 @@ def invalid_effective_count(data: dict, task: str) -> tuple[bool, object]:
         or effective <= 0
     )
     return invalid, effective
+
 
 def metric_prefixes(data: dict, task: str, override: str | None) -> tuple[str, ...]:
     """Resolve score metric prefixes from an explicit override or task config."""
@@ -136,7 +138,9 @@ def validate_batch_manifest(
 
     if expected_concs is not None and "eval_concs" not in meta:
         if len(expected_concs) > 1:
-            return ["workflow requested multiple concurrencies but batched eval metadata is missing"]
+            return [
+                "workflow requested multiple concurrencies but batched eval metadata is missing"
+            ]
         errors = []
         if meta.get("conc") != expected_concs[0]:
             errors.append("eval metadata concurrency does not match workflow request")
@@ -150,8 +154,7 @@ def validate_batch_manifest(
     completed = meta.get("completed_eval_concs")
     failed = meta.get("failed_eval_concs")
     if not all(
-        isinstance(values, list)
-        for values in (metadata_expected, completed, failed)
+        isinstance(values, list) for values in (metadata_expected, completed, failed)
     ):
         return ["batched eval metadata must contain list-valued concurrency fields"]
     if not all(
@@ -169,7 +172,9 @@ def validate_batch_manifest(
     if len(metadata_expected_set) != len(metadata_expected):
         errors.append("batched eval metadata contains duplicate expected concurrencies")
     if len(completed_set) != len(completed):
-        errors.append("batched eval metadata contains duplicate completed concurrencies")
+        errors.append(
+            "batched eval metadata contains duplicate completed concurrencies"
+        )
     if expected_concs is not None and metadata_expected_set != expected_set:
         errors.append("batched eval metadata does not match workflow concurrencies")
     if failed_set:
@@ -226,19 +231,24 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description="Validate eval scores")
     parser.add_argument(
-        "--min-score", type=float, default=0.85,
+        "--min-score",
+        type=float,
+        default=0.85,
         help="Fallback minimum score when no threshold config matches (default: 0.85)",
     )
     parser.add_argument(
-        "--thresholds", default=None,
+        "--thresholds",
+        default=None,
         help="Path to thresholds config, YAML or JSON (default: infx/evals/thresholds.yaml)",
     )
     parser.add_argument(
-        "--meta-env", default="meta_env.json",
+        "--meta-env",
+        default="meta_env.json",
         help="Path to meta_env.json used to detect the model prefix (default: meta_env.json)",
     )
     parser.add_argument(
-        "--model-prefix", default=None,
+        "--model-prefix",
+        default=None,
         help="Override the detected model prefix (default: read from meta_env.json / $MODEL_PREFIX)",
     )
     parser.add_argument(
@@ -247,7 +257,8 @@ def main() -> int:
         help="Override task-config metric selection with one metric prefix",
     )
     parser.add_argument(
-        "--results-glob", default="results*.json",
+        "--results-glob",
+        default="results*.json",
         help="Glob pattern for result files (default: 'results*.json')",
     )
     parser.add_argument(
@@ -268,7 +279,10 @@ def main() -> int:
             or any(value <= 0 for value in expected_concs)
             or len(set(expected_concs)) != len(expected_concs)
         ):
-            print("FAIL: expected concurrencies must be unique positive integers", file=sys.stderr)
+            print(
+                "FAIL: expected concurrencies must be unique positive integers",
+                file=sys.stderr,
+            )
             return 1
 
     # Load thresholds config
@@ -283,7 +297,10 @@ def main() -> int:
             config = load_config(thresholds_path)
             print(f"Loaded thresholds from {thresholds_path}")
         except (json.JSONDecodeError, OSError, ValueError) as e:
-            print(f"WARN: could not load thresholds from {thresholds_path}: {e}", file=sys.stderr)
+            print(
+                f"WARN: could not load thresholds from {thresholds_path}: {e}",
+                file=sys.stderr,
+            )
 
     # Identify the model so per-model thresholds can apply
     prefix = detect_model_prefix(args.meta_env, args.model_prefix)

@@ -7,7 +7,6 @@ from pathlib import Path
 
 import yaml
 
-
 CLUSTER_LABEL_PREFIX = "cluster:"
 
 
