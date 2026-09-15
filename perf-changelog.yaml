@@ -7816,4 +7816,4 @@
     - "Add DeepSeek-V4-Pro MXFP4 ATOM PD-disaggregated AgentX MTP on MI355X (cluster:mi355x-amds, image rocm/atom-dev:nightly_202609140614), the ATOM counterpart to dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp; mooncake RDMA KV transfer, atomesh PD router."
     - "Search space (1P1D TP8): TP EP1 concurrency 1, 2, 8, 16; TP8/EP8 DP-attention concurrency 64, 128 with no offload; TP8/EP8 DP-attention concurrency 256 with an lmcache_offload CPU KV tier (multi connector, max_pending_saves 8, slot_sidecar_staging_slots 4, LRU, 256-token chunks)."
     - "Per ATOM DeepSeek-V4-Agentic-PD-Max recipe: prefix caching on, FP8 KV and index cache, block-size 256, TBO on prefill only, MTP (--method mtp --num-speculative-tokens 3) with synthetic acceptance length 2.49 on throughput runs, dp-sticky idx2idx routing on the DP tiers, max-num-seqs = 2x concurrency."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3158
