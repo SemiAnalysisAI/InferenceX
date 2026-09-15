@@ -174,6 +174,10 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 6. 追加选择全部受影响 key 的 changelog 条目（有意覆盖多个 key 时可以使用通配符），并列出旧/新版本及实质运行时变更。
 7. 生成每个受影响的配置族，确认其运行时路径中没有残留旧 tag。
 
+### MiniMax-M3 B200 vLLM 卸载
+
+B200 MiniMax-M3 AgentX vLLM 配方使用 [vLLM #54756](https://github.com/vllm-project/vllm/pull/54756) 提供的上游混合页大小 KV 卸载注册逻辑，不再改写已安装的 worker。本次更新检查的最新稳定版 v0.29.0 尚未包含此修复，因此主配置按提交固定到更新的已发布 nightly 镜像。保留现有 GPU 驻留和 `vllm-simple` DRAM 卸载测试点，并通过完整 sweep 验证两条路径。
+
 ## 添加或修改 MTP
 
 来源：[`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-negotiable-benchmark-invariants)、[模型+硬件 playbook 的 MTP 附录](../.claude/commands/add-model-hardware.md#appendix--mtp--eagle3-spec-decoding-variant)和现有 [`*_mtp.sh` 同类项](../benchmarks/single_node/fixed_seq_len/)。

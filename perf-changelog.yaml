@@ -7807,3 +7807,11 @@
     - "Use FLASH_ATTN for the target model, select the Humming MXFP8 dense-linear backend, and enable Marlin atomic reduction for the MXFP8 MoE path."
     - "Use 0.95 GPU memory utilization for resident serving while retaining 0.90 for Mooncake DRAM offload, and remove the Mooncake concurrency-14 point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3108
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B200 MiniMax-M3 AgentX to the latest vLLM image with upstream mixed-page KV offload support and remove the runtime offload patch."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
