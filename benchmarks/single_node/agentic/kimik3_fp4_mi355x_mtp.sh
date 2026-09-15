@@ -75,7 +75,7 @@ case "$CONC" in
         case "$CONC" in
             1)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-6}}" ;;
             4)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-5}}" ;;
-            12) SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-4}}" ;;
+            12) SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-5}}" ;;
             *)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-3}}" ;;
         esac
         case "$SPEC_NUM_TOKENS" in
@@ -126,7 +126,7 @@ case "$CONC" in
 esac
 export DCP_SIZE
 
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.89}"
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
 CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL_DECODE_ONLY}"
 
 LADDER=$(( MAX_NUM_SEQS * SPEC_ROWS ))
