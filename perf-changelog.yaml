@@ -7791,6 +7791,24 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3099
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3 MXFP4 ATOM AgentX points on MI355X: TP4 concurrency 1–32 and TP2 concurrency 1, 2, 5 with EAGLE3-GQA MTP."
+    - "Add TP4 concurrency 40 and 48 with LMCache DRAM offload and SLRU caching; speculative decoding is disabled at these points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2816
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use FLASH_ATTN for the target model, select the Humming MXFP8 dense-linear backend, and enable Marlin atomic reduction for the MXFP8 MoE path."
+    - "Use 0.95 GPU memory utilization for resident serving while retaining 0.90 for Mooncake DRAM offload, and remove the Mooncake concurrency-14 point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3108
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
   scenario-type:
     - agentic-coding
