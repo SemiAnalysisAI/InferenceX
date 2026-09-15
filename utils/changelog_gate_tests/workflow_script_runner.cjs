@@ -24,6 +24,7 @@ function response(method, args) {
   if (method === 'pulls.getReview') return data.reviews.find(review => review.id === args.review_id);
   if (method === 'pulls.getReviewComment') return data.inlineComments.find(comment => comment.id === args.comment_id);
   if (method === 'pulls.listCommits') return data.commits;
+  if (method === 'pulls.listFiles') return data.changedFiles;
   if (method === 'issues.listEventsForTimeline') return data.timeline;
   if (method === 'actions.getWorkflowRun') return data.runs.find(run => run.id === args.run_id);
   if (method === 'actions.listWorkflowRunArtifacts') return data.artifacts[String(args.run_id)] ?? [];

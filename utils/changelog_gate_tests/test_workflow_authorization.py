@@ -248,10 +248,48 @@ def signoff_case(event='pull_request_target'):
     case = scenario('trusted-external-sweep')
     case['context'].update(eventName=event, runId=99)
     case['context']['payload']['action'] = 'synchronize'
-    case['data'].update(comments=[], reviews=[], inlineComments=[])
+    case['data'].update(comments=[], reviews=[], inlineComments=[],
+                        changedFiles=[{'filename': 'perf-changelog.yaml'}])
     case['data']['pull']['head']['sha'] = 'resolved-head'
     case['data']['pull']['merge_commit_sha'] = None
+    case['data']['pull']['changed_files'] = 1
     return case
+
+
+def test_unchanged_changelog_marks_signoff_not_applicable():
+    case = signoff_case()
+    case['data']['changedFiles'] = [{'filename': 'README.md'}]
+    result = run_workflow('codeowner-signoff-verify', case)
+    assert result['failures'] == []
+    assert result['outputs']['resolve'] == {'changelog-changed': 'false', 'proceed': 'false'}
+    [status] = result['writes']
+    assert status['method'] == 'repos.createCommitStatus'
+    assert status['sha'] == 'resolved-head'
+    assert status['state'] == 'success'
+    assert status['description'] == 'Not applicable: perf-changelog.yaml unchanged'
+
+
+def test_renamed_changelog_still_requires_signoff():
+    case = signoff_case()
+    case['data']['changedFiles'] = [
+        {'filename': 'renamed.yaml', 'previous_filename': 'perf-changelog.yaml'},
+    ]
+    result = run_workflow('codeowner-signoff-verify', case)
+    assert result['failures'] == []
+    assert result['outputs']['resolve'] == {'changelog-changed': 'true', 'proceed': 'false'}
+    assert result['writes'] == []
+
+
+def test_incomplete_changed_file_list_cannot_skip_signoff():
+    case = signoff_case()
+    case['data']['pull']['changed_files'] = 2
+    case['data']['changedFiles'] = [{'filename': 'README.md'}]
+    result = run_workflow('codeowner-signoff-verify', case)
+    assert result['failures'] == [
+        'Incomplete changed-file list for PR #42; cannot determine verifier scope.',
+    ]
+    assert result['outputs'] == {}
+    assert result['writes'] == []
 
 
 def signoff(identifier=11, timestamp='2026-01-01T12:00:00Z', **changes):
@@ -271,6 +309,7 @@ def test_head_update_recovers_each_signoff_kind_on_the_current_head(collection, 
     result = run_workflow('codeowner-signoff-verify', case)
     assert result['failures'] == []
     assert result['outputs']['resolve'] == {
+        'changelog-changed': 'true',
         'proceed': 'true', 'pr-number': '42', 'head-sha': 'resolved-head',
         'signoff-author': 'reviewer', 'signoff-kind': kind,
         'signoff-fetch-cmd': f'gh api repos/example/repo/{path} --jq .body',
@@ -379,6 +418,7 @@ def test_explicit_signoff_requests_resolve_the_original_signer(event, collection
     result = run_workflow('codeowner-signoff-verify', case)
     assert result['failures'] == []
     assert result['outputs']['resolve'] == {
+        'changelog-changed': 'true',
         'proceed': 'true', 'pr-number': '42', 'head-sha': 'resolved-head',
         'signoff-author': 'reviewer', 'signoff-kind': kind,
         'signoff-fetch-cmd': f'gh api repos/example/repo/{path} --jq .body',
