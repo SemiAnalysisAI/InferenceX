@@ -1,0 +1,118 @@
+# Agentic-coding SGLang aggregated recipe for GLM-5.2-NVFP4 on B200 at concurrency 1.
+#
+# One TP8 worker serves prefill and decode on a single node. The sweep matrix
+# supplies the concurrency list; agentic_srt.sh replays every point against
+# this one server. Acceptance is pinned to the golden thinking-on AL for three
+# speculative tokens (golden_al_distribution/glm5.2_mtp.yaml).
+name: agg-b200-tp8-c1-mtp
+model:
+  path: glm-5.2-fp4
+  container: dynamo-sglang
+  precision: fp4
+identity:
+  model:
+    repo: nvidia/GLM-5.2-NVFP4
+    revision: aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa
+  container:
+    image: lmsysorg/sglang:nightly-dev-20260910-00840301
+  frameworks:
+    dynamo: 1.5.0.dev20260909
+    sglang: 0.0.0.dev1+g008403017
+resources:
+  gpu_type: b200
+  gpus_per_node: 8
+  agg_nodes: 1
+  agg_workers: 1
+  gpus_per_agg: 8
+dynamo:
+  install: false
+backend:
+  type: sglang
+  sglang_config:
+    aggregated:
+      served-model-name: nvidia/GLM-5.2-NVFP4
+      trust-remote-code: true
+      quantization: modelopt_fp4
+      kv-cache-dtype: fp8_e4m3
+      tensor-parallel-size: 8
+      data-parallel-size: 1
+      expert-parallel-size: 1
+      enable-dp-attention: false
+      enable-dp-lm-head: false
+      max-running-requests: 2
+      cuda-graph-max-bs-decode: 2
+      chunked-prefill-size: 8192
+      max-prefill-tokens: 8192
+      context-length: 1048576
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
+      dsa-prefill-backend: trtllm
+      dsa-decode-backend: trtllm
+      moe-runner-backend: flashinfer_trtllm
+      fp4-gemm-backend: flashinfer_trtllm
+      disable-shared-experts-fusion: true
+      enable-flashinfer-allreduce-fusion: true
+      weight-loader-prefetch-checkpoints: true
+      model-loader-extra-config: '{"enable_multithread_load": true}'
+      mem-fraction-static: 0.8
+      enable-hierarchical-cache: true
+      hicache-write-policy: write_back
+      hicache-size: 110
+      hicache-io-backend: direct
+      watchdog-timeout: 1800
+      enable-metrics: true
+      enable-cache-report: true
+  aggregated_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+    PYTHONUNBUFFERED: '1'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    MC_TE_METRIC: 'true'
+    NCCL_CUMEM_ENABLE: '1'
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+    SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
+    SGLANG_DEFAULT_THINKING: '1'
+    SGLANG_REASONING_EFFORT: max
+    SGLANG_HICACHE_DEBUG_LOG: '1'
+    SGLANG_HICACHE_DEBUG_SAMPLE_RATE: '16384'
+    SGLANG_MOE_NVFP4_DISPATCH: '1'
+    SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '1'
+    SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
+    SGLANG_SIMULATE_ACC_LEN: '2.99'
+    SGLANG_SIMULATE_ACC_METHOD: match-expected
+    SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
+    PIP_BREAK_SYSTEM_PACKAGES: '1'
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    RESULT_DIR: /logs/agentic
+    PORT: '8000'
+    IS_MULTINODE: 'true'
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+    AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
+    HF_HUB_CACHE: /hf_hub_cache
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+infra:
+  etcd_nats_dedicated_node: false
+  nats_max_payload_mb: 64
+frontend:
+  type: dynamo
+  env:
+    PIP_BREAK_SYSTEM_PACKAGES: '1'
+  args:
+    router-mode: kv
+    active-decode-blocks-threshold: None
+    active-prefill-tokens-threshold: None
+    active-prefill-tokens-threshold-frac: None
+    router-session-affinity-ttl-secs: 3600
+sbatch_directives:
+  mem: '0'
+srun_options:
+  mem: '0'
+  container-remap-root: ''
