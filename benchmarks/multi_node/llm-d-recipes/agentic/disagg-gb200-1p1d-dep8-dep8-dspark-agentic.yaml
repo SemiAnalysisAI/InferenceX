@@ -21,7 +21,7 @@ plugins:
       blockSizeTokens: 256
       maxPrefixTokensToMatch: 1048576
       maxPrefixBlocksToMatch: 4096
-      lruCapacityPerServer: 45272
+      lruCapacityPerServer: 43949
   - type: prefix-cache-affinity-filter
     parameters:
       peakPrefillThroughput: 4783

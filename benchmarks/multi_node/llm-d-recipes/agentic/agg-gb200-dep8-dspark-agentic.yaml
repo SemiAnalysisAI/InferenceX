@@ -17,15 +17,15 @@ plugins:
       blockSizeTokens: 256
       maxPrefixTokensToMatch: 1048576
       maxPrefixBlocksToMatch: 4096
-      lruCapacityPerServer: 8967
+      lruCapacityPerServer: 5858
   - type: prefix-cache-affinity-filter
     parameters:
-      peakPrefillThroughput: 4783
+      peakPrefillThroughput: 20000
       maxTTFTPenaltyMs: 30000
   - type: prefix-cache-scorer
   - type: token-load-scorer
     parameters:
-      queueThresholdTokens: 2295620
+      queueThresholdTokens: 1499703
   - type: active-request-scorer
   - type: queue-scorer
   - type: max-score-picker

@@ -234,11 +234,19 @@ if [[ "$IS_AGGREGATED" -eq 0 ]]; then
     fi
     if [[ -n "${MOONCAKE_CONFIG_PATH}" ]]; then
         # MultiConnector: NixlConnector handles direct P/D KV transfer;
-        # SimpleCPUOffloadConnector stages KV in CPU DRAM (~38 GB) as a buffer;
         # MooncakeStoreConnector enables cross-node prefix-cache lookup via RDMA.
-        # Both roles use kv_both so decode can serve speculative-decode prefills.
+        # Prefill additionally uses SimpleCPUOffloadConnector to stage KV in CPU
+        # DRAM (~38 GB) before writing to mooncake. Decode omits SimpleCPUOffload:
+        # EAGER mode would store every decoded KV block into mooncake, polluting
+        # the prefix cache with non-reusable blocks and reducing mooncake hit rate
+        # for prefill lookups. Both roles use kv_both so decode can serve
+        # speculative-decode prefills in DSpark.
         _MC_EXTRA='"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false'
-        KV_TRANSFER_CONFIG="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{\"enforce_handshake_compat\":false,\"enable_cross_layers_blocks\":false,\"kv_lease_duration\":1800}},{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":40802189312}},{\"kv_connector\":\"MooncakeStoreConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{${_MC_EXTRA}}}]}}"
+        if [[ "$ROLE" == "prefill" ]]; then
+            KV_TRANSFER_CONFIG="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{\"enforce_handshake_compat\":false,\"enable_cross_layers_blocks\":false,\"kv_lease_duration\":1800}},{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":40802189312}},{\"kv_connector\":\"MooncakeStoreConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{${_MC_EXTRA}}}]}}"
+        else
+            KV_TRANSFER_CONFIG="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{\"enforce_handshake_compat\":false,\"enable_cross_layers_blocks\":false,\"kv_lease_duration\":1800}},{\"kv_connector\":\"MooncakeStoreConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{${_MC_EXTRA}}}]}}"
+        fi
     else
         KV_TRANSFER_CONFIG="{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"$KV_ROLE\",\"kv_load_failure_policy\":\"fail\"}"
     fi
@@ -246,7 +254,9 @@ if [[ "$IS_AGGREGATED" -eq 0 ]]; then
 elif [[ -n "${MOONCAKE_CONFIG_PATH}" ]]; then
     # Aggregated + Mooncake: single role acts as kv_both (stores new KV and
     # loads cache hits from the Mooncake RDMA store for prefix-cache sharing).
-    KV_TRANSFER_CONFIG="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{\"enforce_handshake_compat\":false,\"enable_cross_layers_blocks\":false}},{\"kv_connector\":\"MooncakeStoreConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"load_async\":true,\"lookup_async\":true,\"enable_cross_layers_blocks\":false,\"enable_offload\":false}}]}}"
+    # SimpleCPUOffloadConnector stages freshly computed KV blocks into CPU DRAM
+    # (~40 GB) before writing to MooncakeStore, matching the local DEP8 v1 setup.
+    KV_TRANSFER_CONFIG="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{\"enforce_handshake_compat\":false,\"enable_cross_layers_blocks\":false}},{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":42949672960}},{\"kv_connector\":\"MooncakeStoreConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"load_async\":true,\"lookup_async\":true,\"enable_cross_layers_blocks\":false,\"enable_offload\":false}}]}}"
     COMMON_ARGS+=(--kv_transfer_config "$KV_TRANSFER_CONFIG")
 fi
 # A single frontend (HTTP + tokenize + DP load-balance) is CPU-bound and caps
