@@ -226,6 +226,13 @@ trap 'exit 143' TERM
 # request bursts produced by subagent fan-out.
 MAX_NUM_SEQS=$((2 * CONC))
 
+# Use BF16 KV for every configured task at concurrency 16 and below. Keep FP8
+# KV for the higher-concurrency DEP band.
+KV_CACHE_DTYPE=fp8
+if [ "$CONC" -le 16 ]; then
+    KV_CACHE_DTYPE=bf16
+fi
+
 # DPA splits the C48+ workload across eight ranks, so real decode batches are
 # commonly 3, 5-7, and 9-15. ATOM's default power-of-two ladder rounds those
 # shapes up and runs unnecessary attention, MoE, and collective work. Capture
@@ -252,7 +259,7 @@ if [ "${EVAL_ONLY:-false}" != "true" ]; then
     SPEC_ARGS+=(--spec-decode-acceptance-length "$SPEC_DECODE_AL")
 fi
 
-echo "Starting ATOM server with MAX_NUM_SEQS=$MAX_NUM_SEQS NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS STATE_CHECKPOINT_INTERVAL_TOKENS=$STATE_CHECKPOINT_INTERVAL_TOKENS DP_ATTENTION=$DP_ATTENTION EP_SIZE=$EP_SIZE EVAL_ONLY=${EVAL_ONLY:-false}"
+echo "Starting ATOM server with MAX_NUM_SEQS=$MAX_NUM_SEQS NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS KV_CACHE_DTYPE=$KV_CACHE_DTYPE STATE_CHECKPOINT_INTERVAL_TOKENS=$STATE_CHECKPOINT_INTERVAL_TOKENS DP_ATTENTION=$DP_ATTENTION EP_SIZE=$EP_SIZE EVAL_ONLY=${EVAL_ONLY:-false}"
 ATOM_CMD=(
     python3 -u -m atom.entrypoints.openai_server
     --model "$MODEL_PATH"
@@ -267,7 +274,7 @@ ATOM_CMD=(
     --timeout-keep-alive 900
     --tensor-parallel-size "$TP"
     --data-parallel-size 1
-    --kv-cache-dtype fp8
+    --kv-cache-dtype "$KV_CACHE_DTYPE"
     --index-cache-dtype fp4
     --enable-prefix-caching
     --gpu-memory-utilization 0.9

@@ -7818,3 +7818,12 @@
     - "Remove the runtime patch_aiter_comm_fused_inference.py source mutation, its test, and aiter_runtime_fix.json manifest handling. TP now relies on the fixed implementation shipped in the image while preserving communication fusion, DSpark K6, golden AL 3.77, and graph capture; this entry supersedes the preceding runtime-fix entry."
     - "将镜像切换为包含 ROCm/ATOM#2233 上游修复的 rocm/atom-dev:pr2233-4f3a808（ATOM commit 4f3a8088）；移除运行时 AITER 源码补丁、对应测试及 aiter_runtime_fix.json 记录。TP 直接使用镜像内修复，同时保留通信融合、DSpark K6、golden AL 3.77 和 graph capture；本条取代前一条临时运行时修复记录。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use BF16 KV cache for every concurrency at or below 16 (C1/C2/C4/C8/C16), while retaining FP8 KV cache for the C48/C64/C96/C128/C256 native RCCL DEP band. Preserve the FP4 index cache and all other serving settings."
+    - "将 C16 及以下的全部任务（C1/C2/C4/C8/C16）切换为 BF16 KV cache；C48/C64/C96/C128/C256 原生 RCCL DEP 任务继续使用 FP8 KV cache。FP4 index cache 及其他服务配置保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912

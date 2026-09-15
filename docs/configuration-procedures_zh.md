@@ -200,10 +200,11 @@ DSpark Markov/confidence head、全部 66 个分片的 header 与 payload 边界
 全部十个 AgentX 性能点使用 DSpark K6（target 验证长度为 7）和已提交的
 golden AL 3.77。C1/2/4/8/16 使用 TP8/EP1；C48/64/96/128/256 使用
 TP8/DPA8/EP8 原生 RCCL。每个性能点运行 3600 秒。C256 全量 GSM8K 不传强制
-接受率参数。保留固定的 `rocm/atom-dev:pr2233-4f3a808` 镜像、GPU KV、FP8 KV/FP4 index、
-8192-token checkpoint 和 DEP dense FULL graph 阶梯。每个新服务进程重新捕获
-固定 q7 图；必须从 `server.log` 确认 target 和 DSpark draft capture 完成。
-confidence schedule 和 ragged verification 保持关闭。
+接受率参数。保留固定的 `rocm/atom-dev:pr2233-4f3a808` 镜像和 GPU KV；C1 至 C16
+使用 BF16 KV，C48 及以上继续使用 FP8 KV，所有任务均使用 FP4 index cache、
+8192-token checkpoint 和 DEP dense FULL graph 阶梯。每个新服务进程重新捕获固定
+q7 图；必须从 `server.log` 确认 target 和 DSpark draft capture 完成。confidence
+schedule 和 ragged verification 保持关闭。
 
 `AGENTIC_TOKENIZER_PATH` 可覆盖 AgentX 的 tokenizer 来源，默认仍为 `MODEL`；
 本配方将其设置为已验证的服务 snapshot。`checkpoint_preflight.json`、
