@@ -255,6 +255,8 @@ Canary 和 Fail-fast 解决不同问题：
 
 ## 监控与重跑
 
+PR 扫描维护一条机器人评论，包含 `View unofficial run (performance)` 和 `View unofficial run (accuracy)` 链接。每个更新的 Run 都会编辑该评论；重跑旧 Run 不会覆盖更新的链接。已有 PR 会复用最新的旧格式可视化评论，更早的历史评论保持不变。
+
 ### 监控选定 Run
 
 ```bash
@@ -275,15 +277,11 @@ gh api "/repos/SemiAnalysisAI/InferenceX/actions/runs/$RUN_ID" \
 
 ### 安全重跑
 
-PR 更新 Head、重新打开或退出草稿状态后，CODEOWNER 验证也会自动补查。它会读取已有签署，并将检查固定到当前 Head，因此解决合并冲突后无需再次发布清单。补查事件使用默认分支的工作流，特权验证 Job 也只检出该受信任分支。仅当验证程序的最新状态是同一 PR 和 Head 的已完成裁定时，才会跳过重复自动检查；之后发生崩溃或取消时仍可重试。主动编辑签署或手动派发仍可重做已完成的检查。Commit Status 只接受验证账号在本次 Run 和 Attempt 中发布的裁定。
+首次 PASS 前，CODEOWNER 验证会在 Head 更新、PR 重新打开或退出草稿状态后，补查最新的合格签署。它在当前 Head 上验证已有清单，无需在解决合并冲突后重复发布清单。验证使用可信默认分支代码；在 Claude 开始前发布 pending 状态。
 
-将 `main` 合入分支后，应等待新 Head 的验证完成，再合并 PR。验证 Job 启动时会先发布待完成状态，结束后再更新为结果。不含清单的普通批准不会启动验证。验证被取消时，检查会显示 `Verification cancelled; rerun required`，表示本次尝试没有完成裁定，并不代表签署被拒绝。
+已有 PASS 的延续遵循[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)：自动化将成功状态延续至新 Head，不重新运行 Claude。手动重新评估会更新同一条裁定评论，但不会撤销已有 PASS。验证器只写入本地裁定文件，可信工作流负责发布评论和状态。
 
-Claude Action 仍会拒绝没有仓库写权限的触发者以及未获允许的机器人。如果这类触发者更新了 Head，具有写权限的协作者可使用已有签署的 URL 手动派发验证。
-
-同一 PR 的验证 Job 会逐个执行，包括手动派发，避免并发请求在状态发布前覆盖彼此的裁定标记。
-
-Gate 会在启动特权 Job 前检查 `github.actor`：基础 `permission` 必须为 `write` 或 `admin`，`role_name` 必须为 `write`、`maintain` 或 `admin`。未知或自定义角色、字段缺失、机器人触发以及权限查询失败均不会启动验证。被拒绝的请求无法覆盖已有裁定状态。自动查找签署时，也会按相同的角色要求检查签署者，并跳过不具备资格的用户较晚提交的清单。
+首次验证或重新评估时，Gate 要求触发者的基础 `permission` 为 `write` 或 `admin`，且 `role_name` 为 `write`、`maintain` 或 `admin`。未知或自定义角色、字段缺失、机器人触发和查询失败均不能启动 Claude；自动补查也按相同规则检查签署者。无写权限用户或未获允许的机器人更新 Head 后，可由具有写权限的协作者使用已有签署 URL 发起验证。同一 PR 的验证与 PASS 延续任务串行执行。
 
 不要盲目重跑仍在执行的 Run。已结束的失败 Run 可以只重跑失败 Job 及其依赖项：
 

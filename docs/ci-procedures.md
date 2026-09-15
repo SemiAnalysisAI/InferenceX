@@ -263,6 +263,8 @@ Manual `e2e-tests.yml` has no canary. Its `fail-fast` input defaults to false an
 
 ## Monitoring and reruns
 
+PR sweeps maintain one bot comment with `View unofficial run (performance)` and `View unofficial run (accuracy)` links. Each newer run updates that comment; rerunning an older run does not replace newer links. Existing PRs reuse their latest legacy visualizer comment, leaving earlier historical comments intact.
+
 ### Monitor the selected run
 
 ```bash
@@ -283,15 +285,11 @@ The [`PR Review` workflow](../.github/workflows/claude-pr-review.yml) installs a
 
 ### Rerun safely
 
-CODEOWNER verification also catches up after a PR head update, reopening, or transition out of draft. It reads existing sign-offs and pins the check to the current head, so resolving a merge conflict does not require posting the checklist again. The catch-up event runs from the default branch, and the privileged verifier checks out only that trusted branch. Automatic checks are suppressed only when the latest verifier status is a completed verdict for the same PR and head; a later crash or cancellation remains retryable. Explicit sign-off edits and manual dispatch can repeat a completed check. Commit statuses accept only a verdict authored by the verifier for that run and attempt.
+Before the first PASS, CODEOWNER verification recovers the latest eligible sign-off after head updates, reopening, or leaving draft. It verifies the current head using the existing checklist, including reviews missed during merge conflicts. Execution stays on the trusted default branch, and a pending status appears before Claude starts.
 
-After merging `main` into the branch, wait for verification on the new head before merging the PR. The verifier publishes a pending status when its job starts, then replaces it with the outcome. A plain approval without the checklist does not start verification. A cancelled verifier reports `Verification cancelled; rerun required`: no completed verdict exists for that attempt, rather than a rejected sign-off.
+Existing acceptance follows the [contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off): the workflow carries a prior PASS onto new heads without rerunning Claude. Manual reassessment updates the same verdict comment and cannot revoke an earlier PASS. The verifier writes a local verdict file; trusted workflow code owns comment and status publication.
 
-The Claude action still rejects actors without repository write access and disallowed bots. If such an actor updates the head, a collaborator with write access can manually dispatch verification using the existing sign-off URL.
-
-Verifier jobs run one at a time per PR, including manual dispatches, so concurrent requests cannot replace each other's verdict markers before publication.
-
-The gate checks `github.actor` before starting the privileged job: base `permission` must be `write` or `admin`, and `role_name` must be `write`, `maintain`, or `admin`. Unknown/custom roles, missing fields, bot actors, and lookup failures do not start verification. Rejected requests cannot overwrite an existing verdict status. Automatic discovery applies the same role checks to signers and skips ineligible newer checklists.
+Starting Claude requires the actor's base `permission` to be `write` or `admin`, and `role_name` to be `write`, `maintain`, or `admin`. Unknown/custom roles, missing fields, bots, and lookup failures do not start verification. Catch-up applies the same checks to signers. A collaborator with write access can use the existing sign-off URL after an update by a non-writer or disallowed bot. Verification and PASS carry-forward jobs serialize per PR.
 
 Do not rerun an in-progress run blindly. A completed failed run can rerun only failed jobs and their dependents:
 

@@ -4,7 +4,7 @@ import pytest
 from hypothesis import given, strategies as st
 
 from changelog_gate_tests.test_workflow_authorization import (
-    OPERATIONS, run_scripts, run_workflow, scenario, signoff, signoff_case, workflow,
+    OPERATIONS, run_signoff, run_workflow, scenario, signoff, signoff_case, verdict_comment,
 )
 
 
@@ -19,8 +19,8 @@ PERMISSIONS = st.one_of(
 
 @given(collection=st.sampled_from(['comments', 'reviews', 'inlineComments']),
        preceding=st.integers(0, 220), closed=st.booleans(), draft=st.booleans(),
-       completed=st.booleans(), interrupted=st.booleans(), withdrawn=st.booleans(), outsider=st.booleans())
-def test_signoff_catchup_pins_current_head_and_deduplicates(collection, preceding, closed, draft, completed, interrupted, withdrawn, outsider):
+       withdrawn=st.booleans(), outsider=st.booleans())
+def test_signoff_catchup_pins_current_head(collection, preceding, closed, draft, withdrawn, outsider):
     case = signoff_case()
     case['data']['pull'].update(state='closed' if closed else 'open', draft=draft)
     case['data'][collection] = [signoff(identifier, body='ordinary comment') for identifier in range(preceding)]
@@ -28,26 +28,13 @@ def test_signoff_catchup_pins_current_head_and_deduplicates(collection, precedin
     if outsider:
         case['permissionsByUser'] = {'outsider': {'permission': 'read', 'role_name': 'read'}}
         case['data'][collection].append(signoff(1001, '2026-01-02T00:00:00Z', user={'login': 'outsider', 'type': 'User'}))
-    if completed:
-        case['data']['statuses'] = [{'context': 'codeowner-signoff-verify', 'state': 'success',
-                                    'target_url': 'https://github.com/example/repo/pull/42#issuecomment-123',
-                                    'creator': {'login': 'github-actions[bot]'}}]
-    if interrupted:
-        case['data']['statuses'].insert(0, {'context': 'codeowner-signoff-verify', 'state': 'failure',
-                                           'target_url': 'https://github.com/example/repo/actions/runs/98',
-                                           'creator': {'login': 'github-actions[bot]'}})
-    expected = not any([closed, draft, completed and not interrupted, withdrawn])
+    expected = not any([closed, draft, withdrawn])
     result = run_workflow('codeowner-signoff-verify', case)
     assert result['failures'] == []
     assert result['outputs']['resolve']['proceed'] == str(expected).lower()
     if expected:
         assert result['outputs']['resolve']['head-sha'] == 'resolved-head'
         assert '/1000 --jq .body' in result['outputs']['resolve']['signoff-fetch-cmd']
-        case['data']['statuses'] = [{'context': 'codeowner-signoff-verify', 'state': 'success',
-                                    'target_url': 'https://github.com/example/repo/pull/42#issuecomment-123',
-                                    'creator': {'login': 'github-actions[bot]'}}]
-        repeated = run_workflow('codeowner-signoff-verify', case)
-        assert repeated['outputs']['resolve']['proceed'] == 'false'
 
 
 @given(event=st.sampled_from(['issue_comment', 'pull_request_review', 'pull_request_review_comment',
@@ -68,32 +55,31 @@ def test_signoff_gate_rejects_unauthorized_requesters(event, permission, bot, un
     assert result['writes'] == []
 
 
-@given(trusted=st.booleans(), identity_known=st.booleans(), current_head=st.booleans(),
-       current_run=st.booleans(), current_attempt=st.booleans(), passed=st.booleans(),
+@given(source=st.sampled_from(['none', 'comment', 'label']), trusted=st.booleans(),
+       verdict=st.sampled_from(['pass', 'reject', 'mixed', 'missing']),
        outcome=st.sampled_from(['success', 'failure', 'cancelled', 'skipped']), preceding=st.integers(0, 220))
-def test_signoff_verdict_cannot_reuse_other_authors_heads_or_attempts(
-    trusted, identity_known, current_head, current_run, current_attempt, passed, outcome, preceding,
-):
+def test_signoff_publication_requires_valid_evidence_and_retains_a_prior_pass(source, trusted, verdict, outcome, preceding):
     case = signoff_case()
-    case['context'].update(run_id=99, run_attempt=2)
-    case['stepsState'] = {'verify': {'outcome': outcome},
-                          'prepare': {'outputs': {'verifier-id': '7' if identity_known else ''}}}
-    case['needs'] = {'gate': {'outputs': {'head-sha': 'pinned-head', 'pr-number': '42'}}}
-    head = 'pinned-head' if current_head else 'previous-head'
-    run = 99 if current_run else 98
-    attempt = 2 if current_attempt else 1
-    verdict = '## ✅✅✅ **Verdict: PASS** ✅✅✅' if passed else '## ❌❌❌ **REJECTED** ❌❌❌'
-    case['data']['comments'] = [{'body': 'ordinary comment'} for _ in range(preceding)] + [{
-        'body': f'<!-- codeowner-signoff-verify sha={head} -->\n{verdict}\n<!-- verification-run={run} attempt={attempt} -->',
-        'user': {'id': 7 if trusted else 8}, 'html_url': 'https://github.com/example/repo/pull/42#issuecomment-123',
-    }]
-    publisher = workflow('codeowner-signoff-verify')['jobs']['verify']['steps'][-1]
-    result = run_scripts([publisher], case)
+    case['data']['comments'] = [{'body': 'ordinary comment'} for _ in range(preceding)]
+    author = 'github-actions[bot]' if trusted else 'contributor'
+    if source == 'comment':
+        case['data']['comments'].append(verdict_comment(author=author))
+    elif source == 'label':
+        case['data']['pull']['labels'].append({'name': 'codeowner-signoff-verified'})
+        case['data']['timeline'].append({'event': 'labeled', 'label': {'name': 'codeowner-signoff-verified'},
+                                        'actor': {'login': author}})
+    bodies = {'pass': '## ✅✅✅ **Verdict: PASS** ✅✅✅', 'reject': '## ❌❌❌ **REJECTED** ❌❌❌',
+              'mixed': '## ✅✅✅ **Verdict: PASS** ✅✅✅\n## ❌❌❌ **REJECTED** ❌❌❌'}
+    if verdict != 'missing':
+        case['files'] = {'/tmp/codeowner-signoff-verdict.md': bodies[verdict]}
+    result = run_signoff('publish', case, headSha='pinned-head', verdictPath='/tmp/codeowner-signoff-verdict.md',
+                         verificationSucceeded=outcome == 'success')
     assert result['failures'] == []
-    [status] = result['writes']
-    accepted = all([trusted, identity_known, current_head, current_run, current_attempt, passed, outcome == 'success'])
-    assert status['state'] == ('success' if accepted else 'failure')
-    assert status['sha'] == 'pinned-head'
+    statuses = [write for write in result['writes'] if write['method'] == 'repos.createCommitStatus']
+    accepted = (source != 'none' and trusted) or (outcome == 'success' and verdict == 'pass')
+    assert {status['sha']: status['state'] for status in statuses} == {
+        'resolved-head': 'success' if accepted else 'failure', 'pinned-head': 'success' if accepted else 'failure',
+    }
 
 
 @pytest.mark.parametrize("operation", OPERATIONS)

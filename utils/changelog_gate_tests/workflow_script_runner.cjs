@@ -8,7 +8,7 @@ Date.now = () => Date.parse('2026-01-02T12:00:00Z');
 
 function response(method, args) {
   output.requests.push({method, ...args});
-  if (input.failMethod === method) throw new Error('GitHub unavailable');
+  if (input.failMethod === method) throw Object.assign(new Error('GitHub unavailable'), {status: input.errorStatus});
   const data = input.data;
   if (method === 'repos.getCollaboratorPermissionLevel') {
     output.permissionRequests.push(args);
@@ -31,8 +31,29 @@ function response(method, args) {
   if (method === 'actions.listWorkflowRuns') {
     return args.event === 'workflow_dispatch' ? {workflow_runs: data.dispatchedRuns} : data.runs;
   }
-  if (['issues.createComment', 'actions.createWorkflowDispatch', 'repos.createDispatchEvent', 'repos.createCommitStatus'].includes(method)) {
+  if (method === 'issues.getLabel') {
+    if (input.labelExists === false) throw Object.assign(new Error('Label missing'), {status: 404});
+    return {name: args.name};
+  }
+  if (['issues.createComment', 'issues.updateComment', 'issues.createLabel', 'issues.addLabels', 'issues.removeLabel',
+       'actions.createWorkflowDispatch', 'repos.createDispatchEvent', 'repos.createCommitStatus'].includes(method)) {
     output.writes.push({method, ...args});
+    if (method === 'issues.createLabel') input.labelExists = true;
+    if (method === 'issues.removeLabel') data.pull.labels = data.pull.labels.filter(label => label.name !== args.name);
+    if (method === 'issues.addLabels') {
+      data.pull.labels.push(...args.labels.map(name => ({name})));
+      data.timeline.push(...args.labels.map(name => ({event: 'labeled', label: {name}, actor: {login: 'github-actions[bot]'}})));
+    }
+    if (method === 'issues.createComment' || method === 'issues.updateComment') {
+      data.comments ??= [];
+      let comment = data.comments.find(item => item.id === args.comment_id);
+      if (!comment) {
+        comment = {id: 501, user: {login: 'github-actions[bot]'},
+                   html_url: `https://github.com/${args.owner}/${args.repo}/pull/${args.issue_number}#issuecomment-501`};
+        data.comments.push(comment);
+      }
+      return Object.assign(comment, {body: args.body});
+    }
     return {id: 501};
   }
   throw new Error(`Unexpected GitHub call: ${method}`);
@@ -54,6 +75,18 @@ const github = {rest, paginate: async (fn, args) => {
     if (data.length < (args.per_page ?? 30)) return items;
   }
 }};
+
+function workflowModule(path) {
+  const module = {exports: {}};
+  new Function('require', 'module', fs.readFileSync(path, 'utf8'))(name => {
+    if (name !== 'node:fs') throw new Error(`Unexpected dependency: ${name}`);
+    return {
+      existsSync: path => Object.hasOwn(input.files ?? {}, path),
+      readFileSync: path => input.files[path],
+    };
+  }, module);
+  return module.exports;
+}
 
 function resolve(value) {
   return String(value).replace(/\$\{\{\s*(.*?)\s*\}\}/g, (_, path) => {
@@ -84,8 +117,8 @@ function resolve(value) {
     };
     try {
       if (step.with?.script) {
-        await new AsyncFunction('github', 'context', 'core', 'setTimeout', step.with.script)(
-          github, input.context, core, callback => callback(),
+        await new AsyncFunction('github', 'context', 'core', 'setTimeout', 'require', step.with.script)(
+          github, input.context, core, callback => callback(), workflowModule,
         );
       } else if (step.run && input.renderShell) {
         output.shell.push({script: resolve(step.run), env: stepEnv});

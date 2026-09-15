@@ -20,7 +20,9 @@ Thanks for contributing! PRs are welcome. This page covers the review process ev
 
 ## The PR Review Checklist (CODEOWNER sign-off)
 
-When a CODEOWNER approves a PR, they must fill in the latest [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) template in their approval comment.
+One eligible CODEOWNER reviewer fills in the latest [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) template in their approval comment.
+
+**Only one eligible CODEOWNER reviewer needs to post the checklist for each PR.** Check for an existing checklist before posting; additional reviewers do not need to post their own copies. For corrections, missing evidence, or verification retries, the original reviewer must **edit their existing checklist comment** instead of adding a new one. Create a replacement only if the original comment was deleted.
 
 A friendly reminder. Please follow the latest checklist template **correctly**:
 
@@ -31,11 +33,15 @@ A friendly reminder. Please follow the latest checklist template **correctly**:
 
   Our CI verification workflow, [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml), triggers on exactly this phrase. **If your approval comment does not follow the checklist template, including that phrase, the sign-off verification CI will not trigger at all**, and your sign-off won't count toward merge.
 - The sign-off can be posted as a regular conversation comment, a review summary, or an inline review comment. All three trigger verification.
-- Head updates, reopening a PR, and marking it ready also re-evaluate the latest existing sign-off on the current head. This catches reviews missed during merge conflicts. A completed verdict for that PR and head prevents duplicate automatic verification; editing or resubmitting the sign-off or manually dispatching the workflow requests a fresh check.
-- The verifier's existing actor restrictions still apply. After an update by someone without repository write access or by a disallowed bot, a collaborator with write access must request verification.
+- Before the first PASS, head updates, reopening a PR, and marking it ready recover the latest eligible existing sign-off on the current head. This catches reviews missed during merge conflicts without requiring a duplicate checklist.
+- Starting Claude still requires an eligible actor with repository write access. After an update by a non-writer or disallowed bot, a collaborator with write access can request the initial verification. Carrying an existing PASS forward does not require a new verification.
 - Fill in the "Additional detail section" with the links the checklist asks for (validation/eval workflow runs, the corresponding [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR, and any exception reasoning).
 
-Once the sign-off is posted, CI independently re-verifies the claims that gate a merge, including CODEOWNER status, a green sweep and evals on a commit in the PR, the linked recipe, the `/reuse-sweep-run` command, use of the latest checklist template, upstream [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) images, no architecture-changing benchmark hacks, and chat-template usage for speculative decoding. It then posts a verdict comment on the PR. Checkmarks are not taken on trust, so please only check items you have actually verified.
+Once the sign-off is posted, CI independently re-verifies the claims that gate a merge, including CODEOWNER status, a green sweep and evals on a commit in the PR, the linked recipe, the `/reuse-sweep-run` command, use of the latest checklist template, upstream [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) images, no architecture-changing benchmark hacks, and chat-template usage for speculative decoding. It then creates or updates one verdict comment for the PR, including the SHA actually assessed. Failing criteria stay visible; passing and N/A criteria appear together in a collapsed section. An existing verdict comment from the older per-commit format is reused; if the comment was deleted, the next verification creates a replacement. Checkmarks are not taken on trust, so please only check items you have actually verified.
+
+**One PASS satisfies this gate for the lifetime of the PR.** Automation records the first PASS with the `codeowner-signoff-verified` label. Later commits, rebases, and sign-off edits do not rerun Claude or invalidate that PASS. A small trusted `pull_request_target` workflow carries the successful required `codeowner-signoff-verify` status onto the latest head. The carried status records the earlier acceptance; it does not claim that Claude reviewed the new commits.
+
+The label is managed by automation; do not add it manually. Trusted automation PASS comments from the older verifier can be migrated, but contributor-authored verdict text cannot grant a PASS. Deleting the verdict comment does not clear acceptance. To explicitly reassess, manually dispatch `codeowner-signoff-verify.yml` with the sign-off's `comment_url`; this updates the same verdict comment, but a later failure does not revoke an earlier PASS.
 
 ## Reusing your PR's green sweep at merge with `/reuse-sweep-run`
 

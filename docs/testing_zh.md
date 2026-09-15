@@ -131,7 +131,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 \
 
 Hypothesis 会缩减失败样例，并将其保存在 `.fuzz/examples`；使用相同输出目录重新运行即可重放。失败输出包含 `@reproduce_failure` 装饰器。使用 `--hypothesis-seed <integer>` 可重复生成同一批样例；显式指定种子会关闭数据库重放。`.fuzz/results.xml` 包含测试结果和 Hypothesis 统计信息；`.fuzz/run.json` 记录提交、运行前后的源码哈希、命令和运行时版本。将结果归属于某个代码状态前，请检查 `source_changed`。排查故障时，请同时保留控制台日志。
 
-测试目标涵盖配置生成、历史输入快照、Changelog 冲突解决、规划、schema 拒绝路径、调度标识、固定序列长度指标、AgentX 请求计数、服务工作进程的归属、功率积分与审计失败路径、文件名、评测收集、产物完整性、GitHub 复用和权限判断，以及 CODEOWNER 签署补查与裁定来源验证。工作流启动测试执行仓库中的实际 shell，使用记录型启动器并跳过真实等待。权限测试通过模拟 GitHub 客户端运行实际工作流 JavaScript；需要兼容 `actions/github-script` 的本地 Node 运行时，未安装 Node 时会跳过。无需执行 npm install。
+测试目标涵盖配置生成、历史输入快照、Changelog 冲突解决、规划、schema 拒绝路径、调度标识、固定序列长度指标、AgentX 请求计数、服务工作进程的归属、功率积分与审计失败路径、文件名、评测收集、产物完整性、GitHub 复用和权限判断，以及 CODEOWNER 签署补查、裁定发布及接受状态保留。工作流启动测试执行仓库中的实际 shell，使用记录型启动器并跳过真实等待。权限测试通过模拟 GitHub 客户端运行实际工作流 JavaScript 和可信辅助模块；需要兼容 `actions/github-script` 的本地 Node 运行时，未安装 Node 时会跳过。无需执行 npm install。
 
 这些测试阻止 Python 网络请求。GPU 执行、Slurm 分配、容器、真实 GitHub 权限和 Actions 表达式引擎不在本地测试范围内。生成样例全部通过不代表覆盖了所有可能路径。若需 Python 分支覆盖率，在命令中增加 `--with pytest-cov`，并向 pytest 传入 `--cov=infx --cov-branch --cov-report=html:.fuzz/coverage`；该统计不包含 JavaScript 或 shell 覆盖率。
 
@@ -192,7 +192,7 @@ python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
 3. **CODEOWNER 签署前：**遵循 [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md)，包括适用的代码质量、架构、镜像来源、上游配方、补丁/豁免、聊天模板和 AgentX 要求。
 4. **扫描/评测验收：**当前仍在 PR 中的至少一个提交拥有成功、未跳过且实际执行的 `single-node */` 与 `eval /` 检查。仅 `collect-evals` 成功不够。下载对应评测制品，确认其非空、准确率达标且使用同一推理镜像。这些可执行规则位于[验证器检查 1 和 2](../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr)。
 5. **合并时复用：**获授权的 `OWNER`、`MEMBER` 或 `COLLABORATOR` 必须在受支持的合并路径前发布独占一行的 `/reuse-sweep-run` 命令（可附带合格来源 run ID）。验证器会把命令缺失或发布者未授权视为失败；参见[验证器检查 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted)和[复用流程](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
-6. **合并时：**CODEOWNER 的精确签署须由 [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) 独立接受。如果 PR head 变化，应重新评估证据并等待新 head 的验证；清单中的声明或支持链接发生变化时，应同步更新清单。
+6. **合并时：**CODEOWNER 的精确签署只需由 [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) 独立验证并获得一次 PASS。自动化通过 `codeowner-signoff-verified` 保留接受状态，并将必需状态延续到后续 head（包括 rebase 后），无需重新运行 Claude。每次实际验证都会更新同一条 PR 裁定评论，注明所评估的 SHA；延续 PASS 不代表新增提交已被审阅。删除评论不会重置接受状态，手动重新评估也不会撤销已有 PASS。评论恢复和手动分发说明见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
 7. **合并后：**作者按照 [`CONTRIBUTING.md`](../CONTRIBUTING.md#after-merging) 的要求确认 main 分支任务通过。
 
 ## 停止条件
