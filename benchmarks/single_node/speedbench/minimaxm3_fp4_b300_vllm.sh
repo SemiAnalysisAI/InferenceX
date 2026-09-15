@@ -1,44 +1,22 @@
 #!/usr/bin/env bash
 
-# MiniMax-M3 B300 vLLM SPEED-Bench AL matrix collector for EAGLE3 speculative
-# decoding.
+# MiniMax-M3 B300 vLLM SPEED-Bench AL matrix collector for EAGLE3 speculative decoding.
 #
-# Produces the golden acceptance-length (AL) reference matrix consumed by the
-# synthetic-acceptance framework: for each thinking mode (on/off) and each
-# EAGLE3 level (num_speculative_tokens), measure the REAL AL on a single
-# SPEED-Bench category (default: coding) and emit a YAML matrix identical in
-# shape to benchmarks/speedbench-reference-al.yaml. This measures real EAGLE3
-# acceptance; the synthetic value is injected downstream by the throughput
-# recipe, not here.
+# For each thinking mode (on/off) and EAGLE3 level (num_speculative_tokens), measure
+# the REAL acceptance length (AL) on one SPEED-Bench category and emit a YAML matrix
+# in the golden_al_distribution shape. The synthetic value is injected downstream by
+# the throughput recipe, not here.
 #
-# EAGLE3 draft model: Inferact/MiniMax-M3-EAGLE3. The EAGLE3 head is MHA and
-# must use FLASH_ATTN as the attention backend (FlashInfer only supports page
-# size 128 through its trtllm-gen kernel requiring GQA/MQA). The target model
-# keeps its default FlashInfer backend; --block-size 128 is mandatory for MSA
-# sparse/index cache. The benchmark is text-only, so --language-model-only
-# frees the vision encoder's VRAM.
+# Draft: Inferact/MiniMax-M3-EAGLE3. The EAGLE3 head is MHA and must use FLASH_ATTN
+# (FlashInfer only supports page size 128 through its trtllm-gen kernel, which needs
+# GQA/MQA); the target keeps its default FlashInfer backend. --block-size 128 is
+# mandatory for the MSA sparse/index cache. --language-model-only frees the vision
+# encoder's VRAM (text-only benchmark).
 #
-# Filename *_fp4_* is ONLY a naming convention required by speedbench-al.yml
-# (benchmarks/single_node/speedbench/${model-prefix}_fp4_b300_vllm.sh); it does
-# NOT imply a quantized checkpoint. The staged MiniMax-M3 weights are
-# unquantized BF16 (vLLM reports quantization=None, dtype=bfloat16), so no
-# quantization-specific flags (e.g. --moe-backend marlin, --kv-cache-dtype fp8)
-# apply here.
-#
-# Adapted from speedbench/glm5_fp4_b300_vllm.sh. Differences vs GLM-5 (MTP):
-#   - speculative method  eagle3 + external draft model (was mtp, internal)
-#   - NO reasoning-parser / tool-call-parser (not needed for AL; matches the
-#     existing minimaxm3_fp8_b300_mtp.sh recipe which also omits them)
-#   - --block-size 128    mandatory for MSA sparse attention
-#   - --language-model-only              (text-only benchmark, skip vision encoder)
-#   - --max-cudagraph-capture-size 2048
-#   - NO --kv-cache-dtype fp8            (not used for M3)
-#   - NO --chat-template-content-format  (not needed)
-#   - NO --tokenizer-mode                (not needed)
-#   - NO --attention_config.use_fp4_indexer_cache (not applicable)
-#   - Thinking on/off uses the thinking_mode key (was enable_thinking for GLM)
-#   - Sampling: temperature=1.0, top_p=0.95, top_k=40 (official M3 docs)
-#   - EP handling: 3-way branch (DP_ATTENTION / EP / plain TP)
+# The *_fp4_* filename is only the naming convention speedbench-al.yml requires
+# (${model-prefix}_fp4_b300_vllm.sh); the staged MiniMax-M3 weights are unquantized
+# BF16, so no quantization-specific flags (--moe-backend marlin, --kv-cache-dtype
+# fp8) apply.
 #
 # Usage (inside the vLLM container, on a B300 node):
 #   export MODEL=/data/models/MiniMax-M3
@@ -91,10 +69,8 @@ mkdir -p "$RESULTS_DIR"
 nvidia-smi
 if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
 
-# ---- Download EAGLE3 draft model to a WRITABLE dir ----
-# The draft must NOT go next to a pre-staged target: dirname(MODEL_PATH) is the
-# read-only staged mount (/scratch/models), so writing the draft there fails
-# with PermissionError. Use a writable workspace dir regardless of staging.
+# dirname(MODEL_PATH) is the read-only staged mount (/scratch/models), so the draft
+# must go to a writable workspace dir, not next to the target.
 echo "=== Downloading EAGLE3 draft model ($DRAFT_MODEL) ==="
 DRAFT_DIR="${DRAFT_MODEL_DIR:-/workspace/draft_models}"
 mkdir -p "$DRAFT_DIR"
@@ -103,7 +79,6 @@ if [[ ! -d "$DRAFT_MODEL_PATH" || -z "$(ls -A "$DRAFT_MODEL_PATH" 2>/dev/null)" 
     hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
 fi
 
-# ---- Download SPEED-Bench dataset ----
 echo "=== Downloading SPEED-Bench dataset ==="
 pip install -q datasets tiktoken
 curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/refs/heads/main/nemo_skills/dataset/speed-bench/prepare.py \
@@ -114,15 +89,13 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# ---- Parallel / EP args (3-way MiniMax-M3 pattern) ----
 if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP" --enable-expert-parallel)
 elif [ "${EP_SIZE:-1}" -gt 1 ]; then
     PARALLEL_ARGS=(--tensor-parallel-size "$TP" --enable-expert-parallel)
 else
-    # Plain TP, matching the official MiniMax-M3 recipe. Do NOT force a MoE
-    # backend: the staged checkpoint is unquantized BF16, for which marlin is
-    # rejected; let vLLM auto-select (triton / flashinfer).
+    # Plain TP per the official MiniMax-M3 recipe. Do NOT force a MoE backend: the
+    # staged checkpoint is unquantized BF16, for which marlin is rejected.
     PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 fi
 
@@ -255,7 +228,6 @@ done
 
 stop_gpu_monitor
 
-# ---- Emit the YAML matrix ----
 emit_mode_block() {
     local mode="$1"
     for mtp in $MTP_LIST; do

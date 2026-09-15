@@ -2,61 +2,21 @@
 
 # Qwen3.8-Flash-Next B300 vLLM SPEED-Bench AL matrix collector (native MTP).
 #
-# Produces the golden acceptance-length (AL) reference matrix consumed by the
-# synthetic-acceptance framework: for each thinking mode (on/off) and each MTP
-# level (num_speculative_tokens), measure the REAL AL on a single SPEED-Bench
-# category (default: coding) and emit a YAML matrix identical in shape to the
-# other golden_al_distribution curves. This measures real MTP acceptance; the
-# synthetic value is injected downstream by the throughput recipe, not here.
+# For each thinking mode (on/off) and MTP level (num_speculative_tokens), measure the
+# REAL acceptance length (AL) on one SPEED-Bench category and emit a YAML matrix in
+# the golden_al_distribution shape. The synthetic value is injected downstream by the
+# throughput recipe, not here. Qwen3.8-Flash-Next ships a built-in MTP module, so no
+# separate draft model: https://recipes.vllm.ai/Qwen/Qwen3.8-Flash-Next
 #
-# Qwen3.8-Flash-Next ships a built-in 1-layer / 4B MTP module (trained with
-# multi-steps), so speculative decoding is native — no separate draft model.
-# Reference: https://huggingface.co/Qwen/Qwen3.8-Flash-Next and the vLLM recipe
-# https://recipes.vllm.ai/Qwen/Qwen3.8-Flash-Next
+# Recipe-required serve flags: --no-enable-flashinfer-autotune; --max-num-seqs 256
+# (avoids a Mamba-cache capacity error at startup); kv-cache dtype left at default
+# for the hybrid GDN + Qwen Sparse Attention architecture (do not force fp8);
+# --max-cudagraph-capture-size 512 (mamba-hybrid causal_conv1d capture-size assert);
+# --language-model-only (the checkpoint is multimodal, AL is collected on text only).
+# The 51B n-gram table fits in HBM at TP4, so VLLM_PLE_CPU_OFFLOAD is not needed.
 #
-# Adapted from speedbench/qwen3.5_fp4_b300_vllm.sh. Differences vs Qwen3.5:
-#   - checkpoint            Qwen/Qwen3.8-Flash-Next-FP8 (official FP8; ~173 GiB).
-#                           NOT pre-staged on the B300 cluster -> the launcher
-#                           resolves MODEL_PATH into the writable models dir and
-#                           this script downloads it there on first run.
-#   - TP                    4, not 8. Plain TP8 is incompatible with the FP8
-#                           checkpoint's 128-wide quantization blocks (per the
-#                           vLLM recipe); TP4 is the recipe-validated Blackwell
-#                           full-tray configuration, incl. MTP3. AL is
-#                           GPU-count-independent, so collecting on 4 of the
-#                           node's 8 GPUs does not affect the curve. The
-#                           speedbench-al.yml workflow exports TP=8; that value
-#                           is overridden below unless EP_SIZE>1 (TEP) is set.
-#   - serve flags           --no-enable-flashinfer-autotune (recipe-required),
-#                           --max-num-seqs 256 (avoids a Mamba-cache capacity
-#                           error at startup, per the recipe),
-#                           --gpu-memory-utilization 0.90 (recipe default)
-#   - NO --kv-cache-dtype fp8   the recipe leaves kv-cache dtype at its default
-#                           for this new hybrid GDN + Qwen Sparse Attention
-#                           architecture; do not force fp8 here.
-#   - sampling (model card): thinking  temp 1.0 top_p 0.95 top_k 20 pp 0.0
-#                            instruct  temp 0.7 top_p 0.80 top_k 20 pp 1.5
-#   - concurrency           64 (kimik3 precedent: AL is per-token accept/reject
-#                           and concurrency-independent; batching keeps the
-#                           16-cell sweep inside the CI wall-time budget)
-#
-# Kept from the Qwen3.5 template:
-#   - reasoning-parser qwen3, tool-call-parser qwen3_coder (per the model's
-#     official serving commands)
-#   - --language-model-only  (the checkpoint is multimodal — vision encoder —
-#     but golden AL is collected on the text path only)
-#   - --max-cudagraph-capture-size 512  (safe carry-over for the mamba-hybrid
-#     causal_conv1d capture-size assert; Flash-Next is GDN-based like Qwen3.5)
-#   - thinking on/off via the enable_thinking chat_template key (model card:
-#     default ON; reasoning_effort left at its xhigh default), OFF passed
-#     explicitly
-#
-# N-gram embedding note: the 51B n-gram table fits in HBM at TP4 on B300, so
-# VLLM_PLE_CPU_OFFLOAD is not needed here. It is optional for TP/TEP and only
-# required for DEP, which this collector does not use.
-#
-# Dispatch (speedbench-al.yml) — the defaults for image and thinking-kwargs are
-# DSV4's, so override both:
+# Dispatch (speedbench-al.yml): the image and thinking-kwargs defaults are DSV4's,
+# so override both:
 #   gh workflow run speedbench-al.yml \
 #     --repo SemiAnalysisAI/InferenceX \
 #     --ref BRANCH \
@@ -94,10 +54,10 @@ PORT="${PORT:-8888}"
 GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-256}"
 
-# Plain TP8 is incompatible with the official FP8 checkpoint (128-wide
-# quantization blocks, per the vLLM recipe). speedbench-al.yml exports TP=8
-# unconditionally; fold that back to the recipe-validated TP4 unless the
-# caller explicitly runs TEP (EP_SIZE>1).
+# Plain TP8 is incompatible with the official FP8 checkpoint (128-wide quantization
+# blocks, per the vLLM recipe). speedbench-al.yml exports TP=8 unconditionally; fold
+# it back to the recipe-validated TP4 unless the caller runs TEP (EP_SIZE>1). AL is
+# GPU-count-independent, so collecting on 4 of 8 GPUs does not affect the curve.
 if [[ "$TP" == "8" && "${EP_SIZE}" -le 1 ]]; then
     echo "NOTE: TP=8 without expert parallelism is incompatible with the FP8 checkpoint; using recipe-validated TP=4."
     TP=4
@@ -108,29 +68,26 @@ THINKING_MODES="${THINKING_MODES:-off on}"
 CATEGORY="${CATEGORY:-coding}"
 MODEL_KEY="${MODEL_KEY:-$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')}"
 SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
-# AL is concurrency-independent (per-token accept/reject; no spec-disable-by-batch
-# is set below), so batch the SPEED-Bench pass to keep wall-time under the CI
-# limit. Precedent: kimik3_fp4_b300_vllm.sh, where conc=1 blew the 8h budget.
+# AL is concurrency-independent (per-token accept/reject; no spec-disable-by-batch is
+# set), so batch the SPEED-Bench pass to stay under the CI wall-time limit; conc=1
+# blew the 8h budget on Kimi-K3.
 CONCURRENCY="${CONCURRENCY:-64}"
-# Provider-recommended sampling — DIFFERS by mode (per the Qwen3.8-Flash-Next
-# model card):
+# Model-card sampling DIFFERS by mode and MUST be passed per-mode or the AL is
+# measured at the wrong settings:
 #   thinking : temperature 1.0, top_p 0.95, top_k 20, presence_penalty 0.0
 #   instruct : temperature 0.7, top_p 0.80, top_k 20, presence_penalty 1.5
-# (min_p 0.0 / repetition_penalty 1.0 are vLLM defaults.) These MUST be passed
-# per-mode or the measured AL is taken at the wrong sampling settings.
 TEMPERATURE_ON="${TEMPERATURE_ON:-1.0}";  TOP_P_ON="${TOP_P_ON:-0.95}";  TOP_K_ON="${TOP_K_ON:-20}";  PRESENCE_PENALTY_ON="${PRESENCE_PENALTY_ON:-0.0}"
 TEMPERATURE_OFF="${TEMPERATURE_OFF:-0.7}"; TOP_P_OFF="${TOP_P_OFF:-0.8}"; TOP_K_OFF="${TOP_K_OFF:-20}"; PRESENCE_PENALTY_OFF="${PRESENCE_PENALTY_OFF:-1.5}"
-# Optional sampling seed for run-to-run variance checks. Unset -> vLLM default
-# (deterministic seed=0); set to different values to measure temperature>0 variance.
+# Unset -> vLLM default (deterministic seed=0); vary it to measure temperature>0
+# variance.
 SEED="${SEED:-}"
-# Optional: also save per-request completions (--save-detailed) to eyeball that
-# thinking_on actually emits <think> reasoning and thinking_off does not. Off by
-# default (bloats the result JSON with all completions). Set SAVE_DETAILED=1.
+# --save-detailed keeps per-request completions to eyeball that thinking_on emits
+# <think> and thinking_off does not; off by default (bloats the result JSON).
 SAVE_DETAILED="${SAVE_DETAILED:-}"
-# Qwen thinking toggles via the enable_thinking chat_template key (default ON
-# for Flash-Next). reasoning_effort is left at its model default (xhigh).
-# Use separate single-quoted defaults: an inline ${VAR:-{...}} default whose value
-# contains "}" is truncated by bash brace parsing (matches upstream fix #1695).
+# Qwen thinking toggles via the enable_thinking chat_template key (default ON;
+# reasoning_effort left at its xhigh default). Separate single-quoted defaults: an
+# inline ${VAR:-{...}} default whose value contains "}" is truncated by bash brace
+# parsing.
 DEFAULT_CHAT_TEMPLATE_KWARGS_ON='{"enable_thinking": true}'
 DEFAULT_CHAT_TEMPLATE_KWARGS_OFF='{"enable_thinking": false}'
 CHAT_TEMPLATE_KWARGS_ON="${CHAT_TEMPLATE_KWARGS_ON:-$DEFAULT_CHAT_TEMPLATE_KWARGS_ON}"
@@ -147,10 +104,8 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 mkdir -p "$RESULTS_DIR"
 nvidia-smi
 
-# ---- Download target if it is not pre-staged ----
-# Qwen3.8-Flash-Next-FP8 is not in the launcher's STAGED_MODELS list, so the
-# launcher resolves MODEL_PATH into the writable models dir (/data/models);
-# only download when MODEL_PATH is an empty writable dir (non-staged run).
+# Qwen3.8-Flash-Next-FP8 is not in the launcher's STAGED_MODELS, so MODEL_PATH
+# resolves into the writable models dir; download only when it is an empty dir.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -159,7 +114,6 @@ else
     if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
 fi
 
-# ---- Download SPEED-Bench dataset ----
 echo "=== Downloading SPEED-Bench dataset ==="
 pip install -q datasets tiktoken
 curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/refs/heads/main/nemo_skills/dataset/speed-bench/prepare.py \
@@ -170,7 +124,6 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# Apply the shim once if any cell will pass chat_template_kwargs.
 NEED_SHIM=0
 if [[ " $THINKING_MODES " == *" on "*  && -n "$CHAT_TEMPLATE_KWARGS_ON"  ]]; then NEED_SHIM=1; fi
 if [[ " $THINKING_MODES " == *" off "* && -n "$CHAT_TEMPLATE_KWARGS_OFF" ]]; then NEED_SHIM=1; fi
@@ -332,7 +285,6 @@ done
 
 stop_gpu_monitor
 
-# ---- Emit the YAML matrix ----
 emit_mode_block() {
     local mode="$1"
     for mtp in $MTP_LIST; do

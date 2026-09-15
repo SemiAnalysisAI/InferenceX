@@ -1,30 +1,14 @@
 #!/usr/bin/env bash
 
-# DSV4-Pro B300 vLLM SPEED-Bench AL matrix collector for DSpark speculative
-# decoding.
+# DSV4-Pro B300 vLLM SPEED-Bench AL matrix collector for DSpark speculative decoding.
 #
-# Produces the golden acceptance-length (AL) reference matrix consumed by the
-# synthetic-acceptance framework: for each thinking mode (on/off) and each
-# DSpark speculative-token count, measure the REAL AL on a single SPEED-Bench
-# category (default: coding) and emit a YAML matrix identical in shape to the
-# other golden_al_distribution curves.
-#
-# DSpark is DeepSeek's own speculative-decoding scheme and ships as a separate
-# checkpoint (deepseek-ai/DeepSeek-V4-Pro-DSpark, 960 GB) with the draft baked
-# in — unlike the Kimi-K3 DSpark collector there is no external draft head to
-# download and no "model" key in the speculative-config.
-#
-# Differences vs the DSV4 MTP collector (dsv4_fp4_b300_vllm.sh), which this is
-# otherwise a copy of so the two AL curves stay directly comparable:
-#   - target model       DeepSeek-V4-Pro-DSpark (was DeepSeek-V4-Pro)
-#   - speculative-config method dspark + draft_sample_method (was method mtp)
-#   - expert parallel + deep_gemm_mega_moe, per the published B300 DSpark recipe
-#   - --max-num-seqs and --gpu-memory-utilization pinned (MTP took the defaults)
-# The last two are about fitting in memory, not about drafting: see the TEP block
-# and MAX_NUM_SEQS below for what each one was fixing. AL is a per-draft
-# accept/reject property, independent of expert placement, batch size and graph
-# capture, so they leave "DSpark vs MTP on DSV4-Pro" like-for-like. Every flag
-# that does affect drafting is byte-identical to the MTP collector.
+# For each thinking mode (on/off) and DSpark speculative-token count, measure the REAL
+# acceptance length (AL) on one SPEED-Bench category and emit a YAML matrix in the
+# golden_al_distribution shape. DSpark ships as a separate checkpoint
+# (deepseek-ai/DeepSeek-V4-Pro-DSpark, 960 GB) with the draft baked in, so there is no
+# external draft head and no "model" key in the speculative-config. Every flag that
+# affects drafting is byte-identical to the DSV4 MTP collector so the two AL curves
+# stay comparable.
 #
 # Usage (inside the vLLM container, on a B300 node):
 #   export MODEL=deepseek-ai/DeepSeek-V4-Pro-DSpark
@@ -46,10 +30,9 @@ set -uo pipefail
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 MODEL="${MODEL:?MODEL env var required (e.g. deepseek-ai/DeepSeek-V4-Pro-DSpark)}"
-# Serve from the local weights dir resolved by the launcher (MODEL_PATH points
-# at the writable models dir, e.g. /data/models/DeepSeek-V4-Pro-DSpark, until the
+# MODEL_PATH is the launcher-resolved weights dir (writable models dir until the
 # checkpoint is staged; see the download block below). Falls back to MODEL for a
-# standalone local run where MODEL is itself a path.
+# standalone run where MODEL is itself a path.
 SERVE_MODEL="${MODEL_PATH:-$MODEL}"
 TP="${TP:-8}"
 PORT="${PORT:-8888}"
@@ -57,39 +40,31 @@ PORT="${PORT:-8888}"
 MTP_LIST="${MTP_LIST:-1 2 3 4 5 6 7 8}"
 THINKING_MODES="${THINKING_MODES:-off on}"
 CATEGORY="${CATEGORY:-coding}"
-# Top-level key in the emitted YAML matrix. Derived from the model by the
-# workflow (e.g. deepseek-v4-pro-dspark); falls back to the model basename,
-# lowercased.
+# Top-level key in the emitted YAML matrix; the workflow derives it from the model
+# (e.g. deepseek-v4-pro-dspark).
 MODEL_KEY="${MODEL_KEY:-$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')}"
 SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
-# AL is a per-draft accept/reject property and is independent of batch size, so
-# the SPEED-Bench pass is batched to cut wall-clock. Note this differs from the
-# DSV4 MTP collector, which measured the existing deepseek-v4-pro curve at 1;
-# nothing here sets speculative_disable_by_batch_size, so drafting stays on at
-# this batch size and the curves remain comparable.
+# AL is a per-draft accept/reject property independent of batch size, so batch the
+# SPEED-Bench pass to cut wall-clock. Nothing sets speculative_disable_by_batch_size,
+# so drafting stays on at this batch size.
 CONCURRENCY="${CONCURRENCY:-32}"
-# Engine batch size; must stay >= CONCURRENCY or the client's requests just queue.
-# Held far below the vLLM default of 1024 because that default sizes two
-# allocations the memory profiler never sees — the rejection sampler's fp32 logits
-# scratch, max_num_seqs * (1 + num_speculative_tokens) * vocab * 4B, which is
-# 2.5 GB at 4 speculative tokens and 4.4 GB at 8, and the spec-decode CUDA graphs,
-# which grow with the same product. DSV4-Pro has no room for either: 141.5 GiB of
-# weights plus a 100 GiB KV cache already fills 266 of the 268 GiB on each B300,
-# and warmup died asking for 2.47 GiB more at num_speculative_tokens=4.
+# Must stay >= CONCURRENCY or requests just queue. Held far below vLLM's default of
+# 1024 because that sizes two allocations the memory profiler never sees: the
+# rejection sampler's fp32 logits scratch (max_num_seqs * (1 + spec_tokens) * vocab *
+# 4B, 4.4 GB at 8 tokens) and the spec-decode CUDA graphs. DSV4-Pro has no room:
+# weights + a 100 GiB KV cache already fill 266 of 268 GiB per B300.
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-64}"
-# vLLM's own default, exposed so the KV cache can be traded for headroom if some
-# higher num_speculative_tokens still runs out.
+# vLLM's default, exposed so KV cache can be traded for headroom if a higher
+# num_speculative_tokens still runs out.
 GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
 TEMPERATURE="${TEMPERATURE:-1.0}"
-# thinking-on chat_template_kwargs. MUST match the production/golden config:
-# the reference matrix (golden_al_distribution/dsv4_mtp.yaml) was measured with
-# reasoning_effort=high.
+# MUST match the golden config: golden_al_distribution/dsv4_mtp.yaml was measured
+# with reasoning_effort=high.
 DEFAULT_CHAT_TEMPLATE_KWARGS_ON='{"thinking": true, "reasoning_effort": "high"}'
 CHAT_TEMPLATE_KWARGS_ON="${CHAT_TEMPLATE_KWARGS_ON:-$DEFAULT_CHAT_TEMPLATE_KWARGS_ON}"
-# The greedy/probabilistic knob Benjamin asked to characterize on DSV4-Pro. The
-# published recipe uses greedy; probabilistic won at every level on Kimi-K3
-# (golden_al_distribution/kimik3_dspark*.yaml). vLLM accepts exactly these two
-# values (vllm/config/speculative.py: DraftSampleMethod).
+# The published recipe uses greedy; probabilistic won at every level on Kimi-K3
+# (golden_al_distribution/kimik3_dspark*.yaml). vLLM accepts exactly these two values
+# (vllm/config/speculative.py: DraftSampleMethod).
 DRAFT_SAMPLE_METHOD="${DRAFT_SAMPLE_METHOD:-greedy}"
 case "$DRAFT_SAMPLE_METHOD" in
     greedy|probabilistic) ;;
@@ -98,10 +73,9 @@ case "$DRAFT_SAMPLE_METHOD" in
         exit 1
         ;;
 esac
-# Left unset by default. The K3 probabilistic variant also flipped this to
-# "block", but that bundles two variables into one measurement and the forced-AL
-# config has to stay on a sampling method TRT-LLM supports too, so it is opt-in
-# here rather than tied to draft_sample_method.
+# Opt-in rather than tied to draft_sample_method: flipping it to "block" would bundle
+# two variables into one measurement, and the forced-AL config has to stay on a
+# sampling method TRT-LLM supports too.
 REJECTION_SAMPLE_METHOD="${REJECTION_SAMPLE_METHOD:-}"
 
 SPEEDBENCH_DIR="${SPEEDBENCH_DIR:-/workspace/speed_bench_data}"
@@ -113,12 +87,9 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 mkdir -p "$RESULTS_DIR"
 nvidia-smi
 
-# ---- Resolve target weights ----
-# The DSpark checkpoint is NOT in the launcher's STAGED_MODELS (it is not staged
-# on the B300 cluster yet), so MODEL_PATH resolves to the writable models dir and
-# the ~960 GB download below runs once, on the first collection. Add the basename
-# back to STAGED_MODELS once the weights are staged to read them from the faster
-# read-only mount instead.
+# The DSpark checkpoint is not in the launcher's STAGED_MODELS, so MODEL_PATH resolves
+# to the writable models dir and the ~960 GB download runs once. Add the basename to
+# STAGED_MODELS once the weights are staged on the read-only mount.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         if [[ ! -w "$(dirname "$MODEL_PATH")" ]]; then
@@ -135,7 +106,6 @@ else
     if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
 fi
 
-# ---- Download SPEED-Bench dataset ----
 echo "=== Downloading SPEED-Bench dataset ==="
 pip install -q datasets tiktoken
 curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/refs/heads/main/nemo_skills/dataset/speed-bench/prepare.py \
@@ -146,19 +116,11 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# ---- Preflight: --chat-template-kwargs must reach the chat template ----
-# speed_bench/CustomDataset pre-renders the chat template client-side and posts to
-# /v1/completions, so thinking mode cannot be enabled via --extra-body or
-# --default-chat-template-kwargs — the kwargs have to reach apply_chat_template.
-# vllm-project/vllm#44244 made that native and the images this collector runs on
-# carry it, so there is nothing to patch (the older collectors monkey-patched
-# site-packages here; that is what this replaces).
-#
-# It is still worth asserting rather than assuming, because the failure is silent
-# in one direction: if the CLI option exists but the speed_bench path does not
-# forward it, the flag is accepted and ignored, every thinking_on prompt renders
-# without thinking, and the cell reports a non-thinking AL under the thinking_on
-# key. A missing CLI option, by contrast, would fail loudly at argument parsing.
+# speed_bench/CustomDataset renders the chat template client-side and posts to
+# /v1/completions, so thinking mode must reach apply_chat_template via
+# --chat-template-kwargs (native since vllm-project/vllm#44244). Assert rather than
+# assume: if the CLI option exists but speed_bench does not forward it, the flag is
+# silently ignored and every thinking_on cell reports a non-thinking AL.
 assert_chat_template_kwargs_support() {
     echo "=== Checking vLLM benchmark --chat-template-kwargs support ==="
     python3 - <<'PYEOF'
@@ -193,7 +155,6 @@ print("native --chat-template-kwargs support confirmed")
 PYEOF
 }
 
-# Only thinking-on cells pass chat_template_kwargs, so only they need the support.
 if [[ " $THINKING_MODES " == *" on "* ]]; then
     if ! assert_chat_template_kwargs_support; then
         echo "CRITICAL: --chat-template-kwargs preflight failed — aborting"
@@ -201,27 +162,15 @@ if [[ " $THINKING_MODES " == *" on "* ]]; then
     fi
 fi
 
-# TEP8, exactly as the published B300 DSpark recipe (vllm-project/recipes: TP 8 +
-# --enable-expert-parallel + --moe-backend deep_gemm_mega_moe).
-#
-# This is hard-coded rather than driven by the EP_SIZE / DP_ATTENTION knobs the
-# MTP collector carries, because speedbench-al.yml exports EP_SIZE=1 and
-# DP_ATTENTION=false for every model in the matrix, which silently turned the
-# recipe into plain TP. That cost real memory: TP-sharding the FP4 experts loaded
-# 141.53 GiB per GPU, 8x that being 1132 GiB against an 831 GiB checkpoint, so
-# roughly 37 GiB per GPU went to sharding overhead on weights that expert
-# parallel keeps whole. With a ~100 GiB KV cache on top, 266 of the 268 GiB were
-# gone before warmup, which is what made the num_speculative_tokens=4 cell OOM.
-#
-# TP stays 8 (not the DP+EP variant the recipe also lists) to match the MTP
-# collector's parallelism. Either way AL is unaffected: expert placement changes
-# where a matmul runs, not which draft tokens the target model accepts.
+# TEP8 as in the published B300 DSpark recipe (vllm-project/recipes). Hard-coded
+# rather than driven by EP_SIZE / DP_ATTENTION because speedbench-al.yml exports
+# EP_SIZE=1 and DP_ATTENTION=false for every model, which silently turned the recipe
+# into plain TP; TP-sharding the FP4 experts costs ~37 GiB per GPU over EP and made
+# the num_speculative_tokens=4 cell OOM. AL is unaffected by expert placement.
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
 EP_ARGS=(--enable-expert-parallel)
 MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
 
-# Optional extra speculative-config keys, rendered once so run_cell only has to
-# interpolate num_speculative_tokens.
 SPEC_EXTRA=""
 if [[ -n "$REJECTION_SAMPLE_METHOD" ]]; then
     SPEC_EXTRA=", \"rejection_sample_method\": \"$REJECTION_SAMPLE_METHOD\""
@@ -234,10 +183,9 @@ fetch_metric() {
 }
 
 SERVER_PID=""
-# List all descendant PIDs of $1 recursively, matched by PARENT pid. This can
-# never include this script (the script is an ancestor of the server, not a
-# descendant), so it avoids the self-kill a name-based `pkill -f vllm` caused
-# (the script filename contains "vllm").
+# Descendant PIDs of $1 by PARENT pid. This can never include this script (an
+# ancestor of the server), unlike a name-based `pkill -f vllm`, which self-killed
+# because the script filename contains "vllm".
 _descendants() {
     local pid="$1" child
     for child in $(pgrep -P "$pid" 2>/dev/null || true); do
@@ -247,10 +195,9 @@ _descendants() {
 }
 cleanup_server() {
     if [[ -n "$SERVER_PID" ]]; then
-        # Snapshot the server's worker/EngineCore subprocesses BEFORE killing the
-        # parent: once the parent dies the children reparent to init and the tree
-        # link is lost. Killing the captured PIDs guarantees no orphaned worker
-        # survives to hold GPU memory and OOM the next server start.
+        # Snapshot the worker/EngineCore subprocesses BEFORE killing the parent: once it
+        # dies the children reparent to init and the tree link is lost. An orphaned
+        # worker holds GPU memory and OOMs the next server start.
         local descendants
         descendants=$(_descendants "$SERVER_PID")
         kill "$SERVER_PID" 2>/dev/null || true
@@ -259,7 +206,6 @@ cleanup_server() {
         for pid in $descendants; do
             kill -9 "$pid" 2>/dev/null || true
         done
-        # Wait for GPU memory to actually free before the next server starts.
         local waited=0
         while [[ $waited -lt 120 ]]; do
             local used
@@ -274,7 +220,6 @@ trap 'cleanup_server' EXIT
 
 start_gpu_monitor
 
-# Per-cell AL is collected into associative arrays keyed by "mode_mtp".
 declare -A AL_RESULT
 
 run_cell() {
@@ -317,10 +262,8 @@ run_cell() {
     vllm serve "$SERVE_MODEL" "${serve_args[@]}" > "$server_log" 2>&1 &
     SERVER_PID=$!
 
-    # wait_for_server_ready exits the shell rather than returning when the server
-    # dies, which would make the N/A branch below unreachable and let one bad cell
-    # abort the whole matrix. Running it in a subshell keeps that exit local, so a
-    # cell that cannot start its server costs one cell instead of the run.
+    # wait_for_server_ready exits the shell (rather than returning) when the server
+    # dies; the subshell keeps that exit local so one bad cell does not abort the matrix.
     if ! (wait_for_server_ready --port "$PORT" --server-log "$server_log" --server-pid "$SERVER_PID"); then
         echo "  -> server failed to start (thinking=$mode dspark=$mtp), recording N/A"
         AL_RESULT["${mode}_${mtp}"]="N/A"
@@ -375,7 +318,6 @@ done
 
 stop_gpu_monitor
 
-# ---- Emit the YAML matrix ----
 emit_mode_block() {
     local mode="$1"
     for mtp in $MTP_LIST; do

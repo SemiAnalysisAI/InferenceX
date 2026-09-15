@@ -2,16 +2,9 @@
 
 # GLM-5.2 B300 vLLM SPEED-Bench AL matrix collector.
 #
-# Identical to glm5_fp4_b300_vllm.sh (same GLM DSA architecture, same MTP,
-# same serve flags) but with a proper download guard: if MODEL_PATH points to
-# an empty directory (model not pre-staged), the script downloads weights from
-# HuggingFace before starting the server. The GLM-5 collector skips the
-# download when MODEL_PATH is already set (assumes pre-staged); this variant
-# handles the not-yet-staged case for GLM-5.2.
-#
-# Serve parameters, sampling, thinking kwargs, and the chat-template-kwargs
-# shim are all inherited from the GLM-5 collector unchanged — GLM-5.2 shares
-# the same architecture (glm_moe_dsa), MTP head, and chat template.
+# Same serve parameters, sampling and thinking kwargs as glm5_fp4_b300_vllm.sh (GLM-5.2
+# shares the glm_moe_dsa architecture, MTP head and chat template), plus a download
+# guard for the not-yet-staged checkpoint.
 #
 # Usage (inside the vLLM container, on a B300 node):
 #   export MODEL=zai-org/GLM-5.2-FP8
@@ -52,7 +45,6 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 mkdir -p "$RESULTS_DIR"
 nvidia-smi
 
-# ---- Download model if not pre-staged ----
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         echo "=== MODEL_PATH ($MODEL_PATH) is empty, downloading $MODEL ==="
@@ -62,7 +54,6 @@ else
     if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
 fi
 
-# ---- Download SPEED-Bench dataset ----
 echo "=== Downloading SPEED-Bench dataset ==="
 pip install -q datasets tiktoken
 curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/refs/heads/main/nemo_skills/dataset/speed-bench/prepare.py \
@@ -73,10 +64,9 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# NOTE: --chat-template-kwargs is consumed natively by `vllm bench serve` here.
-# GLM-5.2 only loads on the dedicated vLLM image (>=0.23), which already carries
-# vllm-project/vllm#44244, so no client-side shim is needed (unlike the v0.22
-# collectors that still patch it in).
+# --chat-template-kwargs is consumed natively by `vllm bench serve` here: GLM-5.2 only
+# loads on the dedicated vLLM image (>=0.23), which carries vllm-project/vllm#44244,
+# so no client-side shim is needed.
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
 if [ "${DP_ATTENTION}" = "true" ]; then
@@ -216,7 +206,6 @@ done
 
 stop_gpu_monitor
 
-# ---- Emit the YAML matrix ----
 emit_mode_block() {
     local mode="$1"
     for mtp in $MTP_LIST; do

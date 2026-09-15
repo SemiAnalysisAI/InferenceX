@@ -1,27 +1,12 @@
 #!/usr/bin/env bash
 
-# Kimi-K2.5 B300 vLLM SPEED-Bench AL matrix collector for EAGLE3 speculative
-# decoding.
+# Kimi-K2.5 B300 vLLM SPEED-Bench AL matrix collector for EAGLE3 speculative decoding.
 #
-# Produces the golden acceptance-length (AL) reference matrix consumed by the
-# synthetic-acceptance framework: for each thinking mode (on/off) and each
-# EAGLE3 speculative-token count, measure the REAL AL on a single SPEED-Bench
-# category (default: coding) and emit a YAML matrix identical in shape to
-# benchmarks/speedbench-reference-al.yaml.
-#
-# Kimi-K2.5 uses the lightseekorg/kimi-k2.5-eagle3-mla draft head (MLA
-# variant, recommended by official docs). The draft model is downloaded
-# alongside the target checkpoint before the sweep begins.
-#
-# Differences vs the GLM-5 MTP template (glm5_fp4_b300_vllm.sh):
-#   - speculative-config     eagle3 with external draft model (not mtp)
-#   - reasoning-parser       kimi_k2        (was glm45)
-#   - tool-call-parser       kimi_k2        (was glm47)
-#   - thinking toggle        {"thinking": true/false}   (was enable_thinking)
-#   - temperature            1.0 (thinking) / 0.6 (instant)  (was fixed 1.0)
-#   - NO --chat-template-content-format, --tokenizer-mode, --block-size,
-#     or --attention_config.use_fp4_indexer_cache
-#   - --language-model-only  (text-only benchmark, no vision)
+# For each thinking mode (on/off) and EAGLE3 speculative-token count, measure the REAL
+# acceptance length (AL) on one SPEED-Bench category and emit a YAML matrix in the
+# golden_al_distribution shape. Draft head: lightseekorg/kimi-k2.5-eagle3-mla (MLA
+# variant, recommended by the official docs), downloaded before the sweep.
+# --language-model-only: text-only benchmark, no vision.
 #
 # Usage (inside the Kimi vLLM container, on a B300 node):
 #   export MODEL=moonshotai/Kimi-K2.5-NVFP4
@@ -52,10 +37,10 @@ THINKING_MODES="${THINKING_MODES:-off on}"
 CATEGORY="${CATEGORY:-coding}"
 MODEL_KEY="${MODEL_KEY:-$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')}"
 SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
-# AL is concurrency-independent (per-token accept/reject; no spec-disable-by-batch
-# is set below), so batch the SPEED-Bench pass to keep wall-time under the CI
-# limit. conc=1 made Kimi-K2.5 exceed the 8h budget. 64 captures most of the
-# batch-decode speedup before it saturates / KV pressure grows; override via env.
+# AL is concurrency-independent (per-token accept/reject; no spec-disable-by-batch is
+# set), so batch the SPEED-Bench pass to stay under the CI wall-time limit; conc=1
+# blew the 8h budget. 64 captures most of the batch-decode speedup before KV
+# pressure grows.
 CONCURRENCY="${CONCURRENCY:-64}"
 TOP_P="${TOP_P:-0.95}"
 # Kimi thinking toggles via the thinking chat_template key (default ON).
@@ -78,9 +63,8 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 mkdir -p "$RESULTS_DIR"
 nvidia-smi
 
-# ---- Download target if it is not pre-staged ----
-# A pre-staged target lands in the read-only staged mount (/scratch/models);
-# only download when MODEL_PATH is an empty writable dir (non-staged run).
+# A pre-staged target lives in the read-only staged mount (/scratch/models); only
+# download when MODEL_PATH is an empty writable dir.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -89,10 +73,8 @@ else
     if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
 fi
 
-# ---- Download EAGLE3 draft model to a WRITABLE dir ----
-# The draft must NOT go next to a pre-staged target: dirname(MODEL_PATH) is the
-# read-only staged mount (/scratch/models), so writing the draft there fails
-# with PermissionError. Use a writable workspace dir regardless of staging.
+# dirname(MODEL_PATH) is the read-only staged mount (/scratch/models), so the draft
+# must go to a writable workspace dir, not next to the target.
 DRAFT_DIR="${DRAFT_MODEL_DIR:-/workspace/draft_models}"
 mkdir -p "$DRAFT_DIR"
 DRAFT_MODEL_PATH="$DRAFT_DIR/${DRAFT_MODEL##*/}"
@@ -100,7 +82,6 @@ if [[ ! -d "$DRAFT_MODEL_PATH" || -z "$(ls -A "$DRAFT_MODEL_PATH" 2>/dev/null)" 
     hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
 fi
 
-# ---- Download SPEED-Bench dataset ----
 echo "=== Downloading SPEED-Bench dataset ==="
 pip install -q datasets tiktoken
 curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/refs/heads/main/nemo_skills/dataset/speed-bench/prepare.py \
@@ -111,7 +92,6 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# Apply the shim once if any cell will pass chat_template_kwargs.
 NEED_SHIM=0
 if [[ " $THINKING_MODES " == *" on "*  && -n "$CHAT_TEMPLATE_KWARGS_ON"  ]]; then NEED_SHIM=1; fi
 if [[ " $THINKING_MODES " == *" off "* && -n "$CHAT_TEMPLATE_KWARGS_OFF" ]]; then NEED_SHIM=1; fi
@@ -267,7 +247,6 @@ done
 
 stop_gpu_monitor
 
-# ---- Emit the YAML matrix ----
 emit_mode_block() {
     local mode="$1"
     for mtp in $MTP_LIST; do

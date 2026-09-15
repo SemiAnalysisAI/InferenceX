@@ -16,7 +16,6 @@ fi
 ENDPOINT=$1
 INFMAX_WORKSPACE=$2
 
-# Extract HOST and PORT from endpoint (e.g., http://localhost:8000)
 HOST=$(echo "$ENDPOINT" | sed -E 's|https?://||; s|:.*||')
 PORT=$(echo "$ENDPOINT" | sed -E 's|.*:([0-9]+).*|\1|')
 
@@ -25,7 +24,6 @@ echo "Eval Config: endpoint=${ENDPOINT}; host=${HOST}; port=${PORT}; workspace=$
 # cd to workspace so that relative paths (e.g., utils/evals/*.yaml) resolve
 cd "${INFMAX_WORKSPACE}"
 
-# Source the InferenceX benchmark library
 source "${INFMAX_WORKSPACE}/benchmarks/benchmark_lib.sh"
 
 # The workflow supplies topology and concurrency; srt-slurm supplies MODEL_NAME
@@ -45,11 +43,9 @@ echo "Running evaluation for ${MODEL_NAME} with concurrent-requests=${EVAL_CONCU
 eval_rc=0
 run_eval --port "$PORT" || eval_rc=$?
 
-# Generate the lm-eval summary
 echo "Generating lm-eval summary..."
 append_lm_eval_summary || true
 
-# Copy eval artifacts to /logs/eval_results/
 mkdir -p /logs/eval_results
 echo "Copying eval artifacts to /logs/eval_results/..."
 cp -v meta_env.json /logs/eval_results/ 2>/dev/null || true

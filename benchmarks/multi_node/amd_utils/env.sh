@@ -1,8 +1,7 @@
 #!/bin/bash
 # Dual-engine environment setup for multi-node disaggregated serving.
 #
-# ENGINE=sglang (default): SGLang/MoRI environment
-# ENGINE=vllm:             vLLM/Nixl environment
+# ENGINE=sglang-disagg (default) or vllm-disagg selects the engine-specific block.
 #
 # REQUIRED ENVIRONMENT VARIABLES:
 #   IBDEVICES - RDMA/InfiniBand device names (e.g., ionic_0,ionic_1,... or mlx5_0,mlx5_1,...)
@@ -12,16 +11,10 @@ set -x
 ENGINE="${ENGINE:-sglang-disagg}"
 export PYTHONDONTWRITEBYTECODE=1
 
-# =============================================================================
-# HiCache / Mooncake settings from job.slurm
-# =============================================================================
-# job.slurm writes the recipe-provided HiCache/Mooncake tunables to
-# hicache_mc_<JID>.env and mounts it read-only at /config/hicache_mc.env. Source
-# it here (auto-export) so values like HICACHE_PAGE_SIZE=256 reach the container
-# before server_sglang.sh applies its "${VAR:-default}" fallbacks. Without this
-# the vars arrive unset and server_sglang.sh defaults HICACHE_PAGE_SIZE to 1,
-# overriding the recipe's --page-size. Empty values in the file are harmless:
-# the "${VAR:-default}" fallbacks still treat "" as unset.
+# job.slurm writes the recipe's HiCache/Mooncake tunables to hicache_mc_<JID>.env and
+# mounts it at /config/hicache_mc.env. Source it (auto-export) so values like
+# HICACHE_PAGE_SIZE=256 reach the container before server_sglang.sh applies its
+# "${VAR:-default}" fallbacks; empty values in the file still count as unset.
 if [[ -f /config/hicache_mc.env ]]; then
     set -a
     source /config/hicache_mc.env
@@ -29,12 +22,6 @@ if [[ -f /config/hicache_mc.env ]]; then
     echo "[env.sh] sourced HiCache config from /config/hicache_mc.env (HICACHE_PAGE_SIZE=${HICACHE_PAGE_SIZE:-unset})"
 fi
 
-# =============================================================================
-# Shared: IBDEVICES detection
-# =============================================================================
-
-# Prefer IBDEVICES set by runner (runners/launch_mi355x-amds.sh)
-# Fall back to hostname detection if not set (for direct script execution)
 if [[ -z "$IBDEVICES" ]]; then
     DETECTED=$(ibv_devinfo 2>/dev/null | grep "hca_id:" | awk '{print $2}' | paste -sd',')
     if [[ -n "$DETECTED" ]]; then
@@ -49,8 +36,6 @@ else
 fi
 export IBDEVICES
 
-# Shared: Auto-detect default network interface (portable across clusters)
-# Only auto-detect if not already set by the runner/environment
 if [[ -z "$GLOO_SOCKET_IFNAME" ]]; then
     export GLOO_SOCKET_IFNAME=$(ip route 2>/dev/null | grep '^default' | awk '{print $5}' | head -n 1)
 fi
@@ -62,10 +47,7 @@ set +x
 
 export NCCL_IB_HCA=${NCCL_IB_HCA:-$IBDEVICES}
 
-# =============================================================================
-# MoRI-specific environment
-# =============================================================================
-# Shared by the vLLM MoRIIOConnector and the SGLang/MoRI KV-transfer path.
+# MoRI settings shared by the vLLM MoRIIOConnector and the SGLang/MoRI KV-transfer path.
 
 export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-50000}"
 export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-16384}"
@@ -73,8 +55,6 @@ export MORI_IO_QP_MAX_CQE="${MORI_IO_QP_MAX_CQE:-32768}"
 export MORI_IO_QP_MAX_SGE="${MORI_IO_QP_MAX_SGE:-2}"
 export MORI_IO_TC_DISABLE="${MORI_IO_TC_DISABLE:-0}"
 
-# QoS/DSCP configuration
-# Priority order: 1) Set by runner, 2) Detect via nicctl, 3) Detect from hostname
 if [[ -n "$MORI_RDMA_TC" ]]; then
     echo "[INFO] Using MORI_RDMA_TC=$MORI_RDMA_TC (set by runner or environment)"
 elif command -v nicctl &> /dev/null; then
@@ -97,7 +77,6 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
         echo "[INFO] Detected QoS config from nicctl: MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL, MORI_IO_TC=$MORI_IO_TC, MORI_IO_SL=$MORI_IO_SL"
     else
         echo "[WARN] nicctl available but QoS data unavailable; trying hostname detection."
-        # Fall back to hostname-based detection
         NODENAME=$(hostname -s)
         if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
             export MORI_RDMA_TC=96
@@ -112,7 +91,6 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
         fi
     fi
 else
-    # nicctl not available, try hostname-based detection
     NODENAME=$(hostname -s)
     if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
         export MORI_RDMA_TC=96
@@ -128,14 +106,8 @@ else
     fi
 fi
 
-# =============================================================================
-# Engine-specific environment
-# =============================================================================
 
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    # =========================================================================
-    # vLLM/Nixl-specific environment
-    # =========================================================================
     export VLLM_USE_V1=1
     export VLLM_SERVER_DEV_MODE=0
     export VLLM_DISABLE_REQUEST_ID_RANDOMIZATION=1
@@ -161,7 +133,6 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     # RoCEv2: use IPv4-mapped GID (index 1) for inter-node RDMA routing
     export UCX_IB_GID_INDEX=${UCX_IB_GID_INDEX:-1}
 
-    # QoS/DSCP configuration for lossless RoCEv2 fabric.
     if [[ -n "$UCX_IB_TRAFFIC_CLASS" ]]; then
         echo "[INFO] Using UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS (set by environment)"
     elif command -v nicctl &> /dev/null; then
@@ -206,29 +177,15 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
     echo "[INFO] IBDEVICES=$IBDEVICES  UCX_NET_DEVICES=$UCX_NET_DEVICES  NCCL_SOCKET_IFNAME=$NCCL_SOCKET_IFNAME  UCX_IB_GID_INDEX=$UCX_IB_GID_INDEX  UCX_IB_TRAFFIC_CLASS=${UCX_IB_TRAFFIC_CLASS:-unset}"
 
 else
-    # =========================================================================
-    # SGLang-specific environment
-    # =========================================================================
 
     export SGLANG_USE_AITER=1
     export AITER_LOG_LEVEL=ERROR
 
     export SGLANG_MORI_DISPATCH_DTYPE=auto
-    # export MORI_COMBINE_DTYPE_PREFILL=fp8_direct_cast
-    # export MORI_COMBINE_DTYPE_DECODE=fp8
     export MORI_COMBINE_DTYPE_PREFILL=""
     export MORI_COMBINE_DTYPE_DECODE=""
     export SGLANG_MORI_QP_PER_TRANSFER=4
     export SGLANG_MORI_NUM_WORKERS=4
-    # Keep these as overridable defaults (not hard assignments), otherwise
-    # later tuning blocks cannot raise them for high-concurrency runs.
-    # export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
-
-    # export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-16384}"
-    # export MORI_IO_QP_MAX_CQE=32768
-    # export MORI_IO_QP_MAX_SGE=1
-
-    # export MORI_IO_TC_DISABLE=0
 
     export SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT=3600
     export SGLANG_DISAGGREGATION_WAITING_TIMEOUT=3600
@@ -245,7 +202,6 @@ else
     # Disable allocating memory in one pass
     export MORI_SHMEM_MODE=ISOLATION
 
-    # Enable spec v2
     export SGLANG_ENABLE_SPEC_V2=1
     export SGLANG_ENABLE_OVERLAP_PLAN_STREAM=0
 
@@ -267,86 +223,56 @@ else
     # runs; override with MORI_APP_LOG_LEVEL=INFO when debugging.
     export MORI_APP_LOG_LEVEL="${MORI_APP_LOG_LEVEL:-WARNING}"
 
-    # Router logging control:
-    # 0 (default) keeps noisy per-request access logs out of stdout while still logging to file.
-    # 1 mirrors router logs to stdout via tee (useful for live debugging).
+    # SGLANG_ROUTER_STDOUT_LOGS=1 mirrors router logs to stdout via tee; 0 keeps the
+    # noisy per-request access logs in the file only.
     export SGLANG_ROUTER_STDOUT_LOGS="${SGLANG_ROUTER_STDOUT_LOGS:-0}"
 
-    # FIXME: WA for latest upstream 0305 image
+    # Workaround for the 0305 upstream image.
     export PYTHONPATH=/sgl-workspace/aiter:${PYTHONPATH}
 
-    # Decode CUDA-graph capture crash on ROCm 7.2.0 (TP8+EP8, mori a2a).
-    # Symptom: during decode cuda-graph capture, the torch ProcessGroupNCCL
-    # *watchdog* thread calls hipEventQuery() to poll in-flight NCCL work.
-    # ROCm <= 7.2.0's HIP runtime does NOT honor cudaStreamCaptureModeThreadLocal,
-    # so the watchdog's cross-thread query touches the main thread's active
-    # capture and invalidates it -> "HIP error: operation not permitted on an
-    # event last recorded in a capturing stream (hipErrorCapturedEvent)" ->
-    # watchdog aborts -> "Rank 0 scheduler died during initialization" (-6).
-    # This is a HIP runtime bug, not OOM and not a mori/deepep-mode bug (it
-    # fires for --deepep-mode normal and auto alike; EP8+mori just adds NCCL
-    # PGs that make the watchdog race fire). Refs: sgl-project/sglang#29235,
-    # #24011; ROCm/hip#3876; pytorch/pytorch#176251.
-    # Real fix = ROCm 7.2.2+ (honors THREAD_LOCAL). Until the base image is
-    # bumped, TORCH_NCCL_BLOCKING_WAIT=true makes NCCL work completion use a
-    # blocking wait instead of the async watchdog hipEventQuery poll, so no
-    # event is queried during capture. CUDA graph stays fully enabled.
+    # ROCm <= 7.2.0's HIP runtime does not honor cudaStreamCaptureModeThreadLocal, so
+    # torch's ProcessGroupNCCL watchdog thread polling hipEventQuery() invalidates the
+    # main thread's decode cuda-graph capture (hipErrorCapturedEvent -> "Rank 0
+    # scheduler died during initialization"). Refs: sgl-project/sglang#29235, #24011;
+    # ROCm/hip#3876; pytorch/pytorch#176251. Fixed in ROCm 7.2.2+; until the base image
+    # is bumped, blocking NCCL waits avoid querying events during capture.
     export TORCH_NCCL_BLOCKING_WAIT="${TORCH_NCCL_BLOCKING_WAIT:-1}"
     export NCCL_BLOCKING_WAIT="${NCCL_BLOCKING_WAIT:-1}"
-    # export NCCL_DEBUG="${NCCL_DEBUG:-INFO}"
 
-    # =========================================================================
-    # DeepSeek-V4-Pro PD recipe overrides
-    # Placed at the end of the SGLang env block so it wins over the global
-    # MoRI/SGLang defaults set above. Mirrors the validated DSv4 manual PD
-    # commands (ported from InferenceX amd/dsv4_sgl_di). These SGLANG_OPT_* /
-    # AITER_* kernel-routing knobs steer DSv4 away from the default aiter CK
-    # fused-MoE path, which raises "Unsupported kernel config for moe heuristic
-    # dispatch" at decode time on this fp4 model (job 19034 crash). Only the
-    # SGLang/MoRI env knobs are pinned here; CLI flags live in models.yaml and
-    # the cluster NIC/socket vars stay runner-derived.
-    # =========================================================================
+    # DeepSeek-V4-Pro overrides; last in the block so they win over the defaults above.
+    # The SGLANG_OPT_*/AITER_* knobs steer DSv4 off the default aiter CK fused-MoE path,
+    # which raises "Unsupported kernel config for moe heuristic dispatch" at decode on
+    # this fp4 model. CLI flags live in models.yaml; NIC/socket vars stay runner-derived.
     if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
         export SGLANG_AITER_MLA_PERSIST=0
         ## resolve the OOR issue
         export HSA_NO_SCRATCH_RECLAIM=0
-        # MoRI RDMA send-queue depth for DSv4 (overrides the global default above).
         export MORI_IO_QP_MAX_SEND_WR=32767
-        # Unified radix tree: cache impl with per-component (full-attn / SWA)
-        # management for hybrid-attention models. Set unconditionally (not gated on
-        # hicache) so all SGLang runs use it.
+        # Unified radix tree: per-component (full-attn / SWA) cache management for
+        # hybrid-attention models; set unconditionally, not gated on hicache.
         export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
-        # Proactively free out-of-window SWA KV slots during chunked prefill.
-        # Without it, in-flight requests pin SWA KV for their whole context, keeping
-        # the SWA pool under constant eviction pressure; under LRU the trailing
-        # window of cached sessions gets flushed, making prefix-cache hits bimodal
-        # and collapsing the effective hit rate on multi-turn agentic workloads.
+        # Free out-of-window SWA KV slots during chunked prefill. Otherwise in-flight
+        # requests pin SWA KV for their whole context, LRU flushes the trailing window of
+        # cached sessions, and the prefix-cache hit rate collapses on multi-turn traces.
         export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
 
-        # MoRI dispatch/combine dtypes: auto for both roles (not the fp8 split default)
         export SGLANG_MORI_DISPATCH_DTYPE=auto
         export MORI_COMBINE_DTYPE_PREFILL=auto
         export MORI_COMBINE_DTYPE_DECODE=auto
 
-        # Per-role MoRI dispatch sizing (used by the harness chunked/MoE math)
         export MORI_MAX_DISPATCH_TOKENS_PREFILL=8192
         export MORI_MAX_DISPATCH_TOKENS_DECODE=64
         unset MORI_MOE_MAX_INPUT_TOKENS_PREFILL
         unset MORI_MOE_MAX_INPUT_TOKENS_DECODE
 
-        # PER_RANK dispatch tokens pinned independently (16384 prefill / 128
-        # decode); server_sglang.sh prefers these over the MORI_MAX_DISPATCH_*
+        # server_sglang.sh prefers these PER_RANK values over the MORI_MAX_DISPATCH_*
         # coupling when set.
         export MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_PREFILL=16384
         export MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_DECODE=128
 
-        # Fixed inter-kernel switch threshold (not derived).
         export SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD=4096
 
-        # Overlap plan stream on for DSv4 (global default is 0)
-        # export SGLANG_ENABLE_OVERLAP_PLAN_STREAM=0
 
-        # DSv4 model kernel routing (mirrors the single-node / manual PD recipe)
         export SGLANG_DEFAULT_THINKING=1
         export SGLANG_DSV4_REASONING_EFFORT=high
         export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false

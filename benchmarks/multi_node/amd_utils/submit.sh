@@ -1,15 +1,7 @@
 #!/bin/bash
 #
-# Cluster Configuration Template for Multi-Node Disaggregated Serving
-#
-# This script submits a multi-node disaggregated benchmark job to SLURM.
-# It must be configured for your specific cluster before use.
-#
-# ENGINE=sglang (default): SGLang disaggregated serving
-# ENGINE=vllm:             vLLM disaggregated serving
-#
-# Router is co-located with the first prefill node (same for both engines),
-# so NUM_NODES = PREFILL_NODES + DECODE_NODES.
+# Submit a multi-node disaggregated benchmark job to SLURM. The router is co-located
+# with the first prefill node, so NUM_NODES = PREFILL_NODES + DECODE_NODES.
 
 usage() {
     cat << 'USAGE'
@@ -76,7 +68,6 @@ check_env FRAMEWORK
 # GPUS_PER_NODE defaults to 8 (MI355X). Set to 4 for MI325X if needed.
 GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 
-# COMMAND_LINE ARGS
 PREFILL_NODES=$1
 PREFILL_WORKERS=${2:-1}
 DECODE_NODES=$3
@@ -97,13 +88,11 @@ NODE_LIST=${16}
 NUM_NODES=$((PREFILL_NODES + DECODE_NODES))
 profiler_args="${ISL} ${OSL} ${CONCURRENCIES} ${REQUEST_RATE}"
 
-# Export variables for the SLURM job
 export ENGINE="${FRAMEWORK:-sglang}"
 export MODEL_DIR=$MODEL_PATH
 export DOCKER_IMAGE_NAME=$CONTAINER_IMAGE
 export PROFILER_ARGS=$profiler_args
 
-# Engine-specific xP/yD semantics and TP exports
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
     export PROXY_STREAM_IDLE_TIMEOUT=${PROXY_STREAM_IDLE_TIMEOUT:-300}
 fi
@@ -142,13 +131,10 @@ export BENCH_MAX_CONCURRENCY=${CONCURRENCIES}
 export BENCH_REQUEST_RATE=${REQUEST_RATE}
 export BENCH_RANDOM_RANGE_RATIO=${RANDOM_RANGE_RATIO:-0.8}
 
-# DRY_RUN=1 makes server_sglang.sh echo the composed prefill/decode/router launch
-# commands instead of executing them (useful for previewing a recipe against a real
-# allocation). Threaded here → job.slurm → Docker (-e DRY_RUN) → server_sglang.sh.
-# sbatch defaults to --export=ALL, so exporting it is what carries it into the job.
+# sbatch defaults to --export=ALL, so exporting DRY_RUN carries it through job.slurm
+# and Docker (-e) into server_sglang.sh.
 export DRY_RUN="${DRY_RUN:-0}"
 
-# Eval-related env vars (threaded from workflow → runner → here → job.slurm → Docker)
 export RUN_EVAL="${RUN_EVAL:-false}"
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 export EVAL_CONC="${EVAL_CONC:-}"
@@ -173,7 +159,6 @@ export EVAL_LIMIT="${EVAL_LIMIT:-}"
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
 mkdir -p "$BENCHMARK_LOGS_DIR"
 
-# Optional: pass an explicit node list to sbatch.
 NODELIST_OPT=()
 if [[ -n "${NODE_LIST//[[:space:]]/}" ]]; then
     IFS=',' read -r -a NODE_ARR <<< "$NODE_LIST"
@@ -186,15 +171,10 @@ if [[ -n "${NODE_LIST//[[:space:]]/}" ]]; then
     NODELIST_OPT=(--nodelist "$NODELIST_CSV")
 fi
 
-# Optional: exclude specific nodes for known-bad (FRAMEWORK, MODEL_NAME)
-# combos (e.g. nodes with broken Docker sockets), looked up from
-# node_excludes.yaml. Set SLURM_EXCLUDE_NODES to override with an explicit
-# comma-separated hostname list (takes precedence over the file).
-#
-# Resolution must fail loudly (not silently yield an empty exclude list) if
-# it can't be trusted: a submit host missing python3/PyYAML, or a genuine
-# parse error, must not silently reintroduce the known-bad-node issue this
-# exclusion mechanism exists to prevent.
+# Exclude known-bad nodes for this (FRAMEWORK, MODEL_NAME) combo (e.g. broken Docker
+# sockets) from node_excludes.yaml; SLURM_EXCLUDE_NODES overrides with an explicit
+# list. Resolution must fail loudly rather than silently yield an empty exclude list,
+# or a missing python3/PyYAML would quietly reintroduce the known-bad nodes.
 EXCLUDE_OPT=()
 NODE_EXCLUDES_YAML="$(dirname "$0")/node_excludes.yaml"
 if [[ -n "${SLURM_EXCLUDE_NODES:-}" ]]; then
@@ -221,9 +201,8 @@ for rule in cfg.get('rules', []):
             exit 1
         fi
     else
-        # Fall back to an awk parser (mirrors job.slurm's awk-based models.yaml
-        # parsing) matched to node_excludes.yaml's fixed rule/models/exclude_nodes
-        # shape. Only exercised when python3 or its yaml module is unavailable.
+        # awk fallback matched to node_excludes.yaml's fixed rule/models/exclude_nodes
+        # shape, for submit hosts without python3 or PyYAML.
         echo "Warning: python3/PyYAML unavailable on submit host; falling back to awk parsing of ${NODE_EXCLUDES_YAML}" >&2
         RESOLVED_EXCLUDE_NODES=$(awk -v fw="$FRAMEWORK" -v model="$MODEL_NAME" '
             /^  - framework:/ {
@@ -262,18 +241,13 @@ if [[ -n "$RESOLVED_EXCLUDE_NODES" ]]; then
     EXCLUDE_OPT=(--exclude "$RESOLVED_EXCLUDE_NODES")
 fi
 
-# =============================================================================
-# Reuse existing allocation (skip sbatch)
-# =============================================================================
-# When SLURM_REUSE_JOBID is set, run job.slurm directly in the current shell,
-# attaching to the existing allocation. Inner `srun` calls pick up the
-# allocation via SLURM_JOB_ID; SLURM_OVERLAP=1 lets them share task slots with
-# the interactive shell already holding the allocation.
+# SLURM_REUSE_JOBID: run job.slurm directly in the current shell against the existing
+# allocation. Inner srun calls pick it up via SLURM_JOB_ID; SLURM_OVERLAP=1 lets them
+# share task slots with the interactive shell already holding the allocation.
 if [[ -n "${SLURM_REUSE_JOBID:-}" ]]; then
     REUSE_JID="$SLURM_REUSE_JOBID"
     echo "Reusing existing Slurm allocation ${REUSE_JID} (skipping sbatch)" >&2
 
-    # Resolve allocation's nodelist if not already provided.
     ALLOC_NODELIST="${SLURM_JOB_NODELIST:-$(squeue -h -j "$REUSE_JID" -o '%N' 2>/dev/null)}"
     if [[ -z "$ALLOC_NODELIST" ]]; then
         echo "Error: could not resolve nodelist for job ${REUSE_JID}" >&2
@@ -311,7 +285,6 @@ if [[ -n "${SLURM_REUSE_JOBID:-}" ]]; then
     exit 0
 fi
 
-# Construct the sbatch command
 sbatch_cmd=(
     sbatch
     --parsable

@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
 
 # Agentic trace-replay recipe for a disaggregated SGLang server on MI355X
-# (DeepSeek-V4-Pro FP4, 1P1D TP8).
-#
-# CI-style sibling of dsr1_fp4_mi355x_sglang-disagg.sh: driven entirely by
-# environment variables and submits a SLURM job via submit.sh. The agentic /
-# HiCache-offload configuration mirrors the DSR1 recipe but uses DSV4-Pro
-# specific flags (dsv4 attention backend, page-size 256, SWA settings).
+# (DeepSeek-V4-Pro FP4, 1P1D TP8). Driven by environment variables; submits a SLURM
+# job via submit.sh.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../benchmark_lib.sh"
@@ -40,62 +36,44 @@ fi
 
 set -x
 
-# Use upstreamed multi_node scripts (no external clone needed)
 cd "$GITHUB_WORKSPACE/benchmarks/multi_node/amd_utils" || exit 1
 
-# Set up SGL launch script-specific environment variables
 export TIME_LIMIT="${TIME_LIMIT:-08:00:00}"
 export MODEL_PATH=$MODEL_PATH
 export MODEL_NAME=$MODEL_NAME
 export CONTAINER_IMAGE=$IMAGE
 
-# ── Identity / result naming ──
 export MODEL_PREFIX="${MODEL_PREFIX:-dsv4}"
 export PRECISION="${PRECISION:-fp4}"
 export RESULT_FILENAME="${RESULT_FILENAME:-${RUNNER_NAME:-dsv4-fp4-agentic}}"
 
-# ── Agentic benchmark params ──
 export DURATION="${DURATION:-1800}"
-# DSV4-Pro max model len for agentic traces (matches single-node recipe).
 export MAX_MODEL_LEN="${MAX_MODEL_LEN:-1000000}"
 
-# ── In-tree sglang patches ──
 # mori_conn.py targets hybrid-state bugs (GLM-5, Qwen3.5). DSV4-Pro uses a
 # pure MoE/DSA architecture without hybrid state; skip to avoid interference.
 export MORI_CONN_PATCH="${MORI_CONN_PATCH:-skip}"
 
-# ── Aiter fault mitigation ──
 # --disable-custom-all-reduce avoids a known aiter fault on MI355X.
 export DISABLE_CUSTOM_ALL_REDUCE="${DISABLE_CUSTOM_ALL_REDUCE:-0}"
 
-# ── KV cache offloading (HiCache) ──
-# KV_OFFLOADING=none | dram (passed from YAML; default none for disagg).
-# KV_OFFLOAD_BACKEND selects the backend when offloading is on; this recipe
-# only implements HiCache, so "hicache" is the only supported value.
-# HICACHE_TIER: L2 -> GPU + CPU-DRAM host pool. L3 -> + Mooncake store.
+# KV_OFFLOADING=none | dram. KV_OFFLOAD_BACKEND selects the backend; this recipe only
+# implements hicache. HICACHE_TIER: L2 = GPU + CPU-DRAM host pool, L3 = + Mooncake.
 export KV_OFFLOADING="${KV_OFFLOADING:-none}"
 if [[ "$KV_OFFLOADING" != "none" ]]; then
   export KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-hicache}"
 fi
-# HiCache/Mooncake tunables only matter when KV offloading is enabled.
 if [[ "$KV_OFFLOADING" != "none" && "${KV_OFFLOAD_BACKEND:-}" == "hicache" ]]; then
   export HICACHE_TIER="${HICACHE_TIER:-L2}"
   export HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-1}"
   # DSV4 uses page-size 256 (set in models.yaml); HiCache must match.
   export HICACHE_PAGE_SIZE="${HICACHE_PAGE_SIZE:-256}"
-  # HiCache ratio (host pool = ratio * GPU KV pool).
   export HICACHE_RATIO="${HICACHE_RATIO:-3}"
-  # DSv4 wants the ratio-based pool, but server_sglang.sh prefers
-  # --hicache-size over --hicache-ratio when TOTAL_CPU_DRAM_GB is set.
-  # Opt out via FORCE_HICACHE_RATIO instead of unsetting TOTAL_CPU_DRAM_GB
-  # (also required client-side by benchmark_lib.sh when KV_OFFLOADING=dram).
+  # server_sglang.sh prefers --hicache-size over --hicache-ratio when TOTAL_CPU_DRAM_GB
+  # is set; opt out via FORCE_HICACHE_RATIO rather than unsetting TOTAL_CPU_DRAM_GB,
+  # which benchmark_lib.sh also requires client-side when KV_OFFLOADING=dram.
   export FORCE_HICACHE_RATIO=1
 
-  # ── HiCache layout/backend by tier ──
-  #   L3 (Mooncake): page_first + direct + write_through     + storage=mooncake
-  #   L2 (CPU DRAM): layer_first + direct + write_through_selective + storage=none
-  # NOTE: write_through_selective evicts only under GPU memory pressure, avoiding
-  # the mori RDMA race that causes GPU memory access faults with write_through.
   if [[ "${HICACHE_TIER^^}" == "L3" ]]; then
     export HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first}"
     export HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
@@ -122,18 +100,14 @@ if [[ "$KV_OFFLOADING" != "none" && "${KV_OFFLOAD_BACKEND:-}" == "hicache" ]]; t
   export MC_METADATA_SERVER="${MC_METADATA_SERVER:-}"
 fi
 
-# ── MoRIIO RDMA Send Queue tuning ──
 export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
 export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-32768}"
 
-# ── SGLang PD router policy + server metrics ──
 export PREFILL_ROUTER_POLICY="${PREFILL_ROUTER_POLICY:-consistent_hashing}"
 export ENABLE_METRICS="${ENABLE_METRICS:-1}"
 
-# ── MTP ──
 export DECODE_MTP_SIZE="${DECODE_MTP_SIZE:-0}"
 
-# Derive EP/DP enable flags from the topology inputs.
 if [[ "${PREFILL_EP:-1}" -eq 1 ]]; then
 export PREFILL_ENABLE_EP=false
 else
