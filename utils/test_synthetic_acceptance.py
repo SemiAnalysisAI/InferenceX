@@ -141,6 +141,18 @@ def test_thinking_mode_and_decode_priority(golden_dir):
     assert result["roles"]["prefill"] == {"args": {"tensor-parallel-size": 8}}
 
 
+@pytest.mark.parametrize("sampling", [None, "unknown"])
+def test_kimi_curve_requires_an_explicit_supported_sampler(golden_dir, sampling):
+    fields = {} if sampling is None else {"draft_sample_method": sampling}
+    with pytest.raises(ValueError, match="Kimi DSpark golden curve for draft sampling"):
+        build_overrides(
+            vllm_recipe("dspark", **fields),
+            "vllm",
+            {**ENV, "MODEL_PREFIX": "kimik3", "SPEC_DECODING": "dspark"},
+            golden_dir=golden_dir,
+        )
+
+
 @pytest.mark.parametrize(
     "framework,args,environment,expected",
     [

@@ -78,9 +78,8 @@ def golden_length(model: str, spec: Mapping[str, Any], thinking: str, golden_dir
         if "gqa" in str(spec.get("model", "")).lower():
             curve += "_gqa"
     elif model == "kimik3" and method == "dspark":
-        # Existing AgentX Kimi recipes use the probabilistic/block curve when
-        # draft sampling is omitted. An explicit greedy recipe uses its own curve.
-        sampling = spec.get("draft_sample_method", "probabilistic")
+        # Kimi has distinct measured curves; require the recipe to choose its sampler.
+        sampling = spec.get("draft_sample_method")
         if sampling == "probabilistic":
             curve += "_probabilistic_sample_method_block_rejection_sample_method"
         elif sampling != "greedy":
