@@ -152,7 +152,7 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 | DSV4 在自定义 digest 上可用但在通用 SGLang 上 OOM | [§3](../KLAUD_DEBUG.md#3-custom-dsv4-image--generic-v0512-ooms)：通用 release 不是可直接替换项；保留/回退到已验证兼容镜像 |
 | B300 DeepGemm 非法地址、EAGLE trtllm GEMM 失败或 flash-attn 架构断言 | [§4](../KLAUD_DEBUG.md#4-upstream-sglang-v0512-b300-regressions)：区分三种堆栈；使用受支持后端/上限或已修复/固定的上游镜像 |
 | AMD drained/Pyxis、Docker socket、磁盘满或端口被占用 | [§5](../KLAUD_DEBUG.md#5-cluster-infrastructure-amd-mi355x--mi300x--mi325x)：确认当前节点状态并升级基础设施问题；不健康基础设施没有配方级修复 |
-| `dpkg-deb` 或 `tar` 拒绝刚下载的 srt-slurm 依赖归档 | 保留首个 setup 错误。H200 会重试 `make setup` 最多五次，并在每次尝试之间仅删除不完整的 NATS/etcd 归档；若全部失败，应将 release 下载路径归类为基础设施问题，而不是修改基准配方 |
+| `dpkg-deb` 或 `tar` 拒绝刚下载的 srt-slurm 依赖归档 | [§1.2](../KLAUD_DEBUG.md#12-truncated-natsetcd-dependency-archives)：保留首个 setup 错误。H200 仅在 NATS/etcd 归档未通过完整性检查时重试，只删除无效归档，并对无关的 setup 失败立即停止 |
 | 猜测的 Docker tag 返回 404 | [§6](../KLAUD_DEBUG.md#6-docker-image-tag-gotchas)：在 registry 验证精确 tag；不要推断命名规律 |
 | `gh run rerun --failed` 被拒绝 | [§7](../KLAUD_DEBUG.md#7-ci-rerun-mechanics)：检查运行状态/结论；仅已完成的失败支持只重跑失败任务，取消运行需要完整重跑 |
 | MiniMax M3 B300 MSA 报告 `q2k_indices` 不连续 | [§11](../KLAUD_DEBUG.md#11-minimax-m3-b300-msa-top-k-slice-is-non-contiguous)：识别 TP1/data-parallel-attention 暴露条件；优先使用上游已修复镜像。提交记录中的引擎补丁须符合当前清单/豁免要求 |
