@@ -24,7 +24,6 @@ export SGL_ENABLE_JIT_DEEPGEMM=false
 export SGLANG_ENABLE_FLASHINFER_GEMM=true
 SERVER_LOG=/workspace/server.log
 
-# Default: recv every ~10 requests; if CONC ≥ 16, relax to ~30 requests between scheduler recv polls.
 if [[ $TP -eq 8 ]]; then
   if [[ $CONC -ge 16 ]]; then
     SCHEDULER_RECV_INTERVAL=30
@@ -32,8 +31,7 @@ if [[ $TP -eq 8 ]]; then
     SCHEDULER_RECV_INTERVAL=10
   fi
 
-  # Setting these values (passed in to --cuda-graph-max-bs and --max-running-requests) as the maximum concurrency
-  # this will help us save memory from being unnecessary used. 
+  # Capped so KV memory is not reserved for requests that never run.
   MAX_RUNNING_REQUESTS=128
   CUDA_GRAPH_MAX_BATCH_SIZE=128
 
@@ -46,8 +44,7 @@ elif [[ $TP -eq 4 ]]; then
     exit 1
   fi
 
-  # Setting these values (passed in to --cuda-graph-max-bs and --max-running-requests) as the maximum concurrency
-  # this will help us save memory from being unnecessary used. 
+  # Capped so KV memory is not reserved for requests that never run.
   MAX_RUNNING_REQUESTS=32
   CUDA_GRAPH_MAX_BATCH_SIZE=32
 
@@ -67,7 +64,6 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
 fi
-# Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
@@ -80,7 +76,6 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 pip install -q datasets pandas
@@ -97,12 +92,10 @@ run_benchmark_serving \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
 set +x

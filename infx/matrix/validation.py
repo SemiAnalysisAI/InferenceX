@@ -1164,20 +1164,24 @@ def load_config_files(config_files: List[str], validate: bool = True) -> dict:
         try:
             with open(config_file, "r") as f:
                 config_data = yaml.safe_load(f)
-                assert isinstance(config_data, dict), (
-                    f"Config file '{config_file}' must contain a dictionary"
-                )
+                if not isinstance(config_data, dict):
+                    raise ValueError(
+                        f"Config file '{config_file}' must contain a dictionary"
+                    )
 
                 # Don't allow '*' wildcard in master config keys as we need to reserve these
                 # for expansion in process_changelog.py
                 for key in config_data.keys():
+                    if not isinstance(key, str):
+                        raise ValueError(
+                            f"Configuration key {key!r} in '{config_file}' must be a string"
+                        )
                     if "*" in key:
                         raise ValueError(
                             f" Wildcard '*' is not allowed in master config keys: '{key}'"
                         )
 
-                # Check for duplicate keys
-                duplicate_keys = set(all_config_data.keys()) & set(config_data.keys())
+                duplicate_keys = all_config_data.keys() & config_data.keys()
                 if duplicate_keys:
                     raise ValueError(
                         f"Duplicate configuration keys found in '{config_file}': {', '.join(sorted(duplicate_keys))}"

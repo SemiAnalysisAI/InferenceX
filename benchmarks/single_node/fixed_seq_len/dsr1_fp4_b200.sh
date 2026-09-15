@@ -2,8 +2,6 @@
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-DP_ATTENTION="${DP_ATTENTION:-false}"
-
 check_env_vars \
     MODEL \
     TP \
@@ -30,7 +28,6 @@ nvidia-smi
 
 SERVER_LOG=/workspace/server.log
 
-# Default: recv every ~10 requests; if CONC >= 16, relax to ~30 requests between scheduler recv polls.
 if [[ $CONC -ge 16 ]]; then
   SCHEDULER_RECV_INTERVAL=30
 else
@@ -68,7 +65,6 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
 fi
-# Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
@@ -81,7 +77,6 @@ SGLANG_RADIX_FORCE_MISS=1 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --m
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 pip install -q datasets pandas
@@ -98,12 +93,10 @@ run_benchmark_serving \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
 set +x

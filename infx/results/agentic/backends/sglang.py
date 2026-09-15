@@ -156,7 +156,7 @@ class SglangBackend(ServerMetricsBackend):
         if not server_log:
             return None
 
-        per_rank: dict[str, int] = {}
+        per_rank: dict[tuple[str, ...], int] = {}
         bare_total = 0
         bare_count = 0
         dp_size = cls._dp_size(server_log)
@@ -172,7 +172,7 @@ class SglangBackend(ServerMetricsBackend):
                 continue
             tag_match = cls._RANK_RE.search(line)
             if tag_match:
-                per_rank[tag_match.group("tag")] = tokens
+                per_rank[tuple(tag_match.group("tag").split())] = tokens
             else:
                 bare_total += tokens
                 bare_count += 1
