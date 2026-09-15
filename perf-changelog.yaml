@@ -7997,4 +7997,4 @@
     - "Add aggregate TP8 GLM-5.2 FP8 H200 AgentX recipes with EAGLE MTP and HiCache at concurrencies 1, 2, 4, 8, 12, and 16."
     - "Use one recipe per concurrency and cap max-running-requests and CUDA graph batch size at twice the trajectory concurrency."
     - "Use SGLang nightly-dev-20260914-4358a161 with Dynamo 1.5.0.dev20260913 and retry truncated srt-slurm setup dependency downloads."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3112
