@@ -255,6 +255,8 @@ Canary 和 Fail-fast 解决不同问题：
 
 ## 监控与重跑
 
+PR 扫描维护一条机器人评论，包含 `View unofficial run (performance)` 和 `View unofficial run (accuracy)` 链接。每个更新的 Run 都会编辑该评论；重跑旧 Run 不会覆盖更新的链接。已有 PR 会复用最新的旧格式可视化评论，更早的历史评论保持不变。
+
 ### 监控选定 Run
 
 ```bash

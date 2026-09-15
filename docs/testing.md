@@ -118,6 +118,8 @@ A local matrix cannot prove Slurm allocation or llm-d endpoint discovery. Multi-
 
 ### Full local suite in parallel
 
+The existing Python suites cover workflow contracts too. `utils/matrix_logic/test_validation.py` tests the workflow input schemas and runs both preparation scripts with controlled generator output. Invalid rows must fail before publishing job outputs; accepted rows must remain unchanged, including when manual dispatch measures an older checkout. `utils/test_process_result.py` executes the shipped launch step with a recording launcher for current and historical checkouts. These tests do not emulate GitHub's expression engine or prove GPU performance; review expression changes with workflow validation and applicable smoke evidence.
+
 With the test dependencies installed, add [`pytest-xdist`](https://pytest-xdist.readthedocs.io/en/stable/distribution.html) to the same Python environment and run all local suites with four workers:
 
 ```bash
@@ -171,7 +173,7 @@ Record enough information for another reviewer to reproduce the claim without gu
 3. **Before CODEOWNER sign-off:** follow [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md), including its code-quality, architecture, image provenance, upstream recipe, patch/waiver, chat-template, and AgentX requirements where applicable.
 4. **For sweep/eval acceptance:** at least one commit currently in the PR has successful, non-skipped executed `single-node */` and `eval /` checks. A successful `collect-evals` alone is insufficient. Download the corresponding eval artifacts and confirm non-empty, passing accuracy and the same inference image. These are the executable rules in [verifier Checks 1 and 2](../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr).
 5. **For reuse at merge:** an authorized `OWNER`, `MEMBER`, or `COLLABORATOR` posts a whole-line `/reuse-sweep-run` command (optionally with the eligible source run ID) before the supported merge path. The verifier treats a missing or unauthorized command as a failure. See [verifier Check 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted) and [the reuse procedure](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep).
-6. **At merge:** a CODEOWNER's exact sign-off is independently accepted by [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml). If the PR head changes, reassess and sign the new commit evidence.
+6. **At merge:** a CODEOWNER's exact sign-off needs one independent PASS from [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml). Automation preserves acceptance with `codeowner-signoff-verified` and carries the required status onto subsequent heads without rerunning Claude, including after rebases. Each actual verification updates one PR verdict comment with the assessed SHA; carrying a PASS forward does not attest to review of new commits. Deleting the comment does not reset acceptance, and manual reassessment cannot revoke an earlier PASS. See [the contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off) for comment recovery and manual dispatch.
 7. **After merge:** the author confirms the main-branch jobs pass, as required by [`CONTRIBUTING.md`](../CONTRIBUTING.md#after-merging).
 
 ## Stop conditions
