@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-# Qwen-3.5-397B-A17B FP8 on H100 via sglang.
-# Uses TP8/EP1 at conc 1-8 and TP8/EP8 at conc 16-256.
-
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars \

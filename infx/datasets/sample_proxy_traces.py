@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Sample Claude Code traces from the agentic-proxy Neon DB.
 
 Selects sessions in `public.requests` / `public.sessions` matching the
@@ -37,7 +36,7 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -52,8 +51,9 @@ def _redact_url(url: str) -> str:
     try:
         p = urlsplit(url)
         return f"{p.hostname}{p.path}"
-    except Exception:
+    except Exception:  # noqa: BLE001
         return "<connection string>"
+
 
 DEFAULT_ENV = "AGENTIC_PROXY_DB_URL"
 # Migration `013_add_subagent_label` ran at this UTC timestamp; rows
@@ -185,23 +185,34 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument(
-        "--out", "-o", type=Path, required=True,
+        "--out",
+        "-o",
+        type=Path,
+        required=True,
         help="Output directory. One <session_id>.jsonl per trace + manifest.json.",
     )
     p.add_argument(
-        "--min-requests", type=int, default=None,
+        "--min-requests",
+        type=int,
+        default=None,
         help="Drop sessions with fewer than this many Anthropic requests.",
     )
     p.add_argument(
-        "--max-requests", type=int, default=None,
+        "--max-requests",
+        type=int,
+        default=None,
         help="Drop sessions larger than this.",
     )
     p.add_argument(
-        "--max-span-hours", type=float, default=None,
+        "--max-span-hours",
+        type=float,
+        default=None,
         help="Drop sessions whose first→last request spans more than this many hours.",
     )
     p.add_argument(
-        "--min-main-turns", type=int, default=None,
+        "--min-main-turns",
+        type=int,
+        default=None,
         help=(
             "Drop sessions with fewer than this many MAIN-AGENT turns (rows "
             "with effective subagent_label IS NULL). This is the count that "
@@ -211,7 +222,9 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
-        "--min-trace-version", type=int, default=None,
+        "--min-trace-version",
+        type=int,
+        default=None,
         help=(
             "Require min(trace_version) over the session's SUCCESSFUL anon "
             "Claude rows to be >= N. Equivalent to 'every replayable request "
@@ -220,7 +233,9 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
-        "--max-trace-version", type=int, default=None,
+        "--max-trace-version",
+        type=int,
+        default=None,
         help=(
             "Require max(trace_version) over the session's SUCCESSFUL anon "
             "Claude rows to be <= N. Combine with --min-trace-version=N to "
@@ -229,7 +244,9 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
-        "--max-parallel-subagents", type=int, default=None,
+        "--max-parallel-subagents",
+        type=int,
+        default=None,
         metavar="N",
         help=(
             "Drop sessions whose peak concurrent subagent GROUP count exceeds "
@@ -247,7 +264,9 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
-        "--require-cli-min", type=str, default=None,
+        "--require-cli-min",
+        type=str,
+        default=None,
         metavar="X.Y.Z",
         help=(
             "Require every successful Claude row in the session to be on "
@@ -260,11 +279,14 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
-        "--until", type=str, default=None,
+        "--until",
+        type=str,
+        default=None,
         help="Latest timestamp to consider (ISO).",
     )
     p.add_argument(
-        "--exclude-dynamic-workflow-bug", action="store_true",
+        "--exclude-dynamic-workflow-bug",
+        action="store_true",
         help=(
             "Exclude sessions hit by the Claude Code CLI<2.1.174 dynamic-"
             "workflow bug, where dynamic-workflow subagents were emitted "
@@ -276,7 +298,10 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
-        "--dwbug-min-peak", type=int, default=3, metavar="N",
+        "--dwbug-min-peak",
+        type=int,
+        default=3,
+        metavar="N",
         help=(
             "Peak concurrent unlabeled multi-turn trajectories at/above which "
             "a pre-2.1.174 session is treated as dynamic-workflow-buggy "
@@ -284,35 +309,50 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
-        "--privacy-mode", choices=("anon", "full"), default="anon",
+        "--privacy-mode",
+        choices=("anon", "full"),
+        default="anon",
         help="Privacy filter (default: anon — request bodies are redacted; metric columns are intact). Pass `full` to include un-redacted rows. There is no opt-in for mixing both, by design.",
     )
     p.add_argument(
-        "--limit", type=int, default=None,
+        "--limit",
+        type=int,
+        default=None,
         help="Max sessions to dump.",
     )
     p.add_argument(
-        "--sampling", choices=("top", "recent", "random"), default=None,
+        "--sampling",
+        choices=("top", "recent", "random"),
+        default=None,
         help="`top` = largest req_count, `recent` = newest last activity, `random` = deterministic md5(session_id||seed). Required if --limit is set.",
     )
     p.add_argument(
-        "--seed", type=int, default=None,
+        "--seed",
+        type=int,
+        default=None,
         help="Salt for --sampling random (server-side md5). Required when --sampling random.",
     )
     p.add_argument(
-        "--db-url", type=str, default=None,
+        "--db-url",
+        type=str,
+        default=None,
         help=f"Postgres connection string. Falls back to ${DEFAULT_ENV}.",
     )
     p.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Print matching-session summary; do not fetch row-level data or write files.",
     )
     p.add_argument(
-        "-v", "--verbose", action="store_true",
+        "-v",
+        "--verbose",
+        action="store_true",
         help="Enable DEBUG-level logging.",
     )
     p.add_argument(
-        "--session-id", type=str, default=None,
+        "--session-id",
+        type=str,
+        default=None,
         help=(
             "Dump exactly one session by its `sessions.id`. Skips phase 1 "
             "(candidate aggregates), phase 2 (v1/v2 image exclusion), and "
@@ -321,7 +361,8 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
-        "--allow-non-anthropic", action="store_true",
+        "--allow-non-anthropic",
+        action="store_true",
         help=(
             "Escape hatch: drop the `model LIKE 'claude-%%'` filter so "
             "Codex/GPT sessions get dumped too. The downstream weka "
@@ -354,18 +395,19 @@ def parse_args() -> argparse.Namespace:
                 # leave the X.Y.Z format error to the existing encoder
                 pass
             else:
-                req_int = (int(req_parts[0]) * 1_000_000
-                           + int(req_parts[1]) * 1_000
-                           + int(req_parts[2]))
+                req_int = (
+                    int(req_parts[0]) * 1_000_000 + int(req_parts[1]) * 1_000 + int(req_parts[2])
+                )
                 if req_int < 2_001_139:
                     p.error(
                         "--max-parallel-subagents requires --require-cli-min "
-                        ">= 2.1.139 (got %s)" % args.require_cli_min
+                        f">= 2.1.139 (got {args.require_cli_min})"
                     )
     else:
         # --session-id short-circuits all session-discovery logic.
         ignored = [
-            name for name, val in (
+            name
+            for name, val in (
                 ("--sampling", args.sampling),
                 ("--limit", args.limit),
                 ("--seed", args.seed),
@@ -373,21 +415,18 @@ def parse_args() -> argparse.Namespace:
                 ("--max-requests", args.max_requests),
                 ("--max-span-hours", args.max_span_hours),
                 ("--until", args.until),
-            ) if val is not None
+            )
+            if val is not None
         ]
         if ignored:
-            sys.stderr.write(
-                f"warning: --session-id is set; ignoring {' '.join(ignored)}\n"
-            )
+            sys.stderr.write(f"warning: --session-id is set; ignoring {' '.join(ignored)}\n")
     return args
 
 
 def get_db_url(args: argparse.Namespace) -> str:
     url = args.db_url or os.environ.get(DEFAULT_ENV)
     if not url:
-        sys.exit(
-            f"ERROR: connection string missing. Set ${DEFAULT_ENV} or pass --db-url."
-        )
+        sys.exit(f"ERROR: connection string missing. Set ${DEFAULT_ENV} or pass --db-url.")
     return url
 
 
@@ -456,7 +495,7 @@ SELECT *
         %(min_cli_int)s::int IS NULL
         OR (min_cli_int >= %(min_cli_int)s::int AND rows_unknown_cli = 0)
    )
-"""
+"""  # noqa: S608
 
 # Phase 2: image-content check, bounded to candidate session_ids that
 # passed phase 1. session_id = ANY(...) uses idx_requests_session_id so
@@ -526,7 +565,7 @@ running AS (
 SELECT session_id, MAX(in_flight)::int AS max_parallel_subagents
   FROM running
  GROUP BY session_id
-"""
+"""  # noqa: S608
 
 
 def _sort_and_limit(rows: list[dict], args: argparse.Namespace) -> list[dict]:
@@ -546,7 +585,8 @@ def _sort_and_limit(rows: list[dict], args: argparse.Namespace) -> list[dict]:
             rows,
             # Stable sampling order matching Postgres, not a security boundary.
             key=lambda r: hashlib.md5(
-                (r["session_id"] + seed).encode("utf-8"), usedforsecurity=False,
+                (r["session_id"] + seed).encode("utf-8"),
+                usedforsecurity=False,
             ).hexdigest(),
         )
     if args.limit is not None:
@@ -555,7 +595,7 @@ def _sort_and_limit(rows: list[dict], args: argparse.Namespace) -> list[dict]:
 
 
 def find_sessions(
-    conn, args: argparse.Namespace, model_like: str
+    conn: psycopg.Connection, args: argparse.Namespace, model_like: str
 ) -> list[dict]:
     def _encode_cli_int(s: str | None) -> int | None:
         if not s:
@@ -578,10 +618,7 @@ def find_sessions(
         "privacy": args.privacy_mode,
         "min_requests": args.min_requests,
         "max_requests": args.max_requests,
-        "max_span_sec": (
-            args.max_span_hours * 3600.0
-            if args.max_span_hours is not None else None
-        ),
+        "max_span_sec": (args.max_span_hours * 3600.0 if args.max_span_hours is not None else None),
         "min_main_turns": args.min_main_turns,
         "min_trace_version": args.min_trace_version,
         "max_trace_version": args.max_trace_version,
@@ -591,16 +628,21 @@ def find_sessions(
         "phase 1 (cheap aggregates): min_requests=%s max_requests=%s "
         "max_span_hours=%s min_main_turns=%s min_trace_version=%s "
         "max_trace_version=%s require_cli_min=%s until=%s privacy=%s",
-        args.min_requests, args.max_requests, args.max_span_hours,
-        args.min_main_turns, args.min_trace_version, args.max_trace_version,
-        args.require_cli_min, args.until, args.privacy_mode,
+        args.min_requests,
+        args.max_requests,
+        args.max_span_hours,
+        args.min_main_turns,
+        args.min_trace_version,
+        args.max_trace_version,
+        args.require_cli_min,
+        args.until,
+        args.privacy_mode,
     )
     t1 = time.time()
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(CANDIDATES_PHASE1_SQL, phase1_params)
         candidates = cur.fetchall()
-    logger.info("phase 1: %d candidate session(s) in %.1fs",
-                len(candidates), time.time() - t1)
+    logger.info("phase 1: %d candidate session(s) in %.1fs", len(candidates), time.time() - t1)
 
     if not candidates:
         return []
@@ -616,7 +658,8 @@ def find_sessions(
         excluded_ids = {row["session_id"] for row in cur.fetchall()}
     logger.info(
         "phase 2: %d session(s) excluded for v1/v2 image content in %.1fs",
-        len(excluded_ids), time.time() - t2,
+        len(excluded_ids),
+        time.time() - t2,
     )
 
     surviving = [c for c in candidates if c["session_id"] not in excluded_ids]
@@ -628,7 +671,8 @@ def find_sessions(
         surviving_ids = [c["session_id"] for c in surviving]
         logger.info(
             "phase 2.5 (max-parallel-subagents <= %d): scanning %d session(s)",
-            args.max_parallel_subagents, len(surviving_ids),
+            args.max_parallel_subagents,
+            len(surviving_ids),
         )
         t25 = time.time()
         peak_by_id: dict[str, int] = {}
@@ -657,15 +701,19 @@ def find_sessions(
                 kept.append(c)
         logger.info(
             "phase 2.5: %d session(s) survive peak <= %d in %.1fs (dropped %d)",
-            len(kept), args.max_parallel_subagents,
-            time.time() - t25, len(surviving) - len(kept),
+            len(kept),
+            args.max_parallel_subagents,
+            time.time() - t25,
+            len(surviving) - len(kept),
         )
         surviving = kept
 
     logger.info(
         "phase 3 (sampling=%s, limit=%s): %d → %d session(s)",
-        args.sampling, args.limit,
-        len(surviving), min(args.limit or len(surviving), len(surviving)),
+        args.sampling,
+        args.limit,
+        len(surviving),
+        min(args.limit or len(surviving), len(surviving)),
     )
     return _sort_and_limit(surviving, args)
 
@@ -694,11 +742,11 @@ SELECT session_id,
    AND privacy_mode = %(privacy)s
    AND ({SECURITY_MONITOR_FILTER_SQL})
  GROUP BY session_id
-"""
+"""  # noqa: S608
 
 
 def find_one_session(
-    conn, session_id: str, privacy_mode: str, model_like: str
+    conn: psycopg.Connection, session_id: str, privacy_mode: str, model_like: str
 ) -> list[dict]:
     logger.info("looking up session %s (--session-id mode)", session_id)
     t = time.time()
@@ -716,12 +764,16 @@ def find_one_session(
         logger.warning(
             "no matching rows for session %s "
             "(filters: model LIKE %s, status=200, error IS NULL, privacy_mode=%s)",
-            session_id, model_like, privacy_mode,
+            session_id,
+            model_like,
+            privacy_mode,
         )
         return []
     logger.info(
         "found session %s: %d rows, %d subagent, in %.1fs",
-        session_id, rows[0]["req_count"], rows[0]["subagent_reqs"],
+        session_id,
+        rows[0]["req_count"],
+        rows[0]["subagent_reqs"],
         time.time() - t,
     )
     return rows
@@ -757,7 +809,7 @@ SELECT
    AND privacy_mode = %(privacy)s
    AND ({SECURITY_MONITOR_FILTER_SQL})
  ORDER BY timestamp
-"""
+"""  # noqa: S608
 
 
 # ---------------------------------------------------------------------------
@@ -799,7 +851,7 @@ def _parse_cli_tuple(s: str | None) -> tuple[int, int, int] | None:
 
 def _hash_lcp(a: list, b: list) -> int:
     n = 0
-    for x, y in zip(a, b):
+    for x, y in zip(a, b, strict=False):
         if x == y:
             n += 1
         else:
@@ -818,16 +870,16 @@ def is_dynamic_workflow_bug(rows: list[dict], min_peak: int) -> bool:
     main = [r for r in rows if not r.get("subagent_label")]
     trajs: list[list] = []  # [head_hash_ids, [(start_s, dur_s), ...]]
     for r in main:
-        H = r.get("hash_ids") or []
-        if not H:
+        hash_ids = r.get("hash_ids") or []
+        if not hash_ids:
             continue
         t = r.get("t_sec") or 0.0
         dur = (r.get("duration_ms") or 0) / 1000.0
         best, bi = -1, -1
         for i, (head, _) in enumerate(trajs):
-            lcp = _hash_lcp(head, H)
-            # H extends this trajectory if the trajectory's head is a (near-)
-            # prefix of H: at least one block matches AND at most the trailing
+            lcp = _hash_lcp(head, hash_ids)
+            # hash_ids extends this trajectory if the trajectory's head is a (near-)
+            # prefix of hash_ids: at least one block matches AND at most the trailing
             # _DWBUG_TAIL_TOLERANCE blocks (the per-turn ephemeral footer) of
             # the head diverge. max(1, ...) keeps the tail tolerance from
             # collapsing the threshold below 1 for short heads (which would
@@ -836,17 +888,13 @@ def is_dynamic_workflow_bug(rows: list[dict], min_peak: int) -> bool:
             if lcp >= need and lcp > best:
                 best, bi = lcp, i
         if bi >= 0:
-            trajs[bi][0] = H
+            trajs[bi][0] = hash_ids
             trajs[bi][1].append((t, dur))
         else:
-            trajs.append([H, [(t, dur)]])
+            trajs.append([hash_ids, [(t, dur)]])
     # Only multi-turn trajectories (>=2 turns) count; single-shot utility
     # calls are not interleaved subagents.
-    spans = [
-        (min(s for s, _ in rr), max(s + d for s, d in rr))
-        for _, rr in trajs
-        if len(rr) >= 2
-    ]
+    spans = [(min(s for s, _ in rr), max(s + d for s, d in rr)) for _, rr in trajs if len(rr) >= 2]
     if not spans:
         return False
     events: list[tuple[float, int]] = []
@@ -864,7 +912,7 @@ def is_dynamic_workflow_bug(rows: list[dict], min_peak: int) -> bool:
 
 
 def fetch_session_rows(
-    conn, session_id: str, privacy_mode: str, model_like: str
+    conn: psycopg.Connection, session_id: str, privacy_mode: str, model_like: str
 ) -> list[dict]:
     """Fetch all filtered rows for a session (ordered by timestamp)."""
     with conn.cursor(row_factory=dict_row) as cur:
@@ -917,9 +965,7 @@ def main() -> int:
     with psycopg.connect(url) as conn:
         logger.info("connected")
         if args.session_id:
-            sessions = find_one_session(
-                conn, args.session_id, args.privacy_mode, model_like
-            )
+            sessions = find_one_session(conn, args.session_id, args.privacy_mode, model_like)
         else:
             sessions = find_sessions(conn, args, model_like)
 
@@ -929,8 +975,13 @@ def main() -> int:
             peak_str = f"  peak_par={peak}" if peak is not None else ""
             logger.info(
                 "    %s  reqs=%5d  sub=%5d  span=%5.1fh  in=%10s  out=%10s%s",
-                s["session_id"], s["req_count"], s["subagent_reqs"],
-                s["span_sec"] / 3600, s["total_in"], s["total_out"], peak_str,
+                s["session_id"],
+                s["req_count"],
+                s["subagent_reqs"],
+                s["span_sec"] / 3600,
+                s["total_in"],
+                s["total_out"],
+                peak_str,
             )
         if len(sessions) > 5:
             logger.info("    ... (%d more)", len(sessions) - 5)
@@ -946,7 +997,7 @@ def main() -> int:
         args.out.mkdir(parents=True, exist_ok=True)
         logger.info("dumping %d session(s) to %s/", len(sessions), args.out)
         manifest: dict = {
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "filters": {
                 "migration_floor": SUBAGENT_MIGRATION_TS,
                 "until": args.until,
@@ -988,27 +1039,37 @@ def main() -> int:
                 logger.info(
                     "[%4d/%d] %s  EXCLUDED (dynamic-workflow bug: CLI<2.1.174 + "
                     ">=%d concurrent unlabeled trajectories)",
-                    i, len(sessions), sid, args.dwbug_min_peak,
+                    i,
+                    len(sessions),
+                    sid,
+                    args.dwbug_min_peak,
                 )
                 continue
             n_rows = write_session_rows(rows, out_path)
             total_rows += n_rows
-            manifest["sessions"].append({
-                "session_id": sid,
-                "file": fname,
-                "request_count_filtered": n_rows,
-                "request_count_raw": s["req_count"],
-                "subagent_reqs": s["subagent_reqs"],
-                "distinct_models": s["distinct_models"],
-                "total_input_tokens": s["total_in"],
-                "total_output_tokens": s["total_out"],
-                "first_ts": s["first_ts"].isoformat(),
-                "last_ts": s["last_ts"].isoformat(),
-                "span_sec": s["span_sec"],
-            })
+            manifest["sessions"].append(
+                {
+                    "session_id": sid,
+                    "file": fname,
+                    "request_count_filtered": n_rows,
+                    "request_count_raw": s["req_count"],
+                    "subagent_reqs": s["subagent_reqs"],
+                    "distinct_models": s["distinct_models"],
+                    "total_input_tokens": s["total_in"],
+                    "total_output_tokens": s["total_out"],
+                    "first_ts": s["first_ts"].isoformat(),
+                    "last_ts": s["last_ts"].isoformat(),
+                    "span_sec": s["span_sec"],
+                }
+            )
             logger.info(
                 "[%4d/%d] %s  rows=%5d  (%4.1fs)  -> %s",
-                i, len(sessions), sid, n_rows, time.time() - t_dump, out_path,
+                i,
+                len(sessions),
+                sid,
+                n_rows,
+                time.time() - t_dump,
+                out_path,
             )
 
         manifest_path = args.out / "manifest.json"
@@ -1019,11 +1080,14 @@ def main() -> int:
             logger.info(
                 "dynamic-workflow-bug filter: excluded %d session(s) "
                 "(CLI<2.1.174 + >=%d concurrent unlabeled trajectories)",
-                n_excluded_dwbug, args.dwbug_min_peak,
+                n_excluded_dwbug,
+                args.dwbug_min_peak,
             )
         logger.info(
             "done. %d session(s) written, %d total rows, in %.1fs",
-            len(sessions) - n_excluded_dwbug, total_rows, time.time() - t0,
+            len(sessions) - n_excluded_dwbug,
+            total_rows,
+            time.time() - t0,
         )
 
     return 0

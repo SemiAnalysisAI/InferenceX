@@ -23,7 +23,7 @@ def api(
 ) -> Any:
     """Call the GitHub REST API and return decoded JSON."""
     query = f"?{urllib.parse.urlencode(params)}" if params else ""
-    request = urllib.request.Request(
+    request = urllib.request.Request(  # noqa: S310
         f"{API_BASE}/repos/{repo}{path}{query}",
         headers={
             "Accept": "application/vnd.github+json",
@@ -35,7 +35,7 @@ def api(
         data=json.dumps(data).encode("utf-8") if data is not None else None,
     )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
             body = response.read().decode("utf-8")
             return None if method == "DELETE" and not body else json.loads(body)
     except urllib.error.HTTPError as exc:
