@@ -19,6 +19,7 @@ SQUASH_DIR="/data/home/sa-gha-runner/squash"
 # it is read-only from the job's point of view. Anything not in STAGED_MODELS is
 # downloaded into WRITABLE_MODELS_DIR (shared Lustre) by the single-node scripts.
 MODEL_ROOT="/scratch/models"
+SHARED_MODEL_ROOT="/data/models"
 WRITABLE_MODELS_DIR="/data/home/sa-gha-runner/models"
 
 # Official power (dcgm-power) runs use a separate, pinned producer; CI derives
@@ -430,15 +431,23 @@ done
 find . -name '.nfs*' -delete 2>/dev/null || true
 
 else
-    # HF_HUB_CACHE is set to help with dataset download inside the container
-    # for eval jobs.
-    export HF_HUB_CACHE="$HOME/.cache/huggingface"
+    # AgentX trace datasets need a writable persistent cache. Keep the host and
+    # container paths separate so the cache remains valid with
+    # --no-container-mount-home.
+    HF_CACHE_HOST_DIR="${B300_HF_CACHE_HOST_DIR:-$HOME/.cache/huggingface}"
+    HF_CACHE_CONTAINER_DIR="${B300_HF_CACHE_CONTAINER_DIR:-/hf_hub_cache}"
+    mkdir -p "$HF_CACHE_HOST_DIR/hub" "$HF_CACHE_HOST_DIR/xet"
+    export HF_HOME="$HF_CACHE_CONTAINER_DIR"
+    export HF_HUB_CACHE="$HF_CACHE_CONTAINER_DIR/hub"
+    export HF_XET_CACHE="$HF_CACHE_CONTAINER_DIR/xet"
 
     # MODEL stays the HF id for the client; MODEL_PATH is where the server reads
     # weights. Only the root holding MODEL_PATH is mounted -- mounting both roots
     # makes pyxis fail whenever the unused one is absent on the node.
     MODEL_BASENAME="${MODEL##*/}"
-    if [[ " ${STAGED_MODELS[*]} " == *" ${MODEL_BASENAME} "* ]]; then
+    if [[ "$MODEL_BASENAME" == "DeepSeek-V4-Pro-0813" ]]; then
+        MODEL_MOUNT_DIR="$SHARED_MODEL_ROOT"
+    elif [[ " ${STAGED_MODELS[*]} " == *" ${MODEL_BASENAME} "* ]]; then
         MODEL_MOUNT_DIR="$MODEL_ROOT"
     else
         MODEL_MOUNT_DIR="$WRITABLE_MODELS_DIR"
@@ -447,7 +456,7 @@ else
     export MODEL_PATH="${MODEL_MOUNT_DIR}/${MODEL_BASENAME}"
 
     SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" || "$SPEC_DECODING" == "draft_model" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b300_sglang.sh); fall back to
     # the untagged historical name for scripts that haven't been retagged yet.
     BENCH_BASE="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_b300"
@@ -517,6 +526,7 @@ else
     CONTAINER_MOUNTS=(
         "$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR"
         "$MODEL_MOUNT_DIR:$MODEL_MOUNT_DIR"
+        "$HF_CACHE_HOST_DIR:$HF_CACHE_CONTAINER_DIR"
     )
     if [[ "$MODEL_PREFIX" == "kimik3" && "$FRAMEWORK" == "vllm" && "${IS_AGENTIC:-0}" == "1" ]]; then
         # The pre-staged target is read-only; DSpark needs the writable,
