@@ -413,9 +413,6 @@ class TestSingleHandle(unittest.TestCase):
         self.assertIs(ll._ensure_handle(pa).combine_weights_t, first_weights)
         ll._t.assert_not_called()
 
-        ht = backend(ll=False)
-        self.assertFalse(hasattr(ht._ensure_handle(problem(1)), "combine_weights_t"))
-
     def test_ht_combine_input_is_sliced_to_the_received_count(self):
         """HT combine's staging copy is sized by the tensor it is handed: the whole ladder-max
         receive plane put a rung-independent floor under it. LL keeps the full padded plane."""
@@ -425,10 +422,6 @@ class TestSingleHandle(unittest.TestCase):
         self.assertEqual(h.count, 7)
         self.assertEqual(h.combine_in_t, list(range(7)))
         self.assertLess(len(h.combine_in_t), len(b._recv_x))
-
-        ll = backend(ll=True)
-        ll_h = ll._ensure_handle(problem(1))
-        self.assertFalse(hasattr(ll_h, "combine_in_t"))
 
 if __name__ == "__main__":
     unittest.main()

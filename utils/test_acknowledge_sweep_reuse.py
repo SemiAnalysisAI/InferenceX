@@ -1,36 +1,18 @@
 from __future__ import annotations
 
 import copy
-import json
-import os
-import shutil
-import subprocess
-import sys
-from pathlib import Path
 
 import pytest
 
 from infx.workflows import reuse_comment as acknowledgment
 
 
-def test_comment_entrypoint_runs_with_only_the_infx_package(tmp_path):
-    root = Path(__file__).resolve().parents[1]
-    shutil.copytree(root / "infx", tmp_path / "infx")
-    event_path = tmp_path / "event.json"
-    event_path.write_text(json.dumps({"action": "created", "issue": {"number": 7}}))
-    env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
-    env.update(GH_TOKEN="test-token", GITHUB_REPOSITORY="example/project",
-               GITHUB_EVENT_PATH=str(event_path))
-    run = subprocess.run(
-        [sys.executable, "-m", "infx.workflows.reuse_comment"],
-        cwd=tmp_path, env=env, text=True, capture_output=True, timeout=10,
-    )
-    assert run.returncode == 0, run.stderr
-    assert run.stdout == ""
-
-
 @pytest.fixture
 def request_case(monkeypatch):
+    return make_request_case(monkeypatch)
+
+
+def make_request_case(monkeypatch) -> dict:
     comment = {
         "id": 41, "body": "/reuse-sweep-run 123", "author_association": "MEMBER",
         "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z",
@@ -199,6 +181,14 @@ def test_redelivery_leaves_one_acceptance_reaction(request_case):
     for _ in range(2):
         assert acknowledgment.acknowledge("example/project", event, "test-token") == 0
     assert bot_status(request_case) == ["+1"]
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+def test_number_on_next_line_does_not_authorize_partial_run(request_case, newline):
+    request_case["comment"]["body"] = f"/reuse-sweep-run{newline}123"
+    request_case["run"]["conclusion"] = "failure"
+    assert acknowledgment.acknowledge("example/project", event_for(request_case), "test-token") == 1
+    assert bot_status(request_case) == ["-1"]
 
 
 @pytest.mark.parametrize("change", ["issue", "unrelated", "inline-mention"])

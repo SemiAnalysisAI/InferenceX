@@ -6,7 +6,6 @@ import math
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-
 # The unprefixed joules_per_* fields silently switched from role-local to
 # whole-deployment energy when multinode aggregation landed, and the values
 # alone cannot distinguish the two. Stamp the semantics so consumers fail

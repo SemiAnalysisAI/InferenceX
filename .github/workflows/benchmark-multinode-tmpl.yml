@@ -111,6 +111,16 @@ on:
         type: string
 
 env:
+  PORT: '8888'
+  INFMAX_CONTAINER_WORKSPACE: '/workspace'
+  DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE: '1'
+  MODEL_DOWNLOAD_LOCK_TIMEOUT: '21600'
+  ENROOT_IMPORT_TIME_LIMIT: '120'
+  SALLOC_TIME_LIMIT: '480'
+  GPU_MONITOR_INTERVAL: '1'
+  GPU_METRICS_CSV: 'gpu_metrics.csv'
+  KEEP_LOGS: '0'
+  IS_MULTINODE: 'true'
   RANDOM_RANGE_RATIO: 0.8
   # Day-zero models resolved via hf: ids download from the Hub inside the
   # slurm job (srtctl pre-download + dynamo hub fetch). Anonymous requests
@@ -138,7 +148,7 @@ env:
   EVAL_SUITE: ${{ inputs.eval-suite }}
   EVAL_CONC: ${{ inputs.eval-conc }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
-  SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
+  SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode || 'agentic' }}
   # GPU/multi-node runners lack Docker for SWE-bench scoring.
   SWEBENCH_USE_MODAL: 'true'
   MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
@@ -305,7 +315,23 @@ jobs:
           eval_artifact_conc="$(python3 -c 'import hashlib,os; print(hashlib.sha256(os.environ["CONC_LIST"].encode()).hexdigest()[:12])')"
           echo "EVAL_ARTIFACT_CONC=${eval_artifact_conc}" >> "$GITHUB_ENV"
 
+          # Historical measured revisions own their configuration in the launchers.
+          if [[ -f benchmarks/runtime_settings.sh ]]; then
+            source benchmarks/runtime_settings.sh
+          fi
+          if [[ -f runners/runtime_settings.sh ]]; then
+            source runners/runtime_settings.sh
+          fi
+          # Historical measured revisions own their configuration in the launchers.
+          if [[ -f benchmarks/multi_node/runtime_settings.sh ]]; then
+            source benchmarks/multi_node/runtime_settings.sh
+          fi
           export ${{ join(fromJSON(inputs.config).prefill.additional-settings, ' ') }} ${{ join(fromJSON(inputs.config).decode.additional-settings, ' ') }}
+          # Resolve the workflow's documented automatic eval-concurrency selection.
+          if [[ -z "$EVAL_CONC" ]]; then
+            EVAL_CONC=$(python3 -c 'import os; print(max(map(int, os.environ["CONC_LIST"].split())))')
+          fi
+          export EVAL_CONC
           export IS_MULTINODE=true
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
           if [ "${{ inputs.eval-only }}" = "true" ]; then
@@ -336,10 +362,8 @@ jobs:
               fi
             done
           else
-            # Check if at least one result file was created
-            if ls ${RESULT_FILENAME}_*.json 1> /dev/null 2>&1; then
-              echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
-              echo "Found result files: $(ls ${RESULT_FILENAME}_*.json)"
+            if ls -- "${RESULT_FILENAME}"_*.json 1> /dev/null 2>&1; then
+              printf 'Found result file: %s\n' "${RESULT_FILENAME}"_*.json
             else
               echo "Run failed: No benchmark result files found for ${RESULT_FILENAME}_*.json" >&2
               exit 1
