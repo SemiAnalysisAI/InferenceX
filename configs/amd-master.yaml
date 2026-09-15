@@ -329,8 +329,12 @@ qwen3.5-fp4-mi355x-sglang-agentic-mtp:
       - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20] }
       - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [20, 24, 28, 32, 36, 40] }
 
-# Quark MXFP4 MoE checkpoint, with BF16 PLE and no speculative decoding.
-qwen3.8next-fp4-mi355x-sglang-agentic:
+# Quark MXFP4 MoE checkpoint with BF16 PLE, SGLang native NEXTN MTP
+# (3 steps, eagle-topk 1, 4 draft tokens) pinned to the golden AL 2.32
+# (golden_al_distribution/qwen3.8next_mtp.yaml, thinking_on, K=3). Spec-decode
+# only, per the AgentX policy; same shape as the B200/B300/H200 qwen3.8next
+# SGLang AgentX arms.
+qwen3.8next-fp4-mi355x-sglang-agentic-mtp:
   image: lmsysorg/sglang-rocm:qwen38flashnext@sha256:f2e3928cd5be1d7bf9bfb783d57e9f5b35baa8e09d4248e5fc44da43c85c35e4
   model: amd/Qwen3.8-Flash-Next-Quark-MXFP4
   model-prefix: qwen3.8next
@@ -342,7 +346,7 @@ qwen3.8next-fp4-mi355x-sglang-agentic:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 4, 8, 12, 16] }
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16] }
 
 qwen3.5-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260523

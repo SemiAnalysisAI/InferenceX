@@ -418,7 +418,7 @@ def test_eval_only_acceptance_rewrite_allows_non_speculative_recipe(
     [
         ("deepseek-ai/DeepSeek-V4.1-Flash", "dsv41flash", "/ix", "/it-share/hf-hub-cache/", "vllm", "mtp"),
         ("deepseek-ai/DeepSeek-V4-Pro", "dsv4", "/workspace", "/it-share/hf-hub-cache/", "vllm", "mtp"),
-        ("amd/Qwen3.8-Flash-Next-Quark-MXFP4", "qwen3.8next", "/ix", "/var/lib/hf-hub-cache/", "sglang", "none"),
+        ("amd/Qwen3.8-Flash-Next-Quark-MXFP4", "qwen3.8next", "/ix", "/var/lib/hf-hub-cache/", "sglang", "mtp"),
     ],
 )
 def test_mi355x_agentic_model_mount_and_routing(
@@ -501,7 +501,7 @@ def test_mi355x_import_executes_scoped_digest_uri(
         **os.environ,
         "IS_MULTINODE": "false", "MODEL": model, "FRAMEWORK": framework,
         "EXP_NAME": "qwen3.8next_tp8_conc1", "PRECISION": "fp4",
-        "SPEC_DECODING": "none", "SCENARIO_SUBDIR": "agentic/", "TP": "8",
+        "SPEC_DECODING": "mtp", "SCENARIO_SUBDIR": "agentic/", "TP": "8",
         "RUNNER_NAME": "mi355x-amds_01", "IMAGE": image,
         "GITHUB_WORKSPACE": str(REPO_ROOT), "HF_HUB_CACHE": "/mnt/hf_hub_cache/",
         "RESULT_DIR": "/workspace/results", "CAPTURE": str(capture),

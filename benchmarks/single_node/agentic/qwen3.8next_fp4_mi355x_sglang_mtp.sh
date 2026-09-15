@@ -2,12 +2,18 @@
 set -euo pipefail
 set -x
 
-# Qwen3.8-Flash-Next Quark MXFP4 AgentX on MI355X.
-# Based on the upstream MI355X balanced FP8 recipe:
+# Qwen3.8-Flash-Next Quark MXFP4 AgentX on MI355X with SGLang native NEXTN
+# MTP. Based on the upstream MI355X balanced FP8 recipe plus the cookbook's
+# "NEXTN / MTP" speculative card (--speculative-algorithm NEXTN, 3 steps,
+# eagle-topk 1, 4 draft tokens), the same shape the B200/B300/H200
+# qwen3.8next SGLang AgentX arms run:
 # https://docs.sglang.io/cookbook/autoregressive/Qwen/Qwen3.8-Flash-Next
 # Checkpoint: https://huggingface.co/amd/Qwen3.8-Flash-Next-Quark-MXFP4
-# Quantization is read from the checkpoint (Quark MXFP4 MoE; BF16 PLE).
-# This baseline uses single-token prediction, not synthetic MTP acceptance.
+# Quantization is read from the checkpoint (Quark MXFP4 MoE; BF16 PLE). The
+# model ships its own multi-step-trained MTP head, so NEXTN needs no external
+# drafter. Per the AgentX policy (MODELS.md) agentic recipes run with
+# speculative decoding only: throughput pins acceptance to the committed
+# golden AL, evals retain real target-model verification.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -71,6 +77,18 @@ export AITER_FLYDSL_FORCE=1
 export SGLANG_MAMBA_SSM_DTYPE=bfloat16
 export SGLANG_TIMEOUT_KEEP_ALIVE=1800
 
+if [ "${EVAL_ONLY:-false}" != "true" ]; then
+    # golden_al_distribution/qwen3.8next_mtp.yaml:
+    # qwen3.8-flash-next-fp8.thinking_on[3] = 2.32. --speculative-num-steps 3
+    # with 4 draft tokens is 3 speculative tokens per verification step, i.e.
+    # the MTP=3 cell; AgentX replays run with thinking on. Same value as the
+    # B200/B300/H200 qwen3.8next SGLang arms. EVAL_ONLY leaves simulated
+    # acceptance off so evals score real verification.
+    export SGLANG_SIMULATE_ACC_LEN=2.32
+    export SGLANG_SIMULATE_ACC_METHOD=match-expected
+    export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
+fi
+
 SGLANG_CMD=(
     python3 -m sglang.launch_server
     --model-path "$MODEL_PATH"
@@ -85,10 +103,24 @@ SGLANG_CMD=(
     --kv-cache-dtype auto
     --chunked-prefill-size 16384
     --watchdog-timeout 1200
-    --mem-fraction-static 0.9
+    # MTP: leave non-static headroom for the NEXTN draft head's verification
+    # batch and AITER spec-decode workspaces. The cookbook STP cell runs 0.9;
+    # the B300 NVFP4 MTP sibling runs 0.80 and the H200 FP8 one 0.85. The
+    # ~126 GiB checkpoint is ~16 GB/GPU across TP8 on 288 GB parts, so 0.85
+    # still leaves a ~229 GB/GPU static share for weights plus KV.
+    --mem-fraction-static 0.85
     --model-loader-extra-config '{"enable_multithread_load": true}'
+    # NEXTN silently resets --max-running-requests to 48 when it is unset, so
+    # this must stay explicit and sized to the AgentX concurrency.
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    # Decode-specific spelling as the MI355X Qwen3.5/DeepSeek-V4/GLM-5.2 SGLang
+    # MTP arms use; recent SGLang splits --cuda-graph-max-bs into
+    # decode/prefill variants and rejects the old prefix as ambiguous.
+    --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
+    --speculative-algorithm NEXTN
+    --speculative-num-steps 3
+    --speculative-eagle-topk 1
+    --speculative-num-draft-tokens 4
     --stream-interval 50
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
     "${TOKENIZER_ARGS[@]}"
