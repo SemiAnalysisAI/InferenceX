@@ -80,11 +80,17 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument(
-        "--in-dir", "-i", type=Path, required=True,
+        "--in-dir",
+        "-i",
+        type=Path,
+        required=True,
         help="Directory containing <session_id>.jsonl files (the output of sample_proxy_traces.py).",
     )
     p.add_argument(
-        "--out-dir", "-o", type=Path, required=True,
+        "--out-dir",
+        "-o",
+        type=Path,
+        required=True,
         help="Directory to write <session_id>.json weka traces into.",
     )
     return p.parse_args()
@@ -422,9 +428,7 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
                 items = id_groups[key]
                 # Claude Code agent-id groups use the flat 'Subagent'
                 # label since per-request system-prompt labels drift.
-                use_label = (
-                    "Subagent" if row.get("agent_id") else row["subagent_label"]
-                )
+                use_label = "Subagent" if row.get("agent_id") else row["subagent_label"]
                 instance_count[use_label] = instance_count.get(use_label, 0) + 1
                 entry = build_subagent_entry(
                     use_label, instance_count[use_label], items, hash_map
@@ -439,9 +443,11 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
         # Same algorithm as before: collect consecutive same-label rows
         # bounded by main-agent turns, group by label.
         stretch_rows: list[tuple[dict, float | None]] = []
-        while (i < len(rows)
-               and rows[i].get("subagent_label") is not None
-               and _id_group_key(rows[i]) is None):
+        while (
+            i < len(rows)
+            and rows[i].get("subagent_label") is not None
+            and _id_group_key(rows[i]) is None
+        ):
             stretch_rows.append((rows[i], think_times[i]))
             i += 1
         groups: dict[str, list[tuple[dict, float | None]]] = {}
@@ -449,9 +455,7 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
             groups.setdefault(r["subagent_label"], []).append((r, tt))
         for label, items in groups.items():
             instance_count[label] = instance_count.get(label, 0) + 1
-            entry = build_subagent_entry(
-                label, instance_count[label], items, hash_map
-            )
+            entry = build_subagent_entry(label, instance_count[label], items, hash_map)
             out_requests.append(entry)
             models_seen.update(entry["models"])
 

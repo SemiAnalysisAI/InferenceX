@@ -220,7 +220,10 @@ def main():
             "conc": int(r["conc"]),
         }
 
-        print(f"\nQuery params: {json.dumps({k: str(v) for k, v in query_params.items()}, indent=2)}", file=sys.stderr)
+        print(
+            f"\nQuery params: {json.dumps({k: str(v) for k, v in query_params.items()}, indent=2)}",
+            file=sys.stderr,
+        )
 
         with conn.cursor() as cur:
             cur.execute(BASELINE_QUERY, query_params)
@@ -229,11 +232,16 @@ def main():
         baseline_metrics = None
         if row:
             matched += 1
-            baseline_metrics = row[0] if isinstance(row[0], dict) else json.loads(row[0])
-            print(f"  -> Matched DB model={row[1]}, tput={baseline_metrics.get('tput_per_gpu')}", file=sys.stderr)
+            baseline_metrics = (
+                row[0] if isinstance(row[0], dict) else json.loads(row[0])
+            )
+            print(
+                f"  -> Matched DB model={row[1]}, tput={baseline_metrics.get('tput_per_gpu')}",
+                file=sys.stderr,
+            )
         else:
             unmatched += 1
-            print(f"  -> No baseline found", file=sys.stderr)
+            print("  -> No baseline found", file=sys.stderr)
 
         is_multinode = r.get("is_multinode", False)
         if is_multinode:
@@ -263,9 +271,21 @@ def main():
 
     conn.close()
 
-    print(f"\nSummary: {matched} matched, {unmatched} unmatched out of {len(results)} results", file=sys.stderr)
+    print(
+        f"\nSummary: {matched} matched, {unmatched} unmatched out of {len(results)} results",
+        file=sys.stderr,
+    )
 
-    rows.sort(key=lambda x: (x["model"], x["hw"], x["framework"], x["isl"], x["osl"], x["conc"]))
+    rows.sort(
+        key=lambda x: (
+            x["model"],
+            x["hw"],
+            x["framework"],
+            x["isl"],
+            x["osl"],
+            x["conc"],
+        )
+    )
 
     single_node = [r for r in rows if "P(" not in r["parallelism"]]
     multi_node = [r for r in rows if "P(" in r["parallelism"]]
@@ -277,8 +297,17 @@ def main():
 
     if single_node:
         headers = [
-            "Model", "Served Model", "Hardware", "Framework", "Precision",
-            "ISL", "OSL", "TP", "EP", "DP Attention", "Conc",
+            "Model",
+            "Served Model",
+            "Hardware",
+            "Framework",
+            "Precision",
+            "ISL",
+            "OSL",
+            "TP",
+            "EP",
+            "DP Attention",
+            "Conc",
         ] + metric_headers
 
         table_rows = []
@@ -303,8 +332,15 @@ def main():
             for key, _, higher_is_better, fmt in METRIC_DEFS:
                 val = get_metric_value(row["result"], key)
                 metric_cols.append(format_value(val, key, fmt))
-                metric_cols.append(compute_metric_delta(
-                    row["result"], row["baseline_metrics"], key, higher_is_better, fmt))
+                metric_cols.append(
+                    compute_metric_delta(
+                        row["result"],
+                        row["baseline_metrics"],
+                        key,
+                        higher_is_better,
+                        fmt,
+                    )
+                )
             table_rows.append(config_cols + metric_cols)
 
         print("## Single-Node Comparison vs. Most Recent\n")
@@ -313,15 +349,26 @@ def main():
 
     if multi_node:
         headers = [
-            "Model", "Served Model", "Hardware", "Framework", "Precision",
-            "ISL", "OSL", "Prefill TP", "Prefill EP", "Decode TP", "Decode EP",
+            "Model",
+            "Served Model",
+            "Hardware",
+            "Framework",
+            "Precision",
+            "ISL",
+            "OSL",
+            "Prefill TP",
+            "Prefill EP",
+            "Decode TP",
+            "Decode EP",
             "Conc",
         ] + metric_headers
 
         table_rows = []
         for row in multi_node:
             # Parse P(tp4/ep4) D(tp8/ep8)
-            m = re.match(r"P\(tp(\d+)/ep(\d+)\) D\(tp(\d+)/ep(\d+)\)", row["parallelism"])
+            m = re.match(
+                r"P\(tp(\d+)/ep(\d+)\) D\(tp(\d+)/ep(\d+)\)", row["parallelism"]
+            )
             config_cols = [
                 row["model"],
                 row["served_model"],
@@ -340,8 +387,15 @@ def main():
             for key, _, higher_is_better, fmt in METRIC_DEFS:
                 val = get_metric_value(row["result"], key)
                 metric_cols.append(format_value(val, key, fmt))
-                metric_cols.append(compute_metric_delta(
-                    row["result"], row["baseline_metrics"], key, higher_is_better, fmt))
+                metric_cols.append(
+                    compute_metric_delta(
+                        row["result"],
+                        row["baseline_metrics"],
+                        key,
+                        higher_is_better,
+                        fmt,
+                    )
+                )
             table_rows.append(config_cols + metric_cols)
 
         print("## Multi-Node Comparison vs. Most Recent\n")

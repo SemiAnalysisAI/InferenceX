@@ -1,0 +1,26 @@
+# Ruff configuration for the infx package. Enforced by
+# .github/workflows/lint-python.yml on every pull request that touches infx/.
+#
+# Local usage (from the repository root):
+#   uvx ruff check infx          # lint (add --fix to apply safe autofixes)
+#   uvx ruff format infx         # reformat (add --check to only verify)
+
+target-version = "py312"
+line-length = 88
+
+[lint]
+# E/W: pycodestyle, F: pyflakes, I: isort. Deliberately conservative; widen
+# the selection only alongside a repo-wide autofix so CI stays green.
+select = ["E", "W", "F", "I"]
+# Line length is owned by the formatter. Anything it cannot wrap (long
+# string literals, URLs in comments) is not worth a manual break.
+ignore = ["E501"]
+
+[lint.isort]
+known-first-party = ["infx"]
+# Keep `x as x` re-exports inside the grouped import instead of one line each.
+combine-as-imports = true
+
+[format]
+quote-style = "double"
+docstring-code-format = true

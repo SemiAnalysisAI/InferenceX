@@ -40,7 +40,6 @@ def _patch(path: str, replacements: list[tuple[str, str, str]], label: str) -> b
     return True
 
 
-
 def _patch_swerex_environment(path: str) -> bool:
     return _patch(
         path,
@@ -57,10 +56,11 @@ def _patch_swerex_environment(path: str) -> bool:
         "swebench-agentic",
     )
 
+
 def main() -> int:
+    import minisweagent.environments.extra.swerex_modal as mini_rex_modal
     import minisweagent.run.benchmarks.swebench as mini_swebench
     import swerex.deployment.modal as rex_modal
-    import minisweagent.environments.extra.swerex_modal as mini_rex_modal
 
     mini_ok = _patch(
         mini_swebench.__file__,
@@ -119,7 +119,6 @@ def main() -> int:
         "swebench-agentic",
     )
     mini_env_ok = _patch_swerex_environment(mini_rex_modal.__file__)
-
 
     app_name = os.environ.get("SWEBENCH_MODAL_APP_NAME", "infx-evals-swe")
     rex_ok = _patch(
