@@ -1,5 +1,5 @@
 schema: 2
-name: "kimik3-vllm-agg-b200-tp8pp2-mooncake-c14-agentic"
+name: "kimik3-vllm-agg-b200-tp8pp2-mooncake-c32-agentic"
 
 model:
   path: "kimik3"
@@ -89,11 +89,11 @@ roles:
       tool-call-parser: kimi_k3
       reasoning-parser: kimi_k3
       language-model-only: true
-      max-num-seqs: 28
+      max-num-seqs: 64
       max-num-batched-tokens: 8192
-      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"method":"dspark","attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic"}'
+      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":4,"method":"dspark","attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic"}'
       prefix-match-unit: 128
-      compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,16,24,40,56,64,80,104,128,256,512,1024,2048,4096,8192]}'
+      compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,7,18,34,53,64,75,100,128,256,512,1024,2048,4096,8192]}'
 
 services:
   - name: mooncake-master
@@ -127,7 +127,7 @@ telemetry:
 
 benchmark:
   type: custom
-  concurrencies: [14]
+  concurrencies: [32]
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"

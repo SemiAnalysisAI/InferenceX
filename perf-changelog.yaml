@@ -7807,3 +7807,16 @@
     - "Use FLASH_ATTN for the target model, select the Humming MXFP8 dense-linear backend, and enable Marlin atomic reduction for the MXFP8 MoE path."
     - "Use 0.95 GPU memory utilization for resident serving while retaining 0.90 for Mooncake DRAM offload, and remove the Mooncake concurrency-14 point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3108
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the B200 Kimi-K3 sweep from vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-728d3ad to the stock upstream nightly vllm/vllm-openai:nightly-2671fedfc7ae604761990603fc736c0c4f21de57. The pinned build came from a vLLM fork branch; every fix this configuration needed is now merged upstream (vllm-project/vllm#55924, #55472, #55745, #55499 and #54416), so the recipe runs on an unmodified upstream image with no patching. The whole curve is re-measured on the new image."
+    - "Add concurrencies 32, 56, 72 and 80. The sweep stepped 24 -> 48 -> 96, so the throughput peak was bracketed but never measured. With the bf16 KDA state below, throughput keeps rising past the old c56 peak and tops out at c80; 32 fills the gap below the knee and 56/72/80 cover the plateau. All four recipes are copies of the c48 recipe differing only in name, max-num-seqs and concurrency, with draft depth 4 and the golden synthetic acceptance length 3.36 this config already injects."
+    - "将 B200 Kimi-K3 sweep 的镜像从 vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-728d3ad 切换到上游 stock nightly vllm/vllm-openai:nightly-2671fedfc7ae604761990603fc736c0c4f21de57。原先固定的构建来自 vLLM fork 分支；该配置所需的修复均已合入上游（vllm-project/vllm#55924、#55472、#55745、#55499 和 #54416），因此可在未经修改的上游镜像上运行，无需任何补丁。整条曲线将在新镜像上重新测量。"
+    - "新增并发 32、56、72 和 80。原 sweep 为 24 -> 48 -> 96，吞吐峰值被夹在中间却从未实测。启用下述 bf16 KDA state 后，吞吐持续超过原 c56 峰值并在 c80 达到顶点；32 补上拐点下方的空档，56/72/80 覆盖该平台段。四个 recipe 均为 c48 recipe 的副本，仅 name、max-num-seqs 和并发不同，草稿深度为 4，golden synthetic acceptance length 沿用该配置既有的 3.36。"
+    - "Set mamba-ssm-cache-dtype to bfloat16. vllm-project/vllm#56485 bumped the flashKDA tag so the kernel accepts a bf16 KDA checkpoint state, and kda_state_dtype resolves the auto default to float32, so this halves the recurrent state every K3 run has been carrying. The KDA group sets the allocator granularity for the whole model - the reported kv cache group sizes are [1536, 1536, 1536, 12288] with an LCM of 12288 - so halving that page should halve the block the allocator rounds to. Accuracy is upstream's: gsm8k 0.9659 on that PR."
+    - "将 mamba-ssm-cache-dtype 设为 bfloat16。vllm-project/vllm#56485 提升了 flashKDA 的 tag，使内核支持 bf16 的 KDA checkpoint state；而 kda_state_dtype 将 auto 默认解析为 float32，因此此项把此前所有 K3 运行携带的 recurrent state 减半。KDA 组决定整个模型的分配粒度——日志中的 kv cache group sizes 为 [1536, 1536, 1536, 12288]，LCM 为 12288——故该页减半应使分配器取整的块大小同步减半。精度沿用上游结果：该 PR 的 gsm8k 为 0.9659。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3087

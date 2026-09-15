@@ -3,14 +3,14 @@ name: "kimik3-vllm-agg-b200-tp8pp2-mooncake-c24-agentic"
 
 model:
   path: "kimik3"
-  container: "vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-728d3ad"
+  container: "vllm/vllm-openai:nightly-2671fedfc7ae604761990603fc736c0c4f21de57"
   precision: "fp4"
 
 identity:
   model:
     repo: "moonshotai/Kimi-K3"
   container:
-    image: "vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-728d3ad"
+    image: "vllm/vllm-openai:nightly-2671fedfc7ae604761990603fc736c0c4f21de57"
 
 dynamo:
   install: false
@@ -79,6 +79,7 @@ roles:
       no-enable-flashinfer-autotune: true
       max-model-len: 1048576
       kv-cache-dtype: fp8
+      mamba-ssm-cache-dtype: bfloat16
       kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
       attention-backend: TOKENSPEED_MLA
       attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
