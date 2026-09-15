@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from infx.results.power.native_multinode import record_begin, record_end, run
-from infx.results.power.single_node import integrate_power
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -85,9 +84,12 @@ def test_native_parse_failure_has_a_public_reason_and_retained_detail(tmp_path):
     ("clock_synchronized", False, "native_clock_not_synchronized"),
     ("lifecycle", "collecting", "native_collector_incomplete"),
     ("collection_end_unix", 2, "native_collection_window_mismatch"),
+    ("collection_start_unix", 10**310, "native_node_invalid"),
+    ("collection_end_unix", 10**310, "native_node_invalid"),
     ("job_id", "other-job", "native_run_identity_mismatch"),
     ("role", "prefill", "native_role_gpu_count_mismatch"),
     ("expected_num_nodes", 3, "native_node_topology_mismatch"),
+    ("expected_num_nodes", 10**100, "native_node_topology_mismatch"),
 ])
 def test_native_invalid_evidence_clears_stale_metrics_and_writes_audit(tmp_path, field, value, reason):
     root, bench, agg = _package(tmp_path)
@@ -135,9 +137,8 @@ def test_utc_context_replays_in_a_different_timezone(tmp_path):
 @pytest.mark.parametrize("clock_value, synchronized", [
     ("yes", True), ("true", True), ("no", False), ("false", False), ("", False),
 ])
-def test_native_supervisor_reaps_monitor_and_writes_completion(tmp_path, clock_value, synchronized):
-    binary = tmp_path / "bin"; binary.mkdir()
-    (binary / "python3").symlink_to(sys.executable)
+def test_native_supervisor_reaps_monitor_and_writes_completion(tmp_path, collector_bin, clock_value, synchronized):
+    binary = collector_bin
     fake = binary / "nvidia-smi"
     fake.write_text(f'''#!{sys.executable}
 import datetime, os, sys, time
@@ -219,10 +220,19 @@ def test_native_single_role_preserves_whole_fleet_and_role_metrics(tmp_path, rol
     assert json.loads((tmp_path / 'power_validation_result.json').read_text())['power_valid']
 
 
-def test_native_amd_abort_publishes_receipt_before_reaper_deadline(tmp_path):
+@pytest.fixture
+def collector_bin(tmp_path):
     binary = tmp_path / 'bin'
     binary.mkdir()
     (binary / 'python3').symlink_to(sys.executable)
+    sleep = binary / 'sleep'
+    sleep.write_text('#!/bin/sh\nexec /bin/sleep 0.01\n')
+    sleep.chmod(0o755)
+    return binary
+
+
+def test_native_amd_abort_publishes_receipt_before_reaper_deadline(tmp_path, collector_bin):
+    binary = collector_bin
     fake = binary / 'amd-smi'
     fake.write_text(f'''#!{sys.executable}
 import sys, time

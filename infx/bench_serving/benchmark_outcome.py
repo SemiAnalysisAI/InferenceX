@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Literal, TypedDict
 
-
 MAX_FAILURE_RATE = 0.05
 
 
@@ -18,8 +17,12 @@ class BenchmarkOutcome(TypedDict):
 
 def benchmark_outcome(requested: int, completed: int) -> BenchmarkOutcome:
     """Record the same five-percent gate before cleanup or artifact upload."""
-    if (type(requested) is not int or type(completed) is not int
-            or requested <= 0 or not 0 <= completed <= requested):
+    if (
+        type(requested) is not int
+        or type(completed) is not int
+        or requested <= 0
+        or not 0 <= completed <= requested
+    ):
         raise ValueError("Benchmark request counts must satisfy 0 <= completed <= requested > 0")
     failed = requested - completed
     return {

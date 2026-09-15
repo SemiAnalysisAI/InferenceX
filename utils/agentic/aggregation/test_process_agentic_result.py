@@ -23,7 +23,7 @@ from types import MappingProxyType
 
 import pytest
 
-from infx.results.agentic.request_metrics import compute_request_metrics
+from infx.results.agentic.request_metrics import compute_qps_stats, compute_request_metrics
 from infx.results.agentic import _gpu_shape
 from infx.results.agentic import (
     build_result,
@@ -871,7 +871,12 @@ def test_gpu_shape_preserves_parsing_and_validation_order(env, error_type, messa
         _gpu_shape(env)
 
 
-def test_processor_surfaces_request_accounting(tmp_path: Path):
+@pytest.mark.parametrize("error,category", [
+    ({"type": "HTTPStatusError", "message": "500 server error"}, "HTTPStatusError"),
+    (" \t\r\n", "unknown"),
+    ({"message": " \t\r\n"}, "unknown"),
+])
+def test_processor_surfaces_request_accounting(tmp_path: Path, error, category):
     result_dir = tmp_path / "results"
     artifact = result_dir / "aiperf_artifacts"
     artifact.mkdir(parents=True)
@@ -910,7 +915,7 @@ def test_processor_surfaces_request_accounting(tmp_path: Path):
         start_ns=3_000_000_000,
         end_ns=4_000_000_000,
     )
-    errored["error"] = {"type": "HTTPStatusError", "message": "500 server error"}
+    errored["error"] = error
 
     with open(artifact / "profile_export.jsonl", "w") as f:
         for record in (profiling, warmup, errored):
@@ -928,7 +933,7 @@ def test_processor_surfaces_request_accounting(tmp_path: Path):
         "records_dropped_total": 2,
         "records_warmup_dropped": 1,
         "records_error_dropped": 1,
-        "error_categories": {"HTTPStatusError": 1},
+        "error_categories": {category: 1},
     }
     assert agg["server_metrics"]["tokens"]["requests_completed"] == 1
     e2e_norm_intvty = agg["request_metrics"]["latency"]["e2e_norm_intvty"]
@@ -1920,3 +1925,30 @@ def test_processor_trace_cache_precedence_and_last_duplicate(tmp_path, cache_env
     expected = result["request_metrics"]["tokens"]["output_expected"]
     assert expected["mean"] == 23
     assert expected["std"] == 0
+
+
+@pytest.mark.parametrize("offsets,expected_mean,expected_p95,windows", [
+    ([0, 500_000_000, 1_000_000_000, 1_500_000_000, 2_000_000_000], 2, 2, 2),
+    ([0, 1_000_000_000, 1_000_000_000, 2_000_000_000], 1.5, 1.95, 2),
+    ([0, 250_000_000, 500_000_000], 6, None, 0),
+])
+def test_qps_windows_exclude_right_boundary_and_preserve_duplicates(offsets, expected_mean, expected_p95, windows):
+    records = [{"metadata": {"request_end_ns": 1_000_000_000 + offset}} for offset in reversed(offsets)]
+    flat, nested = compute_qps_stats(records)
+    assert nested["samples"] == windows
+    assert flat["mean_qps"] == pytest.approx(expected_mean)
+    if expected_p95 is None:
+        assert "p95_qps" not in flat
+    else:
+        assert flat["p95_qps"] == pytest.approx(expected_p95)
+
+
+@pytest.mark.parametrize("invalid_turn", [-1, -3, 2])
+def test_expected_output_tokens_ignore_out_of_range_trace_turns(invalid_turn):
+    records = [{"metadata": {"conversation_id": "root", "turn_index": index}}
+               for index in (0, 1, invalid_turn)]
+    traces = [{"id": "root", "requests": [{"type": "n", "out": 11},
+                                           {"type": "s", "out": 29}]}]
+    _, metrics = compute_request_metrics(records, traces=traces)
+    assert metrics["tokens"]["output_expected"]["mean"] == 20
+    assert metrics["tokens"]["output_expected"]["std"] == 9
