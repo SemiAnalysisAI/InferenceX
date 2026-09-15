@@ -1,20 +1,12 @@
 #!/usr/bin/env bash
-#
-# Extract the EPP, pd-sidecar, and Envoy binaries from their source
-# images into $LLMD_BIN_DIR, so a STOCK vllm/vllm-openai image can be run
-# with these mounted in at runtime (see job.slurm) instead of rebuilding
-# a combined image on every vLLM version bump.
-#
-# Run this ONCE on a host with docker (arm64, or x86 with --platform
-# emulation), and re-run only when a binary's source image changes in
-# benchmarks/llm-d/binaries.env. Idempotent: overwrites in place.
-#
-# Usage:
-#   ./extract-binaries.sh                 # uses binaries.env defaults
-#   LLMD_BIN_DIR=/some/dir ./extract-binaries.sh
-#   LLMD_BIN_PLATFORM=linux/amd64 ./extract-binaries.sh   # for an x86 test
+# Extract the EPP, pd-sidecar, and Envoy binaries into $LLMD_BIN_DIR so a stock
+# vllm/vllm-openai image can mount them at runtime (see job.slurm) instead of
+# rebuilding a combined image on every vLLM bump. Needs docker (arm64, or x86
+# with --platform emulation); re-run only when a source image in binaries.env
+# changes. Idempotent.
+# Usage: [LLMD_BIN_DIR=dir] [LLMD_BIN_PLATFORM=linux/amd64] ./extract-binaries.sh
 
-set -euo pipefail
+set -eo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
@@ -42,9 +34,7 @@ extract "$ENVOY_FROM_IMAGE"      "$ENVOY_BIN_PATH"          envoy
 echo "Done. Contents of $LLMD_BIN_DIR:"
 ls -la "$LLMD_BIN_DIR"
 
-# Linking sanity reminder: epp/pd-sidecar are Go (static); envoy is a
-# dynamically-linked C++ binary. Verify inside the stock vLLM container
-# that it resolves:  ldd /usr/local/bin/envoy  (no "not found" lines).
+# epp/pd-sidecar are static Go binaries; envoy is dynamically linked C++.
 echo
 echo "NOTE: verify 'ldd $LLMD_BIN_DIR/envoy' resolves cleanly inside the"
 echo "      target vLLM image before relying on the mounted-binary path."

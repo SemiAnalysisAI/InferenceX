@@ -1,11 +1,12 @@
 """Runtime compatibility hooks for lm-eval 0.4.9.2."""
 
 import json
+from typing import Any
 
 from lm_eval.models.openai_completions import LocalChatCompletion
 
 
-def _parse_generations(outputs, **kwargs):
+def _parse_generations(outputs: Any, **kwargs: Any) -> list[Any]:  # noqa: ARG001
     results = []
     if not isinstance(outputs, list):
         outputs = [outputs]
@@ -20,7 +21,7 @@ def _parse_generations(outputs, **kwargs):
                 if content in (None, "", []):
                     content = message.get("reasoning_content") or ""
                 parsed[index] = content
-        except Exception:
+        except Exception:  # noqa: BLE001
             parsed = [""]
         results.extend(parsed)
     return results
@@ -37,10 +38,10 @@ except ImportError:
 if TemplateAPI is not None and JsonChatStr is not None:
 
     def _apply_chat_template(
-        self,
-        chat_history,
+        self: Any,
+        chat_history: list[dict[str, Any]],
         add_generation_prompt: bool = True,
-    ):
+    ) -> Any:
         if self.tokenizer_backend == "huggingface" and self.tokenized_requests:
             return self.tokenizer.apply_chat_template(
                 chat_history,

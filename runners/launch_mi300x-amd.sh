@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-set -euo pipefail
+
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars IS_MULTINODE
+set -eo pipefail
 
 export HF_HUB_CACHE_MOUNT="/raid/inferencex/models/hub"
 export AIPERF_MMAP_CACHE_MOUNT="/raid/inferencex/aiperf-mmap-cache"
@@ -11,7 +14,7 @@ LOCK_FILE="${SQUASH_FILE}.lock"
 
 SPEC_SUFFIX=$([[ "${SPEC_DECODING:-}" == "mtp" ]] && printf '_mtp' || printf '')
 
-export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+check_env_vars GPU_COUNT
 
 set -x
 
@@ -33,9 +36,9 @@ fi
 export PORT=$((40000 + (JOB_ID % 10000)))
 trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
 
-# Use flock to serialize concurrent imports to the same node-local squash file.
+# Concurrent jobs import to the same node-local squash file; serialize them.
 srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c "
-    set -euo pipefail
+    set -eo pipefail
     exec 9>\"$LOCK_FILE\"
     flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE' >&2; exit 1; }
     if unsquashfs -l \"$SQUASH_FILE\" >/dev/null 2>&1; then
