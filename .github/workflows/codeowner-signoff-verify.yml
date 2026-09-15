@@ -24,6 +24,7 @@ permissions:
 
 jobs:
   gate:
+    name: Check ownership
     if: |
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'pull_request_target' ||
@@ -42,8 +43,8 @@ jobs:
     outputs:
       proceed: ${{ steps.resolve.outputs.proceed }}
       signoff-required: ${{ steps.scope.outputs.required }}
-      pr-number: ${{ steps.resolve.outputs.pr-number }}
-      head-sha: ${{ steps.resolve.outputs.head-sha }}
+      pr-number: ${{ steps.scope.outputs.pr-number }}
+      head-sha: ${{ steps.scope.outputs.head-sha }}
       signoff-author: ${{ steps.resolve.outputs.signoff-author }}
       signoff-kind: ${{ steps.resolve.outputs.signoff-kind }}
       signoff-fetch-cmd: ${{ steps.resolve.outputs.signoff-fetch-cmd }}
@@ -221,8 +222,9 @@ jobs:
             core.setOutput('signoff-fetch-cmd', fetchCmd);
 
   verify:
+    name: Update sign-off
     needs: gate
-    if: ${{ needs.gate.outputs.proceed == 'true' }}
+    if: needs.gate.outputs.signoff-required == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: codeowner-signoff-pr-${{ needs.gate.outputs.pr-number }}
@@ -244,10 +246,27 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.repository.default_branch }}
-          token: ${{ secrets.CLAUDE_PAT }}
+          persist-credentials: false
+
+      - name: Carry the PR's passing checklist onto its latest head
+        if: >-
+          github.event_name == 'pull_request_target' ||
+          (github.event_name == 'issue_comment' && github.event.action == 'deleted' &&
+           github.event.issue.pull_request &&
+           (github.event.comment.user.login == 'Klaud-Cold' ||
+            github.event.comment.user.login == 'github-actions[bot]') &&
+           startsWith(github.event.comment.body || '', '<!-- codeowner-signoff-verify'))
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
+        with:
+          script: |
+            const { carry } = require('./.github/scripts/codeowner-signoff.cjs');
+            await carry({ github, context, core, prNumber: Number(process.env.PR_NUMBER) });
 
       - name: Reuse an existing passing checklist
         id: prepare
+        if: needs.gate.outputs.proceed == 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
@@ -332,39 +351,3 @@ jobs:
               verdictPath: '/tmp/codeowner-signoff-verdict.md',
               verificationSucceeded: process.env.VERIFICATION_SUCCEEDED === 'true',
             });
-
-  carry-forward:
-    needs: gate
-    if: >-
-      needs.gate.outputs.signoff-required == 'true' &&
-      (github.event_name == 'pull_request_target' ||
-      (github.event_name == 'issue_comment' && github.event.action == 'deleted' &&
-       github.event.issue.pull_request &&
-       (github.event.comment.user.login == 'Klaud-Cold' ||
-        github.event.comment.user.login == 'github-actions[bot]') &&
-       startsWith(github.event.comment.body || '', '<!-- codeowner-signoff-verify')))
-    runs-on: ubuntu-latest
-    concurrency:
-      group: codeowner-signoff-pr-${{ github.event.pull_request.number || github.event.issue.number }}
-      cancel-in-progress: false
-    permissions:
-      contents: read
-      pull-requests: write
-      issues: write
-      statuses: write
-    steps:
-      # Never execute PR head code in this privileged pull_request_target job.
-      - name: Checkout trusted default branch
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          persist-credentials: false
-
-      - name: Carry the PR's passing checklist onto its latest head
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
-        with:
-          script: |
-            const { carry } = require('./.github/scripts/codeowner-signoff.cjs');
-            await carry({ github, context, core, prNumber: Number(process.env.PR_NUMBER) });

@@ -567,16 +567,28 @@ def test_repeated_admin_updates_retain_approval_but_cannot_hide_a_collaborator_c
     assert status['state'] == 'failure'
 
 
-@pytest.mark.parametrize('admin', [False, True])
-def test_head_updates_retain_or_invalidate_signoff_without_starting_claude(admin):
+@pytest.mark.parametrize('change,expected_status,verify', [
+    ('admin', 'success', 'false'),
+    ('collaborator', 'failure', 'false'),
+    ('first-signoff', 'pending', 'true'),
+])
+def test_workflow_carries_signoff_before_preparing_verification(change, expected_status, verify):
     case = admin_update()
-    if not admin:
+    if change == 'collaborator':
         case['permission'] = {'permission': 'write', 'role_name': 'write'}
-    result = run_signoff('prepare', case, headSha='c' * 40)
+    elif change == 'first-signoff':
+        case['data']['comments'] = []
+    case['needs'] = {'gate': {'outputs': {
+        'pr-number': '42', 'head-sha': 'c' * 40, 'proceed': 'true',
+    }}}
+    steps = workflow('codeowner-signoff-verify')['jobs']['verify']['steps']
+    scripts = [step for step in steps if 'script' in step.get('with', {})]
+    result = run_scripts(scripts[:2], case)
     assert result['failures'] == []
-    assert result['outputs']['prepare']['verify'] == 'false'
-    [status] = [write for write in result['writes'] if write['method'] == 'repos.createCommitStatus']
-    assert status['state'] == ('success' if admin else 'failure')
+    assert result['outputs']['prepare']['verify'] == verify
+    statuses = [write for write in result['writes'] if write['method'] == 'repos.createCommitStatus']
+    assert statuses[-1]['sha'] == 'c' * 40
+    assert statuses[-1]['state'] == expected_status
 
 
 def test_publish_does_not_approve_a_later_unreviewed_push():
