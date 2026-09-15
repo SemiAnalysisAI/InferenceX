@@ -29,6 +29,10 @@ if [[ -z "$host_ip" ]]; then
 fi
 host_name=$(hostname)
 
+# ATOM/mooncake handshake IP: the recipe exports this per node (prefill/decode
+# IP). Default to this node's resolved IP so it matches the mooncake proxy_ip.
+export ATOM_HOST_IP="${ATOM_HOST_IP:-$host_ip}"
+
 set -x
 _yaml_tmp=$(mktemp)
 python3 << PYEOF > "$_yaml_tmp"
@@ -223,6 +227,13 @@ if [[ "$IS_AGENTIC_RUN" == "1" && "${KV_OFFLOADING:-none}" == "dram" ]]; then
     # GPUS_PER_NODE (one offload worker per GPU rank).
     _per_worker_cpu_gb=$(( ${TOTAL_CPU_DRAM_GB:-0} / GPUS_PER_NODE ))
     if [[ "$_per_worker_cpu_gb" -le 0 ]]; then _per_worker_cpu_gb=128; fi
+    # Recipe offload env (prefill node only). These are read by the lmcache
+    # offload runtime, not encoded in the connector JSON, so they must be in the
+    # server process env -- the launcher exports them outside the SLURM/Docker
+    # boundary where they are lost, so set them here.
+    export OFFLOAD_COPY_WORKERS="${OFFLOAD_COPY_WORKERS:-1}"
+    export OFFLOAD_MIN_LOAD_TOKENS="${OFFLOAD_MIN_LOAD_TOKENS:-8192}"
+    export OFFLOAD_SLOT_STAGING_SLOTS="${OFFLOAD_SLOT_STAGING_SLOTS:-4}"
     PREFILL_KV_TRANSFER="{\"kv_connector\":\"multi\",\"connectors\":[{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}},{\"kv_connector\":\"lmcache_offload\",\"kv_role\":\"offload\",\"offload_layout\":\"hybrid\",\"max_pending_saves\":8,\"slot_sidecar_staging_slots\":${OFFLOAD_SLOT_STAGING_SLOTS:-4},\"lmcache.local_cpu\":true,\"lmcache.max_local_cpu_size\":${_per_worker_cpu_gb},\"lmcache.local_disk\":null,\"lmcache.max_local_disk_size\":0,\"lmcache.remote_url\":null,\"lmcache.chunk_size\":256,\"lmcache.cache_policy\":\"LRU\",\"lmcache.lookup_server_worker_ids\":[],\"lmcache.store_location\":\"LocalCPUBackend\",\"lmcache.retrieve_locations\":[\"LocalCPUBackend\"]}]}"
 fi
 
