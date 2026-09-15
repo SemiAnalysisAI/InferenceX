@@ -116,25 +116,6 @@ Its contract is implemented in [`validate_perf_changelog.py`](../infx/workflows/
 
 A local matrix cannot prove Slurm allocation or llm-d endpoint discovery. Multi-node recipe changes still require the upstream recipe checker and an execution on the intended fleet, as described in [configuration validation](./configuration-procedures.md#validate).
 
-### Local fuzzing
-
-Run the opt-in suite from the repository root:
-
-```bash
-uv run --no-project --exclude-newer PT12H --python 3.12 \
-  --with pytest --with hypothesis --with pydantic --with pyyaml --with tabulate \
-  python -m pytest -c utils/fuzz/pytest.ini utils/fuzz \
-  --fuzz-examples 100 --fuzz-output .fuzz
-```
-
-`--fuzz-examples` applies to each parameterized property, not the whole run. Increase it for a longer campaign; use `-k launch`, `-k pipeline`, `-k collection`, or `-k github` to narrow a failing path. Matrix targets use controlled recipes and runner metadata with known expected outputs.
-
-Hypothesis shrinks failures and saves examples under `.fuzz/examples`; rerunning with the same output directory replays them. Failure output includes a `@reproduce_failure` decorator. Use `--hypothesis-seed <integer>` for a repeatable generated campaign; an explicit seed disables database replay. `.fuzz/results.xml` contains test results and Hypothesis statistics; `.fuzz/run.json` records the revision, source hashes before and after the run, command, and runtime versions. Check `source_changed` before attributing a run to one code state. Keep the console log alongside them when investigating a failure.
-
-Targets cover generation, historical input snapshots, changelog conflict resolution, planning, schema rejection, scheduling identity, fixed-sequence metrics, AgentX accounting, server-worker ownership, power integration and audit failures, filenames, eval collection, GitHub pagination, line-scoped reuse commands, and rejection of malformed permissions. Workflow launch tests execute the shipped shell with recording launchers and immediate waits. Permission tests run the actual workflow JavaScript with a fake GitHub client; they need a local Node runtime compatible with `actions/github-script` and skip when Node is absent. No npm install is needed. Sign-off recovery, verdict publication, artifact eligibility, and retained acceptance use explicit expected outcomes in the focused suites.
-
-Python network calls are blocked in these tests. GPU execution, Slurm allocation, containers, live GitHub permissions, and the Actions expression engine remain outside this local suite. Passing generated cases does not prove every possible path. For Python branch coverage, add `--with pytest-cov` to the command and `--cov=infx --cov-branch --cov-report=html:.fuzz/coverage` to pytest; this does not measure JavaScript or shell coverage.
-
 ### Full local suite in parallel
 
 The existing Python suites cover workflow contracts too. `utils/matrix_logic/test_validation.py` tests the workflow input schemas and runs both preparation scripts with controlled generator output. Invalid rows must fail before publishing job outputs; accepted rows must remain unchanged, including when manual dispatch measures an older checkout. `utils/test_process_result.py` executes the shipped launch step with a recording launcher for current and historical checkouts. These tests do not emulate GitHub's expression engine or prove GPU performance; review expression changes with workflow validation and applicable smoke evidence.

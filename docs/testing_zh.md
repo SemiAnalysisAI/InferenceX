@@ -116,25 +116,6 @@ python3 -m infx.workflows.validate_perf_changelog \
 
 本地矩阵不能证明 Slurm 分配或 llm-d 端点发现。多节点配方变更仍然需要上游配方检查器，并在目标集群上实际执行；详见[配置验证](./configuration-procedures.md#validate)。
 
-### 本地模糊测试
-
-在仓库根目录运行按需启用的测试集：
-
-```bash
-uv run --no-project --exclude-newer PT12H --python 3.12 \
-  --with pytest --with hypothesis --with pydantic --with pyyaml --with tabulate \
-  python -m pytest -c utils/fuzz/pytest.ini utils/fuzz \
-  --fuzz-examples 100 --fuzz-output .fuzz
-```
-
-`--fuzz-examples` 控制每个参数化属性的样例数，而不是整个运行的总数。增加该值可延长测试；用 `-k launch`、`-k pipeline`、`-k collection` 或 `-k github` 缩小故障范围。矩阵测试使用受控配方和运行器元数据，并给出明确的预期输出。
-
-Hypothesis 会缩减失败样例，并将其保存在 `.fuzz/examples`；使用相同输出目录重新运行即可重放。失败输出包含 `@reproduce_failure` 装饰器。使用 `--hypothesis-seed <integer>` 可重复生成同一批样例；显式指定种子会关闭数据库重放。`.fuzz/results.xml` 包含测试结果和 Hypothesis 统计信息；`.fuzz/run.json` 记录提交、运行前后的源码哈希、命令和运行时版本。将结果归属于某个代码状态前，请检查 `source_changed`。排查故障时，请同时保留控制台日志。
-
-测试目标涵盖配置生成、历史输入快照、Changelog 冲突解决、规划、schema 拒绝路径、调度标识、固定序列长度指标、AgentX 请求计数、服务工作进程的归属、功率积分与审计失败路径、文件名、评测收集、GitHub 分页、按行解析的复用命令，以及异常权限响应的拒绝处理。工作流启动测试执行仓库中的实际 shell，使用记录型启动器并跳过真实等待。权限测试通过模拟 GitHub 客户端运行实际工作流 JavaScript；需要兼容 `actions/github-script` 的本地 Node 运行时，未安装 Node 时会跳过。无需执行 npm install。签署补查、裁定发布、产物复用资格及接受状态保留由专项测试覆盖，预期结果明确列出。
-
-这些测试阻止 Python 网络请求。GPU 执行、Slurm 分配、容器、真实 GitHub 权限和 Actions 表达式引擎不在本地测试范围内。生成样例全部通过不代表覆盖了所有可能路径。若需 Python 分支覆盖率，在命令中增加 `--with pytest-cov`，并向 pytest 传入 `--cov=infx --cov-branch --cov-report=html:.fuzz/coverage`；该统计不包含 JavaScript 或 shell 覆盖率。
-
 ### 并行运行完整本地测试套件
 
 现有 Python 测试套件也覆盖工作流契约。`utils/matrix_logic/test_validation.py` 测试工作流输入模式，并使用受控的生成器输出执行两个准备脚本。非法数据行必须在发布作业输出前失败；合法数据行必须保持不变，包括手动分派测量旧 checkout 的情况。`utils/test_process_result.py` 通过记录环境的启动器执行实际启动步骤，覆盖当前和旧版 checkout。这些测试不模拟 GitHub 表达式引擎，也不证明 GPU 性能；表达式修改需结合工作流验证和适用的 smoke 证据进行审查。
