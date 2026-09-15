@@ -51,6 +51,7 @@ run_lm_eval() {
 export EVAL_CONCURRENT_REQUESTS="1 4 8"
 export EVAL_MAX_MODEL_LEN=4096
 export EVAL_ONLY=true
+export IS_AGENTIC=0
 export MODEL=test-model
 export MODEL_NAME=test-model
 export MODEL_PREFIX=test

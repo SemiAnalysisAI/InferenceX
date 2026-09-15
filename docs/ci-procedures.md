@@ -285,6 +285,8 @@ The [`PR Review` workflow](../.github/workflows/claude-pr-review.yml) installs a
 
 ### Rerun safely
 
+CODEOWNER verification applies only to changes with a non-admin, non-core owner under the trusted base CODEOWNERS. Other changes get a successful “not applicable” status. See the [contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off) for ownership, rename, and permission rules.
+
 Before the first PASS, CODEOWNER verification recovers the latest eligible sign-off after head updates, reopening, or leaving draft. It verifies the current head using the existing checklist, including reviews missed during merge conflicts. Execution stays on the trusted default branch, and a pending status appears before Claude starts.
 
 Existing acceptance follows the [contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off): authenticated repository-admin updates from a covered head retain sign-off without calling Claude. Non-admin updates invalidate it without automatically calling Claude; edit the existing checklist or dispatch verification to approve those changes. An admin push after an unreviewed non-admin change does not restore acceptance. Missing update provenance fails closed. The trusted verdict records assessed and covered SHAs, and rejected reassessments revoke acceptance. The verifier writes a local verdict file; trusted workflow code owns comment and status publication.

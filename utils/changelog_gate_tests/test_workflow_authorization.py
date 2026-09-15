@@ -54,7 +54,7 @@ def scenario(operation):
 
 def run_workflow(operation, case):
     job = next(iter(workflow(operation)["jobs"].values()))
-    return run_scripts(job["steps"], case)
+    return run_scripts([step for step in job["steps"] if "script" in step.get("with", {})], case)
 
 
 def run_scripts(steps, case):
@@ -251,6 +251,7 @@ def signoff_case(event='pull_request_target'):
     case['data'].update(comments=[], reviews=[], inlineComments=[])
     case['data']['pull']['head']['sha'] = 'resolved-head'
     case['data']['pull']['merge_commit_sha'] = None
+    case['stepsState'] = {'scope': {'outputs': {'required': 'true', 'head-sha': 'resolved-head'}}}
     return case
 
 
@@ -258,6 +259,16 @@ def signoff(identifier=11, timestamp='2026-01-01T12:00:00Z', **changes):
     return {'id': identifier, 'body': 'As a PR reviewer and CODEOWNER, I have reviewed this and have:',
             'user': {'login': 'reviewer', 'type': 'User'}, 'state': 'APPROVED',
             'commit_id': 'conflicting-head', 'submitted_at': timestamp, 'updated_at': timestamp, **changes}
+
+
+def test_head_change_after_ownership_check_does_not_start_verification():
+    case = signoff_case()
+    case['data']['pull']['head']['sha'] = 'new-head'
+    case['data']['reviews'] = [signoff()]
+    result = run_workflow('codeowner-signoff-verify', case)
+    assert result['failures'] == ['PR head changed while determining sign-off scope; retry on the current head.']
+    assert result['writes'] == []
+    assert result['permissionRequests'] == []
 
 
 @pytest.mark.parametrize('collection,kind,path', [

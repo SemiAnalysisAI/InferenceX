@@ -41,15 +41,33 @@ jobs:
       statuses: write
     outputs:
       proceed: ${{ steps.resolve.outputs.proceed }}
-      changelog-changed: ${{ steps.resolve.outputs.changelog-changed }}
+      signoff-required: ${{ steps.scope.outputs.required }}
       pr-number: ${{ steps.resolve.outputs.pr-number }}
       head-sha: ${{ steps.resolve.outputs.head-sha }}
       signoff-author: ${{ steps.resolve.outputs.signoff-author }}
       signoff-kind: ${{ steps.resolve.outputs.signoff-kind }}
       signoff-fetch-cmd: ${{ steps.resolve.outputs.signoff-fetch-cmd }}
     steps:
+      - name: Checkout trusted workflow code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - name: Check changed-file ownership
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run --no-project --exclude-newer PT12H --python 3.12 --with codeowners python -m infx.workflows.signoff_scope
+
       - name: Resolve PR state and sign-off metadata
         id: resolve
+        if: steps.scope.outputs.required == 'true'
+        env:
+          SCOPED_HEAD_SHA: ${{ steps.scope.outputs.head-sha }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -134,23 +152,8 @@ jobs:
               owner, repo, pull_number: prNumber,
             });
 
-            const files = await github.paginate(github.rest.pulls.listFiles, {
-              owner, repo, pull_number: prNumber, per_page: 100,
-            });
-            if (files.length !== pr.changed_files) {
-              throw new Error(`Incomplete changed-file list for PR #${prNumber}; cannot determine verifier scope.`);
-            }
-            const changelogChanged = files.some(file =>
-              file.filename === 'perf-changelog.yaml' || file.previous_filename === 'perf-changelog.yaml');
-            core.setOutput('changelog-changed', String(changelogChanged));
-            if (!changelogChanged) {
-              core.setOutput('proceed', 'false');
-              core.info(`PR #${prNumber} does not change perf-changelog.yaml; skipping sign-off verification.`);
-              await github.rest.repos.createCommitStatus({
-                owner, repo, sha: pr.head.sha,
-                context: 'codeowner-signoff-verify', state: 'success',
-                description: 'Not applicable: perf-changelog.yaml unchanged',
-              });
+            if (pr.head.sha !== process.env.SCOPED_HEAD_SHA) {
+              core.setFailed('PR head changed while determining sign-off scope; retry on the current head.');
               return;
             }
 
@@ -333,7 +336,7 @@ jobs:
   carry-forward:
     needs: gate
     if: >-
-      needs.gate.outputs.changelog-changed == 'true' &&
+      needs.gate.outputs.signoff-required == 'true' &&
       (github.event_name == 'pull_request_target' ||
       (github.event_name == 'issue_comment' && github.event.action == 'deleted' &&
        github.event.issue.pull_request &&

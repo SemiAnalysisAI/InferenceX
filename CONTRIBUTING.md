@@ -11,14 +11,15 @@ Thanks for contributing! PRs are welcome. This page covers the review process ev
 ## PR review flow
 
 1. Open your PR and get it through PR validation. Add the `full-sweep-fail-fast` label (strongly recommended because a broken change wastes one job per matrix rather than the whole fan-out). Use `full-sweep-enabled` only if you need jobs to keep running past a failure. Let the benchmark sweep run and get a green full sweep, including evals, on a commit in your PR.
-2. Request a review from your respective company's [CODEOWNER](.github/CODEOWNERS).
-3. The CODEOWNER reviews and posts the **PR Review Checklist** sign-off (see below) in their approval comment.
-4. Only after the checklist sign-off is posted should you ping a core maintainer on Slack for final approval.
-5. An authorized maintainer posts `/reuse-sweep-run` (see below) and the PR is merged via the reuse path.
+2. For changes owned by a non-admin CODEOWNER other than `@SemiAnalysisAI/core`, ask one eligible [CODEOWNER](.github/CODEOWNERS) to review and post the **PR Review Checklist** sign-off (see below) in their approval comment.
+3. Ping a core maintainer on Slack for final approval, after obtaining the checklist sign-off when required.
+4. An authorized maintainer posts `/reuse-sweep-run` (see below) and the PR is merged via the reuse path.
 
 **Performance changelog requirement:** Every change that can affect benchmark performance and every recipe addition or modification **MUST** append a new entry to the physical end of `perf-changelog.yaml`. Historical entries **MUST NOT** be edited.
 
 ## The PR Review Checklist (CODEOWNER sign-off)
+
+Sign-off is required only when a changed file has a CODEOWNER other than a repository admin or `@SemiAnalysisAI/core`. Ownership comes from the PR base commit, using the last matching CODEOWNERS rule; renames check both old and new paths. A matching core owner does not exempt another owner on the same file. Individual admins must have both repository `permission: admin` and `role_name: admin`; other teams and email owners require sign-off. Missing ownership data or failed permission lookups cannot grant an exemption. Changes without a qualifying owner receive a successful “not applicable” status without starting the verifier.
 
 One eligible CODEOWNER reviewer fills in the latest [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) template in their approval comment.
 
