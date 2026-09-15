@@ -35,7 +35,7 @@ jobs:
           echo "## Eval Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           uv run --no-project --exclude-newer PT12H --python 3.12 --with tabulate \
-            utils/collect_eval_results.py eval_results/ ${{ inputs.result-prefix || 'all' }} >> $GITHUB_STEP_SUMMARY
+            python -m infx.results.collect_eval_results eval_results/ ${{ inputs.result-prefix || 'all' }} >> $GITHUB_STEP_SUMMARY
 
       - name: Upload aggregated evals
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

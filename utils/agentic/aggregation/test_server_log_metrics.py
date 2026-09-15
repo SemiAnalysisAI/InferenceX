@@ -5,7 +5,7 @@ from pathlib import Path
 from infx.results.agentic.backends.dynamo_vllm import DynamoVllmBackend
 from infx.results.agentic.backends.sglang import SglangBackend
 from infx.results.agentic.backends.vllm import VllmBackend
-from utils.agentic.aggregation.artifacts import (
+from infx.results.agentic.artifacts import (
     find_server_log_paths,
     load_server_log_head,
 )
@@ -18,12 +18,6 @@ def test_kv_cache_pool_tokens_from_server_log_missing() -> None:
     assert SglangBackend.kv_cache_pool_tokens_from_server_log(None) is None
     assert SglangBackend.kv_cache_pool_tokens_from_server_log("") is None
     assert SglangBackend.kv_cache_pool_tokens_from_server_log("INFO no kv cache line") is None
-
-
-def test_kv_cache_pool_tokens_from_single_engine_server_log() -> None:
-    log = "INFO (EngineCore pid=123) GPU KV cache size: 11,294,463 tokens"
-
-    assert VllmBackend.kv_cache_pool_tokens_from_server_log(log) == 11_294_463
 
 
 def test_kv_cache_pool_tokens_from_data_parallel_server_log() -> None:

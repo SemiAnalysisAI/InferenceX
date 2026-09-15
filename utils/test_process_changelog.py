@@ -1,6 +1,9 @@
 """Tests for changelog-driven sweep generation."""
 
+import io
 import json
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -10,9 +13,10 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-import process_changelog
-from matrix_logic.generate_sweep_configs import generate_test_config_sweep
-from matrix_logic.validation import validate_master_config
+from infx.matrix import plan as process_changelog
+from infx.matrix.generate import generate_test_config_sweep
+from infx.matrix.validation import validate_master_config
+from infx.workflows import benchmark_schema
 
 
 @pytest.fixture
@@ -556,6 +560,102 @@ def planning_repo(tmp_path, monkeypatch):
 
 
 @pytest.fixture
+def committed_planning_repo(planning_repo):
+    root, _, _ = planning_repo
+    entry = {"config-keys": ["single"], "description": ["Fixture change"],
+             "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+             "scenario-type": ["fixed-seq-len"], "no-evals": True}
+    (root / "perf-changelog.yaml").write_text("")
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
+    git("init", "-q")
+    git("config", "user.email", "test@example.com")
+    git("config", "user.name", "Test")
+    git("add", ".")
+    git("commit", "-qm", "base")
+    base = git("rev-parse", "HEAD")
+    (root / "perf-changelog.yaml").write_text(yaml.safe_dump([entry]))
+    git("add", "perf-changelog.yaml")
+    git("commit", "-qm", "head")
+    head = git("rev-parse", "HEAD")
+    return root, base, head
+
+
+@pytest.mark.parametrize("trusted", [False, True])
+@pytest.mark.parametrize("trim", [False, True])
+def test_workflow_runs_real_entrypoints_and_preserves_tooling_origin(
+    committed_planning_repo, trusted, trim,
+):
+    root, base, head = committed_planning_repo
+    source = Path(__file__).resolve().parents[1]
+    shutil.copy(source / "utils/ci_priority.py", root / "utils/ci_priority.py")
+    if trusted:
+        tooling = root / ".ci-priority"
+        tooling.mkdir()
+        shutil.move(root / "infx", tooling / "infx")
+        shutil.move(root / "utils", tooling / "utils")
+        # An unrelated package in the data checkout must not supply the planner.
+        (root / "infx").mkdir()
+        (root / "infx/__init__.py").write_text("raise RuntimeError('wrong tooling checkout')\n")
+    policy_root = tooling if trusted else root
+    (policy_root / "configs").mkdir(exist_ok=True)
+    shutil.copy(source / "configs/ci-priority.yaml", policy_root / "configs")
+    workflow = yaml.safe_load((source / ".github/workflows/e2e-tests.yml").read_text())
+    step = next(s for s in workflow["jobs"]["get-jobs"]["steps"] if s.get("id") == "get-jobs")
+    command = "test-config --config-files configs/nvidia-master.yaml --config-keys single --seq-lens 8k1k --scenario-type fixed-seq-len --no-evals"
+    script = re.sub(r"\$\{\{.*?\}\}", command, step["run"])
+    tools = root / "bin"
+    tools.mkdir()
+    # Use installed test dependencies; execute the real planner and priority helper.
+    uv = tools / "uv"
+    uv.write_text('''#!/bin/bash
+while [ "$1" != python ]; do shift; done
+shift
+exec "$TEST_PYTHON" "$@"
+''')
+    uv.chmod(0o755)
+    output = root / "outputs"
+    env = {**os.environ, "PATH": f"{tools}:{Path(sys.executable).parent}:{os.environ['PATH']}",
+           "TEST_PYTHON": sys.executable, "GITHUB_WORKSPACE": str(root), "GITHUB_OUTPUT": str(output),
+           "PR_LABELS": "[]", "CHANGELOG_BASE_REF": base if trusted else "",
+           "CHANGELOG_HEAD_REF": head if trusted else "", "TRIM_CONC": str(trim).lower(),
+           "ALL_EVALS": "false", "EVALS_ONLY": "false"}
+    env.pop("PYTHONPATH", None)
+    result = subprocess.run(["bash", "-euo", "pipefail", "-c", script], cwd=root,
+                            env=env, capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stderr
+    outputs = {key: json.loads(value) for line in output.read_text().splitlines()
+               for key, value in [line.split("=", 1)]}
+    rows = outputs.pop("single-node-config")
+    assert [row["conc"] for row in rows] == ([16] if trim else [16, 32, 64])
+    assert all(row["model"] == "single" for row in rows)
+    assert all(value == [] for value in outputs.values())
+
+
+def test_validator_uses_trusted_entrypoints_while_reading_another_checkout(committed_planning_repo):
+    root, base, head = committed_planning_repo
+    source = Path(__file__).resolve().parents[1]
+    tooling = root / ".tooling"
+    tooling.mkdir()
+    shutil.move(root / "infx", tooling / "infx")
+    shutil.rmtree(root / "utils")
+    (tooling / "utils").mkdir()
+    for script in ("validate_perf_changelog.py", "process_changelog.py"):
+        shutil.copy(source / "utils" / script, tooling / "utils" / script)
+    (root / "infx").mkdir()
+    (root / "infx/__init__.py").write_text("raise RuntimeError('wrong tooling checkout')\n")
+    env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+    result = subprocess.run(
+        [sys.executable, str(tooling / "utils/validate_perf_changelog.py"),
+         "--base-ref", base, "--head-ref", head],
+        cwd=root, env=env, capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "Validated perf-changelog.yaml: final newline present and matrix generated\n"
+    assert result.stderr == ""
+
+
+@pytest.fixture
 def changelog_run(planning_repo, monkeypatch, capsys):
     def run(entries, cli_flags=()):
         entries = [{"config-keys": ["single"], "description": ["Controlled change"],
@@ -567,7 +667,13 @@ def changelog_run(planning_repo, monkeypatch, capsys):
         process_changelog.main()
         captured = capsys.readouterr()
         assert captured.err == ""
-        return json.loads(captured.out)
+        monkeypatch.setattr(sys, "argv", ["benchmark_schema", "--plan"])
+        monkeypatch.setattr(sys, "stdin", io.StringIO(captured.out))
+        benchmark_schema.main()
+        validated = capsys.readouterr()
+        assert validated.err == ""
+        assert validated.out == captured.out
+        return json.loads(validated.out)
     return run
 
 

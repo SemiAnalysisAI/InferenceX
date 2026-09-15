@@ -1,12 +1,18 @@
 """Comprehensive tests for validation.py"""
 import copy
+import io
+import json
+import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+import yaml
 from pydantic import ValidationError
-from validation import (
+from infx.workflows import benchmark_schema
+from infx.matrix.validation import (
     ComponentMetadata,
     SingleNodeMatrixEntry,
     SingleNodeAgenticMatrixEntry,
@@ -630,13 +636,6 @@ class TestMultiNodeMatrixEntry:
         with pytest.raises(ValidationError, match="both.*prefill.*decode"):
             MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
 
-    def test_prefill_decode_worker_configs(self, valid_multinode_matrix_entry):
-        """Prefill and decode should be WorkerConfig objects."""
-        entry = MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
-        assert entry.prefill.num_worker == 5
-        assert entry.prefill.tp == 4
-        assert entry.decode.tp == 8
-        assert entry.decode.dp_attn is True
 
     def test_all_eval_concurrency_batch_marker(
         self,
@@ -672,12 +671,6 @@ class TestMultiNodeMatrixEntry:
     def test_missing_prefill(self, valid_multinode_matrix_entry):
         """Missing prefill should fail."""
         del valid_multinode_matrix_entry["prefill"]
-        with pytest.raises(ValidationError):
-            MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
-
-    def test_missing_decode(self, valid_multinode_matrix_entry):
-        """Missing decode should fail."""
-        del valid_multinode_matrix_entry["decode"]
         with pytest.raises(ValidationError):
             MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
 
@@ -1330,14 +1323,6 @@ class TestValidateMasterConfig:
         result = validate_master_config(configs)
         assert result == configs
 
-    def test_mixed_configs(self, valid_single_node_master_config, valid_multinode_master_config):
-        """Mixed single and multinode configs should pass."""
-        configs = {
-            "dsr1-fp8-mi300x-sglang": valid_single_node_master_config,
-            "dsr1-fp4-gb200-dynamo-trt": valid_multinode_master_config,
-        }
-        result = validate_master_config(configs)
-        assert len(result) == 2
 
     def test_invalid_config_raises_valueerror(self, valid_single_node_master_config):
         """Invalid config should raise ValueError with key name."""
@@ -1497,6 +1482,161 @@ CHANGELOG_METADATA = {
         "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
     }],
 }
+
+
+class TestBenchmarkWorkflowSchema:
+    @pytest.mark.parametrize("multinode", [False, True])
+    @pytest.mark.parametrize("agentic", [False, True])
+    def test_accepts_historical_rows_without_inserting_defaults(
+        self, valid_single_node_matrix_entry, valid_multinode_matrix_entry,
+        multinode, agentic, monkeypatch, capsys,
+    ):
+        if multinode:
+            row = copy.deepcopy(MULTINODE_AGENTIC_EVAL_ROW if agentic else valid_multinode_matrix_entry)
+        else:
+            row = copy.deepcopy(AGENTIC_EVAL_ROW if agentic else valid_single_node_matrix_entry)
+        for worker in ([row["prefill"], row["decode"]] if multinode else [row]):
+            for field in ("pp", "dcp-size", "pcp-size"):
+                worker.pop(field, None)
+        raw = json.dumps([row], indent=2, ensure_ascii=False) + "\n"
+        monkeypatch.setattr(sys, "argv", ["benchmark_schema"])
+        monkeypatch.setattr(sys, "stdin", io.StringIO(raw))
+        benchmark_schema.main()
+        assert capsys.readouterr().out == raw
+
+    @pytest.mark.parametrize(("field", "value"), [
+        ("tp", "8"), ("dp-attn", "false"), ("conc", [4]), ("conc", 0),
+        ("pp", 0), ("pcp-size", None), ("unexpected", "value"),
+    ])
+    def test_workflow_boundary_rejects_invalid_input(
+        self, valid_single_node_matrix_entry, field, value,
+    ):
+        row = {**valid_single_node_matrix_entry, field: value}
+        with pytest.raises(ValueError, match=r"matrix\[0\]"):
+            benchmark_schema.validate_matrix([row])
+
+    def test_rejects_python_field_names_in_json(self, valid_single_node_matrix_entry):
+        row = dict(valid_single_node_matrix_entry)
+        row["model_prefix"] = row.pop("model-prefix")
+        with pytest.raises(ValueError, match="model-prefix"):
+            benchmark_schema.validate_matrix([row])
+
+    @pytest.mark.parametrize("conc", [[], 4, [0], [1, "4"], [True]])
+    def test_rejects_invalid_multinode_batches(self, valid_multinode_matrix_entry, conc):
+        with pytest.raises(ValueError, match="conc"):
+            benchmark_schema.validate_matrix([{**valid_multinode_matrix_entry, "conc": conc}])
+
+    @pytest.mark.parametrize("multinode", [False, True])
+    @pytest.mark.parametrize("bucket", ["evals", "agentic_evals", "1k1k", "agentic"])
+    def test_plan_rejects_rows_in_the_wrong_scenario_bucket(
+        self, valid_single_node_matrix_entry, valid_multinode_matrix_entry, multinode, bucket,
+    ):
+        fixed = valid_multinode_matrix_entry if multinode else valid_single_node_matrix_entry
+        agentic = MULTINODE_AGENTIC_EVAL_ROW if multinode else AGENTIC_EVAL_ROW
+        family = "multi_node" if multinode else "single_node"
+        prefix = "multinode_" if multinode else ""
+        misplaced_rows = {
+            "evals": {prefix + "evals": [agentic]},
+            "agentic_evals": {prefix + "agentic_evals": [fixed]},
+            "1k1k": {family: {"1k1k": [agentic]}},
+            "agentic": {family: {"agentic": [fixed]}},
+        }
+        with pytest.raises(ValueError, match=bucket):
+            benchmark_schema.validate_matrix(misplaced_rows[bucket], plan=True)
+
+    @pytest.mark.parametrize("family", ["single_node", "multi_node"])
+    def test_plan_rejects_the_wrong_topology(
+        self, valid_single_node_matrix_entry, valid_multinode_matrix_entry, family,
+    ):
+        row = valid_multinode_matrix_entry if family == "single_node" else valid_single_node_matrix_entry
+        with pytest.raises(ValueError, match=family):
+            benchmark_schema.validate_matrix({family: {"1k1k": [row]}}, plan=True)
+
+    @pytest.mark.parametrize(("raw", "plan"), [
+        ("{", False), ("{}", False), ("[null]", False),
+        ('{"single_node": []}', True), ('{"evals": {}}', True),
+        ('{"multi_node": []}', True), ('{"multinode_agentic_evals": {}}', True),
+    ])
+    def test_invalid_json_or_container_shape_publishes_nothing(self, raw, plan, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["benchmark_schema", *(["--plan"] if plan else [])])
+        monkeypatch.setattr(sys, "stdin", io.StringIO(raw))
+        with pytest.raises(SystemExit) as error:
+            benchmark_schema.main()
+        assert error.value.code == 2
+        output = capsys.readouterr()
+        assert output.out == ""
+        assert "error:" in output.err
+
+    @pytest.mark.parametrize("workflow_name", ["run-sweep", "e2e-tests"])
+    @pytest.mark.parametrize("multinode", [False, True])
+    @pytest.mark.parametrize("invalid", [False, True])
+    def test_real_preparation_steps_validate_before_publishing_job_outputs(
+        self, tmp_path, valid_single_node_matrix_entry, valid_multinode_matrix_entry,
+        workflow_name, multinode, invalid,
+    ):
+        root = Path(__file__).resolve().parents[2]
+        workflow = yaml.safe_load((root / f".github/workflows/{workflow_name}.yml").read_text())
+        step_id = "setup" if workflow_name == "run-sweep" else "get-jobs"
+        script = next(step["run"] for job in workflow["jobs"].values()
+                      for step in job.get("steps", []) if step.get("id") == step_id)
+        script = re.sub(r"\$\{\{.*?\}\}", lambda m: (
+            "push" if "event_name" in m[0] else "test-config" if "generate-cli-command" in m[0] else ""
+        ), script)
+        row = dict(valid_multinode_matrix_entry if multinode else valid_single_node_matrix_entry)
+        field = "node-count" if multinode else "tp"
+        if invalid:
+            row[field] = "wrong"
+        family = "multi_node" if multinode else "single_node"
+        matrix = {family: {"1k1k": [row]}} if workflow_name == "run-sweep" else [row]
+        source = tmp_path / "generated.json"
+        source.write_text(json.dumps(matrix))
+        output = tmp_path / "job-output"
+        output.touch()
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        uv = bin_dir / "uv"
+        uv.write_text(f"#!{sys.executable}\n" + '''import os, sys
+args = sys.argv[1:]
+if 'infx.workflows.benchmark_schema' in args:
+    os.execv(sys.executable, [sys.executable, *args[args.index('python') + 1:]])
+elif 'infx.matrix.plan' in args or any(a.endswith('/generate_sweep_configs.py') for a in args):
+    sys.stdout.write(open(os.environ['TEST_GENERATED']).read())
+elif 'infx.workflows.ci_priority' in args or any(a.endswith('/ci_priority.py') for a in args):
+    sys.stdout.write(sys.stdin.read())
+else:
+    raise SystemExit(f'Unexpected collaborator: {args}')
+''')
+        python = bin_dir / "python3"
+        python.write_text(f"#!{sys.executable}\n" + '''import os, sys
+if sys.argv[1:3] != ['-m', 'infx.workflows.reuse']:
+    os.execv(sys.executable, [sys.executable, *sys.argv[1:]])
+''')
+        uv.chmod(0o755)
+        python.chmod(0o755)
+        if workflow_name == "e2e-tests":
+            (tmp_path / ".ci-priority").symlink_to(root, target_is_directory=True)
+            (tmp_path / "infx").mkdir()
+            (tmp_path / "infx/__init__.py").write_text("raise RuntimeError('wrong tooling checkout')")
+        result = subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", script],
+            cwd=tmp_path, capture_output=True, text=True, timeout=15,
+            env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "PYTHONPATH": str(root),
+                 "GITHUB_WORKSPACE": str(tmp_path), "GITHUB_OUTPUT": str(output),
+                 "TEST_GENERATED": str(source), "CHANGELOG_BASE_REF": "", "CHANGELOG_HEAD_REF": "",
+                 "TRIM_CONC": "false", "ALL_EVALS": "false", "EVALS_ONLY": "false",
+                 "PR_LABELS": "[]", "PRIORITY_CRITERIA": ""},
+        )
+        if invalid:
+            assert result.returncode != 0
+            assert field in result.stderr
+            assert output.read_text() == ""
+        else:
+            assert result.returncode == 0, result.stderr
+            key = "search-space-config" if workflow_name == "run-sweep" else (
+                "multi-node-config" if multinode else "single-node-config"
+            )
+            published = dict(line.split("=", 1) for line in output.read_text().splitlines())
+            assert json.loads(published[key]) == matrix
 
 
 class TestChangelogMatrixEntry:

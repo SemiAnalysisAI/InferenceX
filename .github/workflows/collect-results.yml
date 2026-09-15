@@ -29,7 +29,7 @@ jobs:
           pattern: ${{ inputs.result-prefix && format('{0}_*', inputs.result-prefix) || '*' }}
 
       - name: Aggregate results
-        run: python3 utils/collect_results.py results/ ${{ inputs.result-prefix || 'all' }}
+        run: python3 -m infx.results.collect_results results/ ${{ inputs.result-prefix || 'all' }}
 
       - name: Upload aggregated results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
