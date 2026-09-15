@@ -63,7 +63,7 @@ OPERATORX_PARTITION=<partition> \
 OPERATORX_ACCOUNT=<account> \
 OPERATORX_QOS=<qos> \
 OPERATORX_SQUASH_DIR=<squash-dir> \
-OPERATORX_BACKENDS=torch,deepgemm,flashinfer,sglang \
+OPERATORX_BACKENDS=torch,deepgemm,sglang \
 OPERATORX_JOB_NAME=<job-name> \
 python3 scripts/submit_run.py nvidia
 ```
