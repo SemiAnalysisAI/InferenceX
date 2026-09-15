@@ -318,6 +318,17 @@ fi
 # Override the job name in the recipe with the runner name.
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+    if [[ "$IS_AGENTIC" == "1" &&
+        "$FRAMEWORK" == "dynamo-trt" &&
+        "$MODEL_PREFIX" == "glm5.2" &&
+        "${EVAL_FRAMEWORK:-lm-eval}" == "lm-eval" ]]; then
+        # This pinned srt-slurm revision launches lm-eval on the allocation head
+        # and targets localhost. Keep throughput frontends on first_decode, but
+        # co-locate the eval-only frontend so the loopback endpoint is reachable.
+        sed -i \
+            's/^  orchestrator_placement: first_decode$/  orchestrator_placement: head/' \
+            "$CONFIG_PATH"
+    fi
     python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
         "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 fi
