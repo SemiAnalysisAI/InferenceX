@@ -194,6 +194,7 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 The GB200 DSpark recipe uses a minimum CUDA graph capture size of 64 tokens to cover concurrent AgentX subagents. This raises c1/c2/c4 from 8/16/32 to 64; c8 and above retain their existing sizes. The full trace, AL 3.51, and Engram UVA settings are preserved; low-concurrency tail latency improvements require CI confirmation.
 The B200 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
 The GB300 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
+The H200 DSpark recipe uses the same minimum capture size and preserves the same workload settings.
 
 B300 uses the same minimum capture size at c1/c2/c4. Its c1 CI comparison reduced request ITL P90/P99 from 38.74/41.42 ms to 2.62/3.45 ms; c2/c4 require CI confirmation.
 
