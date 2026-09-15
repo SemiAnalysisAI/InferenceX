@@ -232,6 +232,22 @@ def test_b300_dsxe_draft_model_uses_public_paths_and_writable_hf_cache() -> None
     assert '"$HF_CACHE_HOST_DIR:$HF_CACHE_CONTAINER_DIR"' in launcher
 
 
+def test_b300_dsxe_glm52_stages_the_libfabric_runtime() -> None:
+    launcher = (REPO_ROOT / "runners/launch_b300-dsxe.sh").read_text()
+
+    assert "nixl_cu13-1.4.0-cp312-cp312-manylinux_2_28_x86_64.whl" in launcher
+    assert "aws-efa-installer-1.47.0.tar.gz" in launcher
+    assert "libfabric1-aws_2.4.0amzn1.0_amd64.deb" in launcher
+    assert "ibverbs-providers_61.0-1_amd64.deb" in launcher
+    assert 'export MELLANOX_VISIBLE_DEVICES=void' in launcher
+    assert '"${NIXL_LIBFABRIC_HOST_DIR}": "/nixl-libfabric"' in launcher
+    assert "export NIXL_PLUGIN_DIR=/nixl-libfabric/nixl" in launcher
+    assert "export IBV_DRIVERS_PATH=/nixl-libfabric/efa/" in launcher
+    assert "export FI_PROVIDER=efa" in launcher
+    assert "export FI_EFA_USE_DEVICE_RDMA=1" in launcher
+    assert "NIXL_PLUGINS_DIR" not in launcher
+
+
 def test_patch_srt_eval_dispatch_forwards_selection_and_is_idempotent(
     tmp_path: Path,
 ) -> None:
