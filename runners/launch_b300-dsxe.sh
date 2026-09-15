@@ -443,7 +443,11 @@ else
         export RESULT_DIR=/ix/results
     fi
 
-    import_squash_image "$IMAGE" "$SQUASH_FILE"
+    # The diagnostic requires the already-cached image and checks the allocated
+    # compute node for an existing rootfs before allowing Pyxis extraction.
+    if [[ "${HANG_STACK_MODE:-}" != faulthandler ]]; then
+        import_squash_image "$IMAGE" "$SQUASH_FILE"
+    fi
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
@@ -462,14 +466,29 @@ else
     if [[ -n "${SALLOC_EXCLUDE:-}" ]]; then
         SALLOC_ARGS+=(--exclude="$SALLOC_EXCLUDE")
     fi
-    # Capture this allocation's ID; a runner name can also match an older job.
-    JOB_ID=$(
-        set -o pipefail
-        LC_ALL=C salloc "${SALLOC_ARGS[@]}" 2>&1 | tee /dev/stderr |
-            sed -n 's/.*Granted job allocation \([0-9][0-9]*\)$/\1/p'
-    ) || exit 1
-    [[ "$JOB_ID" =~ ^[0-9]+$ ]] || { echo 'ERROR: B300 allocation unavailable' >&2; exit 1; }
-    trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
+    if [[ "${HANG_STACK_MODE:-}" == faulthandler ]]; then
+        ALLOCATION_DIAG="$GITHUB_WORKSPACE/diagnostics/pr3088-hang/allocation.py"
+        ALLOCATION_OUT="$GITHUB_WORKSPACE/results/hang-diagnostic/allocation-${GITHUB_RUN_ID:?}-${GITHUB_RUN_ATTEMPT:?}"
+        trap 'rc=$?; trap - EXIT; python3 "$ALLOCATION_DIAG" cleanup "$ALLOCATION_OUT" || true; exit "$rc"' EXIT
+        trap 'exit 130' INT
+        trap 'exit 143' TERM HUP
+        JOB_ID=$(python3 "$ALLOCATION_DIAG" allocate "$ALLOCATION_OUT" "${SALLOC_ARGS[@]}") || exit "$?"
+    else
+        # Capture this allocation's ID; a runner name can also match an older job.
+        JOB_ID=$(
+            set -o pipefail
+            LC_ALL=C salloc "${SALLOC_ARGS[@]}" 2>&1 | tee /dev/stderr |
+                sed -n 's/.*Granted job allocation \([0-9][0-9]*\)$/\1/p'
+        ) || exit 1
+        [[ "$JOB_ID" =~ ^[0-9]+$ ]] || { echo 'ERROR: B300 allocation unavailable' >&2; exit 1; }
+        trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
+    fi
+    if [[ "${HANG_STACK_MODE:-}" == faulthandler ]]; then
+        timeout --signal=TERM --kill-after=5s 75s \
+            srun --jobid="$JOB_ID" --nodes=1 --ntasks=1 --time=1 --mpi=none \
+            python3 "$GITHUB_WORKSPACE/diagnostics/pr3088-hang/runtime.py" \
+            "$ALLOCATION_OUT" "$SQUASH_FILE" || exit "$?"
+    fi
     if [[ "$MODEL_MOUNT_DIR" == "$MODEL_ROOT" ]]; then
         # MODEL_ROOT is node-local: probe the allocated compute node, not the login host.
         srun --jobid="$JOB_ID" test -r "$MODEL_PATH/config.json" || {

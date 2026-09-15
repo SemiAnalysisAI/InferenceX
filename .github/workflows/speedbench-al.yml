@@ -1,5 +1,5 @@
-name: B300 hang diagnostic capabilities (no GPU)
-run-name: pr3088-hang-capabilities-${{ github.run_id }}
+name: B300 one C40 hang diagnostic
+run-name: pr3088-hang-c40-${{ github.run_id }}
 'on':
   workflow_dispatch:
     inputs:
@@ -17,9 +17,6 @@ run-name: pr3088-hang-capabilities-${{ github.run_id }}
         required: true
 permissions:
   contents: read
-env:
-  PYTHONDONTWRITEBYTECODE: '1'
-  PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 jobs:
   setup:
     runs-on: ubuntu-latest
@@ -53,53 +50,44 @@ jobs:
             --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}")
         echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
         echo "queue-token=$(jq -r '.[0]["queue-token"]' <<<"$scored")" >> "$GITHUB_OUTPUT"
-  collect-al:
+  diagnose-c40:
     needs: setup
-    runs-on: |-
-      ${{ fromJSON(
-        vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
-        (
-          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
-          format(
-            '["self-hosted",{0},{1},{2},{3}]',
-            toJSON(inputs.runner),
-            toJSON('nodes:1'),
-            toJSON(format(
-              'ci-job-{0}-{1}',
-              needs.setup.outputs.priority,
-              needs.setup.outputs.queue-token
-            )),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
-          ) ||
-          format(
-            '["self-hosted",{0},"nodes:1",{1},{2}]',
-            toJSON(inputs.runner),
-            toJSON(format(
-              'ci-job-{0}-{1}',
-              needs.setup.outputs.priority,
-              needs.setup.outputs.queue-token
-            )),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
-          )
-        ) ||
-        format('[{0},"nodes:1"]', toJSON(inputs.runner))
-      ) }}
-    timeout-minutes: 5
-    name: p${{ needs.setup.outputs.priority }} | B300 no-GPU attach capability
-    steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      with:
-        ref: ${{ inputs.ref || github.sha }}
-        clean: true
-        persist-credentials: false
-    - name: Read existing resource and attach capability
-      shell: bash
-      run: SQUASH_FILE="$HOME/squash/vllm_vllm-openai_nightly-dev-x86_64-cu13-3696c77.sqsh" timeout --signal=TERM --kill-after=5s
-        90s bash diagnostics/pr3088-hang/capabilities.sh "$RUNNER_TEMP/pr3088-hang-capabilities"
-    - name: Preserve capability evidence
-      if: always()
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      with:
-        name: pr3088-hang-capabilities-${{ github.run_id }}
-        path: ${{ runner.temp }}/pr3088-hang-capabilities/
-        if-no-files-found: error
+    uses: ./.github/workflows/benchmark-tmpl.yml
+    with:
+      runner: b300
+      priority: ${{ needs.setup.outputs.priority }}
+      queue-token: ${{ needs.setup.outputs.queue-token }}
+      image: vllm/vllm-openai:nightly-dev-x86_64-cu13-3696c77
+      model: moonshotai/Kimi-K3
+      model-prefix: kimik3
+      precision: fp4
+      framework: vllm
+      exp-name: kimik3_tp8_conc40_kvdram-mooncake_spec-mtp
+      recipe-fingerprint: 001768805016287806edac81d49413a62fc9944b32f72d82f0ce6f0b0f38b6db
+      isl: '0'
+      osl: '0'
+      tp: '8'
+      pp: '1'
+      dcp-size: '8'
+      pcp-size: '1'
+      ep: '1'
+      dp-attn: false
+      max-model-len: '0'
+      conc: '40'
+      spec-decoding: mtp
+      disagg: 'false'
+      run-eval: false
+      eval-only: false
+      eval-framework: lm-eval
+      eval-suite: ''
+      scenario-type: agentic-coding
+      kv-offloading: dram
+      kv-offload-backend: mooncake
+      kv-offload-backend-metadata: '{"name":"mooncake","version":"0.3.11.post1"}'
+      total-cpu-dram-gb: '2249'
+      duration: '3600'
+      require-power: false
+      agentx-fast: false
+      ref: ${{ inputs.ref }}
+      hang-stack-mode: faulthandler
+    secrets: inherit

@@ -2,6 +2,10 @@ name: Template - Benchmark
 on:
   workflow_call:
     inputs:
+      hang-stack-mode:
+        description: "Temporary diagnostic branch only: registered Python stack mode"
+        required: true
+        type: string
       klaud-run:
         description: "Run Klaud Cold benchmarks at background priority"
         required: false
@@ -213,6 +217,11 @@ env:
   SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
   RESULT_DIR: /workspace/results
+  # Temporary diagnostic branch only; original model/graph/offload inputs remain unchanged.
+  BENCH_SCRIPT_OVERRIDE: diagnostics/pr3088-hang/run-c40.sh
+  HANG_STACK_MODE: ${{ inputs.hang-stack-mode }}
+  SALLOC_TIME_LIMIT: '120'
+  VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '300'
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
   # GPU runners lack Docker for SWE-bench scoring.
@@ -251,23 +260,23 @@ jobs:
           (
             inputs.skip-queue-pr != '' &&
             format(
-              '["self-hosted",{0},{1},{2},{3}]',
+              '["self-hosted",{0},"nodes:1",{1},{2},{3}]',
               toJSON(inputs.runner),
               toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
               toJSON(format('ci-attempt-{0}', github.run_attempt)),
               toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
             ) ||
             format(
-              '["self-hosted",{0},{1},{2}]',
+              '["self-hosted",{0},"nodes:1",{1},{2}]',
               toJSON(inputs.runner),
               toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
               toJSON(format('ci-attempt-{0}', github.run_attempt))
             )
           )
         ) ||
-        format('[{0}]', toJSON(inputs.runner))
+        format('[{0},"nodes:1"]', toJSON(inputs.runner))
       ) }}
-    timeout-minutes: 500
+    timeout-minutes: 130
     name: >-
       ${{ inputs.klaud-run && 'klaud | ' || '' }}p${{ inputs.priority }} | ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework == 'sglang' && 'sgl' || inputs.framework == 'dynamo-sglang' && 'dyn-sgl' || inputs.framework == 'sglang-disagg' && 'sgl-disagg' || inputs.framework }}
       TP${{ inputs.tp }}${{ inputs.pp != '' && inputs.pp != '1' && format('/PP{0}', inputs.pp) || '' }}${{ inputs.dcp-size != '' && inputs.dcp-size != '1' && format('/DCP{0}', inputs.dcp-size) || '' }}${{ inputs.pcp-size != '' && inputs.pcp-size != '1' && format('/PCP{0}', inputs.pcp-size) || '' }}${{ inputs.ep != '' && inputs.ep != '1' && format('/EP{0}', inputs.ep) || '' }}${{ inputs.dp-attn && '/DPA' || '' }}
@@ -277,6 +286,7 @@ jobs:
       c${{ inputs.conc }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
     steps:
       - name: Resource cleanup (pre-run)
+        if: ${{ inputs.hang-stack-mode != 'faulthandler' }}
         run: &resource-cleanup |
           # Containerized AMD Slurm jobs can leave root-owned artifacts when
           # interrupted before their launcher EXIT trap runs. Repair ownership
@@ -339,6 +349,12 @@ jobs:
           clean: true
           submodules: true
 
+      - name: Require the existing cached image before launcher allocation
+        run: |
+          sqsh="$HOME/squash/vllm_vllm-openai_nightly-dev-x86_64-cu13-3696c77.sqsh"
+          timeout --signal=TERM --kill-after=2s 10s test -s "$sqsh"
+          timeout --signal=TERM --kill-after=2s 10s unsquashfs -s "$sqsh"
+
       - name: Launch job script
         env:
           RUNNER_NAME: ${{ runner.name }}
@@ -394,6 +410,14 @@ jobs:
             fi
           fi
 
+      - name: Clean up this diagnostic allocation
+        if: ${{ always() && inputs.hang-stack-mode == 'faulthandler' }}
+        run: |
+          out="$GITHUB_WORKSPACE/results/hang-diagnostic/allocation-${GITHUB_RUN_ID:?}-${GITHUB_RUN_ATTEMPT:?}"
+          if [[ -f "$out/allocation.json" ]]; then
+            python3 diagnostics/pr3088-hang/allocation.py cleanup "$out"
+          fi
+
       - name: Process result
         if: ${{ always() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         env:
@@ -426,6 +450,7 @@ jobs:
           name: agentic_${{ env.RESULT_FILENAME }}
           path: |
             results/**
+            !results/hang-diagnostic/**/*.fifo
             !results/aiperf_artifacts/inputs.json
             !results/aiperf_artifacts/profile_export_raw.jsonl
           if-no-files-found: ignore
@@ -517,5 +542,5 @@ jobs:
           rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true
           
       - name: Resource cleanup (post-run)
-        if: always()
+        if: ${{ always() && inputs.hang-stack-mode != 'faulthandler' }}
         run: *resource-cleanup
