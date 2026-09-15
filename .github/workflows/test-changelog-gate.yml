@@ -8,6 +8,9 @@ on:
     paths:
       - "infx/**"
       - "utils/test_module_entrypoints.py"
+      - "golden_al_distribution/*.yaml"
+      - "utils/test_synthetic_acceptance.py"
+      - "utils/srt-slurm"
       - ".claude/commands/recover-failed-ingest.md"
       - ".claude/mcp/**"
       - ".claude/requirements-mcp.txt"
@@ -120,3 +123,21 @@ jobs:
             utils/evals/test_batched_eval.py \
             utils/evals/test_run_eval_dispatch.py \
             -v -n 4
+
+  test-srt-slurm:
+    name: Test SRT Slurm connector
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - name: Test native srt-slurm acceptance overrides
+        run: |
+          git submodule update --init utils/srt-slurm
+          uv run --no-project --exclude-newer PT12H --python 3.12 \
+            --with pytest --with pyyaml --with marshmallow --with marshmallow-dataclass \
+            --with ruamel.yaml --with jinja2 --with pydantic --with requests --with rich \
+            python -m pytest utils/test_synthetic_acceptance.py -v

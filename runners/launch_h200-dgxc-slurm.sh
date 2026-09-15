@@ -265,15 +265,11 @@ EOF
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
     sed -i '/^health_check:/,/^[^ ]/{ /^health_check:/d; /^  /d; }' "$CONFIG_PATH"
     printf '\nhealth_check:\n  max_attempts: 720\n  interval_seconds: 10\n' >> "$CONFIG_PATH"
-    if [[ "${EVAL_ONLY}" == "true" ]]; then
-        python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-            "$CONFIG_PATH" "$FRAMEWORK" || exit 1
-    fi
     WORKLOAD_TAG="${ISL}x${OSL}"
     if [[ "$IS_AGENTIC" == "1" ]]; then
         WORKLOAD_TAG="agentic"
     fi
-    SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" --tags "h200,${MODEL_PREFIX},${PRECISION},${WORKLOAD_TAG},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" --tags "h200,${MODEL_PREFIX},${PRECISION},${WORKLOAD_TAG},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
     JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
