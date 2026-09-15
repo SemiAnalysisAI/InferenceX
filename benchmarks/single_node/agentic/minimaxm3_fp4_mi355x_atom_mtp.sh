@@ -17,17 +17,26 @@ set -x
 #
 # Required env vars:
 #   MODEL, MODEL_PATH, TP, DCP_SIZE, CONC, KV_OFFLOADING, KV_OFFLOAD_BACKEND,
-#   TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION, EP_SIZE, DP_ATTENTION
+#   TOTAL_CPU_DRAM_GB, RESULT_DIR, RESULT_FILENAME, DURATION, EP_SIZE, DP_ATTENTION,
+#   EVAL_ONLY, ENABLE_PREFIX_CACHING, AITER_LOG_LEVEL
+# Eval-only runs also require EVAL_FRAMEWORK and, for lm-eval, EVAL_TASKS_DIR.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars MODEL MODEL_PATH TP DCP_SIZE CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR RESULT_FILENAME DURATION EP_SIZE DP_ATTENTION EVAL_ONLY ENABLE_PREFIX_CACHING AITER_LOG_LEVEL
+if [[ "$KV_OFFLOADING" != "none" ]]; then
+    check_env_vars KV_OFFLOAD_BACKEND
+fi
+if [[ "$EVAL_ONLY" == "true" ]]; then
+    check_env_vars EVAL_FRAMEWORK
+    if [[ "$EVAL_FRAMEWORK" == "lm-eval" || "$EVAL_FRAMEWORK" == "lm_eval" ]]; then
+        check_env_vars EVAL_TASKS_DIR
+    fi
+fi
 
-export RESULT_FILENAME="${RESULT_FILENAME:-minimaxm3_agentic}"
+echo "MODEL=$MODEL TP=$TP DCP_SIZE=$DCP_SIZE CONC=$CONC KV_OFFLOADING=$KV_OFFLOADING TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB RESULT_DIR=$RESULT_DIR DURATION=$DURATION EP_SIZE=$EP_SIZE DP_ATTENTION=$DP_ATTENTION"
 
-echo "MODEL=$MODEL TP=$TP DCP_SIZE=${DCP_SIZE:-1} CONC=$CONC KV_OFFLOADING=$KV_OFFLOADING TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB RESULT_DIR=$RESULT_DIR DURATION=$DURATION EP_SIZE=$EP_SIZE DP_ATTENTION=$DP_ATTENTION"
-
-if [[ -v SLURM_JOB_ID ]]; then
+if [[ -n "${SLURM_JOB_ID+x}" ]]; then
     echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
@@ -36,17 +45,14 @@ if [ "$TP" -ne 2 ] && [ "$TP" -ne 4 ] && [ "$TP" -ne 8 ]; then
     exit 1
 fi
 
-if [[ -v ROCR_VISIBLE_DEVICES ]]; then
+if [[ -n "${ROCR_VISIBLE_DEVICES+x}" ]]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
-if [[ -n "$MODEL_PATH" ]]; then
-    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
-        hf download "$MODEL" --local-dir "$MODEL_PATH"
-    fi
-else
+if [[ "$MODEL_PATH" == "$MODEL" ]]; then
     hf download "$MODEL"
-    export MODEL_PATH="$MODEL"
+elif [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
+    hf download "$MODEL" --local-dir "$MODEL_PATH"
 fi
 
 DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3-GQA"
@@ -269,7 +275,7 @@ export PYTHONNOUSERSITE=1
 
 # Required by ATOM: without it the aiter kernel logs flood the server log for
 # the whole 3600 s replay.
-export AITER_LOG_LEVEL="${AITER_LOG_LEVEL:-WARNING}"
+export AITER_LOG_LEVEL
 export AITER_SITUV2_A4W4=1
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 export AITER_FLYDSL_STAGE2_FP8=1
@@ -316,15 +322,10 @@ ATOM_CMD=(
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
-if [[ "${ENABLE_PREFIX_CACHING:-true}" != "true" ]]; then
+if [[ "$ENABLE_PREFIX_CACHING" != "true" ]]; then
     ATOM_CMD+=(--no-enable_prefix_caching)
 fi
-if declare -F write_command >/dev/null 2>&1; then
-    write_command "$RESULT_DIR/server_command.txt" "${ATOM_CMD[@]}"
-else
-    printf '%q ' "${ATOM_CMD[@]}" > "$RESULT_DIR/server_command.txt"
-    printf '\n' >> "$RESULT_DIR/server_command.txt"
-fi
+write_command "$RESULT_DIR/server_command.txt" "${ATOM_CMD[@]}"
 PYTHONPATH="$ATOM_RUNTIME_DEPS${PYTHONPATH:+:$PYTHONPATH}" \
     "${ATOM_CMD[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
@@ -334,8 +335,6 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 
 # ---- Run benchmark ----------------------------------------------------------
 if [ "${EVAL_ONLY}" = "true" ]; then
-    export EVAL_FRAMEWORK="${EVAL_FRAMEWORK:-lm-eval}"
-    export EVAL_TASKS_DIR="${EVAL_TASKS_DIR:-utils/evals/gsm8k.yaml}"
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"

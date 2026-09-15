@@ -325,6 +325,13 @@ else
         BENCHMARK_SCRIPT="$SCRIPT_FALLBACK"
     fi
 
+    if [[ "$BENCHMARK_SCRIPT" == "benchmarks/single_node/agentic/minimaxm3_fp4_mi355x_atom_mtp.sh" ]]; then
+        export MODEL_PATH="$MODEL"
+        export ENABLE_PREFIX_CACHING=true
+        export AITER_LOG_LEVEL=WARNING
+        export EVAL_TASKS_DIR=infx/evals/gsm8k.yaml
+    fi
+
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_REPO/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
