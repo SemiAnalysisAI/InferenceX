@@ -16,7 +16,7 @@ set -x
 #
 # Serving flags follow the validated MI355X recipe from
 # https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4-Pro?hardware=mi355x
-# https://github.com/SemiAnalysisAI/InferenceX/blob/main/benchmarks/single_node/fixed_seq_len/dsv4_fp4_mi355x_vllm.sh
+# https://github.com/SemiAnalysisAI/InferenceX/blob/main/benchmarks/single_node/fixed_seq_len/deprecated/dsv4_fp4_mi355x_vllm.sh
 # Image is configured in amd-master.yaml.
 #
 # Required env vars:

@@ -13,11 +13,14 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 from infx.results.evals import (
-    is_eval_result, is_valid_effective_count, is_valid_score, metric_family,
+    is_eval_result,
+    is_valid_effective_count,
+    is_valid_score,
+    metric_family,
+    result_concurrency as _result_concurrency,
+    result_order as _result_order,
     select_latest_result,
 )
-from infx.results.evals import result_concurrency as _result_concurrency
-from infx.results.evals import result_order as _result_order
 
 
 def as_bool(value: Any) -> bool:
@@ -121,10 +124,7 @@ def freeze_identity_value(value: Any) -> Any:
     """Convert nested JSON values into deterministic, hashable identities."""
     if isinstance(value, dict):
         return tuple(
-            sorted(
-                (key, freeze_identity_value(item))
-                for key, item in value.items()
-            )
+            sorted((key, freeze_identity_value(item)) for key, item in value.items())
         )
     if isinstance(value, (list, tuple)):
         return tuple(freeze_identity_value(item) for item in value)
@@ -244,18 +244,12 @@ def duplicate_identity_errors(
 ) -> list[str]:
     """Reject duplicate rows that set equality would otherwise hide."""
     counts = Counter(identities)
-    duplicates = {
-        identity: count
-        for identity, count in counts.items()
-        if count > 1
-    }
+    duplicates = {identity: count for identity, count in counts.items() if count > 1}
     if not duplicates:
         return []
 
     duplicate_rows = sum(count - 1 for count in duplicates.values())
-    errors = [
-        f"{label} artifacts contain {duplicate_rows} duplicate row(s)"
-    ]
+    errors = [f"{label} artifacts contain {duplicate_rows} duplicate row(s)"]
     for identity, count in sorted(
         duplicates.items(),
         key=lambda item: repr(item[0]),
@@ -284,9 +278,7 @@ def validate_agentic_artifacts(
     results_bmk = artifacts_dir / "results_bmk"
     if results_bmk.is_dir():
         aggregate_rows = agentic_keys_from_paths(results_bmk.glob("*.json"))
-        errors.extend(
-            duplicate_identity_errors("agentic aggregate", aggregate_rows)
-        )
+        errors.extend(duplicate_identity_errors("agentic aggregate", aggregate_rows))
         errors.extend(
             validate_identity_set(
                 "agentic aggregate",
@@ -321,15 +313,12 @@ def normalized_runner(value: Any) -> str:
 
 
 LEGACY_EVAL_SUITE = "<legacy-eval-suite>"
+
+
 def invalid_eval_suite(row: dict[str, Any]) -> bool:
     """Return whether an explicit eval-suite identity is malformed."""
     suite = row.get("eval_suite")
-    return "eval_suite" in row and (
-        not isinstance(suite, str) or not suite
-    )
-
-
-
+    return "eval_suite" in row and (not isinstance(suite, str) or not suite)
 
 
 def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
@@ -491,14 +480,12 @@ def raw_eval_key_rows(
             continue
         if not isinstance(meta, dict):
             errors.append(
-                f"raw eval artifact {artifact_dir.name!r} has non-object "
-                "meta_env.json"
+                f"raw eval artifact {artifact_dir.name!r} has non-object meta_env.json"
             )
             continue
         if invalid_eval_suite(meta):
             errors.append(
-                f"raw eval artifact {artifact_dir.name!r} has invalid "
-                "eval_suite"
+                f"raw eval artifact {artifact_dir.name!r} has invalid eval_suite"
             )
             continue
 
@@ -510,9 +497,7 @@ def raw_eval_key_rows(
         if meta_errors:
             continue
 
-        result_paths = _recognized_eval_result_paths(
-            artifact_dir.glob("results*.json")
-        )
+        result_paths = _recognized_eval_result_paths(artifact_dir.glob("results*.json"))
         if batched:
             expected = set(meta["eval_concs"])
             for path in result_paths:
@@ -546,9 +531,7 @@ def raw_eval_key_rows(
                 continue
             result_data = load_json(latest)
             result_tasks = result_data["results"]
-            contribution_meta = (
-                {**meta, "conc": conc} if conc is not None else meta
-            )
+            contribution_meta = {**meta, "conc": conc} if conc is not None else meta
             rows.extend(
                 eval_result_key({**contribution_meta, "task": task})
                 for task in result_tasks
@@ -580,16 +563,13 @@ def validate_eval_artifacts(
                     )
                     continue
                 if not isinstance(data, list):
-                    errors.append(
-                        f"eval aggregate {path.name!r} is not a list"
-                    )
+                    errors.append(f"eval aggregate {path.name!r} is not a list")
                     continue
                 row_count += len(data)
                 for index, row in enumerate(data):
                     if not isinstance(row, dict):
                         errors.append(
-                            f"eval aggregate {path.name!r} row {index} "
-                            "is not an object"
+                            f"eval aggregate {path.name!r} row {index} is not an object"
                         )
                         continue
                     if invalid_eval_suite(row):
@@ -637,6 +617,7 @@ def validate_run_stats(artifacts_dir: Path, required: bool) -> list[str]:
 # latest result, ordered by a filename timestamp or legacy mtime. Identities
 # with no result file are left in place for validation to reject. Eval-only;
 # fixed-sequence and agentic artifacts are untouched.
+
 
 def _recognized_eval_result_paths(paths: Iterable[Path]) -> list[Path]:
     """Return result JSONs carrying a collector-recognized eval marker."""
@@ -706,19 +687,12 @@ def _raw_result_error(path: Path) -> Optional[str]:
                 for item in filter_list
             ):
                 return f"has malformed filter config for task {task!r}"
-            configured_names = [
-                f"{base_metric},{item['name']}"
-                for item in filter_list
-            ]
+            configured_names = [f"{base_metric},{item['name']}" for item in filter_list]
             strict_names = [
-                name
-                for name in configured_names
-                if metric_family(name) == "strict"
+                name for name in configured_names if metric_family(name) == "strict"
             ]
             fallback_names = [
-                name
-                for name in configured_names
-                if metric_family(name) == "flex"
+                name for name in configured_names if metric_family(name) == "flex"
             ]
             primary_names = strict_names or fallback_names or configured_names
         else:
@@ -729,10 +703,7 @@ def _raw_result_error(path: Path) -> Optional[str]:
         for name in primary_names:
             score = metrics[name]
             if not is_valid_score(score):
-                return (
-                    f"has invalid score {name!r} for task {task!r}: "
-                    f"{score!r}"
-                )
+                return f"has invalid score {name!r} for task {task!r}: {score!r}"
         if sample_counts is not None:
             task_counts = sample_counts.get(task)
             if not isinstance(task_counts, dict) or "effective" not in task_counts:
@@ -795,9 +766,7 @@ def _eval_winners(artifacts_dir: Path) -> dict[tuple[Any, ...], Path]:
     ] = {}
     for artifact_dir in raw_eval_artifact_dirs(artifacts_dir):
         contributions, _, _ = _raw_dir_contributions(artifact_dir)
-        result_paths = _recognized_eval_result_paths(
-            artifact_dir.glob("results*.json")
-        )
+        result_paths = _recognized_eval_result_paths(artifact_dir.glob("results*.json"))
         for key, key_conc in contributions:
             latest = select_latest_result(result_paths, concurrency=key_conc)
             if latest is None:
@@ -846,10 +815,7 @@ def _dedupe_eval_aggregate(
                     (agg_path, index, row)
                 )
 
-    keep = {
-        path: set(range(len(data)))
-        for path, data in loaded.items()
-    }
+    keep = {path: set(range(len(data))) for path, data in loaded.items()}
     for key, entries in groups.items():
         artifact_key = key[:-1]
         winner = winners.get(artifact_key)
@@ -866,7 +832,8 @@ def _dedupe_eval_aggregate(
             if re.split(
                 r"[\\/]+",
                 str(entry[2].get("source") or ""),
-            )[-1] == winner.name
+            )[-1]
+            == winner.name
         ]
         if not exact_matching:
             continue
@@ -881,17 +848,11 @@ def _dedupe_eval_aggregate(
 
     messages: list[str] = []
     for agg_path, data in loaded.items():
-        kept = [
-            row
-            for index, row in enumerate(data)
-            if index in keep[agg_path]
-        ]
+        kept = [row for index, row in enumerate(data) if index in keep[agg_path]]
         if len(kept) == len(data):
             continue
         agg_path.write_text(json.dumps(kept, indent=2))
-        messages.append(
-            f"{agg_path.name}: kept {len(kept)} of {len(data)} eval row(s)"
-        )
+        messages.append(f"{agg_path.name}: kept {len(kept)} of {len(data)} eval row(s)")
     return messages
 
 
@@ -923,9 +884,7 @@ def _prune_raw_eval_dir(
         if _result_concurrency(path.name) in losing:
             path.unlink()
     remaining = [
-        conc
-        for conc in meta.get("completed_eval_concs", [])
-        if conc not in losing
+        conc for conc in meta.get("completed_eval_concs", []) if conc not in losing
     ]
     if not remaining:
         shutil.rmtree(artifact_dir)
@@ -934,9 +893,7 @@ def _prune_raw_eval_dir(
     meta["completed_eval_concs"] = remaining
     (artifact_dir / "meta_env.json").write_text(json.dumps(meta))
     dropped = ",".join(str(conc) for conc in sorted(losing))
-    return (
-        f"pruned superseded conc(s) {dropped} from batched raw eval dir {name!r}"
-    )
+    return f"pruned superseded conc(s) {dropped} from batched raw eval dir {name!r}"
 
 
 def dedupe_reran_evals(artifacts_dir: Path) -> list[str]:
@@ -957,9 +914,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.artifacts_dir.is_dir():
-        raise ValueError(
-            f"artifacts directory does not exist: {args.artifacts_dir}"
-        )
+        raise ValueError(f"artifacts directory does not exist: {args.artifacts_dir}")
 
     # Collapse reran (flaky) eval duplicates to the latest result before
     # validating, so a legitimate rerun does not fail the consistency checks.
@@ -970,9 +925,7 @@ def main() -> int:
             print(f"  {message}")
 
     fixed_rows = actual_benchmark_key_rows(args.artifacts_dir)
-    agentic_rows = agentic_keys_from_paths(
-        agentic_point_files(args.artifacts_dir)
-    )
+    agentic_rows = agentic_keys_from_paths(agentic_point_files(args.artifacts_dir))
     eval_rows, _ = raw_eval_key_rows(args.artifacts_dir)
 
     errors = validate_fixed_artifacts(args.artifacts_dir)

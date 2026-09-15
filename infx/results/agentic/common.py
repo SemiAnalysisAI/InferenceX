@@ -51,7 +51,9 @@ def to_int(value: Any) -> int | None:
         return None
 
 
-def rate(numerator: float | int | None, denominator: float | int | None) -> float | None:
+def rate(
+    numerator: float | int | None, denominator: float | int | None
+) -> float | None:
     if numerator is None or denominator is None:
         return None
     if denominator <= 0:

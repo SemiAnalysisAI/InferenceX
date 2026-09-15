@@ -5,13 +5,13 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-from .common import index_server_metrics
 from .backends import detect_backend
 from .backends.base import (
     SERVER_CACHE_FLAT_FIELDS,
     apply_profile_totals,
     empty_server_metrics,
 )
+from .common import index_server_metrics
 
 
 def compute_server_metrics(

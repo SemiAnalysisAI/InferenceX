@@ -20,10 +20,25 @@ _FENCED_DIFF_RE = re.compile(
 _DIFF_GIT_RE = re.compile(r"(?:^|\n)(diff --git .*)", re.DOTALL)
 
 _DIFF_LINE_PREFIXES = (
-    "diff ", "index ", "--- ", "+++ ", "@@", "+", "-", " ", "\\",
-    "old mode ", "new mode ", "new file mode ", "deleted file mode ",
-    "rename ", "copy ", "similarity ", "dissimilarity ",
-    "Binary files ", "GIT binary patch",
+    "diff ",
+    "index ",
+    "--- ",
+    "+++ ",
+    "@@",
+    "+",
+    "-",
+    " ",
+    "\\",
+    "old mode ",
+    "new mode ",
+    "new file mode ",
+    "deleted file mode ",
+    "rename ",
+    "copy ",
+    "similarity ",
+    "dissimilarity ",
+    "Binary files ",
+    "GIT binary patch",
 )
 
 
@@ -152,10 +167,15 @@ def run_harness(
 ) -> None:
     """Invoke the official swebench harness (local Docker, or Modal sandboxes)."""
     cmd = [
-        sys.executable, "-m", "swebench.harness.run_evaluation",
-        "--dataset_name", dataset_name,
-        "--predictions_path", str(predictions_path),
-        "--run_id", run_id,
+        sys.executable,
+        "-m",
+        "swebench.harness.run_evaluation",
+        "--dataset_name",
+        dataset_name,
+        "--predictions_path",
+        str(predictions_path),
+        "--run_id",
+        run_id,
     ]
     if timeout is not None:
         cmd += ["--timeout", str(timeout)]
@@ -265,41 +285,61 @@ def build_results_json(
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Score SWE-bench patches from lm-eval samples")
-    parser.add_argument("--samples-dir", default=None, help="dir containing lm-eval samples_*.jsonl (single-shot mode)")
+    parser = argparse.ArgumentParser(
+        description="Score SWE-bench patches from lm-eval samples"
+    )
     parser.add_argument(
-        "--predictions-file", default=None,
+        "--samples-dir",
+        default=None,
+        help="dir containing lm-eval samples_*.jsonl (single-shot mode)",
+    )
+    parser.add_argument(
+        "--predictions-file",
+        default=None,
         help="pre-built predictions.jsonl (agentic mode) -- skips samples parsing",
     )
-    parser.add_argument("--out-dir", required=True, help="dir to write predictions + results JSON")
-    parser.add_argument("--model-name", required=True, help="served model name (model_name_or_path)")
+    parser.add_argument(
+        "--out-dir", required=True, help="dir to write predictions + results JSON"
+    )
+    parser.add_argument(
+        "--model-name", required=True, help="served model name (model_name_or_path)"
+    )
     parser.add_argument("--dataset-name", default=DEFAULT_DATASET)
     parser.add_argument("--task-name", default=DEFAULT_TASK)
-    parser.add_argument("--run-id", default=None, help="harness run id (default: task name)")
+    parser.add_argument(
+        "--run-id", default=None, help="harness run id (default: task name)"
+    )
     parser.add_argument("--max-workers", type=int, default=4)
     parser.add_argument(
-        "--instance-timeout", type=int, default=None,
+        "--instance-timeout",
+        type=int,
+        default=None,
         help="per-instance test timeout in seconds (harness default 1800)",
     )
     parser.add_argument(
-        "--namespace", default=None,
+        "--namespace",
+        default=None,
         help="local-Docker --namespace value (pass '' on arm/Mac to build images locally)",
     )
     parser.add_argument(
-        "--modal", action="store_true",
+        "--modal",
+        action="store_true",
         help="score on Modal remote sandboxes instead of local Docker (needs modal creds)",
     )
     parser.add_argument("--lm-eval-version", default="unknown")
     parser.add_argument(
-        "--predictions-only", action="store_true",
+        "--predictions-only",
+        action="store_true",
         help="write predictions.jsonl and stop (no scoring; score elsewhere)",
     )
     parser.add_argument(
-        "--no-run", action="store_true",
+        "--no-run",
+        action="store_true",
         help="skip the Docker harness; requires --report (offline/testing)",
     )
     parser.add_argument(
-        "--report", default=None,
+        "--report",
+        default=None,
         help="path to a pre-computed harness report JSON (implies --no-run)",
     )
     args = parser.parse_args(argv)
@@ -315,20 +355,27 @@ def main(argv: Optional[list[str]] = None) -> int:
             blob = json.loads(text)
             predictions = list(blob.values()) if isinstance(blob, dict) else blob
         except json.JSONDecodeError:
-            predictions = [json.loads(line) for line in text.splitlines() if line.strip()]
+            predictions = [
+                json.loads(line) for line in text.splitlines() if line.strip()
+            ]
         if not predictions:
             print(f"ERROR: no predictions in {src}", file=sys.stderr)
             return 1
         predictions_path = out_dir / "predictions.jsonl"
         write_predictions(predictions, predictions_path)
-        print(f"[swebench] using {len(predictions)} pre-built predictions -> {predictions_path}")
+        print(
+            f"[swebench] using {len(predictions)} pre-built predictions -> {predictions_path}"
+        )
     elif args.samples_dir:
         predictions = build_predictions(Path(args.samples_dir), args.model_name)
         predictions_path = out_dir / "predictions.jsonl"
         write_predictions(predictions, predictions_path)
         print(f"[swebench] wrote {len(predictions)} predictions -> {predictions_path}")
     else:
-        print("ERROR: one of --samples-dir or --predictions-file is required", file=sys.stderr)
+        print(
+            "ERROR: one of --samples-dir or --predictions-file is required",
+            file=sys.stderr,
+        )
         return 1
 
     if args.predictions_only:
@@ -336,14 +383,21 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 0
 
     if args.report:
-        report = json.loads(Path(args.report).read_text(encoding="utf-8", errors="replace"))
+        report = json.loads(
+            Path(args.report).read_text(encoding="utf-8", errors="replace")
+        )
     elif args.no_run:
         print("ERROR: --no-run requires --report", file=sys.stderr)
         return 1
     else:
         run_harness(
-            predictions_path, args.dataset_name, run_id,
-            out_dir, args.max_workers, args.namespace, modal=args.modal,
+            predictions_path,
+            args.dataset_name,
+            run_id,
+            out_dir,
+            args.max_workers,
+            args.namespace,
+            modal=args.modal,
             timeout=args.instance_timeout,
         )
         report_path = find_report(out_dir, args.model_name, run_id)
@@ -356,8 +410,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     resolved, total = parse_resolved(report)
 
     results = build_results_json(
-        args.task_name, resolved, total, args.model_name,
-        args.lm_eval_version, report,
+        args.task_name,
+        resolved,
+        total,
+        args.model_name,
+        args.lm_eval_version,
+        report,
     )
     results_path = out_dir / f"results_{args.task_name}.json"
     results_path.write_text(json.dumps(results, indent=2), encoding="utf-8")

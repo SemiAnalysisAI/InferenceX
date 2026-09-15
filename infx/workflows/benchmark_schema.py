@@ -52,7 +52,11 @@ class MultiNodeAgenticConfig(_BatchFields, MultiNodeAgenticMatrixEntry):
 
 
 def _validate_rows(
-    rows: object, *, path: str, multinode: bool | None = None, agentic: bool | None = None,
+    rows: object,
+    *,
+    path: str,
+    multinode: bool | None = None,
+    agentic: bool | None = None,
 ) -> None:
     if not isinstance(rows, list):
         raise ValueError(f"{path}: expected a list of matrix rows")
@@ -61,7 +65,9 @@ def _validate_rows(
         if not isinstance(row, dict):
             raise ValueError(f"{location}: expected a matrix object")
         is_multinode = "prefill" in row if multinode is None else multinode
-        is_agentic = row.get("scenario-type") == "agentic-coding" if agentic is None else agentic
+        is_agentic = (
+            row.get("scenario-type") == "agentic-coding" if agentic is None else agentic
+        )
         if is_multinode:
             schema = MultiNodeAgenticConfig if is_agentic else MultiNodeConfig
         else:
@@ -84,17 +90,30 @@ def validate_matrix(matrix: object, *, plan: bool = False) -> None:
         if not isinstance(groups, dict):
             raise ValueError(f"{family}: expected scenario groups")
         for group, rows in groups.items():
-            _validate_rows(rows, path=f"{family}.{group}", multinode=multinode,
-                           agentic=group == "agentic")
+            _validate_rows(
+                rows,
+                path=f"{family}.{group}",
+                multinode=multinode,
+                agentic=group == "agentic",
+            )
         prefix = "multinode_" if multinode else ""
         for suffix, agentic in (("evals", False), ("agentic_evals", True)):
             bucket = prefix + suffix
-            _validate_rows(matrix.get(bucket, []), path=bucket, multinode=multinode, agentic=agentic)
+            _validate_rows(
+                matrix.get(bucket, []),
+                path=bucket,
+                multinode=multinode,
+                agentic=agentic,
+            )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--plan", action="store_true", help="Read a changelog plan instead of a flat matrix")
+    parser.add_argument(
+        "--plan",
+        action="store_true",
+        help="Read a changelog plan instead of a flat matrix",
+    )
     args = parser.parse_args()
     raw = sys.stdin.read()
     try:

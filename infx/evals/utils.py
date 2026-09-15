@@ -1,9 +1,13 @@
 import random
+
 import datasets
 
 LETTERS = "ABCD"
 
-def process_docs(dataset: datasets.Dataset, n_repeats: int = 2, seed: int = 3407) -> datasets.Dataset:
+
+def process_docs(
+    dataset: datasets.Dataset, n_repeats: int = 2, seed: int = 3407
+) -> datasets.Dataset:
     rng = random.Random(seed)
     docs = list(dataset)
 

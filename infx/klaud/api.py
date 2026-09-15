@@ -1,15 +1,16 @@
 """Public image discovery and private capacity through one bounded HTTP reader."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import hashlib
 import json
 import math
 import os
-from typing import Any, Callable
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
+from typing import Any, Callable
 
 from pydantic import ValidationError
 
@@ -49,21 +50,27 @@ def finite_float(value: str) -> float:
     return result
 
 
-def fetch(resource: str, *, token: str | None = None,
-          model: str | None = None,
-          date: str | None = None,
-          clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc), opener=None) -> Feed:
+def fetch(
+    resource: str,
+    *,
+    token: str | None = None,
+    model: str | None = None,
+    date: str | None = None,
+    clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+    opener=None,
+) -> Feed:
     query = {}
-    if resource == 'benchmarks' and model:
-        query['model'] = model
-    if resource in ('benchmarks', 'workflow-info') and date:
+    if resource == "benchmarks" and model:
+        query["model"] = model
+    if resource in ("benchmarks", "workflow-info") and date:
         from datetime import date as calendar_date
+
         if calendar_date.fromisoformat(date).isoformat() != date:
-            raise ReadError('invalid-baseline-date')
-        query['date'] = date
-        if resource == 'benchmarks':
-            query['exact'] = 'true'
-    url = ENDPOINTS[resource] + ('?' + urllib.parse.urlencode(query) if query else '')
+            raise ReadError("invalid-baseline-date")
+        query["date"] = date
+        if resource == "benchmarks":
+            query["exact"] = "true"
+    url = ENDPOINTS[resource] + ("?" + urllib.parse.urlencode(query) if query else "")
     headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
     if resource == "clusters":
         if not token or not token.strip():
@@ -80,16 +87,28 @@ def fetch(resource: str, *, token: str | None = None,
             raw = response.read(MAX_BYTES + 1)
             if len(raw) > MAX_BYTES:
                 raise ReadError("response-too-large")
-            if "application/json" not in response.headers.get("Content-Type", "").lower():
+            if (
+                "application/json"
+                not in response.headers.get("Content-Type", "").lower()
+            ):
                 raise ReadError("response-not-json")
-            metadata = {key.lower(): response.headers[key] for key in ("Age", "Cache-Control", "Date", "ETag") if key in response.headers}
-        payload = json.loads(raw, parse_constant=reject_nonfinite, parse_float=finite_float)
+            metadata = {
+                key.lower(): response.headers[key]
+                for key in ("Age", "Cache-Control", "Date", "ETag")
+                if key in response.headers
+            }
+        payload = json.loads(
+            raw, parse_constant=reject_nonfinite, parse_float=finite_float
+        )
         if resource == "images" and not isinstance(payload, list):
             raise ReadError("invalid-images-payload")
-        if resource == "releases" and (not isinstance(payload, dict) or any(
-            value is not None and (not isinstance(value, str) or not value.strip())
-            for value in payload.values()
-        )):
+        if resource == "releases" and (
+            not isinstance(payload, dict)
+            or any(
+                value is not None and (not isinstance(value, str) or not value.strip())
+                for value in payload.values()
+            )
+        ):
             raise ReadError("invalid-releases-payload")
     except urllib.error.HTTPError as error:
         raise ReadError(f"http-{error.code}") from None
@@ -101,7 +120,13 @@ def fetch(resource: str, *, token: str | None = None,
         raise
     except ValueError:
         raise ReadError("invalid-response") from None
-    return Feed(url=url, retrieved_at=stamp(clock()), sha256=hashlib.sha256(raw).hexdigest(), payload=payload, headers=metadata)
+    return Feed(
+        url=url,
+        retrieved_at=stamp(clock()),
+        sha256=hashlib.sha256(raw).hexdigest(),
+        payload=payload,
+        headers=metadata,
+    )
 
 
 UNSTABLE_MARKERS = ("nightly", "rocm/sgl-dev", "sglang-rocm")
@@ -130,10 +155,14 @@ def feed_issues(feed: Feed | None, now: datetime, policy: Policy) -> list[str]:
     return issues
 
 
-def catalog(images: Feed | None, releases: Feed | None, now: datetime, policy: Policy) -> tuple[list[dict], list[str]]:
+def catalog(
+    images: Feed | None, releases: Feed | None, now: datetime, policy: Policy
+) -> tuple[list[dict], list[str]]:
     issues = [f"images:{issue}" for issue in feed_issues(images, now, policy)]
     issues += [f"releases:{issue}" for issue in feed_issues(releases, now, policy)]
-    release_map = releases.payload if releases and isinstance(releases.payload, dict) else {}
+    release_map = (
+        releases.payload if releases and isinstance(releases.payload, dict) else {}
+    )
     if releases is not None and not isinstance(releases.payload, dict):
         issues.append("releases:invalid-payload")
     for value in release_map.values():
@@ -145,41 +174,75 @@ def catalog(images: Feed | None, releases: Feed | None, now: datetime, policy: P
         return [], issues + ["images:invalid-or-missing-payload"]
     result = []
     for index, raw in enumerate(images.payload):
-        item: dict[str, Any] = {"source-index": index, "source-id": identity(raw), "source": raw}
+        item: dict[str, Any] = {
+            "source-index": index,
+            "source-id": identity(raw),
+            "source": raw,
+        }
         try:
             row = PublicRow.model_validate(raw)
         except ValidationError as error:
-            item.update({"source-status": "invalid", "review-reasons": ["invalid-public-row"],
-                         "invalid-fields": sorted({str(part["loc"][0]) for part in error.errors() if part["loc"]}),
-                         "release": None, "needs-review": False})
+            item.update(
+                {
+                    "source-status": "invalid",
+                    "review-reasons": ["invalid-public-row"],
+                    "invalid-fields": sorted(
+                        {str(part["loc"][0]) for part in error.errors() if part["loc"]}
+                    ),
+                    "release": None,
+                    "needs-review": False,
+                }
+            )
         else:
-            bases = [key for key in release_map if row.framework == key or row.framework.endswith('-' + key)]
+            bases = [
+                key
+                for key in release_map
+                if row.framework == key or row.framework.endswith("-" + key)
+            ]
             release = release_map[max(bases, key=len)] if bases else None
             reasons = image_reasons(row.image, release)
             days = max(0, (utc(now) - utc(f"{row.date}T00:00:00Z")).days)
             if row.benchmark_type == "agentic_traces" and days > 14:
                 reasons.append("agentx-age")
-            needs_review = any(reason != "release-comparison-unknown" for reason in reasons)
-            item.update({"source-status": "review" if needs_review else "unknown" if reasons else "no-review-signal",
-                         "review-reasons": reasons, "release": release, "needs-review": needs_review,
-                         "benchmark-age-days": days})
+            needs_review = any(
+                reason != "release-comparison-unknown" for reason in reasons
+            )
+            item.update(
+                {
+                    "source-status": "review"
+                    if needs_review
+                    else "unknown"
+                    if reasons
+                    else "no-review-signal",
+                    "review-reasons": reasons,
+                    "release": release,
+                    "needs-review": needs_review,
+                    "benchmark-age-days": days,
+                }
+            )
         result.append(item)
     return result, sorted(set(issues))
 
 
 def fetch_catalog(policy: Policy) -> tuple[list[dict], list[str]]:
     feeds = {}
-    for resource in ('images', 'releases'):
+    for resource in ("images", "releases"):
         try:
             feeds[resource] = fetch(resource)
         except ReadError as error:
-            raise ReadError(f'{resource}:{error}') from None
-    return catalog(feeds['images'], feeds['releases'], datetime.now(timezone.utc), policy)
+            raise ReadError(f"{resource}:{error}") from None
+    return catalog(
+        feeds["images"], feeds["releases"], datetime.now(timezone.utc), policy
+    )
 
 
 def fresh(value: Any, now: datetime, policy: Policy) -> bool:
     try:
-        return -policy.clock_skew_seconds <= (utc(now) - utc(value)).total_seconds() <= policy.response_max_age_seconds
+        return (
+            -policy.clock_skew_seconds
+            <= (utc(now) - utc(value)).total_seconds()
+            <= policy.response_max_age_seconds
+        )
     except (ValueError, TypeError, AttributeError):
         return False
 
@@ -188,35 +251,58 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
     """Return clusters below 80% node utilization; never publish private status."""
     try:
         raw = feed.payload
-        if (feed.error or not fresh(feed.retrieved_at, now, policy)
-                or raw['kind'] != 'inferencex.status.clusters'
-                or not fresh(raw['generatedAt'], now, policy) or raw['data']['available'] is not True):
+        if (
+            feed.error
+            or not fresh(feed.retrieved_at, now, policy)
+            or raw["kind"] != "inferencex.status.clusters"
+            or not fresh(raw["generatedAt"], now, policy)
+            or raw["data"]["available"] is not True
+        ):
             return set()
         # Validate the consumed fields, not schemaVersion: additive API changes
         # must not turn healthy capacity into an empty candidate list.
         available: set[str] = set()
         seen: set[str] = set()
-        for cluster in raw['data']['clusters']:
-            cluster_id = cluster['clusterId']
+        for cluster in raw["data"]["clusters"]:
+            cluster_id = cluster["clusterId"]
             if not isinstance(cluster_id, str) or not cluster_id or cluster_id in seen:
                 return set()
             seen.add(cluster_id)
             # The API owns the cluster-age cutoff. Check timestamp validity/order,
             # but do not impose a second cutoff on its current snapshots.
-            observed, received = utc(cluster['observedAt']), utc(cluster['receivedAt'])
-            generated = utc(raw['generatedAt'])
-            if (cluster['stale'] is not False or cluster['status'] not in ('operational', 'degraded')
-                    or (observed - received).total_seconds() > policy.clock_skew_seconds
-                    or (received - generated).total_seconds() > policy.clock_skew_seconds):
+            observed, received = utc(cluster["observedAt"]), utc(cluster["receivedAt"])
+            generated = utc(raw["generatedAt"])
+            if (
+                cluster["stale"] is not False
+                or cluster["status"] not in ("operational", "degraded")
+                or (observed - received).total_seconds() > policy.clock_skew_seconds
+                or (received - generated).total_seconds() > policy.clock_skew_seconds
+            ):
                 continue
-            summary = cluster['summary']
-            total = summary['totalNodes']
-            counts = [summary[k] for k in ('allocatedNodes', 'mixedNodes', 'idleNodes', 'downNodes', 'otherNodes')]
-            if (type(total) is not int or total <= 0
-                    or any(type(n) is not int or n < 0 for n in counts) or sum(counts) != total):
+            summary = cluster["summary"]
+            total = summary["totalNodes"]
+            counts = [
+                summary[k]
+                for k in (
+                    "allocatedNodes",
+                    "mixedNodes",
+                    "idleNodes",
+                    "downNodes",
+                    "otherNodes",
+                )
+            ]
+            if (
+                type(total) is not int
+                or total <= 0
+                or any(type(n) is not int or n < 0 for n in counts)
+                or sum(counts) != total
+            ):
                 continue
             # An entirely down/unavailable cluster can also report 0% utilization.
-            if summary['idleNodes'] > 0 and (summary['allocatedNodes'] + summary['mixedNodes']) * 5 < total * 4:
+            if (
+                summary["idleNodes"] > 0
+                and (summary["allocatedNodes"] + summary["mixedNodes"]) * 5 < total * 4
+            ):
                 available.add(cluster_id)
         return available
     except (KeyError, ValueError, TypeError, AttributeError):
@@ -224,17 +310,28 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
 
 
 def fetch_capacity(policy: Policy) -> set[str]:
-    return available_clusters(fetch('clusters', token=os.environ.get('KLAUD_DASHBOARD_API_KEY')),
-                              policy, datetime.now(timezone.utc))
+    return available_clusters(
+        fetch("clusters", token=os.environ.get("KLAUD_DASHBOARD_API_KEY")),
+        policy,
+        datetime.now(timezone.utc),
+    )
 
 
 def capacity_context(policy: Policy) -> dict:
     """Private routing hints for review, without node counts or raw responses."""
-    feed = fetch('clusters', token=os.environ.get('KLAUD_DASHBOARD_API_KEY'))
+    feed = fetch("clusters", token=os.environ.get("KLAUD_DASHBOARD_API_KEY"))
     available = available_clusters(feed, policy, datetime.now(timezone.utc))
     try:
-        clusters = sorted({cluster['clusterId'] for cluster in feed.payload['data']['clusters']
-                           if isinstance(cluster['clusterId'], str)})
+        clusters = sorted(
+            {
+                cluster["clusterId"]
+                for cluster in feed.payload["data"]["clusters"]
+                if isinstance(cluster["clusterId"], str)
+            }
+        )
     except (KeyError, TypeError):
         clusters = []
-    return {'telemetry-clusters': clusters, 'eligible-telemetry-clusters': sorted(available)}
+    return {
+        "telemetry-clusters": clusters,
+        "eligible-telemetry-clusters": sorted(available),
+    }

@@ -1,13 +1,13 @@
 """Internal pinned Kimi verifier archive preparation for benchmark_lib.sh."""
 
-from hashlib import sha256
-from pathlib import Path
 import re
 import socket
 import sys
 import tarfile
 import tempfile
 import time
+from hashlib import sha256
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
@@ -23,16 +23,16 @@ def archive_member_parts(name):
     return tuple(parts)
 
 
-
 def main() -> None:
     repo_url, verifier_ref, expected_archive_sha256, checkout_dir_arg = sys.argv[1:]
     checkout_dir = Path(checkout_dir_arg)
     stage = "derive the pinned archive URL"
 
-
     try:
         if not re.fullmatch(r"[0-9a-fA-F]{40}", verifier_ref):
-            raise ValueError(f"expected a 40-character commit SHA, got {verifier_ref!r}")
+            raise ValueError(
+                f"expected a 40-character commit SHA, got {verifier_ref!r}"
+            )
         if not re.fullmatch(r"[0-9a-fA-F]{64}", expected_archive_sha256):
             raise ValueError(
                 "expected a 64-character archive SHA256, got "
@@ -40,10 +40,15 @@ def main() -> None:
             )
 
         parsed_repo_url = urlsplit(repo_url)
-        if parsed_repo_url.scheme not in ("http", "https") or not parsed_repo_url.netloc:
+        if (
+            parsed_repo_url.scheme not in ("http", "https")
+            or not parsed_repo_url.netloc
+        ):
             raise ValueError(f"unsupported repository URL: {repo_url!r}")
         if parsed_repo_url.query or parsed_repo_url.fragment:
-            raise ValueError(f"repository URL must not contain a query or fragment: {repo_url!r}")
+            raise ValueError(
+                f"repository URL must not contain a query or fragment: {repo_url!r}"
+            )
         repo_path = parsed_repo_url.path.rstrip("/")
         if repo_path.endswith(".git"):
             repo_path = repo_path[:-4]
@@ -168,7 +173,9 @@ def main() -> None:
                         )
                     archive_size += member.size
                     if archive_size > 512 * 1024 * 1024:
-                        raise ValueError("expanded archive exceeds the 512 MiB safety limit")
+                        raise ValueError(
+                            "expanded archive exceeds the 512 MiB safety limit"
+                        )
 
                     parts = archive_member_parts(member.name)
                     archive_roots.add(parts[0])
@@ -200,7 +207,9 @@ def main() -> None:
                         )
                     source = archive.extractfile(member)
                     if source is None:
-                        raise ValueError(f"could not read archive member: {member.name!r}")
+                        raise ValueError(
+                            f"could not read archive member: {member.name!r}"
+                        )
                     with source:
                         content = source.read(member.size + 1)
                     if len(content) != member.size:

@@ -1,9 +1,6 @@
 """CPU-only lifecycle checks with controlled external collector/Slurm processes."""
-import json
-import os
 from pathlib import Path
 import subprocess
-import sys
 
 import pytest
 
@@ -16,13 +13,15 @@ JOB = ROOT / 'benchmarks/multi_node/llm-d/job.slurm'
 def test_stop_waits_for_every_collector_and_retains_failure(tmp_path, failed_rank):
     command = '''
 source "$1"
+sleep() { command sleep 0.01; }
 export POWERX_CONTROL_DIR="$2" POWERX_NUM_NODES=2 POWERX_BARRIER_TIMEOUT_S=5
-(while [[ ! -f "$2/stop" ]]; do sleep 0.01; done; sleep 0.1; echo 0 > "$2/done-0") &
+(while [[ ! -f "$2/stop" ]]; do sleep; done; echo 0 > "$2/done-0") &
 POWERX_COLLECTOR_PID=$!
-(while [[ ! -f "$2/stop" ]]; do sleep 0.01; done; sleep 0.2; echo "$3" > "$2/done-1") &
+(while [[ ! -f "$2/done-0" ]]; do sleep; done; echo "$3" > "$2/done-1") &
 remote_pid=$!
 powerx_stop_collectors
 rc=$?
+[[ -f "$2/done-0" && -f "$2/done-1" ]] || rc=99
 wait "$remote_pid"
 exit "$rc"
 '''
