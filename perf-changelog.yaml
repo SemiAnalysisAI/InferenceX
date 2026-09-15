@@ -7704,6 +7704,21 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2918
 
 - config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the Kimi-K3 GB300 AgentX vLLM image from vllm/vllm-openai:nightly-dev-arm64-cu13-3696c77 to vllm/vllm-openai:nightly-dc36fcce902a63eab06c1b93a5c4a5ee178a0c56."
+    - "Update Mooncake KV-offload backend metadata from version 0.3.12.post1 to 0.3.13.post1 and set MC_MAX_MR_SIZE=4294967296 in the worker environment."
+    - "Set --mamba-ssm-cache-dtype=bfloat16 and enable --enable-flashinfer-autotune in all six recipes, replacing --no-enable-flashinfer-autotune in the aggregate recipes."
+    - "Set --cp-kv-cache-interleave-size=1 on both prefill and decode workers in all four disaggregated recipes."
+    - "Remove VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0 from both aggregate recipes."
+    - "Replace the no-spec aggregate recipe and config key with a DSpark-4 arm under the existing DSpark aggregate key, using Inferact/Kimi-K3-DSpark, block rejection for real acceptance, golden synthetic AL 3.36 for throughput, and concurrencies [48,52,56]. Preserve the DSpark-7 aggregate arm at [1,4] with AL 3.84."
+    - "Trim DSpark-4 disaggregated concurrencies to 1P1D [48,56], 1P2D [48,64], and 1P3D [48]. Preserve the DSpark-7 1P3D arm at concurrency 1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3105
+
+- config-keys:
     - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
   description:
     - "Add six compact GLM-5.2 NVFP4 AgentX recipes on B300 with Dynamo and TensorRT-LLM disaggregated serving."
