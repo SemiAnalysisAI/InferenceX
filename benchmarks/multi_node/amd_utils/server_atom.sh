@@ -33,8 +33,18 @@ set -x
 _yaml_tmp=$(mktemp)
 python3 << PYEOF > "$_yaml_tmp"
 import yaml
+# Resolve the recipe entry the same way server_sglang.sh does: agentic runs
+# (IS_AGENTIC) use the '<model>-AgentX' entry, non-agentic runs use the bare
+# '<model>'. job.slurm passes MODEL_NAME unchanged (base name), so the -AgentX
+# derivation has to happen here. Fall back to the base entry when absent.
 with open('${ATOM_WS_PATH}/models_atom.yaml') as f:
-    m = yaml.safe_load(f).get('${MODEL_NAME}', {})
+    _all = yaml.safe_load(f) or {}
+_name = '${MODEL_NAME}'
+_agentic = '${IS_AGENTIC:-0}'.strip().lower() in ('1', 'true')
+_key = f'{_name}-AgentX' if _agentic else _name
+m = _all.get(_key, _all.get(_name, {}))
+import sys
+print(f"Selected models_atom.yaml entry: {_key if _key in _all else _name} (IS_AGENTIC={_agentic})", file=sys.stderr)
 def sh(v): return v.replace("'", "'\\''")
 print(f"MODEL_ENVS='{sh(m.get('env', ''))}'")
 _tp_dp = m.get('tp_dp_flags', '')
