@@ -129,7 +129,7 @@ jobs:
             }]')
           scored=$(printf '%s' "$entry" |
             uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
-              utils/ci_priority.py \
+              python -m infx.workflows.ci_priority \
               --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}")
           echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
           echo "queue-token=$(jq -r '.[0]["queue-token"]' <<<"$scored")" >> "$GITHUB_OUTPUT"

@@ -56,7 +56,7 @@ elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/scratch/models/GLM-5-FP8"
     export SRT_SLURM_MODEL_PREFIX="glm5-fp8"
 elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/scratch/models/GLM-5.1-FP8"
+    export MODEL_PATH="${MODEL_PATH:-/scratch/models/GLM-5.1-FP8}"
     export SRT_SLURM_MODEL_PREFIX="glm5.1-fp8"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/GLM-5-NVFP4"
@@ -91,6 +91,13 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/Kimi-K3"
     export SRT_SLURM_MODEL_PREFIX="kimik3"
+elif [[ $MODEL_PREFIX == "qwen3.8next" && $PRECISION == "fp4" ]]; then
+    if [[ -n "${MODEL_PATH:-}" && -d "$MODEL_PATH" ]]; then
+        :
+    else
+        export MODEL_PATH="/scratch/models/Qwen3.8-Flash-Next-NVFP4"
+    fi
+    export SRT_SLURM_MODEL_PREFIX="qwen3.8next-fp4"
 else
     echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
     echo "Available models under /scratch/models:"
@@ -472,7 +479,7 @@ EOF
     tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
-        copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME"
+        copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" || exit 1
     else
         echo "EVAL_ONLY=true: Skipping benchmark result collection"
     fi
