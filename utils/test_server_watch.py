@@ -1,4 +1,6 @@
 """Client lifecycle regressions, using short real processes without a GPU server."""
+import os
+import signal
 import subprocess
 import sys
 import time
@@ -66,3 +68,55 @@ def test_exited_client_leader_does_not_leave_owned_worker(tmp_path: Path):
             assert server.poll() is None
         finally:
             server.terminate()
+
+
+def test_cleanup_accepts_a_group_with_only_an_exited_process():
+    with subprocess.Popen([sys.executable, '-c', 'pass'], start_new_session=True) as client:
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            state = server_watch.process_state(client.pid)
+            if state and state[0].startswith('Z'):
+                break
+            time.sleep(0.01)
+        else:
+            pytest.fail('Client did not exit')
+        server_watch.stop(client)
+        assert client.wait() == 0
+
+
+@pytest.mark.parametrize('leader_exits', [False, True])
+def test_cleanup_does_not_hide_permission_denial_for_a_live_group(monkeypatch, leader_exits):
+    command = ('import subprocess,sys; subprocess.Popen([sys.executable,"-c","import time; time.sleep(30)"])'
+               if leader_exits else 'import time; time.sleep(30)')
+    killpg = os.killpg
+    with subprocess.Popen([sys.executable, '-c', command], start_new_session=True) as client:
+        def denied(*args):
+            raise PermissionError('denied')
+        try:
+            if leader_exits:
+                client.wait(timeout=3)
+            monkeypatch.setattr(os, 'killpg', denied)
+            with pytest.raises(PermissionError, match='denied'):
+                server_watch.stop(client)
+            if not leader_exits:
+                assert client.poll() is None
+        finally:
+            killpg(client.pid, signal.SIGKILL)
+
+
+def test_cleanup_kills_a_client_that_ignores_termination(monkeypatch, tmp_path):
+    ready = tmp_path / 'ready'
+    command = 'import signal,pathlib,sys,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); pathlib.Path(sys.argv[1]).touch(); time.sleep(30)'
+    with subprocess.Popen([sys.executable, '-c', command, str(ready)], start_new_session=True) as client:
+        try:
+            deadline = time.monotonic() + 3
+            while not ready.exists():
+                assert time.monotonic() < deadline, 'Client did not become ready'
+                time.sleep(0.01)
+            wait = client.wait
+            monkeypatch.setattr(client, 'wait', lambda timeout=None: wait(0.05 if timeout is not None else None))
+            server_watch.stop(client)
+            assert client.returncode == -signal.SIGKILL
+        finally:
+            if client.poll() is None:
+                client.kill()

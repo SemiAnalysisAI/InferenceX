@@ -1769,6 +1769,20 @@ duplicate-key:
             load_config_files(["nonexistent.yaml"])
         assert "does not exist" in str(exc_info.value)
 
+    @pytest.mark.parametrize("content", ["", "null", "[]", "false", "42", "recipe"])
+    def test_non_mapping_root_is_rejected(self, tmp_path, content):
+        path = tmp_path / "config.yaml"
+        path.write_text(content)
+        with pytest.raises(ValueError, match="must contain a dictionary"):
+            load_config_files([str(path)], validate=False)
+
+    @pytest.mark.parametrize("key", ["null", "true", "42"])
+    def test_non_string_key_is_rejected(self, tmp_path, key):
+        path = tmp_path / "config.yaml"
+        path.write_text(f"{key}: {{}}")
+        with pytest.raises(ValueError, match="key.*string"):
+            load_config_files([str(path)], validate=False)
+
     def test_validation_runs_by_default(self, tmp_path):
         """Validation should run by default and catch invalid configs."""
         config_file = tmp_path / "config.yaml"

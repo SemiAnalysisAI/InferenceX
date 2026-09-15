@@ -85,9 +85,12 @@ def test_native_parse_failure_has_a_public_reason_and_retained_detail(tmp_path):
     ("clock_synchronized", False, "native_clock_not_synchronized"),
     ("lifecycle", "collecting", "native_collector_incomplete"),
     ("collection_end_unix", 2, "native_collection_window_mismatch"),
+    ("collection_start_unix", 10**310, "native_node_invalid"),
+    ("collection_end_unix", 10**310, "native_node_invalid"),
     ("job_id", "other-job", "native_run_identity_mismatch"),
     ("role", "prefill", "native_role_gpu_count_mismatch"),
     ("expected_num_nodes", 3, "native_node_topology_mismatch"),
+    ("expected_num_nodes", 10**100, "native_node_topology_mismatch"),
 ])
 def test_native_invalid_evidence_clears_stale_metrics_and_writes_audit(tmp_path, field, value, reason):
     root, bench, agg = _package(tmp_path)

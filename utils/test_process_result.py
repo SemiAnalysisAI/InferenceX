@@ -64,7 +64,7 @@ def test_single_node_workflow_reports_missing_raw_result(tmp_path, single_node_e
     workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-tmpl.yml').read_text())
     step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
                 if step.get('name') == 'Process result')
-    shutil.copytree(REPO_ROOT / 'infx', tmp_path / 'infx')
+    shutil.copytree(REPO_ROOT / 'infx', tmp_path / 'infx', ignore=shutil.ignore_patterns("__pycache__"))
     (tmp_path / 'utils').mkdir()
     shutil.copy(REPO_ROOT / 'utils/process_result.py', tmp_path / 'utils/process_result.py')
     result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=tmp_path,
@@ -90,8 +90,9 @@ def test_single_node_workflow_reports_missing_raw_result(tmp_path, single_node_e
     ("agentic-coding", True, {"results_fixture.json": {}}, None),
     ("agentic-coding", True, {}, "no results*.json files found"),
 ])
+@pytest.mark.parametrize("base", ["fixture", "fixture with space", "-fixture"])
 def test_multinode_launch_checks_the_expected_result_batch(
-    tmp_path, multinode_env_vars, scenario, eval_only, artifacts, diagnostic,
+    tmp_path, multinode_env_vars, scenario, eval_only, artifacts, diagnostic, base,
 ):
     workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/benchmark-multinode-tmpl.yml").read_text())
     step = next(step for step in workflow["jobs"]["benchmark"]["steps"]
@@ -107,12 +108,12 @@ def test_multinode_launch_checks_the_expected_result_batch(
     (tmp_path / "runners").mkdir()
     (tmp_path / "runners/launch_fixture-node.sh").write_text("exit 0\n")
     for filename, payload in artifacts.items():
-        (tmp_path / filename).write_text(json.dumps(payload))
+        (tmp_path / filename.replace("fixture", base)).write_text(json.dumps(payload))
     result = subprocess.run(
         ["bash", "-euo", "pipefail", "-c", script], cwd=tmp_path, capture_output=True, text=True, timeout=10,
         env={**os.environ, **multinode_env_vars,
              "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}", "PYTHONPATH": "",
-             "RUNNER_NAME": "fixture-node_03", "RESULT_FILENAME_BASE": "fixture",
+             "RUNNER_NAME": "fixture-node_03", "RESULT_FILENAME_BASE": base,
              "RECIPE_FINGERPRINT": "", "CONC_LIST": "4 8", "GITHUB_ENV": str(tmp_path / "github-env")},
     )
     if diagnostic:
@@ -121,7 +122,7 @@ def test_multinode_launch_checks_the_expected_result_batch(
     else:
         assert result.returncode == 0, result.stderr
     published = dict(line.split("=", 1) for line in (tmp_path / "github-env").read_text().splitlines())
-    assert published == {"RESULT_FILENAME": "fixture", "EVAL_ARTIFACT_RECIPE": "",
+    assert published == {"RESULT_FILENAME": base, "EVAL_ARTIFACT_RECIPE": "",
                          "EVAL_ARTIFACT_CONC": "809c025ba41f"}
 
 
@@ -129,7 +130,7 @@ def test_multinode_launch_checks_the_expected_result_batch(
 def test_workflow_processes_results_through_compatibility_entrypoint(
     tmp_path, workflow_name, single_node_env_vars, multinode_env_vars, sample_benchmark_result,
 ):
-    shutil.copytree(REPO_ROOT / "infx", tmp_path / "infx")
+    shutil.copytree(REPO_ROOT / "infx", tmp_path / "infx", ignore=shutil.ignore_patterns("__pycache__"))
     (tmp_path / "utils").mkdir()
     shutil.copy(REPO_ROOT / "utils/process_result.py", tmp_path / "utils/process_result.py")
     workflow = yaml.safe_load((REPO_ROOT / ".github/workflows" / workflow_name).read_text())

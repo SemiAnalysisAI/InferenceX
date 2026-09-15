@@ -189,13 +189,11 @@ def run(power_dir: Path, bench_result: Path, agg_result: Path, *,
                              "telemetry_sha256": hashlib.sha256(csv_path.read_bytes()).hexdigest(),
                              "identity_sha256": hashlib.sha256(first_path.read_bytes()).hexdigest(),
                              "identity_end_sha256": hashlib.sha256(last_path.read_bytes()).hexdigest()})
-        except (OSError, ValueError, KeyError, TypeError, csv.Error) as exc:
+        except (OSError, ValueError, KeyError, TypeError, OverflowError, csv.Error) as exc:
             reasons.append("native_node_invalid")
             node_errors.append({"node": path.parent.name, "type": type(exc).__name__, "detail": str(exc)})
-    if (len(expected_nodes) != 1 or not expected_nodes or
-            type(next(iter(expected_nodes), None)) is not int or
-            set(ranks) != set(range(next(iter(expected_nodes), 0))) or
-            len(set(nodes)) != len(nodes) or len(ranks) != len(set(ranks))):
+    if (expected_nodes != {len(ranks)} or sorted(ranks) != list(range(len(ranks))) or
+            len(set(nodes)) != len(nodes)):
         reasons.append("native_node_topology_mismatch")
     if len(jobs) != 1 or "" in jobs or len(revisions) != 1 or "" in revisions:
         reasons.append("native_run_identity_mismatch")

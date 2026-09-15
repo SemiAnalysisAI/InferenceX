@@ -1027,6 +1027,9 @@ def test_run_strict_mode_fails_after_writing_validation(tmp_path: Path):
         (0, 10_000, 2_000, "invalid_successful_query_count"),
         (1, 0, 2_000, "invalid_input_token_count"),
         (1, 10_000, 0, "invalid_output_token_count"),
+        (10**310, 10_000, 2_000, "invalid_successful_query_count"),
+        (1, 10**310, 2_000, "invalid_input_token_count"),
+        (1, 10_000, 10**310, "invalid_output_token_count"),
     ],
 )
 def test_run_invalid_benchmark_denominator_is_auditable(
@@ -1505,7 +1508,7 @@ def test_packaged_power_runs_without_legacy_scripts(power_artifacts, tmp_path):
 
     repo = Path(__file__).resolve().parents[1]
     isolated = tmp_path / "package-only"
-    shutil.copytree(repo / "infx", isolated / "infx")
+    shutil.copytree(repo / "infx", isolated / "infx", ignore=shutil.ignore_patterns("__pycache__"))
     module = "single_node" if power_artifacts["script"] == "aggregate_power" else "multinode"
     result = subprocess.run(
         [sys.executable, "-E", "-S", "-m", f"infx.results.power.{module}", *power_artifacts["args"]],
@@ -1611,3 +1614,23 @@ def test_legacy_average_rejects_invalid_telemetry_context(tmp_path, context):
     csv.write_text('timestamp,index,power.draw [W]\n1,0,100\n2,0,100\n')
     csv.with_name('gpu_metrics_context.json').write_text(context)
     assert aggregate_power(csv, 1, 2) is None
+
+
+@pytest.mark.parametrize("payload,reason", [
+    (None, "invalid_benchmark_result"), ([], "invalid_benchmark_result"),
+    (1, "invalid_benchmark_result"), ("failed", "invalid_benchmark_result"),
+    (b"\xff", "invalid_benchmark_result"),
+    ({"benchmark_start_time_unix": 10**309, "benchmark_end_time_unix": 2, "duration": 1}, "invalid_benchmark_window"),
+])
+@pytest.mark.parametrize("require_power", [False, True])
+def test_malformed_benchmark_preserves_invalid_power_audit(tmp_path, payload, reason, require_power):
+    bench, agg, audit = (tmp_path / name for name in ("bench.json", "agg.json", "audit.json"))
+    bench.write_bytes(payload if isinstance(payload, bytes) else json.dumps(payload).encode())
+    agg.write_text('{"model":"preserved","total_gpu_energy_j":999}')
+    assert run(tmp_path / "missing.csv", bench, agg, validation_result=audit,
+               require_power=require_power) == int(require_power)
+    assert json.loads(audit.read_text())["reasons"] == [reason]
+    result = json.loads(agg.read_text())
+    assert result["model"] == "preserved"
+    assert result["power_valid"] == 0
+    assert "total_gpu_energy_j" not in result

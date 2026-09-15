@@ -5,6 +5,7 @@ from __future__ import annotations
 import bisect
 import json
 import math
+import sys
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -139,7 +140,9 @@ def _load_benchmark_data(
     """Load the strict energy-normalization contract from raw benchmark JSON."""
     try:
         bench = json.loads(bench_result_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None, ["invalid_benchmark_result"]
+    if not isinstance(bench, dict):
         return None, ["invalid_benchmark_result"]
 
     start = bench.get("benchmark_start_time_unix")
@@ -152,9 +155,10 @@ def _load_benchmark_data(
     if not numeric_window:
         return None, ["invalid_benchmark_window"]
 
-    start = float(start)
-    end = float(end)
-    duration = float(duration)
+    try:
+        start, end, duration = map(float, (start, end, duration))
+    except OverflowError:
+        return None, ["invalid_benchmark_window"]
     if (
         not all(math.isfinite(value) for value in (start, end, duration))
         or end <= start
@@ -168,29 +172,24 @@ def _load_benchmark_data(
     if abs(duration - integration_duration) > duration_tolerance:
         _append_reason(reasons, "benchmark_duration_mismatch")
 
-    completed = bench.get("completed")
-    if not isinstance(completed, int) or isinstance(completed, bool) or completed <= 0:
-        _append_reason(reasons, "invalid_successful_query_count")
-        completed = 0
-
-    total_input = bench.get("total_input_tokens")
-    if not isinstance(total_input, int) or isinstance(total_input, bool) or total_input <= 0:
-        _append_reason(reasons, "invalid_input_token_count")
-        total_input = 0
-
-    total_output = bench.get("total_output_tokens")
-    if not isinstance(total_output, int) or isinstance(total_output, bool) or total_output <= 0:
-        _append_reason(reasons, "invalid_output_token_count")
-        total_output = 0
+    counts: dict[str, int] = {}
+    for key, reason in (
+        ("completed", "invalid_successful_query_count"),
+        ("total_input_tokens", "invalid_input_token_count"),
+        ("total_output_tokens", "invalid_output_token_count"),
+    ):
+        value = bench.get(key)
+        if not isinstance(value, int) or isinstance(value, bool) or not 0 < value <= sys.float_info.max:
+            _append_reason(reasons, reason)
+            value = 0
+        counts[key] = value
 
     return (
         BenchmarkData(
             start_unix=start,
             end_unix=end,
             reported_duration_s=duration,
-            completed=completed,
-            total_input_tokens=total_input,
-            total_output_tokens=total_output,
+            **counts,
         ),
         reasons,
     )

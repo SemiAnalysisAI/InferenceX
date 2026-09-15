@@ -3,7 +3,9 @@
 import argparse
 import copy
 import hashlib
+import io
 import json
+import os
 import re
 import subprocess
 import tempfile
@@ -117,7 +119,7 @@ def generation_inputs_at_ref(ref: str):
                 "git",
                 "ls-tree",
                 "-r",
-                "--name-only",
+                "-z",
                 ref,
                 "--",
                 "utils/matrix_logic",
@@ -127,30 +129,39 @@ def generation_inputs_at_ref(ref: str):
             ],
             capture_output=True,
             check=True,
-            text=True,
         )
-        repo_paths = files_result.stdout.splitlines()
+        repo_files = {}
+        for entry in files_result.stdout.split(b"\0")[:-1]:
+            metadata, path = entry.split(b"\t", 1)
+            repo_files[os.fsdecode(path)] = metadata.split()[2]
         required_paths = {
             *MASTER_CONFIGS,
             "configs/runners.yaml",
             GENERATE_SWEEPS_PY_SCRIPT,
         }
-        missing_paths = required_paths - set(repo_paths)
+        missing_paths = required_paths - repo_files.keys()
         if missing_paths:
             raise ValueError(
                 f"append-only base revision is missing generation inputs: "
                 f"{sorted(missing_paths)}"
             )
 
-        for repo_path in repo_paths:
-            result = subprocess.run(
-                ["git", "show", f"{ref}:{repo_path}"],
-                capture_output=True,
-                check=True,
-            )
+        result = subprocess.run(
+            ["git", "cat-file", "--batch"],
+            input=b"\n".join(repo_files.values()) + b"\n",
+            capture_output=True, check=True,
+        )
+        blobs = io.BytesIO(result.stdout)
+        for repo_path in repo_files:
+            header = blobs.readline().split()
+            if len(header) != 3 or header[1] != b"blob":
+                raise ValueError(f"Could not read {repo_path!r} at {ref!r}: {header!r}")
+            content = blobs.read(int(header[2]))
+            if blobs.read(1) != b"\n":
+                raise ValueError(f"Incomplete Git blob for {repo_path!r} at {ref!r}")
             destination = Path(temp_dir) / repo_path
             destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(result.stdout)
+            destination.write_bytes(content)
 
         yield GenerationInputs(
             config_files=[str(Path(temp_dir) / path) for path in MASTER_CONFIGS],

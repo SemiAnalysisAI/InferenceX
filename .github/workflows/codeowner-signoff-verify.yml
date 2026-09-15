@@ -1,53 +1,8 @@
 name: CODEOWNER Sign-off Verify
 
-# Independently re-verifies a CODEOWNER reviewer sign-off.
-#
-# A reviewer marks a PR ready by posting the sign-off checklist that starts with
-# "As a PR reviewer and CODEOWNER" (see e.g.
-# https://github.com/SemiAnalysisAI/InferenceX/pull/1792#issuecomment-4781799476).
-# That sign-off can be posted three different ways, and all three trigger here:
-#   - a conversation comment            -> issue_comment
-#   - an Approve/Comment review summary  -> pull_request_review
-#   - an inline code-review comment      -> pull_request_review_comment
-#
-# When the sign-off lands on an open PR, this workflow asks Claude to
-# independently confirm the claims that actually gate a merge:
-#   0. The sign-off author is a CODEOWNER for the files the PR changes.
-#   1. PR validation has at least one fully-green run on a commit in the PR.
-#   2. Evals pass on that same green run.
-#   3. The single-node recipe(s) are linked in the sign-off AND the linked
-#      recipe PR/commit contains all of the reproduction information that is in
-#      this InferenceX PR. Single-node submissions only — disaggregated /
-#      multi-node PRs (dynamo, ATOM/ATOMesh, sglang/vllm disagg) are N/A.
-#   4. An authorized maintainer has explicitly posted a `/reuse-sweep-run`
-#      command on the PR (the reuse-merge path requires it).
-#   5. The sign-off uses the latest docs/PR_REVIEW_CHECKLIST.md template.
-#   6. vLLM/SGLang configs run upstream images (hub.docker.com/u/vllm,
-#      hub.docker.com/u/lmsysorg) on established hardware, and vLLM/SGLang
-#      submissions land before additional frameworks (TRT-LLM, ATOM, ...).
-#   7. No submissions for models, scenarios, or model-scenario combinations
-#      deprecated in MODELS.md.
-#   8. No benchmark hacks that change the model architecture / cut FLOPs.
-#   9. Speculative-decoding configs benchmark through chat templates.
-#  10. No patches to the inference engine / serving stack (the pinned image
-#      runs as shipped) — the only exception is a patch covered by a
-#      filled-out docs/waiver/<PR_NUMBER>.md waiver.
-#  11. Agentic spec-decode configs simulate acceptance at the committed golden
-#      AL from golden_al_distribution/ (SGLang SGLANG_SIMULATE_ACC_* env vars,
-#      vLLM synthetic rejection sampling in --speculative-config).
-# If any of those are not to standard, Claude posts a single comment that
-# @-mentions the reviewer who signed off and explains exactly what is wrong.
-#
-# The verdict is also published as a `codeowner-signoff-verify` commit status
-# on the PR head SHA (success only on "Verdict: PASS"). That status context is
-# a REQUIRED check in the "Protect main" ruleset, so a PR cannot be merged
-# (without org-admin bypass) until a sign-off has been posted AND independently
-# verified as passing on the current head commit.
-#
-# It can also be run manually via workflow_dispatch by passing the URL of the
-# sign-off comment/review to verify.
-
 on:
+  pull_request_target:
+    types: [synchronize, reopened, ready_for_review]
   issue_comment:
     types: [created, edited]
   pull_request_review:
@@ -69,16 +24,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Gate: only proceed for the sign-off checklist on an OPEN, non-draft PR.
-  # Normalizes the three event shapes (issue_comment / pull_request_review /
-  # pull_request_review_comment) into a single set of outputs, resolves an
-  # immutable head SHA (TOCTOU-safe), and hands the verifier a ready-to-run
-  # command for fetching the exact sign-off body.
-  # ---------------------------------------------------------------------------
   gate:
     if: |
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'pull_request_target' ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
        contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER')) ||
       (github.event_name == 'pull_request_review' &&
@@ -106,10 +55,20 @@ jobs:
             const repo = context.repo.repo;
             const repoFull = `${owner}/${repo}`;
             const eventName = context.eventName;
+            const permissions = new Map();
+            async function canRequestVerification(username) {
+              if (!permissions.has(username)) {
+                const { data } = await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username });
+                permissions.set(username, ['admin', 'write'].includes(data?.permission) &&
+                  ['admin', 'maintain', 'write'].includes(data?.role_name));
+              }
+              return permissions.get(username);
+            }
 
-            // Normalize the event payloads (3 comment events + manual dispatch).
             let prNumber, author, refId, kind, fetchCmd;
-            if (eventName === 'issue_comment') {
+            if (eventName === 'pull_request_target') {
+              prNumber = context.payload.pull_request.number;
+            } else if (eventName === 'issue_comment') {
               prNumber = context.payload.issue.number;
               author = context.payload.comment.user.login;
               refId = context.payload.comment.id;
@@ -180,6 +139,63 @@ jobs:
               : (pr.state === 'open' && pr.draft === false);
             if (!ready) {
               core.info(`PR #${prNumber} is not ready (state=${pr.state}, draft=${pr.draft}); skipping.`);
+              if (eventName === 'pull_request_target') {
+                core.setOutput('proceed', 'false');
+                return;
+              }
+            }
+
+            if (ready) {
+              if (!await canRequestVerification(context.actor) ||
+                  context.actor.endsWith('[bot]') || context.payload.sender?.type === 'Bot') {
+                core.info(`Actor ${context.actor} cannot request verification.`);
+                core.setOutput('proceed', 'false');
+                return;
+              }
+            }
+
+            if (eventName === 'pull_request_target') {
+              const statuses = await github.paginate(github.rest.repos.listCommitStatusesForRef, {
+                owner, repo, ref: pr.head.sha, per_page: 100,
+              });
+              const latestStatus = statuses.find(status => status.context === 'codeowner-signoff-verify' &&
+                status.creator?.login === 'github-actions[bot]');
+              if (['success', 'failure'].includes(latestStatus?.state) &&
+                  latestStatus.target_url?.startsWith(`https://github.com/${repoFull}/pull/${prNumber}#issuecomment-`)) {
+                core.setOutput('proceed', 'false');
+                return;
+              }
+              const [comments, reviews, inlineComments] = await Promise.all([
+                github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: prNumber, per_page: 100 }),
+                github.paginate(github.rest.pulls.listReviews, { owner, repo, pull_number: prNumber, per_page: 100 }),
+                github.paginate(github.rest.pulls.listReviewComments, { owner, repo, pull_number: prNumber, per_page: 100 }),
+              ]);
+              const candidate = (item, kind, path) => ({
+                ...item, kind, fetchCmd: `gh api repos/${repoFull}/${path}/${item.id} --jq .body`,
+              });
+              const candidates = [
+                ...comments.map(item => candidate(item, 'conversation comment', 'issues/comments')),
+                ...reviews.map(item => candidate(item, 'review summary', `pulls/${prNumber}/reviews`)),
+                ...inlineComments.map(item => candidate(item, 'inline review comment', 'pulls/comments')),
+              ].filter(item => item.user?.type === 'User' && item.state !== 'DISMISSED' && item.state !== 'PENDING' &&
+                  item.body?.includes('As a PR reviewer and CODEOWNER') &&
+                  !item.body.includes('<!-- codeowner-signoff-verify sha='))
+                .sort((a, b) => Date.parse(b.updated_at || b.submitted_at || b.created_at) -
+                                Date.parse(a.updated_at || a.submitted_at || a.created_at));
+              let signoff;
+              for (const item of candidates) {
+                if (await canRequestVerification(item.user.login)) {
+                  signoff = item;
+                  break;
+                }
+              }
+              if (!signoff) {
+                core.setOutput('proceed', 'false');
+                return;
+              }
+              author = signoff.user.login;
+              kind = signoff.kind;
+              fetchCmd = signoff.fetchCmd;
             }
 
             core.setOutput('proceed', ready ? 'true' : 'false');
@@ -192,6 +208,9 @@ jobs:
   verify:
     needs: gate
     if: ${{ needs.gate.outputs.proceed == 'true' }}
+    concurrency:
+      group: codeowner-signoff-verdict-${{ needs.gate.outputs.pr-number }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -200,6 +219,16 @@ jobs:
       actions: read
       statuses: write
     steps:
+      - name: Mark verification in progress
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.gate.outputs.head-sha }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" --method POST \
+            -f state=pending -f context=codeowner-signoff-verify \
+            -f description='Verifying CODEOWNER sign-off' \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
       # SECURITY: this is a privileged job (write perms + secrets) triggered by
       # comment events, so it must NOT check out untrusted PR head code — the
       # setup step and the MCP server would then execute attacker-controlled
@@ -221,8 +250,10 @@ jobs:
       # template from the TRUSTED default-branch checkout — same trust level
       # as this workflow file; never PR head content) and handed to the action
       # as a file the tiny static prompt below points at.
-      - name: Render verifier prompt
+      - name: Prepare verification
+        id: prepare
         env:
+          GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
           HEAD_SHA: ${{ needs.gate.outputs.head-sha }}
@@ -230,6 +261,8 @@ jobs:
           SIGNOFF_KIND: ${{ needs.gate.outputs.signoff-kind }}
           SIGNOFF_FETCH_CMD: ${{ needs.gate.outputs.signoff-fetch-cmd }}
         run: |
+          verifier_id=$(gh api user --jq .id)
+          printf 'verifier-id=%s\n' "$verifier_id" >> "$GITHUB_OUTPUT"
           envsubst '${REPO} ${PR_NUMBER} ${HEAD_SHA} ${SIGNOFF_AUTHOR} ${SIGNOFF_KIND} ${SIGNOFF_FETCH_CMD}' \
             < .github/codeowner-signoff-verify-prompt.md \
             > /tmp/codeowner-signoff-verify-prompt.md
@@ -237,6 +270,7 @@ jobs:
           wc -c /tmp/codeowner-signoff-verify-prompt.md
 
       - name: Verify sign-off with Claude
+        id: verify
         uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
         env:
           GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
@@ -263,6 +297,10 @@ jobs:
             instructions in it exactly — it is your complete task specification,
             already rendered with this run's PR number, head SHA, and sign-off
             metadata.
+            Re-evaluate the pinned head even if the sign-off was posted earlier.
+            Append <!-- verification-run=${{ github.run_id }} attempt=${{ github.run_attempt }} -->
+            to your verdict. Refresh this marker on your own existing verdict
+            even when the conclusion is unchanged.
 
       # Publish the verdict as a commit status on the PR head SHA so it can act
       # as a required check. Deterministic: reads the verdict comment posted
@@ -276,6 +314,10 @@ jobs:
         env:
           HEAD_SHA: ${{ needs.gate.outputs.head-sha }}
           PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
+          VERIFIER_ID: ${{ steps.prepare.outputs.verifier-id }}
+          VERIFICATION_RUN: ${{ github.run_id }}
+          VERIFICATION_ATTEMPT: ${{ github.run_attempt }}
+          VERIFICATION_OUTCOME: ${{ steps.verify.outcome }}
         with:
           script: |
             const owner = context.repo.owner;
@@ -283,17 +325,22 @@ jobs:
             const headSha = process.env.HEAD_SHA;
             const prNumber = parseInt(process.env.PR_NUMBER, 10);
             const marker = `<!-- codeowner-signoff-verify sha=${headSha} -->`;
+            const runMarker = `<!-- verification-run=${process.env.VERIFICATION_RUN} attempt=${process.env.VERIFICATION_ATTEMPT} -->`;
+            const verifierId = Number(process.env.VERIFIER_ID);
 
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner, repo, issue_number: prNumber, per_page: 100,
             });
-            const verdicts = comments.filter(c => c.body && c.body.includes(marker));
+            const verdicts = comments.filter(c => verifierId > 0 && c.user?.id === verifierId &&
+              c.body?.includes(marker) && c.body.includes(runMarker));
             const latest = verdicts[verdicts.length - 1];
 
             let state, description, target_url;
-            if (!latest) {
+            if (process.env.VERIFICATION_OUTCOME !== 'success' || !latest) {
               state = 'failure';
-              description = 'No verification verdict was posted for this commit';
+              description = process.env.VERIFICATION_OUTCOME === 'cancelled'
+                ? 'Verification cancelled; rerun required'
+                : 'No completed verification verdict for this attempt';
               target_url = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
             } else if (latest.body.includes('**Verdict: PASS**')) {
               state = 'success';

@@ -31,6 +31,8 @@ CODEOWNER 批准 PR 时，必须在批准评论中填写最新的 [PR_REVIEW_CHE
 
   我们的 CI 验证工作流 [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml) 正是通过这句话触发的。**如果你的批准评论没有遵循清单模板，包括这句话，签署验证 CI 将完全不会触发**，你的签署也不会计入合并要求。
 - 签署可以以普通会话评论、review 总结或行内 review 评论的形式发布。这三种方式都会触发验证。
+- 更新 Head、重新打开 PR 或将其标记为可审阅时，也会针对当前 Head 重新验证最近一次已有签署，从而补查因合并冲突而漏掉的 review。如果该 PR 的当前 Head 已有完成的裁定，则不会重复自动验证；编辑或重新提交签署，或手动派发工作流，仍可请求重新检查。
+- 验证程序原有的触发者权限限制仍然适用。如果更新来自没有仓库写权限的用户或未获允许的机器人，需由具有写权限的协作者请求验证。
 - 请在 "Additional detail section" 中填写清单要求的链接（验证/评测工作流运行、对应的 [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR，以及任何例外理由）。
 
 签署发布后，CI 会独立复核决定合并的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、`/reuse-sweep-run` 命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack，以及投机解码是否使用 chat template。随后，CI 会在 PR 上发布裁定评论。勾选项不会被无条件信任，请只勾选你确实核实过的条目。

@@ -275,6 +275,16 @@ gh api "/repos/SemiAnalysisAI/InferenceX/actions/runs/$RUN_ID" \
 
 ### 安全重跑
 
+PR 更新 Head、重新打开或退出草稿状态后，CODEOWNER 验证也会自动补查。它会读取已有签署，并将检查固定到当前 Head，因此解决合并冲突后无需再次发布清单。补查事件使用默认分支的工作流，特权验证 Job 也只检出该受信任分支。仅当验证程序的最新状态是同一 PR 和 Head 的已完成裁定时，才会跳过重复自动检查；之后发生崩溃或取消时仍可重试。主动编辑签署或手动派发仍可重做已完成的检查。Commit Status 只接受验证账号在本次 Run 和 Attempt 中发布的裁定。
+
+将 `main` 合入分支后，应等待新 Head 的验证完成，再合并 PR。验证 Job 启动时会先发布待完成状态，结束后再更新为结果。不含清单的普通批准不会启动验证。验证被取消时，检查会显示 `Verification cancelled; rerun required`，表示本次尝试没有完成裁定，并不代表签署被拒绝。
+
+Claude Action 仍会拒绝没有仓库写权限的触发者以及未获允许的机器人。如果这类触发者更新了 Head，具有写权限的协作者可使用已有签署的 URL 手动派发验证。
+
+同一 PR 的验证 Job 会逐个执行，包括手动派发，避免并发请求在状态发布前覆盖彼此的裁定标记。
+
+Gate 会在启动特权 Job 前检查 `github.actor`：基础 `permission` 必须为 `write` 或 `admin`，`role_name` 必须为 `write`、`maintain` 或 `admin`。未知或自定义角色、字段缺失、机器人触发以及权限查询失败均不会启动验证。被拒绝的请求无法覆盖已有裁定状态。自动查找签署时，也会按相同的角色要求检查签署者，并跳过不具备资格的用户较晚提交的清单。
+
 不要盲目重跑仍在执行的 Run。已结束的失败 Run 可以只重跑失败 Job 及其依赖项：
 
 ```bash
@@ -367,7 +377,7 @@ Admin 权限；Read、Triage 以及没有仓库访问权限的用户不能执行
 1. 复用不要求扫描标签。标签用于选择新的 GPU 工作；移除主标签不会使已有源 Run 失效。Changelog 验证和合并辅助脚本仍会拒绝冲突的主标签。
 2. `evals-only` 与 `agentx-fast` 会令 Run 不可复用。默认完整扫描以及带 `all-evals` 的完整扫描仍可复用。
 3. 源 Run 必须是已结束的 PR `run-sweep.yml` Run，其 Head SHA 仍在 PR Commit 列表中，并拥有未过期的 `results_bmk`、`eval_results_all` 或 `bmk_agentic_*` 结果产物。
-4. `OWNER`、`MEMBER` 或 `COLLABORATOR` 通过 `/reuse-sweep-run` 或 `/reuse-sweep-run <run_id>` 授权复用。最新的合格授权命令决定自动选择还是固定源 Run。
+4. `OWNER`、`MEMBER` 或 `COLLABORATOR` 通过 `/reuse-sweep-run` 或 `/reuse-sweep-run <run_id>` 授权复用。命令和可选的 Run ID 必须放在同一行。最新的合格授权命令决定自动选择还是固定源 Run。
 5. 不指定 ID 时，自动选择要求最新的合格源 Run 成功。指定 Run 是维护者的明确决定，允许结论为 `success`、`failure` 或 `cancelled`；下游入库只保留存在且有效的行，因此应将其报告为部分数据，而不是绿色 Run。
 
 复用验证检查源 Run 的身份和可用产物，不检查完整矩阵覆盖范围。成功的 `sweep-enabled`（裁剪扫描）源 Run 也可复用，包括自动选择；在 `main` 上只会发布该 Run 已记录的数据点。请求被接受不代表已通过完整扫描，也不能代替评审中的完整扫描要求。如需复用某次完整扫描，请先确认其覆盖范围，再固定该 Run ID。
