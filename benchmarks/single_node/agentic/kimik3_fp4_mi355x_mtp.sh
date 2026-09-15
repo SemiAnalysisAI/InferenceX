@@ -1,52 +1,22 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
-# Agentic trace replay benchmark for Kimi-K3 MXFP4 on MI355X / MI350X (gfx950)
-# using vLLM.
-#
-# The server command is the AMD reference `vllm serve` for this model, i.e. the
-# upstream vLLM recipe's amd block (vllm-project/recipes,
-# https://recipes.vllm.ai/moonshotai/Kimi-K3) as run in practice:
-#
-#   --trust-remote-code --moe-backend auto --tensor-parallel-size 8
-#   --load-format auto --gpu-memory-utilization 0.95 --mm-encoder-tp-mode data
-#   --max-num-seqs 128 --max-num-batched-tokens 4096 --enable-auto-tool-choice
-#   --tool-call-parser kimi_k3 --reasoning-parser kimi_k3
-#
-# with env VLLM_ROCM_USE_AITER=1 SAFETENSORS_FAST_GPU=1 AITER_SITUV2_A8W4=1
-# AITER_BF16_FP8_MOE_BOUND=0 VLLM_USE_BREAKABLE_CUDAGRAPH=0.
-#
-# K3 is a 2.8T-parameter natively-multimodal MoE (896 routed experts, 16/token
-# plus shared) on Kimi Delta Attention, gated MLA and Attention Residuals, with
-# a 1M-token native context.
-#
-# TP=8 ONLY. The MXFP4 checkpoint is 1.561 TB decimal (1.420 TiB, 96
-# safetensors), ~195 GB/GPU across 8 GPUs of the 288 GB part; TP=4 would need
-# ~390 GB/GPU and cannot load. Upstream strategy_min_gpus agrees (single_node_tp
-# and multi_node_tep both 8, DEP 16+), which is why there is no DP-attention arm.
+# Kimi-K3 MXFP4 on MI355X / MI350X (gfx950) with vLLM DSpark. Server flags
+# follow the upstream AMD recipe (https://recipes.vllm.ai/moonshotai/Kimi-K3).
+# TP8 only: the 1.561 TB checkpoint is ~195 GB/GPU on 288 GB parts, and
+# upstream strategy_min_gpus agrees, so there is no DP-attention arm.
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION,
 #   EP_SIZE
-#
-# Perf-search knobs. Each defaults to the reference command's value, so an
-# otherwise-unset run reproduces the reference exactly:
-#   GPU_MEM_UTIL             0.95   (reference)
-#   MAX_NUM_BATCHED_TOKENS   8192   (default)
-#   AITER_A8W4               1      (reference; 0 = aiter a16w4 MoE path)
-#   LANGUAGE_MODEL_ONLY      true
-#   KV_CACHE_DTYPE           fp8    (default for every arm; =auto for a bf16 A/B)
-#   KV_BLOCK_SIZE            unset  (unset -> vLLM sizes the page; 128 under fp8)
-#   MAX_MODEL_LEN            1M
-#   SPEC_DECODE              true   (this is the _mtp DSpark recipe; =false for a no-spec A/B)
-#   SPEC_NUM_TOKENS          2      (DSpark draft length; validated by the _mtp config)
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 wait_for_amd_gpu_clean
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
+check_env_vars DCP_SIZE EVAL_ONLY
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -63,8 +33,6 @@ if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
-# `hf download` creates the target dir if missing and is itself idempotent. The
-# 1.56 TB checkpoint is normally pre-staged, so these calls are a no-op there.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -77,11 +45,10 @@ fi
 rocm-smi || true
 amd-smi || true
 
-# ---- Resolve traces and install deps ----------------------------------------
 resolve_trace_source
 install_agentic_deps
 
-# ---- Reference env block ----------------------------------------------------
+# Env from the upstream AMD recipe.
 export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_USE_AITER=1
 export SAFETENSORS_FAST_GPU=1
@@ -91,21 +58,18 @@ export AITER_BF16_FP8_MOE_BOUND=0
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 
-# Workaround for MEC FW <177 RCCL memory reclaim issue (shared with the other
-# gfx950 recipes in this tree).
+# MEC FW <177 has an RCCL memory reclaim issue.
 mec_version=$(rocm-smi --showfw 2>/dev/null | grep MEC | head -n 1 | awk '{print $NF}')
 if [[ "$mec_version" == "" || ${mec_version:-0} -lt 177 ]]; then
     export HSA_NO_SCRATCH_RECLAIM=1
 fi
 
 # 2.8T of weights off a shared/NFS mount takes far longer than the default.
-export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-7200}"
+export VLLM_ENGINE_READY_TIMEOUT_S="7200"
 
-# Long agentic turns against a 1M context: keep the client from timing out
-# mid-request while the server is prefill-bound.
+# Long agentic turns against a 1M context are prefill-bound on the server.
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 
-# ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
@@ -124,12 +88,9 @@ trap cleanup_agentic_services EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-# ---- KV offload -------------------------------------------------------------
-# TOTAL_CPU_DRAM_GB is the aggregate host-DRAM budget the matrix generator
-# derives from dram-utilization and the runner's available-cpu-dram-mib, capped
-# at the 3,095,781 MiB (3 TB decimal) agentic limit. Per
-# benchmarks/single_node/agentic/README.md it must be consumed as given and
-# never replaced with a model-specific constant.
+# TOTAL_CPU_DRAM_GB is the aggregate host-DRAM budget from the matrix generator
+# (capped at the 3 TB agentic limit) and must be consumed as given, never
+# replaced with a model-specific constant (benchmarks/single_node/agentic/README.md).
 OFFLOAD_ARGS=()
 
 if agentic_kv_offload_enabled; then
@@ -139,7 +100,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / TP ))
     # Identical prefixes must hash to identical block keys across ranks.
     export PYTHONHASHSEED=42
-    SIMPLE_LAZY_OFFLOAD="${SIMPLE_LAZY_OFFLOAD:-false}"
+    SIMPLE_LAZY_OFFLOAD="false"
     OFFLOAD_ARGS=(
         --kv-transfer-config
         "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":$CPU_BYTES_PER_RANK,\"lazy_offload\":$SIMPLE_LAZY_OFFLOAD}}"
@@ -158,15 +119,9 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         "cupy-rocm-7-0==14.1.1" \
         "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
 
-    # LMCache 0.5.5's transfer-channel layer eagerly imports the Mooncake
-    # backend (mooncake_te_impl.py -> `from mooncake.engine import
-    # TransferEngine`), whose native .so resolves all of its DT_NEEDED libs at
-    # import. The vLLM ROCm image ships none of them, so the import sanity
-    # check below (and the LMCache server) would otherwise fail with
-    # "ImportError: lib*.so: cannot open shared object file" (first libglog,
-    # then libjsoncpp, ...). Provision Mooncake's full runtime lib set from the
-    # distro before importing. apt-get install is idempotent, so run it
-    # whenever any of the libs is still missing rather than gating on one.
+    # LMCache 0.5.5 eagerly imports the Mooncake backend, whose native .so
+    # needs libglog, libjsoncpp, libibverbs, librdmacm and libnuma; the vLLM
+    # ROCm image ships none of them.
     LMCACHE_NATIVE_LIBS=(libglog.so.0 libjsoncpp.so.25 libibverbs.so.1 librdmacm.so.1 libnuma.so.1)
     for lib in "${LMCACHE_NATIVE_LIBS[@]}"; do
         if ! ldconfig -p | grep -q "$lib"; then
@@ -180,27 +135,20 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
         >/dev/null
 
-    # One MP server for the node, per the Kimi-K3 recipe
-    # (docs.lmcache.ai/recipes/kimi_k3.html), with --chunk-size sized for
-    # THIS stack rather than the recipe's CUDA-path 768: the connector
-    # requires the chunk to be a multiple of every engine KV group's
-    # tokens_per_block, and the hybrid KDA/MLA layout here registers
-    # attention groups at 1536 ("Setting attention block size to 1536",
-    # run 31644990546) plus a KDA state group at 3072 (run 31645828378),
-    # so 3072 is the minimum valid chunk. The multi-group layout also
-    # requires one object group per sliding-window size:
-    # --separate-object-groups.
+    # One MP server per node (docs.lmcache.ai/recipes/kimi_k3.html). The chunk
+    # must be a multiple of every KV group's tokens_per_block: the hybrid
+    # KDA/MLA layout registers attention groups at 1536 and a KDA state group
+    # at 3072, so 3072 is the minimum, and --separate-object-groups is
+    # required for the multi-group layout.
     LMCACHE_PORT=6555
     LMCACHE_HTTP_PORT=8090
     LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 
     LMCACHE_L1_SIZE_GB="$TOTAL_CPU_DRAM_GB"
 
-    # DCP shards decode KV across the TP ranks, so the LMCache GPU transfer
-    # pool needs one worker per rank; a non-DCP arm only needs a single worker.
-    # The DCP KV interleave also needs the larger 12288 chunk; a non-DCP arm
-    # uses the 3072 minimum (one KDA state group).
-    if [ "${DCP_SIZE:-1}" -gt 1 ]; then
+    # DCP shards decode KV across TP ranks: one GPU worker per rank and the
+    # larger 12288 chunk; a non-DCP arm uses one worker and the 3072 minimum.
+    if [ "${DCP_SIZE}" -gt 1 ]; then
         LMCACHE_MAX_GPU_WORKERS=8
         LMCACHE_CHUNK_SIZE=12288
     else
@@ -250,17 +198,12 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 esac
 fi
 
-# ---- LLM server  ------------------------------------------------------------
-
-# ---- Parallelism ------------------------------------------------------------
 EP_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
-# ---- Speculative / Util------------------------------------------------------
 case "$CONC" in
-    # No KV offload; the working set fits in HBM.
     1)
         SYNTHETIC_ACCEPT_LEN=3.75
         SPEC_NUM_TOKENS=6
@@ -287,7 +230,7 @@ esac
 
 SPEC_ARGS=()
 if [ "$SPEC_NUM_TOKENS" -gt 0 ]; then
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
+if [ "${EVAL_ONLY}" = "true" ]; then
     SPEC_ARGS=(
         --speculative-config
         "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
@@ -300,7 +243,6 @@ else
     fi
 fi
 
-# ---- HIP graph ------------------------------------------------------------
 MAX_NUM_SEQS=$((2 * CONC))
 MAX_CUDAGRAPH_CAPTURE_SIZE=$((MAX_NUM_SEQS * (1 + SPEC_NUM_TOKENS)))
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
@@ -308,12 +250,10 @@ COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
-export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-1200}"
+export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="1200"
 
 
-# ---- DCP       ------------------------------------------------------------
 # DCP shards decode KV across the TP ranks, so it must divide TP.
-DCP_SIZE="${DCP_SIZE:-8}"
 if [ $((TP % DCP_SIZE)) -ne 0 ]; then
     echo "Error: TP='$TP' must be divisible by DCP_SIZE='$DCP_SIZE'" >&2
     exit 1

@@ -32,10 +32,11 @@ import os
 import random
 import time
 import warnings
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import datetime
 from multiprocessing import Pool, cpu_count
-from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 from tqdm.asyncio import tqdm
@@ -82,29 +83,31 @@ class BenchmarkMetrics:
     mean_ttft_ms: float
     median_ttft_ms: float
     std_ttft_ms: float
-    percentiles_ttft_ms: List[Tuple[float, float]]
+    percentiles_ttft_ms: list[tuple[float, float]]
     mean_tpot_ms: float
     median_tpot_ms: float
     std_tpot_ms: float
-    percentiles_tpot_ms: List[Tuple[float, float]]
+    percentiles_tpot_ms: list[tuple[float, float]]
     mean_itl_ms: float
     median_itl_ms: float
     std_itl_ms: float
-    percentiles_itl_ms: List[Tuple[float, float]]
+    percentiles_itl_ms: list[tuple[float, float]]
     # E2EL stands for end-to-end latency per request.
     # It is the time taken on the client side from sending
     # a request to receiving a complete response.
     mean_e2el_ms: float
     median_e2el_ms: float
     std_e2el_ms: float
-    percentiles_e2el_ms: List[Tuple[float, float]]
+    percentiles_e2el_ms: list[tuple[float, float]]
 
 
 # --- Multiprocessing helpers for sample_random_requests ---
 _worker_tokenizer = None
 
 
-def _load_tokenizer(tokenizer_id, tokenizer_mode, trust_remote_code):
+def _load_tokenizer(
+    tokenizer_id: str, tokenizer_mode: str, trust_remote_code: bool
+) -> PreTrainedTokenizerBase:
     """Load tokenizer for random-prompt generation.
 
     vLLM's get_tokenizer can raise AttributeError when transformers removes
@@ -153,9 +156,9 @@ def _load_tokenizer(tokenizer_id, tokenizer_mode, trust_remote_code):
             )
 
 
-def _init_tokenizer_worker(tokenizer_id, tokenizer_mode, trust_remote_code):
+def _init_tokenizer_worker(tokenizer_id: str, tokenizer_mode: str, trust_remote_code: bool) -> None:
     """Initialize tokenizer once per worker process."""
-    global _worker_tokenizer
+    global _worker_tokenizer  # noqa: PLW0603
     _worker_tokenizer = _load_tokenizer(
         tokenizer_id,
         tokenizer_mode=tokenizer_mode,
@@ -163,7 +166,7 @@ def _init_tokenizer_worker(tokenizer_id, tokenizer_mode, trust_remote_code):
     )
 
 
-def _apply_chat_template(prompt, tokenizer, dsv4):
+def _apply_chat_template(prompt: str, tokenizer: PreTrainedTokenizerBase, dsv4: bool) -> str:
     """Render a single user message into the appropriate chat-template prompt.
 
     When `dsv4` is True we use the self-contained DeepSeek-V4 encoder
@@ -183,7 +186,7 @@ def _apply_chat_template(prompt, tokenizer, dsv4):
     )
 
 
-def _process_prompt_chunk(chunk_args):
+def _process_prompt_chunk(chunk_args: tuple) -> list[tuple[str, int, int, None, int]]:
     """Generate a chunk of random prompts in a worker process."""
     (
         indices,
@@ -205,8 +208,7 @@ def _process_prompt_chunk(chunk_args):
     for local_idx, global_idx in enumerate(indices):
         tgt_prompt_len = prefix_len + input_lens[local_idx]
         prompt_token_ids = prefix_token_ids + [
-            (offsets[local_idx] + global_idx + j) % vocab_size
-            for j in range(input_lens[local_idx])
+            (offsets[local_idx] + global_idx + j) % vocab_size for j in range(input_lens[local_idx])
         ]
         prompt = tokenizer.decode(prompt_token_ids)
 
@@ -215,9 +217,7 @@ def _process_prompt_chunk(chunk_args):
             prompt_token_ids = tokenizer.encode(prompt, add_special_tokens=False)
             if len(prompt_token_ids) < tgt_prompt_len:
                 num_extras = tgt_prompt_len - len(prompt_token_ids)
-                prompt_token_ids.extend(
-                    rng.randint(0, vocab_size, size=num_extras).tolist()
-                )
+                prompt_token_ids.extend(rng.randint(0, vocab_size, size=num_extras).tolist())
             elif len(prompt_token_ids) > tgt_prompt_len:
                 prompt_token_ids = prompt_token_ids[:tgt_prompt_len]
             else:
@@ -243,13 +243,13 @@ def sample_random_requests(
     tokenizer: PreTrainedTokenizerBase,
     use_chat_template: bool = False,
     dsv4: bool = False,
-    tokenizer_id: Optional[str] = None,
+    tokenizer_id: str | None = None,
     tokenizer_mode: str = "auto",
     trust_remote_code: bool = False,
     num_workers: int = 0,
-) -> List[Tuple[str, int, int]]:
+) -> list[tuple[str, int, int]]:
     vocab_size = tokenizer.vocab_size
-    prefix_token_ids = np.random.randint(0, vocab_size, size=prefix_len).tolist()
+    prefix_token_ids = np.random.randint(0, vocab_size, size=prefix_len).tolist()  # noqa: NPY002
 
     if dsv4 and not use_chat_template:
         raise ValueError("--dsv4 requires --use-chat-template to be set.")
@@ -262,22 +262,21 @@ def sample_random_requests(
         chat_template_len = len(tokenized_chat_template_dummy) - 1
         input_len = input_len - chat_template_len
 
-    def sample_uniform(seq_len):
+    def sample_uniform(seq_len: int) -> list[int]:
         lower = int(seq_len * range_ratio)
         upper = seq_len
-        seq_lens = np.random.randint(lower, upper + 1, size=num_prompts).tolist()
-        return seq_lens
+        return np.random.randint(lower, upper + 1, size=num_prompts).tolist()  # noqa: NPY002
 
     input_lens = sample_uniform(input_len)
     output_lens = sample_uniform(output_len)
-    offsets = np.random.randint(0, vocab_size, size=num_prompts)
+    offsets = np.random.randint(0, vocab_size, size=num_prompts)  # noqa: NPY002
 
     # Create a local RNG for retry-loop padding so that neither serial nor
     # parallel path consumes global np.random draws beyond this point.
     # This ensures downstream code (e.g. gamma draws for inter-arrival times)
     # sees identical global RNG state regardless of num_workers.
     local_rng = np.random.RandomState(
-        np.random.get_state()[1][
+        np.random.get_state()[1][  # noqa: NPY002
             :4
         ].tolist()  # derive seed from current state without advancing it
     )
@@ -312,9 +311,7 @@ def sample_random_requests(
             )
 
         actual_workers = len(chunk_args_list)
-        print(
-            f"Generating {num_prompts} prompts using {actual_workers} worker processes..."
-        )
+        print(f"Generating {num_prompts} prompts using {actual_workers} worker processes...")
         t0 = time.perf_counter()
         with Pool(
             processes=actual_workers,
@@ -335,9 +332,7 @@ def sample_random_requests(
         # Original serial path — also uses local_rng for retry-loop padding
         # to keep global RNG consumption identical to the parallel path.
         if tokenizer_id is None and num_workers > 1:
-            print(
-                "Warning: tokenizer_id not provided, falling back to serial prompt generation."
-            )
+            print("Warning: tokenizer_id not provided, falling back to serial prompt generation.")
         input_requests = []
         mismatches = []
         for i in range(num_prompts):
@@ -389,10 +384,10 @@ def sample_random_requests(
 
 
 async def get_request(
-    input_requests: List[Tuple[str, int, int]],
+    input_requests: list[tuple[str, int, int]],
     request_rate: float,
     burstiness: float = 1.0,
-) -> AsyncGenerator[Tuple[str, int, int], None]:
+) -> AsyncGenerator[tuple[str, int, int], None]:
     """
     Asynchronously generates requests at a specified rate
     with OPTIONAL burstiness.
@@ -414,7 +409,7 @@ async def get_request(
     input_requests = iter(input_requests)
 
     # Calculate scale parameter theta to maintain the desired request_rate.
-    assert burstiness > 0, (
+    assert burstiness > 0, (  # noqa: S101
         f"A positive burstiness factor is expected, but given {burstiness}."
     )
     theta = 1.0 / (request_rate * burstiness)
@@ -428,29 +423,29 @@ async def get_request(
 
         # Sample the request interval from the gamma distribution.
         # If burstiness is 1, it follows exponential distribution.
-        interval = np.random.gamma(shape=burstiness, scale=theta)
+        interval = np.random.gamma(shape=burstiness, scale=theta)  # noqa: NPY002
         # The next request will be sent after the interval.
         await asyncio.sleep(interval)
 
 
 def calculate_metrics(
-    input_requests: List[Tuple[str, int, int]],
-    outputs: List[RequestFuncOutput],
+    input_requests: list[tuple[str, int, int]],
+    outputs: list[RequestFuncOutput],
     dur_s: float,
     tokenizer: PreTrainedTokenizerBase,
-    selected_percentile_metrics: List[str],
-    selected_percentiles: List[float],
-    goodput_config_dict: Dict[str, float],
-) -> Tuple[BenchmarkMetrics, List[int]]:
-    actual_output_lens: List[int] = []
+    selected_percentile_metrics: list[str],  # noqa: ARG001
+    selected_percentiles: list[float],
+    goodput_config_dict: dict[str, float],
+) -> tuple[BenchmarkMetrics, list[int]]:
+    actual_output_lens: list[int] = []
     total_input = 0
     completed = 0
     good_completed = 0
-    itls: List[float] = []
-    tpots: List[float] = []
-    all_tpots: List[float] = []
-    ttfts: List[float] = []
-    e2els: List[float] = []
+    itls: list[float] = []
+    tpots: list[float] = []
+    all_tpots: list[float] = []
+    ttfts: list[float] = []
+    e2els: list[float] = []
     for i in range(len(outputs)):
         if outputs[i].success:
             output_len = outputs[i].output_tokens
@@ -462,9 +457,7 @@ def calculate_metrics(
                 # bundled together
                 # Note : this may inflate the output token count slightly
                 output_len = len(
-                    tokenizer(
-                        outputs[i].generated_text, add_special_tokens=False
-                    ).input_ids
+                    tokenizer(outputs[i].generated_text, add_special_tokens=False).input_ids
                 )
             actual_output_lens.append(output_len)
             total_input += input_requests[i][1]
@@ -488,22 +481,16 @@ def calculate_metrics(
 
         if "ttft" in goodput_config_dict:
             valid_metrics.append(ttfts)
-            slo_values.append(
-                goodput_config_dict["ttft"] / MILLISECONDS_TO_SECONDS_CONVERSION
-            )
+            slo_values.append(goodput_config_dict["ttft"] / MILLISECONDS_TO_SECONDS_CONVERSION)
         if "tpot" in goodput_config_dict:
             valid_metrics.append(all_tpots)
-            slo_values.append(
-                goodput_config_dict["tpot"] / MILLISECONDS_TO_SECONDS_CONVERSION
-            )
+            slo_values.append(goodput_config_dict["tpot"] / MILLISECONDS_TO_SECONDS_CONVERSION)
         if "e2el" in goodput_config_dict:
             valid_metrics.append(e2els)
-            slo_values.append(
-                goodput_config_dict["e2el"] / MILLISECONDS_TO_SECONDS_CONVERSION
-            )
+            slo_values.append(goodput_config_dict["e2el"] / MILLISECONDS_TO_SECONDS_CONVERSION)
 
-        for req_metric in zip(*valid_metrics):
-            is_good_req = all([s >= r for s, r in zip(slo_values, req_metric)])
+        for req_metric in zip(*valid_metrics, strict=False):
+            is_good_req = all(s >= r for s, r in zip(slo_values, req_metric, strict=False))
             if is_good_req:
                 good_completed += 1
 
@@ -537,9 +524,7 @@ def calculate_metrics(
         mean_itl_ms=np.mean(itls or 0) * 1000,
         std_itl_ms=np.std(itls or 0) * 1000,
         median_itl_ms=np.median(itls or 0) * 1000,
-        percentiles_itl_ms=[
-            (p, np.percentile(itls or 0, p) * 1000) for p in selected_percentiles
-        ],
+        percentiles_itl_ms=[(p, np.percentile(itls or 0, p) * 1000) for p in selected_percentiles],
         mean_e2el_ms=np.mean(e2els or 0) * 1000,
         std_e2el_ms=np.std(e2els or 0) * 1000,
         median_e2el_ms=np.median(e2els or 0) * 1000,
@@ -558,21 +543,21 @@ async def benchmark(
     model_id: str,
     model_name: str,
     tokenizer: PreTrainedTokenizerBase,
-    input_requests: List[Tuple[str, int, int]],
-    logprobs: Optional[int],
+    input_requests: list[tuple[str, int, int]],
+    logprobs: int | None,
     best_of: int,
     request_rate: float,
     burstiness: float,
     disable_tqdm: bool,
     num_warmups: int,
     profile: bool,
-    selected_percentile_metrics: List[str],
-    selected_percentiles: List[str],
+    selected_percentile_metrics: list[str],
+    selected_percentiles: list[str],
     ignore_eos: bool,
-    goodput_config_dict: Dict[str, float],
-    max_concurrency: Optional[int],
-    lora_modules: Optional[List[str]],
-):
+    goodput_config_dict: dict[str, float],
+    max_concurrency: int | None,
+    lora_modules: list[str] | None,
+) -> dict[str, Any]:
     if backend in ASYNC_REQUEST_FUNCS:
         request_func = ASYNC_REQUEST_FUNCS[backend]
     else:
@@ -582,9 +567,7 @@ async def benchmark(
     test_prompt, test_prompt_len, test_output_len, test_mm_content = input_requests[0]
     if backend != "openai-chat" and test_mm_content is not None:
         # multi-modal benchmark is only available on OpenAI Chat backend.
-        raise ValueError(
-            "Multi-modal content is only supported on 'openai-chat' backend."
-        )
+        raise ValueError("Multi-modal content is only supported on 'openai-chat' backend.")
     test_input = RequestFuncInput(
         model=model_id,
         model_name=model_name,
@@ -601,19 +584,13 @@ async def benchmark(
     if num_warmups > 0:
         print(f"Warming up with {num_warmups} requests...")
         warmup_pbar = None if disable_tqdm else tqdm(total=num_warmups)
-        warmup_semaphore = (
-            asyncio.Semaphore(max_concurrency) if max_concurrency else None
-        )
+        warmup_semaphore = asyncio.Semaphore(max_concurrency) if max_concurrency else None
 
-        async def warmup_limited_req_fn():
+        async def warmup_limited_req_fn() -> RequestFuncOutput:
             if warmup_semaphore is None:
-                return await request_func(
-                    request_func_input=test_input, pbar=warmup_pbar
-                )
+                return await request_func(request_func_input=test_input, pbar=warmup_pbar)
             async with warmup_semaphore:
-                return await request_func(
-                    request_func_input=test_input, pbar=warmup_pbar
-                )
+                return await request_func(request_func_input=test_input, pbar=warmup_pbar)
 
         warmup_tasks = []
         for _ in range(num_warmups):
@@ -628,7 +605,7 @@ async def benchmark(
     if lora_modules:
         # For each input request, choose a LoRA module at random.
         lora_modules = iter(
-            [random.choice(lora_modules) for _ in range(len(input_requests))]
+            [random.choice(lora_modules) for _ in range(len(input_requests))]  # noqa: S311
         )
 
     if profile:
@@ -654,10 +631,7 @@ async def benchmark(
         if profile_output.success:
             print("Profiler started")
 
-    if burstiness == 1.0:
-        distribution = "Poisson process"
-    else:
-        distribution = "Gamma distribution"
+    distribution = "Poisson process" if burstiness == 1.0 else "Gamma distribution"
 
     print(f"Traffic request rate: {request_rate}")
     print(f"Burstiness factor: {burstiness} ({distribution})")
@@ -667,7 +641,9 @@ async def benchmark(
 
     semaphore = asyncio.Semaphore(max_concurrency) if max_concurrency else None
 
-    async def limited_request_func(request_func_input, pbar):
+    async def limited_request_func(
+        request_func_input: RequestFuncInput, pbar: tqdm | None
+    ) -> RequestFuncOutput:
         if semaphore is None:
             return await request_func(request_func_input=request_func_input, pbar=pbar)
         async with semaphore:
@@ -677,7 +653,7 @@ async def benchmark(
 
     benchmark_start_time = time.perf_counter()
     benchmark_start_time_unix = time.time()
-    tasks: List[asyncio.Task] = []
+    tasks: list[asyncio.Task] = []
     async for request in get_request(input_requests, request_rate, burstiness):
         prompt, prompt_len, output_len, mm_content = request
         req_model_id, req_model_name = model_id, model_name
@@ -702,7 +678,7 @@ async def benchmark(
                 limited_request_func(request_func_input=request_func_input, pbar=pbar)
             )
         )
-    outputs: List[RequestFuncOutput] = await asyncio.gather(*tasks)
+    outputs: list[RequestFuncOutput] = await asyncio.gather(*tasks)
 
     if profile:
         print("Stopping profiler...")
@@ -740,26 +716,12 @@ async def benchmark(
     print("{:<40} {:<10.2f}".format("Benchmark duration (s):", benchmark_duration))
     print("{:<40} {:<10}".format("Total input tokens:", metrics.total_input))
     print("{:<40} {:<10}".format("Total generated tokens:", metrics.total_output))
-    print(
-        "{:<40} {:<10.2f}".format(
-            "Request throughput (req/s):", metrics.request_throughput
-        )
-    )
+    print("{:<40} {:<10.2f}".format("Request throughput (req/s):", metrics.request_throughput))
     if goodput_config_dict:
-        print(
-            "{:<40} {:<10.2f}".format(
-                "Request goodput (req/s):", metrics.request_goodput
-            )
-        )
+        print("{:<40} {:<10.2f}".format("Request goodput (req/s):", metrics.request_goodput))
+    print("{:<40} {:<10.2f}".format("Output token throughput (tok/s):", metrics.output_throughput))
     print(
-        "{:<40} {:<10.2f}".format(
-            "Output token throughput (tok/s):", metrics.output_throughput
-        )
-    )
-    print(
-        "{:<40} {:<10.2f}".format(
-            "Total Token throughput (tok/s):", metrics.total_token_throughput
-        )
+        "{:<40} {:<10.2f}".format("Total Token throughput (tok/s):", metrics.total_token_throughput)
     )
 
     result = {
@@ -788,7 +750,7 @@ async def benchmark(
         metric_name: str,
         # E.g., "Time to First Token"
         metric_header: str,
-    ):
+    ) -> None:
         # This function prints and adds statistics of the specified
         # metric.
         if metric_attribute_name not in selected_percentile_metrics:
@@ -830,18 +792,18 @@ async def benchmark(
     return result
 
 
-def check_goodput_args(args):
+def check_goodput_args(args: argparse.Namespace) -> dict[str, float]:
     # Check and parse goodput arguments
     goodput_config_dict = {}
-    VALID_NAMES = ["ttft", "tpot", "e2el"]
+    valid_names = ["ttft", "tpot", "e2el"]
     if args.goodput:
         goodput_config_dict = parse_goodput(args.goodput)
         for slo_name, slo_val in goodput_config_dict.items():
-            if slo_name not in VALID_NAMES:
+            if slo_name not in valid_names:
                 raise ValueError(
                     f"Invalid metric name found, {slo_name}: {slo_val}. "
                     "The service level objective name should be one of "
-                    f"{str(VALID_NAMES)}. "
+                    f"{valid_names!s}. "
                 )
             if slo_val < 0:
                 raise ValueError(
@@ -852,7 +814,7 @@ def check_goodput_args(args):
     return goodput_config_dict
 
 
-def parse_goodput(slo_pairs):
+def parse_goodput(slo_pairs: list[str]) -> dict[str, float]:
     goodput_config_dict = {}
     try:
         for slo_pair in slo_pairs:
@@ -869,7 +831,7 @@ def parse_goodput(slo_pairs):
 
 
 def save_to_pytorch_benchmark_format(
-    args: argparse.Namespace, results: Dict[str, Any], file_name: str
+    args: argparse.Namespace, results: dict[str, Any], file_name: str
 ) -> None:
     metrics = [
         "median_ttft_ms",
@@ -892,9 +854,7 @@ def save_to_pytorch_benchmark_format(
         args=args,
         metrics={k: [results[k]] for k in metrics},
         extra_info={
-            k: results[k]
-            for k in results
-            if k not in metrics and k not in ignored_metrics
+            k: results[k] for k in results if k not in metrics and k not in ignored_metrics
         },
     )
     if pt_records:
@@ -904,10 +864,10 @@ def save_to_pytorch_benchmark_format(
             json.dump(pt_records, f)
 
 
-def main(args: argparse.Namespace):
+def main(args: argparse.Namespace) -> None:
     print(args)
     random.seed(args.seed)
-    np.random.seed(args.seed)
+    np.random.seed(args.seed)  # noqa: NPY002
 
     backend = args.backend
     model_id = args.model
@@ -994,10 +954,10 @@ def main(args: argparse.Namespace):
 
     # Save config and results to json
     if args.save_result:
-        result_json: Dict[str, Any] = {}
+        result_json: dict[str, Any] = {}
 
         # Setup
-        current_dt = datetime.now().strftime("%Y%m%d-%H%M%S")
+        current_dt = datetime.now().strftime("%Y%m%d-%H%M%S")  # noqa: DTZ005
         result_json["date"] = current_dt
         result_json["backend"] = backend
         result_json["model_id"] = model_id
@@ -1012,9 +972,7 @@ def main(args: argparse.Namespace):
                     kvstring = item.split("=")
                     result_json[kvstring[0].strip()] = kvstring[1].strip()
                 else:
-                    raise ValueError(
-                        "Invalid metadata format. Please use KEY=VALUE format."
-                    )
+                    raise ValueError("Invalid metadata format. Please use KEY=VALUE format.")
 
         # Traffic
         result_json["request_rate"] = (
@@ -1042,11 +1000,9 @@ def main(args: argparse.Namespace):
         # Save to file
         base_model_id = model_id.split("/")[-1]
         max_concurrency_str = (
-            f"-concurrency{args.max_concurrency}"
-            if args.max_concurrency is not None
-            else ""
+            f"-concurrency{args.max_concurrency}" if args.max_concurrency is not None else ""
         )
-        file_name = f"{backend}-{args.request_rate}qps{max_concurrency_str}-{base_model_id}-{current_dt}.json"  # noqa
+        file_name = f"{backend}-{args.request_rate}qps{max_concurrency_str}-{base_model_id}-{current_dt}.json"
         if args.result_filename:
             file_name = args.result_filename
         if args.result_dir:
@@ -1066,9 +1022,7 @@ def main(args: argparse.Namespace):
 
 
 if __name__ == "__main__":
-    parser = FlexibleArgumentParser(
-        description="Benchmark the online serving throughput."
-    )
+    parser = FlexibleArgumentParser(description="Benchmark the online serving throughput.")
     parser.add_argument(
         "--backend",
         type=str,
@@ -1127,7 +1081,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--tokenizer",
         type=str,
-        help="Name or path of the tokenizer, if not using the default tokenizer.",  # noqa: E501
+        help="Name or path of the tokenizer, if not using the default tokenizer.",
     )
     parser.add_argument(
         "--best-of",
@@ -1313,8 +1267,7 @@ if __name__ == "__main__":
         "--random-range-ratio",
         type=float,
         default=1.0,
-        help="Range of sampled ratio of input/output length, "
-        "used only for random sampling.",
+        help="Range of sampled ratio of input/output length, used only for random sampling.",
     )
     random_group.add_argument(
         "--random-prefix-len",
@@ -1349,12 +1302,8 @@ if __name__ == "__main__":
     )
 
     hf_group = parser.add_argument_group("hf dataset options")
-    hf_group.add_argument(
-        "--hf-subset", type=str, default=None, help="Subset of the HF dataset."
-    )
-    hf_group.add_argument(
-        "--hf-split", type=str, default=None, help="Split of the HF dataset."
-    )
+    hf_group.add_argument("--hf-subset", type=str, default=None, help="Subset of the HF dataset.")
+    hf_group.add_argument("--hf-split", type=str, default=None, help="Split of the HF dataset.")
     hf_group.add_argument(
         "--hf-output-len",
         type=int,

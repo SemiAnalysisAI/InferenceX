@@ -135,15 +135,9 @@ def _hf_traces_dir(hf_dataset_name: str | None, env: Mapping[str, str]) -> Path 
         cache_root = Path(hub_cache)
     else:
         home = env.get("HF_HOME")
-        cache_root = (
-            Path(home) / "hub"
-            if home
-            else Path.home() / ".cache" / "huggingface" / "hub"
-        )
+        cache_root = Path(home) / "hub" if home else Path.home() / ".cache" / "huggingface" / "hub"
 
-    snap_root = (
-        cache_root / f"datasets--{hf_dataset_name.replace('/', '--')}" / "snapshots"
-    )
+    snap_root = cache_root / f"datasets--{hf_dataset_name.replace('/', '--')}" / "snapshots"
     if not snap_root.is_dir():
         return None
 
@@ -182,9 +176,7 @@ def iter_trace_blobs(
     """Read the declared dataset only when request processing consumes traces."""
     metadata = aggregate.get("metadata")
     dataset = metadata.get("dataset") if isinstance(metadata, dict) else None
-    hf_dataset_name = (
-        dataset.get("hf_dataset_name") if isinstance(dataset, dict) else None
-    )
+    hf_dataset_name = dataset.get("hf_dataset_name") if isinstance(dataset, dict) else None
     if not isinstance(hf_dataset_name, str):
         return
     traces_dir = _hf_traces_dir(hf_dataset_name, env)

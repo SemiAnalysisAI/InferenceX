@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Plot distributions over a directory of weka-format traces.
 
 Reads every <in-dir>/*.json (output of proxy_to_weka.py), walks the
@@ -28,9 +27,14 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+if TYPE_CHECKING:
+    from matplotlib.axes import Axes
+
 
 PERCENTILES: tuple[int, ...] = (50, 75, 90, 99)
 PCT_COLORS: dict[int, str] = {
@@ -189,9 +193,7 @@ def collect_metrics(in_dir: Path) -> dict[str, list[float]]:
             main_turns_per_session.append(n_main)
         nonzero_agents = [c for c in agent_turn_counts if c > 0]
         if nonzero_agents:
-            avg_agent_depth_per_session.append(
-                sum(nonzero_agents) / len(nonzero_agents)
-            )
+            avg_agent_depth_per_session.append(sum(nonzero_agents) / len(nonzero_agents))
 
     return {
         "think_time_sec": think_times,
@@ -204,7 +206,7 @@ def collect_metrics(in_dir: Path) -> dict[str, list[float]]:
 
 
 def _draw_histogram(
-    ax,
+    ax: Axes,
     values: list[float],
     title: str,
     xlabel: str,
@@ -288,7 +290,7 @@ def plot_combined(
     linear_clip_pct: float,
 ) -> None:
     fig, axes = plt.subplots(3, 2, figsize=(20, 16))
-    for spec, ax in zip(PLOT_SPECS, axes.flat):
+    for spec, ax in zip(PLOT_SPECS, axes.flat, strict=False):
         log_x = use_log and spec["log_in_log_fig"]
         _draw_histogram(
             ax=ax,

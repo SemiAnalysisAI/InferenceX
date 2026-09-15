@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from tabulate import tabulate
 
@@ -45,42 +44,40 @@ N_EFF = "N (eff)"
 SPEC_DECODING = "Spec Decode"
 
 
-def load_json(path: Path) -> Optional[Dict[str, Any]]:
+def load_json(path: Path) -> dict[str, Any] | None:
     """Load JSON file and return dict, or None on error."""
     try:
-        with open(path, "r") as f:
+        with open(path) as f:
             return json.load(f)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
 
-def find_eval_sets(root: Path) -> List[Path]:
+def find_eval_sets(root: Path) -> list[Path]:
     """Return directories that contain a meta_env.json (one set per job).
 
     Structure: eval_results/<artifact-name>/meta_env.json
     When download-artifact downloads a single artifact, files may be
     extracted flat into root (no subdirectory), so check root itself too.
     """
-    out: List[Path] = []
+    out: list[Path] = []
     try:
         # Handle flat structure (single artifact extracted directly into root)
         if (root / "meta_env.json").exists():
             out.append(root)
         # Handle nested structure (multiple artifacts in subdirectories)
-        for d in root.iterdir():
-            if d.is_dir() and (d / "meta_env.json").exists():
-                out.append(d)
-    except Exception:
+        out.extend(d for d in root.iterdir() if d.is_dir() and (d / "meta_env.json").exists())
+    except Exception:  # noqa: BLE001, S110
         pass
     return out
 
 
-def result_concurrency(path: Path) -> Optional[int]:
+def result_concurrency(path: Path) -> int | None:
     """Extract a batched eval concurrency from a staged result filename."""
     return _result_concurrency(path.name)
 
 
-def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
+def detect_lm_eval_jsons(d: Path, batched: bool = False) -> list[Path]:
     """Return the latest collector-compatible eval result JSONs.
 
     Result filenames contain sortable timestamps. Mtime remains a fallback for
@@ -102,7 +99,7 @@ def pct(x: Any) -> str:
     """Format value as percentage."""
     try:
         return f"{float(x) * 100:.2f}%"
-    except Exception:
+    except Exception:  # noqa: BLE001
         return "N/A"
 
 
@@ -110,18 +107,18 @@ def se(x: Any) -> str:
     """Format stderr as percentage with ± prefix."""
     try:
         return f" ±{float(x) * 100:.2f}%"
-    except Exception:
+    except Exception:  # noqa: BLE001
         return ""
 
 
-def collect_eval_rows(root: Path) -> List[Dict[str, Any]]:
+def collect_eval_rows(root: Path) -> list[dict[str, Any]]:
     """Collect logical eval rows, expanding batched artifacts by concurrency."""
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for d in find_eval_sets(root):
         meta = load_json(d / "meta_env.json") or {}
         batch_concs = meta.get("eval_concs")
         batched = isinstance(batch_concs, list)
-        allowed_concs: Optional[set[int]] = None
+        allowed_concs: set[int] | None = None
         if batched:
             completed_concs = meta.get("completed_eval_concs", batch_concs)
             if isinstance(completed_concs, list):
@@ -131,23 +128,17 @@ def collect_eval_rows(root: Path) -> List[Dict[str, Any]]:
             row_meta = meta
             if batched:
                 conc = result_concurrency(lm_path)
-                if conc is None or (
-                    allowed_concs is not None and conc not in allowed_concs
-                ):
+                if conc is None or (allowed_concs is not None and conc not in allowed_concs):
                     continue
                 row_meta = {**meta, "conc": conc}
 
-            rows.extend(
-                build_rows(load_json(lm_path) or {}, row_meta, source=str(lm_path))
-            )
+            rows.extend(build_rows(load_json(lm_path) or {}, row_meta, source=str(lm_path)))
     return rows
 
 
-def main():
+def main() -> None:
     if len(sys.argv) < 3:
-        print(
-            "Usage: collect_eval_results.py <results_dir> <exp_name> [sort_by: model_prefix|hw]"
-        )
+        print("Usage: collect_eval_results.py <results_dir> <exp_name> [sort_by: model_prefix|hw]")
         sys.exit(1)
 
     root = Path(sys.argv[1])
@@ -235,11 +226,11 @@ def main():
         print("> No eval results found to summarize.")
     else:
         # Print table using tabulate
-        MODEL_PREFIX = "Model Prefix"
+        model_prefix_header = "Model Prefix"
 
         if single_node_rows:
             headers = [
-                MODEL_PREFIX,
+                model_prefix_header,
                 HARDWARE,
                 FRAMEWORK,
                 PRECISION,
@@ -284,7 +275,7 @@ def main():
 
         if multinode_rows:
             headers = [
-                MODEL_PREFIX,
+                model_prefix_header,
                 HARDWARE,
                 FRAMEWORK,
                 PRECISION,

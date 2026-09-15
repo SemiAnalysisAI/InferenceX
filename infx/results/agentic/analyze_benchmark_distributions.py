@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Analyze ISL/OSL distributions from AIPerf benchmark results.
 
 Reads profile_export.jsonl and produces mean/median/p75/p90/p95 summary stats
@@ -54,10 +53,7 @@ def analyze(records: list[dict], output_dir: Path) -> None:
     all_osl: list[int] = []
     for r in records:
         metrics = r.get("metrics", {})
-        if (
-            "input_sequence_length" not in metrics
-            or "output_sequence_length" not in metrics
-        ):
+        if "input_sequence_length" not in metrics or "output_sequence_length" not in metrics:
             continue
         all_isl.append(metrics["input_sequence_length"]["value"])
         all_osl.append(metrics["output_sequence_length"]["value"])
@@ -98,9 +94,9 @@ def _generate_plots(
     osl_stats: dict[str, float],
     output_dir: Path,
 ) -> None:
-    import matplotlib
+    import matplotlib as mpl
 
-    matplotlib.use("Agg")
+    mpl.use("Agg")
     import matplotlib.pyplot as plt
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
@@ -196,9 +192,7 @@ def _generate_plots(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Analyze benchmark workload distributions"
-    )
+    parser = argparse.ArgumentParser(description="Analyze benchmark workload distributions")
     parser.add_argument("artifacts_dir", help="Path to aiperf_artifacts/ directory")
     parser.add_argument(
         "-o",
