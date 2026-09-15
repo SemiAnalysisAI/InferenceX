@@ -335,24 +335,24 @@ if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
     USES_DCGM_POWER=1
 fi
 
-# Note (wenyao): the producer pin follows the srt-slurm main lineage that the
-# dynamo-sglang lanes run on (fp8 validated end-to-end, fp4 recipes
-# parse-verified against the pin); other frameworks clone diverging refs
-# (aflowers branch, sa-submission), so fail fast for them instead.
-if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" ]]; then
-    echo "Error: dcgm-power lanes are only validated for FRAMEWORK=dynamo-sglang, got: $FRAMEWORK" >&2
-    exit 1
-fi
-
 USES_AGENTX_POWER=0
 if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" ]]; then
     if [[ "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" &&
+        "$FRAMEWORK" == "dynamo-sglang" &&
         "$_RECIPE_REL" == "recipes/sglang/glm5.2/gb200-fp4/agentic/glm5.2-agentx-agg.yaml" ]]; then
         USES_AGENTX_POWER=1
+    elif [[ "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" &&
+        "$FRAMEWORK" == "dynamo-vllm" &&
+        "$_RECIPE_REL" == recipes/vllm/kimi-k3/agentic/* ]]; then
+        USES_AGENTX_POWER=1
     else
-        echo "Error: GB200 AgentX dcgm-power requires the GLM-5.2 aggregate recipe" >&2
+        echo "Error: AgentX dcgm-power requires the GLM-5.2 aggregate or supported Kimi-K3 recipe" >&2
         exit 1
     fi
+fi
+if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" && "$USES_AGENTX_POWER" != "1" ]]; then
+    echo "Error: dcgm-power requires dynamo-sglang or the supported Kimi-K3 AgentX route" >&2
+    exit 1
 fi
 
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
@@ -497,12 +497,20 @@ elif [[ "$IS_AGENTIC" == "1" && (( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" 
     fi
 # Kimi-K3 requires direct multi-node vLLM frontend support from srt-slurm.
 elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "kimik3" ]]; then
-    git clone --branch v1.0.53 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    test "$(git rev-parse HEAD)" = "217f94387abeddfed7149a71955dc523e07cd765" || {
-        echo "Error: NVIDIA/srt-slurm v1.0.53 resolved to an unexpected commit" >&2
-        exit 1
-    }
+    if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+        git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout "$AGENTX_POWER_SRT_SLURM_PIN" || exit 1
+        test "$(git rev-parse HEAD)" = "$AGENTX_POWER_SRT_SLURM_PIN" || exit 1
+        git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+    else
+        git clone --branch v1.0.53 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+        cd "$SRT_REPO_DIR" || exit 1
+        test "$(git rev-parse HEAD)" = "217f94387abeddfed7149a71955dc523e07cd765" || {
+            echo "Error: NVIDIA/srt-slurm v1.0.53 resolved to an unexpected commit" >&2
+            exit 1
+        }
+    fi
     python3 "$GITHUB_WORKSPACE/runners/patch_srt_vllm_dp_ranks.py" "$(pwd)" || exit 1
     mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
@@ -856,7 +864,7 @@ LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 AGENTX_POWER_RC=0
 stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || AGENTX_POWER_RC=$?
 if [[ "$AGENTX_POWER_RC" != "0" && "$USES_AGENTX_POWER" != "1" ]]; then
-    exit 1
+    exit "$AGENTX_POWER_RC"
 fi
 
 set -x
@@ -865,42 +873,10 @@ echo "Job $JOB_ID finished!"
 echo "Collecting results..."
 
 if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
-    mkdir -p "$LOGS_DIR/power"
-    # Accounting can lag squeue removal. Retry only a missing/nonterminal row.
-    for status_attempt in 1 2 3; do
-        echo "$status_attempt" > "$LOGS_DIR/power/native-job-status-attempts.txt"
-        sacct -X -n -P -j "$JOB_ID" --format=JobIDRaw,State,ExitCode \
-            > "$LOGS_DIR/power/native-job-status.txt" \
-            2>> "$LOGS_DIR/power/native-job-status.stderr" || true
-        if awk -F'|' -v job="$JOB_ID" '
-            $1 == job && $2 !~ /^(PENDING|RUNNING|COMPLETING)$/ { found = 1 }
-            END { exit !found }
-        ' "$LOGS_DIR/power/native-job-status.txt"; then
-            break
-        fi
-        if [[ "$status_attempt" != "3" ]]; then sleep 5; fi
-    done
-    if ! awk -F'|' -v job="$JOB_ID" '
-        $1 == job { found = 1; if ($2 != "COMPLETED" || $3 != "0:0") failed = 1 }
-        END { exit (!found || failed) }
-    ' "$LOGS_DIR/power/native-job-status.txt"; then
-        AGENTX_POWER_RC=1
-    fi
-    copy_agentic_results "$INFMAX_WORKSPACE" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" || AGENTX_POWER_RC=$?
-    POWER_LOGS_ROOT="$(pwd -P)/$LOGS_DIR"
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
-    for concurrency in "${POWER_CONCURRENCIES[@]}"; do
-        (
-            cd "$GITHUB_WORKSPACE" || exit 1
-            python3 -m utils.agentic.aggregation.power_adapter \
-                --result-dir "$POWER_LOGS_ROOT/agentic/conc_${concurrency}" \
-                --agg-result "$GITHUB_WORKSPACE/${RESULT_FILENAME}_conc${concurrency}.json" \
-                --power-dir "$POWER_LOGS_ROOT/power" \
-                --logs-root "$POWER_LOGS_ROOT" \
-                --expected-producer-sha "$AGENTX_POWER_SRT_SLURM_PIN" \
-                --require-power
-        ) || AGENTX_POWER_RC=$?
-    done
+    collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" "$INFMAX_WORKSPACE" \
+        "$GITHUB_WORKSPACE" "$RESULT_FILENAME" "$AGENTX_POWER_SRT_SLURM_PIN" \
+        "${POWER_CONCURRENCIES[@]}" || AGENTX_POWER_RC=$?
 fi
 
 if [ -d "$LOGS_DIR" ]; then
@@ -919,7 +895,7 @@ else
 fi
 
 if [[ "$AGENTX_POWER_RC" != "0" ]]; then
-    echo "ERROR: AgentX job or power validation failed; available audit and server artifacts were staged" >&2
+    echo "ERROR: AgentX job or power validation failed after staging audit artifacts" >&2
     exit "$AGENTX_POWER_RC"
 fi
 
