@@ -72,10 +72,11 @@ case "$CONC" in
     1|2|4|8|10|12|14|16)
         DCP_SIZE=1
         OFFLOAD_POLICY=harness
+        GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.92}"
         case "$CONC" in
             1)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-6}}" ;;
             4)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-5}}" ;;
-            12) SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-5}}" ;;
+            12) SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-3}}" ;;
             *)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-3}}" ;;
         esac
         case "$SPEC_NUM_TOKENS" in
