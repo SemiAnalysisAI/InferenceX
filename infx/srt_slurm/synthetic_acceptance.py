@@ -66,9 +66,7 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
     }
 
 
-def golden_length(
-    model: str, spec: Mapping[str, Any], thinking: str, golden_dir: Path
-) -> float:
+def golden_length(model: str, spec: Mapping[str, Any], thinking: str, golden_dir: Path) -> float:
     method = str(spec.get("method", "")).lower()
     # SGLang calls native model MTP EAGLE/NEXTN; the curve describes the model's head.
     if method in ("eagle", "nextn"):
@@ -86,16 +84,12 @@ def golden_length(
         if sampling == "probabilistic":
             curve += "_probabilistic_sample_method_block_rejection_sample_method"
         elif sampling != "greedy":
-            raise ValueError(
-                f"No Kimi DSpark golden curve for draft sampling {sampling!r}"
-            )
+            raise ValueError(f"No Kimi DSpark golden curve for draft sampling {sampling!r}")
     if not re.fullmatch(r"[a-z0-9_.-]+", curve):
         raise ValueError(f"Invalid golden curve identity: {curve!r}")
     tokens = spec.get("num_speculative_tokens")
     if not isinstance(tokens, int) or isinstance(tokens, bool) or tokens <= 0:
-        raise ValueError(
-            "Speculative decoding requires a positive integer draft length"
-        )
+        raise ValueError("Speculative decoding requires a positive integer draft length")
     path = golden_dir / f"{curve}.yaml"
     if not path.is_file():
         raise ValueError(f"No committed golden curve for {model}/{method}: {path.name}")
@@ -194,11 +188,7 @@ def selected_recipes(
     selected = generate_override_configs(raw, selector=selector)
     if (
         selector == "base"
-        or (
-            selector
-            and selector.startswith("override_")
-            and not any(c in selector for c in "*?")
-        )
+        or (selector and selector.startswith("override_") and not any(c in selector for c in "*?"))
         or (selector and re.fullmatch(r"zip_override_[\w-]+\[\d+\]", selector))
     ):
         return [(selector, selected[0][1])]
@@ -209,9 +199,7 @@ def selected_recipes(
     for key in keys:
         if selector is not None and not fnmatch.fnmatch(key, selector):
             continue
-        for index, (_, recipe) in enumerate(
-            generate_override_configs(raw, selector=key)
-        ):
+        for index, (_, recipe) in enumerate(generate_override_configs(raw, selector=key)):
             name = f"{key}[{index}]" if key.startswith("zip_override_") else key
             result.append((name, recipe))
     return result
@@ -242,25 +230,18 @@ def plan_commands(
     apply_overrides_to_recipe(raw, parse_overrides(existing.set, existing.unset))
     commands = []
     for variant, recipe in selected_recipes(raw, selector or None):
-        arguments_to_add = build_overrides(
-            recipe, framework, environment, golden_dir=golden_dir
-        )
+        arguments_to_add = build_overrides(recipe, framework, environment, golden_dir=golden_dir)
         parsed, _ = parser.parse_known_args(arguments_to_add)
         for removal in existing.unset or []:
             if any(
-                item.split("=", 1)[0] == removal
-                or item.split("=", 1)[0].startswith(f"{removal}.")
+                item.split("=", 1)[0] == removal or item.split("=", 1)[0].startswith(f"{removal}.")
                 for item in parsed.set or []
             ):
-                raise ValueError(
-                    f"Caller --unset {removal} conflicts with golden acceptance"
-                )
+                raise ValueError(f"Caller --unset {removal} conflicts with golden acceptance")
         # SRT broadcasts overrides into zip groups. Reject a collapsed selection
         # before any job is submitted, rather than selecting the wrong variant.
         materialized = copy.deepcopy(raw)
-        apply_overrides_to_recipe(
-            materialized, parse_overrides(parsed.set, parsed.unset)
-        )
+        apply_overrides_to_recipe(materialized, parse_overrides(parsed.set, parsed.unset))
         selected_recipes(materialized, variant)
         selected_file = f"{path}:{variant}" if variant is not None else path
         commands.append([*command, "--file", selected_file, *arguments_to_add])
