@@ -168,6 +168,7 @@ benchmark:
   client_placement: first_decode
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
+    AGENTIC_BENCHMARK_GRACE_PERIOD: '1800'
     AIPERF_DATASET_CONFIGURATION_TIMEOUT: '1800'
     AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
     AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES: '0'

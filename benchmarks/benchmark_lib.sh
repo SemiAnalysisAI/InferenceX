@@ -3088,6 +3088,11 @@ build_replay_cmd() {
     REPLAY_CMD+=" --tokenizer $MODEL"
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
+    # Let recipes with long low-concurrency requests drain work admitted before
+    # the profiling window closes. Omitted recipes retain AIPerf's default.
+    if [ -n "${AGENTIC_BENCHMARK_GRACE_PERIOD:-}" ]; then
+        REPLAY_CMD+=" --benchmark-grace-period $AGENTIC_BENCHMARK_GRACE_PERIOD"
+    fi
     REPLAY_CMD+=" --stats-interval 30"
     REPLAY_CMD+=" --random-seed 42"
     # Fail runs early once the live error ratio crosses the configured limit.
