@@ -1,11 +1,17 @@
-# Worker preamble for GLM-5.2 dynamo-trt on B300 DSXE. Prefill ranks select active
-# HCA pairs by physical GPU; decode remains unpinned.
+# Worker preamble for GLM-5.2 dynamo-trt on B300 DSXE. Use the requested HCA
+# layout only when those devices are active; otherwise let UCX discover the
+# available fabric devices.
 
 unset UCX_TLS   # Preserve CUDA memory registration for NIXL transfers.
+unset UCX_NET_DEVICES
+
+# Dynamo is installed at worker startup. Allow pip to resume transiently truncated
+# package downloads instead of failing the whole multi-node allocation.
+export PIP_DEFAULT_TIMEOUT="${PIP_DEFAULT_TIMEOUT:-120}"
+export PIP_RETRIES="${PIP_RETRIES:-20}"
+export PIP_RESUME_RETRIES="${PIP_RESUME_RETRIES:-20}"
 
 _srt_live_devices() {
-    set -- /sys/class/infiniband/mlx5_*
-    [ -e "$1" ] || { printf '%s' "$_srt_in"; return 0; }   # fail open
     _srt_out=""; _srt_oIFS="$IFS"; IFS=,
     for _srt_d in $_srt_in; do
         _srt_n="${_srt_d%%:*}"
@@ -20,8 +26,14 @@ _srt_live_devices() {
 # physical GPU's rail pair. Other values leave ranks unchanged.
 case "${BASH_EXECUTION_STRING:-}" in
     *SRT_FABRIC_MODE=symmetric*)
-        export UCX_NET_DEVICES="mlx5_0:1,mlx5_1:1,mlx5_10:1,mlx5_11:1"
-        echo "CTX_HCA_PIN mode=symmetric localid=${SLURM_LOCALID:-0} UCX_NET_DEVICES=$UCX_NET_DEVICES"
+        _srt_in="mlx5_0:1,mlx5_1:1,mlx5_10:1,mlx5_11:1"
+        _srt_hca="$(_srt_live_devices)"
+        if [ -n "$_srt_hca" ]; then
+            export UCX_NET_DEVICES="$_srt_hca"
+            echo "CTX_HCA_PIN mode=symmetric localid=${SLURM_LOCALID:-0} UCX_NET_DEVICES=$UCX_NET_DEVICES"
+        else
+            echo "CTX_HCA_PIN mode=symmetric localid=${SLURM_LOCALID:-0} UCX_NET_DEVICES=<unset, use UCX auto-discovery>"
+        fi
         return 0 2>/dev/null || true
         ;;
     *SRT_FABRIC_MODE=bia_faithful*) ;;
@@ -58,6 +70,6 @@ if [ -n "$_srt_hca" ]; then
     export UCX_NET_DEVICES="$_srt_hca"
     echo "CTX_HCA_PIN localid=${SLURM_LOCALID:-0} phys_gpu=$_srt_phys UCX_NET_DEVICES=$UCX_NET_DEVICES"
 else
-    echo "CTX_HCA_PIN localid=${SLURM_LOCALID:-0} phys_gpu=$_srt_phys UCX_NET_DEVICES=<unset, own rail pair is not ACTIVE>"
+    echo "CTX_HCA_PIN localid=${SLURM_LOCALID:-0} phys_gpu=$_srt_phys UCX_NET_DEVICES=<unset, use UCX auto-discovery>"
 fi
 return 0 2>/dev/null || true
