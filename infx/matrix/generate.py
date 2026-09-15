@@ -270,7 +270,9 @@ def recipe_node_count(prefill: dict, decode: dict) -> int | None:
         # shares prefill nodes and does not reserve another allocation.
         for name, role in roles.items():
             if "nodes" not in role:
-                raise ValueError(f"Recipe role {name!r} must specify nodes: {recipe_path}")
+                raise ValueError(
+                    f"Recipe role {name!r} must specify nodes: {recipe_path}"
+                )
         return sum(
             0 if role["nodes"] == "colocate" else int(role["nodes"])
             for role in roles.values()
