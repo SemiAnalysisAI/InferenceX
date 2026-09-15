@@ -22,7 +22,7 @@ jobs:
       - name: Checkout exact implementation from PR 3125
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: 72d4d13cad94975e1565dceb57e8c12308cc52af
+          ref: c24e246d637ef947a1416053592ca980b6fb65b9
           persist-credentials: false
 
       - name: Exercise real GitHub comments, labels, and statuses
@@ -130,7 +130,7 @@ jobs:
             for (const finding of findings) core.info(`PASS: ${finding}`);
             await core.summary.addHeading('Live GitHub signoff smoke results')
               .addLink(`Disposable PR #${prNumber}`, pr.html_url)
-              .addRaw('\n\nImplementation: `72d4d13cad94975e1565dceb57e8c12308cc52af` from PR #3125.\n\n')
+              .addRaw('\n\nImplementation: `c24e246d637ef947a1416053592ca980b6fb65b9` from PR #3125.\n\n')
               .addList(findings)
               .addRaw('\nUses real GitHub APIs and GITHUB_TOKEN. Verdicts are synthetic; Claude is not invoked. The temporary push workflow calls the unmodified production helper; default-branch event routing is not exercised.\n')
               .write();
