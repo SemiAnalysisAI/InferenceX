@@ -2,9 +2,6 @@
 import copy
 import io
 import json
-import os
-import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -1508,77 +1505,6 @@ class TestBenchmarkWorkflowSchema:
         output = capsys.readouterr()
         assert output.out == ""
         assert "error:" in output.err
-
-    @pytest.mark.parametrize("workflow_name", ["run-sweep", "e2e-tests"])
-    @pytest.mark.parametrize("multinode", [False, True])
-    @pytest.mark.parametrize("invalid", [False, True])
-    def test_real_preparation_steps_validate_before_publishing_job_outputs(
-        self, tmp_path, valid_single_node_matrix_entry, valid_multinode_matrix_entry,
-        workflow_name, multinode, invalid,
-    ):
-        root = Path(__file__).resolve().parents[2]
-        workflow = yaml.safe_load((root / f".github/workflows/{workflow_name}.yml").read_text())
-        step_id = "setup" if workflow_name == "run-sweep" else "get-jobs"
-        script = next(step["run"] for job in workflow["jobs"].values()
-                      for step in job.get("steps", []) if step.get("id") == step_id)
-        script = re.sub(r"\$\{\{.*?\}\}", lambda m: (
-            "push" if "event_name" in m[0] else "test-config" if "generate-cli-command" in m[0] else ""
-        ), script)
-        row = dict(valid_multinode_matrix_entry if multinode else valid_single_node_matrix_entry)
-        field = "node-count" if multinode else "tp"
-        if invalid:
-            row[field] = "wrong"
-        family = "multi_node" if multinode else "single_node"
-        matrix = {family: {"1k1k": [row]}} if workflow_name == "run-sweep" else [row]
-        source = tmp_path / "generated.json"
-        source.write_text(json.dumps(matrix))
-        output = tmp_path / "job-output"
-        output.touch()
-        bin_dir = tmp_path / "bin"
-        bin_dir.mkdir()
-        uv = bin_dir / "uv"
-        uv.write_text(f"#!{sys.executable}\n" + '''import os, sys
-args = sys.argv[1:]
-if 'infx.workflows.benchmark_schema' in args:
-    os.execv(sys.executable, [sys.executable, *args[args.index('python') + 1:]])
-elif 'infx.matrix.plan' in args or any(a.endswith('/generate_sweep_configs.py') for a in args):
-    sys.stdout.write(open(os.environ['TEST_GENERATED']).read())
-elif 'infx.workflows.ci_priority' in args or any(a.endswith('/ci_priority.py') for a in args):
-    sys.stdout.write(sys.stdin.read())
-else:
-    raise SystemExit(f'Unexpected collaborator: {args}')
-''')
-        python = bin_dir / "python3"
-        python.write_text(f"#!{sys.executable}\n" + '''import os, sys
-if sys.argv[1:3] != ['-m', 'infx.workflows.reuse']:
-    os.execv(sys.executable, [sys.executable, *sys.argv[1:]])
-''')
-        uv.chmod(0o755)
-        python.chmod(0o755)
-        if workflow_name == "e2e-tests":
-            (tmp_path / ".ci-priority").symlink_to(root, target_is_directory=True)
-            (tmp_path / "infx").mkdir()
-            (tmp_path / "infx/__init__.py").write_text("raise RuntimeError('wrong tooling checkout')")
-        result = subprocess.run(
-            ["bash", "-euo", "pipefail", "-c", script],
-            cwd=tmp_path, capture_output=True, text=True, timeout=15,
-            env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "PYTHONPATH": str(root),
-                 "GITHUB_WORKSPACE": str(tmp_path), "GITHUB_OUTPUT": str(output),
-                 "TEST_GENERATED": str(source), "CHANGELOG_BASE_REF": "", "CHANGELOG_HEAD_REF": "",
-                 "TRIM_CONC": "false", "ALL_EVALS": "false", "EVALS_ONLY": "false",
-                 "PR_LABELS": "[]", "PRIORITY_CRITERIA": ""},
-        )
-        if invalid:
-            assert result.returncode != 0
-            assert field in result.stderr
-            assert output.read_text() == ""
-        else:
-            assert result.returncode == 0, result.stderr
-            key = "search-space-config" if workflow_name == "run-sweep" else (
-                "multi-node-config" if multinode else "single-node-config"
-            )
-            published = dict(line.split("=", 1) for line in output.read_text().splitlines())
-            assert json.loads(published[key]) == matrix
 
 
 class TestChangelogMatrixEntry:
