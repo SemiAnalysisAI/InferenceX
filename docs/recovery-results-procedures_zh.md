@@ -29,7 +29,7 @@
 1. launcher 必须在工作区留下 `${RESULT_FILENAME}.json`。工作流会短暂等待；如果该文件一直没有出现，任务失败。
 2. `utils/process_result.py` 读取原始 JSON 以及拓扑/运行时环境变量，规范化元数据和每 GPU 吞吐量，把毫秒字段转换成秒，推导 interactivity，并写出 `agg_${RESULT_FILENAME}.json`。
 3. 任务将聚合结果上传为制品 `bmk_${RESULT_FILENAME}`。
-4. `collect-results.yml` 下载 `bmk_*`，运行 `python3 utils/collect_results.py results/ bmk`，再上传 `results_bmk`；其负载为 `agg_bmk.json`。
+4. `collect-results.yml` 下载 `bmk_*`，运行 `python3 -m infx.results.collect_results results/ bmk`，再上传 `results_bmk`；其负载为 `agg_bmk.json`。
 
 对于多节点吞吐量，每个 `${RESULT_FILENAME}_*.json` 都会单独处理。工作流从各文件名推导 GPU 总数、prefill GPU 数和 decode GPU 数，并调用：
 
@@ -38,7 +38,7 @@ RESULT_FILENAME=${result_file%.json} \
 IS_MULTINODE=true \
 PREFILL_GPUS="$prefill_gpus" \
 DECODE_GPUS="$decode_gpus" \
-python3 utils/process_result.py
+python3 -m infx.results.fixed_sequence
 ```
 
 上传的 `bmk_${RESULT_FILENAME}` 制品包含 `agg_${RESULT_FILENAME}_*.json`。缺少源文件属于基准/launcher 故障；缺少 `agg_` 文件属于结果处理故障；缺少 `results_bmk` 属于收集故障。不要把这些问题归类为数据库故障。
@@ -51,7 +51,7 @@ python3 utils/process_result.py
 
 - eval-only 任务没有任何评测文件时会报错；
 - 评测文件在 `always()` 条件下上传，以保留失败任务的部分证据；
-- `utils/evals/validate_scores.py` 在上传后验证 eval-only 分数覆盖范围；
+- `infx/evals/validate_scores.py` 在上传后验证 eval-only 分数覆盖范围；
 - `collect-evals.yml` 下载 `eval_*`，运行 `collect_eval_results.py`，打印摘要，并上传 `eval_results_all/agg_eval_all.json`。
 
 应用既能摄取聚合行，也能摄取逐配置评测目录。两种输入最终落到相同的自然键，而 sample 文件把详细数据附加到已经解析的评测行。因此，仅有聚合文件只能证明完成了收集，不能证明 sample 完整；当逐 sample 输出很重要时，必须核对逐配置制品。
@@ -171,7 +171,7 @@ gh run rerun "$INGEST_RUN_ID" \
 在干净的 InferenceX checkout 中运行，并确保 `gh`、`git`、`jq` 已认证且 Python 依赖可用：
 
 ```bash
-python3 utils/recover_failed_ingest.py inspect-target \
+python3 -m infx.workflows.recover_failed_ingest inspect-target \
   "$FAILED_RUN_OR_JOB_URL" \
   --output /tmp/infx-recovery-target.json
 
@@ -183,7 +183,7 @@ ORIGINAL_MERGE_SHA=$(jq -r .merge_sha /tmp/infx-recovery-target.json)
 gh run view "$TARGET_RUN_ID" --repo SemiAnalysisAI/InferenceX \
   --job "$TARGET_JOB_ID" --log > "/tmp/infx-target-$TARGET_RUN_ID.log"
 
-python3 utils/recover_failed_ingest.py audit-changelog \
+python3 -m infx.workflows.recover_failed_ingest audit-changelog \
   --ref "$ORIGINAL_MERGE_SHA"
 ```
 
@@ -229,11 +229,11 @@ gh pr comment "$RECOVERY_PR" --repo SemiAnalysisAI/InferenceX \
 把恢复条目追加到 `perf-changelog.yaml` 末尾；绝不要修改历史字节。保留原始 `config-keys`、`description`、`evals-only` 和 `scenario-type`，但使用恢复 PR URL。验证 changelog 和生成的范围：
 
 ```bash
-python3 utils/validate_perf_changelog.py \
+python3 -m infx.workflows.validate_perf_changelog \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \
   --head-ref "$RECOVERY_COMMIT"
-python3 utils/process_changelog.py \
+python3 -m infx.matrix.plan \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \
   --head-ref "$RECOVERY_COMMIT" \
