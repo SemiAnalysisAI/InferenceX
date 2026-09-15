@@ -193,6 +193,8 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 
 The GB200 DSpark recipe uses a minimum CUDA graph capture size of 64 tokens to cover concurrent AgentX subagents. This raises c1/c2/c4 from 8/16/32 to 64; c8 and above retain their existing sizes. The full trace, AL 3.51, and Engram UVA settings are preserved; low-concurrency tail latency improvements require CI confirmation.
 
+B300 uses the same minimum capture size at c1/c2/c4. Its c1 CI comparison reduced request ITL P90/P99 from 38.74/41.42 ms to 2.62/3.45 ms; c2/c4 require CI confirmation.
+
 The AgentX-only `dsv41flash-fp4-<sku>-vllm-agentic-dspark` recipes use
 `vllm/vllm-openai:deepseekv41-flash-0909` at TP4 on Blackwell SKUs with native five-token DSpark,
 probabilistic drafting. Throughput uses the [committed golden AL](../golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection and adaptive verification. `--engram-config '{"cpu_offload":true}'`

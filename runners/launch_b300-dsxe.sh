@@ -497,6 +497,8 @@ else
         CONTAINER_MOUNT_DIR=/ix
         export INFMAX_CONTAINER_WORKSPACE=/ix
         export RESULT_DIR=/ix/results
+        # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
+        export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
     fi
 
     import_squash_image "$IMAGE" "$SQUASH_FILE"
