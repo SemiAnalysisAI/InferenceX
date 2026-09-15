@@ -199,7 +199,7 @@ USES_AGENTX_POWER=0
 if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
     "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" &&
     "$FRAMEWORK" == "dynamo-vllm" &&
-    "$_RECIPE_REL" == recipes/vllm/kimi-k3/agentic/* ]]; then
+    "$_RECIPE_REL" == recipes/kimik3/vllm/*/agentx/* ]]; then
     USES_AGENTX_POWER=1
 fi
 if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" && "$USES_AGENTX_POWER" != "1" ]]; then
@@ -245,7 +245,7 @@ fi
 # Accuracy runs use real speculative verification and a frontend colocated
 # with the post-eval client on the allocation head.
 if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-trt" && "$EVAL_ONLY" == "true" ]]; then
-    find recipes/trtllm -name '*.yaml' -exec sed -i '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' {} +
+    find recipes -path 'recipes/*/trtllm/*' -name '*.yaml' -exec sed -i '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' {} +
     if [[ "$MODEL_PREFIX" == "dsv4" ]]; then
         SRTCTL_EVAL_ARGS+=(--set frontend.placement.node=head)
     fi

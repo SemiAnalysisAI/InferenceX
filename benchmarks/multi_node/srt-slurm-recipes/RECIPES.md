@@ -8,6 +8,25 @@ The shared version is the Git submodule pointer at [`utils/srt-slurm`](../../../
 
 InferenceX requires srt-slurm 2.0 or newer and `schema: 2` recipes. Legacy recipe layouts are unsupported; migrate them before adding them to this tree.
 
+## Directory and filename convention
+
+Store every recipe at `<model-prefix>/<engine>/<gpu>-<precision>/<workload>/<recipe>.yaml`:
+
+```text
+dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml
+glm5.2/sglang/h200-fp8/agentx/disagg-1p1d-pcp8-tp8-dp8-mtp6-hicache.yaml
+qwen3.5/trtllm/gb300-fp4/agentx/disagg-1p7d-dep4-tep8-c7-b1-mtp-kvoffload.yaml
+```
+
+- Use the master config's `model-prefix` and `precision` labels. Engines are `sglang`, `vllm`, `trtllm`, and `tilert`; frontend selection remains explicit inside the recipe. Hardware directories use GPU types such as `b200` and `gb300`, rather than cluster names.
+- Workloads are `1k1k`, `8k1k`, or `agentx`. Existing bundles spanning several fixed sequence lengths use `fixed-seq-len`; keep their override selectors intact.
+- Use lowercase, hyphen-separated filenames beginning with `agg` or `disagg`. Include topology and the settings that distinguish sibling recipes, such as parallelism, batch size, concurrency, MTP, offload, or cache configuration. Avoid dates, numbered latency/throughput labels, and repeating the model or hardware already in the path.
+- In topology names, `1p4d` denotes prefill/decode worker counts, not necessarily physical nodes. Role-qualified `p-tp4` and `d-tp8` identify prefill/decode TP; `b` denotes batch size and `c` concurrency. The YAML is authoritative for runtime settings.
+- Name override bundles `*-variants.yaml`. Keep distinct sweep entry files separate even when their contents match: recipe paths participate in eval grouping. The Qwen3.5 `*-stp-sweep.yaml` and `*-mtp-sweep.yaml` pair preserves that existing distinction.
+- Update `CONFIG_FILE` and `EVAL_CONFIG_FILE` references in active and deprecated master configs, launcher path rules, workflow filters, and local documentation together when moving a file. Preserve upstream source URLs as provenance and leave historical performance-changelog entries unchanged. No aliases for the old layout are provided.
+
+Shared runtime assets stay under `configs/` beside the model directories. Keeping a recipe in this tree does not activate it; the master configs determine the benchmark matrix.
+
 ## TileRT exception
 
 For `FRAMEWORK=tilert`, `setup_srt_slurm()` fetches the SemiAnalysisAI/srt-slurm fork directly at `6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde` into the job checkout. This is the schema-2 TileRT port in [SemiAnalysisAI/srt-slurm#13](https://github.com/SemiAnalysisAI/srt-slurm/pull/13). It is the only alternate checkout; its pin lives in that helper because the TileRT backend and router are absent from the NVIDIA pin. TileRT uses the same schema-2 recipe layout and native post-eval dispatch as NVIDIA. TileRT jobs need network access to the fork at setup time. Remove the fork exception once those features are available upstream.
@@ -28,7 +47,7 @@ Recipes use `schema: 2`, `engine`, and `roles`. Each worker role owns its node c
 
 Keep the recipe and master configuration synchronized. The launcher executes the recipe; the master configuration supplies result labels and scheduling metadata. For aggregate recipes use `roles.agg`; `roles.decode.nodes: colocate` shares prefill nodes and contributes no additional worker nodes to scheduling.
 
-All referenced recipes must be checked in: srt-slurm 2 ships curated examples instead of the historical `recipes/` archive. The initial migration restores 204 previously external recipes and two still-referenced AgentX recipes from InferenceX history. Existing recipe paths and override selectors continue to work.
+All referenced recipes must be checked in: srt-slurm 2 ships curated examples instead of the historical `recipes/` archive. The initial migration restores 204 previously external recipes and two still-referenced AgentX recipes from InferenceX history. Master-config paths follow the layout above; existing override selectors are preserved.
 
 ## Migration and validation
 
@@ -36,17 +55,17 @@ Install the shared pin in an isolated environment, then use its CLI:
 
 ```bash
 # Verify each supported recipe directory before rewriting it.
-srtctl migrate --verify -f benchmarks/multi_node/srt-slurm-recipes/sglang
-srtctl migrate --in-place -f benchmarks/multi_node/srt-slurm-recipes/sglang
-# Repeat for vllm, trtllm and the other NVIDIA directories.
-# Use the pinned TileRT fork when migrating tilert/.
+srtctl migrate --verify -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
+srtctl migrate --in-place -f benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang
+# Repeat for the other model/engine directories.
+# Use the pinned TileRT fork for glm5.1/tilert/.
 python -m pytest utils/matrix_logic/ -q
 python -m infx.matrix.generate full-sweep \
   --config-files configs/nvidia-master.yaml \
   --framework dynamo-sglang dynamo-trt dynamo-vllm --multi-node
 ```
 
-The integration workflow installs the exact launcher pin and validates every schema-2 recipe, including all override variants. A passing local schema check does not replace the full hardware sweep and evals.
+Validate recipes with the exact launcher pin, including all override variants. For a path-only reorganization, compare generated matrices before and after with the path mapping applied; all other fields, including eval selection and node counts, must match. A passing local schema check does not replace the full hardware sweep and evals.
 
 The initial migration also resolves compatibility issues that `srtctl migrate` cannot fix itself:
 
