@@ -11,12 +11,13 @@ gpus_per_node: 8
 accelerator_vendor: amd
 network_interface: eno0
 
-gpu_sbatch_directive: gres
+use_gpus_per_node_directive: false
 use_segment_sbatch_directive: false
 use_exclusive_sbatch_directive: false
 runtime_config_transport: shared-filesystem
 
 default_sbatch_directives:
+  gres: gpu:8
   cpus-per-task: "32"
   mem: "128G"
 
@@ -33,3 +34,10 @@ containers:
   sglang-rocm-v0.5.17-mi35x: /it-share/gharunners2/srt-slurm/containers/sglang-rocm-v0.5.17-mi35x-20260809.sqsh
 
 nginx_raise_ulimit: false
+
+# Preserve the existing per-allocation fabric/memory prerequisites through the
+# upstream host-setup lifecycle, not a separate staging Slurm job.
+default_host_setup:
+  commands:
+    - bash "$GITHUB_WORKSPACE/runners/prepare_mi355x_srt_host.sh"
+  nodes: all
