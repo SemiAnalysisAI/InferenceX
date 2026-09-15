@@ -7807,3 +7807,10 @@
     - "Use FLASH_ATTN for the target model, select the Humming MXFP8 dense-linear backend, and enable Marlin atomic reduction for the MXFP8 MoE path."
     - "Use 0.95 GPU memory utilization for resident serving while retaining 0.90 for Mooncake DRAM offload, and remove the Mooncake concurrency-14 point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3108
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang
+  description:
+    - "Update SGLang image from v0.5.12-rocm720-mi30x to v0.5.19-rocm720-mi30x"
+    - "将 SGLang 镜像从 v0.5.12-rocm720-mi30x 更新为 v0.5.19-rocm720-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3130
