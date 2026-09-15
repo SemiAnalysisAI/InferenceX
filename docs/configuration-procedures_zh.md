@@ -196,6 +196,11 @@ GB200 DSpark AgentX 配置使用 `cluster:gb200-nv`：TP8/DEP8 跨两个节点�
 ### DeepSeek-V4.1-Flash DSpark
 
 GB200 的 DSpark 配方将 CUDA graph 最小捕获范围设为 64 tokens，以覆盖 AgentX 子代理并发。这会将 c1/c2/c4 的上限从 8/16/32 提升至 64；c8 及以上保持原有大小。完整轨迹、AL 3.51 和 Engram UVA 配置保持不变；需通过 CI 验证低并发尾延迟改善。
+B200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
+GB300 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
+H200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
+
+B300 在 c1/c2/c4 使用相同的最小捕获范围。其 c1 CI 对比中，请求 ITL P90/P99 从 38.74/41.42 ms 降至 2.62/3.45 ms；c2/c4 仍需 CI 验证。
 
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用
 `vllm/vllm-openai:deepseekv41-flash-0909`，在 Blackwell SKU 上采用 TP4、原生五 token DSpark、
