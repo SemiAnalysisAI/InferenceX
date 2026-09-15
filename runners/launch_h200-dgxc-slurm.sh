@@ -443,6 +443,14 @@ else
         export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
         export INFMAX_CONTAINER_WORKSPACE=/ix
         export RESULT_DIR=/ix/results
+        # The HF cache here is a VIRTIOFS mount, which vLLM does not treat as a
+        # network FS, so it memory-maps the 475 GiB checkpoint lazily. On the
+        # 2026-09-15 nightly that path loaded 19/48 shards in the 3600 s
+        # readiness window (run 35012494184). Stream the shards into page cache
+        # with parallel readers first, and give cold loads the same two-hour
+        # deadline the GB300 launcher uses.
+        export VLLM_SAFETENSORS_LOAD_STRATEGY=prefetch
+        export VLLM_ENGINE_READY_TIMEOUT_S=7200
     fi
 
     srun --jobid=$JOB_ID \

@@ -7807,3 +7807,12 @@
     - "Use FLASH_ATTN for the target model, select the Humming MXFP8 dense-linear backend, and enable Marlin atomic reduction for the MXFP8 MoE path."
     - "Use 0.95 GPU memory utilization for resident serving while retaining 0.90 for Mooncake DRAM offload, and remove the Mooncake concurrency-14 point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3108
+
+- config-keys:
+    - dsv41flash-fp4-h200-vllm-agentic-dspark
+  description:
+    - "Update vLLM image from vllm/vllm-openai:deepseekv41-flash-0909 to vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 (2026-09-15 upstream nightly, vllm-project/vllm@cd10ed6f); recipe script, DSpark settings, and the TP8 c1–128 grid are unchanged"
+    - "将 vLLM 镜像从 vllm/vllm-openai:deepseekv41-flash-0909 更新为 vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3（2026-09-15 上游 nightly，vllm-project/vllm@cd10ed6f）；配方脚本、DSpark 设置及 TP8 c1–128 网格保持不变"
+    - "H200 checkpoint loading: on nightly-cd10ed6f the lazy safetensors path read the 475 GiB checkpoint from the VIRTIOFS HF cache at ~170 s/shard and the Rust frontend hit its 3600 s readiness deadline at 19/48 shards (run 35012494184, c1 and the c128 eval), versus ~12.5 s/shard on deepseekv41-flash-0909 (run 34504985992). runners/launch_h200-dgxc-slurm.sh now exports VLLM_SAFETENSORS_LOAD_STRATEGY=prefetch, which the shared script forwards as --safetensors-load-strategy so shards are streamed into page cache by parallel readers, and VLLM_ENGINE_READY_TIMEOUT_S=7200 like the GB300 launcher. Serve flags and the grid are otherwise unchanged; other SKUs do not set the variable."
+    - "H200 检查点加载：在 nightly-cd10ed6f 上，惰性 safetensors 路径从 VIRTIOFS HF 缓存读取 475 GiB 检查点仅约 170 秒/分片，Rust 前端在 3600 秒就绪期限内只加载了 19/48 分片（运行 35012494184，c1 与 c128 评测），而 deepseekv41-flash-0909 约为 12.5 秒/分片（运行 34504985992）。runners/launch_h200-dgxc-slurm.sh 现导出 VLLM_SAFETENSORS_LOAD_STRATEGY=prefetch（共享脚本转发为 --safetensors-load-strategy，由并行读取器先将分片流式载入页缓存）以及 VLLM_ENGINE_READY_TIMEOUT_S=7200（与 GB300 启动器一致）。其余服务参数与网格不变；其他 SKU 不设置该变量。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3134
