@@ -7807,3 +7807,13 @@
     - "Use FLASH_ATTN for the target model, select the Humming MXFP8 dense-linear backend, and enable Marlin atomic reduction for the MXFP8 MoE path."
     - "Use 0.95 GPU memory utilization for resident serving while retaining 0.90 for Mooncake DRAM offload, and remove the Mooncake concurrency-14 point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3108
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260914."
+    - "Raise --prefill-decode-interval from 10 to 20 on both the TP-only and DP-attention serving paths, so the scheduler runs more decode steps between prefill admissions."
+    - "Switch the sglang-router policy for the DP-attention arms from consistent_hashing to cache_aware, and set the cache-aware absolute balance threshold to 32, down from the router default of 64, at concurrency above 160."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3120
