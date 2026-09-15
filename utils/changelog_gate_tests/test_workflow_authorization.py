@@ -463,6 +463,7 @@ def test_current_verdict_replaces_prior_acceptance(verdict, succeeded, accepted)
                          verdictPath='/tmp/codeowner-signoff-verdict.md', verificationSucceeded=succeeded)
     assert result['failures'] == []
     statuses = [write for write in result['writes'] if write['method'] == 'repos.createCommitStatus']
+    assert all(status['context'] == 'CODEOWNER sign-off' for status in statuses)
     assert {status['sha']: status['state'] for status in statuses} == {
         'b' * 40: 'success' if accepted else 'failure',
     }

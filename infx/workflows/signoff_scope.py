@@ -67,7 +67,7 @@ def check_scope(repo: str, number: int, token: str) -> dict[str, str]:
             token,
             method="POST",
             data={
-                "context": "codeowner-signoff-verify",
+                "context": "CODEOWNER sign-off",
                 "state": "success",
                 "description": "N/A",
             },
