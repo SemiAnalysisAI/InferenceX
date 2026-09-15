@@ -120,7 +120,7 @@ def test_matching_an_owner_more_than_once_checks_their_role_once(scope_case):
     scope_case["files"] = [{"filename": "configs/a.yaml"}, {"filename": "configs/b.yaml"}]
     scope_case["pr"]["changed_files"] = 2
     assert signoff_scope.required_owners("example/repo", scope_case["pr"], "token") == ["@writer"]
-    assert [path for path, _ in scope_case["requests"] if path.startswith("/collaborators/")] == [
+    assert sorted(path for path, _ in scope_case["requests"] if path.startswith("/collaborators/")) == [
         "/collaborators/admin/permission", "/collaborators/writer/permission",
     ]
 

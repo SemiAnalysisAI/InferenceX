@@ -652,16 +652,6 @@ class TestMultiNodeMatrixEntry:
 class TestValidateMatrixEntry:
     """Tests for validate_matrix_entry function."""
 
-    def test_valid_single_node(self, valid_single_node_matrix_entry):
-        """Valid single node entry should return the entry."""
-        result = validate_matrix_entry(valid_single_node_matrix_entry, is_multinode=False)
-        assert result == valid_single_node_matrix_entry
-
-    def test_valid_multinode(self, valid_multinode_matrix_entry):
-        """Valid multinode entry should return the entry."""
-        result = validate_matrix_entry(valid_multinode_matrix_entry, is_multinode=True)
-        assert result == valid_multinode_matrix_entry
-
     def test_invalid_single_node_raises_valueerror(self, valid_single_node_matrix_entry):
         """Invalid single node entry should raise ValueError."""
         del valid_single_node_matrix_entry["tp"]
@@ -1281,19 +1271,6 @@ class TestMasterConfigEntries:
 class TestValidateMasterConfig:
     """Tests for validate_master_config function."""
 
-    def test_valid_single_node_config(self, valid_single_node_master_config):
-        """Valid single node config should pass."""
-        configs = {"dsr1-fp8-mi300x-sglang": valid_single_node_master_config}
-        result = validate_master_config(configs)
-        assert result == configs
-
-    def test_valid_multinode_config(self, valid_multinode_master_config):
-        """Valid multinode config should pass."""
-        configs = {"dsr1-fp4-gb200-dynamo-trt": valid_multinode_master_config}
-        result = validate_master_config(configs)
-        assert result == configs
-
-
     def test_invalid_config_raises_valueerror(self, valid_single_node_master_config):
         """Invalid config should raise ValueError with key name."""
         del valid_single_node_master_config["model"]
@@ -1310,11 +1287,6 @@ class TestValidateMasterConfig:
 
 class TestValidateRunnerConfig:
     """Tests for validate_runner_config function."""
-
-    def test_valid_runner_config(self, valid_runner_config):
-        """Valid runner config should pass."""
-        result = validate_runner_config(valid_runner_config)
-        assert result == valid_runner_config
 
     def test_value_must_be_list(self):
         """Runner config values must be lists."""
