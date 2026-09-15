@@ -31,6 +31,8 @@ These sources outrank this guide when behavior changes. Update the English page 
 
 ## Testing layers
 
+[`CI`](../.github/workflows/ci.yml) runs two independent jobs, **Lint** and **Tests**, for affected PRs (including forks), pushes to `main`, and manual runs. Lint checks Ruff rules and formatting. Tests runs every suite under `utils/`, `runners/`, and `experimental/CollectiveX/tests/` with four pytest workers, plus MCP compatibility. New tests in those directories are discovered automatically. The test environment uses Python 3.12 and CPU-only PyTorch; dependencies must be at least 12 hours old. A failing job does not cancel the other; a newer PR update cancels the superseded CI run. Branch pushes without a PR no longer start a separate changelog-test run.
+
 | Layer | What it can prove | What it cannot prove |
 | --- | --- | --- |
 | Parse and syntax | Edited YAML loads, and edited Bash parses | Schema validity, runtime routing, or GPU behavior |

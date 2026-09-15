@@ -31,6 +31,8 @@
 
 ## 测试层级
 
+[`CI`](../.github/workflows/ci.yml) 在相关 PR（包括 fork）、向 `main` 推送及手动运行时，启动相互独立的 **Lint** 和 **Tests** 两项任务。Lint 检查 Ruff 规则及格式；Tests 使用四个 pytest worker 运行 `utils/`、`runners/` 和 `experimental/CollectiveX/tests/` 下的全部测试，并检查 MCP 兼容性。这些目录中的新增测试会自动发现。测试环境使用 Python 3.12 和仅支持 CPU 的 PyTorch；依赖必须已发布至少 12 小时。一项任务失败不会取消另一项；PR 更新会取消旧提交的 CI。尚未创建 PR 的分支推送不再单独触发变更日志测试。
+
 | 层级 | 能够证明 | 不能证明 |
 | --- | --- | --- |
 | 解析与语法 | 编辑后的 YAML 可加载；编辑后的 Bash 可解析 | 模式有效性、运行时路由或 GPU 行为 |
