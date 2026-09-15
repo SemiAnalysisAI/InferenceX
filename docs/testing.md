@@ -61,24 +61,14 @@ Run checks from the repository root and replace placeholders with the exact chan
 
 ### Python lint and formatting
 
-[`infx/ruff.toml`](../infx/ruff.toml) enables all stable Ruff rules for `infx/`, with the exceptions below. It targets Python 3.12 and uses the Ruff formatter with a line length of 100. CI runs on any Python-file change and pins Ruff 0.16.7; review newly enabled rules when upgrading that pin. Preview rules and automatic unsafe fixes are not enabled.
+Ruff checks `infx/` with the rules in [`infx/ruff.toml`](../infx/ruff.toml), targeting Python 3.12 and a line length of 100. CI runs on any Python-file change and uses the latest Ruff release at least 12 hours old.
 
 ```bash
-uvx --exclude-newer PT12H ruff==0.16.7 check --fix infx
-uvx --exclude-newer PT12H ruff==0.16.7 format infx
+uvx --exclude-newer PT12H ruff@latest check --fix infx
+uvx --exclude-newer PT12H ruff@latest format infx
 ```
 
-| Exceptions | Reason |
-| --- | --- |
-| `D`, `DOC`, `CPY`, `TD`, `FIX`, `W505`, `RUF002`, `RUF003` | Avoid mandatory prose, copyright headers, TODO metadata, and punctuation policing. |
-| `E501`, `W191`, `E111`, `E114`, `E117`, `Q`, `COM812`, `COM819` | Let the formatter own layout and quoting. |
-| `C901`, `PLR0911/12/13/15/17`, `PLR2004`, `PLW2901`, `FBT` | Fixed size limits and blanket bans on literals or loop-variable normalization can force unnecessary helpers and variables. Review complexity and boolean arguments in context. |
-| `EM`, `TRY003`, `TRY004`, `TRY300`, `TRY301`, `T201` | Keep direct error messages, established validation exception types, and CLI output. |
-| `ANN401`, `PLC0414`, `PLC0415`, `TC001`, `TC003` | Support dynamic JSON boundaries, explicit re-exports, optional dependencies, and ordinary type imports without unnecessary indirection. Other annotation rules remain enabled. |
-| `PTH110`, `PTH118`, `PTH122`, `PTH123`, `PTH207`, `FURB162` | Existing file APIs and timestamp normalization have observable edge cases; replacing them is not a lint-only change. |
-| `S603`, `S607` | Argument-vector subprocess calls and tools found on `PATH` are intentional. Shell-execution checks remain enabled; callers still own argument validation. |
-
-Inline `# noqa: CODE` exceptions cover reviewed uses: model tokenizer strings, deterministic benchmark randomness, fixed SQL fragments and HTTP origins, a custom `SafeLoader`, invariant assertions, best-effort collection, and compatibility arguments. Frozen option constructors are allowlisted for default arguments. Fix findings where practical and keep justified exceptions on the affected lines; do not disable a rule for an entire file. Ruff checks for unused ignores. Ruff does not replace a type checker, security review, or behavioral tests.
+Fix findings where practical. Justified exceptions use inline `# noqa: CODE`; unused ignores are checked. Preview rules and automatic unsafe fixes are not enabled.
 
 ### Parse and syntax
 
