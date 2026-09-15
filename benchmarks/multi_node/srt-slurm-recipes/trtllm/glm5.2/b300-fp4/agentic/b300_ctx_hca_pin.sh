@@ -11,6 +11,22 @@ export PIP_DEFAULT_TIMEOUT="${PIP_DEFAULT_TIMEOUT:-120}"
 export PIP_RETRIES="${PIP_RETRIES:-20}"
 export PIP_RESUME_RETRIES="${PIP_RESUME_RETRIES:-20}"
 
+# pip does not retry every truncated response even with its network retry
+# settings. Retry the complete command so a single worker does not leave an
+# otherwise healthy multi-rank launch permanently short of one rank.
+pip() {
+    local _srt_attempt=1 _srt_max_attempts=5
+    while ! command pip "$@"; do
+        if [ "$_srt_attempt" -ge "$_srt_max_attempts" ]; then
+            echo "pip failed after $_srt_attempt attempts" >&2
+            return 1
+        fi
+        echo "pip failed; retrying complete command (attempt $((_srt_attempt + 1))/$_srt_max_attempts)" >&2
+        sleep $((_srt_attempt * 5))
+        _srt_attempt=$((_srt_attempt + 1))
+    done
+}
+
 _srt_live_devices() {
     _srt_out=""; _srt_oIFS="$IFS"; IFS=,
     for _srt_d in $_srt_in; do
