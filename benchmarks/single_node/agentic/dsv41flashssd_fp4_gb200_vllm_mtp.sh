@@ -283,6 +283,30 @@ if [[ "$FOUND_SHARDS" -ne "$EXPECTED_SHARDS" ]]; then
     exit 1
 fi
 
+# Shared-table runs are only meaningful if the readers replay at the same
+# time. Startup across 18 nodes spreads by ~18%, so without a rendezvous the
+# fastest node can finish before the slowest has loaded and the run would
+# measure staggered access rather than concurrent access. Unset by default,
+# so single-node CI rows are untouched.
+if [[ -n "${ENGRAM_REPLAY_BARRIER_DIR:-}" ]]; then
+    barrier_cohort="${ENGRAM_REPLAY_COHORT:-1}"
+    barrier_id="${SLURM_PROCID:-0}"
+    mkdir -p "$ENGRAM_REPLAY_BARRIER_DIR"
+    touch "$ENGRAM_REPLAY_BARRIER_DIR/ready.$barrier_id"
+    echo "Waiting for $barrier_cohort readers at $ENGRAM_REPLAY_BARRIER_DIR"
+    for _ in $(seq 1 720); do
+        arrived="$(find "$ENGRAM_REPLAY_BARRIER_DIR" -name 'ready.*' | wc -l)"
+        [[ "$arrived" -ge "$barrier_cohort" ]] && break
+        sleep 5
+    done
+    arrived="$(find "$ENGRAM_REPLAY_BARRIER_DIR" -name 'ready.*' | wc -l)"
+    if [[ "$arrived" -lt "$barrier_cohort" ]]; then
+        echo "Replay barrier timed out: $arrived of $barrier_cohort readers." >&2
+        exit 1
+    fi
+    echo "engram_replay_cohort=$arrived" | tee -a "$RESULT_DIR/engram_placement.txt"
+fi
+
 if [[ "${EVAL_ONLY:-false}" == true ]]; then
     run_eval --port "$PORT"
 else
