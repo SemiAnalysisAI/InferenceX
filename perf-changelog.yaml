@@ -7649,3 +7649,13 @@
     - "Apply the runtime fix only to TP; native RCCL DEP does not use this backend. Record patch hashes in aiter_runtime_fix.json and runtime_manifest.json. The preceding DSpark C256 full GSM8K job passed all 1319 samples with strict 97.57% and flexible 97.50%, while TP C2/C4/C8 and local TP C16 reproduced this startup error. The interrupted sweep is superseded by the repaired sweep."
     - "修复 DSpark q7 触发 TP MoE 补齐路径时在 InferenceMode 外写入 inference tensor 的启动错误；对固定源码哈希应用 callback 修复并记录补丁哈希，保留通信融合、K6、AL 3.77 和 graph。DEP 不使用该 backend，路径不变；前一轮 C256 全量精度已通过，TP 启动失败的 sweep 已停止并由修复后的新一轮替代。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace rocm/atom-dev:nightly_202609121454 with rocm/atom-dev:pr2233-4f3a808 (digest sha256:543ac7d9659a4a13fcaf0c8b8b80ac99706944a74257be1f2252a72dc9f792f1), built from ATOM commit 4f3a8088 with the upstream ROCm/ATOM#2233 inference-mode fix."
+    - "Remove the runtime patch_aiter_comm_fused_inference.py source mutation, its test, and aiter_runtime_fix.json manifest handling. TP now relies on the fixed implementation shipped in the image while preserving communication fusion, DSpark K6, golden AL 3.77, and graph capture; this entry supersedes the preceding runtime-fix entry."
+    - "将镜像切换为包含 ROCm/ATOM#2233 上游修复的 rocm/atom-dev:pr2233-4f3a808（ATOM commit 4f3a8088）；移除运行时 AITER 源码补丁、对应测试及 aiter_runtime_fix.json 记录。TP 直接使用镜像内修复，同时保留通信融合、DSpark K6、golden AL 3.77 和 graph capture；本条取代前一条临时运行时修复记录。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912

@@ -200,7 +200,7 @@ DSpark Markov/confidence head、全部 66 个分片的 header 与 payload 边界
 全部十个 AgentX 性能点使用 DSpark K6（target 验证长度为 7）和已提交的
 golden AL 3.77。C1/2/4/8/16 使用 TP8/EP1；C48/64/96/128/256 使用
 TP8/DPA8/EP8 原生 RCCL。每个性能点运行 3600 秒。C256 全量 GSM8K 不传强制
-接受率参数。保留固定的 `nightly_202609121454` 镜像、GPU KV、FP8 KV/FP4 index、
+接受率参数。保留固定的 `rocm/atom-dev:pr2233-4f3a808` 镜像、GPU KV、FP8 KV/FP4 index、
 8192-token checkpoint 和 DEP dense FULL graph 阶梯。每个新服务进程重新捕获
 固定 q7 图；必须从 `server.log` 确认 target 和 DSpark draft capture 完成。
 confidence schedule 和 ragged verification 保持关闭。
@@ -210,14 +210,9 @@ confidence schedule 和 ragged verification 保持关闭。
 `runtime_manifest.json` 和 `server_command.txt` 保存模型/源码身份及请求的配置。
 成功启动、graph capture 和请求执行仍需运行时日志证明。
 
-固定版本 AITER 的 TP 通信融合 MoE 在 DSpark q7 需要补齐 token 时，会在
-`InferenceMode` 外更新预分配的 inference tensor。TP 配方应用经过源码哈希
-校验的补丁，在 Stage2 launch callback 内恢复 `torch.inference_mode()`，
-同时覆盖 shared-partial 暂存路径，保留通信融合和 graph capture。DEP 不使用
-这一 TP backend，执行路径保持不变。`aiter_runtime_fix.json` 和
-`runtime_manifest.json` 记录补丁前后哈希；TP 的 AITER Git checkout 预期显示
-dirty。在固定镜像内运行 `test_aiter_comm_fused_inference.py`，可复现原始错误
-并验证补齐及已对齐的 callback。
+固定镜像已包含 [ROCm/ATOM#2233](https://github.com/ROCm/ATOM/pull/2233)
+在 ATOM commit `4f3a8088` 中提供的上游 inference-mode 修复。配方不再在运行时
+修改 AITER 源码；TP 通信融合、DSpark K6 和 graph capture 直接使用镜像内实现。
 
 ### DeepSeek-V4.1-Flash DSpark
 
