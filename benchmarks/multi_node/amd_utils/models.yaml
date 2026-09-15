@@ -384,8 +384,8 @@ DeepSeek-V4-Pro-AgentX: &DeepSeek-V4-Pro-AgentX
       max_running_requests: "BENCH_MAX_CONC_VALUE*2"
       cuda_graph_bs_range: "1-BENCH_MAX_CONC_VALUE*2"
 
-# Alias for the -0813 dated checkpoint: same serving flags/behavior as the base
-# DeepSeek-V4-Pro AgentX recipe 
+# Pro-0813 retains EAGLE 3-1-4 for PD compatibility. Synthetic acceptance is
+# checkpoint-specific in server_sglang.sh: thinking-on, length 3 uses AL 3.01.
 DeepSeek-V4-Pro-0813-AgentX: *DeepSeek-V4-Pro-AgentX
 
 DeepSeek-V4-Pro-DI:

@@ -6685,17 +6685,6 @@
     - "Bump image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726 to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260828"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2763
   
-- config-keys:
-    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Bump the image to lmsysorg/sglang-rocm:v0.5.18-rocm720-mi35x-20260909, switch the active DP-attention arm's decode side from ep:8 to ep:1 (DP-attention over TP-sharded MoE instead of expert-parallel dispatch), and widen conc-list to [64, 96, 128, 192, 256]. "
-    - "models.yaml: round out dp_flags with --tokenizer-worker-num 8, --enable-dp-attention-local-control-broadcast, --stream-interval 20, and --prefill-decode-interval 10 to mirror the single-node DP-attention recipe block; add enable_two_batch_overlap under prefill.dp; raise mem_fraction_static 0.85 -> 0.86 for both prefill and decode. add --enable-deepseek-v4-fp4-indexer to DeepSeek-V4-Pro-AgentX base_flags"
-    - "env.sh: gate the DP-attention-only SGLang knobs (SGLANG_SHARED_EXPERT_TP1, SGLANG_DP_SHARED_EXPERT_LOCAL, SGLANG_DP_USE_GATHERV, SGLANG_DP_USE_REDUCE_SCATTER, wider GPU_MAX_HW_QUEUES) behind PREFILL_ENABLE_DP/DECODE_ENABLE_DP instead of exporting them unconditionally, so TP-only arms keep GPU_MAX_HW_QUEUES=2; add SGLANG_MORI_RECV_BOUND=1 for the disagg MoRI path."
-    - "Split --enforce-shared-experts-fusion and --disable-shared-experts-fusion into mutually exclusive no_dp_flags/dp_flags buckets (new models.yaml no_dp_flags field plus MODEL_NO_DP_FLAGS in server_sglang.sh's build_server_config()). Both flags previously landed on the DP arm's command line simultaneously and only resolved correctly by relying on the internal check order in DeepseekV4ForCausalLM.determine_num_fused_shared_experts(), not a guaranteed contract."
-    - "Make max_running_requests 2*CONC on the DP-attention arm, matching the TP-only arm's 2*CONC value."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2823
 
 - config-keys:
     - minimaxm3-fp4-b300-vllm-agentic-mtp
@@ -7728,3 +7717,15 @@
     - "Replace the no-spec aggregate recipe and config key with a DSpark-4 arm under the existing DSpark aggregate key, using Inferact/Kimi-K3-DSpark, block rejection for real acceptance, golden synthetic AL 3.36 for throughput, and concurrencies [48,52,56]. Preserve the DSpark-7 aggregate arm at [1,4] with AL 3.84."
     - "Trim DSpark-4 disaggregated concurrencies to 1P1D [48,56], 1P2D [48,64], and 1P3D [48]. Preserve the DSpark-7 1P3D arm at concurrency 1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3105
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the MI355X disaggregated AgentX recipe to DeepSeek-V4-Pro-0813 on lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260911 with the FP4 sparse-attention indexer."
+    - "Keep the supported EAGLE three-step, top-k-one, four-token verification path and use the committed Pro-0813 thinking-on golden AL of 3.01 for throughput, replacing the original V4 value of 2.49. Evaluation retains real target verification."
+    - "Use checkpoint-specific Pro-0813 golden AL values for draft lengths one through three and reject unsupported lengths rather than falling through to the original V4 curve."
+    - "Run the full seven-point sweep: TP4 prefill/decode at concurrency 4, TP8 at 16 without offload, TP8 with HiCache at 32 and 48, and TP8/DP8 with UMBP linker at 128, 192, and 256."
+    - "Gate DP environment settings by role, scale request limits and graph ranges with concurrency, and extend UMBP readiness and barrier timeouts. Remove commented-out environment assignments."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2823

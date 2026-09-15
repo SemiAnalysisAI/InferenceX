@@ -1563,8 +1563,11 @@ else
     # agentic throughput benchmarks simulate acceptance at the model's
     # committed golden AL instead of measuring real (non-representative)
     # acceptance. Eval runs (RUN_EVAL / EVAL_ONLY) need real acceptance so
-    # GSM8K scores reflect actual MTP behavior. Golden curve source:
-    # golden_al_distribution/dsv4_mtp.yaml (thinking_on).
+    # GSM8K scores reflect actual MTP behavior. AgentX uses one golden curve
+    # per checkpoint, thinking mode, and draft length, including when the
+    # supported PD draft implementation differs from the calibration engine.
+    # Sources (thinking_on): dsv4_mtp.yaml for the original checkpoint and
+    # golden_al_distribution/dsv4-pro-0813-dspark.yaml for Pro-0813.
     DECODE_SIM_ACC_ENV=""
     if [[ "$DECODE_MTP_SIZE" -gt 0 ]] && { [[ "${IS_AGENTIC:-0}" == "1" ]] || [[ "${IS_AGENTIC:-}" == "true" ]]; }; then
         if [[ "${EVAL_ONLY:-false}" == "true" ]] || [[ "${RUN_EVAL:-false}" == "true" ]]; then
@@ -1572,6 +1575,13 @@ else
         else
             DSV4_GOLDEN_AL=""
             case "${MODEL_NAME}:${DECODE_MTP_SIZE}" in
+                DeepSeek-V4-Pro-0813:1) DSV4_GOLDEN_AL=1.84 ;;
+                DeepSeek-V4-Pro-0813:2) DSV4_GOLDEN_AL=2.51 ;;
+                DeepSeek-V4-Pro-0813:3) DSV4_GOLDEN_AL=3.01 ;;
+                DeepSeek-V4-Pro-0813:*)
+                    echo "ERROR: Pro-0813 draft length ${DECODE_MTP_SIZE} has no golden AL wired here; refusing to use the original V4 curve." >&2
+                    exit 1
+                    ;;
                 *DeepSeek-V4*:1) DSV4_GOLDEN_AL=1.79 ;;
                 *DeepSeek-V4*:2) DSV4_GOLDEN_AL=2.27 ;;
                 *DeepSeek-V4*:3) DSV4_GOLDEN_AL=2.49 ;;
