@@ -42,10 +42,12 @@ SGLANG_ENABLE_SPEC_V2=1 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --mod
 --mamba-ssm-dtype bfloat16 \
 --attention-backend trtllm_mha \
 --moe-runner-backend flashinfer_trtllm \
---cuda-graph-max-bs $CONC \
+--cuda-graph-max-bs-decode $CONC \
 --max-running-requests $CONC \
---max-prefill-tokens 16384 \
---chunked-prefill-size 16384 \
+--max-prefill-tokens 32768 \
+--chunked-prefill-size 32768 \
+--mamba-full-memory-ratio 0.37 \
+--linear-attn-prefill-backend flashinfer \
 --mem-fraction-static 0.8 \
 --stream-interval 50 \
 --scheduler-recv-interval $( [[ $CONC -gt 4 ]] && echo 30 || echo 10 ) \
