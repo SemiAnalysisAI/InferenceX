@@ -403,7 +403,12 @@ set -x
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export VLLM_ROCM_USE_AITER_MOE=1
-export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
+# This checkpoint mixes packed MXFP4 routed experts with a full-width FP8
+# shared expert. The latest nightly otherwise admits the combination into the
+# fused path and fails while loading incompatible scales/shapes.
+export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=0
+# vLLM only clamps torch threads after weight loading; cap from process start.
+export OMP_NUM_THREADS=1
 
 sleep 180
 

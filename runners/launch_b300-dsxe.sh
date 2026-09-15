@@ -1,5 +1,8 @@
 #!/usr/bin/bash
 
+# shellcheck source=runners/slurm_utils.sh
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+
 # Launcher for the B300 DSXE Slurm cluster (dsxe-sa-b300-prd0), runners run as sa-gha-runner.
 #
 # Every cluster-specific fact lives in this block. The rest of the file is generic:
@@ -16,6 +19,7 @@ SQUASH_DIR="/data/home/sa-gha-runner/squash"
 # it is read-only from the job's point of view. Anything not in STAGED_MODELS is
 # downloaded into WRITABLE_MODELS_DIR (shared Lustre) by the single-node scripts.
 MODEL_ROOT="/scratch/models"
+SHARED_MODEL_ROOT="/data/models"
 WRITABLE_MODELS_DIR="/data/home/sa-gha-runner/models"
 
 # Official power (dcgm-power) runs use a separate, pinned producer; CI derives
@@ -358,48 +362,7 @@ cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
 tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
 if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
-    # Find all result subdirectories
-    RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
-
-    if [ -z "$RESULT_SUBDIRS" ]; then
-        echo "Warning: No result subdirectories found in $LOGS_DIR"
-    else
-        # Process results from all configurations
-        for result_subdir in $RESULT_SUBDIRS; do
-            echo "Processing result subdirectory: $result_subdir"
-
-            # Extract configuration info from directory name
-            CONFIG_NAME=$(basename "$result_subdir")
-
-            # Find all result JSON files
-            RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
-
-            for result_file in $RESULT_FILES; do
-                if [ -f "$result_file" ]; then
-                    # Extract metadata from filename
-                    # Files may be "results_concurrency_N_gpus_G_ctx_C_gen_D.json" (disagg) or "results_concurrency_N_gpus_G.json" (non-disagg)
-                    filename=$(basename "$result_file")
-                    concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
-                    gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9][0-9]*\).*/\1/p')
-                    ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
-                    gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
-
-                    echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
-
-                    if [ -n "$ctx" ] && [ -n "$gen" ]; then
-                        WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
-                    else
-                        WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}.json"
-                    fi
-                    cp "$result_file" "$WORKSPACE_RESULT_FILE"
-
-                    echo "Copied result file to: $WORKSPACE_RESULT_FILE"
-                fi
-            done
-        done
-    fi
-
-    echo "All result files processed"
+    copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" || exit 1
 else
     echo "EVAL_ONLY=true: Skipping benchmark result collection"
 fi
@@ -432,15 +395,23 @@ done
 find . -name '.nfs*' -delete 2>/dev/null || true
 
 else
-    # HF_HUB_CACHE is set to help with dataset download inside the container
-    # for eval jobs.
-    export HF_HUB_CACHE="$HOME/.cache/huggingface"
+    # AgentX trace datasets need a writable persistent cache. Keep the host and
+    # container paths separate so the cache remains valid with
+    # --no-container-mount-home.
+    HF_CACHE_HOST_DIR="${B300_HF_CACHE_HOST_DIR:-$HOME/.cache/huggingface}"
+    HF_CACHE_CONTAINER_DIR="${B300_HF_CACHE_CONTAINER_DIR:-/hf_hub_cache}"
+    mkdir -p "$HF_CACHE_HOST_DIR/hub" "$HF_CACHE_HOST_DIR/xet"
+    export HF_HOME="$HF_CACHE_CONTAINER_DIR"
+    export HF_HUB_CACHE="$HF_CACHE_CONTAINER_DIR/hub"
+    export HF_XET_CACHE="$HF_CACHE_CONTAINER_DIR/xet"
 
     # MODEL stays the HF id for the client; MODEL_PATH is where the server reads
     # weights. Only the root holding MODEL_PATH is mounted -- mounting both roots
     # makes pyxis fail whenever the unused one is absent on the node.
     MODEL_BASENAME="${MODEL##*/}"
-    if [[ " ${STAGED_MODELS[*]} " == *" ${MODEL_BASENAME} "* ]]; then
+    if [[ "$MODEL_BASENAME" == "DeepSeek-V4-Pro-0813" ]]; then
+        MODEL_MOUNT_DIR="$SHARED_MODEL_ROOT"
+    elif [[ " ${STAGED_MODELS[*]} " == *" ${MODEL_BASENAME} "* ]]; then
         MODEL_MOUNT_DIR="$MODEL_ROOT"
     else
         MODEL_MOUNT_DIR="$WRITABLE_MODELS_DIR"
@@ -449,7 +420,7 @@ else
     export MODEL_PATH="${MODEL_MOUNT_DIR}/${MODEL_BASENAME}"
 
     SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" || "$SPEC_DECODING" == "draft_model" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b300_sglang.sh); fall back to
     # the untagged historical name for scripts that haven't been retagged yet.
     BENCH_BASE="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_b300"
@@ -474,6 +445,15 @@ else
         CONTAINER_MOUNT_DIR=/workspace
     fi
 
+    # Keep all new AgentX runtime directories outside /workspace.
+    if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" ]]; then
+        CONTAINER_MOUNT_DIR=/ix
+        export INFMAX_CONTAINER_WORKSPACE=/ix
+        export RESULT_DIR=/ix/results
+        # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
+        export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
+    fi
+
     import_squash_image "$IMAGE" "$SQUASH_FILE"
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
@@ -493,13 +473,36 @@ else
     if [[ -n "${SALLOC_EXCLUDE:-}" ]]; then
         SALLOC_ARGS+=(--exclude="$SALLOC_EXCLUDE")
     fi
-    salloc "${SALLOC_ARGS[@]}"
-    JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
+    # Capture this allocation's ID; a runner name can also match an older job.
+    JOB_ID=$(
+        set -o pipefail
+        LC_ALL=C salloc "${SALLOC_ARGS[@]}" 2>&1 | tee /dev/stderr |
+            sed -n 's/.*Granted job allocation \([0-9][0-9]*\)$/\1/p'
+    ) || exit 1
+    [[ "$JOB_ID" =~ ^[0-9]+$ ]] || { echo 'ERROR: B300 allocation unavailable' >&2; exit 1; }
+    trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
+    if [[ "$MODEL_MOUNT_DIR" == "$MODEL_ROOT" ]]; then
+        # MODEL_ROOT is node-local: probe the allocated compute node, not the login host.
+        srun --jobid="$JOB_ID" test -r "$MODEL_PATH/config.json" || {
+            echo 'ERROR: readiness-blocked: staged model config is unavailable on the allocated node' >&2
+            exit 1
+        }
+    fi
 
     CONTAINER_MOUNTS=(
         "$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR"
         "$MODEL_MOUNT_DIR:$MODEL_MOUNT_DIR"
+        "$HF_CACHE_HOST_DIR:$HF_CACHE_CONTAINER_DIR"
     )
+    if [[ "$MODEL_PREFIX" == "kimik3" && "$FRAMEWORK" == "vllm" && "${IS_AGENTIC:-0}" == "1" ]]; then
+        # The pre-staged target is read-only; DSpark needs the writable,
+        # persistent model root as a separate mount.
+        mkdir -p "$WRITABLE_MODELS_DIR"
+        export WRITABLE_MODELS_DIR
+        if [[ "$MODEL_MOUNT_DIR" != "$WRITABLE_MODELS_DIR" ]]; then
+            CONTAINER_MOUNTS+=("$WRITABLE_MODELS_DIR:$WRITABLE_MODELS_DIR")
+        fi
+    fi
     CONTAINER_MOUNTS_ARG=$(IFS=,; printf '%s' "${CONTAINER_MOUNTS[*]}")
 
     srun --jobid="$JOB_ID" \

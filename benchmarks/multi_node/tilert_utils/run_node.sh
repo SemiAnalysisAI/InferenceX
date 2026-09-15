@@ -42,6 +42,36 @@ AGENTIC_LOGS_DIR=${AGENTIC_LOGS_DIR:-$RESULT_DIR/LOGS/agentic}
 mkdir -p "$BENCHMARK_LOGS_DIR"
 
 DONE_SENTINEL="$BENCHMARK_LOGS_DIR/.tilert_done.${SLURM_JOB_ID:-local}"
+source "$(dirname "$0")/../../native_power_lifecycle.sh"
+finish_tilert_node() {
+    local rc=$? pid
+    trap - EXIT
+    if [[ "${POWERX_NATIVE_ENABLED:-0}" == 1 && -n "${POWERX_COLLECTOR_PID:-}" ]]; then
+        if [[ "$TILERT_ROLE" == prefill || "$rc" != 0 ]]; then
+            powerx_stop_collectors || rc=$?
+        else
+            powerx_reap_collector || rc=$?
+        fi
+    fi
+    if [[ "$TILERT_ROLE" == prefill ]]; then
+        printf '%s\n' "$rc" > "$DONE_SENTINEL.tmp" || rc=1
+        if [[ -n "${POWERX_HOST_UID:-}" ]]; then
+            chown "$POWERX_HOST_UID:$POWERX_HOST_GID" "$DONE_SENTINEL.tmp" || rc=1
+        fi
+        mv -f "$DONE_SENTINEL.tmp" "$DONE_SENTINEL" || rc=1
+    fi
+    for pid in "${ROUTER_PID:-}" "${PREFILL_PID:-}" "${DECODE_PID:-}"; do
+        [[ -z "$pid" ]] || kill -TERM "$pid" 2>/dev/null || true
+    done
+    exit "$rc"
+}
+trap finish_tilert_node EXIT
+trap 'exit 143' TERM HUP
+trap 'exit 130' INT
+if [[ "${POWERX_NATIVE_ENABLED:-0}" == 1 ]]; then
+    powerx_start_collector "/powerx_native/node-$POWERX_RANK" "/powerx_control" \
+        nvidia "$POWERX_RANK" "$TILERT_ROLE" "$POWERX_GPU_COUNT" 2
+fi
 echo "[tilert-run_node] ROLE=$TILERT_ROLE host=$(hostname) DECODE_HOST=$DECODE_HOST PREFILL_HOST=$PREFILL_HOST"
 
 log_and_run_bg() {
@@ -202,7 +232,7 @@ wait_for_tcp() {
         fi
         sleep 5
     done
-    [[ $rc -eq 0 ]] && { exec 3>&- 2>/dev/null || true; echo "[wait_for_tcp] $host:$port ready"; }
+    [[ $rc -eq 0 ]] && echo "[wait_for_tcp] $host:$port ready"
     (( _xtrace )) && set -x
     return $rc
 }
@@ -211,6 +241,9 @@ run_bench_and_eval() {
     wait_for_server_ready --port "$ROUTER_PORT" \
         --server-log "$BENCHMARK_LOGS_DIR/tilert_router.log" --server-pid "$ROUTER_PID"
     local rc=0 conc np
+    if [[ "${POWERX_NATIVE_ENABLED:-0}" == 1 ]]; then
+        powerx_wait_collectors ready || return $?
+    fi
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
     for conc in $CONC_LIST; do
         np=$(( conc * 10 ))
@@ -228,11 +261,11 @@ run_bench_and_eval() {
             || { rc=$?; echo "[bench] WARNING: conc=$conc failed/timed out (rc=$rc)"; }
     done
     fi
-    run_lm_eval
+    run_tilert_eval || rc=$?
     return $rc
 }
 
-run_lm_eval() {
+run_tilert_eval() {
     [[ "${RUN_EVAL}" = "true" ]] || return 0
     if [[ -n "${EVAL_CONC:-}" ]]; then
         export EVAL_CONCURRENT_REQUESTS="$EVAL_CONC"
@@ -240,8 +273,13 @@ run_lm_eval() {
         export EVAL_CONCURRENT_REQUESTS="$(tr ' ' '\n' <<< "$CONC_LIST" | sort -n | tail -1)"
     fi
     export CONC="$EVAL_CONCURRENT_REQUESTS"
-    run_eval --port "$ROUTER_PORT"
-    append_lm_eval_summary
+    local eval_rc=0 stage_rc=0
+    run_eval --port "$ROUTER_PORT" || eval_rc=$?
+    append_lm_eval_summary || stage_rc=$?
+    if [[ "$eval_rc" -ne 0 ]]; then
+        return "$eval_rc"
+    fi
+    return "$stage_rc"
 }
 
 run_agentic_replay() {
@@ -278,13 +316,13 @@ case "$TILERT_ROLE" in
             sleep 5
         done
         if [[ -f "$DONE_SENTINEL" ]]; then
-            echo "[decode] done sentinel received, shutting down"; kill "$DECODE_PID" 2>/dev/null || true; exit 0
+            echo "[decode] done sentinel received, shutting down"
+            exit "$(cat "$DONE_SENTINEL")"
         fi
         echo "[decode] decode_server exited early (see $BENCHMARK_LOGS_DIR/tilert_decode.log)"; exit 1
         ;;
     prefill)
         rdma_preflight || exit 1
-        rm -f "$DONE_SENTINEL"
         if [[ "$TILERT_IS_AGENTIC" == "1" ]]; then
             resolve_trace_source
             install_agentic_deps
@@ -300,8 +338,7 @@ case "$TILERT_ROLE" in
         else
             run_bench_and_eval; BENCH_RC=$?
         fi
-        touch "$DONE_SENTINEL"
-        kill "$ROUTER_PID" "$PREFILL_PID" 2>/dev/null || true
+        # EXIT drains both collectors before the decode role sees completion.
         exit $BENCH_RC
         ;;
     *)

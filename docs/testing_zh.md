@@ -50,6 +50,7 @@
 - 不要把当前配方数量、模型或硬件清单、镜像 pin、枚举定义或源码文本写成快照断言。新增有效配方或进行等价重构，不应迫使开发者修改无关断言。
 - 保留真正的契约：数值结果、无效输入拒绝行为、稳定的产物格式，以及由不同组件独立读取的配置之间的一致性。只断言使用方真正依赖的部分。
 - 必要时可以模拟外部服务或进程，但必须运行被测行为本身。测试里复制的解析器、过滤逻辑或假实现，无法发现真实实现中的回归。
+- 在涉及时间的测试中控制时钟和长时间等待，以可观察到的就绪状态进行同步。测试进程终止或产物写入契约时，应保留真实操作，并为等待和清理设置上限，避免回归导致测试进程一直挂起。
 - 冗余测试应直接删除，不必一一补上。只有存在实质性覆盖缺口时才扩展已有 fixture；不要为了维持测试数量而新建测试框架。
 
 参见 [Randy Coulman 的 Tautological Tests](https://randycoulman.com/blog/2016/12/20/tautological-tests/)，了解独立预期结果与仅仅重复实现的断言之间的区别。
@@ -71,14 +72,14 @@ bash -n runners/launch_<cluster>.sh
 ### 先精确配置，再过滤配置族
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
-  utils/matrix_logic/generate_sweep_configs.py test-config \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+  python -m infx.matrix.generate test-config \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --config-keys <exact-key>
 
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
-  utils/matrix_logic/generate_sweep_configs.py full-sweep \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+  python -m infx.matrix.generate full-sweep \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --model-prefix <prefix> \
@@ -96,23 +97,37 @@ uv run --no-project --with pydantic --with pyyaml --python 3.12 \
 | --- | --- |
 | 矩阵模式或生成 | `python -m pytest utils/matrix_logic/ -v` |
 | Changelog 内容或 PR 门禁 | `python -m pytest utils/test_process_changelog.py utils/changelog_gate_tests/ -v` |
-| 结果处理 | `python -m pytest utils/test_process_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
-| 评测分发、批处理或补丁 | `python -m pytest utils/evals/ -v` |
+| 结果处理与拓扑 | `python -m pytest utils/test_process_result.py utils/agentic/aggregation/test_process_agentic_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
+| AgentX 聚合与工件加载 | `python -m pytest utils/agentic/aggregation/ -v` |
+| 评测分发、批处理或补丁 | `python -m pytest infx/evals/ -v` |
 | 评测收集 | `python -m pytest utils/test_collect_eval_results.py -v` |
-| 扫描复用或可复用制品 | `python -m pytest utils/test_find_reusable_sweep_run.py utils/test_validate_reusable_sweep_artifacts.py -v` |
+| 扫描复用或可复用制品 | `python -m pytest utils/test_github.py utils/test_find_reusable_sweep_run.py utils/test_acknowledge_sweep_reuse.py utils/test_validate_reusable_sweep_artifacts.py -v` |
 
 若编辑了 changelog，还要使用真实 base 和 head ref 运行 setup 所用的同一矩阵兼容性验证器：
 
 ```bash
-python3 utils/validate_perf_changelog.py \
+python3 -m infx.workflows.validate_perf_changelog \
   --changelog-file perf-changelog.yaml \
   --base-ref <base-ref> \
   --head-ref <head-ref>
 ```
 
-其契约实现在 [`validate_perf_changelog.py`](../utils/validate_perf_changelog.py) 中。该检查会验证生成矩阵并拒绝禁止的内容变更，但其差异读取器可能看不到仅空白的历史删除。应把精确字节差异检查作为独立证据门禁；不要改写或规范化 `perf-changelog.yaml` 历史字节。
+其契约实现在 [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py) 中。该检查会验证生成矩阵并拒绝禁止的内容变更，但其差异读取器可能看不到仅空白的历史删除。应把精确字节差异检查作为独立证据门禁；不要改写或规范化 `perf-changelog.yaml` 历史字节。
 
 本地矩阵不能证明 Slurm 分配或 llm-d 端点发现。多节点配方变更仍然需要上游配方检查器，并在目标集群上实际执行；详见[配置验证](./configuration-procedures.md#validate)。
+
+### 并行运行完整本地测试套件
+
+现有 Python 测试套件也覆盖工作流契约。`utils/matrix_logic/test_validation.py` 测试工作流输入模式，并使用受控的生成器输出执行两个准备脚本。非法数据行必须在发布作业输出前失败；合法数据行必须保持不变，包括手动分派测量旧 checkout 的情况。`utils/test_process_result.py` 通过记录环境的启动器执行实际启动步骤，覆盖当前和旧版 checkout。这些测试不模拟 GitHub 表达式引擎，也不证明 GPU 性能；表达式修改需结合工作流验证和适用的 smoke 证据进行审查。
+
+安装好测试所需依赖后，在同一 Python 环境中添加 [`pytest-xdist`](https://pytest-xdist.readthedocs.io/en/stable/distribution.html)，使用四个 worker 运行全部本地测试套件：
+
+```bash
+python -m pip install pytest-xdist
+python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
+```
+
+串行调试时使用 `-n 0`。测试必须隔离临时文件和端口，并确保各 worker 收集到的参数化用例一致。changelog-gate CI 任务同样使用四个 worker；并行执行不改变其测试范围和断言。
 
 ## 冒烟、扫描与评测
 
@@ -135,7 +150,7 @@ python3 utils/validate_perf_changelog.py \
 
 吞吐与评测是独立任务。默认扫描对选中的 8k1k 子集进行评测；`all-evals` 扩大评测选择，`evals-only` 抑制吞吐。根据变更范围选择修饰标签，但不要用仅评测或预检运行替代所需的全量扫描。
 
-评测完成不能只看绿色任务。保留并检查 `meta_env.json`、`results*.json` 文件、分数验证输出、推理镜像和聚合评测制品。[`utils/evals/EVALS.md`](../utils/evals/EVALS.md) 负责任务与制品行为。[`validate_scores.py`](../utils/evals/validate_scores.py) 会拒绝缺失结果文件、低于阈值的分数和没有任何已检查指标的运行；当存在预期并发元数据时，它还会拒绝无效、不完整或失败的批次。工作流调用时没有传入 `--expected-concs`，因此评审者必须独立验证单并发制品中的 `meta_env.json`。
+评测完成不能只看绿色任务。保留并检查 `meta_env.json`、`results*.json` 文件、分数验证输出、推理镜像和聚合评测制品。[`utils/evals/EVALS.md`](../utils/evals/EVALS.md) 负责任务与制品行为。[`validate_scores.py`](../infx/evals/validate_scores.py) 会拒绝缺失结果文件、低于阈值的分数和没有任何已检查指标的运行；当存在预期并发元数据时，它还会拒绝无效、不完整或失败的批次。工作流调用时没有传入 `--expected-concs`，因此评审者必须独立验证单并发制品中的 `meta_env.json`。
 
 ## 证据标准
 
@@ -158,7 +173,7 @@ python3 utils/validate_perf_changelog.py \
 3. **CODEOWNER 签署前：**遵循 [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md)，包括适用的代码质量、架构、镜像来源、上游配方、补丁/豁免、聊天模板和 AgentX 要求。
 4. **扫描/评测验收：**当前仍在 PR 中的至少一个提交拥有成功、未跳过且实际执行的 `single-node */` 与 `eval /` 检查。仅 `collect-evals` 成功不够。下载对应评测制品，确认其非空、准确率达标且使用同一推理镜像。这些可执行规则位于[验证器检查 1 和 2](../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr)。
 5. **合并时复用：**获授权的 `OWNER`、`MEMBER` 或 `COLLABORATOR` 必须在受支持的合并路径前发布独占一行的 `/reuse-sweep-run` 命令（可附带合格来源 run ID）。验证器会把命令缺失或发布者未授权视为失败；参见[验证器检查 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted)和[复用流程](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
-6. **合并时：**CODEOWNER 的精确签署须由 [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) 独立接受。如果 PR head 变化，重新评估并签署新提交的证据。
+6. **合并时：**CODEOWNER 的精确签署只需由 [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) 独立验证并获得一次 PASS。自动化通过 `codeowner-signoff-verified` 保留接受状态，并将必需状态延续到后续 head（包括 rebase 后），无需重新运行 Claude。每次实际验证都会更新同一条 PR 裁定评论，注明所评估的 SHA；延续 PASS 不代表新增提交已被审阅。删除评论不会重置接受状态，手动重新评估也不会撤销已有 PASS。评论恢复和手动分发说明见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
 7. **合并后：**作者按照 [`CONTRIBUTING.md`](../CONTRIBUTING.md#after-merging) 的要求确认 main 分支任务通过。
 
 ## 停止条件

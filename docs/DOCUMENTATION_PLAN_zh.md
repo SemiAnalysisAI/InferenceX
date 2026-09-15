@@ -37,7 +37,7 @@
 | 常见 CI 与集群故障 | `KLAUD_DEBUG.md` | 恢复步骤有价值，但与历史故障背景混在一起 |
 | 配置 Schema 与拓扑 | `configs/CONFIGS.md`、`utils/matrix_logic/validation.py` | Schema 参考存在，但修改流程与消费路径分散 |
 | 矩阵生成与扫描复用 | `.github/workflows/README.md`、`.github/workflows/*.yml` | 运维指南位于 `.github`，不在主要文档路径下 |
-| 评估与分数门禁 | `utils/evals/EVALS.md`、`utils/evals/thresholds.yaml` | 参考文档详细，但与吞吐量、结果收集的关系不直观 |
+| 评估与分数门禁 | `utils/evals/EVALS.md`、`infx/evals/thresholds.yaml` | 参考文档详细，但与吞吐量、结果收集的关系不直观 |
 | 多节点 Recipe | `benchmarks/multi_node/srt-slurm-recipes/RECIPES.md` | 编辑任一文件前应明确 Recipe 与主配置的耦合关系 |
 | Runner 初始化 | `utils/runner_setup/RUNNER_SETUP.md`、`runners/` | 部署与运行时启动器关注点分离 |
 | 模型与硬件目录 | `MODELS.md`、`configs/*-master.yaml` | 面向用户的模型列表与可运行配置列表服务于不同读者 |

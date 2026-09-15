@@ -50,6 +50,7 @@ Tests protect behavior, not coverage numbers. During review, ask what plausible 
 - Do not snapshot the current recipe count, model/hardware inventory, image pin, enum definition, or source text. Adding a valid recipe or refactoring equivalent code should not force unrelated assertion changes.
 - Preserve genuine contracts: numerical results, rejected invalid inputs, stable artifact formats, and agreement between independently consumed configurations. Assert only the parts of the contract the consumer needs.
 - Mock external services or processes when necessary, but run the actual behavior under test. A copied parser, filter, or fake implementation cannot detect a regression in the real one.
+- Control clocks and long waits in timing tests. Synchronize on observable readiness, keep process termination and artifact writes real when testing those contracts, and bound waits and cleanup so regressions cannot strand test workers.
 - Delete redundant tests without replacement. Extend existing fixtures only when there is a meaningful gap; do not build a new test framework to preserve a test count.
 
 See [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/20/tautological-tests/) for the distinction between independent expectations and assertions that merely repeat the implementation.
@@ -71,14 +72,14 @@ Parsing is only the first gate. Do not report a YAML parse as matrix validation.
 ### Exact config, then filtered family
 
 ```bash
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
-  utils/matrix_logic/generate_sweep_configs.py test-config \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+  python -m infx.matrix.generate test-config \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --config-keys <exact-key>
 
-uv run --no-project --with pydantic --with pyyaml --python 3.12 \
-  utils/matrix_logic/generate_sweep_configs.py full-sweep \
+uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+  python -m infx.matrix.generate full-sweep \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --model-prefix <prefix> \
@@ -96,23 +97,37 @@ Inspect the emitted values, not only the exit code or row count: config key, mod
 | --- | --- |
 | Matrix schema or generation | `python -m pytest utils/matrix_logic/ -v` |
 | Changelog content or PR gating | `python -m pytest utils/test_process_changelog.py utils/changelog_gate_tests/ -v` |
-| Result processing | `python -m pytest utils/test_process_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
-| Eval dispatch, batching, or patches | `python -m pytest utils/evals/ -v` |
+| Result processing and topology | `python -m pytest utils/test_process_result.py utils/agentic/aggregation/test_process_agentic_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
+| AgentX aggregation and artifact loading | `python -m pytest utils/agentic/aggregation/ -v` |
+| Eval dispatch, batching, or patches | `python -m pytest infx/evals/ -v` |
 | Eval collection | `python -m pytest utils/test_collect_eval_results.py -v` |
-| Sweep reuse or reusable artifacts | `python -m pytest utils/test_find_reusable_sweep_run.py utils/test_validate_reusable_sweep_artifacts.py -v` |
+| Sweep reuse or reusable artifacts | `python -m pytest utils/test_github.py utils/test_find_reusable_sweep_run.py utils/test_acknowledge_sweep_reuse.py utils/test_validate_reusable_sweep_artifacts.py -v` |
 
 For an edited changelog, also run the same matrix-compatibility validator used by setup, with real base and head refs:
 
 ```bash
-python3 utils/validate_perf_changelog.py \
+python3 -m infx.workflows.validate_perf_changelog \
   --changelog-file perf-changelog.yaml \
   --base-ref <base-ref> \
   --head-ref <head-ref>
 ```
 
-Its contract is implemented in [`validate_perf_changelog.py`](../utils/validate_perf_changelog.py). This check validates the generated matrix and rejects prohibited content changes, but whitespace-only historical deletions can be invisible to its diff reader. Inspect the exact byte diff as a separate evidence gate. Do not rewrite or normalize historical `perf-changelog.yaml` bytes.
+Its contract is implemented in [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py). This check validates the generated matrix and rejects prohibited content changes, but whitespace-only historical deletions can be invisible to its diff reader. Inspect the exact byte diff as a separate evidence gate. Do not rewrite or normalize historical `perf-changelog.yaml` bytes.
 
 A local matrix cannot prove Slurm allocation or llm-d endpoint discovery. Multi-node recipe changes still require the upstream recipe checker and an execution on the intended fleet, as described in [configuration validation](./configuration-procedures.md#validate).
+
+### Full local suite in parallel
+
+The existing Python suites cover workflow contracts too. `utils/matrix_logic/test_validation.py` tests the workflow input schemas and runs both preparation scripts with controlled generator output. Invalid rows must fail before publishing job outputs; accepted rows must remain unchanged, including when manual dispatch measures an older checkout. `utils/test_process_result.py` executes the shipped launch step with a recording launcher for current and historical checkouts. These tests do not emulate GitHub's expression engine or prove GPU performance; review expression changes with workflow validation and applicable smoke evidence.
+
+With the test dependencies installed, add [`pytest-xdist`](https://pytest-xdist.readthedocs.io/en/stable/distribution.html) to the same Python environment and run all local suites with four workers:
+
+```bash
+python -m pip install pytest-xdist
+python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
+```
+
+Use `-n 0` for serial debugging. Tests must keep temporary files and ports isolated and collect deterministic parameter cases across workers. The changelog-gate CI job also uses four workers; parallel execution preserves its test selection and assertions.
 
 ## Smoke, sweep, and eval
 
@@ -135,7 +150,7 @@ The current meanings and eligibility rules are defined in the [sweep-label refer
 
 Throughput and evals are separate jobs. The default sweep evaluates the selected 8k1k subset. `all-evals` expands eval selection, and `evals-only` suppresses throughput. Choose modifiers from the changed scope, but do not substitute an eval-only or preflight run for the required full sweep.
 
-Eval completion is not just a green job. Preserve and inspect `meta_env.json`, the `results*.json` files, the score-validation output, the inference image, and the aggregated eval artifact. [`utils/evals/EVALS.md`](../utils/evals/EVALS.md) owns task and artifact behavior. [`validate_scores.py`](../utils/evals/validate_scores.py) rejects missing result files, below-threshold scores, and runs with no checked metrics. When expected concurrency metadata is available, it also rejects invalid/incomplete/failed batches. The workflow invokes it without `--expected-concs`, so reviewers must verify `meta_env.json` independently for single-concurrency artifacts.
+Eval completion is not just a green job. Preserve and inspect `meta_env.json`, the `results*.json` files, the score-validation output, the inference image, and the aggregated eval artifact. [`utils/evals/EVALS.md`](../utils/evals/EVALS.md) owns task and artifact behavior. [`validate_scores.py`](../infx/evals/validate_scores.py) rejects missing result files, below-threshold scores, and runs with no checked metrics. When expected concurrency metadata is available, it also rejects invalid/incomplete/failed batches. The workflow invokes it without `--expected-concs`, so reviewers must verify `meta_env.json` independently for single-concurrency artifacts.
 
 ## Evidence standard
 
@@ -158,7 +173,7 @@ Record enough information for another reviewer to reproduce the claim without gu
 3. **Before CODEOWNER sign-off:** follow [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md), including its code-quality, architecture, image provenance, upstream recipe, patch/waiver, chat-template, and AgentX requirements where applicable.
 4. **For sweep/eval acceptance:** at least one commit currently in the PR has successful, non-skipped executed `single-node */` and `eval /` checks. A successful `collect-evals` alone is insufficient. Download the corresponding eval artifacts and confirm non-empty, passing accuracy and the same inference image. These are the executable rules in [verifier Checks 1 and 2](../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr).
 5. **For reuse at merge:** an authorized `OWNER`, `MEMBER`, or `COLLABORATOR` posts a whole-line `/reuse-sweep-run` command (optionally with the eligible source run ID) before the supported merge path. The verifier treats a missing or unauthorized command as a failure. See [verifier Check 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted) and [the reuse procedure](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep).
-6. **At merge:** a CODEOWNER's exact sign-off is independently accepted by [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml). If the PR head changes, reassess and sign the new commit evidence.
+6. **At merge:** a CODEOWNER's exact sign-off needs one independent PASS from [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml). Automation preserves acceptance with `codeowner-signoff-verified` and carries the required status onto subsequent heads without rerunning Claude, including after rebases. Each actual verification updates one PR verdict comment with the assessed SHA; carrying a PASS forward does not attest to review of new commits. Deleting the comment does not reset acceptance, and manual reassessment cannot revoke an earlier PASS. See [the contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off) for comment recovery and manual dispatch.
 7. **After merge:** the author confirms the main-branch jobs pass, as required by [`CONTRIBUTING.md`](../CONTRIBUTING.md#after-merging).
 
 ## Stop conditions

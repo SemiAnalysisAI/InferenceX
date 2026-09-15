@@ -46,10 +46,11 @@ fi
 
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
-# Keep the upstream ROCm recipe knobs explicit. The shared-expert fusion
-# self-disables when this checkpoint's shared-expert path is not eligible.
+# Fuses the native-FP8 shared expert into the MXFP4 routed-expert AITER kernel.
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+# vLLM only clamps torch threads after weight loading; cap from process start.
+export OMP_NUM_THREADS=1
 
 SERVER_LOG=/workspace/server.log
 

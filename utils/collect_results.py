@@ -1,16 +1,13 @@
+"""Compatibility entrypoint for :mod:`infx.results.collect_results`."""
+
+import importlib
+import runpy
 import sys
-import json
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-results_dir = Path(sys.argv[1])
-exp_name = sys.argv[2]
-
-agg_results = []
-for result_path in results_dir.rglob(f'*.json'):
-    with open(result_path) as f:
-        result = json.load(f)
-    agg_results.append(result)
-
-with open(f'agg_{exp_name}.json', 'w') as f:
-    json.dump(agg_results, f, indent=2)
+if __name__ == "__main__":
+    runpy.run_module("infx.results.collect_results", run_name="__main__", alter_sys=True)
+else:
+    sys.modules[__name__] = importlib.import_module("infx.results.collect_results")

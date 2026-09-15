@@ -20,7 +20,9 @@ Thanks for contributing! PRs are welcome. This page covers the review process ev
 
 ## The PR Review Checklist (CODEOWNER sign-off)
 
-When a CODEOWNER approves a PR, they must fill in the latest [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) template in their approval comment.
+One eligible CODEOWNER reviewer fills in the latest [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) template in their approval comment.
+
+**Only one eligible CODEOWNER reviewer needs to post the checklist for each PR.** Check for an existing checklist before posting; additional reviewers do not need to post their own copies. For corrections, missing evidence, or verification retries, the original reviewer must **edit their existing checklist comment** instead of adding a new one. Create a replacement only if the original comment was deleted.
 
 A friendly reminder. Please follow the latest checklist template **correctly**:
 
@@ -33,7 +35,11 @@ A friendly reminder. Please follow the latest checklist template **correctly**:
 - The sign-off can be posted as a regular conversation comment, a review summary, or an inline review comment. All three trigger verification.
 - Fill in the "Additional detail section" with the links the checklist asks for (validation/eval workflow runs, the corresponding [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR, and any exception reasoning).
 
-Once the sign-off is posted, CI independently re-verifies the claims that gate a merge, including CODEOWNER status, a green sweep and evals on a commit in the PR, the linked recipe, the `/reuse-sweep-run` command, use of the latest checklist template, upstream [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) images, no architecture-changing benchmark hacks, and chat-template usage for speculative decoding. It then posts a verdict comment on the PR. Checkmarks are not taken on trust, so please only check items you have actually verified.
+Once the sign-off is posted, CI independently re-verifies the claims that gate a merge, including CODEOWNER status, a green sweep and evals on a commit in the PR, the linked recipe, the `/reuse-sweep-run` command, use of the latest checklist template, upstream [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) images, no architecture-changing benchmark hacks, and chat-template usage for speculative decoding. It then creates or updates one verdict comment for the PR, including the SHA actually assessed. Failing criteria stay visible; passing and N/A criteria appear together in a collapsed section. An existing verdict comment from the older per-commit format is reused; if the comment was deleted, the next verification creates a replacement. Checkmarks are not taken on trust, so please only check items you have actually verified.
+
+**One PASS satisfies this gate for the lifetime of the PR.** Automation records the first PASS with the `codeowner-signoff-verified` label. Later commits, rebases, and sign-off edits do not rerun Claude or invalidate that PASS. A small trusted `pull_request_target` workflow carries the successful required `codeowner-signoff-verify` status onto the latest head. The carried status records the earlier acceptance; it does not claim that Claude reviewed the new commits.
+
+The label is managed by automation; do not add it manually. Trusted automation PASS comments from the older verifier can be migrated, but contributor-authored verdict text cannot grant a PASS. Deleting the verdict comment does not clear acceptance. To explicitly reassess, manually dispatch `codeowner-signoff-verify.yml` with the sign-off's `comment_url`; this updates the same verdict comment, but a later failure does not revoke an earlier PASS.
 
 ## Reusing your PR's green sweep at merge with `/reuse-sweep-run`
 
@@ -42,6 +48,7 @@ A full benchmark sweep is expensive GPU time, and the runners are shared by ever
 - After your PR has an eligible green full sweep, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) comments `/reuse-sweep-run` on the PR (optionally pinning a specific run: `/reuse-sweep-run <run_id>`).
 - The merge-to-`main` run then validates and ingests the PR sweep's artifacts instead of re-running the whole sweep on `main`.
 - **This reduces CI queue time for everyone.** Each reused merge frees hours of GPU runner time for other PRs, so please prefer the reuse path over merging without it. A green sweep alone is not enough. The `/reuse-sweep-run` comment must be on record (the sign-off verification checks for it), otherwise `main` silently re-runs the full sweep.
+- Reuse does not require retaining a sweep label. The bot reacts to the command with 👍 when accepted or 👎 when rejected, with details in the Actions run summary; source artifacts are revalidated at merge.
 - `utils/merge_with_reuse.sh <pr-number>` is the supported merge path. It posts the command, syncs the branch with `main`, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
 
 ## Adding points to the latest curve with `append-only`
