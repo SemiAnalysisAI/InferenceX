@@ -86,8 +86,7 @@ install_agentic_deps
 
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export PYTHONNOUSERSITE=1
-# Use Humming for dense MXFP8 linear layers and atomic reduction for the
-# Marlin MXFP8 MoE path.
+# Humming for dense MXFP8 linear layers; atomic reduction for the Marlin MXFP8 MoE path.
 export VLLM_MARLIN_USE_ATOMIC_ADD=1
 
 SERVER_LOG="$RESULT_DIR/server.log"

@@ -2,8 +2,8 @@
 set -eo pipefail
 set -x
 
-# Agentic trace replay for Kimi-K3 (MXFP4) on B300: TP8 x DCP8, TokenspeedMLA,
-# Mooncake as the external KV tier. Concurrency selects the arm:
+# Kimi-K3 MXFP4 on B300: TP8 x DCP8, TokenspeedMLA, Mooncake external KV tier.
+# Concurrency selects the arm:
 #   conc <= 8   DSpark level 7, golden AL 3.84
 #   conc 16     DSpark level 3, golden AL 3.00
 #   conc >  16  no drafting
@@ -15,12 +15,9 @@ set -x
 # Optional:
 #   DCP_SIZE (default 8), KV_OFFLOAD_BACKEND (mooncake, or empty for resident)
 #
-# TP8 is the only single-node layout: the MXFP4 checkpoint is ~1.5 TB, so TP4
-# would need ~375 GB/GPU against B300's 288 GB.
-#
-# The draft's real acceptance on this corpus is 1.16-2.01 (13-41% position-1);
-# its native window is 32k YaRN-stretched to 1M. Synthetic acceptance measures
-# the system at a prescribed acceptance, not the draft's fitness at 100k+ ISL.
+# TP8 only: the ~1.5 TB MXFP4 checkpoint would need ~375 GB/GPU at TP4.
+# The draft's real acceptance on this corpus is 1.16-2.01; synthetic acceptance
+# measures the system at a prescribed AL, not the draft's fitness at 100k+ ISL.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -60,8 +57,8 @@ if [[ -n "${MODEL_PATH:-}" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
     fi
     DRAFT_MODEL_PATH="${WRITABLE_MODELS_DIR:-/data/models}/${DRAFT_MODEL##*/}"
-    # Other sweep cells share this directory; nonempty may mean a download
-    # is still in progress. Let HF validate/resume cached files under one lock.
+    # Other sweep cells share this directory and nonempty may mean a download
+    # is in progress; let HF validate/resume under one lock.
     mkdir -p "$(dirname "$DRAFT_MODEL_PATH")"
     flock -w "${MODEL_DOWNLOAD_LOCK_TIMEOUT:-21600}" "${DRAFT_MODEL_PATH}.download.lock" \
         hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
@@ -76,7 +73,6 @@ nvidia-smi
 resolve_trace_source
 install_agentic_deps
 
-# ---- Serving environment ----------------------------------------------------
 export VLLM_ALLREDUCE_USE_FLASHINFER=1
 export VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION=1
 export VLLM_USE_V2_MODEL_RUNNER=1
@@ -111,7 +107,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# ---- External KV tier -------------------------------------------------------
 OFFLOAD_ARGS=()
 case "${KV_OFFLOAD_BACKEND:-}" in
     "")
@@ -127,14 +122,10 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
-        # One rail for every rank. These nodes are rail-isolated, so two
-        # different RNICs cannot reach each other even within a node, and the
-        # embedded store's ranks are eight processes on one host.
-        #
-        # Chosen at runtime: mlx5_0 is down on some nodes (b300-016, b300-017),
-        # and a hardcoded rail has no fallback -- topology discovery finds 0
-        # HCAs and every rank dies in a 20-retry loop that reads like a store
-        # problem. Order starts at mlx5_0 so a healthy node is unchanged.
+        # Rail-isolated nodes: two RNICs cannot reach each other even within a
+        # node, so every rank uses one rail. Chosen at runtime because mlx5_0 is
+        # down on some nodes (b300-016, b300-017) and topology discovery then
+        # finds 0 HCAs and every rank dies in a retry loop.
         MOONCAKE_RAIL=""
         for _d in mlx5_0 mlx5_1 mlx5_2 mlx5_3 mlx5_4 mlx5_5 mlx5_8 mlx5_9 \
                   mlx5_10 mlx5_11 mlx5_16 mlx5_17 mlx5_20 mlx5_21 mlx5_22 mlx5_23; do
@@ -196,7 +187,6 @@ EOF
         ;;
 esac
 
-# ---- Speculative decoding ---------------------------------------------------
 if [ "${SPEC_DECODING:-none}" != "mtp" ]; then
     echo "Error: this recipe expects spec-decoding=mtp for every arm, got '${SPEC_DECODING:-}'" >&2
     exit 1
@@ -227,10 +217,8 @@ fi
 
 MAX_NUM_SEQS=$((2 * CONC))
 
-# 1 - this is the buffer for what is not sized against the budget: the cudagraph
-# pool, the FlashInfer MoE workspace and fragmentation. Only c56 and c70 ran out
-# of it (2.78 GiB wanted, 1.60 GiB free); the pool grows with concurrency, so
-# lower points keep the default and their full KV cache.
+# 1 - util is the buffer for what is not sized against the budget (cudagraph
+# pool, FlashInfer MoE workspace, fragmentation); only c56 and c70 ran out.
 if [ "$CONC" -ge 56 ]; then
     GPU_MEM_UTIL=0.90
 else
