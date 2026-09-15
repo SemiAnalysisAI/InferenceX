@@ -124,6 +124,16 @@ jobs:
             utils/evals/test_run_eval_dispatch.py \
             -v -n 4
 
+  test-srt-slurm:
+    name: Test SRT Slurm connector
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
       - name: Test native srt-slurm acceptance overrides
         run: |
           git submodule update --init utils/srt-slurm
