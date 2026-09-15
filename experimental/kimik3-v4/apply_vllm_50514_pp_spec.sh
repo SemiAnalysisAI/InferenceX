@@ -467,43 +467,51 @@ if marker in t:
     print(f"{p}: draft capture phase barriers already patched")
     raise SystemExit(0)
 
-old_import = """from vllm.distributed.parallel_state import (
-    get_dcp_group,
-    get_pp_group,
-    prepare_communication_buffer_for_model,
-)
-"""
-new_import = """from vllm.distributed.parallel_state import (
-    get_dcp_group,
-    get_pp_group,
-    get_world_group,
-    prepare_communication_buffer_for_model,
-)
-"""
-if old_import not in t:
-    raise SystemExit(f"{p}: parallel_state import block not found")
-t = t.replace(old_import, new_import, 1)
+if "    get_world_group,\n" not in t:
+    old_import_item = "    get_pp_group,\n"
+    if old_import_item not in t:
+        raise SystemExit(f"{p}: get_pp_group import not found")
+    t = t.replace(
+        old_import_item,
+        old_import_item + "    get_world_group,\n",
+        1,
+    )
 
-old_capture = """            if self.speculator is not None:
+old_capture_variants = (
+    """            if self.speculator is not None:
                 self.speculator.capture()
-"""
-new_capture = f"""            # The target graph is captured by every PP stage above. The draft
-            # graph exists only on the last stage, so make it a separate phase:
-            # non-last stages wait instead of entering PP warmup early.
-            {marker}
-            draft_over_pp = (
-                self.speculative_config is not None
-                and self.parallel_config.pipeline_parallel_size > 1
-            )
-            if draft_over_pp:
-                get_world_group().barrier()
-            if self.speculator is not None:
-                self.speculator.capture()
-            if draft_over_pp:
-                get_world_group().barrier()
-"""
-if old_capture not in t:
+""",
+    """                    if self.speculator is not None:
+                        with use_workspace_lane(self._draft_workspace_lane):
+                            self.speculator.capture()
+""",
+)
+old_capture = next((value for value in old_capture_variants if value in t), None)
+if old_capture is None:
     raise SystemExit(f"{p}: speculator capture block not found")
+indent = old_capture.split("if self.speculator", 1)[0]
+capture_body = (
+    f"{indent}if self.speculator is not None:\n"
+    f"{indent}    with use_workspace_lane(self._draft_workspace_lane):\n"
+    f"{indent}        self.speculator.capture()\n"
+    if "use_workspace_lane" in old_capture
+    else
+    f"{indent}if self.speculator is not None:\n"
+    f"{indent}    self.speculator.capture()\n"
+)
+new_capture = f"""{indent}# The target graph is captured by every PP stage above. The draft
+{indent}# graph exists only on the last stage, so make it a separate phase:
+{indent}# non-last stages wait instead of entering PP warmup early.
+{indent}{marker}
+{indent}draft_over_pp = (
+{indent}    self.speculative_config is not None
+{indent}    and self.parallel_config.pipeline_parallel_size > 1
+{indent})
+{indent}if draft_over_pp:
+{indent}    get_world_group().barrier()
+{capture_body}{indent}if draft_over_pp:
+{indent}    get_world_group().barrier()
+"""
 t = t.replace(old_capture, new_capture, 1)
 p.write_text(t)
 print(f"patched {p}: isolated last-stage draft cudagraph capture phase")

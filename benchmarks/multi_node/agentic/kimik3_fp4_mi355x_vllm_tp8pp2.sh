@@ -93,7 +93,9 @@ export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_USE_AITER=1
 export SAFETENSORS_FAST_GPU=1
 export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
+export AITER_SITUV2_A8W4=1
 export AITER_BF16_FP8_MOE_BOUND=0
+export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export PYTHONNOUSERSITE=1
 
@@ -213,22 +215,43 @@ else
 fi
 
 # K3 container patches (triton 3.7.0 + vLLM/aiter hotfixes) — idempotent.
-bash "$(dirname "$0")/../../single_node/agentic/apply_k3_container_patches.sh"
+if [[ "${SKIP_K3_CONTAINER_PATCHES:-0}" == "1" ]]; then
+  echo "Skipping legacy apply_k3_container_patches.sh"
+else
+  bash "$(dirname "$0")/../../single_node/agentic/apply_k3_container_patches.sh"
+fi
+
+# K3 Hybrid PP: defer alignment-context initialization until preprocess_state so
+# PP-local Mamba group IDs remain consistent across CUDA Graph warmup.
+if [[ "${K3_HYBRID_PP_FIX:-0}" == "1" ]]; then
+  python3 "${GITHUB_WORKSPACE:-/workspace}/experimental/kimik3-v4/patch_k3_hybrid_pp.py"
+fi
 
 # vLLM #50514 (open): DSpark/EAGLE3 under PP — draft on last PP stage only.
 # Required when SPEC_DECODE is on with PP>1; no-op if already applied.
-case "${SPEC_DECODE:-false}" in
-true|TRUE|1|yes|YES|on|ON|mtp|dspark)
-    bash "${GITHUB_WORKSPACE:-/workspace}/experimental/kimik3-v4/apply_vllm_50514_pp_spec.sh" \
-      || { echo "ERROR: apply_vllm_50514_pp_spec.sh failed (needed for DSpark+PP)" >&2; exit 1; }
-    ;;
-esac
+if [[ "${SKIP_LEGACY_PP_SPEC_PATCH:-0}" == "1" ]]; then
+  echo "Skipping legacy apply_vllm_50514_pp_spec.sh (PR image contains PP support)"
+else
+  case "${SPEC_DECODE:-false}" in
+  true|TRUE|1|yes|YES|on|ON|mtp|dspark)
+      PATCH_DIR="${PP_SPEC_PATCH_DIR:-}" \
+        bash "${GITHUB_WORKSPACE:-/workspace}/experimental/kimik3-v4/apply_vllm_50514_pp_spec.sh" \
+        || { echo "ERROR: apply_vllm_50514_pp_spec.sh failed (needed for DSpark+PP)" >&2; exit 1; }
+      ;;
+  esac
+fi
+
+# Apply the selected metadata-fusion stage after the PP compatibility overlay
+# so all workers patch the final vLLM source layout.
+K3_DSPARK_FUSION_STAGE="${K3_DSPARK_FUSION_STAGE:-0}" \
+  python3 "${GITHUB_WORKSPACE:-/workspace}/experimental/kimik3-v4/patch_dspark_metadata_fusion.py"
 
 # ---- Optional DSpark (matches kimik3_fp4_mi355x_mtp.sh) ---------------------
 SPEC_ARGS=()
 case "${SPEC_DECODE:-false}" in
 true|TRUE|1|yes|YES|on|ON|mtp|dspark)
     SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
+    SPEC_KV_CACHE_DTYPE="${SPEC_KV_CACHE_DTYPE:-fp8}"
     DRAFT_MODEL_PATH="${DRAFT_MODEL_PATH:-Inferact/Kimi-K3-DSpark}"
     # Prefer a local HF-cache checkout when the hub id is not a directory.
     if [[ ! -d "$DRAFT_MODEL_PATH" ]]; then
@@ -258,13 +281,13 @@ true|TRUE|1|yes|YES|on|ON|mtp|dspark)
     block|BLOCK)
         SPEC_ARGS=(
             --speculative-config
-            "{\"model\":\"$DRAFT_MODEL_PATH\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
+            "{\"model\":\"$DRAFT_MODEL_PATH\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"$SPEC_KV_CACHE_DTYPE\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
         )
         ;;
     synthetic|SYNTHETIC)
         SPEC_ARGS=(
             --speculative-config
-            "{\"model\":\"$DRAFT_MODEL_PATH\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+            "{\"model\":\"$DRAFT_MODEL_PATH\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"$SPEC_KV_CACHE_DTYPE\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
         )
         ;;
     *)
@@ -292,7 +315,10 @@ COMPILATION_CONFIG_ARGS=(
     --compilation-config
     "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}"
 )
-
+PROFILER_CONFIG_ARGS=()
+if [[ -n "${VLLM_TORCH_PROFILER_DIR:-}" ]]; then
+    PROFILER_CONFIG_ARGS=(--profiler-config "{\"profiler\":\"torch\",\"torch_profiler_dir\":\"$VLLM_TORCH_PROFILER_DIR\"}")
+fi
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
@@ -302,7 +328,7 @@ COMMON_VLLM_ARGS=(
     --tensor-parallel-size "$TP"
     --pipeline-parallel-size "$PP"
     --distributed-timeout-seconds "$DISTRIBUTED_TIMEOUT_S"
-    --load-format fastsafetensors
+    --load-format "${LOAD_FORMAT:-fastsafetensors}"
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     --language-model-only
     --max-num-seqs "$MAX_NUM_SEQS"
@@ -314,6 +340,7 @@ COMMON_VLLM_ARGS=(
     --kv-cache-dtype fp8
     --enable-prefix-caching
     "${COMPILATION_CONFIG_ARGS[@]}"
+"${PROFILER_CONFIG_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     --master-addr "$MASTER_ADDR"

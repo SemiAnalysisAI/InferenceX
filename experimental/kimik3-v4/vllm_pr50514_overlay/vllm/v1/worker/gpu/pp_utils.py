@@ -41,10 +41,14 @@ def compute_need_sampled_mask(input_batch: InputBatch) -> np.ndarray | None:
 
     old_computed = input_batch.num_computed_tokens_np
     prefill_len = input_batch.prefill_len_np
-    max_seq_len = input_batch.max_seq_len_np
-    assert max_seq_len is not None  # always populated under PP
     # Exclude non-final prefill chunks (they don't produce a sample).
     produces_sample = old_computed + input_batch.num_scheduled_tokens >= prefill_len
+    max_seq_len = getattr(input_batch, "max_seq_len_np", None)
+    if max_seq_len is None:
+        # Newer V2 InputBatch revisions no longer retain the per-request output
+        # limit. Broadcasting a final sample is safe: the generation counter
+        # filters requests freed before this deferred PP result is consumed.
+        return produces_sample if produces_sample.any() else None
     # Discount drafts: scheduler advances num_computed by full width before
     # PP peers consume the sample broadcast.
     finish_computed = old_computed

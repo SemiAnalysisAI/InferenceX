@@ -5725,3 +5725,12 @@
     - "Validated end-to-end with zero GPU faults over full 30-minute profiling windows: c16 2,049 tok/s/GPU, c20 2,078 tok/s/GPU (TTFT p50 1,682ms, E2E p50 8,963ms, GPU KV-cache occupancy 90.4%)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
 
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the pinned Kimi-K3 TP8xPP2 runtime patch stack used for MI355X bring-up: a two-slot asynchronous activation ring with PP1 receive preposting, last-stage-only DSpark auxiliary-state transport, PP-safe draft KV-cache group projection, hybrid Mamba replay-boundary retention, and an opt-in EAGLE trailing-block no-drop backport. Controlled TP8xPP2 dummy-weight validation reused 15,360 of 18,089 prompt tokens with replay-boundary retention and 16,896 tokens (93.41%) with no-drop; short real-weight AgentX screening increased local prefix-cache hit rate from 6.53% to 33.95% and then 37.46%. These scripts are experimental runtime evidence and are not yet wired into the published recipe."
+    - "新增用于 MI355X bring-up 的固定 Kimi-K3 TP8xPP2 运行时补丁栈：带 PP1 receive 预投递的双槽异步 activation ring、仅在最后 stage 运行的 DSpark auxiliary-state 传输、PP 安全的 draft KV-cache group projection、混合 Mamba replay-boundary retention，以及可选的 EAGLE 尾部 block no-drop backport。受控 TP8xPP2 dummy-weight 验证中，replay-boundary retention 对 18,089-token prompt 命中 15,360 tokens，no-drop 命中 16,896 tokens（93.41%）；短时真实权重 AgentX 筛选将本地 prefix-cache hit rate 从 6.53% 提升至 33.95%，随后提升至 37.46%。这些脚本仅作为实验运行时证据，尚未接入正式发布配方。"
+  pr-link: XXX
