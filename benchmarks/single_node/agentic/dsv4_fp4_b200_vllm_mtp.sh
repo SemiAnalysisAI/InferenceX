@@ -2,19 +2,9 @@
 set -eo pipefail
 set -x
 
-# Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on B200 using vLLM,
-# with MTP speculative decoding (num_speculative_tokens=3): synthetic acceptance
-# length 2.49 for throughput, real target verification for the EVAL_ONLY eval.
-#
-# This MTP-only recipe keeps the established engine args and agentic AIPerf rig,
-# with two speculative-decoding behaviors:
-#   --speculative-config: synthetic acceptance length 2.49 (throughput) vs real MTP (EVAL_ONLY); see the SPEC_CONFIG block
-#   cudagraph capture sizes expressed in TOKENS (see the capture block below).
-#
-# The throughput sweep uses DEP8 with SimpleCPUOffloadConnector only. The recipe
-# uses FP8 KV cache, sparse DeepSeek-V4 FlashInfer attention with an FP4 indexer
-# cache, mega-MoE, long-prefill chunking, and FULL_DECODE_ONLY CUDA graphs with
-# every decode batch captured explicitly.
+# DeepSeek-V4-Pro FP4 on B200 with vLLM MTP (num_speculative_tokens=3).
+# Throughput fixes synthetic acceptance to AL 2.49; EVAL_ONLY keeps real
+# verification. Cudagraph capture sizes are in tokens (see the capture block).
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
@@ -24,9 +14,8 @@ set -x
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars DCP_SIZE EVAL_ONLY PCP_SIZE
 
-DCP_SIZE="${DCP_SIZE:-1}"
-PCP_SIZE="${PCP_SIZE:-1}"
 VLLM_CP_ARGS=()
 if [ "$DCP_SIZE" -gt 1 ]; then
     VLLM_CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE")
@@ -53,9 +42,6 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
     echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-# `hf download` creates the target dir if missing and is itself idempotent.
-# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
-# Either way, MODEL_PATH is what the server is launched with.
 if [[ -n "$MODEL_PATH" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -66,14 +52,12 @@ else
 fi
 nvidia-smi
 
-# ---- Resolve traces and install deps ----------------------------------------
 resolve_trace_source
 install_agentic_deps
 
-# vllm-project/router expands the one HTTP backend into one logical worker per
-# DP rank and sends X-data-parallel-rank on forwarded requests. aiperf's
-# X-Correlation-ID is stable for every turn of a conversation; alias it to the
-# router's preferred X-Session-ID header.
+# vllm-router expands one HTTP backend into a logical worker per DP rank.
+# AIPerf's X-Correlation-ID is stable across a conversation's turns; alias it
+# to the router's X-Session-ID so every turn lands on the same rank.
 USE_VLLM_ROUTER=false
 VLLM_BACKEND_PORT="$PORT"
 if [ "$DP_ATTENTION" = "true" ]; then
@@ -86,14 +70,11 @@ if [ "$DP_ATTENTION" = "true" ]; then
     agentic_pip_install --quiet "vllm-router==$VLLM_ROUTER_VERSION"
 fi
 
-# AIPerf automatically scrapes the public endpoint's /metrics URL. That is the
-# vLLM engine for pure TP, but the native router for DP-attention. Explicitly
-# add the engine endpoint so every topology captures vLLM metrics; AIPerf
-# deduplicates it against the automatic endpoint in pure-TP runs.
+# AIPerf scrapes the public endpoint's /metrics, which is the router under
+# DP-attention; add the engine endpoint explicitly (deduplicated for pure TP).
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${VLLM_BACKEND_PORT}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 
-# DeepSeek-V4-Pro weights are large; engine startup can exceed default 600s.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
 # vllm-project/vllm#43447 keeps local SWA prefix-cache tails sparsely, while
@@ -105,7 +86,6 @@ export VLLM_USE_RUST_FRONTEND=1
 export VLLM_DSV4_MEGA_FP8_COMBINE=1
 export VLLM_RPC_TIMEOUT=600000
 
-# ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 ROUTER_LOG="$RESULT_DIR/router.log"
 MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
@@ -175,8 +155,8 @@ EOF
         export MC_SLICE_SIZE=1048576
         export MC_WORKERS_PER_CTX=4
 
-        # Each rank contributes a separate segment. Evict early enough to
-        # avoid an imbalanced rank exhausting its segment.
+        # Each rank contributes a separate segment; evict early so an imbalanced
+        # rank cannot exhaust its segment.
         MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO=0.80
         MOONCAKE_EVICTION_RATIO=0.10
         # Mooncake's default 5s read lease is shorter than the observed
@@ -232,27 +212,24 @@ if [ "$DP_ATTENTION" = "true" ]; then
     )
 fi
 
-# AgentX concurrency counts live session trees. Subagent fan-out can push the
-# global instantaneous request count above CONC, so retain 2x global headroom
-# while avoiding the old 8x over-allocation of that budget on every DEP rank.
+# AgentX concurrency counts live session trees; subagent fan-out pushes the
+# global request count above CONC, so keep 2x headroom split across DEP ranks.
 if [ "$DP_ATTENTION" = "true" ]; then
     MAX_NUM_SEQS=$((2 * CONC / TP))
 else
     MAX_NUM_SEQS=$((2 * CONC))
 fi
 
-# MTP: cudagraph capture sizes are in TOKENS. With num_speculative_tokens=N,
-# every uniform decode batch of S seqs verifies S*(1+N) tokens, so capture the
-# explicit multiples (1+N), 2*(1+N), ..., MAX_NUM_SEQS*(1+N). vLLM rounds
-# configured sizes up to multiples of (1+N) and deduplicates them; a plain
-# 1..MAX_NUM_SEQS list would cover only MAX_NUM_SEQS/(1+N) decode sequences.
+# Cudagraph capture sizes are in tokens: a decode batch of S seqs verifies
+# S*(1+N) tokens, so capture the multiples (1+N)..MAX_NUM_SEQS*(1+N). vLLM
+# rounds sizes up to multiples of (1+N) and dedups, so a plain 1..MAX_NUM_SEQS
+# list would cover only MAX_NUM_SEQS/(1+N) sequences.
 NUM_SPEC_TOKENS=3
 TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
-# Throughput pins synthetic MTP acceptance to the dsv4-pro golden AL (thinking_on,
-# num_speculative_tokens=3, golden_al_distribution/dsv4_mtp.yaml). The EVAL_ONLY
-# accuracy run uses real target verification instead -- synthetic acceptance
-# bypasses verification and corrupts the SWE-bench eval (0.0000 score).
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
+# Golden AL: golden_al_distribution/dsv4_mtp.yaml, thinking_on, 3 draft tokens.
+# EVAL_ONLY keeps real verification; synthetic acceptance bypasses it and
+# zeroes the SWE-bench score.
+if [ "${EVAL_ONLY}" = "true" ]; then
     SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}"
 else
     SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": 2.49}"
@@ -261,11 +238,8 @@ CAPTURE_SIZE_LIST=()
 for ((num_seqs = 1; num_seqs <= MAX_NUM_SEQS; num_seqs++)); do
     CAPTURE_SIZE_LIST+=("$((num_seqs * TOKENS_PER_SEQ))")
 done
-# TP additionally captures piecewise graphs for the mixed prefill/decode batches,
-# on top of the full graphs for the uniform decode batches above. Piecewise
-# capture requires the compiled graph, so no "mode":0 on that path. The DEP arm
-# keeps decode-only capture. The decode multiples and the piecewise sizes overlap
-# once MAX_NUM_SEQS*(1+N) passes 100, so sort and de-duplicate.
+# TP also captures piecewise graphs for mixed prefill/decode batches, which
+# needs the compiled graph (no "mode":0). The lists overlap past 100, so dedup.
 if [ "$DP_ATTENTION" != "true" ]; then
     CAPTURE_SIZE_LIST+=(100 200 300 400 500)
 fi
@@ -280,7 +254,7 @@ echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
 export VLLM_FLOAT32_MATMUL_PRECISION=high
-GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.90}"
+GPU_MEMORY_UTILIZATION="0.90"
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(

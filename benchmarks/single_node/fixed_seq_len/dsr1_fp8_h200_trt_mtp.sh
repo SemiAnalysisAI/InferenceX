@@ -22,7 +22,6 @@ echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTIO
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
-# ========= Determine MOE_BACKEND and MTP based on DP_ATTENTION =========
 MOE_BACKEND="CUTLASS"
 
 if [[ "$DP_ATTENTION" == "true" ]]; then
@@ -36,7 +35,6 @@ echo "MOE_BACKEND='$MOE_BACKEND', MTP='$MTP'"
 SERVER_LOG=/workspace/server.log
 EXTRA_CONFIG_FILE="dsr1-fp8-mtp.yml"
 
-# If ISL=8192 and DP_ATTENTION=true, export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:8192
 if [[ "$ISL" == "8192" && "$DP_ATTENTION" == "true" ]]; then
     export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:8192"
 fi
@@ -84,11 +82,9 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
     MAX_NUM_TOKENS="$EVAL_MAX_MODEL_LEN"
 fi
-# Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
-# Launch TRT-LLM server
 PYTHONNOUSERSITE=1 mpirun -n 1 --oversubscribe --allow-run-as-root \
     trtllm-serve $MODEL --port=$PORT \
     --trust_remote_code \
@@ -102,7 +98,6 @@ PYTHONNOUSERSITE=1 mpirun -n 1 --oversubscribe --allow-run-as-root \
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 run_benchmark_serving \
@@ -118,11 +113,9 @@ run_benchmark_serving \
     --result-dir /workspace/ \
     --use-chat-template
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
