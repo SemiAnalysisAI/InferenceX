@@ -25,7 +25,7 @@ qwen3.5/trtllm/gb300-fp4/agentx/disagg-1p7d-dep4-tep8-c7-b1-mtp-kvoffload.yaml
 - Name override bundles `*-variants.yaml`. Keep distinct sweep entry files separate even when their contents match: recipe paths participate in eval grouping. The Qwen3.5 `*-stp-sweep.yaml` and `*-mtp-sweep.yaml` pair preserves that existing distinction.
 - Update `CONFIG_FILE` and `EVAL_CONFIG_FILE` references in active and deprecated master configs, launcher path rules, workflow filters, and local documentation together when moving a file. Preserve upstream source URLs as provenance and leave historical performance-changelog entries unchanged. No aliases for the old layout are provided.
 
-Shared runtime assets stay under `configs/` beside the model directories. Keeping a recipe in this tree does not activate it; the master configs determine the benchmark matrix.
+Shared runtime assets stay under `configs/` beside the model directories; they are not standalone recipes. The four files in `configs/dsv4-moe-load-balancer-configs/` are copied verbatim from NVIDIA/srt-slurm commit `deb1dfd9934398664f92d194169c183e009da83b`, preserving the EPLB initial expert assignments used by 17 DSV4 TRT recipes. `setup_srt_slurm()` stages them into the job checkout's `configs/` directory for the recipes' bind mounts. Keeping a recipe in this tree does not activate it; the master configs determine the benchmark matrix.
 
 ## TileRT exception
 
@@ -70,7 +70,7 @@ Validate recipes with the exact launcher pin, including all override variants. F
 The initial migration also resolves compatibility issues that `srtctl migrate` cannot fix itself:
 
 - Duplicate YAML keys retain the value selected by the former PyYAML loader.
-- DCGM telemetry uses `collect_interval_ms: 1000` instead of `provider` and `default_frequency`. The collector derives its shutdown budget; an explicit ten-second budget is too short for the current validator. Power recipes keep discovery services on the head node so samples and benchmark windows share a clock. H200 custom recipes declare a default concurrency that the launcher replaces before submission.
+- DCGM telemetry uses `collect_interval_ms: 1000` instead of `provider` and `default_frequency`. The collector derives its shutdown budget; an explicit ten-second budget is too short for the current validator. Dedicated discovery-service placement is preserved from the original recipes. The pinned upstream runtime rejects telemetry with dedicated infrastructure nodes; this remains a power compatibility blocker rather than changing the original topology to satisfy validation. H200 custom recipes declare a default concurrency that the launcher replaces before submission.
 - DeepSeek-V4 vLLM benchmarks use the supported `custom_tokenizer` loader. Retired `warmup_req_rate: inf` fields are removed; the current upstream client uses its fixed warmup rate of 250 requests per second.
 - The power reader accepts both generations of samples CSV while validating utilization values and continuing to compute board energy from watts.
 - Post-eval selection uses native `post_eval.command` and `post_eval.passthrough_env` with [`srt_eval.sh`](../srt_eval.sh). TRT AgentX recipes declare their existing Dynamo fork with `dynamo.source.git`; launchers no longer rewrite the srt-slurm source.

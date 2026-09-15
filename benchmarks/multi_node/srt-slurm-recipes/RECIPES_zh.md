@@ -25,7 +25,7 @@ qwen3.5/trtllm/gb300-fp4/agentx/disagg-1p7d-dep4-tep8-c7-b1-mtp-kvoffload.yaml
 - 覆盖项集合使用 `*-variants.yaml` 命名。即使内容相同，也保留独立扫描入口：配置路径参与评估分组。Qwen3.5 的 `*-stp-sweep.yaml` 和 `*-mtp-sweep.yaml` 保留了这一既有区别。
 - 移动文件时，同步更新当前及已弃用主配置中的 `CONFIG_FILE`、`EVAL_CONFIG_FILE`，以及启动器路径规则、工作流过滤器和本地文档。保留上游来源 URL，并保持历史性能变更日志不变。不为旧目录结构提供别名。
 
-共享运行时资源保留在模型目录旁的 `configs/` 中。将配置文件放入本目录不会启用该配置；实际基准测试矩阵由主配置决定。
+共享运行时资源保留在模型目录旁的 `configs/` 中，不属于独立基准测试配置。`configs/dsv4-moe-load-balancer-configs/` 中的四个文件原样取自 NVIDIA/srt-slurm 提交 `deb1dfd9934398664f92d194169c183e009da83b`，保留了 17 个 DSV4 TRT 配置使用的 EPLB 初始专家分配。`setup_srt_slurm()` 将这些文件复制到作业仓库的 `configs/` 目录，供配置中的绑定挂载使用。将配置文件放入本目录不会启用该配置；实际基准测试矩阵由主配置决定。
 
 ## TileRT 例外
 
@@ -70,7 +70,7 @@ python -m infx.matrix.generate full-sweep \
 本次迁移还修复了 `srtctl migrate` 无法自动处理的兼容性问题：
 
 - 对重复的 YAML 键，保留原 PyYAML 加载器实际采用的值。
-- DCGM 遥测使用 `collect_interval_ms: 1000`，替代 `provider` 和 `default_frequency`。采集器自动推导退出等待时间；原先显式设置的十秒不满足当前校验要求。功耗配置将服务发现进程放在主节点上，确保采样和基准测试窗口使用同一时钟。H200 自定义配置声明默认并发数，提交前由启动器替换。
+- DCGM 遥测使用 `collect_interval_ms: 1000`，替代 `provider` 和 `default_frequency`。采集器自动推导退出等待时间；原先显式设置的十秒不满足当前校验要求。保留原配置中服务发现进程的专用节点部署方式。固定的上游版本不支持在专用基础设施节点上启用遥测；该功耗兼容性问题仍待解决，不通过改变原有拓扑来绕过校验。H200 自定义配置声明默认并发数，提交前由启动器替换。
 - DeepSeek-V4 vLLM 基准测试使用受支持的 `custom_tokenizer` 加载器。删除已废弃的 `warmup_req_rate: inf` 字段；当前上游客户端的预热速率固定为每秒 250 个请求。
 - 功耗读取器兼容两代 samples CSV，校验利用率字段，并继续根据瓦特数计算 GPU 板级能耗。
 - 评估选择通过原生 `post_eval.command` 和 `post_eval.passthrough_env` 调用 [`srt_eval.sh`](../srt_eval.sh)。TRT AgentX 配置通过 `dynamo.source.git` 声明原有的 Dynamo 分支仓库，启动器不再改写 srt-slurm 源码。

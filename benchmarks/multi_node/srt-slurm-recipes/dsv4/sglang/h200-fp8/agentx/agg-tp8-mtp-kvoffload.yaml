@@ -29,11 +29,11 @@ services:
   - name: etcd
     type: etcd
     placement:
-      node: infra
+      node: dedicated
   - name: nats
     type: nats
     placement:
-      node: infra
+      node: dedicated
     options:
       max_payload_mb: 32
 frontend:

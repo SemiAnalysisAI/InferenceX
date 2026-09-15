@@ -19,6 +19,16 @@ health_check:
 resources:
   gpu_type: "b200"
   gpus_per_node: 8
+services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: dedicated
+  - name: nats
+    type: nats
+    placement:
+      node: dedicated
+
 frontend:
   type: dynamo
   enable_multiple_frontends: false
