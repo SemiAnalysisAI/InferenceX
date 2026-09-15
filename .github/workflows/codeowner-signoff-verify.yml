@@ -27,8 +27,9 @@ jobs:
     if: |
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'pull_request_target' ||
-      (github.event_name == 'issue_comment' && github.event.action != 'deleted' && github.event.issue.pull_request &&
-       contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER')) ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+       ((github.event.action != 'deleted' && contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER')) ||
+        (github.event.action == 'deleted' && startsWith(github.event.comment.body || '', '<!-- codeowner-signoff-verify')))) ||
       (github.event_name == 'pull_request_review' &&
        contains(github.event.review.body || '', 'As a PR reviewer and CODEOWNER')) ||
       (github.event_name == 'pull_request_review_comment' &&
@@ -37,8 +38,10 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      statuses: write
     outputs:
       proceed: ${{ steps.resolve.outputs.proceed }}
+      changelog-changed: ${{ steps.resolve.outputs.changelog-changed }}
       pr-number: ${{ steps.resolve.outputs.pr-number }}
       head-sha: ${{ steps.resolve.outputs.head-sha }}
       signoff-author: ${{ steps.resolve.outputs.signoff-author }}
@@ -130,6 +133,26 @@ jobs:
             const { data: pr } = await github.rest.pulls.get({
               owner, repo, pull_number: prNumber,
             });
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: prNumber, per_page: 100,
+            });
+            if (files.length !== pr.changed_files) {
+              throw new Error(`Incomplete changed-file list for PR #${prNumber}; cannot determine verifier scope.`);
+            }
+            const changelogChanged = files.some(file =>
+              file.filename === 'perf-changelog.yaml' || file.previous_filename === 'perf-changelog.yaml');
+            core.setOutput('changelog-changed', String(changelogChanged));
+            if (!changelogChanged) {
+              core.setOutput('proceed', 'false');
+              core.info(`PR #${prNumber} does not change perf-changelog.yaml; skipping sign-off verification.`);
+              await github.rest.repos.createCommitStatus({
+                owner, repo, sha: pr.head.sha,
+                context: 'codeowner-signoff-verify', state: 'success',
+                description: 'Not applicable: perf-changelog.yaml unchanged',
+              });
+              return;
+            }
 
             // Event-triggered: only act on open, non-draft ("ready") PRs.
             // Manual dispatch is an explicit override, so allow any PR state.
@@ -308,13 +331,15 @@ jobs:
             });
 
   carry-forward:
+    needs: gate
     if: >-
-      github.event_name == 'pull_request_target' ||
+      needs.gate.outputs.changelog-changed == 'true' &&
+      (github.event_name == 'pull_request_target' ||
       (github.event_name == 'issue_comment' && github.event.action == 'deleted' &&
        github.event.issue.pull_request &&
        (github.event.comment.user.login == 'Klaud-Cold' ||
         github.event.comment.user.login == 'github-actions[bot]') &&
-       startsWith(github.event.comment.body || '', '<!-- codeowner-signoff-verify'))
+       startsWith(github.event.comment.body || '', '<!-- codeowner-signoff-verify')))
     runs-on: ubuntu-latest
     concurrency:
       group: codeowner-signoff-pr-${{ github.event.pull_request.number || github.event.issue.number }}
