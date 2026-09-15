@@ -125,6 +125,7 @@ fi
 # cache-aware routing, which picks the rank holding the longest radix/hicache
 # prefix match for the incoming prompt.
 USE_SGLANG_ROUTER=false
+ROUTER_POLICY_ARGS=()
 SGLANG_BACKEND_PORT="$PORT"
 # Small prefill chunks interleave long-context agentic prefills. The flag is
 # engine-wide and DP divides it by dp_size (=TP), so DP uses 8192*TP to keep
@@ -158,6 +159,10 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_DP_USE_REDUCE_SCATTER=1
     export GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES_DP:-5}"
     MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC_DP:-0.92}"
+
+    if [ "$CONC" -gt 160 ]; then
+        ROUTER_POLICY_ARGS+=(--balance-abs-threshold 32)
+    fi
 
     PARALLEL_ARGS+=(
         --dp "$TP"
@@ -276,6 +281,7 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     "${SGLANG_ROUTER_CMD[@]}" \
         --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
         --policy cache_aware \
+        "${ROUTER_POLICY_ARGS[@]}" \
         --request-id-headers x-correlation-id \
         --dp-aware \
         --host 0.0.0.0 \
