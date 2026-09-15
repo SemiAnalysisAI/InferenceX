@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
 # Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on MI355X using
@@ -9,6 +9,7 @@ set -x
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars EVAL_ONLY
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -111,11 +112,11 @@ SPEC_ARGS=(
     --method mtp
     --num-speculative-tokens "$NUM_SPEC_TOKENS"
 )
-if [ "${EVAL_ONLY:-false}" != "true" ]; then
+if [ "${EVAL_ONLY}" != "true" ]; then
     SPEC_ARGS+=(--spec-decode-acceptance-length "$SPEC_DECODE_AL")
 fi
 
-echo "Starting ATOM server with MAX_NUM_SEQS=$MAX_NUM_SEQS NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS SPEC_DECODE_AL=$SPEC_DECODE_AL EVAL_ONLY=${EVAL_ONLY:-false}"
+echo "Starting ATOM server with MAX_NUM_SEQS=$MAX_NUM_SEQS NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS SPEC_DECODE_AL=$SPEC_DECODE_AL EVAL_ONLY=${EVAL_ONLY}"
 ATOM_CMD=(
     python3 -u -m atom.entrypoints.openai_server
     --model "$MODEL_PATH"
@@ -149,7 +150,7 @@ echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
+if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
     # AgentX DSv4 traces already carry fully formed chat payloads; do not apply

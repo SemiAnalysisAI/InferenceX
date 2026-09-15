@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars EVAL_ONLY IS_AGENTIC IS_MULTINODE KEEP_LOGS RUN_EVAL
+
 scancel_sync() {
     local jobid=$1
     local timeout=${2:-600}
@@ -47,7 +50,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export OSL="$OSL"
 
     # Logs go to BENCHMARK_LOGS_DIR (NFS-accessible, outside the repo tree)
-    export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$GITHUB_WORKSPACE/benchmark_logs}"
+    check_env_vars BENCHMARK_LOGS_DIR
     mkdir -p "$BENCHMARK_LOGS_DIR"
     sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
@@ -70,7 +73,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         fi
         sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true
     }
-    if [[ "${KEEP_LOGS:-0}" == "1" ]]; then
+    if [[ "${KEEP_LOGS}" == "1" ]]; then
         trap '' EXIT
     else
         trap cleanup_and_save_logs EXIT
@@ -134,7 +137,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # search for "FRAMEWORK_DIFF_IF_STATEMENT #3" for this if-statement
     # Find the latest log directory that contains the data
 
-    if [[ "${EVAL_ONLY:-false}" != "true" && "${IS_AGENTIC:-0}" != "1" ]]; then
+    if [[ "${EVAL_ONLY}" != "true" && "${IS_AGENTIC}" != "1" ]]; then
         cat > collect_latest_results.py <<'PY'
 import os, sys
 job_dir, isl, osl, nexp, framework = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), sys.argv[5]
@@ -172,7 +175,7 @@ PY
     fi
 
     # Extract eval results if eval was requested
-    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+    if [[ "${RUN_EVAL}" == "true" ]]; then
         # Find eval_results in the slurm job logs directory
         EVAL_DIR=$(find "$BENCHMARK_LOGS_DIR/logs" -type d -name eval_results 2>/dev/null | head -1)
         if [ -n "$EVAL_DIR" ] && [ -d "$EVAL_DIR" ]; then
@@ -209,7 +212,7 @@ PY
     # before the logs dir is removed below. The agg result JSON is already
     # written straight to the mounted workspace by the existing agentic
     # aggregation module.
-    if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
+    if [[ "${IS_AGENTIC}" == "1" ]]; then
         JOB_LOGS_DIR="$BENCHMARK_LOGS_DIR/logs/slurm_job-${JOB_ID}"
         if [ -d "$JOB_LOGS_DIR" ]; then
             # trace_replay.sh always nests artifacts under agentic/conc_<N>/.
@@ -263,7 +266,7 @@ else
     SQUASH_FILE="/var/lib/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     LOCK_FILE="${SQUASH_FILE}.lock"
 
-    export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+    check_env_vars GPU_COUNT
 
     set -x
     salloc --partition=$PARTITION --gres=gpu:$GPU_COUNT --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
@@ -317,8 +320,10 @@ else
     fi
 
     SCRIPT_BASE="${EXP_NAME%%_*}_${PRECISION}_mi355x"
-    SCRIPT_FW="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
-    SCRIPT_FALLBACK="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
+    check_env_vars SCENARIO_SUBDIR
+    SCRIPT_FW="benchmarks/single_node/${SCENARIO_SUBDIR}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
+    check_env_vars SCENARIO_SUBDIR
+    SCRIPT_FALLBACK="benchmarks/single_node/${SCENARIO_SUBDIR}${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
     if [[ -f "$SCRIPT_FW" ]]; then
         BENCHMARK_SCRIPT="$SCRIPT_FW"
     else

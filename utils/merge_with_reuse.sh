@@ -15,7 +15,7 @@
 # Env:   REPO (default SemiAnalysisAI/InferenceX)
 #        CHECK_TIMEOUT_SECONDS (default 900)
 
-set -euo pipefail
+set -eo pipefail
 
 REPO="${REPO:-SemiAnalysisAI/InferenceX}"
 CHANGELOG="perf-changelog.yaml"

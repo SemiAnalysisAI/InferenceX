@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
 # MiniMax-M3 NVFP4 B300 AgentX with EAGLE3-GQA. Throughput pins synthetic
@@ -10,8 +10,6 @@ set -x
 # benchmark-tmpl.yml; do not override them here.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
-
-export EVAL_FRAMEWORK="${EVAL_FRAMEWORK:-lm-eval}"
 
 check_env_vars MODEL TP CONC PORT KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EVAL_ONLY
 

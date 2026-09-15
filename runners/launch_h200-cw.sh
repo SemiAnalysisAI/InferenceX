@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars IS_MULTINODE
+
 export HF_HUB_CACHE_MOUNT="/mnt/vast/gharunner/hf-hub-cache"
 export AIPERF_MMAP_CACHE_HOST_PATH="/mnt/vast/gharunner/ai-perf-cache"
 export PORT=8888
@@ -12,7 +15,7 @@ PARTITION="h200"
 SQUASH_FILE="/mnt/vast/gharunner/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 
-export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+check_env_vars GPU_COUNT
 
 set -x
 

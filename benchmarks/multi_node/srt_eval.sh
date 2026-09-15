@@ -30,7 +30,9 @@ source "${INFMAX_WORKSPACE}/benchmarks/benchmark_lib.sh"
 
 # The workflow supplies topology and concurrency; srt-slurm supplies MODEL_NAME
 # from the recipe's served model name. Missing inputs are configuration errors.
-check_env_vars IS_MULTINODE MODEL_NAME EVAL_CONC PREFILL_TP PREFILL_EP PREFILL_DP_ATTN DECODE_DP_ATTN
+check_env_vars \
+    IS_MULTINODE MODEL_NAME EVAL_CONC PREFILL_TP PREFILL_EP \
+    PREFILL_DP_ATTN DECODE_DP_ATTN
 
 # Translate the explicit workflow names to benchmark_lib's metadata names.
 export EVAL_CONCURRENT_REQUESTS="$EVAL_CONC"

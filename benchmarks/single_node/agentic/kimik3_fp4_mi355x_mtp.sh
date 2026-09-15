@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
 # Agentic trace replay benchmark for Kimi-K3 MXFP4 on MI355X / MI350X (gfx950)
@@ -47,6 +47,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 wait_for_amd_gpu_clean
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
+check_env_vars DCP_SIZE EVAL_ONLY
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -99,7 +100,7 @@ if [[ "$mec_version" == "" || ${mec_version:-0} -lt 177 ]]; then
 fi
 
 # 2.8T of weights off a shared/NFS mount takes far longer than the default.
-export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-7200}"
+export VLLM_ENGINE_READY_TIMEOUT_S="7200"
 
 # Long agentic turns against a 1M context: keep the client from timing out
 # mid-request while the server is prefill-bound.
@@ -139,7 +140,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / TP ))
     # Identical prefixes must hash to identical block keys across ranks.
     export PYTHONHASHSEED=42
-    SIMPLE_LAZY_OFFLOAD="${SIMPLE_LAZY_OFFLOAD:-false}"
+    SIMPLE_LAZY_OFFLOAD="false"
     OFFLOAD_ARGS=(
         --kv-transfer-config
         "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":$CPU_BYTES_PER_RANK,\"lazy_offload\":$SIMPLE_LAZY_OFFLOAD}}"
@@ -200,7 +201,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     # pool needs one worker per rank; a non-DCP arm only needs a single worker.
     # The DCP KV interleave also needs the larger 12288 chunk; a non-DCP arm
     # uses the 3072 minimum (one KDA state group).
-    if [ "${DCP_SIZE:-1}" -gt 1 ]; then
+    if [ "${DCP_SIZE}" -gt 1 ]; then
         LMCACHE_MAX_GPU_WORKERS=8
         LMCACHE_CHUNK_SIZE=12288
     else
@@ -287,7 +288,7 @@ esac
 
 SPEC_ARGS=()
 if [ "$SPEC_NUM_TOKENS" -gt 0 ]; then
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
+if [ "${EVAL_ONLY}" = "true" ]; then
     SPEC_ARGS=(
         --speculative-config
         "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
@@ -308,12 +309,11 @@ COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
-export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-1200}"
+export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="1200"
 
 
 # ---- DCP       ------------------------------------------------------------
 # DCP shards decode KV across the TP ranks, so it must divide TP.
-DCP_SIZE="${DCP_SIZE:-8}"
 if [ $((TP % DCP_SIZE)) -ne 0 ]; then
     echo "Error: TP='$TP' must be divisible by DCP_SIZE='$DCP_SIZE'" >&2
     exit 1

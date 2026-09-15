@@ -1,11 +1,14 @@
 #!/usr/bin/bash
+
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars EVAL_ONLY IS_MULTINODE REQUIRE_POWER RUN_EVAL
 set -eo pipefail
 
 # System-specific configuration for H200 DGXC Slurm cluster
 SLURM_PARTITION="main"
 SLURM_ACCOUNT="sa-shared"
-HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/models/gharunners/hf-hub-cache}"
-AIPERF_MMAP_CACHE_HOST_PATH="${AIPERF_MMAP_CACHE_HOST_PATH:-/home/sa-shared/gharunners/ai-perf-cache}"
+check_env_vars HF_HUB_CACHE_MOUNT
+check_env_vars AIPERF_MMAP_CACHE_HOST_PATH
 
 
 set -x
@@ -60,13 +63,15 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             # srtctl preflight finds the directory instead of trying to pull the
             # hf: model ID, which fails on the compute node ("path is
             # unavailable. Pull or register the model yourself").
-            export MODEL_PATH="${DSV4_MODEL_PATH:-${HF_HUB_CACHE_MOUNT}/DeepSeek-V4-Pro}"
+            check_env_vars DSV4_MODEL_PATH
+            export MODEL_PATH="${DSV4_MODEL_PATH}"
             export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
         elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
             export MODEL_PATH="/models/DeepSeek-R1-0528"
             export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
         elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp8" ]]; then
-            export MODEL_PATH="${GLM52_FP8_MODEL_PATH:-/models/GLM-5.2-FP8}"
+            check_env_vars GLM52_FP8_MODEL_PATH
+            export MODEL_PATH="${GLM52_FP8_MODEL_PATH}"
             if [[ ! -d "$MODEL_PATH" ]]; then
                 export MODEL_PATH="hf:zai-org/GLM-5.2-FP8"
             fi
@@ -148,7 +153,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         srun --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT" \
             --nodes=1 --ntasks=1 --time=30 --job-name="$RUNNER_NAME" \
             bash -c "
-                set -euo pipefail
+                set -eo pipefail
                 exec 9>\"$LOCK_FILE\"
                 flock -w 1800 9
                 if unsquashfs -l \"$SQUASH_FILE\" >/dev/null 2>&1; then
@@ -172,7 +177,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             srun --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT" \
                 --nodes=1 --ntasks=1 --time=30 --job-name="$RUNNER_NAME" \
                 bash -c "
-                    set -euo pipefail
+                    set -eo pipefail
                     exec 9>\"$DCGM_EXPORTER_LOCK\"
                     flock -w 1800 9
                     if unsquashfs -l \"$DCGM_EXPORTER_SQSH\" >/dev/null 2>&1; then
@@ -191,7 +196,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     export ISL="$ISL"
     export OSL="$OSL"
-    export EVAL_ONLY="${EVAL_ONLY:-false}"
 
     # Create srtslurm.yaml for srtctl (used by both frameworks)
     SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
@@ -271,7 +275,7 @@ EOF
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
     sed -i '/^health_check:/,/^[^ ]/{ /^health_check:/d; /^  /d; }' "$CONFIG_PATH"
     printf '\nhealth_check:\n  max_attempts: 720\n  interval_seconds: 10\n' >> "$CONFIG_PATH"
-    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+    if [[ "${EVAL_ONLY}" == "true" ]]; then
         python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
             "$CONFIG_PATH" "$FRAMEWORK" || exit 1
     fi
@@ -319,12 +323,12 @@ EOF
     echo "Found logs directory: $LOGS_DIR"
 
     AGENTX_POWER_RC="$SRT_JOB_RC"
-    if [[ "$USES_KIMIK3_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+    if [[ "$USES_KIMIK3_POWER" == "1" && "${EVAL_ONLY}" != "true" ]]; then
         read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
         collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" \
             "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" \
             "$SRT_SLURM_COMMIT" "${POWER_CONCURRENCIES[@]}" || AGENTX_POWER_RC=$?
-    elif [[ "$USES_DCGM_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+    elif [[ "$USES_DCGM_POWER" == "1" && "${EVAL_ONLY}" != "true" ]]; then
         POWER_LOGS_ROOT=$(cd "$LOGS_DIR" && pwd -P)
         read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
         for concurrency in "${POWER_CONCURRENCIES[@]}"; do
@@ -335,7 +339,7 @@ EOF
                 --logs-root "$POWER_LOGS_ROOT"
                 --expected-producer-sha "$SRT_SLURM_COMMIT"
             )
-            case "${REQUIRE_POWER:-0}" in
+            case "${REQUIRE_POWER}" in
                 1|true|TRUE|yes|YES) power_args+=(--require-power) ;;
             esac
             (
@@ -358,14 +362,14 @@ EOF
         exit "$AGENTX_POWER_RC"
     fi
 
-    if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+    if [[ "${EVAL_ONLY}" != "true" ]]; then
         copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME"
     else
         echo "EVAL_ONLY=true: Skipping benchmark result collection"
     fi
 
     # Collect eval results if eval was requested
-    if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
+    if [[ "${RUN_EVAL}" == "true" || "${EVAL_ONLY}" == "true" ]]; then
         EVAL_DIR="$LOGS_DIR/eval_results"
         if [ -d "$EVAL_DIR" ]; then
             echo "Extracting eval results from $EVAL_DIR"
@@ -398,7 +402,7 @@ else
     DOCKER_IMAGE=$(echo "$IMAGE" | sed 's/#/\//g')
     LOCK_FILE="${SQUASH_FILE}.lock"
 
-    export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+    check_env_vars GPU_COUNT
 
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)

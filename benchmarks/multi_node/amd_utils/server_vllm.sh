@@ -1,4 +1,15 @@
 #!/bin/bash
+
+source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
+
+check_env_vars \
+    NODE0_ADDR NODE_RANK MODEL_NAME xP yD \
+    IPADDRS PREFILL_TP_SIZE DECODE_TP_SIZE PREFILL_ENABLE_EP PREFILL_ENABLE_DP \
+    DECODE_ENABLE_EP DECODE_ENABLE_DP BENCH_INPUT_LEN BENCH_OUTPUT_LEN BENCH_RANDOM_RANGE_RATIO \
+    BENCH_REQUEST_RATE BENCH_NUM_PROMPTS_MULTIPLIER BENCH_MAX_CONCURRENCY DRY_RUN GPUS_PER_NODE \
+    RUN_EVAL EVAL_ONLY EVAL_FRAMEWORK BENCHMARK_LOGS_DIR MODEL_DIR \
+    WS_PATH ROUTER_PORT SERVER_PORT PROXY_PING_PORT MODEL_PATH
+
 # vLLM Disaggregated Server Launcher with Model-Specific Configurations
 # =============================================================================
 #
@@ -14,40 +25,7 @@
 # =============================================================================
 source "$(dirname "${BASH_SOURCE[0]}")/setup_deps.sh"
 
-# =============================================================================
-# Environment Configuration
-# =============================================================================
-
-NODE0_ADDR="${NODE0_ADDR:-localhost}"
-NODE_RANK="${NODE_RANK:-0}"
-MODEL_DIR="${MODEL_DIR:-}"
-MODEL_NAME="${MODEL_NAME:-}"
-
-xP="${xP:-1}"
-yD="${yD:-1}"
-
-IPADDRS="${IPADDRS:-localhost}"
-
-# Benchmark Configuration
-BENCH_INPUT_LEN="${BENCH_INPUT_LEN:-1024}"
-BENCH_OUTPUT_LEN="${BENCH_OUTPUT_LEN:-1024}"
-BENCH_RANDOM_RANGE_RATIO="${BENCH_RANDOM_RANGE_RATIO:-1}"
-BENCH_REQUEST_RATE="${BENCH_REQUEST_RATE:-inf}"
-BENCH_NUM_PROMPTS_MULTIPLIER="${BENCH_NUM_PROMPTS_MULTIPLIER:-10}"
-BENCH_MAX_CONCURRENCY="${BENCH_MAX_CONCURRENCY:-512}"
-
-DRY_RUN="${DRY_RUN:-0}"
-GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
-
-PREFILL_TP_SIZE="${PREFILL_TP_SIZE:-$GPUS_PER_NODE}"
-DECODE_TP_SIZE="${DECODE_TP_SIZE:-$GPUS_PER_NODE}"
-
-ROUTER_PORT="${ROUTER_PORT:-30000}"
-SERVER_PORT="${SERVER_PORT:-2584}"
-ENGINE_ID="${ENGINE_ID:-${MODEL_NAME}-pd-run}"
-
 # Prefer MODEL_PATH from job.slurm (handles HF cache snapshot resolution)
-MODEL_PATH="${MODEL_PATH:-${MODEL_DIR}/${MODEL_NAME}}"
 
 # =============================================================================
 # Dependencies and Environment Setup
@@ -170,16 +148,16 @@ if [[ -n "${DECODE_TP_SIZE:-}" ]]; then
         DECODE_SERVER_CONFIG+=" --tensor-parallel-size ${DECODE_TP_SIZE}"
     fi
 fi
-if [[ "${PREFILL_ENABLE_EP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
+if [[ "${PREFILL_ENABLE_EP}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
     PREFILL_SERVER_CONFIG+=" --enable-expert-parallel"
 fi
-if [[ "${PREFILL_ENABLE_DP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
+if [[ "${PREFILL_ENABLE_DP}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
     PREFILL_SERVER_CONFIG+=" --enable-dp-attention"
 fi
-if [[ "${DECODE_ENABLE_EP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
+if [[ "${DECODE_ENABLE_EP}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
     DECODE_SERVER_CONFIG+=" --enable-expert-parallel"
 fi
-if [[ "${DECODE_ENABLE_DP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
+if [[ "${DECODE_ENABLE_DP}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
     DECODE_SERVER_CONFIG+=" --enable-dp-attention"
 fi
 
@@ -220,7 +198,6 @@ echo "Prefill node IPs: ${PREFILL_ARGS}"
 echo "Decode  node IPs: ${DECODE_ARGS}"
 
 # MoRI-IO proxy ZMQ registration port (must match vllm-router --vllm-discovery-address)
-PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
 
 # vLLM runtime environment (static vars moved to env.sh; these depend on per-node state)
 setup_vllm_env() {
@@ -240,7 +217,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "================================================"
     echo "Node List : ${SLURM_JOB_NODELIST}"
     echo "Node IPs  : ${IPADDRS}"
-    echo "Model     : ${MODEL_NAME:-'Not specified'}"
+    echo "Model     : ${MODEL_NAME}"
     echo "================================================"
 
     echo "CLUSTER INFO ===================================="
@@ -317,7 +294,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
         ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
 
-    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+    if [[ "${EVAL_ONLY}" == "true" ]]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"
     elif [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BENCH_CMD"
@@ -328,7 +305,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
 
     # Run evaluation if requested (before killing router)
-    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+    if [[ "${RUN_EVAL}" == "true" ]]; then
         echo "Running lm-eval evaluation on Node 0..."
 
         EVAL_HEALTH_OK=false
@@ -355,7 +332,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             fi
 
             if [[ "$DRY_RUN" -eq 1 ]]; then
-                echo "DRY RUN: run_eval --port $ROUTER_PORT (framework=${EVAL_FRAMEWORK:-lm-eval}, conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
+                echo "DRY RUN: run_eval --port $ROUTER_PORT (framework=${EVAL_FRAMEWORK}, conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
             else
                 run_eval --port "$ROUTER_PORT"
                 eval_rc=$?
@@ -401,7 +378,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
 
     # Copy benchmark/eval results to BENCHMARK_LOGS_DIR (mounted from host)
-    LOGS_OUTPUT="${BENCHMARK_LOGS_DIR:-/run_logs}/logs"
+    LOGS_OUTPUT="${BENCHMARK_LOGS_DIR}/logs"
     mkdir -p "$LOGS_OUTPUT"
 
     if [[ "$DRY_RUN" -eq 0 ]]; then

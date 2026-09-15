@@ -9,7 +9,7 @@
 #SBATCH --mem=256G
 
 # Persistent vLLM server for Kimi K2 Thinking
-set -euo pipefail
+set -eo pipefail
 
 MODEL="moonshotai/Kimi-K2-Thinking"
 PORT=8000

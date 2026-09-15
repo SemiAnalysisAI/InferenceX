@@ -5,7 +5,7 @@
 # Flow:
 #   identity -> setup -> repository-stage -> backend-setup -> scheduler-allocation
 #   -> container-import -> container-launch -> artifact-collection
-set -euo pipefail
+set -eo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COLLX_DIR="$(cd "$HERE/.." && pwd)"

@@ -418,7 +418,7 @@ collx_resolve_slurm_rendezvous() {
     master_addr="$(srun --jobid="$job_id" --nodes=1 --ntasks=1 --relative=0 \
       --chdir=/tmp --export="$(collx_host_exports)" bash -s -- "$socket_ifname" \
       2>/dev/null <<'BASH' | head -n1
-set -euo pipefail
+set -eo pipefail
 ip -o -4 address show dev "$1" scope global \
   | awk 'NR == 1 {split($4, address, "/"); print address[1]}'
 BASH
@@ -869,7 +869,7 @@ collx_ensure_squash_on_job() {
       bash -s -- "$sq" "$lock" "$image" "$COLLX_IMAGE_PLATFORM" "$refresh_epoch" \
       "${COLLX_IMAGE_DIGEST:-}" "$(printf '%s' "$image" | sed 's#[/:@#]#_#g')" \
       > "$log" 2>&1 <<'BASH' || rc=$?
-set -euo pipefail
+set -eo pipefail
 sq="$1"; lock="$2"; image="$3"; platform="$4"
 refresh_epoch="${5:-}"; digest="${6:-}"; sanitized="${7:-}"
 machine="$(uname -m)"

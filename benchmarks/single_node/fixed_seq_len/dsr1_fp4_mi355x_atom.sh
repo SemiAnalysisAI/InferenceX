@@ -46,7 +46,7 @@ start_gpu_monitor
 
 set -x
 
-BLOCK_SIZE=${BLOCK_SIZE:-16}
+BLOCK_SIZE=16
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \

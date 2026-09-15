@@ -49,7 +49,8 @@ if [[ -n "${MODEL_PATH:-}" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
     fi
 else
-    MODEL_CACHE_ROOT="${HF_HUB_CACHE:-${HF_HOME:-$HOME/.cache/huggingface/hub}}"
+    check_env_vars HF_HUB_CACHE
+    MODEL_CACHE_ROOT="$HF_HUB_CACHE"
     MODEL_CACHE_DIR="$MODEL_CACHE_ROOT/models--${MODEL//\//--}"
     mkdir -p "$MODEL_CACHE_ROOT"
     MODEL_PATH=$(resolve_complete_model_snapshot "$MODEL_CACHE_DIR")

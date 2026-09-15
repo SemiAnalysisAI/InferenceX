@@ -27,51 +27,36 @@
 #   export MODEL=moonshotai/Kimi-K2.5-NVFP4
 #   bash benchmarks/single_node/speedbench/kimik2.5_fp4_b300_vllm.sh
 #
-# Tunables (env):
-#   MTP_LIST          space-separated EAGLE3 spec-token counts (default "1 2 3 4 5 6 7 8")
-#   THINKING_MODES    space-separated: off|on       (default "off on")
-#   CATEGORY          SPEED-Bench category          (default coding)
-#   SPEEDBENCH_OUTPUT_LEN  per-request output len   (default 4096)
-#   OUT_YAML          output matrix path            (default $RESULTS_DIR/speedbench-reference-al.yaml)
+# Required collection settings come from speedbench-al.yml.
 
-set -uo pipefail
+set -o pipefail
 source "$(dirname "$0")/../../benchmark_lib.sh"
+check_env_vars \
+    CATEGORY CHAT_TEMPLATE_KWARGS_ON DP_ATTENTION EP_SIZE MODEL MODEL_PATH \
+    MTP_LIST OUT_YAML PORT SPEEDBENCH_OUTPUT_LEN THINKING_MODES TP
 
-MODEL="${MODEL:?MODEL env var required (e.g. moonshotai/Kimi-K2.5-NVFP4)}"
-SERVE_MODEL="${MODEL_PATH:-$MODEL}"
-TP="${TP:-8}"
-DP_ATTENTION="${DP_ATTENTION:-false}"
-EP_SIZE="${EP_SIZE:-1}"
-PORT="${PORT:-8888}"
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.80}"
+SERVE_MODEL="${MODEL_PATH}"
+GPU_MEM_UTIL="0.80"
 
 DRAFT_MODEL="lightseekorg/kimi-k2.5-eagle3-mla"
 
-MTP_LIST="${MTP_LIST:-1 2 3 4 5 6 7 8}"
-THINKING_MODES="${THINKING_MODES:-off on}"
-CATEGORY="${CATEGORY:-coding}"
-MODEL_KEY="${MODEL_KEY:-$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')}"
-SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
+MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
 # AL is concurrency-independent (per-token accept/reject; no spec-disable-by-batch
 # is set below), so batch the SPEED-Bench pass to keep wall-time under the CI
 # limit. conc=1 made Kimi-K2.5 exceed the 8h budget. 64 captures most of the
-# batch-decode speedup before it saturates / KV pressure grows; override via env.
-CONCURRENCY="${CONCURRENCY:-64}"
-TOP_P="${TOP_P:-0.95}"
+# batch-decode speedup before it saturates / KV pressure grows.
+CONCURRENCY="64"
+TOP_P="0.95"
 # Kimi thinking toggles via the thinking chat_template key (default ON).
-DEFAULT_CHAT_TEMPLATE_KWARGS_ON='{"thinking": true}'
-DEFAULT_CHAT_TEMPLATE_KWARGS_OFF='{"thinking": false}'
-CHAT_TEMPLATE_KWARGS_ON="${CHAT_TEMPLATE_KWARGS_ON:-$DEFAULT_CHAT_TEMPLATE_KWARGS_ON}"
-CHAT_TEMPLATE_KWARGS_OFF="${CHAT_TEMPLATE_KWARGS_OFF:-$DEFAULT_CHAT_TEMPLATE_KWARGS_OFF}"
+CHAT_TEMPLATE_KWARGS_OFF='{"thinking": false}'
 
-SPEEDBENCH_DIR="${SPEEDBENCH_DIR:-/workspace/speed_bench_data}"
-RESULTS_DIR="${RESULTS_DIR:-/workspace/speedbench_results}"
-OUT_YAML="${OUT_YAML:-$RESULTS_DIR/speedbench-reference-al.yaml}"
+SPEEDBENCH_DIR="/workspace/speed_bench_data"
+RESULTS_DIR="/workspace/speedbench_results"
 
 # Blackwell NVFP4 checkpoints need FlashInfer FP4 MoE kernels; auto-enable
 # when the served model name contains NVFP4 (e.g. nvidia/Kimi-K2.5-NVFP4).
 if [[ "$SERVE_MODEL" == *NVFP4* || "$SERVE_MODEL" == *nvfp4* ]]; then
-    export VLLM_USE_FLASHINFER_MOE_FP4="${VLLM_USE_FLASHINFER_MOE_FP4:-1}"
+    export VLLM_USE_FLASHINFER_MOE_FP4="1"
 fi
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
@@ -93,7 +78,7 @@ fi
 # The draft must NOT go next to a pre-staged target: dirname(MODEL_PATH) is the
 # read-only staged mount (/scratch/models), so writing the draft there fails
 # with PermissionError. Use a writable workspace dir regardless of staging.
-DRAFT_DIR="${DRAFT_MODEL_DIR:-/workspace/draft_models}"
+DRAFT_DIR="/workspace/draft_models"
 mkdir -p "$DRAFT_DIR"
 DRAFT_MODEL_PATH="$DRAFT_DIR/${DRAFT_MODEL##*/}"
 if [[ ! -d "$DRAFT_MODEL_PATH" || -z "$(ls -A "$DRAFT_MODEL_PATH" 2>/dev/null)" ]]; then
@@ -127,7 +112,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
 fi
 EP_ARGS=()
-if [ "${EP_SIZE:-1}" -gt 1 ]; then
+if [ "${EP_SIZE}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 

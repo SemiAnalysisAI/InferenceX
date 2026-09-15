@@ -24,9 +24,8 @@ set -x
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars DCP_SIZE EVAL_ONLY PCP_SIZE
 
-DCP_SIZE="${DCP_SIZE:-1}"
-PCP_SIZE="${PCP_SIZE:-1}"
 VLLM_CP_ARGS=()
 if [ "$DCP_SIZE" -gt 1 ]; then
     VLLM_CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE")
@@ -271,7 +270,7 @@ TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
 # num_speculative_tokens=3, golden_al_distribution/dsv4_mtp.yaml). The EVAL_ONLY
 # accuracy run uses real target verification instead -- synthetic acceptance
 # bypasses verification and corrupts the SWE-bench eval (0.0000 score).
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
+if [ "${EVAL_ONLY}" = "true" ]; then
     SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}"
 else
     SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": 2.49}"

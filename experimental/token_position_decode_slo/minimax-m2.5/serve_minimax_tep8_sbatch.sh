@@ -9,7 +9,7 @@
 #SBATCH --open-mode=append
 
 # Persistent vLLM server for MiniMax M2.5 (tensor-parallel + expert-parallel)
-set -euo pipefail
+set -eo pipefail
 
 MODEL="MiniMaxAI/MiniMax-M2.5"
 PORT=8000

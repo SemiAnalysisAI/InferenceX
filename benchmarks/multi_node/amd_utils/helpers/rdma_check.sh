@@ -23,7 +23,7 @@
 #
 # Exit code: 0 = OK (or gracefully skipped, e.g. no ionic NICs on this host),
 #            1 = hard QoS/DCQCN misconfiguration -- do not proceed with the run.
-set -uo pipefail
+set -o pipefail
 
 AINIC_MIN_VER="1.117.5-a-45"   # minimum recommended AINIC firmware for IBGDA
 

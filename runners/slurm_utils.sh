@@ -2,10 +2,10 @@
 
 # Launchers source this file before changing into srt-slurm.
 INFERENCEX_SLURM_UTILS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$INFERENCEX_SLURM_UTILS_DIR/../benchmarks/benchmark_lib.sh" --validation-only || return 1
 
 SRTCTL_EVAL_ARGS=(
     --set 'post_eval.command=["bash", "{infmax_workspace}/benchmarks/multi_node/srt_eval.sh", "{endpoint}", "{infmax_workspace}"]'
-    --set 'post_eval.passthrough_env=["EVAL_FRAMEWORK", "EVAL_CONC", "EVAL_LIMIT", "EVAL_SUITE", "SWEBENCH_GEN_MODE", "SWEBENCH_USE_MODAL", "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET", "IS_AGENTIC", "SCENARIO_TYPE"]'
 )
 
 # Leaves the caller in the checkout, matching the launchers' installation flow.
@@ -16,6 +16,23 @@ setup_srt_slurm() {
         return 1
     fi
     local destination="$1" framework="$2" uses_power="$3"
+    check_env_vars INFERENCEX_RUNTIME_ENV_VARS AIPERF_DRAIN_TIMEOUT_SECONDS AIPERF_DRAIN_POLL_SECONDS EVAL_ONLY
+    local eval_passthrough
+    eval_passthrough=$(python3 - <<'PYENV'
+import json
+import os
+
+names = [
+    "EVAL_FRAMEWORK", "EVAL_CONC", "EVAL_LIMIT", "EVAL_SUITE",
+    "SWEBENCH_GEN_MODE", "SWEBENCH_USE_MODAL", "MODAL_TOKEN_ID",
+    "MODAL_TOKEN_SECRET", "IS_AGENTIC", "SCENARIO_TYPE",
+]
+print(json.dumps(names + os.environ["INFERENCEX_RUNTIME_ENV_VARS"].split()))
+PYENV
+    ) || return 1
+    SRTCTL_EVAL_ARGS+=(--set "post_eval.passthrough_env=$eval_passthrough")
+    # Custom benchmarks inherit exported workflow settings through sbatch/srun;
+    # native recipe environment and benchmark.env retain their override priority.
     local source="$INFERENCEX_SLURM_UTILS_DIR/../utils/srt-slurm"
     if [[ "$framework" == "tilert" ]]; then
         # Sole fork exception until NVIDIA supports the TileRT backend and router.

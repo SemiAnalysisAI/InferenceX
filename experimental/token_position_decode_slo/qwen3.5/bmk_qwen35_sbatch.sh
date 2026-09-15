@@ -7,7 +7,7 @@
 #SBATCH --job-name=bmk-qwen35
 #SBATCH --output=/mnt/home/kimbo/inferperf/qwen3.5/logs/bmk-client.log
 
-set -euo pipefail
+set -eo pipefail
 
 MODEL="Qwen/Qwen3.5-397B-A17B"
 PARALLEL_TAG="${PARALLEL_TAG:-tp8}"

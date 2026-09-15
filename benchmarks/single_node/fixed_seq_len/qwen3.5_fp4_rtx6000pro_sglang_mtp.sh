@@ -50,7 +50,7 @@ SERVER_LOG=/workspace/server.log
 # 0.85 came up but left only 4.56 GiB free per rank, too thin for a 16k prefill
 # chunk, so 0.80 trades surplus KV (1.7M tokens, ~3x what concurrency 64 needs)
 # for activation headroom.
-MEM_FRAC_STATIC="${MEM_FRAC_STATIC:-0.80}"
+MEM_FRAC_STATIC="0.80"
 CHUNKED_PREFILL_SIZE=$((ISL * 2))
 MAX_PREFILL_TOKENS=$((ISL * 2))
 # The client never opens more than CONC connections, so sizing the Mamba state

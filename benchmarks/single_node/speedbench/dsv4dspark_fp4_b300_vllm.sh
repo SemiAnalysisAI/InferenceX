@@ -26,48 +26,29 @@
 # capture, so they leave "DSpark vs MTP on DSV4-Pro" like-for-like. Every flag
 # that does affect drafting is byte-identical to the MTP collector.
 #
-# Usage (inside the vLLM container, on a B300 node):
-#   export MODEL=deepseek-ai/DeepSeek-V4-Pro-DSpark
-#   bash benchmarks/single_node/speedbench/dsv4dspark_fp4_b300_vllm.sh
+# Dispatch this collector through speedbench-al.yml.
 #
-# Tunables (env):
-#   MTP_LIST          space-separated DSpark spec-token counts (default "1 2 3 4 5 6 7 8")
-#   THINKING_MODES    space-separated: off|on       (default "off on")
-#   CATEGORY          SPEED-Bench category          (default coding)
-#   SPEEDBENCH_OUTPUT_LEN  per-request output len   (default 4096)
-#   OUT_YAML          output matrix path            (default $RESULTS_DIR/speedbench-reference-al.yaml)
-#   DRAFT_SAMPLE_METHOD    greedy|probabilistic     (default greedy)
-#   REJECTION_SAMPLE_METHOD  passed through to speculative-config when non-empty
-#                            (default: unset, i.e. the vLLM default)
-#   MAX_NUM_SEQS      engine max batch size         (default 64)
-#   GPU_MEM_UTIL      --gpu-memory-utilization      (default 0.90)
+# Required collection settings come from speedbench-al.yml.
 
-set -uo pipefail
+set -o pipefail
 source "$(dirname "$0")/../../benchmark_lib.sh"
+check_env_vars \
+    CATEGORY CHAT_TEMPLATE_KWARGS_ON DRAFT_SAMPLE_METHOD MODEL MODEL_PATH MTP_LIST \
+    OUT_YAML PORT SPEEDBENCH_OUTPUT_LEN THINKING_MODES TP
 
-MODEL="${MODEL:?MODEL env var required (e.g. deepseek-ai/DeepSeek-V4-Pro-DSpark)}"
 # Serve from the local weights dir resolved by the launcher (MODEL_PATH points
 # at the writable models dir, e.g. /data/models/DeepSeek-V4-Pro-DSpark, until the
-# checkpoint is staged; see the download block below). Falls back to MODEL for a
-# standalone local run where MODEL is itself a path.
-SERVE_MODEL="${MODEL_PATH:-$MODEL}"
-TP="${TP:-8}"
-PORT="${PORT:-8888}"
+# checkpoint is staged; see the download block below).
+SERVE_MODEL="${MODEL_PATH}"
 
-MTP_LIST="${MTP_LIST:-1 2 3 4 5 6 7 8}"
-THINKING_MODES="${THINKING_MODES:-off on}"
-CATEGORY="${CATEGORY:-coding}"
-# Top-level key in the emitted YAML matrix. Derived from the model by the
-# workflow (e.g. deepseek-v4-pro-dspark); falls back to the model basename,
-# lowercased.
-MODEL_KEY="${MODEL_KEY:-$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')}"
-SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
+# Top-level key in the emitted YAML matrix comes from the model basename.
+MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
 # AL is a per-draft accept/reject property and is independent of batch size, so
 # the SPEED-Bench pass is batched to cut wall-clock. Note this differs from the
 # DSV4 MTP collector, which measured the existing deepseek-v4-pro curve at 1;
 # nothing here sets speculative_disable_by_batch_size, so drafting stays on at
 # this batch size and the curves remain comparable.
-CONCURRENCY="${CONCURRENCY:-32}"
+CONCURRENCY="32"
 # Engine batch size; must stay >= CONCURRENCY or the client's requests just queue.
 # Held far below the vLLM default of 1024 because that default sizes two
 # allocations the memory profiler never sees — the rejection sampler's fp32 logits
@@ -76,21 +57,17 @@ CONCURRENCY="${CONCURRENCY:-32}"
 # which grow with the same product. DSV4-Pro has no room for either: 141.5 GiB of
 # weights plus a 100 GiB KV cache already fills 266 of the 268 GiB on each B300,
 # and warmup died asking for 2.47 GiB more at num_speculative_tokens=4.
-MAX_NUM_SEQS="${MAX_NUM_SEQS:-64}"
-# vLLM's own default, exposed so the KV cache can be traded for headroom if some
-# higher num_speculative_tokens still runs out.
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
-TEMPERATURE="${TEMPERATURE:-1.0}"
+MAX_NUM_SEQS="64"
+# Reserve device memory for KV cache and speculative verification.
+GPU_MEM_UTIL="0.90"
+TEMPERATURE="1.0"
 # thinking-on chat_template_kwargs. MUST match the production/golden config:
 # the reference matrix (golden_al_distribution/dsv4_mtp.yaml) was measured with
 # reasoning_effort=high.
-DEFAULT_CHAT_TEMPLATE_KWARGS_ON='{"thinking": true, "reasoning_effort": "high"}'
-CHAT_TEMPLATE_KWARGS_ON="${CHAT_TEMPLATE_KWARGS_ON:-$DEFAULT_CHAT_TEMPLATE_KWARGS_ON}"
 # The greedy/probabilistic knob Benjamin asked to characterize on DSV4-Pro. The
 # published recipe uses greedy; probabilistic won at every level on Kimi-K3
 # (golden_al_distribution/kimik3_dspark*.yaml). vLLM accepts exactly these two
 # values (vllm/config/speculative.py: DraftSampleMethod).
-DRAFT_SAMPLE_METHOD="${DRAFT_SAMPLE_METHOD:-greedy}"
 case "$DRAFT_SAMPLE_METHOD" in
     greedy|probabilistic) ;;
     *)
@@ -104,9 +81,8 @@ esac
 # here rather than tied to draft_sample_method.
 REJECTION_SAMPLE_METHOD="${REJECTION_SAMPLE_METHOD:-}"
 
-SPEEDBENCH_DIR="${SPEEDBENCH_DIR:-/workspace/speed_bench_data}"
-RESULTS_DIR="${RESULTS_DIR:-/workspace/speedbench_results}"
-OUT_YAML="${OUT_YAML:-$RESULTS_DIR/speedbench-reference-al.yaml}"
+SPEEDBENCH_DIR="/workspace/speed_bench_data"
+RESULTS_DIR="/workspace/speedbench_results"
 
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 

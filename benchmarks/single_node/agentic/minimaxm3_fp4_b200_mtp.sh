@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
 # MiniMax-M3 NVFP4 B200 AgentX with EAGLE3-GQA and synthetic acceptance.
@@ -70,7 +70,7 @@ PYEOF
 # path before handing off to this script, so `hf download "$MODEL"` cannot work
 # on this runner the way it does on b300-nv, where MODEL stays the HF repo id.
 # Keep the repo id separate for the case where the checkpoint is not staged.
-HF_MODEL_ID="${HF_MODEL_ID:-nvidia/MiniMax-M3-NVFP4}"
+HF_MODEL_ID="nvidia/MiniMax-M3-NVFP4"
 
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if ! checkpoint_is_complete "$MODEL_PATH"; then
@@ -82,7 +82,8 @@ if [[ -n "${MODEL_PATH:-}" ]]; then
         MODEL_DOWNLOAD_LOCK="${MODEL_PATH%/}.download.lock"
         echo "Checkpoint at $MODEL_PATH is incomplete; acquiring $MODEL_DOWNLOAD_LOCK"
         exec 9>"$MODEL_DOWNLOAD_LOCK"
-        flock -w "${MODEL_DOWNLOAD_LOCK_TIMEOUT:-21600}" 9 || {
+        check_env_vars MODEL_DOWNLOAD_LOCK_TIMEOUT
+        flock -w "$MODEL_DOWNLOAD_LOCK_TIMEOUT" 9 || {
             echo "Error: timed out waiting for another cell to stage $MODEL_PATH" >&2
             exit 1
         }
@@ -111,7 +112,7 @@ fi
 # checkpoint directory and must not be polluted. The EAGLE3-GQA head is small
 # next to the target, so the per-job pull is cheap; this is what the
 # now-deprecated 8k1k B200 MiniMax-M3 MTP recipe did as well.
-DRAFT_MODEL_PATH="${DRAFT_MODEL_PATH:-$(dirname "${MODEL_PATH%/}")/${DRAFT_MODEL##*/}}"
+DRAFT_MODEL_PATH="$(dirname "${MODEL_PATH%/}")/${DRAFT_MODEL##*/}"
 if ! checkpoint_is_complete "$DRAFT_MODEL_PATH"; then
     hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
     checkpoint_is_complete "$DRAFT_MODEL_PATH" || {
@@ -141,11 +142,11 @@ export VLLM_FLOAT32_MATMUL_PRECISION=high
 export VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm
 
 # Same 0.9 the B300 sibling and the deprecated 8k1k B200 MiniMax-M3 NVFP4 MTP
-# recipe ran. Exposed as an override because B200's 180 GB leaves little beyond
+# recipe ran. B200's 180 GB leaves little beyond
 # the ~250 GB checkpoint: TP2 could not host the 1M-context KV for even one
 # request at this value and was dropped from the search space, so TP4 is the
 # smallest topology this script is expected to serve.
-GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.9}"
+GPU_MEMORY_UTILIZATION="0.9"
 
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"

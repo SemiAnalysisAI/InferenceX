@@ -11,7 +11,12 @@
 #            <model_dir> <model_name> <log_path> <isl> <osl> \
 #            <concurrency_list> <req_rate> <random_range_ratio> <num_prompts_multiplier>
 
-ENGINE="${ENGINE:-sglang-disagg}"
+source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
+check_env_vars ENGINE MODEL_PATH MODEL_NAME ROUTER_PORT
+if [[ $# -ne 13 ]]; then
+    echo "Error: bench.sh requires 13 positional arguments" >&2
+    exit 1
+fi
 
 n_prefill=$1
 n_decode=$2
@@ -19,29 +24,22 @@ prefill_gpus=$3
 decode_gpus=$4
 model_path=$5
 model_name=$6
-MODEL_PATH="${MODEL_PATH:-${model_path}/${model_name}}"
 # vllm-disagg uses --served-model-name MODEL_NAME; sglang defaults to MODEL_PATH
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    BENCH_MODEL="${MODEL_NAME:-${MODEL_PATH}}"
+    BENCH_MODEL="${MODEL_NAME}"
 else
     BENCH_MODEL="${MODEL_PATH}"
 fi
 log_path=$7
 
-chosen_isl=${8:-1024}
-chosen_osl=${9:-1024}
-concurrency_list=${10:-"512x1"}
-if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    chosen_req_rate=${11:-inf}
-else
-    chosen_req_rate=${11:-1}
-fi
-random_range_ratio=${12:-0.8}
-num_prompts_multiplier=${13:-10}
+chosen_isl=${8}
+chosen_osl=${9}
+concurrency_list=${10}
+chosen_req_rate=${11}
+random_range_ratio=${12}
+num_prompts_multiplier=${13}
 
 IFS='x' read -r -a chosen_concurrencies <<< "$concurrency_list"
-
-ROUTER_PORT="${ROUTER_PORT:-30000}"
 
 export TRANSFORMERS_VERBOSITY=error
 export TOKENIZERS_PARALLELISM=false

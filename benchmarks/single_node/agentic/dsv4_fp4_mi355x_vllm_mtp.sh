@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
 # Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on MI355X using vLLM,
@@ -32,6 +32,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars \
     MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR \
     DURATION EP_SIZE DP_ATTENTION
+check_env_vars EVAL_ONLY
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -165,7 +166,7 @@ if agentic_kv_offload_enabled; then
 
         wait_for_lmcache_ready() {
             { set +x; } 2>/dev/null
-            local attempts="${LMCACHE_READY_ATTEMPTS:-120}"
+            local attempts="120"
             local tail_pid=""
 
             while [ ! -f "$LMCACHE_LOG" ]; do
@@ -220,29 +221,29 @@ if agentic_kv_offload_enabled; then
             # pool, but let the external MP server own that pool so vLLM does not
             # split --kv-offloading-size across TP ranks through the integrated
             # LMCache backend.
-            LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
-            LMCACHE_PORT="${LMCACHE_PORT:-5555}"
-            LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
+            LMCACHE_HOST="127.0.0.1"
+            LMCACHE_PORT="5555"
+            LMCACHE_HTTP_PORT="8080"
             # LMCacheMPConnector concatenates lmcache.mp.host and port into the
             # ZMQ endpoint. Bind the server to a raw host, but pass the connector a
             # ZMQ-style host string.
-            LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
+            LMCACHE_CONNECT_HOST="tcp://$LMCACHE_HOST"
             LMCACHE_L1_SIZE_GB="${TOTAL_CPU_DRAM_PARTITION_GB}"
             if [ "$LMCACHE_L1_SIZE_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
                 echo "Error: LMCACHE_L1_SIZE_GB=$LMCACHE_L1_SIZE_GB exceeds configured capacity $TOTAL_CPU_DRAM_GB" >&2
                 exit 1
             fi
-            LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
+            LMCACHE_L1_INIT_SIZE_GB="20"
             # LMCache read locks are leases on chunks that lookup has promised
             # vLLM can retrieve. The default 300s TTL is too short for this
             # long-context agentic queue: TP8/conc32 can spend >300s between
             # lookup and retrieve while GPU KV is saturated, which leaves the
             # object present in L1 but no longer readable. Keep the 2.5 TB pool
             # size unchanged and only extend the lookup-to-retrieve lease.
-            LMCACHE_L1_READ_TTL_SECONDS="${LMCACHE_L1_READ_TTL_SECONDS:-7200}"
-            LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
-            LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
-            export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
+            LMCACHE_L1_READ_TTL_SECONDS="7200"
+            LMCACHE_CHUNK_SIZE="256"
+            LMCACHE_MAX_WORKERS="$TP"
+            export PYTHONHASHSEED="0"
             export LMCACHE_BLOCKING_TIMEOUT_SECS=1200
             LMCACHE_TX_MODE="lmcache_driven"
 
@@ -312,7 +313,7 @@ fi
 # eval-only runs use real target verification so accuracy remains meaningful.
 NUM_SPEC_TOKENS=3
 SYNTHETIC_ACCEPT_LEN=2.49
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
+if [ "${EVAL_ONLY}" = "true" ]; then
     SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}"
 else
     SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"

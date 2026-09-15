@@ -1,5 +1,8 @@
 #!/usr/bin/bash
 
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars EVAL_ONLY IS_AGENTIC RUN_EVAL
+
 # Standalone launcher for the B200 nscale Slurm cluster.
 #
 # Self-contained because Nscale has its own Slurm and storage layout.
@@ -36,21 +39,21 @@ if [[ "$IS_MULTINODE" != "true" ]]; then
     run_compat_launcher
 fi
 
-if [[ "$FRAMEWORK" == "tilert" && "${IS_AGENTIC:-0}" != "1" ]]; then
+if [[ "$FRAMEWORK" == "tilert" && "${IS_AGENTIC}" != "1" ]]; then
     run_compat_launcher
 fi
 
 if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/DeepSeek-V4-Pro}"
+    check_env_vars MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/Kimi-K2.6-NVFP4}"
+    check_env_vars MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="kimi-k2.6-nvfp4"
 elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/Kimi-K3}"
+    check_env_vars MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="kimik3"
 elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/GLM-5.2-NVFP4}"
+    check_env_vars MODEL_PATH
     # This alias must match model.path in the checked-in GLM-5.2 recipes.
     export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
 elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" && $FRAMEWORK == "tilert" ]]; then
@@ -70,7 +73,7 @@ fi
 USES_DCGM_POWER=0
 USES_AGENTX_POWER=0
 _POWER_CONFIG_FILE="${CONFIG_FILE:-}"
-if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+if [[ "${EVAL_ONLY}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
     _POWER_CONFIG_FILE="$EVAL_CONFIG_FILE"
 fi
 _RECIPE_REL="${_POWER_CONFIG_FILE%%:*}"
@@ -88,7 +91,7 @@ if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
     "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
     USES_AGENTX_POWER=1
 elif [[ "$USES_DCGM_POWER" == "1" && (
-    "${IS_AGENTIC:-0}" == "1" ||
+    "${IS_AGENTIC}" == "1" ||
     "$PRECISION" != "fp4" ||
     ( "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" ) ||
     ( "$MODEL_PREFIX" == "kimik2.6" && "$FRAMEWORK" != "dynamo-vllm" ) ||
@@ -201,7 +204,6 @@ fi
 
 export ISL="$ISL"
 export OSL="$OSL"
-export EVAL_ONLY="${EVAL_ONLY:-false}"
 
 # Agentic runs bind-mount two persistent caches into every worker container:
 # aiperf's content-addressed dataset mmap cache and the HF hub cache holding
@@ -272,7 +274,7 @@ echo "MODEL_PATH=$MODEL_PATH"
 # throughput row keeps synthetic golden acceptance. Only configs that set
 # EVAL_CONFIG_FILE opt into this selection; all other configs keep using
 # CONFIG_FILE unchanged.
-if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+if [[ "${EVAL_ONLY}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
     CONFIG_FILE="$EVAL_CONFIG_FILE"
     echo "EVAL_ONLY=true: selecting real-verification recipe $CONFIG_FILE"
 fi
@@ -348,7 +350,7 @@ if [ ! -d "$LOGS_DIR" ]; then
 fi
 
 AGENTX_POWER_RC="$SRT_JOB_RC"
-if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY}" != "true" ]]; then
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
     collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" \
         "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" \
@@ -369,7 +371,7 @@ if [[ "$AGENTX_POWER_RC" != "0" ]]; then
     exit "$AGENTX_POWER_RC"
 fi
 
-if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+if [[ "${EVAL_ONLY}" != "true" ]]; then
     RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
 
     if [ -z "$RESULT_SUBDIRS" ]; then
@@ -410,7 +412,7 @@ fi
 
 # Collect eval results if eval was requested. copy_eval_artifacts warns and
 # returns 0 when the directory is absent.
-if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
+if [[ "${RUN_EVAL}" == "true" || "${EVAL_ONLY}" == "true" ]]; then
     copy_eval_artifacts "$LOGS_DIR/eval_results" "$GITHUB_WORKSPACE"
 fi
 

@@ -1,5 +1,8 @@
 #!/usr/bin/bash
 
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars ENROOT_IMPORT_TIME_LIMIT EVAL_ONLY IS_AGENTIC IS_MULTINODE RUN_EVAL SALLOC_TIME_LIMIT
+
 # shellcheck source=runners/slurm_utils.sh
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 
@@ -94,8 +97,8 @@ import_squash_image() {
     fi
 
     srun -N 1 -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION" \
-        --time="${ENROOT_IMPORT_TIME_LIMIT:-120}" bash -c "
-        set -euo pipefail
+        --time="${ENROOT_IMPORT_TIME_LIMIT}" bash -c "
+        set -eo pipefail
         exec 9>\"$lock\"
         flock -w 3600 9
         if unsquashfs -l \"$sqsh\" > /dev/null 2>&1; then
@@ -130,7 +133,7 @@ if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
     USES_DCGM_POWER=1
 fi
 if [[ "$USES_DCGM_POWER" == "1" && (
-    "${IS_AGENTIC:-0}" == "1" ||
+    "${IS_AGENTIC}" == "1" ||
     "$MODEL_PREFIX" != "dsv4" ||
     "$PRECISION" != "fp4" ||
     ( "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" )
@@ -177,7 +180,6 @@ fi
 
 export ISL="$ISL"
 export OSL="$OSL"
-export EVAL_ONLY="${EVAL_ONLY:-false}"
 
 # ---------------------------------------------------------------------------
 # srtslurm.yaml: cluster defaults, every model alias, container aliases.
@@ -238,7 +240,7 @@ fi
 
 # Override the job name in the recipe with the runner name.
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
-if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+if [[ "${EVAL_ONLY}" == "true" ]]; then
     python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
         "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 fi
@@ -318,14 +320,14 @@ fi
 cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
 tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
-if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+if [[ "${EVAL_ONLY}" != "true" ]]; then
     copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" || exit 1
 else
     echo "EVAL_ONLY=true: Skipping benchmark result collection"
 fi
 
 # Collect eval results if eval was requested
-if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
+if [[ "${RUN_EVAL}" == "true" || "${EVAL_ONLY}" == "true" ]]; then
     EVAL_DIR="$LOGS_DIR/eval_results"
     if [ -d "$EVAL_DIR" ]; then
         echo "Extracting eval results from $EVAL_DIR"
@@ -355,8 +357,10 @@ else
     # AgentX trace datasets need a writable persistent cache. Keep the host and
     # container paths separate so the cache remains valid with
     # --no-container-mount-home.
-    HF_CACHE_HOST_DIR="${B300_HF_CACHE_HOST_DIR:-$HOME/.cache/huggingface}"
-    HF_CACHE_CONTAINER_DIR="${B300_HF_CACHE_CONTAINER_DIR:-/hf_hub_cache}"
+    check_env_vars B300_HF_CACHE_HOST_DIR
+    HF_CACHE_HOST_DIR="${B300_HF_CACHE_HOST_DIR}"
+    check_env_vars B300_HF_CACHE_CONTAINER_DIR
+    HF_CACHE_CONTAINER_DIR="${B300_HF_CACHE_CONTAINER_DIR}"
     mkdir -p "$HF_CACHE_HOST_DIR/hub" "$HF_CACHE_HOST_DIR/xet"
     export HF_HOME="$HF_CACHE_CONTAINER_DIR"
     export HF_HUB_CACHE="$HF_CACHE_CONTAINER_DIR/hub"
@@ -413,7 +417,7 @@ else
 
     import_squash_image "$IMAGE" "$SQUASH_FILE"
 
-    export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+    check_env_vars GPU_COUNT
 
     SALLOC_ARGS=(
         --partition="$SLURM_PARTITION"
@@ -422,7 +426,7 @@ else
         --gres="gpu:$GPU_COUNT"
         --exclusive
         --mem=0
-        --time="${SALLOC_TIME_LIMIT:-480}"
+        --time="${SALLOC_TIME_LIMIT}"
         --no-shell
         --job-name="$RUNNER_NAME"
     )
@@ -451,7 +455,7 @@ else
         "$MODEL_MOUNT_DIR:$MODEL_MOUNT_DIR"
         "$HF_CACHE_HOST_DIR:$HF_CACHE_CONTAINER_DIR"
     )
-    if [[ "$MODEL_PREFIX" == "kimik3" && "$FRAMEWORK" == "vllm" && "${IS_AGENTIC:-0}" == "1" ]]; then
+    if [[ "$MODEL_PREFIX" == "kimik3" && "$FRAMEWORK" == "vllm" && "${IS_AGENTIC}" == "1" ]]; then
         # The pre-staged target is read-only; DSpark needs the writable,
         # persistent model root as a separate mount.
         mkdir -p "$WRITABLE_MODELS_DIR"

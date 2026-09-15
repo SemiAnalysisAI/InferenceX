@@ -1,5 +1,8 @@
 #!/usr/bin/bash
 
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars EVAL_ONLY IS_AGENTIC IS_MULTINODE RUN_EVAL SALLOC_TIME_LIMIT
+
 # This script sets up the environment and launches multi-node benchmarks
 
 set -exo pipefail
@@ -7,7 +10,7 @@ set -exo pipefail
 # shellcheck source=runners/slurm_utils.sh
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 
-export SLURM_PARTITION="${SLURM_PARTITION:-batch_1}"
+check_env_vars SLURM_PARTITION
 export SBATCH_PARTITION="$SLURM_PARTITION"
 export SLURM_ACCOUNT="benchmark"
 export ENROOT_ROOTFS_WRITABLE=1
@@ -37,7 +40,7 @@ mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
 
 export MODEL_PATH=$MODEL
 
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE}" != "true" ]]; then
     # Download the new checkpoint into the persistent shared HF cache.
     export MODEL_PATH="$MODEL"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
@@ -150,11 +153,11 @@ import_squash() {
 import_squash "$SQUASH_FILE" "$IMAGE"
 # Direct vLLM single-node bring-up uses the same four-GPU tray and shared
 # storage as srt-slurm. Keep this before the router import and srtctl setup.
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE}" != "true" ]]; then
     BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb300_${FRAMEWORK}_mtp.sh"
     # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
     export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
-    [[ "${IS_AGENTIC:-0}" == "1" && "${SPEC_DECODING:-}" == "mtp" && -f "$BENCH_SCRIPT" ]] || {
+    [[ "${IS_AGENTIC}" == "1" && "${SPEC_DECODING:-}" == "mtp" && -f "$BENCH_SCRIPT" ]] || {
         echo "Unsupported single-node recipe: $BENCH_SCRIPT" >&2
         exit 1
     }
@@ -165,7 +168,7 @@ if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINO
     export VLLM_ENGINE_READY_TIMEOUT_S=7200
     srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
         --nodes=1 --ntasks=1 --gpus="${TP:?}" --cpus-per-task=144 --exclusive --mem=0 \
-        --time="${SALLOC_TIME_LIMIT:-480}" --job-name="$RUNNER_NAME" \
+        --time="${SALLOC_TIME_LIMIT}" --job-name="$RUNNER_NAME" \
         --mpi=none --container-image="$SQUASH_FILE" \
         --container-mounts="$GITHUB_WORKSPACE:/ix,$HF_HUB_CACHE_HOST_PATH:/hf-cache" \
         --no-container-mount-home --container-remap-root \
@@ -223,7 +226,6 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
     sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
 fi
 
-export EVAL_ONLY="${EVAL_ONLY:-false}"
 if [[ "$EVAL_ONLY" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
     CONFIG_FILE="$EVAL_CONFIG_FILE"
     echo "EVAL_ONLY=true: selecting real-verification recipe $CONFIG_FILE"
@@ -233,8 +235,10 @@ export ISL="$ISL"
 export OSL="$OSL"
 
 echo "Preparing job-local srt-slurm checkout..."
-RUN_KEY=$(printf "%s" "${RESULT_FILENAME:-${RUNNER_NAME:-gb300-nv}}" | sha1sum | cut -c1-12)
-SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUN_KEY}"
+check_env_vars RESULT_FILENAME
+RUN_KEY=$(printf "%s" "${RESULT_FILENAME}" | sha1sum | cut -c1-12)
+check_env_vars GITHUB_RUN_ID GITHUB_RUN_ATTEMPT
+SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RUN_KEY}"
 rm -rf "$SRT_REPO_DIR"
 
 setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" "$USES_DCGM_POWER" || exit 1
@@ -256,7 +260,8 @@ export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
 curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$UV_INSTALL_DIR:$PATH"
 
-VENV_DIR="${GITHUB_WORKSPACE}/.venv-srt-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUN_KEY}"
+check_env_vars GITHUB_RUN_ID GITHUB_RUN_ATTEMPT
+VENV_DIR="${GITHUB_WORKSPACE}/.venv-srt-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RUN_KEY}"
 rm -rf "$VENV_DIR"
 # --seed installs pip+setuptools+wheel into the venv. Without it, the
 # upstream prefetch-ai-dynamo-wheel.sh script (called by srtctl when a
@@ -454,7 +459,7 @@ set -x
 echo "Job $JOB_ID completed!"
 echo "Collecting results..."
 
-if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY}" != "true" ]]; then
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
     collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" "$INFMAX_WORKSPACE" \
         "$GITHUB_WORKSPACE" "$RESULT_FILENAME" "$SRT_SLURM_COMMIT" \
@@ -476,7 +481,7 @@ if [[ "$AGENTX_POWER_RC" != "0" ]]; then
     exit "$AGENTX_POWER_RC"
 fi
 
-if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+if [[ "${EVAL_ONLY}" != "true" ]]; then
     if [ ! -d "$LOGS_DIR" ]; then
         exit 1
     fi
@@ -487,7 +492,7 @@ else
 fi
 
 # Collect eval results if eval was requested
-if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
+if [[ "${RUN_EVAL}" == "true" || "${EVAL_ONLY}" == "true" ]]; then
     EVAL_DIR="$LOGS_DIR/eval_results"
     if [ -d "$EVAL_DIR" ]; then
         echo "Extracting eval results from $EVAL_DIR"
@@ -510,7 +515,8 @@ if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
     # srt-slurm stages eval artifacts but does not write the metadata file
     # consumed by score validation. Reuse the canonical metadata writer so
     # topology and recipe identity stay aligned with the workflow inputs.
-    eval_conc_value="${EVAL_CONC:-${CONC:-1}}"
+    check_env_vars EVAL_CONC
+    eval_conc_value="$EVAL_CONC"
     (
         export IS_MULTINODE=true
         # shellcheck source=benchmarks/benchmark_lib.sh

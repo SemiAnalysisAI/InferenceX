@@ -24,7 +24,7 @@ export SGLANG_MAMBA_SSM_DTYPE=bfloat16
 export ROCM_QUICK_REDUCE_QUANTIZATION=INT8
 
 SERVER_LOG=/workspace/server.log
-MEM_FRAC_STATIC=${MEM_FRAC_STATIC:-0.8}
+MEM_FRAC_STATIC=0.8
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context

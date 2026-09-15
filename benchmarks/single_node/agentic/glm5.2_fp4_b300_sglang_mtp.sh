@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
 # Agentic trace replay benchmark for GLM-5.2 NVFP4 on B300 using SGLang with
@@ -27,6 +27,7 @@ set -x
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars EVAL_ONLY
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -72,7 +73,7 @@ if require_agentic_kv_offload_backend hicache; then
     # node MemAvailable.
     DEFAULT_HICACHE_SIZE=270
     MAX_HICACHE_SIZE=270
-    HICACHE_SIZE="${HICACHE_SIZE:-$DEFAULT_HICACHE_SIZE}"
+    HICACHE_SIZE="$DEFAULT_HICACHE_SIZE"
     if ! [[ "$HICACHE_SIZE" =~ ^[0-9]+$ ]]; then
         echo "Error: HICACHE_SIZE must be a positive integer, got $HICACHE_SIZE" >&2
         exit 1
@@ -81,9 +82,9 @@ if require_agentic_kv_offload_backend hicache; then
         echo "Error: HICACHE_SIZE=$HICACHE_SIZE must be in (0, $MAX_HICACHE_SIZE]" >&2
         exit 1
     fi
-    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_back}"
-    HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-    HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+    HICACHE_WRITE_POLICY="write_back"
+    HICACHE_IO_BACKEND="direct"
+    HICACHE_MEM_LAYOUT="page_first_direct"
     echo "HiCache CPU tier: conc=$CONC, target_size=$HICACHE_SIZE GB, total_capacity=${TOTAL_CPU_DRAM_GB} GB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
     CACHE_ARGS=(
         --enable-hierarchical-cache
@@ -201,7 +202,7 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 # EVAL_ONLY leaves simulated acceptance off: it commits drafted tokens
 # regardless of the target logits, so generated text is wrong and the eval
 # would score ~0.
-if [ "${EVAL_ONLY:-false}" != "true" ]; then
+if [ "${EVAL_ONLY}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=2.99
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token

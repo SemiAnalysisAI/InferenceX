@@ -3,7 +3,7 @@
 # Usage: ./profile_serving.sh <server_url>
 # Example: ./profile_serving.sh http://slurm-h200-205-057:8000
 
-set -euo pipefail
+set -eo pipefail
 
 SERVER_URL="${1:?Usage: $0 <server_url>}"
 MODEL="Qwen/Qwen3.5-397B-A17B"

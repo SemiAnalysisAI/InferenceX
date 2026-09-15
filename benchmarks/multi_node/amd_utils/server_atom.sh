@@ -1,4 +1,18 @@
 #!/bin/bash
+
+source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
+check_env_vars \
+    MODEL_NAME ROUTER_PORT PREFILL_PORT DECODE_PORT HANDSHAKE_PORT \
+    MEM_FRAC_STATIC BLOCK_SIZE MAX_NUM_SEQS WAIT_SERVER_TIMEOUT
+
+check_env_vars \
+    NODE0_ADDR NODE_RANK xP yD IPADDRS \
+    PREFILL_TP_SIZE DECODE_TP_SIZE PREFILL_ENABLE_EP PREFILL_ENABLE_DP DECODE_ENABLE_EP \
+    DECODE_ENABLE_DP DECODE_MTP_SIZE BENCH_INPUT_LEN BENCH_OUTPUT_LEN BENCH_RANDOM_RANGE_RATIO \
+    BENCH_REQUEST_RATE BENCH_NUM_PROMPTS_MULTIPLIER BENCH_MAX_CONCURRENCY DRY_RUN GPUS_PER_NODE \
+    RUN_EVAL EVAL_ONLY EVAL_FRAMEWORK BENCHMARK_LOGS_DIR MODEL_DIR \
+    ATOM_WS_PATH
+
 # ATOM Disaggregated Server Launcher
 # =============================================================================
 # Uses atom.entrypoints.openai_server with mooncake RDMA KV transfer.
@@ -13,52 +27,9 @@
 #   - Router port: $ROUTER_PORT (default 8000)
 # =============================================================================
 
-# =============================================================================
-# Environment Configuration
-# =============================================================================
-
-NODE0_ADDR="${NODE0_ADDR:-localhost}"
-NODE_RANK="${NODE_RANK:-0}"
-MODEL_DIR="${MODEL_DIR:-}"
-MODEL_NAME="${MODEL_NAME:-}"
-
-xP="${xP:-1}"
-yD="${yD:-1}"
-
-IPADDRS="${IPADDRS:-localhost}"
-
-# Parallelism
-PREFILL_TP_SIZE="${PREFILL_TP_SIZE:-8}"
-PREFILL_ENABLE_EP="${PREFILL_ENABLE_EP}"
-PREFILL_ENABLE_DP="${PREFILL_ENABLE_DP}"
-DECODE_TP_SIZE="${DECODE_TP_SIZE:-8}"
-DECODE_ENABLE_EP="${DECODE_ENABLE_EP}"
-DECODE_ENABLE_DP="${DECODE_ENABLE_DP}"
-
-# MTP
-DECODE_MTP_SIZE="${DECODE_MTP_SIZE:-0}"
-
-# ATOM server ports (different from SGLang which uses 8000 for all)
-PREFILL_PORT="${PREFILL_PORT:-8010}"
-DECODE_PORT="${DECODE_PORT:-8020}"
-ROUTER_PORT="${ROUTER_PORT:-8000}"
-HANDSHAKE_PORT="${HANDSHAKE_PORT:-6301}"
-
-# ATOM server tuning — defaults applied after YAML load (env var > YAML > shell default)
+# ATOM server tuning — YAML values take precedence over explicit caller settings
 EXTRA_SERVER_ARGS="${EXTRA_SERVER_ARGS:-}"
 
-# Benchmark Configuration
-BENCH_INPUT_LEN="${BENCH_INPUT_LEN:-1024}"
-BENCH_OUTPUT_LEN="${BENCH_OUTPUT_LEN:-1024}"
-BENCH_RANDOM_RANGE_RATIO="${BENCH_RANDOM_RANGE_RATIO:-1}"
-BENCH_REQUEST_RATE="${BENCH_REQUEST_RATE:-inf}"
-BENCH_NUM_PROMPTS_MULTIPLIER="${BENCH_NUM_PROMPTS_MULTIPLIER:-10}"
-BENCH_MAX_CONCURRENCY="${BENCH_MAX_CONCURRENCY:-512}"
-
-DRY_RUN="${DRY_RUN:-0}"
-GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
-
-# =============================================================================
 # Dependencies and Environment Setup
 # =============================================================================
 
@@ -114,10 +85,10 @@ unset _yaml_tmp
 # Apply server-tuning: YAML > env var > shell default
 # (job.slurm injects BLOCK_SIZE/MEM_FRAC_STATIC/MAX_NUM_SEQS with hardcoded
 #  defaults into the Docker env, so env-first would always shadow the YAML.)
-BLOCK_SIZE="${_YAML_BLOCK_SIZE:-${BLOCK_SIZE:-16}}"
-MEM_FRAC_STATIC="${_YAML_MEM_FRAC_STATIC:-${MEM_FRAC_STATIC:-0.85}}"
+BLOCK_SIZE="${_YAML_BLOCK_SIZE:-${BLOCK_SIZE}}"
+MEM_FRAC_STATIC="${_YAML_MEM_FRAC_STATIC:-${MEM_FRAC_STATIC}}"
 MAX_MODEL_LEN="${_YAML_MAX_MODEL_LEN:-${MAX_MODEL_LEN:-}}"
-MAX_NUM_SEQS="${_YAML_MAX_NUM_SEQS:-${MAX_NUM_SEQS:-256}}"
+MAX_NUM_SEQS="${_YAML_MAX_NUM_SEQS:-${MAX_NUM_SEQS}}"
 MAX_NUM_BATCHED_TOKENS="${_YAML_MAX_NUM_BATCHED_TOKENS:-${MAX_NUM_BATCHED_TOKENS:-}}"
 SCHEDULER_DELAY_FACTOR="${_YAML_SCHEDULER_DELAY_FACTOR:-${SCHEDULER_DELAY_FACTOR:-}}"
 unset _YAML_BLOCK_SIZE _YAML_MEM_FRAC_STATIC _YAML_MAX_MODEL_LEN _YAML_MAX_NUM_SEQS _YAML_MAX_NUM_BATCHED_TOKENS _YAML_SCHEDULER_DELAY_FACTOR
@@ -150,15 +121,6 @@ for i in $(seq 0 $((yD - 1))); do
     DECODE_ARGS="$DECODE_ARGS --decode http://${IP_ARRAY[$idx]}:${DECODE_PORT}"
 done
 
-PREFILL_ENABLE_EP="${PREFILL_ENABLE_EP}"
-PREFILL_ENABLE_DP="${PREFILL_ENABLE_DP}"
-DECODE_ENABLE_EP="${DECODE_ENABLE_EP}"
-DECODE_ENABLE_DP="${DECODE_ENABLE_DP}"
-
-
-
-
-# Parallel args
 PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE") #TP
 ONLINE_QUANT_ARG=""
 if [ "$PREFILL_ENABLE_DP" = "true" ]; then
@@ -198,7 +160,7 @@ unset _env_pair
 
 # MTP args
 SPEC_ARGS=()
-if [[ -n "$MODEL_MTP_FLAGS" && "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
+if [[ -n "$MODEL_MTP_FLAGS" && "${DECODE_MTP_SIZE}" -gt 0 ]]; then
     SPEC_ARGS=(${MODEL_MTP_FLAGS} "$DECODE_MTP_SIZE")
 fi
 
@@ -217,11 +179,10 @@ if [[ -n "$SCHEDULER_DELAY_FACTOR" ]]; then
     MODEL_LEN_ARGS="${MODEL_LEN_ARGS} --scheduler-delay-factor ${SCHEDULER_DELAY_FACTOR}"
 fi
 
-
 cat <<INFO
 === Configuration ===
-PREFILL  : ${PREFILL_IPS[*]} (TP=${PREFILL_TP_SIZE}, EP=${PREFILL_ENABLE_EP:-false}, DP=${PREFILL_ENABLE_DP:-false}, port=${PREFILL_PORT})
-DECODE   : ${DECODE_IPS[*]}  (TP=${DECODE_TP_SIZE},  EP=${DECODE_ENABLE_EP:-false},  DP=${DECODE_ENABLE_DP:-false},  port=${DECODE_PORT})
+PREFILL  : ${PREFILL_IPS[*]} (TP=${PREFILL_TP_SIZE}, EP=${PREFILL_ENABLE_EP}, DP=${PREFILL_ENABLE_DP}, port=${PREFILL_PORT})
+DECODE   : ${DECODE_IPS[*]}  (TP=${DECODE_TP_SIZE},  EP=${DECODE_ENABLE_EP},  DP=${DECODE_ENABLE_DP},  port=${DECODE_PORT})
 ROUTER   : port=${ROUTER_PORT}
 MODEL    : ${MODEL_NAME}
 BACKEND  : atom (PD mooncake KV transfer)
@@ -287,7 +248,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
 
     # Wait for all prefill and decode servers to be ready
-    WAIT_SERVER_TIMEOUT="${WAIT_SERVER_TIMEOUT:-2500}"
     echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "Waiting for all servers to be up (timeout=${WAIT_SERVER_TIMEOUT}s)..."
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -342,7 +302,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
         proxy_pid=$!
 
         # Wait for router to accept connections
-        WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-300}"
+        check_env_vars WAIT_LOCAL_ROUTER_TIMEOUT
+        WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-$WAIT_LOCAL_ROUTER_TIMEOUT}"
         echo "[wait] router http://0.0.0.0:${ROUTER_PORT}/v1/models (timeout=${WAIT_ROUTER_TIMEOUT}s)"
         _router_deadline=$(( $(date +%s) + WAIT_ROUTER_TIMEOUT ))
         while ! curl -sf --max-time 10 "http://0.0.0.0:${ROUTER_PORT}/v1/models" >/dev/null 2>&1; do
@@ -363,7 +324,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     cd $ATOM_WS_PATH
 
     export IS_MTP="false"
-    if [[ -n "$MODEL_MTP_FLAGS" && "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
+    if [[ -n "$MODEL_MTP_FLAGS" && "${DECODE_MTP_SIZE}" -gt 0 ]]; then
         export IS_MTP="true"
     fi
 
@@ -372,7 +333,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
         ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
 
-    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+    if [[ "${EVAL_ONLY}" == "true" ]]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"
     elif [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BENCH_CMD"
@@ -383,7 +344,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
 
     # Run evaluation if requested (before killing router)
-    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+    if [[ "${RUN_EVAL}" == "true" ]]; then
         echo "Running lm-eval evaluation on Node 0..."
 
         # Health check: verify the router is still serving before running eval.
@@ -411,7 +372,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             fi
 
             if [[ "$DRY_RUN" -eq 1 ]]; then
-                echo "DRY RUN: run_eval --port ${ROUTER_PORT} (framework=${EVAL_FRAMEWORK:-lm-eval}, conc=${EVAL_CONCURRENT_REQUESTS})"
+                echo "DRY RUN: run_eval --port ${ROUTER_PORT} (framework=${EVAL_FRAMEWORK}, conc=${EVAL_CONCURRENT_REQUESTS})"
             else
                 MODEL_NAME="${MODEL_DIR}/${MODEL_NAME}" run_eval --port "${ROUTER_PORT}"
                 eval_rc=$?
@@ -450,7 +411,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
 
     # Copy results
-    LOGS_OUTPUT="${BENCHMARK_LOGS_DIR:-/run_logs}/logs"
+    LOGS_OUTPUT="${BENCHMARK_LOGS_DIR}/logs"
     mkdir -p "$LOGS_OUTPUT"
     if [[ "$DRY_RUN" -eq 0 ]]; then
         cp -r /run_logs/slurm_job-${SLURM_JOB_ID} "$LOGS_OUTPUT/"
@@ -511,7 +472,8 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
 
     echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "Waiting for router to be up..."
-    WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-2800}"
+    check_env_vars WAIT_REMOTE_ROUTER_TIMEOUT
+    WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-$WAIT_REMOTE_ROUTER_TIMEOUT}"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: wait for router ${NODE0_ADDR}:${ROUTER_PORT}/health"
     else
@@ -585,7 +547,8 @@ else
 
     echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "Waiting for router to be up..."
-    WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-2800}"
+    check_env_vars WAIT_REMOTE_ROUTER_TIMEOUT
+    WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-$WAIT_REMOTE_ROUTER_TIMEOUT}"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: wait for router ${NODE0_ADDR}:${ROUTER_PORT}/health"
     else

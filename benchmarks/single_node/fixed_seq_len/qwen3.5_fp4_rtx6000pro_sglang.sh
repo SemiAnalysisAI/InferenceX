@@ -47,7 +47,7 @@ SERVER_LOG=/workspace/server.log
 # activations still fit: at 0.8 the KV pool grew to 2.2M tokens (30x what
 # concurrency 64 needs) and the first 8k prefill OOM'd. 0.7 still leaves ~1M
 # KV tokens, and a 2-request prefill chunk keeps the activation peak bounded.
-MEM_FRAC_STATIC="${MEM_FRAC_STATIC:-0.7}"
+MEM_FRAC_STATIC="0.7"
 CHUNKED_PREFILL_SIZE=$((ISL * 2))
 MAX_PREFILL_TOKENS=$((ISL * 2))
 MAX_RUNNING_REQUESTS=128

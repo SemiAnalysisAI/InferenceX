@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
 # Full-context AgentX refresh for GLM-5.2 FP8 on one 8xMI325X node.
@@ -9,6 +9,7 @@ set -x
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars EVAL_ONLY
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -65,7 +66,7 @@ export SGLANG_OPT_USE_TOPK_V2=false
 # Synthetic rejection sampling is only for performance replay. Evals retain
 # real target-model verification. The AL is GLM-5.2 thinking-on, K=3, from
 # golden_al_distribution/glm5.2_mtp.yaml.
-if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+if [[ "${EVAL_ONLY}" != "true" ]]; then
     export SGLANG_SIMULATE_ACC_LEN=2.99
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
@@ -114,7 +115,7 @@ echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+if [[ "${EVAL_ONLY}" == "true" ]]; then
     export SWEBENCH_AGENT_STEP_LIMIT=150
     run_eval --port "$PORT"
 else

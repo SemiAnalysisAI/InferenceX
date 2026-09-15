@@ -37,58 +37,43 @@
 #   export MODEL=moonshotai/Kimi-K3
 #   bash benchmarks/single_node/speedbench/kimik3_fp4_b300_vllm_probabilistic_sample_method_block_rejection_sample_method.sh
 #
-# Tunables (env):
-#   MTP_LIST          space-separated DSpark spec-token counts (default "1 2 3 4 5 6 7 8")
-#   THINKING_MODES    space-separated: off|on       (default "on")
-#   CATEGORY          SPEED-Bench category          (default coding)
-#   SPEEDBENCH_OUTPUT_LEN  per-request output len   (default 4096)
-#   OUT_YAML          output matrix path            (default $RESULTS_DIR/speedbench-reference-al.yaml)
+# Required collection settings come from speedbench-al.yml.
 
-set -uo pipefail
+set -o pipefail
 source "$(dirname "$0")/../../benchmark_lib.sh"
+check_env_vars \
+    CATEGORY CHAT_TEMPLATE_KWARGS_ON DP_ATTENTION EP_SIZE MODEL MODEL_PATH \
+    MTP_LIST OUT_YAML PORT SPEEDBENCH_OUTPUT_LEN THINKING_MODES TP
 
-MODEL="${MODEL:?MODEL env var required (e.g. moonshotai/Kimi-K3)}"
-SERVE_MODEL="${MODEL_PATH:-$MODEL}"
-TP="${TP:-8}"
-DP_ATTENTION="${DP_ATTENTION:-false}"
-EP_SIZE="${EP_SIZE:-1}"
-PORT="${PORT:-8888}"
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
-MAX_MODEL_LEN="${MAX_MODEL_LEN:-16384}"
-MAX_NUM_SEQS="${MAX_NUM_SEQS:-512}"
+SERVE_MODEL="${MODEL_PATH}"
+GPU_MEM_UTIL="0.90"
+MAX_MODEL_LEN="16384"
+MAX_NUM_SEQS="512"
 
-DRAFT_MODEL="${DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
+DRAFT_MODEL="Inferact/Kimi-K3-DSpark"
 
-MTP_LIST="${MTP_LIST:-1 2 3 4 5 6 7 8}"
 # K3 is a thinking model (kimi_k3 reasoning parser defaults enable_thinking=True),
 # so the golden curve is collected for thinking_on only.
-THINKING_MODES="${THINKING_MODES:-on}"
-CATEGORY="${CATEGORY:-coding}"
-MODEL_KEY="${MODEL_KEY:-$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')}"
-SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
+MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
 # AL is concurrency-independent (per-token accept/reject; no spec-disable-by-batch
 # is set below), so batch the SPEED-Bench pass to keep wall-time under the CI
 # limit. Inherited from the Kimi-K2.5 collector, where conc=1 blew the 8h budget.
-CONCURRENCY="${CONCURRENCY:-64}"
-TOP_P="${TOP_P:-0.95}"
+CONCURRENCY="64"
+TOP_P="0.95"
 # Kimi thinking toggles via the thinking chat_template key. K3 defaults to
 # thinking ON, so the on-cell kwargs are stated explicitly and the off-cell
 # kwargs disable it. NOTE: speedbench-al.yml's thinking-kwargs input defaults to
 # the DSV4 value ({"thinking": true, "reasoning_effort": "high"}) and is exported
 # as CHAT_TEMPLATE_KWARGS_ON — dispatch K3 with -f 'thinking-kwargs={"thinking": true}'.
-DEFAULT_CHAT_TEMPLATE_KWARGS_ON='{"thinking": true}'
-DEFAULT_CHAT_TEMPLATE_KWARGS_OFF='{"thinking": false}'
-CHAT_TEMPLATE_KWARGS_ON="${CHAT_TEMPLATE_KWARGS_ON:-$DEFAULT_CHAT_TEMPLATE_KWARGS_ON}"
-CHAT_TEMPLATE_KWARGS_OFF="${CHAT_TEMPLATE_KWARGS_OFF:-$DEFAULT_CHAT_TEMPLATE_KWARGS_OFF}"
+CHAT_TEMPLATE_KWARGS_OFF='{"thinking": false}'
 
-SPEEDBENCH_DIR="${SPEEDBENCH_DIR:-/workspace/speed_bench_data}"
-RESULTS_DIR="${RESULTS_DIR:-/workspace/speedbench_results}"
-OUT_YAML="${OUT_YAML:-$RESULTS_DIR/speedbench-reference-al.yaml}"
+SPEEDBENCH_DIR="/workspace/speed_bench_data"
+RESULTS_DIR="/workspace/speedbench_results"
 
 # Kimi-K3 production serving environment.
-export NCCL_DMABUF_ENABLE="${NCCL_DMABUF_ENABLE:-0}"
-export VLLM_ALLREDUCE_USE_FLASHINFER="${VLLM_ALLREDUCE_USE_FLASHINFER:-1}"
-export VLLM_USE_RUST_FRONTEND="${VLLM_USE_RUST_FRONTEND:-1}"
+export NCCL_DMABUF_ENABLE="0"
+export VLLM_ALLREDUCE_USE_FLASHINFER="1"
+export VLLM_USE_RUST_FRONTEND="1"
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
 # `vllm bench serve` delegates the CLIENT to the Rust binary: the kimi-k3 branch's
@@ -148,7 +133,7 @@ fi
 # The draft must NOT go next to a pre-staged target: dirname(MODEL_PATH) can be
 # the read-only staged mount (/scratch/models), so writing the draft there fails
 # with PermissionError. Use a writable workspace dir regardless of staging.
-DRAFT_DIR="${DRAFT_MODEL_DIR:-/workspace/draft_models}"
+DRAFT_DIR="/workspace/draft_models"
 mkdir -p "$DRAFT_DIR"
 DRAFT_MODEL_PATH="$DRAFT_DIR/${DRAFT_MODEL##*/}"
 if [[ ! -d "$DRAFT_MODEL_PATH" || -z "$(ls -A "$DRAFT_MODEL_PATH" 2>/dev/null)" ]]; then
@@ -199,7 +184,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
 fi
 EP_ARGS=()
-if [ "${EP_SIZE:-1}" -gt 1 ]; then
+if [ "${EP_SIZE}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 

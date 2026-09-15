@@ -1,4 +1,6 @@
 #!/bin/bash
+
+source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
 # Multi-Engine Disaggregated Server Dispatcher
 # =============================================================================
 # Dispatches to the engine-specific server launcher based on ENGINE env var.
@@ -7,8 +9,12 @@
 #   ENGINE=atom-disagg             -> server_atom.sh  (ATOM + mooncake)
 # =============================================================================
 
-ENGINE="${ENGINE:-sglang-disagg}"
-WS_PATH="${WS_PATH:-${SGLANG_WS_PATH:-${VLLM_WS_PATH:-${ATOM_WS_PATH:-$(dirname "${BASH_SOURCE[0]}")}}}}"
+check_env_vars ENGINE WS_PATH
+if [[ -f /config/hicache_mc.env ]]; then
+    set -a
+    source /config/hicache_mc.env
+    set +a
+fi
 export WS_PATH ENGINE
 
 echo "[DISPATCHER] ENGINE=$ENGINE  WS_PATH=$WS_PATH"

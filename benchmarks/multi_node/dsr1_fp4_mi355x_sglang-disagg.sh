@@ -37,7 +37,7 @@ export MODEL_PATH=$MODEL_PATH
 export MODEL_NAME=$MODEL_NAME
 export CONTAINER_IMAGE=$IMAGE
 
-if [[ "${PREFILL_EP:-1}" -eq 1 ]]; then
+if [[ "${PREFILL_EP}" -eq 1 ]]; then
 export PREFILL_ENABLE_EP=false
 else
 export PREFILL_ENABLE_EP=true
@@ -49,7 +49,7 @@ else
 export PREFILL_ENABLE_DP=false
 fi
 
-if [[ "${DECODE_EP:-1}" -eq 1 ]]; then
+if [[ "${DECODE_EP}" -eq 1 ]]; then
 export DECODE_ENABLE_EP=false
 else
 export DECODE_ENABLE_EP=true

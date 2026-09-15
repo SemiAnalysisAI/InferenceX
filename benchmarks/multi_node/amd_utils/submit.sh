@@ -1,4 +1,6 @@
 #!/bin/bash
+
+source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
 #
 # Cluster Configuration Template for Multi-Node Disaggregated Serving
 #
@@ -48,111 +50,105 @@ Required environment variables:
   CONTAINER_IMAGE  Docker image name (e.g., vllm_disagg_pd:latest)
   RUNNER_NAME      Runner identifier (for job name)
 
-Optional environment variables:
+Required environment variables (continued):
   DRY_RUN          1 = echo composed server/router launch commands instead of
                    running them (preview a recipe against a real allocation).
 USAGE
 }
 
-check_env() {
-    local name="$1"
-    if [[ -z "${!name:-}" ]]; then
-        echo "Error: ${name} not specified" >&2
-        usage >&2
-        exit 1
-    fi
-}
+check_env_vars \
+    SLURM_ACCOUNT SLURM_PARTITION TIME_LIMIT MODEL_PATH MODEL_NAME \
+    CONTAINER_IMAGE RUNNER_NAME FRAMEWORK GPUS_PER_NODE PREFILL_EP \
+    PREFILL_DP_ATTN PREFILL_NUM_WORKERS PREFILL_PP_SIZE PREFILL_DCP_SIZE PREFILL_PCP_SIZE \
+    DECODE_EP DECODE_DP_ATTN DECODE_NUM_WORKERS DECODE_PP_SIZE DECODE_DCP_SIZE \
+    DECODE_PCP_SIZE DECODE_MTP_SIZE BENCH_NUM_PROMPTS_MULTIPLIER DRY_RUN RUN_EVAL \
+    EVAL_ONLY EVAL_FRAMEWORK IS_MULTINODE SWEBENCH_USE_MODAL BENCHMARK_LOGS_DIR \
+    KEEP_CONTAINERS ROUTER_TYPE ROUTER_PORT PROXY_PING_PORT HEADNODE_PORT \
+    SERVER_PORT IS_AGENTIC KV_OFFLOADING
 
-check_env SLURM_ACCOUNT
-check_env SLURM_PARTITION
-check_env TIME_LIMIT
-
-check_env MODEL_PATH
-check_env MODEL_NAME
-check_env CONTAINER_IMAGE
-check_env RUNNER_NAME
-check_env FRAMEWORK
-
-# GPUS_PER_NODE defaults to 8 (MI355X). Set to 4 for MI325X if needed.
-GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
+if [[ $# -lt 15 || $# -gt 16 ]]; then
+    usage >&2
+    exit 1
+fi
 
 # COMMAND_LINE ARGS
 PREFILL_NODES=$1
-PREFILL_WORKERS=${2:-1}
+PREFILL_WORKERS=${2}
 DECODE_NODES=$3
-DECODE_WORKERS=${4:-1}
+DECODE_WORKERS=${4}
 ISL=$5
 OSL=$6
 CONCURRENCIES=$7
 REQUEST_RATE=$8
-PREFILL_ENABLE_EP=${9:-true}
-PREFILL_ENABLE_DP=${10:-true}
-DECODE_ENABLE_EP=${11:-true}
-DECODE_ENABLE_DP=${12:-true}
-PREFILL_TP=${13:-8}
-DECODE_TP=${14:-8}
-RANDOM_RANGE_RATIO=${15:-0.8}
-NODE_LIST=${16}
+PREFILL_ENABLE_EP=${9}
+PREFILL_ENABLE_DP=${10}
+DECODE_ENABLE_EP=${11}
+DECODE_ENABLE_DP=${12}
+PREFILL_TP=${13}
+DECODE_TP=${14}
+RANDOM_RANGE_RATIO=${15}
+NODE_LIST=${16:-}
 
 NUM_NODES=$((PREFILL_NODES + DECODE_NODES))
 profiler_args="${ISL} ${OSL} ${CONCURRENCIES} ${REQUEST_RATE}"
 
 # Export variables for the SLURM job
-export ENGINE="${FRAMEWORK:-sglang}"
+export ENGINE="${FRAMEWORK}"
 export MODEL_DIR=$MODEL_PATH
 export DOCKER_IMAGE_NAME=$CONTAINER_IMAGE
 export PROFILER_ARGS=$profiler_args
 
 # Engine-specific xP/yD semantics and TP exports
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    export PROXY_STREAM_IDLE_TIMEOUT=${PROXY_STREAM_IDLE_TIMEOUT:-300}
+    check_env_vars PROXY_STREAM_IDLE_TIMEOUT
+    export PROXY_STREAM_IDLE_TIMEOUT
 fi
 # xP = prefill workers, yD = decode workers (may span multiple nodes)
 export xP=$PREFILL_WORKERS
 export yD=$DECODE_WORKERS
 export PREFILL_TP_SIZE=$(( $PREFILL_NODES * $PREFILL_TP / $PREFILL_WORKERS ))
-export PREFILL_ENABLE_EP=${PREFILL_ENABLE_EP}
-export PREFILL_ENABLE_DP=${PREFILL_ENABLE_DP}
+export PREFILL_ENABLE_EP
+export PREFILL_ENABLE_DP
 export PREFILL_TP
-export PREFILL_EP=${PREFILL_EP:-1}
-export PREFILL_DP_ATTN=${PREFILL_DP_ATTN:-false}
-export PREFILL_NUM_WORKERS=${PREFILL_NUM_WORKERS:-$PREFILL_WORKERS}
-export PREFILL_PP_SIZE=${PREFILL_PP_SIZE:-1}
-export PREFILL_DCP_SIZE=${PREFILL_DCP_SIZE:-1}
-export PREFILL_PCP_SIZE=${PREFILL_PCP_SIZE:-1}
+export PREFILL_EP
+export PREFILL_DP_ATTN
+export PREFILL_NUM_WORKERS
+export PREFILL_PP_SIZE
+export PREFILL_DCP_SIZE
+export PREFILL_PCP_SIZE
 export DECODE_TP_SIZE=$(( $DECODE_NODES * $DECODE_TP / $DECODE_WORKERS ))
-export DECODE_ENABLE_EP=${DECODE_ENABLE_EP}
-export DECODE_ENABLE_DP=${DECODE_ENABLE_DP}
+export DECODE_ENABLE_EP
+export DECODE_ENABLE_DP
 export DECODE_TP
-export DECODE_EP=${DECODE_EP:-1}
-export DECODE_DP_ATTN=${DECODE_DP_ATTN:-false}
-export DECODE_NUM_WORKERS=${DECODE_NUM_WORKERS:-$DECODE_WORKERS}
-export DECODE_PP_SIZE=${DECODE_PP_SIZE:-1}
-export DECODE_DCP_SIZE=${DECODE_DCP_SIZE:-1}
-export DECODE_PCP_SIZE=${DECODE_PCP_SIZE:-1}
-export DECODE_MTP_SIZE=${DECODE_MTP_SIZE}
+export DECODE_EP
+export DECODE_DP_ATTN
+export DECODE_NUM_WORKERS
+export DECODE_PP_SIZE
+export DECODE_DCP_SIZE
+export DECODE_PCP_SIZE
+export DECODE_MTP_SIZE
 
 export NUM_NODES=$NUM_NODES
 export GPUS_PER_NODE=$GPUS_PER_NODE
 export MODEL_NAME=$MODEL_NAME
 export BENCH_INPUT_LEN=${ISL}
 export BENCH_OUTPUT_LEN=${OSL}
-export BENCH_NUM_PROMPTS_MULTIPLIER=${BENCH_NUM_PROMPTS_MULTIPLIER:-10}
+export BENCH_NUM_PROMPTS_MULTIPLIER
 export BENCH_MAX_CONCURRENCY=${CONCURRENCIES}
 export BENCH_REQUEST_RATE=${REQUEST_RATE}
-export BENCH_RANDOM_RANGE_RATIO=${RANDOM_RANGE_RATIO:-0.8}
+export BENCH_RANDOM_RANGE_RATIO=${RANDOM_RANGE_RATIO}
 
 # DRY_RUN=1 makes server_sglang.sh echo the composed prefill/decode/router launch
 # commands instead of executing them (useful for previewing a recipe against a real
 # allocation). Threaded here → job.slurm → Docker (-e DRY_RUN) → server_sglang.sh.
 # sbatch defaults to --export=ALL, so exporting it is what carries it into the job.
-export DRY_RUN="${DRY_RUN:-0}"
+export DRY_RUN
 
 # Eval-related env vars (threaded from workflow → runner → here → job.slurm → Docker)
-export RUN_EVAL="${RUN_EVAL:-false}"
-export EVAL_ONLY="${EVAL_ONLY:-false}"
+export RUN_EVAL
+export EVAL_ONLY
 export EVAL_CONC="${EVAL_CONC:-}"
-export EVAL_FRAMEWORK="${EVAL_FRAMEWORK:-lm-eval}"
+export EVAL_FRAMEWORK
 export EVAL_SUITE="${EVAL_SUITE:-}"
 export SWEBENCH_GEN_MODE="${SWEBENCH_GEN_MODE:-}"
 export FRAMEWORK="${FRAMEWORK:-}"
@@ -161,8 +157,8 @@ export MODEL_PREFIX="${MODEL_PREFIX:-}"
 export RUNNER_TYPE="${RUNNER_TYPE:-}"
 export RESULT_FILENAME="${RESULT_FILENAME:-}"
 export SPEC_DECODING="${SPEC_DECODING:-}"
-export IS_MULTINODE="${IS_MULTINODE:-false}"
-export SWEBENCH_USE_MODAL="${SWEBENCH_USE_MODAL:-false}"
+export IS_MULTINODE
+export SWEBENCH_USE_MODAL
 export MODAL_TOKEN_ID="${MODAL_TOKEN_ID:-}"
 export MODAL_TOKEN_SECRET="${MODAL_TOKEN_SECRET:-}"
 export HF_TOKEN="${HF_TOKEN:-}"
@@ -170,7 +166,7 @@ export SCENARIO_TYPE="${SCENARIO_TYPE:-}"
 export EVAL_LIMIT="${EVAL_LIMIT:-}"
 
 # Log directory: must be on NFS (shared filesystem) so the submit host can read SLURM output.
-export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
+export BENCHMARK_LOGS_DIR
 mkdir -p "$BENCHMARK_LOGS_DIR"
 
 # Optional: pass an explicit node list to sbatch.

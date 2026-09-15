@@ -8,6 +8,7 @@ set -eo pipefail
 # https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+check_env_vars EVAL_ONLY
 require_agentic_kv_offload_none
 export GPU_COUNT="$TP"
 
@@ -69,7 +70,7 @@ echo "Using vLLM endpoint ${AIPERF_SERVER_URL}"
 # Adaptive verification stays off in both modes on ROCm: it trims verification
 # requests on device, which DeepseekV4IndexerBackend does not support, so the
 # engine refused to start with it enabled (run 34651830283, eval-only c32).
-if [[ "${EVAL_ONLY:-false}" == true ]]; then
+if [[ "${EVAL_ONLY}" == true ]]; then
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
 else
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":3.51,"enable_adaptive_verification":false}'
@@ -113,7 +114,7 @@ trap 'exit 143' TERM
 SERVER_PID=$!
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [[ "${EVAL_ONLY:-false}" == true ]]; then
+if [[ "${EVAL_ONLY}" == true ]]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"

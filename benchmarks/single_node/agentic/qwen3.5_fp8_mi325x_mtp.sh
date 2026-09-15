@@ -13,8 +13,9 @@ export EVAL_FRAMEWORK="lm-eval"
 check_env_vars \
     MODEL TP CONC EP_SIZE \
     TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+check_env_vars EVAL_ONLY
 
-SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-30}
+SCHEDULER_RECV_INTERVAL=30
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -95,7 +96,7 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=1800
 # Synthetic rejection sampling is only for performance replay. The AL is the
 # committed Qwen3.5 thinking-on value for three speculative tokens. Evals use
 # real target-model verification.
-if [ "${EVAL_ONLY:-false}" != "true" ]; then
+if [ "${EVAL_ONLY}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=3.39
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
@@ -142,7 +143,7 @@ SERVER_PID=$!
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
+if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"

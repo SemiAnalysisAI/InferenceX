@@ -7,7 +7,7 @@
 # So unlike the Slurm+enroot mi-amds launcher, this launcher runs each case in a
 # Docker container driven by torchrun. It is EP8 scale-up only: there is no scheduler
 # or RDMA fabric on these clusters to build EP16 scale-out on.
-set -euo pipefail
+set -eo pipefail
 
 HERE="$(cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 COLLX_DIR="$(cd "$HERE/.." && pwd)"

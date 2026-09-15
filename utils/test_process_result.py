@@ -44,7 +44,7 @@ PY
 printf '{}' > "$RESULT_FILENAME.json"
 ''')
     result = subprocess.run(
-        ["bash", "-euo", "pipefail", "-c", script], cwd=tmp_path, capture_output=True, text=True, timeout=10,
+        ["bash", "-eo", "pipefail", "-c", script], cwd=tmp_path, capture_output=True, text=True, timeout=10,
         env={**os.environ, **single_node_env_vars,
              "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}", "PYTHONPATH": "",
              "TP": "4", "PP_SIZE": "2", "PCP_SIZE": "3", "DCP_SIZE": "4",
@@ -67,7 +67,7 @@ def test_single_node_workflow_reports_missing_raw_result(tmp_path, single_node_e
     shutil.copytree(REPO_ROOT / 'infx', tmp_path / 'infx')
     (tmp_path / 'utils').mkdir()
     shutil.copy(REPO_ROOT / 'utils/process_result.py', tmp_path / 'utils/process_result.py')
-    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=tmp_path,
+    result = subprocess.run(['bash', '-eo', 'pipefail', '-c', step['run']], cwd=tmp_path,
                             env={**os.environ, **single_node_env_vars, 'RESULT_FILENAME': 'missing',
                                  'PATH': f"{Path(sys.executable).parent}:{os.environ['PATH']}"},
                             capture_output=True, text=True, timeout=10)
@@ -105,16 +105,17 @@ def test_multinode_launch_checks_the_expected_result_batch(
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(REPO_ROOT / file, target)
     (tmp_path / "runners").mkdir()
-    (tmp_path / "runners/launch_fixture-node.sh").write_text("exit 0\n")
+    (tmp_path / "runners/launch_fixture-node.sh").write_text('printf "%s" "$EVAL_CONC" > received-eval-conc\n')
     for filename, payload in artifacts.items():
         (tmp_path / filename).write_text(json.dumps(payload))
     result = subprocess.run(
-        ["bash", "-euo", "pipefail", "-c", script], cwd=tmp_path, capture_output=True, text=True, timeout=10,
+        ["bash", "-eo", "pipefail", "-c", script], cwd=tmp_path, capture_output=True, text=True, timeout=10,
         env={**os.environ, **multinode_env_vars,
              "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}", "PYTHONPATH": "",
              "RUNNER_NAME": "fixture-node_03", "RESULT_FILENAME_BASE": "fixture",
-             "RECIPE_FINGERPRINT": "", "CONC_LIST": "4 8", "GITHUB_ENV": str(tmp_path / "github-env")},
+             "RECIPE_FINGERPRINT": "", "CONC_LIST": "4 8", "EVAL_CONC": "", "GITHUB_ENV": str(tmp_path / "github-env")},
     )
+    assert (tmp_path / "received-eval-conc").read_text() == "8"
     if diagnostic:
         assert result.returncode == 1
         assert diagnostic in result.stderr
@@ -144,7 +145,7 @@ def test_workflow_processes_results_through_compatibility_entrypoint(
            "RESULT_FILENAME": "fixture" if multinode else stem, "POWER_PRODUCER_SHA": "",
            "CONC_LIST": "64",
            "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}"}
-    result = subprocess.run(["bash", "-euo", "pipefail", "-c", step["run"]],
+    result = subprocess.run(["bash", "-eo", "pipefail", "-c", step["run"]],
                             cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stderr
     data = json.loads((tmp_path / f"agg_{stem}.json").read_text())
@@ -1770,7 +1771,7 @@ sys.exit(data['exit_code'])
     workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-multinode-tmpl.yml').read_text())
     step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
                 if step.get('name') == 'Process result')
-    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=tmp_path,
+    result = subprocess.run(['bash', '-eo', 'pipefail', '-c', step['run']], cwd=tmp_path,
                             env={**os.environ, 'RESULT_FILENAME': 'run', 'POWER_PRODUCER_SHA': '',
                                  'CONC_LIST': expected_concs, 'PYTHONPATH': '',
                                  'PATH': f"{Path(sys.executable).parent}:{os.environ['PATH']}"},
@@ -1793,7 +1794,7 @@ def test_multinode_workflow_does_not_downgrade_processor_import_errors(tmp_path)
     workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-multinode-tmpl.yml').read_text())
     step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
                 if step.get('name') == 'Process result')
-    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=tmp_path,
+    result = subprocess.run(['bash', '-eo', 'pipefail', '-c', step['run']], cwd=tmp_path,
                             env={**os.environ, 'RESULT_FILENAME': 'run', 'POWER_PRODUCER_SHA': '',
                                  'CONC_LIST': '4', 'PYTHONPATH': '',
                                  'PATH': f"{Path(sys.executable).parent}:{os.environ['PATH']}"},

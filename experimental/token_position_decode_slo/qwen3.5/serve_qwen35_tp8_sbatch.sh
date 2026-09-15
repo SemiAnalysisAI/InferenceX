@@ -9,7 +9,7 @@
 #SBATCH --open-mode=append
 
 # Persistent vLLM server for Qwen3.5-397B-A17B (tensor-parallel)
-set -euo pipefail
+set -eo pipefail
 
 MODEL="Qwen/Qwen3.5-397B-A17B"
 PORT=8000

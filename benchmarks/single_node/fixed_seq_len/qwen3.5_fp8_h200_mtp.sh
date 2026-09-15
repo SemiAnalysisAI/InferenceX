@@ -84,7 +84,7 @@ run_benchmark_serving \
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    export EVAL_CONCURRENT_REQUESTS="${EVAL_CONCURRENT_REQUESTS:-$CONC}"
+    export EVAL_CONCURRENT_REQUESTS="$CONC"
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
 # Agentic trace replay benchmark for Qwen3.8-Flash-Next FP8 on H100 using
@@ -41,8 +41,9 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars \
     MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR \
     DURATION EP_SIZE
+check_env_vars EVAL_ONLY
 
-SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-10}
+SCHEDULER_RECV_INTERVAL=10
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -79,20 +80,9 @@ CACHE_ARGS=()
 if require_agentic_kv_offload_backend hicache; then
     # HiCache extends RadixAttention, so do not pass --disable-radix-cache.
     # Hybrid GDN/Mamba allocates one KV and one Mamba host pool per rank.
-    REQUESTED_HICACHE_TOTAL_GB="${HICACHE_TOTAL_CPU_DRAM_GB:-$TOTAL_CPU_DRAM_GB}"
-    if [ "$REQUESTED_HICACHE_TOTAL_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
-        echo "Error: requested HiCache pool ${REQUESTED_HICACHE_TOTAL_GB} GB exceeds configured capacity ${TOTAL_CPU_DRAM_GB} GB" >&2
-        exit 1
-    fi
-    TOTAL_CPU_DRAM_GB="$REQUESTED_HICACHE_TOTAL_GB"
-    HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-2}"
-    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
-    MAX_HICACHE_SIZE_GB=$((TOTAL_CPU_DRAM_GB / TP / HICACHE_HOST_POOL_COUNT))
-    HICACHE_SIZE_GB="${HICACHE_SIZE_GB:-$MAX_HICACHE_SIZE_GB}"
-    if [ "$HICACHE_SIZE_GB" -gt "$MAX_HICACHE_SIZE_GB" ]; then
-        echo "Error: HICACHE_SIZE_GB=$HICACHE_SIZE_GB exceeds configured per-pool limit $MAX_HICACHE_SIZE_GB" >&2
-        exit 1
-    fi
+    HICACHE_HOST_POOL_COUNT="2"
+    HICACHE_WRITE_POLICY="write_through_selective"
+    HICACHE_SIZE_GB=$((TOTAL_CPU_DRAM_GB / TP / HICACHE_HOST_POOL_COUNT))
     if [ "$HICACHE_SIZE_GB" -lt 1 ]; then
         echo "Error: computed HICACHE_SIZE_GB=$HICACHE_SIZE_GB from TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB, TP=$TP, HICACHE_HOST_POOL_COUNT=$HICACHE_HOST_POOL_COUNT" >&2
         exit 1
@@ -132,7 +122,7 @@ SPEC_ARGS=(
 # EVAL_ONLY leaves simulated acceptance off: it commits drafted tokens
 # regardless of the target logits, so generated text is wrong and the eval would
 # score ~0.
-if [ "${EVAL_ONLY:-false}" != "true" ]; then
+if [ "${EVAL_ONLY}" != "true" ]; then
     # golden_al_distribution/qwen3.8next_mtp.yaml:
     # qwen3.8-flash-next-fp8.thinking_on[3] = 2.32.
     # --speculative-num-steps 3 with 4 draft tokens is 3 speculative tokens

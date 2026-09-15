@@ -7,7 +7,7 @@
 #SBATCH --job-name=bmk-glm5
 #SBATCH --output=/home/kimbo/inferperf/glm-5/logs/bmk-client.log
 
-set -euo pipefail
+set -eo pipefail
 
 # Install latest transformers (required for GLM-5 tokenizer)
 echo "Installing latest transformers from GitHub main branch..."

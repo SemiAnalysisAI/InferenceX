@@ -33,8 +33,8 @@ export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 SERVER_LOG=/workspace/server.log
 
 # Keep server-side speculative decoding capacity aligned with the matrix row.
-MAX_RUNNING_REQUESTS="${MAX_RUNNING_REQUESTS:-$CONC}"
-CUDA_GRAPH_MAX_BATCH_SIZE="${CUDA_GRAPH_MAX_BATCH_SIZE:-$CONC}"
+MAX_RUNNING_REQUESTS="$CONC"
+CUDA_GRAPH_MAX_BATCH_SIZE="$CONC"
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then

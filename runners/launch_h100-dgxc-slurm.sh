@@ -1,4 +1,7 @@
 #!/usr/bin/bash
+
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars EVAL_ONLY IS_MULTINODE RUN_EVAL
 set -e
 
 # shellcheck source=runners/slurm_utils.sh
@@ -80,7 +83,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     export ISL="$ISL"
     export OSL="$OSL"
-    export EVAL_ONLY="${EVAL_ONLY:-false}"
 
     # Create srtslurm.yaml for srtctl (used by both frameworks)
     SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
@@ -133,7 +135,7 @@ EOF
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
     # Raise sglang's torch-distributed TCPStore timeout from the 600s gloo default
     sed -i '/^      watchdog-timeout:/a\      dist-timeout: 1800' "${CONFIG_FILE%%:*}"
-    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+    if [[ "${EVAL_ONLY}" == "true" ]]; then
         python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
             "${CONFIG_FILE%%:*}" "$FRAMEWORK" || exit 1
     fi
@@ -198,14 +200,14 @@ EOF
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
     tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
-    if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+    if [[ "${EVAL_ONLY}" != "true" ]]; then
         copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME"
     else
         echo "EVAL_ONLY=true: Skipping benchmark result collection"
     fi
 
     # Collect eval results if eval was requested
-    if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
+    if [[ "${RUN_EVAL}" == "true" || "${EVAL_ONLY}" == "true" ]]; then
         EVAL_DIR="$LOGS_DIR/eval_results"
         if [ -d "$EVAL_DIR" ]; then
             echo "Extracting eval results from $EVAL_DIR"
@@ -238,7 +240,7 @@ else
     SQUASH_FILE="/mnt/nfs/lustre/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     LOCK_FILE="${SQUASH_FILE}.lock"
 
-    export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+    check_env_vars GPU_COUNT
 
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)

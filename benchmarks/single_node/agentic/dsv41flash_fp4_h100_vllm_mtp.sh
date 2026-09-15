@@ -16,6 +16,7 @@ set -eo pipefail
 # https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+check_env_vars EVAL_ONLY
 require_agentic_kv_offload_none
 export GPU_COUNT="$TP"
 
@@ -62,7 +63,7 @@ echo "Using vLLM endpoint ${AIPERF_SERVER_URL}"
 
 # Golden AL: golden_al_distribution/dsv41flash_dspark.yaml, thinking_on, five draft tokens.
 # Accuracy evals keep real block rejection; throughput fixes acceptance to AL 3.51.
-if [[ "${EVAL_ONLY:-false}" == true ]]; then
+if [[ "${EVAL_ONLY}" == true ]]; then
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":true}'
 else
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":3.51,"enable_adaptive_verification":false}'
@@ -89,7 +90,7 @@ printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
 SERVER_PID=$!
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [[ "${EVAL_ONLY:-false}" == true ]]; then
+if [[ "${EVAL_ONLY}" == true ]]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"

@@ -8,7 +8,7 @@
 #SBATCH --output=/home/kimbo/inferperf/glm-5/logs/vllm-server-tp8.log
 
 # Persistent vLLM server for GLM-5 FP8
-set -euo pipefail
+set -eo pipefail
 
 MODEL="zai-org/GLM-5-FP8"
 PORT=8000

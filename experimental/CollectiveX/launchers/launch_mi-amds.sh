@@ -5,7 +5,7 @@
 # Flow (container import runs inside the allocation retry loop):
 #   identity -> setup -> repository-stage -> scheduler-allocation + container-import
 #   -> container-launch -> artifact-collection
-set -euo pipefail
+set -eo pipefail
 
 HERE="$(cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 COLLX_DIR="$(cd "$HERE/.." && pwd)"

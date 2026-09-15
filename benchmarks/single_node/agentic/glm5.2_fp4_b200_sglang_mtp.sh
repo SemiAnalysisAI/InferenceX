@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
 # Agentic trace replay benchmark for GLM-5.2 NVFP4 on B200 using SGLang with
@@ -32,6 +32,7 @@ set -x
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars EVAL_ONLY
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -41,7 +42,7 @@ fi
 # path and then rewrites MODEL to that path, so `hf download "$MODEL"` cannot
 # work on this runner. Keep the HF repo id separate for the day-zero case where
 # GLM-5.2-NVFP4 has not been staged yet.
-HF_MODEL_ID="${HF_MODEL_ID:-nvidia/GLM-5.2-NVFP4}"
+HF_MODEL_ID="nvidia/GLM-5.2-NVFP4"
 
 # A non-empty directory is NOT a staged checkpoint. b200-nscale already had
 # /lustre/fsw/gharunners/models/GLM-5.2-NVFP4 holding config.json,
@@ -82,7 +83,8 @@ if [[ -n "${MODEL_PATH:-}" ]]; then
         MODEL_DOWNLOAD_LOCK="${MODEL_PATH%/}.download.lock"
         echo "Checkpoint at $MODEL_PATH is incomplete; acquiring $MODEL_DOWNLOAD_LOCK"
         exec 9>"$MODEL_DOWNLOAD_LOCK"
-        flock -w "${MODEL_DOWNLOAD_LOCK_TIMEOUT:-21600}" 9 || {
+        check_env_vars MODEL_DOWNLOAD_LOCK_TIMEOUT
+        flock -w "$MODEL_DOWNLOAD_LOCK_TIMEOUT" 9 || {
             echo "Error: timed out waiting for another cell to stage $MODEL_PATH" >&2
             exit 1
         }
@@ -127,15 +129,14 @@ if require_agentic_kv_offload_backend hicache; then
     # cluster:b200-nscale advertises 2,063,920 MiB and this config exposes 80%,
     # giving the benchmark 1,731 GB. A 169 GB/rank packed target+MTP pool plus
     # the coupled 38.73 GB/rank DSA indexer uses about 1,662 GB across TP8.
-    # Keep the 270 GB ceiling so deployments with more usable host DRAM can
-    # explicitly override the default.
+    # Keep the 270 GB ceiling as a guard for future recipe tuning.
     DEFAULT_HICACHE_RATIO=0.75
     DEFAULT_HICACHE_SIZE=0
     case "$CONC" in
         12|16) DEFAULT_HICACHE_SIZE=169 ;;
     esac
     MAX_HICACHE_SIZE=270
-    HICACHE_SIZE="${HICACHE_SIZE:-$DEFAULT_HICACHE_SIZE}"
+    HICACHE_SIZE="$DEFAULT_HICACHE_SIZE"
     if ! [[ "$HICACHE_SIZE" =~ ^[0-9]+$ ]]; then
         echo "Error: HICACHE_SIZE must be a non-negative integer, got $HICACHE_SIZE" >&2
         exit 1
@@ -144,10 +145,10 @@ if require_agentic_kv_offload_backend hicache; then
         echo "Error: HICACHE_SIZE=$HICACHE_SIZE exceeds configured limit $MAX_HICACHE_SIZE" >&2
         exit 1
     fi
-    HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
-    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_back}"
-    HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-    HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+    HICACHE_RATIO="$DEFAULT_HICACHE_RATIO"
+    HICACHE_WRITE_POLICY="write_back"
+    HICACHE_IO_BACKEND="direct"
+    HICACHE_MEM_LAYOUT="page_first_direct"
     CACHE_ARGS=(
         --enable-hierarchical-cache
         --hicache-write-policy "$HICACHE_WRITE_POLICY"
@@ -252,7 +253,7 @@ fi
 # at 4 draft tokens both come out of that pool on top of GLM-5.2's DSA indexer
 # temporaries. 0.83 restores ~31 GB while still giving the KV pool the bulk of
 # the card. Overridable so on-node tuning does not need a code change.
-MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.83}"
+MEM_FRACTION_STATIC="0.83"
 
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=10.0
@@ -262,7 +263,7 @@ export TORCH_CUDA_ARCH_LIST=10.0
 # overwrite the same per-rank runtime-cache files. Non-Slurm launchers can
 # provide an explicit SGLANG_CACHE_DIR override.
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-    export SGLANG_CACHE_DIR="${SGLANG_CACHE_DIR:-/tmp/sglang-cache-${SLURM_JOB_ID}}"
+    export SGLANG_CACHE_DIR="/tmp/sglang-cache-${SLURM_JOB_ID}"
 fi
 # Agentic warmup dispatches hundreds of large prompts at once; allow up to
 # 15 minutes of TCP progress before AIPerf declares a connection dead.
@@ -290,7 +291,7 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 # EVAL_ONLY leaves simulated acceptance off: it commits drafted tokens
 # regardless of the target logits, so generated text is wrong and the eval
 # would score ~0.
-if [ "${EVAL_ONLY:-false}" != "true" ]; then
+if [ "${EVAL_ONLY}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=2.99
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token

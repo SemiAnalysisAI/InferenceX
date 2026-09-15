@@ -14,7 +14,7 @@
 #   LLMD_BIN_DIR=/some/dir ./extract-binaries.sh
 #   LLMD_BIN_PLATFORM=linux/amd64 ./extract-binaries.sh   # for an x86 test
 
-set -euo pipefail
+set -eo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null

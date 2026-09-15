@@ -8,7 +8,7 @@
 #SBATCH --output=/home/kimbo/inferperf_kimi-k2/logs/bmk-client.log
 #SBATCH --mem=16G
 
-set -euo pipefail
+set -eo pipefail
 
 MODEL="moonshotai/Kimi-K2-Thinking"
 SERVER_URL=$(cat /logs/server_info.txt)

@@ -7,7 +7,7 @@
 #SBATCH --job-name=bmk-minimax-m25
 #SBATCH --output=/mnt/home/kimbo/inferperf/minimax-m2.5/logs/bmk-client.log
 
-set -euo pipefail
+set -eo pipefail
 
 MODEL="MiniMaxAI/MiniMax-M2.5"
 PARALLEL_TAG="${PARALLEL_TAG:-tep8}"

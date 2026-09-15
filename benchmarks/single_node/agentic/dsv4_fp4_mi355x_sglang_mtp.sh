@@ -8,6 +8,7 @@ set -x
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars EVAL_ONLY
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
     echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -100,10 +101,10 @@ CACHE_ARGS=()
 if agentic_kv_offload_enabled; then
     case "$KV_OFFLOAD_BACKEND" in
         hicache)
-            HICACHE_RATIO="${HICACHE_RATIO:-1.5}"
-            HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
-            HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-            HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+            HICACHE_RATIO="1.5"
+            HICACHE_WRITE_POLICY="write_through"
+            HICACHE_IO_BACKEND="direct"
+            HICACHE_MEM_LAYOUT="page_first_direct"
             echo "HiCache DSv4 CPU tier: ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT, dram_budget=${TOTAL_CPU_DRAM_GB} GB, tp=$TP"
             CACHE_ARGS=(
                 --enable-hierarchical-cache
@@ -140,11 +141,11 @@ elif [ "$TP" -eq 8 ]; then
 else
     CHUNKED_PREFILL_SIZE=8192
 fi
-MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.86}"
+MEM_FRACTION_STATIC="0.86"
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 SHARED_EXPERTS_ARGS=(--enforce-shared-experts-fusion)
-SWA_FULL_TOKENS_RATIO="${SWA_FULL_TOKENS_RATIO:-0.10}"
-export GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES:-2}"
+SWA_FULL_TOKENS_RATIO="0.10"
+export GPU_MAX_HW_QUEUES="2"
 if [ "$DP_ATTENTION" = "true" ]; then
     USE_SGLANG_ROUTER=true
     export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
@@ -156,8 +157,8 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_DP_SHARED_EXPERT_LOCAL=1
     export SGLANG_DP_USE_GATHERV=1
     export SGLANG_DP_USE_REDUCE_SCATTER=1
-    export GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES_DP:-5}"
-    MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC_DP:-0.92}"
+    export GPU_MAX_HW_QUEUES="5"
+    MEM_FRACTION_STATIC="0.92"
 
     PARALLEL_ARGS+=(
         --dp "$TP"
@@ -167,11 +168,11 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --enable-dp-attention-local-control-broadcast
         --tokenizer-worker-num "$TP"
         --stream-interval 20
-        --prefill-decode-interval "${PREFILL_DECODE_INTERVAL:-10}"
-        --prefill-delayer-token-usage-low-watermark "${DP_PREFILL_DELAYER_LOW_WATERMARK:-0.7}"
+        --prefill-decode-interval "10"
+        --prefill-delayer-token-usage-low-watermark "0.7"
     )
 else
-    PARALLEL_ARGS+=(--prefill-decode-interval "${PREFILL_DECODE_INTERVAL:-10}")
+    PARALLEL_ARGS+=(--prefill-decode-interval "10")
 fi
 
 if [ "$EP_SIZE" -gt 1 ]; then
@@ -199,7 +200,7 @@ fi
 # no separate draft checkpoint is needed.
 #
 # gamma=6 is the AL-optimal draft length on the committed golden curve.
-DSV4_DSPARK_GAMMA="${DSV4_DSPARK_GAMMA:-6}"
+DSV4_DSPARK_GAMMA="6"
 
 SPEC_ARGS=(
     --speculative-algorithm DSPARK
@@ -214,7 +215,7 @@ SPEC_ARGS=(
 # thinking_on column, key = gamma: 6 -> 3.77). Eval-only runs keep real target
 # verification so accuracy stays meaningful.
 DSV4_GOLDEN_AL=3.77
-if [ "${EVAL_ONLY:-false}" != "true" ]; then
+if [ "${EVAL_ONLY}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN="$DSV4_GOLDEN_AL"
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token

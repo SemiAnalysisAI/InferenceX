@@ -30,8 +30,9 @@ DRAFT_MODEL="Inferact/Kimi-K3-DSpark"
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars DCP_SIZE
 
-echo "MODEL=$MODEL TP=$TP DCP_SIZE=${DCP_SIZE:-1} CONC=$CONC KV_OFFLOADING=$KV_OFFLOADING TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB RESULT_DIR=$RESULT_DIR DURATION=$DURATION EP_SIZE=$EP_SIZE DP_ATTENTION=$DP_ATTENTION"
+echo "MODEL=$MODEL TP=$TP DCP_SIZE=${DCP_SIZE} CONC=$CONC KV_OFFLOADING=$KV_OFFLOADING TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB RESULT_DIR=$RESULT_DIR DURATION=$DURATION EP_SIZE=$EP_SIZE DP_ATTENTION=$DP_ATTENTION"
 
 if [[ -v SLURM_JOB_ID ]]; then
     echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -236,7 +237,7 @@ export AITER_REUSE_IDENTICAL_COMM_GROUPS
 # accepted token, so a spec point needs (1 + draft) times the batch widths a
 # non-spec point at the same window does; capturing only up to the window would
 # send every speculative decode down the eager path.
-CUDAGRAPH_MAX_NUM_SEQS="${CUDAGRAPH_MAX_NUM_SEQS:-$((2 * CONC))}"
+CUDAGRAPH_MAX_NUM_SEQS="$((2 * CONC))"
 GRAPH_MAX=$((CUDAGRAPH_MAX_NUM_SEQS * (1 + NUM_SPEC_TOKENS)))
 CUDAGRAPH_CAPTURE_SIZES="[$(seq -s, 2 "$GRAPH_MAX")]"
 echo "CUDAGRAPH_MAX_NUM_SEQS=$CUDAGRAPH_MAX_NUM_SEQS GRAPH_MAX=$GRAPH_MAX"
@@ -311,7 +312,7 @@ export PYTHONNOUSERSITE=1
 
 # Required by ATOM: without it the aiter kernel logs flood the server log for
 # the whole 3600 s replay.
-export AITER_LOG_LEVEL="${AITER_LOG_LEVEL:-WARNING}"
+export AITER_LOG_LEVEL="WARNING"
 export AITER_SITUV2_A4W4=1
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 export AITER_FLYDSL_STAGE2_FP8=1
@@ -370,7 +371,7 @@ ATOM_CMD=(
     --server-port "$PORT"
     --trust-remote-code
     --tensor-parallel-size "$TP"
-    --decode-context-parallel-size "${DCP_SIZE:-1}"
+    --decode-context-parallel-size "${DCP_SIZE}"
     --kv_cache_dtype fp8
     --block-size 128
     --max-num-seqs "$MAX_NUM_SEQS"

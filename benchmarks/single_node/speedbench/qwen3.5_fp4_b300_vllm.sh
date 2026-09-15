@@ -25,40 +25,27 @@
 # NVIDIA's Qwen3.5-397B-A17B-NVFP4 model card serves it with vllm/vllm-openai:latest;
 # the runner's vllm-openai:v0.21.0 (May) is newer and loads it.
 #
-# Usage (inside the vLLM container, on a B300 node):
-#   export MODEL=/scratch/models/Qwen3.5-397B-A17B-NVFP4
-#   bash benchmarks/single_node/speedbench/qwen3.5_fp4_b300_vllm.sh
+# Dispatch this collector through speedbench-al.yml.
 #
-# Tunables (env):
-#   MTP_LIST          space-separated MTP levels   (default "1 2 3 4 5 6 7 8")
-#   THINKING_MODES    space-separated: off|on       (default "off on")
-#   CATEGORY          SPEED-Bench category          (default coding)
-#   SPEEDBENCH_OUTPUT_LEN  per-request output len   (default 4096)
-#   OUT_YAML          output matrix path            (default $RESULTS_DIR/speedbench-reference-al.yaml)
+# Required collection settings come from speedbench-al.yml.
 
-set -uo pipefail
+set -o pipefail
 source "$(dirname "$0")/../../benchmark_lib.sh"
+check_env_vars \
+    CATEGORY CHAT_TEMPLATE_KWARGS_ON DP_ATTENTION EP_SIZE MODEL MODEL_PATH \
+    MTP_LIST OUT_YAML PORT SPEEDBENCH_OUTPUT_LEN THINKING_MODES TP
 
-MODEL="${MODEL:?MODEL env var required (e.g. /scratch/models/Qwen3.5-397B-A17B-NVFP4)}"
-SERVE_MODEL="${MODEL_PATH:-$MODEL}"
-TP="${TP:-8}"
-DP_ATTENTION="${DP_ATTENTION:-false}"
-EP_SIZE="${EP_SIZE:-1}"
-PORT="${PORT:-8888}"
+SERVE_MODEL="${MODEL_PATH}"
 
-MTP_LIST="${MTP_LIST:-1 2 3 4 5 6 7 8}"
-THINKING_MODES="${THINKING_MODES:-off on}"
-CATEGORY="${CATEGORY:-coding}"
-MODEL_KEY="${MODEL_KEY:-$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')}"
-SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
-CONCURRENCY="${CONCURRENCY:-1}"
+MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
+CONCURRENCY="1"
 # Provider-recommended sampling — DIFFERS by mode (per the Qwen3.5 model card):
 #   thinking : temperature 0.6, top_p 0.95, top_k 20, presence_penalty 0.0
 #   instruct : temperature 0.7, top_p 0.8,  top_k 20, presence_penalty 1.5
 # (min_p 0.0 / repetition_penalty 1.0 are vLLM defaults.) These MUST be passed
 # per-mode or the measured AL is taken at the wrong sampling settings.
-TEMPERATURE_ON="${TEMPERATURE_ON:-0.6}";  TOP_P_ON="${TOP_P_ON:-0.95}";  TOP_K_ON="${TOP_K_ON:-20}";  PRESENCE_PENALTY_ON="${PRESENCE_PENALTY_ON:-0.0}"
-TEMPERATURE_OFF="${TEMPERATURE_OFF:-0.7}"; TOP_P_OFF="${TOP_P_OFF:-0.8}"; TOP_K_OFF="${TOP_K_OFF:-20}"; PRESENCE_PENALTY_OFF="${PRESENCE_PENALTY_OFF:-1.5}"
+TEMPERATURE_ON="0.6";  TOP_P_ON="0.95";  TOP_K_ON="20";  PRESENCE_PENALTY_ON="0.0"
+TEMPERATURE_OFF="0.7"; TOP_P_OFF="0.8"; TOP_K_OFF="20"; PRESENCE_PENALTY_OFF="1.5"
 # Optional sampling seed for run-to-run variance checks. Unset -> vLLM default
 # (deterministic seed=0); set to different values to measure temperature>0 variance.
 SEED="${SEED:-}"
@@ -67,18 +54,12 @@ SEED="${SEED:-}"
 # default (bloats the result JSON with all completions). Set SAVE_DETAILED=1.
 SAVE_DETAILED="${SAVE_DETAILED:-}"
 # Qwen thinking toggles via the enable_thinking chat_template key.
-# Use separate single-quoted defaults: an inline ${VAR:-{...}} default whose value
-# contains "}" is truncated by bash brace parsing (matches upstream fix #1695).
-DEFAULT_CHAT_TEMPLATE_KWARGS_ON='{"enable_thinking": true}'
-DEFAULT_CHAT_TEMPLATE_KWARGS_OFF='{"enable_thinking": false}'
-CHAT_TEMPLATE_KWARGS_ON="${CHAT_TEMPLATE_KWARGS_ON:-$DEFAULT_CHAT_TEMPLATE_KWARGS_ON}"
-CHAT_TEMPLATE_KWARGS_OFF="${CHAT_TEMPLATE_KWARGS_OFF:-$DEFAULT_CHAT_TEMPLATE_KWARGS_OFF}"
+CHAT_TEMPLATE_KWARGS_OFF='{"enable_thinking": false}'
 
-SPEEDBENCH_DIR="${SPEEDBENCH_DIR:-/workspace/speed_bench_data}"
+SPEEDBENCH_DIR="/workspace/speed_bench_data"
 # Flat results dir to match the speedbench-al.yml artifact glob
 # (speedbench_results/server_*.log) and its pre-run `rm -rf speedbench_results`.
-RESULTS_DIR="${RESULTS_DIR:-/workspace/speedbench_results}"
-OUT_YAML="${OUT_YAML:-$RESULTS_DIR/speedbench-reference-al.yaml}"
+RESULTS_DIR="/workspace/speedbench_results"
 
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
@@ -113,7 +94,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
 fi
 EP_ARGS=()
-if [ "${EP_SIZE:-1}" -gt 1 ]; then
+if [ "${EP_SIZE}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 

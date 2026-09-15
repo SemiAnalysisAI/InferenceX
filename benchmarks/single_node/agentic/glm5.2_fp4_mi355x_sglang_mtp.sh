@@ -7,6 +7,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
  export EVAL_FRAMEWORK="lm-eval"
  
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars EVAL_ONLY
  
 if [[ -n "$SLURM_JOB_ID" ]]; then
     echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -67,12 +68,10 @@ export SGLANG_OPT_USE_TOPK_V2=true
 # HiCache L2 (host DRAM), optionally extended with Mooncake L3.
 # KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=hicache or mooncake.
 #
-# Per-arm L2 ratio (sizing rationale below) applies to both backends unless
-# overridden via HICACHE_RATIO. TP arm (182.7 GB/rank device pool): the
+# Per-arm L2 ratio (sizing rationale below) applies to both backends.
+# TP arm (182.7 GB/rank device pool): the
 # agentic-coding corpus saturates any fixed DRAM pool at conc ≥ 10; ratio 1.0
-# (~453 GB pinned at TP4) is the default. Larger ratios trade DRAM headroom
-# for host-tier capacity and must be set via the HICACHE_RATIO env-var
-# override on nodes that can accommodate them.
+# (~453 GB pinned at TP4) preserves DRAM headroom for the host tier.
 # The DP-attention arm (159.4 GB/rank) only runs at conc >= 32, where the host
 # tier just absorbs overflow - ratio 0.5 (~1.2 TB pinned, ~1.8 TB of load
 # headroom) at negligible hit-rate cost (ratio 1.5 OOMs the host mid-storm at
@@ -80,15 +79,14 @@ export SGLANG_OPT_USE_TOPK_V2=true
 CACHE_ARGS=()
 if agentic_kv_offload_enabled; then
     if [ "$DP_ATTENTION" = "true" ]; then
-        HICACHE_RATIO="${HICACHE_RATIO:-0.5}"
+        HICACHE_RATIO="0.5"
     else
-        # ratio=1.0 (~113 GB/rank, ~453 GB pinned at TP4). Raise via the
-        # HICACHE_RATIO env-var override on nodes with more DRAM headroom.
-        HICACHE_RATIO="${HICACHE_RATIO:-1.0}"
+        # ratio=1.0 (~113 GB/rank, ~453 GB pinned at TP4).
+        HICACHE_RATIO="1.0"
     fi
-    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
-    HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-    HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+    HICACHE_WRITE_POLICY="write_through"
+    HICACHE_IO_BACKEND="direct"
+    HICACHE_MEM_LAYOUT="page_first_direct"
     case "$KV_OFFLOAD_BACKEND" in
         hicache)
             echo "HiCache (GPU+host DRAM only): ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
@@ -101,7 +99,7 @@ if agentic_kv_offload_enabled; then
             )
             ;;
         mooncake)
-            L3_PER_RANK_GB="${L3_PER_RANK_GB:-40}"
+            L3_PER_RANK_GB="40"
             python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
             MOONCAKE_MASTER_PORT=$((PORT + 12000))
             MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
@@ -202,7 +200,7 @@ MAX_RUNNING_REQUESTS=$((2 * CONC))
 # The 20260910 image removed that alias, making its old spelling ambiguous.
 CUDA_GRAPH_MAX_BS_DECODE=$(( MAX_RUNNING_REQUESTS < 64 ? MAX_RUNNING_REQUESTS : 64 ))
 
-if [ "${EVAL_ONLY:-false}" != "true" ]; then
+if [ "${EVAL_ONLY}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=3.61
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token

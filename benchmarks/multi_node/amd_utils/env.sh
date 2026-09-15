@@ -1,4 +1,10 @@
 #!/bin/bash
+
+source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
+check_env_vars \
+    MORI_IO_SQ_BACKOFF_TIMEOUT_US MORI_IO_QP_MAX_SEND_WR MORI_IO_QP_MAX_CQE MORI_IO_QP_MAX_SGE MORI_IO_TC_DISABLE \
+    UCX_IB_GID_INDEX MORI_APP_LOG_LEVEL SGLANG_ROUTER_STDOUT_LOGS TORCH_NCCL_BLOCKING_WAIT NCCL_BLOCKING_WAIT \
+    SGLANG_OPT_USE_AITER_INDEXER
 # Dual-engine environment setup for multi-node disaggregated serving.
 #
 # ENGINE=sglang (default): SGLang/MoRI environment
@@ -9,7 +15,7 @@
 #               Set by runner or auto-detected from hostname.
 set -x
 
-ENGINE="${ENGINE:-sglang-disagg}"
+check_env_vars ENGINE
 export PYTHONDONTWRITEBYTECODE=1
 
 # =============================================================================
@@ -18,10 +24,7 @@ export PYTHONDONTWRITEBYTECODE=1
 # job.slurm writes the recipe-provided HiCache/Mooncake tunables to
 # hicache_mc_<JID>.env and mounts it read-only at /config/hicache_mc.env. Source
 # it here (auto-export) so values like HICACHE_PAGE_SIZE=256 reach the container
-# before server_sglang.sh applies its "${VAR:-default}" fallbacks. Without this
-# the vars arrive unset and server_sglang.sh defaults HICACHE_PAGE_SIZE to 1,
-# overriding the recipe's --page-size. Empty values in the file are harmless:
-# the "${VAR:-default}" fallbacks still treat "" as unset.
+# before server_sglang.sh validates and consumes the explicit recipe values.
 if [[ -f /config/hicache_mc.env ]]; then
     set -a
     source /config/hicache_mc.env
@@ -67,11 +70,11 @@ export NCCL_IB_HCA=${NCCL_IB_HCA:-$IBDEVICES}
 # =============================================================================
 # Shared by the vLLM MoRIIOConnector and the SGLang/MoRI KV-transfer path.
 
-export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-50000}"
-export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-16384}"
-export MORI_IO_QP_MAX_CQE="${MORI_IO_QP_MAX_CQE:-32768}"
-export MORI_IO_QP_MAX_SGE="${MORI_IO_QP_MAX_SGE:-2}"
-export MORI_IO_TC_DISABLE="${MORI_IO_TC_DISABLE:-0}"
+export MORI_IO_SQ_BACKOFF_TIMEOUT_US
+export MORI_IO_QP_MAX_SEND_WR
+export MORI_IO_QP_MAX_CQE
+export MORI_IO_QP_MAX_SGE
+export MORI_IO_TC_DISABLE
 
 # QoS/DSCP configuration
 # Priority order: 1) Set by runner, 2) Detect via nicctl, 3) Detect from hostname
@@ -159,7 +162,7 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     fi
 
     # RoCEv2: use IPv4-mapped GID (index 1) for inter-node RDMA routing
-    export UCX_IB_GID_INDEX=${UCX_IB_GID_INDEX:-1}
+    export UCX_IB_GID_INDEX
 
     # QoS/DSCP configuration for lossless RoCEv2 fabric.
     if [[ -n "$UCX_IB_TRAFFIC_CLASS" ]]; then
@@ -222,9 +225,9 @@ else
     export SGLANG_MORI_NUM_WORKERS=4
     # Keep these as overridable defaults (not hard assignments), otherwise
     # later tuning blocks cannot raise them for high-concurrency runs.
-    # export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
+    # export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US}"
 
-    # export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-16384}"
+    # export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR}"
     # export MORI_IO_QP_MAX_CQE=32768
     # export MORI_IO_QP_MAX_SGE=1
 
@@ -265,12 +268,12 @@ else
 
     # Default to WARNING to cut per-op MoRI log spam on long multinode/eval
     # runs; override with MORI_APP_LOG_LEVEL=INFO when debugging.
-    export MORI_APP_LOG_LEVEL="${MORI_APP_LOG_LEVEL:-WARNING}"
+    export MORI_APP_LOG_LEVEL
 
     # Router logging control:
     # 0 (default) keeps noisy per-request access logs out of stdout while still logging to file.
     # 1 mirrors router logs to stdout via tee (useful for live debugging).
-    export SGLANG_ROUTER_STDOUT_LOGS="${SGLANG_ROUTER_STDOUT_LOGS:-0}"
+    export SGLANG_ROUTER_STDOUT_LOGS
 
     # FIXME: WA for latest upstream 0305 image
     export PYTHONPATH=/sgl-workspace/aiter:${PYTHONPATH}
@@ -291,8 +294,8 @@ else
     # bumped, TORCH_NCCL_BLOCKING_WAIT=true makes NCCL work completion use a
     # blocking wait instead of the async watchdog hipEventQuery poll, so no
     # event is queried during capture. CUDA graph stays fully enabled.
-    export TORCH_NCCL_BLOCKING_WAIT="${TORCH_NCCL_BLOCKING_WAIT:-1}"
-    export NCCL_BLOCKING_WAIT="${NCCL_BLOCKING_WAIT:-1}"
+    export TORCH_NCCL_BLOCKING_WAIT
+    export NCCL_BLOCKING_WAIT
     # export NCCL_DEBUG="${NCCL_DEBUG:-INFO}"
 
     # =========================================================================
@@ -357,7 +360,7 @@ else
         export SGLANG_OPT_FP8_WO_A_GEMM=false
         export SGLANG_OPT_USE_JIT_INDEXER_METADATA=false
         export SGLANG_OPT_USE_TOPK_V2=false
-        export SGLANG_OPT_USE_AITER_INDEXER=${SGLANG_OPT_USE_AITER_INDEXER:-true}
+        export SGLANG_OPT_USE_AITER_INDEXER
         export SGLANG_OPT_USE_TILELANG_INDEXER=false
         export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
         export SGLANG_OPT_USE_TILELANG_MHC_POST=false

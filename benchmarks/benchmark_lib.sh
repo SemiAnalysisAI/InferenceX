@@ -2,6 +2,32 @@
 
 # Shared benchmarking utilities for InferenceX
 
+# Check if required environment variables are set
+# Usage: check_env_vars VAR1 VAR2 VAR3 ...
+# Exits with code 1 if any variable is not set
+check_env_vars() {
+    local missing_vars=()
+
+    for var_name in "$@"; do
+        if [[ -z "${!var_name:-}" ]]; then
+            missing_vars+=("$var_name")
+        fi
+    done
+
+    if [[ ${#missing_vars[@]} -gt 0 ]]; then
+        echo "Error: The following required environment variables are not set:"
+        for var in "${missing_vars[@]}"; do
+            echo "  - $var"
+        done
+        exit 1
+    fi
+}
+
+# Launchers may load only input validation, without benchmark initialization.
+if [[ "${1-}" == "--validation-only" ]]; then
+    return 0
+fi
+
 # Keep Python bytecode out of the mounted workspace. Benchmark jobs often run as
 # root inside containers, and root-owned cache directories break future checkout
 # cleanup on self-hosted runners.
@@ -15,18 +41,14 @@ INFERENCEX_REPO_ROOT="$(
     cd "$INFERENCEX_BENCHMARK_LIB_DIR/.." && pwd
 )"
 
-# Inference server port shared by every benchmark recipe. Launchers that need
-# a non-default value (e.g. launch_mi355x-amds.sh derives PORT from RUNNER_NAME
-# to avoid collisions across concurrent gh-runners on a shared host) set PORT
-# themselves before sourcing this file; the `:-` fallback only kicks in when
-# nothing upstream set it.
-export PORT="${PORT:-8888}"
+# Workflows supply PORT; launchers may select a cluster-specific port.
 
 # Opt-in for recipes running in the host network namespace. Probe the preferred
 # port on the compute node; fall back to an OS-selected port if it is occupied.
 # Call immediately before server launch and construct client URLs afterward.
 select_available_server_port() {
-    PORT=$(python3 - "${PORT:-8888}" <<'PYPORT'
+    check_env_vars PORT
+    PORT=$(python3 - "${PORT}" <<'PYPORT'
 import errno
 import socket
 import sys
@@ -257,7 +279,7 @@ disable_trtllm_detailed_perf_metrics() {
 _benchmark_caller="${BASH_SOURCE[1]:-}"
 if [[ "$_benchmark_caller" == */agentic/* ||
       "$_benchmark_caller" == */agentic_*.sh ||
-      "${IS_AGENTIC:-0}" == "1" ||
+      "${IS_AGENTIC-}" == "1" ||
       "${SCENARIO_TYPE:-}" == "agentic-coding" ]]; then
     unset MAX_MODEL_LEN
     if [[ -z "${KV_OFFLOADING+x}" || -z "$KV_OFFLOADING" ]]; then
@@ -366,7 +388,7 @@ stop_gpu_monitor() {
         # the stream needs a tick at the NEXT whole second (measured on MI355X:
         # end=...153.325 vs last sample ...153.0).
         if [[ "$GPU_MONITOR_VENDOR" == "amd" ]]; then
-            sleep $(( ${GPU_MONITOR_INTERVAL:-1} + 2 ))
+            sleep $(( ${GPU_MONITOR_INTERVAL} + 2 ))
         fi
         kill "$GPU_MONITOR_PID" 2>/dev/null
         wait "$GPU_MONITOR_PID" 2>/dev/null || true
@@ -520,26 +542,6 @@ EOF
     echo "Stopped $label."
 }
 
-# Check if required environment variables are set
-# Usage: check_env_vars VAR1 VAR2 VAR3 ...
-# Exits with code 1 if any variable is not set
-check_env_vars() {
-    local missing_vars=()
-
-    for var_name in "$@"; do
-        if [[ -z "${!var_name:-}" ]]; then
-            missing_vars+=("$var_name")
-        fi
-    done
-
-    if [[ ${#missing_vars[@]} -gt 0 ]]; then
-        echo "Error: The following required environment variables are not set:"
-        for var in "${missing_vars[@]}"; do
-            echo "  - $var"
-        done
-        exit 1
-    fi
-}
 
 # Poll an HTTP endpoint while streaming the owning process log.
 # Required: --endpoint, --log, --pid. A zero timeout waits indefinitely.
@@ -1002,8 +1004,9 @@ move_profile_trace_for_relay() {
         return 0
     fi
 
-    local sglang_dir="${SGLANG_TORCH_PROFILER_DIR:-/workspace}"
-    local vllm_dir="${VLLM_TORCH_PROFILER_DIR:-/workspace}"
+    check_env_vars SGLANG_TORCH_PROFILER_DIR VLLM_TORCH_PROFILER_DIR
+    local sglang_dir="${SGLANG_TORCH_PROFILER_DIR}"
+    local vllm_dir="${VLLM_TORCH_PROFILER_DIR}"
     local -a search_dirs=()
     local dir="" existing=""
     local seen=0
@@ -1142,6 +1145,7 @@ _prepare_vendor_verifier_python() {
 }
 
 _install_kimi_vendor_eval_deps() {
+    check_env_vars VENDOR_VERIFIER_PYTHON
     local target_dir="$1"
     local eval_suite="${2:-kimi_tool_call_schema}"
     local -a packages=(
@@ -1153,7 +1157,7 @@ _install_kimi_vendor_eval_deps() {
     if [ "$eval_suite" = "kimi_tool_call_schema_full" ]; then
         packages+=("pytest-xdist==3.8.0")
     fi
-    "${VENDOR_VERIFIER_PYTHON:-python3}" -m pip install -q --no-cache-dir \
+    "${VENDOR_VERIFIER_PYTHON}" -m pip install -q --no-cache-dir \
         --target "$target_dir" "${packages[@]}"
 }
 
@@ -1170,6 +1174,7 @@ _prepare_kimi_vendor_runtime() {
 }
 
 _prepare_kimi_vendor_verifier() {
+    check_env_vars VENDOR_VERIFIER_PYTHON
     local repo_url="$1"
     local verifier_ref="$2"
     local expected_archive_sha256="$3"
@@ -1180,7 +1185,7 @@ _prepare_kimi_vendor_verifier() {
         return 1
     }
 
-    "${VENDOR_VERIFIER_PYTHON:-python3}" - \
+    "${VENDOR_VERIFIER_PYTHON}" - \
         "$repo_url" "$verifier_ref" "$expected_archive_sha256" "$checkout_dir" \
         < "${INFERENCEX_REPO_ROOT}/infx/evals/_kimi_verifier_archive.py" || prepare_rc=$?
 
@@ -1255,13 +1260,14 @@ _prepare_eval_artifact_family() {
 }
 
 _write_kimi_vendor_integration_error() {
+    check_env_vars VENDOR_VERIFIER_PYTHON
     local adapter_path="$1"
     local model_name="$2"
     local results_dir="$3"
     local task_name="$4"
     local message="$5"
 
-    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+    "${VENDOR_VERIFIER_PYTHON}" "$adapter_path" \
         --model "$model_name" \
         --output-dir "$results_dir" \
         --task-name "$task_name" \
@@ -1269,7 +1275,8 @@ _write_kimi_vendor_integration_error() {
 }
 
 _run_kimi_tool_call_schema_eval() {
-    local port="${PORT:-8888}"
+    check_env_vars PORT
+    local port="${PORT}"
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local verifier_repo="https://github.com/MoonshotAI/Kimi-Vendor-Verifier.git"
     local verifier_ref="3dad65a760a8867cda72f6dd8848d876a4e851b4"
@@ -1346,7 +1353,7 @@ _run_kimi_tool_call_schema_eval() {
 
     local eval_rc=0
     PYTHONPATH="${runtime_dir}${PYTHONPATH:+:${PYTHONPATH}}" \
-        run_server_client "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+        run_server_client "${VENDOR_VERIFIER_PYTHON}" "$adapter_path" \
             --verifier-dir "$checkout_dir" \
             --base-url "http://127.0.0.1:${port}/v1" \
             --api-key EMPTY \
@@ -1389,12 +1396,13 @@ run_kimi_vendor_eval() {
 }
 
 _install_bfcl_eval_deps() {
+    check_env_vars VENDOR_VERIFIER_PYTHON
     local download_dir="$1"
     local wheel_url="https://files.pythonhosted.org/packages/ba/41/ed458527c770c50225b60bae3b0c3444b26804ee455fa2d8f187018d2cb2/bfcl_eval-2026.3.23-py3-none-any.whl"
     local wheel_sha256="3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a"
     local wheel_path="${download_dir}/bfcl_eval-2026.3.23-py3-none-any.whl"
 
-    "${VENDOR_VERIFIER_PYTHON:-python3}" - \
+    "${VENDOR_VERIFIER_PYTHON}" - \
         "$wheel_url" "$wheel_sha256" "$wheel_path" <<'PY' || return $?
 from hashlib import sha256
 from pathlib import Path
@@ -1432,7 +1440,7 @@ except Exception as error:
     raise SystemExit(1)
 PY
 
-    timeout 600 "${VENDOR_VERIFIER_PYTHON:-python3}" -m pip install \
+    timeout 600 "${VENDOR_VERIFIER_PYTHON}" -m pip install \
         -q --no-cache-dir "$wheel_path" "soundfile==0.13.1"
 }
 
@@ -1448,10 +1456,11 @@ _prepare_bfcl_runtime() {
 }
 
 _archive_bfcl_upstream_artifacts() {
+    check_env_vars VENDOR_VERIFIER_PYTHON
     local project_root="$1"
     local archive_path="$2"
 
-    "${VENDOR_VERIFIER_PYTHON:-python3}" - "$project_root" "$archive_path" <<'PY'
+    "${VENDOR_VERIFIER_PYTHON}" - "$project_root" "$archive_path" <<'PY'
 import gzip
 import os
 from pathlib import Path
@@ -1497,6 +1506,7 @@ PY
 }
 
 _write_bfcl_integration_error() {
+    check_env_vars VENDOR_VERIFIER_PYTHON
     local adapter_path="$1"
     local model_name="$2"
     local results_dir="$3"
@@ -1507,7 +1517,7 @@ _write_bfcl_integration_error() {
     # Integration errors deliberately make the adapter exit nonzero after
     # publishing both score artifacts. Treat those artifacts, not that expected
     # status, as proof that failure reporting succeeded.
-    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+    "${VENDOR_VERIFIER_PYTHON}" "$adapter_path" \
         --model "$model_name" \
         --output-dir "$results_dir" \
         --suite "$suite" \
@@ -1524,13 +1534,14 @@ _write_bfcl_integration_error() {
 }
 
 _run_bfcl_suite_eval() {
+    check_env_vars PORT
     local eval_suite="$1"
     local num_threads="$2"
     local process_timeout_seconds="$3"
     local archive_upstream="$4"
     shift 4
 
-    local port="${PORT:-8888}"
+    local port="${PORT}"
     local results_dir="${EVAL_RESULT_DIR:-}"
 
     while [[ $# -gt 0 ]]; do
@@ -1603,7 +1614,7 @@ _run_bfcl_suite_eval() {
         suite_args=(--suite "$eval_suite")
     fi
     run_server_client timeout "$process_timeout_seconds" \
-        "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" \
+        "${VENDOR_VERIFIER_PYTHON}" "$adapter_path" \
         --base-url "http://127.0.0.1:${port}/v1" \
         --api-key EMPTY \
         --model "$model_name" \
@@ -1670,6 +1681,7 @@ run_bfcl_eval() {
 
 
 _write_minimax_vendor_integration_error() {
+    check_env_vars VENDOR_VERIFIER_PYTHON
     local adapter_path="$1"
     local model_name="$2"
     local results_dir="$3"
@@ -1677,14 +1689,15 @@ _write_minimax_vendor_integration_error() {
 
     # The failure path is stdlib-only, so it remains usable when runtime
     # provisioning or dependency installation is what failed.
-    "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" failure \
+    "${VENDOR_VERIFIER_PYTHON}" "$adapter_path" failure \
         --model "$model_name" \
         --output-dir "$results_dir" \
         --message "$message"
 }
 
 _run_minimax_m3_smoke_eval() {
-    local port="${PORT:-8888}"
+    check_env_vars PORT
+    local port="${PORT}"
     local results_dir="${EVAL_RESULT_DIR:-}"
 
     while [[ $# -gt 0 ]]; do
@@ -1746,8 +1759,8 @@ _run_minimax_m3_smoke_eval() {
     fi
 
     local eval_rc=0
-    run_server_client "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
-        --python "${VENDOR_VERIFIER_PYTHON:-python3}" \
+    run_server_client "${VENDOR_VERIFIER_PYTHON}" "$adapter_path" run \
+        --python "${VENDOR_VERIFIER_PYTHON}" \
         --source-dir "${runtime_dir}/source" \
         --dependency-dir "${runtime_dir}/deps" \
         --base-url "http://127.0.0.1:${port}/v1" \
@@ -1772,8 +1785,9 @@ _run_minimax_m3_smoke_eval() {
 }
 
 _install_minimax_m3_full_deps() {
+    check_env_vars VENDOR_VERIFIER_PYTHON
     local target_dir="$1"
-    "${VENDOR_VERIFIER_PYTHON:-python3}" -m pip install -q --no-cache-dir --target "$target_dir" \
+    "${VENDOR_VERIFIER_PYTHON}" -m pip install -q --no-cache-dir --target "$target_dir" \
         "jsonschema==4.25.1" \
         "loguru==0.7.3" \
         "megfile==4.2.5" \
@@ -1783,10 +1797,11 @@ _install_minimax_m3_full_deps() {
 }
 
 _prepare_minimax_m3_full_runtime() {
+    check_env_vars VENDOR_VERIFIER_PYTHON
     local source_adapter_path="${INFERENCEX_REPO_ROOT}/infx/evals/minimax_m3_full_eval.py"
     local runtime_dir prepare_rc=0
     runtime_dir="$(mktemp -d /tmp/minimax-m3-full-runtime-XXXXXX)" || return $?
-    "${VENDOR_VERIFIER_PYTHON:-python3}" "$source_adapter_path" prepare-source \
+    "${VENDOR_VERIFIER_PYTHON}" "$source_adapter_path" prepare-source \
         --source-dir "${runtime_dir}/source" >&2 || prepare_rc=$?
     if [ "$prepare_rc" -eq 0 ]; then
         _install_minimax_m3_full_deps "${runtime_dir}/deps" >&2 || prepare_rc=$?
@@ -1799,7 +1814,8 @@ _prepare_minimax_m3_full_runtime() {
 }
 
 _run_minimax_m3_full_eval() {
-    local port="${PORT:-8888}"
+    check_env_vars PORT
+    local port="${PORT}"
     local results_dir="${EVAL_RESULT_DIR:-}"
 
     while [[ $# -gt 0 ]]; do
@@ -1860,8 +1876,8 @@ _run_minimax_m3_full_eval() {
     fi
 
     local eval_rc=0
-    run_server_client "${VENDOR_VERIFIER_PYTHON:-python3}" "$adapter_path" run \
-        --python "${VENDOR_VERIFIER_PYTHON:-python3}" \
+    run_server_client "${VENDOR_VERIFIER_PYTHON}" "$adapter_path" run \
+        --python "${VENDOR_VERIFIER_PYTHON}" \
         --source-dir "${runtime_dir}/source" \
         --dependency-dir "${runtime_dir}/deps" \
         --base-url "http://127.0.0.1:${port}/v1" \
@@ -1976,13 +1992,15 @@ setup_eval_context() {
 }
 
 run_lm_eval() {
-    local port="${PORT:-8888}"
+    check_env_vars OPENAI_API_KEY PORT
+    local port="${PORT}"
     local tasks_dir="${EVAL_TASKS_DIR:-infx/evals/gsm8k.yaml}"
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
-    local eval_context_len="${EVAL_MAX_MODEL_LEN:-16384}"
+    local eval_context_len="${EVAL_MAX_MODEL_LEN}"
     local temperature=0
     local top_p=1
-    local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-${CONC:-64}}"
+    local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-${CONC}}"
+    check_env_vars concurrent_requests
     # SWE-bench adds a repo-local task YAML, so pass its task directory via
     # --include_path. Full-dataset runs remain the default; --limit is passed
     # only when EVAL_LIMIT explicitly requests a smaller smoke-test slice.
@@ -2013,6 +2031,8 @@ run_lm_eval() {
         esac
     done
 
+    check_env_vars eval_context_len
+
     # Serving images may use a different WORKDIR.
     local _repo_root="$INFERENCEX_REPO_ROOT"
     if [[ "$tasks_dir" == *.yaml && "$tasks_dir" != /* \
@@ -2031,7 +2051,7 @@ run_lm_eval() {
 
     local openai_server_base="http://0.0.0.0:${port}"
     local openai_chat_base="${openai_server_base}/v1/chat/completions"
-    export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
+    export OPENAI_API_KEY=${OPENAI_API_KEY}
     MODEL_NAME=${MODEL_NAME:-$MODEL} # Prefer MODEL_NAME, else MODEL
 
     # Cap output tokens: must fit within context window (leave room for input),
@@ -2184,6 +2204,7 @@ bridge_disagg_eval_metadata() {
 }
 
 _write_lm_eval_meta_json() {
+    check_env_vars IS_MULTINODE
     local meta_json="$1"
     local batch_metadata="${2:-}"
     local metadata_conc="${3:-${CONC:-1}}"
@@ -2191,13 +2212,13 @@ _write_lm_eval_meta_json() {
     # Single-node jobs already export TP/EP/DP_ATTENTION. The disaggregated
     # bridge defaults missing per-phase DP flags to false, so applying it to
     # single-node jobs would overwrite their actual DP-attention setting.
-    if [ "${IS_MULTINODE:-false}" = "true" ]; then
+    if [ "${IS_MULTINODE}" = "true" ]; then
         bridge_disagg_eval_metadata
     fi
 
     local model_name="${MODEL_NAME:-$MODEL}"
     local is_multinode_json="false"
-    if [ "${IS_MULTINODE:-false}" = "true" ]; then
+    if [ "${IS_MULTINODE}" = "true" ]; then
         is_multinode_json="true"
     fi
 
@@ -2393,9 +2414,10 @@ _patch_swebench_agent() {
 }
 
 _install_swebench_deps() {
+    check_env_vars SWEBENCH_USE_MODAL
     # Patch anchors depend on SWE-bench 4.1.0.
     python3 -m pip install -q --no-cache-dir --break-system-packages 'swebench==4.1.0' || true
-    if [ "${SWEBENCH_USE_MODAL:-false}" = "true" ]; then
+    if [ "${SWEBENCH_USE_MODAL}" = "true" ]; then
         python3 -m pip install -q --no-cache-dir --break-system-packages modal || true
         _patch_swebench_scoring || \
             echo "WARN: scoring patches failed; eval sandboxes will reserve 4 CPUs and idle-bill to their timeout" >&2
@@ -2408,9 +2430,10 @@ _patch_swebench_scoring() {
 
 # SWE-bench requires ~/.modal.toml despite env credentials.
 _ensure_modal_credentials() {
+    check_env_vars IS_AGENTIC SWEBENCH_USE_MODAL
     # Agentic generation uses swerex_modal sandboxes even when scoring is local.
-    if [ "${SWEBENCH_USE_MODAL:-false}" != "true" ] \
-        && [ "${IS_AGENTIC:-0}" != "1" ] \
+    if [ "${SWEBENCH_USE_MODAL}" != "true" ] \
+        && [ "${IS_AGENTIC}" != "1" ] \
         && [ "${SCENARIO_TYPE:-}" != "agentic-coding" ]; then
         return 0
     fi
@@ -2442,8 +2465,11 @@ _ensure_modal_credentials() {
 
 
 _run_swebench_agentic_generation() {
+    check_env_vars \
+        PORT SWEBENCH_AGENT_EXIT_GRACE SWEBENCH_AGENT_STEP_LIMIT SWEBENCH_AGENT_TIMEOUT \
+        SWEBENCH_EXPECTED_INSTANCES SWEBENCH_SANDBOX_SWEEP SWEBENCH_WATCHDOG_POLL
     local gen_dir="$1"; shift
-    local port="${PORT:-8888}"
+    local port="${PORT}"
     while [[ $# -gt 0 ]]; do
         case $1 in
             --port) port="$2"; shift 2 ;;
@@ -2522,25 +2548,27 @@ PYGEN
     fi
 
     export MSWEA_COST_TRACKING=ignore_errors
-    local expected="${EVAL_LIMIT:-${SWEBENCH_EXPECTED_INSTANCES:-300}}"
-    echo "[swebench-agentic] mini-swe-agent: workers=${SWEBENCH_AGENT_WORKERS:-${CONC:-64}} step_limit=${SWEBENCH_AGENT_STEP_LIMIT:-250} slice=${EVAL_LIMIT:-full} expected=$expected"
+    local expected="${EVAL_LIMIT:-${SWEBENCH_EXPECTED_INSTANCES}}"
+    local workers="${SWEBENCH_AGENT_WORKERS:-${CONC}}"
+    check_env_vars workers
+    echo "[swebench-agentic] mini-swe-agent: workers=${workers} step_limit=${SWEBENCH_AGENT_STEP_LIMIT} slice=${EVAL_LIMIT:-full} expected=$expected"
     local agen_rc=0
     mini-extra swebench \
         -c "$cfg" \
         --subset lite --split test \
         --environment-class swerex_modal \
         "${slice_args[@]}" \
-        -w "${SWEBENCH_AGENT_WORKERS:-${CONC:-64}}" \
+        -w "${workers}" \
         -o "$gen_dir/agent_out" &
     local mini_pid=$!
     # preds.json detects completion despite teardown hangs.
     local preds_file="$gen_dir/agent_out/preds.json"
-    local deadline=$(( $(date +%s) + ${SWEBENCH_AGENT_TIMEOUT:-21600} ))
+    local deadline=$(( $(date +%s) + ${SWEBENCH_AGENT_TIMEOUT} ))
     local grace_until=0
     local killed_after_complete=0
     while kill -0 "$mini_pid" 2>/dev/null; do
         if [ "$(date +%s)" -ge "$deadline" ]; then
-            echo "ERROR: generation exceeded SWEBENCH_AGENT_TIMEOUT (${SWEBENCH_AGENT_TIMEOUT:-21600}s); killing mini-extra" >&2
+            echo "ERROR: generation exceeded SWEBENCH_AGENT_TIMEOUT (${SWEBENCH_AGENT_TIMEOUT}s); killing mini-extra" >&2
             kill "$mini_pid" 2>/dev/null; sleep 5; kill -9 "$mini_pid" 2>/dev/null
             agen_rc=124
             break
@@ -2549,8 +2577,8 @@ PYGEN
         done_count=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$preds_file" 2>/dev/null || echo 0)
         if [ "${done_count:-0}" -ge "$expected" ]; then
             if [ "$grace_until" -eq 0 ]; then
-                grace_until=$(( $(date +%s) + ${SWEBENCH_AGENT_EXIT_GRACE:-300} ))
-                echo "[swebench-agentic] all $expected predictions written; waiting ${SWEBENCH_AGENT_EXIT_GRACE:-300}s for mini-extra to exit"
+                grace_until=$(( $(date +%s) + ${SWEBENCH_AGENT_EXIT_GRACE} ))
+                echo "[swebench-agentic] all $expected predictions written; waiting ${SWEBENCH_AGENT_EXIT_GRACE}s for mini-extra to exit"
             elif [ "$(date +%s)" -ge "$grace_until" ]; then
                 echo "WARN: mini-extra hung after completing all instances; killing (known hang-on-exit)" >&2
                 kill "$mini_pid" 2>/dev/null; sleep 5; kill -9 "$mini_pid" 2>/dev/null
@@ -2558,7 +2586,7 @@ PYGEN
                 break
             fi
         fi
-        sleep "${SWEBENCH_WATCHDOG_POLL:-30}"
+        sleep "${SWEBENCH_WATCHDOG_POLL}"
     done
     wait "$mini_pid" 2>/dev/null
     local wait_rc=$?
@@ -2568,7 +2596,7 @@ PYGEN
         agen_rc=$wait_rc
     fi
     # Isolate sweeps to avoid killing unrelated sandboxes.
-    [ "${SWEBENCH_SANDBOX_SWEEP:-1}" = "1" ] && python3 - <<'PYSWEEP' || true
+    [ "${SWEBENCH_SANDBOX_SWEEP}" = "1" ] && python3 - <<'PYSWEEP' || true
 try:
     import os
     import modal
@@ -2603,6 +2631,9 @@ PYSWEEP
 }
 
 run_swebench_eval() {
+    check_env_vars \
+        SWEBENCH_EVAL_TIMEOUT SWEBENCH_MAX_WORKERS SWEBENCH_SCORE_TIMEOUT SWEBENCH_SKIP_SCORE \
+        SWEBENCH_USE_MODAL SWEBENCH_GEN_MODE
     local out_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local task_name="${SWEBENCH_TASK_NAME:-swebench_lite}"
     export EVAL_SUITE="${EVAL_SUITE:-$task_name}"
@@ -2625,7 +2656,7 @@ run_swebench_eval() {
         return 1
     fi
 
-    local gen_mode="${SWEBENCH_GEN_MODE:-agentic}"
+    local gen_mode="$SWEBENCH_GEN_MODE"
     local score_input=()
     if [ "$gen_mode" = "agentic" ]; then
         # mini-extra supports only SWE-bench Lite.
@@ -2671,7 +2702,7 @@ run_swebench_eval() {
     local lm_eval_version
     lm_eval_version=$(python3 -c 'import lm_eval; print(lm_eval.__version__)' 2>/dev/null || echo unknown)
 
-    if [ "${SWEBENCH_SKIP_SCORE:-false}" = "true" ]; then
+    if [ "${SWEBENCH_SKIP_SCORE}" = "true" ]; then
         local skip_rc=0
         python3 -m infx.evals.swebench_score \
             "${score_input[@]}" --out-dir "$out_dir" \
@@ -2691,17 +2722,17 @@ run_swebench_eval() {
     local ns_args=()
     if [ "${SWEBENCH_NAMESPACE+set}" = "set" ]; then ns_args=(--namespace "$SWEBENCH_NAMESPACE"); fi
     local modal_args=()
-    if [ "${SWEBENCH_USE_MODAL:-false}" = "true" ]; then modal_args=(--modal); fi
-    local itimeout_args=(--instance-timeout "${SWEBENCH_EVAL_TIMEOUT:-900}")
+    if [ "${SWEBENCH_USE_MODAL}" = "true" ]; then modal_args=(--modal); fi
+    local itimeout_args=(--instance-timeout "${SWEBENCH_EVAL_TIMEOUT}")
     # Avoid holding the GPU on scoring stalls.
-    timeout "${SWEBENCH_SCORE_TIMEOUT:-7200}" \
+    timeout "${SWEBENCH_SCORE_TIMEOUT}" \
     python3 -m infx.evals.swebench_score \
         "${score_input[@]}" \
         --out-dir "$out_dir" \
         --model-name "${MODEL_NAME:-$MODEL}" \
         --task-name "$task_name" \
         --dataset-name "$dataset" \
-        --max-workers "${SWEBENCH_MAX_WORKERS:-4}" \
+        --max-workers "${SWEBENCH_MAX_WORKERS}" \
         --lm-eval-version "$lm_eval_version" \
         "${modal_args[@]}" \
         "${itimeout_args[@]}" \
@@ -2715,10 +2746,11 @@ run_swebench_eval() {
 }
 
 _wait_for_openai_chat_route() {
-    local port="${PORT:-8888}"
-    local timeout_seconds="${EVAL_ENDPOINT_READY_TIMEOUT_SECONDS:-1800}"
+    check_env_vars EVAL_ENDPOINT_READY_TIMEOUT_SECONDS EVAL_MODEL_STABILIZATION_SECONDS PORT
+    local port="${PORT}"
+    local timeout_seconds="${EVAL_ENDPOINT_READY_TIMEOUT_SECONDS}"
     local poll_seconds=5
-    local stabilization_seconds="${EVAL_MODEL_STABILIZATION_SECONDS:-30}"
+    local stabilization_seconds="${EVAL_MODEL_STABILIZATION_SECONDS}"
     local start_seconds=$SECONDS
     local server_ready_since=-1
     local next_report=0
@@ -2814,6 +2846,7 @@ raise SystemExit(0 if any(model.get("id") == expected for model in models) else 
 # ------------------------------
 
 run_eval() {
+    check_env_vars EVAL_ONLY IS_AGENTIC
     local cli_framework=""
     local forwarded=()
     # Keep runner-selected suite identity scoped to this invocation.
@@ -2839,7 +2872,7 @@ run_eval() {
 
     local scenario_default="lm-eval"
     local scenario_is_agentic=0
-    if [ "${IS_AGENTIC:-0}" = "1" ] || [ "${SCENARIO_TYPE:-}" = "agentic-coding" ]; then
+    if [ "${IS_AGENTIC}" = "1" ] || [ "${SCENARIO_TYPE:-}" = "agentic-coding" ]; then
         scenario_is_agentic=1
     fi
 
@@ -2872,7 +2905,7 @@ run_eval() {
         return 2
     fi
 
-    if [ "${EVAL_ONLY:-false}" = "true" ]; then
+    if [ "${EVAL_ONLY}" = "true" ]; then
         case "$framework" in
             kimi-vendor|minimax-vendor|bfcl)
                 _wait_for_openai_chat_route "${forwarded[@]}" || return $?
@@ -2973,7 +3006,7 @@ run_eval() {
     local stage_rc=0
     # Agentic eval-only recipes have no separate staging step. Provider
     # failures are staged before returning so diagnostic artifacts survive.
-    if { [ "${EVAL_ONLY:-false}" = "true" ] && [ "$scenario_is_agentic" = "1" ]; } \
+    if { [ "${EVAL_ONLY}" = "true" ] && [ "$scenario_is_agentic" = "1" ]; } \
         || { { [ "$framework" = "kimi-vendor" ] \
             || [ "$framework" = "minimax-vendor" ] \
             || [ "$framework" = "bfcl" ]; } \
@@ -2982,7 +3015,7 @@ run_eval() {
     fi
     if [ "$eval_rc" -ne 0 ]; then
         echo "ERROR: run_eval failed with exit code $eval_rc" >&2
-        if [ "${EVAL_ONLY:-false}" = "true" ]; then
+        if [ "${EVAL_ONLY}" = "true" ]; then
             echo "Eval-only mode: failing after artifact collection" >&2
         fi
         return "$eval_rc"
@@ -2999,20 +3032,16 @@ run_eval() {
 # Agentic trace replay helpers (aiperf driver)
 # --------------------------------
 
-INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/workspace}"
-AGENTIC_DIR="${AGENTIC_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/agentic-benchmark}"
-AIPERF_DIR="${AIPERF_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/aiperf}"
+AGENTIC_DIR="${INFMAX_CONTAINER_WORKSPACE}/utils/agentic-benchmark"
+AIPERF_DIR="${INFMAX_CONTAINER_WORKSPACE}/utils/aiperf"
 AIPERF_RUNTIME_DIR="${AIPERF_RUNTIME_DIR:-${TMPDIR:-/tmp}/inferencex-agentic-${SLURM_JOB_ID:-$$}}"
-AIPERF_VENV="${AIPERF_VENV:-${AIPERF_RUNTIME_DIR}/venv}"
-AIPERF_UV_INSTALL_DIR="${AIPERF_UV_INSTALL_DIR:-${AIPERF_RUNTIME_DIR}/uv/bin}"
-AIPERF_UV_CACHE_DIR="${AIPERF_UV_CACHE_DIR:-${AIPERF_RUNTIME_DIR}/uv-cache}"
+AIPERF_VENV="${AIPERF_RUNTIME_DIR}/venv"
+AIPERF_UV_INSTALL_DIR="${AIPERF_RUNTIME_DIR}/uv/bin"
+AIPERF_UV_CACHE_DIR="${AIPERF_RUNTIME_DIR}/uv-cache"
 AIPERF_PYTHON="${AIPERF_VENV}/bin/python"
 AIPERF_CLI="${AIPERF_VENV}/bin/aiperf"
 AIPERF_HF_CLI="${AIPERF_VENV}/bin/hf"
 AIPERF_DEPS_READY=0
-AIPERF_FAILED_REQUEST_THRESHOLD="${AIPERF_FAILED_REQUEST_THRESHOLD:-0.10}"
-AIPERF_LIVE_FAILED_REQUEST_THRESHOLD="${AIPERF_LIVE_FAILED_REQUEST_THRESHOLD:-$AIPERF_FAILED_REQUEST_THRESHOLD}"
-AIPERF_TRACE_IDLE_GAP_CAP_SECONDS="${AIPERF_TRACE_IDLE_GAP_CAP_SECONDS:-300}"
 
 agentic_pip_install() {
     local pip_install=(python3 -m pip install)
@@ -3043,6 +3072,7 @@ ensure_agentic_uv() {
 }
 
 install_agentic_deps() {
+    check_env_vars AIPERF_PYTHON_VERSION INFMAX_CONTAINER_WORKSPACE
     if [ "$AIPERF_DEPS_READY" = "1" ]; then
         return
     fi
@@ -3066,7 +3096,7 @@ install_agentic_deps() {
     # already used to fetch uv itself above), so this doesn't depend on the
     # container image bundling a new-enough Python.
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
-        "$AIPERF_UV_BIN" venv --python "${AIPERF_PYTHON_VERSION:-3.11}" "$AIPERF_VENV" || return $?
+        "$AIPERF_UV_BIN" venv --python "${AIPERF_PYTHON_VERSION}" "$AIPERF_VENV" || return $?
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" UV_HTTP_TIMEOUT=120 UV_HTTP_RETRIES=3 \
         "$AIPERF_UV_BIN" pip install --python "$AIPERF_PYTHON" \
         -r "$AGENTIC_DIR/requirements.txt" \
@@ -3172,6 +3202,15 @@ resolve_trace_source() {
 }
 
 build_replay_cmd() {
+    check_env_vars INFMAX_CONTAINER_WORKSPACE MODEL PORT CONC DURATION
+    check_env_vars \
+        AIPERF_FAILED_REQUEST_THRESHOLD AIPERF_LIVE_FAILED_REQUEST_THRESHOLD \
+        AIPERF_TRACE_IDLE_GAP_CAP_SECONDS
+    check_env_vars \
+        AGENTIC_WARMUP_GRACE_PERIOD AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES \
+        AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS AIPERF_EXPERIMENTAL_FAST \
+        AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID AIPERF_UNSAFE_OVERRIDE \
+        AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING AIPERF_WARMUP_REQUESTS_PER_LANE
     # aiperf invocation for the inferencex-agentx-mvp scenario.
     #
     # Pre-canned assistant replay is the default: recorded assistant responses
@@ -3188,16 +3227,16 @@ build_replay_cmd() {
     # utils/aiperf/docs/tutorials/agentx-mvp.md.
     local result_dir="$1"
     local duration="$DURATION"
-    local warmup_requests_per_lane="${AIPERF_WARMUP_REQUESTS_PER_LANE:-10}"
+    local warmup_requests_per_lane="${AIPERF_WARMUP_REQUESTS_PER_LANE}"
 
     # Fast mode minimizes setup by advancing each trajectory lane only once
     # and shortens profiling to 20 minutes.
-    if [[ "${AIPERF_EXPERIMENTAL_FAST:-0}" == "1" ]]; then
+    if [[ "${AIPERF_EXPERIMENTAL_FAST}" == "1" ]]; then
         duration=1200
         warmup_requests_per_lane=1
     fi
 
-    export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES="${AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES:-0}"
+    export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES="${AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES}"
     # Dataset configuration (load + reconstruct + inputs.json + mmap)
     # routinely takes 4-5 min for the Weka corpus on fast /tmp
     # (B300) but can stretch to 14 min on slower /tmp + parallel contention
@@ -3257,7 +3296,7 @@ build_replay_cmd() {
     # in-flight working set may override via AGENTIC_WARMUP_GRACE_PERIOD
     # (grace is a maximum wait, not a fixed sleep — drain exits when done).
     # cancelling any remaining requests and starting profiling.
-    REPLAY_CMD+=" --warmup-grace-period ${AGENTIC_WARMUP_GRACE_PERIOD:-1800}"
+    REPLAY_CMD+=" --warmup-grace-period ${AGENTIC_WARMUP_GRACE_PERIOD}"
     # Use server-reported usage fields (prompt_tokens / completion_tokens) for
     # ISL/OSL instead of client-side tokenizer.encode(). Auto-enables
     # stream_options.include_usage on the OpenAI chat endpoint. Skips the
@@ -3280,14 +3319,14 @@ build_replay_cmd() {
     # New recipes instead set AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=true
     # to route by X-Dynamo-Session-ID header, which needs no routing CLI flag.
     if [[ "${FRAMEWORK:-}" == dynamo-* \
-          && "${AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING:-1}" != "0" \
-          && "${AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID:-false}" != "true" ]]; then
+          && "${AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING}" != "0" \
+          && "${AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID}" != "true" ]]; then
         REPLAY_CMD+=" --use-dynamo-conv-aware-routing"
         # The upstream 300s affinity TTL is shorter than an overloaded
         # high-concurrency agentic request. Keep bindings alive across long
         # prefills, generation, and capped inter-turn delay. This controls the
         # router's inactivity lease; it does not relax HTTP/request failures.
-        REPLAY_CMD+=" --dynamo-session-timeout-seconds ${AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS:-3600}"
+        REPLAY_CMD+=" --dynamo-session-timeout-seconds ${AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS}"
     fi
     # Disable DCGM GPU telemetry collection. aiperf's GpuMetricTimeSeries
     # freezes its metric schema on the first DCGM scrape, then KeyErrors when
@@ -3346,13 +3385,14 @@ build_replay_cmd() {
     # benchmark duration. For smoke tests with shorter durations, opt
     # into --unsafe-override (the run's submission_valid will be flagged
     # false; that's expected for non-canonical runs).
-    if [ "$duration" -lt 900 ] || [ "${AIPERF_UNSAFE_OVERRIDE:-false}" = "true" ]; then
+    if [ "$duration" -lt 900 ] || [ "${AIPERF_UNSAFE_OVERRIDE}" = "true" ]; then
         REPLAY_CMD+=" --unsafe-override"
     fi
     REPLAY_CMD+=" $TRACE_SOURCE_FLAG"
 }
 
 write_agentic_result_json() {
+    check_env_vars INFMAX_CONTAINER_WORKSPACE
     # Aggregate aiperf's profile_export.{json,jsonl} + server_metrics_export.json
     # into $AGENTIC_OUTPUT_DIR/$RESULT_FILENAME.json. The workflow checks that
     # this file exists; run_agentic_replay_and_write_outputs separately rejects
@@ -3401,6 +3441,7 @@ validate_required_agentic_server_metrics() {
 }
 
 run_agentic_replay_and_write_outputs() (
+    check_env_vars ENABLE_AGENTX_POWER IS_MULTINODE REQUIRE_POWER
     local result_dir="$1"
     local replay_rc
     local validation_rc
@@ -3410,9 +3451,9 @@ run_agentic_replay_and_write_outputs() (
     local agentx_multinode_contract_missing=0
     local agentx_monitor_stopped=1
 
-    case "${ENABLE_AGENTX_POWER:-1}" in
+    case "${ENABLE_AGENTX_POWER}" in
         1|true|TRUE|yes|YES)
-            if [ "${IS_MULTINODE:-false}" = "true" ]; then
+            if [ "${IS_MULTINODE}" = "true" ]; then
                 if [ -n "${SRT_MEASUREMENT_WINDOW_DIR:-}" ]; then
                     agentx_multinode_power_enabled=1
                 else
@@ -3439,7 +3480,7 @@ run_agentic_replay_and_write_outputs() (
             --concurrency "${CONC:?CONC must be set for multinode AgentX power}"
             --write-multinode-window "$state"
         )
-        case "${REQUIRE_POWER:-0}" in
+        case "${REQUIRE_POWER}" in
             1|true|TRUE|yes|YES) power_args+=(--require-power) ;;
         esac
         (
@@ -3510,10 +3551,11 @@ run_agentic_replay_and_write_outputs() (
         if [ "$agentx_multinode_contract_missing" = "1" ]; then
             power_args+=(--multinode-contract-missing)
         else
-            expected_num_gpus=$((${TP:-1} * ${PP_SIZE:-1} * ${PCP_SIZE:-1}))
+            check_env_vars TP PP_SIZE PCP_SIZE
+            expected_num_gpus=$((TP * PP_SIZE * PCP_SIZE))
             power_args+=(--expected-num-gpus "$expected_num_gpus")
         fi
-        case "${REQUIRE_POWER:-0}" in
+        case "${REQUIRE_POWER}" in
             1|true|TRUE|yes|YES) power_args+=(--require-power) ;;
         esac
         set +e

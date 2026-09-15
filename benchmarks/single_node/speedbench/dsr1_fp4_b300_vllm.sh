@@ -30,46 +30,33 @@
 # Checkpoint (B300 / Blackwell): NVFP4 build nvidia/DeepSeek-R1-0528-NVFP4-v2,
 # basename dsr1-fp4 on the runner (resolved by launch_b300-dsxe.sh).
 #
-# Usage (inside the vLLM container, on a B300 node):
-#   export MODEL=/data/models/dsr1-fp4
-#   bash benchmarks/single_node/speedbench/dsr1_fp4_b300_vllm.sh
+# Dispatch this collector through speedbench-al.yml.
 #
-# Tunables (env):
-#   MTP_LIST          space-separated MTP levels   (default "1 2 3 4 5 6 7 8")
-#   THINKING_MODES    space-separated: on           (default "on"; R1 has no off)
-#   CATEGORY          SPEED-Bench category          (default coding)
-#   SPEEDBENCH_OUTPUT_LEN  per-request output len   (default 4096)
-#   OUT_YAML          output matrix path            (default $RESULTS_DIR/speedbench-reference-al.yaml)
+# Required collection settings come from speedbench-al.yml.
 
-set -uo pipefail
+set -o pipefail
 source "$(dirname "$0")/../../benchmark_lib.sh"
+check_env_vars \
+    CATEGORY DP_ATTENTION MODEL MODEL_PATH MTP_LIST OUT_YAML \
+    PORT SPEEDBENCH_OUTPUT_LEN THINKING_MODES TP
 
-MODEL="${MODEL:?MODEL env var required (e.g. /data/models/dsr1-fp4)}"
-SERVE_MODEL="${MODEL_PATH:-$MODEL}"
-TP="${TP:-8}"
-DP_ATTENTION="${DP_ATTENTION:-false}"
-PORT="${PORT:-8888}"
+SERVE_MODEL="${MODEL_PATH}"
 
-MTP_LIST="${MTP_LIST:-1 2 3 4 5 6 7 8}"
-THINKING_MODES="${THINKING_MODES:-on}"
-CATEGORY="${CATEGORY:-coding}"
-MODEL_KEY="${MODEL_KEY:-$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')}"
-SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
-CONCURRENCY="${CONCURRENCY:-1}"
+MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
+CONCURRENCY="1"
 # Provider-recommended sampling from the DeepSeek-R1 checkpoint generation_config
 # (temperature 0.6, top_p 0.95; no top_k). vLLM's own default top_p is 1.0, so it
 # MUST be passed explicitly or the measured AL is taken at the wrong settings.
-TEMPERATURE="${TEMPERATURE:-0.6}"
-TOP_P="${TOP_P:-0.95}"
+TEMPERATURE="0.6"
+TOP_P="0.95"
 
-SPEEDBENCH_DIR="${SPEEDBENCH_DIR:-/workspace/speed_bench_data}"
+SPEEDBENCH_DIR="/workspace/speed_bench_data"
 # Flat results dir to match the speedbench-al.yml artifact glob
 # (speedbench_results/server_*.log) and its pre-run `rm -rf speedbench_results`.
-RESULTS_DIR="${RESULTS_DIR:-/workspace/speedbench_results}"
-OUT_YAML="${OUT_YAML:-$RESULTS_DIR/speedbench-reference-al.yaml}"
+RESULTS_DIR="/workspace/speedbench_results"
 
 # Blackwell FP4 MoE path (DeepSeek-R1 FP4 on B-series): required per vLLM R1 docs.
-export VLLM_USE_FLASHINFER_MOE_FP4="${VLLM_USE_FLASHINFER_MOE_FP4:-1}"
+export VLLM_USE_FLASHINFER_MOE_FP4="1"
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
 mkdir -p "$RESULTS_DIR"

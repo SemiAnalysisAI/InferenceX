@@ -11,26 +11,26 @@
 #            <model_dir> <model_name> <log_path> <isl> <osl> \
 #            <concurrency_list> <req_rate> <random_range_ratio> <num_prompts_multiplier>
 
-ENGINE="${ENGINE:-sglang-disagg}"
+source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
+check_env_vars ENGINE MODEL_PATH MODEL_NAME ROUTER_PORT
+if [[ $# -ne 4 ]]; then
+    echo "Error: trace_replay.sh requires 4 positional arguments" >&2
+    exit 1
+fi
 
 model_path=$1
 model_name=$2
-concurrency_list=${3:-"1"}
-MODEL_PATH="${MODEL_PATH:-${model_path}/${model_name}}"
+concurrency_list=${3}
 # vllm-disagg uses --served-model-name MODEL_NAME; sglang defaults to MODEL_PATH
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    MODEL="${MODEL_NAME:-${MODEL_PATH}}"
+    MODEL="${MODEL_NAME}"
 else
     MODEL="${MODEL_PATH}"
 fi
-log_path=${4:-/run_logs}
+log_path=${4}
 
 # Split BENCH_MAX_CONCURRENCY (x-delimited, e.g. "8x16x32") into an array.
-# Falls back to 1 if unset so the loop always runs at least once.
 IFS='x' read -r -a chosen_concurrencies <<< "${concurrency_list}"
-
-
-ROUTER_PORT="${ROUTER_PORT:-30000}"
 
 export TRANSFORMERS_VERBOSITY=error
 export TOKENIZERS_PARALLELISM=false
@@ -57,7 +57,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 #       — HTTP != 200 when L3 is off, tolerated.
 # Best-effort: logs WARN, never hard-fails the sweep.
 clear_kv_caches() {
-    local drain_tmo="${FLUSH_DRAIN_TIMEOUT:-120}"
+    local drain_tmo="${FLUSH_DRAIN_TIMEOUT}"
     local urls_csv="${SERVER_FLUSH_URLS_CSV:-}"
     if [[ -z "$urls_csv" ]]; then
         echo "[clear_caches] WARN: SERVER_FLUSH_URLS_CSV unset; skipping cache flush" >&2
@@ -94,16 +94,14 @@ clear_kv_caches() {
 # REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
 PORT="${ROUTER_PORT}"
-MODEL="${MODEL:-${BENCH_MODEL}}"
-DURATION="${DURATION:-1800}"
+check_env_vars DURATION RESULT_FILENAME FLUSH_DRAIN_TIMEOUT CLEAR_CACHE_BETWEEN_CONC
 export MODEL DURATION MAX_MODEL_LEN
-RESULT_DIR="${RESULT_DIR:-${profile_folder}}"
 # Base name for the per-conc aggregate written by the existing
 # infx.results.agentic.process_agentic_result module.
 # The workflow guard / upload steps expect a "${RESULT_FILENAME}_conc<N>.json"
 # file per concurrency, so each concurrency below is always suffixed with
 # _conc<N> (matching agentic_srt.sh on the gb200 path).
-RESULT_FILENAME_BASE="${RESULT_FILENAME:-agentic_bench}"
+RESULT_FILENAME_BASE="${RESULT_FILENAME}"
 
 mkdir -p "$RESULT_DIR"
 
@@ -126,7 +124,7 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
     # Clear all KV cache tiers on every backend before this conc point so it is
     # measured cold (no prefix reuse from the previous conc). Default on; set
     # CLEAR_CACHE_BETWEEN_CONC=0 to disable. Best-effort — never fails the run.
-    if [[ "${CLEAR_CACHE_BETWEEN_CONC:-1}" == "1" ]]; then
+    if [[ "${CLEAR_CACHE_BETWEEN_CONC}" == "1" ]]; then
         echo "conc=$max_concurrency: clearing L1/L2/L3 on all backends (no server restart)"
         clear_kv_caches || echo "WARNING: cache clear had issues for conc=$max_concurrency" >&2
     fi

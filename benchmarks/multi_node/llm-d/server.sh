@@ -14,17 +14,16 @@
 # via --data-parallel-hybrid-lb; the leader accepts traffic, workers serve their
 # local DP ranks.
 
-set -euo pipefail
+set -eo pipefail
 
 source /workspace/benchmarks/benchmark_lib.sh
 
 # ----------------------------------------------------------------
 # Config + service ports
 # ----------------------------------------------------------------
-NODE_RANK="${NODE_RANK:-${SLURM_PROCID:-0}}"
-PREFILL_NODES="${PREFILL_NODES:-1}"
-DECODE_NODES="${DECODE_NODES:-1}"
-GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
+check_env_vars \
+    NODE_RANK PREFILL_NODES DECODE_NODES GPUS_PER_NODE PREFILL_WORKERS \
+    DECODE_WORKERS EVAL_ONLY RUN_EVAL
 VLLM_PORT=8200
 SIDECAR_PORT=8000
 ENVOY_PORT=8080
@@ -79,8 +78,6 @@ echo "=== rank=$NODE_RANK host=$HOST_IP model=$MODEL ==="
 # engines, each spanning (role_nodes / role_workers) nodes with its own DP
 # coordinator (leader IP) and rank range. workers=1 => one engine over all role
 # nodes (1P+1D / mid-curve); >1 => high-tpt (e.g. 2 prefill : 1 decode, DEP8 each).
-PREFILL_WORKERS="${PREFILL_WORKERS:-1}"
-DECODE_WORKERS="${DECODE_WORKERS:-1}"
 IFS=',' read -r -a _ALL_IPS <<< "${ALL_IPS:-}"
 
 if [[ "$NODE_RANK" -lt "$PREFILL_NODES" ]]; then
@@ -162,16 +159,19 @@ echo "Resolved $ROLE TP_SIZE=$TP_SIZE ROLE_ENABLE_EP=$ROLE_ENABLE_EP"
 # ----------------------------------------------------------------
 export GLOO_SOCKET_IFNAME=${GLOO_SOCKET_IFNAME:-$DEFAULT_IFACE}
 export NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-$DEFAULT_IFACE}
+check_env_vars \
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS VLLM_ENGINE_READY_TIMEOUT_S VLLM_LOGGING_LEVEL UCX_TLS NVSHMEM_REMOTE_TRANSPORT \
+    NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_SYMMETRIC_SIZE LLMD_API_SERVER_COUNT
 export VLLM_SKIP_P2P_CHECK=1
 # Randomized DP dummy inputs make idle DP ranks fan their lockstep dummy passes
 # across all experts (full MoE all-to-all), wasting prefill bandwidth; a recipe
 # may set this to 0.
-export VLLM_RANDOMIZE_DP_DUMMY_INPUTS=${VLLM_RANDOMIZE_DP_DUMMY_INPUTS:-1}
+export VLLM_RANDOMIZE_DP_DUMMY_INPUTS
 export VLLM_USE_DEEP_GEMM=1
 # Cold-start budget for engine-core readiness. DSV4-Pro on GB200 cold-starts in
 # ~9-11 min (weight load + DeepGEMM JIT warmup + cudagraph capture + NIXL/UCX
 # handshake); the 600s vLLM default is too tight, so allow 30 min.
-export VLLM_ENGINE_READY_TIMEOUT_S=${VLLM_ENGINE_READY_TIMEOUT_S:-1800}
+export VLLM_ENGINE_READY_TIMEOUT_S
 # DeepGEMM JIT links -l:libcuda.so.1 at warmup; the compat dir is on
 # LD_LIBRARY_PATH (runtime) but not LIBRARY_PATH (link time). Prepend it, plus
 # the arch-specific toolkit lib dir resolved from `uname -m`.
@@ -181,11 +181,11 @@ case "$(uname -m)" in
 esac
 export LIBRARY_PATH=/usr/local/cuda/compat:${_NCT_LIB}:${LIBRARY_PATH:-}
 export VLLM_NIXL_SIDE_CHANNEL_HOST="$HOST_IP"
-export VLLM_LOGGING_LEVEL=${VLLM_LOGGING_LEVEL:-INFO}
+export VLLM_LOGGING_LEVEL
 
 # Pin NIXL/UCX to IB verbs (rc) so cross-node KV rides the IB HCAs (job.slurm
 # exposes /dev/infiniband + IPC_LOCK); cuda_copy/cuda_ipc cover intra-node.
-export UCX_TLS=${UCX_TLS:-cuda_copy,cuda_ipc,rc}
+export UCX_TLS
 
 # ----------------------------------------------------------------
 # Wide-EP NVSHMEM / ibgda env (only when an engine spans >1 node)
@@ -196,9 +196,9 @@ if [[ "$LWS_GROUP_SIZE" -gt 1 ]]; then
     export NVIDIA_GDRCOPY=enabled
     # ibgda default kept for future DeepEP/wide-EP recipes; a recipe may override
     # NVSHMEM_REMOTE_TRANSPORT to none.
-    export NVSHMEM_REMOTE_TRANSPORT=${NVSHMEM_REMOTE_TRANSPORT:-ibgda}
-    export NVSHMEM_IB_ENABLE_IBGDA=${NVSHMEM_IB_ENABLE_IBGDA:-true}
-    export NVSHMEM_SYMMETRIC_SIZE=${NVSHMEM_SYMMETRIC_SIZE:-16G}
+    export NVSHMEM_REMOTE_TRANSPORT
+    export NVSHMEM_IB_ENABLE_IBGDA
+    export NVSHMEM_SYMMETRIC_SIZE
     export NVSHMEM_BOOTSTRAP_UID_SOCK_IFNAME=${NVSHMEM_BOOTSTRAP_UID_SOCK_IFNAME:-$DEFAULT_IFACE}
     # NVSHMEM ignores NVSHMEM_HCA_PE_MAPPING when NVSHMEM_HCA_LIST is set, so
     # clear the latter when the recipe provides an explicit PE mapping.
@@ -235,7 +235,7 @@ COMMON_ARGS=(
 # load-balances its local DP ranks -> ONE serving port (VLLM_PORT) per node, so
 # the local rank-0 health port is always VLLM_PORT.
 HEALTH_PORT="$VLLM_PORT"
-API_SERVER_COUNT="${LLMD_API_SERVER_COUNT:-4}"
+API_SERVER_COUNT="${LLMD_API_SERVER_COUNT}"
 # Multiple frontends only help the DP (wide-EP) path, where they load-balance
 # across the node's local DP ranks. A pure-TP engine has a single core with one
 # frontend, so it keeps the default count (also avoids --api-server-count
@@ -562,7 +562,7 @@ PY
     _bench_prefill_gpus=$(( PREFILL_NODES * GPUS_PER_NODE ))
     _bench_decode_gpus=$(( DECODE_NODES * GPUS_PER_NODE ))
     _bench_total_gpus=$(( _bench_prefill_gpus + _bench_decode_gpus ))
-    if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+    if [[ "${EVAL_ONLY}" != "true" ]]; then
     for max_concurrency in "${CONCURRENCIES[@]}"; do
         num_prompts=$(( max_concurrency * BENCH_NUM_PROMPTS_MULTIPLIER ))
         [[ "$num_prompts" -lt 16 ]] && num_prompts=16
@@ -605,7 +605,7 @@ PY
     fi
 
     # ---- Eval (optional) ----
-    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+    if [[ "${RUN_EVAL}" == "true" ]]; then
         # Concurrency for the eval and, crucially, for the concurrency stamped
         # into meta_env.json. run_eval/append_lm_eval_summary read
         # EVAL_CONCURRENT_REQUESTS and CONC (not EVAL_CONC), so mirror the AMD

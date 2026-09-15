@@ -2,8 +2,6 @@
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-DP_ATTENTION="${DP_ATTENTION:-false}"
-
 check_env_vars \
     MODEL \
     TP \

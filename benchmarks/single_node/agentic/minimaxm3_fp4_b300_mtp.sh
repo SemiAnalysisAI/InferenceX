@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
 # MiniMax-M3 NVFP4 B300 AgentX with EAGLE3-GQA and synthetic acceptance.

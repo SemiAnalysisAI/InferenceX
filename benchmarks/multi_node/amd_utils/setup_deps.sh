@@ -1,11 +1,14 @@
 #!/bin/bash
+
+source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
+check_env_vars ROCM_PATH UCX_HOME RIXL_HOME
 # =============================================================================
 # setup_deps.sh — Install missing disagg dependencies at container start.
 #
 # Dispatched by $ENGINE (set by server.sh dispatcher):
 #   vllm-disagg   -> recipe deps + amd-quark + UCX/RIXL path exports
 #                    (base image: vllm/vllm-openai-rocm:nightly)
-#   sglang-disagg -> SGLang aiter gluon patch + per-model installs
+#   sglang-disagg -> per-model dependency installs
 #                    (base image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-*)
 #
 # Sourced by server_vllm.sh and server_sglang.sh so PATH / LD_LIBRARY_PATH
@@ -13,10 +16,6 @@
 #
 # Build steps run in subshells to avoid CWD pollution between installers.
 # =============================================================================
-
-ROCM_PATH="${ROCM_PATH:-/opt/rocm}"
-UCX_HOME="${UCX_HOME:-/usr/local/ucx}"
-RIXL_HOME="${RIXL_HOME:-/usr/local/rixl}"
 
 _SETUP_START=$(date +%s)
 _SETUP_INSTALLED=()
@@ -113,9 +112,9 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     # =========================================================================
     # vLLM: Export UCX/RIXL paths (persists since this file is sourced)
     # =========================================================================
-    export ROCM_PATH="${ROCM_PATH}"
-    export UCX_HOME="${UCX_HOME}"
-    export RIXL_HOME="${RIXL_HOME}"
+    export ROCM_PATH
+    export UCX_HOME
+    export RIXL_HOME
     export PATH="${UCX_HOME}/bin:/usr/local/bin/etcd:/root/.cargo/bin:${PATH}"
     export LD_LIBRARY_PATH="${UCX_HOME}/lib:${RIXL_HOME}/lib:${RIXL_HOME}/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
 else

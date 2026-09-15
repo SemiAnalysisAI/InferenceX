@@ -1,12 +1,15 @@
 #!/usr/bin/bash
 
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars EVAL_ONLY IS_AGENTIC IS_MULTINODE RUN_EVAL SALLOC_TIME_LIMIT
+
 # shellcheck source=runners/slurm_utils.sh
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 
 # Compatibility launcher for B200 Nscale configurations that have not yet
 # moved to the native srt-slurm path in launch_b200-nscale-slurm.sh.
-SLURM_PARTITION="${SLURM_PARTITION:-batch_1}"
-SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
+check_env_vars SLURM_PARTITION
+check_env_vars SLURM_ACCOUNT
 
 set -x
 
@@ -26,7 +29,7 @@ elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/scratch/models/DeepSeek-R1-0528"
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $MODEL == "deepseek-ai/DeepSeek-V4-Pro-0813" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-/scratch/models/DeepSeek-V4-Pro-0813}"
+    check_env_vars MODEL_PATH
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     # Node-local weights are not visible on the runner/login node.
     export MODEL_PATH="/scratch/models/DeepSeek-V4-Pro-NVFP4"
@@ -54,13 +57,13 @@ elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/scratch/models/GLM-5-FP8"
     export SRT_SLURM_MODEL_PREFIX="glm5-fp8"
 elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-/scratch/models/GLM-5.1-FP8}"
+    check_env_vars MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="glm5.1-fp8"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/GLM-5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="glm5-fp4"
 elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-/scratch/models/GLM-5.2-NVFP4}"
+    check_env_vars MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="glm5.2-fp4"
 elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "int4" ]]; then
     export MODEL_PATH="/scratch/models/Kimi-K2.5"
@@ -69,7 +72,7 @@ elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/Kimi-K2.5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="kimik2.5-fp4"
 elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-/scratch/models/Kimi-K2.6-NVFP4}"
+    check_env_vars MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="kimi-k2.6-nvfp4"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/scratch/models/MiniMax-M2.5"
@@ -90,7 +93,8 @@ elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/Kimi-K3"
     export SRT_SLURM_MODEL_PREFIX="kimik3"
 elif [[ $MODEL_PREFIX == "qwen3.8next" && $PRECISION == "fp4" ]]; then
-    if [[ -n "${MODEL_PATH:-}" && -d "$MODEL_PATH" ]]; then
+    check_env_vars MODEL_PATH
+    if [[ -n "${MODEL_PATH}" && -d "$MODEL_PATH" ]]; then
         :
     else
         export MODEL_PATH="/scratch/models/Qwen3.8-Flash-Next-NVFP4"
@@ -108,11 +112,11 @@ export AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/aiperf-cache
 if [[ "$IS_MULTINODE" == "true" ]]; then
     if [[ "$FRAMEWORK" == "tilert" ]]; then
         export SLURM_PARTITION SLURM_ACCOUNT
-        export TILERT_WEIGHTS_DIR="${TILERT_WEIGHTS_DIR:-/scratch/models/${MODEL_PREFIX}-${PRECISION}-tilert-8shard}"
+        check_env_vars TILERT_WEIGHTS_DIR
         # Nscale exposes eight RoCE HCAs, mlx5_0..mlx5_7.
-        export UCX_NET_DEVICES="${UCX_NET_DEVICES:-mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1}"
-        export UCX_MEMTYPE_CACHE="${UCX_MEMTYPE_CACHE:-n}"
-        export UCX_MEMTYPE_REG_WHOLE="${UCX_MEMTYPE_REG_WHOLE:-n}"
+        check_env_vars UCX_NET_DEVICES
+        check_env_vars UCX_MEMTYPE_CACHE
+        check_env_vars UCX_MEMTYPE_REG_WHOLE
         TILERT_SUBDIR="multi_node"
         [[ "${SCENARIO_SUBDIR}" == "agentic/" ]] && TILERT_SUBDIR="multi_node/agentic"
         TILERT_DISAGG="$GITHUB_WORKSPACE/benchmarks/${TILERT_SUBDIR}/${EXP_NAME%%_*}_${PRECISION}_b200_${FRAMEWORK}-disagg.sh"
@@ -135,7 +139,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     USES_DCGM_POWER=0
     _POWER_CONFIG_FILE="${CONFIG_FILE:-}"
-    if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+    if [[ "${EVAL_ONLY}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
         _POWER_CONFIG_FILE="$EVAL_CONFIG_FILE"
     fi
     _RECIPE_REL="${_POWER_CONFIG_FILE%%:*}"
@@ -150,7 +154,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         USES_DCGM_POWER=1
     fi
     if [[ "$USES_DCGM_POWER" == "1" && (
-        "${IS_AGENTIC:-0}" == "1" ||
+        "${IS_AGENTIC}" == "1" ||
         "$MODEL_PREFIX" != "dsv4" ||
         "$PRECISION" != "fp4" ||
         "$FRAMEWORK" != "dynamo-vllm"
@@ -190,9 +194,11 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # Map container images to local squash files
     NGINX_IMAGE="nginx:1.27.4"
-    SQUASH_DIR="${B200_SQUASH_DIR:-/data/home/sa-shared/containers}"
+    check_env_vars B200_SQUASH_DIR
+    SQUASH_DIR="${B200_SQUASH_DIR}"
     if [[ $MODEL_PREFIX == "minimaxm2.5" && $FRAMEWORK == "dynamo-vllm" ]]; then
-        SQUASH_DIR="${B200_SQUASH_DIR:-/home/slurm-shared/gharunners/squash}"
+        check_env_vars B200_SQUASH_DIR
+        SQUASH_DIR="${B200_SQUASH_DIR}"
     fi
     if ! mkdir -p "$SQUASH_DIR" 2>/dev/null || [[ ! -w "$SQUASH_DIR" ]]; then
         echo "Warning: $SQUASH_DIR is not writable; using workspace-local squash cache" >&2
@@ -215,7 +221,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         local lock_file="${lock_dir}/${image_key}.lock"
 
         (
-            flock -w "${B200_SQUASH_LOCK_TIMEOUT:-600}" 9 || { echo "Failed to acquire lock for $squash_file" >&2; exit 1; }
+            check_env_vars B200_SQUASH_LOCK_TIMEOUT
+            flock -w "${B200_SQUASH_LOCK_TIMEOUT}" 9 || { echo "Failed to acquire lock for $squash_file" >&2; exit 1; }
             if unsquashfs -l "$squash_file" > /dev/null 2>&1; then
                 echo "Squash file already exists and is valid, skipping import: $squash_file"
             else
@@ -246,7 +253,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     export ISL="$ISL"
     export OSL="$OSL"
-    export EVAL_ONLY="${EVAL_ONLY:-false}"
 
     # Agentic runs bind-mount two persistent caches into every worker
     # container (Lustre, shared across nodes): aiperf's content-addressed
@@ -316,7 +322,7 @@ EOF
     # throughput row keeps synthetic golden acceptance. Only configs that set
     # EVAL_CONFIG_FILE opt into this selection; all other configs keep using
     # CONFIG_FILE unchanged.
-    if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+    if [[ "${EVAL_ONLY}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
         CONFIG_FILE="$EVAL_CONFIG_FILE"
         echo "EVAL_ONLY=true: selecting real-verification recipe $CONFIG_FILE"
     fi
@@ -333,7 +339,7 @@ EOF
     # so large-model loads (e.g. DSR1-FP8 ~680GB off shared FS) finish in time.
     # Uses ${CONFIG_FILE%%:*} because CONFIG_FILE may carry an :override[N] suffix.
     sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "${CONFIG_FILE%%:*}"
-    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+    if [[ "${EVAL_ONLY}" == "true" ]]; then
         python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
             "${CONFIG_FILE%%:*}" "$FRAMEWORK" || exit 1
     fi
@@ -411,14 +417,14 @@ EOF
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
     tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
-    if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+    if [[ "${EVAL_ONLY}" != "true" ]]; then
         copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" || exit 1
     else
         echo "EVAL_ONLY=true: Skipping benchmark result collection"
     fi
 
     # Collect eval results if eval was requested
-    if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
+    if [[ "${RUN_EVAL}" == "true" || "${EVAL_ONLY}" == "true" ]]; then
         EVAL_DIR="$LOGS_DIR/eval_results"
         if [ -d "$EVAL_DIR" ]; then
             echo "Extracting eval results from $EVAL_DIR"
@@ -484,9 +490,8 @@ else
 
     # The runner lease reserves the Slurm nodes before this single-node job is
     # submitted to the Nscale batch_1 partition.
-    export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+    check_env_vars GPU_COUNT
 
-    SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-480}"
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 

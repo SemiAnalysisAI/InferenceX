@@ -25,6 +25,7 @@ set -x
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+check_env_vars DCP_SIZE EVAL_ONLY SPEC_DECODING
 
 if [ "$TP" -ne 8 ]; then
     echo "Error: Kimi-K3 on B300 requires TP=8, got TP='$TP'" >&2
@@ -37,7 +38,6 @@ if [[ -n "${EP_SIZE:-}" && "${EP_SIZE}" -gt 1 ]]; then
 fi
 
 # DCP shards decode KV across the TP ranks, so it must divide TP.
-DCP_SIZE="${DCP_SIZE:-8}"
 if [ $((TP % DCP_SIZE)) -ne 0 ]; then
     echo "Error: TP='$TP' must be divisible by DCP_SIZE='$DCP_SIZE'" >&2
     exit 1
@@ -51,7 +51,7 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
-DRAFT_MODEL="${DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
+DRAFT_MODEL="Inferact/Kimi-K3-DSpark"
 
 # The draft must not land next to a pre-staged target: dirname(MODEL_PATH) is a
 # read-only mount, so use the launcher's writable models dir.
@@ -59,11 +59,13 @@ if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
     fi
-    DRAFT_MODEL_PATH="${WRITABLE_MODELS_DIR:-/data/models}/${DRAFT_MODEL##*/}"
+    check_env_vars WRITABLE_MODELS_DIR
+    DRAFT_MODEL_PATH="${WRITABLE_MODELS_DIR}/${DRAFT_MODEL##*/}"
     # Other sweep cells share this directory; nonempty may mean a download
     # is still in progress. Let HF validate/resume cached files under one lock.
     mkdir -p "$(dirname "$DRAFT_MODEL_PATH")"
-    flock -w "${MODEL_DOWNLOAD_LOCK_TIMEOUT:-21600}" "${DRAFT_MODEL_PATH}.download.lock" \
+    check_env_vars MODEL_DOWNLOAD_LOCK_TIMEOUT
+    flock -w "$MODEL_DOWNLOAD_LOCK_TIMEOUT" "${DRAFT_MODEL_PATH}.download.lock" \
         hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
 else
     hf download "$MODEL"
@@ -197,7 +199,7 @@ EOF
 esac
 
 # ---- Speculative decoding ---------------------------------------------------
-if [ "${SPEC_DECODING:-none}" != "mtp" ]; then
+if [ "${SPEC_DECODING}" != "mtp" ]; then
     echo "Error: this recipe expects spec-decoding=mtp for every arm, got '${SPEC_DECODING:-}'" >&2
     exit 1
 fi
@@ -217,7 +219,7 @@ SPEC_ARGS=()
 if [ "$NUM_SPEC_TOKENS" -gt 0 ]; then
     # EVAL_ONLY needs real verification: synthetic acceptance commits drafts
     # regardless of target logits and would zero the eval score.
-    if [ "${EVAL_ONLY:-false}" = "true" ]; then
+    if [ "${EVAL_ONLY}" = "true" ]; then
         SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TOKENSPEED_MLA\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
     else
         SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TOKENSPEED_MLA\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"

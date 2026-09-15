@@ -10,15 +10,13 @@ set -x
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFERENCEX_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-export INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/workspace}"
+source "$INFERENCEX_ROOT/benchmarks/benchmark_lib.sh" --validation-only
+check_env_vars INFMAX_CONTAINER_WORKSPACE RESULT_DIR
 
 # The B200 DeepSeek-V4 Blackwell image installs SGLang editable under
 # /workspace, so its launcher mounts InferenceX at /ix instead. Resolve the
 # agentic tooling and results against the actual repository mount so the image
 # can keep its /workspace install and GitHub Actions can collect the outputs.
-if [[ ! -d "$INFMAX_CONTAINER_WORKSPACE/utils/aiperf" ]]; then
-    export INFMAX_CONTAINER_WORKSPACE="$INFERENCEX_ROOT"
-fi
 if [[ "${RESULT_DIR:-}" == /workspace/* && "$INFMAX_CONTAINER_WORKSPACE" != /workspace ]]; then
     export RESULT_DIR="$INFMAX_CONTAINER_WORKSPACE/${RESULT_DIR#/workspace/}"
 fi
@@ -50,7 +48,7 @@ resolve_trace_source
 # processing use the isolated environment when InferenceX is mounted at /ix.
 SGLANG_PYTHON="$(command -v python3)"
 if [[ "$INFMAX_CONTAINER_WORKSPACE" != /workspace ]]; then
-    AGENTIC_VENV="${AGENTIC_VENV:-/tmp/inferencex-agentic-venv}"
+    AGENTIC_VENV="/tmp/inferencex-agentic-venv"
     "$SGLANG_PYTHON" -m venv "$AGENTIC_VENV"
     export PATH="$AGENTIC_VENV/bin:$PATH"
 fi
@@ -70,18 +68,13 @@ if require_agentic_kv_offload_backend hicache; then
     # DEP8 shards the host pools and fits ratio=8 on NScale. The replicated
     # TP8 pools need a lower ratio: 2.75 allocates about 121 GiB per rank and
     # leaves startup headroom on the 1.7 TiB NScale hosts.
-    DEFAULT_HICACHE_RATIO=2.75
+    HICACHE_RATIO=2.75
     if [ "$DP_ATTENTION" = "true" ]; then
-        DEFAULT_HICACHE_RATIO=8
+        HICACHE_RATIO=8
     fi
-    HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
-    if awk -v ratio="$HICACHE_RATIO" -v max="$DEFAULT_HICACHE_RATIO" 'BEGIN { exit !(ratio > max) }'; then
-        echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds configured limit $DEFAULT_HICACHE_RATIO" >&2
-        exit 1
-    fi
-    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
-    HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-    HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+    HICACHE_WRITE_POLICY="write_through"
+    HICACHE_IO_BACKEND="direct"
+    HICACHE_MEM_LAYOUT="page_first_direct"
     CACHE_ARGS=(
         --enable-hierarchical-cache
         --hicache-ratio "$HICACHE_RATIO"

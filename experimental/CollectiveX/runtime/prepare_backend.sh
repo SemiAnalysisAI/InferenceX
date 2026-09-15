@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prepare one backend per allocated node and persist its rank environment.
-set -euo pipefail
+set -eo pipefail
 
 cd /ix/experimental/CollectiveX
 # shellcheck source=../runtime/common.sh

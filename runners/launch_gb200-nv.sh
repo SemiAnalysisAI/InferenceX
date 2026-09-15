@@ -1,5 +1,8 @@
 #!/usr/bin/bash
 
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars EVAL_ONLY IS_AGENTIC IS_MULTINODE RUN_EVAL SALLOC_TIME_LIMIT
+
 # This script sets up the environment and launches multi-node benchmarks
 
 set -x
@@ -94,11 +97,11 @@ import_squash() {
 }
 
 # Direct single-tray AgentX uses the existing shared image and HF caches.
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE}" != "true" ]]; then
     BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb200_${FRAMEWORK}_mtp.sh"
     # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
     export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
-    [[ "${IS_AGENTIC:-0}" == "1" && "${SPEC_DECODING:-}" == "mtp" && -f "$BENCH_SCRIPT" ]] || {
+    [[ "${IS_AGENTIC}" == "1" && "${SPEC_DECODING:-}" == "mtp" && -f "$BENCH_SCRIPT" ]] || {
         echo "Unsupported single-node recipe: $BENCH_SCRIPT" >&2
         exit 1
     }
@@ -110,7 +113,7 @@ if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINO
     import_squash "$SQUASH_FILE" "$IMAGE"
     srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
         --nodes=1 --ntasks=1 --gpus="${TP:?}" --exclusive --mem=0 \
-        --time="${SALLOC_TIME_LIMIT:-480}" --job-name="$RUNNER_NAME" \
+        --time="${SALLOC_TIME_LIMIT}" --job-name="$RUNNER_NAME" \
         --mpi=none --container-image="$SQUASH_FILE" \
         --container-mounts="$GITHUB_WORKSPACE:/ix,$HF_HUB_CACHE_HOST_PATH:/hf-cache" \
         --no-container-mount-home --container-remap-root \
@@ -160,7 +163,7 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
         copy_to_workspace "$result_file" "$GITHUB_WORKSPACE/$(basename "$result_file")" || exit 1
     done < <(find "$BENCHMARK_LOGS_DIR" -name "${RESULT_FILENAME}*.json" -print0 2>/dev/null)
 
-    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+    if [[ "${RUN_EVAL}" == "true" ]]; then
         EVAL_DIR=$(find "$BENCHMARK_LOGS_DIR" -type d -name eval_results -print -quit 2>/dev/null)
         if [[ -z "$EVAL_DIR" ]]; then
             EVAL_DIR="$BENCHMARK_LOGS_DIR/eval_results"
@@ -354,7 +357,6 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
     sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
 fi
 
-export EVAL_ONLY="${EVAL_ONLY:-false}"
 
 export ISL="$ISL"
 export OSL="$OSL"
@@ -674,7 +676,7 @@ set -x
 echo "Job $JOB_ID finished!"
 echo "Collecting results..."
 
-if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY}" != "true" ]]; then
     mkdir -p "$LOGS_DIR/power"
     # Accounting can lag squeue removal. Retry only a missing/nonterminal row.
     for status_attempt in 1 2 3; do
@@ -733,7 +735,7 @@ if [[ "$AGENTX_POWER_RC" != "0" ]]; then
     exit "$AGENTX_POWER_RC"
 fi
 
-if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+if [[ "${EVAL_ONLY}" != "true" ]]; then
     if [ ! -d "$LOGS_DIR" ]; then
         exit 1
     fi
@@ -796,6 +798,6 @@ else
 fi
 
 # Collect eval results if eval was requested
-if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
+if [[ "${RUN_EVAL}" == "true" || "${EVAL_ONLY}" == "true" ]]; then
     copy_eval_artifacts "$LOGS_DIR/eval_results" "$GITHUB_WORKSPACE" || exit 1
 fi
