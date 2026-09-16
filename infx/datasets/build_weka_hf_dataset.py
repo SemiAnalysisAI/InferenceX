@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Build + upload a weka-with-subagents HuggingFace dataset (and optional 256k variant).
 
 End-to-end pipeline:
@@ -35,9 +34,10 @@ import os
 import shlex
 import subprocess
 import sys
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable
+from typing import Any
 
 CAP_TOKENS = 256_000
 HERE = Path(__file__).resolve().parent
@@ -65,8 +65,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--repo-256k",
         default=None,
-        help="HF dataset repo id for the 256k-capped variant. "
-        "Omit to skip the 256k build.",
+        help="HF dataset repo id for the 256k-capped variant. Omit to skip the 256k build.",
     )
     p.add_argument(
         "--base-max-isl",
@@ -126,9 +125,7 @@ def parse_args() -> argparse.Namespace:
     )
 
     # auth
-    p.add_argument(
-        "--db-url", default=None, help="Postgres URL (else $AGENTIC_PROXY_DB_URL)."
-    )
+    p.add_argument("--db-url", default=None, help="Postgres URL (else $AGENTIC_PROXY_DB_URL).")
     p.add_argument(
         "--hf-token",
         default=None,
@@ -136,9 +133,7 @@ def parse_args() -> argparse.Namespace:
     )
 
     # idempotency
-    p.add_argument(
-        "--skip-sample", action="store_true", help="Reuse work-dir/proxy/ if present."
-    )
+    p.add_argument("--skip-sample", action="store_true", help="Reuse work-dir/proxy/ if present.")
     p.add_argument(
         "--skip-convert",
         action="store_true",
@@ -153,12 +148,12 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def _run(cmd: list, **kw) -> None:
+def _run(cmd: list, **kw: Any) -> None:
     print(f"$ {' '.join(shlex.quote(str(c)) for c in cmd)}", flush=True)
     subprocess.run(cmd, check=True, **kw)
 
 
-def stage_sample(args, work_dir: Path) -> Path:
+def stage_sample(args: argparse.Namespace, work_dir: Path) -> Path:
     proxy_dir = work_dir / "proxy"
     if args.skip_sample and proxy_dir.exists() and any(proxy_dir.glob("*.jsonl")):
         n = sum(1 for _ in proxy_dir.glob("*.jsonl"))
@@ -195,7 +190,7 @@ def stage_sample(args, work_dir: Path) -> Path:
     return proxy_dir
 
 
-def stage_convert(args, proxy_dir: Path, work_dir: Path) -> Path:
+def stage_convert(args: argparse.Namespace, proxy_dir: Path, work_dir: Path) -> Path:
     per_trace = work_dir / "per_trace"
     if args.skip_convert and per_trace.exists() and any(per_trace.glob("*.json")):
         n = sum(1 for _ in per_trace.glob("*.json"))
@@ -303,11 +298,11 @@ def _build_readme(
     pretty_date: str | None = None,
     isl_cap: int | None = None,
 ) -> str:
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
     pretty_label = (
         f"CC Traces — Weka, With Subagents, "
         f"{'256k cap, ' if is_256k else ''}"
-        f"{version_label} ({pretty_date or datetime.now(timezone.utc).strftime('%b %d %Y')})"
+        f"{version_label} ({pretty_date or datetime.now(UTC).strftime('%b %d %Y')})"
     )
     plugin_key = (
         "semianalysis_cc_traces_weka_with_subagents_256k"
@@ -408,7 +403,7 @@ def _build_readme(
     )
 
 
-def _filters_block(args, *, cap_256k: bool = False) -> str:
+def _filters_block(args: argparse.Namespace, *, cap_256k: bool = False) -> str:
     bits = []
     if (
         args.min_trace_version is not None
@@ -430,9 +425,7 @@ def _filters_block(args, *, cap_256k: bool = False) -> str:
     if args.require_cli_min is not None:
         bits.append(f"- Claude Code CLI ≥ {args.require_cli_min} (every row)")
     if args.max_parallel_subagents is not None:
-        bits.append(
-            f"- peak concurrent sub-agent groups ≤ {args.max_parallel_subagents}"
-        )
+        bits.append(f"- peak concurrent sub-agent groups ≤ {args.max_parallel_subagents}")
     bits.append("- Non-image rows only (image content excluded at source)")
     bits.append(
         "- Classifier calls excluded "
@@ -463,7 +456,7 @@ def _filters_block(args, *, cap_256k: bool = False) -> str:
 
 
 def _build_payload(
-    args,
+    args: argparse.Namespace,
     per_trace_dir: Path,
     payload_dir: Path,
     *,
@@ -574,9 +567,7 @@ def _filter_trace(trace: dict, is_oversize: Callable[[dict], bool]) -> dict | No
     request_times = [
         req.get("t", 0.0)
         for entry in surviving
-        for req in (
-            entry.get("requests", []) if entry.get("type") == "subagent" else [entry]
-        )
+        for req in (entry.get("requests", []) if entry.get("type") == "subagent" else [entry])
     ]
     origin = min(request_times)
 
@@ -592,10 +583,8 @@ def _filter_trace(trace: dict, is_oversize: Callable[[dict], bool]) -> dict | No
         first_t = min(inner["t"] for inner in inners)
         last_end = max(inner["t"] + (inner.get("api_time") or 0.0) for inner in inners)
         entry["t"] = first_t
-        entry["duration_ms"] = int(round((last_end - first_t) * 1000.0))
-        entry["total_tokens"] = sum(
-            (r.get("in") or 0) + (r.get("out") or 0) for r in inners
-        )
+        entry["duration_ms"] = round((last_end - first_t) * 1000.0)
+        entry["total_tokens"] = sum((r.get("in") or 0) + (r.get("out") or 0) for r in inners)
 
     out["requests"] = surviving
     return out
@@ -612,7 +601,12 @@ def _filter_trace_isl(trace: dict, cap: int) -> dict | None:
     return _filter_trace(trace, lambda r: _is_oversize_isl(r, cap))
 
 
-def _stage_filter(per_trace_dir: Path, out_dir: Path, filter_fn, tag: str) -> Path:
+def _stage_filter(
+    per_trace_dir: Path,
+    out_dir: Path,
+    filter_fn: Callable[[dict], dict | None],
+    tag: str,
+) -> Path:
     """Apply ``filter_fn`` to every per-trace JSON; write survivors to out_dir."""
     out_dir.mkdir(parents=True, exist_ok=True)
     kept = 0
@@ -635,9 +629,7 @@ def _stage_filter(per_trace_dir: Path, out_dir: Path, filter_fn, tag: str) -> Pa
 
 def stage_256k(per_trace_dir: Path, work_dir: Path) -> Path:
     """Apply 256k filter to every per-trace JSON; write to work_dir/per_trace_256k/."""
-    return _stage_filter(
-        per_trace_dir, work_dir / "per_trace_256k", _filter_trace_256k, "256k"
-    )
+    return _stage_filter(per_trace_dir, work_dir / "per_trace_256k", _filter_trace_256k, "256k")
 
 
 def stage_isl_filter(per_trace_dir: Path, work_dir: Path, cap: int) -> Path:
@@ -658,7 +650,9 @@ def stage_isl_filter(per_trace_dir: Path, work_dir: Path, cap: int) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def stage_upload(args, payload_dir: Path, repo_id: str, commit_msg: str) -> None:
+def stage_upload(
+    args: argparse.Namespace, payload_dir: Path, repo_id: str, commit_msg: str
+) -> None:
     if args.skip_upload:
         print(f"[upload] --skip-upload: payload ready at {payload_dir}")
         return
@@ -678,7 +672,7 @@ def stage_upload(args, payload_dir: Path, repo_id: str, commit_msg: str) -> None
     print(f"[upload] done: https://huggingface.co/datasets/{repo_id}")
 
 
-def _reconstruct_sampler_cmd(args) -> list:
+def _reconstruct_sampler_cmd(args: argparse.Namespace) -> list:
     """The exact sample_proxy_traces.py invocation, for the README."""
     cmd = [
         "python",

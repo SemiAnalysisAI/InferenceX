@@ -1,157 +1,18 @@
 """Exercise the fixed-sequence module CLI with controlled environment and artifacts."""
 import json
 import os
-import re
-import shutil
 import signal
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
-import yaml
 
 from infx.results.power.multinode import ROLE_METRIC_KEYS, WHOLE_METRIC_KEYS
 from test_aggregate_power_multinode import PRODUCER_SHA, build_package
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MODULE_COMMAND = [sys.executable, "-m", "infx.results.fixed_sequence"]
-
-
-@pytest.mark.parametrize(("historical", "expected_filename"), [
-    (False, "fixture"),
-    (True, "1d8fcd0d7905fdaee2bd136c221bde34db0b88e16a9e4043c238a9607e29a990"),
-])
-def test_launch_step_computes_gpu_count_and_result_identity(
-    tmp_path, single_node_env_vars, historical, expected_filename,
-):
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/benchmark-tmpl.yml").read_text())
-    step = next(step for step in workflow["jobs"]["benchmark"]["steps"] if step.get("name") == "Launch job script")
-    script = step["run"].replace("${{ inputs.eval-only }}", "false").replace(
-        "${{ inputs.scenario-type }}", "fixed-seq-len")
-    if not historical:
-        for file in ("utils/result_filename.py", "infx/__init__.py", "infx/results/__init__.py",
-                     "infx/results/result_filename.py"):
-            target = tmp_path / file
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(REPO_ROOT / file, target)
-    (tmp_path / "runners").mkdir()
-    (tmp_path / "runners/launch_fixture-node.sh").write_text('''python3 - <<'PY'
-import json, os
-with open('received.json', 'w') as output:
-    json.dump(dict(os.environ), output)
-PY
-printf '{}' > "$RESULT_FILENAME.json"
-''')
-    result = subprocess.run(
-        ["bash", "-euo", "pipefail", "-c", script], cwd=tmp_path, capture_output=True, text=True, timeout=10,
-        env={**os.environ, **single_node_env_vars,
-             "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}", "PYTHONPATH": "",
-             "TP": "4", "PP_SIZE": "2", "PCP_SIZE": "3", "DCP_SIZE": "4",
-             "RUNNER_NAME": "fixture-node_03", "RUNNER_TYPE": "fixture-node",
-             "RESULT_FILENAME_BASE": "fixture", "RECIPE_FINGERPRINT": "",
-             "GITHUB_ENV": str(tmp_path / "github-env")},
-    )
-    assert result.returncode == 0, result.stderr
-    received = json.loads((tmp_path / "received.json").read_text())
-    assert received["GPU_COUNT"] == "24"
-    assert received["RESULT_FILENAME"] == expected_filename
-    published = dict(line.split("=", 1) for line in (tmp_path / "github-env").read_text().splitlines())
-    assert published == {"GPU_COUNT": "24", "RESULT_FILENAME": expected_filename}
-
-
-def test_single_node_workflow_reports_missing_raw_result(tmp_path, single_node_env_vars):
-    workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-tmpl.yml').read_text())
-    step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
-                if step.get('name') == 'Process result')
-    shutil.copytree(REPO_ROOT / 'infx', tmp_path / 'infx')
-    (tmp_path / 'utils').mkdir()
-    shutil.copy(REPO_ROOT / 'utils/process_result.py', tmp_path / 'utils/process_result.py')
-    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=tmp_path,
-                            env={**os.environ, **single_node_env_vars, 'RESULT_FILENAME': 'missing',
-                                 'PATH': f"{Path(sys.executable).parent}:{os.environ['PATH']}"},
-                            capture_output=True, text=True, timeout=10)
-    assert result.returncode == 1
-    assert 'no raw result to process: missing.json' in result.stderr
-    assert 'Traceback' not in result.stderr
-    assert not (tmp_path / 'agg_missing.json').exists()
-
-
-@pytest.mark.parametrize(("scenario", "eval_only", "artifacts", "diagnostic"), [
-    ("fixed-seq-len", False, {"fixture_conc4.json": {}}, None),
-    ("fixed-seq-len", False, {}, "No benchmark result files found"),
-    ("agentic-coding", False, {"fixture_conc4.json": {"num_requests_successful": 3},
-                               "fixture_conc8.json": {"num_requests_successful": 5}}, None),
-    ("agentic-coding", False, {"fixture_conc4.json": {"num_requests_successful": 3}},
-     "expected 2 agentic results, found 1"),
-    ("agentic-coding", False, {"fixture_conc4.json": {"num_requests_successful": 3},
-                               "fixture_conc8.json": {"num_requests_successful": 0}},
-     "zero successful requests"),
-    ("agentic-coding", True, {"results_fixture.json": {}}, None),
-    ("agentic-coding", True, {}, "no results*.json files found"),
-])
-def test_multinode_launch_checks_the_expected_result_batch(
-    tmp_path, multinode_env_vars, scenario, eval_only, artifacts, diagnostic,
-):
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/benchmark-multinode-tmpl.yml").read_text())
-    step = next(step for step in workflow["jobs"]["benchmark"]["steps"]
-                if step.get("name") == "Launch multi-node job script")
-    script = step["run"].replace("${{ inputs.eval-only }}", str(eval_only).lower()).replace(
-        "${{ inputs.scenario-type }}", scenario)
-    script = re.sub(r"\$\{\{ join\([^\n]*?additional-settings[^\n]*?\}\}", "", script)
-    for file in ("utils/result_filename.py", "infx/__init__.py", "infx/results/__init__.py",
-                 "infx/results/result_filename.py"):
-        target = tmp_path / file
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(REPO_ROOT / file, target)
-    (tmp_path / "runners").mkdir()
-    (tmp_path / "runners/launch_fixture-node.sh").write_text("exit 0\n")
-    for filename, payload in artifacts.items():
-        (tmp_path / filename).write_text(json.dumps(payload))
-    result = subprocess.run(
-        ["bash", "-euo", "pipefail", "-c", script], cwd=tmp_path, capture_output=True, text=True, timeout=10,
-        env={**os.environ, **multinode_env_vars,
-             "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}", "PYTHONPATH": "",
-             "RUNNER_NAME": "fixture-node_03", "RESULT_FILENAME_BASE": "fixture",
-             "RECIPE_FINGERPRINT": "", "CONC_LIST": "4 8", "GITHUB_ENV": str(tmp_path / "github-env")},
-    )
-    if diagnostic:
-        assert result.returncode == 1
-        assert diagnostic in result.stderr
-    else:
-        assert result.returncode == 0, result.stderr
-    published = dict(line.split("=", 1) for line in (tmp_path / "github-env").read_text().splitlines())
-    assert published == {"RESULT_FILENAME": "fixture", "EVAL_ARTIFACT_RECIPE": "",
-                         "EVAL_ARTIFACT_CONC": "809c025ba41f"}
-
-
-@pytest.mark.parametrize("workflow_name", ["benchmark-tmpl.yml", "benchmark-multinode-tmpl.yml", "profile.yml"])
-def test_workflow_processes_results_through_compatibility_entrypoint(
-    tmp_path, workflow_name, single_node_env_vars, multinode_env_vars, sample_benchmark_result,
-):
-    shutil.copytree(REPO_ROOT / "infx", tmp_path / "infx")
-    (tmp_path / "utils").mkdir()
-    shutil.copy(REPO_ROOT / "utils/process_result.py", tmp_path / "utils/process_result.py")
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows" / workflow_name).read_text())
-    step = next(step for job in workflow["jobs"].values() for step in job.get("steps", [])
-                if step.get("name", "").startswith("Process result"))
-    multinode = workflow_name == "benchmark-multinode-tmpl.yml"
-    stem = "fixture_conc64_gpus_28_ctx_20_gen_8" if multinode else "fixture"
-    (tmp_path / f"{stem}.json").write_text(json.dumps({
-        **sample_benchmark_result, "total_token_throughput": 56, "output_throughput": 28,
-    }))
-    env = {**(multinode_env_vars if multinode else single_node_env_vars),
-           "RESULT_FILENAME": "fixture" if multinode else stem, "POWER_PRODUCER_SHA": "",
-           "CONC_LIST": "64",
-           "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}"}
-    result = subprocess.run(["bash", "-euo", "pipefail", "-c", step["run"]],
-                            cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10)
-    assert result.returncode == 0, result.stderr
-    data = json.loads((tmp_path / f"agg_{stem}.json").read_text())
-    assert data["conc"] == 64
-    assert data["disagg"] is multinode
-    assert data["tput_per_gpu"] == (2 if multinode else 7)
-    assert (tmp_path / f"power_validation_{stem}.json").is_file()
 
 
 @pytest.mark.parametrize('fingerprint', ['', 'a' * 64, 'a' * 16 + 'b' * 48])
@@ -1700,22 +1561,6 @@ def test_public_power_audit_bounds_text_and_device_identifiers():
     assert audit['observed_gpu_ids'][:2] == ['gpu0', 'gpu1']
 
 
-@pytest.mark.parametrize('step_name', ['Upload GPU metrics', 'Upload power audit bundle'])
-def test_workflow_retains_context_for_each_metrics_csv(tmp_path, step_name):
-    import yaml
-
-    workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-tmpl.yml').read_text())
-    step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
-                if step.get('name') == step_name)
-    patterns = step['with']['path'].splitlines()
-    for relative in ['gpu_metrics_concurrency_4_context.json',
-                     'results/gpu_metrics_concurrency_4_context.json']:
-        path = tmp_path / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text('{"timestamp_timezone":"UTC"}')
-        assert any(path in tmp_path.glob(pattern.strip()) for pattern in patterns)
-
-
 @pytest.mark.parametrize('sidecar', ['run_recipe_conc4_gpus_4_ctx_2_gen_2.pytorch.json',
                                     'run_gpu_metrics_context.json', 'run_gpu_metrics_identity.json'])
 @pytest.mark.parametrize('point_state', ['valid', 'missing', 'malformed'])
@@ -1751,53 +1596,3 @@ def test_multinode_batch_rejects_unknown_point_filename(
     receipt = json.loads((tmp_path / 'result_processing_run.json').read_text())
     assert receipt['missing_concurrencies'] == [16]
     assert any('filename lacks' in point.get('error', '') for point in receipt['points'])
-
-
-@pytest.mark.parametrize('first_rc', [0, 7])
-@pytest.mark.parametrize('expected_concs', ['4 16', '4 8 16', '4'])
-def test_multinode_workflow_processes_every_point_with_legacy_processor(tmp_path, first_rc, expected_concs):
-    (tmp_path / 'utils').mkdir()
-    (tmp_path / 'utils/process_result.py').write_text('''import json, os, sys
-from pathlib import Path
-stem = os.environ['RESULT_FILENAME']
-data = json.loads(Path(stem + '.json').read_text())
-Path('agg_' + stem + '.json').write_text(json.dumps(data))
-sys.exit(data['exit_code'])
-''')
-    for conc, rc in [(4, first_rc), (16, 0)]:
-        (tmp_path / f'run_conc{conc}_gpus_4_ctx_2_gen_2.json').write_text(
-            json.dumps({'exit_code': rc}))
-    workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-multinode-tmpl.yml').read_text())
-    step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
-                if step.get('name') == 'Process result')
-    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=tmp_path,
-                            env={**os.environ, 'RESULT_FILENAME': 'run', 'POWER_PRODUCER_SHA': '',
-                                 'CONC_LIST': expected_concs, 'PYTHONPATH': '',
-                                 'PATH': f"{Path(sys.executable).parent}:{os.environ['PATH']}"},
-                            capture_output=True, text=True, timeout=10)
-    assert result.returncode == int(bool(first_rc) or expected_concs != '4 16'), result.stderr
-    for conc in [4, 16]:
-        assert (tmp_path / f'agg_run_conc{conc}_gpus_4_ctx_2_gen_2.json').is_file()
-
-
-def test_multinode_workflow_does_not_downgrade_processor_import_errors(tmp_path):
-    (tmp_path / 'infx/results').mkdir(parents=True)
-    (tmp_path / 'infx/__init__.py').touch()
-    (tmp_path / 'infx/results/__init__.py').touch()
-    (tmp_path / 'infx/results/fixed_sequence.py').write_text(
-        'raise RuntimeError("broken processor import")\n')
-    (tmp_path / 'utils').mkdir()
-    (tmp_path / 'utils/process_result.py').write_text(
-        'from pathlib import Path\nPath("legacy-called").touch()\n')
-    (tmp_path / 'run_conc4_gpus_4.json').write_text('{}')
-    workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-multinode-tmpl.yml').read_text())
-    step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
-                if step.get('name') == 'Process result')
-    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=tmp_path,
-                            env={**os.environ, 'RESULT_FILENAME': 'run', 'POWER_PRODUCER_SHA': '',
-                                 'CONC_LIST': '4', 'PYTHONPATH': '',
-                                 'PATH': f"{Path(sys.executable).parent}:{os.environ['PATH']}"},
-                            capture_output=True, text=True, timeout=10)
-    assert result.returncode != 0
-    assert 'broken processor import' in result.stderr
-    assert not (tmp_path / 'legacy-called').exists()

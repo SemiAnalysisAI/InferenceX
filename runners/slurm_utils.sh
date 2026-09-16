@@ -2,10 +2,10 @@
 
 # Launchers source this file before changing into srt-slurm.
 INFERENCEX_SLURM_UTILS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$INFERENCEX_SLURM_UTILS_DIR/../benchmarks/benchmark_lib.sh" --validation-only || return 1
 
 SRTCTL_EVAL_ARGS=(
     --set 'post_eval.command=["bash", "{infmax_workspace}/benchmarks/multi_node/srt_eval.sh", "{endpoint}", "{infmax_workspace}"]'
-    --set 'post_eval.passthrough_env=["EVAL_FRAMEWORK", "EVAL_CONC", "EVAL_LIMIT", "EVAL_SUITE", "SWEBENCH_GEN_MODE", "SWEBENCH_USE_MODAL", "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET", "IS_AGENTIC", "SCENARIO_TYPE"]'
 )
 
 # Leaves the caller in the checkout, matching the launchers' installation flow.
@@ -16,6 +16,23 @@ setup_srt_slurm() {
         return 1
     fi
     local destination="$1" framework="$2" uses_power="$3"
+    check_env_vars INFERENCEX_RUNTIME_ENV_VARS AIPERF_DRAIN_TIMEOUT_SECONDS AIPERF_DRAIN_POLL_SECONDS EVAL_ONLY
+    local eval_passthrough
+    eval_passthrough=$(python3 - <<'PYENV'
+import json
+import os
+
+names = [
+    "EVAL_FRAMEWORK", "EVAL_CONC", "EVAL_LIMIT", "EVAL_SUITE",
+    "SWEBENCH_GEN_MODE", "SWEBENCH_USE_MODAL", "MODAL_TOKEN_ID",
+    "MODAL_TOKEN_SECRET", "IS_AGENTIC", "SCENARIO_TYPE",
+]
+print(json.dumps(names + os.environ["INFERENCEX_RUNTIME_ENV_VARS"].split()))
+PYENV
+    ) || return 1
+    SRTCTL_EVAL_ARGS+=(--set "post_eval.passthrough_env=$eval_passthrough")
+    # Custom benchmarks inherit exported workflow settings through sbatch/srun;
+    # native recipe environment and benchmark.env retain their override priority.
     local source="$INFERENCEX_SLURM_UTILS_DIR/../utils/srt-slurm"
     if [[ "$framework" == "tilert" ]]; then
         # Sole fork exception until NVIDIA supports the TileRT backend and router.
@@ -70,11 +87,9 @@ check_staged_srt_assets() {
     fi
 }
 
-# Optionally inject synthetic acceptance into a recipe's speculative-config when
-# SYNTHETIC_ACCEPTANCE=true (no-op otherwise). Call after the job-name override
-# and before `srtctl apply` so the rendered job picks it up. Returns non-zero if
-# the injector fails, so a broken opt-in never reaches srtctl with an unrewritten
-# recipe; callers should propagate that rather than continuing.
+# Injects synthetic acceptance when SYNTHETIC_ACCEPTANCE=true, no-op otherwise.
+# Call after the job-name override and before `srtctl apply`; propagate a
+# non-zero return so an unrewritten recipe never reaches srtctl.
 inject_synthetic_acceptance() {
     local config_path="$1"
     local framework="$2"
@@ -117,10 +132,8 @@ copy_to_workspace() {
     local source_file="$1"
     local destination_file="$2"
 
-    # A compute-visible runner workspace may be mounted directly into the
-    # benchmark container. In that case the staged result already is the
-    # workflow artifact, so copying it onto itself would fail with cp's
-    # "same file" error even though the benchmark succeeded.
+    # When the runner workspace is mounted into the container the staged result
+    # already is the artifact, and cp onto itself fails with "same file".
     if [[ -e "$destination_file" && "$source_file" -ef "$destination_file" ]]; then
         echo "Result already present at $destination_file"
         return 0

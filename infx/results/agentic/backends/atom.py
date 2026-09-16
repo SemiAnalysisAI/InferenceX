@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..common import gauge_stat, normalize_fraction, rate, sum_stat
+from infx.results.agentic.common import gauge_stat, normalize_fraction, rate, sum_stat
+
 from .base import ServerMetricsBackend, counter_int
 
 

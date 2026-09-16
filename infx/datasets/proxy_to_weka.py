@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Convert flat per-session JSONL dumps into weka-format trace JSON.
 
 Reads <in-dir>/<session_id>.jsonl produced by `sample_proxy_traces.py`
@@ -49,7 +48,7 @@ def _dump_trace_inline_hash_ids(trace: dict, path: Path) -> None:
     """
     placeholders: list[list[Any]] = []
 
-    def _substitute(obj):
+    def _substitute(obj: Any) -> Any:
         if isinstance(obj, dict):
             out: dict[str, Any] = {}
             for k, v in obj.items():
@@ -153,7 +152,7 @@ def remap_hash(h: str, m: dict[str, int]) -> int:
     return m[h]
 
 
-def infer_block_size(rows: list[dict]) -> int:
+def infer_block_size(rows: list[dict]) -> int:  # noqa: ARG001
     """Anthropic's KV-cache uses a constant 64-token block. The proxy's
     `hash_token_count` can drift below `len(hash_ids) * 64` on rows
     where the prompt's trailing partial block isn't hashed — naive
@@ -194,9 +193,7 @@ def effective_input_length(row: dict, block_size: int = 64) -> int:
     )
 
 
-def build_normal_request(
-    row: dict, hash_map: dict[str, int], think_time: float | None
-) -> dict:
+def build_normal_request(row: dict, hash_map: dict[str, int], think_time: float | None) -> dict:
     """Inner subagent request — Normal type, per weka v1 spec."""
     out = {
         "t": row["t_sec"],
@@ -212,9 +209,7 @@ def build_normal_request(
     return out
 
 
-def build_top_request(
-    row: dict, hash_map: dict[str, int], think_time: float | None
-) -> dict:
+def build_top_request(row: dict, hash_map: dict[str, int], think_time: float | None) -> dict:
     """Top-level main-agent request — Normal or Streaming."""
     out = {
         "t": row["t_sec"],
@@ -319,7 +314,7 @@ def build_subagent_entry(
     first_row = items[0][0]
     last_row = items[-1][0]
     end_t = last_row["t_sec"] + (last_row.get("duration_ms") or 0) / 1000.0
-    duration_ms = int(round((end_t - first_row["t_sec"]) * 1000))
+    duration_ms = round((end_t - first_row["t_sec"]) * 1000)
     total_tokens = sum(r["in"] + r["out"] for r in inner)
     models = sorted({row["model"] for row, _ in items})
     # agent_id suffix priority: Claude Code agent-id (canonical when
@@ -393,7 +388,7 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
     # stable across fragments — collapse them. Mirrors the pass-1 logic
     # in subagent-runs.ts:buildRequestRuns.
     id_groups: dict[str, list[tuple[dict, float | None]]] = {}
-    for r, tt in zip(rows, think_times):
+    for r, tt in zip(rows, think_times, strict=False):
         key = _id_group_key(r)
         if key is None:
             continue
@@ -430,9 +425,7 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
                 # label since per-request system-prompt labels drift.
                 use_label = "Subagent" if row.get("agent_id") else row["subagent_label"]
                 instance_count[use_label] = instance_count.get(use_label, 0) + 1
-                entry = build_subagent_entry(
-                    use_label, instance_count[use_label], items, hash_map
-                )
+                entry = build_subagent_entry(use_label, instance_count[use_label], items, hash_map)
                 out_requests.append(entry)
                 models_seen.update(entry["models"])
             i += 1

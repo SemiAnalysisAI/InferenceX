@@ -17,14 +17,10 @@ fi
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
-# Reference
-# https://rocm.docs.amd.com/en/docs-7.0-rc1/preview/benchmark-docker/inference-sglang-deepseek-r1-fp8.html#run-the-inference-benchmark
+# Reference: https://rocm.docs.amd.com/en/docs-7.0-rc1/preview/benchmark-docker/inference-sglang-deepseek-r1-fp8.html#run-the-inference-benchmark
 
-# If the machine runs a MEC FW older than 177, RCCL
-# cannot reclaim some memory.
-# Disable that features to avoid crashes.
-# This is related to the changes in the driver at:
-# https://rocm.docs.amd.com/en/docs-6.4.3/about/release-notes.html#amdgpu-driver-updates
+# On MEC firmware older than 177 RCCL cannot reclaim scratch memory and crashes; disable it.
+# See https://rocm.docs.amd.com/en/docs-6.4.3/about/release-notes.html#amdgpu-driver-updates
 version=`rocm-smi --showfw | grep MEC | head -n 1 |  awk '{print $NF}'`
 if [[ "$version" == "" || $version -lt 177 ]]; then
   export HSA_NO_SCRATCH_RECLAIM=1
@@ -40,7 +36,6 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
 fi
-# Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
@@ -58,7 +53,6 @@ python3 -m sglang.launch_server \
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 run_benchmark_serving \
@@ -73,12 +67,10 @@ run_benchmark_serving \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
 set +x

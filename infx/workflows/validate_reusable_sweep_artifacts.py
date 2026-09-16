@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Validate reused sweep artifacts for internal consistency."""
 
 from __future__ import annotations
@@ -9,8 +8,9 @@ import re
 import shutil
 import sys
 from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any
 
 from infx.results.evals import (
     is_eval_result,
@@ -123,9 +123,7 @@ def actual_benchmark_keys(artifacts_dir: Path) -> set[tuple[Any, ...]]:
 def freeze_identity_value(value: Any) -> Any:
     """Convert nested JSON values into deterministic, hashable identities."""
     if isinstance(value, dict):
-        return tuple(
-            sorted((key, freeze_identity_value(item)) for key, item in value.items())
-        )
+        return tuple(sorted((key, freeze_identity_value(item)) for key, item in value.items()))
     if isinstance(value, (list, tuple)):
         return tuple(freeze_identity_value(item) for item in value)
     return value
@@ -225,14 +223,12 @@ def validate_identity_set(
     extra = actual - expected
     if missing:
         errors.append(f"{label} artifacts are missing {len(missing)} expected row(s)")
-        for key in sorted(missing, key=repr)[:20]:
-            errors.append(f"  missing: {key}")
+        errors.extend(f"  missing: {key}" for key in sorted(missing, key=repr)[:20])
         if len(missing) > 20:
             errors.append(f"  ... and {len(missing) - 20} more")
     if extra:
         errors.append(f"{label} artifacts contain {len(extra)} unexpected row(s)")
-        for key in sorted(extra, key=repr)[:20]:
-            errors.append(f"  unexpected: {key}")
+        errors.extend(f"  unexpected: {key}" for key in sorted(extra, key=repr)[:20])
         if len(extra) > 20:
             errors.append(f"  ... and {len(extra) - 20} more")
     return errors
@@ -397,7 +393,7 @@ def _raw_meta_contributions(
     artifact_name: str,
     meta: dict[str, Any],
 ) -> tuple[
-    list[tuple[tuple[Any, ...], Optional[int]]],
+    list[tuple[tuple[Any, ...], int | None]],
     bool,
     list[str],
 ]:
@@ -466,27 +462,20 @@ def raw_eval_key_rows(
     for artifact_dir in raw_eval_artifact_dirs(artifacts_dir):
         meta_path = artifact_dir / "meta_env.json"
         if not meta_path.is_file():
-            errors.append(
-                f"raw eval artifact {artifact_dir.name!r} is missing meta_env.json"
-            )
+            errors.append(f"raw eval artifact {artifact_dir.name!r} is missing meta_env.json")
             continue
         try:
             meta = load_json(meta_path)
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             errors.append(
-                f"raw eval artifact {artifact_dir.name!r} has invalid "
-                f"meta_env.json: {exc}"
+                f"raw eval artifact {artifact_dir.name!r} has invalid meta_env.json: {exc}"
             )
             continue
         if not isinstance(meta, dict):
-            errors.append(
-                f"raw eval artifact {artifact_dir.name!r} has non-object meta_env.json"
-            )
+            errors.append(f"raw eval artifact {artifact_dir.name!r} has non-object meta_env.json")
             continue
         if invalid_eval_suite(meta):
-            errors.append(
-                f"raw eval artifact {artifact_dir.name!r} has invalid eval_suite"
-            )
+            errors.append(f"raw eval artifact {artifact_dir.name!r} has invalid eval_suite")
             continue
 
         contributions, batched, meta_errors = _raw_meta_contributions(
@@ -533,8 +522,7 @@ def raw_eval_key_rows(
             result_tasks = result_data["results"]
             contribution_meta = {**meta, "conc": conc} if conc is not None else meta
             rows.extend(
-                eval_result_key({**contribution_meta, "task": task})
-                for task in result_tasks
+                eval_result_key({**contribution_meta, "task": task}) for task in result_tasks
             )
     return rows, errors
 
@@ -558,9 +546,7 @@ def validate_eval_artifacts(
                 try:
                     data = load_json(path)
                 except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-                    errors.append(
-                        f"eval aggregate {path.name!r} is invalid JSON: {exc}"
-                    )
+                    errors.append(f"eval aggregate {path.name!r} is invalid JSON: {exc}")
                     continue
                 if not isinstance(data, list):
                     errors.append(f"eval aggregate {path.name!r} is not a list")
@@ -568,14 +554,11 @@ def validate_eval_artifacts(
                 row_count += len(data)
                 for index, row in enumerate(data):
                     if not isinstance(row, dict):
-                        errors.append(
-                            f"eval aggregate {path.name!r} row {index} is not an object"
-                        )
+                        errors.append(f"eval aggregate {path.name!r} row {index} is not an object")
                         continue
                     if invalid_eval_suite(row):
                         errors.append(
-                            f"eval aggregate {path.name!r} row {index} "
-                            "has invalid eval_suite"
+                            f"eval aggregate {path.name!r} row {index} has invalid eval_suite"
                         )
                         continue
                     aggregate_rows.append(eval_result_key(row))
@@ -632,7 +615,7 @@ def _recognized_eval_result_paths(paths: Iterable[Path]) -> list[Path]:
     return recognized
 
 
-def _raw_result_error(path: Path) -> Optional[str]:
+def _raw_result_error(path: Path) -> str | None:
     """Return a structural error for a raw result, or None when reusable."""
     try:
         data = load_json(path)
@@ -688,12 +671,8 @@ def _raw_result_error(path: Path) -> Optional[str]:
             ):
                 return f"has malformed filter config for task {task!r}"
             configured_names = [f"{base_metric},{item['name']}" for item in filter_list]
-            strict_names = [
-                name for name in configured_names if metric_family(name) == "strict"
-            ]
-            fallback_names = [
-                name for name in configured_names if metric_family(name) == "flex"
-            ]
+            strict_names = [name for name in configured_names if metric_family(name) == "strict"]
+            fallback_names = [name for name in configured_names if metric_family(name) == "flex"]
             primary_names = strict_names or fallback_names or configured_names
         else:
             primary_names = ["acc" if "acc" in metrics else base_metric]
@@ -710,16 +689,13 @@ def _raw_result_error(path: Path) -> Optional[str]:
                 return f"has malformed effective sample count for task {task!r}"
             effective = task_counts["effective"]
             if not is_valid_effective_count(effective):
-                return (
-                    f"has invalid effective sample count for task {task!r}: "
-                    f"{effective!r}"
-                )
+                return f"has invalid effective sample count for task {task!r}: {effective!r}"
     return None
 
 
 def _raw_dir_contributions(
     artifact_dir: Path,
-) -> tuple[list[tuple[tuple[Any, ...], Optional[int]]], dict[str, Any], bool]:
+) -> tuple[list[tuple[tuple[Any, ...], int | None]], dict[str, Any], bool]:
     """Return validated (identity, conc) contributions and raw metadata."""
     try:
         meta = load_json(artifact_dir / "meta_env.json")
@@ -756,9 +732,7 @@ def _eval_winners(artifacts_dir: Path) -> dict[tuple[Any, ...], Path]:
             continue
         for row in data:
             if isinstance(row, dict) and not invalid_eval_suite(row):
-                aggregate_sources.setdefault(eval_key(row), []).append(
-                    row.get("source")
-                )
+                aggregate_sources.setdefault(eval_key(row), []).append(row.get("source"))
 
     best: dict[
         tuple[Any, ...],
@@ -788,9 +762,7 @@ def _eval_winners(artifacts_dir: Path) -> dict[tuple[Any, ...], Path]:
     return winners
 
 
-def _dedupe_eval_aggregate(
-    artifacts_dir: Path, winners: dict[tuple[Any, ...], Path]
-) -> list[str]:
+def _dedupe_eval_aggregate(artifacts_dir: Path, winners: dict[tuple[Any, ...], Path]) -> list[str]:
     """Keep one aggregate row per winning identity across all aggregate files."""
     eval_dir = artifacts_dir / "eval_results_all"
     if not eval_dir.is_dir():
@@ -811,9 +783,7 @@ def _dedupe_eval_aggregate(
         loaded[agg_path] = data
         for index, row in enumerate(data):
             if isinstance(row, dict) and not invalid_eval_suite(row):
-                groups.setdefault(eval_result_key(row), []).append(
-                    (agg_path, index, row)
-                )
+                groups.setdefault(eval_result_key(row), []).append((agg_path, index, row))
 
     keep = {path: set(range(len(data))) for path, data in loaded.items()}
     for key, entries in groups.items():
@@ -856,9 +826,7 @@ def _dedupe_eval_aggregate(
     return messages
 
 
-def _prune_raw_eval_dir(
-    artifact_dir: Path, winners: dict[tuple[Any, ...], Path]
-) -> Optional[str]:
+def _prune_raw_eval_dir(artifact_dir: Path, winners: dict[tuple[Any, ...], Path]) -> str | None:
     """Drop a raw dir's identities that a newer dir supersedes."""
     contributions, meta, batched = _raw_dir_contributions(artifact_dir)
     if not contributions:
@@ -875,17 +843,13 @@ def _prune_raw_eval_dir(
             return f"removed superseded raw eval dir {name!r}"
         return None
 
-    losing = {
-        conc for key, conc in contributions if conc is not None and superseded(key)
-    }
+    losing = {conc for key, conc in contributions if conc is not None and superseded(key)}
     if not losing:
         return None
     for path in artifact_dir.glob("results*.json"):
         if _result_concurrency(path.name) in losing:
             path.unlink()
-    remaining = [
-        conc for conc in meta.get("completed_eval_concs", []) if conc not in losing
-    ]
+    remaining = [conc for conc in meta.get("completed_eval_concs", []) if conc not in losing]
     if not remaining:
         shutil.rmtree(artifact_dir)
         return f"removed superseded batched raw eval dir {name!r}"

@@ -24,15 +24,17 @@ def audit_summary(validation: Mapping[str, Any], source: str) -> dict[str, Any]:
         fields["sample_count"] = sum(counts.values())
     gaps = validation.get("per_gpu_max_sample_gap_s") or {}
     finite_gaps = [
-        value
-        for value in gaps.values()
-        if type(value) in (int, float) and math.isfinite(value)
+        value for value in gaps.values() if type(value) in (int, float) and math.isfinite(value)
     ]
     if finite_gaps:
         fields["max_sample_gap_s"] = max(finite_gaps)
-    for key, value in fields.items():
-        if type(value) in (int, float) and math.isfinite(value) and value >= 0:
-            audit[key] = value
+    audit.update(
+        {
+            key: value
+            for key, value in fields.items()
+            if type(value) in (int, float) and math.isfinite(value) and value >= 0
+        }
+    )
     for target, original in (
         ("producer_sha", "producer_git_commit"),
         ("exporter_image_sha256", "exporter_image_sha256"),

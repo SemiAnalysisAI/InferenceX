@@ -1,20 +1,15 @@
 #!/usr/bin/env bash
-# CollectiveX Docker launcher for the Slurm-less "-tw" AMD clusters (mi325x-tw,
-# mi300x-tw), single-node scale-up.
-#
-# Their GHA runners run as `gharunner` directly on an 8x CDNA (gfx942) node that has
-# Docker (gharunner is in the docker/video/render groups) but NO Slurm and NO enroot.
-# So unlike the Slurm+enroot mi-amds launcher, this launcher runs each case in a
-# Docker container driven by torchrun. It is EP8 scale-up only: there is no scheduler
-# or RDMA fabric on these clusters to build EP16 scale-out on.
-set -euo pipefail
+# CollectiveX Docker launcher for the Slurm-less "-tw" AMD clusters (mi325x-tw, mi300x-tw).
+# Their GHA runners run as `gharunner` on an 8x CDNA (gfx942) node with Docker but no Slurm or
+# enroot, so each case runs in a Docker container driven by torchrun. EP8 scale-up only: there
+# is no scheduler or RDMA fabric to build EP16 scale-out on.
+set -eo pipefail
 
 HERE="$(cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 COLLX_DIR="$(cd "$HERE/.." && pwd)"
 # shellcheck source=../runtime/common.sh
 source "$HERE/../runtime/common.sh"
 
-# ---- identity ---------------------------------------------------------------
 RUNNER="${COLLX_SHARD_SKU:-}"
 case "$RUNNER" in
   mi325x-tw | mi300x-tw) ;;
@@ -26,11 +21,8 @@ case "$COLLX_BENCH" in
   *) collx_die "the -tw AMD clusters support only the mori and uccl-ep backends, got '$COLLX_BENCH'" ;;
 esac
 
-# ---- setup: trimmed prologue (no Slurm stage-dir / enroot squash) -----------
-# collx_launcher_prologue's collx_prepare_stage_dir requires COLLX_SQUASH_DIR (the
-# enroot squash path); this cluster has neither, so run only the pieces a Docker
-# launcher needs: the fail-safe trap (allocation cleanup no-ops without a JOB_ID)
-# and the operator config, which supplies the Docker image tag.
+# collx_launcher_prologue requires COLLX_SQUASH_DIR (enroot squash), which this cluster lacks;
+# run only the fail-safe trap and the operator config (source of the Docker image tag).
 collx_install_launcher_fail_safe
 [ -n "${COLLX_SHARD_FILE:-}" ] || collx_die "COLLX_SHARD_FILE is required"
 collx_load_operator_config
@@ -45,9 +37,8 @@ IMAGE="$COLLX_IMAGE"
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 
 command -v docker >/dev/null 2>&1 || collx_die "docker not found on the $RUNNER runner"
-# -tw runner accounts differ: some are in the docker group (direct socket access,
-# e.g. mi325x-tw), others only have passwordless sudo (e.g. mi300x-tw's `cam`).
-# Pick whichever works so the launcher is portable across the -tw clusters.
+# -tw runner accounts differ: mi325x-tw's is in the docker group, mi300x-tw's `cam` only has
+# passwordless sudo.
 DOCKER=(docker)
 if ! docker ps >/dev/null 2>&1; then
   if sudo -n docker ps >/dev/null 2>&1; then
@@ -57,21 +48,10 @@ if ! docker ps >/dev/null 2>&1; then
   fi
 fi
 
-# Reap containers left behind by an earlier leg before touching the GPUs.
-#
-# A case container can outlive its GHA job: `docker run --rm` only removes the container when it
-# exits, so when Actions kills the runner's process tree (job cancellation, or the 350-minute
-# timeout firing on a wedged run) the daemon keeps it alive, and the workflow's non-root cleanup
-# step cannot remove a root-owned container. It then pins every GPU on the node, and the failure
-# it causes is nothing like a hang: hipIpcGetMemHandle starts returning "invalid argument" for any
-# job with >= 3 ranks while 1- and 2-rank jobs still pass. Observed twice - tw032 carried a wedged
-# MoRI low-latency leg for 5 days (4 red legs in one sweep, cleared by hand) and tw018 stranded one
-# the same way when a MoRI run hit the job timeout. A wedged low-latency leg is a known class, so
-# without this the next sweep re-poisons the node.
-#
-# The -tw fleets run one runner per node, so any container from the pinned image that predates this
-# launcher belongs to a finished leg. Should a pool ever put two runners on one node, this needs a
-# narrower predicate (match COLLX_CX_LABEL below and exclude the live execution id) instead.
+# Reap containers left by an earlier leg. `docker run --rm` only removes on exit, so when Actions
+# kills the runner's process tree the root-owned container survives the non-root cleanup step and
+# pins every GPU; the symptom is hipIpcGetMemHandle "invalid argument" for jobs with >= 3 ranks.
+# One runner per node, so any container from the pinned image that predates this launcher is stale.
 COLLX_CX_LABEL="collectivex.leg"
 for stray_id in $("${DOCKER[@]}" ps -q --filter "ancestor=$IMAGE" 2>/dev/null); do
   stray_started="$("${DOCKER[@]}" inspect -f '{{.State.StartedAt}}' "$stray_id" 2>/dev/null)" || continue
@@ -79,21 +59,15 @@ for stray_id in $("${DOCKER[@]}" ps -q --filter "ancestor=$IMAGE" 2>/dev/null); 
   "${DOCKER[@]}" rm -f "$stray_id" >/dev/null 2>&1 || true
 done
 
-# The image is imported once per node and reused; pull only when absent.
 "${DOCKER[@]}" image inspect "$IMAGE" >/dev/null 2>&1 \
   || "${DOCKER[@]}" pull "$IMAGE" >&2 \
   || collx_die "docker pull failed for $IMAGE"
 
 collx_log "runner=$RUNNER nodes=1 x ${GPN}gpu world=$NGPUS bench=$COLLX_BENCH image=$IMAGE (${DOCKER[*]}/torchrun)"
 
-# ---- uccl-ep: prepare source + build (persisted node-local, outside the job root) --------
-# UCCL is not in the image, so build from source. Cases each run in a throwaway `docker run
-# --rm`, so build ONCE into a prefix every case container puts on PYTHONPATH. The prefix lives
-# in a NODE-LOCAL /tmp path keyed on the pinned commit, NOT under the isolated job root: the
-# build container writes it as root, and the workflow's cleanup step (non-root runner) cannot
-# rm root-owned files under the job root (that reds an otherwise-green leg). /tmp is outside
-# cleanup's scope and lets a second leg on the same node reuse the build. The AMD build applies
-# the CDNA managed->pinned-host-memory patch (see prepare_backend.sh).
+# UCCL is not in the image; build once into a prefix every case container puts on PYTHONPATH.
+# The prefix is node-local /tmp keyed on the pinned commit, not the job root: the build writes
+# as root and the non-root cleanup step cannot rm root-owned files under the job root.
 UCCL_PFX_MOUNT=()
 if [ "$COLLX_BENCH" = uccl-ep ]; then
   REPO_ROOT="$(cd "$COLLX_DIR/../.." && pwd)"
@@ -103,20 +77,16 @@ import json, sys
 print(json.load(open(sys.argv[1]))["platforms"][sys.argv[2]]["arch"])
 PY
 )"
-  # Cache key = pinned UCCL commit + the image's CONTENT id + GPU arch. Torch/ROCm are baked into
-  # the image, so its content id (not the mutable tag) captures an ABI change even under a
-  # re-pushed tag, and the arch captures a cross-SKU reuse hazard. Keying on the commit alone (as
-  # before) would let a bumped image or a different arch silently reuse an ABI-stale build.
+  # Cache key = pinned commit + image content id + GPU arch: the content id (not the mutable tag)
+  # catches a torch/ROCm ABI change under a re-pushed tag, and the arch a cross-SKU reuse.
   UCCL_IMAGE_ID="$("${DOCKER[@]}" image inspect --format '{{.Id}}' "$IMAGE" 2>/dev/null \
     || printf '%s' "$IMAGE")"
   UCCL_CACHE_KEY="$(printf '%s\0%s\0%s' "$COLLX_UCCL_COMMIT" "$UCCL_IMAGE_ID" "$UCCL_ARCH" \
     | sha1sum | cut -c1-16)"
   UCCL_PFX_HOST="/tmp/collx-uccl-pfx-$UCCL_CACHE_KEY"
   UCCL_PFX_MOUNT=(-v "$UCCL_PFX_HOST:/uccl_pfx")
-  # Readiness is a `.ready` marker written LAST (only after the in-container import verification
-  # passes), never the mere existence of deep_ep/: an interrupted copy or a failed import must not
-  # leave a half-populated cache a later job reuses blind. Build into a private temp dir, then
-  # publish atomically with `mv -T` (a concurrent leg that loses the rename just drops its temp).
+  # `.ready` is written last, after the in-container import check, so an interrupted copy never
+  # leaves a half-populated cache; build into a temp dir and publish atomically with `mv -T`.
   if [ ! -f "$UCCL_PFX_HOST/.ready" ]; then
     collx_log "uccl-ep: one-time from-source build (arch=$UCCL_ARCH, key=$UCCL_CACHE_KEY, USE_DMABUF, host-atomic path)"
     rm -rf "$UCCL_PFX_HOST"   # clear any partial/aborted prior attempt (no .ready)
@@ -153,12 +123,9 @@ PY
   fi
 fi
 
-# ---- execute: one Docker+torchrun invocation per case -----------------------
-# The shard control and results dir live under the CX source tree the workflow
-# checked out; mount that tree so run_ep.py's `results/*.json` land where the
-# workflow's stage step collects them. Per-case run_ep.py argv is decoded from the
-# shard by config.py case-args (same codec the Slurm launcher uses), passed to the
-# container as a NUL-delimited argv file — never as env.
+# $COLLX_DIR is mounted so run_ep.py's results/*.json land where the workflow collects them.
+# Per-case argv comes from config.py case-args (the Slurm launcher's codec) as a NUL-delimited
+# argv file, never as env.
 cd "$COLLX_DIR"
 mkdir -p results
 
@@ -176,10 +143,9 @@ if [ "$COLLX_BENCH" = uccl-ep ]; then
     -e COLLECTIVEX_SOURCE_SHA="${COLLECTIVEX_SOURCE_SHA:-}"
   )
 else
-  # MoRI's SDMA "anvil" transport (hsaKmtCreateQueueExt with HSA_QUEUE_SDMA_BY_ENG_ID)
-  # fails at init on the mi300x-tw nodes' kernel thunk (anvil.cpp:193, both nodes), so
-  # disable it there and let MoRI fall back to the hipIpc/P2P intra-node path (correct
-  # results, normal latency). mi325x-tw's thunk accepts the SDMA queue, so keep it on.
+  # MoRI's SDMA "anvil" transport (hsaKmtCreateQueueExt with HSA_QUEUE_SDMA_BY_ENG_ID) fails at
+  # init on the mi300x-tw kernel thunk (anvil.cpp:193); disable it there so MoRI falls back to
+  # the hipIpc/P2P intra-node path. mi325x-tw's thunk accepts the SDMA queue.
   mori_sdma_default=1
   [ "$RUNNER" = mi300x-tw ] && mori_sdma_default=0
   docker_env=(
@@ -200,11 +166,9 @@ for ((ci = 0; ci < ncases; ci++)); do
     collx_log "case $ci: argv generation failed"
     final_rc=1; rm -f "$argv_file"; continue
   fi
-  # A cold first torchrun on a freshly-imported image occasionally dies at worker
-  # launch before run_ep.py even starts (no output, ~5s), while the same case runs
-  # fine immediately after (verified: 3/3 standalone successes vs 1 first-invocation
-  # flake). Retry once so a transient launch flake does not red an otherwise-good leg;
-  # a real failure fails both attempts. The successful attempt overwrites --out.
+  # A cold first torchrun on a freshly-imported image occasionally dies at worker launch before
+  # run_ep.py starts (no output, ~5s) while the same case then runs fine; retry once. The
+  # successful attempt overwrites --out.
   case_ok=0
   for attempt in 1 2; do
     collx_log "case $ci/$ncases attempt $attempt: docker torchrun --nproc-per-node=$NGPUS"

@@ -5,8 +5,9 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from ..metadata import parse_component_metadata
-from ..topology import Parallelism, validate_parallelism
+from infx.results.metadata import parse_component_metadata
+from infx.results.topology import Parallelism, validate_parallelism
+
 from .request_metrics import compute_request_metrics
 from .server_metrics import compute_server_metrics
 
@@ -32,9 +33,7 @@ def _required_env(env: Mapping[str, str], name: str) -> str:
     return value
 
 
-def _optional_component_metadata(
-    env: Mapping[str, str], env_name: str
-) -> dict[str, str] | None:
+def _optional_component_metadata(env: Mapping[str, str], env_name: str) -> dict[str, str] | None:
     return parse_component_metadata(
         env.get(env_name),
         env_name,
@@ -58,21 +57,15 @@ def _validate_kv_offload_env(
 ) -> tuple[str, dict[str, str] | None]:
     kv_offloading = _required_env(env, "KV_OFFLOADING")
     backend_name = env.get("KV_OFFLOAD_BACKEND", "")
-    backend_metadata = _optional_kv_offload_backend_metadata(
-        env, "KV_OFFLOAD_BACKEND_METADATA"
-    )
+    backend_metadata = _optional_kv_offload_backend_metadata(env, "KV_OFFLOAD_BACKEND_METADATA")
     if kv_offloading == "none":
         if backend_name or backend_metadata is not None:
             raise SystemExit("KV_OFFLOAD_BACKEND must be empty when KV_OFFLOADING=none")
     else:
         if not backend_name or backend_name == "none" or backend_metadata is None:
-            raise SystemExit(
-                "KV_OFFLOAD_BACKEND is required when KV_OFFLOADING is enabled"
-            )
+            raise SystemExit("KV_OFFLOAD_BACKEND is required when KV_OFFLOADING is enabled")
         if backend_metadata["name"] != backend_name:
-            raise SystemExit(
-                "KV_OFFLOAD_BACKEND must match KV_OFFLOAD_BACKEND_METADATA.name"
-            )
+            raise SystemExit("KV_OFFLOAD_BACKEND must match KV_OFFLOAD_BACKEND_METADATA.name")
     return kv_offloading, backend_metadata
 
 
@@ -119,9 +112,7 @@ def _gpu_shape(env: Mapping[str, str]) -> tuple[dict[str, Any], int, int, int, s
     prefill_hardware = env.get("PREFILL_HARDWARE", "")
     decode_hardware = env.get("DECODE_HARDWARE", "")
     if bool(prefill_hardware) != bool(decode_hardware):
-        raise SystemExit(
-            "PREFILL_HARDWARE and DECODE_HARDWARE must be specified together."
-        )
+        raise SystemExit("PREFILL_HARDWARE and DECODE_HARDWARE must be specified together.")
     num_prefill_gpu = prefill_num_workers * prefill.gpus_per_worker
     num_decode_gpu = decode_num_workers * decode.gpus_per_worker
     num_gpus = num_prefill_gpu + num_decode_gpu
@@ -129,9 +120,7 @@ def _gpu_shape(env: Mapping[str, str]) -> tuple[dict[str, Any], int, int, int, s
     tp = prefill.tp + decode.tp
     ep = max(prefill.ep, decode.ep)
     dp_attention = (
-        "true"
-        if _env_bool(env, "PREFILL_DP_ATTN") or _env_bool(env, "DECODE_DP_ATTN")
-        else "false"
+        "true" if _env_bool(env, "PREFILL_DP_ATTN") or _env_bool(env, "DECODE_DP_ATTN") else "false"
     )
     fields = {
         "prefill_num_workers": prefill_num_workers,
@@ -220,9 +209,7 @@ def build_result(
         if isinstance(dataset, dict):
             agg["dataset"] = dataset
 
-    request_flat, request_nested = compute_request_metrics(
-        records, aggregate, traces=traces
-    )
+    request_flat, request_nested = compute_request_metrics(records, aggregate, traces=traces)
     _, server_nested, warnings = compute_server_metrics(
         server_metrics,
         framework=framework,

@@ -2,6 +2,7 @@ import json
 import os
 import re
 import sys
+from collections.abc import Iterable
 from enum import Enum
 from pathlib import Path
 
@@ -17,23 +18,23 @@ def normalize_hardware_label(label: str) -> str:
     return label
 
 
-def load_hardware_labels():
+def load_hardware_labels() -> list[str]:
     """Load distinct cluster hardware labels from runners.yaml."""
     runners_path = Path(__file__).parents[2] / "configs" / "runners.yaml"
     with open(runners_path) as f:
         runners = yaml.safe_load(f)
 
     labels = runners.get("labels", runners)
-    hardware_labels = [
-        label for label in labels.keys() if label.startswith(CLUSTER_LABEL_PREFIX)
-    ]
+    hardware_labels = [label for label in labels if label.startswith(CLUSTER_LABEL_PREFIX)]
     if not hardware_labels:
         hardware_labels = runners.get("hardware", {}).keys()
 
     return sorted(normalize_hardware_label(label) for label in hardware_labels)
 
 
-def build_hardware_match_patterns(hardware_labels):
+def build_hardware_match_patterns(
+    hardware_labels: Iterable[str],
+) -> dict[str, tuple[re.Pattern[str], ...]]:
     return {
         hardware: tuple(
             re.compile(rf"(?<![a-z0-9]){re.escape(label)}(?![a-z0-9])")
@@ -58,16 +59,19 @@ REPO_NAME = os.environ.get("GITHUB_REPOSITORY")
 _HARDWARE_MATCH_PATTERNS = build_hardware_match_patterns(HARDWARE_LABELS)
 
 
-def extract_hardware_from_name(job_name, match_patterns=None):
+def extract_hardware_from_name(
+    job_name: str, match_patterns: dict[str, tuple[re.Pattern[str], ...]] | None = None
+) -> str | None:
     job_lower = job_name.lower()
     match_patterns = match_patterns or _HARDWARE_MATCH_PATTERNS
 
     for hardware, patterns in match_patterns.items():
         if any(pattern.search(job_lower) for pattern in patterns):
             return hardware
+    return None
 
 
-def calculate_hardware_success_rates():
+def calculate_hardware_success_rates() -> dict[str, dict[str, int]] | None:
     from github import Auth, Github
 
     auth = Auth.Token(GITHUB_TOKEN)
@@ -76,7 +80,7 @@ def calculate_hardware_success_rates():
     try:
         user = g.get_user().login
         print(f"Authenticated as user: {user}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"Authentication failed: {e}")
         return None
 
@@ -91,8 +95,8 @@ def calculate_hardware_success_rates():
         print(f"Error: {e}")
         raise
 
-    success_runs = {hardware: 0 for hardware in HARDWARE_LABELS}
-    total_runs = {hardware: 0 for hardware in HARDWARE_LABELS}
+    success_runs = dict.fromkeys(HARDWARE_LABELS, 0)
+    total_runs = dict.fromkeys(HARDWARE_LABELS, 0)
 
     # Use _filter="all" to include jobs from all attempts (retries), not just the latest
     for job in run.jobs(_filter="all"):
@@ -110,7 +114,7 @@ def calculate_hardware_success_rates():
                 success_runs[hardware] += 1
 
     success_rates = {}
-    for hardware in success_runs.keys():
+    for hardware in success_runs:
         success_rates[hardware] = {
             "n_success": success_runs[hardware],
             "total": total_runs[hardware],
@@ -122,7 +126,7 @@ def calculate_hardware_success_rates():
 calculate_gpu_success_rates = calculate_hardware_success_rates
 
 
-def print_success_rates(success_rates):
+def print_success_rates(success_rates: dict[str, dict[str, int]] | None) -> None:
     """Pretty print the success rates."""
     if success_rates is None:
         print("No data to display")
@@ -137,9 +141,7 @@ def print_success_rates(success_rates):
     for hardware, stats in sorted(success_rates.items()):
         if stats["total"] > 0:
             rate = (stats["n_success"] / stats["total"]) * 100
-            print(
-                f"{hardware:<20} {stats['n_success']:<10} {stats['total']:<10} {rate:<10.2f}%"
-            )
+            print(f"{hardware:<20} {stats['n_success']:<10} {stats['total']:<10} {rate:<10.2f}%")
     print("=" * 60)
 
 

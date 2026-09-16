@@ -1,6 +1,6 @@
 import pprint
 from enum import Enum
-from typing import Dict, List, Literal, Optional, Union
+from typing import Any, Literal, Self
 
 import yaml
 from pydantic import (
@@ -131,11 +131,11 @@ class KVOffloadBackendMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1)
-    version: Optional[str] = Field(default=None, min_length=1)
+    version: str | None = Field(default=None, min_length=1)
 
     @field_validator("version")
     @classmethod
-    def validate_component_version(cls, version: Optional[str]) -> Optional[str]:
+    def validate_component_version(cls, version: str | None) -> str | None:
         """Reject image provenance when an independent version is available."""
         if version is not None and version.startswith("image:"):
             raise ValueError(
@@ -145,7 +145,7 @@ class KVOffloadBackendMetadata(BaseModel):
         return version
 
 
-def _validate_tp_context_topology(self):
+def _validate_tp_context_topology(self: Any) -> Any:
     """Validate TP/DCP topology shared by single-node and worker schemas."""
     if self.tp % self.dcp_size != 0:
         raise ValueError(
@@ -166,40 +166,34 @@ class SingleNodeMatrixEntry(BaseModel):
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
     precision: str
     framework: str
-    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
-        alias=Fields.SPEC_DECODING.value
-    )
+    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(alias=Fields.SPEC_DECODING.value)
     runner: str
     isl: int
     osl: int
-    require_power: bool = Field(
-        default=False, alias=Fields.REQUIRE_POWER.value, strict=True
-    )
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     tp: int
     pp: int = Field(gt=0, strict=True)
     dcp_size: int = Field(alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(alias=Fields.PCP_SIZE.value, gt=0, strict=True)
     ep: int
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
-    conc: Union[int, List[int]]
+    conc: int | list[int]
     max_model_len: int = Field(alias=Fields.MAX_MODEL_LEN.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: Literal[False]
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
     eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
-    eval_framework: Optional[str] = Field(
-        default=None, alias=Fields.EVAL_FRAMEWORK.value
-    )
-    eval_suite: Optional[str] = Field(default=None, alias=Fields.EVAL_SUITE.value)
-    router: Optional[ComponentMetadata] = None
-    recipe_fingerprint: Optional[str] = Field(
+    eval_framework: str | None = Field(default=None, alias=Fields.EVAL_FRAMEWORK.value)
+    eval_suite: str | None = Field(default=None, alias=Fields.EVAL_SUITE.value)
+    router: ComponentMetadata | None = None
+    recipe_fingerprint: str | None = Field(
         default=None,
         alias=Fields.RECIPE_FINGERPRINT.value,
         pattern=r"^[0-9a-f]{64}$",
     )
 
     @model_validator(mode="after")
-    def validate_single_node_topology(self):
+    def validate_single_node_topology(self) -> Self:
         return _validate_tp_context_topology(self)
 
 
@@ -215,13 +209,13 @@ class WorkerConfig(BaseModel):
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
     ep: int
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
-    hardware: Optional[str] = Field(default=None, min_length=1)
-    additional_settings: Optional[List[str]] = Field(
+    hardware: str | None = Field(default=None, min_length=1)
+    additional_settings: list[str] | None = Field(
         default_factory=list, alias=Fields.ADDITIONAL_SETTINGS.value
     )
 
     @model_validator(mode="after")
-    def validate_worker_topology(self):
+    def validate_worker_topology(self) -> Self:
         return _validate_tp_context_topology(self)
 
 
@@ -237,17 +231,17 @@ class AggregateWorkerConfig(BaseModel):
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
     ep: int
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
-    hardware: Optional[str] = Field(default=None, min_length=1)
-    additional_settings: Optional[List[str]] = Field(
+    hardware: str | None = Field(default=None, min_length=1)
+    additional_settings: list[str] | None = Field(
         default_factory=list, alias=Fields.ADDITIONAL_SETTINGS.value
     )
 
     @model_validator(mode="after")
-    def validate_worker_topology(self):
+    def validate_worker_topology(self) -> Self:
         return _validate_tp_context_topology(self)
 
 
-def _validate_worker_hardware_pair(self):
+def _validate_worker_hardware_pair(self: Any) -> Any:
     """Require prefill and decode workers to declare hardware together."""
     if bool(self.prefill.hardware) != bool(self.decode.hardware):
         raise ValueError(
@@ -268,50 +262,42 @@ class MultiNodeMatrixEntry(BaseModel):
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
     precision: str
     framework: str
-    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
-        alias=Fields.SPEC_DECODING.value
-    )
+    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(alias=Fields.SPEC_DECODING.value)
     runner: str
     node_count: int = Field(alias=Fields.NODE_COUNT.value, gt=0, strict=True)
     isl: int
     osl: int
-    require_power: bool = Field(
-        default=False, alias=Fields.REQUIRE_POWER.value, strict=True
-    )
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     prefill: WorkerConfig
     decode: WorkerConfig
-    conc: List[int]
+    conc: list[int]
     max_model_len: int = Field(alias=Fields.MAX_MODEL_LEN.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
     eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
-    eval_conc: Optional[int] = Field(default=None, alias=Fields.EVAL_CONC.value)
+    eval_conc: int | None = Field(default=None, alias=Fields.EVAL_CONC.value)
     eval_all_concs: bool = Field(default=False, alias=Fields.EVAL_ALL_CONCS.value)
-    eval_framework: Optional[str] = Field(
-        default=None, alias=Fields.EVAL_FRAMEWORK.value
-    )
-    eval_suite: Optional[str] = Field(default=None, alias=Fields.EVAL_SUITE.value)
-    router: Optional[ComponentMetadata] = None
-    kv_p2p_transfer: Optional[str] = Field(
+    eval_framework: str | None = Field(default=None, alias=Fields.EVAL_FRAMEWORK.value)
+    eval_suite: str | None = Field(default=None, alias=Fields.EVAL_SUITE.value)
+    router: ComponentMetadata | None = None
+    kv_p2p_transfer: str | None = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
     )
-    recipe_fingerprint: Optional[str] = Field(
+    recipe_fingerprint: str | None = Field(
         default=None,
         alias=Fields.RECIPE_FINGERPRINT.value,
         pattern=r"^[0-9a-f]{64}$",
     )
 
     @model_validator(mode="after")
-    def validate_worker_hardware_pair(self):
+    def validate_worker_hardware_pair(self) -> Self:
         return _validate_worker_hardware_pair(self)
 
     @model_validator(mode="after")
-    def validate_disagg_transfer(self):
+    def validate_disagg_transfer(self) -> Self:
         if self.disagg and self.kv_p2p_transfer is None:
-            raise ValueError(
-                f"{Fields.DISAGG.value}=true requires {Fields.KV_P2P_TRANSFER.value}"
-            )
+            raise ValueError(f"{Fields.DISAGG.value}=true requires {Fields.KV_P2P_TRANSFER.value}")
         return self
 
 
@@ -337,34 +323,32 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     )
     conc: int
     kv_offloading: Literal["none", "dram"] = Field(alias=Fields.KV_OFFLOADING.value)
-    kv_offload_backend: Optional[KVOffloadBackendMetadata] = Field(
+    kv_offload_backend: KVOffloadBackendMetadata | None = Field(
         default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
     )
-    router: Optional[ComponentMetadata] = None
+    router: ComponentMetadata | None = None
     total_cpu_dram_gb: int = Field(alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
     # Agentic eval rows carry selection and evaluator metadata. Benchmark-only
     # rows omit them, and exclude_none keeps them out of dumped matrix output.
-    run_eval: Optional[bool] = Field(default=None, alias=Fields.RUN_EVAL.value)
-    eval_only: Optional[bool] = Field(default=None, alias=Fields.EVAL_ONLY.value)
-    eval_framework: Optional[str] = Field(
-        default=None, alias=Fields.EVAL_FRAMEWORK.value
-    )
-    eval_suite: Optional[str] = Field(default=None, alias=Fields.EVAL_SUITE.value)
-    recipe_fingerprint: Optional[str] = Field(
+    run_eval: bool | None = Field(default=None, alias=Fields.RUN_EVAL.value)
+    eval_only: bool | None = Field(default=None, alias=Fields.EVAL_ONLY.value)
+    eval_framework: str | None = Field(default=None, alias=Fields.EVAL_FRAMEWORK.value)
+    eval_suite: str | None = Field(default=None, alias=Fields.EVAL_SUITE.value)
+    recipe_fingerprint: str | None = Field(
         default=None,
         alias=Fields.RECIPE_FINGERPRINT.value,
         pattern=r"^[0-9a-f]{64}$",
     )
 
     @model_validator(mode="after")
-    def validate_kv_offload_fields(self):
+    def validate_kv_offload_fields(self) -> Self:
         return _validate_kv_offload_fields(self)
 
     @model_validator(mode="after")
-    def validate_single_node_topology(self):
+    def validate_single_node_topology(self) -> Self:
         return _validate_tp_context_topology(self)
 
 
@@ -378,20 +362,18 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
     precision: str
     framework: str
-    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
-        alias=Fields.SPEC_DECODING.value
-    )
+    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(alias=Fields.SPEC_DECODING.value)
     runner: str
     node_count: int = Field(alias=Fields.NODE_COUNT.value, gt=0, strict=True)
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: list[int]
     kv_offloading: Literal["none", "dram"] = Field(alias=Fields.KV_OFFLOADING.value)
-    kv_offload_backend: Optional[KVOffloadBackendMetadata] = Field(
+    kv_offload_backend: KVOffloadBackendMetadata | None = Field(
         default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
     )
-    router: Optional[ComponentMetadata] = None
-    kv_p2p_transfer: Optional[str] = Field(
+    router: ComponentMetadata | None = None
+    kv_p2p_transfer: str | None = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
     )
     total_cpu_dram_gb: int = Field(alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
@@ -403,37 +385,33 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     # Benchmark-only rows omit them, and exclude_none keeps them out of dumped
     # matrix output. Multi-node agentic evals run one selected concurrency per
     # job, so they do not use eval-all-concs.
-    run_eval: Optional[bool] = Field(default=None, alias=Fields.RUN_EVAL.value)
-    eval_only: Optional[bool] = Field(default=None, alias=Fields.EVAL_ONLY.value)
-    eval_conc: Optional[int] = Field(default=None, alias=Fields.EVAL_CONC.value)
-    eval_framework: Optional[str] = Field(
-        default=None, alias=Fields.EVAL_FRAMEWORK.value
-    )
-    eval_suite: Optional[str] = Field(default=None, alias=Fields.EVAL_SUITE.value)
-    recipe_fingerprint: Optional[str] = Field(
+    run_eval: bool | None = Field(default=None, alias=Fields.RUN_EVAL.value)
+    eval_only: bool | None = Field(default=None, alias=Fields.EVAL_ONLY.value)
+    eval_conc: int | None = Field(default=None, alias=Fields.EVAL_CONC.value)
+    eval_framework: str | None = Field(default=None, alias=Fields.EVAL_FRAMEWORK.value)
+    eval_suite: str | None = Field(default=None, alias=Fields.EVAL_SUITE.value)
+    recipe_fingerprint: str | None = Field(
         default=None,
         alias=Fields.RECIPE_FINGERPRINT.value,
         pattern=r"^[0-9a-f]{64}$",
     )
 
     @model_validator(mode="after")
-    def validate_worker_hardware_pair(self):
+    def validate_worker_hardware_pair(self) -> Self:
         return _validate_worker_hardware_pair(self)
 
     @model_validator(mode="after")
-    def validate_kv_offload_fields(self):
+    def validate_kv_offload_fields(self) -> Self:
         return _validate_kv_offload_fields(self)
 
     @model_validator(mode="after")
-    def validate_disagg_transfer(self):
+    def validate_disagg_transfer(self) -> Self:
         if self.disagg and self.kv_p2p_transfer is None:
-            raise ValueError(
-                f"{Fields.DISAGG.value}=true requires {Fields.KV_P2P_TRANSFER.value}"
-            )
+            raise ValueError(f"{Fields.DISAGG.value}=true requires {Fields.KV_P2P_TRANSFER.value}")
         return self
 
 
-AgenticMatrixEntry = Union[SingleNodeAgenticMatrixEntry, MultiNodeAgenticMatrixEntry]
+AgenticMatrixEntry = SingleNodeAgenticMatrixEntry | MultiNodeAgenticMatrixEntry
 
 
 def validate_agentic_matrix_entry(entry: dict) -> dict:
@@ -446,7 +424,7 @@ def validate_agentic_matrix_entry(entry: dict) -> dict:
     except ValidationError as e:
         raise ValueError(
             f"The following parsed agentic matrix entry failed validation:\n{pprint.pformat(entry)}\n{e}"
-        )
+        ) from e
     return entry
 
 
@@ -464,7 +442,7 @@ def validate_matrix_entry(entry: dict, is_multinode: bool) -> dict:
     except ValidationError as e:
         raise ValueError(
             f"The following parsed matrix entry failed validation:\n{pprint.pformat(entry)}\n{e}"
-        )
+        ) from e
     return entry
 
 
@@ -476,7 +454,7 @@ def validate_matrix_entry(entry: dict, is_multinode: bool) -> dict:
 """
 
 
-def _validate_conc_fields(self):
+def _validate_conc_fields(self: Any) -> Any:
     """Ensure either (conc_start AND conc_end) OR conc_list is provided, but not both."""
     has_range = self.conc_start is not None and self.conc_end is not None
     has_list = self.conc_list is not None and len(self.conc_list) > 0
@@ -513,16 +491,13 @@ def _validate_conc_fields(self):
                 f"'{Fields.CONC_END.value}' ({self.conc_end})."
             )
 
-    if has_list:
-        if not all(x > 0 for x in self.conc_list):
-            raise ValueError(
-                f"Input '{Fields.CONC_LIST.value}' entries must be greater than 0."
-            )
+    if has_list and not all(x > 0 for x in self.conc_list):
+        raise ValueError(f"Input '{Fields.CONC_LIST.value}' entries must be greater than 0.")
 
     return self
 
 
-def _validate_agentic_runner_is_cluster(runner: str, scenarios) -> None:
+def _validate_agentic_runner_is_cluster(runner: str, scenarios: Any) -> None:
     if scenarios.agentic_coding and not runner.startswith(CLUSTER_LABEL_PREFIX):
         raise ValueError(
             f"Agentic master configs must use a '{CLUSTER_LABEL_PREFIX}<name>' runner "
@@ -530,13 +505,12 @@ def _validate_agentic_runner_is_cluster(runner: str, scenarios) -> None:
         )
 
 
-def _validate_kv_offload_fields(self):
+def _validate_kv_offload_fields(self: Any) -> Any:
     backend = getattr(self, "kv_offload_backend", None)
     if self.kv_offloading is None:
         if backend is not None:
             raise ValueError(
-                f"{Fields.KV_OFFLOAD_BACKEND.value} requires "
-                f"{Fields.KV_OFFLOADING.value}"
+                f"{Fields.KV_OFFLOAD_BACKEND.value} requires {Fields.KV_OFFLOADING.value}"
             )
         return self
     if self.kv_offloading == "none":
@@ -563,22 +537,22 @@ class SingleNodeSearchSpaceEntry(BaseModel):
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
-    ep: Optional[int] = None
+    ep: int | None = None
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
         default="none", alias=Fields.SPEC_DECODING.value
     )
-    dp_attn: Optional[bool] = Field(default=None, alias=Fields.DP_ATTN.value)
-    router: Optional[ComponentMetadata] = None
-    conc_start: Optional[int] = Field(default=None, alias=Fields.CONC_START.value)
-    conc_end: Optional[int] = Field(default=None, alias=Fields.CONC_END.value)
-    conc_list: Optional[List[int]] = Field(default=None, alias=Fields.CONC_LIST.value)
+    dp_attn: bool | None = Field(default=None, alias=Fields.DP_ATTN.value)
+    router: ComponentMetadata | None = None
+    conc_start: int | None = Field(default=None, alias=Fields.CONC_START.value)
+    conc_end: int | None = Field(default=None, alias=Fields.CONC_END.value)
+    conc_list: list[int] | None = Field(default=None, alias=Fields.CONC_LIST.value)
 
     @model_validator(mode="after")
-    def validate_conc_fields(self):
+    def validate_conc_fields(self) -> Self:
         return _validate_conc_fields(self)
 
     @model_validator(mode="after")
-    def validate_single_node_topology(self):
+    def validate_single_node_topology(self) -> Self:
         return _validate_tp_context_topology(self)
 
 
@@ -590,31 +564,27 @@ class MultiNodeSearchSpaceEntry(BaseModel):
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
         default="none", alias=Fields.SPEC_DECODING.value
     )
-    worker: Optional[AggregateWorkerConfig] = None
-    prefill: Optional[WorkerConfig] = None
-    decode: Optional[WorkerConfig] = None
-    num_nodes: Optional[int] = Field(
-        default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True
-    )
-    router: Optional[ComponentMetadata] = None
-    kv_p2p_transfer: Optional[str] = Field(
+    worker: AggregateWorkerConfig | None = None
+    prefill: WorkerConfig | None = None
+    decode: WorkerConfig | None = None
+    num_nodes: int | None = Field(default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
+    router: ComponentMetadata | None = None
+    kv_p2p_transfer: str | None = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
     )
-    conc_start: Optional[int] = Field(default=None, alias=Fields.CONC_START.value)
-    conc_end: Optional[int] = Field(default=None, alias=Fields.CONC_END.value)
-    conc_list: Optional[List[int]] = Field(default=None, alias=Fields.CONC_LIST.value)
+    conc_start: int | None = Field(default=None, alias=Fields.CONC_START.value)
+    conc_end: int | None = Field(default=None, alias=Fields.CONC_END.value)
+    conc_list: list[int] | None = Field(default=None, alias=Fields.CONC_LIST.value)
 
     @model_validator(mode="after")
-    def validate_conc_fields(self):
+    def validate_conc_fields(self) -> Self:
         return _validate_conc_fields(self)
 
     @model_validator(mode="after")
-    def validate_worker_hardware_pair(self):
+    def validate_worker_hardware_pair(self) -> Self:
         has_worker = self.worker is not None
         has_any_disagg_worker = self.prefill is not None or self.decode is not None
-        has_complete_disagg_workers = (
-            self.prefill is not None and self.decode is not None
-        )
+        has_complete_disagg_workers = self.prefill is not None and self.decode is not None
         if has_worker == has_any_disagg_worker or (
             has_any_disagg_worker and not has_complete_disagg_workers
         ):
@@ -634,12 +604,8 @@ class SingleNodeSeqLenConfig(BaseModel):
 
     isl: int
     osl: int
-    require_power: bool = Field(
-        default=False, alias=Fields.REQUIRE_POWER.value, strict=True
-    )
-    search_space: List[SingleNodeSearchSpaceEntry] = Field(
-        alias=Fields.SEARCH_SPACE.value
-    )
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
+    search_space: list[SingleNodeSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
 
 
 class MultiNodeSeqLenConfig(BaseModel):
@@ -649,12 +615,8 @@ class MultiNodeSeqLenConfig(BaseModel):
 
     isl: int
     osl: int
-    require_power: bool = Field(
-        default=False, alias=Fields.REQUIRE_POWER.value, strict=True
-    )
-    search_space: List[MultiNodeSearchSpaceEntry] = Field(
-        alias=Fields.SEARCH_SPACE.value
-    )
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
+    search_space: list[MultiNodeSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
 
 
 class AgenticCodingSearchSpaceEntry(BaseModel):
@@ -662,45 +624,43 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    tp: Optional[int] = None
+    tp: int | None = None
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
-    ep: Optional[int] = None
-    dp_attn: Optional[bool] = Field(default=None, alias=Fields.DP_ATTN.value)
+    ep: int | None = None
+    dp_attn: bool | None = Field(default=None, alias=Fields.DP_ATTN.value)
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
         default="none", alias=Fields.SPEC_DECODING.value
     )
-    worker: Optional[AggregateWorkerConfig] = None
-    prefill: Optional[WorkerConfig] = None
-    decode: Optional[WorkerConfig] = None
-    num_nodes: Optional[int] = Field(
-        default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True
-    )
-    kv_offloading: Optional[Literal["none", "dram"]] = Field(
+    worker: AggregateWorkerConfig | None = None
+    prefill: WorkerConfig | None = None
+    decode: WorkerConfig | None = None
+    num_nodes: int | None = Field(default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
+    kv_offloading: Literal["none", "dram"] | None = Field(
         default=None, alias=Fields.KV_OFFLOADING.value
     )
-    kv_offload_backend: Optional[KVOffloadBackendMetadata] = Field(
+    kv_offload_backend: KVOffloadBackendMetadata | None = Field(
         default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
     )
-    router: Optional[ComponentMetadata] = None
-    kv_p2p_transfer: Optional[str] = Field(
+    router: ComponentMetadata | None = None
+    kv_p2p_transfer: str | None = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
     )
-    conc_start: Optional[int] = Field(default=None, alias=Fields.CONC_START.value)
-    conc_end: Optional[int] = Field(default=None, alias=Fields.CONC_END.value)
-    conc_list: Optional[List[int]] = Field(default=None, alias=Fields.CONC_LIST.value)
+    conc_start: int | None = Field(default=None, alias=Fields.CONC_START.value)
+    conc_end: int | None = Field(default=None, alias=Fields.CONC_END.value)
+    conc_list: list[int] | None = Field(default=None, alias=Fields.CONC_LIST.value)
 
     @model_validator(mode="after")
-    def validate_conc_fields(self):
+    def validate_conc_fields(self) -> Self:
         return _validate_conc_fields(self)
 
     @model_validator(mode="after")
-    def validate_kv_offload_fields(self):
+    def validate_kv_offload_fields(self) -> Self:
         return _validate_kv_offload_fields(self)
 
     @model_validator(mode="after")
-    def validate_topology_fields(self):
+    def validate_topology_fields(self) -> Self:
         has_single_node = self.tp is not None
         has_aggregate_worker = self.worker is not None
         has_any_multinode_field = self.prefill is not None or self.decode is not None
@@ -712,9 +672,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                 has_complete_multinode,
             )
         )
-        if topology_count != 1 or (
-            has_any_multinode_field and not has_complete_multinode
-        ):
+        if topology_count != 1 or (has_any_multinode_field and not has_complete_multinode):
             raise ValueError(
                 "Agentic search-space entries must specify exactly one of tp, "
                 "worker, or both prefill and decode"
@@ -742,8 +700,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                     )
                 )
                 raise ValueError(
-                    "Multinode agentic search-space entries cannot specify "
-                    f"{field_names}"
+                    f"Multinode agentic search-space entries cannot specify {field_names}"
                 )
             if has_complete_multinode:
                 _validate_worker_hardware_pair(self)
@@ -755,15 +712,13 @@ class AgenticCodingConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    search_space: List[AgenticCodingSearchSpaceEntry] = Field(
-        alias=Fields.SEARCH_SPACE.value
-    )
-    dram_utilization: Optional[float] = Field(
+    search_space: list[AgenticCodingSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
+    dram_utilization: float | None = Field(
         default=None, alias=Fields.DRAM_UTILIZATION.value, gt=0, le=1
     )
 
     @model_validator(mode="after")
-    def validate_dram_offload_capacity(self):
+    def validate_dram_offload_capacity(self) -> Self:
         for entry in self.search_space:
             if entry.kv_offloading != "dram":
                 continue
@@ -780,15 +735,15 @@ class SingleNodeScenarios(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    fixed_seq_len: Optional[List[SingleNodeSeqLenConfig]] = Field(
+    fixed_seq_len: list[SingleNodeSeqLenConfig] | None = Field(
         default=None, alias=Fields.FIXED_SEQ_LEN.value
     )
-    agentic_coding: Optional[List[AgenticCodingConfig]] = Field(
+    agentic_coding: list[AgenticCodingConfig] | None = Field(
         default=None, alias=Fields.AGENTIC_CODING.value
     )
 
     @model_validator(mode="after")
-    def at_least_one_scenario(self):
+    def at_least_one_scenario(self) -> Self:
         if not self.fixed_seq_len and not self.agentic_coding:
             raise ValueError("At least one scenario type must be specified")
         return self
@@ -799,15 +754,15 @@ class MultiNodeScenarios(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    fixed_seq_len: Optional[List[MultiNodeSeqLenConfig]] = Field(
+    fixed_seq_len: list[MultiNodeSeqLenConfig] | None = Field(
         default=None, alias=Fields.FIXED_SEQ_LEN.value
     )
-    agentic_coding: Optional[List[AgenticCodingConfig]] = Field(
+    agentic_coding: list[AgenticCodingConfig] | None = Field(
         default=None, alias=Fields.AGENTIC_CODING.value
     )
 
     @model_validator(mode="after")
-    def at_least_one_scenario(self):
+    def at_least_one_scenario(self) -> Self:
         if not self.fixed_seq_len and not self.agentic_coding:
             raise ValueError("At least one scenario type must be specified")
         return self
@@ -834,8 +789,7 @@ def _validate_component_metadata_scope(self: BaseModel) -> BaseModel:
         attribute = field.value.replace("-", "_")
         top_level_value = getattr(self, attribute, None)
         has_search_space_value = any(
-            getattr(entry, attribute, None) is not None
-            for entry in search_space_entries
+            getattr(entry, attribute, None) is not None for entry in search_space_entries
         )
         if top_level_value is not None and has_search_space_value:
             raise ValueError(
@@ -844,25 +798,27 @@ def _validate_component_metadata_scope(self: BaseModel) -> BaseModel:
             )
 
     has_search_space_transfer = any(
-        getattr(entry, "kv_p2p_transfer", None) is not None
-        for entry in search_space_entries
+        getattr(entry, "kv_p2p_transfer", None) is not None for entry in search_space_entries
     )
     if not self.multinode and has_search_space_transfer:
         raise ValueError(
-            f"{Fields.KV_P2P_TRANSFER.value} is only valid when "
-            f"{Fields.MULTINODE.value}=true"
+            f"{Fields.KV_P2P_TRANSFER.value} is only valid when {Fields.MULTINODE.value}=true"
         )
 
     top_level_transfer = getattr(self, "kv_p2p_transfer", None)
-    if self.disagg and top_level_transfer is None:
-        if not search_space_entries or any(
-            entry.kv_p2p_transfer is None for entry in search_space_entries
-        ):
-            raise ValueError(
-                f"{Fields.DISAGG.value}=true requires "
-                f"{Fields.KV_P2P_TRANSFER.value} at the top level or in every "
-                "search-space entry"
-            )
+    if (
+        self.disagg
+        and top_level_transfer is None
+        and (
+            not search_space_entries
+            or any(entry.kv_p2p_transfer is None for entry in search_space_entries)
+        )
+    ):
+        raise ValueError(
+            f"{Fields.DISAGG.value}=true requires "
+            f"{Fields.KV_P2P_TRANSFER.value} at the top level or in every "
+            "search-space entry"
+        )
 
     return self
 
@@ -897,9 +853,7 @@ def _validate_multinode_entry_scope(self: BaseModel) -> BaseModel:
                     f"{Fields.NUM_NODES.value}"
                 )
             if prefill is None or decode is None:
-                raise ValueError(
-                    f"{Fields.DISAGG.value}=true requires prefill and decode"
-                )
+                raise ValueError(f"{Fields.DISAGG.value}=true requires prefill and decode")
             continue
 
         if worker is None or prefill is not None or decode is not None:
@@ -928,20 +882,20 @@ class SingleNodeMasterConfigEntry(BaseModel):
     runner: str
     multinode: Literal[False]
     disagg: Literal[False] = Field(default=False)
-    router: Optional[ComponentMetadata] = None
+    router: ComponentMetadata | None = None
     scenarios: SingleNodeScenarios
 
     @model_validator(mode="after")
-    def validate_agentic_runner(self):
+    def validate_agentic_runner(self) -> Self:
         _validate_agentic_runner_is_cluster(self.runner, self.scenarios)
         return self
 
     @model_validator(mode="after")
-    def validate_component_metadata_scope(self):
+    def validate_component_metadata_scope(self) -> Self:
         return _validate_component_metadata_scope(self)
 
     @model_validator(mode="after")
-    def validate_multinode_entry_scope(self):
+    def validate_multinode_entry_scope(self) -> Self:
         return _validate_multinode_entry_scope(self)
 
 
@@ -958,27 +912,27 @@ class MultiNodeMasterConfigEntry(BaseModel):
     runner: str
     multinode: Literal[True]
     disagg: bool = Field(default=False)
-    router: Optional[ComponentMetadata] = None
-    kv_p2p_transfer: Optional[str] = Field(
+    router: ComponentMetadata | None = None
+    kv_p2p_transfer: str | None = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
     )
     scenarios: MultiNodeScenarios
 
     @model_validator(mode="after")
-    def validate_agentic_runner(self):
+    def validate_agentic_runner(self) -> Self:
         _validate_agentic_runner_is_cluster(self.runner, self.scenarios)
         return self
 
     @model_validator(mode="after")
-    def validate_component_metadata_scope(self):
+    def validate_component_metadata_scope(self) -> Self:
         return _validate_component_metadata_scope(self)
 
     @model_validator(mode="after")
-    def validate_multinode_entry_scope(self):
+    def validate_multinode_entry_scope(self) -> Self:
         return _validate_multinode_entry_scope(self)
 
 
-def validate_master_config(master_configs: dict) -> List[dict]:
+def validate_master_config(master_configs: dict) -> list[dict]:
     """Validate input master configuration structure."""
     for key, entry in master_configs.items():
         is_multinode = entry.get("multinode", False)
@@ -989,7 +943,7 @@ def validate_master_config(master_configs: dict) -> List[dict]:
             else:
                 SingleNodeMasterConfigEntry(**entry)
         except ValidationError as e:
-            raise ValueError(f"Master config entry '{key}' failed validation:\n{e}")
+            raise ValueError(f"Master config entry '{key}' failed validation:\n{e}") from e
     return master_configs
 
 
@@ -1024,8 +978,8 @@ class RunnerConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    labels: Dict[str, List[str]]
-    hardware: Dict[str, RunnerHardwareConfig] = Field(default_factory=dict)
+    labels: dict[str, list[str]]
+    hardware: dict[str, RunnerHardwareConfig] = Field(default_factory=dict)
 
 
 def validate_runner_config(runner_configs: dict) -> dict:
@@ -1037,7 +991,7 @@ def validate_runner_config(runner_configs: dict) -> dict:
     try:
         RunnerConfig(**runner_configs)
     except ValidationError as e:
-        raise ValueError(f"Runner config failed validation:\n{e}")
+        raise ValueError(f"Runner config failed validation:\n{e}") from e
     return runner_configs
 
 
@@ -1067,7 +1021,7 @@ class ChangelogEntry(BaseModel):
             "every existing generated point, then append them to the latest curve"
         ),
     )
-    eval_min_prefill_ep: Optional[int] = Field(
+    eval_min_prefill_ep: int | None = Field(
         alias="eval-min-prefill-ep",
         default=None,
         ge=1,
@@ -1076,7 +1030,7 @@ class ChangelogEntry(BaseModel):
             "threshold are dropped after eval selection."
         ),
     )
-    scenario_type: Optional[List[Literal["fixed-seq-len", "agentic-coding"]]] = Field(
+    scenario_type: list[Literal["fixed-seq-len", "agentic-coding"]] | None = Field(
         alias="scenario-type",
         default=None,
         min_length=1,
@@ -1084,7 +1038,7 @@ class ChangelogEntry(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_append_only_mode(self):
+    def validate_append_only_mode(self) -> Self:
         """Append-only entries are throughput deltas, never eval-only requests."""
         if self.no_evals and (
             self.evals_only or self.all_evals or self.eval_min_prefill_ep is not None
@@ -1093,9 +1047,7 @@ class ChangelogEntry(BaseModel):
         if self.append_only and (
             self.evals_only or self.all_evals or self.eval_min_prefill_ep is not None
         ):
-            raise ValueError(
-                "append-only cannot be combined with eval selection fields"
-            )
+            raise ValueError("append-only cannot be combined with eval selection fields")
         return self
 
 
@@ -1117,12 +1069,12 @@ class ChangelogMatrixEntry(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    single_node: dict[
-        str, list[Union[SingleNodeMatrixEntry, SingleNodeAgenticMatrixEntry]]
-    ] = Field(default_factory=dict)
-    multi_node: dict[
-        str, list[Union[MultiNodeMatrixEntry, MultiNodeAgenticMatrixEntry]]
-    ] = Field(default_factory=dict)
+    single_node: dict[str, list[SingleNodeMatrixEntry | SingleNodeAgenticMatrixEntry]] = Field(
+        default_factory=dict
+    )
+    multi_node: dict[str, list[MultiNodeMatrixEntry | MultiNodeAgenticMatrixEntry]] = Field(
+        default_factory=dict
+    )
     evals: list[SingleNodeMatrixEntry] = Field(default_factory=list)
     # Agentic GSM8K eval rows live in their own bucket rather than a
     # union inside `evals`: each bucket maps 1:1 to a run-sweep.yml job with a
@@ -1135,9 +1087,7 @@ class ChangelogMatrixEntry(BaseModel):
     # the same way agentic_evals is split out of evals: they carry the
     # agentic input shape (scenario-type, kv-offloading, ...) rather than
     # the fixed-seq-len shape (isl/osl/max-model-len) multinode_evals rows do.
-    multinode_agentic_evals: list[MultiNodeAgenticMatrixEntry] = Field(
-        default_factory=list
-    )
+    multinode_agentic_evals: list[MultiNodeAgenticMatrixEntry] = Field(default_factory=list)
     changelog_metadata: ChangelogMetadata
 
 
@@ -1146,7 +1096,7 @@ class ChangelogMatrixEntry(BaseModel):
 # =============================================================================
 
 
-def load_config_files(config_files: List[str], validate: bool = True) -> dict:
+def load_config_files(config_files: list[str], validate: bool = True) -> dict:
     """Load and merge configuration files.
 
     Args:
@@ -1162,30 +1112,32 @@ def load_config_files(config_files: List[str], validate: bool = True) -> dict:
     all_config_data = {}
     for config_file in config_files:
         try:
-            with open(config_file, "r") as f:
+            with open(config_file) as f:
                 config_data = yaml.safe_load(f)
-                assert isinstance(config_data, dict), (
-                    f"Config file '{config_file}' must contain a dictionary"
-                )
+                if not isinstance(config_data, dict):
+                    raise ValueError(f"Config file '{config_file}' must contain a dictionary")
 
                 # Don't allow '*' wildcard in master config keys as we need to reserve these
                 # for expansion in process_changelog.py
-                for key in config_data.keys():
+                for key in config_data:
+                    if not isinstance(key, str):
+                        raise ValueError(
+                            f"Configuration key {key!r} in '{config_file}' must be a string"
+                        )
                     if "*" in key:
                         raise ValueError(
                             f" Wildcard '*' is not allowed in master config keys: '{key}'"
                         )
 
-                # Check for duplicate keys
-                duplicate_keys = set(all_config_data.keys()) & set(config_data.keys())
+                duplicate_keys = all_config_data.keys() & config_data.keys()
                 if duplicate_keys:
                     raise ValueError(
                         f"Duplicate configuration keys found in '{config_file}': {', '.join(sorted(duplicate_keys))}"
                     )
 
                 all_config_data.update(config_data)
-        except FileNotFoundError:
-            raise ValueError(f"Input file '{config_file}' does not exist.")
+        except FileNotFoundError as e:
+            raise ValueError(f"Input file '{config_file}' does not exist.") from e
 
     if validate:
         validate_master_config(all_config_data)
@@ -1207,10 +1159,10 @@ def load_runner_file(runner_file: str, validate: bool = True) -> dict:
         ValueError: If file doesn't exist or fails validation.
     """
     try:
-        with open(runner_file, "r") as f:
+        with open(runner_file) as f:
             runner_config = yaml.safe_load(f)
-    except FileNotFoundError:
-        raise ValueError(f"Runner config file '{runner_file}' does not exist.")
+    except FileNotFoundError as e:
+        raise ValueError(f"Runner config file '{runner_file}' does not exist.") from e
 
     if validate:
         validate_runner_config(runner_config)

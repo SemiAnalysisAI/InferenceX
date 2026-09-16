@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Safety helpers for artifact-only recovery of a failed sweep ingest."""
 
 from __future__ import annotations
@@ -45,6 +44,7 @@ def run_command(
     """Run a command and raise a concise recovery error on failure."""
     result = subprocess.run(
         command,
+        check=False,
         cwd=cwd,
         env=env,
         input=input_text,
@@ -61,6 +61,7 @@ def read_git_file_from(worktree: Path, ref: str, path: str) -> bytes:
     """Read an exact blob through a specific repository worktree."""
     result = subprocess.run(
         ["git", "show", f"{ref}:{path}"],
+        check=False,
         cwd=worktree,
         capture_output=True,
     )
@@ -91,9 +92,7 @@ def gh_api(repo: str, endpoint: str) -> Any:
     try:
         return json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        raise RecoveryError(
-            f"GitHub API returned invalid JSON for {endpoint}: {exc}"
-        ) from exc
+        raise RecoveryError(f"GitHub API returned invalid JSON for {endpoint}: {exc}") from exc
 
 
 def list_run_jobs(repo: str, run_id: int) -> list[dict[str, Any]]:
@@ -122,14 +121,9 @@ def select_failed_job(
     if requested_job_id is not None:
         matches = [job for job in jobs if int(job.get("id", 0)) == requested_job_id]
         if len(matches) != 1:
-            raise RecoveryError(
-                f"job {requested_job_id} was not found in the target run"
-            )
+            raise RecoveryError(f"job {requested_job_id} was not found in the target run")
         selected = matches[0]
-        if (
-            selected.get("status") != "completed"
-            or selected.get("conclusion") != "failure"
-        ):
+        if selected.get("status") != "completed" or selected.get("conclusion") != "failure":
             raise RecoveryError(f"job {requested_job_id} is not a completed failed job")
         return selected
 
@@ -155,9 +149,7 @@ def inspect_target(
     """Validate a failed main run and resolve its exact failed job and PR."""
     url_repo, run_id, url_job_id = parse_target_url(url)
     if url_repo != expected_repo:
-        raise RecoveryError(
-            f"target URL repository is {url_repo}, expected {expected_repo}"
-        )
+        raise RecoveryError(f"target URL repository is {url_repo}, expected {expected_repo}")
     if url_job_id and job_id_override and url_job_id != job_id_override:
         raise RecoveryError("URL job ID and --job-id disagree")
     requested_job_id = job_id_override or url_job_id
@@ -172,9 +164,7 @@ def inspect_target(
     }
     for field, expected in required.items():
         if run.get(field) != expected:
-            raise RecoveryError(
-                f"target run {field} is {run.get(field)!r}, expected {expected!r}"
-            )
+            raise RecoveryError(f"target run {field} is {run.get(field)!r}, expected {expected!r}")
 
     selected_job = select_failed_job(
         list_run_jobs(expected_repo, run_id),
@@ -190,13 +180,12 @@ def inspect_target(
         and pull.get("merge_commit_sha") == merge_sha
     ]
     if len(candidates) != 1:
-        raise RecoveryError(
-            f"target merge SHA maps to {len(candidates)} exact merged PRs"
-        )
+        raise RecoveryError(f"target merge SHA maps to {len(candidates)} exact merged PRs")
 
     base_sha = ""
     rev_parse = subprocess.run(
         ["git", "rev-parse", f"{merge_sha}^"],
+        check=False,
         capture_output=True,
         text=True,
     )
@@ -230,14 +219,11 @@ def audit_changelog_bytes(raw: bytes, label: str) -> dict[str, Any]:
     warnings: list[str] = []
     text = raw.decode("utf-8")
     trailing = [
-        number
-        for number, line in enumerate(text.splitlines(), start=1)
-        if line != line.rstrip()
+        number for number, line in enumerate(text.splitlines(), start=1) if line != line.rstrip()
     ]
     if trailing:
         warnings.append(
-            "trailing whitespace on lines "
-            + ", ".join(str(number) for number in trailing)
+            "trailing whitespace on lines " + ", ".join(str(number) for number in trailing)
         )
 
     seen: dict[str, int] = {}
@@ -272,9 +258,7 @@ def create_worktree(ref: str, destination: Path) -> None:
     ).stdout.strip()
     expected = run_command(["git", "rev-parse", ref]).stdout.strip()
     if actual != expected:
-        raise RecoveryError(
-            f"worktree HEAD is {actual}, expected historical ref {expected}"
-        )
+        raise RecoveryError(f"worktree HEAD is {actual}, expected historical ref {expected}")
 
 
 def validate_reconstruction(
@@ -284,14 +268,10 @@ def validate_reconstruction(
 ) -> tuple[int, int]:
     """Validate that a repaired tree is only the target PR's append delta."""
     if not repaired_raw.startswith(base_raw):
-        raise RecoveryError(
-            "repaired changelog does not preserve the recovery base byte-for-byte"
-        )
+        raise RecoveryError("repaired changelog does not preserve the recovery base byte-for-byte")
 
     suffix = repaired_raw[len(base_raw) :]
-    expected_start = (
-        b"- config-keys:" if base_raw.endswith(b"\n\n") else b"\n- config-keys:"
-    )
+    expected_start = b"- config-keys:" if base_raw.endswith(b"\n\n") else b"\n- config-keys:"
     if not suffix.startswith(expected_start):
         raise RecoveryError(
             "repaired changelog does not append target entries after one empty line"
@@ -308,9 +288,7 @@ def validate_reconstruction(
         0,
     )
     if not additions:
-        raise RecoveryError(
-            "recovery reconstruction must contain only appended target PR entries"
-        )
+        raise RecoveryError("recovery reconstruction must contain only appended target PR entries")
     expected_link = f"https://github.com/{DEFAULT_REPO}/pull/{pr_number}"
     wrong_links = [
         str(entry.get("pr-link") or "")
@@ -318,9 +296,7 @@ def validate_reconstruction(
         if str(entry.get("pr-link") or "") != expected_link
     ]
     if wrong_links:
-        raise RecoveryError(
-            f"reconstructed entries must all use {expected_link}: {wrong_links}"
-        )
+        raise RecoveryError(f"reconstructed entries must all use {expected_link}: {wrong_links}")
     return len(additions), 0
 
 
@@ -341,9 +317,7 @@ def create_synthetic_commit(
         cwd=worktree,
     ).stdout.strip()
     if actual_head != expected_head:
-        raise RecoveryError(
-            f"recovery worktree is at {actual_head}, expected {expected_head}"
-        )
+        raise RecoveryError(f"recovery worktree is at {actual_head}, expected {expected_head}")
 
     status_lines = run_command(
         ["git", "status", "--porcelain"],
@@ -351,9 +325,7 @@ def create_synthetic_commit(
     ).stdout.splitlines()
     unrelated = [line for line in status_lines if line[3:] != changelog_path]
     if unrelated:
-        raise RecoveryError(
-            "recovery worktree has unrelated changes: " + ", ".join(unrelated)
-        )
+        raise RecoveryError("recovery worktree has unrelated changes: " + ", ".join(unrelated))
 
     additions, _ = validate_reconstruction(
         read_git_file_from(worktree, base_ref, changelog_path),
@@ -405,9 +377,7 @@ def create_synthetic_commit(
         cwd=worktree,
     ).stdout.splitlines()
     if changed_paths != [changelog_path]:
-        raise RecoveryError(
-            f"synthetic commit changed unexpected paths: {changed_paths}"
-        )
+        raise RecoveryError(f"synthetic commit changed unexpected paths: {changed_paths}")
     return fixed_sha, additions
 
 
@@ -447,9 +417,7 @@ def build_config(
     try:
         config = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        raise RecoveryError(
-            f"process_changelog.py returned invalid JSON: {exc}"
-        ) from exc
+        raise RecoveryError(f"process_changelog.py returned invalid JSON: {exc}") from exc
 
     expected_link = f"https://github.com/{DEFAULT_REPO}/pull/{pr_number}"
     metadata = config.get("changelog_metadata", {})
@@ -457,9 +425,7 @@ def build_config(
     if not metadata_entries or any(
         entry.get("pr-link") != expected_link for entry in metadata_entries
     ):
-        raise RecoveryError(
-            "generated changelog metadata includes entries outside the target PR"
-        )
+        raise RecoveryError("generated changelog metadata includes entries outside the target PR")
     metadata["base_ref"] = base_ref
     metadata["head_ref"] = merge_ref
 
@@ -487,7 +453,7 @@ def build_config(
 def validate_recovery_workflow(path: Path, pr_number: int) -> None:
     """Reject recovery workflows that could schedule benchmark compute."""
     text = path.read_text()
-    data = yaml.load(text, Loader=UniqueKeyLoader)
+    data = yaml.load(text, Loader=UniqueKeyLoader)  # noqa: S506
     if not isinstance(data, dict):
         raise RecoveryError("recovery workflow root must be a mapping")
 
@@ -508,9 +474,7 @@ def validate_recovery_workflow(path: Path, pr_number: int) -> None:
     if not isinstance(permissions, dict) or any(
         value not in {"read", "none"} for value in permissions.values()
     ):
-        raise RecoveryError(
-            "recovery workflow permissions must be explicitly read-only"
-        )
+        raise RecoveryError("recovery workflow permissions must be explicitly read-only")
 
     jobs = data.get("jobs")
     if not isinstance(jobs, dict) or len(jobs) != 1:
@@ -535,9 +499,7 @@ def validate_recovery_workflow(path: Path, pr_number: int) -> None:
         rf"(?:\s*\}}\}})?"
     )
     if not confirmation_pattern.fullmatch(str(job.get("if") or "").strip()):
-        raise RecoveryError(
-            f"recovery job must require confirmation {expected_confirmation!r}"
-        )
+        raise RecoveryError(f"recovery job must require confirmation {expected_confirmation!r}")
 
     forbidden = (
         ".github/workflows/benchmark-tmpl.yml",

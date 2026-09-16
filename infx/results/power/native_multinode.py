@@ -15,7 +15,7 @@ import math
 import os
 import socket
 import time
-from datetime import timezone
+from datetime import UTC
 from pathlib import Path
 
 from . import ALL_POWER_METRIC_KEYS
@@ -39,10 +39,7 @@ def _identity(path: Path, vendor: str) -> dict[str, str]:
         with path.open(newline="") as stream:
             rows = []
             for row in csv.DictReader(stream, skipinitialspace=True):
-                if any(
-                    not isinstance(k, str) or not isinstance(v, str)
-                    for k, v in row.items()
-                ):
+                if any(not isinstance(k, str) or not isinstance(v, str) for k, v in row.items()):
                     raise ValueError("invalid_device_identity")
                 rows.append({k.strip().lower(): v.strip() for k, v in row.items()})
     elif vendor == "amd":
@@ -148,9 +145,7 @@ def run(
         f"power_validation_{bench_result.stem}.json"
     )
     benchmark, reasons = _load_benchmark_data(bench_result)
-    expected_gpus = (
-        expected_prefill_gpus + expected_decode_gpus + expected_aggregate_gpus
-    )
+    expected_gpus = expected_prefill_gpus + expected_decode_gpus + expected_aggregate_gpus
     if expected_aggregate_gpus and (expected_prefill_gpus or expected_decode_gpus):
         reasons.append("native_mixed_aggregate_role_topology")
     roles: dict[str, list[str]] = {"prefill": [], "decode": [], "aggregate": []}
@@ -198,10 +193,7 @@ def run(
             expected_nodes.add(manifest["expected_num_nodes"])
             jobs.add(manifest["job_id"])
             revisions.add(manifest["collector_revision"])
-            if (
-                manifest.get("lifecycle") != "complete"
-                or manifest.get("collector_exit_code") != 0
-            ):
+            if manifest.get("lifecycle") != "complete" or manifest.get("collector_exit_code") != 0:
                 reasons.append("native_collector_incomplete")
             if (
                 manifest.get("clock_source") != "utc_ntp"
@@ -213,9 +205,7 @@ def run(
                 manifest["collection_end_unix"],
             )
             if (
-                not all(
-                    type(x) in (int, float) and math.isfinite(x) for x in (start, end)
-                )
+                not all(type(x) in (int, float) and math.isfinite(x) for x in (start, end))
                 or end <= start
                 or (
                     benchmark is not None
@@ -258,9 +248,7 @@ def run(
                         continue
                     if gpu not in selected_ids:
                         continue
-                    timestamp = _parse_timestamp(
-                        (row.get(t_col) or ""), naive_timezone=timezone.utc
-                    )
+                    timestamp = _parse_timestamp((row.get(t_col) or ""), naive_timezone=UTC)
                     # Invalid rows are retained for the common validator to reject.
                     samples.append((timestamp, selected_ids[gpu], row.get(p_col) or ""))
             receipts.append(
@@ -268,18 +256,19 @@ def run(
                     **manifest,
                     "physical_gpu_ids": selected_ids,
                     "manifest_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                    "telemetry_sha256": hashlib.sha256(
-                        csv_path.read_bytes()
-                    ).hexdigest(),
-                    "identity_sha256": hashlib.sha256(
-                        first_path.read_bytes()
-                    ).hexdigest(),
-                    "identity_end_sha256": hashlib.sha256(
-                        last_path.read_bytes()
-                    ).hexdigest(),
+                    "telemetry_sha256": hashlib.sha256(csv_path.read_bytes()).hexdigest(),
+                    "identity_sha256": hashlib.sha256(first_path.read_bytes()).hexdigest(),
+                    "identity_end_sha256": hashlib.sha256(last_path.read_bytes()).hexdigest(),
                 }
             )
-        except (OSError, ValueError, KeyError, TypeError, csv.Error) as exc:
+        except (
+            OSError,
+            ValueError,
+            KeyError,
+            TypeError,
+            OverflowError,
+            csv.Error,
+        ) as exc:
             reasons.append("native_node_invalid")
             node_errors.append(
                 {
@@ -289,12 +278,9 @@ def run(
                 }
             )
     if (
-        len(expected_nodes) != 1
-        or not expected_nodes
-        or type(next(iter(expected_nodes), None)) is not int
-        or set(ranks) != set(range(next(iter(expected_nodes), 0)))
+        expected_nodes != {len(ranks)}
+        or sorted(ranks) != list(range(len(ranks)))
         or len(set(nodes)) != len(nodes)
-        or len(ranks) != len(set(ranks))
     ):
         reasons.append("native_node_topology_mismatch")
     if len(jobs) != 1 or "" in jobs or len(revisions) != 1 or "" in revisions:
@@ -331,9 +317,7 @@ def run(
     if not reasons and integration is not None and benchmark is not None:
         metrics = _derived_metrics(integration, benchmark)
         if roles["prefill"]:
-            prefill = sum(
-                integration.per_gpu_energy_j[uuid] for uuid in roles["prefill"]
-            )
+            prefill = sum(integration.per_gpu_energy_j[uuid] for uuid in roles["prefill"])
             metrics.update(
                 prefill_gpu_energy_j=prefill,
                 prefill_avg_power_w=prefill
@@ -345,9 +329,7 @@ def run(
             decode = sum(integration.per_gpu_energy_j[uuid] for uuid in roles["decode"])
             metrics.update(
                 decode_gpu_energy_j=decode,
-                decode_avg_power_w=decode
-                / benchmark.integration_duration_s
-                / expected_decode_gpus,
+                decode_avg_power_w=decode / benchmark.integration_duration_s / expected_decode_gpus,
                 decode_joules_per_output_token=decode / benchmark.total_output_tokens,
             )
     valid = not reasons
@@ -376,21 +358,13 @@ def run(
         "node_errors": node_errors,
         "observed_gpu_count": integration.observed_num_gpus if integration else 0,
         "per_gpu_role": {uuid: role for role, uuids in roles.items() for uuid in uuids},
-        "per_gpu_sample_counts": integration.per_gpu_sample_counts
-        if integration
-        else {},
-        "boundary_degenerate_rows": integration.boundary_degenerate_rows
-        if integration
-        else {},
-        "per_gpu_max_sample_gap_s": integration.per_gpu_max_sample_gap_s
-        if integration
-        else {},
+        "per_gpu_sample_counts": integration.per_gpu_sample_counts if integration else {},
+        "boundary_degenerate_rows": integration.boundary_degenerate_rows if integration else {},
+        "per_gpu_max_sample_gap_s": integration.per_gpu_max_sample_gap_s if integration else {},
         "producer": {
             "name": "inferencex-native-smi",
             "revisions": sorted(revisions),
-            "producer_git_commit": next(iter(revisions))
-            if len(revisions) == 1
-            else None,
+            "producer_git_commit": next(iter(revisions)) if len(revisions) == 1 else None,
         },
         "integration_method": "per_device_trapezoidal_with_linear_boundary_interpolation",
         "power_percentile_method": "time_weighted_synchronized_total_piecewise_linear",
@@ -406,22 +380,14 @@ def main() -> None:
     begin = sub.add_parser("begin")
     begin.add_argument("--directory", type=Path, required=True)
     begin.add_argument("--vendor", choices=("amd", "nvidia"), required=True)
-    begin.add_argument(
-        "--node", default=os.environ.get("POWERX_NODE_NAME", socket.gethostname())
-    )
+    begin.add_argument("--node", default=os.environ.get("POWERX_NODE_NAME", socket.gethostname()))
     begin.add_argument("--rank", type=int, required=True)
-    begin.add_argument(
-        "--role", choices=("prefill", "decode", "aggregate"), required=True
-    )
+    begin.add_argument("--role", choices=("prefill", "decode", "aggregate"), required=True)
     begin.add_argument("--gpu-indices", required=True)
     begin.add_argument("--num-nodes", type=int, required=True)
     begin.add_argument("--job-id", default=os.environ.get("SLURM_JOB_ID", ""))
-    begin.add_argument(
-        "--revision", default=os.environ.get("POWERX_COLLECTOR_REVISION", "")
-    )
-    begin.add_argument(
-        "--clock-synchronized", choices=("true", "false"), default="false"
-    )
+    begin.add_argument("--revision", default=os.environ.get("POWERX_COLLECTOR_REVISION", ""))
+    begin.add_argument("--clock-synchronized", choices=("true", "false"), default="false")
     end = sub.add_parser("end")
     end.add_argument("--directory", type=Path, required=True)
     end.add_argument("--collector-exit-code", type=int, required=True)
