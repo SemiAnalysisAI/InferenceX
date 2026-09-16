@@ -1,0 +1,98 @@
+{
+  "schema-version": 2,
+  "head": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "run-id": 123,
+  "run-attempt": 1,
+  "full-sweep": false,
+  "matrix": {
+    "single_node": {
+      "agentic": [
+        {
+          "exp-name": "golden",
+          "model-prefix": "qwen3.5",
+          "model": "Qwen/Qwen3.5",
+          "runner": "h100",
+          "framework": "sglang",
+          "precision": "fp8",
+          "recipe-fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "conc": [1],
+          "require-power": true,
+          "scenario-type": "agentic-coding",
+          "disagg": false,
+          "num-gpus": 1,
+          "tp": 1,
+          "ep": 1,
+          "image": "example/serving:golden"
+        }
+      ]
+    },
+    "multi_node": {}
+  },
+  "publication": {
+    "mode": "incremental",
+    "replacement_scope": []
+  },
+  "points": [
+    {
+      "config_key": "golden",
+      "identity": {
+        "model": "qwen3.5",
+        "hardware": "h100",
+        "framework": "sglang",
+        "precision": "fp8",
+        "recipe_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "benchmark_type": "agentic_traces",
+        "isl": null,
+        "osl": null,
+        "concurrency": 1
+      },
+      "topology": {
+        "disagg": false,
+        "is_multinode": false,
+        "num_gpus": 1,
+        "tp": 1,
+        "ep": 1,
+        "dp_attention": false
+      },
+      "measurement_window": {
+        "start_time_unix": 1700000000,
+        "end_time_unix": 1700000002
+      },
+      "devices": [
+        {
+          "node": "golden-node",
+          "gpu_uuid": "GPU-golden",
+          "role": "aggregate",
+          "energy_j": 1000
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "agentic_golden/gpu_metrics.csv",
+          "sha256": "f42dee832f8d837142be9d4dc5fbbf8462c02846f06e66edfce659b8b20943db",
+          "validation_state": "valid"
+        },
+        {
+          "path": "agentic_golden/gpu_metrics_identity.csv",
+          "sha256": "a4364a0d4050078b9cba24c7e695fbed658fabb1d48e61a3da8f61b8ec873627",
+          "validation_state": "valid"
+        },
+        {
+          "path": "agentic_golden/power_node.txt",
+          "sha256": "114aa18bee3688c0e6040020ad0230472645541372b88a54253116fd9c2148e6",
+          "validation_state": "valid"
+        },
+        {
+          "path": "agentic_golden/power_validation.json",
+          "sha256": "c00687e7239fd172aa15f60c8d967294a0fa623984d0eaeeb5222424b6335d94",
+          "validation_state": "valid"
+        },
+        {
+          "path": "bmk_agentic_golden/agg.json",
+          "sha256": "56e3377ae12402eec61e25e2f9a0480ab228048a29d32c35cb8d438d50ea2faa",
+          "validation_state": "valid"
+        }
+      ]
+    }
+  ]
+}

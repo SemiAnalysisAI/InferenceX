@@ -358,6 +358,7 @@ def run(
         "node_errors": node_errors,
         "observed_gpu_count": integration.observed_num_gpus if integration else 0,
         "per_gpu_role": {uuid: role for role, uuids in roles.items() for uuid in uuids},
+        "per_gpu_energy_j": integration.per_gpu_energy_j if integration else {},
         "per_gpu_sample_counts": integration.per_gpu_sample_counts if integration else {},
         "boundary_degenerate_rows": integration.boundary_degenerate_rows if integration else {},
         "per_gpu_max_sample_gap_s": integration.per_gpu_max_sample_gap_s if integration else {},

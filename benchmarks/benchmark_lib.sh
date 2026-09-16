@@ -334,6 +334,8 @@ start_gpu_monitor() {
     GPU_MONITOR_INTERVAL="$interval"
     export GPU_METRICS_CSV
 
+    hostname > "$(dirname "$output")/power_node.txt"
+
     if command -v nvidia-smi &>/dev/null; then
         GPU_MONITOR_VENDOR="nvidia"
         if ! nvidia-smi --query-gpu=index,uuid,pci.bus_id,name,driver_version \
@@ -358,6 +360,7 @@ start_gpu_monitor() {
         # against the accumulator delta.
         _write_amd_smi_sidecar "${output%.csv}_energy_start.csv" metric -E --csv
         _write_amd_smi_sidecar "${output%.csv}_identity.json" static --json
+        _write_amd_smi_sidecar "${output%.csv}_devices.json" list --json
         echo "[GPU Monitor] Started AMD (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
     else
         GPU_MONITOR_VENDOR=""
@@ -3303,6 +3306,7 @@ run_agentic_replay_and_write_outputs() (
     local result_dir="$1"
     local replay_rc
     local validation_rc
+    local aggregate_rc=0
     local power_rc=0
     local agentx_power_enabled=0
     local agentx_multinode_power_enabled=0
@@ -3388,7 +3392,11 @@ run_agentic_replay_and_write_outputs() (
         trap - EXIT INT TERM
     fi
 
+    # Retain the original serving/replay status even if output processing fails.
+    set +e
     write_agentic_result_json "$result_dir"
+    aggregate_rc=$?
+    set -e
 
     if [ "$agentx_multinode_power_enabled" = "1" ] && [ "$replay_rc" -eq 0 ]; then
         set +e
@@ -3439,6 +3447,11 @@ run_agentic_replay_and_write_outputs() (
     if [ "$replay_rc" -ne 0 ]; then
         echo "ERROR: agentic trace replay exited with code $replay_rc after writing available results" >&2
         return "$replay_rc"
+    fi
+
+    if [ "$aggregate_rc" -ne 0 ]; then
+        echo "ERROR: AgentX aggregate processing failed" >&2
+        return "$aggregate_rc"
     fi
 
     if [ "$validation_rc" -ne 0 ]; then

@@ -7988,3 +7988,66 @@
     - "Use a B300-specific vLLM AgentX script with explicit FULL_AND_PIECEWISE CUDA graph capture sizes, concurrency-tiered batched-token limits, and an explicit maximum sequence count."
     - "Add a TP2 search-space variant at concurrency 2-128 while retaining the TP4 concurrency 1-128 variant."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3109
+
+- config-keys:
+  - dsv4-fp4-b200-sglang-agentic-hicache-mtp
+  - dsv4-fp4-b200-vllm-agentic-mtp
+  - dsv4-fp4-b300-sglang-agentic-hicache-mtp
+  - qwen3.5-fp8-b200-sglang-agentic-mtp
+  - kimik3-fp4-h200-vllm-agentic-latency
+  - kimik3-fp4-b300-vllm-agentic-dspark
+  - dsv4-fp4-b300-vllm-agentic-mtp
+  - qwen3.5-fp8-b300-sglang-agentic-mtp
+  - qwen3.5-fp4-b300-sglang-agentic-mtp
+  - qwen3.8next-fp4-b300-sglang-agentic-mtp
+  - qwen3.5-fp8-b300-sglang-agentic-power-ab
+  - qwen3.5-fp4-b300-sglang-agentic-power-ab
+  - qwen3.5-fp8-h100-sglang-agentic
+  - qwen3.5-fp8-h200-sglang-agentic-mtp
+  - qwen3.8next-fp8-h200-sglang-agentic-mtp
+  - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+  - qwen3.5-fp8-h100-sglang-agentic-mtp
+  - qwen3.8next-fp8-h100-sglang-agentic-mtp
+  - minimaxm3-fp8-h100-vllm-agentic-mtp
+  - minimaxm3-fp8-h200-vllm-agentic-mtp
+  - qwen3.5-fp4-b200-sglang-agentic-mtp
+  - qwen3.8next-fp4-b200-sglang-agentic-mtp
+  - minimaxm3-fp4-b300-vllm-agentic-mtp
+  - minimaxm3-fp4-b300-trtllm-agentic-mtp
+  - minimaxm3-fp4-b200-vllm-agentic-mtp
+  - minimaxm3-fp4-b200-trtllm-agentic-mtp
+  - glm5.2-fp4-b300-sglang-agentic-mtp
+  - glm5.2-fp4-b200-sglang-agentic-mtp
+  - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  - dsv41flash-fp4-h100-vllm-agentic-dspark
+  - dsv41flash-fp4-gb200-vllm-agentic-dspark
+  - dsv41flash-fp4-b300-vllm-agentic-dspark
+  - dsv41flash-fp4-b200-vllm-agentic-dspark
+  - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  - dsv41flash-fp4-h200-vllm-agentic-dspark
+  - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+  - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  - qwen3.5-fp8-mi300x-sglang-agentic-mtp
+  - kimik3-fp4-mi355x-vllm-agentic-mtp
+  - kimik3-fp4-mi355x-atom-agentic-mtp
+  - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  - dsv4-fp4-mi355x-vllm-agentic-mtp
+  - dsv4-fp4-mi355x-atom-agentic-mtp
+  - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  - minimaxm3-fp8-mi325x-vllm-agentic-mtp
+  - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  - glm5.2-fp8-mi355x-sglang-agentic-mtp
+  - glm5.2-fp4-mi355x-atom-agentic-mtp
+  - dsv4-fp4-mi355x-sglang-agentic-mtp
+  - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+  - agentic-coding
+  description:
+  - Require measured power by default for single-node AgentX recipe submissions and enforce the existing enabled multi-node scopes through source manifests and publication checks.
+  - 单节点 AgentX 配方提交默认要求有效实测功耗，并通过来源清单和发布检查保护已启用的多节点范围。
+  - Route the two existing Qwen B300 power A/B configurations to the replacement DSXE fleet; retain their model, image and search spaces.
+  - 将两项现有 Qwen B300 功耗 A/B 配置路由到替代的 DSXE 集群，保留模型、镜像和搜索空间。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3165

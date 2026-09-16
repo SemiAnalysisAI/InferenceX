@@ -100,7 +100,11 @@ Sources: [`configs/CONFIGS.md`](../configs/CONFIGS.md), [`validation.py`](../uti
 6. For srt-slurm, update recipe and master entry together. For llm-d, update the llm-d recipe/orchestration and master entry together.
 7. Append the trigger entry, generate only the affected key first, and inspect every emitted point.
 
-Fixed-sequence `8192/1024` scenarios may set `require-power: true` to opt into validated measured power. The matrix passes this flag to standard sweeps and manual E2E throughput jobs; eval-only and AgentX rows do not inherit it. Omit the field to preserve existing behavior. Enable it only alongside the corresponding runtime and result adapter, then qualify the complete selected scope.
+Single-node `agentic-coding` scenarios require validated measured power by default, using the existing automatic collector. Newly submitted recipes inherit this behavior without a model or hardware allowlist. An explicit `require-power: false` alongside `search-space` opts a scenario out of the validity gate; it does not disable collection. Omitted or `null` uses the topology default. Multi-node AgentX and fixed-sequence `8192/1024` scenarios remain opt-in with `require-power: true`: their native collector and launcher must support the full deployment first. Standard sweeps and manual E2E jobs inherit the resolved flag; eval-only rows do not.
+
+Required AgentX jobs also check every returned aggregate after the launcher succeeds: each must have the current power schema, numeric `power_valid: 1`, and finite positive average power, total energy, and joules per output token. Disaggregated jobs also require prefill/decode energy and role-specific joules per input/output token. Missing or invalid results fail the job while diagnostic uploads remain available. This flag does not enable a missing collector or srt-slurm recipe telemetry. Enable it only alongside the corresponding runtime and result adapter, then qualify the complete selected scope.
+
+When a fresh sweep includes required-power benchmark rows, CI uploads its existing `sweep_manifest.json` as `required-power-sweep-manifest`, retaining the source run, attempt, head, and complete matrix. The changelog metadata also records `require-power: true`, allowing ingestion to reject a missing source manifest. Metadata upload failure blocks both ingest dispatches. Reused runs keep the original source manifest; eval-only flags do not create a required-power scope.
 
 ## Register and set up a runner
 

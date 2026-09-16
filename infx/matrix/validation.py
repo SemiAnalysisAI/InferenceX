@@ -312,6 +312,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     precision: str
     framework: str
     runner: str
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     tp: int
     pp: int = Field(gt=0, strict=True)
     dcp_size: int = Field(alias=Fields.DCP_SIZE.value, gt=0, strict=True)
@@ -364,6 +365,7 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     framework: str
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(alias=Fields.SPEC_DECODING.value)
     runner: str
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     node_count: int = Field(alias=Fields.NODE_COUNT.value, gt=0, strict=True)
     prefill: WorkerConfig
     decode: WorkerConfig
@@ -712,6 +714,7 @@ class AgenticCodingConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
+    require_power: bool | None = Field(default=None, alias=Fields.REQUIRE_POWER.value, strict=True)
     search_space: list[AgenticCodingSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
     dram_utilization: float | None = Field(
         default=None, alias=Fields.DRAM_UTILIZATION.value, gt=0, le=1

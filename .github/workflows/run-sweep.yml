@@ -611,6 +611,7 @@ jobs:
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: *klaud-run
+            require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
@@ -645,6 +646,7 @@ jobs:
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: *klaud-run
+            require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
@@ -857,11 +859,21 @@ jobs:
 
     upload-changelog-metadata:
         name: upload-changelog-metadata
-        needs: [setup, collect-results]
+        permissions:
+            actions: read # Download required power evidence artifacts.
+            contents: read
+        needs: [setup, collect-results, sweep-agentic, sweep-multi-node-agentic]
+        outputs:
+            has-required-power: ${{ steps.metadata.outputs.has-required-power }}
         if: ${{ always() && needs.setup.result == 'success' }}
         runs-on: ubuntu-latest
         steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+
             - name: Extract and save changelog metadata
+              id: metadata
               env:
                   SWEEP_MATRIX: ${{ needs.setup.outputs.search-space-config }}
                   SWEEP_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -878,7 +890,6 @@ jobs:
                       'full-sweep-fail-fast', 'full-sweep-fail-fast-no-canary',
                       'all-evals', 'evals-only', 'agentx-fast',
                   }
-                  Path('changelog_metadata.json').write_text(json.dumps(matrix['changelog_metadata']))
                   Path('sweep_manifest.json').write_text(json.dumps({
                       'head': os.environ['SWEEP_HEAD'], 'run-id': int(os.environ['GITHUB_RUN_ID']),
                       'run-attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
@@ -887,6 +898,17 @@ jobs:
                       ),
                       'matrix': matrix,
                   }))
+                  has_required_power = any(
+                      row.get('require-power') is True and row.get('eval-only') is not True
+                      for topology in ('single_node', 'multi_node')
+                      for rows in matrix.get(topology, {}).values()
+                      for row in rows
+                  )
+                  Path('changelog_metadata.json').write_text(json.dumps({
+                      **matrix['changelog_metadata'], 'require-power': has_required_power,
+                  }))
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+                      output.write(f'has-required-power={str(has_required_power).lower()}\n')
                   PY
 
             - name: Upload changelog artifact
@@ -900,6 +922,43 @@ jobs:
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   name: klaud-sweep-manifest
+                  path: sweep_manifest.json
+                  if-no-files-found: error
+
+            - name: Download required power evidence
+              if: ${{ steps.metadata.outputs.has-required-power == 'true' }}
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  path: power-evidence
+                  pattern: '{bmk_*,agentic_*,power_audit_*,required-power-sweep-manifest}'
+                  github-token: ${{ github.token }}
+                  run-id: ${{ needs.setup.outputs.reuse-enabled == 'true' && needs.setup.outputs.reuse-source-run-id || github.run_id }}
+
+            - name: Validate required power publication
+              if: ${{ steps.metadata.outputs.has-required-power == 'true' }}
+              env:
+                  REUSE_ENABLED: ${{ needs.setup.outputs.reuse-enabled }}
+                  SOURCE_HEAD: ${{ needs.setup.outputs.reuse-enabled == 'true' && needs.setup.outputs.reuse-source-head-sha || github.event.pull_request.head.sha || github.sha }}
+                  SOURCE_ATTEMPT: ${{ needs.setup.outputs.reuse-enabled == 'true' && needs.setup.outputs.reuse-source-run-attempt || github.run_attempt }}
+                  SOURCE_RUN_ID: ${{ needs.setup.outputs.reuse-enabled == 'true' && needs.setup.outputs.reuse-source-run-id || github.run_id }}
+              run: |
+                  manifest=sweep_manifest.json
+                  power_args=()
+                  if [ "$REUSE_ENABLED" = 'true' ]; then
+                      manifest=power-evidence/required-power-sweep-manifest/sweep_manifest.json
+                      power_args+=(--verify-existing)
+                  fi
+                  python3 -m infx.results.power.publication \
+                      --sweep "$manifest" --artifacts power-evidence \
+                      --expected-run-id "$SOURCE_RUN_ID" --expected-head "$SOURCE_HEAD" \
+                      --expected-run-attempt "$SOURCE_ATTEMPT" "${power_args[@]}" \
+                      --output sweep_manifest.json
+
+            - name: Upload required power sweep manifest
+              if: ${{ steps.metadata.outputs.has-required-power == 'true' && needs.setup.outputs.reuse-enabled != 'true' }}
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: required-power-sweep-manifest
                   path: sweep_manifest.json
                   if-no-files-found: error
 
@@ -995,6 +1054,7 @@ jobs:
             github.event_name == 'push' &&
             github.ref == 'refs/heads/main' &&
             needs.setup.result == 'success' &&
+            needs.upload-changelog-metadata.result == 'success' &&
             (
               (
                 toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) == 'null' ||
@@ -1017,6 +1077,7 @@ jobs:
               env:
                 SOURCE_RUN_ID: ${{ needs.setup.outputs.reuse-enabled == 'true' && needs.setup.outputs.reuse-source-run-id || github.run_id }}
                 MERGE_RUN_ID: ${{ github.run_id }}
+                REQUIRE_POWER: ${{ needs.upload-changelog-metadata.outputs.has-required-power }}
               with:
                 # Repository integration credential for the scoped sweep/ingest job.
                 github-token: ${{ secrets.INFX_FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
@@ -1027,6 +1088,8 @@ jobs:
                     event_type: "ingest-results",
                     client_payload: {
                       "source-run-id": process.env.SOURCE_RUN_ID,
+                      "require-power": process.env.REQUIRE_POWER === "true",
+                      "power-manifest-schema-version": 2,
                       "merge-run-id": process.env.MERGE_RUN_ID
                     }
                   });
@@ -1082,6 +1145,7 @@ jobs:
               env:
                 SOURCE_RUN_ID: ${{ needs.setup.outputs.reuse-enabled == 'true' && needs.setup.outputs.reuse-source-run-id || github.run_id }}
                 MERGE_RUN_ID: ${{ github.run_id }}
+                REQUIRE_POWER: ${{ needs.upload-changelog-metadata.outputs.has-required-power }}
               with:
                 # Repository integration credential for the scoped sweep/ingest job.
                 github-token: ${{ secrets.INFX_FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
@@ -1092,6 +1156,8 @@ jobs:
                     event_type: "ingest-agentic-results",
                     client_payload: {
                       "source-run-id": process.env.SOURCE_RUN_ID,
+                      "require-power": process.env.REQUIRE_POWER === "true",
+                      "power-manifest-schema-version": 2,
                       "merge-run-id": process.env.MERGE_RUN_ID,
                       "database-target": "production"
                     }

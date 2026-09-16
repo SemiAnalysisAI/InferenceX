@@ -26,6 +26,7 @@ def _run_lifecycle(
     require_power: bool = False,
     formal_multinode_power: bool = False,
     real_power_adapter: bool = False,
+    aggregate_rc: int = 0,
 ) -> subprocess.CompletedProcess[str]:
     result_dir = tmp_path / "results"
     result_dir.mkdir()
@@ -48,6 +49,7 @@ fake_replay() {{
 write_agentic_result_json() {{
     printf 'aggregate\n' >> {str(event_log)!r}
     printf '{{}}\n' > "$AGENTIC_OUTPUT_DIR/$RESULT_FILENAME.json"
+    return {aggregate_rc}
 }}
 fake_python() {{
     case "$*" in
@@ -143,6 +145,18 @@ def test_single_node_invokes_adapter_with_gpu_shape_and_strict_mode(tmp_path: Pa
     assert "--agg-result " + str(tmp_path / "agg_agentx.json") in adapter_event
     assert "--expected-num-gpus 12" in adapter_event
     assert "--require-power" in adapter_event
+
+
+@pytest.mark.parametrize("replay_rc,aggregate_rc,expected", [(7, 9, 7), (0, 9, 9), (7, 0, 7), (0, 0, 1)])
+def test_primary_failure_survives_invalid_required_telemetry(tmp_path, replay_rc, aggregate_rc, expected):
+    result = _run_lifecycle(
+        tmp_path, replay_rc=replay_rc, aggregate_rc=aggregate_rc,
+        require_power=True, real_power_adapter=True,
+    )
+    assert result.returncode == expected, result.stderr
+    audit = json.loads((tmp_path / "results/power_validation.json").read_text())
+    assert audit["power_valid"] is False
+    assert "profile_artifacts_missing" in audit["reasons"]
 
 
 def test_explicit_opt_out_skips_power(tmp_path: Path):
