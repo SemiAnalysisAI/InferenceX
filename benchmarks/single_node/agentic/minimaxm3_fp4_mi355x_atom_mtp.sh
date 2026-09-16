@@ -121,12 +121,20 @@ case "$KV_OFFLOAD_BACKEND" in
         export PYTHONHASHSEED=0
         export LMCACHE_LOCAL_CPU=True
 
-        # GPUs 0-3 are on NUMA node 0, 4-7 on node 1; one rank per node so they
-        # do not starve each other pinning host memory (45 min -> 21 s).
-        if [[ -z "${ROCR_VISIBLE_DEVICES+x}" && "$TP" -eq 2 ]]; then
-            export ROCR_VISIBLE_DEVICES=0,4
-            export HIP_VISIBLE_DEVICES=0,4
-            echo "NUMA-spread GPUs for offload: $ROCR_VISIBLE_DEVICES"
+        # GPUs 0-3 are on NUMA node 0, 4-7 on node 1. Ranks pinning host memory on
+        # one node starve each other: 256 GB/rank takes 45 min (TP2) / 27 min (TP4)
+        # all on node 0, and 21 s with TP2 split one per node.
+        if [[ -z "${ROCR_VISIBLE_DEVICES+x}" ]]; then
+            case "$TP" in
+                2) NUMA_GPUS=0,4 ;;
+                4) NUMA_GPUS=0,1,4,5 ;;
+                *) NUMA_GPUS="" ;;
+            esac
+            if [[ -n "$NUMA_GPUS" ]]; then
+                export ROCR_VISIBLE_DEVICES="$NUMA_GPUS"
+                export HIP_VISIBLE_DEVICES="$NUMA_GPUS"
+                echo "NUMA-spread GPUs for offload: $NUMA_GPUS"
+            fi
         fi
 
         case "$OFFLOAD_TIER" in
