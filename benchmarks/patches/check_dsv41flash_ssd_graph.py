@@ -15,10 +15,22 @@ from vllm.models.deepseek_v4_1.common.engram import (
     EngramDiskStager,
     ParallelEngramEmbedding,
     _engram_disk_tensor,
+    validate_disk_graph_config,
 )
 
 
 def check() -> None:
+    from vllm.config import ParallelConfig
+
+    for size in (0, 1):
+        validate_disk_graph_config(SimpleNamespace(parallel_config=ParallelConfig(ubatch_size=size)))
+    for options in ({"ubatch_size": 2}, {"enable_dbo": True}, {"pipeline_parallel_size": 2}, {"data_parallel_size": 2}):
+        try:
+            validate_disk_graph_config(SimpleNamespace(parallel_config=ParallelConfig(**options)))
+        except ValueError as error:
+            assert "SSD graph staging requires" in str(error), str(error)
+        else:
+            raise AssertionError(f"unsupported configuration accepted: {options}")
     torch.cuda.set_device(0)
     with tempfile.TemporaryDirectory(prefix="engram-graph-") as directory:
         layers = []
