@@ -619,9 +619,7 @@ def _run_upstream(
         from bfcl_eval.model_handler.api_inference.openai_completion import OpenAICompletionsHandler
 
         stock_handler = OpenAICompletionsHandler
-    handler = _bounded_openai_handler(
-        stock_handler, timeout_seconds=suite.request_timeout_seconds
-    )
+    handler = _bounded_openai_handler(stock_handler, timeout_seconds=suite.request_timeout_seconds)
 
     bfcl_model_config.MODEL_CONFIG_MAPPING[model] = ModelConfig(
         model_name=model,
