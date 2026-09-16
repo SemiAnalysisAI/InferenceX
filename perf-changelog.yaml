@@ -7958,6 +7958,29 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2989
 
 - config-keys:
+    - qwen3.5-fp8-h100-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.16-cu130 to lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161 (2026-09-14 upstream cu13 nightly, sgl-project/sglang@4358a161). The 2026-09-15 nightly (nightly-dev-cu13-20260915-8874c51a) cannot start any HiCache arm: sgl-project/sglang#35233 (merged 2026-09-14T22:49Z) made the host pool import get_device_accessible_ptr from a kernel wheel that image does not ship, so every kv-offloading dram point died at startup (runs 35016956476, 35016965515); sgl-project/sglang#39516 fixes it for the 2026-09-16 build, and 09-14 is the newest nightly that predates the regression. NEXTN MTP settings, HiCache arms, and the grid are unchanged"
+    - "将 SGLang 镜像从 lmsysorg/sglang:v0.5.16-cu130更新为 lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161（2026-09-14 上游 cu13 nightly，sgl-project/sglang@4358a161）。2026-09-15 nightly（nightly-dev-cu13-20260915-8874c51a）的所有 HiCache 分支无法启动：sgl-project/sglang#35233（2026-09-14T22:49Z 合入）令主机池从镜像未附带的内核 wheel 导入 get_device_accessible_ptr，所有 kv-offloading dram 点在启动时失败（运行 35016956476、35016965515）；sgl-project/sglang#39516 已修复并将随 2026-09-16 构建发布，09-14 是早于该回归的最新 nightly。NEXTN MTP 设置、HiCache 分支及网格保持不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3150
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.16-cu130 to lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161 (2026-09-14 upstream cu13 nightly, sgl-project/sglang@4358a161); rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode, which exists on both this and the 09-15 nightly, because recent nightlies split the flag into decode/prefill variants and reject the old prefix as ambiguous (B200 sibling, run 35013444957). The 2026-09-15 nightly (nightly-dev-cu13-20260915-8874c51a) cannot start any HiCache arm: sgl-project/sglang#35233 (merged 2026-09-14T22:49Z) made the host pool import get_device_accessible_ptr from a kernel wheel that image does not ship, so every kv-offloading dram point died at startup (runs 35016956476, 35016965515); sgl-project/sglang#39516 fixes it for the 2026-09-16 build, and 09-14 is the newest nightly that predates the regression. NEXTN MTP settings, HiCache arms, and the grid are unchanged"
+    - "将 SGLang 镜像从 lmsysorg/sglang:v0.5.16-cu130更新为 lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161（2026-09-14 上游 cu13 nightly，sgl-project/sglang@4358a161）；将 --cuda-graph-max-bs 改为 --cuda-graph-max-bs-decode（09-14 与 09-15 nightly 均支持），因近期 nightly 将该参数拆分为 decode/prefill 两个变体并拒绝旧写法（B200 同级配方运行 35013444957）。2026-09-15 nightly（nightly-dev-cu13-20260915-8874c51a）的所有 HiCache 分支无法启动：sgl-project/sglang#35233（2026-09-14T22:49Z 合入）令主机池从镜像未附带的内核 wheel 导入 get_device_accessible_ptr，所有 kv-offloading dram 点在启动时失败（运行 35016956476、35016965515）；sgl-project/sglang#39516 已修复并将随 2026-09-16 构建发布，09-14 是早于该回归的最新 nightly。NEXTN MTP 设置、HiCache 分支及网格保持不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3142
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.14-cu130 to lmsysorg/sglang:nightly-dev-cu13-20260915-8874c51a (2026-09-15 upstream cu13 nightly, sgl-project/sglang@8874c51a); raise --max-prefill-tokens and --chunked-prefill-size from 16384 to 32768 and add --mamba-full-memory-ratio 0.37 and --linear-attn-prefill-backend flashinfer; the TP8/TP4 EAGLE grid is unchanged"
+    - "将 SGLang 镜像从 lmsysorg/sglang:v0.5.14-cu130 更新为 lmsysorg/sglang:nightly-dev-cu13-20260915-8874c51a（2026-09-15 上游 cu13 nightly，sgl-project/sglang@8874c51a）；将 --max-prefill-tokens 与 --chunked-prefill-size 从 16384 提高到 32768，并新增 --mamba-full-memory-ratio 0.37 和 --linear-attn-prefill-backend flashinfer；TP8/TP4 EAGLE 网格保持不变"
+    - "Rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode: the 2026-09-15 SGLang nightly splits the flag into decode/prefill variants and rejects the old spelling as ambiguous (run 35013444957, canary c4)"
+    - "将 --cuda-graph-max-bs 改为 --cuda-graph-max-bs-decode：2026-09-15 SGLang nightly 将该参数拆分为 decode/prefill 两个变体，旧写法因歧义被拒绝（运行 35013444957，canary c4）"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3144
+
+- config-keys:
     - kimik3-fp4-mi355x-vllm-agentic-mtp
     - minimaxm3-fp4-b200-vllm-agentic-mtp
     - minimaxm3-fp4-b200-trtllm-agentic-mtp
