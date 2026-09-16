@@ -158,10 +158,13 @@ def allocation_ids(root: Path) -> list[str]:
     )
 
 
-def cleanup(root: Path) -> None:
+def cleanup(root: Path, timeout_seconds: int) -> None:
+    if timeout_seconds <= 0:
+        raise ValueError("cleanup timeout must be positive")
     for job in allocation_ids(root):
         subprocess.run(["scancel", job], check=False, timeout=15)
-        for _ in range(15):
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
             state = subprocess.run(
                 ["squeue", "-h", "-u", str(os.getuid()), "-o", "%A"],
                 check=False,
@@ -265,10 +268,10 @@ def import_image(args) -> None:
             temporary.unlink(missing_ok=True)
 
 
-def finalize(root: Path) -> None:
+def finalize(root: Path, cleanup_seconds: int) -> None:
     if not root.exists():
         return
-    cleanup(root)
+    cleanup(root, cleanup_seconds)
     execution = root / "execution.json"
     if execution.exists():
         data = json.loads(execution.read_text())
@@ -288,7 +291,9 @@ def finalize(root: Path) -> None:
             shutil.rmtree(stage)
 
 
-def recover(artifacts: Path, run_id: str, pool: str, platform_config: Path) -> None:
+def recover(
+    artifacts: Path, run_id: str, pool: str, platform_config: Path, cleanup_seconds: int
+) -> None:
     profile = json.loads(platform_config.read_text())["platforms"][pool]["operator"]
     base = shared_base(profile, pool).resolve()
     recovered = 0
@@ -299,7 +304,7 @@ def recover(artifacts: Path, run_id: str, pool: str, platform_config: Path) -> N
         stage = Path(data["stage"])
         if stage.parent.resolve() != base:
             raise ValueError("recovery stage does not belong to this pool/user")
-        finalize(execution.parent)
+        finalize(execution.parent, cleanup_seconds)
         recovered += 1
     if not recovered:
         raise ValueError("no execution artifacts found to recover")
@@ -479,7 +484,7 @@ def execute(args) -> None:
         # Stop writers before collecting; failed cleanup retains the evidence.
         for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
             signal.signal(sig, signal.SIG_IGN)
-        finalize(root)
+        finalize(root, args.cleanup_seconds)
         write_json(
             root / "status.json", {"exit_code": rc, "slurm_jobs": allocation_ids(root)}
         )
@@ -583,6 +588,7 @@ def main() -> None:
     for name in ("shard", "run-id", "attempt", "source-sha", "runner-name"):
         p.add_argument("--" + name, required=True)
     p.add_argument("--time-minutes", required=True, type=int)
+    p.add_argument("--cleanup-seconds", required=True, type=int)
     p.add_argument("--manifest", required=True, type=Path)
     p.add_argument("--platform-config", required=True, type=Path)
     p.add_argument("--output", required=True, type=Path)
@@ -595,12 +601,14 @@ def main() -> None:
     )
     sub.add_parser("rank")
     p = sub.add_parser("finalize")
+    p.add_argument("--cleanup-seconds", required=True, type=int)
     p.add_argument("--output", required=True, type=Path)
     p = sub.add_parser("summarize")
     p.add_argument("--manifest", required=True, type=Path)
     p.add_argument("--artifacts", required=True, type=Path)
     p.add_argument("--out", required=True, type=Path)
     p = sub.add_parser("recover")
+    p.add_argument("--cleanup-seconds", required=True, type=int)
     p.add_argument("--artifacts", required=True, type=Path)
     p.add_argument("--run-id", required=True)
     p.add_argument("--pool", required=True, choices=tuple(POOLS))
@@ -662,11 +670,17 @@ def main() -> None:
             )
         raise SystemExit(0 if report["success"] else 1)
     elif args.command == "recover":
-        recover(args.artifacts, args.run_id, args.pool, args.platform_config)
+        recover(
+            args.artifacts,
+            args.run_id,
+            args.pool,
+            args.platform_config,
+            args.cleanup_seconds,
+        )
     elif args.command == "execute":
         execute(args)
     elif args.command == "finalize":
-        finalize(args.output)
+        finalize(args.output, args.cleanup_seconds)
     elif args.command == "import":
         import_image(args)
     else:

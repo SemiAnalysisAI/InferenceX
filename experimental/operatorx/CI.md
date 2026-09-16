@@ -75,7 +75,8 @@ Do not infer that Blackwell-specific FP4 kernels work on Hopper.
   allocation time limit is 45 minutes; Actions permits 70 minutes including
   queueing and cleanup. Slurm job names match the Actions runner name.
 - Signals and the workflow's `always()` recovery step cancel recorded allocations,
-  stop writers, recover partial results, and remove staged sources. A failed
+  stop writers, recover partial results, and remove staged sources. The workflow
+  explicitly allows 180 seconds for Slurm epilog/node release, including on H200. A failed
   cleanup retains staging for investigation. Slurm's time limit is the last
   bound if the runner host disappears.
 - Strict CI runs atomically checkpoint rank-zero rows after each operation,

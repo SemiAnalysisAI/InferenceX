@@ -341,6 +341,8 @@ if name == 'srun' and sys.argv[-1] == 'rank':
             "test_runner",
             "--time-minutes",
             "1",
+            "--cleanup-seconds",
+            "2",
         ],
         env=env,
     )
@@ -463,8 +465,36 @@ def test_recovery_refuses_unrelated_pool_or_storage(tmp_path):
     }
     ci.write_json(artifacts / "execution.json", data)
     with pytest.raises(ValueError, match="run/pool"):
-        ci.recover(artifacts, "12", "h100-dgxc", profile)
+        ci.recover(artifacts, "12", "h100-dgxc", profile, 2)
     data["cell"]["pool"] = "h100-dgxc"
     ci.write_json(artifacts / "execution.json", data)
     with pytest.raises(ValueError, match="pool/user"):
-        ci.recover(artifacts, "12", "h100-dgxc", profile)
+        ci.recover(artifacts, "12", "h100-dgxc", profile, 2)
+
+
+@pytest.mark.parametrize("release", [True, False])
+def test_cleanup_waits_for_delayed_release_but_stays_bounded(
+    tmp_path, monkeypatch, release
+):
+    (tmp_path / "allocation.log").write_text("Granted job allocation 12345\n")
+    clock = [0]
+    monkeypatch.setattr(ci.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(
+        ci.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds)
+    )
+
+    def slurm(argv, **kwargs):
+        active = "12345\n" if not release or clock[0] < 30 else ""
+        return subprocess.CompletedProcess(argv, 0, active, "")
+
+    monkeypatch.setattr(ci.subprocess, "run", slurm)
+    if release:
+        ci.cleanup(tmp_path, 180)
+        assert (tmp_path / "cleanup.log").read_text().splitlines()[-1] == (
+            "job=12345 rc=0 active='' error=''"
+        )
+        assert clock[0] == 30
+    else:
+        with pytest.raises(RuntimeError, match="retaining staged evidence"):
+            ci.cleanup(tmp_path, 180)
+        assert clock[0] == 180
