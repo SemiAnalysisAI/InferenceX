@@ -959,8 +959,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log >/dev/null) 2>&1 &
         set +x
         prefill0_pid=$!
-        prefill0_pgid=$(ps -o pgid= -p "$prefill0_pid" 2>/dev/null | tr -d ' ')
-        : "${prefill0_pgid:=$prefill0_pid}"
+        prefill0_pgid=$prefill0_pid
     fi
 
     echo "Waiting for all prefill and decode servers to be up . . ."
@@ -1017,8 +1016,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         fi
         set +x
         proxy_pid=$!
-        proxy_pgid=$(ps -o pgid= -p "$proxy_pid" 2>/dev/null | tr -d ' ')
-        : "${proxy_pgid:=$proxy_pid}"
+        proxy_pgid=$proxy_pid
 
         HEALTH_BARRIER_CMD="python3 $SGLANG_WS_PATH/sync.py barrier \
             --node-ips ${NODE0_ADDR} \
@@ -1114,6 +1112,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         IS_AGENTIC_RUN=1
     fi
 
+    BENCHMARK_EXIT_CODE=0
     if [[ "${EVAL_ONLY}" == "true" ]]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"
     elif [[ "$DRY_RUN" -eq 1 ]]; then
@@ -1188,10 +1187,12 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
             --entrypoint "" \
             "${CLIENT_IMAGE}" \
             bash -lc "cd /workspace/benchmarks/multi_node/amd_utils && bash trace_replay.sh /models ${MODEL_NAME} \"${BENCH_MAX_CONCURRENCY}\" /run_logs/slurm_job-${SLURM_JOB_ID}"
+        BENCHMARK_EXIT_CODE=$?
         set +x
     else
         set -x
         eval "$BENCH_CMD"
+        BENCHMARK_EXIT_CODE=$?
         set +x
     fi
 
@@ -1281,22 +1282,17 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
         echo "Copied results to $LOGS_OUTPUT/slurm_job-${SLURM_JOB_ID}"
     fi
 
-    echo "Killing the proxy server and prefill server"
-
+    node_exit_status=$BENCHMARK_EXIT_CODE
+    if [[ "${EVAL_FAILED:-0}" -eq 1 && "$node_exit_status" -eq 0 ]]; then
+        node_exit_status=1
+    fi
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        # Group-kill the router (setsid at launch): the python launcher has usually
-        # exited after spawning the Rust worker, which reparents to init but stays in
-        # this group; kill $proxy_pid alone misses it and :30000 stays open.
-        kill -TERM -"${proxy_pgid:-$proxy_pid}" 2>/dev/null || true
-        # Group-kill the prefill tree so TP-scheduler children release the tee pipe
-        # and the container can exit.
-        kill -TERM -"${prefill0_pgid:-$prefill0_pid}" 2>/dev/null || true
+        # The router and prefill may retain TERM-resistant tokenizer workers.
+        # Keep the benchmark/eval status even when teardown also fails.
+        stop_background_process_groups "$node_exit_status" 30 5 "$proxy_pgid" "$prefill0_pgid"
+        exit $?
     fi
-
-    if [[ "${EVAL_FAILED:-0}" -eq 1 ]]; then
-        echo "ERROR: eval failed; exiting node-0 with rc=1"
-        exit 1
-    fi
+    exit "$node_exit_status"
 
 elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     echo "${host_name}:${host_ip} is Prefill Node (Model: ${MODEL_NAME})"
@@ -1340,8 +1336,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
             > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log >/dev/null) 2>&1 &
         set +x
         prefill_pid=$!
-        prefill_pgid=$(ps -o pgid= -p "$prefill_pid" 2>/dev/null | tr -d ' ')
-        : "${prefill_pgid:=$prefill_pid}"
+        prefill_pgid=$prefill_pid
     fi
 
     echo "Waiting for proxy server to be up..."
@@ -1371,8 +1366,8 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     echo "Killing the rank $NODE_RANK prefill server"
 
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        # Group-kill so TP-scheduler children release the tee pipe and the container exits.
-        kill -TERM -"${prefill_pgid:-$prefill_pid}" 2>/dev/null || true
+        stop_background_process_groups 0 30 5 "$prefill_pgid"
+        exit $?
     fi
 
 else
@@ -1459,8 +1454,7 @@ else
 
         set +x
         decode_pid=$!
-        decode_pgid=$(ps -o pgid= -p "$decode_pid" 2>/dev/null | tr -d ' ')
-        : "${decode_pgid:=$decode_pid}"
+        decode_pgid=$decode_pid
     fi
 
     echo "Waiting for proxy server to be up..."
@@ -1489,8 +1483,8 @@ else
 
     echo "Killing the rank $RANK decode server"
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        # Group-kill so TP-scheduler children release the tee pipe and the container exits.
-        kill -TERM -"${decode_pgid:-$decode_pid}" 2>/dev/null || true
+        stop_background_process_groups 0 30 5 "$decode_pgid"
+        exit $?
     fi
 
 fi

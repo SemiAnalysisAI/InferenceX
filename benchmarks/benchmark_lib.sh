@@ -19,6 +19,74 @@ check_env_vars() {
     fi
 }
 
+# Report live members of explicitly owned process groups. Zombies cannot hold
+# output pipes open. Do not use leader liveness: a router can orphan its workers.
+_background_process_groups_alive() {
+    local groups=" $* "
+    local listing
+    listing=$(ps -eo pgid=,stat=) || return 1
+    awk -v groups="$groups" '
+        index(groups, " " $1 " ") && $2 !~ /^[ZX]/ { alive[$1] = 1 }
+        END { for (group in alive) print group }
+    ' <<< "$listing"
+}
+
+# Called only after benchmark/eval work ends. Preserve its exit status while
+# bounding teardown of the setsid groups recorded by the launcher. Grace periods
+# are explicit arguments, independent of benchmark duration and server readiness.
+stop_background_process_groups() {
+    local work_status="$1" term_grace="$2" kill_grace="$3"
+    shift 3
+    local pgid own_pgid remaining deadline cleanup_status=0
+    local groups=("$@")
+    if [[ ! "$work_status" =~ ^[0-9]+$ || ! "$term_grace" =~ ^[0-9]+$ || ! "$kill_grace" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: invalid process-group cleanup status or grace period" >&2
+        return 1
+    fi
+    if ! own_pgid=$(ps -o pgid= -p "$$"); then
+        if [[ "$work_status" -ne 0 ]]; then return "$work_status"; fi
+        return 1
+    fi
+    own_pgid="${own_pgid//[[:space:]]/}"
+    for pgid in "${groups[@]}"; do
+        if [[ ! "$pgid" =~ ^[1-9][0-9]*$ || "$pgid" -le 1 || "$pgid" == "$own_pgid" ]]; then
+            echo "ERROR: refusing unsafe process-group cleanup: '$pgid'" >&2
+            if [[ "$work_status" -ne 0 ]]; then return "$work_status"; fi
+            return 1
+        fi
+    done
+    if [[ ${#groups[@]} -eq 0 ]]; then return "$work_status"; fi
+
+    echo "Stopping owned process groups: ${groups[*]}"
+    for pgid in "${groups[@]}"; do
+        kill -TERM -- "-$pgid" 2>/dev/null || true
+    done
+    deadline=$((SECONDS + term_grace))
+    while true; do
+        remaining=$(_background_process_groups_alive "${groups[@]}") || { cleanup_status=1; break; }
+        [[ -n "$remaining" && $SECONDS -lt $deadline ]] || break
+        sleep 1
+    done
+    if [[ -n "$remaining" ]]; then
+        echo "TERM grace expired; force-stopping owned process groups: $remaining"
+        for pgid in $remaining; do
+            kill -KILL -- "-$pgid" 2>/dev/null || true
+        done
+        deadline=$((SECONDS + kill_grace))
+        while true; do
+            remaining=$(_background_process_groups_alive "${groups[@]}") || { cleanup_status=1; break; }
+            [[ -n "$remaining" && $SECONDS -lt $deadline ]] || break
+            sleep 1
+        done
+        if [[ -n "$remaining" ]]; then
+            echo "ERROR: process groups still alive after KILL grace: $remaining" >&2
+            cleanup_status=1
+        fi
+    fi
+    if [[ "$work_status" -ne 0 ]]; then return "$work_status"; fi
+    return "$cleanup_status"
+}
+
 # Launchers may load only input validation, without benchmark initialization.
 if [[ "${1-}" == "--validation-only" ]]; then
     return 0

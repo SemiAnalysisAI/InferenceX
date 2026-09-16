@@ -425,3 +425,15 @@ Remaining durable fix:
 ```
 
 This evidence is the completion gate. “Workflow green” without artifact identity, source/merge identity, and ingest counts is not a verified result recovery.
+
+### AMD multi-node SGLang teardown
+
+After benchmark/eval work and result staging, the AMD SGLang launcher sends TERM
+only to its recorded `setsid` process groups. It allows 30 seconds for graceful
+exit, then sends KILL to surviving groups and checks for exit for another five
+seconds. This handles orphaned or TERM-resistant workers that otherwise hold log
+pipes open. These cleanup deadlines do not change profiling, evaluation, or server
+readiness deadlines. A failed client retains its exit status; unresolved cleanup
+fails an otherwise successful node. Kernel-blocked processes may still require
+separately authorized node repair. Do not change or discard completed metrics to
+work around teardown failures.
