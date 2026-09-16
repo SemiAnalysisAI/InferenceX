@@ -184,7 +184,8 @@ jobs:
       COLLX_SWAP_SEED: '0'
       COLLX_SWAP_DEVICE: '0'
       COLLX_SWAP_TIME: '45'
-      COLLX_IMPORT_TMPDIR: ${{ matrix.sku == 'h100-dgxc' && '/var/tmp' || '/tmp' }}
+      COLLX_IMPORT_TMPDIR: /tmp
+      COLLX_SWAP_IMPORT_HOST: ${{ matrix.sku == 'h100-dgxc' && 'submit' || 'compute' }}
       COLLX_NODES: ${{ matrix.nodes }}
       COLLX_GPUS_PER_NODE: ${{ matrix.gpus_per_node }}
       COLLX_SCALE_UP_DOMAIN: ${{ matrix.scale_up_domain }}

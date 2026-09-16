@@ -70,7 +70,7 @@ case "$COLLX_SHARD_SKU" in
     ;;
 esac
 [ -z "${COLLX_ENROOT_CACHE_PATH:-}" ] || export ENROOT_CACHE_PATH="$COLLX_ENROOT_CACHE_PATH"
-check_env_vars COLLX_PARTITION COLLX_SQUASH_DIR COLLX_IMAGE_PLATFORM
+check_env_vars COLLX_PARTITION COLLX_SQUASH_DIR COLLX_IMAGE_PLATFORM COLLX_SWAP_IMPORT_HOST
 collx_prepare_stage_dir "$COLLX_RUNNER"
 check_env_vars COLLX_STAGE_DIR
 collx_select_image "$COLLX_SWAP_IMAGE"
@@ -91,7 +91,15 @@ if [ -n "${COLLX_EXCLUDE_NODES:-}" ]; then
 fi
 collx_salloc_jobid "${allocation[@]}"
 check_env_vars JOB_ID
-SQUASH_FILE="$(collx_ensure_squash_on_job "$JOB_ID" "$COLLX_SQUASH_DIR" "$COLLX_SWAP_IMAGE")"
+case "$COLLX_SWAP_IMPORT_HOST" in
+  submit)
+    SQUASH_FILE="$(COLLX_ENROOT_LOCAL_IMPORT=1 collx_ensure_squash "$COLLX_SQUASH_DIR" "$COLLX_SWAP_IMAGE")"
+    ;;
+  compute)
+    SQUASH_FILE="$(collx_ensure_squash_on_job "$JOB_ID" "$COLLX_SQUASH_DIR" "$COLLX_SWAP_IMAGE")"
+    ;;
+  *) collx_die "COLLX_SWAP_IMPORT_HOST must be submit or compute" ;;
+esac
 check_env_vars SQUASH_FILE
 read -r -a block_bytes <<< "$COLLX_SWAP_BLOCK_BYTES"
 read -r -a num_blocks <<< "$COLLX_SWAP_NUM_BLOCKS"
