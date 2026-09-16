@@ -6,10 +6,11 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import Decimal
-from pathlib import Path
 from typing import Any, Literal
 
 import yaml
+
+from infx.config import repository_root
 
 from .validation import (
     DEFAULT_AGENTIC_DURATION_SECONDS,
@@ -236,7 +237,7 @@ def recipe_node_count(prefill: dict, decode: dict) -> int | None:
         raise ValueError(f"Conflicting CONFIG_FILE settings: {sorted(config_files)}")
 
     config_file = config_files.pop()
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = repository_root()
     recipe_root = repo_root / "benchmarks" / "multi_node" / "srt-slurm-recipes"
     if config_file.startswith("benchmarks/multi_node/srt-slurm-recipes/"):
         recipe_path = repo_root / config_file
