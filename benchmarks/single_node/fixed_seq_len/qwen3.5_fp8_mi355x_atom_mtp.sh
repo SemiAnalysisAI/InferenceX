@@ -23,7 +23,6 @@ SERVER_LOG=/workspace/server.log
 
 export OMP_NUM_THREADS=1
 
-# Calculate max-model-len based on ISL and OSL
 if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
     CALCULATED_MAX_MODEL_LEN=""
 else
@@ -36,7 +35,6 @@ else
   EP=" "
 fi
 
-# Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 MEM_FRAC_STATIC=0.9
 
@@ -55,7 +53,6 @@ python3 -m atom.entrypoints.openai_server \
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 export PYTHONDONTWRITEBYTECODE=1
@@ -73,12 +70,10 @@ run_benchmark_serving \
     --trust-remote-code \
     --use-chat-template
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT" 
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
 set +x

@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-set -euo pipefail
+
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars IS_MULTINODE
+set -eo pipefail
 
 export HF_HUB_CACHE_MOUNT="/raid/hf-hub-cache/"
 
@@ -7,11 +10,9 @@ PARTITION="compute"
 SQUASH_FILE="/raid/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 
-# Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
-# the h200 launchers, which have carried SPEC_SUFFIX since #392).
 SPEC_SUFFIX=$([[ "${SPEC_DECODING:-}" == "mtp" ]] && printf '_mtp' || printf '')
 
-export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+check_env_vars GPU_COUNT
 
 set -x
 
@@ -28,9 +29,9 @@ export TRITON_CACHE_DIR="/tmp/triton-cache-$JOB_ID"
 
 trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
 
-# Use flock to serialize concurrent imports to the same squash file
+# Concurrent jobs import to the same squash file; serialize them.
 srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c "
-    set -euo pipefail
+    set -eo pipefail
     exec 9>\"$LOCK_FILE\"
     flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE' >&2; exit 1; }
     if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then

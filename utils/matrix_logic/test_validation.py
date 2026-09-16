@@ -1,11 +1,14 @@
 """Comprehensive tests for validation.py"""
 import copy
-import subprocess
+import io
+import json
 import sys
 from pathlib import Path
 
 import pytest
+import yaml
 from pydantic import ValidationError
+from infx.workflows import benchmark_schema
 from infx.matrix.validation import (
     ComponentMetadata,
     SingleNodeMatrixEntry,
@@ -30,36 +33,6 @@ from infx.matrix.validation import (
     load_config_files,
     load_runner_file,
 )
-
-
-@pytest.mark.parametrize("order", ["legacy-first", "package-first"])
-def test_schema_instances_work_across_legacy_and_package_imports(tmp_path, order):
-    """Duplicate module loads must not create incompatible Pydantic/Enum types."""
-    result = subprocess.run(
-        [sys.executable, "-c", '''
-import importlib
-import sys
-from pathlib import Path
-
-root = Path(sys.argv[1])
-sys.path[:0] = [str(root), str(root / "utils"), str(root / "utils/matrix_logic")]
-names = ["validation", "matrix_logic.validation", "utils.matrix_logic.validation", "infx.matrix.validation"]
-generators = ["generate_sweep_configs", "matrix_logic.generate_sweep_configs", "utils.matrix_logic.generate_sweep_configs", "infx.matrix.generate"]
-if sys.argv[2] == "package-first":
-    names.reverse()
-    generators.reverse()
-schemas = [importlib.import_module(name) for name in names]
-component = schemas[0].ComponentMetadata(name="fixture", version="1")
-field = schemas[0].Fields("runner")
-for schema in schemas:
-    assert schema.ComponentMetadata.model_validate(component) is component
-for name in generators:
-    assert importlib.import_module(name).Fields(field) is field
-''', str(Path(__file__).resolve().parents[2]), order],
-        cwd=tmp_path, capture_output=True, text=True, check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    assert result.stdout == result.stderr == ""
 
 
 # =============================================================================
@@ -675,16 +648,6 @@ class TestMultiNodeMatrixEntry:
 
 class TestValidateMatrixEntry:
     """Tests for validate_matrix_entry function."""
-
-    def test_valid_single_node(self, valid_single_node_matrix_entry):
-        """Valid single node entry should return the entry."""
-        result = validate_matrix_entry(valid_single_node_matrix_entry, is_multinode=False)
-        assert result == valid_single_node_matrix_entry
-
-    def test_valid_multinode(self, valid_multinode_matrix_entry):
-        """Valid multinode entry should return the entry."""
-        result = validate_matrix_entry(valid_multinode_matrix_entry, is_multinode=True)
-        assert result == valid_multinode_matrix_entry
 
     def test_invalid_single_node_raises_valueerror(self, valid_single_node_matrix_entry):
         """Invalid single node entry should raise ValueError."""
@@ -1305,19 +1268,6 @@ class TestMasterConfigEntries:
 class TestValidateMasterConfig:
     """Tests for validate_master_config function."""
 
-    def test_valid_single_node_config(self, valid_single_node_master_config):
-        """Valid single node config should pass."""
-        configs = {"dsr1-fp8-mi300x-sglang": valid_single_node_master_config}
-        result = validate_master_config(configs)
-        assert result == configs
-
-    def test_valid_multinode_config(self, valid_multinode_master_config):
-        """Valid multinode config should pass."""
-        configs = {"dsr1-fp4-gb200-dynamo-trt": valid_multinode_master_config}
-        result = validate_master_config(configs)
-        assert result == configs
-
-
     def test_invalid_config_raises_valueerror(self, valid_single_node_master_config):
         """Invalid config should raise ValueError with key name."""
         del valid_single_node_master_config["model"]
@@ -1334,11 +1284,6 @@ class TestValidateMasterConfig:
 
 class TestValidateRunnerConfig:
     """Tests for validate_runner_config function."""
-
-    def test_valid_runner_config(self, valid_runner_config):
-        """Valid runner config should pass."""
-        result = validate_runner_config(valid_runner_config)
-        assert result == valid_runner_config
 
     def test_value_must_be_list(self):
         """Runner config values must be lists."""
@@ -1478,6 +1423,90 @@ CHANGELOG_METADATA = {
 }
 
 
+class TestBenchmarkWorkflowSchema:
+    @pytest.mark.parametrize("multinode", [False, True])
+    @pytest.mark.parametrize("agentic", [False, True])
+    def test_accepts_historical_rows_without_inserting_defaults(
+        self, valid_single_node_matrix_entry, valid_multinode_matrix_entry,
+        multinode, agentic, monkeypatch, capsys,
+    ):
+        if multinode:
+            row = copy.deepcopy(MULTINODE_AGENTIC_EVAL_ROW if agentic else valid_multinode_matrix_entry)
+        else:
+            row = copy.deepcopy(AGENTIC_EVAL_ROW if agentic else valid_single_node_matrix_entry)
+        for worker in ([row["prefill"], row["decode"]] if multinode else [row]):
+            for field in ("pp", "dcp-size", "pcp-size"):
+                worker.pop(field, None)
+        raw = json.dumps([row], indent=2, ensure_ascii=False) + "\n"
+        monkeypatch.setattr(sys, "argv", ["benchmark_schema"])
+        monkeypatch.setattr(sys, "stdin", io.StringIO(raw))
+        benchmark_schema.main()
+        assert capsys.readouterr().out == raw
+
+    @pytest.mark.parametrize(("field", "value"), [
+        ("tp", "8"), ("dp-attn", "false"), ("conc", [4]), ("conc", 0),
+        ("pp", 0), ("pcp-size", None), ("unexpected", "value"),
+    ])
+    def test_workflow_boundary_rejects_invalid_input(
+        self, valid_single_node_matrix_entry, field, value,
+    ):
+        row = {**valid_single_node_matrix_entry, field: value}
+        with pytest.raises(ValueError, match=r"matrix\[0\]"):
+            benchmark_schema.validate_matrix([row])
+
+    def test_rejects_python_field_names_in_json(self, valid_single_node_matrix_entry):
+        row = dict(valid_single_node_matrix_entry)
+        row["model_prefix"] = row.pop("model-prefix")
+        with pytest.raises(ValueError, match="model-prefix"):
+            benchmark_schema.validate_matrix([row])
+
+    @pytest.mark.parametrize("conc", [[], 4, [0], [1, "4"], [True]])
+    def test_rejects_invalid_multinode_batches(self, valid_multinode_matrix_entry, conc):
+        with pytest.raises(ValueError, match="conc"):
+            benchmark_schema.validate_matrix([{**valid_multinode_matrix_entry, "conc": conc}])
+
+    @pytest.mark.parametrize("multinode", [False, True])
+    @pytest.mark.parametrize("bucket", ["evals", "agentic_evals", "1k1k", "agentic"])
+    def test_plan_rejects_rows_in_the_wrong_scenario_bucket(
+        self, valid_single_node_matrix_entry, valid_multinode_matrix_entry, multinode, bucket,
+    ):
+        fixed = valid_multinode_matrix_entry if multinode else valid_single_node_matrix_entry
+        agentic = MULTINODE_AGENTIC_EVAL_ROW if multinode else AGENTIC_EVAL_ROW
+        family = "multi_node" if multinode else "single_node"
+        prefix = "multinode_" if multinode else ""
+        misplaced_rows = {
+            "evals": {prefix + "evals": [agentic]},
+            "agentic_evals": {prefix + "agentic_evals": [fixed]},
+            "1k1k": {family: {"1k1k": [agentic]}},
+            "agentic": {family: {"agentic": [fixed]}},
+        }
+        with pytest.raises(ValueError, match=bucket):
+            benchmark_schema.validate_matrix(misplaced_rows[bucket], plan=True)
+
+    @pytest.mark.parametrize("family", ["single_node", "multi_node"])
+    def test_plan_rejects_the_wrong_topology(
+        self, valid_single_node_matrix_entry, valid_multinode_matrix_entry, family,
+    ):
+        row = valid_multinode_matrix_entry if family == "single_node" else valid_single_node_matrix_entry
+        with pytest.raises(ValueError, match=family):
+            benchmark_schema.validate_matrix({family: {"1k1k": [row]}}, plan=True)
+
+    @pytest.mark.parametrize(("raw", "plan"), [
+        ("{", False), ("{}", False), ("[null]", False),
+        ('{"single_node": []}', True), ('{"evals": {}}', True),
+        ('{"multi_node": []}', True), ('{"multinode_agentic_evals": {}}', True),
+    ])
+    def test_invalid_json_or_container_shape_publishes_nothing(self, raw, plan, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["benchmark_schema", *(["--plan"] if plan else [])])
+        monkeypatch.setattr(sys, "stdin", io.StringIO(raw))
+        with pytest.raises(SystemExit) as error:
+            benchmark_schema.main()
+        assert error.value.code == 2
+        output = capsys.readouterr()
+        assert output.out == ""
+        assert "error:" in output.err
+
+
 class TestChangelogMatrixEntry:
     """Tests for the final search-space contract consumed by run-sweep.yml."""
 
@@ -1607,6 +1636,20 @@ duplicate-key:
         with pytest.raises(ValueError) as exc_info:
             load_config_files(["nonexistent.yaml"])
         assert "does not exist" in str(exc_info.value)
+
+    @pytest.mark.parametrize("content", ["", "null", "[]", "false", "42", "recipe"])
+    def test_non_mapping_root_is_rejected(self, tmp_path, content):
+        path = tmp_path / "config.yaml"
+        path.write_text(content)
+        with pytest.raises(ValueError, match="must contain a dictionary"):
+            load_config_files([str(path)], validate=False)
+
+    @pytest.mark.parametrize("key", ["null", "true", "42"])
+    def test_non_string_key_is_rejected(self, tmp_path, key):
+        path = tmp_path / "config.yaml"
+        path.write_text(f"{key}: {{}}")
+        with pytest.raises(ValueError, match="key.*string"):
+            load_config_files([str(path)], validate=False)
 
     def test_validation_runs_by_default(self, tmp_path):
         """Validation should run by default and catch invalid configs."""

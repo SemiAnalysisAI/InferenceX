@@ -16,6 +16,8 @@
 
 ## 新闻
 
+- **[2026/09]** DeepSeek V4.1 Flash：新增 AgentX 基准测试 [仪表盘](https://inferencex.semianalysis.com/agentx)
+- **[2026/08]** Qwen3.8-Flash-Next：新增使用原生多 Token 预测（MTP）的 AgentX 基准测试 [仪表盘](https://inferencex.semianalysis.com/agentx)
 - **[2026/08]** 🔥 **AgentX：全球首个完全开源、采用 Apache 2.0 许可的真实百万级长上下文多轮基准测试上线** [仪表盘](https://inferencex.semianalysis.com/agentx)
 - **[2026/08]** 🔥 GLM5.3：同样已上线持续 Agentic 基准测试 [仪表盘](https://inferencex.semianalysis.com/)
 - **[2026/07]** 🔥 Kimi K3 2.8T：自 Day 0 起持续进行基准测试

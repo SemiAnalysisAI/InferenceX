@@ -31,6 +31,10 @@ These sources outrank this guide when behavior changes. Update the English page 
 
 ## Testing layers
 
+[`CI`](../.github/workflows/ci.yml) runs **Lint** and **Tests** in parallel when any `.py` file changes in a PR (including forks) or a push to `main`. GitHub handles path filtering; manual dispatch runs both jobs regardless of changed files. Changes only to docs, shell scripts, YAML, dependencies, or Ruff configuration do not trigger Python CI; run the applicable checks locally or dispatch CI manually.
+
+Tests runs every suite under `utils/`, `runners/`, and `experimental/CollectiveX/tests/` with four pytest workers, plus MCP compatibility. New tests in those directories are discovered automatically. The test environment uses Python 3.12 and CPU-only PyTorch; dependencies must be at least 12 hours old. A failing job does not cancel the other; a newer PR update cancels the superseded CI run. Branch pushes without a PR no longer start a separate changelog-test run.
+
 | Layer | What it can prove | What it cannot prove |
 | --- | --- | --- |
 | Parse and syntax | Edited YAML loads, and edited Bash parses | Schema validity, runtime routing, or GPU behavior |
@@ -58,6 +62,17 @@ See [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/2
 ## Local checks
 
 Run checks from the repository root and replace placeholders with the exact changed path or key.
+
+### Python lint and formatting
+
+Ruff checks `infx/` with the rules in [`infx/ruff.toml`](../infx/ruff.toml), targeting Python 3.12 and a line length of 100. CI runs on any Python-file change and uses the latest Ruff release at least 12 hours old.
+
+```bash
+uvx --exclude-newer PT12H ruff@latest check --fix infx
+uvx --exclude-newer PT12H ruff@latest format infx
+```
+
+Fix findings where practical. Justified exceptions use inline `# noqa: CODE`; unused ignores are checked. Preview rules and automatic unsafe fixes are not enabled.
 
 ### Parse and syntax
 
@@ -118,6 +133,8 @@ A local matrix cannot prove Slurm allocation or llm-d endpoint discovery. Multi-
 
 ### Full local suite in parallel
 
+The existing Python suites cover workflow contracts too. `utils/matrix_logic/test_validation.py` tests the workflow input schemas and runs both preparation scripts with controlled generator output. Invalid rows must fail before publishing job outputs; accepted rows must remain unchanged, including when manual dispatch measures an older checkout. `utils/test_process_result.py` executes the shipped launch step with a recording launcher for current and historical checkouts. These tests do not emulate GitHub's expression engine or prove GPU performance; review expression changes with workflow validation and applicable smoke evidence.
+
 With the test dependencies installed, add [`pytest-xdist`](https://pytest-xdist.readthedocs.io/en/stable/distribution.html) to the same Python environment and run all local suites with four workers:
 
 ```bash
@@ -171,7 +188,7 @@ Record enough information for another reviewer to reproduce the claim without gu
 3. **Before CODEOWNER sign-off:** follow [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md), including its code-quality, architecture, image provenance, upstream recipe, patch/waiver, chat-template, and AgentX requirements where applicable.
 4. **For sweep/eval acceptance:** at least one commit currently in the PR has successful, non-skipped executed `single-node */` and `eval /` checks. A successful `collect-evals` alone is insufficient. Download the corresponding eval artifacts and confirm non-empty, passing accuracy and the same inference image. These are the executable rules in [verifier Checks 1 and 2](../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr).
 5. **For reuse at merge:** an authorized `OWNER`, `MEMBER`, or `COLLABORATOR` posts a whole-line `/reuse-sweep-run` command (optionally with the eligible source run ID) before the supported merge path. The verifier treats a missing or unauthorized command as a failure. See [verifier Check 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted) and [the reuse procedure](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep).
-6. **At merge:** a CODEOWNER's exact sign-off is independently accepted by [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml). If the PR head changes, reassess and sign the new commit evidence.
+6. **At merge:** the current head needs the CODEOWNER sign-off status defined in [the contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off). That guide owns verification, admin-update retention, revocation, and recovery rules.
 7. **After merge:** the author confirms the main-branch jobs pass, as required by [`CONTRIBUTING.md`](../CONTRIBUTING.md#after-merging).
 
 ## Stop conditions

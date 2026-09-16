@@ -2,18 +2,9 @@
 set -eo pipefail
 set -x
 
-# Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on B300 using vLLM,
-# with MTP speculative decoding (num_speculative_tokens=3): synthetic acceptance
-# length 2.49 for throughput, real target verification for the EVAL_ONLY eval.
-#
-# This MTP-only recipe keeps the established image, engine args, offload, GPU
-# topologies, and agentic aiperf rig, with two speculative-decoding behaviors:
-#   --speculative-config: synthetic acceptance length 2.49 (throughput) vs real MTP (EVAL_ONLY); see the SPEC_CONFIG block
-#   cudagraph capture sizes expressed in TOKENS (see the capture block below).
-#
-# Image is configured in nvidia-master.yaml. The recipe uses FP8 KV cache,
-# sparse DeepSeek-V4 FlashInfer attention with an FP4 indexer cache, mega-MoE,
-# and FULL_DECODE_ONLY CUDA graphs with every decode batch captured explicitly.
+# DeepSeek-V4-Pro FP4 on B300 with vLLM MTP (num_speculative_tokens=3).
+# Throughput fixes synthetic acceptance to AL 2.49; EVAL_ONLY keeps real
+# verification. Cudagraph capture sizes are in tokens (see the capture block).
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
@@ -24,9 +15,8 @@ set -x
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars DCP_SIZE EVAL_ONLY PCP_SIZE
 
-DCP_SIZE="${DCP_SIZE:-1}"
-PCP_SIZE="${PCP_SIZE:-1}"
 VLLM_CP_ARGS=()
 if [ "$DCP_SIZE" -gt 1 ]; then
     VLLM_CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE")
@@ -49,9 +39,8 @@ if [ "$DP_ATTENTION" = "true" ] && [ $((2 * CONC % TP)) -ne 0 ]; then
     exit 1
 fi
 
-# DEP8 (TP8 + DP-attention) is a high-concurrency SimpleCPU arm tuned separately
-# from DEP4 with a larger prefill token budget and lower GPU-memory-utilization
-# headroom. Both DEP arms chunk long prefills.
+# DEP8 (TP8 + DP-attention) gets a larger prefill token budget and lower
+# GPU-memory headroom than DEP4.
 IS_DEP8=false
 if [ "$DP_ATTENTION" = "true" ] && [ "$TP" -eq 8 ]; then
     IS_DEP8=true
@@ -61,9 +50,6 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
     echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-# `hf download` creates the target dir if missing and is itself idempotent.
-# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE.
-# Either way, MODEL_PATH is what the server is launched with.
 if [[ -n "$MODEL_PATH" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -74,13 +60,12 @@ else
 fi
 nvidia-smi
 
-# ---- Resolve traces and install deps ----------------------------------------
 resolve_trace_source
 install_agentic_deps
 
-# vllm-project/router expands the one HTTP backend into one logical worker per
-# DP rank. Bind every turn of a conversation to the same rank by mapping
-# AIPerf's stable correlation ID to the router's X-Session-ID header.
+# vllm-router expands one HTTP backend into a logical worker per DP rank.
+# AIPerf's X-Correlation-ID is stable across a conversation's turns; alias it
+# to the router's X-Session-ID so every turn lands on the same rank.
 USE_VLLM_ROUTER=false
 VLLM_BACKEND_PORT="$PORT"
 if [ "$DP_ATTENTION" = "true" ]; then
@@ -93,10 +78,8 @@ if [ "$DP_ATTENTION" = "true" ]; then
     agentic_pip_install --quiet "vllm-router==$VLLM_ROUTER_VERSION"
 fi
 
-# AIPerf automatically scrapes the public endpoint's /metrics URL. That is the
-# vLLM engine for pure TP, but the native router for DP-attention. Explicitly
-# add the engine endpoint so every topology captures vLLM metrics; AIPerf
-# deduplicates it against the automatic endpoint in pure-TP runs.
+# AIPerf scrapes the public endpoint's /metrics, which is the router under
+# DP-attention; add the engine endpoint explicitly (deduplicated for pure TP).
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${VLLM_BACKEND_PORT}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 
@@ -108,7 +91,6 @@ export VLLM_DSV4_MEGA_FP8_COMBINE=1
 export NCCL_NVLS_ENABLE=1
 export VLLM_USE_RUST_FRONTEND=1
 
-# ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 ROUTER_LOG="$RESULT_DIR/router.log"
 MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
@@ -118,9 +100,6 @@ SERVER_PID=""
 ROUTER_PID=""
 MOONCAKE_MASTER_PID=""
 
-# The generated TOTAL_CPU_DRAM_GB budget is proportional to allocated GPUs.
-# On cluster:b300-dsxe, dram-utilization=0.95 gives both DEP4 and DEP8 356 GB per
-# DP rank (1,424 GB and 2,849 GB total, respectively). TP arms remain GPU-resident.
 OFFLOAD_ARGS=()
 case "$KV_OFFLOAD_BACKEND" in
     "")
@@ -131,8 +110,8 @@ case "$KV_OFFLOAD_BACKEND" in
         CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / GPU_COUNT ))
         # Identical prefixes must hash to identical block keys across DP ranks.
         export PYTHONHASHSEED=42
-        # The plain-TP (non-DP-attention) offload ladder uses lazy offload;
-        # DEP keeps eager offload for cross-rank block-hash stability.
+        # DEP keeps eager offload for cross-rank block-hash stability; plain TP
+        # uses lazy offload.
         SIMPLE_LAZY_OFFLOAD=false
         if [ "$DP_ATTENTION" != "true" ]; then
             SIMPLE_LAZY_OFFLOAD=true
@@ -186,9 +165,8 @@ EOF
         export MC_SLICE_SIZE=1048576
         export MC_WORKERS_PER_CTX=4
 
-        # The store is shared, but each rank contributes a separate segment.
-        # Start eviction before an imbalanced rank exhausts its segment, and
-        # reclaim enough space for several concurrent multi-GB batch puts.
+        # Each rank contributes a separate segment; evict early so an imbalanced
+        # rank cannot exhaust it, and reclaim enough for several multi-GB puts.
         MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO=0.80
         MOONCAKE_EVICTION_RATIO=0.10
 
@@ -243,8 +221,6 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --long-prefill-token-threshold 512
     )
     if [ "$IS_DEP8" = "true" ]; then
-        # DEP8 gets a larger prefill token budget; the shared long-prefill
-        # threshold keeps decode latency bounded under load.
         MODE_ARGS+=(--max-num-batched-tokens 16384)
     else
         MODE_ARGS+=(--max-num-batched-tokens 8192)
@@ -255,23 +231,19 @@ if [ "$DP_ATTENTION" = "true" ]; then
     # The DEP source recipe enforces 2*CONC = DP_WORLD_SIZE*MAX_NUM_SEQS.
     MAX_NUM_SEQS=$((2 * CONC / TP))
 else
-    # Preserve the previous TP4 scheduler headroom for agentic fan-out.
+    # Headroom for AgentX subagent fan-out.
     MAX_NUM_SEQS=$((2 * CONC))
 fi
-# MTP: cudagraph capture sizes are in TOKENS. With num_speculative_tokens=N,
-# every uniform decode batch of S seqs verifies S*(1+N) tokens, so capture the
-# explicit multiples (1+N), 2*(1+N), ..., MAX_NUM_SEQS*(1+N) -- one graph per
-# decode batch of 1..MAX_NUM_SEQS seqs. vLLM rounds configured sizes up to
-# multiples of (1+N) and dedups (adjust_cudagraph_sizes_for_spec_decode), so a
-# plain 1..MAX_NUM_SEQS list would collapse to coverage of only
-# MAX_NUM_SEQS/(1+N) seqs and drop the largest decode batches to eager.
+# Cudagraph capture sizes are in tokens: a decode batch of S seqs verifies
+# S*(1+N) tokens, so capture the multiples (1+N)..MAX_NUM_SEQS*(1+N). vLLM
+# rounds sizes up to multiples of (1+N) and dedups, so a plain 1..MAX_NUM_SEQS
+# list would cover only MAX_NUM_SEQS/(1+N) sequences.
 NUM_SPEC_TOKENS=3
 TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
-# Throughput pins synthetic MTP acceptance to the dsv4-pro golden AL (thinking_on,
-# num_speculative_tokens=3, golden_al_distribution/dsv4_mtp.yaml). The EVAL_ONLY
-# accuracy run uses real target verification instead -- synthetic acceptance
-# bypasses verification and corrupts the SWE-bench eval (0.0000 score).
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
+# Golden AL: golden_al_distribution/dsv4_mtp.yaml, thinking_on, 3 draft tokens.
+# EVAL_ONLY keeps real verification; synthetic acceptance bypasses it and
+# zeroes the SWE-bench score.
+if [ "${EVAL_ONLY}" = "true" ]; then
     SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}"
 else
     SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": 2.49}"
@@ -290,8 +262,7 @@ export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
 export VLLM_FLOAT32_MATMUL_PRECISION=high
 
-# DEP8 leaves more headroom for its larger prefill token budget; all other
-# topologies (TP4/DEP4/TP8) use 0.95.
+# DEP8 leaves more headroom for its larger prefill token budget.
 GPU_MEM_UTIL=0.95
 if [ "$IS_DEP8" = "true" ]; then
     GPU_MEM_UTIL=0.92

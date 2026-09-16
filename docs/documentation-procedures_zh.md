@@ -288,9 +288,9 @@ Squash merge commit 会继承双语 PR 标题，因此自动满足 subject 要�
 4. 勾选前独立验证每一项。审阅 diff、源码行为、全量扫描与评估证据、上游 recipe 状态、镜像来源、架构限制、patch/waiver 状态、chat-template 要求，以及适用时的 AgentX acceptance 证据。
 5. 在 additional-detail section 中填写准确的验证和评估工作流链接、已合并的上游 vLLM recipe/SGLang cookbook PR 或已发布 recipe 链接，并对每个例外或不适用项给出明确理由。
 6. 在 `Signed:` 中填写真实 GitHub 用户名。不得代替其他审阅者签名。
-7. 将精确英文模板作为对话评论、review summary 或 inline review comment 发布。验证器支持这三类事件。
+7. 每个 PR 只需一名符合条件的 CODEOWNER 审阅者发布清单。先检查是否已有清单，再将精确英文模板作为对话评论、review summary 或 inline review comment 发布一次；验证器支持这三类形式。需要更正、补充证据或重试时，原审阅者必须编辑已有评论。其他审阅者无需重复发布。只有原评论被删除时才创建替代评论。
 8. 确认 [`.github/workflows/codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) 已触发，并阅读 verdict。验证器会重新推导合并门禁陈述；不会直接信任勾选结果。
-9. 如果签核后 PR head 前进，应重新审阅新 diff 并发布新的签核。旧证据只对应之前审阅的 commit。
+9. 验证通过后，经认证的管理员更新会保留接受状态；非管理员改动需要重新验证。自动化会将必需状态延续到最新 head；同一条裁定评论会注明实际评估的 SHA。若需明确重新评估，可手动分发验证器，并传入同一 PR 的 `pr-number` 和签署的 `comment_url`。这会更新同一条裁定评论；重新评估被拒绝时会撤销接受状态。参见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
 10. 只有获得授权的维护者才能记录 `/reuse-sweep-run` 并使用受支持的合并路径。CODEOWNER 批准本身不会授予该权限。
 
 缺少必需的来源、工作流链接、recipe、例外理由或验证结果时，应停止而不是签核。保留未勾选项并提出具体后续要求；绝不能把未知状态写成批准声明。
