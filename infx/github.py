@@ -54,17 +54,10 @@ def paginate(
     out: list[dict[str, Any]] = []
     page = 1
     while True:
-        page_params = {"per_page": "100", "page": str(page)}
-        if params:
-            page_params.update(params)
+        page_params = {**(params or {}), "per_page": "100", "page": str(page)}
         data = api(repo, path, token, page_params)
-        if isinstance(data, list):
-            items = data
-        elif isinstance(data, dict):
-            items = data.get(item_key, [])
-        else:
-            items = []
-        if not isinstance(items, list):
+        items = data.get(item_key) if isinstance(data, dict) else data
+        if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
             raise RuntimeError(f"GitHub API {path} returned an unexpected shape")
         out.extend(items)
         if len(items) < 100:

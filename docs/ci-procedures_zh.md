@@ -174,7 +174,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
 
 ## 手动端到端派发
 
-仅在完全相同的生成器命令已于本地成功后，才使用 [`e2e-tests.yml`](../.github/workflows/e2e-tests.yml) 执行受限的一次性 Run。测试名称必须唯一。在通用模式中，`--ref main` 选择已部署的 Workflow 定义，输入 `ref` 则选择矩阵生成和基准 Job Checkout 的 Branch 或 SHA。
+仅在完全相同的生成器命令已于本地成功后，才使用 [`e2e-tests.yml`](../.github/workflows/e2e-tests.yml) 执行受限的一次性 Run。测试名称必须唯一。在通用模式中，`--ref main` 选择已部署的 Workflow 定义，输入 `ref` 则选择要测量的 Branch 或 SHA。Setup 只解析一次该 ref，并将 checkout SHA 传给全部八条基准测试和评测路径，覆盖单节点、多节点、固定序列和 AgentX Job。即使分支在排队期间前进，后续 Job 仍使用该 SHA。未提供输入 `ref` 时，仍使用 `github.sha`。
 
 ```bash
 REPO=SemiAnalysisAI/InferenceX
@@ -507,7 +507,7 @@ jq -r '
 ' "$OUT/eval_results_all/agg_eval_all.json"
 ```
 
-检查 Run Statistics 时，不要把 Skipped Job 与实际尝试的 Job 混为一谈：
+检查 Run Statistics 时，不要把 Skipped Job 与实际尝试的 Job 混为一谈。GitHub 请求失败或响应格式无效时，收集会报错；只有读取所有 Job 分页后才会写入统计结果：
 
 ```bash
 jq -r 'to_entries[] | [.key, .value.n_success, .value.total] | @tsv' \

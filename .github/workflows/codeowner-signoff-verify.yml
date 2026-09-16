@@ -65,7 +65,7 @@ jobs:
         id: scope
         env:
           GH_TOKEN: ${{ github.token }}
-        run: uv run --no-project --exclude-newer PT12H --python 3.12 --with codeowners python -m infx.workflows.signoff_scope
+        run: uv run --locked --extra workflows python -m infx.workflows.signoff_scope
 
       - name: Resolve PR state and sign-off metadata
         id: resolve

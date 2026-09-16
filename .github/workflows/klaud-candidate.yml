@@ -10,6 +10,9 @@ on:
       KLAUD_DASHBOARD_API_KEY:
         required: true
     inputs:
+      tooling-ref:
+        type: string
+        required: true
       candidate:
         type: string
         required: true
@@ -32,8 +35,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.tooling-ref }}
           persist-credentials: false
           fetch-depth: 0
+      - name: Checkout workflow tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tooling-ref }}
+          path: .infx-tooling
+          persist-credentials: false
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: '3.12'
@@ -50,7 +60,7 @@ jobs:
           cp -R "$RUNNER_TEMP/plan/$CANDIDATE" "$RUNNER_TEMP/klaud"
           echo "KLAUD_EVIDENCE=$RUNNER_TEMP/klaud" >> "$GITHUB_ENV"
           rm -r "$RUNNER_TEMP/plan"
-          outcome_schema=$(uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" python -m infx.klaud outcome-schema)
+          outcome_schema=$(uv run --project .infx-tooling --locked python -P -m infx.klaud outcome-schema)
           echo "outcome-schema=$outcome_schema" >> "$GITHUB_OUTPUT"
       - name: Let Klaud Cold own the candidate PR
         id: claude
@@ -68,7 +78,7 @@ jobs:
               "hooks": {
                 "Stop": [{"hooks": [{
                   "type": "command",
-                  "command": "cd \"$GITHUB_WORKSPACE\" && uv run --no-project --exclude-newer PT12H --python 3.12 --with 'pydantic>=2.10,<3' --with pyyaml python -m infx.klaud check-stop"
+                  "command": "cd \"$GITHUB_WORKSPACE\" && uv run --project .infx-tooling --locked python -P -m infx.klaud check-stop"
                 }]}]
               }
             }
@@ -86,7 +96,7 @@ jobs:
         if: always() && steps.claude.outcome == 'failure'
         env:
           GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
-        run: uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" --with pyyaml python -m infx.klaud recover-current
+        run: uv run --project .infx-tooling --locked python -P -m infx.klaud recover-current
       - name: Save sanitized candidate diagnostics
         if: always()
         env:
@@ -96,7 +106,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           printf '%s' "$KLAUD_STRUCTURED_OUTCOME" > "$RUNNER_TEMP/candidate-outcome.json"
-          uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" --with pyyaml python -m infx.klaud diagnostics \
+          uv run --project .infx-tooling --locked python -P -m infx.klaud diagnostics \
             --execution-file "${KLAUD_EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}" \
             --structured-outcome-file "$RUNNER_TEMP/candidate-outcome.json" \
             --outcome "${KLAUD_OUTCOME:-unknown}" --output "$RUNNER_TEMP/candidate-diagnostics.json"
