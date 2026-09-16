@@ -63,12 +63,15 @@ gh workflow run collectivex-sweep.yml --ref codex/collectivex-swap-blocks \
   -f swap_image=vllm/vllm-openai:v0.25.1
 ```
 
-Use `--ref main` after merge. This mode schedules one `h200-dgxc` cell with
-`nodes:1` priority demand, allocates one exclusive physical node, and runs one GPU
-process. It builds no EP libraries and executes no EP cases. Leave EP filters
-blank; `only_sku` may be blank or `h200-dgxc`. The existing `all` selection remains
-EP-only. The caller-selected official vLLM image is imported using the existing
-CollectiveX container cache and runs from an isolated compute-visible stage.
+Use `--ref main` after merge. Blank `only_sku` selects every registered GPU pool;
+set it to `h200-dgxc`, `h100-dgxc`, `b200-nscale`, `b300`, `gb200`, `gb300`,
+`mi300x-tw`, `mi325x-tw`, or `mi355x` for an isolated GPU sweep. `exclude_skus`
+accepts a comma-separated exclusion list. Leave EP filters blank. Each cell requests
+`nodes:1` and runs one GPU process; Slurm cells allocate an exclusive node, while
+`-tw` cells use the runner's Docker host. `all` remains EP-only.
+CUDA pools use `swap_image`; AMD pools use `swap_rocm_image` (default
+`vllm/vllm-openai-rocm:v0.27.1`). GB pools select the image's ARM64 variant.
+Docker writes as the runner UID/GID, and each artifact records its SKU and source SHA.
 
 The `smoke` profile covers all three directions, both layouts, block sizes
 257/4096/65536/262144 bytes (up to 256 KiB), and counts 1/4/16/64/256/1024/2048, with 4 warmups and 20 samples
@@ -86,7 +89,7 @@ both layouts and all directions, with 126 over-budget combinations explicitly
 recorded as excluded. Each transfer buffer also contains two guard blocks, so a
 1 GiB block case allocates 3 GiB per buffer plus CPU correctness references.
 
-Download `cxshard-swap-blocks-<run_id>-<attempt>` for the two JSON results.
+Download `cxshard-swap-<sku>-<run_id>-<attempt>` for the two JSON results.
 Each artifact records the actual GPU, framework versions, image, source SHA,
 correctness status, and measurements. The existing allocation/stage cleanup
 also runs on failure. CPU CI is separate and does not establish GPU correctness.

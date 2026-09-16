@@ -245,6 +245,7 @@ def main(argv: list[str] | None = None) -> int:
             "skipped_cases": skipped,
         },
         "runtime": {
+            "sku": os.environ.get("COLLX_SHARD_SKU"),
             "torch": str(torch.__version__),
             "vllm": vllm.__version__,
             "cuda": torch.version.cuda,

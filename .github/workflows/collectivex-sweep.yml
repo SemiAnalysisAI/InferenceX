@@ -7,14 +7,18 @@ on:
   workflow_dispatch:
     inputs:
       backend:
-        description: "Benchmark to run — swap-blocks runs only vLLM memory copies on one H200 GPU; all runs EP backends"
+        description: "Benchmark to run — swap-blocks runs only vLLM memory copies on one GPU per selected pool; all runs EP backends"
         type: choice
         default: all
         options: [all, deepep-v2, mori, uccl-ep, nccl-ep, flashinfer-ep, swap-blocks]
       swap_image:
-        description: Official vLLM image for swap-blocks only
+        description: Official CUDA vLLM image for swap-blocks
         type: string
         default: vllm/vllm-openai:v0.25.1
+      swap_rocm_image:
+        description: Official ROCm vLLM image for AMD swap-blocks
+        type: string
+        default: vllm/vllm-openai-rocm:v0.27.1
       swap_profile:
         description: swap-blocks workload size (both profiles cover all directions and layouts)
         type: choice
@@ -87,19 +91,12 @@ jobs:
           [ -n "$INPUT_EP_SIZES" ] && args+=(--ep-sizes "$INPUT_EP_SIZES")
           [ -n "$INPUT_MODES" ] && args+=(--modes "$INPUT_MODES")
           if [ "$INPUT_BACKEND" = swap-blocks ]; then
-            if { [ -n "$INPUT_ONLY_SKU" ] && [ "$INPUT_ONLY_SKU" != h200-dgxc ]; } \
-                || [ -n "$INPUT_EXCLUDE_SKUS$INPUT_EP_SIZES$INPUT_MODES" ]; then
-              echo "swap-blocks supports only h200-dgxc, with no EP filters" >&2
+            if [ -n "$INPUT_EP_SIZES$INPUT_MODES" ]; then
+              echo "swap-blocks does not accept EP filters" >&2
               exit 1
             fi
-            python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          cell = dict(id="swap-blocks", sku="h200-dgxc", backend="swap-blocks",
-                      nodes=1, gpus_per_node=1, scale_up_domain=1, launcher="swap-blocks")
-          Path("matrix_full.json").write_text(json.dumps({"include": [cell]}) + "\n")
-          PY
+            python3 swap_matrix.py --only-sku "$INPUT_ONLY_SKU" \
+              --exclude-skus "$INPUT_EXCLUDE_SKUS" --out matrix_full.json
           else
             python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null
           fi
@@ -177,7 +174,8 @@ jobs:
     timeout-minutes: 350
     env:
       COLLX_BENCH: ${{ matrix.backend }}
-      COLLX_SWAP_IMAGE: ${{ inputs.swap_image }}
+      COLLX_SWAP_IMAGE: ${{ matrix.vendor == 'amd' && inputs.swap_rocm_image || inputs.swap_image }}
+      COLLX_VENDOR: ${{ matrix.vendor }}
       COLLX_SWAP_BLOCK_BYTES: ${{ inputs.swap_profile == 'large-blocks' && '257 4096 65536 262144 1048576 4194304 16777216 67108864 268435456 1073741824' || inputs.swap_profile == 'standard' && '4096 65536 1048576' || '257 4096 65536 262144' }}
       COLLX_SWAP_MAX_PAYLOAD_BYTES: ${{ inputs.swap_profile == 'large-blocks' && '1073741824' || '2147483648' }}
       COLLX_SWAP_NUM_BLOCKS: '1 4 16 64 256 1024 2048'
@@ -207,10 +205,10 @@ jobs:
       # the shard finishes.
       COLLX_TIME: '300'
       COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_${{ matrix.id }}
-      COLLX_JOB_PARENT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || '/tmp' }}
-      COLLX_JOB_ROOT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) }}
-      COLLX_SOURCE_ROOT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) }}
-      HOME: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) }}
+      COLLX_JOB_PARENT: ${{ (matrix.launcher == 'mi-amds' || matrix.sku == 'mi355x') && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || '/tmp' }}
+      COLLX_JOB_ROOT: ${{ (matrix.launcher == 'mi-amds' || matrix.sku == 'mi355x') && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) }}
+      COLLX_SOURCE_ROOT: ${{ (matrix.launcher == 'mi-amds' || matrix.sku == 'mi355x') && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) }}
+      HOME: ${{ (matrix.launcher == 'mi-amds' || matrix.sku == 'mi355x') && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) }}
     steps:
       # Create the private mode-0700 /tmp job root and git-fetch the exact COLLECTIVEX_SOURCE_SHA into it; shards never execute from the runner's shared checkout.
       - name: Prepare isolated source

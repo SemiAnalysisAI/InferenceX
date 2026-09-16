@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-node, one-process vLLM copy benchmark using CollectiveX's H200 allocation path.
+# One-node, one-process vLLM copy benchmark using each pool's Slurm or Docker runtime.
 set -eo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,12 +8,12 @@ source "$REPO_ROOT/benchmarks/benchmark_lib.sh" --validation-only
 check_env_vars COLLX_SHARD_SKU COLLX_NODES COLLX_GPUS_PER_NODE COLLX_SWAP_IMAGE \
   COLLX_SWAP_MAX_PAYLOAD_BYTES COLLX_SWAP_BLOCK_BYTES COLLX_SWAP_NUM_BLOCKS COLLX_SWAP_WARMUP COLLX_SWAP_ITERATIONS \
   COLLX_SWAP_SEED COLLX_SWAP_DEVICE COLLX_SWAP_TIME COLLX_JOB_ROOT \
-  COLLECTIVEX_SOURCE_SHA COLLECTIVEX_EXECUTION_ID COLLECTIVEX_CANONICAL_GHA
+  COLLECTIVEX_SOURCE_SHA COLLECTIVEX_EXECUTION_ID COLLECTIVEX_CANONICAL_GHA COLLX_VENDOR
 source "$HERE/../runtime/common.sh"
 
-[ "$COLLX_SHARD_SKU" = h200-dgxc ] && [ "$COLLX_NODES" = 1 ] \
-  && [ "$COLLX_GPUS_PER_NODE" = 1 ] || collx_die "swap-blocks requires one H200 GPU process"
-[[ "$COLLX_SWAP_IMAGE" =~ ^vllm/vllm-openai:[A-Za-z0-9._-]+$ ]] \
+[ "$COLLX_NODES" = 1 ] && [ "$COLLX_GPUS_PER_NODE" = 1 ] \
+  || collx_die "swap-blocks requires one GPU process"
+[[ "$COLLX_SWAP_IMAGE" =~ ^vllm/vllm-openai(-rocm)?:[A-Za-z0-9._-]+$ ]] \
   || collx_die "swap-blocks requires a tagged official vLLM image"
 for value in "$COLLX_SWAP_BLOCK_BYTES" "$COLLX_SWAP_NUM_BLOCKS"; do
   [[ "$value" =~ ^[1-9][0-9]*(\ [1-9][0-9]*)*$ ]] \
@@ -31,6 +31,45 @@ JOB_ID=""
 NODES="$COLLX_NODES"
 collx_install_launcher_fail_safe
 collx_load_operator_config
+collx_select_image "$COLLX_SWAP_IMAGE"
+read -r -a block_bytes <<< "$COLLX_SWAP_BLOCK_BYTES"
+read -r -a num_blocks <<< "$COLLX_SWAP_NUM_BLOCKS"
+case "$COLLX_SHARD_SKU" in
+  mi300x-tw|mi325x-tw)
+    docker_cmd=(docker)
+    if ! docker ps >/dev/null 2>&1; then
+      sudo -n docker ps >/dev/null 2>&1 || collx_die "Docker is unavailable"
+      docker_cmd=(sudo -n docker)
+    fi
+    "${docker_cmd[@]}" image inspect "$COLLX_SWAP_IMAGE" >/dev/null 2>&1 \
+      || "${docker_cmd[@]}" pull "$COLLX_SWAP_IMAGE"
+    mkdir -p "$REPO_ROOT/experimental/CollectiveX/results"
+    container="cxswap_${COLLECTIVEX_EXECUTION_ID}"
+    trap '"${docker_cmd[@]}" rm -f "$container" >/dev/null 2>&1 || true' EXIT
+    groups=()
+    for group in video render; do
+      gid="$(getent group "$group" | cut -d: -f3)"
+      [ -z "$gid" ] || groups+=(--group-add "$gid")
+    done
+    for layout in contiguous random; do
+      "${docker_cmd[@]}" run --rm --name "$container" \
+        --user "$(id -u):$(id -g)" "${groups[@]}" \
+        --device /dev/kfd --device /dev/dri --ipc host \
+        --security-opt seccomp=unconfined --entrypoint python3 \
+        -e HOME=/tmp -e PYTHONDONTWRITEBYTECODE=1 \
+        -e COLLECTIVEX_IMAGE -e COLLECTIVEX_SOURCE_SHA -e COLLX_SHARD_SKU \
+        -v "$REPO_ROOT:/ix" -w /ix/experimental/CollectiveX "$COLLX_SWAP_IMAGE" \
+        bench/run_swap_blocks.py --directions h2d d2h d2d \
+        --block-bytes "${block_bytes[@]}" --num-blocks "${num_blocks[@]}" \
+        --layout "$layout" --seed "$COLLX_SWAP_SEED" --device "$COLLX_SWAP_DEVICE" \
+        --max-payload-bytes "$COLLX_SWAP_MAX_PAYLOAD_BYTES" \
+        --warmup "$COLLX_SWAP_WARMUP" --iterations "$COLLX_SWAP_ITERATIONS" \
+        --output "results/swap-blocks-$layout.json"
+    done
+    exit 0
+    ;;
+esac
+[ -z "${COLLX_ENROOT_CACHE_PATH:-}" ] || export ENROOT_CACHE_PATH="$COLLX_ENROOT_CACHE_PATH"
 check_env_vars COLLX_PARTITION COLLX_SQUASH_DIR COLLX_IMAGE_PLATFORM
 collx_prepare_stage_dir "$COLLX_RUNNER"
 check_env_vars COLLX_STAGE_DIR
@@ -60,7 +99,7 @@ for layout in contiguous random; do
       --container-name="cxep_${JOB_ID}" --container-writable --container-remap-root \
       --container-mounts="$MOUNT_SRC:/ix" --no-container-mount-home --no-container-entrypoint \
       --container-workdir=/ix/experimental/CollectiveX \
-      --export="$(collx_host_exports),COLLECTIVEX_IMAGE,COLLECTIVEX_SOURCE_SHA" \
+      --export="$(collx_host_exports),COLLECTIVEX_IMAGE,COLLECTIVEX_SOURCE_SHA,COLLX_SHARD_SKU" \
       python3 bench/run_swap_blocks.py --directions h2d d2h d2d \
       --block-bytes "${block_bytes[@]}" --num-blocks "${num_blocks[@]}" \
       --layout "$layout" --seed "$COLLX_SWAP_SEED" --device "$COLLX_SWAP_DEVICE" \

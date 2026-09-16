@@ -80,3 +80,13 @@ gh workflow run collectivex-sweep.yml --ref codex/collectivex-swap-blocks \
 下载 `cxshard-swap-blocks-<run_id>-<attempt>` 可获得两个 JSON 结果文件，
 其中记录实际 GPU、框架版本、镜像、源代码 SHA、正确性状态和测量数据。
 失败时同样执行现有的资源分配和暂存目录清理。CPU CI 独立运行，不能证明 GPU 正确性。
+
+## 多 GPU 平台运行
+
+`only_sku` 留空时运行所有已注册 GPU 池，也可单独指定 `h200-dgxc`、`h100-dgxc`、
+`b200-nscale`、`b300`、`gb200`、`gb300`、`mi300x-tw`、`mi325x-tw` 或 `mi355x`。
+`exclude_skus` 接受以逗号分隔的排除列表；EP 筛选项应留空。每个任务请求 `nodes:1`，
+只运行一个 GPU 进程。Slurm 独占分配一个节点，`-tw` 则使用 runner 所在主机的 Docker。
+CUDA 平台使用 `swap_image`，AMD 平台使用 `swap_rocm_image`，默认值为
+`vllm/vllm-openai-rocm:v0.27.1`；GB 平台选择 ARM64 镜像。Docker 以 runner 的
+UID/GID 写入文件。产物记录 SKU 和源码 SHA，名称为 `cxshard-swap-<sku>-<run_id>-<attempt>`。
