@@ -1,10 +1,9 @@
-#!/usr/bin/env python3
 """Find an approved pull-request sweep run that can be reused after merge.
 
 This script is used by ``run-sweep.yml`` on push-to-main runs.  It only enables
 reuse when the merge commit maps unambiguously to one pull request and a
-maintainer has left a ``/reuse-sweep-run`` comment on that PR.  The comment
-may include a specific source run ID; without one, the latest successful
+maintainer has left a ``/use <run_id>`` or legacy ``/reuse-sweep-run`` comment.
+The legacy command may omit the source run ID; without one, the latest successful
 ``pull_request`` ``run-sweep.yml`` run for the PR head is used.
 """
 
@@ -18,10 +17,9 @@ import sys
 import urllib.parse
 from typing import Any
 
-from .. import github
-# Preserve the existing helper imports used through the legacy entrypoint.
-from ..github import api as github_api, paginate as paginated_github_api
+from infx import github
 
+# Preserve the existing helper imports used through the legacy entrypoint.
 
 DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR")
 REUSE_INCOMPATIBLE_LABELS = {"evals-only", "agentx-fast"}
@@ -45,8 +43,7 @@ def write_outputs(path: str | None, outputs: dict[str, str]) -> None:
     if not path:
         return
     with open(path, "a") as handle:
-        for key, value in outputs.items():
-            handle.write(f"{key}={value}\n")
+        handle.writelines(f"{key}={value}\n" for key, value in outputs.items())
 
 
 def result(
@@ -75,10 +72,14 @@ def result(
 
 def parse_reuse_command(body: str, command: str = "/reuse-sweep-run") -> tuple[bool, int | None]:
     """Use the last standalone command in a comment, preserving unpinned requests."""
-    matches = re.findall(rf"(?m)^\s*{re.escape(command)}(?:\s+(\d+))?\s*$", body)
+    pattern = rf"{re.escape(command)}(?:[^\S\r\n]+(\d+))?"
+    if command == "/reuse-sweep-run":
+        pattern += r"|/use[^\S\r\n]+(\d+)"
+    matches = list(re.finditer(rf"(?m)^\s*(?:{pattern})\s*$", body))
     if not matches:
         return False, None
-    return True, int(matches[-1]) if matches[-1] else None
+    run_id = next((value for value in matches[-1].groups() if value), None)
+    return True, int(run_id) if run_id else None
 
 
 def find_reuse_request(
@@ -115,7 +116,11 @@ def find_reuse_authorization(
     allowed_author_associations: set[str],
 ) -> tuple[bool, int | None]:
     comment, pinned_run_id = find_reuse_request(
-        repo, pr_number, token, command, allowed_author_associations,
+        repo,
+        pr_number,
+        token,
+        command,
+        allowed_author_associations,
     )
     return comment is not None, pinned_run_id
 
@@ -210,13 +215,9 @@ def validate_reusable_run(
     # points.  ``cancelled`` belongs here alongside ``failure`` because a
     # fail-fast sweep cancels its remaining jobs, so a run whose benchmark jobs
     # all passed still concludes ``cancelled`` when a later job is cut short.
-    allowed_conclusions = (
-        {"success", "failure", "cancelled"} if allow_failed else {"success"}
-    )
+    allowed_conclusions = {"success", "failure", "cancelled"} if allow_failed else {"success"}
     if run.get("conclusion") not in allowed_conclusions:
-        expected = (
-            "success, failure, or cancelled" if allow_failed else "success"
-        )
+        expected = "success, failure, or cancelled" if allow_failed else "success"
         raise RuntimeError(
             f"Reusable source run {run_id} has conclusion {run.get('conclusion')!r}; "
             f"expected {expected}."
@@ -240,8 +241,7 @@ def validate_reusable_run(
     names = artifact_names(repo, run_id, token)
     if not has_reusable_result_artifacts(names):
         raise RuntimeError(
-            f"Reusable source run {run_id} has no benchmark, eval, or "
-            "agentic result artifact."
+            f"Reusable source run {run_id} has no benchmark, eval, or agentic result artifact."
         )
 
 
@@ -295,7 +295,11 @@ def resolve_reusable_run(
         if not pr_shas:
             raise RuntimeError(f"PR #{pr_number} has no commits.")
         run = find_latest_successful_pr_run(
-            repo, workflow_id, str(pr.get("head", {}).get("ref") or ""), pr_shas, token,
+            repo,
+            workflow_id,
+            str(pr.get("head", {}).get("ref") or ""),
+            pr_shas,
+            token,
         )
         if not run:
             raise RuntimeError(
@@ -305,7 +309,12 @@ def resolve_reusable_run(
                 f"`{command} <run_id>`."
             )
     validate_reusable_run(
-        repo, workflow_id, pr_number, run, token, allow_failed=pinned_run_id is not None,
+        repo,
+        workflow_id,
+        pr_number,
+        run,
+        token,
+        allow_failed=pinned_run_id is not None,
     )
     return run
 
@@ -337,9 +346,7 @@ def main() -> int:
     if not token:
         raise RuntimeError("GH_TOKEN or GITHUB_TOKEN is required")
     allowed_author_associations = {
-        value.strip()
-        for value in args.allowed_author_associations.split(",")
-        if value.strip()
+        value.strip() for value in args.allowed_author_associations.split(",") if value.strip()
     }
 
     incompatible_labels = {
@@ -365,7 +372,12 @@ def main() -> int:
             if authorized:
                 pr = github.api(args.repo, f"/pulls/{args.pr_number}", token)
                 resolve_reusable_run(
-                    args.repo, args.workflow_id, args.pr_number, pr, token, pinned_run_id,
+                    args.repo,
+                    args.workflow_id,
+                    args.pr_number,
+                    pr,
+                    token,
+                    pinned_run_id,
                     incompatible_labels=incompatible_labels,
                     command=args.pinned_run_command,
                 )
@@ -445,7 +457,12 @@ def main() -> int:
     if not pr.get("merged_at"):
         raise RuntimeError(f"PR #{pr_number} is not marked as merged.")
     run = resolve_reusable_run(
-        args.repo, args.workflow_id, pr_number, pr, token, pinned_run_id,
+        args.repo,
+        args.workflow_id,
+        pr_number,
+        pr,
+        token,
+        pinned_run_id,
         incompatible_labels=incompatible_labels,
         command=args.pinned_run_command,
     )
@@ -470,9 +487,9 @@ def cli() -> None:
     """Keep the same error presentation for package and legacy entrypoints."""
     try:
         raise SystemExit(main())
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         print(f"error: {exc}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":

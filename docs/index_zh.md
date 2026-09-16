@@ -41,6 +41,8 @@
 | [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md) | Runner 部署与初始化 |
 | [`MODELS_zh.md`](../MODELS_zh.md) | 支持的模型、硬件覆盖与命名 |
 | [`KLAUD_DEBUG.md`](../KLAUD_DEBUG.md) | Klaud-Cold、CI、镜像、集群与 GitHub CLI 的历史故障特征 |
+| [`klaud.md`](./klaud.md) / [`klaud_zh.md`](./klaud_zh.md) | Klaud Cold 候选选择、所有权、验证与恢复 |
+| [`klaud-reporting.md`](./klaud-reporting.md) / [`klaud-reporting_zh.md`](./klaud-reporting_zh.md) | Klaud PR 正文、进度评论、数值对比与维护者重试 |
 | [`benchmarks/single_node/agentic/README.md`](../benchmarks/single_node/agentic/README.md) | AgentX Trace 基准测试实现 |
 
 ## 上下文规则

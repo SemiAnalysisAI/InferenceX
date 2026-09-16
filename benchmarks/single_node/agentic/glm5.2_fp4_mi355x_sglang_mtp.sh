@@ -7,6 +7,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
  export EVAL_FRAMEWORK="lm-eval"
  
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars EVAL_ONLY
  
 if [[ -n "$SLURM_JOB_ID" ]]; then
     echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -29,14 +30,10 @@ fi
 rocm-smi || true
 amd-smi || true
   
-# A server killed on this node minutes earlier (previous job, crashed run)
-# can still be draining its ~1.4 TB of HBM: KFD reclaim takes minutes, and
-# booting into a half-drained node fails RCCL init with HIP 'unhandled cuda
-# error' / 'invalid argument' (observed as the mooncake-c64 CI failure).
-# Wait for the GPUs to come back before launching.
-# Per-GPU threshold: idle nodes hold a small driver/firmware VRAM baseline
-# (observed up to ~4%/GPU, node-dependent), while a draining or occupied
-# GPU sits at 50-90%. Require every GPU <= 10%.
+# A server killed minutes earlier can still be draining HBM (KFD reclaim takes
+# minutes), and booting into a half-drained node fails RCCL init with HIP
+# 'unhandled cuda error'. Idle GPUs sit at up to ~4% VRAM, draining ones at
+# 50-90%, so require every GPU <= 10%.
 GPU_CLEAN=false
 for i in $(seq 1 90); do
     VRAM_MAX=$(rocm-smi --showmemuse 2>/dev/null | grep -oE "GPU Memory Allocated \(VRAM%\): [0-9]+" | awk '{if ($NF > m) m = $NF} END {print m+0}')
@@ -56,46 +53,27 @@ export PYTHONNOUSERSITE=1
 # Agentic warmup dispatches hundreds of large prompts at once; allow up to
 # 15 minutes of TCP progress before AIPerf declares a connection dead.
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
-# AIPerf pins one pooled keep-alive connection per session (client-side
-# keep-alive 300s) while uvicorn's default SGLANG_TIMEOUT_KEEP_ALIVE is 5s;
-# inter-turn idle gaps can reuse a socket exactly as the server closes it.
-# Outlast the client pool so the race cannot occur.
+# AIPerf pins one pooled keep-alive connection per session while uvicorn's
+# default keep-alive is 5 s; outlast the client pool so the reuse race cannot occur.
 export SGLANG_TIMEOUT_KEEP_ALIVE=900
-# The DSA indexer's top-k v2 kernel (default since v0.5.14) is JIT-compiled
-# from CUDA-only source (cooperative_groups.h) and cannot build for gfx950;
-# v1 dispatches to the precompiled HIP op in sgl-kernel (upstream MI355X CI
-# runs DSA models the same way).
-export SGLANG_OPT_USE_TOPK_V2=false
+# SGLang PRs #36684 and #36851 enable the v2 fused top-k for GLM-5.x on ROCm.
+export SGLANG_OPT_USE_TOPK_V2=true
  
-# HiCache L2 (host DRAM), optionally extended with Mooncake L3.
-# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=hicache or mooncake.
-#
-# Per-arm L2 ratio (sizing rationale below) applies to both backends unless
-# overridden via HICACHE_RATIO. TP arm (182.7 GB/rank device pool): the
-# agentic-coding corpus saturates any fixed DRAM pool at conc ≥ 10; ratio 1.5
-# (~2.9 TB pinned) is the safe default for cluster:mi355x-amds nodes (~3.0 TB
-# available DRAM per runners.yaml). ratio=2.5 (~4.8 TB) yields higher
-# throughput at conc 10-12 but exceeds physical DRAM on these nodes and must
-# be set via HICACHE_RATIO env-var override on nodes that can accommodate it.
-# The DP-attention arm (159.4 GB/rank) only runs at conc >= 32, where the host
-# tier just absorbs overflow - ratio 0.5 (~1.2 TB pinned, ~1.8 TB of load
-# headroom) at negligible hit-rate cost (ratio 1.5 OOMs the host mid-storm at
-# conc 48).
+# HiCache L2 (host DRAM), optionally with Mooncake L3. KV_OFFLOADING=dram
+# requires KV_OFFLOAD_BACKEND=hicache or mooncake. TP arm: the corpus
+# saturates any fixed DRAM pool at conc >= 10; ratio 1.0 (~453 GB pinned at
+# TP4) is the default. The DP arm runs only at conc >= 32, where the host tier
+# absorbs overflow: ratio 0.5 (~1.2 TB pinned), since 1.5 OOMs the host at conc 48.
 CACHE_ARGS=()
 if agentic_kv_offload_enabled; then
     if [ "$DP_ATTENTION" = "true" ]; then
-        HICACHE_RATIO="${HICACHE_RATIO:-0.5}"
+        HICACHE_RATIO="0.5"
     else
-        # ratio=1.5 (~2.9 TB pinned): safe default within the ~3.0 TB DRAM
-        # available on cluster:mi355x-amds nodes. Set HICACHE_RATIO=2.5 via
-        # env-var override for maximum throughput on nodes with >4 TB DRAM.
-        HICACHE_RATIO="${HICACHE_RATIO:-1.5}"
+        HICACHE_RATIO="1.0"
     fi
-    # write_through_selective skips DRAM writes for non-reusable KV blocks,
-    # reducing host-bus traffic without affecting the cache hit rate.
-    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
-    HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-    HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+    HICACHE_WRITE_POLICY="write_through"
+    HICACHE_IO_BACKEND="direct"
+    HICACHE_MEM_LAYOUT="page_first_direct"
     case "$KV_OFFLOAD_BACKEND" in
         hicache)
             echo "HiCache (GPU+host DRAM only): ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
@@ -108,7 +86,7 @@ if agentic_kv_offload_enabled; then
             )
             ;;
         mooncake)
-            L3_PER_RANK_GB="${L3_PER_RANK_GB:-40}"
+            L3_PER_RANK_GB="40"
             python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
             MOONCAKE_MASTER_PORT=$((PORT + 12000))
             MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
@@ -151,20 +129,11 @@ EOF
     esac
 fi
  
-# Arm selection. TP arm keeps the FP8 sibling's cookbook batch-shaping
-# bands.
-#
-# NOTE: the DP-attention path below is currently DORMANT (no dp-attn arms
-# in amd-master.yaml): DSA + dp-attention hangs a collective under
-# long-context prefill on ROCm v0.5.14 (watchdog kills the scheduler with
-# zero completions; reproduced with and without HiCache, with and without
-# the DSv4 DP collective envs; short prompts are fine). Re-enable the
-# config arm once upstream fixes the DSA DP prefill path.
-#
-# When active, the DP-attention (DEP) arm fronts the DP ranks with sglang-router
-# using consistent hashing on the AIPerf correlation id so multi-turn
-# sessions stay on the DP rank holding their radix/hicache prefix, and
-# widens chunked-prefill (whole-engine, /dp ranks) like the B300 sibling.
+# The DP-attention arm is dormant (no dp-attn arms in amd-master.yaml): DSA +
+# dp-attention hangs a collective under long-context prefill on ROCm v0.5.14
+# (watchdog kills the scheduler with zero completions). When active,
+# sglang-router fronts the DP ranks with consistent hashing on the AIPerf
+# correlation id so sessions stay on the rank holding their prefix.
 USE_SGLANG_ROUTER=false
 SGLANG_BACKEND_PORT="$PORT"
 PARALLEL_ARGS=(--tp "$TP" --ep-size "$EP_SIZE")
@@ -178,21 +147,15 @@ if [ "$DP_ATTENTION" = "true" ]; then
     PARALLEL_ARGS+=(--dp "$TP" --enable-dp-attention)
     CHUNKED_PREFILL_SIZE=32768
     export AGENTIC_WARMUP_GRACE_PERIOD=3600
-    # Swap the DP gather collectives to gatherv/reduce-scatter on ROCm
-    # (dsv4_fp4_mi355x_sglang.sh precedent - the only green DP-attention
-    # config on this cluster/image): with the defaults the DSA DP path
-    # hangs a collective under long-context prefill load until the
-    # watchdog kills the scheduler (0/96 storm completions, twice).
+    # gatherv/reduce-scatter DP collectives (the only green DP-attention config
+    # on this cluster/image); the defaults hang under long-context prefill.
     export SGLANG_DP_USE_GATHERV=1
     export SGLANG_DP_USE_REDUCE_SCATTER=1
     export GPU_MAX_HW_QUEUES=5
 elif [ "$CONC" -le 16 ]; then
-    # Chunked prefill 32k: smaller chunks let the scheduler interleave decode
-    # steps between prefill chunks, reducing TPOT for concurrent sessions
-    # (improved interactivity vs the original 131072-token chunk). The reduced
-    # chunk size drops per-chunk activation headroom from ~7 GiB/rank to
-    # ~1.7 GiB/rank, so mem-fraction 0.85 is safe (0.85 OOMed at 131k:
-    # "Tried to allocate 6.86 GiB ... 5.15 GiB is free", run 29751563205).
+    # 32k chunks let the scheduler interleave decode between prefill chunks;
+    # they also drop per-chunk activation headroom from ~7 GiB to ~1.7 GiB per
+    # rank, which is what makes 0.85 safe (it OOMed at 131k chunks).
     CHUNKED_PREFILL_SIZE=32768
     MEM_FRACTION_STATIC=0.85
 else
@@ -203,11 +166,11 @@ fi
 # than CONC sessions; headroom prevents scheduler stalls under burst.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 [ "$MAX_RUNNING_REQUESTS" -gt 256 ] && MAX_RUNNING_REQUESTS=256
-# SGLang interpolates a bs list [1..max_bs] automatically; cap at 64 to
-# keep graph-capture memory bounded without giving up coverage.
-CUDA_GRAPH_MAX_BS=$(( MAX_RUNNING_REQUESTS < 64 ? MAX_RUNNING_REQUESTS : 64 ))
+# Cap at 64 to bound graph-capture memory. --cuda-graph-max-bs was a deprecated
+# alias for the decode setting and the 20260910 image removed it.
+CUDA_GRAPH_MAX_BS_DECODE=$(( MAX_RUNNING_REQUESTS < 64 ? MAX_RUNNING_REQUESTS : 64 ))
 
-if [ "${EVAL_ONLY:-false}" != "true" ]; then
+if [ "${EVAL_ONLY}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=3.61
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
@@ -222,8 +185,8 @@ SGLANG_CMD=(
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --kv-cache-dtype fp8_e4m3
-    --dsa-prefill-backend tilelang
-    --dsa-decode-backend tilelang
+    --dsa-prefill-backend triton
+    --dsa-decode-backend triton
     # GLM-5.2 emits the GLM-4.7-style tool-call format; glm47 is required for
     # structured message.tool_calls (SWE-bench agentic evals die without it).
     # The glm45 reasoning parser keeps hybrid thinking in reasoning_content.
@@ -232,7 +195,7 @@ SGLANG_CMD=(
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS_DECODE"
     --speculative-algorithm EAGLE
     --speculative-num-steps 5
     --speculative-eagle-topk 1

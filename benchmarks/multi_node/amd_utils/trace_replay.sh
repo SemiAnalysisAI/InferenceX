@@ -1,63 +1,46 @@
 #!/bin/bash
-# Dual-Engine Disaggregated Benchmark Runner
+# Agentic trace-replay runner for the disaggregated servers.
 #
-# ENGINE=sglang (default): SGLang benchmark
-# ENGINE=vllm:             vLLM benchmark
-#
-# Produces JSON result files via benchmark_serving.py so that the CI pipeline
-# can collect and process results.
-#
-# Usage: bash bench.sh <n_prefill> <n_decode> <prefill_gpus> <decode_gpus> \
-#            <model_dir> <model_name> <log_path> <isl> <osl> \
-#            <concurrency_list> <req_rate> <random_range_ratio> <num_prompts_multiplier>
+# Usage: bash trace_replay.sh <model_dir> <model_name> <concurrency_list> <log_path>
 
-ENGINE="${ENGINE:-sglang-disagg}"
+source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
+check_env_vars ENGINE MODEL_PATH MODEL_NAME ROUTER_PORT
+if [[ $# -ne 4 ]]; then
+    echo "Error: trace_replay.sh requires 4 positional arguments" >&2
+    exit 1
+fi
 
 model_path=$1
 model_name=$2
-concurrency_list=${3:-"1"}
-MODEL_PATH="${MODEL_PATH:-${model_path}/${model_name}}"
+concurrency_list=${3}
 # vllm-disagg uses --served-model-name MODEL_NAME; sglang defaults to MODEL_PATH
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    MODEL="${MODEL_NAME:-${MODEL_PATH}}"
+    MODEL="${MODEL_NAME}"
 else
     MODEL="${MODEL_PATH}"
 fi
-log_path=${4:-/run_logs}
+log_path=${4}
 
-# Split BENCH_MAX_CONCURRENCY (x-delimited, e.g. "8x16x32") into an array.
-# Falls back to 1 if unset so the loop always runs at least once.
 IFS='x' read -r -a chosen_concurrencies <<< "${concurrency_list}"
-
-
-ROUTER_PORT="${ROUTER_PORT:-30000}"
 
 export TRANSFORMERS_VERBOSITY=error
 export TOKENIZERS_PARALLELISM=false
-
-# echo "Config ${chosen_isl}; ${chosen_osl}; ${chosen_concurrencies[0]}; ${chosen_req_rate}"
 
 RESULT_DIR="${RESULT_DIR:-${log_path}/agentic}"
 mkdir -p "$RESULT_DIR"
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-# clear_kv_caches — wipe all KV cache tiers on every backend worker before a
-# concurrency point, so each conc is measured cold (no prefix reuse bleeding in
-# from the previous conc). Mirrors mori-scheduler/scripts/benchmark/lib/
-# clear_caches.sh, but the worker base URLs are already resolved by
-# server_sglang.sh (SERVER_FLUSH_URLS_CSV) so no SSH/IP lookup is needed.
-#
-# Tiers (SGLang server APIs), hit on EACH worker directly (the router does not
-# fan /flush_cache out):
-#   L1 (GPU radix) + L2 (host hicache): POST /flush_cache  — NO-OP while any
-#       request is in flight, so we drain-retry until "Cache flushed" or
-#       FLUSH_DRAIN_TIMEOUT (default 120s) elapses.
-#   L3 (umbp / mooncake store):         POST /hicache/storage-backend/clear
-#       — HTTP != 200 when L3 is off, tolerated.
-# Best-effort: logs WARN, never hard-fails the sweep.
+# Wipe every KV cache tier on each backend worker before a concurrency point so it
+# is measured cold. Hits each worker directly (the router does not fan /flush_cache
+# out) using the URLs server_sglang.sh resolved into SERVER_FLUSH_URLS_CSV.
+#   L1 (GPU radix) + L2 (host hicache): POST /flush_cache, a NO-OP while any request
+#       is in flight, so drain-retry until "Cache flushed" or FLUSH_DRAIN_TIMEOUT.
+#   L3 (umbp / mooncake store): POST /hicache/storage-backend/clear, non-200 when
+#       L3 is off.
+# Best-effort: never hard-fails the sweep.
 clear_kv_caches() {
-    local drain_tmo="${FLUSH_DRAIN_TIMEOUT:-120}"
+    local drain_tmo="${FLUSH_DRAIN_TIMEOUT}"
     local urls_csv="${SERVER_FLUSH_URLS_CSV:-}"
     if [[ -z "$urls_csv" ]]; then
         echo "[clear_caches] WARN: SERVER_FLUSH_URLS_CSV unset; skipping cache flush" >&2
@@ -91,19 +74,12 @@ clear_kv_caches() {
     done
 }
 
-# REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-
 PORT="${ROUTER_PORT}"
-MODEL="${MODEL:-${BENCH_MODEL}}"
-DURATION="${DURATION:-1800}"
+check_env_vars DURATION RESULT_FILENAME FLUSH_DRAIN_TIMEOUT CLEAR_CACHE_BETWEEN_CONC
 export MODEL DURATION MAX_MODEL_LEN
-RESULT_DIR="${RESULT_DIR:-${profile_folder}}"
-# Base name for the per-conc aggregate written by the existing
-# utils.agentic.aggregation.process_agentic_result module.
-# The workflow guard / upload steps expect a "${RESULT_FILENAME}_conc<N>.json"
-# file per concurrency, so each concurrency below is always suffixed with
-# _conc<N> (matching agentic_srt.sh on the gb200 path).
-RESULT_FILENAME_BASE="${RESULT_FILENAME:-agentic_bench}"
+# The workflow guard / upload steps expect one "${RESULT_FILENAME}_conc<N>.json" per
+# concurrency, so each conc below is suffixed with _conc<N> (as agentic_srt.sh does).
+RESULT_FILENAME_BASE="${RESULT_FILENAME}"
 
 mkdir -p "$RESULT_DIR"
 
@@ -123,20 +99,16 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
     echo "Agentic trace replay: conc=$max_concurrency"
     echo "=========================================="
 
-    # Clear all KV cache tiers on every backend before this conc point so it is
-    # measured cold (no prefix reuse from the previous conc). Default on; set
-    # CLEAR_CACHE_BETWEEN_CONC=0 to disable. Best-effort — never fails the run.
-    if [[ "${CLEAR_CACHE_BETWEEN_CONC:-1}" == "1" ]]; then
+    # Measure each conc point cold (no prefix reuse from the previous conc).
+    # CLEAR_CACHE_BETWEEN_CONC=0 disables; best-effort, never fails the run.
+    if [[ "${CLEAR_CACHE_BETWEEN_CONC}" == "1" ]]; then
         echo "conc=$max_concurrency: clearing L1/L2/L3 on all backends (no server restart)"
         clear_kv_caches || echo "WARNING: cache clear had issues for conc=$max_concurrency" >&2
     fi
 
-    # Mirror agentic_srt.sh (the srtctl/gb200 path): every concurrency writes
-    # its artifacts into a conc_<N>/ subdir of RESULT_DIR. The CI matrix explodes
-    # agentic runs to one concurrency per job, but benchmark-multinode-tmpl.yml
-    # still expects the per-conc nesting (LOGS/agentic/conc_*/...) and the
-    # _conc<N> result-file suffix, so we always nest to keep the layout identical
-    # across runners and avoid overwriting earlier runs in local multi-conc sweeps.
+    # benchmark-multinode-tmpl.yml expects the per-conc nesting (LOGS/agentic/conc_*/...)
+    # even though CI runs one concurrency per job; nesting also keeps local multi-conc
+    # sweeps from overwriting each other (same layout as agentic_srt.sh).
     CONC_RESULT_DIR="$RESULT_DIR/conc_${max_concurrency}"
     mkdir -p "$CONC_RESULT_DIR"
 
@@ -145,10 +117,8 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
     export CONC USERS
     build_replay_cmd "$CONC_RESULT_DIR"
 
-    # Per-conc result name consumed by write_agentic_result_json. Always suffix
-    # with _conc<N> so the file matches
-    # the workflow guard's "${RESULT_FILENAME}_conc*.json" glob (and the agg /
-    # checkpoint upload steps) for both single-conc CI runs and multi-conc sweeps.
+    # Must match the workflow guard's "${RESULT_FILENAME}_conc*.json" glob and the
+    # agg / checkpoint upload steps.
     export RESULT_FILENAME="${RESULT_FILENAME_BASE}_conc${max_concurrency}"
     if ! run_agentic_replay_and_write_outputs "$CONC_RESULT_DIR"; then
         echo "WARNING: agentic trace replay for conc=$max_concurrency failed (replay or validation) after writing available results" >&2

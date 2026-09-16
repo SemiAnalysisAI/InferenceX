@@ -1,9 +1,9 @@
 # How to Test Workflows
 
-In order to test configurations described in `configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `utils/matrix_logic/generate_sweep_configs.py` script. The usage for this script is shown below:
+In order to test configurations described in `configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `python -m infx.matrix.generate` command. The command usage is shown below:
 
 ```
-usage: generate_sweep_configs.py [-h] {full-sweep,test-config} ...
+usage: python -m infx.matrix.generate [-h] {full-sweep,test-config} ...
 
 Generate benchmark configurations from YAML config files
 
@@ -26,7 +26,7 @@ options:
 The `full-sweep` command generates benchmark configurations with optional filtering. You can specify `--single-node`, `--multi-node`, or both. If neither is specified, both types are generated.
 
 ```
-usage: generate_sweep_configs.py full-sweep
+usage: python -m infx.matrix.generate full-sweep
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
     [--no-evals | --evals-only] [--all-evals]
@@ -95,7 +95,7 @@ full-sweep --scenario-type agentic-coding --config-files configs/nvidia-master.y
 The `test-config` command generates the full sweep for one or more specific config keys. This is useful for testing individual configurations without filtering by model prefix, framework, etc.
 
 ```
-usage: generate_sweep_configs.py test-config
+usage: python -m infx.matrix.generate test-config
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
     [--no-evals | --evals-only] [--all-evals]
@@ -183,7 +183,7 @@ dispatcher never checks out or executes PR code itself.
 
 This proof of concept produces benchmark and evaluation artifacts through the
 End-to-End Tests workflow. Those runs are not yet eligible for
-`/reuse-sweep-run`, which currently accepts only `run-sweep.yml` runs. The PoC
+`/use`, which currently accepts only `run-sweep.yml` runs. The PoC
 also fans out the selected matrix immediately. It does not reproduce
 `run-sweep.yml`'s canary-first sequencing.
 
@@ -196,15 +196,16 @@ An authorized maintainer can reuse an eligible completed sweep without keeping
 a sweep label on the PR:
 
 ```
-/reuse-sweep-run
+/use <run_id>
 ```
 
-This selects the latest successful `run-sweep.yml` PR run whose commit remains
-in the PR. A run ID can pin an eligible successful or failed run:
+Keep the command and required run ID on one line. This pins an eligible completed
+`run-sweep.yml` PR run whose commit remains in the PR, including failed or cancelled
+runs with usable results.
 
-```
-/reuse-sweep-run <run_id>
-```
+The legacy `/reuse-sweep-run <run_id>` remains equivalent. Bare `/reuse-sweep-run`
+selects the latest successful eligible run automatically; bare `/use` is rejected.
+Both names share authorization, validation, and reactions.
 
 Source validation checks identity and artifacts, not full-matrix coverage.
 A successful `sweep-enabled` trim sweep can also be selected automatically;
@@ -212,7 +213,7 @@ reusing it publishes only its recorded points on `main`. Acceptance does not
 certify a green full sweep. Verify coverage and pin the run ID when a full sweep
 is required by the review process.
 
-The latest matching comment by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
+The latest matching comment across both names by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
 The bot reacts with 👍 after validating the request, or 👎 on rejection; details
 are in the Actions run summary. Edits replace the bot's old reaction. No separate
 comment is posted. Comments do not trigger or cancel GPU sweeps. Later commits
@@ -237,7 +238,7 @@ authorization, `main` runs the normal full sweep.
 
 ## Validation Architecture
 
-The benchmarking system uses a strict validation methodology to ensure correctness at every stage. This is implemented in `utils/matrix_logic/validation.py` using Pydantic models.
+The benchmarking system uses a strict validation methodology to ensure correctness at every stage. This is implemented in `infx/matrix/validation.py` using Pydantic models.
 
 ### Validation Methodology
 

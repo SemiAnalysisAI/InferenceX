@@ -21,6 +21,18 @@
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | 只允许追加的基准触发日志 |
 | [`AGENTS.md`](../AGENTS.md) | 仓库级配置、MTP、changelog 和 sweep 规则 |
 
+## 依赖子模块
+
+Git 记录依赖的精确提交版本。[`.gitmodules`](../.gitmodules) 定义各仓库：AIPerf 位于 `utils/aiperf`，NVIDIA srt-slurm 位于 `utils/srt-slurm`。TileRT 由 `setup_srt_slurm()` 手动检出已记录的分支仓库，不是独立子模块。
+
+本地运行基准测试前，先初始化子模块：
+
+```bash
+git submodule update --init
+```
+
+升级时，在对应子模块中获取并检出目标提交，再将更新后的子模块指针提交到 InferenceX。基准测试工作流已配置为自动初始化子模块。Slurm 启动器为每个作业创建本地 Git 克隆，避免配方准备和运行时写入修改子模块，并记录实际提交以供结果溯源。NVIDIA 启动器使用本地克隆；TileRT 启动器通过网络获取固定的分支提交。
+
 ## 规程索引
 
 1. [准备 worktree](#准备-worktree)
@@ -88,6 +100,8 @@ STP（Single Token Prediction，单 Token 预测）是每次前向传播生成�
 6. srt-slurm 必须同时更新配方和主条目；llm-d 必须同时更新 llm-d 配方/编排和主条目。
 7. 追加触发条目，先只生成受影响的 key，并检查每个生成点。
 
+固定序列 `8192/1024` 场景可设置 `require-power: true`，要求经过验证的实测功耗。矩阵将此标记传递给标准 sweep 和手动 E2E 吞吐作业；eval-only 和 AgentX 行不继承该标记。省略此字段可保留现有行为。仅在对应 runtime 和结果适配器同时交付时启用，然后验证完整选定范围。
+
 ## 注册并设置 runner
 
 设置来源：[`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md)。配置来源：[`configs/CONFIGS.md#runners`](../configs/CONFIGS.md#runners)。
@@ -112,12 +126,30 @@ runner 名称前缀是关键契约：workflow 通过 `launch_${RUNNER_NAME%%_*}.
 6. 将 runner 加入 sweep 流量前，在[仓库 runner 设置页](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners)确认每个 runner 都是 **Idle**。
 7. 从计算节点验证 launcher 对 `_work`、HF cache、预置权重和 squash 镜像的挂载。root 容器不得在共享 workspace 留下 root 所有的文件。
 
+B300 DSXE 的 Kimi-K3 AgentX 路径在 `/scratch/models` 下挂载预置目标模型，
+另行导出并挂载 `WRITABLE_MODELS_DIR` 以保存 DSpark 权重。复用服务容器时，
+草稿模型目录应保留在该持久化挂载中；只读目标模型挂载无法保存草稿模型。
+并发任务通过模型专用锁串行准备草稿权重。每个任务在启动服务前由 `hf download`
+校验或续传现有缓存；目录非空不代表下载完成。
+
+## TileRT 原生功耗
+
+TileRT 的共享导入器保留 Docker Hub 镜像名称，并将 `ghcr.io/team/image:tag` 等显式仓库地址转换为 Enroot 的 `docker://ghcr.io#team/image:tag` 格式。已有的 `#` 地址保持不变。有效的缓存 squash 镜像会直接复用；命中缓存不能证明仓库导入路径有效。无效的缓存镜像会在持有导入锁时删除，再重新导入。
+
+GLM-5.1 B200 Nscale 1k1k 和 8k1k 配方使用已准备的共享 checkpoint、TileRT 转换权重和 squash 缓存，1k1k 的分配时限为 45 分钟，8k1k 为 90 分钟，以容纳完整 GSM8K eval。C1 低于自动 eval 选择门槛，完整资格验证应同时使用 PR 标签 `all-evals` 和 `full-sweep-fail-fast`。TileRT 在 GLM-5.1 一般退役之后由 [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533) 加入；[MODELS_zh.md](../MODELS_zh.md) 记录了这部分保留范围。相关改动仍须完成正常 PR sweep、适用质量验证、签核和复用，才能发布。
+
+TileRT 的 eval 封装调用共享 `run_eval` 分发器，不覆盖其中的 `run_lm_eval` 客户端。评测后保存可用产物，并保留评测或产物保存阶段的失败状态。TCP 就绪探测只在子 shell 中使用 socket，不改变调用方的诊断输出流。
+
+B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默认的 `/scratch/models/GLM-5.1-FP8`。若指定 HF snapshot，还需把 `HF_HUB_CACHE_HOST_PATH` 设为现有缓存根目录；TileRT 按相同绝对路径挂载整个缓存，使 snapshot 指向同级 blobs 的软链接可读。`TILERT_WEIGHTS_DIR` 仍指向单独转换的 decode 权重。
+
+仅固定 8192/1024 的 `glm5.1-fp8-b200-tilert` 要求原生功耗。TileRT 在 `salloc` 返回的分配内运行，保留两个角色的退出码，并在保存审计数据前等待采集器排空。每个角色仅支持一个物理节点。其他序列长度、AgentX 和 eval-only 不启用此采集器。硬件资格验证与发布仍待完成。
+
 ## 注册 srt-slurm 配方
 
 映射来源：[`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md)。检入的配方：[`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/)。
 
 1. 定位精确的上游 [NVIDIA/srt-slurm](https://github.com/NVIDIA/srt-slurm) 配方，并记录固定到 commit 的来源路径。
-2. 将 YAML 暂存到匹配的检入配方目录。阅读最接近的同类项和所选集群 launcher。
+2. 将 YAML 放在 `benchmarks/multi_node/srt-slurm-recipes/<model-prefix>/<engine>/<gpu>-<precision>/<workload>/` 下，遵循 `RECIPES_zh.md` 中的命名规范。阅读最接近的同类项和所选集群 launcher。
 3. 将来源字段映射到主配置搜索空间条目：资源 worker 数 → `num-worker`；TP/EP/DP-attention → worker 拓扑；基准并发 → `conc-list`；配方路径 → `additional-settings: ["CONFIG_FILE=..."]`。
 4. 在同一变更中添加/更新匹配的 [`nvidia-master.yaml`](../configs/nvidia-master.yaml) 条目。同步 worker 数、TP/PP/EP/DCP/PCP、hardware、router、传输引擎和并发标签。
 5. 更新镜像时，使配方 `model.container` 与主配置 `image` 完全相同；launcher 使用主配置镜像作为 container alias key。
@@ -168,6 +200,13 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 8. 运行 Bash 语法和生成检查；检查 `spec-decoding`、draft/native 方法、token 数、chat-template 使用、capture 范围和解析出的脚本。
 
 ### DeepSeek-V4.1-Flash DSpark
+
+GB200 的 DSpark 配方将 CUDA graph 最小捕获范围设为 64 tokens，以覆盖 AgentX 子代理并发。这会将 c1/c2/c4 的上限从 8/16/32 提升至 64；c8 及以上保持原有大小。完整轨迹、AL 3.51 和 Engram UVA 配置保持不变；需通过 CI 验证低并发尾延迟改善。
+B200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
+GB300 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
+H200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
+
+B300 在 c1/c2/c4 使用相同的最小捕获范围。其 c1 CI 对比中，请求 ITL P90/P99 从 38.74/41.42 ms 降至 2.62/3.45 ms；c2/c4 仍需 CI 验证。
 
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用
 `vllm/vllm-openai:deepseekv41-flash-0909`，在 Blackwell SKU 上采用 TP4、原生五 token DSpark、
@@ -256,8 +295,9 @@ GPU KV cache size: 7,022,899 tokens
 Maximum concurrency for 1,048,576 tokens per request: 6.70x
 ```
 
-因此该分支扫描并发 1–4，处于 6.70x 上限之下，避免接近满上下文的轨迹把批次推入抢占。
-若要获得更多 KV，需要进一步缩小 indexer —— `--max-num-batched-tokens 2048` 可再释放约
+原始分支扫描并发 1–4，处于 6.70x 满上下文估算上限之下。后续 sweep 保持配方不变，
+将并发扩展到 8 和 16，以测量 AgentX 的实际饱和曲线；如果多条轨迹同时接近 1M token，
+这些点可能发生抢占。若要获得更多 KV，需要进一步缩小 indexer —— `--max-num-batched-tokens 2048` 可再释放约
 4 GiB —— 代价是长轨迹 prefill 的分块更细。待有跨并发的吞吐数据后可重新权衡。
 
 `runners/launch_h100-dgxc-slurm.sh` 此前只解析不带 framework 的 `_h100[_mtp].sh` 名称，
@@ -289,7 +329,7 @@ bash -n runners/launch_<cluster>.sh
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/matrix_logic/generate_sweep_configs.py test-config \
+  python -m infx.matrix.generate test-config \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --config-keys <exact-key>
@@ -299,7 +339,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  utils/matrix_logic/generate_sweep_configs.py full-sweep \
+  python -m infx.matrix.generate full-sweep \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --model-prefix <prefix> \
@@ -374,3 +414,11 @@ python -m pytest utils/matrix_logic/ -v
 - YAML、Bash、严格 schema、精确 key 生成、launcher 模拟或配方验证失败。
 
 只有当所有可执行文件一致、精确 key 能生成、运行时路由存在、changelog 能选择该 key，且以上各层检查全部通过时，配置才可以进入 sweep。
+
+## MI355X 上的 DeepSeek-V4.1-Flash
+
+草案配方 `dsv41flash-fp4-mi355x-vllm-agentic-dspark` 将 [#2958](https://github.com/SemiAnalysisAI/InferenceX/pull/2958) 扩展至 MI355X AgentX：TP4、并发 1–32、原生五 token DSpark。吞吐测试使用[已提交的黄金 AL](../golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样，但与 CUDA 分支不同，同样关闭自适应验证：它会在设备端裁剪验证请求，而 ROCm 的 `DeepseekV4IndexerBackend` 不支持该操作，启用后引擎拒绝启动（[运行 34651830283](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34651830283)）。FP4 表示 MXFP4 专家权重；检查点还包含 MXFP8 权重。
+
+遵循已合并的[上游配方 #968](https://github.com/vllm-project/recipes/pull/968) 中的 AMD 设置：`VLLM_ROCM_USE_AITER=1`、`VLLM_ROCM_USE_AITER_MOE=1` 和 `--moe-backend aiter`。通用 AITER 选择器允许 vLLM 选择 CK a8w4 专家内核，与 DSV4-Pro MI355X 配方一致。配方通过 `WEKA_LOADER_OVERRIDE` 固定使用完整语料 `semianalysis_cc_traces_weka_062126`。KV 驻留 GPU；Engram 沿用上游 AMD 默认设置。不要复制 NVIDIA 的 `--engram-config` 选项：上游目前在 ROCm 上拒绝该选项。MI355X launcher 使用共享 HF 缓存，并将此模型的仓库挂载至 `/ix`，同时导出 `INFMAX_CONTAINER_WORKSPACE=/ix`，确保 AgentX 依赖与输出路径位于该挂载中。
+
+**GPU 验证：** [运行 34710937012](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34710937012) 使用精确固定的镜像，通过了并发 1、2、4、8、16、32 的吞吐测试以及仅评测并发 32。配方使用 `vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657`（摘要 `sha256:960228cf…`，发布于 2026-09-12）。较早的 `deepseekv41-flash-0909` 标签早于 [vllm-project/vllm#56503](https://github.com/vllm-project/vllm/pull/56503)，该 PR 将 mHC delayed pre 块从 eager Torch 参考实现切换到 AITER；已合并的[上游配方 #968](https://github.com/vllm-project/recipes/pull/968) 固定使用同一 nightly，并记录了完整的 InferenceX 命令。后续运行时证据请遵循 [AgentX 流程](./eval-agentx-procedures_zh.md)；仅有本地矩阵生成和镜像元数据不能证明 GPU 验证完成。

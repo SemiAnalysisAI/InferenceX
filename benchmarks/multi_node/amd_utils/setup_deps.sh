@@ -1,45 +1,15 @@
 #!/bin/bash
-# =============================================================================
-# setup_deps.sh — Install missing disagg dependencies at container start.
-#
-# Dispatched by $ENGINE (set by server.sh dispatcher):
-#   vllm-disagg   -> recipe deps + amd-quark + UCX/RIXL path exports
-#                    (base image: vllm/vllm-openai-rocm:nightly)
-#   sglang-disagg -> SGLang aiter gluon patch + per-model installs
-#                    (base image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-*)
-#
-# Sourced by server_vllm.sh and server_sglang.sh so PATH / LD_LIBRARY_PATH
-# exports persist. Each patch is idempotent: skipped if already applied.
-#
-# Build steps run in subshells to avoid CWD pollution between installers.
-# =============================================================================
 
-ROCM_PATH="${ROCM_PATH:-/opt/rocm}"
-UCX_HOME="${UCX_HOME:-/usr/local/ucx}"
-RIXL_HOME="${RIXL_HOME:-/usr/local/rixl}"
+source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
+check_env_vars ROCM_PATH UCX_HOME RIXL_HOME
+# Install missing disagg dependencies at container start; sourced by server_vllm.sh
+# and server_sglang.sh so PATH / LD_LIBRARY_PATH exports persist. Each installer is
+# idempotent and gated on $ENGINE (vllm-disagg / sglang-disagg).
 
 _SETUP_START=$(date +%s)
 _SETUP_INSTALLED=()
 
-git_clone_retry() {
-    local url="$1" dest="$2" max_tries=3 try=1
-    while (( try <= max_tries )); do
-        if git clone --quiet "$url" "$dest" 2>/dev/null; then return 0; fi
-        echo "[SETUP] git clone attempt $try/$max_tries failed for $url, retrying in 10s..."
-        rm -rf "$dest"
-        sleep 10
-        (( try++ ))
-    done
-    echo "[SETUP] git clone failed after $max_tries attempts: $url"
-    return 1
-}
-
-# ---------------------------------------------------------------------------
-# 5. Container RDMA/net tools
-#    - ibv_devinfo comes from ibverbs-utils
-#    - iproute2 provides the `ip` command
-#    Used for in-container NIC/RDMA validation and routing checks.
-# ---------------------------------------------------------------------------
+# ibv_devinfo (ibverbs-utils) and ip (iproute2) for in-container NIC/RDMA checks.
 install_recipe_deps() {
     if command -v ibv_devinfo >/dev/null 2>&1 && command -v ip >/dev/null 2>&1; then
         echo "[SETUP] Container RDMA/net tools already present"
@@ -57,11 +27,8 @@ install_recipe_deps() {
     _SETUP_INSTALLED+=("ibverbs-utils+iproute2")
 }
 
-# ---------------------------------------------------------------------------
-# 6b. amd-quark (MXFP4 quantization support for Kimi-K2.5-MXFP4 and similar)
-#     Required due to ROCm vLLM missing the quark dependency:
-#     https://github.com/vllm-project/vllm/issues/35633
-# ---------------------------------------------------------------------------
+# ROCm vLLM lacks the quark dependency needed for MXFP4 (Kimi-K2.5-MXFP4):
+# https://github.com/vllm-project/vllm/issues/35633
 install_amd_quark() {
     if python3 -c "import quark" 2>/dev/null; then
         echo "[SETUP] amd-quark already present"
@@ -78,14 +45,8 @@ install_amd_quark() {
     _SETUP_INSTALLED+=("amd-quark")
 }
 
-# ---------------------------------------------------------------------------
-# SGLang: Install latest transformers for GLM model type support.
-#
-# GLM-5 (zai-org/GLM-5-FP8) requires a transformers build that includes
-# the glm_moe_dsa model type. The mori images do not ship it. Gated on any
-# GLM model name (not just GLM-5-FP8) so other GLM variants pick up the same
-# fix; only installs when a GLM model is active (avoid overhead otherwise).
-# ---------------------------------------------------------------------------
+# GLM-5 needs a transformers build with the glm_moe_dsa model type, which the mori
+# images do not ship. Gated on any GLM model name.
 install_transformers_glm5() {
     if [[ "$MODEL_NAME" != *GLM* ]]; then
         return 0
@@ -102,20 +63,13 @@ install_transformers_glm5() {
     _SETUP_INSTALLED+=("transformers-glm5")
 }
 
-# =============================================================================
-# Run installers (engine-gated)
-# =============================================================================
-
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
     install_recipe_deps
     install_amd_quark
 
-    # =========================================================================
-    # vLLM: Export UCX/RIXL paths (persists since this file is sourced)
-    # =========================================================================
-    export ROCM_PATH="${ROCM_PATH}"
-    export UCX_HOME="${UCX_HOME}"
-    export RIXL_HOME="${RIXL_HOME}"
+    export ROCM_PATH
+    export UCX_HOME
+    export RIXL_HOME
     export PATH="${UCX_HOME}/bin:/usr/local/bin/etcd:/root/.cargo/bin:${PATH}"
     export LD_LIBRARY_PATH="${UCX_HOME}/lib:${RIXL_HOME}/lib:${RIXL_HOME}/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
 else

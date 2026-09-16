@@ -22,7 +22,6 @@ echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTIO
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
-# ========= Determine MOE_BACKEND and MTP based on DP_ATTENTION =========
 MOE_BACKEND="TRTLLM"
 PIECEWISE_CUDA_GRAPHS="false"
 MAX_BATCH_SIZE=$CONC
@@ -68,7 +67,6 @@ fi
 
 MAX_NUM_TOKENS=$(( ((MTP+1)*MAX_BATCH_SIZE+ISL+64+63)/64*64 ))
 
-# set of configs using piecewise_cuda_graphs
 if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
     if [[ $CONC == 32 || $CONC == 64 ]]; then
         PIECEWISE_CUDA_GRAPHS="true"
@@ -78,7 +76,6 @@ if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
 fi
 
 if [[ "$PIECEWISE_CUDA_GRAPHS" == "true" ]]; then
-    # [2^i for i in range(8)] + [i for i in range(256, max_num_tokens, 256)] + [max_num_tokens]
     capture_tokens=(1 2 4 8 16 32 64 128)
     capture_tokens+=( $(seq 256 256 $MAX_NUM_TOKENS))
     if [ $((MAX_NUM_TOKENS%256)) -ne 0 ]; then
@@ -93,7 +90,6 @@ torch_compile_config:
 EOF
 fi  # end of set of configs using piecewise_cuda_graphs
 
-# Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -103,7 +99,6 @@ if [ "${EVAL_ONLY}" = "true" ]; then
 fi
 
 set -x
-# Launch TRT-LLM server
 mpirun -n 1 --oversubscribe --allow-run-as-root \
     trtllm-serve $MODEL --port=$PORT \
     --trust_remote_code \
@@ -117,7 +112,6 @@ mpirun -n 1 --oversubscribe --allow-run-as-root \
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 run_benchmark_serving \
@@ -133,12 +127,10 @@ run_benchmark_serving \
     --result-dir /workspace/ \
     --use-chat-template
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
 set +x
