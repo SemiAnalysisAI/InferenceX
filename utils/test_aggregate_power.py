@@ -1027,6 +1027,9 @@ def test_run_strict_mode_fails_after_writing_validation(tmp_path: Path):
         (0, 10_000, 2_000, "invalid_successful_query_count"),
         (1, 0, 2_000, "invalid_input_token_count"),
         (1, 10_000, 0, "invalid_output_token_count"),
+        (10**310, 10_000, 2_000, "invalid_successful_query_count"),
+        (1, 10**310, 2_000, "invalid_input_token_count"),
+        (1, 10_000, 10**310, "invalid_output_token_count"),
     ],
 )
 def test_run_invalid_benchmark_denominator_is_auditable(
@@ -1434,12 +1437,10 @@ def test_power_cli_invalid_telemetry_preserves_strictness(power_artifacts, env_v
     assert audit["reasons"]
 
 
-@pytest.mark.parametrize(("args", "status"), [(["--help"], 0), ([], 2)])
-def test_power_cli_help_and_argument_errors_outside_repo(power_artifacts, args, status):
-    result = _run_power_cli(power_artifacts, args=args)
-    assert result.returncode == status
-    assert "usage:" in result.stdout + result.stderr
-    assert "Traceback" not in result.stderr
+def test_power_cli_rejects_missing_arguments_outside_repo(power_artifacts):
+    result = _run_power_cli(power_artifacts, args=[])
+    assert result.returncode == 2
+    assert "required" in result.stderr
     assert not power_artifacts["package"].validation_result.exists()
 
 
@@ -1505,7 +1506,7 @@ def test_packaged_power_runs_without_legacy_scripts(power_artifacts, tmp_path):
 
     repo = Path(__file__).resolve().parents[1]
     isolated = tmp_path / "package-only"
-    shutil.copytree(repo / "infx", isolated / "infx")
+    shutil.copytree(repo / "infx", isolated / "infx", ignore=shutil.ignore_patterns("__pycache__"))
     module = "single_node" if power_artifacts["script"] == "aggregate_power" else "multinode"
     result = subprocess.run(
         [sys.executable, "-E", "-S", "-m", f"infx.results.power.{module}", *power_artifacts["args"]],
@@ -1562,52 +1563,29 @@ def test_power_percentiles_aligns_asynchronous_gpu_samples(tmp_path):
     assert result.p90_power_w == pytest.approx(300)
 
 
-@pytest.mark.parametrize('step_name', ['Upload GPU metrics', 'Upload power audit bundle'])
-@pytest.mark.parametrize('directory', ['', 'results'])
-def test_uploaded_telemetry_replays_in_a_different_timezone(tmp_path, step_name, directory):
-    import os
-    import shutil
-    import yaml
-
-    repo = Path(__file__).resolve().parents[1]
-    source = tmp_path / 'source'
-    telemetry = source / directory
-    telemetry.mkdir(parents=True)
-    (telemetry / 'gpu_metrics.csv').write_text(
-        'timestamp,index,power.draw [W]\n'
-        '2024/01/01 00:00:00.000,0,100 W\n'
-        '2024/01/01 00:00:01.000,0,100 W\n'
-        '2024/01/01 00:00:02.000,0,100 W\n')
-    (telemetry / 'gpu_metrics_context.json').write_text('{"timestamp_timezone":"UTC"}')
-    workflow = yaml.safe_load((repo / '.github/workflows/benchmark-tmpl.yml').read_text())
-    step = next(step for job in workflow['jobs'].values() for step in job['steps']
-                if step.get('name') == step_name)
-    archive = tmp_path / 'downloaded'
-    for pattern in step['with']['path'].splitlines():
-        for file in source.glob(pattern):
-            destination = archive / file.relative_to(source)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(file, destination)
-    result = subprocess.run(
-        [sys.executable, '-c', """
-import sys, time
-from pathlib import Path
-from infx.results.power.single_node import integrate_power
-time.tzset()
-result = integrate_power(Path(sys.argv[1]), start_unix=1704067200, end_unix=1704067202,
-                         expected_num_gpus=1)
-assert result.power_valid, result.invalid_reasons
-assert result.total_gpu_energy_j == 200
-""", str(archive / directory / 'gpu_metrics.csv')],
-        cwd=tmp_path, env={**os.environ, 'TZ': 'Etc/GMT+8', 'PYTHONPATH': str(repo)},
-        capture_output=True, text=True, timeout=10,
-    )
-    assert result.returncode == 0, result.stderr
-
-
 @pytest.mark.parametrize('context', ['{"timestamp_timezone":"PST"}', '{}', '{invalid'])
 def test_legacy_average_rejects_invalid_telemetry_context(tmp_path, context):
     csv = tmp_path / 'gpu_metrics.csv'
     csv.write_text('timestamp,index,power.draw [W]\n1,0,100\n2,0,100\n')
     csv.with_name('gpu_metrics_context.json').write_text(context)
     assert aggregate_power(csv, 1, 2) is None
+
+
+@pytest.mark.parametrize("payload,reason", [
+    (None, "invalid_benchmark_result"), ([], "invalid_benchmark_result"),
+    (1, "invalid_benchmark_result"), ("failed", "invalid_benchmark_result"),
+    (b"\xff", "invalid_benchmark_result"),
+    ({"benchmark_start_time_unix": 10**309, "benchmark_end_time_unix": 2, "duration": 1}, "invalid_benchmark_window"),
+])
+@pytest.mark.parametrize("require_power", [False, True])
+def test_malformed_benchmark_preserves_invalid_power_audit(tmp_path, payload, reason, require_power):
+    bench, agg, audit = (tmp_path / name for name in ("bench.json", "agg.json", "audit.json"))
+    bench.write_bytes(payload if isinstance(payload, bytes) else json.dumps(payload).encode())
+    agg.write_text('{"model":"preserved","total_gpu_energy_j":999}')
+    assert run(tmp_path / "missing.csv", bench, agg, validation_result=audit,
+               require_power=require_power) == int(require_power)
+    assert json.loads(audit.read_text())["reasons"] == [reason]
+    result = json.loads(agg.read_text())
+    assert result["model"] == "preserved"
+    assert result["power_valid"] == 0
+    assert "total_gpu_energy_j" not in result

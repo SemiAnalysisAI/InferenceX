@@ -255,6 +255,8 @@ Canary 和 Fail-fast 解决不同问题：
 
 ## 监控与重跑
 
+PR 扫描维护一条机器人评论，包含 `View unofficial run (performance)` 和 `View unofficial run (accuracy)` 链接。每个更新的 Run 都会编辑该评论；重跑旧 Run 不会覆盖更新的链接。已有 PR 会复用最新的旧格式可视化评论，更早的历史评论保持不变。
+
 ### 监控选定 Run
 
 ```bash
@@ -271,9 +273,17 @@ gh api "/repos/SemiAnalysisAI/InferenceX/actions/runs/$RUN_ID" \
 - **策略/Gate 失败：** 标签冲突、Changelog 无效、缺少授权、合并冲突或产物不合格。修正 Gate；重跑 GPU 无法解决。
 - **已被取代的 Run：** 后续 Commit 或被识别的标签变更通过 Workflow Concurrency 将其取消。应监控替代 Run，不要复活过期证据。
 
-[`PR Review` Workflow](../.github/workflows/claude-pr-review.yml) 安装固定版本的官方 Claude Code npm 包，并在将可执行文件路径传给审阅 Action 前检查 `claude --version`。安装或启动失败表示审阅没有执行，既不是代码审阅发现的问题，也不代表审阅通过。重试前应先检查安装步骤。
+[`Claude Code` 工作流](../.github/workflows/claude.yml) 包含审阅和编码两个独立任务。审阅任务保留原有的 `ready_for_review` 及授权 `@pr-claude` 触发条件，只读访问仓库内容，并具有发布 PR 反馈的权限；编码任务使用原有写权限处理 `@claude` 和 `@Klaud-Cold` 请求。同一 PR 的审阅请求串行执行，不取消正在运行的审阅；编码请求仍独立运行。两个任务均通过固定到提交 SHA 的官方 action 安装其支持的 Claude Code CLI。安装或启动失败表示审阅没有执行，既不是代码审阅发现的问题，也不代表审阅通过。重试前应先检查 action 的安装日志。
 
 ### 安全重跑
+
+CODEOWNER 验证仅适用于可信基础版本 CODEOWNERS 中存在非管理员、非 core owner 的改动。其他改动会获得成功的“不适用”状态。归属、重命名及权限规则见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
+
+首次 PASS 前，CODEOWNER 验证会在 Head 更新、PR 重新打开或退出草稿状态后，补查最新的合格签署。它在当前 Head 上验证已有清单，无需在解决合并冲突后重复发布清单。验证使用可信默认分支代码；在 Claude 开始前发布 pending 状态。
+
+已有 PASS 的延续遵循[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)：经认证的仓库管理员从已覆盖 head 推送更新时，保留签署且不调用 Claude。非管理员更新会使签署失效，但不会自动调用 Claude；可编辑已有检查清单或手动分发验证来批准这些改动。非管理员改动尚未审阅时，随后由管理员推送也不能恢复接受状态。缺少更新来源信息时默认拒绝。可信裁定记录已验证和已覆盖的 SHA，重新评估被拒绝时会撤销接受状态。验证器只写入本地裁定文件，可信工作流负责发布评论和状态。
+
+首次验证或重新评估时，Gate 要求触发者的基础 `permission` 为 `write` 或 `admin`，且 `role_name` 为 `write`、`maintain` 或 `admin`。未知或自定义角色、字段缺失、机器人触发和查询失败均不能启动 Claude；自动补查也按相同规则检查签署者。无写权限用户或未获允许的机器人更新 Head 后，可由具有写权限的协作者使用已有签署 URL 发起验证。归属检查、验证与 PASS 延续作为同一任务中的步骤执行，并按 PR 串行运行。手动分发需提供同一 PR 的 `pr-number` 和 `comment_url`。必需的 `CODEOWNER sign-off` 状态独立于工作流任务是否完成，记录 PR head 上的签核结论。
 
 不要盲目重跑仍在执行的 Run。已结束的失败 Run 可以只重跑失败 Job 及其依赖项：
 
@@ -367,7 +377,7 @@ Admin 权限；Read、Triage 以及没有仓库访问权限的用户不能执行
 1. 复用不要求扫描标签。标签用于选择新的 GPU 工作；移除主标签不会使已有源 Run 失效。Changelog 验证和合并辅助脚本仍会拒绝冲突的主标签。
 2. `evals-only` 与 `agentx-fast` 会令 Run 不可复用。默认完整扫描以及带 `all-evals` 的完整扫描仍可复用。
 3. 源 Run 必须是已结束的 PR `run-sweep.yml` Run，其 Head SHA 仍在 PR Commit 列表中，并拥有未过期的 `results_bmk`、`eval_results_all` 或 `bmk_agentic_*` 结果产物。
-4. `OWNER`、`MEMBER` 或 `COLLABORATOR` 通过 `/reuse-sweep-run` 或 `/reuse-sweep-run <run_id>` 授权复用。最新的合格授权命令决定自动选择还是固定源 Run。
+4. `OWNER`、`MEMBER` 或 `COLLABORATOR` 通过 `/reuse-sweep-run` 或 `/reuse-sweep-run <run_id>` 授权复用。命令和可选的 Run ID 必须放在同一行。最新的合格授权命令决定自动选择还是固定源 Run。
 5. 不指定 ID 时，自动选择要求最新的合格源 Run 成功。指定 Run 是维护者的明确决定，允许结论为 `success`、`failure` 或 `cancelled`；下游入库只保留存在且有效的行，因此应将其报告为部分数据，而不是绿色 Run。
 
 复用验证检查源 Run 的身份和可用产物，不检查完整矩阵覆盖范围。成功的 `sweep-enabled`（裁剪扫描）源 Run 也可复用，包括自动选择；在 `main` 上只会发布该 Run 已记录的数据点。请求被接受不代表已通过完整扫描，也不能代替评审中的完整扫描要求。如需复用某次完整扫描，请先确认其覆盖范围，再固定该 Run ID。

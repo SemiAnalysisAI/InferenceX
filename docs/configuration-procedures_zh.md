@@ -21,6 +21,18 @@
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | 只允许追加的基准触发日志 |
 | [`AGENTS.md`](../AGENTS.md) | 仓库级配置、MTP、changelog 和 sweep 规则 |
 
+## 依赖子模块
+
+Git 记录依赖的精确提交版本。[`.gitmodules`](../.gitmodules) 定义各仓库：AIPerf 位于 `utils/aiperf`，NVIDIA srt-slurm 位于 `utils/srt-slurm`。TileRT 由 `setup_srt_slurm()` 手动检出已记录的分支仓库，不是独立子模块。
+
+本地运行基准测试前，先初始化子模块：
+
+```bash
+git submodule update --init
+```
+
+升级时，在对应子模块中获取并检出目标提交，再将更新后的子模块指针提交到 InferenceX。基准测试工作流已配置为自动初始化子模块。Slurm 启动器为每个作业创建本地 Git 克隆，避免配方准备和运行时写入修改子模块，并记录实际提交以供结果溯源。NVIDIA 启动器使用本地克隆；TileRT 启动器通过网络获取固定的分支提交。
+
 ## 规程索引
 
 1. [准备 worktree](#准备-worktree)
@@ -137,7 +149,7 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 映射来源：[`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md)。检入的配方：[`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/)。
 
 1. 定位精确的上游 [NVIDIA/srt-slurm](https://github.com/NVIDIA/srt-slurm) 配方，并记录固定到 commit 的来源路径。
-2. 将 YAML 暂存到匹配的检入配方目录。阅读最接近的同类项和所选集群 launcher。
+2. 将 YAML 放在 `benchmarks/multi_node/srt-slurm-recipes/<model-prefix>/<engine>/<gpu>-<precision>/<workload>/` 下，遵循 `RECIPES_zh.md` 中的命名规范。阅读最接近的同类项和所选集群 launcher。
 3. 将来源字段映射到主配置搜索空间条目：资源 worker 数 → `num-worker`；TP/EP/DP-attention → worker 拓扑；基准并发 → `conc-list`；配方路径 → `additional-settings: ["CONFIG_FILE=..."]`。
 4. 在同一变更中添加/更新匹配的 [`nvidia-master.yaml`](../configs/nvidia-master.yaml) 条目。同步 worker 数、TP/PP/EP/DCP/PCP、hardware、router、传输引擎和并发标签。
 5. 更新镜像时，使配方 `model.container` 与主配置 `image` 完全相同；launcher 使用主配置镜像作为 container alias key。
@@ -190,6 +202,9 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 ### DeepSeek-V4.1-Flash DSpark
 
 GB200 的 DSpark 配方将 CUDA graph 最小捕获范围设为 64 tokens，以覆盖 AgentX 子代理并发。这会将 c1/c2/c4 的上限从 8/16/32 提升至 64；c8 及以上保持原有大小。完整轨迹、AL 3.51 和 Engram UVA 配置保持不变；需通过 CI 验证低并发尾延迟改善。
+B200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
+GB300 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
+H200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。
 
 B300 在 c1/c2/c4 使用相同的最小捕获范围。其 c1 CI 对比中，请求 ITL P90/P99 从 38.74/41.42 ms 降至 2.62/3.45 ms；c2/c4 仍需 CI 验证。
 

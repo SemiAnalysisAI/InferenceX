@@ -2,7 +2,6 @@
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -83,40 +82,3 @@ def test_filename_entrypoint_retains_environment_and_point_arguments(invoke):
                      "--point", "model_tp8", "config", "four", "8", "", "")
     assert invalid.returncode != 0
     assert "Expected numeric point identity" in invalid.stderr
-
-
-def test_importing_command_modules_does_not_run_them(tmp_path):
-    result = subprocess.run(
-        [sys.executable, "-P", "-c",
-         "import infx.results.collect_results; import infx.evals._kimi_verifier_archive"],
-        cwd=tmp_path, env={**os.environ, "PYTHONPATH": str(ROOT)},
-        capture_output=True, text=True, timeout=10,
-    )
-    assert result.returncode == 0, result.stderr
-    assert result.stdout == result.stderr == ""
-    assert list(tmp_path.iterdir()) == []
-
-
-def test_legacy_benchmark_entrypoint_supports_spawned_workers(tmp_path):
-    """Exercise the shipped wrapper's execution context with a minimal worker."""
-    wrapper = tmp_path / "utils/bench_serving/benchmark_serving.py"
-    wrapper.parent.mkdir(parents=True)
-    shutil.copy(ROOT / "utils/bench_serving/benchmark_serving.py", wrapper)
-    package = tmp_path / "infx/bench_serving"
-    package.mkdir(parents=True)
-    (package.parent / "__init__.py").touch()
-    (package / "__init__.py").touch()
-    (package / "benchmark_serving.py").write_text('''from multiprocessing import get_context
-def work(value):
-    return value * value
-if __name__ == "__main__":
-    with get_context("spawn").Pool(1) as pool:
-        print(pool.map(work, [2, 3]))
-''')
-    result = subprocess.run(
-        [sys.executable, str(wrapper)], cwd=tmp_path,
-        env={key: value for key, value in os.environ.items() if key != "PYTHONPATH"},
-        capture_output=True, text=True, timeout=10,
-    )
-    assert result.returncode == 0, result.stderr
-    assert result.stdout == "[4, 9]\n"

@@ -31,6 +31,10 @@ These sources outrank this guide when behavior changes. Update the English page 
 
 ## Testing layers
 
+[`CI`](../.github/workflows/ci.yml) runs **Lint** and **Tests** in parallel for PRs (including forks) and pushes to `main` that change Python files, `ci.yml`, the MCP requirements, Ruff configuration, or `pytest.ini`. [`Workflow security`](../.github/workflows/zizmor.yml) runs **Zizmor** for changes to workflows, action definitions, Dependabot, pre-commit, or zizmor configuration. Python-only changes do not trigger Zizmor; other workflow-only changes do not trigger Lint or Tests. Editing `ci.yml` triggers all three jobs. Each workflow can be dispatched manually. Changes only to other docs, shell scripts, or benchmark YAML do not trigger either workflow; run the applicable checks locally or dispatch them manually.
+
+Tests runs every suite under `utils/`, `runners/`, and `experimental/CollectiveX/tests/` with four pytest workers, plus MCP compatibility. New tests in those directories are discovered automatically. The test environment uses Python 3.12 and CPU-only PyTorch; dependencies must be at least 12 hours old. A failing job does not cancel the other; a newer PR update cancels the superseded CI run. Branch pushes without a PR no longer start a separate changelog-test run.
+
 | Layer | What it can prove | What it cannot prove |
 | --- | --- | --- |
 | Parse and syntax | Edited YAML loads, and edited Bash parses | Schema validity, runtime routing, or GPU behavior |
@@ -58,6 +62,37 @@ See [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/2
 ## Local checks
 
 Run checks from the repository root and replace placeholders with the exact changed path or key.
+
+### Python lint and formatting
+
+Ruff checks `infx/` with the rules in [`infx/ruff.toml`](../infx/ruff.toml), targeting Python 3.12 and a line length of 100. CI runs on any Python-file change and uses the latest Ruff release at least 12 hours old.
+
+```bash
+uvx --exclude-newer PT12H ruff@latest check --fix infx
+uvx --exclude-newer PT12H ruff@latest format infx
+```
+
+Fix findings where practical. Justified exceptions use inline `# noqa: CODE`; unused ignores are checked. Preview rules and automatic unsafe fixes are not enabled.
+
+### GitHub Actions security
+
+CI uses the latest zizmor release at least 12 hours old, with its strictest `auditor` persona, strict input collection, all supported input kinds, and online action-reference checks. Every unsuppressed finding fails the job, including informational and low-confidence findings. Run the same audit locally with an authenticated GitHub token:
+
+```bash
+GH_TOKEN="$(gh auth token)" uvx --exclude-newer PT12H zizmor@latest \
+  --persona auditor --strict-collection --collect all --no-config --no-progress .
+```
+
+All third-party actions remain pinned to commit SHAs. Same-repository workflow calls use `$/`, which resolves the workflow's exact commit and requires Actions runner 2.336.0 or newer. Dependabot waits seven days before action updates. The combined Claude workflow keeps separate review and coding jobs with their own permissions; the pinned Claude action installs its supported CLI version.
+
+Auditor mode also reports deliberate architecture choices. Exceptions are attached to the exact affected YAML line with a reason, never disabled globally:
+
+- Independent GPU dispatches, comment requests, and Klaud waves must not supersede one another. The priority scheduler and candidate ownership claims handle their resource limits.
+- Fork sign-off and trusted external dispatch require `pull_request_target`; they execute trusted control code and enforce authorization before privileged operations.
+- Existing repository-scoped integration credentials are retained. Moving them into protected GitHub Environments requires migrating the actual stored secrets; adding an empty `environment:` field is not a fix.
+- The profiling storage checkout retains its scoped SSH deploy key only because the next step pushes a trace commit to that separate repository. Benchmark checkouts do not retain credentials.
+
+Add `--no-ignores` to review all of these exceptions. Keep new findings blocking, and review an exception again if its trigger, checkout, credential consumer, or authorization changes. No GPU execution is needed to run this security audit.
 
 ### Parse and syntax
 
@@ -173,7 +208,7 @@ Record enough information for another reviewer to reproduce the claim without gu
 3. **Before CODEOWNER sign-off:** follow [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md), including its code-quality, architecture, image provenance, upstream recipe, patch/waiver, chat-template, and AgentX requirements where applicable.
 4. **For sweep/eval acceptance:** at least one commit currently in the PR has successful, non-skipped executed `single-node */` and `eval /` checks. A successful `collect-evals` alone is insufficient. Download the corresponding eval artifacts and confirm non-empty, passing accuracy and the same inference image. These are the executable rules in [verifier Checks 1 and 2](../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr).
 5. **For reuse at merge:** an authorized `OWNER`, `MEMBER`, or `COLLABORATOR` posts a whole-line `/reuse-sweep-run` command (optionally with the eligible source run ID) before the supported merge path. The verifier treats a missing or unauthorized command as a failure. See [verifier Check 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted) and [the reuse procedure](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep).
-6. **At merge:** a CODEOWNER's exact sign-off is independently accepted by [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml). If the PR head changes, reassess and sign the new commit evidence.
+6. **At merge:** the current head needs the CODEOWNER sign-off status defined in [the contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off). That guide owns verification, admin-update retention, revocation, and recovery rules.
 7. **After merge:** the author confirms the main-branch jobs pass, as required by [`CONTRIBUTING.md`](../CONTRIBUTING.md#after-merging).
 
 ## Stop conditions

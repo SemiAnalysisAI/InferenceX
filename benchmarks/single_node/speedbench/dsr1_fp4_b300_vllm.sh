@@ -2,81 +2,51 @@
 
 # DeepSeek-R1 B300 vLLM SPEED-Bench AL matrix collector.
 #
-# Produces the golden acceptance-length (AL) reference matrix consumed by the
-# synthetic-acceptance framework: for each MTP level (num_speculative_tokens),
-# measure the REAL AL on a single SPEED-Bench category (default: coding) and emit
-# a YAML matrix identical in shape to benchmarks/speedbench-reference-al.yaml.
-# This measures real MTP acceptance; the synthetic value is injected downstream
-# by the throughput recipe, not here.
+# For each MTP level (num_speculative_tokens), measure the REAL acceptance length (AL)
+# on one SPEED-Bench category and emit a YAML matrix in the golden_al_distribution
+# shape. The synthetic value is injected downstream by the throughput recipe, not here.
 #
-# Adapted from speedbench/dsv4_fp4_b300_vllm.sh. DeepSeek-R1 is DeepSeek-V3
-# architecture (MLA dense attention), NOT V4 (DSA / Lightning Indexer), so vs the
-# DSV4 collector:
-#   - NO --tokenizer-mode deepseek_v4 / --reasoning-parser deepseek_v4 /
-#     --tool-call-parser deepseek_v4   (all V4-specific; the official vLLM R1
-#     serve command is bare). reasoning-parser is irrelevant here anyway: AL is
-#     read from /metrics, not from parsed output.
-#   - NO --attention_config.use_fp4_indexer_cache (that knob is dsv32/MLA-indexer
-#     only; R1 is plain MLA and never reads it).
-#   - NO --block-size / --compilation-config (the official R1 recipe omits them;
-#     defaults apply). --kv-cache-dtype fp8 IS kept, to match the dsv4/qwen/glm
-#     collectors so all golden AL values share one kv-cache numeric regime.
-#   - FP4 on Blackwell needs FlashInfer MoE: export VLLM_USE_FLASHINFER_MOE_FP4=1.
-#   - THINKING: R1 is a pure reasoning model and always emits <think> (its chat
-#     template has no enable_thinking toggle). There is no thinking-off mode, so
-#     this collector measures thinking_on only and needs no --chat-template-kwargs
-#     shim (the default client-side template render already enables thinking).
+# R1 is DeepSeek-V3 architecture (plain MLA), not V4: no deepseek_v4 tokenizer/parsers
+# and no --attention_config.use_fp4_indexer_cache (dsv32/MLA-indexer only). AL is read
+# from /metrics, so a reasoning parser is irrelevant. --kv-cache-dtype fp8 is kept so
+# all golden AL values share one kv-cache numeric regime. R1 always emits <think> (no
+# enable_thinking toggle), so only thinking_on is measured and no chat-template-kwargs
+# shim is needed. Checkpoint: nvidia/DeepSeek-R1-0528-NVFP4-v2, basename dsr1-fp4 on
+# the runner.
 #
-# Checkpoint (B300 / Blackwell): NVFP4 build nvidia/DeepSeek-R1-0528-NVFP4-v2,
-# basename dsr1-fp4 on the runner (resolved by launch_b300-dsxe.sh).
+# Dispatch this collector through speedbench-al.yml.
 #
-# Usage (inside the vLLM container, on a B300 node):
-#   export MODEL=/data/models/dsr1-fp4
-#   bash benchmarks/single_node/speedbench/dsr1_fp4_b300_vllm.sh
-#
-# Tunables (env):
-#   MTP_LIST          space-separated MTP levels   (default "1 2 3 4 5 6 7 8")
-#   THINKING_MODES    space-separated: on           (default "on"; R1 has no off)
-#   CATEGORY          SPEED-Bench category          (default coding)
-#   SPEEDBENCH_OUTPUT_LEN  per-request output len   (default 4096)
-#   OUT_YAML          output matrix path            (default $RESULTS_DIR/speedbench-reference-al.yaml)
+# Required collection settings come from speedbench-al.yml.
 
-set -uo pipefail
+set -o pipefail
 source "$(dirname "$0")/../../benchmark_lib.sh"
+check_env_vars \
+    CATEGORY DP_ATTENTION MODEL MODEL_PATH MTP_LIST OUT_YAML \
+    PORT SPEEDBENCH_OUTPUT_LEN THINKING_MODES TP
 
-MODEL="${MODEL:?MODEL env var required (e.g. /data/models/dsr1-fp4)}"
-SERVE_MODEL="${MODEL_PATH:-$MODEL}"
-TP="${TP:-8}"
-DP_ATTENTION="${DP_ATTENTION:-false}"
-PORT="${PORT:-8888}"
+SERVE_MODEL="${MODEL_PATH}"
 
-MTP_LIST="${MTP_LIST:-1 2 3 4 5 6 7 8}"
-THINKING_MODES="${THINKING_MODES:-on}"
-CATEGORY="${CATEGORY:-coding}"
-MODEL_KEY="${MODEL_KEY:-$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')}"
-SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
-CONCURRENCY="${CONCURRENCY:-1}"
-# Provider-recommended sampling from the DeepSeek-R1 checkpoint generation_config
-# (temperature 0.6, top_p 0.95; no top_k). vLLM's own default top_p is 1.0, so it
-# MUST be passed explicitly or the measured AL is taken at the wrong settings.
-TEMPERATURE="${TEMPERATURE:-0.6}"
-TOP_P="${TOP_P:-0.95}"
+MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
+CONCURRENCY="1"
+# Sampling from the DeepSeek-R1 generation_config (temperature 0.6, top_p 0.95; no
+# top_k). vLLM's default top_p is 1.0, so it MUST be passed or the AL is measured at
+# the wrong settings.
+TEMPERATURE="0.6"
+TOP_P="0.95"
 
-SPEEDBENCH_DIR="${SPEEDBENCH_DIR:-/workspace/speed_bench_data}"
+SPEEDBENCH_DIR="/workspace/speed_bench_data"
 # Flat results dir to match the speedbench-al.yml artifact glob
 # (speedbench_results/server_*.log) and its pre-run `rm -rf speedbench_results`.
-RESULTS_DIR="${RESULTS_DIR:-/workspace/speedbench_results}"
-OUT_YAML="${OUT_YAML:-$RESULTS_DIR/speedbench-reference-al.yaml}"
+RESULTS_DIR="/workspace/speedbench_results"
 
-# Blackwell FP4 MoE path (DeepSeek-R1 FP4 on B-series): required per vLLM R1 docs.
-export VLLM_USE_FLASHINFER_MOE_FP4="${VLLM_USE_FLASHINFER_MOE_FP4:-1}"
+# FP4 MoE on Blackwell needs FlashInfer (vLLM R1 docs).
+export VLLM_USE_FLASHINFER_MOE_FP4="1"
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
 mkdir -p "$RESULTS_DIR"
 nvidia-smi
 if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
 
-# ---- Download SPEED-Bench dataset ----
 echo "=== Downloading SPEED-Bench dataset ==="
 pip install -q datasets tiktoken
 curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/refs/heads/main/nemo_skills/dataset/speed-bench/prepare.py \
@@ -209,7 +179,6 @@ done
 
 stop_gpu_monitor
 
-# ---- Emit the YAML matrix ----
 emit_mode_block() {
     local mode="$1"
     for mtp in $MTP_LIST; do
