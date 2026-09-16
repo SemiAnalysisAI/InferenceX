@@ -8,7 +8,8 @@ source "$REPO_ROOT/benchmarks/benchmark_lib.sh" --validation-only
 check_env_vars COLLX_SHARD_SKU COLLX_NODES COLLX_GPUS_PER_NODE COLLX_SWAP_IMAGE \
   COLLX_SWAP_MAX_PAYLOAD_BYTES COLLX_SWAP_BLOCK_BYTES COLLX_SWAP_NUM_BLOCKS COLLX_SWAP_WARMUP COLLX_SWAP_ITERATIONS \
   COLLX_SWAP_SEED COLLX_SWAP_DEVICE COLLX_SWAP_TIME COLLX_JOB_ROOT \
-  COLLECTIVEX_SOURCE_SHA COLLECTIVEX_EXECUTION_ID COLLECTIVEX_CANONICAL_GHA COLLX_VENDOR
+  COLLECTIVEX_SOURCE_SHA COLLECTIVEX_EXECUTION_ID COLLECTIVEX_CANONICAL_GHA COLLX_VENDOR \
+  COLLX_IMAGE_REFRESH
 source "$HERE/../runtime/common.sh"
 
 [ "$COLLX_NODES" = 1 ] && [ "$COLLX_GPUS_PER_NODE" = 1 ] \
@@ -93,14 +94,13 @@ collx_salloc_jobid "${allocation[@]}"
 check_env_vars JOB_ID
 SQUASH_FILE=""
 # The serving launcher uses this exact image-tag filename in its operator-staged cache.
-if [ -n "${COLLX_SWAP_STAGED_DIR:-}" ]; then
+if [ "$COLLX_IMAGE_REFRESH" = 0 ] && [ -n "${COLLX_SWAP_STAGED_DIR:-}" ]; then
   staged_image="$COLLX_SWAP_STAGED_DIR/$(printf '%s' "$COLLX_SWAP_IMAGE" | sed 's#[/:@#]#_#g').sqsh"
   if unsquashfs -l "$staged_image" >/dev/null 2>&1; then
     collx_log "using operator-staged image: $staged_image"
     SQUASH_FILE="$staged_image"
   else
     collx_log "requested image is not staged: $staged_image"
-    find "$COLLX_SWAP_STAGED_DIR" -maxdepth 1 -type f -name '*vllm*' -printf '%f\n' >&2 || true
   fi
 fi
 if [ -z "$SQUASH_FILE" ]; then

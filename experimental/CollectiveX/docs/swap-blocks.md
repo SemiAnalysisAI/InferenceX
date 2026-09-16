@@ -98,6 +98,7 @@ H100 first checks the operator-staged serving-image cache at
 `/mnt/nfs/lustre/containers` for the exact requested image tag, matching the serving
 launcher's filename convention. A valid staged squash is reused without importing
 inside the compute pod. If absent, the regular import path reports its failure.
+`refresh_image=true` bypasses the staged cache and requests a fresh import.
 `swap_h100_image` explicitly selects that pool's image (default
 `vllm/vllm-openai:v0.27.1`); the other CUDA pools use `swap_image`. The artifact
 records the selected image and installed vLLM version so cross-version results
