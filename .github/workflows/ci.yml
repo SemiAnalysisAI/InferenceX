@@ -6,7 +6,11 @@ on:
     paths: &python-paths
       - '**/*.py'
       - '.github/workflows/ci.yml'
-      - '.claude/requirements-mcp.txt'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.python-version'
+      - '.mcp.json'
+      - '.github/mcp-ci.json'
       - 'infx/ruff.toml'
       - '**/pytest.ini'
   push:
@@ -49,13 +53,8 @@ jobs:
       - name: Prepare test environment
         if: matrix.check == 'Tests'
         run: |
-          uv venv --python 3.12 "$RUNNER_TEMP/test-venv"
-          uv pip install --python "$RUNNER_TEMP/test-venv/bin/python" \
-            --exclude-newer PT12H --torch-backend cpu \
-            -r .claude/requirements-mcp.txt \
-            pytest pytest-xdist pydantic tabulate codeowners \
-            numpy aiohttp transformers matplotlib torch packaging
-          echo "$RUNNER_TEMP/test-venv/bin" >> "$GITHUB_PATH"
+          uv sync --locked --group test --no-editable
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Verify MCP server compatibility
         if: matrix.check == 'Tests'

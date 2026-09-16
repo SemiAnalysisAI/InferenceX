@@ -31,9 +31,9 @@
 
 ## 测试层级
 
-[`CI`](../.github/workflows/ci.yml) 在 PR（包括 fork）或向 `main` 的推送修改 Python 文件、`ci.yml`、MCP 依赖、Ruff 配置或 `pytest.ini` 时，并行运行 **Lint** 和 **Tests**。[`Workflow security`](../.github/workflows/zizmor.yml) 在工作流、action 定义、Dependabot、pre-commit 或 zizmor 配置变更时运行 **Zizmor**。仅修改 Python 文件不会触发 Zizmor；仅修改其他工作流不会触发 Lint 或 Tests。修改 `ci.yml` 会触发全部三项任务。两个工作流均可手动分发。仅修改其他文档、Shell 脚本或基准测试 YAML 不会触发这两个工作流；请在本地执行相应检查，或手动分发。
+[`CI`](../.github/workflows/ci.yml) 在 PR（包括 fork）或向 `main` 的推送修改 Python 文件、`ci.yml`、`pyproject.toml`、`uv.lock`、`.python-version`、MCP 配置、Ruff 配置或 `pytest.ini` 时，并行运行 **Lint** 和 **Tests**。[`Workflow security`](../.github/workflows/zizmor.yml) 在工作流、action 定义、Dependabot、pre-commit 或 zizmor 配置变更时运行 **Zizmor**。仅修改 Python 文件不会触发 Zizmor；仅修改其他工作流不会触发 Lint 或 Tests。修改 `ci.yml` 会触发全部三项任务。两个工作流均可手动分发。仅修改其他文档、Shell 脚本或基准测试 YAML 不会触发这两个工作流；请在本地执行相应检查，或手动分发。
 
-Tests 使用四个 pytest worker 运行 `utils/`、`runners/` 和 `experimental/CollectiveX/tests/` 下的全部测试，并检查 MCP 兼容性。这些目录中的新增测试会自动发现。测试环境使用 Python 3.12 和仅支持 CPU 的 PyTorch；依赖必须已发布至少 12 小时。一项任务失败不会取消另一项；PR 更新会取消旧提交的 CI。尚未创建 PR 的分支推送不再单独触发变更日志测试。
+Tests 使用四个 pytest worker 运行 `utils/`、`runners/` 和 `experimental/CollectiveX/tests/` 下的全部测试，并检查 MCP 兼容性。这些目录中的新增测试会自动发现。CI 通过 `uv sync --locked --group test --no-editable` 将 `infx` 安装为 wheel，使用 Python 3.12 和仅支持 CPU 的 PyTorch。一项任务失败不会取消另一项；PR 更新会取消旧提交的 CI。尚未创建 PR 的分支推送不再单独触发变更日志测试。
 
 | 层级 | 能够证明 | 不能证明 |
 | --- | --- | --- |
@@ -62,6 +62,14 @@ Tests 使用四个 pytest worker 运行 `utils/`、`runners/` 和 `experimental/
 ## 本地检查
 
 从仓库根目录运行检查，并用实际变更路径或键替换占位符。
+
+### Python 环境
+
+[`pyproject.toml`](../pyproject.toml) 定义 `infx` 包及其依赖；[`uv.lock`](../uv.lock) 记录解析后的版本。运行 `uv sync --locked` 安装核心工具，然后用 `uv run --locked python -m infx.matrix.generate ...` 调用现有模块命令。CODEOWNER/GitHub 集成使用 `--extra workflows`，评测摘要和数据库比较使用 `--extra results`，仓库 MCP 服务使用 `--group mcp`。`test` 依赖组包含 MCP 和 CPU 测试所需依赖。
+
+开发时 uv 以 editable 模式安装包，源码修改立即生效。CI 使用普通 wheel；安装包测试在隔离解释器和临时仓库中检查配方节点数与运行器元数据，不从源码 checkout 导入。依赖仓库文件的命令在 editable 安装时使用源码仓库；使用 wheel 时，应从仓库根目录运行。评测 YAML/JSON 资源及 Apache 许可证随包分发。
+
+核心依赖使用 `uv add` 添加，集成依赖使用 `uv add --optional <extra>`，测试工具使用 `uv add --group test`。同时提交 manifest 和 lockfile。`uv lock --upgrade-package <name>` 更新指定依赖；解析时按 `pyproject.toml` 执行 12 小时发布冷却期。Ruff 和 Zizmor 不加入 lockfile，CI 继续使用满足冷却期的最新版本。基准测试镜像、供应商评测环境和测量历史 checkout 的命令保留原有依赖安装方式。
 
 ### Python 静态检查与格式化
 
@@ -107,13 +115,13 @@ bash -n runners/launch_<cluster>.sh
 ### 先精确配置，再过滤配置族
 
 ```bash
-uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+uv run --locked \
   python -m infx.matrix.generate test-config \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --config-keys <exact-key>
 
-uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+uv run --locked \
   python -m infx.matrix.generate full-sweep \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
@@ -155,11 +163,11 @@ python3 -m infx.workflows.validate_perf_changelog \
 
 现有 Python 测试套件也覆盖工作流契约。`utils/matrix_logic/test_validation.py` 测试工作流输入模式，并使用受控的生成器输出执行两个准备脚本。非法数据行必须在发布作业输出前失败；合法数据行必须保持不变，包括手动分派测量旧 checkout 的情况。`utils/test_process_result.py` 通过记录环境的启动器执行实际启动步骤，覆盖当前和旧版 checkout。这些测试不模拟 GitHub 表达式引擎，也不证明 GPU 性能；表达式修改需结合工作流验证和适用的 smoke 证据进行审查。
 
-安装好测试所需依赖后，在同一 Python 环境中添加 [`pytest-xdist`](https://pytest-xdist.readthedocs.io/en/stable/distribution.html)，使用四个 worker 运行全部本地测试套件：
+使用与 CI 相同的锁定环境和四个 worker 运行测试套件：
 
 ```bash
-python -m pip install pytest-xdist
-python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
+uv run --locked --group test --no-editable \
+  python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
 ```
 
 串行调试时使用 `-n 0`。测试必须隔离临时文件和端口，并确保各 worker 收集到的参数化用例一致。changelog-gate CI 任务同样使用四个 worker；并行执行不改变其测试范围和断言。

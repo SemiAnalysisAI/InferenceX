@@ -4,9 +4,10 @@ import re
 import sys
 from collections.abc import Iterable
 from enum import Enum
-from pathlib import Path
 
 import yaml
+
+from infx.config import repository_root
 
 CLUSTER_LABEL_PREFIX = "cluster:"
 
@@ -20,7 +21,7 @@ def normalize_hardware_label(label: str) -> str:
 
 def load_hardware_labels() -> list[str]:
     """Load distinct cluster hardware labels from runners.yaml."""
-    runners_path = Path(__file__).parents[2] / "configs" / "runners.yaml"
+    runners_path = repository_root() / "configs" / "runners.yaml"
     with open(runners_path) as f:
         runners = yaml.safe_load(f)
 

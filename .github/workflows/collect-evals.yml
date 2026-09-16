@@ -37,7 +37,7 @@ jobs:
         run: |
           echo "## Eval Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          uv run --no-project --exclude-newer PT12H --python 3.12 --with tabulate \
+          uv run --locked --extra results \
             python -m infx.results.collect_eval_results eval_results/ "${RESULT_PREFIX}" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload aggregated evals

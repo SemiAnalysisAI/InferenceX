@@ -5,6 +5,7 @@ from unittest.mock import Mock
 import pytest
 import yaml
 
+import infx.config
 import infx.workflows.calc_success_rate as success_rate
 
 
@@ -34,7 +35,7 @@ def test_load_hardware_labels_normalizes_supported_layouts(
     config_dir = tmp_path / "configs"
     config_dir.mkdir()
     (config_dir / "runners.yaml").write_text(yaml.safe_dump(runners, sort_keys=False))
-    monkeypatch.setattr(success_rate, "__file__", str(tmp_path / "infx" / "workflows" / "calc_success_rate.py"))
+    monkeypatch.setattr(infx.config, "__file__", str(tmp_path / "infx" / "config.py"))
 
     assert success_rate.load_hardware_labels() == expected
 

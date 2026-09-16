@@ -31,9 +31,9 @@ These sources outrank this guide when behavior changes. Update the English page 
 
 ## Testing layers
 
-[`CI`](../.github/workflows/ci.yml) runs **Lint** and **Tests** in parallel for PRs (including forks) and pushes to `main` that change Python files, `ci.yml`, the MCP requirements, Ruff configuration, or `pytest.ini`. [`Workflow security`](../.github/workflows/zizmor.yml) runs **Zizmor** for changes to workflows, action definitions, Dependabot, pre-commit, or zizmor configuration. Python-only changes do not trigger Zizmor; other workflow-only changes do not trigger Lint or Tests. Editing `ci.yml` triggers all three jobs. Each workflow can be dispatched manually. Changes only to other docs, shell scripts, or benchmark YAML do not trigger either workflow; run the applicable checks locally or dispatch them manually.
+[`CI`](../.github/workflows/ci.yml) runs **Lint** and **Tests** in parallel for PRs (including forks) and pushes to `main` that change Python files, `ci.yml`, `pyproject.toml`, `uv.lock`, `.python-version`, MCP configuration, Ruff configuration, or `pytest.ini`. [`Workflow security`](../.github/workflows/zizmor.yml) runs **Zizmor** for changes to workflows, action definitions, Dependabot, pre-commit, or zizmor configuration. Python-only changes do not trigger Zizmor; other workflow-only changes do not trigger Lint or Tests. Editing `ci.yml` triggers all three jobs. Each workflow can be dispatched manually. Changes only to other docs, shell scripts, or benchmark YAML do not trigger either workflow; run the applicable checks locally or dispatch them manually.
 
-Tests runs every suite under `utils/`, `runners/`, and `experimental/CollectiveX/tests/` with four pytest workers, plus MCP compatibility. New tests in those directories are discovered automatically. The test environment uses Python 3.12 and CPU-only PyTorch; dependencies must be at least 12 hours old. A failing job does not cancel the other; a newer PR update cancels the superseded CI run. Branch pushes without a PR no longer start a separate changelog-test run.
+Tests runs every suite under `utils/`, `runners/`, and `experimental/CollectiveX/tests/` with four pytest workers, plus MCP compatibility. New tests in those directories are discovered automatically. CI installs `infx` as a wheel with `uv sync --locked --group test --no-editable`, using Python 3.12 and CPU-only PyTorch. A failing job does not cancel the other; a newer PR update cancels the superseded CI run. Branch pushes without a PR no longer start a separate changelog-test run.
 
 | Layer | What it can prove | What it cannot prove |
 | --- | --- | --- |
@@ -62,6 +62,14 @@ See [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/2
 ## Local checks
 
 Run checks from the repository root and replace placeholders with the exact changed path or key.
+
+### Python environment
+
+[`pyproject.toml`](../pyproject.toml) defines the `infx` package and its dependencies; [`uv.lock`](../uv.lock) records their resolved versions. Run `uv sync --locked` to install the core tooling, then `uv run --locked python -m infx.matrix.generate ...` to use the existing module commands. Use `--extra workflows` for CODEOWNER/GitHub integrations, `--extra results` for eval summaries/database comparisons, or `--group mcp` for the repository MCP server. The `test` group includes MCP and the CPU test dependencies.
+
+For development, uv installs the package in editable mode, so source edits apply immediately. CI uses a regular wheel; the installed-package test runs in an isolated interpreter against a temporary repository to check recipe node counts and runner metadata without importing the source checkout. Repository-dependent commands use their source checkout when installed editable; with a wheel, run them from the repository root. Eval YAML/JSON resources and the Apache license ship with the package.
+
+Use `uv add` for core dependencies, `uv add --optional <extra>` for an integration, or `uv add --group test` for test-only tools. Commit both the manifest and lockfile. `uv lock --upgrade-package <name>` updates a dependency; resolution enforces a 12-hour age cutoff from `pyproject.toml`. Ruff and Zizmor remain outside the lockfile so their CI checks keep using the latest eligible release. Benchmark images, vendor eval environments, and commands that measure historical checkouts retain their existing dependency setup.
 
 ### Python lint and formatting
 
@@ -107,13 +115,13 @@ Parsing is only the first gate. Do not report a YAML parse as matrix validation.
 ### Exact config, then filtered family
 
 ```bash
-uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+uv run --locked \
   python -m infx.matrix.generate test-config \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --config-keys <exact-key>
 
-uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+uv run --locked \
   python -m infx.matrix.generate full-sweep \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
@@ -155,11 +163,11 @@ A local matrix cannot prove Slurm allocation or llm-d endpoint discovery. Multi-
 
 The existing Python suites cover workflow contracts too. `utils/matrix_logic/test_validation.py` tests the workflow input schemas and runs both preparation scripts with controlled generator output. Invalid rows must fail before publishing job outputs; accepted rows must remain unchanged, including when manual dispatch measures an older checkout. `utils/test_process_result.py` executes the shipped launch step with a recording launcher for current and historical checkouts. These tests do not emulate GitHub's expression engine or prove GPU performance; review expression changes with workflow validation and applicable smoke evidence.
 
-With the test dependencies installed, add [`pytest-xdist`](https://pytest-xdist.readthedocs.io/en/stable/distribution.html) to the same Python environment and run all local suites with four workers:
+Run the same locked environment and four-worker suite as CI:
 
 ```bash
-python -m pip install pytest-xdist
-python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
+uv run --locked --group test --no-editable \
+  python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
 ```
 
 Use `-n 0` for serial debugging. Tests must keep temporary files and ports isolated and collect deterministic parameter cases across workers. The changelog-gate CI job also uses four workers; parallel execution preserves its test selection and assertions.

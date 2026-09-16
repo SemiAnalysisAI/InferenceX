@@ -1,0 +1,50 @@
+[project]
+name = "infx"
+version = "0.1.0"
+description = "Configuration, workflow, and result tooling for InferenceX"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+dependencies = [
+    "pydantic>=2.10,<3",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+workflows = ["codeowners", "PyGithub"]
+results = ["psycopg2-binary", "tabulate"]
+
+[dependency-groups]
+mcp = ["gitpython>=3.1.40", "mcp>=0.9.0,<2"]
+test = [
+    { include-group = "mcp" },
+    "aiohttp",
+    "codeowners",
+    "matplotlib",
+    "numpy",
+    "packaging",
+    "pytest",
+    "pytest-xdist",
+    "tabulate",
+    "torch",
+    "transformers",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.0,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv]
+exclude-newer = "PT12H"
+
+[tool.uv.build-backend]
+module-root = ""
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform != 'darwin'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

@@ -7,7 +7,6 @@ import json
 import re
 import subprocess
 import sys
-from pathlib import Path
 from typing import Any
 
 import yaml
@@ -278,7 +277,8 @@ def validate_generated_config(
     """Run the same changelog processor used by sweep setup."""
     command = [
         sys.executable,
-        str(Path(__file__).resolve().parents[2] / "utils/process_changelog.py"),
+        "-m",
+        "infx.matrix.plan",
         "--changelog-file",
         path,
         "--base-ref",
