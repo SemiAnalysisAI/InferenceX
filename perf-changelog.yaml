@@ -7873,6 +7873,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2823
 
 - config-keys:
+    - dsv4-fp8-h200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh DeepSeek-V4-Pro-0813 FP8 H200 Dynamo+SGLang AgentX aggregate serving with DSpark K=6."
+    - "Image: lmsysorg/sglang:nightly-dev-20260914-4358a161"
+    - "Update simulated acceptance length from 2.49 to 3.77 and replace the removed cuda-graph-max-bs flag with cuda-graph-max-bs-decode."
+    - "Preserve the eight-hour DSV4 AgentX allocation through the H200 launcher's default time limit."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3100
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
   scenario-type:
     - agentic-coding

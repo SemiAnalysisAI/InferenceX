@@ -16,7 +16,10 @@ from infx.workflows.reuse import write_outputs
 
 def required_owners(repo: str, pr: dict[str, Any], token: str) -> list[str]:
     files = github.paginate(repo, f"/pulls/{pr['number']}/files", token, "")
-    if len(files) != pr["changed_files"]:
+    # GitHub lists a symlink-to-file change as removed and added entries for
+    # one path, while changed_files counts that path once. Keep every entry
+    # below so ownership checks still include all previous_filename values.
+    if len({file["filename"] for file in files}) != pr["changed_files"]:
         raise RuntimeError("Incomplete changed-file list; cannot determine sign-off scope")
     params = {"ref": pr["base"]["sha"]}
     errors = github.api(repo, "/codeowners/errors", token, params)
