@@ -94,10 +94,12 @@ Each artifact records the actual GPU, framework versions, image, source SHA,
 correctness status, and measurements. The existing allocation/stage cleanup
 also runs on failure. CPU CI is separate and does not establish GPU correctness.
 
-The workflow imports H100 images on the submit host because the compute pods reject
-enroot whiteout conversion; other pools import on their allocated compute nodes.
-H100 uses private `/var/tmp` scratch, including GNU parallel's temporary output;
-other pools use `/tmp`. Compute imports log the filesystem and enroot version to diagnose host-level
+H100 first checks the operator-staged serving-image cache at
+`/mnt/nfs/lustre/containers` for the exact requested image tag, matching the serving
+launcher's filename convention. A valid staged squash is reused without importing
+inside the compute pod. If absent, the regular import path reports its failure.
+The workflow selects `/var/tmp` for H100 container-import scratch and `/tmp` for
+other pools. Imports log the filesystem and enroot version to diagnose host-level
 whiteout conversion failures. Job-private import scratch is removed on exit. Slurm node exclusions are
 intersected with the current node inventory: retired names cannot invalidate the
 allocation, while exclusions of existing nodes are preserved. B300/GB300 use the
