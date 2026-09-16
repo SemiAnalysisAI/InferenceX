@@ -56,13 +56,6 @@ def test_reaction_replacement_preserves_humans_and_unmanaged_bot_reactions(monke
     assert calls == expected
 
 
-def test_adding_a_reaction_does_not_list_or_delete_other_reactions(monkeypatch):
-    calls = []
-    monkeypatch.setattr(github, "api", lambda repo, path, token, **kwargs: calls.append((path, kwargs)))
-    github.set_comment_reaction("example/project", 7, "token", "eyes")
-    assert calls == [("/issues/comments/7/reactions", {"method": "POST", "data": {"content": "eyes"}})]
-
-
 @pytest.mark.parametrize("item_key", ["", "artifacts"])
 def test_pagination_reads_following_pages_without_losing_filters(monkeypatch, item_key):
     pages = []

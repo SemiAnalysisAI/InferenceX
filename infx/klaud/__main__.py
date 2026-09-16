@@ -236,9 +236,11 @@ def plan(root: Path, directory: Path) -> None:
     # Private selection hints for the read-only reviewer; excluded from artifacts.
     (directory / "capacity.json").write_text(json.dumps(capacity) + "\n")
     if filename := os.environ.get("GITHUB_OUTPUT"):
+        schema = PRReview.model_json_schema(by_alias=True)
+        schema["properties"]["decisions"].update(minItems=len(contexts), maxItems=len(contexts))
         with open(filename, "a") as output:
             output.write(f"has_candidates={str(bool(candidates)).lower()}\n")
-            output.write(f"review_schema={json.dumps(PRReview.model_json_schema(by_alias=True))}\n")
+            output.write(f"review_schema={json.dumps(schema)}\n")
 
 
 def denied_bash_category(denial: dict) -> str:
@@ -465,10 +467,10 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
             try:
                 review = PRReview.model_validate_json(os.environ.get("KLAUD_PR_REVIEW", ""))
                 ids = [decision.candidate_id for decision in review.decisions]
-                if len(set(ids)) != len(ids) or not set(ids) <= {
+                if len(set(ids)) != len(ids) or set(ids) != {
                     candidate["id"] for candidate in contexts
                 }:
-                    raise ValueError("Duplicate or unknown candidate IDs")
+                    raise ValueError("Review must cover every candidate exactly once")
                 expected = {candidate["id"]: candidate["family"] for candidate in contexts}
                 if any(
                     decision.family != expected[decision.candidate_id]
@@ -705,17 +707,21 @@ def main() -> int:
             return 0
         if args.command == "check-final":
             from .lifecycle import current_session
+            from .reporting import baseline_for, check_baseline_coverage
             from .validation import canonical_matrix, check_matrix
 
             session = current_session()
             pull = session.pulls()[0]
             head = pull["head"]["sha"]
+            matrix = json.loads(args.matrix_file.read_text())
+            canonical = canonical_matrix(session.repository, head, session.candidate.family)
             check_matrix(
-                json.loads(args.matrix_file.read_text()),
-                canonical_matrix(session.repository, head, session.candidate.family),
+                matrix,
+                canonical,
                 head,
                 session.candidate.family,
             )
+            check_baseline_coverage(canonical, baseline_for(session, pull))
             return 0
         if args.command == "recover-current":
             from .lifecycle import PendingCleanup, current_session, reconcile
