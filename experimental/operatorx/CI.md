@@ -72,7 +72,9 @@ Do not infer that Blackwell-specific FP4 kernels work on Hopper.
   forwards account, QoS, and quarantined nodes; B300/GB pools retain their existing
   remap-root and memory settings. B300 leaves QoS selection to its partition/account,
   matching the inference launcher; the former `batch_1_qos` override is rejected
-  by the current cluster. GB300 retains its configured QoS.
+  by the current cluster. Its former excluded node names also do not exist in
+  this pool and have been removed; Slurm still honors drained nodes. GB300 retains
+  its configured QoS and exclusions.
 - The launcher remains active through allocation, import, and execution. The
   allocation time limit is 45 minutes; Actions permits 70 minutes including
   queueing and cleanup. Slurm job names match the Actions runner name.
