@@ -352,6 +352,16 @@ if [[ $MODEL_PREFIX == "kimik2.6" ]] ||
     SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
 fi
 
+# NScale's runner association supports salloc but rejects real sbatch even when
+# `sbatch --test-only` accepts the identical request. Put a narrow adapter named
+# sbatch ahead of Slurm in PATH for srtctl's single submission call.
+NSCALE_SBATCH_ADAPTER_DIR="$GITHUB_WORKSPACE/.nscale-sbatch-adapter"
+export NSCALE_SALLOC_STATE_DIR="$GITHUB_WORKSPACE/.nscale-salloc"
+mkdir -p "$NSCALE_SBATCH_ADAPTER_DIR" "$NSCALE_SALLOC_STATE_DIR"
+cp "$GITHUB_WORKSPACE/runners/nscale_sbatch_adapter.sh" "$NSCALE_SBATCH_ADAPTER_DIR/sbatch"
+chmod +x "$NSCALE_SBATCH_ADAPTER_DIR/sbatch"
+export PATH="$NSCALE_SBATCH_ADAPTER_DIR:$PATH"
+
 SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
@@ -368,10 +378,22 @@ echo "Extracted JOB_ID: $JOB_ID"
 
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
+touch "$NSCALE_SALLOC_STATE_DIR/${JOB_ID}.ready"
 
 # Waits for the log file to appear, fails fast if the job dies first, then
 # streams until the job leaves the queue.
 stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+
+NSCALE_EXIT_FILE="${LOG_FILE}.exit-code"
+if [[ ! -f "$NSCALE_EXIT_FILE" ]]; then
+    echo "Error: NScale allocation $JOB_ID ended without an orchestrator exit status" >&2
+    exit 1
+fi
+NSCALE_EXIT_CODE="$(cat "$NSCALE_EXIT_FILE")"
+if [[ "$NSCALE_EXIT_CODE" != "0" ]]; then
+    echo "Error: NScale orchestrator failed with exit code $NSCALE_EXIT_CODE" >&2
+    exit "$NSCALE_EXIT_CODE"
+fi
 
 set -x
 
