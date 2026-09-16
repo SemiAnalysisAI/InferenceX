@@ -81,8 +81,8 @@
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749,35154018672",
   "status": "Checkout fallback verified; published compatible image pushed. Image-fix retry not dispatched because capacity check closed.",
   "last_capacity_check": {
-    "checked_at": "2026-09-16T22:59:33.570390+00:00",
-    "cluster_observed_at": "2026-09-16T22:59:04.000Z",
+    "checked_at": "2026-09-16T23:30:25.483717+00:00",
+    "cluster_observed_at": "2026-09-16T23:29:57.000Z",
     "cluster_stale": false,
     "idle_nodes": 0,
     "total_nodes": 11,
@@ -91,15 +91,15 @@
       "15749",
       "15763"
     ],
-    "scheduler_snapshot_at": "2026-09-16T22:59:00.000Z",
+    "scheduler_snapshot_at": "2026-09-16T23:30:00.000Z",
     "scheduler_available": true,
-    "b200_queued_jobs": 26,
+    "b200_queued_jobs": 23,
     "competing_run_ids": [
       35156261493,
       35157470870
     ],
-    "active_reservations_global": 1,
-    "reserved_nodes_global": 2,
+    "active_reservations_global": 2,
+    "reserved_nodes_global": 3,
     "dispatch_allowed": false,
     "reason": "No eligible idle B200 nodes; competing queued work. No workflow dispatched."
   },
