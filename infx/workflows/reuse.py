@@ -2,8 +2,8 @@
 
 This script is used by ``run-sweep.yml`` on push-to-main runs.  It only enables
 reuse when the merge commit maps unambiguously to one pull request and a
-maintainer has left a ``/reuse-sweep-run`` comment on that PR.  The comment
-may include a specific source run ID; without one, the latest successful
+maintainer has left a ``/use <run_id>`` or legacy ``/reuse-sweep-run`` comment.
+The legacy command may omit the source run ID; without one, the latest successful
 ``pull_request`` ``run-sweep.yml`` run for the PR head is used.
 """
 
@@ -72,10 +72,14 @@ def result(
 
 def parse_reuse_command(body: str, command: str = "/reuse-sweep-run") -> tuple[bool, int | None]:
     """Use the last standalone command in a comment, preserving unpinned requests."""
-    matches = re.findall(rf"(?m)^\s*{re.escape(command)}(?:[^\S\r\n]+(\d+))?\s*$", body)
+    pattern = rf"{re.escape(command)}(?:[^\S\r\n]+(\d+))?"
+    if command == "/reuse-sweep-run":
+        pattern += r"|/use[^\S\r\n]+(\d+)"
+    matches = list(re.finditer(rf"(?m)^\s*(?:{pattern})\s*$", body))
     if not matches:
         return False, None
-    return True, int(matches[-1]) if matches[-1] else None
+    run_id = next((value for value in matches[-1].groups() if value), None)
+    return True, int(run_id) if run_id else None
 
 
 def find_reuse_request(

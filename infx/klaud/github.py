@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import base64
 import io
-import json
 import subprocess
 import zipfile
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote
+
+from infx import github
 
 
 class VerificationError(ValueError):
@@ -16,34 +17,18 @@ class VerificationError(ValueError):
 
 
 def read(repository: str, path: str, *, paginate: bool = False) -> list | dict:
-    args = ["gh", "api", "--method", "GET"]
-    if paginate:
-        args.extend(["--paginate", "--slurp"])
-    return json.loads(
-        subprocess.check_output([*args, f"repos/{repository}/{path}"], text=True, timeout=60)
-    )
+    return github.api(repository, path, paginate=paginate)
 
 
 def items(repository: str, path: str, key: str | None = None) -> list[dict]:
-    pages = read(repository, path, paginate=True)
-    if not isinstance(pages, list) or not pages:
-        raise VerificationError("Missing GitHub listing")
-    rows = [row for page in pages for row in (page[key] if key else page)]
-    if key and any(page["total_count"] > len(rows) for page in pages):
-        raise VerificationError("Incomplete GitHub listing")
-    return rows
+    try:
+        return github.paginate(repository, path, item_key=key or "")
+    except github.ListingError as error:
+        raise VerificationError(str(error)) from error
 
 
 def write(repository: str, path: str, method: str, payload: dict | None = None) -> dict:
-    result = subprocess.run(
-        ["gh", "api", "--method", method, f"repos/{repository}/{path}", "--input", "-"],
-        input=json.dumps(payload or {}),
-        text=True,
-        capture_output=True,
-        timeout=60,
-        check=True,
-    )
-    return json.loads(result.stdout) if result.stdout.strip() else {}
+    return github.api(repository, path, method=method, data=payload)
 
 
 def artifacts(repository: str, run_id: int) -> list[dict]:

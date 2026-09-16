@@ -211,6 +211,8 @@ jobs:
         name: get-jobs
         runs-on: ubuntu-latest
         outputs:
+            benchmark-ref: ${{ steps.checkout-ref.outputs.commit || steps.checkout-default.outputs.commit }}
+            tooling-ref: ${{ steps.tooling.outputs.result }}
             single-node-config: ${{ steps.get-jobs.outputs.single-node-config }}
             multi-node-config: ${{ steps.get-jobs.outputs.multi-node-config }}
             eval-config: ${{ steps.get-jobs.outputs.eval-config }}
@@ -221,6 +223,7 @@ jobs:
             multi-node-agentic-eval-config: ${{ steps.get-jobs.outputs.multi-node-agentic-eval-config }}
         steps:
             - name: Checkout code (ref)
+              id: checkout-ref
               if: ${{ inputs.ref && inputs.ref != '' }}
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
@@ -229,11 +232,28 @@ jobs:
                 persist-credentials: false
 
             - name: Checkout code (default)
+              id: checkout-default
               if: ${{ !inputs.ref || inputs.ref == '' }}
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                 ref: ${{ github.sha }}
                 persist-credentials: false
+            - name: Resolve workflow tooling
+              id: tooling
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              env:
+                CHECKOUT_SHA: ${{ steps.checkout-ref.outputs.commit || steps.checkout-default.outputs.commit }}
+              with:
+                result-encoding: string
+                script: |
+                  const { data } = await github.rest.repos.getCommit({
+                    ...context.repo, ref: context.payload.repository.default_branch,
+                  });
+                  await core.summary.addHeading('Revisions', 2).addTable([
+                    ['Setup checkout', process.env.CHECKOUT_SHA],
+                    ['infx tooling', data.sha],
+                  ]).write();
+                  return data.sha;
             - name: Checkout workflow tooling
               if: ${{ inputs.ref && inputs.ref != '' }}
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -356,7 +376,7 @@ jobs:
             run-eval: false
             require-power: ${{ inputs.require-power || (matrix.config['require-power'] == true && matrix.config['eval-only'] != true) }}
             power-producer-sha: ${{ inputs.power-producer-sha }}
-            ref: ${{ inputs.ref }}
+            ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
 
     test-sweep-multi-node-evals:
         needs: get-jobs
@@ -387,7 +407,7 @@ jobs:
             eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
-            ref: ${{ inputs.ref }}
+            ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
 
     test-sweep-agentic:
         needs: get-jobs
@@ -415,7 +435,7 @@ jobs:
             run-eval: false
             require-power: ${{ inputs.require-power }}
             scenario-type: agentic-coding
-            ref: ${{ inputs.ref }}
+            ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
 
     test-sweep-agentic-evals:
         needs: get-jobs
@@ -447,7 +467,7 @@ jobs:
             eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             scenario-type: agentic-coding
-            ref: ${{ inputs.ref }}
+            ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
 
     test-sweep-multi-node-agentic:
         needs: get-jobs
@@ -478,7 +498,7 @@ jobs:
             require-power: ${{ inputs.require-power }}
             power-producer-sha: ${{ inputs.power-producer-sha }}
             scenario-type: agentic-coding
-            ref: ${{ inputs.ref }}
+            ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
 
     test-sweep-multi-node-agentic-evals:
         needs: get-jobs
@@ -512,7 +532,7 @@ jobs:
             eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             scenario-type: agentic-coding
-            ref: ${{ inputs.ref }}
+            ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
 
     test-sweep-single-node:
         needs: get-jobs
@@ -537,7 +557,7 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
             require-power: ${{ inputs.require-power || (matrix.config['require-power'] == true && matrix.config['eval-only'] != true) }}
-            ref: ${{ inputs.ref }}
+            ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
 
     test-sweep-evals:
         needs: get-jobs
@@ -566,26 +586,29 @@ jobs:
             eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
-            ref: ${{ inputs.ref }}
+            ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
 
     collect-results:
         name: collect-results
-        needs: [test-sweep-multi-node, test-sweep-single-node, test-sweep-agentic, test-sweep-multi-node-agentic]
+        needs: [get-jobs, test-sweep-multi-node, test-sweep-single-node, test-sweep-agentic, test-sweep-multi-node-agentic]
         if: ${{ always() && (needs.test-sweep-multi-node.result != 'skipped' || needs.test-sweep-single-node.result != 'skipped' || needs.test-sweep-agentic.result != 'skipped' || needs.test-sweep-multi-node-agentic.result != 'skipped') }}
         uses: $/.github/workflows/collect-results.yml
         with:
             result-prefix: "bmk"
+            tooling-ref: ${{ needs.get-jobs.outputs.tooling-ref }}
 
     collect-evals:
         name: collect-evals
-        needs: [test-sweep-evals, test-sweep-multi-node-evals, test-sweep-agentic-evals, test-sweep-multi-node-agentic-evals]
+        needs: [get-jobs, test-sweep-evals, test-sweep-multi-node-evals, test-sweep-agentic-evals, test-sweep-multi-node-agentic-evals]
         if: ${{ always() && (needs.test-sweep-evals.result != 'skipped' || needs.test-sweep-multi-node-evals.result != 'skipped' || needs.test-sweep-agentic-evals.result != 'skipped' || needs.test-sweep-multi-node-agentic-evals.result != 'skipped') }}
         uses: $/.github/workflows/collect-evals.yml
+        with:
+            tooling-ref: ${{ needs.get-jobs.outputs.tooling-ref }}
 
     calc-success-rate:
         name: calc-success-rate
-        needs: [collect-results, collect-evals]
-        if: ${{ always() }}
+        needs: [get-jobs, collect-results, collect-evals]
+        if: ${{ always() && needs.get-jobs.outputs.tooling-ref != '' }}
         runs-on: ubuntu-latest
 
         env:
@@ -597,6 +620,7 @@ jobs:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   token: ${{ secrets.REPO_PAT }}
+                  ref: ${{ needs.get-jobs.outputs.tooling-ref }}
                   fetch-depth: 0
                   persist-credentials: false
 
@@ -611,7 +635,7 @@ jobs:
 
             - name: Calculate success rate
               run: >-
-                  uv run --no-project --exclude-newer PT12H --python 3.12 --with PyGithub --with pyyaml
+                  uv run --locked --extra workflows
                   python -m infx.workflows.calc_success_rate "$STATS_FILENAME"
 
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

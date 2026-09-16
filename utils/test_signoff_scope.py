@@ -3,7 +3,8 @@ from __future__ import annotations
 import base64
 import copy
 import json
-from urllib.parse import quote
+import subprocess
+from urllib.parse import parse_qsl, quote
 
 import pytest
 
@@ -34,8 +35,7 @@ def scope_case(monkeypatch):
         if path == "/pulls/7/files":
             if callback := case.get("during_listing"):
                 callback()
-            page = int(params["page"]) - 1
-            return case["files"][page * 100:(page + 1) * 100]
+            return case["files"]
         if path == "/codeowners/errors":
             if params == {"ref": "stale-base"}:
                 return {"errors": [{"kind": "Unknown owner"}]}
@@ -55,7 +55,17 @@ def scope_case(monkeypatch):
             return data
         raise AssertionError((method, path))
 
-    monkeypatch.setattr(signoff_scope.github, "api", api)
+    def run(args, **kwargs):
+        endpoint = next(arg for arg in args if arg.startswith("repos/"))
+        path, _, query = endpoint.split("/", 3)[3].partition("?")
+        response = api("example/repo", "/" + path, kwargs["env"]["GH_TOKEN"],
+                       dict(parse_qsl(query)) or None, method=args[args.index("--method") + 1],
+                       data=json.loads(kwargs["input"]) if kwargs["input"] else None)
+        if "--slurp" in args:
+            response = [response[:100], response[100:]] if response else [[]]
+        return subprocess.CompletedProcess(args, 0, json.dumps(response), "")
+
+    monkeypatch.setattr(signoff_scope.github.subprocess, "run", run)
     return case
 
 
