@@ -267,10 +267,7 @@ case "$CONC" in
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=16384
         ;;
-    # The speculative envelope descends with concurrency: drafting spends spare
-    # compute, and there is less of it to spend as the batch grows. Each k is
-    # paired with its own acceptance length -- changing one without the other
-    # measures nothing.
+    # k descends with concurrency; each k is paired with its own AL.
     4)
         SYNTHETIC_ACCEPT_LEN=3.62
         SPEC_NUM_TOKENS=5
@@ -302,20 +299,23 @@ case "$CONC" in
 esac
 
 # ---- DSpark draft ------------------------------------------------------------
-# Used as published. vLLM #55966 ("Add Aiter MLA decode support non-causal draft
-# block") landed upstream, so ROCM_AITER_MLA now accepts the stock
-# Inferact/Kimi-K3-DSpark checkpoint, which ships "dflash_config": null. The
-# earlier revision of this PR rewrote that field to {"causal": true} in a local
-# copy; that is no longer necessary and has been dropped.
+# Published checkpoint, unmodified. vLLM #55966 makes ROCM_AITER_MLA accept its
+# non-causal dflash_config, so the local causal rewrite is no longer needed.
 DSPARK_DRAFT_PATH="${DSPARK_DRAFT_PATH:-Inferact/Kimi-K3-DSpark}"
 
 # ---- CUDA graph mode ---------------------------------------------------------
-# FULL_AND_PIECEWISE requires either a torch-compiled model or breakable CUDA
-# graphs. Kimi-K3's AMD classes carry no @support_torch_compile and this recipe
-# runs VLLM_USE_BREAKABLE_CUDAGRAPH=0, so on rocm100 nightlies that pairing is
-# refused at startup. FULL captures the same decode shapes without that
-# requirement. Overridable for A/B.
-CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL}"
+# FULL_AND_PIECEWISE needs breakable graphs (no @support_torch_compile on K3 AMD).
+# Breakable costs ~1/3 of the KV pool at conc 44+, where conc 48 deadlocks at 86%.
+case "$CONC" in
+    1|4|8|10|12|14)
+        CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL_AND_PIECEWISE}"
+        export VLLM_USE_BREAKABLE_CUDAGRAPH=1
+        ;;
+    *)
+        CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL}"
+        export VLLM_USE_BREAKABLE_CUDAGRAPH=0
+        ;;
+esac
 
 SPEC_ARGS=()
 if [ "$SPEC_NUM_TOKENS" -gt 0 ]; then
