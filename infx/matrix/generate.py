@@ -420,7 +420,7 @@ def agentic_dram_offload_gb(
       budgeted separately if it ever gains its own pool).
     """
     kv_offloading = benchmark.get(Fields.KV_OFFLOADING.value, "none")
-    if kv_offloading != "dram":
+    if kv_offloading not in {"dram", "dram-nvme"}:
         return 0
 
     available_mib = min(
@@ -987,6 +987,8 @@ def _agentic_entries(
         entry.update(component_metadata(benchmark, config))
         if is_multinode:
             add_multinode_node_count(entry, runner_data, benchmark.get(Fields.NUM_NODES.value))
+        if config.get("experiment") is not None:
+            entry["experiment"] = config["experiment"]
         entries.append(validate_agentic_matrix_entry(entry))
     return entries
 

@@ -1,0 +1,74 @@
+agentx-offload-none:
+  experiment: agentx-offload
+  image: vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
+  model: nvidia/MiniMax-M3-NVFP4
+  model-prefix: minimaxm3
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.683
+      search-space:
+      - tp: 4
+        spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [1, 4, 8, 16, 32, 64, 128, 256, 1024, 4096, 16384]
+
+agentx-offload-dram:
+  experiment: agentx-offload
+  image: vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
+  model: nvidia/MiniMax-M3-NVFP4
+  model-prefix: minimaxm3
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.683
+      search-space:
+      - tp: 4
+        spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [1, 4, 8, 16, 32, 64, 128, 256, 1024, 4096, 16384]
+
+agentx-offload-nvme:
+  experiment: agentx-offload
+  image: vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
+  model: nvidia/MiniMax-M3-NVFP4
+  model-prefix: minimaxm3
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.683
+      search-space:
+      - tp: 4
+        spec-decoding: mtp
+        kv-offloading: nvme
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [1, 4, 8, 16, 32, 64, 128, 256, 1024, 4096, 16384]
+
+agentx-offload-dram-nvme:
+  experiment: agentx-offload
+  image: vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
+  model: nvidia/MiniMax-M3-NVFP4
+  model-prefix: minimaxm3
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.683
+      search-space:
+      - tp: 4
+        spec-decoding: mtp
+        kv-offloading: dram-nvme
+        kv-offload-backend: { name: vllm-native }
+        conc-list: [1, 4, 8, 16, 32, 64, 128, 256, 1024, 4096, 16384]

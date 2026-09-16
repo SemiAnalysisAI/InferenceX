@@ -137,6 +137,7 @@ env:
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
   SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
   IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
+  INFERENCEX_EXPERIMENT: ${{ fromJSON(inputs.config).experiment || '' }}
   KV_OFFLOADING: ${{ inputs.scenario-type == 'agentic-coding' && format('{0}', fromJSON(inputs.config).kv-offloading) || '' }}
   KV_OFFLOAD_BACKEND: ${{ inputs.scenario-type == 'agentic-coding' && format('{0}', fromJSON(inputs.config).kv-offload-backend.name) || '' }}
   KV_OFFLOAD_BACKEND_METADATA: ${{ inputs.scenario-type == 'agentic-coding' && fromJSON(inputs.config).kv-offload-backend && toJSON(fromJSON(inputs.config).kv-offload-backend) || '' }}

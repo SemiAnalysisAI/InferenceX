@@ -306,6 +306,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
+    experiment: Literal["agentx-offload"] | None = None
     image: str
     model: str
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
@@ -322,7 +323,9 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
         default="none", alias=Fields.SPEC_DECODING.value
     )
     conc: int
-    kv_offloading: Literal["none", "dram"] = Field(alias=Fields.KV_OFFLOADING.value)
+    kv_offloading: Literal["none", "dram", "nvme", "dram-nvme"] = Field(
+        alias=Fields.KV_OFFLOADING.value
+    )
     kv_offload_backend: KVOffloadBackendMetadata | None = Field(
         default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
     )
@@ -637,7 +640,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     prefill: WorkerConfig | None = None
     decode: WorkerConfig | None = None
     num_nodes: int | None = Field(default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
-    kv_offloading: Literal["none", "dram"] | None = Field(
+    kv_offloading: Literal["none", "dram", "nvme", "dram-nvme"] | None = Field(
         default=None, alias=Fields.KV_OFFLOADING.value
     )
     kv_offload_backend: KVOffloadBackendMetadata | None = Field(
@@ -720,7 +723,7 @@ class AgenticCodingConfig(BaseModel):
     @model_validator(mode="after")
     def validate_dram_offload_capacity(self) -> Self:
         for entry in self.search_space:
-            if entry.kv_offloading != "dram":
+            if entry.kv_offloading not in {"dram", "dram-nvme"}:
                 continue
             if self.dram_utilization is None:
                 raise ValueError(
@@ -874,6 +877,7 @@ class SingleNodeMasterConfigEntry(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
+    experiment: Literal["agentx-offload"] | None = None
     image: str
     model: str
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
@@ -884,6 +888,26 @@ class SingleNodeMasterConfigEntry(BaseModel):
     disagg: Literal[False] = Field(default=False)
     router: ComponentMetadata | None = None
     scenarios: SingleNodeScenarios
+
+    @model_validator(mode="after")
+    def validate_experiment(self) -> Self:
+        if self.experiment is not None and (
+            self.runner != "cluster:b200-nscale"
+            or self.model != "nvidia/MiniMax-M3-NVFP4"
+            or self.model_prefix != "minimaxm3"
+            or self.precision != "fp4"
+            or self.framework != "vllm"
+            or self.scenarios.fixed_seq_len is not None
+            or self.scenarios.agentic_coding is None
+        ):
+            raise ValueError("agentx-offload requires MiniMax-M3 NVFP4 B200 vLLM AgentX")
+        for scenario in self.scenarios.agentic_coding or []:
+            for entry in scenario.search_space:
+                if entry.kv_offloading in {"nvme", "dram-nvme"} and self.experiment is None:
+                    raise ValueError("NVMe tiers currently require experiment=agentx-offload")
+                if self.experiment is not None and (entry.tp != 4 or entry.spec_decoding != "mtp"):
+                    raise ValueError("agentx-offload requires TP4 with MTP")
+        return self
 
     @model_validator(mode="after")
     def validate_agentic_runner(self) -> Self:

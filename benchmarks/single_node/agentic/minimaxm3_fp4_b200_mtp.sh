@@ -102,7 +102,11 @@ resolve_trace_source
 install_agentic_deps
 
 OFFLOAD_ARGS=()
-if require_agentic_kv_offload_backend vllm-simple; then
+EXPERIMENT_ARGS=()
+if [[ "${INFERENCEX_EXPERIMENT-}" == "agentx-offload" ]]; then
+    source "$(dirname "$0")/../../../experiments/agentx-offload/configure.sh"
+    configure_offload_experiment
+elif require_agentic_kv_offload_backend vllm-simple; then
     python3 "$(dirname "$0")/../../../runners/patch_vllm_simple_kv_offload.py"
     CPU_OFFLOAD_BYTES=$((TOTAL_CPU_DRAM_GB * 1024 * 1024 * 1024))
     export VLLM_USE_SIMPLE_KV_OFFLOAD=1
@@ -130,6 +134,9 @@ cleanup_agentic_services() {
     trap - EXIT INT TERM
     set +e
     stop_background_process_tree "$SERVER_PID" "vLLM server" 60
+    if [[ "${INFERENCEX_EXPERIMENT-}" == "agentx-offload" ]]; then
+        finish_offload_experiment "$exit_code" || exit_code=1
+    fi
     exit "$exit_code"
 }
 trap cleanup_agentic_services EXIT
@@ -170,6 +177,7 @@ VLLM_CMD=(
     --trust-remote-code
     --speculative-config "$SPEC_CONFIG"
     "${OFFLOAD_ARGS[@]}"
+    "${EXPERIMENT_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"

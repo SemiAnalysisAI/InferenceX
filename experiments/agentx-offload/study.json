@@ -1,0 +1,29 @@
+{
+  "study": "agentx-offload-v1",
+  "base_commit": "30109f306",
+  "model": "nvidia/MiniMax-M3-NVFP4",
+  "tp": 4,
+  "hbm_bytes_per_gpu": 85899345920,
+  "dram_bytes_per_node": 739000000000,
+  "nvme_bytes_per_node": 1099511627776,
+  "profile_seconds": 3600,
+  "warmup_requests_per_lane": 10,
+  "seed": 42,
+  "max_concurrency": 16384,
+  "initial_matched_concurrency": 16,
+  "concurrency_candidates": [
+    1,
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    1024,
+    4096,
+    16384
+  ],
+  "legacy_results_imported": false,
+  "run_transport": "InferenceX e2e-tests.yml and priority scheduler only"
+}

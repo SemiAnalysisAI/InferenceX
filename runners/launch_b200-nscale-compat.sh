@@ -439,6 +439,9 @@ else
     if [[ ! -f "$BENCH_SCRIPT" ]]; then
         BENCH_SCRIPT="${BENCH_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
     fi
+    if [[ "${INFERENCEX_EXPERIMENT-}" == "agentx-offload" ]]; then
+        BENCH_SCRIPT="experiments/agentx-offload/run.sh"
+    fi
     LOCK_FILE="${SQUASH_FILE}.lock"
 
     # TODO(Cam): lmsysorg/sglang:deepseek-v4-blackwell installs sglang editable at
@@ -488,6 +491,12 @@ else
             enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
         fi
     "
+
+    if [[ "${INFERENCEX_EXPERIMENT-}" == "agentx-offload" ]]; then
+        # Each workflow owns an exclusive allocation. The experiment creates and
+        # cleans only its unique child of this node-local mount.
+        CONTAINER_MOUNTS+=",/scratch:/offload-scratch"
+    fi
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \

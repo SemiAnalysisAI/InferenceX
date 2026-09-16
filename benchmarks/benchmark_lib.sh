@@ -289,13 +289,23 @@ if [[ "$_benchmark_caller" == */agentic/* ||
                 exit 1
             fi
             ;;
-        dram)
+        dram|dram-nvme)
+            if [[ "$KV_OFFLOADING" == dram-nvme && ( "${INFERENCEX_EXPERIMENT-}" != agentx-offload || "${KV_OFFLOAD_BACKEND-}" != vllm-native ) ]]; then
+                echo "Error: combined tiers require the agentx-offload experiment and vllm-native backend" >&2
+                exit 1
+            fi
             if [[ -z "${KV_OFFLOAD_BACKEND:-}" || "${KV_OFFLOAD_BACKEND:-}" == "none" ]]; then
-                echo "Error: KV_OFFLOAD_BACKEND is required when KV_OFFLOADING=dram" >&2
+                echo "Error: KV_OFFLOAD_BACKEND is required when KV_OFFLOADING=$KV_OFFLOADING" >&2
                 exit 1
             fi
             if [[ ! "${TOTAL_CPU_DRAM_GB:-}" =~ ^[1-9][0-9]*$ ]]; then
                 echo "Error: DRAM KV offloading requires a positive configured TOTAL_CPU_DRAM_GB capacity" >&2
+                exit 1
+            fi
+            ;;
+        nvme)
+            if [[ "${INFERENCEX_EXPERIMENT-}" != "agentx-offload" || "${KV_OFFLOAD_BACKEND-}" != "vllm-simple" ]]; then
+                echo "Error: NVMe requires the agentx-offload experiment and vllm-simple backend" >&2
                 exit 1
             fi
             ;;

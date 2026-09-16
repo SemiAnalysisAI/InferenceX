@@ -1,0 +1,6 @@
+{
+  "study": "agentx-offload-v1",
+  "runs": [],
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu",
+  "status": "Ready for first matched workflow set after capacity check"
+}
