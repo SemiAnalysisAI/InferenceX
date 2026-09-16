@@ -8,9 +8,9 @@ set -x
 # apply_k3_container_patches.sh is not sourced: it targets a patched vLLM container.
 #
 # Serving bands, one fresh server per concurrency point:
-#   interactive (1, 2, 4)         DCP1, DSpark 7, no LMCache
-#   mid         (8, 12, 14, 16)   DCP8, DSpark 3, LMCache 128 GB/rank
-#   throughput  (32, 40, 56, 64)  DCP8, no draft model, LMCache 128 or 192 GB/rank
+#   interactive (1, 2, 4)                 DCP1, DSpark 7, no LMCache
+#   mid         (8, 16)                   DCP8, DSpark 3, LMCache 128 GB/rank
+#   throughput  (32, 40, 48, 56, 64, 72)  DCP8, no draft, LMCache 128 or 192 GB/rank
 #
 # Required env vars:
 #   MODEL, MODEL_PATH, TP, DCP_SIZE, CONC, KV_OFFLOADING, KV_OFFLOAD_BACKEND,
@@ -95,90 +95,31 @@ trap 'exit 143' TERM
 # so DCP8 (from dcp-size in configs/amd-master.yaml), LMCache DRAM tier, and
 # ReplaySSM rebuilding KDA state from the checkpoint ring. Throughput band:
 # past the knee the draft forward no longer pays for itself, so no draft.
-# CUDAGRAPH_MAX_NUM_SEQS defaults to 2 * CONC; only concurrency 14 pins it
-# because it runs the concurrency 16 server verbatim.
+MAX_NUM_BATCHED_TOKENS=8192
+GPU_MEM_UTIL=0.90
 AITER_REUSE_IDENTICAL_COMM_GROUPS=0
-CUDAGRAPH_MAX_NUM_SEQS=""
 case "$CONC" in
     1|2|4)
         MAX_NUM_SEQS=32
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.88
         ATOM_ENABLE_REPLAYSSM=0
         NUM_SPEC_TOKENS=7
         SPEC_DECODE_AL=3.84
         ;;
-    8)
+    8|16)
         MAX_NUM_SEQS=32
-        MAX_NUM_BATCHED_TOKENS=4096
-        GPU_MEM_UTIL=0.88
         ATOM_ENABLE_REPLAYSSM=1
         NUM_SPEC_TOKENS=3
         SPEC_DECODE_AL=3.00
         ;;
-    12)
-        MAX_NUM_SEQS=24
-        MAX_NUM_BATCHED_TOKENS=4096
-        GPU_MEM_UTIL=0.88
-        ATOM_ENABLE_REPLAYSSM=1
-        NUM_SPEC_TOKENS=3
-        SPEC_DECODE_AL=3.00
-        ;;
-    14)
-        # The concurrency 16 server verbatim; only the client concurrency is 14.
-        # Deriving the graph width from 2 * CONC (28) dies during graph warmup.
-        MAX_NUM_SEQS=32
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.86
-        ATOM_ENABLE_REPLAYSSM=1
-        NUM_SPEC_TOKENS=3
-        SPEC_DECODE_AL=3.00
-        CUDAGRAPH_MAX_NUM_SEQS=32
-        ;;
-    16)
-        MAX_NUM_SEQS=32
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.86
-        ATOM_ENABLE_REPLAYSSM=1
-        NUM_SPEC_TOKENS=3
-        SPEC_DECODE_AL=3.00
-        ;;
-    32)
-        MAX_NUM_SEQS=64
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.86
+    32|40|48|56|64|72)
+        MAX_NUM_SEQS=$((2 * CONC))
         ATOM_ENABLE_REPLAYSSM=0
         NUM_SPEC_TOKENS=0
         SPEC_DECODE_AL=0
-        ;;
-    40)
-        MAX_NUM_SEQS=80
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.86
-        ATOM_ENABLE_REPLAYSSM=0
-        NUM_SPEC_TOKENS=0
-        SPEC_DECODE_AL=0
-        ;;
-    # The two widest points are the only ones that reuse identical AITER
-    # communicator groups, and the only ones given the 192 GB/rank LMCache
-    # budget rather than 128.
-    56)
-        MAX_NUM_SEQS=112
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.86
-        ATOM_ENABLE_REPLAYSSM=0
-        NUM_SPEC_TOKENS=0
-        SPEC_DECODE_AL=0
-        AITER_REUSE_IDENTICAL_COMM_GROUPS=1
-        ;;
-    64)
-        MAX_NUM_SEQS=128
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.86
-        ATOM_ENABLE_REPLAYSSM=0
-        NUM_SPEC_TOKENS=0
-        SPEC_DECODE_AL=0
-        AITER_REUSE_IDENTICAL_COMM_GROUPS=1
+        # Only the three widest points reuse identical AITER communicator groups.
+        if [ "$CONC" -ge 56 ]; then
+            AITER_REUSE_IDENTICAL_COMM_GROUPS=1
+        fi
         ;;
     *)
         echo "Unsupported CONC=$CONC" >&2
