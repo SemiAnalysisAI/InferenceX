@@ -84,7 +84,11 @@ allocation=(--partition="$COLLX_PARTITION" --nodes="$NODES" --gres=gpu:1
 [ -z "${COLLX_ACCOUNT:-}" ] || allocation+=(--account="$COLLX_ACCOUNT")
 [ -z "${COLLX_QOS:-}" ] || allocation+=(--qos="$COLLX_QOS")
 [ -z "${COLLX_NODELIST:-}" ] || allocation+=(--nodelist="$COLLX_NODELIST")
-[ -z "${COLLX_EXCLUDE_NODES:-}" ] || allocation+=(--exclude="$COLLX_EXCLUDE_NODES")
+if [ -n "${COLLX_EXCLUDE_NODES:-}" ]; then
+  existing_exclusions="$(python3 "$HERE/../runtime/swap_nodes.py" "$COLLX_EXCLUDE_NODES")" \
+    || collx_die "cannot validate Slurm node exclusions"
+  [ -z "$existing_exclusions" ] || allocation+=(--exclude="$existing_exclusions")
+fi
 collx_salloc_jobid "${allocation[@]}"
 check_env_vars JOB_ID
 SQUASH_FILE="$(collx_ensure_squash_on_job "$JOB_ID" "$COLLX_SQUASH_DIR" "$COLLX_SWAP_IMAGE")"
