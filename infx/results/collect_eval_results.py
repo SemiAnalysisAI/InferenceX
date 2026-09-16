@@ -12,7 +12,7 @@ from infx.results.evals import (
     as_int,
     build_row as build_row,
     build_rows,
-    is_eval_result,
+    read_eval_results,
     result_concurrency as _result_concurrency,
     result_order as result_order,
     select_latest_results,
@@ -83,16 +83,14 @@ def detect_lm_eval_jsons(d: Path, batched: bool = False) -> list[Path]:
     Result filenames contain sortable timestamps. Mtime remains a fallback for
     legacy names, with the filename as a deterministic tie-breaker.
     """
-    immediate_jsons = set(d.glob("results*.json"))
-    immediate_jsons.update(p for p in d.glob("*.json") if p.name != "meta_env.json")
-    lm_paths = []
+    return select_latest_results(_read_results(d), batched=batched)
 
-    for p in immediate_jsons:
-        data = load_json(p)
-        if is_eval_result(data):
-            lm_paths.append(p)
 
-    return select_latest_results(lm_paths, batched=batched)
+def _read_results(directory: Path) -> dict[Path, dict[str, Any]]:
+    return read_eval_results(
+        (path for path in directory.glob("*.json") if path.name != "meta_env.json"),
+        skip_errors=(Exception,),
+    )
 
 
 def pct(x: Any) -> str:
@@ -124,7 +122,8 @@ def collect_eval_rows(root: Path) -> list[dict[str, Any]]:
             if isinstance(completed_concs, list):
                 allowed_concs = {as_int(conc, -1) for conc in completed_concs}
 
-        for lm_path in detect_lm_eval_jsons(d, batched=batched):
+        results = _read_results(d)
+        for lm_path in select_latest_results(results, batched=batched):
             row_meta = meta
             if batched:
                 conc = result_concurrency(lm_path)
@@ -132,7 +131,7 @@ def collect_eval_rows(root: Path) -> list[dict[str, Any]]:
                     continue
                 row_meta = {**meta, "conc": conc}
 
-            rows.extend(build_rows(load_json(lm_path) or {}, row_meta, source=str(lm_path)))
+            rows.extend(build_rows(results[lm_path], row_meta, source=str(lm_path)))
     return rows
 
 
