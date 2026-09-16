@@ -110,7 +110,9 @@ def test_multinode_node_count_reads_schema_two_roles(tmp_path, monkeypatch, role
     recipe.parent.mkdir(parents=True)
     recipe.write_text(yaml.safe_dump({"schema": 2, "roles": roles}))
     import infx.matrix.generate as generate
-    monkeypatch.setattr(generate, "__file__", str(tmp_path / "infx/matrix/generate.py"))
+    import infx.config
+    (tmp_path / "configs").mkdir()
+    monkeypatch.setattr(infx.config, "__file__", str(tmp_path / "infx/config.py"))
     prefill = {"additional-settings": ["CONFIG_FILE=recipes/test.yaml"]}
     if expected is None:
         with pytest.raises(ValueError, match="role 'decode' must specify nodes"):
@@ -168,9 +170,11 @@ def test_multinode_node_count_prefers_recipe_roles(
     recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/test.yaml"
     recipe.parent.mkdir(parents=True)
     recipe.write_text(yaml.safe_dump({"schema": 2, "roles": roles}))
+    import infx.config
+    (tmp_path / "configs").mkdir()
     monkeypatch.setattr(
-        generate_sweep_configs, "__file__",
-        str(tmp_path / "infx/matrix/generate.py"),
+        infx.config, "__file__",
+        str(tmp_path / "infx/config.py"),
     )
     prefill = {
         "num-worker": 1, "tp": 8,
