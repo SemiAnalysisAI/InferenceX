@@ -163,7 +163,8 @@ def test_edit_replaces_bot_status_and_preserves_human_reaction(request_case, bod
         {"id": 2, "content": "+1", "user": {"login": "maintainer"}},
     ]
     case["comment"]["body"] = body
-    acknowledgment.acknowledge("example/project", event_for(case, action="edited"), "test-token")
+    event = event_for(case, action="edited", changes={"body": {"from": "/use 123"}})
+    acknowledgment.acknowledge("example/project", event, "test-token")
     assert bot_status(case) == status
     assert case["reactions"][0] == {"id": 2, "content": "+1", "user": {"login": "maintainer"}}
 
@@ -204,15 +205,24 @@ def test_number_on_next_line_does_not_authorize_partial_run(request_case, newlin
     assert bot_status(request_case) == ["-1"]
 
 
-@pytest.mark.parametrize("change", ["issue", "unrelated", "inline-mention"])
-def test_unrelated_activity_does_not_get_acknowledged(request_case, change):
+@pytest.mark.parametrize("change", ["issue", "unrelated", "inline-mention", "attachment", "unrelated-edit"])
+def test_unrelated_activity_preserves_existing_reactions(request_case, change):
+    request_case["reactions"] = [
+        {"id": 1, "content": "+1", "user": {"login": "github-actions[bot]"}},
+    ]
     event = event_for(request_case)
     if change == "issue":
         event["issue"].pop("pull_request")
     else:
-        request_case["comment"]["body"] = (
-            "hello" if change == "unrelated" else "please use /reuse-sweep-run later"
-        )
+        request_case["comment"]["body"] = {
+            "unrelated": "hello",
+            "inline-mention": "please use /reuse-sweep-run later",
+            "attachment": "![screenshot](https://github.com/user-attachments/assets/example)",
+            "unrelated-edit": "Updated screenshot",
+        }[change]
         event = event_for(request_case)
+        if change == "unrelated-edit":
+            event.update(action="edited", changes={"body": {"from": "https://example.com/users/alice"}})
     assert acknowledgment.acknowledge("example/project", event, "test-token") == 0
     assert request_case["writes"] == []
+    assert bot_status(request_case) == ["+1"]
