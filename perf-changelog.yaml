@@ -7998,4 +7998,5 @@
     - "Use one recipe per concurrency and cap max-running-requests and CUDA graph batch size at twice the trajectory concurrency."
     - "Set mem-fraction-static to 0.75 to leave additional GPU workspace headroom for MTP."
     - "Use SGLang nightly-dev-20260914-4358a161 with Dynamo 1.5.0.dev20260913 and retry truncated srt-slurm setup dependency downloads."
+    - "Update telemetry to the current srt-slurm schema, preserving the one-second collection interval and using a schema-compliant 12-second collector join timeout."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3112
