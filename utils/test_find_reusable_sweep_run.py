@@ -49,23 +49,55 @@ def test_reuse_entrypoints_preserve_outputs_and_errors_without_installation(
     assert dict(line.split("=", 1) for line in output.read_text().splitlines()) == expected
 
 
-def test_find_reuse_authorization_uses_latest_allowed_comment(monkeypatch) -> None:
+@pytest.mark.parametrize("body,expected", [
+    ("  /use\t0042 \r\n", (True, 42)),
+    ("/reuse-sweep-run 11\n/use 22", (True, 22)),
+    ("/use 22\n/reuse-sweep-run 11", (True, 11)),
+    ("/use 22\n/reuse-sweep-run", (True, None)),
+    ("/use", (False, None)),
+    ("/use\n42", (False, None)),
+    ("/use\r\n42", (False, None)),
+    ("/use nope", (False, None)),
+    ("/use -1", (False, None)),
+    ("/use 42 extra", (False, None)),
+    ("please /use 42", (False, None)),
+    ("/useful 42", (False, None)),
+])
+def test_reuse_alias_parses_standalone_pins_and_preserves_command_order(body, expected):
+    assert reuse.parse_reuse_command(body) == expected
+
+
+@pytest.mark.parametrize("body,expected", [
+    ("/custom.run", (True, None)),
+    ("/custom.run 17", (True, 17)),
+    ("/customXrun 17", (False, None)),
+    ("/use 17", (False, None)),
+])
+def test_custom_command_keeps_its_existing_syntax(body, expected):
+    assert reuse.parse_reuse_command(body, "/custom.run") == expected
+
+
+@pytest.mark.parametrize("older,newer", [
+    ("/reuse-sweep-run 111", "/use 333"),
+    ("/use 111", "/reuse-sweep-run 333"),
+])
+def test_find_reuse_authorization_uses_latest_allowed_comment(monkeypatch, older, newer) -> None:
     def fake_paginated_github_api(*args, **kwargs):
         return [
             {
                 "created_at": "2026-05-13T00:00:00Z",
                 "author_association": "MEMBER",
-                "body": "/reuse-sweep-run 111",
+                "body": older,
             },
             {
-                "created_at": "2026-05-13T00:01:00Z",
+                "created_at": "2026-05-13T00:03:00Z",
                 "author_association": "CONTRIBUTOR",
-                "body": "/reuse-sweep-run 222",
+                "body": "/use 222",
             },
             {
                 "created_at": "2026-05-13T00:02:00Z",
                 "author_association": "OWNER",
-                "body": "approved\n/reuse-sweep-run 333",
+                "body": "approved\n" + newer,
             },
         ]
 
@@ -86,7 +118,7 @@ def test_find_reuse_authorization_lets_newer_no_arg_unpin_older_pin(monkeypatch)
             {
                 "created_at": "2026-05-13T00:00:00Z",
                 "author_association": "OWNER",
-                "body": "/reuse-sweep-run 111",
+                "body": "/use 111",
             },
             {
                 "created_at": "2026-05-13T00:01:00Z",
@@ -127,101 +159,29 @@ def test_find_reuse_authorization_ignores_inline_mentions(monkeypatch) -> None:
     ) == (False, None)
 
 
-def test_find_latest_successful_pr_run_skips_newer_failed_run(monkeypatch) -> None:
-    failed_run = {
-        "id": 222,
-        "conclusion": "failure",
-        "head_sha": "abc123",
+@pytest.mark.parametrize("newer,artifacts", [
+    ({"conclusion": "failure"}, [{"name": "results_bmk"}]),
+    ({"head_sha": "orphaned"}, [{"name": "results_bmk"}]),
+    ({}, []),
+    ({}, [{"name": "results_bmk", "expired": True}]),
+])
+def test_latest_successful_source_skips_ineligible_runs(monkeypatch, newer, artifacts):
+    older = {"id": 111, "conclusion": "success", "head_sha": "tested"}
+    responses = {
+        "/actions/workflows/run-sweep.yml/runs": {
+            "workflow_runs": [{**older, "id": 222, **newer}, older], "total_count": 2,
+        },
+        "/actions/runs/222/artifacts": {"artifacts": artifacts, "total_count": len(artifacts)},
+        "/actions/runs/111/artifacts": {
+            "artifacts": [{"name": "bmk_agentic_point", "expired": False}], "total_count": 1,
+        },
     }
-    successful_run = {
-        "id": 111,
-        "conclusion": "success",
-        "head_sha": "abc123",
-    }
+    monkeypatch.setattr(reuse.github, "api", lambda repo, path, *args, **kwargs: [responses[path]])
 
-    def fake_paginated_github_api(repo, path, token, item_key, params=None):
-        assert path == "/actions/workflows/run-sweep.yml/runs"
-        return [failed_run, successful_run]
-
-    monkeypatch.setattr(reuse.github, "paginate", fake_paginated_github_api)
-    monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
-
-    assert (
-        reuse.find_latest_successful_pr_run(
-            "SemiAnalysisAI/InferenceX",
-            "run-sweep.yml",
-            "feature-branch",
-            {"abc123"},
-            "token",
-        )
-        == successful_run
+    selected = reuse.find_latest_successful_pr_run(
+        "example/project", "run-sweep.yml", "feature", {"tested"}, "token",
     )
-
-
-def test_find_latest_successful_pr_run_skips_gated_noop_run(monkeypatch) -> None:
-    gated_run = {
-        "id": 333,
-        "conclusion": "success",
-        "head_sha": "def456",
-    }
-    real_run = {
-        "id": 222,
-        "conclusion": "success",
-        "head_sha": "abc123",
-    }
-
-    def fake_paginated_github_api(repo, path, token, item_key, params=None):
-        assert path == "/actions/workflows/run-sweep.yml/runs"
-        return [gated_run, real_run]
-
-    artifacts_by_run = {333: set(), 222: {"results_bmk"}}
-    monkeypatch.setattr(reuse.github, "paginate", fake_paginated_github_api)
-    monkeypatch.setattr(
-        reuse, "artifact_names", lambda repo, run_id, token: artifacts_by_run[run_id]
-    )
-
-    assert (
-        reuse.find_latest_successful_pr_run(
-            "SemiAnalysisAI/InferenceX",
-            "run-sweep.yml",
-            "feature-branch",
-            {"abc123", "def456"},
-            "token",
-        )
-        == real_run
-    )
-
-
-def test_find_latest_successful_pr_run_accepts_agentic_only_run(
-    monkeypatch,
-) -> None:
-    agentic_run = {
-        "id": 444,
-        "conclusion": "success",
-        "head_sha": "abc123",
-    }
-
-    monkeypatch.setattr(
-        reuse.github,
-        "paginate",
-        lambda *args, **kwargs: [agentic_run],
-    )
-    monkeypatch.setattr(
-        reuse,
-        "artifact_names",
-        lambda *args: {"bmk_agentic_dsv4_tp8_conc16"},
-    )
-
-    assert (
-        reuse.find_latest_successful_pr_run(
-            "SemiAnalysisAI/InferenceX",
-            "run-sweep.yml",
-            "feature-branch",
-            {"abc123"},
-            "token",
-        )
-        == agentic_run
-    )
+    assert selected["id"] == 111
 
 
 def test_artifact_names_excludes_expired_artifacts(monkeypatch) -> None:
@@ -387,13 +347,7 @@ def test_main_does_not_check_reuse_comment_for_label_event(
 
 
 @pytest.mark.parametrize("conclusion", ["failure", "cancelled"])
-def test_validate_reusable_run_rejects_non_success_run_by_default(
-    monkeypatch,
-    conclusion,
-) -> None:
-    monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
-    monkeypatch.setattr(reuse, "pr_commit_shas", lambda *args: {"abc123"})
-
+def test_validate_reusable_run_rejects_non_success_run_by_default(conclusion) -> None:
     try:
         reuse.validate_reusable_run(
             "SemiAnalysisAI/InferenceX",
@@ -416,8 +370,8 @@ def test_validate_reusable_run_rejects_non_success_run_by_default(
 
 
 def test_validate_reusable_run_rejects_run_for_orphaned_commit(monkeypatch) -> None:
-    monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
-    monkeypatch.setattr(reuse, "pr_commit_shas", lambda *args: {"def456"})
+    responses = {"/pulls/1321/commits": [[{"sha": "def456"}]]}
+    monkeypatch.setattr(reuse.github, "api", lambda repo, path, *args, **kwargs: responses[path])
 
     try:
         reuse.validate_reusable_run(
@@ -441,13 +395,16 @@ def test_validate_reusable_run_rejects_run_for_orphaned_commit(monkeypatch) -> N
         raise AssertionError("expected orphaned-commit run to be rejected")
 
 
-@pytest.mark.parametrize("labels", [[], ["documentation"], ["sweep-enabled"], ["full-sweep-enabled"]])
-def test_main_enables_pinned_reuse_without_sweep_label(monkeypatch, tmp_path, labels) -> None:
+@pytest.mark.parametrize("labels,command", [
+    ([], "/reuse-sweep-run"), ([], "/use"), (["documentation"], "/use"),
+    (["sweep-enabled"], "/use"), (["full-sweep-enabled"], "/use"),
+])
+def test_main_enables_pinned_reuse_without_sweep_label(monkeypatch, tmp_path, labels, command) -> None:
     comments = [
         {
             "created_at": "2026-05-13T00:00:00Z",
             "author_association": "OWNER",
-            "body": "/reuse-sweep-run 25763404168",
+            "body": f"{command} 25763404168",
         },
     ]
     run = {

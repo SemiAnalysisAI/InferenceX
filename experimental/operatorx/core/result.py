@@ -70,7 +70,9 @@ def write_run_result(path: Path | str, run: RunInfo, results: Iterable[Result]) 
         "run": _run_to_dict(run),
         "rows": [to_dict(r) for r in results],
     }
-    path.write_text(json.dumps(body, indent=2))
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(body, indent=2))
+    temporary.replace(path)
 
 
 def read_run_result(path: Path | str) -> tuple[RunInfo, list[Result]]:

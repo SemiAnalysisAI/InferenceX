@@ -16,6 +16,7 @@
 | [`utils/process_result.py`](../utils/process_result.py) | 固定序列吞吐量聚合架构及派生的每 GPU 指标 |
 | [`infx/results/collect_results.py`](../infx/results/collect_results.py)、[`collect-results.yml`](../.github/workflows/collect-results.yml) | 将基准结果递归收集为 `agg_<prefix>.json` 和 `results_<prefix>` |
 | [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py)、[`collect-evals.yml`](../.github/workflows/collect-evals.yml) | 评测发现、指标提取、批量并发选择及 `eval_results_<prefix>` |
+| [`infx/results/evals.py`](../infx/results/evals.py)、[`eval_artifacts.py`](../infx/results/eval_artifacts.py) | 供收集流程和 Klaud 共用的评测读取、结果选择、复用一致性检查及重跑去重 |
 | [`infx.results.agentic`](../infx/results/agentic/__init__.py)、[`request_metrics.py`](../infx/results/agentic/request_metrics.py)、[`artifacts.py`](../infx/results/agentic/artifacts.py) | AgentX 聚合架构、原始记录过滤、请求计数和派生指标 |
 | [`validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py) | AgentX 上传前错误率门禁 |
 | [`run-sweep.yml`](../.github/workflows/run-sweep.yml)、[`recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) | 应用分发载荷及 source/merge 运行身份 |
@@ -119,6 +120,8 @@ PR changelog 选择具有代表性的 NVIDIA 和 AMD 覆盖，并非所有受影
 ### 单配置身份和收集
 
 每个评测上传名为 `eval_<EXP_NAME>_<RESULT_FILENAME>`。当前允许的载荷包括 `meta_env.json`、`results*.json`、样本 JSONL、预测、SWE-bench 报告和轨迹文件。收集器只使用元数据和 lm-eval 结果 JSON 来生成聚合记录。
+
+收集与复用共用结果读取和选择逻辑，但保留各自的校验规则。收集可以输出失败批次中已完成的点；复用则拒绝失败或不完整的批次。每个阶段使用已读取的 JSON 完成选择和校验。去重改写或删除工件后，校验会重新读取最终文件。
 
 共享评测元数据写入器保留单节点的 `DP_ATTENTION`，并将其作为
 `prefill_dp_attention` 和 `decode_dp_attention` 的默认值。只有
