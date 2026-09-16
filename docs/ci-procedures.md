@@ -44,7 +44,7 @@ These files are the contract. Follow the target ref's source rather than copying
 | Changelog byte/diff/matrix gate | [`infx/workflows/validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py), [`infx.matrix.plan`](../infx/matrix/plan.py) |
 | Reuse authorization and source-run selection | [`infx/workflows/reuse.py`](../infx/workflows/reuse.py) |
 | Supported reuse merge and conflict preparation | [`utils/merge_with_reuse.sh`](../utils/merge_with_reuse.sh), [`infx/workflows/prepare_perf_changelog_merge.py`](../infx/workflows/prepare_perf_changelog_merge.py) |
-| Staging request and callback | [`.github/workflows/stage-results.yml`](../.github/workflows/stage-results.yml), [`.github/workflows/stage-results-callback.yml`](../.github/workflows/stage-results-callback.yml) |
+| Staging request and callback | [`infx/workflows/stage_results.py`](../infx/workflows/stage_results.py), [`.github/workflows/stage-results.yml`](../.github/workflows/stage-results.yml), [`.github/workflows/stage-results-callback.yml`](../.github/workflows/stage-results-callback.yml) |
 | Reused agentic-ingest redispatch | [`.github/workflows/recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) |
 | Post-merge responsibility reminder | [`.github/workflows/pr-recipe-reminder.yml`](../.github/workflows/pr-recipe-reminder.yml) |
 
@@ -334,8 +334,9 @@ launchers; this CI dependency migration does not change those environments.
 
 ## Repository-role authorization
 
-Staging and trusted external sweep dispatch check repository permissions directly
-through `actions/github-script`, using its authenticated `GITHUB_TOKEN` client.
+Staging and trusted external sweep dispatch check repository permissions with
+`GITHUB_TOKEN`. Staging uses `infx.workflows.stage_results`; external dispatch uses
+`actions/github-script`.
 Both operations require Write, Maintain, or Admin access; Read, Triage, and users
 without repository access cannot perform these operations.
 
@@ -349,8 +350,9 @@ include both fields. Organization membership and `author_association` do not
 grant access through these checks; no team-membership token is needed.
 
 Staging checks the comment author; external approval checks the original
-`github.actor`, including on reruns. Authorization lives in each trusted workflow
-and needs no repository checkout or Python helper. Existing PR, SHA,
+`github.actor`, including on reruns. Staging checks out the default-branch commit
+recorded in the comment event and runs the locked `infx` package; it never loads PR
+code. External dispatch keeps its inline authorization. Existing PR, SHA,
 label-history, source-run, artifact, and CODEOWNER checks remain in place.
 Other workflows, including recovery, retain their original authorization and
 dispatch behavior. Execution credentials and GitHub protections remain explicit
@@ -393,7 +395,7 @@ Reuse prevents an approved full PR sweep from being rerun on `main`. It is not a
 
 ### Eligibility and authorization
 
-`infx.github` provides repository-scoped REST calls, pagination, and comment-reaction primitives. It contains no sweep policy. `infx.workflows.reuse` owns command parsing, authorization lookup, and source-run selection/validation. `infx.workflows.reuse_comment` uses those same rules for reaction feedback. Workflows run these modules with `python3 -m`; the existing `utils/find_reusable_sweep_run.py` command and imports remain compatible. These helpers use Python’s standard library and the GitHub CLI; no Python package installation is needed when running them from a checkout.
+`infx.github` provides repository-scoped REST calls, pagination, and comment-reaction primitives. It contains no sweep policy. `infx.workflows.sweep_runs` shares PR commit lookup, completed-run listing, and unexpired result-artifact discovery between staging and reuse. Each caller keeps its own eligibility rules. `infx.workflows.reuse` owns command parsing, authorization lookup, and source-run selection/validation. `infx.workflows.reuse_comment` uses those same rules for reaction feedback. Workflows run these modules with `python3 -m`; the existing `utils/find_reusable_sweep_run.py` command and imports remain compatible. These helpers use Python’s standard library and the GitHub CLI; no Python package installation is needed when running them from a checkout.
 
 1. Reuse does not require a sweep label. Labels select new GPU work; removing a primary label does not invalidate an existing source run. Conflicting primary labels remain rejected by changelog validation and the merge helper.
 2. `evals-only` and `agentx-fast` make the run ineligible. A default full sweep and a full sweep with `all-evals` remain eligible.
