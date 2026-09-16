@@ -13,3 +13,19 @@ kimik3-fp4-mi355x-vllm-bfcl-probe:
     - dram-utilization: 0.60
       search-space:
       - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [8], spec-decoding: mtp }
+
+# Native CPU-offload diagnostic; no LMCache dependency or source patch.
+# 原生 CPU offload 诊断；不依赖 LMCache，也不修改框架源码。
+kimik3-fp4-mi355x-vllm-native-offload-bfcl-probe:
+  image: vllm/vllm-openai-rocm:nightly-af1c01499b289be555c475669ba50a88e96d846e
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: af1c01499b289be555c475669ba50a88e96d846e }, conc-list: [4], spec-decoding: mtp }

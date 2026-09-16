@@ -437,10 +437,12 @@ remains the framework default. Both suites use BFCL's OpenAI completions
 handler against the local endpoint rather than a hosted-provider handler. They
 fix temperature to `0.001` and retain the stock handler's request construction,
 response interpretation, and retry behavior. A transport-only subclass pins
-the OpenAI SDK to two retries and a 180-second per-attempt timeout. MiniMax uses
-eight worker threads and a two-hour whole-suite timeout. Kimi uses 16 threads,
-uses the pinned upstream multi-turn step limit (20), and uses a four-hour
-whole-suite timeout. InferenceX does not override BFCL module globals. Older
+the OpenAI SDK to two retries. MiniMax uses a 180-second per-attempt timeout,
+eight worker threads and a two-hour whole-suite timeout. Kimi allows 600 seconds
+per attempt for long multi-turn generations, uses 16 threads, retains the pinned
+upstream multi-turn step limit (20), and uses a four-hour whole-suite timeout.
+Native reports record the request timeout and retry limit in `transport`.
+InferenceX does not override BFCL module globals. Older
 Kimi runs used a local ten-step override and are not directly comparable.
 
 The adapter builds a deterministic run-ID map from the pinned BFCL dataset.

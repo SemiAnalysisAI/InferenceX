@@ -406,6 +406,10 @@ def test_perfect_score_projects_upstream_headers_and_compatibility_metrics(
     )
     assert native["completed"] is True
     assert native["passed"] is True
+    assert native["transport"] == {
+        "request_timeout_seconds": 180,
+        "max_retries": 2,
+    }
     assert native["summary"] == {
         "accuracy": 1.0,
         "correct_count": 4,
@@ -824,6 +828,7 @@ def test_selected_suite_integration_error_preserves_suite_identity(
         expected_leaf_counts=(("left", 2), ("right", 1)),
         temperature=0.25,
         default_num_threads=7,
+        request_timeout_seconds=600,
     )
     monkeypatch.setattr(be, "SUITE_SPECS", {suite.name: suite})
 
@@ -848,6 +853,10 @@ def test_selected_suite_integration_error_preserves_suite_identity(
     assert native["sampling"] == {
         "temperature": 0.25,
         "num_threads": 7,
+    }
+    assert native["transport"] == {
+        "request_timeout_seconds": 600,
+        "max_retries": 2,
     }
     assert list(compatibility["results"]) == [
         "custom_suite",
@@ -984,7 +993,9 @@ def test_upstream_registration_preserves_stock_semantics(
     handler = model_config_mapping["model-a"].model_handler
     assert issubclass(handler, OpenAICompletionsHandler)
     assert handler()._build_client_kwargs() == {
-        "base_url": "http://127.0.0.1:8000/v1", "timeout": 180, "max_retries": 2,
+        "base_url": "http://127.0.0.1:8000/v1",
+        "timeout": 600 if suite is be.KIMI_SUITE else 180,
+        "max_retries": 2,
     }
     assert prompts.MAXIMUM_STEP_LIMIT == 20
 

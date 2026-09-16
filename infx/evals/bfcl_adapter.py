@@ -63,6 +63,7 @@ class SuiteSpec:
     threshold: float
     category_limits: tuple[tuple[str, int], ...] = ()
     api_format: Literal["chat-completions", "responses"] = "chat-completions"
+    request_timeout_seconds: int = REQUEST_TIMEOUT_SECONDS
 
     @property
     def leaf_categories(self) -> tuple[str, ...]:
@@ -130,6 +131,9 @@ KIMI_SUITE = SuiteSpec(
     default_num_threads=16,
     threshold=0.0,
     category_limits=(("multi_turn", 240),),
+    # Long multi-turn generations can exceed the short smoke request budget.
+    # The launcher still bounds the entire Kimi selection to four hours.
+    request_timeout_seconds=600,
 )
 SUITE_SPECS: Mapping[str, SuiteSpec] = MappingProxyType(
     {
@@ -307,6 +311,10 @@ def _native_report(
             "temperature": suite.temperature,
             "num_threads": num_threads,
         },
+        "transport": {
+            "request_timeout_seconds": suite.request_timeout_seconds,
+            "max_retries": REQUEST_MAX_RETRIES,
+        },
         "summary": {
             "accuracy": accuracy,
             "correct_count": correct_count,
@@ -450,14 +458,16 @@ def _clear_upstream_modules() -> None:
             sys.modules.pop(module_name, None)
 
 
-def _bounded_openai_handler(stock_handler: type[Any]) -> type[Any]:
+def _bounded_openai_handler(
+    stock_handler: type[Any], *, timeout_seconds: int = REQUEST_TIMEOUT_SECONDS
+) -> type[Any]:
     """Retain BFCL's handler while bounding its OpenAI transport."""
 
     class BoundedOpenAICompletionsHandler(stock_handler):
         def _build_client_kwargs(self) -> dict[str, Any]:
             kwargs = super()._build_client_kwargs()
             kwargs.update(
-                timeout=REQUEST_TIMEOUT_SECONDS,
+                timeout=timeout_seconds,
                 max_retries=REQUEST_MAX_RETRIES,
             )
             return kwargs
@@ -609,7 +619,9 @@ def _run_upstream(
         from bfcl_eval.model_handler.api_inference.openai_completion import OpenAICompletionsHandler
 
         stock_handler = OpenAICompletionsHandler
-    handler = _bounded_openai_handler(stock_handler)
+    handler = _bounded_openai_handler(
+        stock_handler, timeout_seconds=suite.request_timeout_seconds
+    )
 
     bfcl_model_config.MODEL_CONFIG_MAPPING[model] = ModelConfig(
         model_name=model,
