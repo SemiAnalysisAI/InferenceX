@@ -6,6 +6,7 @@ import json
 import re
 import shutil
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import Any
 
@@ -182,11 +183,14 @@ class _RawEvalArtifact:
     contributions: list[tuple[tuple[Any, ...], int | None]]
     batched: bool
     errors: list[str]
-    results: dict[Path, dict[str, Any]]
+
+    @cached_property
+    def results(self) -> dict[Path, dict[str, Any]]:
+        return read_eval_results(self.path.glob("results*.json"))
 
     @classmethod
     def read(cls, path: Path) -> _RawEvalArtifact:
-        artifact = cls(path, {}, [], False, [], {})
+        artifact = cls(path, {}, [], False, [])
         prefix = f"raw eval artifact {path.name!r}"
         meta_path = path / "meta_env.json"
         if not meta_path.is_file():
@@ -207,8 +211,6 @@ class _RawEvalArtifact:
         artifact.contributions, artifact.batched, artifact.errors = _raw_meta_contributions(
             path.name, meta
         )
-        if not artifact.errors:
-            artifact.results = read_eval_results(path.glob("results*.json"))
         return artifact
 
 
@@ -329,42 +331,6 @@ def _source_names_raw_dir(source: Any, artifact_name: str) -> bool:
     return artifact_name in re.split(r"[\\/]+", str(source or ""))
 
 
-def _eval_winners(
-    artifacts: list[_RawEvalArtifact], aggregates: dict[Path, list[Any]]
-) -> dict[tuple[Any, ...], Path]:
-    """Retain the selected result path for each valid, aggregate-backed identity."""
-    aggregate_sources: dict[tuple[Any, ...], list[Any]] = {}
-    for data in aggregates.values():
-        for row in data:
-            if isinstance(row, dict) and not invalid_eval_suite(row):
-                aggregate_sources.setdefault(eval_key(row), []).append(row.get("source"))
-
-    best: dict[
-        tuple[Any, ...],
-        tuple[tuple[int, str], str, Path, dict[str, Any]],
-    ] = {}
-    for artifact in artifacts:
-        for key, key_conc in artifact.contributions:
-            latest = select_latest_result(artifact.results, concurrency=key_conc)
-            if latest is None:
-                continue
-            candidate = (result_order(latest), artifact.path.name, latest, artifact.results[latest])
-            current = best.get(key)
-            if current is None or candidate[:2] > current[:2]:
-                best[key] = candidate
-
-    winners: dict[tuple[Any, ...], Path] = {}
-    for key, (_, artifact_name, path, data) in best.items():
-        if result_error(data) is not None:
-            continue
-        if any(
-            _source_names_raw_dir(source, artifact_name)
-            for source in aggregate_sources.get(key, [])
-        ):
-            winners[key] = path
-    return winners
-
-
 def _dedupe_eval_aggregate(
     loaded: dict[Path, list[Any]], winners: dict[tuple[Any, ...], Path]
 ) -> list[str]:
@@ -458,16 +424,48 @@ def _prune_raw_eval_dir(
 
 def dedupe_reran_evals(artifacts_dir: Path) -> list[str]:
     """Collapse reran eval duplicates in place; return a change log."""
+    aggregate_sources: dict[tuple[Any, ...], list[Any]] = {}
     aggregates = {}
     for path in sorted((artifacts_dir / "eval_results_all").glob("*.json")):
         try:
             data = load_json(path)
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             continue
-        if isinstance(data, list):
-            aggregates[path] = data
-    artifacts = [_RawEvalArtifact.read(path) for path in raw_eval_artifact_dirs(artifacts_dir)]
-    winners = _eval_winners(artifacts, aggregates)
+        if not isinstance(data, list):
+            continue
+        aggregates[path] = data
+        for row in data:
+            if isinstance(row, dict) and not invalid_eval_suite(row):
+                aggregate_sources.setdefault(eval_key(row), []).append(row.get("source"))
+
+    best: dict[
+        tuple[Any, ...],
+        tuple[tuple[int, str], str, Path, dict[str, Any]],
+    ] = {}
+    artifacts = []
+    for path in raw_eval_artifact_dirs(artifacts_dir):
+        artifact = _RawEvalArtifact.read(path)
+        artifacts.append(artifact)
+        results = artifact.results
+        for key, key_conc in artifact.contributions:
+            latest = select_latest_result(results, concurrency=key_conc)
+            if latest is None:
+                continue
+            candidate = (result_order(latest), artifact.path.name, latest, results[latest])
+            current = best.get(key)
+            if current is None or candidate[:2] > current[:2]:
+                best[key] = candidate
+
+    winners: dict[tuple[Any, ...], Path] = {}
+    for key, (_, artifact_name, path, data) in best.items():
+        if result_error(data) is not None:
+            continue
+        if any(
+            _source_names_raw_dir(source, artifact_name)
+            for source in aggregate_sources.get(key, [])
+        ):
+            winners[key] = path
+
     messages = _dedupe_eval_aggregate(aggregates, winners)
     for artifact in artifacts:
         message = _prune_raw_eval_dir(artifact, winners)

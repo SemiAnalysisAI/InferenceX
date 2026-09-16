@@ -1069,6 +1069,40 @@ def _dd_write_legacy_raw(
         )
 
 
+@pytest.mark.parametrize("payload,error", [
+    ("[" * 10000 + "]" * 10000, RecursionError),
+    ("9" * 5000, ValueError),
+])
+def test_dedupe_checks_result_decode_errors_even_without_metadata(
+    tmp_path: Path, payload: str, error: type[Exception],
+) -> None:
+    _dd_write_legacy_raw(tmp_path, "eval_old", 4, "2026-01-01T00-00-00")
+    _dd_write_legacy_raw(tmp_path, "eval_new", 4, "2026-01-02T00-00-00")
+    aggregate = _dd_write_aggregate(tmp_path, [
+        _dd_agg_row(4, "eval_old/results_2026-01-01T00-00-00.json", 0.5),
+        _dd_agg_row(4, "eval_new/results_2026-01-02T00-00-00.json", 0.9),
+    ])
+    before = aggregate.read_bytes()
+    invalid = tmp_path / "eval_invalid"
+    invalid.mkdir()
+    (invalid / "results.json").write_text(payload)
+
+    with pytest.raises(error):
+        dedupe_reran_evals(tmp_path)
+
+    assert aggregate.read_bytes() == before
+    assert (tmp_path / "eval_old/results_2026-01-01T00-00-00.json").is_file()
+
+
+def test_dedupe_reports_aggregate_identity_error_before_decoding_raw_results(tmp_path: Path) -> None:
+    _dd_write_aggregate(tmp_path, [{"conc": float("inf")}])
+    _dd_write_legacy_raw(tmp_path, "eval_raw", 4, None)
+    (tmp_path / "eval_raw/results.json").write_text("[" * 10000 + "]" * 10000)
+
+    with pytest.raises(OverflowError, match="cannot convert float infinity to integer"):
+        dedupe_reran_evals(tmp_path)
+
+
 def test_dedupe_keeps_latest_legacy_rerun(tmp_path: Path) -> None:
     # Three reruns of one eval plus a result-less attempt, mirroring a flaky
     # config retried until it passed.
