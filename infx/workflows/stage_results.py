@@ -65,12 +65,13 @@ def resolve_run(
             return "its head commit is not in the PR commit list"
         if not full_sweep_at(timeline, run.get("created_at", "")):
             return "it was not created while a full-sweep label was applied"
-        if run.get("status") != "completed" or run.get("conclusion") not in {
+        conclusion = run.get("conclusion")
+        if run.get("status") != "completed" or conclusion not in {
             "success",
             "cancelled",
             "failure",
         }:
-            return f"it is {run.get('status')}/{run.get('conclusion')}"
+            return f"it is {run.get('status')}/{'null' if conclusion is None else conclusion}"
         names = sweep_runs.artifact_names(repo, run["id"], token)
         if "changelog-metadata" not in names:
             return "it has no unexpired changelog-metadata artifact"

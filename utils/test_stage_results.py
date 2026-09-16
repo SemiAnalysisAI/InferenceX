@@ -139,7 +139,7 @@ def test_automatic_selection_rejects_all_orphaned_runs(staging):
 @pytest.mark.parametrize("change,reason", [
     ({"path": ".github/workflows/e2e-tests.yml"}, "not a pull-request run"),
     ({"event": "push"}, "not a pull-request run"),
-    ({"status": "in_progress"}, "it is in_progress/success"),
+    ({"status": "in_progress", "conclusion": None}, "it is in_progress/null"),
     ({"conclusion": "timed_out"}, "it is completed/timed_out"),
     ({"created_at": "not a date"}, "not created while a full-sweep label"),
 ])
