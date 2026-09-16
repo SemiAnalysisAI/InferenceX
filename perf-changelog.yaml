@@ -6752,3 +6752,21 @@
     - "Configure model-specific tool and reasoning parsers for the Kimi-K3 and MiniMax-M3 serving paths so opt-in verifier requests produce structured OpenAI tool calls."
     - "Limit shared AgentX readiness and synthetic-acceptance rewrites to eval-only runs so default throughput recipe rendering remains unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2634
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B200 Dynamo+SGLang AgentX TP8 aggregate HiCache recipes at concurrency 1, 2, 4, 8, 12, and 16."
+    - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with DSpark K=6 and per-point request/CUDA-graph limits."
+  pr-link: https://github.com/NVIDIA/InferenceMAX/pull/XXX
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B200 Dynamo+SGLang AgentX 1P1D and 2P1D DEP8/DEP8 HiCache recipes at concurrency 64 and 128."
+    - "Limit decode max-running-requests to 128 and 256, respectively."
+  pr-link: https://github.com/NVIDIA/InferenceMAX/pull/XXX
