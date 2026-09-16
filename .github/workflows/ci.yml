@@ -3,10 +3,10 @@ name: CI
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths: ['**/*.py']
+    paths: ['**/*.py', '.github/**', '**/action.yml', '**/action.yaml', '**/.pre-commit-*.yaml', '**/.pre-commit-*.yml', '**/zizmor.yml', '**/zizmor.yaml']
   push:
     branches: [main]
-    paths: ['**/*.py']
+    paths: ['**/*.py', '.github/**', '**/action.yml', '**/action.yaml', '**/.pre-commit-*.yaml', '**/.pre-commit-*.yml', '**/zizmor.yml', '**/zizmor.yaml']
   workflow_dispatch:
 
 permissions:
@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [Lint, Tests]
+        check: [Lint, Tests, Zizmor]
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -40,6 +40,15 @@ jobs:
         run: |
           uvx --exclude-newer PT12H ruff@latest check --output-format=github infx
           uvx --exclude-newer PT12H ruff@latest format --check --diff infx
+
+      - name: Audit GitHub Actions
+        if: matrix.check == 'Zizmor'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          uvx --exclude-newer PT12H zizmor@latest
+          --persona auditor --strict-collection --collect all --no-config
+          --format github --no-progress .
 
       - name: Prepare test environment
         if: matrix.check == 'Tests'

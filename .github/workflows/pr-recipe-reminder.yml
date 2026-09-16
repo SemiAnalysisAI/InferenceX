@@ -9,11 +9,17 @@ on:
       - 'benchmarks/**'
       - 'perf-changelog.yaml'
 
-permissions:
-  pull-requests: write
+permissions: {}
+
+concurrency:
+  group: recipe-reminder-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
 
 jobs:
   comment:
+    name: comment
+    permissions:
+      pull-requests: write # Publish PR feedback.
     runs-on: ubuntu-latest
     steps:
       - name: Comment recipe reminder

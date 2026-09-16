@@ -126,7 +126,7 @@ All external actions use full commit SHAs; the table reflects the current workfl
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" python -m infx.klaud --help
-uvx zizmor==1.30.0 --offline --no-config --no-ignores .github/workflows/klaud-plan.yml .github/workflows/klaud-candidate.yml
+uvx --exclude-newer PT12H zizmor@latest --offline --no-config --no-ignores .github/workflows/klaud-plan.yml .github/workflows/klaud-candidate.yml
 ```
 
 CLI and workflow checks do not establish GPU workingness. Klaud Cold uses the existing InferenceX validation and e2e workflows for its candidate changes. No live model, benchmark, PR creation or deployment is part of local verification.
