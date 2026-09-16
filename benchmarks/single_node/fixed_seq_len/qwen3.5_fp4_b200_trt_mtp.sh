@@ -20,8 +20,7 @@ fi
 
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
-# MTP (multi-token prediction) speculative decode requires the FlashInfer GDN
-# prefill path to be disabled.
+# MTP speculative decode requires the FlashInfer GDN prefill path to be disabled.
 export TLLM_USE_FLASHINFER_GDN_PREFILL="0"
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
@@ -32,14 +31,10 @@ SERVER_LOG=/workspace/server.log
 EXTRA_CONFIG_FILE="qwen3.5-fp4-trt-mtp.yml"
 NUM_NEXTN_PREDICT_LAYERS=3
 
-# Attention-DP layouts run CUTEDSL MoE; everything else runs the TRTLLM backend.
-# With MTP the served batch is much smaller than raw concurrency: attention-DP
-# runs at CONC/8, everything else at CONC. The KV-cache memory fraction is tuned
-# per layout (there is no single derivable rule).
+# KV-cache memory fractions below are tuned empirically per layout.
 if [[ "$DP_ATTENTION" == "true" ]]; then
     MAX_BATCH_SIZE=$(( CONC / 8 ))
     MOE_BACKEND="CUTEDSL"
-    # attention-DP: 0.9 up to conc 512, backed off to 0.8 at conc 1024.
     if (( CONC >= 1024 )); then KV_MEMORY_FRACTION=0.8; else KV_MEMORY_FRACTION=0.9; fi
     MODE_CONFIG="enable_attention_dp: true
 attention_dp_config:
@@ -49,7 +44,6 @@ attention_dp_config:
 else
     MAX_BATCH_SIZE="$CONC"
     MOE_BACKEND="TRTLLM"
-    # non-attention-DP fraction, tuned per (ISL, TP, EP) layout.
     case "${ISL}_tp${TP}_ep${EP_SIZE}" in
         1024_tp2_ep1) KV_MEMORY_FRACTION=0.6 ;;
         1024_tp2_ep2) KV_MEMORY_FRACTION=0.75 ;;
@@ -60,8 +54,7 @@ else
         8192_tp8_ep8) KV_MEMORY_FRACTION=0.8 ;;
         *)            KV_MEMORY_FRACTION=0.8 ;;
     esac
-    # Short-context runs hold less in flight, so they wait on a tighter token
-    # ratio before flushing a batch.
+    # Short-context runs hold less in flight, so they use a tighter token ratio before flushing a batch.
     case "$ISL" in
         1024) BATCH_WAIT_MAX_TOKENS_RATIO=0.0625 ;;
         *)    BATCH_WAIT_MAX_TOKENS_RATIO=0.45 ;;
@@ -126,7 +119,6 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     MAX_NUM_TOKENS="$EVAL_MAX_MODEL_LEN"
 fi
 
-# Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
@@ -143,7 +135,6 @@ mpirun -n 1 --oversubscribe --allow-run-as-root \
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 run_benchmark_serving \
@@ -159,12 +150,10 @@ run_benchmark_serving \
     --result-dir /workspace/ \
     --use-chat-template
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
 set +x

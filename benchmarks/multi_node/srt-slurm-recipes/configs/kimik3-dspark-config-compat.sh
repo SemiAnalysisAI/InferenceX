@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 
 # The Kimi K3 DSpark checkpoint publishes its parallel-drafting token as
 # `mask_token_id`. Dynamo's serialized draft config reaches vLLM without the

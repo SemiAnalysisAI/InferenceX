@@ -397,7 +397,7 @@ Keep the `N/A — <reason>` row so the reviewer sees it was considered.
 Write the complete verdict to `/tmp/codeowner-signoff-verdict.md` using the Write
 or Bash tool. Do not post, edit, or delete GitHub comments, labels, or commit
 statuses. The workflow publishes this file by updating one persistent PR comment
-(or creating it if deleted), remembers the first PASS, and sets the merge status.
+(or creating it if deleted), records the assessed commit, and sets the merge status.
 Do not include a hidden marker or assessed-commit footer; the publisher adds them.
 Always write your full current assessment, even if it matches a previous verdict.
 

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Process aiperf agentic-replay output into InferenceX aggregate JSON."""
 
 from __future__ import annotations

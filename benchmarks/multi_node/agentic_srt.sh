@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
 # Client-only agentic trace replay for srt-slurm multinode jobs.
 # srt-slurm owns server startup; this script runs as benchmark.type=custom
 # against the already-ready frontend on the head node.
 
-INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/infmax-workspace}"
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh" --validation-only
+check_env_vars INFMAX_CONTAINER_WORKSPACE RESULT_DIR EVAL_ONLY AIPERF_DRAIN_TIMEOUT_SECONDS AIPERF_DRAIN_POLL_SECONDS
 source "$INFMAX_CONTAINER_WORKSPACE/benchmarks/benchmark_lib.sh"
 
 if [[ -n "${SRT_FRONTEND_HOST:-}" ]]; then
@@ -27,18 +28,20 @@ if [[ -n "${AIPERF_MAX_CONTEXT_LENGTH:-}" ]]; then
     export MAX_MODEL_LEN="$AIPERF_MAX_CONTEXT_LENGTH"
 fi
 
-check_env_vars MODEL MODEL_PREFIX FRAMEWORK PRECISION CONC RESULT_FILENAME DURATION
+check_env_vars \
+    MODEL MODEL_PREFIX FRAMEWORK PRECISION CONC \
+    RESULT_FILENAME DURATION
 
 if [[ -z "${AIPERF_SERVER_URL:-}" ]]; then
     if [[ -n "${SRT_FRONTEND_HOST:-}" ]]; then
-        export AIPERF_SERVER_URL="http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT:-$PORT}"
+        export AIPERF_SERVER_URL="http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}"
     else
         export AIPERF_SERVER_URL="http://localhost:${PORT}"
     fi
 fi
 echo "Using srt-slurm frontend endpoint: $AIPERF_SERVER_URL"
 
-BASE_RESULT_DIR="${RESULT_DIR:-/logs/agentic}"
+BASE_RESULT_DIR="${RESULT_DIR}"
 BASE_RESULT_FILENAME="$RESULT_FILENAME"
 read -r -a CONCURRENCIES <<< "${CONC_LIST:-$CONC}"
 
@@ -53,16 +56,15 @@ for concurrency in "${CONCURRENCIES[@]}"; do
     fi
 done
 
-
 resolve_trace_source
 install_agentic_deps
-if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+if [[ "${EVAL_ONLY}" == "true" ]]; then
     _wait_for_openai_chat_route --port "$PORT"
 fi
 
 wait_for_agentic_servers_idle() {
-    local timeout_seconds="${AIPERF_DRAIN_TIMEOUT_SECONDS:-1800}"
-    local poll_seconds="${AIPERF_DRAIN_POLL_SECONDS:-10}"
+    local timeout_seconds="${AIPERF_DRAIN_TIMEOUT_SECONDS}"
+    local poll_seconds="${AIPERF_DRAIN_POLL_SECONDS}"
     local frontend_metrics_url="${AIPERF_SERVER_URL%/}/metrics"
 
     "$AIPERF_PYTHON" - \
@@ -81,11 +83,9 @@ worker_urls = [url for url in sys.argv[4].split(",") if url]
 deadline = time.monotonic() + timeout_seconds
 idle_polls = 0
 
-
 def fetch_metrics(url: str) -> str:
     with urllib.request.urlopen(url, timeout=10) as response:
         return response.read().decode("utf-8")
-
 
 def metric_sum(metrics: str, name: str) -> float:
     total = 0.0
@@ -97,7 +97,6 @@ def metric_sum(metrics: str, name: str) -> float:
             continue
         total += float(fields[1])
     return total
-
 
 while time.monotonic() < deadline:
     try:

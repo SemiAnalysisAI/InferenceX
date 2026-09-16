@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Plot sub-agent fan-out distributions over a directory of weka traces.
 
 Reads every <in-dir>/*.json (output of proxy_to_weka.py) and produces two
@@ -27,27 +26,66 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
 
+if TYPE_CHECKING:
+    from matplotlib.axes import Axes
+
+
 PERCENTILES: tuple[int, ...] = (50, 75, 90, 99)
-PCT_COLORS: dict[int, str] = {50: "#1f77b4", 75: "#2ca02c", 90: "#ff7f0e", 99: "#d62728"}
+PCT_COLORS: dict[int, str] = {
+    50: "#1f77b4",
+    75: "#2ca02c",
+    90: "#ff7f0e",
+    99: "#d62728",
+}
 
 PLOT_SPECS: list[dict] = [
-    {"key": "groups_per_trace", "title": "Sub-agent groups per trace",
-     "xlabel": "groups", "fmt": "{:,.0f}", "log_in_log_fig": True},
-    {"key": "inners_per_group", "title": "Inner requests per sub-agent group",
-     "xlabel": "inner requests", "fmt": "{:,.0f}", "log_in_log_fig": True},
-    {"key": "duration_sec", "title": "Sub-agent group wall-clock duration",
-     "xlabel": "seconds (first→last inner)", "fmt": "{:,.2f}", "log_in_log_fig": True},
-    {"key": "group_total_tokens", "title": "Sub-agent group total tokens (Σ in+out)",
-     "xlabel": "tokens", "fmt": "{:,.0f}", "log_in_log_fig": True},
-    {"key": "inner_isl", "title": "Inner-request ISL",
-     "xlabel": "tokens", "fmt": "{:,.0f}", "log_in_log_fig": True},
-    {"key": "intra_group_cache_hit_rate", "title": "Intra-group cache hit rate per inner request",
-     "xlabel": "hits / total blocks (subsequent inners only)", "fmt": "{:,.4f}",
-     "log_in_log_fig": False},
+    {
+        "key": "groups_per_trace",
+        "title": "Sub-agent groups per trace",
+        "xlabel": "groups",
+        "fmt": "{:,.0f}",
+        "log_in_log_fig": True,
+    },
+    {
+        "key": "inners_per_group",
+        "title": "Inner requests per sub-agent group",
+        "xlabel": "inner requests",
+        "fmt": "{:,.0f}",
+        "log_in_log_fig": True,
+    },
+    {
+        "key": "duration_sec",
+        "title": "Sub-agent group wall-clock duration",
+        "xlabel": "seconds (first→last inner)",
+        "fmt": "{:,.2f}",
+        "log_in_log_fig": True,
+    },
+    {
+        "key": "group_total_tokens",
+        "title": "Sub-agent group total tokens (Σ in+out)",
+        "xlabel": "tokens",
+        "fmt": "{:,.0f}",
+        "log_in_log_fig": True,
+    },
+    {
+        "key": "inner_isl",
+        "title": "Inner-request ISL",
+        "xlabel": "tokens",
+        "fmt": "{:,.0f}",
+        "log_in_log_fig": True,
+    },
+    {
+        "key": "intra_group_cache_hit_rate",
+        "title": "Intra-group cache hit rate per inner request",
+        "xlabel": "hits / total blocks (subsequent inners only)",
+        "fmt": "{:,.4f}",
+        "log_in_log_fig": False,
+    },
 ]
 
 
@@ -56,14 +94,27 @@ def parse_args() -> argparse.Namespace:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("--in-dir", "-i", type=Path, required=True,
-                   help="Directory of weka *.json traces.")
-    p.add_argument("--out-dir", "-o", type=Path, required=True,
-                   help="Directory to write *.png plots into.")
-    p.add_argument("--bins", type=int, default=60,
-                   help="Number of histogram bins. Default: 60.")
-    p.add_argument("--linear-clip-pct", type=float, default=99.0,
-                   help="In the linear figure, clip x-axis at this percentile.")
+    p.add_argument(
+        "--in-dir",
+        "-i",
+        type=Path,
+        required=True,
+        help="Directory of weka *.json traces.",
+    )
+    p.add_argument(
+        "--out-dir",
+        "-o",
+        type=Path,
+        required=True,
+        help="Directory to write *.png plots into.",
+    )
+    p.add_argument("--bins", type=int, default=60, help="Number of histogram bins. Default: 60.")
+    p.add_argument(
+        "--linear-clip-pct",
+        type=float,
+        default=99.0,
+        help="In the linear figure, clip x-axis at this percentile.",
+    )
     return p.parse_args()
 
 
@@ -106,8 +157,10 @@ def collect_metrics(in_dir: Path) -> dict[str, list[float]]:
                 seen.update(hashes)
         groups_per_trace.append(n_groups_this)
 
-    print(f"  total: {n_traces} traces, {sum(groups_per_trace):,} subagent groups, "
-          f"{sum(inners_per_group):,} inner requests")
+    print(
+        f"  total: {n_traces} traces, {sum(groups_per_trace):,} subagent groups, "
+        f"{sum(inners_per_group):,} inner requests"
+    )
     return {
         "groups_per_trace": [g for g in groups_per_trace if g > 0],
         "inners_per_group": inners_per_group,
@@ -118,7 +171,16 @@ def collect_metrics(in_dir: Path) -> dict[str, list[float]]:
     }
 
 
-def _draw_histogram(ax, values, title, xlabel, bins, log_x, value_fmt, linear_clip_pct):
+def _draw_histogram(
+    ax: Axes,
+    values: list[float],
+    title: str,
+    xlabel: str,
+    bins: int,
+    log_x: bool,
+    value_fmt: str,
+    linear_clip_pct: float,
+) -> None:
     if not values:
         ax.set_title(f"{title}\n(no values)")
         ax.axis("off")
@@ -140,30 +202,48 @@ def _draw_histogram(ax, values, title, xlabel, bins, log_x, value_fmt, linear_cl
     else:
         lower = float(arr.min())
         upper = float(np.percentile(arr, linear_clip_pct))
-        ax.hist(arr, bins=bins, range=(lower, max(upper, lower + 1e-9)),
-                color="#888", edgecolor="#222", linewidth=0.4)
+        ax.hist(
+            arr,
+            bins=bins,
+            range=(lower, max(upper, lower + 1e-9)),
+            color="#888",
+            edgecolor="#222",
+            linewidth=0.4,
+        )
 
     for p, val in pct.items():
-        ax.axvline(val, linestyle="--", linewidth=1.4,
-                   color=PCT_COLORS[p],
-                   label=f"p{p} = {value_fmt.format(val)}")
+        ax.axvline(
+            val,
+            linestyle="--",
+            linewidth=1.4,
+            color=PCT_COLORS[p],
+            label=f"p{p} = {value_fmt.format(val)}",
+        )
 
     ax.set_xlabel(xlabel + (" (log)" if log_x else ""))
     ax.set_ylabel("count")
-    subtitle = "     ".join([
-        f"N = {len(arr):,}",
-        f"min = {value_fmt.format(arr.min())}",
-        f"max = {value_fmt.format(arr.max())}",
-        f"mean = {value_fmt.format(arr.mean())}",
-    ])
+    subtitle = "     ".join(
+        [
+            f"N = {len(arr):,}",
+            f"min = {value_fmt.format(arr.min())}",
+            f"max = {value_fmt.format(arr.max())}",
+            f"mean = {value_fmt.format(arr.mean())}",
+        ]
+    )
     ax.set_title(f"{title}\n{subtitle}", fontsize=10)
     ax.legend(loc="upper right", fontsize=9, framealpha=0.9)
     ax.grid(axis="y", alpha=0.25)
 
 
-def plot_combined(metrics, out_path, bins, use_log, linear_clip_pct):
+def plot_combined(
+    metrics: dict[str, list[float]],
+    out_path: Path,
+    bins: int,
+    use_log: bool,
+    linear_clip_pct: float,
+) -> None:
     fig, axes = plt.subplots(3, 2, figsize=(20, 16))
-    for spec, ax in zip(PLOT_SPECS, axes.flat):
+    for spec, ax in zip(PLOT_SPECS, axes.flat, strict=False):
         log_x = use_log and spec["log_in_log_fig"]
         _draw_histogram(
             ax=ax,
@@ -177,7 +257,8 @@ def plot_combined(metrics, out_path, bins, use_log, linear_clip_pct):
         )
     fig.suptitle(
         f"Sub-agent fan-out distributions  ({'log-x' if use_log else 'linear-x'})",
-        fontsize=14, y=1.00,
+        fontsize=14,
+        y=1.00,
     )
     fig.tight_layout()
     fig.savefig(out_path, dpi=110, bbox_inches="tight")
@@ -190,10 +271,20 @@ def main() -> int:
     args.out_dir.mkdir(parents=True, exist_ok=True)
     metrics = collect_metrics(args.in_dir)
     print("\nplotting:", flush=True)
-    plot_combined(metrics, args.out_dir / "subagent_distributions_log.png",
-                  bins=args.bins, use_log=True, linear_clip_pct=args.linear_clip_pct)
-    plot_combined(metrics, args.out_dir / "subagent_distributions_linear.png",
-                  bins=args.bins, use_log=False, linear_clip_pct=args.linear_clip_pct)
+    plot_combined(
+        metrics,
+        args.out_dir / "subagent_distributions_log.png",
+        bins=args.bins,
+        use_log=True,
+        linear_clip_pct=args.linear_clip_pct,
+    )
+    plot_combined(
+        metrics,
+        args.out_dir / "subagent_distributions_linear.png",
+        bins=args.bins,
+        use_log=False,
+        linear_clip_pct=args.linear_clip_pct,
+    )
     return 0
 
 

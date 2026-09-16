@@ -8,7 +8,7 @@ import hashlib
 import json
 import sys
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
 
@@ -78,9 +78,7 @@ def _entry_from_criteria(
     framework_criteria = tuple(policy["adjustments"].get("framework-prefix", {}))
     model_criteria = tuple(policy["adjustments"].get("model-prefix", {}))
     return {
-        "prefill": (
-            {} if "multi-node" in criteria and entry.get("prefill") is not None else None
-        ),
+        "prefill": ({} if "multi-node" in criteria and entry.get("prefill") is not None else None),
         "scenario-type": (
             "agentic-coding"
             if "agentic" in criteria and entry.get("scenario-type") == "agentic-coding"
@@ -93,10 +91,7 @@ def _entry_from_criteria(
             framework
             if any(
                 criterion in criteria
-                and (
-                    framework == criterion
-                    or framework.startswith(f"{criterion}-")
-                )
+                and (framework == criterion or framework.startswith(f"{criterion}-"))
                 for criterion in framework_criteria
             )
             else ""
@@ -105,10 +100,7 @@ def _entry_from_criteria(
             model_prefix
             if any(
                 criterion in criteria
-                and (
-                    model_prefix == criterion
-                    or model_prefix.startswith(f"{criterion}-")
-                )
+                and (model_prefix == criterion or model_prefix.startswith(f"{criterion}-"))
                 for criterion in model_criteria
             )
             else ""
@@ -128,12 +120,8 @@ def calculate_priority(
     waiver_labels = set(patchwork.get("waived-by", []))
     criteria = context.criteria
     if (
-        (
-            (criteria is not None and "patchwork" in criteria)
-            or context.labels & patch_labels
-        )
-        and not context.labels & waiver_labels
-    ):
+        (criteria is not None and "patchwork" in criteria) or context.labels & patch_labels
+    ) and not context.labels & waiver_labels:
         return _decimal(patchwork["score"]).quantize(SCORE_QUANTUM, ROUND_HALF_UP)
 
     if criteria is not None:
@@ -143,11 +131,7 @@ def calculate_priority(
     score += _decimal(adjustments.get("event", {}).get(context.event_name, 0))
 
     node_count = entry.get("node-count", 1)
-    if (
-        not isinstance(node_count, int)
-        or isinstance(node_count, bool)
-        or node_count < 1
-    ):
+    if not isinstance(node_count, int) or isinstance(node_count, bool) or node_count < 1:
         raise ValueError(f"node-count must be a positive integer, got {node_count!r}")
     score += _decimal(adjustments.get("additional-node", 0)) * (node_count - 1)
 
@@ -170,9 +154,8 @@ def calculate_priority(
     )
 
     checklist = policy["labels"].get("checklist-complete", {})
-    if (
-        (criteria is not None and "checklist-complete" in criteria)
-        or context.labels & set(checklist.get("names", []))
+    if (criteria is not None and "checklist-complete" in criteria) or context.labels & set(
+        checklist.get("names", [])
     ):
         score += _decimal(checklist.get("adjustment", 0))
 

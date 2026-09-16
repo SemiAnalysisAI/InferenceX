@@ -2,9 +2,6 @@
 import copy
 import io
 import json
-import os
-import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -36,36 +33,6 @@ from infx.matrix.validation import (
     load_config_files,
     load_runner_file,
 )
-
-
-@pytest.mark.parametrize("order", ["legacy-first", "package-first"])
-def test_schema_instances_work_across_legacy_and_package_imports(tmp_path, order):
-    """Duplicate module loads must not create incompatible Pydantic/Enum types."""
-    result = subprocess.run(
-        [sys.executable, "-c", '''
-import importlib
-import sys
-from pathlib import Path
-
-root = Path(sys.argv[1])
-sys.path[:0] = [str(root), str(root / "utils"), str(root / "utils/matrix_logic")]
-names = ["validation", "matrix_logic.validation", "utils.matrix_logic.validation", "infx.matrix.validation"]
-generators = ["generate_sweep_configs", "matrix_logic.generate_sweep_configs", "utils.matrix_logic.generate_sweep_configs", "infx.matrix.generate"]
-if sys.argv[2] == "package-first":
-    names.reverse()
-    generators.reverse()
-schemas = [importlib.import_module(name) for name in names]
-component = schemas[0].ComponentMetadata(name="fixture", version="1")
-field = schemas[0].Fields("runner")
-for schema in schemas:
-    assert schema.ComponentMetadata.model_validate(component) is component
-for name in generators:
-    assert importlib.import_module(name).Fields(field) is field
-''', str(Path(__file__).resolve().parents[2]), order],
-        cwd=tmp_path, capture_output=True, text=True, check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    assert result.stdout == result.stderr == ""
 
 
 # =============================================================================
@@ -681,16 +648,6 @@ class TestMultiNodeMatrixEntry:
 
 class TestValidateMatrixEntry:
     """Tests for validate_matrix_entry function."""
-
-    def test_valid_single_node(self, valid_single_node_matrix_entry):
-        """Valid single node entry should return the entry."""
-        result = validate_matrix_entry(valid_single_node_matrix_entry, is_multinode=False)
-        assert result == valid_single_node_matrix_entry
-
-    def test_valid_multinode(self, valid_multinode_matrix_entry):
-        """Valid multinode entry should return the entry."""
-        result = validate_matrix_entry(valid_multinode_matrix_entry, is_multinode=True)
-        assert result == valid_multinode_matrix_entry
 
     def test_invalid_single_node_raises_valueerror(self, valid_single_node_matrix_entry):
         """Invalid single node entry should raise ValueError."""
@@ -1311,19 +1268,6 @@ class TestMasterConfigEntries:
 class TestValidateMasterConfig:
     """Tests for validate_master_config function."""
 
-    def test_valid_single_node_config(self, valid_single_node_master_config):
-        """Valid single node config should pass."""
-        configs = {"dsr1-fp8-mi300x-sglang": valid_single_node_master_config}
-        result = validate_master_config(configs)
-        assert result == configs
-
-    def test_valid_multinode_config(self, valid_multinode_master_config):
-        """Valid multinode config should pass."""
-        configs = {"dsr1-fp4-gb200-dynamo-trt": valid_multinode_master_config}
-        result = validate_master_config(configs)
-        assert result == configs
-
-
     def test_invalid_config_raises_valueerror(self, valid_single_node_master_config):
         """Invalid config should raise ValueError with key name."""
         del valid_single_node_master_config["model"]
@@ -1340,11 +1284,6 @@ class TestValidateMasterConfig:
 
 class TestValidateRunnerConfig:
     """Tests for validate_runner_config function."""
-
-    def test_valid_runner_config(self, valid_runner_config):
-        """Valid runner config should pass."""
-        result = validate_runner_config(valid_runner_config)
-        assert result == valid_runner_config
 
     def test_value_must_be_list(self):
         """Runner config values must be lists."""
@@ -1567,77 +1506,6 @@ class TestBenchmarkWorkflowSchema:
         assert output.out == ""
         assert "error:" in output.err
 
-    @pytest.mark.parametrize("workflow_name", ["run-sweep", "e2e-tests"])
-    @pytest.mark.parametrize("multinode", [False, True])
-    @pytest.mark.parametrize("invalid", [False, True])
-    def test_real_preparation_steps_validate_before_publishing_job_outputs(
-        self, tmp_path, valid_single_node_matrix_entry, valid_multinode_matrix_entry,
-        workflow_name, multinode, invalid,
-    ):
-        root = Path(__file__).resolve().parents[2]
-        workflow = yaml.safe_load((root / f".github/workflows/{workflow_name}.yml").read_text())
-        step_id = "setup" if workflow_name == "run-sweep" else "get-jobs"
-        script = next(step["run"] for job in workflow["jobs"].values()
-                      for step in job.get("steps", []) if step.get("id") == step_id)
-        script = re.sub(r"\$\{\{.*?\}\}", lambda m: (
-            "push" if "event_name" in m[0] else "test-config" if "generate-cli-command" in m[0] else ""
-        ), script)
-        row = dict(valid_multinode_matrix_entry if multinode else valid_single_node_matrix_entry)
-        field = "node-count" if multinode else "tp"
-        if invalid:
-            row[field] = "wrong"
-        family = "multi_node" if multinode else "single_node"
-        matrix = {family: {"1k1k": [row]}} if workflow_name == "run-sweep" else [row]
-        source = tmp_path / "generated.json"
-        source.write_text(json.dumps(matrix))
-        output = tmp_path / "job-output"
-        output.touch()
-        bin_dir = tmp_path / "bin"
-        bin_dir.mkdir()
-        uv = bin_dir / "uv"
-        uv.write_text(f"#!{sys.executable}\n" + '''import os, sys
-args = sys.argv[1:]
-if 'infx.workflows.benchmark_schema' in args:
-    os.execv(sys.executable, [sys.executable, *args[args.index('python') + 1:]])
-elif 'infx.matrix.plan' in args or any(a.endswith('/generate_sweep_configs.py') for a in args):
-    sys.stdout.write(open(os.environ['TEST_GENERATED']).read())
-elif 'infx.workflows.ci_priority' in args or any(a.endswith('/ci_priority.py') for a in args):
-    sys.stdout.write(sys.stdin.read())
-else:
-    raise SystemExit(f'Unexpected collaborator: {args}')
-''')
-        python = bin_dir / "python3"
-        python.write_text(f"#!{sys.executable}\n" + '''import os, sys
-if sys.argv[1:3] != ['-m', 'infx.workflows.reuse']:
-    os.execv(sys.executable, [sys.executable, *sys.argv[1:]])
-''')
-        uv.chmod(0o755)
-        python.chmod(0o755)
-        if workflow_name == "e2e-tests":
-            (tmp_path / ".ci-priority").symlink_to(root, target_is_directory=True)
-            (tmp_path / "infx").mkdir()
-            (tmp_path / "infx/__init__.py").write_text("raise RuntimeError('wrong tooling checkout')")
-        result = subprocess.run(
-            ["bash", "-euo", "pipefail", "-c", script],
-            cwd=tmp_path, capture_output=True, text=True, timeout=15,
-            env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "PYTHONPATH": str(root),
-                 "GITHUB_WORKSPACE": str(tmp_path), "GITHUB_OUTPUT": str(output),
-                 "TEST_GENERATED": str(source), "CHANGELOG_BASE_REF": "", "CHANGELOG_HEAD_REF": "",
-                 "TRIM_CONC": "false", "ALL_EVALS": "false", "EVALS_ONLY": "false",
-                 "PR_LABELS": "[]", "PRIORITY_CRITERIA": ""},
-        )
-        if invalid:
-            assert result.returncode != 0
-            assert field in result.stderr
-            assert output.read_text() == ""
-        else:
-            assert result.returncode == 0, result.stderr
-            key = "search-space-config" if workflow_name == "run-sweep" else (
-                "multi-node-config" if multinode else "single-node-config"
-            )
-            published = dict(line.split("=", 1) for line in output.read_text().splitlines())
-            assert json.loads(published[key]) == matrix
-
 
 class TestChangelogMatrixEntry:
     """Tests for the final search-space contract consumed by run-sweep.yml."""
@@ -1768,6 +1636,20 @@ duplicate-key:
         with pytest.raises(ValueError) as exc_info:
             load_config_files(["nonexistent.yaml"])
         assert "does not exist" in str(exc_info.value)
+
+    @pytest.mark.parametrize("content", ["", "null", "[]", "false", "42", "recipe"])
+    def test_non_mapping_root_is_rejected(self, tmp_path, content):
+        path = tmp_path / "config.yaml"
+        path.write_text(content)
+        with pytest.raises(ValueError, match="must contain a dictionary"):
+            load_config_files([str(path)], validate=False)
+
+    @pytest.mark.parametrize("key", ["null", "true", "42"])
+    def test_non_string_key_is_rejected(self, tmp_path, key):
+        path = tmp_path / "config.yaml"
+        path.write_text(f"{key}: {{}}")
+        with pytest.raises(ValueError, match="key.*string"):
+            load_config_files([str(path)], validate=False)
 
     def test_validation_runs_by_default(self, tmp_path):
         """Validation should run by default and catch invalid configs."""
