@@ -28,16 +28,14 @@ fi
 
 set -x
 
-# Use upstreamed multi_node scripts (no external clone needed)
 cd "$GITHUB_WORKSPACE/benchmarks/multi_node/amd_utils" || exit 1
 
-# Set up SGL launch script-specific environment variables
 export TIME_LIMIT="08:00:00"
 export MODEL_PATH=$MODEL_PATH
 export MODEL_NAME=$MODEL_NAME
 export CONTAINER_IMAGE=$IMAGE
 
-if [[ "${PREFILL_EP:-1}" -eq 1 ]]; then
+if [[ "${PREFILL_EP}" -eq 1 ]]; then
 export PREFILL_ENABLE_EP=false
 else
 export PREFILL_ENABLE_EP=true
@@ -49,7 +47,7 @@ else
 export PREFILL_ENABLE_DP=false
 fi
 
-if [[ "${DECODE_EP:-1}" -eq 1 ]]; then
+if [[ "${DECODE_EP}" -eq 1 ]]; then
 export DECODE_ENABLE_EP=false
 else
 export DECODE_ENABLE_EP=true
@@ -61,10 +59,7 @@ else
 export DECODE_ENABLE_DP=false
 fi
 
-# Launch jobs based on ISL/OSL
-# Replace ' ' in CONC_LIST with 'x' such that the concurrency list is represented
-# by a list of numbers delimited by 'x'. This is because of how the underlying launch script
-# expects the concurrencies.
+# submit.sh wants the concurrency list 'x'-delimited.
 JOB_ID=$(bash ./submit.sh $PREFILL_NODES \
     $PREFILL_NUM_WORKERS \
     $DECODE_NODES \

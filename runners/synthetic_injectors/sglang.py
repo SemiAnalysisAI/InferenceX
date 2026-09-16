@@ -4,9 +4,9 @@ import re
 import sys
 
 from . import register
+from ._roles import rewrite_role_environments
 
 _SPEC_STEPS_RE = re.compile(r"(?m)^\s+speculative-num-steps:\s*([0-9]+)\s*$")
-_ENV_BLOCK_RE = re.compile(r"(?m)^(  (?:aggregated|prefill|decode)_environment:\s*)$")
 _SIMULATED_ACCEPTANCE_ENV_RE = re.compile(
     r"(?m)^[ \t]+SGLANG_SIMULATE_ACC_(?:LEN|METHOD|TOKEN_MODE):[^\n]*(?:\n|$)"
 )
@@ -23,15 +23,12 @@ def rewrite(content, al, log):
     if "SGLANG_SIMULATE_ACC_LEN" in content:
         raise ValueError("recipe already contains SGLANG_SIMULATE_ACC_* variables")
 
-    variables = (
-        f'\n    SGLANG_SIMULATE_ACC_LEN: "{al:g}"'
-        '\n    SGLANG_SIMULATE_ACC_METHOD: "match-expected"'
-        '\n    SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"'
+    values = (
+        ("SGLANG_SIMULATE_ACC_LEN", f"{al:g}"),
+        ("SGLANG_SIMULATE_ACC_METHOD", "match-expected"),
+        ("SGLANG_SIMULATE_ACC_TOKEN_MODE", "real-draft-token"),
     )
-    rewritten, count = _ENV_BLOCK_RE.subn(
-        lambda match: match.group(1) + variables,
-        content,
-    )
+    rewritten, count = rewrite_role_environments(content, values)
     if count:
         log(f"Added SGLANG_SIMULATE_ACC_* to {count} worker environment block(s)")
     return rewritten, count

@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars IS_MULTINODE
+
 export HF_HUB_CACHE_MOUNT="/mnt/vast/gharunner/hf-hub-cache"
 export AIPERF_MMAP_CACHE_HOST_PATH="/mnt/vast/gharunner/ai-perf-cache"
 export PORT=8888
@@ -12,7 +15,7 @@ PARTITION="h200"
 SQUASH_FILE="/mnt/vast/gharunner/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 
-export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+check_env_vars GPU_COUNT
 
 set -x
 
@@ -23,11 +26,10 @@ if [ -z "$JOB_ID" ]; then
     exit 1
 fi
 
-# Use Docker image directly for openai/gpt-oss-120b with trt, otherwise use squash file
 if [[ "$MODEL" == "openai/gpt-oss-120b" && "$FRAMEWORK" == "trt" ]]; then
     CONTAINER_IMAGE=$IMAGE
 else
-    # Use flock to serialize concurrent imports to the same squash file
+    # Concurrent jobs import to the same squash file; serialize them.
     srun --jobid=$JOB_ID --job-name="$RUNNER_NAME" bash -c "
         exec 9>\"$LOCK_FILE\"
         flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }

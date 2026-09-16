@@ -23,7 +23,7 @@ def api(
 ) -> Any:
     """Call the GitHub REST API and return decoded JSON."""
     query = f"?{urllib.parse.urlencode(params)}" if params else ""
-    request = urllib.request.Request(
+    request = urllib.request.Request(  # noqa: S310
         f"{API_BASE}/repos/{repo}{path}{query}",
         headers={
             "Accept": "application/vnd.github+json",
@@ -35,7 +35,7 @@ def api(
         data=json.dumps(data).encode("utf-8") if data is not None else None,
     )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
             body = response.read().decode("utf-8")
             return None if method == "DELETE" and not body else json.loads(body)
     except urllib.error.HTTPError as exc:
@@ -54,17 +54,10 @@ def paginate(
     out: list[dict[str, Any]] = []
     page = 1
     while True:
-        page_params = {"per_page": "100", "page": str(page)}
-        if params:
-            page_params.update(params)
+        page_params = {**(params or {}), "per_page": "100", "page": str(page)}
         data = api(repo, path, token, page_params)
-        if isinstance(data, list):
-            items = data
-        elif isinstance(data, dict):
-            items = data.get(item_key, [])
-        else:
-            items = []
-        if not isinstance(items, list):
+        items = data.get(item_key) if isinstance(data, dict) else data
+        if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
             raise RuntimeError(f"GitHub API {path} returned an unexpected shape")
         out.extend(items)
         if len(items) < 100:

@@ -1,6 +1,5 @@
 #!/usr/bin/bash
 
-# Source benchmark utilities early
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars \
@@ -20,13 +19,11 @@ SERVER_LOG=/workspace/server.log
 PORT=8888
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
-# Reference
-# https://rocm.docs.amd.com/en/docs-7.0-rc1/preview/benchmark-docker/inference-sglang-deepseek-r1-fp8.html#run-the-inference-benchmark
+# Reference: https://rocm.docs.amd.com/en/docs-7.0-rc1/preview/benchmark-docker/inference-sglang-deepseek-r1-fp8.html#run-the-inference-benchmark
 
 export SGLANG_USE_AITER=1
 export SGLANG_AITER_MLA_PERSIST=1
 
-# Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 EVAL_CONTEXT_ARGS=""
@@ -51,7 +48,6 @@ $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 run_benchmark_serving \
@@ -66,12 +62,10 @@ run_benchmark_serving \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
 set +x

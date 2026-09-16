@@ -13,15 +13,12 @@ END="$2"
 BASE_DIR="$3"
 SESSION="${4:-github-actions}"
 
-# Kill existing session if it exists
 tmux kill-session -t "$SESSION" 2>/dev/null || true
 
-# Create session with the first runner
 PADDED_START=$(printf "%02d" "$START")
 tmux new-session -d -s "$SESSION" -n "runners"
 tmux send-keys -t "$SESSION" "cd ${BASE_DIR}/gharunner${PADDED_START}/actions-runner && ./run.sh" Enter
 
-# Create additional panes for the rest
 for i in $(seq $((START + 1)) "$END"); do
   PADDED=$(printf "%02d" "$i")
   tmux split-window -t "$SESSION"
