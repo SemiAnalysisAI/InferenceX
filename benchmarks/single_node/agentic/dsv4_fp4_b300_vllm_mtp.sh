@@ -281,7 +281,7 @@ VLLM_CMD=(
     --kv-cache-dtype fp8
     --block-size 256
     --max-model-len 1048576
-    --attention-config '{"use_fp4_indexer_cache":true,"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true}'
+    --attention-config '{"indexer_kv_dtype":"mxfp4","backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true}'
     --speculative-config "$SPEC_CONFIG"
     --disable-uvicorn-access-log
     --tokenizer-mode deepseek_v4

@@ -1484,7 +1484,7 @@ dsv4-fp8-h200-dynamo-sglang-agentic-agg:
           additional-settings:
           - "CONFIG_FILE=recipes/dsv4/sglang/h200-fp8/agentx/agg-tp8-mtp-kvoffload.yaml"
 dsv4-fp4-b300-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-426e59f
+  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-591bb95@sha256:fe10835cefdb617cbbcf48f96435aef2c123d1ed9b504303de74b39c0f40d657
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b300-dsxe
