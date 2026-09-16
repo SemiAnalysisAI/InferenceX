@@ -5,20 +5,24 @@ run-name: Trusted external sweep - PR #${{ github.event.pull_request.number }} @
 # executes pull-request code. A write-authorized collaborator applies one primary
 # sweep label to approve the exact external head SHA, then this trusted event
 # dispatches the existing e2e workflow from main with repository secrets.
-on:
-    pull_request_target:
+# Each authorized label event approves an exact PR head; no event may cancel another.
+on: # zizmor: ignore[concurrency-limits]
+    # Control plane only: verifies writer permission and the exact labeled head, never executes PR code.
+    pull_request_target: # zizmor: ignore[dangerous-triggers]
         branches:
             - main
         types:
             - labeled
 
-permissions:
-    actions: write
-    contents: read
-    pull-requests: write
+permissions: {}
 
 jobs:
     dispatch:
+        name: dispatch
+        permissions:
+            actions: write # Dispatch authorized sweeps.
+            contents: read
+            pull-requests: write # Publish PR feedback.
         if: >-
             github.event.pull_request.head.repo.full_name != github.repository &&
             contains(

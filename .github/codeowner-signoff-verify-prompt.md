@@ -105,8 +105,9 @@ NOT need to list `run-sweep.yml` runs or parse reuse logs.
   Do NOT write a confusing message like "it technically passed but the commit isn't in
   the PR." A sweep that ran on a rebased-out commit is irrelevant to the reviewer, so
   don't lead with it. The fix the author needs is simply: run (or re-anchor via
-  `/reuse-sweep-run`) a passing full sweep on a commit currently in this PR. You may
-  add an offending run/SHA as a short supporting detail AFTER the root-issue line.
+  `/use <run_id>` or the legacy `/reuse-sweep-run`) a passing full sweep on a commit
+  currently in this PR. You may add an offending run/SHA as a short supporting detail
+  AFTER the root-issue line.
 
 ## Check 2 — Evals actually pass (accuracy), on that in-PR commit's run
 For the commit that passed Check 1, confirm the eval numbers are real and meet the bar,
@@ -185,26 +186,22 @@ public upstream documentation.
   standard.
 
 ## Check 4 — Reuse-sweep command explicitly posted
-The supported merge path for an approved PR is reuse (`utils/merge_with_reuse.sh`),
-which can only find a run to reuse if an authorized maintainer has explicitly posted
-the `/reuse-sweep-run` command as a PR comment. A green sweep alone is NOT enough.
-The reuse command must be on record so the merge actually consumes that sweep rather than
-silently re-running it. Verify it directly from the PR's comments:
-- List the PR's conversation comments and look for the reuse command at the start of a
-  comment line (it may be bare `/reuse-sweep-run` or pin a run id,
-  `/reuse-sweep-run <run_id>`):
+The supported merge path for an approved PR is reuse (`utils/merge_with_reuse.sh`).
+An authorized maintainer must explicitly post a reuse command as a PR comment;
+a green sweep alone is not enough. Verify the command directly from the comments:
+- Prefer `/use <run_id>`, with a numeric run ID on the same line. Also accept the legacy
+  `/reuse-sweep-run <run_id>` or bare `/reuse-sweep-run`. Each command must occupy a whole line.
+  Inline mentions and bare `/use` do not count.
   ```bash
   gh api repos/${REPO}/issues/${PR_NUMBER}/comments \
     --paginate --jq '.[] | {user: .user.login, association: .author_association, body: .body}'
   ```
-- PASS only if at least one such `/reuse-sweep-run` comment exists AND its author is
-  authorized when `author_association` is `OWNER`, `MEMBER`, or `COLLABORATOR` (the same
-  authorization the reuse path itself enforces). A `/reuse-sweep-run` from an
-  unauthorized author does not count.
-- FAIL if no `/reuse-sweep-run` comment is present, or the only such comment is from an
-  unauthorized author. State the root issue plainly: "No authorized `/reuse-sweep-run`
-  command has been posted on this PR" and remind the reviewer that an authorized
-  maintainer must comment `/reuse-sweep-run` before this PR can be merged via reuse.
+- PASS only if a matching comment exists whose `author_association` is `OWNER`,
+  `MEMBER`, or `COLLABORATOR`. Both command names share this requirement; the newest
+  authorized matching comment across both names determines the requested source.
+- FAIL if no authorized reuse command is present. State: "No authorized reuse command
+  has been posted on this PR" and ask an authorized maintainer to comment
+  `/use <run_id>` before merging via reuse.
 
 ## Check 5 — Sign-off uses the LATEST checklist template
 The first item of the checklist has the reviewer affirm they used the latest version
