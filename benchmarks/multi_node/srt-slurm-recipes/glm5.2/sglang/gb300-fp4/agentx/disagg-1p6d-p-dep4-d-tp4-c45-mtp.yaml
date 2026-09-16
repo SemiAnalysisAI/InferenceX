@@ -82,7 +82,7 @@ roles:
       enable-flashinfer-allreduce-fusion: true
       weight-loader-prefetch-checkpoints: true
       model-loader-extra-config: '{"enable_multithread_load": true}'
-      mem-fraction-static: 0.8
+      mem-fraction-static: 0.75
       context-length: 1048576
       enable-hierarchical-cache: true
       hicache-write-policy: write_back
