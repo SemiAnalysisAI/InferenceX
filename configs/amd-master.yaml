@@ -624,7 +624,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=2"
 
 kimik3-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-rocm100-2671fedfc7ae604761990603fc736c0c4f21de57
+  image: vllm/vllm-openai-rocm:nightly-rocm100-af1c01499b289be555c475669ba50a88e96d846e
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds

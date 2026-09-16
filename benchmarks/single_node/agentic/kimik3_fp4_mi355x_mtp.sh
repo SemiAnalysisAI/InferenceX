@@ -267,7 +267,23 @@ case "$CONC" in
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=16384
         ;;
-    4|8|10|12|14)
+    # The speculative envelope descends with concurrency: drafting spends spare
+    # compute, and there is less of it to spend as the batch grows. Each k is
+    # paired with its own acceptance length -- changing one without the other
+    # measures nothing.
+    4)
+        SYNTHETIC_ACCEPT_LEN=3.62
+        SPEC_NUM_TOKENS=5
+        GPU_MEM_UTIL=0.9
+        MAX_NUM_BATCHED_TOKENS=8192
+        ;;
+    8|10)
+        SYNTHETIC_ACCEPT_LEN=3.36
+        SPEC_NUM_TOKENS=4
+        GPU_MEM_UTIL=0.9
+        MAX_NUM_BATCHED_TOKENS=8192
+        ;;
+    12|14)
         SYNTHETIC_ACCEPT_LEN=3.00
         SPEC_NUM_TOKENS=3
         GPU_MEM_UTIL=0.9
@@ -285,28 +301,13 @@ case "$CONC" in
         ;;
 esac
 
-# ---- DSpark draft: materialise a causal-flagged copy --------------------------
-# Inferact/Kimi-K3-DSpark ships "dflash_config": null, which vLLM reads as
-# non-causal. ROCM_AITER_MLA does not implement non-causal draft attention, so the
-# backend is rejected at config time ("non-causal attention not supported") and the
-# draft falls back to TRITON_MLA. Setting dflash_config.causal makes the selection
-# legal. This is a model-config change only -- no vLLM patch -- and gsm8k
-# (limit 128, real block acceptance) scores 1.00 strict / 1.00 flexible with it,
-# i.e. the flag is semantically correct here and not merely permissive.
-DSPARK_DRAFT_REPO="${DSPARK_DRAFT_REPO:-Inferact/Kimi-K3-DSpark}"
-DSPARK_DRAFT_PATH="${DSPARK_DRAFT_PATH:-/tmp/kimi-k3-dspark-causal}"
-if [ ! -f "$DSPARK_DRAFT_PATH/config.json" ]; then
-    mkdir -p "$DSPARK_DRAFT_PATH"
-    hf download "$DSPARK_DRAFT_REPO" --local-dir "$DSPARK_DRAFT_PATH"
-    python3 - "$DSPARK_DRAFT_PATH/config.json" <<'PYEOF'
-import json, sys
-p = sys.argv[1]
-cfg = json.load(open(p))
-cfg["dflash_config"] = {"causal": True}
-json.dump(cfg, open(p, "w"), indent=2)
-print(f"dspark draft: dflash_config -> {cfg['dflash_config']}")
-PYEOF
-fi
+# ---- DSpark draft ------------------------------------------------------------
+# Used as published. vLLM #55966 ("Add Aiter MLA decode support non-causal draft
+# block") landed upstream, so ROCM_AITER_MLA now accepts the stock
+# Inferact/Kimi-K3-DSpark checkpoint, which ships "dflash_config": null. The
+# earlier revision of this PR rewrote that field to {"causal": true} in a local
+# copy; that is no longer necessary and has been dropped.
+DSPARK_DRAFT_PATH="${DSPARK_DRAFT_PATH:-Inferact/Kimi-K3-DSpark}"
 
 # ---- CUDA graph mode ---------------------------------------------------------
 # FULL_AND_PIECEWISE requires either a torch-compiled model or breakable CUDA
