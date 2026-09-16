@@ -80,7 +80,7 @@ def test_b200_dsv4_agentx_uses_the_0813_bundled_dspark_checkpoint() -> None:
         / "agentic"
     )
     recipes = sorted(recipe_dir.glob("*b200*-mtp-*.yaml"))
-    assert len(recipes) == 8
+    assert len(recipes) == 6
 
     for recipe in recipes:
         contents = recipe.read_text(encoding="utf-8")
@@ -114,7 +114,7 @@ def test_b200_disaggregated_recipes_use_standard_rdma_mooncake_buffers() -> None
         / "agentic"
     )
     recipes = sorted(recipe_dir.glob("disagg-b200-*.yaml"))
-    assert len(recipes) == 2
+    assert len(recipes) == 3
 
     for recipe in recipes:
         contents = recipe.read_text(encoding="utf-8")

@@ -1,7 +1,7 @@
-name: "disagg-b200-2p1d-dep8-dep8-c128-mtp-kvoffload"
+name: "disagg-b200-2p1d-dep8-dep8-c256-mtp-kvoffload"
 
 # B200 AgentX SGLang disaggregated recipe for DeepSeek-V4-Pro-0813
-# (2P x DEP8 / 1D x DEP8, bundled DSpark + HiCache KV offload), tuned for concurrency 128.
+# (2P x DEP8 / 1D x DEP8, bundled DSpark + HiCache KV offload), tuned for concurrency 256.
 # Each DEP8 worker occupies one eight-GPU B200 node.
 
 model:
@@ -190,7 +190,7 @@ backend:
       mem-fraction-static: 0.9
       page-size: 256
       swa-full-tokens-ratio: 0.02
-      max-running-requests: 256
+      max-running-requests: 512
       cuda-graph-max-bs-decode: 256
       disable-flashinfer-autotune: true
       model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'

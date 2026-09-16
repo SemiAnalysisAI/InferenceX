@@ -6758,7 +6758,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add B200 Dynamo+SGLang AgentX TP8 aggregate HiCache recipes at concurrency 1, 2, 4, 8, 12, and 16."
+    - "Add B200 Dynamo+SGLang AgentX TP8 aggregate HiCache recipes at concurrency 1, 4, and 8."
     - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with DSpark K=6 and per-point request/CUDA-graph limits."
   pr-link: https://github.com/NVIDIA/InferenceMAX/pull/335
 
@@ -6767,6 +6767,6 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add B200 Dynamo+SGLang AgentX 1P1D and 2P1D DEP8/DEP8 HiCache recipes at concurrency 64 and 128."
-    - "Limit decode max-running-requests to 128 and 256, respectively."
+    - "Add B200 Dynamo+SGLang AgentX DEP8/DEP8 HiCache recipes for 1P1D at concurrency 64 and 128, plus 2P1D at concurrency 256."
+    - "Limit decode max-running-requests to 128, 256, and 512, respectively."
   pr-link: https://github.com/NVIDIA/InferenceMAX/pull/335
