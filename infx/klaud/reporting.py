@@ -681,7 +681,7 @@ def publish_final(
     session: Session, run: dict, evidence: tuple[dict, list[dict], list[dict]]
 ) -> None:
     """Normal finish and recovery publish the same artifact-derived final report."""
-    from infx.workflows import validate_reusable_sweep_artifacts as reuse
+    from infx.results.eval_artifacts import eval_key
 
     from .validation import benchmark_entries, expected_evals
 
@@ -709,7 +709,7 @@ def publish_final(
         )
     evaluations = [
         Evaluation(
-            key=identity(reuse.eval_key(row)),
+            key=identity(eval_key(row)),
             suite=row.get("eval_suite") or "gsm8k",
             label=f"c{row['conc']}",
             metric=row.get("score_name") or "em_strict",
@@ -752,14 +752,68 @@ def publish_final(
     )
 
 
-def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -> Baseline:
-    """Fetch once, accepting only exact producer fingerprints of the selected old family.
+def public_point(entry: dict) -> dict:
+    """Project generated settings onto the public BenchmarkRow identity (not metrics)."""
+    from infx.matrix.generate import _hardware_family
 
-    Legacy public rows without full fingerprints remain unavailable rather than
-    matching merely by SKU/concurrency. Raw responses never enter the public record.
+    agentic = entry.get("scenario-type") == "agentic-coding"
+    multi = entry.get("prefill") is not None
+    point = {
+        "model": entry["model-prefix"],
+        "hardware": _hardware_family(entry["runner"]),
+        "framework": entry["framework"],
+        "precision": entry["precision"],
+        "spec_method": entry["spec-decoding"],
+        "disagg": entry.get("disagg", False),
+        "is_multinode": multi,
+        "benchmark_type": "agentic_traces" if agentic else "single_turn",
+        "isl": None if agentic else entry["isl"],
+        "osl": None if agentic else entry["osl"],
+        "offload_mode": "on" if entry.get("kv-offloading", "none") != "none" else "off",
+        "conc": int(entry["conc"]),
+        "image": entry["image"],
+    }
+    for role in ("prefill", "decode"):
+        topology = entry[role] if multi else entry
+        point.update(
+            {
+                f"{role}_tp": topology["tp"],
+                f"{role}_ep": topology.get("ep", 1),
+                f"{role}_dp_attention": topology.get("dp-attn", False),
+                f"{role}_num_workers": topology["num-worker"] if multi else 0,
+            }
+        )
+    return point
+
+
+def matrix_points(matrix: dict) -> list[dict]:
+    from .validation import benchmark_entries
+
+    return [
+        {**entry, "conc": int(conc)}
+        for entry in benchmark_entries(matrix)
+        for conc in (entry["conc"] if isinstance(entry["conc"], list) else [entry["conc"]])
+    ]
+
+
+def check_baseline_coverage(matrix: dict, baseline: Baseline | None) -> None:
+    """Current-family completeness cannot replace the frozen original point roster."""
+    if baseline is None or not baseline.points:
+        raise VerificationError("Missing frozen baseline point roster")
+    if {point.key for point in baseline.points} - {point_key(p) for p in matrix_points(matrix)}:
+        raise VerificationError("Final matrix omits or changes frozen baseline points")
+
+
+def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -> Baseline:
+    """Freeze source-date rows against their own producer's complete family.
+
+    Legacy fingerprints may be absent, but exact producer provenance and a unique
+    workload/topology/concurrency match are required. Raw API data stays private.
     """
+    from fnmatch import fnmatchcase
+
     from .api import fetch
-    from .validation import benchmark_entries, canonical_matrix
+    from .validation import canonical_matrix
 
     matrix = canonical_matrix(session.repository, session.candidate.base, session.candidate.family)
     feed = fetch("benchmarks", model=model, date=context["source"]["date"])
@@ -771,54 +825,123 @@ def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -
         if row.get("head_sha"):
             heads.setdefault(int(row["github_run_id"]), set()).add(row["head_sha"])
     old_image = context["source"]["image"]
-    points = []
-    for entry in benchmark_entries(matrix):
-        if entry["image"] != old_image:
-            raise VerificationError("Baseline source image no longer matches the selected base")
-        for conc in entry["conc"] if isinstance(entry["conc"], list) else [entry["conc"]]:
-            point = {**entry, "conc": conc}
-            matched = [
-                row
-                for row in feed.payload
-                if row.get("recipe_fingerprint") == entry["recipe-fingerprint"]
-                and row.get("image") == old_image
-                and row.get("conc") == conc
-            ]
-            published = matched[0] if len(matched) == 1 else None
-            producer = re.fullmatch(
-                r"https://github.com/"
-                + re.escape(session.repository)
-                + r"/actions/runs/(\d+)(?:/attempts/(\d+))?",
-                (published or {}).get("run_url") or "",
+    entries = {point_key(entry): entry for entry in matrix_points(matrix)}
+    if not entries or any(entry["image"] != old_image for entry in entries.values()):
+        raise VerificationError("Baseline source image no longer matches the selected base")
+    historical: dict[str, list[dict]] = {}
+    published: dict[str, Point] = {}
+    unverified: list[dict] = []
+    family_runs = {
+        int(change["workflow_run_id"])
+        for change in info.payload["changelogs"]
+        if any(
+            fnmatchcase(session.candidate.family.split(":", 1)[1], key)
+            for key in change["config_keys"]
+        )
+    }
+    for row in feed.payload:
+        # Do not filter ISL/OSL here: that would erase other curves in the original family.
+        if any(
+            row.get(key) != context["source"][key]
+            for key in (
+                "model",
+                "hardware",
+                "framework",
+                "precision",
+                "spec_method",
+                "disagg",
+                "image",
             )
-            run_id = int(producer[1]) if producer else None
-            run_attempt = int(producer[2]) if producer and producer[2] else None
-            if (
-                run_id not in producers
-                or len(heads.get(run_id, ())) != 1
-                or (run_attempt is not None and run_attempt > int(producers[run_id]["run_attempt"]))
-            ):
-                published = None
-            points.append(
-                Point(
-                    key=point_key(point),
-                    label=point_label(point),
-                    conc=int(conc),
-                    scenario=entry.get("scenario-type", "fixed-seq-len"),
-                    # Dataset is not included in BenchmarkRow. Until a public
-                    # producer dataset match is established, AgentX deltas are N/A.
-                    values=values(published) if published else Values(),
-                    result="passed" if published else "unavailable",
-                    run_id=run_id if published else None,
-                    head=next(iter(heads[run_id])) if published else None,
-                    run_attempt=run_attempt if published else None,
+        ):
+            continue
+        producer = re.fullmatch(
+            r"https://github.com/"
+            + re.escape(session.repository)
+            + r"/actions/runs/(\d+)(?:/attempts/(\d+))?",
+            row.get("run_url") or "",
+        )
+        run_id = int(producer[1]) if producer else None
+        run_attempt = int(producer[2]) if producer and producer[2] else None
+        if (
+            run_id not in producers
+            or len(heads.get(run_id, ())) != 1
+            or (run_attempt is not None and run_attempt > int(producers[run_id]["run_attempt"]))
+        ):
+            # Classify after reconstructing the complete historical family, so an
+            # unrelated sibling cannot block it and feed ordering cannot hide points.
+            unverified.append(row)
+            continue
+        head = next(iter(heads[run_id]))
+        if head not in historical:
+            historical[head] = matrix_points(
+                canonical_matrix(
+                    session.repository, head, session.candidate.family, historical=True
                 )
             )
+        matches = [
+            entry
+            for entry in historical[head]
+            if all(row.get(key) == value for key, value in public_point(entry).items())
+        ]
+        if not matches:  # A distinct sibling workload/topology is not this family's baseline.
+            continue
+        if row.get("recipe_fingerprint"):
+            matches = [
+                entry
+                for entry in matches
+                if entry["recipe-fingerprint"] == row["recipe_fingerprint"]
+            ]
+        elif run_id not in family_runs:
+            raise VerificationError("Legacy baseline producer does not select the candidate family")
+        if len(matches) != 1:
+            raise VerificationError("Public baseline recipe identity is ambiguous or mismatched")
+        entry = matches[0]
+        key = point_key(entry)
+        if key in published:
+            raise VerificationError("Duplicate public baseline point")
+        # Retain all original points, even if a current family or API response is smaller.
+        entries.update(
+            (point_key(point), point) for point in historical[head] if point["image"] == old_image
+        )
+        published[key] = Point(
+            key=key,
+            label=point_label(entry),
+            conc=entry["conc"],
+            scenario=entry.get("scenario-type", "fixed-seq-len"),
+            # Dataset is not in BenchmarkRow; AgentX deltas remain N/A until proven.
+            values=values(row),
+            result="passed",
+            run_id=run_id,
+            head=head,
+            run_attempt=run_attempt,
+        )
+    identities = [public_point(entry) for entry in entries.values()]
+    if any(
+        any(all(row.get(key) == value for key, value in point.items()) for point in identities)
+        for row in unverified
+    ):
+        raise VerificationError("Public baseline producer provenance is unavailable")
+    if not published:
+        raise VerificationError("No verified public baseline points for the selected family")
+    points = [
+        published.get(key)
+        or Point(
+            key=key,
+            label=point_label(entry),
+            conc=entry["conc"],
+            scenario=entry.get("scenario-type", "fixed-seq-len"),
+            values=Values(),
+            result="unavailable",
+        )
+        for key, entry in entries.items()
+    ]
     return Baseline(
         family=session.candidate.family,
         date=context["source"]["date"],
         image=old_image,
         goal=goal,
         sources=[feed.url, info.url],
-        points=points,
+        points=sorted(
+            points, key=lambda point: (point.label.split(" c")[0], point.conc, point.label)
+        ),
     )

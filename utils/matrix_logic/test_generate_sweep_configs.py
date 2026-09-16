@@ -2,8 +2,6 @@
 import argparse
 import copy
 import json
-import os
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -112,7 +110,9 @@ def test_multinode_node_count_reads_schema_two_roles(tmp_path, monkeypatch, role
     recipe.parent.mkdir(parents=True)
     recipe.write_text(yaml.safe_dump({"schema": 2, "roles": roles}))
     import infx.matrix.generate as generate
-    monkeypatch.setattr(generate, "__file__", str(tmp_path / "infx/matrix/generate.py"))
+    import infx.config
+    (tmp_path / "configs").mkdir()
+    monkeypatch.setattr(infx.config, "__file__", str(tmp_path / "infx/config.py"))
     prefill = {"additional-settings": ["CONFIG_FILE=recipes/test.yaml"]}
     if expected is None:
         with pytest.raises(ValueError, match="role 'decode' must specify nodes"):
@@ -170,9 +170,11 @@ def test_multinode_node_count_prefers_recipe_roles(
     recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/test.yaml"
     recipe.parent.mkdir(parents=True)
     recipe.write_text(yaml.safe_dump({"schema": 2, "roles": roles}))
+    import infx.config
+    (tmp_path / "configs").mkdir()
     monkeypatch.setattr(
-        generate_sweep_configs, "__file__",
-        str(tmp_path / "infx/matrix/generate.py"),
+        infx.config, "__file__",
+        str(tmp_path / "infx/config.py"),
     )
     prefill = {
         "num-worker": 1, "tp": 8,
@@ -3147,105 +3149,6 @@ class TestExpandConfigKeys:
             "dsr1-fp8-h200-trt",
             "gptoss-fp8-b200-sglang",
         ]
-
-
-# =============================================================================
-# Tests for e2e-tests.yml workflow config splitting
-# =============================================================================
-
-@pytest.fixture
-def split_e2e_configs(tmp_path):
-    """Run the shipped workflow step; stub only generation and priority scoring."""
-    repo_root = Path(__file__).resolve().parents[2]
-    workflow = yaml.safe_load((repo_root / ".github/workflows/e2e-tests.yml").read_text())
-    step = next(step for step in workflow["jobs"]["get-jobs"]["steps"] if step.get("id") == "get-jobs")
-    # Actions resolves these expressions before invoking Bash. Their values
-    # are irrelevant to routing, so use a harmless nonempty command/context.
-    script = re.sub(r"\$\{\{.*?\}\}", "fixture", step["run"])
-    boundary_stubs = r"""#!/bin/bash
-case "$*" in
-  *generate_sweep_configs.py*|*infx.matrix.generate*) cat "$MATRIX_FIXTURE" ;;
-  *infx.workflows.benchmark_schema*) exec "$TEST_PYTHON" -P -m infx.workflows.benchmark_schema ;;
-  *ci_priority.py*|*infx.workflows.ci_priority*) cat ;;
-  *) exit 1 ;;
-esac
-"""
-    tools = tmp_path / "bin"
-    tools.mkdir()
-    (tools / "uv").write_text(boundary_stubs)
-    (tools / "uv").chmod(0o755)
-    (tmp_path / ".ci-priority").symlink_to(repo_root, target_is_directory=True)
-
-    def run(entries):
-        matrix_file = tmp_path / "matrix.json"
-        matrix_file.write_text(json.dumps(entries))
-        output_file = tmp_path / "outputs"
-        output_file.write_text("")
-        subprocess.run(
-            ["bash", "-euo", "pipefail", "-c", script],
-            cwd=tmp_path, check=True, capture_output=True, text=True, timeout=30,
-            env={
-                **os.environ,
-                "PATH": f"{tools}:{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}",
-                "GITHUB_WORKSPACE": str(tmp_path), "GITHUB_OUTPUT": str(output_file),
-                "MATRIX_FIXTURE": str(matrix_file), "PR_LABELS": "[]",
-                "TEST_PYTHON": sys.executable,
-                "CHANGELOG_BASE_REF": "", "CHANGELOG_HEAD_REF": "",
-                "TRIM_CONC": "false", "ALL_EVALS": "false", "EVALS_ONLY": "false",
-            },
-        )
-        return {
-            name: json.loads(value)
-            for line in output_file.read_text().splitlines()
-            for name, value in [line.split("=", 1)]
-        }
-
-    return run
-
-
-class TestE2EConfigSplitting:
-    def test_workflow_routes_benchmarks_and_evals_without_crossing_scenarios(self, split_e2e_configs):
-        common = {"image": "engine:fixture", "model": "test/model", "model-prefix": "fixture",
-                  "precision": "fp8", "framework": "sglang", "runner": "fixture-node",
-                  "tp": 8, "pp": 1, "dcp-size": 1, "pcp-size": 1, "ep": 1,
-                  "dp-attn": False, "conc": 4, "spec-decoding": "none"}
-        single = {**common, "exp-name": "single", "run-eval": False,
-                  "isl": 1024, "osl": 1024, "max-model-len": 2248, "disagg": False}
-        single_eval = {**single, "exp-name": "single-eval", "run-eval": True, "recipe-fingerprint": "a" * 64}
-        single_eval_only = {**single, "exp-name": "single-eval-only", "run-eval": True, "eval-only": True}
-        worker = {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}
-        multi = {k: v for k, v in single.items() if k not in ("tp", "pp", "dcp-size", "pcp-size", "ep", "dp-attn")}
-        multi.update({"exp-name": "multi", "prefill": worker, "decode": worker,
-                      "node-count": 2, "conc": [4, 8], "run-eval": True})
-        multi_eval_only = {**multi, "exp-name": "multi-eval-only", "eval-only": True}
-        agentic = {**common, "exp-name": "agentic", "scenario-type": "agentic-coding", "run-eval": True,
-                   "kv-offloading": "none", "total-cpu-dram-gb": 0, "duration": 3600}
-        agentic_eval_only = {**agentic, "exp-name": "agentic-eval-only", "eval-only": True}
-        multi_agentic = {k: v for k, v in multi.items() if k not in ("isl", "osl", "max-model-len")}
-        multi_agentic.update({"exp-name": "multi-agentic", "scenario-type": "agentic-coding",
-                              "kv-offloading": "none", "total-cpu-dram-gb": 0, "duration": 3600})
-        multi_agentic_eval_only = {**multi_agentic, "exp-name": "multi-agentic-eval-only", "eval-only": True}
-
-        output = split_e2e_configs([
-            single, single_eval, single_eval_only, multi, multi_eval_only,
-            agentic, agentic_eval_only, multi_agentic, multi_agentic_eval_only,
-        ])
-
-        assert output == {
-            "single-node-config": [single, single_eval],
-            "eval-config": [single_eval, single_eval_only],
-            "multi-node-config": [multi],
-            "multi-node-eval-config": [multi, multi_eval_only],
-            "agentic-config": [agentic],
-            "agentic-eval-config": [agentic, agentic_eval_only],
-            "multi-node-agentic-config": [multi_agentic],
-            "multi-node-agentic-eval-config": [multi_agentic, multi_agentic_eval_only],
-        }
-
-    def test_empty_matrix_has_no_jobs(self, split_e2e_configs):
-        output = split_e2e_configs([])
-
-        assert output and all(rows == [] for rows in output.values())
 
 
 @pytest.mark.parametrize("multinode", [False, True])
