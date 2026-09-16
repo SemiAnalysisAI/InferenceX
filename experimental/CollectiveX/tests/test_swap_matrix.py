@@ -2,12 +2,12 @@
 
 import sys
 import unittest
-from unittest import mock
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from swap_matrix import build_matrix
 from runtime.swap_nodes import existing_exclusions
+from swap_matrix import build_matrix
 
 
 class SwapMatrixTests(unittest.TestCase):
@@ -52,8 +52,10 @@ class SwapNodeTests(unittest.TestCase):
             side_effect=["retired\nquarantined\n", "healthy\nquarantined\n"],
         ):
             self.assertEqual(existing_exclusions("retired,quarantined"), "quarantined")
-        with mock.patch(
-            "runtime.swap_nodes.subprocess.check_output", side_effect=["old\n", ""]
+        with (
+            mock.patch(
+                "runtime.swap_nodes.subprocess.check_output", side_effect=["old\n", ""]
+            ),
+            self.assertRaisesRegex(ValueError, "no nodes"),
         ):
-            with self.assertRaisesRegex(ValueError, "no nodes"):
-                existing_exclusions("old")
+            existing_exclusions("old")
