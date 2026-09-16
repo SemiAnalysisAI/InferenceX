@@ -102,7 +102,7 @@ KLAUD=(uv run --no-project --exclude-newer PT12H --python 3.12 \
 
 ## 最终预检与维护者重试
 
-添加 `full-sweep-enabled` 前，验证已推送精确 head 的完整矩阵：
+添加 `full-sweep-fail-fast` 前，验证已推送精确 head 的完整矩阵：
 
 ```bash
 head_sha=$(git rev-parse HEAD)
