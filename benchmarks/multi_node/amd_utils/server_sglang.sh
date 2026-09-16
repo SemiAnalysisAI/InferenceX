@@ -398,10 +398,10 @@ build_server_config() {
     # (x (DECODE_MTP_SIZE + 1)) correct for DSpark without further change.
     if [ "$decode_mtp_size" -gt 0 ]; then
         if [[ "${SPEC_DECODING:-}" == "draft_model" ]]; then
-            if [[ -z "${MODEL_DSPARK_FLAGS// }" ]]; then
-                echo "FATAL: SPEC_DECODING=draft_model but model '${model_name}' has no dspark_flags in models.yaml." >&2
-                exit 1
-            fi
+            # MODEL_DSPARK_FLAGS is validated at the call site, not here: this
+            # function is only ever invoked inside $( ), where an exit would
+            # terminate the subshell and leave the caller with an empty config
+            # rather than aborting the launch.
             mtp_config="${MODEL_DSPARK_FLAGS} --speculative-dspark-block-size ${decode_mtp_size} --speculative-num-steps 1 --speculative-num-draft-tokens $((decode_mtp_size + 1))"
         else
             mtp_config="${MODEL_MTP_FLAGS} --speculative-num-steps ${decode_mtp_size} --speculative-num-draft-tokens $((decode_mtp_size + 1))"
@@ -461,6 +461,15 @@ build_server_config() {
 
     echo "$full_config"
 }
+
+# Validate the DSpark path before building either config. This has to happen at
+# top level: build_server_config only ever runs inside $( ), so an exit there
+# would kill the subshell and hand the caller an empty config string instead of
+# stopping the launch.
+if [[ "$DECODE_MTP_SIZE" -gt 0 ]] && [[ "${SPEC_DECODING:-}" == "draft_model" ]] && [[ -z "${MODEL_DSPARK_FLAGS// }" ]]; then
+    echo "FATAL: SPEC_DECODING=draft_model but model '${MODEL_NAME}' has no dspark_flags in models.yaml." >&2
+    exit 1
+fi
 
 PREFILL_SERVER_CONFIG=$(build_server_config "prefill" "$MODEL_NAME" "$PREFILL_TP_SIZE" "$PREFILL_ENABLE_EP" "$PREFILL_ENABLE_DP" "$DECODE_MTP_SIZE")
 DECODE_SERVER_CONFIG=$(build_server_config "decode" "$MODEL_NAME" "$DECODE_TP_SIZE" "$DECODE_ENABLE_EP" "$DECODE_ENABLE_DP" "$DECODE_MTP_SIZE")
