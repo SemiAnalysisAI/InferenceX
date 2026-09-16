@@ -126,7 +126,7 @@ smoke benchmark 和代表性 eval 都通过后，在 changelog 物理末尾追�
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" python -m infx.klaud --help
-uvx zizmor==1.30.0 --offline --no-config --no-ignores .github/workflows/klaud-plan.yml .github/workflows/klaud-candidate.yml
+uvx --exclude-newer PT12H zizmor@latest --offline --no-config --no-ignores .github/workflows/klaud-plan.yml .github/workflows/klaud-candidate.yml
 ```
 
 CLI 和工作流检查不能证明 GPU 实际可运行。Klaud Cold 使用现有 InferenceX 校验和 e2e 工作流验证候选修改。本地验证不调用真实模型、不调度 benchmark、不创建 PR、不部署。

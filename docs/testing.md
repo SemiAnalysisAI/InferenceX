@@ -76,14 +76,14 @@ Fix findings where practical. Justified exceptions use inline `# noqa: CODE`; un
 
 ### GitHub Actions security
 
-CI pins zizmor 1.30.1 and uses its strictest `auditor` persona, strict input collection, all supported input kinds, and online action-reference checks. Every unsuppressed finding fails the job, including informational and low-confidence findings. Run the same audit locally with an authenticated GitHub token:
+CI uses the latest zizmor release at least 12 hours old, with its strictest `auditor` persona, strict input collection, all supported input kinds, and online action-reference checks. Every unsuppressed finding fails the job, including informational and low-confidence findings. Run the same audit locally with an authenticated GitHub token:
 
 ```bash
-GH_TOKEN="$(gh auth token)" uvx --exclude-newer PT12H zizmor==1.30.1 \
+GH_TOKEN="$(gh auth token)" uvx --exclude-newer PT12H zizmor@latest \
   --persona auditor --strict-collection --collect all --no-config --no-progress .
 ```
 
-All third-party actions remain pinned to commit SHAs. Same-repository workflow calls use `$/`, which resolves the workflow's exact commit and requires Actions runner 2.336.0 or newer. Dependabot waits seven days before action updates; Claude's review CLI installs from a committed npm lockfile.
+All third-party actions remain pinned to commit SHAs. Same-repository workflow calls use `$/`, which resolves the workflow's exact commit and requires Actions runner 2.336.0 or newer. Dependabot waits seven days before action updates. The combined Claude workflow keeps separate review and coding jobs with their own permissions; the pinned Claude action installs its supported CLI version.
 
 Auditor mode also reports deliberate architecture choices. Exceptions are attached to the exact affected YAML line with a reason, never disabled globally:
 

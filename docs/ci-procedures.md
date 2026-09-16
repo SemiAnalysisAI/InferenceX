@@ -281,7 +281,7 @@ Watch the first canary or matrix failure, then classify it before rerunning:
 - **Policy/gate failure:** conflicting labels, invalid changelog, missing authorization, merge conflict, or ineligible artifacts. Correct the gate. GPU reruns will not fix it.
 - **Superseded run:** a later commit or recognized label change cancelled it through workflow concurrency. Monitor the replacement run rather than reviving stale evidence.
 
-The [`PR Review` workflow](../.github/workflows/claude-pr-review.yml) installs a pinned official Claude Code npm package and checks `claude --version` before passing its executable path to the review action. An installation or startup failure means the review did not run; it is not a review finding or a successful review. Check the installation step before retrying.
+The [`Claude Code` workflow](../.github/workflows/claude.yml) has separate review and coding jobs. Review keeps its existing `ready_for_review` and authorized `@pr-claude` triggers, read-only repository contents, and PR feedback permissions; the coding job handles `@claude` and `@Klaud-Cold` with its existing write permissions. Review requests serialize per PR without cancelling active reviews; coding requests remain independent. Both jobs use the pinned official action to install its supported Claude Code CLI. An installation or startup failure means the review did not run; it is not a review finding or a successful review. Check the action installation logs before retrying.
 
 ### Rerun safely
 

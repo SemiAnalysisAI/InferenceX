@@ -76,14 +76,14 @@ uvx --exclude-newer PT12H ruff@latest format infx
 
 ### GitHub Actions 安全检查
 
-CI 固定使用 zizmor 1.30.1，启用最严格的 `auditor` 模式、严格输入收集、全部受支持的输入类型，以及在线 action 引用检查。所有未豁免的发现都会使任务失败，包括信息级和低置信度发现。使用已认证的 GitHub token 在本地执行同样的检查：
+CI 使用发布至少 12 小时的最新 zizmor 版本，启用最严格的 `auditor` 模式、严格输入收集、全部受支持的输入类型，以及在线 action 引用检查。所有未豁免的发现都会使任务失败，包括信息级和低置信度发现。使用已认证的 GitHub token 在本地执行同样的检查：
 
 ```bash
-GH_TOKEN="$(gh auth token)" uvx --exclude-newer PT12H zizmor==1.30.1 \
+GH_TOKEN="$(gh auth token)" uvx --exclude-newer PT12H zizmor@latest \
   --persona auditor --strict-collection --collect all --no-config --no-progress .
 ```
 
-所有第三方 action 仍固定到提交 SHA。同仓库工作流使用 `$/` 引用，解析到工作流的确切提交，要求 Actions runner 版本至少为 2.336.0。Dependabot 在 action 发布七天后才更新；Claude 审查 CLI 通过已提交的 npm 锁文件安装。
+所有第三方 action 仍固定到提交 SHA。同仓库工作流使用 `$/` 引用，解析到工作流的确切提交，要求 Actions runner 版本至少为 2.336.0。Dependabot 在 action 发布七天后才更新。合并后的 Claude 工作流保留审阅和编码两个独立任务，分别设置权限；固定到提交 SHA 的 Claude action 负责安装其支持的 CLI 版本。
 
 Auditor 模式也会报告有意保留的架构选择。豁免仅标注在对应的 YAML 行，并附上原因，不会全局禁用规则：
 

@@ -1,7 +1,0 @@
-{
-  "name": "inferencex-claude-review",
-  "private": true,
-  "dependencies": {
-    "@anthropic-ai/claude-code": "2.1.265"
-  }
-}
