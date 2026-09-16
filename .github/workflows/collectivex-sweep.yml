@@ -7,10 +7,19 @@ on:
   workflow_dispatch:
     inputs:
       backend:
-        description: "EP library to sweep — 'all' runs every EP backend in one matrix"
+        description: "Benchmark to run — swap-blocks runs only vLLM memory copies on one H200 GPU; all runs EP backends"
         type: choice
         default: all
-        options: [all, deepep-v2, mori, uccl-ep, nccl-ep, flashinfer-ep]
+        options: [all, deepep-v2, mori, uccl-ep, nccl-ep, flashinfer-ep, swap-blocks]
+      swap_image:
+        description: Official vLLM image for swap-blocks only
+        type: string
+        default: vllm/vllm-openai:v0.25.1
+      swap_profile:
+        description: swap-blocks workload size (both profiles cover all directions and layouts)
+        type: choice
+        default: smoke
+        options: [smoke, standard]
       only_sku:
         description: Restrict to one GHA runner pool; blank = all
         type: string
@@ -70,12 +79,30 @@ jobs:
           RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           set -eo pipefail
+          source ../../benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars INPUT_BACKEND RUN_ID RUN_ATTEMPT GITHUB_OUTPUT
           args=(--backend "$INPUT_BACKEND")
           [ -n "$INPUT_ONLY_SKU" ] && args+=(--only-sku "$INPUT_ONLY_SKU")
           [ -n "$INPUT_EXCLUDE_SKUS" ] && args+=(--exclude-skus "$INPUT_EXCLUDE_SKUS")
           [ -n "$INPUT_EP_SIZES" ] && args+=(--ep-sizes "$INPUT_EP_SIZES")
           [ -n "$INPUT_MODES" ] && args+=(--modes "$INPUT_MODES")
-          python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null
+          if [ "$INPUT_BACKEND" = swap-blocks ]; then
+            if { [ -n "$INPUT_ONLY_SKU" ] && [ "$INPUT_ONLY_SKU" != h200-dgxc ]; } \
+                || [ -n "$INPUT_EXCLUDE_SKUS$INPUT_EP_SIZES$INPUT_MODES" ]; then
+              echo "swap-blocks supports only h200-dgxc, with no EP filters" >&2
+              exit 1
+            fi
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          cell = dict(id="swap-blocks", sku="h200-dgxc", backend="swap-blocks",
+                      nodes=1, gpus_per_node=1, scale_up_domain=1, launcher="swap-blocks")
+          Path("matrix_full.json").write_text(json.dumps({"include": [cell]}) + "\n")
+          PY
+          else
+            python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null
+          fi
           python3 - "$GITHUB_OUTPUT" <<'PY'
           import hashlib
           import json
@@ -133,8 +160,9 @@ jobs:
             toJSON(format('ci-attempt-{0}', github.run_attempt))
           ) ||
           format(
-            '["self-hosted",{0},{1},{2}]',
+            '["self-hosted",{0},{1},{2},{3}]',
             toJSON(matrix.sku),
+            toJSON(format('nodes:{0}', matrix.nodes)),
             toJSON(format(
               'ci-job-{0}-{1}',
               needs.setup.outputs.priority,
@@ -149,6 +177,14 @@ jobs:
     timeout-minutes: 350
     env:
       COLLX_BENCH: ${{ matrix.backend }}
+      COLLX_SWAP_IMAGE: ${{ inputs.swap_image }}
+      COLLX_SWAP_BLOCK_BYTES: ${{ inputs.swap_profile == 'standard' && '4096 65536 1048576' || '257 4096 65536' }}
+      COLLX_SWAP_NUM_BLOCKS: ${{ inputs.swap_profile == 'standard' && '1 16 256' || '1 4 16' }}
+      COLLX_SWAP_WARMUP: ${{ inputs.swap_profile == 'standard' && '32' || '4' }}
+      COLLX_SWAP_ITERATIONS: ${{ inputs.swap_profile == 'standard' && '100' || '20' }}
+      COLLX_SWAP_SEED: '0'
+      COLLX_SWAP_DEVICE: '0'
+      COLLX_SWAP_TIME: '45'
       COLLX_NODES: ${{ matrix.nodes }}
       COLLX_GPUS_PER_NODE: ${{ matrix.gpus_per_node }}
       COLLX_SCALE_UP_DOMAIN: ${{ matrix.scale_up_domain }}
@@ -224,6 +260,7 @@ jobs:
           path: ${{ env.COLLX_JOB_ROOT }}/control
       # Materialize this shard's .shards/<id>.json case control from the run-scoped matrix artifact downloaded above.
       - name: Extract execution control
+        if: matrix.backend != 'swap-blocks'
         env:
           MATRIX_ID: ${{ matrix.id }}
         run: |
@@ -261,13 +298,15 @@ jobs:
           source experimental/CollectiveX/runtime/common.sh
           collx_cleanup_allocation "$COLLX_JOB_ROOT" \
             || { echo "CollectiveX allocation cleanup failed; results may still be changing" >&2; exit 1; }
-          python3 experimental/CollectiveX/summarize.py \
-            --results-dir experimental/CollectiveX/results >> "$GITHUB_STEP_SUMMARY" || true
+          if [ "$COLLX_BENCH" != swap-blocks ]; then
+            python3 experimental/CollectiveX/summarize.py \
+              --results-dir experimental/CollectiveX/results >> "$GITHUB_STEP_SUMMARY" || true
           # Second view over the same documents: latency answers how long a point took,
           # this answers how fast it moved its payload. Both are renderers over the staged
           # JSON and neither gates the leg, so both are `|| true`.
-          python3 experimental/CollectiveX/bandwidth.py \
-            --results-dir experimental/CollectiveX/results >> "$GITHUB_STEP_SUMMARY" || true
+            python3 experimental/CollectiveX/bandwidth.py \
+              --results-dir experimental/CollectiveX/results >> "$GITHUB_STEP_SUMMARY" || true
+          fi
           shopt -s nullglob
           results=(experimental/CollectiveX/results/*.json)
           if [ "${#results[@]}" -eq 0 ]; then

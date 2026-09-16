@@ -4,7 +4,8 @@
 
 `bench/run_swap_blocks.py` measures `from vllm._custom_ops import swap_blocks`
 on one CUDA or ROCm GPU using an installed, compatible vLLM build. Run it directly
-with Python inside that environment; it does not use `torchrun` or the EP sweep.
+with Python inside that environment, or select the isolated GPU Action below.
+It does not use `torchrun` or execute EP workloads.
 The installed vLLM version is recorded. Both the older three-argument wrapper and
 the explicit `block_size_in_bytes` wrapper are supported.
 
@@ -47,3 +48,31 @@ python3 -m unittest discover experimental/CollectiveX/tests -p 'test_swap_blocks
 ```
 
 CPU-only machines run measurement/mapping tests and skip the real GPU test.
+
+## Isolated GitHub GPU Action
+
+Select `backend: swap-blocks` in **CollectiveX Sweep**, or dispatch:
+
+```bash
+gh workflow run collectivex-sweep.yml --ref codex/collectivex-swap-blocks \
+  -f backend=swap-blocks -f swap_profile=smoke \
+  -f swap_image=vllm/vllm-openai:v0.25.1
+```
+
+Use `--ref main` after merge. This mode schedules one `h200-dgxc` cell with
+`nodes:1` priority demand, allocates one exclusive physical node, and runs one GPU
+process. It builds no EP libraries and executes no EP cases. Leave EP filters
+blank; `only_sku` may be blank or `h200-dgxc`. The existing `all` selection remains
+EP-only. The caller-selected official vLLM image is imported using the existing
+CollectiveX container cache and runs from an isolated compute-visible stage.
+
+The `smoke` profile covers all three directions, both layouts, block sizes
+257/4096/65536 bytes, and counts 1/4/16, with 4 warmups and 20 samples per point
+(54 points total). `standard` uses sizes 4096/65536/1048576 and counts 1/16/256,
+32 warmups, and 100 samples. Both check the actual GPU copies before and after
+timing and fail if a GPU or compatible vLLM is unavailable.
+
+Download `cxshard-swap-blocks-<run_id>-<attempt>` for the two JSON results.
+Each artifact records the actual GPU, framework versions, image, source SHA,
+correctness status, and measurements. The existing allocation/stage cleanup
+also runs on failure. CPU CI is separate and does not establish GPU correctness.
