@@ -384,7 +384,7 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 1. 复用不要求扫描标签。标签用于选择新的 GPU 工作；移除主标签不会使已有源 Run 失效。Changelog 验证和合并辅助脚本仍会拒绝冲突的主标签。
 2. `evals-only` 与 `agentx-fast` 会令 Run 不可复用。默认完整扫描以及带 `all-evals` 的完整扫描仍可复用。
 3. 源 Run 必须是已结束的 PR `run-sweep.yml` Run，其 Head SHA 仍在 PR Commit 列表中，并拥有未过期的 `results_bmk`、`eval_results_all` 或 `bmk_agentic_*` 结果产物。
-4. `OWNER`、`MEMBER` 或 `COLLABORATOR` 通过 `/reuse-sweep-run` 或 `/reuse-sweep-run <run_id>` 授权复用。命令和可选的 Run ID 必须放在同一行。最新的合格授权命令决定自动选择还是固定源 Run。
+4. `OWNER`、`MEMBER` 或 `COLLABORATOR` 通过 `/use <run_id>` 授权复用。必须提供 Run ID，并与命令放在同一行。原有的 `/reuse-sweep-run <run_id>` 仍然等效；不带 ID 的 `/reuse-sweep-run` 会自动选择源 Run。两种命令使用相同的授权、验证和表态规则，并以两者中最新的合格授权命令为准。
 5. 不指定 ID 时，自动选择要求最新的合格源 Run 成功。指定 Run 是维护者的明确决定，允许结论为 `success`、`failure` 或 `cancelled`；下游入库只保留存在且有效的行，因此应将其报告为部分数据，而不是绿色 Run。
 
 复用验证检查源 Run 的身份和可用产物，不检查完整矩阵覆盖范围。成功的 `sweep-enabled`（裁剪扫描）源 Run 也可复用，包括自动选择；在 `main` 上只会发布该 Run 已记录的数据点。请求被接受不代表已通过完整扫描，也不能代替评审中的完整扫描要求。如需复用某次完整扫描，请先确认其覆盖范围，再固定该 Run ID。

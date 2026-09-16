@@ -17,7 +17,7 @@ def request_case(monkeypatch):
 
 def make_request_case(monkeypatch) -> dict:
     comment = {
-        "id": 41, "body": "/reuse-sweep-run 123", "author_association": "MEMBER",
+        "id": 41, "body": "/use 123", "author_association": "MEMBER",
         "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z",
     }
     case = {
@@ -93,7 +93,7 @@ def bot_status(case):
     return [r["content"] for r in case["reactions"] if r["user"]["login"] == "github-actions[bot]"]
 
 
-@pytest.mark.parametrize("body", ["/reuse-sweep-run", "/reuse-sweep-run 123"])
+@pytest.mark.parametrize("body", ["/reuse-sweep-run", "/reuse-sweep-run 123", "/use 123"])
 @pytest.mark.parametrize("labels", [[], [{"name": "sweep-enabled"}]])
 def test_accepts_valid_reuse_without_full_sweep_label(request_case, body, labels):
     case = request_case
@@ -129,7 +129,7 @@ def test_rejects_invalid_requests_without_approving(request_case, capsys, proble
     if problem == "unauthorized":
         case["comment"]["author_association"] = "CONTRIBUTOR"
     elif problem == "syntax":
-        case["comment"]["body"] = "/reuse-sweep-run nope"
+        case["comment"]["body"] = "/use nope"
     elif problem == "closed":
         case["pr"]["state"] = "closed"
     elif problem == "workflow":
@@ -155,7 +155,7 @@ def test_rejects_invalid_requests_without_approving(request_case, capsys, proble
     assert reason in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("body,status", [("withdrawn", []), ("/reuse-sweep-run nope", ["-1"])])
+@pytest.mark.parametrize("body,status", [("withdrawn", []), ("/use", ["-1"]), ("/reuse-sweep-run 123", ["+1"])])
 def test_edit_replaces_bot_status_and_preserves_human_reaction(request_case, body, status):
     case = request_case
     case["reactions"] = [
