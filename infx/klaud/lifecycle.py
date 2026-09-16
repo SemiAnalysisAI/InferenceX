@@ -55,7 +55,11 @@ class Session:
     def validation(self, run: dict) -> tuple[dict, list[dict], list[dict]]:
         key = (run["id"], run["head_sha"], run["run_attempt"])
         if key not in self.validations:
-            self.validations[key] = verify_sweep(self.repository, run, self.candidate.family)
+            from .reporting import baseline_for, check_baseline_coverage
+
+            evidence = verify_sweep(self.repository, run, self.candidate.family)
+            check_baseline_coverage(evidence[0], baseline_for(self, self.pulls()[0]))
+            self.validations[key] = evidence
         return self.validations[key]
 
     def pulls(self) -> list[dict]:

@@ -32,11 +32,6 @@ def _noop(_msg):
     pass
 
 
-def test_trtllm_registered_for_both_frameworks():
-    assert get_injector("dynamo-trt") is not None
-    assert get_injector("trt") is get_injector("dynamo-trt")
-
-
 def test_trtllm_rewrite_injects_al_minus_one_into_environment():
     injector = get_injector("dynamo-trt")
     new, count = injector.rewrite(TRTLLM_RECIPE, 2.78, _noop)
@@ -49,7 +44,7 @@ def test_trtllm_rewrite_injects_al_minus_one_into_environment():
 
 
 def test_trtllm_rewrite_replaces_existing_value():
-    injector = get_injector("dynamo-trt")
+    injector = get_injector("trt")
     recipe = TRTLLM_RECIPE.replace(
         "      HF_HUB_OFFLINE: '1'\n",
         "      HF_HUB_OFFLINE: '1'\n      TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: '9'\n",

@@ -247,7 +247,7 @@ else
     # The SGLANG_OPT_*/AITER_* knobs steer DSv4 off the default aiter CK fused-MoE path,
     # which raises "Unsupported kernel config for moe heuristic dispatch" at decode on
     # this fp4 model. CLI flags live in models.yaml; NIC/socket vars stay runner-derived.
-    if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
+    if [[ "$MODEL_NAME" == DeepSeek-V4-Pro* ]]; then
         export SGLANG_AITER_MLA_PERSIST=0
         ## resolve the OOR issue
         export HSA_NO_SCRATCH_RECLAIM=0
@@ -269,7 +269,10 @@ else
         unset MORI_MOE_MAX_INPUT_TOKENS_PREFILL
         unset MORI_MOE_MAX_INPUT_TOKENS_DECODE
 
-        # server_sglang.sh prefers these PER_RANK values over the MORI_MAX_DISPATCH_*
+        export SGLANG_MORI_RECV_BOUND=1
+
+        # PER_RANK dispatch tokens pinned independently (16384 prefill / 128
+        # decode); server_sglang.sh prefers these over the MORI_MAX_DISPATCH_*
         # coupling when set.
         export MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_PREFILL=16384
         export MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_DECODE=128
@@ -278,29 +281,26 @@ else
 
         export SGLANG_DEFAULT_THINKING=1
         export SGLANG_DSV4_REASONING_EFFORT=high
-        export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
-        export SGLANG_USE_AITER=1
         export SGLANG_USE_ROCM700A=0
-        export SGLANG_OPT_USE_FUSED_COMPRESS=true
         export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
-        export SGLANG_OPT_FP8_WO_A_GEMM=false
-        export SGLANG_OPT_USE_JIT_INDEXER_METADATA=false
-        export SGLANG_OPT_USE_TOPK_V2=false
-        export SGLANG_OPT_USE_AITER_INDEXER
-        export SGLANG_OPT_USE_TILELANG_INDEXER=false
-        export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
-        export SGLANG_OPT_USE_TILELANG_MHC_POST=false
-        export SGLANG_FP8_PAGED_MQA_LOGITS_TORCH=1
-        export SGLANG_OPT_USE_FUSED_COMPRESS_TRITON=true
-        export SGLANG_OPT_USE_MULTI_STREAM_OVERLAP=false
-        export SGLANG_ROCM_USE_MULTI_STREAM=false
+        export SGLANG_OPT_FP8_WO_A_FUSED_INVROPE=1
         export AITER_BF16_FP8_MOE_BOUND=0
-        export SGLANG_EAGER_INPUT_NO_COPY=true
-        export SGLANG_SHARED_EXPERT_TP1=1
-        export SGLANG_DP_SHARED_EXPERT_LOCAL=1
-        export SGLANG_DP_USE_GATHERV=1
-        export SGLANG_DP_USE_REDUCE_SCATTER=1
-        export GPU_MAX_HW_QUEUES=5
+        export TORCH_BLAS_PREFER_HIPBLASLT=1
+        # aiter batched GEMM for the absorbed MLA projections, carried by the v0.5.18
+        # image and off by default in environ.py.
+        export SGLANG_OPT_USE_AITER_BATCHED_GEMM=1
+        # DP-attention-only SGLang internal knobs (shared-expert TP1 placement,
+        # gatherv/reduce-scatter collectives) plus the wider HW-queue count DP
+        # ranks need to overlap MoRI dispatch with compute.
+        if [[ "$PREFILL_ENABLE_DP" == "true" || "$DECODE_ENABLE_DP" == "true" ]]; then
+            export SGLANG_SHARED_EXPERT_TP1=1
+            export SGLANG_DP_SHARED_EXPERT_LOCAL=1
+            export SGLANG_DP_USE_GATHERV=1
+            export SGLANG_DP_USE_REDUCE_SCATTER=1
+            export GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES_DP:-5}"
+        else
+            export GPU_MAX_HW_QUEUES=2
+        fi
     fi
 
 fi
