@@ -65,7 +65,7 @@ jobs:
       - name: Let Klaud Cold own the candidate PR
         id: claude
         continue-on-error: true
-        uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
+        uses: anthropics/claude-code-action@19dda84776b3518d98b8798e591daee763049ed3 # v1.0.220
         env:
           GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
           KLAUD_DASHBOARD_API_KEY: ${{ secrets.KLAUD_DASHBOARD_API_KEY }}

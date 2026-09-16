@@ -185,7 +185,7 @@ jobs:
       - name: Verify sign-off with Claude
         id: claude
         if: steps.resolve.outputs.proceed == 'true'
-        uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
+        uses: anthropics/claude-code-action@19dda84776b3518d98b8798e591daee763049ed3 # v1.0.220
         env:
           # Repository verifier credential; trusted code checks writer authorization before this step.
           GH_TOKEN: ${{ secrets.CLAUDE_PAT }} # zizmor: ignore[secrets-outside-env]
