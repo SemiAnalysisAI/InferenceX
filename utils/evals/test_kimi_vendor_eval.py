@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import kimi_vendor_eval as kve
+import infx.evals.kimi_vendor_eval as kve
 
 
 def _report(stream_status: str = "passed") -> dict[str, Any]:

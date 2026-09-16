@@ -6,7 +6,6 @@ import math
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-
 # The unprefixed joules_per_* fields silently switched from role-local to
 # whole-deployment energy when multinode aggregation landed, and the values
 # alone cannot distinguish the two. Stamp the semantics so consumers fail
@@ -59,6 +58,7 @@ def with_power_metrics(
     data["power_metric_schema_version"] = schema_version
     data["power_valid"] = int(power_valid)
     data.pop("power_invalid_reasons", None)
+    data.pop("power_audit", None)
     if power_valid:
         for key, value in metrics.items():
             if value is None or not math.isfinite(value):

@@ -51,7 +51,7 @@ write_agentic_result_json() {{
 }}
 fake_python() {{
     case "$*" in
-        *utils.agentic.aggregation.power_adapter*)
+        *infx.results.agentic.power_adapter*)
             printf 'adapter:%s\n' "$*" >> {str(event_log)!r}
             if [ {'1' if real_power_adapter else '0'} = 1 ]; then
                 PYTHONPATH={str(REPO_ROOT)!r} {sys.executable!r} "$@"
@@ -280,14 +280,20 @@ start_gpu_monitor() {{
 }}
 stop_gpu_monitor() {{ printf 'monitor-stop\n' >> {str(event_log)!r}; }}
 fake_replay() {{
-    printf 'replay-ready\n' >> {str(event_log)!r}
-    exec sleep 30
+    exec {sys.executable!r} -c '
+import signal, sys, time
+signal.signal(signal.SIGINT, signal.SIG_DFL)
+signal.signal(signal.SIGTERM, signal.SIG_DFL)
+print("replay-ready", file=open(sys.argv[1], "a"), flush=True)
+time.sleep(30)
+' {str(event_log)!r}
 }}
 trap 'printf "parent-exit\\n" >> {str(event_log)!r}' EXIT
 trap 'printf "parent-int\\n" >> {str(event_log)!r}; exit 130' INT
 trap 'printf "parent-term\\n" >> {str(event_log)!r}; exit 143' TERM
 REPLAY_CMD=fake_replay
 ENABLE_AGENTX_POWER=1
+REQUIRE_POWER=0
 IS_MULTINODE=false
 run_agentic_replay_and_write_outputs {str(result_dir)!r}
 """
@@ -301,7 +307,8 @@ run_agentic_replay_and_write_outputs {str(result_dir)!r}
     )
     try:
         # The monitor starts before the production signal traps are installed.
-        # Wait for replay so the signal actually exercises those traps.
+        # Publish readiness from the execed process after restoring signal handling;
+        # a shell marker before exec races with the group SIGINT.
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
             if event_log.exists() and "replay-ready" in event_log.read_text().splitlines():
