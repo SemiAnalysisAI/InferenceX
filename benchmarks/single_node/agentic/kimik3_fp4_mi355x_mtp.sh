@@ -305,9 +305,11 @@ DSPARK_DRAFT_PATH="${DSPARK_DRAFT_PATH:-Inferact/Kimi-K3-DSpark}"
 
 # ---- CUDA graph mode ---------------------------------------------------------
 # FULL_AND_PIECEWISE needs breakable graphs (no @support_torch_compile on K3 AMD).
-# Breakable costs ~1/3 of the KV pool at conc 44+, where conc 48 deadlocks at 86%.
+# Breakable costs KV pool, scaling with capture size 2*CONC*(1+k): -11.5% at conc 4
+# (capture 48), -1/3 at conc 48 (capture 96, deadlocks at 86% usage). Enabled only
+# for conc 1 and 4, the two cells measured under it.
 case "$CONC" in
-    1|4|8|10|12|14)
+    1|4)
         CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL_AND_PIECEWISE}"
         export VLLM_USE_BREAKABLE_CUDAGRAPH=1
         ;;
