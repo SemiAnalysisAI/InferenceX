@@ -90,24 +90,25 @@ MAX_NUM_SEQS=$((2 * CONC))
 MAX_NUM_BATCHED_TOKENS=32768
 GPU_MEM_UTIL=0.95
 
+# One place per concurrency. A band that is not listed exits; a band that is
+# listed but leaves a feature off simply does not get it -- both failures are
+# visible, unlike enabling a feature on a point nobody measured.
 NUM_SPEC_TOKENS=3
 SPEC_DECODE_AL=2.78
-# Per-rank CPU slice reserved for the M3 state; 0 leaves it all to paged KV.
-STATE_OFFLOAD_CPU_GIB=0
+INDEXER_CP=0
+OFFLOAD_TIER=""
 case "$CONC" in
-    1|2|4|5|8|10|12|14|15|20|24|25|28|30|40|48) ;;
-    16|32) STATE_OFFLOAD_CPU_GIB=32 ;;
-    56)    STATE_OFFLOAD_CPU_GIB=32; NUM_SPEC_TOKENS=0; SPEC_DECODE_AL=0 ;;
-    *)     echo "Unsupported CONC=$CONC" >&2; exit 2 ;;
+    1|2|4|5|8|10|12|14|15|16|24) ;;
+    20|25|30) OFFLOAD_TIER=cpu256 ;;
+    28|32)    INDEXER_CP=1 ;;
+    40|48)    INDEXER_CP=1; OFFLOAD_TIER=cpu256 ;;
+    *) echo "Unsupported CONC=$CONC" >&2; exit 2 ;;
 esac
 
 # Sized for the running batch, which is 22-41% of CONC on this workload, not for
 # CONC itself. ModelRunner trims this to min(2*CONC, 8192).
 CUDAGRAPH_CAPTURE_SIZES="[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,20,22,24,26,28,30,32,34,36,40,48,56,64]"
 
-# MiniMax-M3 attention carries a per-request recurrent state alongside the
-# paged KV. The CPU state tier is what makes a resumed agentic turn cheap; the
-# paged KV tier alone cannot restore one.
 OFFLOAD_ARGS=()
 
 case "$KV_OFFLOAD_BACKEND" in
@@ -128,9 +129,8 @@ case "$KV_OFFLOAD_BACKEND" in
             echo "NUMA-spread GPUs for offload: $ROCR_VISIBLE_DEVICES"
         fi
 
-        case "$CONC" in
-            20|25|30|40|48)
-                # Validated tier: CPU only, chunk 256, no hybrid state offload.
+        case "$OFFLOAD_TIER" in
+            cpu256)
                 export LMCACHE_MAX_LOCAL_CPU_SIZE=256
                 export LMCACHE_CHUNK_SIZE=256
                 # ATOM_SLRU needs rocm/atom-dev:nightly_202609140645-lirzhang-triton-build or later.
@@ -141,31 +141,8 @@ case "$KV_OFFLOAD_BACKEND" in
                 export LMCACHE_LOOKUP_SERVER_WORKER_IDS="$(seq -s, 0 $((TP - 1)))"
                 ;;
             *)
-                # TOTAL_CPU_DRAM_GB is the aggregate budget; these are per rank, so
-                # divide by TP (agentic README). Handing a rank the whole aggregate
-                # never finishes pinning and hangs the launch.
-                PER_RANK_CPU_GB="$((TOTAL_CPU_DRAM_GB / TP))"
-                LMCACHE_CPU_GB="$((PER_RANK_CPU_GB - STATE_OFFLOAD_CPU_GIB))"
-
-                export LMCACHE_MAX_LOCAL_CPU_SIZE="$LMCACHE_CPU_GB"
-                # DCP-locked: the offload hash block is block-size(128) x dcp(8) = 1024,
-                # so the KV grid and the state-checkpoint grid coincide and the joint
-                # load aims both legs at one boundary. 512 or 2048 misaligns it.
-                export LMCACHE_CHUNK_SIZE=1024
-                export OFFLOAD_KV_FOR_HYBRID=1
-                # Statistics only; the submitted numbers were measured with it on.
-                export OFFLOAD_PROFILE=1
-
-                if [ "$STATE_OFFLOAD_CPU_GIB" -gt 0 ]; then
-                    export OFFLOAD_STATE=1
-                    export OFFLOAD_STATE_CPU_SIZE="$STATE_OFFLOAD_CPU_GIB"
-                    export OFFLOAD_STATE_STAGING_GROUPS=8
-                    export OFFLOAD_STATE_MIN_LOAD_TOKENS=0
-                    # The staging buffer defaults to 2 chunks (8 MiB) and one state
-                    # entry is 54.78 MiB; a buffer too small for one entry makes the
-                    # tier decline to build, which reads like a tier that is on and idle.
-                    export OFFLOAD_GPU_STAGING_CHUNKS=32
-                fi
+                echo "CONC=$CONC has no measured offload tier" >&2
+                exit 2
                 ;;
         esac
 
@@ -180,9 +157,10 @@ case "$KV_OFFLOAD_BACKEND" in
         ;;
 esac
 
-if [ "$TP" -eq 4 ] && [ "$CONC" -gt 24 ]; then
+# TP4 only: ATOM requires tp_size == sparse_num_index_heads (4 for M3).
+if [ "$INDEXER_CP" -eq 1 ] && [ "$TP" -eq 4 ]; then
     export ATOM_M3_INDEXER_CP=1
-    echo "ATOM_M3_INDEXER_CP=1 (TP4, CONC=$CONC > 24)"
+    echo "ATOM_M3_INDEXER_CP=1 (TP4, CONC=$CONC)"
 fi
 
 echo "Starting atom server..."
@@ -197,16 +175,13 @@ export ATOM_FORCE_ATTN_TRITON=1
 
 # golden_al_distribution/minimaxm3_eagle3_gqa.yaml: minimax-m3.thinking_on[3] -> AL 2.78.
 # Synthetic acceptance on throughput runs, real target verification on eval-only.
-SPEC_ARGS=()
-if [ "$NUM_SPEC_TOKENS" -gt 0 ]; then
-    SPEC_ARGS=(
-        --method eagle3
-        --draft-model "$DRAFT_MODEL"
-        --num-speculative-tokens "$NUM_SPEC_TOKENS"
-    )
-    if [ "${EVAL_ONLY}" != "true" ]; then
-        SPEC_ARGS+=(--spec-decode-acceptance-length "$SPEC_DECODE_AL")
-    fi
+SPEC_ARGS=(
+    --method eagle3
+    --draft-model "$DRAFT_MODEL"
+    --num-speculative-tokens "$NUM_SPEC_TOKENS"
+)
+if [ "${EVAL_ONLY}" != "true" ]; then
+    SPEC_ARGS+=(--spec-decode-acceptance-length "$SPEC_DECODE_AL")
 fi
 echo "SPEC_DECODE_AL=$SPEC_DECODE_AL NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS"
 
