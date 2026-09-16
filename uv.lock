@@ -889,7 +889,6 @@ mcp = [
 ]
 test = [
     { name = "aiohttp" },
-    { name = "codeowners" },
     { name = "gitpython" },
     { name = "matplotlib" },
     { name = "mcp" },
@@ -897,7 +896,6 @@ test = [
     { name = "packaging" },
     { name = "pytest" },
     { name = "pytest-xdist" },
-    { name = "tabulate" },
     { name = "torch", version = "2.14.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
     { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
     { name = "transformers" },
@@ -921,7 +919,6 @@ mcp = [
 ]
 test = [
     { name = "aiohttp", specifier = ">=3,<4" },
-    { name = "codeowners", specifier = ">=0.9,<0.10" },
     { name = "gitpython", specifier = ">=3.1.40,<4" },
     { name = "matplotlib", specifier = ">=3,<4" },
     { name = "mcp", specifier = ">=1.30,<2" },
@@ -929,7 +926,6 @@ test = [
     { name = "packaging", specifier = ">=26,<27" },
     { name = "pytest", specifier = ">=9,<10" },
     { name = "pytest-xdist", specifier = ">=3,<4" },
-    { name = "tabulate", specifier = ">=0.10,<0.11" },
     { name = "torch", marker = "sys_platform != 'darwin'", specifier = ">=2,<3", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torch", marker = "sys_platform == 'darwin'", specifier = ">=2,<3" },
     { name = "transformers", specifier = ">=5,<6" },

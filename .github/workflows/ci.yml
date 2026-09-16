@@ -53,7 +53,7 @@ jobs:
       - name: Prepare test environment
         if: matrix.check == 'Tests'
         run: |
-          uv sync --locked --group test --no-editable
+          uv sync --locked --all-extras --group test --no-editable
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Verify MCP server compatibility
