@@ -142,14 +142,19 @@ def test_image_import_separates_architectures_and_refuses_wrong_host(
     assert imports[0][-1] == "docker://nvcr.io#nvidia/pytorch:test"
 
 
-def test_shared_storage_uses_only_configured_writable_roots(tmp_path):
+def test_shared_storage_uses_only_configured_writable_roots(tmp_path, monkeypatch):
     shared = tmp_path / "shared"
     shared.mkdir()
     assert ci.shared_base(
-        {"storage_roots": [str(tmp_path / "absent"), str(shared)]}
+        {"storage_roots": [str(tmp_path / "absent"), str(shared)]}, "gb200"
     ) == (shared / f".operatorx-{os.getuid()}")
+    monkeypatch.setenv("HOME", str(tmp_path / "runner-local-sandbox"))
+    monkeypatch.setattr(
+        ci.pwd, "getpwuid", lambda uid: types.SimpleNamespace(pw_dir=str(shared))
+    )
+    assert ci.shared_base({}, "b300") == shared / f".operatorx-{os.getuid()}"
     with pytest.raises(ValueError, match="shared storage"):
-        ci.shared_base({"storage_roots": [str(tmp_path / "absent")]})
+        ci.shared_base({"storage_roots": [str(tmp_path / "absent")]}, "gb200")
 
 
 @pytest.mark.parametrize(
@@ -273,6 +278,7 @@ if name == 'srun' and sys.argv[-1] == 'rank':
                         "image_platform": architecture,
                         "operator": {
                             "partition": "test",
+                            "stage_dir": str(tmp_path / "shared"),
                             "account": "fixture",
                             "qos": "fixture-qos",
                             "exclude_nodes": "quarantined",

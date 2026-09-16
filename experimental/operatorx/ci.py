@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 import platform
+import pwd
 import re
 import shutil
 import signal
@@ -188,9 +189,15 @@ def image_key(image: str, digest: str, image_platform: str) -> str:
     return hashlib.sha256((image + digest + suffix).encode()).hexdigest()
 
 
-def shared_base(profile: dict) -> Path:
-    """Use only compute-visible roots supplied by the pool's tracked profile."""
-    if profile.get("squash_dir"):
+def shared_base(profile: dict, pool: str) -> Path:
+    """Resolve the pool's configured/shared account storage, never temporary HOME."""
+    if profile.get("stage_dir"):
+        roots = [Path(profile["stage_dir"])]
+    elif pool == "b300":
+        # CollectiveX uses the compute-visible account home on this pool.
+        # The shared squash parent is not writable by the GHA service account.
+        roots = [Path(pwd.getpwuid(os.getuid()).pw_dir)]
+    elif profile.get("squash_dir"):
         roots = [Path(profile["squash_dir"]).parent]
     else:
         roots = [Path(root) for root in profile["storage_roots"]]
@@ -283,7 +290,7 @@ def finalize(root: Path) -> None:
 
 def recover(artifacts: Path, run_id: str, pool: str, platform_config: Path) -> None:
     profile = json.loads(platform_config.read_text())["platforms"][pool]["operator"]
-    base = shared_base(profile).resolve()
+    base = shared_base(profile, pool).resolve()
     recovered = 0
     for execution in artifacts.rglob("execution.json"):
         data = json.loads(execution.read_text())
@@ -318,7 +325,7 @@ def execute(args) -> None:
         or cell["world_size"] > gpus
     ):
         raise ValueError("manifest hardware differs from the selected pool")
-    base = shared_base(profile)
+    base = shared_base(profile, cell["pool"])
     base.mkdir(mode=0o700, exist_ok=True)
     if (
         base.is_symlink()

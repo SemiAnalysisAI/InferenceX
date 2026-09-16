@@ -53,7 +53,8 @@ gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
   初始并发上限为两个分片。两个调度开关都必须保持启用。
 - 运行器设置来自 CollectiveX 已纳入版本控制的平台配置。源码按工作流 SHA 检出，
   再复制到共享 squash 父目录或配置中可写的 `storage_roots` 路径（GB200）下的私有目录，
-  该目录必须在计算节点上可见。结果不依赖提交主机的 `/tmp` 在计算节点上可见。
+  该目录必须在计算节点上可见。B300 沿用 CollectiveX，从系统账户数据库读取计算节点可见
+  的账户主目录；显式配置的 `stage_dir` 优先。结果不依赖提交主机的 `/tmp` 在计算节点上可见。
 - 规划步骤解析镜像 digest。导入操作加锁，并按镜像、digest 和 CPU 架构缓存，导入后再次核对
   digest。标签发生变化或无法解析时运行失败，避免错误标注测量所用镜像。
   规划和导入主机都必须能匿名读取镜像。导入前校验主机 CPU 架构；B300 沿用 CollectiveX
