@@ -3,7 +3,7 @@ name: "bs16-1p3d-h200-fp8"
 
 model:
   path: "dsr1"
-  container: "lmsysorg/sglang:v0.5.8.post1-cu130"
+  container: "lmsysorg/sglang:v0.5.19-cu130"
   precision: "fp8"
 
 frontend:
@@ -14,12 +14,13 @@ resources:
   gpus_per_node: 8
 
 dynamo:
-  # Dynamo 0.8.0 was the default when this recipe was written; pin it explicitly.
-  # Use NATS for a recipe prior to Dynamo commit 39d2a68.
-  request_plane: "nats"
+  # ai-dynamo 1.5.0.dev20260910 is the nightly that pins sglang==0.5.19; srtctl installs
+  # the exact ai-dynamo/ai-dynamo-runtime wheels with --no-deps. TCP is the Dynamo request
+  # plane default since commit 39d2a68 (NATS was only needed for older Dynamo).
+  request_plane: "tcp"
 
   source:
-    pypi: "0.8.0"
+    wheel: "1.5.0.dev20260910"
 engine: sglang
 roles:
   prefill:
