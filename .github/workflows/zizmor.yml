@@ -4,7 +4,8 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths: &workflow-paths
-      - '.github/workflows/**'
+      - '.github/workflows/*.yml'
+      - '.github/workflows/*.yaml'
       - '.github/dependabot.yml'
       - '.github/dependabot.yaml'
       - '**/action.yml'
