@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import statistics
+from bisect import bisect_left
 from collections.abc import Iterable
 from typing import Any
 
@@ -58,11 +59,7 @@ def _distribution(prefix: str, values: list[int]) -> dict[str, float]:
 
 def _nest_stats(prefix: str, flat: dict[str, Any]) -> dict[str, Any]:
     suffix = f"_{prefix}"
-    return {
-        key[: -len(suffix)]: value
-        for key, value in flat.items()
-        if key.endswith(suffix)
-    }
+    return {key[: -len(suffix)]: value for key, value in flat.items() if key.endswith(suffix)}
 
 
 def _interactivity_stats(
@@ -156,9 +153,7 @@ def compute_latency_stats(
         "intvty": _nest_stats("intvty", intvty_stats),
         "e2e_norm_intvty": _nest_stats("e2e_norm_intvty", e2e_norm_intvty_stats),
         "full_response_itl": _nest_stats("full_response_itl", full_response_itl_stats),
-        "full_response_intvty": _nest_stats(
-            "full_response_intvty", full_response_intvty_stats
-        ),
+        "full_response_intvty": _nest_stats("full_response_intvty", full_response_intvty_stats),
     }
     return flat, nested
 
@@ -182,23 +177,11 @@ def compute_qps_stats(
     qps_values: list[float] = []
     current = ends[0]
     while current + window <= ends[-1]:
-        count = sum(
-            1 for completed_at in ends if current <= completed_at < current + window
-        )
+        count = bisect_left(ends, current + window) - bisect_left(ends, current)
         qps_values.append(count / window)
         current += window
 
-    if qps_values:
-        flat = {
-            "mean_qps": statistics.mean(qps_values),
-            "p50_qps": percentile(qps_values, 50),
-            "p75_qps": percentile(qps_values, 75),
-            "p90_qps": percentile(qps_values, 90),
-            "p95_qps": percentile(qps_values, 95),
-            "std_qps": statistics.pstdev(qps_values) if len(qps_values) > 1 else 0.0,
-        }
-    else:
-        flat = {"mean_qps": len(ends) / duration}
+    flat = stats_for("qps", qps_values) if qps_values else {"mean_qps": len(ends) / duration}
     return flat, {
         "window_seconds": window,
         "samples": len(qps_values),
@@ -288,7 +271,7 @@ def _aiperf_percent_metric_as_rate(
 
 
 def compute_cache_stats(
-    records: list[dict[str, Any]],
+    records: list[dict[str, Any]],  # noqa: ARG001
     aggregate: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     flat: dict[str, Any] = {
@@ -333,28 +316,21 @@ def compute_request_metrics(
     return flat, nested
 
 
-def _trace_metadata(
-    traces: Iterable[dict[str, Any]],
-) -> dict[str, list[dict[str, Any]]]:
+def _trace_output_lengths(traces: Iterable[dict[str, Any]]) -> dict[str, list[int]]:
     """Index trace turns in input order; the last nonempty duplicate wins."""
-    out: dict[str, list[dict[str, Any]]] = {}
+    out: dict[str, list[int]] = {}
     for blob in traces:
         trace_id = blob.get("id")
         if not trace_id:
             continue
-        per_turn: list[dict[str, Any]] = []
+        per_turn: list[int] = []
         for req in blob.get("requests", []):
             if req.get("type") not in ("n", "s"):
                 continue
             output_length = req.get("output_length")
             if output_length is None:
                 output_length = req.get("out")
-            per_turn.append(
-                {
-                    "hash_ids": list(req.get("hash_ids") or []),
-                    "output_length": int(output_length or 0),
-                }
-            )
+            per_turn.append(int(output_length or 0))
         if per_turn:
             out[str(trace_id)] = per_turn
 
@@ -364,7 +340,7 @@ def _trace_metadata(
 def _expected_output_lengths(
     records: list[dict[str, Any]], traces: Iterable[dict[str, Any]]
 ) -> list[int]:
-    metadata = _trace_metadata(traces)
+    metadata = _trace_output_lengths(traces)
     if not metadata:
         return []
 
@@ -377,7 +353,7 @@ def _expected_output_lengths(
         if trace_id is None or turn_index is None:
             continue
         turns = metadata.get(trace_id)
-        if not turns or turn_index >= len(turns):
+        if not turns or not 0 <= turn_index < len(turns):
             continue
-        expected.append(int(turns[int(turn_index)]["output_length"]))
+        expected.append(turns[int(turn_index)])
     return expected

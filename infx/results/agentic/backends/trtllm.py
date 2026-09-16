@@ -5,13 +5,14 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-from ..common import (
+from infx.results.agentic.common import (
     gauge_stat,
     label_value,
     normalize_fraction,
     rate,
     sum_stat,
 )
+
 from .base import ServerMetricsBackend, counter_int
 
 
@@ -21,8 +22,7 @@ class TrtllmBackend(ServerMetricsBackend):
     def matches(self, metrics: dict[str, dict[str, Any]], framework: str) -> bool:
         metric_names = set(metrics)
         return any(name.startswith("trtllm_") for name in metric_names) or (
-            not metrics
-            and framework.lower() in ("trtllm", "dynamo-trt", "dynamo-trtllm")
+            not metrics and framework.lower() in ("trtllm", "dynamo-trt", "dynamo-trtllm")
         )
 
     def populate(
@@ -119,9 +119,7 @@ class TrtllmBackend(ServerMetricsBackend):
                     "gpu_cache_hit": cached_tokens,
                     "cpu_or_external_cache_hit": None,
                     "computed": computed_tokens,
-                    "raw": {"device": cached_tokens}
-                    if cached_tokens is not None
-                    else {},
+                    "raw": {"device": cached_tokens} if cached_tokens is not None else {},
                 },
             }
         )
@@ -187,7 +185,7 @@ def _trtllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     sources: list[dict[str, Any]] = []
     for endpoint in sorted(endpoints):
 
-        def series_filter(series, endpoint=endpoint):
+        def series_filter(series: dict, endpoint: str = endpoint) -> bool:
             return str(series.get("endpoint_url", "")) == endpoint
 
         prompt_tokens = sum_stat(

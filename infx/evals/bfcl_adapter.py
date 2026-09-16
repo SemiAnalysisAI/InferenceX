@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Run pinned BFCL V4 OpenAI chat-completions suites."""
 
 from __future__ import annotations
@@ -12,6 +11,7 @@ import sys
 import urllib.parse
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from importlib.metadata import distribution
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Protocol
@@ -222,7 +222,8 @@ def _positive_int(value: str) -> int:
 
 
 def _source_details(
-    suite: SuiteSpec, case_ids_by_category: Mapping[str, tuple[str, ...]]
+    suite: SuiteSpec,  # noqa: ARG001
+    case_ids_by_category: Mapping[str, tuple[str, ...]],
 ) -> dict[str, Any]:
     return {
         "url": UPSTREAM_SOURCE,
@@ -234,8 +235,7 @@ def _source_details(
         "source_revision": SOURCE_REVISION,
         "vllm_integration_ref": VLLM_INTEGRATION_REF,
         "case_ids": {
-            category: list(case_ids)
-            for category, case_ids in case_ids_by_category.items()
+            category: list(case_ids) for category, case_ids in case_ids_by_category.items()
         },
     }
 
@@ -337,14 +337,10 @@ def _compatibility_result(
     for category, expected_count in suite.expected_leaf_counts:
         category_score = score_by_category.get(category)
         task_name = suite.projected_task(category)
-        task_scores[task_name] = (
-            category_score.accuracy if category_score is not None else 0.0
-        )
+        task_scores[task_name] = category_score.accuracy if category_score is not None else 0.0
         task_samples[task_name] = {
             "original": expected_count,
-            "effective": (
-                category_score.total_count if category_score is not None else 0
-            ),
+            "effective": (category_score.total_count if category_score is not None else 0),
         }
 
     if suite is KIMI_SUITE:
@@ -356,9 +352,7 @@ def _compatibility_result(
         ]
         multi_turn_total = sum(score.total_count for score in multi_turn_scores)
         multi_turn_correct = sum(score.correct_count for score in multi_turn_scores)
-        multi_turn_accuracy = (
-            multi_turn_correct / multi_turn_total if multi_turn_total else 0.0
-        )
+        multi_turn_accuracy = multi_turn_correct / multi_turn_total if multi_turn_total else 0.0
         aggregate_task = suite.projected_task("multi_turn")
         task_scores[aggregate_task] = multi_turn_accuracy
         task_samples[aggregate_task] = {
@@ -395,20 +389,21 @@ def _compatibility_result(
 
 
 def _write_json(path: Path, value: Mapping[str, Any]) -> None:
-    path.write_text(
-        json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def _write_upstream_attribution(project_root: Path) -> None:
     """Keep BFCL provenance and its Apache license with archived outputs."""
     project_root.mkdir(parents=True, exist_ok=True)
     repository_license = Path(__file__).resolve().parents[2] / "LICENSE"
-    if not repository_license.is_file():
-        raise FileNotFoundError(f"Apache license file not found: {repository_license}")
-    (project_root / UPSTREAM_LICENSE_FILENAME).write_bytes(
-        repository_license.read_bytes()
-    )
+    if repository_license.is_file():
+        license_bytes = repository_license.read_bytes()
+    else:
+        license_text = distribution("infx").read_text("licenses/LICENSE")
+        if license_text is None:
+            raise FileNotFoundError("Apache license file not found in infx distribution")
+        license_bytes = license_text.encode("utf-8")
+    (project_root / UPSTREAM_LICENSE_FILENAME).write_bytes(license_bytes)
     _write_json(
         project_root / UPSTREAM_ATTRIBUTION_FILENAME,
         {
@@ -473,16 +468,11 @@ def _bounded_openai_handler(stock_handler: type[Any]) -> type[Any]:
     return BoundedOpenAICompletionsHandler
 
 
-def _write_id_map(
-    project_root: Path, case_ids_by_category: Mapping[str, tuple[str, ...]]
-) -> None:
+def _write_id_map(project_root: Path, case_ids_by_category: Mapping[str, tuple[str, ...]]) -> None:
     project_root.mkdir(parents=True, exist_ok=True)
     _write_json(
         project_root / "test_case_ids_to_generate.json",
-        {
-            category: list(case_ids)
-            for category, case_ids in case_ids_by_category.items()
-        },
+        {category: list(case_ids) for category, case_ids in case_ids_by_category.items()},
     )
 
 
@@ -528,10 +518,7 @@ def _build_suite_case_ids(
     seen_ids: set[str] = set()
     for category in suite.generation_categories:
         leaf_categories = list(parse_test_category_argument([category]))
-        by_leaf = {
-            leaf: sorted(load_dataset_entry(leaf), key=sort_key)
-            for leaf in leaf_categories
-        }
+        by_leaf = {leaf: sorted(load_dataset_entry(leaf), key=sort_key) for leaf in leaf_categories}
         limit = category_limits.get(category)
         if limit is None:
             quotas = [len(by_leaf[leaf]) for leaf in leaf_categories]
@@ -546,36 +533,26 @@ def _build_suite_case_ids(
                     raise ValueError(f"{leaf} dataset entry must be a mapping")
                 case_id = entry.get("id")
                 if not isinstance(case_id, str) or not case_id:
-                    raise ValueError(
-                        f"{leaf} dataset entry must contain a non-empty string id"
-                    )
+                    raise ValueError(f"{leaf} dataset entry must contain a non-empty string id")
                 if case_id in seen_ids:
                     raise ValueError(f"BFCL dataset contains duplicate id {case_id}")
                 seen_ids.add(case_id)
                 ids.append(case_id)
             selected_by_leaf[leaf] = tuple(ids)
 
-    actual_counts = {
-        category: len(case_ids) for category, case_ids in selected_by_leaf.items()
-    }
+    actual_counts = {category: len(case_ids) for category, case_ids in selected_by_leaf.items()}
     expected_counts = dict(suite.expected_leaf_counts)
     if actual_counts != expected_counts:
         raise ValueError(
-            f"{suite.name} selected leaf counts {actual_counts!r}; "
-            f"expected {expected_counts!r}"
+            f"{suite.name} selected leaf counts {actual_counts!r}; expected {expected_counts!r}"
         )
-    return {
-        category: selected_by_leaf[category]
-        for category, _ in suite.expected_leaf_counts
-    }
+    return {category: selected_by_leaf[category] for category, _ in suite.expected_leaf_counts}
 
 
 def _read_selected_suite(
     project_root: Path,
 ) -> tuple[SuiteSpec, dict[str, tuple[str, ...]]]:
-    raw = json.loads(
-        (project_root / "test_case_ids_to_generate.json").read_text(encoding="utf-8")
-    )
+    raw = json.loads((project_root / "test_case_ids_to_generate.json").read_text(encoding="utf-8"))
     if not isinstance(raw, Mapping):
         raise ValueError("BFCL test-case ID map must be a JSON object")
     case_ids_by_category: dict[str, tuple[str, ...]] = {}
@@ -586,9 +563,7 @@ def _read_selected_suite(
             raise ValueError(f"{category} test-case IDs must be non-empty strings")
         case_ids_by_category[category] = tuple(case_ids)
 
-    shape = tuple(
-        (category, len(case_ids)) for category, case_ids in case_ids_by_category.items()
-    )
+    shape = tuple((category, len(case_ids)) for category, case_ids in case_ids_by_category.items())
     for suite in SUITE_SPECS.values():
         if shape != suite.expected_leaf_counts:
             continue
@@ -669,9 +644,7 @@ def _validate_generated_results(
     for category, case_ids in case_ids_by_category.items():
         matches = sorted(project_root.glob(f"result/**/BFCL_v4_{category}_result.json"))
         if len(matches) != 1:
-            raise ValueError(
-                f"expected exactly one {category} result file, found {len(matches)}"
-            )
+            raise ValueError(f"expected exactly one {category} result file, found {len(matches)}")
         result_ids: list[str] = []
         with matches[0].open(encoding="utf-8") as result_file:
             for line_number, result_line in enumerate(result_file, start=1):
@@ -679,13 +652,11 @@ def _validate_generated_results(
                     record = json.loads(result_line)
                 except json.JSONDecodeError as exc:
                     raise ValueError(
-                        f"{category} result record on line {line_number} "
-                        "is malformed JSON"
+                        f"{category} result record on line {line_number} is malformed JSON"
                     ) from exc
                 if not isinstance(record, Mapping):
                     raise ValueError(
-                        f"{category} result record on line {line_number} "
-                        "must be a JSON object"
+                        f"{category} result record on line {line_number} must be a JSON object"
                     )
                 case_id = record.get("id")
                 if not isinstance(case_id, str) or not case_id:
@@ -694,38 +665,27 @@ def _validate_generated_results(
                         "must contain a non-empty string id"
                     )
                 if case_id not in case_ids:
-                    raise ValueError(
-                        f"{category} result file contains unexpected id {case_id}"
-                    )
+                    raise ValueError(f"{category} result file contains unexpected id {case_id}")
                 if case_id in result_ids:
-                    raise ValueError(
-                        f"{category} result file contains duplicate id {case_id}"
-                    )
+                    raise ValueError(f"{category} result file contains duplicate id {case_id}")
                 if "traceback" in record or (
                     isinstance(record.get("result"), str)
                     and record["result"].startswith("Error during inference:")
                 ):
-                    raise RuntimeError(
-                        f"{category} result {case_id} contains an inference error"
-                    )
+                    raise RuntimeError(f"{category} result {case_id} contains an inference error")
                 result_ids.append(case_id)
         if result_ids != list(case_ids):
             raise ValueError(
-                f"{category} result ids {result_ids!r} "
-                f"do not match expected ids {list(case_ids)!r}"
+                f"{category} result ids {result_ids!r} do not match expected ids {list(case_ids)!r}"
             )
 
 
-def _validate_header(
-    *, category: str, header: Any, expected_count: int
-) -> tuple[float, int, int]:
+def _validate_header(*, category: str, header: Any, expected_count: int) -> tuple[float, int, int]:
     if not isinstance(header, Mapping):
         raise ValueError(f"{category} score header must be a JSON object")
     missing = {"accuracy", "correct_count", "total_count"} - header.keys()
     if missing:
-        raise ValueError(
-            f"{category} score header missing: {', '.join(sorted(missing))}"
-        )
+        raise ValueError(f"{category} score header missing: {', '.join(sorted(missing))}")
 
     correct_count = header["correct_count"]
     total_count = header["total_count"]
@@ -741,9 +701,7 @@ def _validate_header(
     ):
         raise ValueError(f"{category} accuracy must be a finite number")
     if total_count != expected_count:
-        raise ValueError(
-            f"{category} evaluated {total_count} cases; expected {expected_count}"
-        )
+        raise ValueError(f"{category} evaluated {total_count} cases; expected {expected_count}")
     if correct_count < 0 or correct_count > total_count:
         raise ValueError(f"{category} correct_count is outside [0, total_count]")
 
@@ -761,9 +719,7 @@ def _collect_scores(
     for category, case_ids in case_ids_by_category.items():
         matches = sorted(project_root.glob(f"score/**/BFCL_v4_{category}_score.json"))
         if len(matches) != 1:
-            raise ValueError(
-                f"expected exactly one {category} score file, found {len(matches)}"
-            )
+            raise ValueError(f"expected exactly one {category} score file, found {len(matches)}")
         score_path = matches[0]
         with score_path.open(encoding="utf-8") as score_file:
             first_line = score_file.readline()
@@ -790,8 +746,7 @@ def _collect_scores(
                 ) from exc
             if not isinstance(record, Mapping):
                 raise ValueError(
-                    f"{category} score record on line {line_number} "
-                    "must be a JSON object"
+                    f"{category} score record on line {line_number} must be a JSON object"
                 )
             case_id = record.get("id")
             if not isinstance(case_id, str) or not case_id:
@@ -800,13 +755,9 @@ def _collect_scores(
                     "must contain a non-empty string id"
                 )
             if case_id not in case_ids:
-                raise ValueError(
-                    f"{category} score file contains unexpected id {case_id}"
-                )
+                raise ValueError(f"{category} score file contains unexpected id {case_id}")
             if case_id in record_ids:
-                raise ValueError(
-                    f"{category} score file contains duplicate id {case_id}"
-                )
+                raise ValueError(f"{category} score file contains duplicate id {case_id}")
             record_ids.append(case_id)
             records.append(dict(record))
         expected_failure_count = total_count - correct_count
@@ -840,9 +791,7 @@ def publish_integration_error(
     """Publish required zero-score artifacts without importing BFCL or Typer."""
     native_path, compatibility_path = _prepare_output_paths(output_dir)
     case_ids_by_category = (
-        dict(SMOKE_CASE_IDS)
-        if suite is SMOKE_SUITE
-        else {category: () for category in suite.leaf_categories}
+        dict(SMOKE_CASE_IDS) if suite is SMOKE_SUITE else dict.fromkeys(suite.leaf_categories, ())
     )
     _write_json(
         native_path,
@@ -882,22 +831,16 @@ def run_evaluation(
     """Run one immutable BFCL suite and always publish both report formats."""
     native_path, compatibility_path = _prepare_output_paths(output_dir)
     selected_case_ids: dict[str, tuple[str, ...]] = (
-        dict(SMOKE_CASE_IDS)
-        if suite is SMOKE_SUITE
-        else {category: () for category in suite.leaf_categories}
+        dict(SMOKE_CASE_IDS) if suite is SMOKE_SUITE else dict.fromkeys(suite.leaf_categories, ())
     )
-    resolved_num_threads = (
-        suite.default_num_threads if num_threads is None else num_threads
-    )
+    resolved_num_threads = suite.default_num_threads if num_threads is None else num_threads
     try:
         if suite.name not in SUITE_SPECS or SUITE_SPECS[suite.name] is not suite:
             raise ValueError(f"unsupported BFCL suite: {suite.name}")
         normalized_url = _absolute_http_url(base_url)
         normalized_model = _nonempty_string(model)
         normalized_key = _nonempty_string(api_key)
-        if isinstance(resolved_num_threads, bool) or not isinstance(
-            resolved_num_threads, int
-        ):
+        if isinstance(resolved_num_threads, bool) or not isinstance(resolved_num_threads, int):
             raise ValueError("num_threads must be a positive integer")
         if resolved_num_threads <= 0:
             raise ValueError("num_threads must be a positive integer")
@@ -919,9 +862,7 @@ def run_evaluation(
         _validate_generated_results(bfcl_project_root, selected_case_ids)
         scores = _collect_scores(bfcl_project_root, selected_case_ids)
         if sum(score.total_count for score in scores) != suite.expected_sample_count:
-            raise ValueError(
-                f"{suite.name} evaluated an unexpected total number of cases"
-            )
+            raise ValueError(f"{suite.name} evaluated an unexpected total number of cases")
     except Exception as exc:  # noqa: BLE001 - artifact publication is the boundary
         _write_json(
             native_path,
@@ -967,9 +908,7 @@ def run_evaluation(
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Run a pinned BFCL V4 OpenAI completions suite."
-    )
+    parser = argparse.ArgumentParser(description="Run a pinned BFCL V4 OpenAI completions suite.")
     parser.add_argument("--base-url", type=_absolute_http_url)
     parser.add_argument("--api-key", type=_nonempty_string, default="EMPTY")
     parser.add_argument("--model", type=_nonempty_string, required=True)
@@ -992,9 +931,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         if args.base_url is None:
             parser.error("--base-url required unless --integration-error is provided")
         if args.bfcl_project_root is None:
-            parser.error(
-                "--bfcl-project-root required unless --integration-error is provided"
-            )
+            parser.error("--bfcl-project-root required unless --integration-error is provided")
     return args
 
 

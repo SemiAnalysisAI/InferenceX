@@ -12,21 +12,33 @@ on:
                 required: true
                 type: string
 
+permissions: {}
+
+concurrency:
+  group: recover-ingest-${{ inputs.source-run-id }}-${{ inputs.merge-run-id }}
+  cancel-in-progress: false
+
 jobs:
     trigger-agentic-ingest:
+        name: trigger-agentic-ingest
         runs-on: ubuntu-latest
         steps:
             - name: Trigger agentic database ingest
-              run: |
-                  curl -sSf -X POST \
-                    -H "Authorization: Bearer ${{ secrets.INFX_FRONTEND_PAT }}" \
-                    -H "Accept: application/vnd.github+v3+json" \
-                    https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/dispatches \
-                    -d '{
-                      "event_type": "ingest-agentic-results",
-                      "client_payload": {
-                        "source-run-id": "${{ inputs.source-run-id }}",
-                        "merge-run-id": "${{ inputs.merge-run-id }}",
-                        "database-target": "production"
-                      }
-                    }'
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              env:
+                SOURCE_RUN_ID: ${{ inputs.source-run-id }}
+                MERGE_RUN_ID: ${{ inputs.merge-run-id }}
+              with:
+                # Cross-repository dispatch credential for maintainer-triggered ingest recovery.
+                github-token: ${{ secrets.INFX_FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
+                script: |
+                  await github.rest.repos.createDispatchEvent({
+                    owner: "SemiAnalysisAI",
+                    repo: "InferenceX-app",
+                    event_type: "ingest-agentic-results",
+                    client_payload: {
+                      "source-run-id": process.env.SOURCE_RUN_ID,
+                      "merge-run-id": process.env.MERGE_RUN_ID,
+                      "database-target": "production"
+                    }
+                  });

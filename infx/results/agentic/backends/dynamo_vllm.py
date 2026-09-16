@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..common import gauge_stat, normalize_fraction, rate, sum_stat
+from infx.results.agentic.common import gauge_stat, normalize_fraction, rate, sum_stat
+
 from .vllm import VllmBackend, first_counter_total
 
 
@@ -91,9 +92,7 @@ class DynamoVllmBackend(VllmBackend):
             )
         )
         if flat["server_overall_cache_hit_rate"] is None:
-            flat["server_overall_cache_hit_rate"] = (
-                frontend_hit_rate or router_shared_hit_rate
-            )
+            flat["server_overall_cache_hit_rate"] = frontend_hit_rate or router_shared_hit_rate
 
         nested["cache"].update(
             {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
 # AgentX trace replay for Qwen3.5-397B-A17B FP8 on B300 with SGLang
@@ -14,8 +14,9 @@ export EVAL_FRAMEWORK="lm-eval"
 check_env_vars \
     MODEL TP CONC EP_SIZE KV_OFFLOADING \
     TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+check_env_vars EVAL_ONLY
 
-SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-10}
+SCHEDULER_RECV_INTERVAL=10
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -40,12 +41,6 @@ mkdir -p "$RESULT_DIR"
 
 CACHE_ARGS=()
 if require_agentic_kv_offload_backend hicache; then
-    REQUESTED_HICACHE_TOTAL_GB="${HICACHE_TOTAL_CPU_DRAM_GB:-$TOTAL_CPU_DRAM_GB}"
-    if [ "$REQUESTED_HICACHE_TOTAL_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
-        echo "Error: requested HiCache pool ${REQUESTED_HICACHE_TOTAL_GB} GB exceeds configured capacity ${TOTAL_CPU_DRAM_GB} GB" >&2
-        exit 1
-    fi
-    TOTAL_CPU_DRAM_GB="$REQUESTED_HICACHE_TOTAL_GB"
     # SGLang applies --hicache-size independently to Qwen's target KV and
     # Mamba pools. Native NEXTN also creates a draft KV pool with the same
     # slot count; its one attention layer adds 1/15 of the target KV bytes.
@@ -56,10 +51,9 @@ if require_agentic_kv_offload_backend hicache; then
         echo "Error: insufficient DRAM after HiCache alignment reserve" >&2
         exit 1
     fi
-    MAX_HICACHE_SIZE_GB=$((HICACHE_USABLE_TOTAL_GB * 15 / TP / 31))
-    HICACHE_SIZE_GB="${HICACHE_SIZE_GB:-$MAX_HICACHE_SIZE_GB}"
-    if [ "$HICACHE_SIZE_GB" -lt 1 ] || [ "$HICACHE_SIZE_GB" -gt "$MAX_HICACHE_SIZE_GB" ]; then
-        echo "Error: HICACHE_SIZE_GB=$HICACHE_SIZE_GB outside 1..$MAX_HICACHE_SIZE_GB" >&2
+    HICACHE_SIZE_GB=$((HICACHE_USABLE_TOTAL_GB * 15 / TP / 31))
+    if [ "$HICACHE_SIZE_GB" -lt 1 ]; then
+        echo "Error: computed HICACHE_SIZE_GB=$HICACHE_SIZE_GB must be positive" >&2
         exit 1
     fi
     PROJECTED_HICACHE_TOTAL_GB=$(((HICACHE_SIZE_GB * TP * 31 + 14) / 15 + HICACHE_ALIGNMENT_RESERVE_GB))
@@ -92,9 +86,8 @@ if [ "$TP" -ge 4 ]; then
     TOKENIZER_ARGS=(--tokenizer-worker-num 6)
 fi
 
-# AgentX concurrency counts live session trees rather than individual HTTP
-# requests. Leave room for subagent fan-out and avoid spending HBM on graphs
-# above the batch sizes that remain useful for this long-context workload.
+# AgentX concurrency counts live session trees; leave room for subagent
+# fan-out without spending HBM on graphs above useful batch sizes.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS="$CONC"
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
@@ -108,7 +101,7 @@ export SGLANG_ENABLE_FLASHINFER_GEMM=true
 # timeout so bursty AgentX trajectories cannot reuse a closing idle socket.
 export SGLANG_TIMEOUT_KEEP_ALIVE=1800
 
-if [ "${EVAL_ONLY:-false}" != "true" ]; then
+if [ "${EVAL_ONLY}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=3.39
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
@@ -168,7 +161,7 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 capture_cache_metrics
 trap capture_cache_metrics EXIT
 
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
+if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"

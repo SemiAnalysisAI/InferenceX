@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import bisect
+import itertools
 import json
 import math
+import sys
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,14 +64,12 @@ def _integrate_device(
     end_power = _interpolate_power(samples, end_unix)
     clipped = [(start_unix, start_power)]
     clipped.extend(
-        (timestamp, power)
-        for timestamp, power in samples
-        if start_unix < timestamp < end_unix
+        (timestamp, power) for timestamp, power in samples if start_unix < timestamp < end_unix
     )
     clipped.append((end_unix, end_power))
 
     energy_j = 0.0
-    for (left_time, left_power), (right_time, right_power) in zip(clipped, clipped[1:]):
+    for (left_time, left_power), (right_time, right_power) in itertools.pairwise(clipped):
         energy_j += (right_time - left_time) * (left_power + right_power) / 2.0
     return energy_j
 
@@ -96,7 +96,7 @@ def _percentile_total_power(
         clipped = [(start_unix, first)]
         clipped.extend((t, p) for t, p in samples if start_unix < t < end_unix)
         clipped.append((end_unix, _interpolate_power(samples, end_unix)))
-        for (left_t, left_p), (right_t, right_p) in zip(clipped, clipped[1:]):
+        for (left_t, left_p), (right_t, right_p) in itertools.pairwise(clipped):
             slope = (right_p - left_p) / (right_t - left_t)
             slope_changes[left_t] = slope_changes.get(left_t, 0.0) + slope
             slope_changes[right_t] = slope_changes.get(right_t, 0.0) - slope
@@ -105,7 +105,7 @@ def _percentile_total_power(
     segments: list[tuple[float, float, float]] = []
     slope = 0.0
     times = sorted(slope_changes)
-    for left_t, right_t in zip(times, times[1:]):
+    for left_t, right_t in itertools.pairwise(times):
         slope += slope_changes[left_t]
         next_power = total_power + slope * (right_t - left_t)
         segments.append(
@@ -143,7 +143,9 @@ def _load_benchmark_data(
     """Load the strict energy-normalization contract from raw benchmark JSON."""
     try:
         bench = json.loads(bench_result_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None, ["invalid_benchmark_result"]
+    if not isinstance(bench, dict):
         return None, ["invalid_benchmark_result"]
 
     start = bench.get("benchmark_start_time_unix")
@@ -156,9 +158,10 @@ def _load_benchmark_data(
     if not numeric_window:
         return None, ["invalid_benchmark_window"]
 
-    start = float(start)
-    end = float(end)
-    duration = float(duration)
+    try:
+        start, end, duration = map(float, (start, end, duration))
+    except OverflowError:
+        return None, ["invalid_benchmark_window"]
     if (
         not all(math.isfinite(value) for value in (start, end, duration))
         or end <= start
@@ -172,37 +175,28 @@ def _load_benchmark_data(
     if abs(duration - integration_duration) > duration_tolerance:
         _append_reason(reasons, "benchmark_duration_mismatch")
 
-    completed = bench.get("completed")
-    if not isinstance(completed, int) or isinstance(completed, bool) or completed <= 0:
-        _append_reason(reasons, "invalid_successful_query_count")
-        completed = 0
-
-    total_input = bench.get("total_input_tokens")
-    if (
-        not isinstance(total_input, int)
-        or isinstance(total_input, bool)
-        or total_input <= 0
+    counts: dict[str, int] = {}
+    for key, reason in (
+        ("completed", "invalid_successful_query_count"),
+        ("total_input_tokens", "invalid_input_token_count"),
+        ("total_output_tokens", "invalid_output_token_count"),
     ):
-        _append_reason(reasons, "invalid_input_token_count")
-        total_input = 0
-
-    total_output = bench.get("total_output_tokens")
-    if (
-        not isinstance(total_output, int)
-        or isinstance(total_output, bool)
-        or total_output <= 0
-    ):
-        _append_reason(reasons, "invalid_output_token_count")
-        total_output = 0
+        value = bench.get(key)
+        if (
+            not isinstance(value, int)
+            or isinstance(value, bool)
+            or not 0 < value <= sys.float_info.max
+        ):
+            _append_reason(reasons, reason)
+            value = 0
+        counts[key] = value
 
     return (
         BenchmarkData(
             start_unix=start,
             end_unix=end,
             reported_duration_s=duration,
-            completed=completed,
-            total_input_tokens=total_input,
-            total_output_tokens=total_output,
+            **counts,
         ),
         reasons,
     )

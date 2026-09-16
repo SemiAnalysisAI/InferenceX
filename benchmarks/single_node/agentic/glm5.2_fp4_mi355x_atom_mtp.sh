@@ -18,7 +18,7 @@ if [[ -v SLURM_JOB_ID ]]; then
     echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-# ROCR/HIP visibility for vLLM 0.14+
+# ROCR/HIP visibility under slurm cgroups.
 if [[ -v ROCR_VISIBLE_DEVICES ]]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
@@ -38,15 +38,12 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
-# Require the vLLM Prometheus stream in every official result. AIPerf
-# deduplicates this endpoint against its automatic localhost discovery.
+# Require the ATOM Prometheus stream in every official result.
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="atom:"
 
-# VRAM space check
 wait_for_amd_gpu_clean
 
-# ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 mkdir -p "$RESULT_DIR"
@@ -77,7 +74,6 @@ case "$KV_OFFLOAD_BACKEND" in
     lmcache)
         require_agentic_kv_offload_backend lmcache
 
-        # LMCache settings
         export PYTHONHASHSEED=0
         export LMCACHE_LOCAL_CPU=True
         export LMCACHE_MAX_LOCAL_CPU_SIZE="$TOTAL_CPU_DRAM_GB"
@@ -95,16 +91,12 @@ case "$KV_OFFLOAD_BACKEND" in
         ;;
 esac
 
-# ---- LLM server config ----------------------------------------------------------
-
 echo "Starting atom server..."
 export PYTHONNOUSERSITE=1
 
-# ---- ATOM env ----
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 export AITER_USE_FLYDSL_MOE_SORTING=1
 
-# CUDA/HIPGRAPH settings
 case "$CONC" in
   1)  CUDAGRAPH_CAPTURE_SIZES='[1,2]' ;;
   2)  CUDAGRAPH_CAPTURE_SIZES='[1,2,4]' ;;
@@ -119,24 +111,18 @@ case "$CONC" in
     ;;
 esac
 
-# PARALLEL settings
 PARALLEL_ARGS=(--tensor-parallel-size "$TP") #TP
 if [ "$DP_ATTENTION" = "true" ]; then
-    # DPA+EP
     if [ "$EP_SIZE" -gt 1 ]; then #DP+EP
         PARALLEL_ARGS=(--tensor-parallel-size "$TP" --enable-dp-attention --enable-expert-parallel)
-    # DPA+TP
     else 
         PARALLEL_ARGS=(--tensor-parallel-size "$TP" --enable-dp-attention )
     fi
 fi
 
-# SPEC settings
-# SIMULATE_ACC_LEN and NUM_SPEC_TOKENS reference:
 # https://github.com/SemiAnalysisAI/InferenceX/blob/main/golden_al_distribution/glm5.2_mtp.yaml
 SIMULATE_ACC_LEN=2.99
 NUM_SPEC_TOKENS=3
-# spec-decode-acceptance-rate = (SIMULATE_ACC_LEN - 1) / NUM_SPEC_TOKENS
 SPEC_ACCEPTANCE_RATE=$(awk "BEGIN{print ($SIMULATE_ACC_LEN-1)/$NUM_SPEC_TOKENS}")
 if [ "${EVAL_ONLY}" = "true" ]; then
     SPEC_ARGS=(
@@ -173,7 +159,6 @@ echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-# ---- Run benchmark ----------------------------------------------------------
 if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else

@@ -1,65 +1,18 @@
 name: CODEOWNER Sign-off Verify
 
-# Independently re-verifies a CODEOWNER reviewer sign-off.
-#
-# A reviewer marks a PR ready by posting the sign-off checklist that starts with
-# "As a PR reviewer and CODEOWNER" (see e.g.
-# https://github.com/SemiAnalysisAI/InferenceX/pull/1792#issuecomment-4781799476).
-# That sign-off can be posted three different ways, and all three trigger here:
-#   - a conversation comment            -> issue_comment
-#   - an Approve/Comment review summary  -> pull_request_review
-#   - an inline code-review comment      -> pull_request_review_comment
-#
-# When the sign-off lands on an open PR, this workflow asks Claude to
-# independently confirm the claims that actually gate a merge:
-#   0. The sign-off author is a CODEOWNER for the files the PR changes.
-#   1. PR validation has at least one fully-green run on a commit in the PR.
-#   2. Evals pass on that same green run.
-#   3. The single-node recipe(s) are linked in the sign-off AND the linked
-#      recipe PR/commit contains all of the reproduction information that is in
-#      this InferenceX PR. Single-node submissions only — disaggregated /
-#      multi-node PRs (dynamo, ATOM/ATOMesh, sglang/vllm disagg) are N/A.
-#   4. An authorized maintainer has explicitly posted a `/reuse-sweep-run`
-#      command on the PR (the reuse-merge path requires it).
-#   5. The sign-off uses the latest docs/PR_REVIEW_CHECKLIST.md template.
-#   6. vLLM/SGLang configs run upstream images (hub.docker.com/u/vllm,
-#      hub.docker.com/u/lmsysorg) on established hardware, and vLLM/SGLang
-#      submissions land before additional frameworks (TRT-LLM, ATOM, ...).
-#   7. No submissions for models, scenarios, or model-scenario combinations
-#      deprecated in MODELS.md.
-#   8. No benchmark hacks that change the model architecture / cut FLOPs.
-#   9. Speculative-decoding configs benchmark through chat templates.
-#  10. No patches to the inference engine / serving stack (the pinned image
-#      runs as shipped) — the only exception is a patch covered by a
-#      filled-out docs/waiver/<PR_NUMBER>.md waiver.
-#  11. Agentic spec-decode configs simulate acceptance at the committed golden
-#      AL from golden_al_distribution/ (SGLang SGLANG_SIMULATE_ACC_* env vars,
-#      vLLM synthetic rejection sampling in --speculative-config).
-# If any of those are not to standard, Claude posts a single comment that
-# @-mentions the reviewer who signed off and explains exactly what is wrong.
-#
-# The verdict is also published as a `codeowner-signoff-verify` commit status
-# on the PR head SHA (success after the first "Verdict: PASS"). That context is
-# a REQUIRED check in the "Protect main" ruleset, so a PR cannot be merged
-# (without org-admin bypass) until a sign-off has been posted AND independently
-# verified as passing once for this PR. A durable PR label remembers that pass;
-# later commits receive success without invoking Claude again. The workflow owns
-# one PR-wide verdict comment and edits it on each explicit reassessment.
-#
-# It can also be run manually via workflow_dispatch by passing the URL of the
-# sign-off comment/review to verify.
-
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened, ready_for_review]
   issue_comment:
-    types: [created, edited, deleted]
+    types: [created, edited]
   pull_request_review:
     types: [submitted, edited]
   pull_request_review_comment:
     types: [created, edited]
   workflow_dispatch:
     inputs:
+      pr-number:
+        description: PR number
+        required: true
+        type: number
       comment_url:
         description: >-
           URL of the sign-off comment/review to verify, e.g.
@@ -72,36 +25,47 @@ permissions:
   contents: read
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Gate: only proceed for the sign-off checklist on an OPEN, non-draft PR.
-  # Normalizes the three event shapes (issue_comment / pull_request_review /
-  # pull_request_review_comment) into a single set of outputs, resolves an
-  # immutable head SHA (TOCTOU-safe), and hands the verifier a ready-to-run
-  # command for fetching the exact sign-off body.
-  # ---------------------------------------------------------------------------
-  gate:
+  verify:
+    name: Check sign-off
     if: |
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'issue_comment' && github.event.action != 'deleted' && github.event.issue.pull_request &&
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
        contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER')) ||
       (github.event_name == 'pull_request_review' &&
        contains(github.event.review.body || '', 'As a PR reviewer and CODEOWNER')) ||
       (github.event_name == 'pull_request_review_comment' &&
        contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER'))
     runs-on: ubuntu-latest
+    concurrency:
+      group: codeowner-signoff-pr-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr-number }}
+      cancel-in-progress: false
     permissions:
       contents: read
-      pull-requests: read
-    outputs:
-      proceed: ${{ steps.resolve.outputs.proceed }}
-      pr-number: ${{ steps.resolve.outputs.pr-number }}
-      head-sha: ${{ steps.resolve.outputs.head-sha }}
-      signoff-author: ${{ steps.resolve.outputs.signoff-author }}
-      signoff-kind: ${{ steps.resolve.outputs.signoff-kind }}
-      signoff-fetch-cmd: ${{ steps.resolve.outputs.signoff-fetch-cmd }}
+      pull-requests: write # Publish PR feedback.
+      issues: write # Update the verdict comment.
+      actions: read # Read workflow runs and artifacts.
     steps:
+      - name: Checkout trusted workflow code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - name: Check changed-file ownership
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run --locked --extra workflows python -m infx.workflows.signoff_scope
+
       - name: Resolve PR state and sign-off metadata
         id: resolve
+        if: steps.scope.outputs.required == 'true'
+        env:
+          SCOPED_HEAD_SHA: ${{ steps.scope.outputs.head-sha }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -109,8 +73,6 @@ jobs:
             const repo = context.repo.repo;
             const repoFull = `${owner}/${repo}`;
             const eventName = context.eventName;
-
-            // Normalize the event payloads (3 comment events + manual dispatch).
             let prNumber, author, refId, kind, fetchCmd;
             if (eventName === 'issue_comment') {
               prNumber = context.payload.issue.number;
@@ -176,77 +138,41 @@ jobs:
               owner, repo, pull_number: prNumber,
             });
 
-            // Event-triggered: only act on open, non-draft ("ready") PRs.
-            // Manual dispatch is an explicit override, so allow any PR state.
-            const ready = eventName === 'workflow_dispatch'
-              ? true
-              : (pr.state === 'open' && pr.draft === false);
-            if (!ready) {
-              core.info(`PR #${prNumber} is not ready (state=${pr.state}, draft=${pr.draft}); skipping.`);
+            if (pr.head.sha !== process.env.SCOPED_HEAD_SHA) {
+              core.setFailed('PR head changed while determining sign-off scope; retry on the current head.');
+              return;
             }
 
-            core.setOutput('proceed', ready ? 'true' : 'false');
+            if (eventName !== 'workflow_dispatch' && (pr.state !== 'open' || pr.draft)) {
+              core.info(`PR #${prNumber} is not ready; skipping.`);
+              return;
+            }
+            const { data: permission } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner, repo, username: context.actor,
+            });
+            if (!['admin', 'write'].includes(permission?.permission) ||
+                !['admin', 'maintain', 'write'].includes(permission?.role_name) ||
+                context.actor.endsWith('[bot]') || context.payload.sender?.type === 'Bot') {
+              core.info(`Actor ${context.actor} cannot request verification.`);
+              return;
+            }
+
+            core.setOutput('proceed', 'true');
             core.setOutput('pr-number', String(prNumber));
             core.setOutput('head-sha', pr.head.sha);
             core.setOutput('signoff-author', author);
             core.setOutput('signoff-kind', kind);
             core.setOutput('signoff-fetch-cmd', fetchCmd);
 
-  verify:
-    needs: gate
-    if: ${{ needs.gate.outputs.proceed == 'true' }}
-    runs-on: ubuntu-latest
-    concurrency:
-      group: codeowner-signoff-pr-${{ needs.gate.outputs.pr-number }}
-      cancel-in-progress: false
-    permissions:
-      contents: read
-      pull-requests: write
-      issues: write
-      actions: read
-      statuses: write
-    steps:
-      # SECURITY: this is a privileged job (write perms + secrets) triggered by
-      # comment events, so it must NOT check out untrusted PR head code — the
-      # setup step and the MCP server would then execute attacker-controlled
-      # files. Check out the trusted default branch; all PR content is read
-      # read-only via the GitHub API (gh / MCP), never from the working tree.
-      - name: Checkout repository (trusted default branch only)
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.repository.default_branch }}
-          token: ${{ secrets.CLAUDE_PAT }}
-
-      - name: Reuse an existing passing checklist
-        id: prepare
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
-        with:
-          script: |
-            const { prepare } = require('./.github/scripts/codeowner-signoff.cjs');
-            await prepare({ github, context, core, prNumber: Number(process.env.PR_NUMBER) });
-
-      - name: Set up uv
-        if: steps.prepare.outputs.verify == 'true'
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-
-      # The verifier prompt lives in .github/codeowner-signoff-verify-prompt.md:
-      # GitHub caps any ${{ }}-bearing workflow scalar at 21000 characters and
-      # the prompt outgrew that, so it is rendered here (envsubst on the
-      # template from the TRUSTED default-branch checkout — same trust level
-      # as this workflow file; never PR head content) and handed to the action
-      # as a file the tiny static prompt below points at.
       - name: Render verifier prompt
-        if: steps.prepare.outputs.verify == 'true'
+        if: steps.resolve.outputs.proceed == 'true'
         env:
           REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
-          HEAD_SHA: ${{ needs.gate.outputs.head-sha }}
-          SIGNOFF_AUTHOR: ${{ needs.gate.outputs.signoff-author }}
-          SIGNOFF_KIND: ${{ needs.gate.outputs.signoff-kind }}
-          SIGNOFF_FETCH_CMD: ${{ needs.gate.outputs.signoff-fetch-cmd }}
+          PR_NUMBER: ${{ steps.scope.outputs.pr-number }}
+          HEAD_SHA: ${{ steps.scope.outputs.head-sha }}
+          SIGNOFF_AUTHOR: ${{ steps.resolve.outputs.signoff-author }}
+          SIGNOFF_KIND: ${{ steps.resolve.outputs.signoff-kind }}
+          SIGNOFF_FETCH_CMD: ${{ steps.resolve.outputs.signoff-fetch-cmd }}
         run: |
           # These placeholders must remain literal for envsubst.
           # shellcheck disable=SC2016
@@ -258,17 +184,21 @@ jobs:
 
       - name: Verify sign-off with Claude
         id: claude
-        if: steps.prepare.outputs.verify == 'true'
+        if: steps.resolve.outputs.proceed == 'true'
         uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
         env:
-          GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
-          GITHUB_TOKEN: ${{ secrets.CLAUDE_PAT }}
+          # Repository verifier credential; trusted code checks writer authorization before this step.
+          GH_TOKEN: ${{ secrets.CLAUDE_PAT }} # zizmor: ignore[secrets-outside-env]
+          # Repository verifier credential; trusted code checks writer authorization before this step.
+          GITHUB_TOKEN: ${{ secrets.CLAUDE_PAT }} # zizmor: ignore[secrets-outside-env]
           INFERENCEMAX_ROOT: ${{ github.workspace }}
           BASH_DEFAULT_TIMEOUT_MS: "1800000"
           BASH_MAX_TIMEOUT_MS: "3600000"
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.CLAUDE_PAT }}
+          # Repository verifier credential; trusted code checks writer authorization before this step.
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
+          # Repository verifier credential; trusted code checks writer authorization before this step.
+          github_token: ${{ secrets.CLAUDE_PAT }} # zizmor: ignore[secrets-outside-env]
           track_progress: false
           allowed_bots: ''
           additional_permissions: |
@@ -286,14 +216,12 @@ jobs:
             already rendered with this run's PR number, head SHA, and sign-off
             metadata.
 
-      # Claude writes a local verdict; deterministic code owns the sticky comment,
-      # durable PASS, and status publication (including verifier crashes).
-      - name: Update verdict comment and PR status
-        if: always() && steps.prepare.outputs.verify == 'true'
+      - name: Update verdict comment
+        if: always() && steps.resolve.outputs.proceed == 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          HEAD_SHA: ${{ needs.gate.outputs.head-sha }}
-          PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
+          HEAD_SHA: ${{ steps.scope.outputs.head-sha }}
+          PR_NUMBER: ${{ steps.scope.outputs.pr-number }}
           VERIFICATION_SUCCEEDED: ${{ steps.claude.outcome == 'success' }}
         with:
           script: |
@@ -305,37 +233,3 @@ jobs:
               verdictPath: '/tmp/codeowner-signoff-verdict.md',
               verificationSucceeded: process.env.VERIFICATION_SUCCEEDED === 'true',
             });
-
-  carry-forward:
-    if: >-
-      github.event_name == 'pull_request_target' ||
-      (github.event_name == 'issue_comment' && github.event.action == 'deleted' &&
-       github.event.issue.pull_request &&
-       (github.event.comment.user.login == 'Klaud-Cold' ||
-        github.event.comment.user.login == 'github-actions[bot]') &&
-       startsWith(github.event.comment.body || '', '<!-- codeowner-signoff-verify'))
-    runs-on: ubuntu-latest
-    concurrency:
-      group: codeowner-signoff-pr-${{ github.event.pull_request.number || github.event.issue.number }}
-      cancel-in-progress: false
-    permissions:
-      contents: read
-      pull-requests: write
-      issues: write
-      statuses: write
-    steps:
-      # Never execute PR head code in this privileged pull_request_target job.
-      - name: Checkout trusted default branch
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          persist-credentials: false
-
-      - name: Carry the PR's passing checklist onto its latest head
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
-        with:
-          script: |
-            const { carry } = require('./.github/scripts/codeowner-signoff.cjs');
-            await carry({ github, context, core, prNumber: Number(process.env.PR_NUMBER) });

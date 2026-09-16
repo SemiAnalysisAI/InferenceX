@@ -1,9 +1,9 @@
-#!/usr/bin/env python3
 """Validate eval scores against per-task and per-model thresholds."""
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import glob
 import json
 import math
@@ -60,7 +60,9 @@ def detect_model_prefix(meta_env_path: str, override: str | None) -> str | None:
     return None
 
 
-def resolve_threshold(config: dict, prefix: str | None, task: str, fallback: float):
+def resolve_threshold(
+    config: dict, prefix: str | None, task: str, fallback: float
+) -> tuple[float, str]:
     """Return (min_score, source) for a task, most-specific-first."""
     models = config.get("models", {})
     if prefix and task in models.get(prefix, {}):
@@ -100,9 +102,7 @@ def metric_prefixes(data: dict, task: str, override: str | None) -> tuple[str, .
     declared = tuple(
         f"{item['metric']},"
         for item in metric_list
-        if isinstance(item, dict)
-        and isinstance(item.get("metric"), str)
-        and item["metric"]
+        if isinstance(item, dict) and isinstance(item.get("metric"), str) and item["metric"]
     )
     return declared or ("exact_match,",)
 
@@ -127,12 +127,13 @@ def validate_batch_manifest(
             meta = json.load(f)
     except (json.JSONDecodeError, OSError) as exc:
         if expected_concs is not None or any(
-            CONC_SUFFIX_RE.search(Path(result_file).name)
-            for result_file in result_files
+            CONC_SUFFIX_RE.search(Path(result_file).name) for result_file in result_files
         ):
             return [
-                "batched eval result files exist but "
-                f"{meta_env_path} is unavailable or invalid: {exc}"
+                (
+                    "batched eval result files exist but "
+                    f"{meta_env_path} is unavailable or invalid: {exc}"
+                )
             ]
         return []
 
@@ -153,9 +154,7 @@ def validate_batch_manifest(
     metadata_expected = meta.get("eval_concs")
     completed = meta.get("completed_eval_concs")
     failed = meta.get("failed_eval_concs")
-    if not all(
-        isinstance(values, list) for values in (metadata_expected, completed, failed)
-    ):
+    if not all(isinstance(values, list) for values in (metadata_expected, completed, failed)):
         return ["batched eval metadata must contain list-valued concurrency fields"]
     if not all(
         isinstance(value, int) and value > 0
@@ -172,9 +171,7 @@ def validate_batch_manifest(
     if len(metadata_expected_set) != len(metadata_expected):
         errors.append("batched eval metadata contains duplicate expected concurrencies")
     if len(completed_set) != len(completed):
-        errors.append(
-            "batched eval metadata contains duplicate completed concurrencies"
-        )
+        errors.append("batched eval metadata contains duplicate completed concurrencies")
     if expected_concs is not None and metadata_expected_set != expected_set:
         errors.append("batched eval metadata does not match workflow concurrencies")
     if failed_set:
@@ -200,9 +197,7 @@ def validate_batch_manifest(
     for result_file in result_files:
         match = CONC_SUFFIX_RE.search(Path(result_file).name)
         if match is None:
-            errors.append(
-                f"batched eval result lacks a concurrency suffix: {result_file}"
-            )
+            errors.append(f"batched eval result lacks a concurrency suffix: {result_file}")
             continue
         actual_concs.add(int(match.group(1)))
 
@@ -224,10 +219,8 @@ def validate_batch_manifest(
 def main() -> int:
     # Keep merged CI logs ordered.
     for _stream in (sys.stdout, sys.stderr):
-        try:
+        with contextlib.suppress(AttributeError, ValueError):
             _stream.reconfigure(line_buffering=True)
-        except (AttributeError, ValueError):
-            pass
 
     parser = argparse.ArgumentParser(description="Validate eval scores")
     parser.add_argument(
@@ -330,8 +323,7 @@ def main() -> int:
                     print("PASS: batched eval produced every requested concurrency")
         except (json.JSONDecodeError, OSError) as exc:
             print(
-                "WARN: could not inspect eval metadata for batched concurrency "
-                f"status: {exc}",
+                f"WARN: could not inspect eval metadata for batched concurrency status: {exc}",
                 file=sys.stderr,
             )
 
@@ -352,8 +344,7 @@ def main() -> int:
             invalid_effective, effective = invalid_effective_count(data, task)
             if invalid_effective:
                 print(
-                    f"FAIL: {conc_label}{task} invalid effective sample count: "
-                    f"{effective!r}",
+                    f"FAIL: {conc_label}{task} invalid effective sample count: {effective!r}",
                     file=sys.stderr,
                 )
                 failed = True

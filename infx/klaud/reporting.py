@@ -9,14 +9,18 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
-from typing import Annotated, Literal
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Annotated, Literal, Self
 
 from pydantic import AfterValidator, Field, field_validator, model_validator
 
 from . import github
 from .github import VerificationError
 from .models import Contract, identity
+
+if TYPE_CHECKING:
+    from infx.klaud.lifecycle import Session
+
 
 Number = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 SHA = Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
@@ -26,9 +30,7 @@ def public_prose(value: str) -> str:
     # Digest-pinned images are inline code, not GitHub mentions.
     prose = re.sub(r"`[A-Za-z0-9_./:+-]+@sha256:[0-9a-f]{64}`", "", value)
     if any(char in prose for char in ("@", "<", ">", "\n", "|")):
-        raise ValueError(
-            "Use one sentence of public prose without mentions, HTML or tables"
-        )
+        raise ValueError("Use one sentence of public prose without mentions, HTML or tables")
     return value
 
 
@@ -37,9 +39,7 @@ Text = Annotated[str, Field(min_length=1, max_length=700), AfterValidator(public
 
 class Prose(Contract):
     en: Text = Field(description="One concise English sentence")
-    zh: Text = Field(
-        description="Natural Simplified Chinese translation; preserve identifiers"
-    )
+    zh: Text = Field(description="Natural Simplified Chinese translation; preserve identifiers")
 
 
 class Values(Contract):
@@ -105,7 +105,7 @@ class Baseline(Contract):
         return urls
 
     @model_validator(mode="after")
-    def distinct(self):
+    def distinct(self) -> Self:
         unique_points(self.points)
         unique_evals(self.evals)
         return self
@@ -120,9 +120,7 @@ class Attempt(Contract):
     run_attempt: int = Field(gt=0)
     status: Literal["queued", "running", "passed", "failed", "cancelled", "deferred"]
     change: Prose
-    finding: Text | None = (
-        None  # Optional diagnostic evidence, not a visible summary paragraph.
-    )
+    finding: Text | None = None  # Optional diagnostic evidence, not a visible summary paragraph.
     next: Prose
     benchmarks_expected: int = Field(ge=0)
     benchmarks_passed: int = Field(ge=0)
@@ -132,7 +130,7 @@ class Attempt(Contract):
     evals: list[Evaluation] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def consistent(self):
+    def consistent(self) -> Self:
         unique_points(self.points)
         unique_evals(self.evals)
         if (
@@ -140,18 +138,14 @@ class Attempt(Contract):
             or self.evals_passed > self.evals_expected
         ):
             raise ValueError("Passed coverage exceeds expected coverage")
-        if (
-            self.kind == "initial"
-            and self.number != 0
-            or self.kind == "repair"
-            and not 1 <= self.number <= 5
+        if (self.kind == "initial" and self.number != 0) or (
+            self.kind == "repair" and not 1 <= self.number <= 5
         ):
             raise ValueError("Initial update is separate from the five-repair budget")
         if any(
             p.run_id not in (None, self.run_id)
             or p.head not in (None, self.head)
-            or p.run_attempt is not None
-            and p.run_attempt > self.run_attempt
+            or (p.run_attempt is not None and p.run_attempt > self.run_attempt)
             for p in [*self.points, *self.evals]
         ):
             raise ValueError("Attempt point provenance mismatch")
@@ -210,24 +204,18 @@ def values(row: dict) -> Values:
             output_tps_gpu=throughput.get("output_tput_tps"),
             ttft_ms=ttft * 1000 if ttft is not None else None,
             tpot_ms=tpot * 1000 if tpot is not None else None,
-            request_errors=row.get("request_accounting", {}).get(
-                "records_error_dropped"
-            ),
+            request_errors=row.get("request_accounting", {}).get("records_error_dropped"),
         )
     return Values(
         total_tps_gpu=metrics.get("tput_per_gpu"),
         output_tps_gpu=metrics.get("output_tput_per_gpu"),
-        ttft_ms=metrics["mean_ttft"] * 1000
-        if metrics.get("mean_ttft") is not None
-        else None,
-        tpot_ms=metrics["mean_tpot"] * 1000
-        if metrics.get("mean_tpot") is not None
-        else None,
+        ttft_ms=metrics["mean_ttft"] * 1000 if metrics.get("mean_ttft") is not None else None,
+        tpot_ms=metrics["mean_tpot"] * 1000 if metrics.get("mean_tpot") is not None else None,
         request_errors=metrics.get("errors"),
     )
 
 
-def number(value: float | int | None) -> str:
+def number(value: float | None) -> str:
     return "N/A" if value is None else f"{value:,.2f}".rstrip("0").rstrip(".")
 
 
@@ -238,19 +226,13 @@ def delta(old: float | None, new: float | None, comparable: bool = True) -> str:
 
 
 def translated(english: str, chinese: str) -> str:
-    return (
-        english
-        + "\n\n<details>\n<summary>中文</summary>\n\n"
-        + chinese
-        + "\n\n</details>"
-    )
+    return english + "\n\n<details>\n<summary>中文</summary>\n\n" + chinese + "\n\n</details>"
 
 
 def short_label(label: str) -> str:
     def shape(match: re.Match) -> str:
         return "/".join(
-            f"{int(n) // 1024}k" if int(n) > 0 and int(n) % 1024 == 0 else n
-            for n in match.groups()
+            f"{int(n) // 1024}k" if int(n) > 0 and int(n) % 1024 == 0 else n for n in match.groups()
         )
 
     return re.sub(r"\b(\d+)/(\d+)\b", shape, label, count=1)
@@ -260,14 +242,11 @@ def point_layout(points: list[Point]) -> tuple[str, list[str], str]:
     """Factor out only shared settings; retain full labels for ambiguous concurrencies."""
     labels = [short_label(p.label) for p in points]
     shapes = [
-        re.fullmatch(r"(.+) c\d+ (.+)", re.sub(r" [0-9a-f]{6}$", "", label))
-        for label in labels
+        re.fullmatch(r"(.+) c\d+ (.+)", re.sub(r" [0-9a-f]{6}$", "", label)) for label in labels
     ]
     common = {match.groups() for match in shapes if match}
     statistics = {p.values.latency_statistic for p in points}
-    latency = (
-        next(iter(statistics)).capitalize() + " latency" if len(statistics) == 1 else ""
-    )
+    latency = next(iter(statistics)).capitalize() + " latency" if len(statistics) == 1 else ""
     if (
         points
         and all(shapes)
@@ -284,7 +263,7 @@ def point_layout(points: list[Point]) -> tuple[str, list[str], str]:
     if len(statistics) > 1:
         labels = [
             f"{label} · {p.values.latency_statistic}"
-            for label, p in zip(labels, points)
+            for label, p in zip(labels, points, strict=False)
         ]
     return "Point", labels, latency
 
@@ -322,7 +301,7 @@ def point_table(
     old = {point.key: point for point in baseline.points} if baseline else {}
     heading, labels, settings = point_layout(points)
     rows, issues = [], {}
-    for point, label in zip(points, labels):
+    for point, label in zip(points, labels, strict=False):
         previous = old.get(point.key)
         comparable = bool(
             previous
@@ -330,8 +309,7 @@ def point_table(
             and previous.scenario == point.scenario
             and (
                 point.scenario != "agentic-coding"
-                or point.dataset
-                and point.dataset == previous.dataset
+                or (point.dataset and point.dataset == previous.dataset)
             )
             and previous.values.latency_statistic == point.values.latency_statistic
         )
@@ -349,8 +327,7 @@ def point_table(
             reasons.append(point.result)
         if b.request_errors:
             reasons.append(
-                f"{number(b.request_errors)} request error"
-                + ("s" if b.request_errors != 1 else "")
+                f"{number(b.request_errors)} request error" + ("s" if b.request_errors != 1 else "")
             )
         elif b.request_errors is None:
             reasons.append("request errors unavailable")
@@ -372,9 +349,7 @@ def point_table(
         ):
             reasons.append("Δ N/A where baseline is missing or zero")
         for reason in reasons:
-            issues.setdefault(reason, []).append(
-                f"c{label}" if heading == "Concurrency" else label
-            )
+            issues.setdefault(reason, []).append(f"c{label}" if heading == "Concurrency" else label)
     return "\n\n".join(
         part
         for part in (
@@ -386,14 +361,8 @@ def point_table(
     )
 
 
-def eval_table(
-    rows: list[Evaluation], baseline: Baseline | None, *, compare: bool = True
-) -> str:
-    previous = (
-        {(row.key, row.suite, row.metric): row for row in baseline.evals}
-        if baseline
-        else {}
-    )
+def eval_table(rows: list[Evaluation], baseline: Baseline | None, *, compare: bool = True) -> str:
+    previous = {(row.key, row.suite, row.metric): row for row in baseline.evals} if baseline else {}
     values, issues = [], {}
     for row in rows:
         old = previous.get((row.key, row.suite, row.metric))
@@ -416,9 +385,7 @@ def eval_table(
                 if old and row.samples is not None and old.samples == row.samples
                 else f"{number(old.samples if old else None)}/{samples} (old/new)"
             )
-        label = f"{row.suite}/{row.metric}" + (
-            f" · {short_label(row.label)}" if row.label else ""
-        )
+        label = f"{row.suite}/{row.metric}" + (f" · {short_label(row.label)}" if row.label else "")
         values.append([label, score, samples])
         if row.result != "passed":
             issues.setdefault(row.result, []).append(label)
@@ -453,10 +420,10 @@ def baseline_table(points: list[Point], *, context: bool = True) -> str:
             number(p.values.ttft_ms),
             number(p.values.tpot_ms),
         ]
-        for label, p in zip(labels, points)
+        for label, p in zip(labels, points, strict=False)
     ]
     issues = {}
-    for label, point in zip(labels, points):
+    for label, point in zip(labels, points, strict=False):
         if point.result != "passed":
             issues.setdefault(point.result, []).append(
                 f"c{label}" if heading == "Concurrency" else label
@@ -488,20 +455,13 @@ def baseline_table(points: list[Point], *, context: bool = True) -> str:
 
 def render_body(baseline: Baseline) -> str:
     _, _, settings = point_layout(baseline.points[:12])
-    sources = (
-        ", ".join(f"[API {i + 1}]({url})" for i, url in enumerate(baseline.sources))
-        or "N/A"
-    )
+    sources = ", ".join(f"[API {i + 1}]({url})" for i, url in enumerate(baseline.sources)) or "N/A"
     meta = " · ".join(part for part in (settings, f"Sources: {sources}") if part)
     english = (
         f"**Goal:** {baseline.goal.en}  \n**Baseline:** {baseline.date} · `{baseline.image}`  \n{meta}\n\n"
         + baseline_table(baseline.points[:12], context=False)
         + "\n\n"
-        + (
-            eval_table(baseline.evals, None, compare=False)
-            if baseline.evals
-            else "**Eval:** N/A"
-        )
+        + (eval_table(baseline.evals, None, compare=False) if baseline.evals else "**Eval:** N/A")
     )
     if len(baseline.points) > 12:
         english += f"\n\n12/{len(baseline.points)} points shown; remaining rows are in the baseline report."
@@ -534,12 +494,10 @@ def render_attempt(record: Attempt, baseline: Baseline | None, repository: str) 
         "deferred": "已延期",
     }[record.status]
     title, title_zh = titles[record.kind]
-    timestamp = f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M UTC}"
+    timestamp = f"{datetime.now(UTC):%Y-%m-%d %H:%M UTC}"
     link = f"[Run {record.run_id} / attempt {record.run_attempt}](https://github.com/{repository}/actions/runs/{record.run_id}/attempts/{record.run_attempt})"
     _, _, settings = point_layout(record.points)
-    meta = f"`{record.image}` · `{record.head[:12]}`" + (
-        f" · {settings}" if settings else ""
-    )
+    meta = f"`{record.image}` · `{record.head[:12]}`" + (f" · {settings}" if settings else "")
     results = "\n\n".join(
         part
         for part in (
@@ -562,25 +520,27 @@ def render_attempt(record: Attempt, baseline: Baseline | None, repository: str) 
     return translated(english, chinese)
 
 
-def marker(session, name: str) -> str:
+def marker(session: Session, name: str) -> str:
     return f"<!-- klaud-report:{session.parent['id']}:{session.candidate.id}:{name}\n"
 
 
-def stored(session, pull: dict, name: str) -> dict | None:
+def stored(session: Session, pull: dict, name: str) -> dict | None:
     matches = [
         c
-        for c in github.items(
-            session.repository, f"issues/{pull['number']}/comments?per_page=100"
-        )
-        if c["user"]["login"] == "Klaud-Cold"
-        and c["body"].startswith(marker(session, name))
+        for c in github.items(session.repository, f"issues/{pull['number']}/comments?per_page=100")
+        if c["user"]["login"] == "Klaud-Cold" and c["body"].startswith(marker(session, name))
     ]
     if len(matches) > 1:
         raise VerificationError("Ambiguous report comment")
     return matches[0] if matches else None
 
 
-def decode(comment: dict, model, session=None, pull=None):
+def decode[Record: Contract](
+    comment: dict,
+    model: type[Record],
+    session: Session | None = None,
+    pull: dict | None = None,
+) -> Record:
     value = json.loads(comment["body"].split("\n", 1)[1].split("\n-->", 1)[0])
     if "record" in value:
         record = value["record"]
@@ -595,12 +555,12 @@ def decode(comment: dict, model, session=None, pull=None):
     return model.model_validate(value)
 
 
-def baseline_for(session, pull: dict) -> Baseline | None:
+def baseline_for(session: Session, pull: dict) -> Baseline | None:
     comment = stored(session, pull, "baseline")
     return decode(comment, Baseline, session, pull) if comment else None
 
 
-def initialize_body(session, pull: dict, record: Baseline) -> None:
+def initialize_body(session: Session, pull: dict, record: Baseline) -> None:
     current = session.refresh(pull)
     body = current.get("body") or ""
     completed = "<!-- klaud-baseline-body -->"
@@ -618,7 +578,7 @@ def initialize_body(session, pull: dict, record: Baseline) -> None:
     github.write(session.repository, f"pulls/{pull['number']}", "PATCH", {"body": body})
 
 
-def publish(session, record: Baseline | Attempt) -> None:
+def publish(session: Session, record: Baseline | Attempt) -> None:
     pull = session.pulls()[0]
     session.refresh(pull)
     if isinstance(record, Baseline):
@@ -628,9 +588,7 @@ def publish(session, record: Baseline | Attempt) -> None:
         previous = stored(session, pull, name)
         if previous:
             if decode(previous, Baseline, session, pull) != record:
-                raise VerificationError(
-                    "Baseline is frozen; do not silently replace it"
-                )
+                raise VerificationError("Baseline is frozen; do not silently replace it")
             initialize_body(session, pull, record)
             return
         text = f"**Baseline:** {record.date} · `{record.image}`"
@@ -669,9 +627,7 @@ def publish(session, record: Baseline | Attempt) -> None:
             part_text = (
                 baseline_table(record.points[offset : offset + 20])
                 if isinstance(record, Baseline)
-                else point_table(
-                    record.points[offset : offset + 20], baseline_for(session, pull)
-                )
+                else point_table(record.points[offset : offset + 20], baseline_for(session, pull))
             )
             if part["evals"]:
                 part_text += "\n\n" + eval_table(
@@ -708,7 +664,7 @@ def publish(session, record: Baseline | Attempt) -> None:
         initialize_body(session, pull, record)
 
 
-def upsert(session, pull: dict, name: str, data: str, text: str) -> None:
+def upsert(session: Session, pull: dict, name: str, data: str, text: str) -> None:
     previous = stored(session, pull, name)
     # Only the typed allowlist enters the durable record, never raw API/log data.
     body = marker(session, name) + data + "\n-->\n" + text
@@ -717,21 +673,15 @@ def upsert(session, pull: dict, name: str, data: str, text: str) -> None:
             "Report exceeds GitHub comment size; split the point evidence before publication"
         )
     session.refresh(pull)
-    path = (
-        f"issues/comments/{previous['id']}"
-        if previous
-        else f"issues/{pull['number']}/comments"
-    )
-    github.write(
-        session.repository, path, "PATCH" if previous else "POST", {"body": body}
-    )
+    path = f"issues/comments/{previous['id']}" if previous else f"issues/{pull['number']}/comments"
+    github.write(session.repository, path, "PATCH" if previous else "POST", {"body": body})
 
 
 def publish_final(
-    session, run: dict, evidence: tuple[dict, list[dict], list[dict]]
+    session: Session, run: dict, evidence: tuple[dict, list[dict], list[dict]]
 ) -> None:
     """Normal finish and recovery publish the same artifact-derived final report."""
-    from infx.workflows import validate_reusable_sweep_artifacts as reuse
+    from infx.results.eval_artifacts import eval_key
 
     from .validation import benchmark_entries, expected_evals
 
@@ -739,9 +689,7 @@ def publish_final(
     generated = {
         (entry["recipe-fingerprint"], int(conc)): {**entry, "conc": int(conc)}
         for entry in benchmark_entries(matrix)
-        for conc in (
-            entry["conc"] if isinstance(entry["conc"], list) else [entry["conc"]]
-        )
+        for conc in (entry["conc"] if isinstance(entry["conc"], list) else [entry["conc"]])
     }
     points = []
     for row in rows:
@@ -761,7 +709,7 @@ def publish_final(
         )
     evaluations = [
         Evaluation(
-            key=identity(reuse.eval_key(row)),
+            key=identity(eval_key(row)),
             suite=row.get("eval_suite") or "gsm8k",
             label=f"c{row['conc']}",
             metric=row.get("score_name") or "em_strict",
@@ -771,9 +719,7 @@ def publish_final(
             run_id=run["id"],
             head=run["head_sha"],
         )
-        for row in sorted(
-            eval_rows, key=lambda row: (int(row["conc"]), row.get("eval_suite", ""))
-        )
+        for row in sorted(eval_rows, key=lambda row: (int(row["conc"]), row.get("eval_suite", "")))
     ]
     images = {row["image"] for row in rows}
     if len(images) != 1:
@@ -806,18 +752,70 @@ def publish_final(
     )
 
 
-def prepare_baseline(session, context: dict, model: str, goal: Prose) -> Baseline:
-    """Fetch once, accepting only exact producer fingerprints of the selected old family.
+def public_point(entry: dict) -> dict:
+    """Project generated settings onto the public BenchmarkRow identity (not metrics)."""
+    from infx.matrix.generate import _hardware_family
 
-    Legacy public rows without full fingerprints remain unavailable rather than
-    matching merely by SKU/concurrency. Raw responses never enter the public record.
+    agentic = entry.get("scenario-type") == "agentic-coding"
+    multi = entry.get("prefill") is not None
+    point = {
+        "model": entry["model-prefix"],
+        "hardware": _hardware_family(entry["runner"]),
+        "framework": entry["framework"],
+        "precision": entry["precision"],
+        "spec_method": entry["spec-decoding"],
+        "disagg": entry.get("disagg", False),
+        "is_multinode": multi,
+        "benchmark_type": "agentic_traces" if agentic else "single_turn",
+        "isl": None if agentic else entry["isl"],
+        "osl": None if agentic else entry["osl"],
+        "offload_mode": "on" if entry.get("kv-offloading", "none") != "none" else "off",
+        "conc": int(entry["conc"]),
+        "image": entry["image"],
+    }
+    for role in ("prefill", "decode"):
+        topology = entry[role] if multi else entry
+        point.update(
+            {
+                f"{role}_tp": topology["tp"],
+                f"{role}_ep": topology.get("ep", 1),
+                f"{role}_dp_attention": topology.get("dp-attn", False),
+                f"{role}_num_workers": topology["num-worker"] if multi else 0,
+            }
+        )
+    return point
+
+
+def matrix_points(matrix: dict) -> list[dict]:
+    from .validation import benchmark_entries
+
+    return [
+        {**entry, "conc": int(conc)}
+        for entry in benchmark_entries(matrix)
+        for conc in (entry["conc"] if isinstance(entry["conc"], list) else [entry["conc"]])
+    ]
+
+
+def check_baseline_coverage(matrix: dict, baseline: Baseline | None) -> None:
+    """Current-family completeness cannot replace the frozen original point roster."""
+    if baseline is None or not baseline.points:
+        raise VerificationError("Missing frozen baseline point roster")
+    if {point.key for point in baseline.points} - {point_key(p) for p in matrix_points(matrix)}:
+        raise VerificationError("Final matrix omits or changes frozen baseline points")
+
+
+def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -> Baseline:
+    """Freeze source-date rows against their own producer's complete family.
+
+    Legacy fingerprints may be absent, but exact producer provenance and a unique
+    workload/topology/concurrency match are required. Raw API data stays private.
     """
-    from .api import fetch
-    from .validation import benchmark_entries, canonical_matrix
+    from fnmatch import fnmatchcase
 
-    matrix = canonical_matrix(
-        session.repository, session.candidate.base, session.candidate.family
-    )
+    from .api import fetch
+    from .validation import canonical_matrix
+
+    matrix = canonical_matrix(session.repository, session.candidate.base, session.candidate.family)
     feed = fetch("benchmarks", model=model, date=context["source"]["date"])
     info = fetch("workflow-info", date=context["source"]["date"])
     # Public database bigint IDs are serialized as strings; URLs use decimal IDs.
@@ -827,59 +825,123 @@ def prepare_baseline(session, context: dict, model: str, goal: Prose) -> Baselin
         if row.get("head_sha"):
             heads.setdefault(int(row["github_run_id"]), set()).add(row["head_sha"])
     old_image = context["source"]["image"]
-    points = []
-    for entry in benchmark_entries(matrix):
-        if entry["image"] != old_image:
-            raise VerificationError(
-                "Baseline source image no longer matches the selected base"
+    entries = {point_key(entry): entry for entry in matrix_points(matrix)}
+    if not entries or any(entry["image"] != old_image for entry in entries.values()):
+        raise VerificationError("Baseline source image no longer matches the selected base")
+    historical: dict[str, list[dict]] = {}
+    published: dict[str, Point] = {}
+    unverified: list[dict] = []
+    family_runs = {
+        int(change["workflow_run_id"])
+        for change in info.payload["changelogs"]
+        if any(
+            fnmatchcase(session.candidate.family.split(":", 1)[1], key)
+            for key in change["config_keys"]
+        )
+    }
+    for row in feed.payload:
+        # Do not filter ISL/OSL here: that would erase other curves in the original family.
+        if any(
+            row.get(key) != context["source"][key]
+            for key in (
+                "model",
+                "hardware",
+                "framework",
+                "precision",
+                "spec_method",
+                "disagg",
+                "image",
             )
-        for conc in (
-            entry["conc"] if isinstance(entry["conc"], list) else [entry["conc"]]
         ):
-            point = {**entry, "conc": conc}
-            matched = [
-                row
-                for row in feed.payload
-                if row.get("recipe_fingerprint") == entry["recipe-fingerprint"]
-                and row.get("image") == old_image
-                and row.get("conc") == conc
-            ]
-            published = matched[0] if len(matched) == 1 else None
-            producer = re.fullmatch(
-                r"https://github.com/"
-                + re.escape(session.repository)
-                + r"/actions/runs/(\d+)(?:/attempts/(\d+))?",
-                (published or {}).get("run_url") or "",
-            )
-            run_id = int(producer[1]) if producer else None
-            run_attempt = int(producer[2]) if producer and producer[2] else None
-            if (
-                run_id not in producers
-                or len(heads.get(run_id, ())) != 1
-                or run_attempt is not None
-                and run_attempt > int(producers[run_id]["run_attempt"])
-            ):
-                published = None
-            points.append(
-                Point(
-                    key=point_key(point),
-                    label=point_label(point),
-                    conc=int(conc),
-                    scenario=entry.get("scenario-type", "fixed-seq-len"),
-                    # Dataset is not included in BenchmarkRow. Until a public
-                    # producer dataset match is established, AgentX deltas are N/A.
-                    values=values(published) if published else Values(),
-                    result="passed" if published else "unavailable",
-                    run_id=run_id if published else None,
-                    head=next(iter(heads[run_id])) if published else None,
-                    run_attempt=run_attempt if published else None,
+            continue
+        producer = re.fullmatch(
+            r"https://github.com/"
+            + re.escape(session.repository)
+            + r"/actions/runs/(\d+)(?:/attempts/(\d+))?",
+            row.get("run_url") or "",
+        )
+        run_id = int(producer[1]) if producer else None
+        run_attempt = int(producer[2]) if producer and producer[2] else None
+        if (
+            run_id not in producers
+            or len(heads.get(run_id, ())) != 1
+            or (run_attempt is not None and run_attempt > int(producers[run_id]["run_attempt"]))
+        ):
+            # Classify after reconstructing the complete historical family, so an
+            # unrelated sibling cannot block it and feed ordering cannot hide points.
+            unverified.append(row)
+            continue
+        head = next(iter(heads[run_id]))
+        if head not in historical:
+            historical[head] = matrix_points(
+                canonical_matrix(
+                    session.repository, head, session.candidate.family, historical=True
                 )
             )
+        matches = [
+            entry
+            for entry in historical[head]
+            if all(row.get(key) == value for key, value in public_point(entry).items())
+        ]
+        if not matches:  # A distinct sibling workload/topology is not this family's baseline.
+            continue
+        if row.get("recipe_fingerprint"):
+            matches = [
+                entry
+                for entry in matches
+                if entry["recipe-fingerprint"] == row["recipe_fingerprint"]
+            ]
+        elif run_id not in family_runs:
+            raise VerificationError("Legacy baseline producer does not select the candidate family")
+        if len(matches) != 1:
+            raise VerificationError("Public baseline recipe identity is ambiguous or mismatched")
+        entry = matches[0]
+        key = point_key(entry)
+        if key in published:
+            raise VerificationError("Duplicate public baseline point")
+        # Retain all original points, even if a current family or API response is smaller.
+        entries.update(
+            (point_key(point), point) for point in historical[head] if point["image"] == old_image
+        )
+        published[key] = Point(
+            key=key,
+            label=point_label(entry),
+            conc=entry["conc"],
+            scenario=entry.get("scenario-type", "fixed-seq-len"),
+            # Dataset is not in BenchmarkRow; AgentX deltas remain N/A until proven.
+            values=values(row),
+            result="passed",
+            run_id=run_id,
+            head=head,
+            run_attempt=run_attempt,
+        )
+    identities = [public_point(entry) for entry in entries.values()]
+    if any(
+        any(all(row.get(key) == value for key, value in point.items()) for point in identities)
+        for row in unverified
+    ):
+        raise VerificationError("Public baseline producer provenance is unavailable")
+    if not published:
+        raise VerificationError("No verified public baseline points for the selected family")
+    points = [
+        published.get(key)
+        or Point(
+            key=key,
+            label=point_label(entry),
+            conc=entry["conc"],
+            scenario=entry.get("scenario-type", "fixed-seq-len"),
+            values=Values(),
+            result="unavailable",
+        )
+        for key, entry in entries.items()
+    ]
     return Baseline(
         family=session.candidate.family,
         date=context["source"]["date"],
         image=old_image,
         goal=goal,
         sources=[feed.url, info.url],
-        points=points,
+        points=sorted(
+            points, key=lambda point: (point.label.split(" c")[0], point.conc, point.label)
+        ),
     )

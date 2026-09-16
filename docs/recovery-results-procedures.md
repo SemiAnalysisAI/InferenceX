@@ -223,7 +223,7 @@ Create an empty recovery PR from current `main`, give it exactly one full-sweep 
 gh pr edit "$RECOVERY_PR" --repo SemiAnalysisAI/InferenceX \
   --add-label full-sweep-fail-fast
 gh pr comment "$RECOVERY_PR" --repo SemiAnalysisAI/InferenceX \
-  --body "/reuse-sweep-run $SOURCE_RUN_ID"
+  --body "/use $SOURCE_RUN_ID"
 ```
 
 Append recovery entries to the end of `perf-changelog.yaml`. Never modify historical bytes. Preserve the original `config-keys`, `description`, `evals-only`, and `scenario-type`, but use the recovery PR URL. Validate both the changelog and generated scope:
