@@ -31,7 +31,7 @@ These sources outrank this guide when behavior changes. Update the English page 
 
 ## Testing layers
 
-[`CI`](../.github/workflows/ci.yml) runs **Lint**, **Tests**, and **Zizmor** in parallel for PRs (including forks) and pushes to `main` that change Python files, `.github/` files, action definitions, pre-commit configuration, or zizmor configuration. Manual dispatch runs all three jobs. Changes only to other docs, shell scripts, or benchmark YAML do not trigger CI; run the applicable checks locally or dispatch CI manually.
+[`CI`](../.github/workflows/ci.yml) runs **Lint** and **Tests** in parallel for PRs (including forks) and pushes to `main` that change Python files, `ci.yml`, the MCP requirements, Ruff configuration, or `pytest.ini`. [`Workflow security`](../.github/workflows/zizmor.yml) runs **Zizmor** for changes to workflows, action definitions, Dependabot, pre-commit, or zizmor configuration. Python-only changes do not trigger Zizmor; other workflow-only changes do not trigger Lint or Tests. Editing `ci.yml` triggers all three jobs. Each workflow can be dispatched manually. Changes only to other docs, shell scripts, or benchmark YAML do not trigger either workflow; run the applicable checks locally or dispatch them manually.
 
 Tests runs every suite under `utils/`, `runners/`, and `experimental/CollectiveX/tests/` with four pytest workers, plus MCP compatibility. New tests in those directories are discovered automatically. The test environment uses Python 3.12 and CPU-only PyTorch; dependencies must be at least 12 hours old. A failing job does not cancel the other; a newer PR update cancels the superseded CI run. Branch pushes without a PR no longer start a separate changelog-test run.
 
