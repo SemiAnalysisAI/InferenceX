@@ -162,6 +162,57 @@ def test_shared_storage_uses_only_configured_writable_roots(tmp_path, monkeypatc
         ci.shared_base({"storage_roots": [str(tmp_path / "absent")]}, "gb200")
 
 
+def test_amd_staging_uses_shared_runner_root(tmp_path, monkeypatch):
+    runner = tmp_path / "runner"
+    (runner / "_work/_temp").mkdir(parents=True)
+    monkeypatch.setenv("RUNNER_TEMP", str(runner / "_work/_temp"))
+    monkeypatch.setenv("HOME", str(tmp_path / "private-home"))
+    assert ci.shared_base({}, "mi300x") == runner / f".operatorx-{os.getuid()}"
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path / "unrelated"))
+    with pytest.raises(ValueError, match="shared runner"):
+        ci.shared_base({}, "mi355x")
+
+
+def test_platform_overlay_preserves_base_and_replaces_explicit_profile(tmp_path):
+    base = tmp_path / "base.json"
+    ci.write_json(
+        base,
+        {
+            "platforms": {
+                "fixture": {"gpus_per_node": 4, "operator": {"partition": "old"}}
+            }
+        },
+    )
+    child = tmp_path / "child.json"
+    ci.write_json(
+        child,
+        {
+            "base": "base.json",
+            "platforms": {"fixture": {"operator": {"partition": "new"}}},
+        },
+    )
+    assert ci.load_platforms(child) == {
+        "fixture": {"gpus_per_node": 4, "operator": {"partition": "new"}}
+    }
+
+
+@pytest.mark.parametrize(
+    "backend,worlds,kind",
+    [("aiter", [1], "gemm"), ("torch", [2], "gemm"), ("torch", [1], "allreduce")],
+)
+def test_amd_plan_rejects_unimplemented_execution(backend, worlds, kind):
+    with pytest.raises(ValueError, match="single-GPU torch GEMM"):
+        ci.plan(
+            "mi300x",
+            [backend],
+            {"tiny": [{"type": kind, "args": {}}]},
+            {backend: {"image": "rocm:1"}},
+            worlds,
+            50,
+            platforms("mi300x"),
+        )
+
+
 @pytest.mark.parametrize(
     "outcome,expected_rc", [("ok", 0), ("error", 1), ("unsupported", 1)]
 )
@@ -233,6 +284,8 @@ def test_testlist_loading_and_unknown_selection(tmp_path):
         (0, False, "gb200", 4, "linux/arm64"),
         (0, False, "gb300", 4, "linux/arm64"),
         (0, False, "b300", 8, "linux/amd64"),
+        (0, False, "mi300x", 8, "linux/amd64"),
+        (0, False, "mi355x", 8, "linux/amd64"),
     ],
 )
 def test_allocation_completion_failure_and_cancellation(
@@ -285,6 +338,7 @@ if name == 'srun' and sys.argv[-1] == 'rank':
                             "partition": "test",
                             "stage_dir": str(tmp_path / "shared"),
                             "account": "fixture",
+                            "cpus_per_node": 128,
                             **({"qos": "fixture-qos"} if pool != "b300" else {}),
                             "exclude_nodes": "quarantined",
                             "enroot_cache_path": str(tmp_path / "shared/enroot"),
@@ -389,6 +443,8 @@ if name == 'srun' and sys.argv[-1] == 'rank':
     else:
         assert "--qos=fixture-qos" in allocation
     assert "--exclude=quarantined" in allocation
+    if pool in {"mi300x", "mi355x"}:
+        assert "--cpus-per-task=16" in allocation
     if not cancel:
         imported = next(c for c in calls if "import" in c["argv"])
         assert imported["cache"] == str(tmp_path / "shared/enroot")
@@ -396,8 +452,13 @@ if name == 'srun' and sys.argv[-1] == 'rank':
         assert Path(imported["argv"][0]).name == "srun"
         launched = next(c["argv"] for c in calls if c["argv"][-1] == "rank")
         assert "--ntasks=1" in launched
-        if pool in ("gb200", "gb300", "b300"):
+        if pool in ("gb200", "gb300", "b300", "mi300x", "mi355x"):
             assert "--container-remap-root" in launched
+        if pool == "mi300x":
+            mounts = next(
+                arg for arg in launched if arg.startswith("--container-mounts=")
+            )
+            assert mounts.endswith(",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri")
 
 
 def test_summary_uses_latest_attempt_and_reports_missing_coverage(tmp_path):

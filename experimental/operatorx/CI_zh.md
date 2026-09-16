@@ -3,7 +3,8 @@
 [English](CI.md) | **中文**
 
 [OperatorX Sweep](../../.github/workflows/operatorx-sweep.yml) 支持手动选择
-`h100-dgxc`（默认）、`h200-dgxc`、`b200-nscale`、`b300`、`gb200` 或 `gb300`。
+`h100-dgxc`（默认）、`h200-dgxc`、`b200-nscale`、`b300`、`gb200`、`gb300`、
+`mi300x`、`mi325x` 或 `mi355x`。
 PR 只在 GitHub 托管运行器上生成执行计划；GPU 执行必须通过 `workflow_dispatch` 触发。
 
 | GPU | 运行器池 | 每个物理节点的 GPU 数 | 镜像平台 | 结果集群标识 |
@@ -14,6 +15,9 @@ PR 只在 GitHub 托管运行器上生成执行计划；GPU 执行必须通过 `
 | B300 | `b300` | 8 | `linux/amd64` | `b300_dsxe_8x` |
 | GB200 | `gb200` | 4 | `linux/arm64` | `gb200_nvl72_4x` |
 | GB300 | `gb300` | 4 | `linux/arm64` | `gb300_nvl72_4x` |
+| MI300X | `mi300x` | 8 | `linux/amd64` | `mi300x_amds_8x` |
+| MI325X | `mi325x` | 8 | `linux/amd64` | `mi325x_amds_8x` |
+| MI355X | `mi355x` | 8 | `linux/amd64` | `mi355x_8x` |
 
 GB200/GB300 每次使用一个四卡计算托盘，不会占用整个 NVL72 机架。所有运行器池的
 稠密 GEMM 都使用 `world_sizes=1`，TFLOPS 始终按单卡计算。硬件信息来自 CollectiveX
@@ -91,7 +95,7 @@ gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
 Slurm 主机环境。CPU 测试执行真实规划器、基准编排和启动器，仅替换外部 GPU/Slurm 依赖。
 
 ```bash
-uv run --no-project --python 3.12 --with pytest --with pyyaml \
+uv run --no-project --python 3.12 --with pytest --with pyyaml --with torch --with numpy \
   python -m pytest experimental/operatorx/tests/ -q
 ```
 
@@ -108,3 +112,11 @@ CPU 检查不能证明 GPU 兼容性或集群存储可见性。
 
 `cleanup.log` 记录用于确认分配已释放的活动作业查询。查询使用当前用户的作业列表，
 因为直接查询已删除的作业 ID，即使分配已终止，也可能返回 Slurm 错误。
+
+## AMD 执行
+
+`platforms.json` 在 CollectiveX 配置之上补充 AMDS Slurm 运行器池。
+AMD 目前接受单卡 `torch` GEMM。ROCm PyTorch 通过 `torch.cuda` 使用 HIP 事件计时；
+FP8 在 gfx942 上选择 FNUZ，在 gfx950 上选择 OCP。不支持的格式会明确记录。
+暂存目录由 `RUNNER_TEMP` 推导，位于共享运行器根目录下、`_work` 之外。容器不写入
+源码检出目录。MI300X/MI325X 显式传递 `/dev/kfd` 和 `/dev/dri`；CPU 请求沿用各推理启动器。

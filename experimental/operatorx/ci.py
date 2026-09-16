@@ -27,7 +27,22 @@ POOLS = {
     "b300": "b300_dsxe_8x",
     "gb200": "gb200_nvl72_4x",
     "gb300": "gb300_nvl72_4x",
+    "mi300x": "mi300x_amds_8x",
+    "mi325x": "mi325x_amds_8x",
+    "mi355x": "mi355x_8x",
 }
+AMD_POOLS = {"mi300x", "mi325x", "mi355x"}
+
+
+def load_platforms(path: Path) -> dict:
+    document = json.loads(path.read_text())
+    platforms = {}
+    if "base" in document:
+        base = path.parent / document["base"]
+        platforms.update(json.loads(base.read_text())["platforms"])
+    for pool, hardware in document["platforms"].items():
+        platforms[pool] = {**platforms.get(pool, {}), **hardware}
+    return platforms
 
 
 def write_json(path: Path, value: object) -> None:
@@ -56,7 +71,15 @@ def plan(
     if image_platform not in ("linux/amd64", "linux/arm64"):
         raise ValueError("unsupported image platform")
     if not backends or set(backends) - images.keys():
-        raise ValueError("select at least one registered NVIDIA backend")
+        raise ValueError("select at least one registered backend for this GPU platform")
+    if pool in AMD_POOLS and (
+        set(backends) != {"torch"}
+        or world_sizes != [1]
+        or any(
+            shape["type"] != "gemm" for shapes in testlists.values() for shape in shapes
+        )
+    ):
+        raise ValueError("AMD CI currently supports single-GPU torch GEMM only")
     if not world_sizes or set(world_sizes) - {1, 2, 4, 8}:
         raise ValueError("world sizes must be selected from 1,2,4,8 (single node)")
     if any(ws > gpus for ws in world_sizes):
@@ -196,6 +219,14 @@ def shared_base(profile: dict, pool: str) -> Path:
     """Resolve the pool's configured/shared account storage, never temporary HOME."""
     if profile.get("stage_dir"):
         roots = [Path(profile["stage_dir"])]
+    elif pool in AMD_POOLS:
+        runner_temp = Path(os.environ["RUNNER_TEMP"])
+        if (
+            runner_temp.parts[-2:] != ("_work", "_temp")
+            or not runner_temp.is_absolute()
+        ):
+            raise ValueError("AMD staging requires the shared runner _work/_temp path")
+        roots = [runner_temp.parent.parent]
     elif pool == "b300":
         # CollectiveX uses the compute-visible account home on this pool.
         # The shared squash parent is not writable by the GHA service account.
@@ -295,7 +326,7 @@ def finalize(root: Path, cleanup_seconds: int) -> None:
 def recover(
     artifacts: Path, run_id: str, pool: str, platform_config: Path, cleanup_seconds: int
 ) -> None:
-    profile = json.loads(platform_config.read_text())["platforms"][pool]["operator"]
+    profile = load_platforms(platform_config)[pool]["operator"]
     base = shared_base(profile, pool).resolve()
     recovered = 0
     for execution in artifacts.rglob("execution.json"):
@@ -320,8 +351,7 @@ def execute(args) -> None:
         raise ValueError("manifest source/run mismatch")
     cells = manifest["include"]
     cell = next(c for c in cells if c["id"] == args.shard)
-    config = json.loads(args.platform_config.read_text())
-    hardware = config["platforms"][cell["pool"]]
+    hardware = load_platforms(args.platform_config)[cell["pool"]]
     profile = hardware["operator"]
     gpus = hardware["gpus_per_node"]
     image_platform = hardware["image_platform"]
@@ -397,6 +427,8 @@ def execute(args) -> None:
             allocation.append("--mem=0")
         if cell["pool"] in ("gb200", "gb300"):
             allocation.append("--cpus-per-task=35")
+        if cell["pool"] in AMD_POOLS:
+            allocation.append(f"--cpus-per-task={profile['cpus_per_node'] // gpus}")
         command(allocation, root / "allocation.log")
         jobs = allocation_ids(root)
         if len(jobs) != 1:
@@ -453,6 +485,9 @@ def execute(args) -> None:
         )
         if cell["moe"]:
             env["OPERATORX_MOE_PARALLELISM"] = ":".join(map(str, cell["moe"]))
+        mounts = f"{stage}:/opx"
+        if cell["pool"] in ("mi300x", "mi325x"):
+            mounts += ",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri"
         run = [
             "srun",
             f"--jobid={job}",
@@ -462,14 +497,14 @@ def execute(args) -> None:
             "--kill-on-bad-exit=1",
             "--chdir=/tmp",
             f"--container-image={cache / (key + '.sqsh')}",
-            f"--container-mounts={stage}:/opx",
+            f"--container-mounts={mounts}",
             "--container-workdir=/opx",
             "--no-container-mount-home",
             "--no-container-entrypoint",
             "--container-writable",
             "--export=ALL",
         ]
-        if cell["pool"] in ("h200-dgxc", "b300", "gb200", "gb300"):
+        if cell["pool"] in {"h200-dgxc", "b300", "gb200", "gb300"} | AMD_POOLS:
             run.append("--container-remap-root")
         if cell["pool"] == "b300":
             run.append("--mpi=none")
@@ -620,7 +655,8 @@ def main() -> None:
         lists = {
             n: json.loads((ROOT / "testlists" / f"{n}.json").read_text()) for n in names
         }
-        images = tomllib.loads((ROOT / "containers.toml").read_text())["nvidia"]
+        vendor = "amd" if args.pool in AMD_POOLS else "nvidia"
+        images = tomllib.loads((ROOT / "containers.toml").read_text())[vendor]
         result = plan(
             args.pool,
             args.backends.split(","),
@@ -628,7 +664,7 @@ def main() -> None:
             images,
             [int(w) for w in args.world_sizes.split(",")],
             args.chunk_size,
-            json.loads(args.platform_config.read_text())["platforms"],
+            load_platforms(args.platform_config),
         )
         digests = {c["image"]: "" for c in result["include"]}
         for image in digests:

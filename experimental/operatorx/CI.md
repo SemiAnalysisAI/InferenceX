@@ -3,7 +3,8 @@
 **English** | [中文](CI_zh.md)
 
 [OperatorX Sweep](../../.github/workflows/operatorx-sweep.yml) runs manually on
-`h100-dgxc` (default), `h200-dgxc`, `b200-nscale`, `b300`, `gb200`, or `gb300`.
+`h100-dgxc` (default), `h200-dgxc`, `b200-nscale`, `b300`, `gb200`, `gb300`,
+`mi300x`, `mi325x`, or `mi355x`.
 Pull requests only run the hosted planner; GPU work requires `workflow_dispatch`.
 
 | GPU | Pool | GPUs per physical node | Image platform | Result cluster |
@@ -14,6 +15,9 @@ Pull requests only run the hosted planner; GPU work requires `workflow_dispatch`
 | B300 | `b300` | 8 | `linux/amd64` | `b300_dsxe_8x` |
 | GB200 | `gb200` | 4 | `linux/arm64` | `gb200_nvl72_4x` |
 | GB300 | `gb300` | 4 | `linux/arm64` | `gb300_nvl72_4x` |
+| MI300X | `mi300x` | 8 | `linux/amd64` | `mi300x_amds_8x` |
+| MI325X | `mi325x` | 8 | `linux/amd64` | `mi325x_amds_8x` |
+| MI355X | `mi355x` | 8 | `linux/amd64` | `mi355x_8x` |
 
 GB200/GB300 runs use one four-GPU tray, not the full NVL72 rack. Dense GEMM uses
 `world_sizes=1` on every pool; reported TFLOPS remains per GPU. Hardware facts come
@@ -108,7 +112,7 @@ Python 3.10+ Slurm-host environment. CPU tests run the real planner, benchmark
 orchestration and launcher with external GPU/Slurm collaborators substituted.
 
 ```bash
-uv run --no-project --python 3.12 --with pytest --with pyyaml \
+uv run --no-project --python 3.12 --with pytest --with pyyaml --with torch --with numpy \
   python -m pytest experimental/operatorx/tests/ -q
 ```
 
@@ -129,3 +133,12 @@ pool, and private staging parent; do not select unrelated or old Slurm execution
 `cleanup.log` records the active-job query used to confirm allocation release.
 It queries the current user’s job list because querying a removed job ID directly
 can return a Slurm error even after that allocation has terminated.
+
+## AMD execution
+
+`platforms.json` overlays the CollectiveX registry with the AMDS Slurm pools.
+AMD currently accepts single-GPU `torch` GEMM. ROCm PyTorch uses HIP events through
+`torch.cuda`; FP8 selects FNUZ on gfx942 and OCP on gfx950. Unsupported formats
+remain explicit. Staging lives outside `_work`, below the shared runner root
+derived from `RUNNER_TEMP`. Containers never write to the checkout. MI300X/MI325X
+forward `/dev/kfd` and `/dev/dri`; CPU requests follow each inference launcher.
