@@ -252,8 +252,14 @@ fi
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
 
-echo "Running make setup..."
-make setup ARCH=x86_64
+# srt-slurm releases v2.7.0, v2.8.0 and v2.8.1 publish
+# tachometer-scraper-x86_64-unknown-linux-gnu.sha256 without the binary, so the
+# Makefile default TACHOMETER_RELEASE=latest 404s and aborts setup before
+# nats-server, etcd and uv install. v2.6.0 is the newest release carrying the
+# x86_64 asset. Drop this pin once the release job is fixed.
+export TACHOMETER_RELEASE="${TACHOMETER_RELEASE:-v2.6.0}"
+echo "Running make setup (TACHOMETER_RELEASE=$TACHOMETER_RELEASE)..."
+make setup ARCH=x86_64 || exit 1
 
 # Read by srt-slurm's post-benchmark eval.
 export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
