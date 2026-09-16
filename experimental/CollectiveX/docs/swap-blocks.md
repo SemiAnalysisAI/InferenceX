@@ -67,9 +67,9 @@ EP-only. The caller-selected official vLLM image is imported using the existing
 CollectiveX container cache and runs from an isolated compute-visible stage.
 
 The `smoke` profile covers all three directions, both layouts, block sizes
-257/4096/65536 bytes, and counts 1/4/16/64/256/1024, with 4 warmups and 20 samples
-per point (108 points total). `standard` uses sizes 4096/65536/1048576 and the same
-block counts, 32 warmups, and 100 samples (also 108 points). Both check the actual GPU copies before and after
+257/4096/65536 bytes, and counts 1/4/16/64/256/1024/2048, with 4 warmups and 20 samples
+per point (126 points total). `standard` uses sizes 4096/65536/1048576 and the same
+block counts, 32 warmups, and 100 samples (also 126 points). Both check the actual GPU copies before and after
 timing and fail if a GPU or compatible vLLM is unavailable.
 
 Download `cxshard-swap-blocks-<run_id>-<attempt>` for the two JSON results.
