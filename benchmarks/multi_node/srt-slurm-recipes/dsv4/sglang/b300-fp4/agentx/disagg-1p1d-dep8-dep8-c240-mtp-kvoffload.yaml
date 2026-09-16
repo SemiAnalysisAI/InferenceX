@@ -19,7 +19,7 @@ identity:
 dynamo:
   install: false
 
-setup_script: install-nixl-cu13-libfabric-mooncake-efa.sh
+setup_script: install-mooncake-efa-cu13.sh
 
 health_check:
   max_attempts: 1440
@@ -91,7 +91,7 @@ roles:
       FI_HMEM_CUDA_USE_DMABUF: '1'
       MC_MS_FILTERS: rdmap191s0
       WITH_NVIDIA_PEERMEM: '0'
-      LD_LIBRARY_PATH: /tmp/mooncake-rdma-core:/opt/amazon/efa/lib:/opt/amazon/efa/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/lib64:/usr/local/nvidia/lib64
+      LD_LIBRARY_PATH: /opt/amazon/efa/lib:/opt/amazon/efa/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/lib64:/usr/local/nvidia/lib64
       LD_PRELOAD: /opt/amazon/efa/lib/libfabric.so.1
       NCCL_TIMEOUT: '100000'
       SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
@@ -175,7 +175,7 @@ roles:
       FI_HMEM_CUDA_USE_DMABUF: '1'
       MC_MS_FILTERS: rdmap191s0
       WITH_NVIDIA_PEERMEM: '0'
-      LD_LIBRARY_PATH: /tmp/mooncake-rdma-core:/opt/amazon/efa/lib:/opt/amazon/efa/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/lib64:/usr/local/nvidia/lib64
+      LD_LIBRARY_PATH: /opt/amazon/efa/lib:/opt/amazon/efa/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/lib64:/usr/local/nvidia/lib64
       LD_PRELOAD: /opt/amazon/efa/lib/libfabric.so.1
       NCCL_TIMEOUT: '100000'
       SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
