@@ -242,22 +242,29 @@ jobs:
             reuse-source-pr-number: ${{ steps.setup.outputs.reuse-source-pr-number }}
             reuse-source-head-sha: ${{ steps.setup.outputs.reuse-source-head-sha }}
         steps:
+            - name: Checkout code
+              id: checkout
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+
             - name: Resolve workflow tooling
               id: tooling
               uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              env:
+                  CHECKOUT_SHA: ${{ steps.checkout.outputs.commit }}
               with:
                   result-encoding: string
                   script: |
                       const { data } = await github.rest.repos.getCommit({
                         ...context.repo, ref: context.payload.repository.default_branch,
                       });
+                      await core.summary.addHeading('Revisions', 2).addTable([
+                        ['Setup checkout', process.env.CHECKOUT_SHA],
+                        ['infx tooling', data.sha],
+                      ]).write();
                       return data.sha;
-            - name: Checkout code
-              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-              with:
-                  fetch-depth: 0
-                  persist-credentials: false
-
             - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
             - name: Classify priority criteria
               id: classify
@@ -383,6 +390,17 @@ jobs:
                     --event-name "${GITHUB_EVENT_NAME}" \
                     --ref "${GITHUB_REF}" \
                     --workflow-id "run-sweep.yml"
+
+            - name: Summarize reused source
+              if: steps.setup.outputs.reuse-source-head-sha != ''
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              env:
+                  REUSE_SHA: ${{ steps.setup.outputs.reuse-source-head-sha }}
+              with:
+                  script: |
+                      await core.summary.addTable([
+                        ['Reused benchmark source', process.env.REUSE_SHA],
+                      ]).write();
 
     canary-select:
         name: canary-select

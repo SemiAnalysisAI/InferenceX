@@ -67,13 +67,13 @@ Tests 使用四个 pytest worker 运行 `utils/`、`runners/` 和 `experimental/
 
 [`pyproject.toml`](../pyproject.toml) 定义 `infx` 包及其依赖；[`uv.lock`](../uv.lock) 记录解析后的版本。运行 `uv sync --locked` 安装核心工具，然后用 `uv run --locked python -m infx.matrix.generate ...` 调用现有模块命令。CODEOWNER/GitHub 集成使用 `--extra workflows`，评测摘要和数据库比较使用 `--extra results`，仓库 MCP 服务使用 `--group mcp`。`test` 依赖组包含 MCP 和 CPU 测试所需依赖。
 
-开发时 uv 以 editable 模式安装包，源码修改立即生效。CI 使用普通 wheel；安装包测试在隔离解释器和临时仓库中检查配方节点数与运行器元数据，不从源码 checkout 导入。依赖仓库文件的命令在 editable 安装时使用源码仓库；使用 wheel 时，应从仓库根目录运行。评测 YAML/JSON 资源及 Apache 许可证随包分发。
+开发时 uv 以 editable 模式安装包，源码修改立即生效。CI 使用普通 wheel。安装包测试创建仅含核心或 results 依赖的独立环境，并在源码 checkout 之外运行，检查配方节点数、运行器元数据、矩阵拒绝、包内阈值加载、分数验证，以及生成的评测结果行与摘要。依赖仓库文件的命令在 editable 安装时使用源码仓库；使用 wheel 时，应从仓库根目录运行。评测 YAML/JSON 资源及 Apache 许可证随包分发。
 
 核心依赖使用 `uv add` 添加，集成依赖使用 `uv add --optional <extra>`，测试工具使用 `uv add --group test`。同时提交 manifest 和 lockfile。`uv lock --upgrade-package <name>` 更新指定依赖；解析时按 `pyproject.toml` 执行 12 小时发布冷却期。Ruff 和 Zizmor 不加入 lockfile，CI 继续使用满足冷却期的最新版本。基准测试镜像、供应商评测环境和测量历史 checkout 的命令保留原有依赖安装方式。
 
 依赖限制在当前支持的最新主版本内；次版本和补丁更新记录在 `uv.lock` 中，并通过 CI 验证。对尚未达到 1.0 的包，次版本升级也需审查。MCP 保持在 1.x，因为 2.x 替换了当前服务使用的装饰器式处理器 API。新版本发布不会自动改变已锁定的环境。
 
-结果收集、结果比较和运行统计使用当前 `main` 中的 `infx`，在 sweep setup 时解析一次提交，并在这些 job 间共享。Klaud 同样只解析一次 `main`，将该提交传给所有候选任务；候选任务的 hook 使用独立的工具 checkout，避免配方编辑替换导入的包。Sign-off 也检出当前受信任的 `main`。这些工具不固定到发布版本，仓库提交不受依赖发布冷却期限制。PR CI 测试 PR 自身的包；矩阵生成、基准测试脚本和配方仍使用所选 checkout。
+结果收集、结果比较和运行统计使用当前 `main` 中的 `infx`，在 sweep setup 时解析一次提交，并在这些 job 间共享。Klaud 同样只解析一次 `main`，将该提交传给所有候选任务；候选任务的 hook 使用独立的工具 checkout，避免配方编辑替换导入的包。Sign-off 也检出当前受信任的 `main`。这些工具不固定到发布版本，仓库提交不受依赖发布冷却期限制。PR CI 测试 PR 自身的包；矩阵生成、基准测试脚本和配方仍使用所选 checkout。Sweep 摘要显示解析后的 setup 和工具提交；复用基准测试时还显示源 head。Setup SHA 记录生成矩阵时使用的 checkout；可变的基准测试 ref 可能在后续 job 检出前发生移动。Klaud 摘要显示作为候选任务基础的工具提交。
 
 ### Python 静态检查与格式化
 

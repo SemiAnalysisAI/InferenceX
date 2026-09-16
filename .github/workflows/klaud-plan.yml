@@ -34,6 +34,15 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
           fetch-depth: 0
+      - name: Summarize revisions
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          TOOLING_SHA: ${{ steps.checkout.outputs.commit }}
+        with:
+          script: |
+            await core.summary.addHeading('Revisions', 2).addTable([
+              ['infx tooling / candidate base', process.env.TOOLING_SHA],
+            ]).write();
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: '3.12'

@@ -221,17 +221,8 @@ jobs:
             multi-node-agentic-config: ${{ steps.get-jobs.outputs.multi-node-agentic-config }}
             multi-node-agentic-eval-config: ${{ steps.get-jobs.outputs.multi-node-agentic-eval-config }}
         steps:
-            - name: Resolve workflow tooling
-              id: tooling
-              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-              with:
-                result-encoding: string
-                script: |
-                  const { data } = await github.rest.repos.getCommit({
-                    ...context.repo, ref: context.payload.repository.default_branch,
-                  });
-                  return data.sha;
             - name: Checkout code (ref)
+              id: checkout-ref
               if: ${{ inputs.ref && inputs.ref != '' }}
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
@@ -240,11 +231,28 @@ jobs:
                 persist-credentials: false
 
             - name: Checkout code (default)
+              id: checkout-default
               if: ${{ !inputs.ref || inputs.ref == '' }}
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                 ref: ${{ github.sha }}
                 persist-credentials: false
+            - name: Resolve workflow tooling
+              id: tooling
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              env:
+                CHECKOUT_SHA: ${{ steps.checkout-ref.outputs.commit || steps.checkout-default.outputs.commit }}
+              with:
+                result-encoding: string
+                script: |
+                  const { data } = await github.rest.repos.getCommit({
+                    ...context.repo, ref: context.payload.repository.default_branch,
+                  });
+                  await core.summary.addHeading('Revisions', 2).addTable([
+                    ['Setup checkout', process.env.CHECKOUT_SHA],
+                    ['infx tooling', data.sha],
+                  ]).write();
+                  return data.sha;
             - name: Checkout workflow tooling
               if: ${{ inputs.ref && inputs.ref != '' }}
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
