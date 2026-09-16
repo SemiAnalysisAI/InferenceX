@@ -18,7 +18,7 @@ identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
   container:
-    image: "lmsysorg/sglang:nightly-dev-cu13-20260829-89816a21"
+    image: "lmsysorg/sglang:nightly-dev-cu13-20260908-20ca564b"
 
 dynamo:
   install: true
@@ -32,20 +32,35 @@ health_check:
   max_attempts: 1440
   interval_seconds: 10
 
+# TEMPORARY: the Mooncake external-linker optimizations this Pareto point
+# depends on are not in a released SGLang image yet. The gb300-nv runner clones
+# the reviewed branch into the srt-slurm configs directory and the servers
+# import it from there. The setup script aborts the job when that tree is
+# missing, so a run can never silently fall back to the container's SGLang.
+# Remove both keys once the optimizations ship in the pinned image.
+setup_script: dsv4-gb300-sglang-mooncake-opt.sh
+
+environment:
+  PYTHONPATH: /configs/sglang-mooncake-opt/python
+
 resources:
   gpu_type: gb300
   gpus_per_node: 4
 services:
-  - name: etcd
-    type: etcd
-    placement:
-      node: dedicated
-  - name: nats
-    type: nats
-    placement:
-      node: dedicated
-    options:
-      max_payload_mb: 32
+- name: etcd
+  type: etcd
+  placement:
+    node: dedicated
+- name: nats
+  type: nats
+  placement:
+    node: dedicated
+  options:
+    max_payload_mb: 32
+- name: mooncake-master
+  type: mooncake-master
+  args:
+  - --eviction_high_watermark_ratio=0.90
 frontend:
   type: dynamo
   nginx_session_affinity: true
@@ -100,6 +115,15 @@ roles:
       SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
       SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
 
+      MOONCAKE_PROTOCOL: rdma
+      MOONCAKE_GLOBAL_SEGMENT_SIZE: 140gb
+      MOONCAKE_STANDALONE_STORAGE: '0'
+      MC_STORE_CLIENT_METRIC: '1'
+      MC_STORE_CLIENT_METRIC_INTERVAL: '5'
+      MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+      WITH_NVIDIA_PEERMEM: '0'
+      SGLANG_EXTERNAL_LINKER_WRITE_THROUGH_THRESHOLD: '1'
+      SGLANG_EXTERNAL_LINKER_SWA_RETENTION_INTERVAL: '32768'
     args:
       host: 0.0.0.0
       served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
@@ -121,7 +145,7 @@ roles:
       disaggregation-transfer-backend: mooncake
       disaggregation-mode: prefill
       load-balance-method: total_tokens
-      mem-fraction-static: 0.85
+      mem-fraction-static: 0.92
       page-size: 256
       swa-full-tokens-ratio: 0.02
       max-running-requests: 512
@@ -135,11 +159,11 @@ roles:
       speculative-num-steps: 1
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 7
-      enable-hierarchical-cache: true
-      hicache-write-policy: write_back
-      hicache-ratio: 1
-      hicache-io-backend: direct
-
+      prefill-chunk-size-per-request: 2048
+      disaggregation-defer-partial-kv-transfer: true
+      enable-unified-cache-external-linker: true
+      unified-cache-external-linker-backend: mooncake
+      hicache-storage-backend-extra-config: '{"enable_group_semantics":true}'
   decode:
     nodes: 4
     workers: 1
@@ -175,6 +199,14 @@ roles:
       SGLANG_LOG_MS: '1'
       SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
 
+      MOONCAKE_PROTOCOL: rdma
+      MOONCAKE_GLOBAL_SEGMENT_SIZE: 140gb
+      MOONCAKE_STANDALONE_STORAGE: '0'
+      MC_STORE_CLIENT_METRIC: '1'
+      MC_STORE_CLIENT_METRIC_INTERVAL: '5'
+      MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+      WITH_NVIDIA_PEERMEM: '0'
+      SGLANG_MOONCAKE_STORE_CONTRIBUTOR: '1'
     args:
       host: 0.0.0.0
       served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813

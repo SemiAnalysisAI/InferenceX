@@ -215,6 +215,22 @@ rm -rf "$SRT_REPO_DIR"
 
 setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" "$USES_DCGM_POWER" || exit 1
 
+# TEMPORARY: the Mooncake external-linker optimizations the DSV4 AgentX
+# disaggregated recipes rely on are not in a released SGLang image yet, so
+# clone the reviewed branch into configs/ (mounted at /configs) and let the
+# servers import it through PYTHONPATH while still using the container's
+# compiled kernels. The recipes' setup script aborts the job if this tree is
+# missing. Drop this block, the setup script, and the recipes' PYTHONPATH once
+# the change ships in the pinned image.
+if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-sglang" && "$MODEL_PREFIX" == "dsv4" ]]; then
+    SGLANG_MOONCAKE_OPT_URL="https://github.com/weireweire/sglang.git"
+    SGLANG_MOONCAKE_OPT_PIN="d2cf19e69fe7f9d69a7504012c3617fe6669acbd"
+    git init configs/sglang-mooncake-opt || exit 1
+    git -C configs/sglang-mooncake-opt fetch --depth 1 \
+        "$SGLANG_MOONCAKE_OPT_URL" "$SGLANG_MOONCAKE_OPT_PIN" || exit 1
+    git -C configs/sglang-mooncake-opt checkout --detach FETCH_HEAD || exit 1
+fi
+
 if [[ "$FRAMEWORK" == "dynamo-trt" && "$MODEL_PREFIX" == "dsv4" ]]; then
     SRT_SLURM_MODEL_PREFIX="deepseek-ai/DeepSeek-V4-Pro"
 fi

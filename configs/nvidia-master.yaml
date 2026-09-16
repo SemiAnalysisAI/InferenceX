@@ -6647,7 +6647,7 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
           - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/gb300-fp4/agentx/agg-tp4-mtp.yaml"
 dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260829-89816a21
+  image: lmsysorg/sglang:nightly-dev-cu13-20260908-20ca564b
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:gb300-nv
@@ -6664,7 +6664,7 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
       - spec-decoding: draft_model
         conc-list: [480]
         kv-offloading: dram
-        kv-offload-backend: { name: hicache }
+        kv-offload-backend: { name: mooncake }
         prefill:
           num-worker: 1
           tp: 8
@@ -6682,7 +6682,7 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
       - spec-decoding: draft_model
         conc-list: [960]
         kv-offloading: dram
-        kv-offload-backend: { name: hicache }
+        kv-offload-backend: { name: mooncake }
         prefill:
           num-worker: 2
           tp: 8
@@ -6700,7 +6700,7 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
       - spec-decoding: draft_model
         conc-list: [1440]
         kv-offloading: dram
-        kv-offload-backend: { name: hicache }
+        kv-offload-backend: { name: mooncake }
         prefill:
           num-worker: 3
           tp: 8
@@ -6718,7 +6718,7 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
       - spec-decoding: draft_model
         conc-list: [1920]
         kv-offloading: dram
-        kv-offload-backend: { name: hicache }
+        kv-offload-backend: { name: mooncake }
         prefill:
           num-worker: 4
           tp: 8
