@@ -30,7 +30,7 @@ jobs:
                 MERGE_RUN_ID: ${{ inputs.merge-run-id }}
               with:
                 # Cross-repository dispatch credential for maintainer-triggered ingest recovery.
-                github-token: ${{ secrets.INFX_FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
+                github-token: ${{ secrets.GH_FRONTEND_DISPATCH_TOKEN }} # zizmor: ignore[secrets-outside-env]
                 script: |
                   await github.rest.repos.createDispatchEvent({
                     owner: "SemiAnalysisAI",

@@ -8,7 +8,7 @@
 
 [`klaud-plan.yml`](../.github/workflows/klaud-plan.yml) 先收尾有记录的中断会话，再用 Python 准备候选，经只读 Claude 检查排除重叠 PR 后调用 [`klaud-candidate.yml`](../.github/workflows/klaud-candidate.yml)。每个候选仍由一个自主 Klaud Cold 会话负责修改、诊断和修复。`finish` 命令验证结果或执行清理，并发布完成记录；只读 Stop hook 和诊断步骤对照 GitHub 验证该记录。恢复工作放在下一次现有 autosweep 中，不增加第二个 agent 或工作流。
 
-PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: false`），最多运行 200 轮。候选执行使用 `claude-fable-5-1`（Fable 5.1），关闭 fast mode。Agent 的显示名称为 **Klaud Cold**；工作流文件名、CLI、产物、分支及环境变量/secret 标识统一使用 `klaud` / `KLAUD`。旧拼写的候选分支仍会阻止重复选择。调度重命名后的工作流前，须配置 `KLAUD_DASHBOARD_API_KEY`。
+PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: false`），最多运行 200 轮。候选执行使用 `claude-fable-5-1`（Fable 5.1），关闭 fast mode。Agent 的显示名称为 **Klaud Cold**；工作流文件名、CLI、产物、分支及运行时环境变量统一使用 `klaud` / `KLAUD`。旧拼写的候选分支仍会阻止重复选择。调度前须配置 `DASHBOARD_STATUS_READ_API_KEY`；工作流仍将其传给现有的 `KLAUD_DASHBOARD_API_KEY` 运行时变量。参见[凭据范围](ci-procedures_zh.md#workflow-凭据)。
 
 ## 候选选择
 
@@ -35,7 +35,7 @@ PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: fals
 
 [报告指南](./klaud-reporting_zh.md)统一定义正文、评论模板及类型化报告命令。正文仅包含目标和冻结的公开基线；尝试评论包含计数/状态/运行、紧凑元数据与 Change、benchmark/eval 表格，以及仅说明下一子目标的 Next。英文展开，简体中文折叠在 中文 区块，数值表格共用一次。单元格显示新值和差值，表头使用箭头，长度使用精确的 8k/1k 简写。不添加 Result 列、可见的 Coverage/Finding 段落、图例、存储说明或限制章节；失败及无法比较的原因保留为简短备注。目标/变更/下一步使用 en/zh 记录。
 
-完成 checkout 和上下文准备后，candidate 工作流将控制权交给 Klaud Cold，并提供 `CLAUDE_PAT`、`ANTHROPIC_API_KEY` 和私有 API 只读密钥。Klaud Cold 将公开观测解析到一个活动主配置族，检查当前镜像和已有 PR，并在**编辑或创建分支/PR 之前**核实检查结果中的目标 ID 和实时容量。随后在使用 GPU 前认领分支，产生实际修改并创建草稿 PR。所有生成的 PR 标题必须以 `[Klaud Cold] ` 开头，后接英文 / 简体中文描述。不得在 GitHub 上 @提及用户/团队，也不得请求 review/re-review；这些操作由自动流程处理。它在认领分支前立即重新检查开放 PR，因为检查只是快照，不能锁住后来创建的人工 PR。有歧义、已退役或已经更新的候选直接停止，不运行扫描。提交、推送、调度、监控、诊断、修复及使用上述布局的 PR 正文/评论更新都由同一会话完成。
+完成 checkout 和上下文准备后，candidate 工作流将控制权交给 Klaud Cold，并提供 `GH_AGENT_WRITE_TOKEN`、`ANTHROPIC_API_KEY` 和私有 API 只读密钥。Klaud Cold 将公开观测解析到一个活动主配置族，检查当前镜像和已有 PR，并在**编辑或创建分支/PR 之前**核实检查结果中的目标 ID 和实时容量。随后在使用 GPU 前认领分支，产生实际修改并创建草稿 PR。所有生成的 PR 标题必须以 `[Klaud Cold] ` 开头，后接英文 / 简体中文描述。不得在 GitHub 上 @提及用户/团队，也不得请求 review/re-review；这些操作由自动流程处理。它在认领分支前立即重新检查开放 PR，因为检查只是快照，不能锁住后来创建的人工 PR。有歧义、已退役或已经更新的候选直接停止，不运行扫描。提交、推送、调度、监控、诊断、修复及使用上述布局的 PR 正文/评论更新都由同一会话完成。
 
 选择或修复镜像前，比较新旧镜像实际内置版本对应的 vLLM、SGLang、ATOM 或 TensorRT-LLM 源码标签/提交，以及关联的 serving 依赖。检查参数和配置解析器及执行路径，确认默认值或语义变化、改名/移除的选项和相关新增选项。仅看 release notes 不够；核实镜像与源码的对应关系，无法确认时如实说明，不能假定最新 `main` 就是镜像内容。将源码链接、相关变化和范围内的决策写入尝试评论。这不扩大允许修改的范围，也不允许运行时补丁。
 
@@ -112,7 +112,7 @@ smoke benchmark 和代表性 eval 都通过后，在 changelog 物理末尾追�
 
 入口工作流每六小时运行一次（`0 */6 * * *`，UTC），并支持手动触发（`workflow_dispatch`）。每次调用最多选择五个候选并行运行。条件 `github.ref == 'refs/heads/main' && github.run_attempt == 1` 会跳过功能分支、tag 和重新运行。candidate 作业也跳过重跑；应重新调度 autosweep，先执行恢复。只有 candidate 暴露 `workflow_call`。两个 Klaud 工作流均不设置并发组：新调用可以与已有调用重叠，且不会取消已有运行。五个候选的上限按每次调用计算，因此多轮重叠时，活跃候选总数可以超过五个。开放 PR 检查和 agent 对精确分支的原子认领仍用于防止重复工作；审查只是快照，agent 必须在认领前再次检查。恢复先于选择执行，但不阻塞等待活动子运行。配置族认领和每会话恢复租约保护重叠调用，未解决配置族仍被排除。
 
-恢复和最终选择步骤使用 `CLAUDE_PAT` 执行已确认归属的清理及配置族认领；只读重叠检查 agent 不获得该凭据。planner 的 Python 准备和最终容量检查步骤使用 dashboard key；准备步骤还使用只读工作流 token。限轮数的 Claude PR 检查使用 `ANTHROPIC_API_KEY` 和具有 `pull-requests: read` 权限的只读工作流 token。它接收私有资格线索，但不接收 `CLAUDE_PAT` 或 dashboard key，也不执行 GitHub 写操作。candidate 获得用于分支/PR 写入及 e2e 调度/取消的 `CLAUDE_PAT`、用于 Klaud Cold 的 `ANTHROPIC_API_KEY`，以及覆盖 clusters 的限期 `status:read` `KLAUD_DASHBOARD_API_KEY`。Klaud Cold 不得发布凭据或私有 API 响应。共享 HTTP 读取器固定来源、限制 GET 响应大小并拒绝重定向。非有限 JSON 数值（包括 `1e400` 这样的指数溢出）会在校验或哈希计算前被拒绝。不需要部署额外服务、数据库或新增 environment 配置。
+恢复和最终选择步骤使用 `GH_AGENT_WRITE_TOKEN` 执行已确认归属的清理及配置族认领；只读重叠检查 agent 不获得该凭据。planner 的 Python 准备和最终容量检查步骤使用 dashboard key；准备步骤还使用只读工作流 token。限轮数的 Claude PR 检查使用 `ANTHROPIC_API_KEY` 和具有 `pull-requests: read` 权限的只读工作流 token。它接收私有资格线索，但不接收 `GH_AGENT_WRITE_TOKEN` 或 dashboard key，也不执行 GitHub 写操作。candidate 获得用于分支/PR 写入及 e2e 调度/取消的 `GH_AGENT_WRITE_TOKEN`、用于 Klaud Cold 的 `ANTHROPIC_API_KEY`，以及覆盖 clusters 的限期 `status:read` `DASHBOARD_STATUS_READ_API_KEY`。Klaud Cold 不得发布凭据或私有 API 响应。共享 HTTP 读取器固定来源、限制 GET 响应大小并拒绝重定向。非有限 JSON 数值（包括 `1e400` 这样的指数溢出）会在校验或哈希计算前被拒绝。不需要部署额外服务、数据库或新增 environment 配置。
 
 所有外部 action 均固定完整提交 SHA；下表与当前工作流中的固定版本一致。内部调用使用 `./.github/workflows/klaud-candidate.yml` 解析调用者的精确提交，并显式传递三个必需 secret。
 

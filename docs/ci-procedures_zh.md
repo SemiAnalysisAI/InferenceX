@@ -22,6 +22,7 @@
 | 诊断或重跑 Workflow | [监控与重跑](#监控与重跑) |
 | 检查特权 Workflow 的访问权限 | [基于仓库角色的授权](#基于仓库角色的授权) |
 | 管理 CI Python 依赖 | [CI Python 环境](#ci-python-环境) |
+| 配置 Workflow 凭据 | [Workflow 凭据](#workflow-凭据) |
 | 将 PR Run 发布到预发布环境 | [暂存结果](#暂存结果) |
 | 合并时不重复已批准的扫描 | [产物复用与 merge-with-reuse](#产物复用与-merge-with-reuse) |
 | 恢复仅追加 Changelog 的冲突 | [Changelog 冲突恢复](#changelog-冲突恢复) |
@@ -321,6 +322,46 @@ Checkout Ref、凭据和审阅
 
 仅依赖标准库的辅助程序继续使用 Runner 自带的 Python。基准容器及其框架
 环境仍由现有启动器管理；此次 CI 依赖迁移不会修改这些环境。
+
+## Workflow 凭据
+
+以下是当前调用方所需的最低权限，不代表已核实各凭据在服务提供方配置的实际权限。
+GitHub Token 使用细粒度仓库权限；Metadata read 会自动授予。四种存储的 GitHub
+凭据应保持独立，避免 Runner 只读凭据或前端凭据泄露后被用于写入 InferenceX 分支。
+
+| Secret | 原名称 | 资源范围 | 所需权限与用途 |
+| --- | --- | --- | --- |
+| `GH_SPEEDBENCH_PR_TOKEN` | `REPO_PAT` | 仅 `SemiAnalysisAI/InferenceX` | Contents write；Pull requests write。推送 SpeedBench 参考数据更新并创建 PR。 |
+| `GH_AGENT_WRITE_TOKEN` | `CLAUDE_PAT` | 仅 `SemiAnalysisAI/InferenceX` | Contents write；Pull requests write；Issues write；Actions write；Workflows write。编码 Agent 推送修改、管理 PR/评论/标签、派发或取消 Run，并可编辑 Workflow 文件。无需 Administration 或组织权限。 |
+| `GH_FRONTEND_DISPATCH_TOKEN` | `INFX_FRONTEND_PAT` | 仅 `SemiAnalysisAI/InferenceX-app` | Contents write，用于发送 `repository_dispatch` 以暂存结果或触发入库。 |
+| `GH_RUNNERS_READ_TOKEN` | `RUNNERS_PAT` | 仅 `SemiAnalysisAI/InferenceX` | Administration read，用于列出自托管 Runner 并生成离线摘要。 |
+| `ANTHROPIC_API_KEY` | 不变 | 专用 InferenceX Workspace | 模型 API 访问权限，并设置 Workspace 费用和速率限制。无需 Admin API Key。 |
+| `DASHBOARD_STATUS_READ_API_KEY` | `KLAUD_DASHBOARD_API_KEY` | 所需 Dashboard 集群 | 有到期时间的 `status:read` 权限，用于 `GET /api/status/clusters`。无需调度控制或密钥管理权限。 |
+| `MODAL_TOKEN_ID` + `MODAL_TOKEN_SECRET` | 不变 | 专用评估环境 | 一对服务用户凭据，具有该环境的 Contributor 权限，用于创建、运行和终止 SWE-bench Sandbox 及相关 App/镜像。 |
+| `NEON_PROD_READONLY_URL` | `NEON_PROD_RO_URL` | 生产基准数据库 | CONNECT；Schema USAGE；对 `benchmark_results`、`configs` 和 `workflow_runs` 的 SELECT。无需写入、DDL 或角色管理权限。 |
+| `PROFILER_STORAGE_DEPLOY_KEY` | 不变 | 仅 `SemiAnalysisAI/InferenceX-trace-storage` | Git 读写部署密钥，用于上传 Profile。 |
+| `SLACK_BOT_TOKEN` | 不变 | Runner 摘要频道 `C09PULGMVNG` | `chat:write`；Bot 必须是频道成员。无需历史消息、管理或 `chat:write.public` 权限。 |
+| `HF_MODELS_READ_TOKEN` | `INFERENCEX_OFFICIAL_RO_HF_TOKEN` | 所需模型仓库；继承的组织 Secret | 细粒度模型读取/下载权限，按需取得受限模型访问授权。无需上传、删除或管理权限。 |
+
+内置 `GITHUB_TOKEN` 无需存储为 Secret。基准和 SpeedBench 的 Checkout 使用
+`contents: read`，不持久化凭据；当前子模块均为公开仓库。统计 Job 额外授予
+`actions: read` 以列出 Job。其他 Job 保留各自显式声明的权限。SpeedBench 写入凭据
+仅传给创建 PR 的步骤，以保留现有推送和 PR 事件的触发行为。
+
+GitHub 要求 [repository_dispatch 使用 Contents write](https://docs.github.com/en/rest/repos/repos#create-a-repository-dispatch-event)，
+[Runner 列表使用 Administration read](https://docs.github.com/en/rest/actions/self-hosted-runners#list-self-hosted-runners-for-a-repository)。
+这两种凭据均无需访问上述范围以外的仓库。重命名 Secret 不会收紧现有 Token 的权限，
+也不会限制哪些 Workflow 能取得它；服务方权限和受保护的 Environment 是独立的控制手段。
+
+部署新名称前，按所需范围配置所有重命名的 Secret，包括继承的 HF Secret 对本仓库的
+访问授权。`HF_TOKEN`、`DATABASE_URL` 和 `KLAUD_DASHBOARD_API_KEY` 等运行时输入
+保持原名。支持历史 Workflow 重跑期间应保留旧 Secret，因为重跑使用原始 Workflow
+版本。仅在旧调用方退役后移除旧副本；撤销底层凭据前还需检查其他仓库和服务的使用情况。
+
+`APP_ID`、`APP_PRIVATE_KEY`、`PAT_WITH_WORKFLOW_SCOPE`、`DATABASE_WRITE_URL`、
+`TEST_HF_TOKEN`、`VERCEL_REVALIDATE_URL` 和 `INFX_CI_SCHEDULER_PAT` 在本仓库没有
+活跃的 Workflow 调用方，当前 Workflow 不需要它们的任何权限；退役前应检查历史版本
+和外部调用方。调度器的 Administration-write 凭据必须与 Runner 只读凭据保持独立。
 
 ## 基于仓库角色的授权
 

@@ -188,9 +188,9 @@ jobs:
         uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
         env:
           # Repository verifier credential; trusted code checks writer authorization before this step.
-          GH_TOKEN: ${{ secrets.CLAUDE_PAT }} # zizmor: ignore[secrets-outside-env]
+          GH_TOKEN: ${{ secrets.GH_AGENT_WRITE_TOKEN }} # zizmor: ignore[secrets-outside-env]
           # Repository verifier credential; trusted code checks writer authorization before this step.
-          GITHUB_TOKEN: ${{ secrets.CLAUDE_PAT }} # zizmor: ignore[secrets-outside-env]
+          GITHUB_TOKEN: ${{ secrets.GH_AGENT_WRITE_TOKEN }} # zizmor: ignore[secrets-outside-env]
           INFERENCEMAX_ROOT: ${{ github.workspace }}
           BASH_DEFAULT_TIMEOUT_MS: "1800000"
           BASH_MAX_TIMEOUT_MS: "3600000"
@@ -198,7 +198,7 @@ jobs:
           # Repository verifier credential; trusted code checks writer authorization before this step.
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
           # Repository verifier credential; trusted code checks writer authorization before this step.
-          github_token: ${{ secrets.CLAUDE_PAT }} # zizmor: ignore[secrets-outside-env]
+          github_token: ${{ secrets.GH_AGENT_WRITE_TOKEN }} # zizmor: ignore[secrets-outside-env]
           track_progress: false
           allowed_bots: ''
           additional_permissions: |

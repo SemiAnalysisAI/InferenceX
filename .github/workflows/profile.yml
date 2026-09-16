@@ -47,7 +47,7 @@ env:
   REQUIRE_POWER: '0'
   IS_MULTINODE: 'false'
   SCENARIO_SUBDIR: fixed_seq_len/
-  HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+  HF_TOKEN: ${{ secrets.HF_MODELS_READ_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   RANDOM_RANGE_RATIO: '0.8'
   PERFETTO_RELAY_URL: https://semianalysisai.github.io/InferenceX-trace-storage
