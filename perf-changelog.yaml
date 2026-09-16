@@ -7992,6 +7992,7 @@
 - config-keys:
     - kimik3-fp4-mi355x-vllm-agentic-mtp
     - minimaxm3-fp4-b200-vllm-agentic-mtp
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
     - minimaxm3-fp4-b200-trtllm-agentic-mtp
     - minimaxm3-fp4-b300-trtllm-agentic-mtp
   scenario-type:
@@ -8013,4 +8014,6 @@
     - "Kimi MI355X vLLM 升级至上游 nightly-af1c0149，使用镜像内针对其 PyTorch 构建的 LMCache 0.5.3。移除运行时 LMCache、Python 依赖及系统包安装；原生 DRAM offload 路径单独验证。"
     - "Remove the obsolete MiniMax TRT fuse_qkv_index_projection option rejected by rc26. Set Kimi DCP1 LMCache prefill batches to 1536 tokens, preserving every recurrent-state snapshot as required by the bundled connector. These recipe changes require fresh throughput validation."
     - "移除 rc26 已不支持的 MiniMax TRT fuse_qkv_index_projection 配置。Kimi DCP1 LMCache 的预填充批次改为 1536 token，按镜像内连接器的要求保留每个循环状态快照；这些配方变更需重新验证吞吐量。"
+    - "Upgrade both B200/B300 MiniMax vLLM images to nightly-af1c0149 with upstream mixed-layout CPU-offload and MSA fixes. Remove both runtime offload patch calls and their shared helper together; use native FlashInfer draft attention on both SKUs. Offload and B300 validation remain separate from the successful B200 resident evaluation; fresh throughput validation is required."
+    - "B200/B300 MiniMax vLLM 同步升级至包含上游混合布局 CPU offload 和 MSA 修复的 nightly-af1c0149 镜像，一并移除两个运行时 offload 补丁调用及共享脚本；两种 SKU 均使用原生 FlashInfer 草稿 attention。Offload 和 B300 验证独立于已通过的 B200 纯 GPU 驻留评估，仍需重新验证吞吐量。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156

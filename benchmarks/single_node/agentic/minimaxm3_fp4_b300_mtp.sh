@@ -40,7 +40,6 @@ install_agentic_deps
 
 OFFLOAD_ARGS=()
 if require_agentic_kv_offload_backend vllm-simple; then
-    python3 "$(dirname "$0")/../../../runners/patch_vllm_simple_kv_offload.py"
     CPU_OFFLOAD_BYTES=$((TOTAL_CPU_DRAM_GB * 1024 * 1024 * 1024))
     export VLLM_USE_SIMPLE_KV_OFFLOAD=1
     OFFLOAD_CONFIG=$(printf \
@@ -69,13 +68,15 @@ trap cleanup_agentic_services EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# Use the native FP8 draft backend verified by the B200 sibling. The earlier
+# FA4 probe failed during graph capture on zero-stride descale tensors.
 if [ "${EVAL_ONLY:-}" = "true" ]; then
     SPEC_CONFIG=$(printf \
-        '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"FLASH_ATTN"}' \
+        '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"FLASHINFER"}' \
         "$DRAFT_MODEL_PATH" "$NUM_SPEC_TOKENS")
 else
     SPEC_CONFIG=$(printf \
-        '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"FLASH_ATTN","rejection_sample_method":"synthetic","synthetic_acceptance_length":%.2f}' \
+        '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"FLASHINFER","rejection_sample_method":"synthetic","synthetic_acceptance_length":%.2f}' \
         "$DRAFT_MODEL_PATH" "$NUM_SPEC_TOKENS" "$SYNTHETIC_ACCEPT_LEN")
 fi
 

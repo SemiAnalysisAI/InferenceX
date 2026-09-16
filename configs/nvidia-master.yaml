@@ -5416,7 +5416,7 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
           - "SYNTHETIC_ACCEPTANCE_LENGTH=3.39"
           - "CONFIG_FILE=recipes/qwen3.5/sglang/gb200-fp4/agentx/agg-tp2ep2-mtp-hicache-cap48.yaml"
 minimaxm3-fp4-b300-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
+  image: vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b300-dsxe
@@ -5570,7 +5570,7 @@ minimaxm3-fp4-b300-trtllm-agentic-mtp:
 # the same 3 TB AgentX ceiling before the proportional-GPU rule is applied.
 # GPU-resident points receive a zero budget.
 minimaxm3-fp4-b200-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
+  image: vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b200-nscale
