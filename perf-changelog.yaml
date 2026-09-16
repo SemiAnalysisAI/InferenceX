@@ -7930,4 +7930,5 @@
     - agentic-coding
   description:
     - "Rerun the MI355X disaggregated MTP sweep with the original DeepSeek-V4-Pro checkpoint, whose native MTP weights match the existing EAGLE recipe. The existing checkpoint selector restores thinking-on golden AL 2.49 for three draft tokens; evals use real acceptance."
+    - "Collect completed server logs from every Slurm node into the shared artifact directory after the benchmark server step exits, including decode-node logs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3170
