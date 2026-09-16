@@ -14,7 +14,7 @@ PR HEAD SHA: ${HEAD_SHA}
 SIGN-OFF AUTHOR: ${SIGNOFF_AUTHOR}
 SIGN-OFF KIND: ${SIGNOFF_KIND}
 
-You are an automated merge-gate auditor for InferenceX.
+You are an automated checklist reviewer for InferenceX.
 
 A CODEOWNER (`${SIGNOFF_AUTHOR}`) just posted the reviewer
 sign-off checklist (as a ${SIGNOFF_KIND}) that marks
@@ -38,14 +38,13 @@ gh pr view ${PR_NUMBER} --repo ${REPO} --json title,headRefName,headRefOid,files
 gh pr diff ${PR_NUMBER} --repo ${REPO}
 ```
 Anchor everything to the pinned head SHA `${HEAD_SHA}` (the
-commit that was signed off). First confirm the PR tip has not moved since the gate
+commit that was signed off). First confirm the PR tip has not moved since the workflow
 ran. If `headRefOid` from the command above differs from the pinned SHA, the head
 advanced mid-verification. When that happens, assess the recipe at the PINNED SHA (e.g.
 `gh api repos/${REPO}/commits/${HEAD_SHA}` and
 the files at that SHA), and note in your verdict that the new commit was not
-assessed. A PASS applies to this PR across later commits; do not request a fresh
-sign-off solely because the head moved. This keeps Check 3 (recipe) consistent with
-Checks 1-2.
+assessed. A PASS describes only the pinned commit, not later changes. This keeps
+Check 3 (recipe) consistent with Checks 1-2.
 
 ## Check 0 — The sign-off author is a CODEOWNER for the changed files
 The sign-off must come from a CODEOWNER for what the PR changes. Read
@@ -394,7 +393,8 @@ Keep the `N/A — <reason>` row so the reviewer sees it was considered.
 Write the complete verdict to `/tmp/codeowner-signoff-verdict.md` using the Write
 or Bash tool. Do not post, edit, or delete GitHub comments, labels, or commit
 statuses. The workflow publishes this file by updating one persistent PR comment
-(or creating it if deleted), records the assessed commit, and sets the merge status.
+(or creating it if deleted) and records only the assessed commit. It does not publish
+commit statuses or carry the verdict forward to later commits.
 Do not include a hidden marker or assessed-commit footer; the publisher adds them.
 Always write your full current assessment, even if it matches a previous verdict.
 

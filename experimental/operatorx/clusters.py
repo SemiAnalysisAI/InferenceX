@@ -8,6 +8,8 @@ from __future__ import annotations
 
 
 CLUSTER_PLATFORMS: dict[str, str] = {
+    "h100_dgxc_8x":  "nvidia",
+    "h200_dgxc_8x":  "nvidia",
     "b200_dgx_8x":   "nvidia",
     "b300_hgx_8x":   "nvidia",
     "b200_nvl72":    "nvidia",
@@ -22,6 +24,8 @@ CLUSTER_PLATFORMS: dict[str, str] = {
 }
 
 CLUSTER_CHIPS: dict[str, str] = {
+    "h100_dgxc_8x":  "h100",
+    "h200_dgxc_8x":  "h200",
     "b200_dgx_8x":   "b200",
     "b300_hgx_8x":   "b300",
     "b200_nvl72":    "b200",

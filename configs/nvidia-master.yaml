@@ -860,7 +860,7 @@ dsr1-fp8-b300-dynamo-trt:
           ep: 8
           dp-attn: true
 dsr1-fp4-b200-sglang:
-  image: lmsysorg/sglang:v0.5.16-cu130
+  image: lmsysorg/sglang:v0.5.19-cu130
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
   runner: cluster:b200-nscale
@@ -900,7 +900,7 @@ dsr1-fp4-b200-sglang-mtp:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
 
 dsv4-fp4-b200-sglang-agentic-hicache-mtp:
-  image: lmsysorg/sglang:nightly-dev-20260827-20621aa1
+  image: lmsysorg/sglang:v0.5.19-cu130
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:b200-nscale
@@ -1074,7 +1074,7 @@ qwen3.5-fp8-b200-sglang:
       - { tp: 4, ep: 1, conc-list: [320, 384, 448, 640] }
 
 qwen3.5-fp8-b200-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.16-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b200-nscale
@@ -1124,7 +1124,7 @@ qwen3.5-fp4-b200-sglang-mtp:
       - { tp: 2, ep: 2, conc-list: [16, 32, 64], spec-decoding: mtp }
 
 qwen3.5-fp8-b200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.14-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260915-8874c51a
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b200-nscale
@@ -5179,7 +5179,7 @@ qwen3.5-fp8-h200-sglang-agentic-hicache-mtp:
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [2, 4, 8, 10, 12, 16, 20, 24] }
 
 qwen3.5-fp8-h100-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.16-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:h100-dgxc
@@ -8210,8 +8210,11 @@ dsv41flash-fp4-b300-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
+      # Engram weights use UVA DRAM; the KV cache stays GPU-resident. The B300
+      # script uses explicit piecewise CUDA graph capture tiers.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      # Run the same B300 recipe on two GPUs.
+      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [2, 4, 8, 16, 32, 64, 128] }
 
 dsv41flash-fp4-b200-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3
