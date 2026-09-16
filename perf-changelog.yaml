@@ -7940,3 +7940,14 @@
     - "Update vLLM image from vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 to vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e (2026-09-16 upstream nightly, vllm-project/vllm@af1c0149, manifest digest sha256:f3b756ede21083a9415baac77b38998b89c738d2a9c1441c22de2d49cacf5282); the 59 upstream commits touch the DeepSeek-V4.1 path (Mega-mHC via the vLLM DeepGEMM fork, DSpark collapse before SP all-gather, KV-only context insertion, renderer and XGrammar tool-schema fixes). v0.29.0 predates the deepseek_v41 package this recipe needs. Recipe script, DSpark settings and the TP4 c1-128 grid are unchanged"
     - "将 vLLM 镜像从 vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 更新为 vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e（2026-09-16 上游 nightly，vllm-project/vllm@af1c0149，manifest digest sha256:f3b756ede21083a9415baac77b38998b89c738d2a9c1441c22de2d49cacf5282）；上游 59 个提交涉及 DeepSeek-V4.1 路径（基于 vLLM DeepGEMM 分支的 Mega-mHC、DSpark 在 SP all-gather 前折叠、仅 KV 的上下文插入、渲染器与 XGrammar 工具 schema 修复）。v0.29.0 早于该配方所需的 deepseek_v41 包。配方脚本、DSpark 设置及 TP4 c1-128 网格保持不变"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3176
+
+- config-keys:
+    - minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable the MiniMax-M3 reasoning parser on the Dynamo frontend so reasoning blocks are classified consistently instead of being returned as ordinary content."
+    - "Set reasoning_parser: minimax_m3 in each TensorRT-LLM engine configuration to keep the frontend and engine parser settings aligned."
+    - "在 Dynamo 前端启用 MiniMax-M3 推理解析器，使推理内容按一致方式分类，而不会作为普通内容返回。"
+    - "在每个 TensorRT-LLM 引擎配置中设置 reasoning_parser: minimax_m3，使前端与引擎的解析器设置保持一致。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

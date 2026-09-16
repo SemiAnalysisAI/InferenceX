@@ -48,6 +48,7 @@ roles:
       TRTLLM_SERVE_ENABLE_MSGSPEC: '1'
       TRTLLM_TORCH_COMPILE_CONTEXT_ONLY: '1'
       DYN_PUBLISH_KV_EVENTS: '0'
+      DYN_REASONING_PARSER: minimax_m3
     args:
       max_seq_len: 1048576
       max_num_tokens: 16384
@@ -104,6 +105,7 @@ roles:
       enable_autotuner: true
       trust_remote_code: true
       stream_interval: 20
+      reasoning_parser: minimax_m3
       print_iter_log: true
       num_postprocess_workers: 8
       enable_attention_dp: false
