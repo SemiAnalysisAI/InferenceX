@@ -9,26 +9,23 @@
 #SBATCH --open-mode=append
 
 # Persistent vLLM server for MiniMax M2.5 (tensor-parallel + expert-parallel)
-set -euo pipefail
+set -eo pipefail
 
 MODEL="MiniMaxAI/MiniMax-M2.5"
 PORT=8000
 SERVER_INFO_FILE=/workspace/logs/server_info.txt
 
-# Write server address to shared file for client jobs
 HOSTNAME=$(hostname)
 echo "http://${HOSTNAME}:${PORT}" > "$SERVER_INFO_FILE"
 echo "Server will be available at: http://${HOSTNAME}:${PORT}"
 echo "Server info written to: $SERVER_INFO_FILE"
 
-# Trap to clean up on exit
 cleanup() {
     echo "Cleaning up..."
     rm -f "$SERVER_INFO_FILE"
 }
 trap cleanup EXIT
 
-# Install specific vLLM commit
 VLLM_COMMIT=dea63512bb9bdf7521d591546c52138d9d79e8ce
 echo "Installing vLLM commit ${VLLM_COMMIT}..."
 pip install vllm --extra-index-url https://wheels.vllm.ai/${VLLM_COMMIT}
@@ -36,7 +33,6 @@ pip install vllm --extra-index-url https://wheels.vllm.ai/${VLLM_COMMIT}
 export VLLM_CACHE_ROOT=/model_storage/vllm_cache
 export DG_JIT_CACHE_DIR=/model_storage/deep_gemm_cache
 
-# Start vLLM server (foreground - keeps job alive)
 echo "Starting vLLM server..."
 
 exec vllm serve $MODEL \

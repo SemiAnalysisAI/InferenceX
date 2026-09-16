@@ -1,17 +1,17 @@
 #!/bin/bash
-# Dual-Engine Disaggregated Benchmark Runner
-#
-# ENGINE=sglang (default): SGLang benchmark
-# ENGINE=vllm:             vLLM benchmark
-#
-# Produces JSON result files via benchmark_serving.py so that the CI pipeline
-# can collect and process results.
+# Disaggregated fixed-seq-len benchmark runner; writes JSON results via
+# benchmark_serving.py for the CI pipeline.
 #
 # Usage: bash bench.sh <n_prefill> <n_decode> <prefill_gpus> <decode_gpus> \
 #            <model_dir> <model_name> <log_path> <isl> <osl> \
 #            <concurrency_list> <req_rate> <random_range_ratio> <num_prompts_multiplier>
 
-ENGINE="${ENGINE:-sglang-disagg}"
+source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
+check_env_vars ENGINE MODEL_PATH MODEL_NAME ROUTER_PORT
+if [[ $# -ne 13 ]]; then
+    echo "Error: bench.sh requires 13 positional arguments" >&2
+    exit 1
+fi
 
 n_prefill=$1
 n_decode=$2
@@ -19,29 +19,22 @@ prefill_gpus=$3
 decode_gpus=$4
 model_path=$5
 model_name=$6
-MODEL_PATH="${MODEL_PATH:-${model_path}/${model_name}}"
 # vllm-disagg uses --served-model-name MODEL_NAME; sglang defaults to MODEL_PATH
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    BENCH_MODEL="${MODEL_NAME:-${MODEL_PATH}}"
+    BENCH_MODEL="${MODEL_NAME}"
 else
     BENCH_MODEL="${MODEL_PATH}"
 fi
 log_path=$7
 
-chosen_isl=${8:-1024}
-chosen_osl=${9:-1024}
-concurrency_list=${10:-"512x1"}
-if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    chosen_req_rate=${11:-inf}
-else
-    chosen_req_rate=${11:-1}
-fi
-random_range_ratio=${12:-0.8}
-num_prompts_multiplier=${13:-10}
+chosen_isl=${8}
+chosen_osl=${9}
+concurrency_list=${10}
+chosen_req_rate=${11}
+random_range_ratio=${12}
+num_prompts_multiplier=${13}
 
 IFS='x' read -r -a chosen_concurrencies <<< "$concurrency_list"
-
-ROUTER_PORT="${ROUTER_PORT:-30000}"
 
 export TRANSFORMERS_VERBOSITY=error
 export TOKENIZERS_PARALLELISM=false
@@ -74,26 +67,22 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
     echo "num_prompts: $num_prompts"
     echo "export_file: $export_file"
 
-    # Engine-specific extra flags
     extra_flags=""
-    # vllm
     if [[ "$ENGINE" == "vllm-disagg" ]]; then
         extra_flags="--trust-remote-code --tokenizer $MODEL_PATH"
-    # atom
     elif [[ "$ENGINE" == "atom-disagg" ]]; then
         extra_flags="--trust-remote-code --tokenizer $MODEL_PATH"
         if [ "$IS_MTP" = "true" ]; then
             # just override extra_flags as dsv3 use different tokenizer path
-            if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
+            if [[ "$MODEL_NAME" == DeepSeek-V4-Pro* ]]; then
                 extra_flags="--dsv4"
             else
                 extra_flags="--use-chat-template"
             fi
         fi
-    # sglang
     else
         if [ "$IS_MTP" = "true" ]; then
-            if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
+            if [[ "$MODEL_NAME" == DeepSeek-V4-Pro* ]]; then
                 extra_flags="--dsv4"
             else
                 extra_flags="--use-chat-template"
@@ -117,7 +106,6 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
 
     echo "-----------------------------------------"
 
-    # vLLM: cooldown between rounds for idle KV block reaper
     if [[ "$ENGINE" == "vllm-disagg" ]]; then
         echo "[BENCH] Cooldown: waiting 10s for idle KV block reaper..."
         sleep 10

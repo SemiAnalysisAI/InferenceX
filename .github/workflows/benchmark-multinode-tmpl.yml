@@ -2,7 +2,20 @@ name: Template - Multi-Node Benchmark
 
 on:
   workflow_call:
+    secrets:
+      REPO_PAT:
+        required: true
+      INFERENCEX_OFFICIAL_RO_HF_TOKEN:
+        required: true
+      MODAL_TOKEN_ID:
+        required: false
+      MODAL_TOKEN_SECRET:
+        required: false
     inputs:
+      config:
+        description: "Benchmark configuration as JSON"
+        required: true
+        type: string
       klaud-run:
         description: "Run Klaud Cold benchmarks at background priority"
         required: false
@@ -28,116 +41,9 @@ on:
         required: false
         type: string
         default: ''
-      image:
-        required: true
-        type: string
-      model:
-        required: true
-        type: string
-      model-prefix:
-        required: true
-        type: string
-      framework:
-        required: true
-        type: string
-      precision:
-        required: true
-        type: string
-      exp-name:
-        required: true
-        type: string
-      recipe-fingerprint:
-        description: "Deterministic generated-recipe identity"
-        required: false
-        type: string
-        default: ''
-      isl:
-        required: true
-        type: string
-      osl:
-        required: true
-        type: string
       conc-list:
         required: true
         type: string
-      spec-decoding:
-        required: true
-        type: string
-      disagg:
-        required: true
-        type: string
-      prefill-hardware:
-        description: "GPU SKU used by prefill workers"
-        required: false
-        type: string
-        default: ""
-      decode-hardware:
-        description: "GPU SKU used by decode workers"
-        required: false
-        type: string
-        default: ""
-
-      max-model-len:
-        required: true
-        type: string
-
-      prefill-num-worker:
-        required: true
-        type: string
-      prefill-tp:
-        required: true
-        type: string
-      prefill-pp:
-        required: false
-        type: string
-        default: '1'
-      prefill-dcp-size:
-        required: false
-        type: string
-        default: '1'
-      prefill-pcp-size:
-        required: false
-        type: string
-        default: '1'
-      prefill-ep:
-        required: true
-        type: string
-      prefill-dp-attn:
-        required: true
-        type: string
-      prefill-additional-settings:
-        required: false
-        type: string
-        default: "[]"
-
-      decode-num-worker:
-        required: true
-        type: string
-      decode-tp:
-        required: true
-        type: string
-      decode-pp:
-        required: false
-        type: string
-        default: '1'
-      decode-dcp-size:
-        required: false
-        type: string
-        default: '1'
-      decode-pcp-size:
-        required: false
-        type: string
-        default: '1'
-      decode-ep:
-        required: true
-        type: string
-      decode-dp-attn:
-        required: true
-        type: string
-      decode-additional-settings:
-        required: false
-        type: string
-        default: "[]"
       run-eval:
         type: boolean
         required: false
@@ -203,26 +109,6 @@ on:
         type: boolean
         required: false
         default: false
-      kv-offloading:
-        description: "KV offload mode for agentic scenarios (none/dram)"
-        required: false
-        type: string
-      kv-offload-backend:
-        description: "KV offload backend for agentic scenarios when kv-offloading is not none"
-        required: false
-        type: string
-      kv-offload-backend-metadata:
-        description: "Optional KV offload backend name and version metadata as JSON"
-        required: false
-        type: string
-      router:
-        description: "Optional router name and version metadata as JSON"
-        required: false
-        type: string
-      kv-p2p-transfer:
-        description: "Optional multinode peer-to-peer KV transfer engine name"
-        required: false
-        type: string
       total-cpu-dram-gb:
         description: "Total CPU DRAM in GB for KV offloading"
         required: false
@@ -234,34 +120,44 @@ on:
         type: string
 
 env:
+  PORT: '8888'
+  INFMAX_CONTAINER_WORKSPACE: '/workspace'
+  DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE: '1'
+  MODEL_DOWNLOAD_LOCK_TIMEOUT: '21600'
+  ENROOT_IMPORT_TIME_LIMIT: '120'
+  SALLOC_TIME_LIMIT: '480'
+  GPU_MONITOR_INTERVAL: '1'
+  GPU_METRICS_CSV: 'gpu_metrics.csv'
+  KEEP_LOGS: '0'
+  IS_MULTINODE: 'true'
   RANDOM_RANGE_RATIO: 0.8
   # Day-zero models resolved via hf: ids download from the Hub inside the
   # slurm job (srtctl pre-download + dynamo hub fetch). Anonymous requests
   # get 429-rate-limited when several workers pull a 444 GB snapshot at
   # once; sbatch/srun inherit this env so the token reaches the workers.
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-  EXP_NAME: ${{ inputs.exp-name }}
-  RECIPE_FINGERPRINT: ${{ inputs.recipe-fingerprint }}
-  IMAGE: ${{ inputs.image }}
-  MODEL_PREFIX: ${{ inputs.model-prefix }}
-  MODEL: ${{ inputs.model }}
-  FRAMEWORK: ${{ inputs.framework }}
-  PRECISION: ${{ inputs.precision }}
-  ISL: ${{ inputs.isl }}
-  OSL: ${{ inputs.osl }}
-  MAX_MODEL_LEN: ${{ inputs.max-model-len }}
+  EXP_NAME: ${{ fromJSON(inputs.config).exp-name }}
+  RECIPE_FINGERPRINT: ${{ fromJSON(inputs.config)['recipe-fingerprint'] || '' }}
+  IMAGE: ${{ fromJSON(inputs.config).image }}
+  MODEL_PREFIX: ${{ fromJSON(inputs.config).model-prefix }}
+  MODEL: ${{ fromJSON(inputs.config).model }}
+  FRAMEWORK: ${{ fromJSON(inputs.config).framework }}
+  PRECISION: ${{ fromJSON(inputs.config).precision }}
+  ISL: ${{ inputs.scenario-type == 'agentic-coding' && '0' || fromJSON(inputs.config).isl }}
+  OSL: ${{ inputs.scenario-type == 'agentic-coding' && '0' || fromJSON(inputs.config).osl }}
+  MAX_MODEL_LEN: ${{ inputs.scenario-type == 'agentic-coding' && '0' || fromJSON(inputs.config).max-model-len }}
   CONC_LIST: ${{ join(fromJson(inputs.conc-list), ' ') }}
-  SPEC_DECODING: ${{ inputs.spec-decoding }}
-  DISAGG: ${{ inputs.disagg }}
-  PREFILL_HARDWARE: ${{ inputs.prefill-hardware }}
-  DECODE_HARDWARE: ${{ inputs.decode-hardware }}
+  SPEC_DECODING: ${{ fromJSON(inputs.config).spec-decoding }}
+  DISAGG: ${{ fromJSON(inputs.config).disagg }}
+  PREFILL_HARDWARE: ${{ fromJSON(inputs.config).prefill.hardware }}
+  DECODE_HARDWARE: ${{ fromJSON(inputs.config).decode.hardware }}
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
   EVAL_FRAMEWORK: ${{ inputs.eval-framework }}
   EVAL_SUITE: ${{ inputs.eval-suite }}
   EVAL_CONC: ${{ inputs.eval-conc }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
-  SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
+  SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode || 'agentic' }}
   # GPU/multi-node runners lack Docker for SWE-bench scoring.
   SWEBENCH_USE_MODAL: 'true'
   MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
@@ -275,30 +171,30 @@ env:
   CONC: ${{ inputs.conc }}
   DURATION: ${{ inputs.duration }}
   AIPERF_EXPERIMENTAL_FAST: ${{ inputs.agentx-fast && '1' || '0' }}
-  KV_OFFLOADING: ${{ inputs.kv-offloading }}
-  KV_OFFLOAD_BACKEND: ${{ inputs.kv-offload-backend }}
-  KV_OFFLOAD_BACKEND_METADATA: ${{ inputs.kv-offload-backend-metadata }}
-  ROUTER_METADATA: ${{ inputs.router }}
-  KV_P2P_TRANSFER: ${{ inputs.kv-p2p-transfer }}
+  KV_OFFLOADING: ${{ inputs.scenario-type == 'agentic-coding' && fromJSON(inputs.config).kv-offloading || '' }}
+  KV_OFFLOAD_BACKEND: ${{ inputs.scenario-type == 'agentic-coding' && fromJSON(inputs.config)['kv-offload-backend'].name || '' }}
+  KV_OFFLOAD_BACKEND_METADATA: ${{ inputs.scenario-type == 'agentic-coding' && fromJSON(inputs.config)['kv-offload-backend'] && toJSON(fromJSON(inputs.config)['kv-offload-backend']) || '' }}
+  ROUTER_METADATA: ${{ fromJSON(inputs.config).router && toJSON(fromJSON(inputs.config).router) || '' }}
+  KV_P2P_TRANSFER: ${{ fromJSON(inputs.config)['kv-p2p-transfer'] || '' }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 
-  PREFILL_NUM_WORKERS: ${{ inputs.prefill-num-worker }}
-  PREFILL_TP: ${{ inputs.prefill-tp }}
-  PREFILL_PP_SIZE: ${{ inputs.prefill-pp }}
-  PREFILL_DCP_SIZE: ${{ inputs.prefill-dcp-size }}
-  PREFILL_PCP_SIZE: ${{ inputs.prefill-pcp-size }}
-  PREFILL_EP: ${{ inputs.prefill-ep }}
-  PREFILL_DP_ATTN: ${{ inputs.prefill-dp-attn }}
+  PREFILL_NUM_WORKERS: ${{ fromJSON(inputs.config).prefill.num-worker }}
+  PREFILL_TP: ${{ fromJSON(inputs.config).prefill.tp }}
+  PREFILL_PP_SIZE: ${{ fromJSON(inputs.config).prefill.pp }}
+  PREFILL_DCP_SIZE: ${{ fromJSON(inputs.config).prefill.dcp-size }}
+  PREFILL_PCP_SIZE: ${{ fromJSON(inputs.config).prefill.pcp-size }}
+  PREFILL_EP: ${{ fromJSON(inputs.config).prefill.ep }}
+  PREFILL_DP_ATTN: ${{ fromJSON(inputs.config).prefill.dp-attn }}
 
-  DECODE_NUM_WORKERS: ${{ inputs.decode-num-worker }}
-  DECODE_TP: ${{ inputs.decode-tp }}
-  DECODE_PP_SIZE: ${{ inputs.decode-pp }}
-  DECODE_DCP_SIZE: ${{ inputs.decode-dcp-size }}
-  DECODE_PCP_SIZE: ${{ inputs.decode-pcp-size }}
-  DECODE_EP: ${{ inputs.decode-ep }}
-  DECODE_DP_ATTN: ${{ inputs.decode-dp-attn }}
+  DECODE_NUM_WORKERS: ${{ fromJSON(inputs.config).decode.num-worker }}
+  DECODE_TP: ${{ fromJSON(inputs.config).decode.tp }}
+  DECODE_PP_SIZE: ${{ fromJSON(inputs.config).decode.pp }}
+  DECODE_DCP_SIZE: ${{ fromJSON(inputs.config).decode.dcp-size }}
+  DECODE_PCP_SIZE: ${{ fromJSON(inputs.config).decode.pcp-size }}
+  DECODE_EP: ${{ fromJSON(inputs.config).decode.ep }}
+  DECODE_DP_ATTN: ${{ fromJSON(inputs.config).decode.dp-attn }}
 
 permissions:
   contents: read
@@ -352,19 +248,19 @@ jobs:
     # recipe's 12-hour Slurm limit for checkout, staging, and artifact upload.
     timeout-minutes: ${{ inputs.scenario-type == 'agentic-coding' && 780 || 480 }}
     name: >-
-      ${{ inputs.klaud-run && 'klaud | ' || '' }}p${{ inputs.priority }} | ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework == 'sglang' && 'sgl' || inputs.framework == 'dynamo-sglang' && 'dyn-sgl' || inputs.framework == 'sglang-disagg' && 'sgl-disagg' || inputs.framework }}
-      ${{ inputs.disagg == 'true' && format('{0}P ', inputs.prefill-num-worker) || '' }}(TP${{ inputs.prefill-tp }}${{ inputs.prefill-pp != '' && inputs.prefill-pp != '1' && format('/PP{0}', inputs.prefill-pp) || '' }}${{ inputs.prefill-dcp-size != '' && inputs.prefill-dcp-size != '1' && format('/DCP{0}', inputs.prefill-dcp-size) || '' }}${{ inputs.prefill-pcp-size != '' && inputs.prefill-pcp-size != '1' && format('/PCP{0}', inputs.prefill-pcp-size) || '' }}${{ inputs.prefill-ep != '' && inputs.prefill-ep != '1' && format('/EP{0}', inputs.prefill-ep) || '' }}${{ inputs.prefill-dp-attn == 'true' && '/DPA' || '' }})
-      ${{ inputs.disagg == 'true' && format('x {0}D (TP{1}{2}{3}{4}{5}{6})', inputs.decode-num-worker, inputs.decode-tp, inputs.decode-pp != '' && inputs.decode-pp != '1' && format('/PP{0}', inputs.decode-pp) || '', inputs.decode-dcp-size != '' && inputs.decode-dcp-size != '1' && format('/DCP{0}', inputs.decode-dcp-size) || '', inputs.decode-pcp-size != '' && inputs.decode-pcp-size != '1' && format('/PCP{0}', inputs.decode-pcp-size) || '', inputs.decode-ep != '' && inputs.decode-ep != '1' && format('/EP{0}', inputs.decode-ep) || '', inputs.decode-dp-attn == 'true' && '/DPA' || '') || '' }}
-      ${{ inputs.spec-decoding != 'none' && inputs.spec-decoding || '' }}
-      ${{ inputs.kv-offloading != '' && inputs.kv-offloading != 'none' && format('{0} KV offload', inputs.kv-offloading) || '' }}
-      ${{ inputs.kv-offload-backend != '' && inputs.kv-offload-backend != 'none' && inputs.kv-offload-backend != 'default' && inputs.kv-offload-backend || '' }}
+      ${{ inputs.klaud-run && 'klaud | ' || '' }}p${{ inputs.priority }} | ${{ fromJSON(inputs.config).model-prefix }} ${{ fromJSON(inputs.config).precision }} ${{ inputs.runner }} ${{ fromJSON(inputs.config).framework == 'sglang' && 'sgl' || fromJSON(inputs.config).framework == 'dynamo-sglang' && 'dyn-sgl' || fromJSON(inputs.config).framework == 'sglang-disagg' && 'sgl-disagg' || fromJSON(inputs.config).framework }}
+      ${{ format('{0}', fromJSON(inputs.config).disagg) == 'true' && format('{0}P ', fromJSON(inputs.config).prefill.num-worker) || '' }}(TP${{ fromJSON(inputs.config).prefill.tp }}${{ format('{0}', fromJSON(inputs.config).prefill.pp) != '' && format('{0}', fromJSON(inputs.config).prefill.pp) != '1' && format('/PP{0}', fromJSON(inputs.config).prefill.pp) || '' }}${{ format('{0}', fromJSON(inputs.config).prefill.dcp-size) != '' && format('{0}', fromJSON(inputs.config).prefill.dcp-size) != '1' && format('/DCP{0}', fromJSON(inputs.config).prefill.dcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).prefill.pcp-size) != '' && format('{0}', fromJSON(inputs.config).prefill.pcp-size) != '1' && format('/PCP{0}', fromJSON(inputs.config).prefill.pcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).prefill.ep) != '' && format('{0}', fromJSON(inputs.config).prefill.ep) != '1' && format('/EP{0}', fromJSON(inputs.config).prefill.ep) || '' }}${{ format('{0}', fromJSON(inputs.config).prefill.dp-attn) == 'true' && '/DPA' || '' }})
+      ${{ format('{0}', fromJSON(inputs.config).disagg) == 'true' && format('x {0}D (TP{1}{2}{3}{4}{5}{6})', fromJSON(inputs.config).decode.num-worker, fromJSON(inputs.config).decode.tp, format('{0}', fromJSON(inputs.config).decode.pp) != '' && format('{0}', fromJSON(inputs.config).decode.pp) != '1' && format('/PP{0}', fromJSON(inputs.config).decode.pp) || '', format('{0}', fromJSON(inputs.config).decode.dcp-size) != '' && format('{0}', fromJSON(inputs.config).decode.dcp-size) != '1' && format('/DCP{0}', fromJSON(inputs.config).decode.dcp-size) || '', format('{0}', fromJSON(inputs.config).decode.pcp-size) != '' && format('{0}', fromJSON(inputs.config).decode.pcp-size) != '1' && format('/PCP{0}', fromJSON(inputs.config).decode.pcp-size) || '', format('{0}', fromJSON(inputs.config).decode.ep) != '' && format('{0}', fromJSON(inputs.config).decode.ep) != '1' && format('/EP{0}', fromJSON(inputs.config).decode.ep) || '', format('{0}', fromJSON(inputs.config).decode.dp-attn) == 'true' && '/DPA' || '') || '' }}
+      ${{ fromJSON(inputs.config).spec-decoding != 'none' && fromJSON(inputs.config).spec-decoding || '' }}
+      ${{ inputs.scenario-type == 'agentic-coding' && fromJSON(inputs.config).kv-offloading != '' && fromJSON(inputs.config).kv-offloading != 'none' && format('{0} KV offload', fromJSON(inputs.config).kv-offloading) || '' }}
+      ${{ inputs.scenario-type == 'agentic-coding' && fromJSON(inputs.config)['kv-offload-backend'].name != '' && fromJSON(inputs.config)['kv-offload-backend'].name != 'none' && fromJSON(inputs.config)['kv-offload-backend'].name != 'default' && fromJSON(inputs.config)['kv-offload-backend'].name || '' }}
       c${{ join(fromJson(inputs.conc-list), 'x') }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
 
     steps:
       - name: Slurm cleanup (pre-run)
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
-            for job_name in "${{ runner.name }}" "inferencex-${{ runner.name }}"; do
+            for job_name in "${RUNNER_NAME}" "inferencex-${RUNNER_NAME}"; do
               echo "[Slurm] Cleaning up jobs named: $job_name ..."
               scancel --user="$USER" --name="$job_name" || true
               while [ -n "$(squeue --user="$USER" --name="$job_name" --noheader --format='%i')" ]; do
@@ -385,7 +281,7 @@ jobs:
           # module git dir — a truncated clone may lack HEAD entirely, and a
           # git dir whose HEAD does not resolve to a commit is dropped
           # together with its worktree so checkout re-clones it.
-          repo_dir="${{ github.workspace }}"
+          repo_dir="${GITHUB_WORKSPACE}"
           if [ -d "${repo_dir}/.git" ]; then
             find "${repo_dir}/.git" -name index.lock -type f -delete || true
             for gitdir in "${repo_dir}"/.git/modules/* "${repo_dir}"/.git/modules/*/*; do
@@ -399,42 +295,74 @@ jobs:
             done
           fi
 
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
           ref: ${{ inputs.ref || github.sha }}
           clean: true
           submodules: true
+          persist-credentials: false
 
       - name: Launch multi-node job script
         env:
+          PREFILL_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).prefill.additional-settings) }}
+          DECODE_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).decode.additional-settings) }}
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
           RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
         run: |
           set -x
-          export RESULT_FILENAME="$RESULT_FILENAME_BASE"
-          if [ -n "$RECIPE_FINGERPRINT" ]; then
-            export RESULT_FILENAME="${RESULT_FILENAME}_recipe-${RECIPE_FINGERPRINT:0:16}"
+          if [[ -f utils/result_filename.py ]]; then
+            RESULT_FILENAME=$(python3 utils/result_filename.py)
+          else
+            # Older measured commits predate the helper; preserve safe identity.
+            RESULT_FILENAME=$(printf '%s\0' "$RESULT_FILENAME_BASE" "$RECIPE_FINGERPRINT" | sha256sum)
+            RESULT_FILENAME="${RESULT_FILENAME%% *}"
           fi
+          export RESULT_FILENAME
           # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
           echo "EVAL_ARTIFACT_RECIPE=${RECIPE_FINGERPRINT:0:16}" >> "$GITHUB_ENV"
           eval_artifact_conc="$(python3 -c 'import hashlib,os; print(hashlib.sha256(os.environ["CONC_LIST"].encode()).hexdigest()[:12])')"
           echo "EVAL_ARTIFACT_CONC=${eval_artifact_conc}" >> "$GITHUB_ENV"
 
-          export ${{ join(fromJson(inputs.prefill-additional-settings), ' ') }} ${{ join(fromJson(inputs.decode-additional-settings), ' ') }}
+          # Historical measured revisions own their configuration in the launchers.
+          if [[ -f benchmarks/runtime_settings.sh ]]; then
+            source benchmarks/runtime_settings.sh
+          fi
+          if [[ -f runners/runtime_settings.sh ]]; then
+            source runners/runtime_settings.sh
+          fi
+          # Historical measured revisions own their configuration in the launchers.
+          if [[ -f benchmarks/multi_node/runtime_settings.sh ]]; then
+            source benchmarks/multi_node/runtime_settings.sh
+          fi
+          # Assign data literally; recipe values must never become shell code.
+          settings_json=$(jq -cen \
+            --argjson prefill "$PREFILL_ADDITIONAL_SETTINGS" \
+            --argjson decode "$DECODE_ADDITIONAL_SETTINGS" \
+            '($prefill // []) + ($decode // []) |
+             if all(.[]; type == "string" and test("^[A-Za-z_][A-Za-z0-9_]*=")) then .
+             else error("additional-settings must contain NAME=value assignments") end')
+          while IFS= read -r -d '' setting; do
+            export "$setting"
+          done < <(jq -j '.[] + "\u0000"' <<< "$settings_json")
+          # Resolve the workflow's documented automatic eval-concurrency selection.
+          if [[ -z "$EVAL_CONC" ]]; then
+            EVAL_CONC=$(python3 -c 'import os; print(max(map(int, os.environ["CONC_LIST"].split())))')
+          fi
+          export EVAL_CONC
           export IS_MULTINODE=true
-          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
-          if [ "${{ inputs.eval-only }}" = "true" ]; then
+          bash "./runners/launch_${RUNNER_NAME%%_*}.sh"
+          if [ "${EVAL_ONLY}" = "true" ]; then
             echo "Eval-only mode: skipping benchmark result file check"
             # Verify eval produced results
             if ! ls results*.json 1>/dev/null 2>&1; then
               echo "Eval-only run failed: no results*.json files found." >&2
               exit 1
             fi
-          elif [ "${{ inputs.scenario-type }}" = "agentic-coding" ]; then
+          elif [ "${SCENARIO_TYPE}" = "agentic-coding" ]; then
             expected_count=$(wc -w <<< "$CONC_LIST" | tr -d ' ')
             shopt -s nullglob
             agentic_results=("${RESULT_FILENAME}"_conc*.json)
@@ -455,10 +383,8 @@ jobs:
               fi
             done
           else
-            # Check if at least one result file was created
-            if ls ${RESULT_FILENAME}_*.json 1> /dev/null 2>&1; then
-              echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
-              echo "Found result files: $(ls ${RESULT_FILENAME}_*.json)"
+            if ls -- "${RESULT_FILENAME}"_*.json 1> /dev/null 2>&1; then
+              printf 'Found result file: %s\n' "${RESULT_FILENAME}"_*.json
             else
               echo "Run failed: No benchmark result files found for ${RESULT_FILENAME}_*.json" >&2
               exit 1
@@ -466,7 +392,7 @@ jobs:
           fi
 
       - name: Process result
-        if: ${{ !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
+        if: ${{ always() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
         run: |
@@ -476,36 +402,57 @@ jobs:
             export POWER_PRODUCER_SHA="$(cat power-producer-sha.txt)"
             echo "POWER_PRODUCER_SHA derived from launcher stamp: $POWER_PRODUCER_SHA"
           fi
-          # Process each result file
-          for result_file in ${RESULT_FILENAME}_*.json; do
-            if [ -f "$result_file" ]; then
-              echo "Processing $result_file"
-              # Extract GPU count, prefill_gpus and decode_gpus from filename for tp_size calculation
-              gpus=$(echo "$result_file" | sed -n "s/.*_gpus_\([0-9][0-9]*\).*\.json/\1/p")
-              prefill_gpus=$(echo "$result_file" | sed -n "s/.*_ctx_\([0-9]*\).*\.json/\1/p")
-              decode_gpus=$(echo "$result_file" | sed -n "s/.*_gen_\([0-9]*\).*\.json/\1/p")
-
-              if [ -n "$gpus" ]; then
-                # Non-disagg results lack _ctx_/_gen_ fields; all GPUs belong to the single worker
-                if [ -z "$prefill_gpus" ] || [ -z "$decode_gpus" ]; then
-                  prefill_gpus=$gpus
-                  decode_gpus=0
-                fi
-                echo "Extracted: gpus=$gpus, prefill_gpus=$prefill_gpus, decode_gpus=$decode_gpus"
-                RESULT_FILENAME=${result_file%.json} IS_MULTINODE=true PREFILL_GPUS="$prefill_gpus" DECODE_GPUS="$decode_gpus" python3 utils/process_result.py
+          # Older measured refs predate the batch CLI. Import failures in a
+          # present processor are errors, not a reason to downgrade validation.
+          has_batch=$(python3 - <<'PY'
+          import importlib
+          from pathlib import Path
+          if Path('infx/results/fixed_sequence.py').is_file():
+              module = importlib.import_module('infx.results.fixed_sequence')
+              print(int(hasattr(module, 'process_multinode_results')))
+          else:
+              print(0)
+          PY
+          )
+          if [ "$has_batch" = 1 ]; then
+            python3 utils/process_result.py --all
+          else
+            batch_rc=0
+            observed=()
+            for result_file in "${RESULT_FILENAME}"_*.json; do
+              [ -f "$result_file" ] || continue
+              case "$result_file" in
+                *.pytorch.json|"${RESULT_FILENAME}_gpu_metrics_context.json"|"${RESULT_FILENAME}_gpu_metrics_identity.json") continue ;;
+              esac
+              if [[ "$result_file" =~ _(c|conc|concurrency_)([0-9]+)(_req_rate_[^_]+)?_gpus_([0-9]+)(_ctx_([0-9]+)_gen_([0-9]+))?\.json$ ]]; then
+                observed+=("${BASH_REMATCH[2]}")
+                gpus=${BASH_REMATCH[4]}
+                prefill_gpus=${BASH_REMATCH[6]:-$gpus}
+                decode_gpus=${BASH_REMATCH[7]:-0}
+                RESULT_FILENAME=${result_file%.json} IS_MULTINODE=true PREFILL_GPUS="$prefill_gpus" DECODE_GPUS="$decode_gpus" \
+                  python3 utils/process_result.py || batch_rc=1
+              else
+                echo "Unrecognized result filename: $result_file" >&2
+                batch_rc=1
               fi
+            done
+            read -r -a expected <<< "$CONC_LIST"
+            if [[ "$(printf '%s\n' "${observed[@]}" | sort -n)" != "$(printf '%s\n' "${expected[@]}" | sort -n)" ]]; then
+              echo 'Legacy result batch has missing, duplicate or unexpected concurrencies' >&2
+              batch_rc=1
             fi
-          done
+            exit "$batch_rc"
+          fi
 
       - name: Upload result
-        if: ${{ !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
+        if: ${{ success() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}_*.json
 
       - name: Upload power audit bundle
-        if: ${{ always() && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
+        if: ${{ always() && !inputs.eval-only }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: power_audit_${{ env.RESULT_FILENAME }}
@@ -514,7 +461,12 @@ jobs:
             agg_${{ env.RESULT_FILENAME }}_*.json
             power_validation_${{ env.RESULT_FILENAME }}_*.json
             LOGS/power/**
+            LOGS/native_power/**
+            result_processing_${{ env.RESULT_FILENAME }}.json
             LOGS/*/results_*.json
+            LOGS/agentic/**/agentic_power_concurrency_*.json
+            LOGS/agentic/**/agentic_power_timezone_offset.txt
+            LOGS/agentic/**/power_validation.json
           if-no-files-found: ignore
 
       - name: Upload server logs
@@ -527,7 +479,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload agentic aggregated result
-        if: ${{ !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}
+        if: ${{ always() && !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}

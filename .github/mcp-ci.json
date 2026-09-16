@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "inferencemax-repos": {
+      "command": "uv",
+      "args": [
+        "run", "--project", "${INFERENCEMAX_ROOT}", "--locked", "--group", "mcp",
+        "python", "${INFERENCEMAX_ROOT}/.claude/mcp/server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "."
+      }
+    }
+  }
+}

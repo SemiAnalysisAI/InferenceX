@@ -22,10 +22,9 @@ echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTIO
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
-# temporary, avoids risk of OOM error
+# Guards against OOM.
 export TLLM_OVERRIDE_LAYER_NUM=61
 
-# ========= Determine other parameters based on ISL, OSL, CONC =========
 CUDA_GRAPH_MAX_BATCH_SIZE=$CONC
 MOE_BACKEND="TRTLLM"
 PIECEWISE_CUDA_GRAPHS="false"
@@ -82,7 +81,6 @@ batch_wait_max_tokens_ratio: 0.8
 EOF
 fi
 
-# Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
@@ -98,7 +96,6 @@ if [ "${EVAL_ONLY}" = "true" ]; then
 fi
 
 if [[ "$PIECEWISE_CUDA_GRAPHS" == "true" ]]; then
-    # [2^i for i in range(8)] + [i for i in range(256, max_num_tokens, 256)] + [max_num_tokens]
     capture_tokens=(1 2 4 8 16 32 64 128)
     capture_tokens+=( $(seq 256 256 $MAX_NUM_TOKENS))
     if [ $((MAX_NUM_TOKENS%256)) -ne 0 ]; then
@@ -113,7 +110,6 @@ torch_compile_config:
 EOF
 fi
 
-# Launch TRT-LLM server
 mpirun -n 1 --oversubscribe --allow-run-as-root \
     trtllm-serve $MODEL --port=$PORT \
     --trust_remote_code \
@@ -126,7 +122,6 @@ mpirun -n 1 --oversubscribe --allow-run-as-root \
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 run_benchmark_serving \
@@ -141,12 +136,10 @@ run_benchmark_serving \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
 set +x

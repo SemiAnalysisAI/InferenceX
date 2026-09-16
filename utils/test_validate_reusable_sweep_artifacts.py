@@ -2,20 +2,92 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
-from validate_reusable_sweep_artifacts import (
+import pytest
+
+from infx.results.evals import result_error, result_order
+from infx.results.eval_artifacts import inspect_eval_artifacts
+from infx.workflows.validate_reusable_sweep_artifacts import (
     agentic_key,
     benchmark_key,
     dedupe_reran_evals,
     eval_key,
     eval_result_key,
-    main,
     validate_agentic_artifacts,
     validate_eval_artifacts,
     validate_fixed_artifacts,
 )
+
+
+@pytest.mark.parametrize("metrics,config,expected_score,expected_error", [
+    ({"exact_match,custom": 0.5}, {"filter_list": [{"name": "custom"}]}, None, None),
+    ({"strict_metric,extract": 0.75},
+     {"metric_list": [{"metric": "strict_metric"}],
+      "filter_list": [{"name": "plain"}, {"name": "extract"}]},
+     0.75, "has no score for task 'task'"),
+    ({"exact_match,strict-first": -0.1, "exact_match,strict-last": 0.75},
+     {"filter_list": [{"name": "strict-first"}, {"name": "strict-last"}]},
+     0.75, "has invalid score 'exact_match,strict-first' for task 'task': -0.1"),
+])
+def test_reuse_preserves_stricter_and_distinct_metric_selection(
+    tmp_path: Path, metrics: dict, config: dict, expected_score: float | None,
+    expected_error: str | None,
+) -> None:
+    from infx.results.collect_eval_results import collect_eval_rows
+
+    (tmp_path / "meta_env.json").write_text("{}")
+    path = tmp_path / "results.json"
+    path.write_text(json.dumps({
+        "lm_eval_version": "test", "results": {"task": metrics},
+        "configs": {"task": config},
+    }))
+
+    assert result_error(json.loads(path.read_text())) == expected_error
+    [row] = collect_eval_rows(tmp_path)
+    assert row["score"] == expected_score
+    assert row["infrastructure_success"] is (expected_score is not None)
+
+
+def test_reuse_rejects_present_null_integration_error(tmp_path: Path) -> None:
+    path = tmp_path / "results.json"
+    path.write_text(json.dumps({
+        **raw_eval_result(), "integration_error": None,
+    }))
+    assert result_error(json.loads(path.read_text())) == "reports an integration error"
+
+
+@pytest.mark.parametrize("name,expected_ns", [
+    ("results_1970-01-01T00-00-00.json", 0),
+    ("results_1970-01-01T00-00-01.000000009.json", 1_000_000_009),
+    ("results_1970-01-01T00-00-00.1234567899_conc4_2.json", 123_456_789),
+    ("results_1969-12-31T23-59-59.75.json", -250_000_000),
+    ("results_1970-01-02T00-00-00.json", 86_400_000_000_000),
+    ("results_2026-99-99T99-99-99.json", 9_000_000_000),
+    ("results_legacy.json", 9_000_000_000),
+])
+def test_result_order_preserves_nanoseconds_and_legacy_fallback(
+    tmp_path: Path, name: str, expected_ns: int,
+) -> None:
+    path = tmp_path / name
+    path.write_text("{}")
+    os.utime(path, ns=(9_000_000_000, 9_000_000_000))
+    assert result_order(path) == (expected_ns, name)
+
+
+def test_result_order_breaks_equal_recency_by_filename(tmp_path: Path) -> None:
+    from infx.results.collect_eval_results import detect_lm_eval_jsons
+
+    early = tmp_path / "results_a_1970-01-01T00-00-01.1.json"
+    late = tmp_path / "results_z_1970-01-01T00-00-01.100000000.json"
+    for path in (late, early):
+        path.write_text('{"lm_eval_version":"0.4.0"}')
+    os.utime(early, ns=(9_000_000_000, 9_000_000_000))
+    os.utime(late, ns=(1_000_000_000, 1_000_000_000))
+    assert result_order(early) < result_order(late)
+    assert detect_lm_eval_jsons(tmp_path) == [late]
 
 
 def write_eval_aggregate(
@@ -338,24 +410,7 @@ def write_agentic_artifacts(
     (root / f"agentic_{result_name}").mkdir()
 
 
-def test_eval_validation_requires_raw_result_dirs_not_eval_debug_dirs(
-    tmp_path: Path,
-) -> None:
-    write_eval_aggregate(
-        tmp_path,
-        [single_eval_result(32), single_eval_result(64)],
-    )
-
-    (tmp_path / "eval_server_logs_gptoss_8k1k_runner").mkdir()
-    (tmp_path / "eval_gpu_metrics_gptoss_8k1k_runner").mkdir()
-    write_raw_eval_artifact(tmp_path, 32)
-
-    errors = validate_eval_artifacts(tmp_path)
-
-    assert any("unexpected" in error for error in errors)
-
-
-def test_eval_validation_accepts_matching_legacy_artifacts_without_suite(
+def test_eval_validation_accepts_legacy_results_alongside_debug_artifacts(
     tmp_path: Path,
 ) -> None:
     write_eval_aggregate(
@@ -368,8 +423,102 @@ def test_eval_validation_accepts_matching_legacy_artifacts_without_suite(
         64,
         physical_runner="h100-dgxc-slurm_01",
     )
+    (tmp_path / "eval_server_logs_fixture").mkdir()
+    (tmp_path / "eval_gpu_metrics_fixture").mkdir()
 
     assert validate_eval_artifacts(tmp_path) == []
+
+
+@pytest.mark.parametrize("metadata,error", [
+    (None, "is missing meta_env.json"),
+    (b"{", "has invalid meta_env.json: Expecting property name enclosed in double quotes: "
+            "line 1 column 2 (char 1)"),
+    (b"[]", "has non-object meta_env.json"),
+])
+def test_eval_inspection_keeps_valid_rows_and_reports_bad_metadata(
+    tmp_path: Path, metadata: bytes | None, error: str,
+) -> None:
+    write_raw_eval_artifact(tmp_path, 32)
+    write_eval_aggregate(tmp_path, [single_eval_result(32)])
+    invalid = tmp_path / "eval_invalid"
+    invalid.mkdir()
+    if metadata is not None:
+        (invalid / "meta_env.json").write_bytes(metadata)
+
+    rows, errors = inspect_eval_artifacts(tmp_path)
+
+    assert rows == [(
+        "single", "h100-dgxc-slurm", "gptoss", "vllm", "fp4",
+        "<legacy-eval-suite>", "none", 8192, 1024, 2, 1, 1, 1, 1, False, 32, "gsm8k",
+    )]
+    assert errors == [f"raw eval artifact 'eval_invalid' {error}"]
+
+
+def test_collection_tolerates_decoder_failure_but_reuse_does_not(tmp_path: Path) -> None:
+    from infx.results.collect_eval_results import collect_eval_rows
+
+    write_raw_eval_artifact(tmp_path, 32)
+    raw = tmp_path / "eval_result_conc32_h100-dgxc-slurm_00"
+    (raw / "results_deep.json").write_text("[" * 10000 + "]" * 10000)
+
+    [row] = collect_eval_rows(tmp_path)
+    assert (row["task"], row["conc"], row["score"]) == ("gsm8k", 32, 0.9)
+    with pytest.raises(RecursionError):
+        inspect_eval_artifacts(tmp_path)
+
+
+@pytest.mark.parametrize("failed_rerun", [False, True])
+def test_klaud_coverage_validates_the_rerun_it_retains(tmp_path: Path, failed_rerun: bool) -> None:
+    from infx.klaud.github import VerificationError
+    from infx.klaud.validation import check_coverage
+
+    entry = {
+        "image": "fixture:latest", "model": "fixture/model", "model-prefix": "gptoss",
+        "precision": "fp4", "framework": "vllm", "spec-decoding": "none",
+        "runner": "h100-dgxc-slurm", "isl": 8192, "osl": 1024,
+        "tp": 2, "pp": 1, "dcp-size": 1, "pcp-size": 1, "ep": 1, "dp-attn": False,
+        "conc": 32, "max-model-len": 9216, "exp-name": "fixture", "disagg": False,
+        "run-eval": True, "recipe-fingerprint": "a" * 64, "eval-suite": "gsm8k",
+    }
+    matrix = {
+        "single_node": {"all": [entry]}, "evals": [entry],
+        "changelog_metadata": {"head_ref": "head", "entries": [{"config-keys": ["fixture"]}]},
+    }
+    manifest = {
+        "head": "head", "run-id": 42, "run-attempt": 2, "full-sweep": True, "matrix": matrix,
+    }
+    fixed = tmp_path / "results_bmk"
+    fixed.mkdir()
+    (fixed / "agg.json").write_text(json.dumps([
+        {"recipe_fingerprint": "a" * 64, "conc": 32, "image": "fixture:latest"},
+    ]))
+    aggregates = []
+    for name, day in [("old", "01"), ("new", "02")]:
+        artifact = tmp_path / f"eval_{name}"
+        artifact.mkdir()
+        (artifact / "meta_env.json").write_text(json.dumps(single_eval_meta(32, eval_suite="gsm8k")))
+        result = raw_eval_result(score=-1 if failed_rerun and name == "new" else 0.9)
+        filename = f"results_2026-01-{day}T00-00-00.json"
+        (artifact / filename).write_text(json.dumps(result))
+        aggregates.append({
+            **single_eval_result(32, eval_suite="gsm8k"), "source": f"eval_{name}/{filename}",
+        })
+    write_eval_aggregate(tmp_path, aggregates)
+
+    args = (tmp_path, manifest, {"head_sha": "head", "id": 42, "run_attempt": 2},
+            "configs/nvidia-master.yaml:fixture", matrix)
+    if failed_rerun:
+        with pytest.raises(VerificationError, match="Full-sweep result coverage or consistency failed"):
+            check_coverage(*args)
+        assert (tmp_path / "eval_old").is_dir()
+    else:
+        check_coverage(*args)
+        assert not (tmp_path / "eval_old").exists()
+    retained = json.loads((tmp_path / "eval_results_all/agg_eval_all.json").read_text())
+    assert [row["source"] for row in retained] == (
+        ["eval_old/results_2026-01-01T00-00-00.json", "eval_new/results_2026-01-02T00-00-00.json"]
+        if failed_rerun else ["eval_new/results_2026-01-02T00-00-00.json"]
+    )
 
 
 def test_eval_validation_separates_explicit_suite_identities(
@@ -737,6 +886,26 @@ def test_eval_validation_rejects_malformed_batch_metadata(
         assert any(expected in error for error in errors), errors
 
 
+def test_reuse_reports_unexpected_results_before_missing_concurrency(tmp_path: Path) -> None:
+    from infx.workflows.validate_reusable_sweep_artifacts import raw_eval_key_rows
+
+    write_raw_batched_eval_artifact(tmp_path, [16, 4])
+    artifact = tmp_path / "eval_gptoss_8k1k_batch"
+    (artifact / "results_test_conc4.json").unlink()
+    for name in ("results_test.json", "results_test_conc8.json"):
+        (artifact / name).write_text(json.dumps(raw_eval_result()))
+
+    rows, errors = raw_eval_key_rows(tmp_path)
+
+    assert len(rows) == 1
+    prefix = "raw eval artifact 'eval_gptoss_8k1k_batch'"
+    assert set(errors[:-1]) == {
+        f"{prefix} has batched result 'results_test.json' without a concurrency suffix",
+        f"{prefix} has result 'results_test_conc8.json' for unexpected concurrency 8",
+    }
+    assert errors[-1] == f"{prefix} has no recognized eval result for concurrency 4"
+
+
 def test_fixed_sequence_validation_accepts_unique_source_rows(tmp_path: Path) -> None:
     results = tmp_path / "results_bmk"
     results.mkdir()
@@ -759,14 +928,6 @@ def test_fixed_sequence_validation_rejects_duplicate_identity(
     errors = validate_fixed_artifacts(tmp_path)
 
     assert "fixed-sequence artifacts contain 1 duplicate row(s)" in errors
-
-
-def test_agentic_validation_accepts_run_sweep_point_artifacts(
-    tmp_path: Path,
-) -> None:
-    write_agentic_artifacts(tmp_path)
-
-    assert validate_agentic_artifacts(tmp_path) == []
 
 
 def test_agentic_validation_accepts_additional_source_identity(
@@ -831,23 +992,27 @@ def test_agentic_validation_handles_mapping_kv_offload_backend(
     assert "agentic point artifacts contain 1 duplicate row(s)" in errors
 
 
-def test_eval_only_main_does_not_require_benchmark_artifacts(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
+def test_eval_only_cli_runs_outside_checkout_without_benchmark_artifacts(tmp_path: Path) -> None:
     write_eval_aggregate(tmp_path, [single_eval_result(32)])
     write_raw_eval_artifact(tmp_path, 32)
-    monkeypatch.setattr(
-        sys,
-        "argv",
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    completed = subprocess.run(
         [
-            "validate_reusable_sweep_artifacts.py",
+            sys.executable,
+            str(Path(__file__).with_name("validate_reusable_sweep_artifacts.py")),
             "--artifacts-dir",
             str(tmp_path),
         ],
+        cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10,
     )
 
-    assert main() == 0
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stderr == ""
+    assert completed.stdout == (
+        "Reusable sweep artifacts validated: "
+        "0 fixed-sequence row(s), 0 agentic row(s), 1 eval row(s).\n"
+    )
 
 
 # ── dedupe_reran_evals ────────────────────────────────────────────────────────
@@ -902,6 +1067,40 @@ def _dd_write_legacy_raw(
         (artifact_dir / f"results_{timestamp}.json").write_text(
             json.dumps(raw_eval_result())
         )
+
+
+@pytest.mark.parametrize("payload,error", [
+    ("[" * 10000 + "]" * 10000, RecursionError),
+    ("9" * 5000, ValueError),
+])
+def test_dedupe_checks_result_decode_errors_even_without_metadata(
+    tmp_path: Path, payload: str, error: type[Exception],
+) -> None:
+    _dd_write_legacy_raw(tmp_path, "eval_old", 4, "2026-01-01T00-00-00")
+    _dd_write_legacy_raw(tmp_path, "eval_new", 4, "2026-01-02T00-00-00")
+    aggregate = _dd_write_aggregate(tmp_path, [
+        _dd_agg_row(4, "eval_old/results_2026-01-01T00-00-00.json", 0.5),
+        _dd_agg_row(4, "eval_new/results_2026-01-02T00-00-00.json", 0.9),
+    ])
+    before = aggregate.read_bytes()
+    invalid = tmp_path / "eval_invalid"
+    invalid.mkdir()
+    (invalid / "results.json").write_text(payload)
+
+    with pytest.raises(error):
+        dedupe_reran_evals(tmp_path)
+
+    assert aggregate.read_bytes() == before
+    assert (tmp_path / "eval_old/results_2026-01-01T00-00-00.json").is_file()
+
+
+def test_dedupe_reports_aggregate_identity_error_before_decoding_raw_results(tmp_path: Path) -> None:
+    _dd_write_aggregate(tmp_path, [{"conc": float("inf")}])
+    _dd_write_legacy_raw(tmp_path, "eval_raw", 4, None)
+    (tmp_path / "eval_raw/results.json").write_text("[" * 10000 + "]" * 10000)
+
+    with pytest.raises(OverflowError, match="cannot convert float infinity to integer"):
+        dedupe_reran_evals(tmp_path)
 
 
 def test_dedupe_keeps_latest_legacy_rerun(tmp_path: Path) -> None:
@@ -1289,7 +1488,6 @@ def test_dedupe_requires_aggregate_row_for_latest_raw_directory(
     assert any("duplicate" in error for error in validate_eval_artifacts(tmp_path))
 
 
-
 def test_eval_validation_accepts_extract_filter_primary_score(
     tmp_path: Path,
 ) -> None:
@@ -1334,16 +1532,21 @@ def test_eval_dedupe_leaves_invalid_suite_for_validation(
     assert any("invalid eval_suite" in error for error in errors)
 
 
-def test_dedupe_uses_winning_legacy_result_mtime_for_aggregate(
-    tmp_path: Path,
+@pytest.mark.parametrize("newer_name,older_ns", [
+    ("results_a.json", 1_000_000_000),
+    ("results_c.json", 2_000_000_000),
+])
+def test_dedupe_uses_winning_legacy_result_for_aggregate(
+    tmp_path: Path, newer_name: str, older_ns: int,
 ) -> None:
     artifact_name = "eval_minimaxm3_conc4096_b300-nv_retry"
-    _dd_write_legacy_raw(tmp_path, artifact_name, 4096, "a")
+    _dd_write_legacy_raw(tmp_path, artifact_name, 4096, None)
     artifact_dir = tmp_path / artifact_name
     older = artifact_dir / "results_b.json"
     older.write_text(json.dumps(raw_eval_result()))
-    newer = artifact_dir / "results_a.json"
-    os.utime(older, ns=(1_000_000_000, 1_000_000_000))
+    newer = artifact_dir / newer_name
+    newer.write_text(json.dumps(raw_eval_result()))
+    os.utime(older, ns=(older_ns, older_ns))
     os.utime(newer, ns=(2_000_000_000, 2_000_000_000))
     _dd_write_aggregate(
         tmp_path,
@@ -1355,7 +1558,7 @@ def test_dedupe_uses_winning_legacy_result_mtime_for_aggregate(
             ),
             _dd_agg_row(
                 4096,
-                f"eval_results/{artifact_name}/results_a.json",
+                f"eval_results/{artifact_name}/{newer_name}",
                 0.9,
             ),
         ],
@@ -1368,3 +1571,72 @@ def test_dedupe_uses_winning_legacy_result_mtime_for_aggregate(
     )
     assert [row["em_strict"] for row in rows] == [0.9]
     assert validate_eval_artifacts(tmp_path) == []
+
+
+@pytest.mark.parametrize("separator", ["/", "\\"])
+def test_dedupe_breaks_ties_by_directory_then_aggregate_location(
+    tmp_path: Path, separator: str,
+) -> None:
+    # Equal result timestamps and filenames choose the last directory name;
+    # repeated rows for that file choose the last aggregate filename and index.
+    stamp = "2026-06-27T01-00-00.000000"
+    for name in ("eval_retry_z", "eval_retry_a"):
+        _dd_write_legacy_raw(tmp_path, name, 16, stamp)
+    source = separator.join(["eval_results", "eval_retry_z", f"results_{stamp}.json"])
+    first = _dd_write_aggregate(tmp_path, [
+        _dd_agg_row(16, f"eval_results/eval_retry_a/results_{stamp}.json", 0.1),
+        _dd_agg_row(16, source, 0.2),
+    ])
+    last = first.with_name("z.json")
+    chosen = _dd_agg_row(16, source, 0.4)
+    last.write_text(json.dumps([_dd_agg_row(16, source, 0.3), chosen]))
+
+    assert dedupe_reran_evals(tmp_path) == [
+        "agg_eval_all.json: kept 0 of 2 eval row(s)",
+        "z.json: kept 1 of 2 eval row(s)",
+        "removed superseded raw eval dir 'eval_retry_a'",
+    ]
+    assert json.loads(first.read_text()) == []
+    assert json.loads(last.read_text()) == [chosen]
+    assert not (tmp_path / "eval_retry_a").exists()
+    assert (tmp_path / "eval_retry_z" / f"results_{stamp}.json").is_file()
+    assert validate_eval_artifacts(tmp_path) == []
+    assert dedupe_reran_evals(tmp_path) == []
+
+
+def test_dedupe_selects_result_files_per_batched_concurrency(tmp_path: Path) -> None:
+    name = "eval_retry_batch"
+    _dd_write_legacy_raw(tmp_path, name, 0, None)
+    meta = {**_dd_meta(0), "eval_concs": [16, 32], "completed_eval_concs": [16, 32]}
+    meta_path = tmp_path / name / "meta_env.json"
+    meta_path.write_text(json.dumps(meta))
+    rows = []
+    for conc, suffix, mtime, score in (
+        (16, "a", 10, 0.1), (16, "b", 20, 0.6),
+        (32, "a", 20, 0.9), (32, "b", 10, 0.2),
+    ):
+        path = tmp_path / name / f"results_{suffix}_conc{conc}.json"
+        path.write_text(json.dumps(raw_eval_result(score)))
+        os.utime(path, (mtime, mtime))
+        rows.append(_dd_agg_row(conc, f"eval_results/{name}/{path.name}", score))
+    aggregate = _dd_write_aggregate(tmp_path, rows)
+    raw_bytes = {path: path.read_bytes() for path in (tmp_path / name).iterdir()}
+
+    assert dedupe_reran_evals(tmp_path) == ["agg_eval_all.json: kept 2 of 4 eval row(s)"]
+    assert [row["em_strict"] for row in json.loads(aggregate.read_text())] == [0.6, 0.9]
+    assert {path: path.read_bytes() for path in (tmp_path / name).iterdir()} == raw_bytes
+    assert validate_eval_artifacts(tmp_path) == []
+
+
+def test_dedupe_leaves_rows_without_the_selected_result_filename(tmp_path: Path) -> None:
+    name = "eval_retry"
+    _dd_write_legacy_raw(tmp_path, name, 16, "latest")
+    aggregate = _dd_write_aggregate(tmp_path, [
+        _dd_agg_row(16, f"eval_results/{name}/results_old.json", 0.1),
+        _dd_agg_row(16, f"eval_results/{name}/results_other.json", 0.9),
+    ])
+    before = aggregate.read_bytes()
+
+    assert dedupe_reran_evals(tmp_path) == []
+    assert aggregate.read_bytes() == before
+    assert any("duplicate" in error for error in validate_eval_artifacts(tmp_path))

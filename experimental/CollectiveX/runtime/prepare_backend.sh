@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prepare one backend per allocated node and persist its rank environment.
-set -euo pipefail
+set -eo pipefail
 
 cd /ix/experimental/CollectiveX
 # shellcheck source=../runtime/common.sh
@@ -20,7 +20,7 @@ readonly -a RANK_ENV_VARS=(
 )
 readonly -a DEEPEP_RANK_UNSETS=(EP_SUPPRESS_NCCL_CHECK)
 
-# ---- discovery --------------------------------------------------------------
+# discovery
 
 cuda_arch() {
   local expected detected
@@ -129,8 +129,17 @@ deepep_cache_root() {
   base="${COLLX_BACKEND_CACHE_ROOT:-}"
   [[ "$base" = /* ]] || return 1
   image="$(printf '%s' "${COLLECTIVEX_IMAGE:-manual}" | tr -cs 'A-Za-z0-9_.-' '-')"
-  printf '%s/deepep-v2-%s-sm%s-%s-%s' \
-    "$base" "$cpu" "${arch/./}" "${image#-}" "${COLLX_DEEPEP_V2_COMMIT:0:12}"
+  # The NVSHMEM wheel is part of the built venv's identity (see common.sh: the cu12
+  # wheel on cu130 images broke sm103), so it keys the cache and a spec change rebuilds.
+  local nvshmem_key="${COLLX_DEEPEP_V2_NVSHMEM_SPEC#nvidia-}"
+  nvshmem_key="${nvshmem_key//==/-}"
+  local torch_key="${COLLX_DEEPEP_V2_TORCH_SPEC//==/-}"
+  local build_gen="${COLLX_DEEPEP_V2_BUILD_GEN:?}"
+  [[ "$nvshmem_key" =~ ^[A-Za-z0-9._-]+$ && "$torch_key" =~ ^[A-Za-z0-9._-]+$ \
+     && "$build_gen" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  printf '%s/deepep-v2-%s-sm%s-%s-%s-%s-%s-%s' \
+    "$base" "$cpu" "${arch/./}" "${image#-}" "${COLLX_DEEPEP_V2_COMMIT:0:12}" \
+    "$torch_key" "$nvshmem_key" "$build_gen"
 }
 
 deepep_activate() {
@@ -145,7 +154,7 @@ deepep_activate() {
   nccl_root="$(nvidia_package_root "$venv/bin/python" nvidia-nccl-cu13 nccl)" \
     || { collx_log "ERROR: DeepEP V2 NCCL package root is unavailable"; return 1; }
   nvshmem_package="$(nvidia_package_root \
-    "$venv/bin/python" nvidia-nvshmem-cu12 nvshmem)" \
+    "$venv/bin/python" "${COLLX_DEEPEP_V2_NVSHMEM_SPEC%%==*}" nvshmem)" \
     || { collx_log "ERROR: DeepEP V2 NVSHMEM package root is unavailable"; return 1; }
   overlay="$(deepep_nvshmem_overlay "$root" "$nvshmem_package")" || return 1
   toolchain="$(cuda_toolchain_paths)" || return 1
@@ -203,10 +212,10 @@ deepep_install() {
   pip=("$venv/bin/python" -m pip install -q --disable-pip-version-check --no-input)
   "${pip[@]}" \
     "pip==26.1.2" "setuptools==82.0.1" "wheel==0.47.0" "ninja==1.13.0" \
-    "numpy==2.2.6" "nvidia-nvshmem-cu12==3.3.9" >&2 2>&1 \
+    "numpy==2.2.6" "$COLLX_DEEPEP_V2_NVSHMEM_SPEC" >&2 2>&1 \
     || { collx_log "ERROR: DeepEP V2 build-tool installation failed"; return 1; }
   "${pip[@]}" --index-url https://download.pytorch.org/whl/cu130 \
-    --extra-index-url https://pypi.org/simple "torch==2.10.0" >&2 2>&1 \
+    --extra-index-url https://pypi.org/simple "$COLLX_DEEPEP_V2_TORCH_SPEC" >&2 2>&1 \
     || { collx_log "ERROR: torch 2.10.0+cu130 installation failed"; return 1; }
   # Torch pins NCCL 2.28.9; ElasticBuffer requires 2.30.4.
   "${pip[@]}" --force-reinstall --no-deps "nvidia-nccl-cu13==2.30.4" >&2 2>&1 \
@@ -215,7 +224,12 @@ deepep_install() {
     || { collx_log "ERROR: DeepEP V2 environment activation failed"; return 1; }
   collx_materialize_deepep_source "$source_dir" \
     || { collx_log "ERROR: DeepEP V2 staged source is invalid"; return 1; }
+  # The RDC device-link step (nvcc -dlink) gets no -gencode from the extension build, so nvcc
+  # falls back to its default arch (sm_75 on CUDA 13) and links kernels that cannot load on the
+  # target GPU (gb300/sm103: cudaErrorUnknown). NVCC_PREPEND_FLAGS reaches the dlink too.
+  local gencode="-gencode=arch=compute_${arch/./},code=sm_${arch/./}"
   (cd "$source_dir" && TORCH_CUDA_ARCH_LIST="$arch" MAX_JOBS=16 \
+    NVCC_PREPEND_FLAGS="$gencode ${NVCC_PREPEND_FLAGS:-}" \
     "$venv/bin/python" -m pip install -q --no-build-isolation --no-deps \
       --force-reinstall .) >&2 2>&1 \
     || { collx_log "ERROR: DeepEP V2 build failed"; return 1; }
@@ -224,7 +238,7 @@ deepep_install() {
   : > "$root/.ready"
 }
 
-# ---- DeepEP lifecycle -------------------------------------------------------
+# DeepEP lifecycle
 
 deepep_prepare() {
   local arch root venv source_dir ready lock_path
@@ -256,9 +270,8 @@ deepep_prepare() {
   collx_log "DeepEP V2 ready ($COLLX_DEEPEP_V2_COMMIT, ElasticBuffer, NCCL Device API; LSA/Gin selected by adapter)"
 }
 
-# ---- UCCL-EP lifecycle ------------------------------------------------------
+# UCCL-EP lifecycle
 
-# Registry arch string for the runner (gfx942/gfx950 on AMD) for PYTORCH_ROCM_ARCH.
 uccl_rocm_arch() {
   python3 - "$COLLX_RUNNER" <<'PY'
 import json, sys
@@ -277,17 +290,11 @@ assert hasattr(Buffer, "low_latency_dispatch") and hasattr(Buffer, "get_dispatch
 PY
 }
 
-# Direct in-container source build against the image's torch — validated on h200 (sglang
-# cu130). NOT `build.sh` (that spins up its own Docker image to make a wheel and cannot run
-# inside enroot/pyxis). single-slurm and mi-amds run the writable container as remapped root,
-# so the build needs no venv. verbs/nl/numa dev headers ship in the sglang/rocm images; only
-# nanobind must be added. The built deep_ep/uccl packages are persisted under a cache root and
-# put on PYTHONPATH (which write_rank_env carries to the ranks), so later allocations reuse them
-# without recompiling — the same copy+PYTHONPATH scheme the mi-tw Docker launcher already uses.
+# UCCL is built in-container against the image's torch, not with upstream `build.sh` (that spins
+# up its own Docker image and cannot run inside enroot/pyxis). The built deep_ep/uccl packages
+# persist under a cache root and reach the ranks via PYTHONPATH, so later allocations skip the build.
 
-# Cache root keyed by cpu + build arch + image + pinned commit, under the shared /cx-cache mount
-# ($COLLX_BACKEND_CACHE_ROOT). Returns non-zero when no shared cache is mounted (manual runs), so
-# the caller falls back to a node-local build. Mirrors deepep_cache_root.
+# Returns non-zero when no shared cache is mounted (manual runs); the caller then builds node-local.
 uccl_cache_root() {
   local arch="$1" cpu base image
   cpu="$(uname -m)"
@@ -300,8 +307,7 @@ uccl_cache_root() {
     "$base" "$cpu" "${arch#-}" "${image#-}" "${COLLX_UCCL_COMMIT:0:12}"
 }
 
-# Put the persisted build ($root/site) on PYTHONPATH for the probe and the rank tasks; mirror the
-# minimal runtime bits of deepep_activate. CDNA additionally needs the aggressive host-atomic path.
+# CDNA needs UCCL's aggressive host-atomic path.
 uccl_activate() {
   local site="$1/site"
   [ -d "$site" ] || { collx_log "ERROR: UCCL cache site is unavailable"; return 1; }
@@ -309,10 +315,6 @@ uccl_activate() {
   [ "${COLLX_VENDOR:-nvidia}" != amd ] || export UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC=1
 }
 
-# Build UCCL from source into $root/site (fresh root, with a .ready marker written LAST). The
-# build installs into the image's system python as a sandbox, then copies the built deep_ep/uccl
-# packages into the cache; the runtime imports them via PYTHONPATH (uccl_activate), so cache-hit
-# and cache-miss paths import identically. Only nanobind is added to the image.
 uccl_install() {
   local root="$1" arch="$2" source_dir="/tmp/collectivex-uccl-$COLLX_UCCL_COMMIT" arch_env sp
   if [ -e "$root" ] || [ -L "$root" ]; then
@@ -320,8 +322,7 @@ uccl_install() {
   fi
   mkdir -m 700 "$root" || { collx_log "ERROR: UCCL cache-create failed"; return 1; }
   collx_log "UCCL-EP: building $COLLX_UCCL_COMMIT from source (USE_DMABUF, PER_EXPERT_BATCHING)"
-  # Plain install first; some sglang/rocm image variants mark the system env externally-managed
-  # (PEP 668), so fall back to --break-system-packages (a no-op on older pip that lacks the flag).
+  # Some sglang/rocm images mark the system env externally-managed (PEP 668).
   { python3 -m pip install -q --disable-pip-version-check --no-input nanobind \
       || python3 -m pip install -q --disable-pip-version-check --no-input \
            --break-system-packages nanobind; } >&2 2>&1 \
@@ -330,13 +331,9 @@ uccl_install() {
     || { collx_log "ERROR: UCCL staged source is invalid"; return 1; }
   if [ "${COLLX_VENDOR:-nvidia}" = amd ]; then
     arch_env="PYTORCH_ROCM_ARCH=$arch"
-    # Managed/unified memory (cudaMallocManaged) is unavailable on our CDNA nodes (hipMallocManaged
-    # fails even for 4 KiB, regardless of XNACK / --privileged / memlock). UCCL's HIP CPU-proxy path
-    # uses it for the d2h channel handles + proxy atomic buffer; pinned host memory (cudaMallocHost)
-    # is coherent + device-accessible on gfx942/gfx950 and is already used elsewhere in UCCL (e.g.
-    # the RDMA scratch), so swap the two on the runtime path before building. Validated on mi300x-tw
-    # (bf16/fp8 normal green). NB: build the WHOLE tree (materialize copies it) — the ROCm path
-    # includes top-level util/gpu_rt.h.
+    # hipMallocManaged fails on our CDNA nodes (even 4 KiB, regardless of XNACK or memlock). UCCL's
+    # HIP CPU-proxy path uses cudaMallocManaged for the d2h channel handles and proxy atomic buffer;
+    # pinned host memory (cudaMallocHost) is coherent and device-accessible on gfx942/gfx950.
     sed -i 's/cudaMallocManaged/cudaMallocHost/g' \
       "$source_dir/ep/src/uccl_ep.cc" "$source_dir/ep/src/uccl_proxy.cpp" \
       || { collx_log "ERROR: UCCL AMD managed-memory patch failed"; return 1; }
@@ -346,10 +343,8 @@ uccl_install() {
   ( cd "$source_dir/ep" \
       && env USE_DMABUF=1 PER_EXPERT_BATCHING=1 "$arch_env" python3 setup.py install ) >&2 2>&1 \
     || { collx_log "ERROR: UCCL ep extension build failed"; return 1; }
-  # Install the wrapper WITHOUT its deps: install_requires=["uccl"] resolves to the PyPI
-  # uccl metapackage, which depends on the prebuilt uccl-cu12 wheel — absent on ROCm (hard
-  # fail) and wrong even on CUDA, since our from-source ep build already provides uccl.ep in
-  # site-packages/uccl. --no-deps makes the source build authoritative on both vendors.
+  # --no-deps: the wrapper's install_requires=["uccl"] resolves to the PyPI uccl-cu12 wheel, absent
+  # on ROCm and wrong on CUDA too, since the from-source ep build already provides uccl.ep.
   ( cd "$source_dir/ep/deep_ep_wrapper" \
       && { python3 -m pip install -q --disable-pip-version-check --no-input --no-deps . \
              || python3 -m pip install -q --disable-pip-version-check --no-input \
@@ -363,9 +358,6 @@ uccl_install() {
   : > "$root/.ready"
 }
 
-# UCCL-EP lifecycle: build once per (arch, image, commit) into the shared /cx-cache behind an
-# flock + .ready marker, reused on every later allocation (mirrors deepep_prepare); fall back to
-# a node-local build when no shared cache is mounted (e.g. a manual run).
 uccl_prepare() {
   local arch root ready lock_path
   command -v python3 >/dev/null || { collx_log "ERROR: python3 unavailable for UCCL build"; return 1; }
@@ -404,16 +396,13 @@ uccl_prepare() {
   collx_log "UCCL-EP ready ($COLLX_UCCL_COMMIT, deep_ep wrapper over uccl.ep CPU-proxy runtime)"
 }
 
-# ---- NCCL EP lifecycle ------------------------------------------------------
+# NCCL EP lifecycle
 
-# Slug of the pinned pip spec, safe as a cache-dir path component.
 nccl_ep_spec_slug() {
-  printf '%s' "$COLLX_NCCL4PY_SPEC" | tr -cs 'A-Za-z0-9_.-' '-'
+  printf '%s' "$COLLX_NCCL_EP_SPEC" | tr -cs 'A-Za-z0-9_.-' '-'
 }
 
-# Cache root keyed by cpu + build arch + image + pinned wheel spec, under the shared /cx-cache
-# mount ($COLLX_BACKEND_CACHE_ROOT). Returns non-zero when no shared cache is mounted (manual
-# runs), so the caller falls back to a node-local install. Mirrors uccl_cache_root.
+# Returns non-zero when no shared cache is mounted (manual runs); the caller then installs node-local.
 nccl_ep_cache_root() {
   local arch="$1" cpu base image slug
   cpu="$(uname -m)"
@@ -427,10 +416,8 @@ nccl_ep_cache_root() {
     "$base" "$cpu" "${arch#-}" "${image#-}" "${slug#-}"
 }
 
-# Put the installed wheel ($root/site) on PYTHONPATH for the probe and rank tasks, and the
-# wheel-bundled NCCL runtime lib dir ahead of the image torch's older NCCL on the loader path
-# (nccl.ep needs NCCL >= 2.29.3's Device API + GIN; the image torch bundles an older NCCL). Both
-# PYTHONPATH and LD_LIBRARY_PATH are already carried to the ranks by write_rank_env.
+# The wheel-bundled NCCL goes ahead of the image torch's older NCCL on the loader path: nccl.ep
+# needs NCCL >= 2.29.3 (Device API + GIN).
 nccl_ep_activate() {
   local root="$1" site="$1/site" nccl_lib
   [ -d "$site" ] || { collx_log "ERROR: NCCL EP cache site is unavailable"; return 1; }
@@ -441,29 +428,28 @@ nccl_ep_activate() {
       break
     fi
   done
-  # NCCL EP group creation gates on the NCCL Device API (LSA symmetric memory), which NCCL only
-  # advertises when cuMem allocation is enabled; without it ncclEpCreateGroup returns
-  # ncclInvalidUsage. Persisted here (already in RANK_ENV_VARS) so every rank has it, mirroring
-  # the launcher's process-wide export. Verified on h100 EP8 (2026-07-21).
+  # NCCL only advertises the Device API (LSA symmetric memory) with cuMem allocation enabled;
+  # without it ncclEpCreateGroup returns ncclInvalidUsage. Persisted here so every rank has it.
   export NCCL_CUMEM_ENABLE=1
 }
 
 nccl_ep_probe() {
-  # import torch FIRST so libc10/libnccl are resident before the nccl.ep extension dlopens; then
-  # nccl.core (libnccl.so) and nccl.ep (libnccl_ep.so JIT runtime). nccl.ep.__init__ runs its own
-  # libnccl/libnccl_ep CUDA-major consistency check on import and raises ImportError on mismatch.
+  # torch first so libc10/libnccl are resident before nccl.ep dlopens. The version line records
+  # which libnccl_ep.so loaded, in case a stale cache or image-bundled copy shadows the wheel.
   python3 - <<'PY'
+import sys
+
 import torch  # noqa: F401
 import nccl.core  # noqa: F401
-import nccl.ep  # noqa: F401
+import nccl.ep
+
+print(
+    f"nccl.ep: libnccl_ep {nccl.ep.get_lib_version()} at {nccl.ep.get_lib_path()}",
+    file=sys.stderr,
+)
 PY
 }
 
-# Primary install: the published nccl4py[cu13] wheel + deps into $root/site via pip --target
-# (self-contained; the runtime imports it through PYTHONPATH, so cache-hit and cache-miss paths
-# import identically — mirrors uccl_install's copy-to-cache scheme). The from-source fallback
-# (OpenMPI + build NCCL + contrib/nccl_ep from COLLX_NCCL_EP_COMMIT, with a matching launcher
-# source-staging arm) is deferred until bring-up shows the wheel does not ship libnccl_ep.so.
 nccl_ep_install() {
   local root="$1" site="$1/site"
   if [ -e "$root" ] || [ -L "$root" ]; then
@@ -471,21 +457,19 @@ nccl_ep_install() {
   fi
   mkdir -m 700 "$root" || { collx_log "ERROR: NCCL EP cache-create failed"; return 1; }
   mkdir -p "$site" || { collx_log "ERROR: NCCL EP cache-site-create failed"; return 1; }
-  collx_log "NCCL EP: installing $COLLX_NCCL4PY_SPEC (pip --target)"
-  # --target installs into an isolated tree and does not touch the system env, so PEP 668 does
-  # not apply; torch is imported from the image at runtime (nccl.ep's torch interop resolver).
+  collx_log "NCCL EP: installing $COLLX_NCCL_EP_SPEC (pip --target)"
+  # --target does not touch the system env, so PEP 668 does not apply. $COLLX_NCCL_EP_SPEC is
+  # unquoted on purpose: it carries two whitespace-separated pip specs.
+  # shellcheck disable=SC2086
   python3 -m pip install -q --disable-pip-version-check --no-input \
-      --target "$site" "$COLLX_NCCL4PY_SPEC" >&2 2>&1 \
-    || { collx_log "ERROR: NCCL EP nccl4py install failed"; return 1; }
+      --target "$site" $COLLX_NCCL_EP_SPEC >&2 2>&1 \
+    || { collx_log "ERROR: NCCL EP wheel install failed"; return 1; }
   nccl_ep_activate "$root" \
     || { collx_log "ERROR: NCCL EP environment activation failed"; return 1; }
   nccl_ep_probe || { collx_log "ERROR: NCCL EP import probe failed"; return 1; }
   : > "$root/.ready"
 }
 
-# NCCL EP lifecycle: install once per (arch, image, wheel-spec) into the shared /cx-cache behind
-# an flock + .ready marker, reused on every later allocation (mirrors uccl_prepare); fall back to
-# a node-local install when no shared cache is mounted (e.g. a manual run).
 nccl_ep_prepare() {
   local arch root ready lock_path
   command -v python3 >/dev/null || { collx_log "ERROR: python3 unavailable for NCCL EP"; return 1; }
@@ -495,7 +479,7 @@ nccl_ep_prepare() {
     command -v flock >/dev/null \
       || { collx_log "ERROR: flock is required for NCCL EP caching"; return 1; }
     mkdir -p "${root%/*}" || return 1
-    collx_log "NCCL EP: preparing $COLLX_NCCL4PY_SPEC (shared cache $root)"
+    collx_log "NCCL EP: preparing $COLLX_NCCL_EP_SPEC (shared cache $root)"
     if ! (
       [ ! -L "$lock_path" ] || { collx_log "ERROR: NCCL EP cache lock is unsafe"; exit 1; }
       (umask 077; : >> "$lock_path") && chmod 600 "$lock_path" \
@@ -510,17 +494,17 @@ nccl_ep_prepare() {
     fi
   else
     root="/tmp/collectivex-nccl-ep-cache-$(nccl_ep_spec_slug)"
-    collx_log "NCCL EP: preparing $COLLX_NCCL4PY_SPEC (node-local $root; no shared cache mounted)"
+    collx_log "NCCL EP: preparing $COLLX_NCCL_EP_SPEC (node-local $root; no shared cache mounted)"
     if [ ! -f "$root/.ready" ] || [ ! -d "$root/site" ]; then
       nccl_ep_install "$root" || return 1
     fi
   fi
   nccl_ep_activate "$root" || return 1
   nccl_ep_probe || { collx_log "ERROR: NCCL EP import probe failed"; return 1; }
-  collx_log "NCCL EP ready ($COLLX_NCCL4PY_SPEC; libnccl_ep.so JIT runtime, NCCL Device API LSA/GIN)"
+  collx_log "NCCL EP ready ($COLLX_NCCL_EP_SPEC; libnccl_ep.so JIT runtime, NCCL Device API LSA/GIN)"
 }
 
-# ---- container boundary ----------------------------------------------------
+# container boundary
 
 write_rank_env() {
   local root="$PWD/.collx_backend/env" node_id="${SLURM_NODEID:-0}" path temporary name
@@ -568,10 +552,8 @@ validate_container_network() {
   done
 }
 
-# FlashInfer needs no build step: the pinned SGLang images ship `flashinfer-python`, and the
-# one-sided MoE all-to-all lives in that same wheel. So this is a capability assert, not an
-# install - fail loudly and early if the image ever drops it or ships a build without the
-# trtllm_moe_alltoall module, rather than dying mid-case inside create_buffer.
+# The pinned SGLang images ship flashinfer-python with the one-sided MoE all-to-all, so this is a
+# capability assert, not an install: fail early rather than mid-case inside create_buffer.
 flashinfer_ep_prepare() {
   command -v python3 >/dev/null \
     || { collx_log "ERROR: python3 unavailable for FlashInfer EP"; return 1; }

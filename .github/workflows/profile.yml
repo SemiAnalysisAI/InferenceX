@@ -1,6 +1,7 @@
 name: Profile
 
-on:
+# Independent profiling requests use priority-scheduled runner slots.
+on: # zizmor: ignore[concurrency-limits]
   workflow_dispatch:
     inputs:
       config-key:
@@ -31,6 +32,21 @@ permissions:
   contents: read
 
 env:
+  PORT: '8888'
+  INFMAX_CONTAINER_WORKSPACE: '/workspace'
+  DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE: '1'
+  MODEL_DOWNLOAD_LOCK_TIMEOUT: '21600'
+  ENROOT_IMPORT_TIME_LIMIT: '120'
+  SALLOC_TIME_LIMIT: '480'
+  GPU_MONITOR_INTERVAL: '1'
+  GPU_METRICS_CSV: 'gpu_metrics.csv'
+  KEEP_LOGS: '0'
+  EVAL_ONLY: 'false'
+  RUN_EVAL: 'false'
+  IS_AGENTIC: '0'
+  REQUIRE_POWER: '0'
+  IS_MULTINODE: 'false'
+  SCENARIO_SUBDIR: fixed_seq_len/
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   RANDOM_RANGE_RATIO: '0.8'
@@ -40,47 +56,60 @@ env:
 
 jobs:
   get-jobs:
+    name: get-jobs
     runs-on: ubuntu-latest
     outputs:
       filtered-matrix: ${{ steps.filter.outputs.filtered }}
       count: ${{ steps.filter.outputs.count }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
       - name: Checkout priority scheduler tooling
         if: ${{ inputs.ref && inputs.ref != '' }}
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
           path: .ci-priority
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - id: gen
         name: Generate matrix via script
         run: |
-          CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --conc ${{ inputs.conc }}"
-          CONFIG_JSON=$(uv run --no-project --with pydantic --with pyyaml --python 3.12 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
           PRIORITY_ROOT="${GITHUB_WORKSPACE}"
           if [ -d "${GITHUB_WORKSPACE}/.ci-priority" ]; then
             PRIORITY_ROOT="${GITHUB_WORKSPACE}/.ci-priority"
           fi
-          CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --with pyyaml --python 3.12 \
-            "${PRIORITY_ROOT}/utils/ci_priority.py" \
+          source "$PRIORITY_ROOT/benchmarks/benchmark_lib.sh" --validation-only
+          check_env_vars INPUTS_CONFIG_FILE INPUTS_CONFIG_KEY INPUTS_CONC PR_LABELS
+          CONFIG_JSON=$(uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+            python "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py" \
+            test-config --config-files "$INPUTS_CONFIG_FILE" --config-keys "$INPUTS_CONFIG_KEY" --conc "$INPUTS_CONC")
+          CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | env PYTHONPATH="$PRIORITY_ROOT" uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
+            python -P "${PRIORITY_ROOT}/utils/ci_priority.py" \
             --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
-            --event-name "${{ github.event_name }}" \
-            --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}" \
-            --labels-json '${{ inputs.moe-debug && '["ci-patchwork"]' || '[]' }}')
-          echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
+            --event-name "${GITHUB_EVENT_NAME}" \
+            --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
+            --labels-json "${PR_LABELS}")
+          echo "raw=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
+
+        env:
+          PR_LABELS: ${{ inputs.moe-debug && '["ci-patchwork"]' || '[]' }}
+          INPUTS_CONFIG_FILE: ${{ inputs.config-file }}
+          INPUTS_CONFIG_KEY: ${{ inputs.config-key }}
+          INPUTS_CONC: ${{ inputs.conc }}
 
       - id: filter
         name: Take first generated job
         shell: python
+        env:
+          STEPS_GEN_OUTPUTS_RAW: ${{ steps.gen.outputs.raw }}
         run: |
           import json, os, sys
-          raw = '${{ steps.gen.outputs.raw }}'
+          raw = os.environ["STEPS_GEN_OUTPUTS_RAW"]
           try:
             data = json.loads(raw)
           except Exception as e:
@@ -119,8 +148,11 @@ jobs:
       - name: Fail if no matching entries
         if: ${{ steps.filter.outputs.count == '0' }}
         run: |
-          echo "No entries produced for config-key=${{ inputs.config-key }}, conc=${{ inputs.conc }}." >&2
+          echo "No entries produced for config-key=${INPUTS_CONFIG_KEY}, conc=${INPUTS_CONC}." >&2
           exit 1
+        env:
+          INPUTS_CONFIG_KEY: ${{ inputs.config-key }}
+          INPUTS_CONC: ${{ inputs.conc }}
 
   profile:
     needs: get-jobs
@@ -197,20 +229,21 @@ jobs:
 
           # Cleanup SLURM resources
           if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
-            scancel --name="${{ runner.name }}" || true
-            while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
-              squeue --name="${{ runner.name }}"
+            echo "[Slurm] Cleaning up jobs with name: ${RUNNER_NAME} ..."
+            scancel --name="${RUNNER_NAME}" || true
+            while [ -n "$(squeue --name="${RUNNER_NAME}" --noheader --format='%i')" ]; do
+              squeue --name="${RUNNER_NAME}"
               sleep 5
             done
           fi
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ inputs.ref || github.sha }}
           clean: false
+          persist-credentials: false
 
       - name: Launch + Profile (single-node sglang/vllm)
         id: run
@@ -222,7 +255,7 @@ jobs:
           VLLM_RPC_TIMEOUT: '1800000'
         shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
           export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
           echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
           ep_val="${EP_SIZE:-1}"
@@ -230,6 +263,13 @@ jobs:
           export RESULT_FILENAME="${res_name}"
           echo "RESULT_FILENAME=${res_name}" >> "$GITHUB_ENV"
 
+          # Historical measured revisions own their configuration in the launchers.
+          if [[ -f benchmarks/runtime_settings.sh ]]; then
+            source benchmarks/runtime_settings.sh
+          fi
+          if [[ -f runners/runtime_settings.sh ]]; then
+            source runners/runtime_settings.sh
+          fi
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
           if [ ! -f "${res_name}.json" ]; then
@@ -301,24 +341,30 @@ jobs:
 
       - name: Checkout storage repo
         if: ${{ steps.run.outputs.trace != '' }}
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: SemiAnalysisAI/InferenceX-trace-storage
           path: storage
           ref: master
-          ssh-key: ${{ secrets.PROFILER_STORAGE_DEPLOY_KEY }}
+          # Storage-repository deploy key for authorized profiling dispatches.
+          ssh-key: ${{ secrets.PROFILER_STORAGE_DEPLOY_KEY }} # zizmor: ignore[secrets-outside-env]
           fetch-depth: 0
+          # This separate storage checkout pushes trace commits using its scoped deploy key.
+          persist-credentials: true # zizmor: ignore[artipacked]
 
       - name: Push profile to storage repo
         if: ${{ steps.run.outputs.trace != '' }}
         id: push
         env:
+          MATRIX_CONFIG_RUNNER: ${{ matrix.config.runner }}
+          MATRIX_CONFIG_EXP_NAME: ${{ matrix.config['exp-name'] }}
+          MATRIX_EP: ${{ matrix.config.ep || 1 }}
           TRACE_LOCAL: ${{ steps.run.outputs.trace }}
         shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
 
-          dest_dir="storage/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_pp${{ matrix.config.pp }}_dcp${{ matrix.config.dcp-size }}_pcp${{ matrix.config.pcp-size }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
+          dest_dir="storage/profiles/${GITHUB_SHA}/${MATRIX_CONFIG_RUNNER}/${FRAMEWORK}/${MATRIX_CONFIG_EXP_NAME}_${PRECISION}_tp${TP}_pp${PP_SIZE}_dcp${DCP_SIZE}_pcp${PCP_SIZE}_ep${MATRIX_EP}_conc${CONC}"
           mkdir -p "$dest_dir"
           cp "$TRACE_LOCAL" "$dest_dir/trace.json.gz"
 
@@ -326,13 +372,13 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add -A
-          git commit -m "Add profile: ${GITHUB_SHA} ${{ matrix.config['exp-name'] }} tp${{ matrix.config.tp }} pp${{ matrix.config.pp }} dcp${{ matrix.config.dcp-size }} pcp${{ matrix.config.pcp-size }} ep${{ matrix.config.ep || 1 }} conc${{ matrix.config.conc }}" || echo "Nothing to commit"
+          git commit -m "Add profile: ${GITHUB_SHA} ${MATRIX_CONFIG_EXP_NAME} tp${TP} pp${PP_SIZE} dcp${DCP_SIZE} pcp${PCP_SIZE} ep${MATRIX_EP} conc${CONC}" || echo "Nothing to commit"
           git push
           STORAGE_SHA="$(git rev-parse HEAD)"
           popd >/dev/null
 
-          export RAW_URL="https://raw.githubusercontent.com/SemiAnalysisAI/InferenceX-trace-storage/${STORAGE_SHA}/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_pp${{ matrix.config.pp }}_dcp${{ matrix.config.dcp-size }}_pcp${{ matrix.config.pcp-size }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}/trace.json.gz"
-          export TITLE="${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_pp${{ matrix.config.pp }}_dcp${{ matrix.config.dcp-size }}_pcp${{ matrix.config.pcp-size }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
+          export RAW_URL="https://raw.githubusercontent.com/SemiAnalysisAI/InferenceX-trace-storage/${STORAGE_SHA}/profiles/${GITHUB_SHA}/${MATRIX_CONFIG_RUNNER}/${FRAMEWORK}/${MATRIX_CONFIG_EXP_NAME}_${PRECISION}_tp${TP}_pp${PP_SIZE}_dcp${DCP_SIZE}_pcp${PCP_SIZE}_ep${MATRIX_EP}_conc${CONC}/trace.json.gz"
+          export TITLE="${MATRIX_CONFIG_EXP_NAME}_${PRECISION}_tp${TP}_pp${PP_SIZE}_dcp${DCP_SIZE}_pcp${PCP_SIZE}_ep${MATRIX_EP}_conc${CONC}"
 
           enc_src="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["RAW_URL"], safe=""))')"
           enc_title="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["TITLE"], safe=""))')"
@@ -350,7 +396,7 @@ jobs:
           RAW_URL: ${{ steps.push.outputs.raw_url }}
         shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
           echo "RAW trace URL: $RAW_URL"
           echo "Perfetto Relay URL: $RELAY_URL"
           printf "\n**Perfetto (Relay):** %s\n" "$RELAY_URL" >> "$GITHUB_STEP_SUMMARY"

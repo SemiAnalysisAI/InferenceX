@@ -1,7 +1,7 @@
 # Generate a shard matrix, run each shard on its GPU pool, and upload raw results.
 name: CollectiveX Sweep
 permissions:
-  actions: read
+  actions: read # Read workflow runs and artifacts.
   contents: read
 on:
   workflow_dispatch:
@@ -32,10 +32,10 @@ on:
         type: boolean
         default: false
       fp8_consume:
-        description: "DIAGNOSTIC ONLY. 'dequant' puts the FP8 dequant back inside the chain, so staging is no longer hoisted; changes what is measured. Blank = native (the production model)."
+        description: "DIAGNOSTIC ONLY. 'dequant' puts the FP8 dequant back inside the chain, so staging is no longer hoisted; changes what is measured. Use native for the production model."
         type: choice
-        default: ''
-        options: ['', dequant]
+        default: native
+        options: [native, dequant]
 concurrency:
   group: cx-${{ github.ref }}-${{ inputs.backend }}-${{ inputs.only_sku }}
   cancel-in-progress: false
@@ -43,19 +43,20 @@ concurrency:
 jobs:
   # ---- setup: generate the shard matrix and upload its requested coverage ----
   setup:
+    name: setup
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.gen.outputs.matrix }}
       n: ${{ steps.gen.outputs.n }}
       priority: ${{ steps.score.outputs.priority }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { clean: true, persist-credentials: false }
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - id: score
         run: |
           scored=$(printf '%s' '[{"runner":"collectivex","framework":"collectivex"}]' |
-            uv run --no-project --with pyyaml --python 3.12 utils/ci_priority.py)
+            uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml python -m infx.workflows.ci_priority)
           echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
       - id: gen
         working-directory: experimental/CollectiveX
@@ -68,7 +69,7 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
-          set -euo pipefail
+          set -eo pipefail
           args=(--backend "$INPUT_BACKEND")
           [ -n "$INPUT_ONLY_SKU" ] && args+=(--only-sku "$INPUT_ONLY_SKU")
           [ -n "$INPUT_EXCLUDE_SKUS" ] && args+=(--exclude-skus "$INPUT_EXCLUDE_SKUS")
@@ -180,7 +181,7 @@ jobs:
         env:
           COLLECTIVEX_REPOSITORY: ${{ github.repository }}
         run: |
-          set -euo pipefail
+          set -eo pipefail
           [ "${COLLX_JOB_ROOT%/*}" = "$COLLX_JOB_PARENT" ] \
             && [[ "${COLLX_JOB_ROOT##*/}" =~ ^inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
             || { echo "CollectiveX isolated root is invalid" >&2; exit 1; }
@@ -223,32 +224,38 @@ jobs:
           path: ${{ env.COLLX_JOB_ROOT }}/control
       # Materialize this shard's .shards/<id>.json case control from the run-scoped matrix artifact downloaded above.
       - name: Extract execution control
+        env:
+          MATRIX_ID: ${{ matrix.id }}
         run: |
-          set -euo pipefail
+          set -eo pipefail
           cd "$COLLX_SOURCE_ROOT/experimental/CollectiveX" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
           python3 sweep_matrix.py \
             --extract-from "$COLLX_JOB_ROOT/control/matrix_full.json" \
-            --shard-id '${{ matrix.id }}' \
-            --out '${{ env.COLLX_SHARD_FILE }}' >/dev/null
+            --shard-id "${MATRIX_ID}" \
+            --out "${COLLX_SHARD_FILE}" >/dev/null
+
       # Merge the base + per-SKU operator-config secrets into one validated mode-0600 file, then run the SKU launcher (allocate -> stage -> build -> run cases).
       - name: Execute sweep cell ${{ matrix.id }}
         id: sweep_shard
+        env:
+          MATRIX_LAUNCHER: ${{ matrix.launcher }}
         run: |
-          set -euo pipefail
+          set -eo pipefail
           umask 077
           # Runner-local Slurm/storage config comes from the tracked
           # configs/platform_config.json baseline (no operator secret); the
           # launcher's collx_load_operator_config emits it per SKU.
           cd "$COLLX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
-          bash "experimental/CollectiveX/launchers/launch_${{ matrix.launcher }}.sh"
+          bash "experimental/CollectiveX/launchers/launch_${MATRIX_LAUNCHER}.sh"
+
       # always(): cancel any Slurm allocation a killed launcher left recorded, append the summary table, and stage result JSONs so a red or partial leg still uploads.
       - name: Summarize and stage shard results
         id: stage_artifact
         if: ${{ always() && steps.source.outputs.prepared == 'true' }}
         run: |
-          set -euo pipefail
+          set -eo pipefail
           cd "$COLLX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
           source experimental/CollectiveX/runtime/common.sh
@@ -285,7 +292,7 @@ jobs:
       - name: Cleanup isolated workspace
         if: ${{ always() && steps.source.outputs.prepared == 'true' }}
         run: |
-          set -euo pipefail
+          set -eo pipefail
           [ "$COLLX_JOB_PARENT" = /tmp ] \
             || [[ "$COLLX_JOB_PARENT" =~ ^/tmp/inferencex-collectivex-parent-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
             || { echo "CollectiveX cleanup parent is invalid" >&2; exit 1; }
