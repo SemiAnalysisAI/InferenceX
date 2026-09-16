@@ -8102,4 +8102,5 @@
     - "Add aggregate concurrency 1 and retain aggregate concurrency 2/4; retain disaggregate 1P2D c48, 1P4D c48, and 1P6D c45; replace the unstable 2P1D c128/c192 points with 4P1D DEP4/DEP8 c227 and 5P1D DEP4/DEP16 c260."
     - "Align prefill speculative steps and draft tokens with decode, use FlashInfer CuteDSL for disaggregate MoE/FP4 backends unless the existing backend is TensorRT-LLM, and run from the nightly's bundled Dynamo."
     - "For 4P1D c227, cap prefill chunks and max prefill tokens at 8192 and lower prefill mem-fraction-static to 0.75 to avoid the observed prefill allocator OOM and rank stall."
+    - "Set aggregate max-running-requests and cuda-graph-max-bs-decode to twice each point's concurrency: 2 for c1, 4 for c2, and 8 for c4."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3178
