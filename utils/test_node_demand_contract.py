@@ -119,6 +119,12 @@ def test_b200_disaggregated_recipes_use_standard_rdma_mooncake_buffers() -> None
     for recipe in recipes:
         contents = recipe.read_text(encoding="utf-8")
         assert contents.count("disaggregation-transfer-backend: mooncake") == 2
+        physical_hcas = (
+            "disaggregation-ib-device: "
+            + ",".join(f"mlx5_{index}" for index in range(12))
+        )
+        assert contents.count(physical_hcas) == 2
+        assert "disaggregation-ib-device: mlx5_bond_0" not in contents
         assert "SGLANG_MOONCAKE_CUSTOM_MEM_POOL" not in contents
         assert "MC_INTRANODE_NVLINK" not in contents
         assert "MC_FORCE_MNNVL" not in contents

@@ -138,6 +138,9 @@ backend:
       enable-deepseek-v4-fp4-indexer: true
       enable-w4a4-mxfp4-megamoe: true
       disaggregation-transfer-backend: mooncake
+      # Exclude mlx5_bond_0: Mooncake auto-detection mixed its routed RoCE GID
+      # with physical InfiniBand endpoints, causing QP RTR timeouts on NScale.
+      disaggregation-ib-device: mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_11
       disaggregation-mode: prefill
       load-balance-method: total_tokens
       mem-fraction-static: 0.85
@@ -179,6 +182,7 @@ backend:
       enable-deepseek-v4-fp4-indexer: true
       enable-w4a4-mxfp4-megamoe: true
       disaggregation-transfer-backend: mooncake
+      disaggregation-ib-device: mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_11
       disaggregation-mode: decode
       load-balance-method: total_tokens
       mem-fraction-static: 0.9
