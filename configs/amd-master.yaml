@@ -1194,7 +1194,7 @@ minimaxm3-fp8-mi325x-vllm-agentic-mtp:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 18] }
 
 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260911
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1225,7 +1225,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=6"
+          - "DECODE_MTP_SIZE=3"
       - spec-decoding: "draft_model"
         conc-list: [ 16 ]
         kv-offloading: none
@@ -1244,7 +1244,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=6"
+          - "DECODE_MTP_SIZE=3"
       - spec-decoding: "draft_model"
         conc-list: [ 32, 48 ]
         kv-offloading: dram
@@ -1265,11 +1265,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-          # DSpark block size gamma, not an MTP chain length: the verify window
-          # is gamma + 1. 6 is the peak of the committed golden AL curve
-          # (golden_al_distribution/dsv4-pro-0813-dspark.yaml: 6 -> 3.77), which
-          # regresses at 7 and 8.
-          - "DECODE_MTP_SIZE=6"
+          - "DECODE_MTP_SIZE=3"
       - spec-decoding: "draft_model"
         conc-list: [ 128, 192, 256 ]
         kv-offloading: dram
@@ -1296,7 +1292,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           dp-attn: true
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=6"
+          - "DECODE_MTP_SIZE=3"
 
 minimaxm3-fp4-mi355x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:nightly-2a02f6efe319c885e3ccbcecde402e0028f9ec1e

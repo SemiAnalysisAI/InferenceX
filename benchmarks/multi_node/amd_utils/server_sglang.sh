@@ -384,6 +384,10 @@ build_server_config() {
 
     if [ "$decode_mtp_size" -gt 0 ]; then
         if [[ "${SPEC_DECODING:-}" == "draft_model" ]]; then
+            if [[ -z "${MODEL_DSPARK_FLAGS// }" ]]; then
+                echo "FATAL: SPEC_DECODING=draft_model but model '${model_name}' has no dspark_flags in models.yaml." >&2
+                exit 1
+            fi
             # DSpark proposes a whole block per step rather than walking a chain,
             # so num-steps is pinned to 1 and decode_mtp_size is read as the block
             # size gamma. The verify window is gamma + 1, same arithmetic as MTP.
@@ -1386,41 +1390,22 @@ else
             echo "[INFO] Eval mode: synthetic MTP disabled (using real acceptance)"
         else
             DSV4_GOLDEN_AL=""
-            if [[ "${SPEC_DECODING:-}" == "draft_model" ]]; then
-                # DSpark curve, keyed by block size gamma. Source:
-                # golden_al_distribution/dsv4-pro-0813-dspark.yaml (thinking_on).
-                # It peaks at gamma 6 and regresses past it, so 7 and 8 are listed
-                # to keep an accidental over-long block from silently falling back
-                # to real acceptance.
-                case "${MODEL_NAME}:${DECODE_MTP_SIZE}" in
-                    *DeepSeek-V4-Pro-0813*:1) DSV4_GOLDEN_AL=1.84 ;;
-                    *DeepSeek-V4-Pro-0813*:2) DSV4_GOLDEN_AL=2.51 ;;
-                    *DeepSeek-V4-Pro-0813*:3) DSV4_GOLDEN_AL=3.01 ;;
-                    *DeepSeek-V4-Pro-0813*:4) DSV4_GOLDEN_AL=3.36 ;;
-                    *DeepSeek-V4-Pro-0813*:5) DSV4_GOLDEN_AL=3.61 ;;
-                    *DeepSeek-V4-Pro-0813*:6) DSV4_GOLDEN_AL=3.77 ;;
-                    *DeepSeek-V4-Pro-0813*:7) DSV4_GOLDEN_AL=3.73 ;;
-                    *DeepSeek-V4-Pro-0813*:8) DSV4_GOLDEN_AL=3.47 ;;
-                esac
-            else
-                # EAGLE/MTP path. Pro-0813 draws on the same committed
-                # thinking-on curve, so only the lengths calibrated there are
-                # wired; an unwired length is an error rather than a silent
-                # fall-through to the original V4 curve below, which would
-                # understate acceptance (2.49 against 3.01 at length 3).
-                case "${MODEL_NAME}:${DECODE_MTP_SIZE}" in
-                    *DeepSeek-V4-Pro-0813*:1) DSV4_GOLDEN_AL=1.84 ;;
-                    *DeepSeek-V4-Pro-0813*:2) DSV4_GOLDEN_AL=2.51 ;;
-                    *DeepSeek-V4-Pro-0813*:3) DSV4_GOLDEN_AL=3.01 ;;
-                    *DeepSeek-V4-Pro-0813*:*)
-                        echo "ERROR: Pro-0813 draft length ${DECODE_MTP_SIZE} has no golden AL wired here; refusing to use the original V4 curve." >&2
-                        exit 1
-                        ;;
-                    *DeepSeek-V4*:1) DSV4_GOLDEN_AL=1.79 ;;
-                    *DeepSeek-V4*:2) DSV4_GOLDEN_AL=2.27 ;;
-                    *DeepSeek-V4*:3) DSV4_GOLDEN_AL=2.49 ;;
-                esac
-            fi
+            case "${MODEL_NAME}:${DECODE_MTP_SIZE}" in
+                DeepSeek-V4-Pro-0813:1) DSV4_GOLDEN_AL=1.84 ;;
+                DeepSeek-V4-Pro-0813:2) DSV4_GOLDEN_AL=2.51 ;;
+                DeepSeek-V4-Pro-0813:3) DSV4_GOLDEN_AL=3.01 ;;
+                # The dspark curve does carry values out to length 8, but only
+                # 1-3 are wired here, matching upstream. Refuse rather than fall
+                # through to the original V4 curve, which would silently
+                # under-simulate this checkpoint.
+                DeepSeek-V4-Pro-0813:*)
+                    echo "ERROR: Pro-0813 draft length ${DECODE_MTP_SIZE} has no golden AL wired here; refusing to use the original V4 curve." >&2
+                    exit 1
+                    ;;
+                *DeepSeek-V4*:1) DSV4_GOLDEN_AL=1.79 ;;
+                *DeepSeek-V4*:2) DSV4_GOLDEN_AL=2.27 ;;
+                *DeepSeek-V4*:3) DSV4_GOLDEN_AL=2.49 ;;
+            esac
             if [[ -n "$DSV4_GOLDEN_AL" ]]; then
                 DECODE_SIM_ACC_ENV="SGLANG_SIMULATE_ACC_LEN=${DSV4_GOLDEN_AL} SGLANG_SIMULATE_ACC_METHOD=match-expected SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token"
             else
