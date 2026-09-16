@@ -15,15 +15,25 @@ export CONC="${CONC_LIST%% *}"
 # Use discovery's serving nodes, but scrape vLLM rather than the decode sidecar.
 mkdir -p "$RESULT_DIR"
 AIPERF_METRIC_URLS=$(python3 - "$LLMD_ENDPOINTS_FILE" "$VLLM_PORT" \
-    "$RESULT_DIR/llmd_metrics_endpoints.json" "$DECODE_NODES" <<'PY'
+    "$RESULT_DIR/llmd_metrics_endpoints.json" "$DECODE_NODES" "${SIDECAR_PORT:-8000}" <<'PY'
 import json
 import sys
 import yaml
 
 with open(sys.argv[1]) as source:
     endpoints = yaml.safe_load(source)["endpoints"]
+vllm_base = int(sys.argv[2])
+sidecar_base = int(sys.argv[5])
+
+def vllm_metrics_port(endpoint):
+    role = endpoint["labels"]["llm-d.ai/role"]
+    endpoint_port = int(endpoint["port"])
+    if role == "decode":
+        return vllm_base + (endpoint_port - sidecar_base)
+    return endpoint_port
+
 metrics_endpoints = {
-    f"http://{endpoint['address']}:{int(sys.argv[2])}/metrics": {
+    f"http://{endpoint['address']}:{vllm_metrics_port(endpoint)}/metrics": {
         "name": endpoint["name"],
         "role": endpoint["labels"]["llm-d.ai/role"] if int(sys.argv[4]) else "combined",
     }

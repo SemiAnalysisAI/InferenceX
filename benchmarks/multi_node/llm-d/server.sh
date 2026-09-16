@@ -233,19 +233,19 @@ if [[ "$IS_AGGREGATED" -eq 0 ]]; then
         KV_ROLE="kv_consumer"
     fi
     if [[ -n "${MOONCAKE_CONFIG_PATH}" ]]; then
-        # MultiConnector: NixlConnector handles direct P/D KV transfer;
-        # MooncakeStoreConnector enables cross-node prefix-cache lookup via RDMA.
-        # Prefill additionally uses SimpleCPUOffloadConnector to stage KV in CPU
-        # DRAM (~38 GB) before writing to mooncake. Decode omits SimpleCPUOffload:
-        # EAGER mode would store every decoded KV block into mooncake, polluting
-        # the prefix cache with non-reusable blocks and reducing mooncake hit rate
-        # for prefill lookups. Both roles use kv_both so decode can serve
-        # speculative-decode prefills in DSpark.
+        # MultiConnector on prefill: NixlConnector handles direct P/D KV transfer;
+        # SimpleCPUOffloadConnector stages KV in CPU DRAM (~38 GB) before writing
+        # to MooncakeStoreConnector for cross-node prefix-cache lookup via RDMA.
+        # Decode uses NixlConnector only (matches agentX v13): Mooncake on decode
+        # would pollute the prefix cache with non-reusable decode blocks, and
+        # SimpleCPUOffload in EAGER mode would amplify that. kv_both on decode
+        # so it can serve speculative-decode prefills in DSpark.
         _MC_EXTRA='"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false'
+        _NIXL_EXTRA='"enforce_handshake_compat":false,"enable_cross_layers_blocks":false,"kv_lease_duration":1800'
         if [[ "$ROLE" == "prefill" ]]; then
-            KV_TRANSFER_CONFIG="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{\"enforce_handshake_compat\":false,\"enable_cross_layers_blocks\":false,\"kv_lease_duration\":1800}},{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":40802189312}},{\"kv_connector\":\"MooncakeStoreConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{${_MC_EXTRA}}}]}}"
+            KV_TRANSFER_CONFIG="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{${_NIXL_EXTRA}}},{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":40802189312}},{\"kv_connector\":\"MooncakeStoreConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{${_MC_EXTRA}}}]}}"
         else
-            KV_TRANSFER_CONFIG="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{\"enforce_handshake_compat\":false,\"enable_cross_layers_blocks\":false,\"kv_lease_duration\":1800}},{\"kv_connector\":\"MooncakeStoreConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{${_MC_EXTRA}}}]}}"
+            KV_TRANSFER_CONFIG="{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{${_NIXL_EXTRA}}}"
         fi
     else
         KV_TRANSFER_CONFIG="{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"$KV_ROLE\",\"kv_load_failure_policy\":\"fail\"}"
@@ -259,21 +259,13 @@ elif [[ -n "${MOONCAKE_CONFIG_PATH}" ]]; then
     KV_TRANSFER_CONFIG="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\",\"kv_load_failure_policy\":\"fail\",\"kv_buffer_device\":\"cuda\",\"kv_connector_extra_config\":{\"enforce_handshake_compat\":false,\"enable_cross_layers_blocks\":false}},{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":42949672960}},{\"kv_connector\":\"MooncakeStoreConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"load_async\":true,\"lookup_async\":true,\"enable_cross_layers_blocks\":false,\"enable_offload\":false}}]}}"
     COMMON_ARGS+=(--kv_transfer_config "$KV_TRANSFER_CONFIG")
 fi
-# A single frontend (HTTP + tokenize + DP load-balance) is CPU-bound and caps
-# throughput, so run several. Incompatible with --headless, so it is the one
-# flag the headless-worker branch below drops. Overridable via LLMD_API_SERVER_COUNT.
-# LB is hybrid: --data-parallel-hybrid-lb; one api-server per node internally
-# load-balances its local DP ranks -> ONE serving port (VLLM_PORT) per node, so
-# the local rank-0 health port is always VLLM_PORT.
+# EP roles use multi-port-external-lb: each local DP rank gets its own serving
+# port starting at VLLM_PORT (8200, 8201, ...). The vLLM supervisor binds 8100
+# and serves /health once all engines are ready -> health check uses port 8100.
+# Pure-TP roles serve on a single VLLM_PORT with the standard health check.
 HEALTH_PORT="$VLLM_PORT"
-API_SERVER_COUNT="4"
-# Multiple frontends only help the DP (wide-EP) path, where they load-balance
-# across the node's local DP ranks. A pure-TP engine has a single core with one
-# frontend, so it keeps the default count (also avoids --api-server-count
-# interacting with the --headless multi-node TP launch below). Every DEP8 node
-# gets it; pure-TP nodes get none.
 if [[ "$ROLE_ENABLE_EP" == "true" ]]; then
-    COMMON_ARGS+=(--api-server-count "$API_SERVER_COUNT")
+    HEALTH_PORT="8100"
 fi
 # Set to 1 by the pure-TP multi-node branch below on --headless followers, which
 # run no local api-server; gates the post-launch health wait.
@@ -287,10 +279,11 @@ if [[ "$ROLE_ENABLE_EP" == "true" ]]; then
     COMMON_ARGS+=(
         --enable-expert-parallel
         --data-parallel-size "$DP_SIZE"
+        --data-parallel-multi-port-external-lb
+        --data-parallel-supervisor-port 8100
     )
     if [[ "$LWS_GROUP_SIZE" -gt 1 ]]; then
         COMMON_ARGS+=(
-            --data-parallel-hybrid-lb
             --data-parallel-size-local "$DP_SIZE_LOCAL"
             --data-parallel-address "$DP_ADDR"
             --data-parallel-rpc-port 5555
@@ -347,7 +340,8 @@ if [[ "$ROLE" == "decode" && ( "$ROLE_ENABLE_EP" == "true" || "$LWS_WORKER_INDEX
     SIDECAR_CONNECTOR="nixlv2"
     SIDECAR_FLAGS=(--port="$SIDECAR_PORT" --vllm-port="$VLLM_PORT"
                    --kv-connector="$SIDECAR_CONNECTOR" --secure-proxy=false
-                   --enable-prefiller-sampling)
+                   --enable-prefiller-sampling
+                   --data-parallel-size="$DP_SIZE_LOCAL")
     SIDECAR_HEALTH_PORT="$SIDECAR_PORT"
     echo "Starting pd-sidecar (decode node_rank=$NODE_RANK worker_index=$LWS_WORKER_INDEX): ${SIDECAR_FLAGS[*]}"
     pd-sidecar "${SIDECAR_FLAGS[@]}" > "$SIDECAR_LOG" 2>&1 &
@@ -374,19 +368,27 @@ import os, yaml
 ips = os.environ['ALL_IPS'].split(',')
 pn = int(os.environ['PREFILL_NODES'])
 dn = int(os.environ['DECODE_NODES'])
+gpus_per_node = int('$GPUS_PER_NODE')
 endpoints = []
 
-def add_role(role, addresses, port, group_size):
-    for i, address in enumerate(addresses[::group_size]):
-        endpoints.append({'name': f'{role}-{i}', 'namespace': 'inferencex',
-                          'address': address, 'port': str(port),
-                          'labels': {'llm-d.ai/role': role}})
+def add_role(role, addresses, port, group_size, dp_local=1):
+    idx = 0
+    for address in addresses[::group_size]:
+        for rank in range(dp_local):
+            endpoints.append({'name': f'{role}-{idx}', 'namespace': 'inferencex',
+                              'address': address, 'port': str(port + rank),
+                              'labels': {'llm-d.ai/role': role}})
+            idx += 1
 
-prefill_group = 1 if '$PREFILL_ENABLE_EP' == 'true' else pn // int('$PREFILL_WORKERS')
-add_role('prefill', ips[:pn], int('$VLLM_PORT'), prefill_group)
+prefill_ep = '$PREFILL_ENABLE_EP' == 'true'
+prefill_group = 1 if prefill_ep else pn // int('$PREFILL_WORKERS')
+prefill_dp_local = gpus_per_node if prefill_ep else 1
+add_role('prefill', ips[:pn], int('$VLLM_PORT'), prefill_group, prefill_dp_local)
 if dn:
-    decode_group = 1 if '$ROLE_ENABLE_EP' == 'true' else dn // int('$DECODE_WORKERS')
-    add_role('decode', ips[pn:pn + dn], int('$SIDECAR_PORT'), decode_group)
+    decode_ep = '$ROLE_ENABLE_EP' == 'true'
+    decode_group = 1 if decode_ep else dn // int('$DECODE_WORKERS')
+    decode_dp_local = gpus_per_node if decode_ep else 1
+    add_role('decode', ips[pn:pn + dn], int('$SIDECAR_PORT'), decode_group, decode_dp_local)
 with open(os.environ['LLMD_ENDPOINTS_FILE'], 'w') as output:
     yaml.safe_dump({'endpoints': endpoints}, output)
 print(yaml.safe_dump({'endpoints': endpoints}))
@@ -466,19 +468,29 @@ PY
 
     # ---- Gate on ALL prefill vLLM /health endpoints (cross-node) ----
     # Prefill ranks wait on their own local /health; wait_for_server_ready only
-    # probes localhost, so the decode leader polls the prefill nodes here.
-    # endpoints.yaml lists one prefill endpoint per node, so with PREFILL_WORKERS>1
-    # (multiple independent DP engines) EVERY prefill node must be probed, not just
-    # IPS[0]. curl gets an explicit connect/max timeout so a blackholed endpoint
-    # trips the deadline instead of hanging the whole run (a single timeout-less
-    # curl once wedged a 2P run for 7h before it was cancelled).
+    # probes localhost, so the coordinator polls every prefill node here.
+    # External LB registers one EPP endpoint per DP rank, so dedupe by node IP.
+    # EP roles expose /health on the DP supervisor (8100), not the serving port.
+    # curl gets an explicit connect/max timeout so a blackholed endpoint trips the
+    # deadline instead of hanging the whole run (a single timeout-less curl once
+    # wedged a 2P run for 7h before it was cancelled).
     mapfile -t _prefill_ips < <(python3 - "$LLMD_ENDPOINTS_FILE" <<'PY'
 import sys, yaml
+seen = set()
 for endpoint in yaml.safe_load(open(sys.argv[1]))['endpoints']:
-    if endpoint['labels']['llm-d.ai/role'] == 'prefill':
-        print(endpoint['address'])
+    if endpoint['labels']['llm-d.ai/role'] != 'prefill':
+        continue
+    address = endpoint['address']
+    if address in seen:
+        continue
+    seen.add(address)
+    print(address)
 PY
     )
+    _PREFILL_HEALTH_PORT="$VLLM_PORT"
+    if [[ "$PREFILL_ENABLE_EP" == "true" ]]; then
+        _PREFILL_HEALTH_PORT="8100"
+    fi
 
     # On failure, dump enough to tell a server-not-ready problem (TCP connects but
     # /health is slow) apart from a network/subnet problem (TCP connect refused or
@@ -550,28 +562,26 @@ PY
         } >&2
     }
 
-    # Log the decode->prefill target layout up front so a subnet/interface
-    # mismatch is visible even on a run that eventually succeeds. Every prefill
-    # node serves on VLLM_PORT (hybrid LB).
-    echo "[diag] decode-leader $(hostname 2>/dev/null) local-ips: $(hostname -I 2>/dev/null); prefill targets: ${_prefill_ips[*]}"
-    echo "Waiting for prefill vLLM /health on ${#_prefill_ips[@]} node(s): ${_prefill_ips[*]}"
+    # Log the coordinator->prefill target layout up front so a subnet/interface
+    # mismatch is visible even on a run that eventually succeeds.
+    echo "[diag] coordinator $(hostname 2>/dev/null) local-ips: $(hostname -I 2>/dev/null); prefill targets: ${_prefill_ips[*]}:${_PREFILL_HEALTH_PORT}"
+    echo "Waiting for prefill vLLM /health on ${#_prefill_ips[@]} node(s) (port ${_PREFILL_HEALTH_PORT}): ${_prefill_ips[*]}"
     PREFILL_WAIT_DEADLINE=$(( $(date +%s) + 300 ))
     for _pidx in "${!_prefill_ips[@]}"; do
         _pip="${_prefill_ips[$_pidx]}"
-        _pport="$VLLM_PORT"
         until curl --output /dev/null --silent --fail \
                 --connect-timeout 5 --max-time 10 \
-                "http://$_pip:$_pport/health"; do
+                "http://$_pip:${_PREFILL_HEALTH_PORT}/health"; do
             if [[ "$(date +%s)" -ge "$PREFILL_WAIT_DEADLINE" ]]; then
-                echo "ERROR: prefill vLLM at $_pip:$_pport not ready within 5 min" >&2
-                _diag_prefill_endpoint "$_pip" "$_pport"
+                echo "ERROR: prefill vLLM at $_pip:${_PREFILL_HEALTH_PORT} not ready within 5 min" >&2
+                _diag_prefill_endpoint "$_pip" "$_PREFILL_HEALTH_PORT"
                 exit 1
             fi
             sleep 5
         done
-        echo "Prefill vLLM at $_pip:$_pport is ready"
+        echo "Prefill vLLM at $_pip:${_PREFILL_HEALTH_PORT} is ready"
     done
-    echo "All ${#_prefill_ips[@]} prefill vLLM endpoint(s) ready"
+    echo "All ${#_prefill_ips[@]} prefill vLLM node(s) ready"
 
     if [[ "${IS_AGENTIC}" == "1" && "${EVAL_ONLY}" != "true" ]]; then
         export ENVOY_PORT VLLM_PORT INFMAX_CONTAINER_WORKSPACE

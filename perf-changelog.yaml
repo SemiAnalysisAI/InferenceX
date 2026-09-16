@@ -7800,3 +7800,13 @@
     - "Use fixed-K DSpark golden AL: K=5/AL=3.61 for aggregated/decode; K=1/AL=1.84 for P/D prefill. Adaptive verification is disabled."
     - "Mooncake variants use DRAM offload at 0.60 utilization, one job-local master, and IB HCAs mlx5_0,1,3,4; no SSD offload. Plain TP8/DEP8 has no offload. Scrape vLLM nodes directly without duplicate frontend counters."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+    - dsv4-fp4-gb200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Switch DEP8 llm-d wide-EP from hybrid LB to multi-port external LB: register one EPP endpoint per DP rank, open multi-port pd-sidecar on decode, probe DP supervisor /health on 8100, use Nixl-only decode KV, and scrape per-rank vLLM metrics in AgentX."
+    - "将 DEP8 llm-d 宽 EP 从 hybrid LB 切换为多端口外部 LB：按 DP rank 注册 EPP 端点，decode 侧启用多端口 pd-sidecar，在 8100 探测 DP supervisor /health，decode 仅保留 Nixl KV，并在 AgentX 中按 rank 抓取 vLLM 指标。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
