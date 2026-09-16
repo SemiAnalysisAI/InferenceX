@@ -7914,3 +7914,22 @@
     - "Update SGLang image for the resident arm from lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 and the HiCache arm from lmsysorg/sglang:v0.5.19-cu130 to lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161 (2026-09-14 upstream cu13 nightly, sgl-project/sglang@4358a161). The 2026-09-15 nightly (nightly-dev-cu13-20260915-8874c51a) cannot start any HiCache arm: sgl-project/sglang#35233 (merged 2026-09-14T22:49Z) made the host pool import get_device_accessible_ptr from a kernel wheel that image does not ship, so every kv-offloading dram point died at startup (runs 35016956476, 35016965515); sgl-project/sglang#39516 fixes it for the 2026-09-16 build, and 09-14 is the newest nightly that predates the regression. NEXTN MTP settings, HiCache arms, and the grid are unchanged"
     - "将 SGLang 镜像（驻留分支自 lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00，HiCache 分支自 lmsysorg/sglang:v0.5.19-cu130）更新为 lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161（2026-09-14 上游 cu13 nightly，sgl-project/sglang@4358a161）。2026-09-15 nightly（nightly-dev-cu13-20260915-8874c51a）的所有 HiCache 分支无法启动：sgl-project/sglang#35233（2026-09-14T22:49Z 合入）令主机池从镜像未附带的内核 wheel 导入 get_device_accessible_ptr，所有 kv-offloading dram 点在启动时失败（运行 35016956476、35016965515）；sgl-project/sglang#39516 已修复并将随 2026-09-16 构建发布，09-14 是早于该回归的最新 nightly。NEXTN MTP 设置、HiCache 分支及网格保持不变"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3149
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260915."
+    - "Switch HiCache defaults to --hicache-io-backend kernel and --hicache-mem-layout page_first (from direct / page_first_direct). Ratio 1.5 and write_through are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3118
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Rerun the MI355X disaggregated MTP sweep with the original DeepSeek-V4-Pro checkpoint, whose native MTP weights match the existing EAGLE recipe. The existing checkpoint selector restores thinking-on golden AL 2.49 for three draft tokens; evals use real acceptance."
+    - "Collect completed server logs from every Slurm node into the shared artifact directory after the benchmark server step exits, including decode-node logs."
+    - "Pass the existing router port to evaluation and forward workflow-owned AgentX fast-mode and power requirements across container boundaries."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3170
