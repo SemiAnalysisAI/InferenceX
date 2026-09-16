@@ -91,6 +91,14 @@ Actions runner 2.336.0 or newer; actionlint 1.7.12 does not recognize this synta
 Offload setup is selected only by
 `experiment: agentx-offload`; ordinary recipes retain their existing behavior.
 
+The experiment's self-hosted checkout uses pinned `actions/checkout@v5.0.1` with
+`persist-credentials: false`: the initial NVMe and DRAM workflow jobs failed in
+v7.0.1's conditional credential-file setup before reaching GPU allocation.
+This is a scoped compatibility probe for the documented [upstream path-matching
+issue](https://github.com/actions/checkout/issues/2393), not offload performance
+evidence. Ordinary workflow checkouts retain v7.0.1. Remove the fallback once the
+runner paths or an upstream release are verified compatible.
+
 ## Evidence and visualization
 
 Retain standard `bmk_agentic_*`, `agentic_*`, server and GPU metrics artifacts.

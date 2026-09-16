@@ -1,6 +1,54 @@
 {
   "study": "agentx-offload-v1",
-  "runs": [],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu",
-  "status": "Ready for first matched workflow set after capacity check"
+  "runs": [
+    {
+      "run_id": 35150085918,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35150085918",
+      "arm": "nvme",
+      "concurrency": 16,
+      "repeat": 1,
+      "attempt": 1,
+      "head_sha": "4d465b7b6a2b908f068b9b709f0804a27cd56e2b",
+      "status": "failed",
+      "node": null,
+      "artifacts": [],
+      "failure_stage": "repository checkout",
+      "diagnosis": "Git fetch could not read Username; conditional credential file not applied.",
+      "performance_result": false,
+      "artifact_evidence": "GitHub job logs retained by workflow"
+    },
+    {
+      "run_id": 35150281066,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35150281066",
+      "arm": "none",
+      "concurrency": 16,
+      "repeat": 1,
+      "attempt": 1,
+      "head_sha": "4d465b7b6a2b908f068b9b709f0804a27cd56e2b",
+      "status": "cancellation_requested",
+      "node": null,
+      "artifacts": [],
+      "diagnosis": "Stopped queued control pending shared checkout compatibility repair.",
+      "performance_result": false,
+      "artifact_evidence": "GitHub job logs retained by workflow"
+    },
+    {
+      "run_id": 35150286749,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35150286749",
+      "arm": "dram",
+      "concurrency": 16,
+      "repeat": 1,
+      "attempt": 1,
+      "head_sha": "4d465b7b6a2b908f068b9b709f0804a27cd56e2b",
+      "status": "failed",
+      "node": null,
+      "artifacts": [],
+      "failure_stage": "repository checkout",
+      "diagnosis": "Git fetch could not read Username; conditional credential file not applied.",
+      "performance_result": false,
+      "artifact_evidence": "GitHub job logs retained by workflow"
+    }
+  ],
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749",
+  "status": "Testing experiment-only checkout fallback after two pre-GPU authentication failures."
 }

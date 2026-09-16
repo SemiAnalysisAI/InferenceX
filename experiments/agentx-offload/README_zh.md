@@ -77,6 +77,12 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX \
 actionlint 1.7.12 尚不识别该语法。
 仅 `experiment: agentx-offload` 启用实验配置，普通配方保留原行为。
 
+实验的自托管 checkout 暂时使用固定提交的 `actions/checkout@v5.0.1`，仍设置
+`persist-credentials: false`。首批 NVMe 和 DRAM 作业在 v7.0.1 的条件式凭据文件
+配置后获取仓库失败，尚未申请 GPU。这是针对 [上游路径匹配问题](https://github.com/actions/checkout/issues/2393)
+的限定范围兼容性验证，不是卸载性能证据。普通工作流仍使用 v7.0.1。
+确认 runner 路径或上游新版本兼容后，应移除此回退。
+
 ## 证据与可视化
 
 保留标准 `bmk_agentic_*`、`agentic_*`、服务端日志和 GPU 指标产物。
