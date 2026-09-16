@@ -7923,3 +7923,12 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260915."
     - "Switch HiCache defaults to --hicache-io-backend kernel and --hicache-mem-layout page_first (from direct / page_first_direct). Ratio 1.5 and write_through are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3118
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the vLLM ROCm nightly to af1c01499b289be555c475669ba50a88e96d846e and extend the MI355X DeepSeek-V4.1-Flash TP4 AgentX sweep with concurrency 64 and 128. Use vLLM's MI355X API-server default max_num_seqs of 1024; keep the CUDA graph ceiling at 1024 tokens through c64 and raise it to 2048 at c128 to cover twice the outer concurrency."
+    - "将 vLLM ROCm nightly 更新至 af1c01499b289be555c475669ba50a88e96d846e，并为 MI355X DeepSeek-V4.1-Flash TP4 AgentX 扫描新增并发 64 和 128。使用 vLLM 在 MI355X API server 上默认的 max_num_seqs 1024；c64 及以下保持 1024-token CUDA graph 上限，c128 提升至 2048，以覆盖两倍外层并发。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3111

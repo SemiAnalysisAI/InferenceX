@@ -41,12 +41,16 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_RUST_FRONTEND=1
 export PYTHONUNBUFFERED=1
 
-# Upstream picks 1024 on GPUs with >= 160 GiB, and 2*CONC starves AgentX
-# subagent fan-out at low CONC. 128 also keeps CAPTURE_SIZE deterministic.
-MAX_NUM_SEQS=128
+# Let vLLM select max_num_seqs; its API-server default is 1024 on MI355X.
+# Keep graph capture at the #3058 size through c64, then cover twice the outer
+# concurrency at c128 for AgentX subagent fan-out.
 NUM_SPEC_TOKENS=5
+GRAPH_NUM_SEQS=$((2 * CONC))
+if (( GRAPH_NUM_SEQS < 128 )); then
+    GRAPH_NUM_SEQS=128
+fi
 CAPTURE_SIZE=1
-while (( CAPTURE_SIZE < MAX_NUM_SEQS * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
+while (( CAPTURE_SIZE < GRAPH_NUM_SEQS * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
     CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
 done
 
@@ -82,7 +86,6 @@ VLLM_CMD=(
     --gpu-memory-utilization 0.9
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576
-    --max-num-seqs "$MAX_NUM_SEQS"
     --max-cudagraph-capture-size "$CAPTURE_SIZE"
     --max-num-batched-tokens 16384
     --disable-uvicorn-access-log
