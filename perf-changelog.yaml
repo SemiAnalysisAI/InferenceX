@@ -7850,3 +7850,11 @@
     - "Update vLLM image from vllm/vllm-openai:deepseekv41-flash-0909 to vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 (2026-09-15 upstream nightly, vllm-project/vllm@cd10ed6f); recipe script, DSpark settings, and the TP4 c1–128 grid are unchanged"
     - "将 vLLM 镜像从 vllm/vllm-openai:deepseekv41-flash-0909 更新为 vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3（2026-09-15 上游 nightly，vllm-project/vllm@cd10ed6f）；配方脚本、DSpark 设置及 TP4 c1–128 网格保持不变"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3139
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang
+    - qwen3.5-fp8-h200-sglang-mtp
+  description:
+    - "Require validated GPU power for the retained Qwen3.5 H200 FP8 8k1k points."
+    - "要求保留的 Qwen3.5 H200 FP8 8k1k 数据点提供通过验证的 GPU 功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
