@@ -1,37 +1,9 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-# DeepSeek-V4.1-Flash with the Engram n-gram tables served from local NVMe
-# instead of pinned host RAM.
-#
-# The table is 23.60 GiB per rank per Engram layer and the model has two, so
-# TP4 holds ~189 GiB in host memory. It is a pure gather -- one row per head
-# per layer per token -- so the working set is tiny next to the table, which
-# makes it a candidate for file-backed paging. This maps each shard from
-# $ENGRAM_SSD_DIR and gathers rows on the host, leaving ~257 GiB of host RAM
-# free at no cost to decode throughput.
-#
-# The row gather runs on a worker while the decoder layers execute. The forward
-# thread issues the id copy on the stream that produced the ids and records an
-# event; the worker waits on it and then does numpy and filesystem work only,
-# touching no CUDA, which is what keeps it clear of cudagraph capture.
-#
-# Against an otherwise identical inline build at 8k1k concurrency 16: mean TTFT
-# 697 ms against 985 ms, P99 TTFT 4.1s against 6.5s, with throughput and TPOT
-# unchanged. The gain is the prefill tail, where a step gathers thousands of
-# rows and has decoder compute to hide them behind.
-#
-# Measured against dsv41flash-fp4-b200-vllm-agentic-dspark on B200 TP4 at
-# 8k1k, concurrency 16, CUDA graphs, three runs per arm:
-#   disk     14,168 tok/s mean (1.4% spread), 95 GB host RAM
-#   baseline 13,632 tok/s mean (12.4% spread), 352 GB host RAM
-# Decode is slightly better (median TPOT 8.45-8.60 ms vs 8.57-9.78 ms): UVA
-# issues ~16k scattered 264-byte PCIe reads per layer, while this gathers in
-# DRAM and page cache and then does one contiguous H2D. Prefill's tail is
-# worse (P99 TTFT ~6.0s vs ~3.9s) from cold-page first touches.
-#
-# Requires the vLLM patch in benchmarks/patches (vllm-project/vllm#56512 plus
-# the disk tier); drop this recipe once that lands upstream.
+# DeepSeek-V4.1-Flash Engram on local NVMe. The pinned image patch stages
+# current hash IDs and disk rows before graph replay into fixed GPU buffers.
+# Correctness is checked on changing IDs and graph sizes before model startup.
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 export GPU_COUNT="$TP"
@@ -74,6 +46,7 @@ elif ! patch -p1 -R --dry-run -d "$VLLM_DIR" < "$ENGRAM_PATCH" > /dev/null 2>&1;
     exit 1
 fi
 python3 -c "from vllm.config.engram import EngramConfig; assert 'disk_offload_dir' in EngramConfig.__dataclass_fields__"
+python3 "$INFERENCEX_REPO_ROOT/benchmarks/patches/check_dsv41flash_ssd_graph.py"
 
 # Node-local NVMe. A network mount would make every row gather a round trip,
 # so fail loudly rather than silently benchmarking the filesystem.
@@ -202,7 +175,7 @@ EOF
 esac
 
 NUM_SPEC_TOKENS=5
-CAPTURE_SIZE=1
+CAPTURE_SIZE=64
 while (( CAPTURE_SIZE < CONC * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
     CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
 done
@@ -213,10 +186,8 @@ else
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":3.51,"enable_adaptive_verification":false}'
 fi
 
-# Piecewise capture, not the default. The row gather is host work -- a
-# device-to-host copy of the ids and a read from a mapped file -- which is
-# illegal while a stream is capturing, so the lookup skips it during capture
-# and relies on this forward still executing in Python on every live step.
+# SSD hash/row staging runs before replay. Decode captures the complete GPU
+# forward; mixed/prefill batches use the image's piecewise fallback.
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0 --port "$PORT" --tensor-parallel-size "$TP"
@@ -226,7 +197,7 @@ VLLM_CMD=(
     --reasoning-parser deepseek_v41
     --engram-config "{\"cpu_offload\":true,\"disk_offload_dir\":\"$ENGRAM_SSD_DIR\"}"
     "${OFFLOAD_ARGS[@]}"
-    --compilation-config '{"cudagraph_mode":"PIECEWISE"}'
+    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576
     --max-cudagraph-capture-size "$CAPTURE_SIZE"

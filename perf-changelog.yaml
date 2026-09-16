@@ -7932,3 +7932,12 @@
     - "Serve the DeepSeek-V4.1-Flash Engram n-gram tables from node-local NVMe instead of pinned host DRAM, freeing ~189 GiB of host memory for KV at throughput parity on B200 TP4 (14,168 vs 13,632 tok/s mean over three 8k1k runs each), with the row gather overlapped against the decoder layers (P99 TTFT 4.1s vs 6.5s inline)."
     - "DeepSeek-V4.1-Flash 的 Engram 表改由本地 NVMe 提供，释放的主机内存转给 KV 卸载，吞吐持平。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3080
+
+- config-keys:
+    - dsv41flashssd-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Stage SSD Engram rows before full CUDA graph replay on B200 using live V2 input/lookback hashes, fixed GPU buffers, deduplicated sorted reads and concurrent table gathers; raise the graph floor to 64"
+    - "在 B200 上使用实时 V2 输入及回看 hash、固定 GPU 缓冲区、去重排序读取和并行表读取，于完整 CUDA graph 回放前准备 SSD Engram 行；将最小图捕获范围提升至 64"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3080
