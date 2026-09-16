@@ -135,7 +135,7 @@ def submit(image: str, backends: list[str], world_size: int, platform: str, clus
         "unset NCCL_ASYNC_ERROR_HANDLING",
         "export PYTHONWARNINGS=ignore::SyntaxWarning",
         f"cd {project}",
-        f"export PYTHONPATH={project}",
+        f"export PYTHONPATH={shlex.quote(str(project.parent))}",
         "export RANK=$SLURM_PROCID",
         "export LOCAL_RANK=$SLURM_LOCALID",
         "export WORLD_SIZE=$SLURM_NTASKS",

@@ -102,9 +102,12 @@ if agentic_kv_offload_enabled; then
     esac
 fi
 
-# sglang-router fronts the DP ranks with consistent hashing on the AIPerf
-# correlation id so multi-turn sessions stay on the rank holding their prefix.
+# ---- Parallelism ------------------------------------------------------------
+# The DP-attention path below is live: sglang-router fronts the DP ranks with
+# cache-aware routing, which picks the rank holding the longest radix/hicache
+# prefix match for the incoming prompt.
 USE_SGLANG_ROUTER=false
+ROUTER_POLICY_ARGS=()
 SGLANG_BACKEND_PORT="$PORT"
 # The flag is engine-wide and DP divides it by dp_size (=TP), so DP uses
 # 8192*TP to keep 8192 per rank.
@@ -138,6 +141,10 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export GPU_MAX_HW_QUEUES="5"
     MEM_FRACTION_STATIC="0.92"
 
+    if [ "$CONC" -gt 160 ]; then
+        ROUTER_POLICY_ARGS+=(--balance-abs-threshold 32)
+    fi
+
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
@@ -146,11 +153,11 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --enable-dp-attention-local-control-broadcast
         --tokenizer-worker-num "$TP"
         --stream-interval 20
-        --prefill-decode-interval "10"
+        --prefill-decode-interval "20"
         --prefill-delayer-token-usage-low-watermark "0.7"
     )
 else
-    PARALLEL_ARGS+=(--prefill-decode-interval "10")
+    PARALLEL_ARGS+=(--prefill-decode-interval "20")
 fi
 
 if [ "$EP_SIZE" -gt 1 ]; then
@@ -244,7 +251,8 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     echo "Starting SGLang router on port $PORT for $TP DP ranks..."
     "${SGLANG_ROUTER_CMD[@]}" \
         --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
-        --policy consistent_hashing \
+        --policy cache_aware \
+        "${ROUTER_POLICY_ARGS[@]}" \
         --request-id-headers x-correlation-id \
         --dp-aware \
         --host 0.0.0.0 \

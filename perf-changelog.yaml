@@ -7925,6 +7925,71 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3118
 
 - config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260914."
+    - "Raise --prefill-decode-interval from 10 to 20 on both the TP-only and DP-attention serving paths, so the scheduler runs more decode steps between prefill admissions."
+    - "Switch the sglang-router policy for the DP-attention arms from consistent_hashing to cache_aware, and set the cache-aware absolute balance threshold to 32, down from the router default of 64, at concurrency above 160."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3120
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Update vLLM image from vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 to vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e (2026-09-16 upstream nightly, vllm-project/vllm@af1c0149, manifest digest sha256:f3b756ede21083a9415baac77b38998b89c738d2a9c1441c22de2d49cacf5282); the 59 upstream commits touch the DeepSeek-V4.1 path (Mega-mHC via the vLLM DeepGEMM fork, DSpark collapse before SP all-gather, KV-only context insertion, renderer and XGrammar tool-schema fixes). v0.29.0 predates the deepseek_v41 package this recipe needs. Recipe script, DSpark settings and the TP4 c1-128 grid are unchanged"
+    - "将 vLLM 镜像从 vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 更新为 vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e（2026-09-16 上游 nightly，vllm-project/vllm@af1c0149，manifest digest sha256:f3b756ede21083a9415baac77b38998b89c738d2a9c1441c22de2d49cacf5282）；上游 59 个提交涉及 DeepSeek-V4.1 路径（基于 vLLM DeepGEMM 分支的 Mega-mHC、DSpark 在 SP all-gather 前折叠、仅 KV 的上下文插入、渲染器与 XGrammar 工具 schema 修复）。v0.29.0 早于该配方所需的 deepseek_v41 包。配方脚本、DSpark 设置及 TP4 c1-128 网格保持不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3176
+
+- config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B200 DeepSeek-V4-Pro AgentX to lmsysorg/sglang:v0.5.19-cu130; recipe settings unchanged."
+    - "将 B200 DeepSeek-V4-Pro AgentX 镜像更新为 lmsysorg/sglang:v0.5.19-cu130；配方参数不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3012
+
+- config-keys:
+    - dsr1-fp4-b200-sglang
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.16-cu130 (build commit sgl-project/sglang@fdebc938f7f4d16fe6b9f55dcd9a767cf0899ea1, CUDA 13.0.1, FlashInfer 0.6.14, sgl-kernel 0.4.5) to the v0.5.19 release image lmsysorg/sglang:v0.5.19-cu130 (digest sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9, build commit sgl-project/sglang@0bcd822377da7b5718e674eaf9c870d349424dd1, CUDA 13.0.3, FlashInfer 0.6.18, sgl-kernel 0.4.6.post1)."
+    - "benchmarks/single_node/fixed_seq_len/dsr1_fp4_b200.sh is unchanged: nvidia/DeepSeek-R1-0528-FP4-V2 with modelopt_fp4, trtllm_mla attention, flashinfer_trtllm MoE, fp8_e4m3 KV cache, TP4/EP1 concurrency 1-32 and TP4/EP4 DP-attention concurrency 64-256 on the 8k1k workload."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2989
+
+- config-keys:
+    - qwen3.5-fp8-h100-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.16-cu130 to lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161 (2026-09-14 upstream cu13 nightly, sgl-project/sglang@4358a161). The 2026-09-15 nightly (nightly-dev-cu13-20260915-8874c51a) cannot start any HiCache arm: sgl-project/sglang#35233 (merged 2026-09-14T22:49Z) made the host pool import get_device_accessible_ptr from a kernel wheel that image does not ship, so every kv-offloading dram point died at startup (runs 35016956476, 35016965515); sgl-project/sglang#39516 fixes it for the 2026-09-16 build, and 09-14 is the newest nightly that predates the regression. NEXTN MTP settings, HiCache arms, and the grid are unchanged"
+    - "将 SGLang 镜像从 lmsysorg/sglang:v0.5.16-cu130更新为 lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161（2026-09-14 上游 cu13 nightly，sgl-project/sglang@4358a161）。2026-09-15 nightly（nightly-dev-cu13-20260915-8874c51a）的所有 HiCache 分支无法启动：sgl-project/sglang#35233（2026-09-14T22:49Z 合入）令主机池从镜像未附带的内核 wheel 导入 get_device_accessible_ptr，所有 kv-offloading dram 点在启动时失败（运行 35016956476、35016965515）；sgl-project/sglang#39516 已修复并将随 2026-09-16 构建发布，09-14 是早于该回归的最新 nightly。NEXTN MTP 设置、HiCache 分支及网格保持不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3150
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.16-cu130 to lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161 (2026-09-14 upstream cu13 nightly, sgl-project/sglang@4358a161); rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode, which exists on both this and the 09-15 nightly, because recent nightlies split the flag into decode/prefill variants and reject the old prefix as ambiguous (B200 sibling, run 35013444957). The 2026-09-15 nightly (nightly-dev-cu13-20260915-8874c51a) cannot start any HiCache arm: sgl-project/sglang#35233 (merged 2026-09-14T22:49Z) made the host pool import get_device_accessible_ptr from a kernel wheel that image does not ship, so every kv-offloading dram point died at startup (runs 35016956476, 35016965515); sgl-project/sglang#39516 fixes it for the 2026-09-16 build, and 09-14 is the newest nightly that predates the regression. NEXTN MTP settings, HiCache arms, and the grid are unchanged"
+    - "将 SGLang 镜像从 lmsysorg/sglang:v0.5.16-cu130更新为 lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161（2026-09-14 上游 cu13 nightly，sgl-project/sglang@4358a161）；将 --cuda-graph-max-bs 改为 --cuda-graph-max-bs-decode（09-14 与 09-15 nightly 均支持），因近期 nightly 将该参数拆分为 decode/prefill 两个变体并拒绝旧写法（B200 同级配方运行 35013444957）。2026-09-15 nightly（nightly-dev-cu13-20260915-8874c51a）的所有 HiCache 分支无法启动：sgl-project/sglang#35233（2026-09-14T22:49Z 合入）令主机池从镜像未附带的内核 wheel 导入 get_device_accessible_ptr，所有 kv-offloading dram 点在启动时失败（运行 35016956476、35016965515）；sgl-project/sglang#39516 已修复并将随 2026-09-16 构建发布，09-14 是早于该回归的最新 nightly。NEXTN MTP 设置、HiCache 分支及网格保持不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3142
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.14-cu130 to lmsysorg/sglang:nightly-dev-cu13-20260915-8874c51a (2026-09-15 upstream cu13 nightly, sgl-project/sglang@8874c51a); raise --max-prefill-tokens and --chunked-prefill-size from 16384 to 32768 and add --mamba-full-memory-ratio 0.37 and --linear-attn-prefill-backend flashinfer; the TP8/TP4 EAGLE grid is unchanged"
+    - "将 SGLang 镜像从 lmsysorg/sglang:v0.5.14-cu130 更新为 lmsysorg/sglang:nightly-dev-cu13-20260915-8874c51a（2026-09-15 上游 cu13 nightly，sgl-project/sglang@8874c51a）；将 --max-prefill-tokens 与 --chunked-prefill-size 从 16384 提高到 32768，并新增 --mamba-full-memory-ratio 0.37 和 --linear-attn-prefill-backend flashinfer；TP8/TP4 EAGLE 网格保持不变"
+    - "Rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode: the 2026-09-15 SGLang nightly splits the flag into decode/prefill variants and rejects the old spelling as ambiguous (run 35013444957, canary c4)"
+    - "将 --cuda-graph-max-bs 改为 --cuda-graph-max-bs-decode：2026-09-15 SGLang nightly 将该参数拆分为 decode/prefill 两个变体，旧写法因歧义被拒绝（运行 35013444957，canary c4）"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3144
+
+- config-keys:
+    - dsv41flash-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use a B300-specific vLLM AgentX script with explicit FULL_AND_PIECEWISE CUDA graph capture sizes, concurrency-tiered batched-token limits, and an explicit maximum sequence count."
+    - "Add a TP2 search-space variant at concurrency 2-128 while retaining the TP4 concurrency 1-128 variant."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3109
+
+- config-keys:
     - dsv4-fp4-gb200-llmd-vllm-agentx
     - dsv4-fp4-gb200-llmd-vllm-agentx-agg
   scenario-type:

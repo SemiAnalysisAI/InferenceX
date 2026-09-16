@@ -223,15 +223,22 @@ stores Engram embedding tables in pinned host DRAM accessed through UVA;
 `kv-offloading: none` describes the separate, GPU-resident KV cache. MXFP4 expert
 weights determine the recipe's `precision: fp4` label.
 
-The GPU-specific entry points share the text-only serving script, `deepseek_v41` tokenizer and
+The GPU-specific entry points share the text-only serving behavior, `deepseek_v41` tokenizer and
 parsers, 1M context, and the shared AgentX trace replay, power, metrics, and eval
-helpers. Concurrency is 1–128. Model-runner selection and scheduler batching follow the
-official single-node TP recipe defaults; graph capture covers concurrency times
-the six-token DSpark verification block. The launchers mount the repository at `/ix` for this recipe so
+helpers. The TP4 concurrency range is 1–128. The shared script sizes graph capture
+for the six-token DSpark verification block. The launchers mount the repository at `/ix` for this recipe so
 AgentX runtime directories are not created under `/workspace`. Launcher-specific model paths and persistent caches are reused.
 The recipe probes the serving port on the compute node and selects an available
 port if the preferred one is occupied. Serving, replay, metrics, and eval share
 that endpoint.
+
+The B300 entry also includes a TP2 variant at concurrency 2–128. Its dedicated
+script uses `FULL_AND_PIECEWISE` CUDA graphs with explicit capture-size sets ending
+at 2046 or 8190 tokens. It sets `--max-num-batched-tokens` to 2048 for concurrency
+1–4 and TP2 concurrency 128, and to 8192 otherwise; `--max-num-seqs` is 256. The
+TP2 concurrency-128 variant also sets `--gpu-memory-utilization 0.97`. Other SKUs
+continue to use the shared script.
+
 The GB300 launcher allows 7200 seconds for engine readiness. In [run 34504969146](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34504969146), the Rust frontend exhausted its 3600-second deadline while the engine was still capturing graphs; model loading alone took 18–23 minutes. This extends startup time without changing the benchmark duration or decoding settings.
 
 GPU sweep and eval evidence is required before calling any recipe validated.
