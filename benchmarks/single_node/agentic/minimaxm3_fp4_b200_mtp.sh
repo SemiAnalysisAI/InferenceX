@@ -136,13 +136,15 @@ trap cleanup_agentic_services EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# Select the supported FP8 draft backend explicitly; FA4 currently fails
+# during graph capture on zero-stride descale tensors. No engine source edits.
 if [ "${EVAL_ONLY:-}" = "true" ]; then
     SPEC_CONFIG=$(printf \
-        '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"FLASH_ATTN"}' \
+        '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"FLASHINFER"}' \
         "$DRAFT_MODEL_PATH" "$NUM_SPEC_TOKENS")
 else
     SPEC_CONFIG=$(printf \
-        '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"FLASH_ATTN","rejection_sample_method":"synthetic","synthetic_acceptance_length":%.2f}' \
+        '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"FLASHINFER","rejection_sample_method":"synthetic","synthetic_acceptance_length":%.2f}' \
         "$DRAFT_MODEL_PATH" "$NUM_SPEC_TOKENS" "$SYNTHETIC_ACCEPT_LEN")
 fi
 

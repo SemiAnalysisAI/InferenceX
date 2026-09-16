@@ -7942,6 +7942,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3176
 
 - config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
     - minimaxm3-fp4-b200-trtllm-agentic-mtp
     - minimaxm3-fp4-b300-trtllm-agentic-mtp
   scenario-type:
@@ -7953,4 +7954,6 @@
     - "移除 TRT 执行器指标改写，选择原生 MiniMax-M3 工具解析器，并添加上游 BFCL Responses smoke；原生指标采集开销需重新验证性能。"
     - "Add an experimental native TensorRT-LLM rc26 BFCL Responses probe with upstream token-usage reporting."
     - "新增实验性原生 TensorRT-LLM rc26 BFCL Responses 探测配置，使用上游 token 用量统计。"
+    - "Select native FlashInfer attention for the B200 MiniMax EAGLE3 draft to avoid the FA4 FP8 descale stride failure. Requires fresh throughput validation."
+    - "B200 MiniMax EAGLE3 草稿模型改用原生 FlashInfer attention，避开 FA4 FP8 descale stride 故障；需重新验证吞吐量。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
