@@ -3,11 +3,18 @@ default_partition: ${SLURM_PARTITION}
 gpus_per_node: 8
 network_interface: ""
 srtctl_root: ${SRTCTL_ROOT}
+default_mounts:
+  /opt/amazon/efa: /opt/amazon/efa
+  /opt/amazon/ofi-nccl: /opt/amazon/ofi-nccl
+  "${AIPERF_MMAP_CACHE_HOST_PATH}": /aiperf_mmap_cache
+  "${HF_HUB_CACHE_HOST_PATH}": /hf_hub_cache
 model_paths:
   dsr1: ${MODEL_ROOT}/DeepSeek-R1-0528-NVFP4-v2
   dsr1-fp8: ${MODEL_ROOT}/DeepSeek-R1-0528
   deepseek-v4-pro: ${MODEL_ROOT}/DeepSeek-V4-Pro
   deepseek-ai/DeepSeek-V4-Pro: ${MODEL_ROOT}/DeepSeek-V4-Pro
+  deepseek-v4-pro-0813: ${MODEL_ROOT}/DeepSeek-V4-Pro-0813
+  deepseek-ai/DeepSeek-V4-Pro-0813: ${MODEL_ROOT}/DeepSeek-V4-Pro-0813
   glm-5.2-fp4: ${MODEL_ROOT}/GLM-5.2-NVFP4
   glm-5.2-fp8: ${MODEL_ROOT}/GLM-5.2-FP8
   nvidia/GLM-5.2-NVFP4: ${MODEL_ROOT}/GLM-5.2-NVFP4

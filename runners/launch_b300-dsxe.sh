@@ -48,6 +48,8 @@ fi
 # enroot squash images. Must be on storage every compute node mounts and writable
 # by the runner user (/data/squash is root-owned, hence the per-user default).
 SQUASH_DIR="/data/home/sa-gha-runner/squash"
+AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-gha-runner/aiperf-cache"
+HF_HUB_CACHE_HOST_PATH="/data/home/sa-gha-runner/hf-hub-cache"
 
 # Weights. MODEL_ROOT is node-local NVMe with the same layout on every compute node;
 # it is read-only from the job's point of view. Anything not in STAGED_MODELS is
@@ -77,7 +79,7 @@ STAGED_MODELS=(
     Qwen3.8-2.4T-A95B-FP8
 )
 
-mkdir -p "$SQUASH_DIR"
+mkdir -p "$SQUASH_DIR" "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH"
 set -x
 
 # Keep this definition above the IS_MULTINODE branch: both paths call it, and
@@ -189,7 +191,9 @@ export OSL="$OSL"
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
 echo "Creating srtslurm.yaml configuration..."
 write_srt_cluster_config b300-dsxe srtslurm.yaml "$USES_DCGM_POWER" \
-    --var MODEL_ROOT "$MODEL_ROOT" || exit 1
+    --var MODEL_ROOT "$MODEL_ROOT" \
+    --var AIPERF_MMAP_CACHE_HOST_PATH "$AIPERF_MMAP_CACHE_HOST_PATH" \
+    --var HF_HUB_CACHE_HOST_PATH "$HF_HUB_CACHE_HOST_PATH" || exit 1
 
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
