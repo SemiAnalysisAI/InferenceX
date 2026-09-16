@@ -7931,4 +7931,4 @@
   description:
     - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913."
     - "Rerun the MI355X disaggregated MTP sweep with DeepSeek-V4-Pro-0813 + Dspark."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3170
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3191
