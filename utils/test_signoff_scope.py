@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import copy
 import json
+from urllib.parse import quote
 
 import pytest
 
@@ -12,7 +13,9 @@ from infx.workflows import signoff_scope
 @pytest.fixture
 def scope_case(monkeypatch):
     case = {
-        "pr": {"number": 7, "head": {"sha": "head"}, "base": {"sha": "trusted-base"}, "changed_files": 1},
+        "pr": {"number": 7, "head": {"sha": "head"}, "base": {"sha": "trusted-base", "ref": "main"}, "changed_files": 1},
+        "branch_sha": "trusted-base",
+        "target_ref": "main",
         "files": [{"filename": "configs/model.yaml"}],
         "codeowners": "* @SemiAnalysisAI/core\n/configs/ @admin @writer\n",
         "permissions": {"admin": {"permission": "admin", "role_name": "admin"},
@@ -26,14 +29,20 @@ def scope_case(monkeypatch):
             raise RuntimeError("GitHub unavailable")
         if path == "/pulls/7":
             return copy.deepcopy(case["pr"])
+        if path == f"/branches/{quote(case['target_ref'], safe='')}":
+            return {"commit": {"sha": case["branch_sha"]}}
         if path == "/pulls/7/files":
             if callback := case.get("during_listing"):
                 callback()
             page = int(params["page"]) - 1
             return case["files"][page * 100:(page + 1) * 100]
         if path == "/codeowners/errors":
+            if params == {"ref": "stale-base"}:
+                return {"errors": [{"kind": "Unknown owner"}]}
             if params != {"ref": "trusted-base"}:
-                raise AssertionError("Ownership must come from the base commit")
+                raise AssertionError("Ownership must come from the resolved target-branch commit")
+            if callback := case.get("during_errors"):
+                callback()
             return {"errors": case["errors"]}
         if path == "/contents/.github/CODEOWNERS":
             if params != {"ref": "trusted-base"}:
@@ -107,10 +116,37 @@ def test_owned_file_after_first_page_is_not_missed(scope_case):
     assert scope_case["statuses"] == []
 
 
-@pytest.mark.parametrize("changed", ["head", "base"])
+@pytest.mark.parametrize("base_ref", ["main", "release/next"])
+def test_stale_pr_base_uses_current_target_ownership_pinned_to_one_commit(scope_case, base_ref):
+    scope_case["pr"]["base"] = {"sha": "stale-base", "ref": base_ref}
+    scope_case["target_ref"] = base_ref
+    scope_case["during_errors"] = lambda: scope_case.update(branch_sha="newer-base")
+    assert signoff_scope.check_scope("example/repo", 7, "token")["required"] == "true"
+    assert scope_case["statuses"] == []
+
+
+@pytest.mark.parametrize("preceding_files", [0, 99])
+def test_type_change_entries_count_as_one_file_and_still_require_signoff(scope_case, preceding_files):
+    scope_case["files"] = [
+        {"filename": f"docs/{i}.md"} for i in range(preceding_files)
+    ] + [
+        {"filename": "configs/model.yaml", "status": "removed"},
+        {"filename": "configs/model.yaml", "status": "added"},
+    ]
+    scope_case["pr"]["changed_files"] = preceding_files + 1
+    assert signoff_scope.check_scope("example/repo", 7, "token") == {
+        "required": "true", "pr-number": "7", "head-sha": "head",
+    }
+    assert scope_case["statuses"] == []
+
+
+@pytest.mark.parametrize("changed", ["head", "base", "base-ref"])
 def test_pr_changes_during_scope_resolution_do_not_publish_an_exemption(scope_case, changed):
     scope_case["files"] = [{"filename": "README.md"}]
-    scope_case["during_listing"] = lambda: scope_case["pr"][changed].update(sha="new-commit")
+    if changed == "base-ref":
+        scope_case["during_listing"] = lambda: scope_case["pr"]["base"].update(ref="release/next")
+    else:
+        scope_case["during_listing"] = lambda: scope_case["pr"][changed].update(sha="new-commit")
     with pytest.raises(RuntimeError, match="PR changed"):
         signoff_scope.check_scope("example/repo", 7, "token")
     assert scope_case["statuses"][-1]["state"] == "error"
@@ -125,13 +161,18 @@ def test_matching_an_owner_more_than_once_checks_their_role_once(scope_case):
     ]
 
 
-@pytest.mark.parametrize("problem", ["files", "codeowners", "permission", "incomplete", "invalid", "empty"])
+@pytest.mark.parametrize("problem", ["files", "branch", "codeowners", "permission", "incomplete", "incomplete-duplicate", "invalid", "empty"])
 def test_scope_failures_revoke_an_earlier_exemption(scope_case, problem):
     scope_case["statuses"].append({"context": "CODEOWNER sign-off", "state": "success", "description": "N/A"})
-    if problem in {"files", "codeowners", "permission"}:
-        scope_case["fail_path"] = {"files": "/pulls/7/files", "codeowners": "/contents/.github/CODEOWNERS", "permission": "/collaborators/admin/permission"}[problem]
-    elif problem == "incomplete":
+    if problem in {"files", "branch", "codeowners", "permission"}:
+        scope_case["fail_path"] = {"files": "/pulls/7/files", "branch": "/branches/main", "codeowners": "/contents/.github/CODEOWNERS", "permission": "/collaborators/admin/permission"}[problem]
+    elif problem in {"incomplete", "incomplete-duplicate"}:
         scope_case["pr"]["changed_files"] = 2
+        if problem == "incomplete-duplicate":
+            scope_case["files"] = [
+                {"filename": "configs/model.yaml", "status": "removed"},
+                {"filename": "configs/model.yaml", "status": "added"},
+            ]
     elif problem == "invalid":
         scope_case["errors"] = [{"kind": "Unknown owner"}]
     else:

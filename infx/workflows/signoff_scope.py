@@ -16,9 +16,15 @@ from infx.workflows.reuse import write_outputs
 
 def required_owners(repo: str, pr: dict[str, Any], token: str) -> list[str]:
     files = github.paginate(repo, f"/pulls/{pr['number']}/files", token, "")
-    if len(files) != pr["changed_files"]:
+    # GitHub lists a symlink-to-file change as removed and added entries for
+    # one path, while changed_files counts that path once. Keep every entry
+    # below so ownership checks still include all previous_filename values.
+    if len({file["filename"] for file in files}) != pr["changed_files"]:
         raise RuntimeError("Incomplete changed-file list; cannot determine sign-off scope")
-    params = {"ref": pr["base"]["sha"]}
+    # A PR's recorded base SHA can predate ownership fixes on its target branch.
+    # Resolve the current trusted base branch once, then pin both reads to it.
+    branch = github.api(repo, f"/branches/{quote(pr['base']['ref'], safe='')}", token)
+    params = {"ref": branch["commit"]["sha"]}
     errors = github.api(repo, "/codeowners/errors", token, params)
     if errors["errors"]:
         raise RuntimeError("The base CODEOWNERS file has errors; cannot determine sign-off scope")
@@ -56,9 +62,15 @@ def check_scope(repo: str, number: int, token: str) -> dict[str, str]:
     try:
         required = required_owners(repo, pr, token)
         current = github.api(repo, f"/pulls/{number}", token)
-        if (current["head"]["sha"], current["base"]["sha"], current["changed_files"]) != (
+        if (
+            current["head"]["sha"],
+            current["base"]["sha"],
+            current["base"]["ref"],
+            current["changed_files"],
+        ) != (
             pr["head"]["sha"],
             pr["base"]["sha"],
+            pr["base"]["ref"],
             pr["changed_files"],
         ):
             raise RuntimeError(

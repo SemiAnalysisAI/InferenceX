@@ -7871,3 +7871,14 @@
     - "Select CUDA graph batch-size flags from the installed SGLang argument parser. Preserve --cuda-graph-bs on older images and use explicit phase flags only when the legacy option is absent."
     - "Restore compatibility for existing AMD disaggregated recipes on older SGLang images without changing the Pro-0813 image's graph sizes, disabled prefill graphs, golden AL 3.01, topology, or precision. Fail before launch if neither supported spelling is available."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2823
+
+- config-keys:
+    - dsv4-fp8-h200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh DeepSeek-V4-Pro-0813 FP8 H200 Dynamo+SGLang AgentX aggregate serving with DSpark K=6."
+    - "Image: lmsysorg/sglang:nightly-dev-20260914-4358a161"
+    - "Update simulated acceptance length from 2.49 to 3.77 and replace the removed cuda-graph-max-bs flag with cuda-graph-max-bs-decode."
+    - "Preserve the eight-hour DSV4 AgentX allocation through the H200 launcher's default time limit."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3100
