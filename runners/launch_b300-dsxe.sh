@@ -190,10 +190,15 @@ export OSL="$OSL"
 
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
 echo "Creating srtslurm.yaml configuration..."
+SRT_DEFAULT_TIME_LIMIT="4:00:00"
+if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+    SRT_DEFAULT_TIME_LIMIT="8:00:00"
+fi
 write_srt_cluster_config b300-dsxe srtslurm.yaml "$USES_DCGM_POWER" \
     --var MODEL_ROOT "$MODEL_ROOT" \
     --var AIPERF_MMAP_CACHE_HOST_PATH "$AIPERF_MMAP_CACHE_HOST_PATH" \
-    --var HF_HUB_CACHE_HOST_PATH "$HF_HUB_CACHE_HOST_PATH" || exit 1
+    --var HF_HUB_CACHE_HOST_PATH "$HF_HUB_CACHE_HOST_PATH" \
+    --var SRT_DEFAULT_TIME_LIMIT "$SRT_DEFAULT_TIME_LIMIT" || exit 1
 
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
