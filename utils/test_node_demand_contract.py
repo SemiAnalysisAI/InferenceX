@@ -47,3 +47,17 @@ def test_multinode_workflow_never_suppresses_an_empty_node_request() -> None:
     assert "type: number" in node_input
     assert "inputs.node-count != ''" not in contents
     assert "inputs.node-count == ''" not in contents
+
+
+def test_b200_nscale_launcher_discovers_a_live_slurm_association() -> None:
+    contents = (REPO_ROOT / "runners" / "launch_b200-nscale-slurm.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'SLURM_ACCOUNT="restricted"' in contents
+    assert 'SLURM_PARTITION="batch_2"' in contents
+    assert "sacctmgr -nP show assoc" in contents
+    assert "sbatch --test-only" in contents
+    assert "--gpus-per-node=8" in contents
+    assert 'SLURM_ACCOUNT="$account"' in contents
+    assert 'SLURM_PARTITION="$partition"' in contents

@@ -8,8 +8,8 @@
 # DeepSeek-V4-Pro FP4 Dynamo-SGLang MTP, on the b200-nscale runner label.
 # Anything else exits non-zero.
 
-SLURM_PARTITION="batch_1"
-SLURM_ACCOUNT="benchmark"
+SLURM_PARTITION="batch_2"
+SLURM_ACCOUNT="restricted"
 POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
 POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
 TILERT_SRT_SLURM_URL="https://github.com/SemiAnalysisAI/srt-slurm.git"
@@ -86,6 +86,74 @@ if [[ "$USES_DCGM_POWER" == "1" && (
     echo "Error: B200 nscale dcgm-power is limited to fixed-sequence DSV4/Kimi-K2.6 FP4 lanes" >&2
     exit 1
 fi
+
+select_nscale_slurm_pair() {
+    local probe_script probe_output candidate account partition assoc_account assoc_partition
+    local -a candidates partitions
+    local -A seen
+
+    probe_script="$(mktemp)"
+    printf '#!/usr/bin/bash\nexit 0\n' > "$probe_script"
+
+    add_candidate() {
+        local candidate_account="$1"
+        local candidate_partition="$2"
+        local key="${candidate_account}|${candidate_partition}"
+        if [[ -n "$candidate_account" && -n "$candidate_partition" && -z "${seen[$key]:-}" ]]; then
+            candidates+=("$key")
+            seen["$key"]=1
+        fi
+    }
+
+    # Keep the historically used pairs first, then discover every association
+    # granted to the runner user. NScale has changed these associations while
+    # retaining the same physical GitHub runner names.
+    add_candidate "$SLURM_ACCOUNT" "$SLURM_PARTITION"
+    add_candidate "benchmark" "batch_1"
+    mapfile -t partitions < <(sinfo -h -o '%P' 2>/dev/null | sed 's/\*$//' | sort -u)
+    if command -v sacctmgr >/dev/null 2>&1; then
+        while IFS='|' read -r assoc_account assoc_partition _; do
+            if [[ -n "$assoc_partition" ]]; then
+                add_candidate "$assoc_account" "$assoc_partition"
+            else
+                for partition in "${partitions[@]}"; do
+                    add_candidate "$assoc_account" "$partition"
+                done
+            fi
+        done < <(sacctmgr -nP show assoc where user="$USER" format=Account,Partition 2>/dev/null)
+    fi
+
+    for candidate in "${candidates[@]}"; do
+        IFS='|' read -r account partition <<< "$candidate"
+        if probe_output="$(sbatch --test-only \
+            --nodes=1 \
+            --ntasks=1 \
+            --ntasks-per-node=1 \
+            --exclusive \
+            --mem=0 \
+            --gpus-per-node=8 \
+            --time=4:00:00 \
+            --account="$account" \
+            --partition="$partition" \
+            "$probe_script" 2>&1)"; then
+            SLURM_ACCOUNT="$account"
+            SLURM_PARTITION="$partition"
+            echo "Selected NScale Slurm association: ${SLURM_ACCOUNT}/${SLURM_PARTITION}"
+            echo "$probe_output"
+            rm -f "$probe_script"
+            return 0
+        fi
+        echo "Rejected NScale Slurm association ${account}/${partition}: ${probe_output}" >&2
+    done
+
+    echo "Error: no runner Slurm association accepts the NScale GPU request" >&2
+    sacctmgr -nP show assoc where user="$USER" format=Account,Partition,DefaultQOS >&2 || true
+    sinfo -h -o '%P %G %a' >&2 || true
+    rm -f "$probe_script"
+    return 1
+}
+
+select_nscale_slurm_pair || exit 1
 
 export SERVED_MODEL_NAME=$MODEL
 
