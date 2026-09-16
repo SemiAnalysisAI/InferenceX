@@ -7,7 +7,7 @@ on:
         description: GPU runner pool (one physical node per shard)
         type: choice
         default: h100-dgxc
-        options: [h100-dgxc, h200-dgxc]
+        options: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300]
       backends:
         description: Comma-separated NVIDIA backends
         type: string
@@ -17,7 +17,7 @@ on:
         type: string
         default: gemm
       world_sizes:
-        description: Comma-separated world sizes from 1,2,4,8
+        description: Comma-separated world sizes (1,2,4; also 8 on eight-GPU pools)
         type: string
         default: '1'
       chunk_size:
@@ -69,6 +69,7 @@ jobs:
           source benchmarks/benchmark_lib.sh --validation-only
           check_env_vars OPERATORX_POOL OPERATORX_BACKENDS OPERATORX_TESTLISTS OPERATORX_WORLD_SIZES OPERATORX_CHUNK_SIZE GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_SHA GITHUB_OUTPUT
           python3 -m operatorx.ci plan \
+            --platform-config experimental/CollectiveX/configs/platform_config.json \
             --pool "$OPERATORX_POOL" --backends "$OPERATORX_BACKENDS" \
             --testlists "$OPERATORX_TESTLISTS" --world-sizes "$OPERATORX_WORLD_SIZES" \
             --chunk-size "$OPERATORX_CHUNK_SIZE" --run-id "$GITHUB_RUN_ID" \

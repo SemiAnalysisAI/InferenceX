@@ -3,8 +3,21 @@
 [English](CI.md) | **中文**
 
 [OperatorX Sweep](../../.github/workflows/operatorx-sweep.yml) 支持手动选择
-`h100-dgxc`（默认）或 `h200-dgxc`。PR 只在 GitHub 托管运行器上生成执行计划；
-GPU 执行必须通过 `workflow_dispatch` 触发。首个验证目标是 H100。
+`h100-dgxc`（默认）、`h200-dgxc`、`b200-nscale`、`b300`、`gb200` 或 `gb300`。
+PR 只在 GitHub 托管运行器上生成执行计划；GPU 执行必须通过 `workflow_dispatch` 触发。
+
+| GPU | 运行器池 | 每个物理节点的 GPU 数 | 镜像平台 | 结果集群标识 |
+| --- | --- | ---: | --- | --- |
+| H100 | `h100-dgxc` | 8 | `linux/amd64` | `h100_dgxc_8x` |
+| H200 | `h200-dgxc` | 8 | `linux/amd64` | `h200_dgxc_8x` |
+| B200 | `b200-nscale` | 8 | `linux/amd64` | `b200_nscale_8x` |
+| B300 | `b300` | 8 | `linux/amd64` | `b300_dsxe_8x` |
+| GB200 | `gb200` | 4 | `linux/arm64` | `gb200_nvl72_4x` |
+| GB300 | `gb300` | 4 | `linux/arm64` | `gb300_nvl72_4x` |
+
+GB200/GB300 每次使用一个四卡计算托盘，不会占用整个 NVL72 机架。所有运行器池的
+稠密 GEMM 都使用 `world_sizes=1`，TFLOPS 始终按单卡计算。硬件信息来自 CollectiveX
+平台配置，并在规划和执行阶段分别校验。
 
 ## 触发运行
 
@@ -32,17 +45,21 @@ gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
 ## 执行约定
 
 - 托管规划步骤校验输入，按容器镜像分组后端，区分 world size 和 MoE 并行参数组合，
-  并将形状拆成大小受限的分片。最多支持 256 个分片。world size 仅允许 1、2、4、8；
+  并将形状拆成大小受限的分片。最多支持 256 个分片。world size 仅允许 1、2、4、8，
+  且不能超过一个物理节点的 GPU 数，因此 GB200/GB300 不接受 8。
   未被所选大小覆盖的形状会计入 `excluded_shapes`。
-- 每个 Actions 分片独占一个八 GPU Slurm 节点。GPU 进程数等于所选 world size。
+- 每个 Actions 分片独占一个物理 Slurm 节点，包含四张或八张 GPU。GPU 进程数等于所选 world size。
   准入沿用优先级评分器，以及 `ci-job-*`、`ci-attempt-*` 和唯一的 `nodes:1` 标签。
   初始并发上限为两个分片。两个调度开关都必须保持启用。
 - 运行器设置来自 CollectiveX 已纳入版本控制的平台配置。源码按工作流 SHA 检出，
-  再复制到共享 squash 父目录下的私有、计算节点可见目录。结果不依赖提交主机的
-  `/tmp` 在计算节点上可见。
-- 规划步骤解析镜像 digest。导入操作加锁，并按镜像与 digest 缓存，导入后再次核对
+  再复制到共享 squash 父目录或配置中可写的 `storage_roots` 路径（GB200）下的私有目录，
+  该目录必须在计算节点上可见。结果不依赖提交主机的 `/tmp` 在计算节点上可见。
+- 规划步骤解析镜像 digest。导入操作加锁，并按镜像、digest 和 CPU 架构缓存，导入后再次核对
   digest。标签发生变化或无法解析时运行失败，避免错误标注测量所用镜像。
-  规划和导入主机都必须能匿名读取镜像。
+  规划和导入主机都必须能匿名读取镜像。导入前校验主机 CPU 架构；B300 沿用 CollectiveX
+  的提交主机导入方式，其他运行器池在已分配的计算节点上导入。Enroot 使用显式 registry
+  地址、私有临时目录和运行器池指定的缓存路径。分配请求保留 account、QoS 和隔离节点
+  列表，并沿用 B300/GB 平台的 remap-root 与内存设置。
 - 启动器等待分配、导入和执行完成。Slurm 分配限时 45 分钟；Actions 允许 70 分钟，
   包含排队与清理时间。Slurm 作业名与 Actions 运行器名称一致。
 - 信号处理和工作流的 `always()` 恢复步骤会取消已记录的分配、停止写入、保留部分结果，
@@ -72,7 +89,7 @@ uv run --no-project --python 3.12 --with pytest --with pyyaml \
   python -m pytest experimental/operatorx/tests/ -q
 ```
 
-实际验收还需要带产物的 Hopper smoke 运行、失败分片重跑，以及确认释放分配的取消测试。
+实际验收还需要在每个所选运行器池上执行带产物的 smoke 运行、失败分片重跑，以及确认释放分配的取消测试。
 CPU 检查不能证明 GPU 兼容性或集群存储可见性。
 
 最终覆盖汇总为每个请求分片选择最新产物尝试，保留此前尝试中已成功的分片，

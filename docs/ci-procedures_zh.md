@@ -547,6 +547,8 @@ jq -r 'to_entries[] | [.key, .value.n_success, .value.total] | @tsv' \
 
 ## OperatorX 微基准
 
-OperatorX 手动工作流先支持 H100/H200，每个分片使用一个 Slurm 节点。
+OperatorX 手动工作流支持 H100、H200、B200、B300、GB200 和 GB300，每个分片使用一个
+物理 Slurm 节点。GB200/GB300 使用四卡 Arm 节点，其他 NVIDIA 运行器池使用八卡 x86
+节点；两类节点上的稠密 GEMM 测试都只使用一张 GPU。
 触发方式、覆盖范围、产物、取消及验证说明见
 [OperatorX GitHub Actions](../experimental/operatorx/CI_zh.md)。

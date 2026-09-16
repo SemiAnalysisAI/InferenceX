@@ -17,6 +17,10 @@ from operatorx import main as benchmark
 from operatorx.core import Result, UnsupportedOpError
 
 
+def platforms(pool="h100-dgxc", gpus=8, architecture="linux/amd64"):
+    return {pool: {"gpus_per_node": gpus, "image_platform": architecture}}
+
+
 def test_plan_chunks_and_preserves_moe_groups():
     ordinary = {"type": "gemm", "args": {"m": 2}}
     moe = {"type": "moe_forward", "args": {"world_size": 4, "expert_parallel_size": 2}}
@@ -28,6 +32,7 @@ def test_plan_chunks_and_preserves_moe_groups():
         {"a": {"image": "same:1"}, "b": {"image": "same:1"}},
         [1, 4],
         1,
+        platforms(),
     )
     cells = result["include"]
     assert [(c["world_size"], c["moe"], len(c["cases"])) for c in cells] == [
@@ -53,8 +58,98 @@ def test_plan_chunks_and_preserves_moe_groups():
 def test_plan_rejects_unexecutable_selection(pool, backends, worlds, shapes, chunk):
     with pytest.raises(ValueError):
         ci.plan(
-            pool, backends, {"tiny": shapes}, {"a": {"image": "image:1"}}, worlds, chunk
+            pool,
+            backends,
+            {"tiny": shapes},
+            {"a": {"image": "image:1"}},
+            worlds,
+            chunk,
+            platforms(),
         )
+
+
+def test_plan_bounds_world_size_to_physical_arm_node():
+    shapes = {
+        "tiny": [
+            {"type": "gemm", "args": {"m": 2}},
+            {"type": "allreduce", "args": {"world_size": 8}},
+        ]
+    }
+    hardware = platforms("gb200", 4, "linux/arm64")
+    result = ci.plan(
+        "gb200", ["torch"], shapes, {"torch": {"image": "image:1"}}, [1], 50, hardware
+    )
+    assert result["excluded_shapes"] == 1
+    assert result["include"][0]["cases"] == [
+        {"testlist": "tiny", "shape": shapes["tiny"][0]}
+    ]
+    assert result["include"][0]["image_platform"] == "linux/arm64"
+    with pytest.raises(ValueError, match="4-GPU"):
+        ci.plan(
+            "gb200",
+            ["torch"],
+            shapes,
+            {"torch": {"image": "image:1"}},
+            [1, 8],
+            50,
+            hardware,
+        )
+
+
+def test_image_import_separates_architectures_and_refuses_wrong_host(
+    tmp_path, monkeypatch
+):
+    trace = []
+
+    def external(argv, **kwargs):
+        trace.append(argv)
+        if argv[0] == "enroot":
+            Path(argv[3]).write_bytes(b"validated squash fixture")
+            env = kwargs["env"]
+            assert Path(env["ENROOT_TEMP_PATH"]).is_dir()
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(ci.subprocess, "run", external)
+    digest = "sha256:" + "a" * 64
+    # Only registry traffic is replaced; use the production reference parser.
+    probe = ci.probe_module()
+    monkeypatch.setattr(probe, "resolve_image_digest", lambda image: digest)
+    monkeypatch.setattr(ci, "probe_module", lambda: probe)
+    args = types.SimpleNamespace(
+        image="nvcr.io/nvidia/pytorch:test",
+        digest=digest,
+        cache=tmp_path / "cache",
+        image_platform="linux/arm64",
+    )
+    monkeypatch.setattr(ci.platform, "machine", lambda: "x86_64")
+    with pytest.raises(ValueError, match="import host"):
+        ci.import_image(args)
+    assert not args.cache.exists()
+
+    for architecture, machine in [
+        ("linux/amd64", "x86_64"),
+        ("linux/arm64", "aarch64"),
+    ]:
+        args.image_platform = architecture
+        monkeypatch.setattr(ci.platform, "machine", lambda: machine)
+        ci.import_image(args)
+        ci.import_image(args)  # Reuse a validated cache on the same architecture.
+    images = list(args.cache.glob("*.sqsh"))
+    assert len(images) == 2
+    assert all(image.read_bytes() == b"validated squash fixture" for image in images)
+    imports = [argv for argv in trace if argv[0] == "enroot"]
+    assert len(imports) == 2
+    assert imports[0][-1] == "docker://nvcr.io#nvidia/pytorch:test"
+
+
+def test_shared_storage_uses_only_configured_writable_roots(tmp_path):
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    assert ci.shared_base(
+        {"storage_roots": [str(tmp_path / "absent"), str(shared)]}
+    ) == (shared / f".operatorx-{os.getuid()}")
+    with pytest.raises(ValueError, match="shared storage"):
+        ci.shared_base({"storage_roots": [str(tmp_path / "absent")]})
 
 
 @pytest.mark.parametrize(
@@ -119,15 +214,29 @@ def test_testlist_loading_and_unknown_selection(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "exit_code,cancel", [(0, False), (3, False), (0, True), (0, "queued")]
+    "exit_code,cancel,pool,gpus,architecture",
+    [
+        (0, False, "h100-dgxc", 8, "linux/amd64"),
+        (3, False, "h100-dgxc", 8, "linux/amd64"),
+        (0, True, "h100-dgxc", 8, "linux/amd64"),
+        (0, "queued", "h100-dgxc", 8, "linux/amd64"),
+        (0, False, "gb200", 4, "linux/arm64"),
+        (0, False, "gb300", 4, "linux/arm64"),
+        (0, False, "b300", 8, "linux/amd64"),
+    ],
 )
-def test_allocation_completion_failure_and_cancellation(tmp_path, exit_code, cancel):
+def test_allocation_completion_failure_and_cancellation(
+    tmp_path, exit_code, cancel, pool, gpus, architecture
+):
     binaries = tmp_path / "bin"
     binaries.mkdir()
-    stub = """#!/usr/bin/env python3
+    stub = """#!PYTHON
 import json, os, pathlib, sys, time
 name = pathlib.Path(sys.argv[0]).name
 with open(os.environ['TRACE'], 'a') as f: f.write(name + '\\n')
+with open(os.environ['TRACE_ARGS'], 'a') as f:
+    row = {'argv': sys.argv, 'cache': os.environ.get('ENROOT_CACHE_PATH')}
+    f.write(json.dumps(row) + '\\n')
 if name == 'salloc':
     if os.environ['QUEUED'] == '1':
         print('salloc: Pending job allocation 12345', flush=True)
@@ -140,14 +249,16 @@ if name == 'squeue':
         sys.exit(1)
     print('99999')
 if name == 'srun' and sys.argv[-1] == 'rank':
-    mount = next(x for x in sys.argv if x.startswith('--container-mounts=')).split('=',1)[1].split(':')[0]
+    mount_arg = next(x for x in sys.argv if x.startswith('--container-mounts='))
+    mount = mount_arg.split('=',1)[1].split(':')[0]
     out = pathlib.Path(mount) / 'results' / 'partial.json'
     out.write_text('{"rows":[{"status":"ok"}]}')
     pathlib.Path(os.environ['READY']).touch()
     if os.environ['CANCEL'] == '1': time.sleep(60)
     sys.exit(int(os.environ['EXIT_CODE']))
 """
-    for name in ("salloc", "srun", "scancel", "squeue"):
+    stub = stub.replace("#!PYTHON", f"#!{sys.executable}")
+    for name in ("salloc", "srun", "scancel", "squeue", "python3"):
         path = binaries / name
         path.write_text(stub)
         path.chmod(0o755)
@@ -157,11 +268,21 @@ if name == 'srun' and sys.argv[-1] == 'rank':
         json.dumps(
             {
                 "platforms": {
-                    "h100-dgxc": {
+                    pool: {
+                        "gpus_per_node": gpus,
+                        "image_platform": architecture,
                         "operator": {
                             "partition": "test",
-                            "squash_dir": str(tmp_path / "shared/squash"),
-                        }
+                            "account": "fixture",
+                            "qos": "fixture-qos",
+                            "exclude_nodes": "quarantined",
+                            "enroot_cache_path": str(tmp_path / "shared/enroot"),
+                            **(
+                                {"storage_roots": [str(tmp_path / "shared")]}
+                                if pool == "gb200"
+                                else {"squash_dir": str(tmp_path / "shared/squash")}
+                            ),
+                        },
                     }
                 }
             }
@@ -169,12 +290,13 @@ if name == 'srun' and sys.argv[-1] == 'rank':
     )
     manifest = tmp_path / "manifest.json"
     control = ci.plan(
-        "h100-dgxc",
+        pool,
         ["torch"],
         {"tiny": [{"type": "gemm", "args": {"m": 2}}]},
         {"torch": {"image": "image:1"}},
         [1],
         1,
+        platforms(pool, gpus, architecture),
     )
     control.update(source_sha="abc", run_id="12")
     control["include"][0]["digest"] = "sha256:" + "a" * 64
@@ -184,6 +306,7 @@ if name == 'srun' and sys.argv[-1] == 'rank':
         os.environ,
         PATH=str(binaries) + os.pathsep + os.environ["PATH"],
         TRACE=str(tmp_path / "trace"),
+        TRACE_ARGS=str(tmp_path / "trace-args"),
         READY=str(tmp_path / "ready"),
         EXIT_CODE=str(exit_code),
         CANCEL=str(int(bool(cancel))),
@@ -241,6 +364,26 @@ if name == 'srun' and sys.argv[-1] == 'rank':
     assert "scancel" in (tmp_path / "trace").read_text().splitlines()
     stage = Path(json.loads((output / "execution.json").read_text())["stage"])
     assert not stage.exists()
+    calls = [
+        json.loads(line) for line in (tmp_path / "trace-args").read_text().splitlines()
+    ]
+    allocation = next(c["argv"] for c in calls if Path(c["argv"][0]).name == "salloc")
+    assert f"--gres=gpu:{gpus}" in allocation
+    assert "--nodes=1" in allocation
+    assert "--account=fixture" in allocation
+    assert "--qos=fixture-qos" in allocation
+    assert "--exclude=quarantined" in allocation
+    if not cancel:
+        imported = next(c for c in calls if "import" in c["argv"])
+        assert imported["cache"] == str(tmp_path / "shared/enroot")
+        assert imported["argv"][-2:] == ["--image-platform", architecture]
+        assert Path(imported["argv"][0]).name == (
+            "python3" if pool == "b300" else "srun"
+        )
+        launched = next(c["argv"] for c in calls if c["argv"][-1] == "rank")
+        assert "--ntasks=1" in launched
+        if pool in ("gb200", "gb300", "b300"):
+            assert "--container-remap-root" in launched
 
 
 def test_summary_uses_latest_attempt_and_reports_missing_coverage(tmp_path):
@@ -295,6 +438,7 @@ def test_summary_uses_latest_attempt_and_reports_missing_coverage(tmp_path):
 
 def test_recovery_refuses_unrelated_pool_or_storage(tmp_path):
     artifacts = tmp_path / "artifacts"
+    (tmp_path / "shared").mkdir()
     profile = tmp_path / "platforms.json"
     ci.write_json(
         profile,

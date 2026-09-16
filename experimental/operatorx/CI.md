@@ -3,8 +3,21 @@
 **English** | [中文](CI_zh.md)
 
 [OperatorX Sweep](../../.github/workflows/operatorx-sweep.yml) runs manually on
-`h100-dgxc` (default) or `h200-dgxc`. Pull requests only run the hosted planner;
-GPU work requires `workflow_dispatch`. The first validation target is H100.
+`h100-dgxc` (default), `h200-dgxc`, `b200-nscale`, `b300`, `gb200`, or `gb300`.
+Pull requests only run the hosted planner; GPU work requires `workflow_dispatch`.
+
+| GPU | Pool | GPUs per physical node | Image platform | Result cluster |
+| --- | --- | ---: | --- | --- |
+| H100 | `h100-dgxc` | 8 | `linux/amd64` | `h100_dgxc_8x` |
+| H200 | `h200-dgxc` | 8 | `linux/amd64` | `h200_dgxc_8x` |
+| B200 | `b200-nscale` | 8 | `linux/amd64` | `b200_nscale_8x` |
+| B300 | `b300` | 8 | `linux/amd64` | `b300_dsxe_8x` |
+| GB200 | `gb200` | 4 | `linux/arm64` | `gb200_nvl72_4x` |
+| GB300 | `gb300` | 4 | `linux/arm64` | `gb300_nvl72_4x` |
+
+GB200/GB300 runs use one four-GPU tray, not the full NVL72 rack. Dense GEMM uses
+`world_sizes=1` on every pool; reported TFLOPS remains per GPU. Hardware facts come
+from CollectiveX's platform registry, and both planning and execution validate them.
 
 ## Dispatch
 
@@ -35,20 +48,27 @@ Do not infer that Blackwell-specific FP4 kernels work on Hopper.
 
 - Hosted planning validates inputs, groups backends by container image, separates
   world sizes and MoE parallelism triples, and splits shapes into bounded chunks.
-  At most 256 shards are accepted. World sizes are restricted to 1, 2, 4, and 8;
-  shapes outside the requested sizes are counted in `excluded_shapes`.
-- Each Actions shard holds exactly one exclusive eight-GPU Slurm node. The GPU
+  At most 256 shards are accepted. World sizes are restricted to 1, 2, 4, and 8,
+  and must fit one physical node (GB200/GB300 reject 8). Shapes outside the
+  requested sizes are counted in `excluded_shapes`.
+- Each Actions shard holds exactly one exclusive physical Slurm node (four or eight GPUs). The GPU
   process count is the selected world size. Admission uses the existing priority
   scorer and `ci-job-*`, `ci-attempt-*`, and exactly one `nodes:1` label. Initial
   concurrency is two shards. Both scheduler switches must remain enabled.
 - Runner settings come from CollectiveX's tracked platform registry. Source is
   checked out at the workflow SHA and copied into a private, compute-visible
-  directory below the configured shared squash parent. Results never depend on
+  directory below the configured shared squash parent or a writable configured
+  `storage_roots` entry (GB200). Results never depend on
   a submit-host `/tmp` mount being visible to compute nodes.
 - The planner resolves each image digest. Imports are locked and cached by image
-  plus digest, with a second digest check after import. A moved or unresolvable
+  plus digest and CPU architecture, with a second digest check after import. A moved or unresolvable
   tag fails rather than claiming the planned image was measured. Images must be
-  anonymously readable from the planning and import hosts.
+  anonymously readable from the planning and import hosts. Imports verify the host
+  CPU architecture; B300 imports on its submit host, matching CollectiveX, while
+  other pools import inside their allocation. Enroot uses explicit registry URLs,
+  private temporary directories, and any pool-configured cache path. Allocation
+  forwards account, QoS, and quarantined nodes; B300/GB pools retain their existing
+  remap-root and memory settings.
 - The launcher remains active through allocation, import, and execution. The
   allocation time limit is 45 minutes; Actions permits 70 minutes including
   queueing and cleanup. Slurm job names match the Actions runner name.
@@ -84,7 +104,7 @@ uv run --no-project --python 3.12 --with pytest --with pyyaml \
   python -m pytest experimental/operatorx/tests/ -q
 ```
 
-Real acceptance additionally requires a Hopper smoke run with artifacts, a
+Real acceptance additionally requires a smoke run with artifacts on each selected pool, a
 failed-shard rerun, and cancellation with confirmed allocation release. CPU
 checks alone do not establish GPU compatibility or cluster storage visibility.
 
