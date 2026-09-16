@@ -7652,6 +7652,6 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Stage nightly-TBD for the pending ROCm image and extend the MI355X DeepSeek-V4.1-Flash TP4 AgentX sweep with concurrency 64 and 128. Use vLLM's MI355X API-server default max_num_seqs of 1024; keep the CUDA graph ceiling at 1024 tokens through c64 and raise it to 2048 at c128 to cover twice the outer concurrency."
-    - "为待发布的 ROCm 镜像暂设 nightly-TBD，并为 MI355X DeepSeek-V4.1-Flash TP4 AgentX 扫描新增并发 64 和 128。使用 vLLM 在 MI355X API server 上默认的 max_num_seqs 1024；c64 及以下保持 1024-token CUDA graph 上限，c128 提升至 2048，以覆盖两倍外层并发。"
+    - "Update the vLLM ROCm nightly to af1c01499b289be555c475669ba50a88e96d846e and extend the MI355X DeepSeek-V4.1-Flash TP4 AgentX sweep with concurrency 64 and 128. Use vLLM's MI355X API-server default max_num_seqs of 1024; keep the CUDA graph ceiling at 1024 tokens through c64 and raise it to 2048 at c128 to cover twice the outer concurrency."
+    - "将 vLLM ROCm nightly 更新至 af1c01499b289be555c475669ba50a88e96d846e，并为 MI355X DeepSeek-V4.1-Flash TP4 AgentX 扫描新增并发 64 和 128。使用 vLLM 在 MI355X API server 上默认的 max_num_seqs 1024；c64 及以下保持 1024-token CUDA graph 上限，c128 提升至 2048，以覆盖两倍外层并发。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3111

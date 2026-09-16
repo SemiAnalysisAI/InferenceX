@@ -1754,11 +1754,12 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 48], spec-decoding: draft_model }
       - { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [128, 256], spec-decoding: draft_model }
 
-# Keep the image at nightly-TBD until the replacement ROCm build is published.
-# The previous nightly passed concurrency 1-32 and eval-only concurrency 32 in
-# MI355X run 34710937012.
+# Bump to the latest upstream ROCm nightly. The previous nightly
+# (eed1f3d0c6043bd494424a22443ee198dd56f657) passed concurrency 1-32 and
+# eval-only concurrency 32 in MI355X run 34710937012; this sweep validates the
+# new nightly plus concurrency 64/128.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:nightly-TBD
+  image: vllm/vllm-openai-rocm:nightly-af1c01499b289be555c475669ba50a88e96d846e
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
