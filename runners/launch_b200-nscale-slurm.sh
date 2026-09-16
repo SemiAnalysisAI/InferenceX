@@ -1,13 +1,10 @@
 #!/usr/bin/bash
 
-# Standalone launcher for the B200 nscale Slurm cluster.
-#
-# Self-contained because Nscale has its own Slurm and storage layout.
-#
-# Scope: multi-node Dynamo-vLLM DeepSeek-V4-Pro and Kimi K2.6 FP4 runs, plus
-# DeepSeek-V4-Pro FP4 Dynamo-SGLang STP and MTP runs, GLM-5.2 FP4
-# Dynamo-SGLang MTP runs, and Kimi-K3 AgentX on the b200-nscale runner label.
-# Anything else exits non-zero.
+# B200 nscale Slurm launcher for the native srt-slurm lanes selected below;
+# everything else falls through to launch_b200-nscale-compat.sh.
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars EVAL_ONLY IS_AGENTIC RUN_EVAL
+
 
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
@@ -36,21 +33,21 @@ if [[ "$IS_MULTINODE" != "true" ]]; then
     run_compat_launcher
 fi
 
-if [[ "$FRAMEWORK" == "tilert" && "${IS_AGENTIC:-0}" != "1" ]]; then
+if [[ "$FRAMEWORK" == "tilert" && "${IS_AGENTIC}" != "1" ]]; then
     run_compat_launcher
 fi
 
 if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/DeepSeek-V4-Pro}"
+    check_env_vars MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/Kimi-K2.6-NVFP4}"
+    check_env_vars MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="kimi-k2.6-nvfp4"
 elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/Kimi-K3}"
+    check_env_vars MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="kimik3"
 elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/GLM-5.2-NVFP4}"
+    check_env_vars MODEL_PATH
     # This alias must match model.path in the checked-in GLM-5.2 recipes.
     export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
 elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" && $FRAMEWORK == "tilert" ]]; then
@@ -70,7 +67,7 @@ fi
 USES_DCGM_POWER=0
 USES_AGENTX_POWER=0
 _POWER_CONFIG_FILE="${CONFIG_FILE:-}"
-if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+if [[ "${EVAL_ONLY}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
     _POWER_CONFIG_FILE="$EVAL_CONFIG_FILE"
 fi
 _RECIPE_REL="${_POWER_CONFIG_FILE%%:*}"
@@ -88,7 +85,7 @@ if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
     "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
     USES_AGENTX_POWER=1
 elif [[ "$USES_DCGM_POWER" == "1" && (
-    "${IS_AGENTIC:-0}" == "1" ||
+    "${IS_AGENTIC}" == "1" ||
     "$PRECISION" != "fp4" ||
     ( "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" ) ||
     ( "$MODEL_PREFIX" == "kimik2.6" && "$FRAMEWORK" != "dynamo-vllm" ) ||
@@ -118,7 +115,6 @@ if ! command -v srtctl &> /dev/null; then
     exit 1
 fi
 
-# Map container images to local squash files
 NGINX_IMAGE="nginx:1.27.4"
 if ! mkdir -p "$SQUASH_DIR" 2>/dev/null || [[ ! -w "$SQUASH_DIR" ]]; then
     echo "Warning: $SQUASH_DIR is not writable; using workspace-local squash cache" >&2
@@ -201,12 +197,9 @@ fi
 
 export ISL="$ISL"
 export OSL="$OSL"
-export EVAL_ONLY="${EVAL_ONLY:-false}"
 
-# Agentic runs bind-mount two persistent caches into every worker container:
-# aiperf's content-addressed dataset mmap cache and the HF hub cache holding
-# the trace dataset. Container-side paths are referenced by the agentic
-# recipes' benchmark.env.
+# Persistent caches for aiperf's dataset mmap files and the HF trace dataset;
+# the container paths are referenced by the agentic recipes' benchmark.env.
 DEFAULT_MOUNTS_BLOCK=""
 if [[ "$IS_AGENTIC" == "1" ]]; then
     mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH"
@@ -262,17 +255,15 @@ cat srtslurm.yaml
 echo "Running make setup..."
 make setup ARCH=x86_64
 
-# Export eval-related env vars for srt-slurm post-benchmark eval
+# Read by srt-slurm's post-benchmark eval.
 export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 
 echo "Submitting job with srtctl..."
 echo "MODEL_PATH=$MODEL_PATH"
 
-# An eval row may point at a committed real-verification recipe while its
-# throughput row keeps synthetic golden acceptance. Only configs that set
-# EVAL_CONFIG_FILE opt into this selection; all other configs keep using
-# CONFIG_FILE unchanged.
-if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+# An eval row may use a real-verification recipe while its throughput row
+# keeps synthetic acceptance; only configs setting EVAL_CONFIG_FILE opt in.
+if [[ "${EVAL_ONLY}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
     CONFIG_FILE="$EVAL_CONFIG_FILE"
     echo "EVAL_ONLY=true: selecting real-verification recipe $CONFIG_FILE"
 fi
@@ -286,7 +277,6 @@ fi
 # Strip any :override[N] selector so sed and the injector operate on the file.
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 
-# Override the job name in the config file with the runner name
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 # Give recipes at least 720 attempts without shortening a larger model-specific
 # load budget (GLM-5.2 intentionally requests 1440x10s).
@@ -329,8 +319,6 @@ echo "Extracted JOB_ID: $JOB_ID"
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
-# Waits for the log file to appear, fails fast if the job dies first, then
-# streams until the job leaves the queue.
 SRT_JOB_RC=0
 stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
 if [[ "$SRT_JOB_RC" != "0" && "$USES_AGENTX_POWER" != "1" ]]; then
@@ -348,7 +336,7 @@ if [ ! -d "$LOGS_DIR" ]; then
 fi
 
 AGENTX_POWER_RC="$SRT_JOB_RC"
-if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY}" != "true" ]]; then
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
     collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" \
         "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" \
@@ -369,7 +357,7 @@ if [[ "$AGENTX_POWER_RC" != "0" ]]; then
     exit "$AGENTX_POWER_RC"
 fi
 
-if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+if [[ "${EVAL_ONLY}" != "true" ]]; then
     RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
 
     if [ -z "$RESULT_SUBDIRS" ]; then
@@ -408,9 +396,7 @@ else
     echo "EVAL_ONLY=true: Skipping benchmark result collection"
 fi
 
-# Collect eval results if eval was requested. copy_eval_artifacts warns and
-# returns 0 when the directory is absent.
-if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
+if [[ "${RUN_EVAL}" == "true" || "${EVAL_ONLY}" == "true" ]]; then
     copy_eval_artifacts "$LOGS_DIR/eval_results" "$GITHUB_WORKSPACE"
 fi
 

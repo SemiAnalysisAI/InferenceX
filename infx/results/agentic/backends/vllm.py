@@ -6,7 +6,7 @@ import re
 from collections.abc import Iterable
 from typing import Any
 
-from ..common import (
+from infx.results.agentic.common import (
     gauge_stat,
     label_value,
     metric_series,
@@ -16,6 +16,7 @@ from ..common import (
     sum_server_log_capacities,
     sum_stat,
 )
+
 from .base import ServerMetricsBackend, counter_int
 
 
@@ -83,9 +84,7 @@ class VllmBackend(ServerMetricsBackend):
                     flat["server_gpu_cache_hit_rate"] = local_cache_hit / source_total
                 if external_transfer is not None:
                     flat["server_cpu_cache_hit_rate"] = external_transfer / source_total
-                    flat["server_external_cache_hit_rate"] = (
-                        external_transfer / source_total
-                    )
+                    flat["server_external_cache_hit_rate"] = external_transfer / source_total
                 cached_total = (local_cache_hit or 0.0) + (external_transfer or 0.0)
                 flat["server_overall_cache_hit_rate"] = cached_total / source_total
             nested["tokens"]["prompt_by_source"] = {
@@ -192,7 +191,7 @@ class VllmBackend(ServerMetricsBackend):
 
     def gpu_kv_capacity_tokens(
         self,
-        metrics: dict[str, dict[str, Any]],
+        metrics: dict[str, dict[str, Any]],  # noqa: ARG002
         server_logs: Iterable[str | None],
     ) -> int | None:
         return sum_server_log_capacities(
@@ -269,19 +268,13 @@ def _vllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         if not source_id:
             continue
 
-        def series_filter(series, source_id=source_id):
+        def series_filter(series: dict, source_id: str = source_id) -> bool:
             return _source_id(series) == source_id
 
-        prompt_tokens = sum_stat(
-            metrics, "vllm:prompt_tokens", series_filter=series_filter
-        )
-        generation_tokens = sum_stat(
-            metrics, "vllm:generation_tokens", series_filter=series_filter
-        )
+        prompt_tokens = sum_stat(metrics, "vllm:prompt_tokens", series_filter=series_filter)
+        generation_tokens = sum_stat(metrics, "vllm:generation_tokens", series_filter=series_filter)
         hits = sum_stat(metrics, "vllm:prefix_cache_hits", series_filter=series_filter)
-        queries = sum_stat(
-            metrics, "vllm:prefix_cache_queries", series_filter=series_filter
-        )
+        queries = sum_stat(metrics, "vllm:prefix_cache_queries", series_filter=series_filter)
         kv_usage = normalize_fraction(
             gauge_stat(
                 metrics,

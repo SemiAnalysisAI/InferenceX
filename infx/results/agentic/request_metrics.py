@@ -59,11 +59,7 @@ def _distribution(prefix: str, values: list[int]) -> dict[str, float]:
 
 def _nest_stats(prefix: str, flat: dict[str, Any]) -> dict[str, Any]:
     suffix = f"_{prefix}"
-    return {
-        key[: -len(suffix)]: value
-        for key, value in flat.items()
-        if key.endswith(suffix)
-    }
+    return {key[: -len(suffix)]: value for key, value in flat.items() if key.endswith(suffix)}
 
 
 def _interactivity_stats(
@@ -157,9 +153,7 @@ def compute_latency_stats(
         "intvty": _nest_stats("intvty", intvty_stats),
         "e2e_norm_intvty": _nest_stats("e2e_norm_intvty", e2e_norm_intvty_stats),
         "full_response_itl": _nest_stats("full_response_itl", full_response_itl_stats),
-        "full_response_intvty": _nest_stats(
-            "full_response_intvty", full_response_intvty_stats
-        ),
+        "full_response_intvty": _nest_stats("full_response_intvty", full_response_intvty_stats),
     }
     return flat, nested
 
@@ -187,10 +181,7 @@ def compute_qps_stats(
         qps_values.append(count / window)
         current += window
 
-    if qps_values:
-        flat = stats_for("qps", qps_values)
-    else:
-        flat = {"mean_qps": len(ends) / duration}
+    flat = stats_for("qps", qps_values) if qps_values else {"mean_qps": len(ends) / duration}
     return flat, {
         "window_seconds": window,
         "samples": len(qps_values),
@@ -280,7 +271,7 @@ def _aiperf_percent_metric_as_rate(
 
 
 def compute_cache_stats(
-    records: list[dict[str, Any]],
+    records: list[dict[str, Any]],  # noqa: ARG001
     aggregate: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     flat: dict[str, Any] = {

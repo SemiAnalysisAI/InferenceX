@@ -6,7 +6,7 @@ import re
 from collections.abc import Iterable
 from typing import Any
 
-from ..common import (
+from infx.results.agentic.common import (
     gauge_stat,
     label_equals,
     normalize_fraction,
@@ -15,6 +15,7 @@ from ..common import (
     sum_server_log_capacities,
     sum_stat,
 )
+
 from .base import ServerMetricsBackend, counter_int
 
 
@@ -143,7 +144,7 @@ class SglangBackend(ServerMetricsBackend):
 
     def gpu_kv_capacity_tokens(
         self,
-        metrics: dict[str, dict[str, Any]],
+        metrics: dict[str, dict[str, Any]],  # noqa: ARG002
         server_logs: Iterable[str | None],
     ) -> int | None:
         return sum_server_log_capacities(

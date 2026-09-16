@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import bisect
+import itertools
 import json
 import math
 import sys
@@ -63,14 +64,12 @@ def _integrate_device(
     end_power = _interpolate_power(samples, end_unix)
     clipped = [(start_unix, start_power)]
     clipped.extend(
-        (timestamp, power)
-        for timestamp, power in samples
-        if start_unix < timestamp < end_unix
+        (timestamp, power) for timestamp, power in samples if start_unix < timestamp < end_unix
     )
     clipped.append((end_unix, end_power))
 
     energy_j = 0.0
-    for (left_time, left_power), (right_time, right_power) in zip(clipped, clipped[1:]):
+    for (left_time, left_power), (right_time, right_power) in itertools.pairwise(clipped):
         energy_j += (right_time - left_time) * (left_power + right_power) / 2.0
     return energy_j
 
@@ -97,7 +96,7 @@ def _percentile_total_power(
         clipped = [(start_unix, first)]
         clipped.extend((t, p) for t, p in samples if start_unix < t < end_unix)
         clipped.append((end_unix, _interpolate_power(samples, end_unix)))
-        for (left_t, left_p), (right_t, right_p) in zip(clipped, clipped[1:]):
+        for (left_t, left_p), (right_t, right_p) in itertools.pairwise(clipped):
             slope = (right_p - left_p) / (right_t - left_t)
             slope_changes[left_t] = slope_changes.get(left_t, 0.0) + slope
             slope_changes[right_t] = slope_changes.get(right_t, 0.0) - slope
@@ -106,7 +105,7 @@ def _percentile_total_power(
     segments: list[tuple[float, float, float]] = []
     slope = 0.0
     times = sorted(slope_changes)
-    for left_t, right_t in zip(times, times[1:]):
+    for left_t, right_t in itertools.pairwise(times):
         slope += slope_changes[left_t]
         next_power = total_power + slope * (right_t - left_t)
         segments.append(

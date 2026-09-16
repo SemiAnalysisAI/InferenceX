@@ -20,9 +20,7 @@ def read(repository: str, path: str, *, paginate: bool = False) -> list | dict:
     if paginate:
         args.extend(["--paginate", "--slurp"])
     return json.loads(
-        subprocess.check_output(
-            [*args, f"repos/{repository}/{path}"], text=True, timeout=60
-        )
+        subprocess.check_output([*args, f"repos/{repository}/{path}"], text=True, timeout=60)
     )
 
 
@@ -49,9 +47,7 @@ def write(repository: str, path: str, method: str, payload: dict | None = None) 
 
 
 def artifacts(repository: str, run_id: int) -> list[dict]:
-    return items(
-        repository, f"actions/runs/{run_id}/artifacts?per_page=100", "artifacts"
-    )
+    return items(repository, f"actions/runs/{run_id}/artifacts?per_page=100", "artifacts")
 
 
 def file_at(repository: str, head: str, path: str) -> bytes:
@@ -85,9 +81,7 @@ def download_json(repository: str, artifact: dict, destination: Path) -> None:
     )
     try:
         with zipfile.ZipFile(io.BytesIO(archive)) as source:
-            members = [
-                item for item in source.infolist() if item.filename.endswith(".json")
-            ]
+            members = [item for item in source.infolist() if item.filename.endswith(".json")]
             if not members or sum(item.file_size for item in members) > limit:
                 raise VerificationError("Invalid artifact JSON size")
             for member in members:

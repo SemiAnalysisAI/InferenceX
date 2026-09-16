@@ -14,7 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -27,12 +27,9 @@ COMPATIBILITY_GLOB = "results_minimax_vendor_*.json"
 EXPECTED_RESULT_COUNT = 102
 UPSTREAM_REF = "c899f95e17bfc4a338ddd4cb1638279125885e55"
 UPSTREAM_BASE_URL = (
-    "https://raw.githubusercontent.com/MiniMax-AI/MiniMax-Provider-Verifier/"
-    f"{UPSTREAM_REF}"
+    f"https://raw.githubusercontent.com/MiniMax-AI/MiniMax-Provider-Verifier/{UPSTREAM_REF}"
 )
-EXPECTED_SAMPLE_SHA256 = (
-    "3ead102af0f888acc95867b3a9916942524b02f4f64931f020a1bfb4fee9aae2"
-)
+EXPECTED_SAMPLE_SHA256 = "3ead102af0f888acc95867b3a9916942524b02f4f64931f020a1bfb4fee9aae2"
 REQUIRED_SOURCE_SHA256 = {
     "verify.py": "6bc00948d9be06189f31c5a53bb7929b15555402f0b3495609d26b468090ee4a",
     "sample.jsonl": EXPECTED_SAMPLE_SHA256,
@@ -58,7 +55,7 @@ class FullSuiteError(RuntimeError):
 
 
 class _RejectRedirects(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *args: Any, **kwargs: Any) -> None:
+    def redirect_request(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
         return None
 
 
@@ -87,14 +84,13 @@ def verify_source_content(relative_path: str, content: bytes) -> None:
     expected = REQUIRED_SOURCE_SHA256[relative_path]
     if actual != expected:
         raise ValueError(
-            f"pinned source {relative_path} SHA256 mismatch: "
-            f"expected {expected}, got {actual}"
+            f"pinned source {relative_path} SHA256 mismatch: expected {expected}, got {actual}"
         )
 
 
 def _fetch_source(relative_path: str) -> bytes:
     url = source_url(relative_path)
-    request = urllib.request.Request(
+    request = urllib.request.Request(  # noqa: S310
         url,
         headers={"Accept": "application/octet-stream"},
         method="GET",
@@ -102,9 +98,7 @@ def _fetch_source(relative_path: str) -> bytes:
     last_error: BaseException | None = None
     for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
         try:
-            with _NO_REDIRECT_OPENER.open(
-                request, timeout=DOWNLOAD_TIMEOUT_SECONDS
-            ) as response:
+            with _NO_REDIRECT_OPENER.open(request, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
                 status = getattr(response, "status", None)
                 if status != 200 or response.geturl() != url:
                     raise FullSuiteError(
@@ -113,9 +107,7 @@ def _fetch_source(relative_path: str) -> bytes:
                     )
                 declared_size = response.headers.get("Content-Length")
                 if declared_size is not None and int(declared_size) > MAX_SOURCE_BYTES:
-                    raise FullSuiteError(
-                        f"pinned source {relative_path} exceeds the size limit"
-                    )
+                    raise FullSuiteError(f"pinned source {relative_path} exceeds the size limit")
                 content = response.read(MAX_SOURCE_BYTES + 1)
         except (
             FullSuiteError,
@@ -143,16 +135,12 @@ def _validate_sample(content: bytes) -> None:
         raise ValueError("pinned sample.jsonl is not UTF-8") from exc
     lines = text.splitlines()
     if len(lines) != EXPECTED_RESULT_COUNT or any(not line.strip() for line in lines):
-        raise ValueError(
-            f"pinned sample.jsonl must contain exactly {EXPECTED_RESULT_COUNT} rows"
-        )
+        raise ValueError(f"pinned sample.jsonl must contain exactly {EXPECTED_RESULT_COUNT} rows")
     for line_number, line in enumerate(lines, 1):
         try:
             row = json.loads(line)
         except json.JSONDecodeError as exc:
-            raise ValueError(
-                f"pinned sample.jsonl row {line_number} is invalid JSON"
-            ) from exc
+            raise ValueError(f"pinned sample.jsonl row {line_number} is invalid JSON") from exc
         if not isinstance(row, dict):
             raise ValueError(f"pinned sample.jsonl row {line_number} must be an object")
 
@@ -205,9 +193,7 @@ def build_verifier_command(
         or parsed_base_url.query
         or parsed_base_url.fragment
     ):
-        raise ValueError(
-            "base_url must be an absolute HTTP(S) URL without query or fragment"
-        )
+        raise ValueError("base_url must be an absolute HTTP(S) URL without query or fragment")
     extra_body = json.dumps(
         {"temperature": 0, "top_p": 1, "max_tokens": 40960},
         separators=(",", ":"),
@@ -286,23 +272,19 @@ def _compatibility_result(
 def _compatibility_path(output_dir: Path) -> Path:
     for stale_path in output_dir.glob(COMPATIBILITY_GLOB):
         stale_path.unlink()
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S.%f")
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S.%f")
     return output_dir / f"results_minimax_vendor_full_{timestamp}.json"
 
 
 def _write_json(path: Path, value: Mapping[str, Any]) -> None:
-    path.write_text(
-        json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def _read_native_report(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise FullSuiteError(
-            f"native summary is unavailable or invalid: {exc}"
-        ) from exc
+        raise FullSuiteError(f"native summary is unavailable or invalid: {exc}") from exc
     if not isinstance(value, dict):
         raise FullSuiteError("native summary must be a JSON object")
     return value
@@ -315,21 +297,16 @@ def _read_native_results(path: Path) -> list[dict[str, Any]]:
         raise FullSuiteError(f"native results are unavailable: {exc}") from exc
     if len(lines) != EXPECTED_RESULT_COUNT or any(not line.strip() for line in lines):
         raise FullSuiteError(
-            f"native results must contain exactly {EXPECTED_RESULT_COUNT} rows, "
-            f"found {len(lines)}"
+            f"native results must contain exactly {EXPECTED_RESULT_COUNT} rows, found {len(lines)}"
         )
     results: list[dict[str, Any]] = []
     for line_number, line in enumerate(lines, 1):
         try:
             value = json.loads(line)
         except json.JSONDecodeError as exc:
-            raise FullSuiteError(
-                f"native result row {line_number} is invalid JSON"
-            ) from exc
+            raise FullSuiteError(f"native result row {line_number} is invalid JSON") from exc
         if not isinstance(value, dict):
-            raise FullSuiteError(
-                f"native result row {line_number} must be a JSON object"
-            )
+            raise FullSuiteError(f"native result row {line_number} must be a JSON object")
         results.append(value)
     return results
 
@@ -357,12 +334,8 @@ def project_native_artifacts(*, output_dir: Path, model: str) -> Path:
     results = _read_native_results(output_dir / NATIVE_RESULTS_FILENAME)
     indices = [row.get("data_index") for row in results]
     if indices != list(range(1, EXPECTED_RESULT_COUNT + 1)):
-        raise FullSuiteError(
-            "native results must retain ordered data_index values 1..102"
-        )
-    failed_indices = [
-        row["data_index"] for row in results if row.get("status") != "success"
-    ]
+        raise FullSuiteError("native results must retain ordered data_index values 1..102")
+    failed_indices = [row["data_index"] for row in results if row.get("status") != "success"]
     if failed_indices:
         raise FullSuiteError(
             "native verifier has transport failures at data_index "
@@ -465,9 +438,7 @@ def run_full_suite(
             output_dir=output_dir,
         )
         environment = os.environ.copy()
-        environment["PYTHONPATH"] = os.pathsep.join(
-            (str(source_dir), str(dependency_dir))
-        )
+        environment["PYTHONPATH"] = os.pathsep.join((str(source_dir), str(dependency_dir)))
         environment["PYTHONNOUSERSITE"] = "1"
         completed = runner(
             command,

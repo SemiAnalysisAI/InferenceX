@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -37,15 +37,11 @@ def result_order(path: Path) -> tuple[int, str]:
     if match:
         try:
             base, separator, fraction = match.group(0).partition(".")
-            parsed = datetime.strptime(base, "%Y-%m-%dT%H-%M-%S").replace(
-                tzinfo=timezone.utc
-            )
-            delta = parsed - datetime(1970, 1, 1, tzinfo=timezone.utc)
+            parsed = datetime.strptime(base, "%Y-%m-%dT%H-%M-%S").replace(tzinfo=UTC)
+            delta = parsed - datetime(1970, 1, 1, tzinfo=UTC)
             fractional_ns = int((fraction + "000000000")[:9]) if separator else 0
             return (
-                delta.days * 86_400_000_000_000
-                + delta.seconds * 1_000_000_000
-                + fractional_ns,
+                delta.days * 86_400_000_000_000 + delta.seconds * 1_000_000_000 + fractional_ns,
                 path.name,
             )
         except ValueError:
@@ -71,9 +67,7 @@ def select_latest_result(
     return max(candidates, key=result_order, default=None)
 
 
-def select_latest_results(
-    paths: Iterable[Path], *, batched: bool = False
-) -> list[Path]:
+def select_latest_results(paths: Iterable[Path], *, batched: bool = False) -> list[Path]:
     """Select one result, or one per suffixed concurrency in numeric order."""
     if not batched:
         latest = select_latest_result(paths)
@@ -147,12 +141,8 @@ def extract_metrics(data: dict[str, Any], *, source: str) -> list[dict[str, Any]
         metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
         model = data.get("model_name") or metadata.get("model")
         sample_counts = data.get("n-samples")
-        task_samples = (
-            sample_counts.get(task) if isinstance(sample_counts, dict) else None
-        )
-        n_eff = (
-            task_samples.get("effective") if isinstance(task_samples, dict) else None
-        )
+        task_samples = sample_counts.get(task) if isinstance(sample_counts, dict) else None
+        n_eff = task_samples.get("effective") if isinstance(task_samples, dict) else None
 
         invalid_count = "n-samples" in data and not is_valid_effective_count(n_eff)
         integration_error = data.get("integration_error")
@@ -204,9 +194,7 @@ def extract_metrics(data: dict[str, Any], *, source: str) -> list[dict[str, Any]
                         family = "accuracy"
                     if family is not None:
                         metrics[family] = task_results.get(f"{base_metric},{name}")
-                        metrics[f"{family}_se"] = task_results.get(
-                            f"{base_metric}_stderr,{name}"
-                        )
+                        metrics[f"{family}_se"] = task_results.get(f"{base_metric}_stderr,{name}")
         extracted.append(metrics)
     return extracted
 
@@ -215,7 +203,7 @@ def as_int(x: Any, default: int = 0) -> int:
     """Convert a metadata field to int with a fallback."""
     try:
         return int(x)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return default
 
 

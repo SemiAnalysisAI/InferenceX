@@ -83,7 +83,7 @@ health_check:
 benchmark:
   type: custom
   command: |
-    set -euo pipefail
+    set -eo pipefail
     mkdir -p /infmax-workspace/LOGS/agentic
     export RESULT_DIR=/infmax-workspace/LOGS/agentic
     export AGENTIC_OUTPUT_DIR=/infmax-workspace

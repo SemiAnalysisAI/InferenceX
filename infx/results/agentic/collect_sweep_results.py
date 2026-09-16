@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Collect and aggregate multi-turn benchmark sweep results from GitHub Actions
 artifacts.
@@ -22,7 +21,7 @@ from pathlib import Path
 import pandas as pd
 
 
-def _load_custom_client_csv(client_csv: Path, exp_dir: Path) -> pd.DataFrame | None:
+def _load_custom_client_csv(client_csv: Path, exp_dir: Path) -> pd.DataFrame | None:  # noqa: ARG001
     """Load per-request metrics from custom benchmark client CSV."""
     df = pd.read_csv(client_csv)
     if len(df) == 0:
@@ -62,7 +61,7 @@ def _load_aiperf_summary_csv(csv_path: Path) -> dict | None:
             # Different section (GPU metrics) — stop
             break
 
-    def metric_stat(metric_name, stat):
+    def metric_stat(metric_name: str, stat: str) -> float:
         if metric_name in per_metric:
             try:
                 return float(per_metric[metric_name].get(stat, 0))
@@ -70,7 +69,7 @@ def _load_aiperf_summary_csv(csv_path: Path) -> dict | None:
                 return 0
         return 0
 
-    def scalar_val(metric_name):
+    def scalar_val(metric_name: str) -> float:
         if metric_name in scalars:
             try:
                 return float(scalars[metric_name])
@@ -169,7 +168,7 @@ def load_experiment(exp_dir: Path) -> dict | None:
                     with open(metadata_file) as f:
                         metadata = json.load(f)
                     total_time_sec = metadata.get("benchmark_runtime_sec")
-                except Exception:
+                except Exception:  # noqa: BLE001, S110
                     pass
 
             if not total_time_sec or total_time_sec <= 0:
@@ -183,15 +182,11 @@ def load_experiment(exp_dir: Path) -> dict | None:
             result.update(
                 {
                     "num_requests": num_requests,
-                    "throughput_rps": num_requests / total_time_sec
+                    "throughput_rps": num_requests / total_time_sec if total_time_sec > 0 else 0,
+                    "input_throughput_tps": df["input_num_tokens"].sum() / total_time_sec
                     if total_time_sec > 0
                     else 0,
-                    "input_throughput_tps": df["input_num_tokens"].sum()
-                    / total_time_sec
-                    if total_time_sec > 0
-                    else 0,
-                    "output_throughput_tps": df["output_num_tokens"].sum()
-                    / total_time_sec
+                    "output_throughput_tps": df["output_num_tokens"].sum() / total_time_sec
                     if total_time_sec > 0
                     else 0,
                     "total_throughput_tps": (
@@ -225,20 +220,16 @@ def load_experiment(exp_dir: Path) -> dict | None:
                     final = sdf.iloc[-1]
                     if final.get("prefix_cache_queries", 0) > 0:
                         result["gpu_hit_rate"] = (
-                            100
-                            * final["prefix_cache_hits"]
-                            / final["prefix_cache_queries"]
+                            100 * final["prefix_cache_hits"] / final["prefix_cache_queries"]
                         )
                     if final.get("cpu_prefix_cache_queries", 0) > 0:
                         result["cpu_hit_rate"] = (
-                            100
-                            * final["cpu_prefix_cache_hits"]
-                            / final["cpu_prefix_cache_queries"]
+                            100 * final["cpu_prefix_cache_hits"] / final["cpu_prefix_cache_queries"]
                         )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 print(f"Warning: failed to load server metrics for {exp_dir.name}: {e}")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"Warning: failed to load client metrics for {exp_dir.name}: {e}")
 
     return result
@@ -297,7 +288,7 @@ def main() -> None:
             plot_workload_consistency(pareto_input, output_dir)
         else:
             print("Warning: No experiment_summary.csv found, skipping overview plots")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"Warning: Overview plots failed: {e}")
 
     print(f"Aggregated results saved to {output_dir}")

@@ -65,9 +65,7 @@ def _validate_rows(
         if not isinstance(row, dict):
             raise ValueError(f"{location}: expected a matrix object")
         is_multinode = "prefill" in row if multinode is None else multinode
-        is_agentic = (
-            row.get("scenario-type") == "agentic-coding" if agentic is None else agentic
-        )
+        is_agentic = row.get("scenario-type") == "agentic-coding" if agentic is None else agentic
         if is_multinode:
             schema = MultiNodeAgenticConfig if is_agentic else MultiNodeConfig
         else:
