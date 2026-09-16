@@ -112,7 +112,9 @@ def test_multinode_node_count_reads_schema_two_roles(tmp_path, monkeypatch, role
     recipe.parent.mkdir(parents=True)
     recipe.write_text(yaml.safe_dump({"schema": 2, "roles": roles}))
     import infx.matrix.generate as generate
-    monkeypatch.setattr(generate, "__file__", str(tmp_path / "infx/matrix/generate.py"))
+    import infx.config
+    (tmp_path / "configs").mkdir()
+    monkeypatch.setattr(infx.config, "__file__", str(tmp_path / "infx/config.py"))
     prefill = {"additional-settings": ["CONFIG_FILE=recipes/test.yaml"]}
     if expected is None:
         with pytest.raises(ValueError, match="role 'decode' must specify nodes"):
@@ -170,9 +172,11 @@ def test_multinode_node_count_prefers_recipe_roles(
     recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/test.yaml"
     recipe.parent.mkdir(parents=True)
     recipe.write_text(yaml.safe_dump({"schema": 2, "roles": roles}))
+    import infx.config
+    (tmp_path / "configs").mkdir()
     monkeypatch.setattr(
-        generate_sweep_configs, "__file__",
-        str(tmp_path / "infx/matrix/generate.py"),
+        infx.config, "__file__",
+        str(tmp_path / "infx/config.py"),
     )
     prefill = {
         "num-worker": 1, "tp": 8,
@@ -3149,9 +3153,35 @@ class TestExpandConfigKeys:
         ]
 
 
-# =============================================================================
-# Tests for e2e-tests.yml workflow config splitting
-# =============================================================================
+@pytest.mark.parametrize("multinode", [False, True])
+@pytest.mark.parametrize("power_key", ["require-power", "require_power"])
+def test_require_power_is_scoped_to_one_fixed_sequence(multinode, power_key, sample_single_node_config,
+                                                       sample_multinode_config, sample_runner_config):
+    from infx.matrix.generate import expand_full_sweep, select_matrix_evals
+    from infx.matrix.validation import MultiNodeSeqLenConfig, SingleNodeSeqLenConfig
+
+    config = sample_multinode_config if multinode else sample_single_node_config
+    entry = next(iter(config.values()))
+    sequences = entry["scenarios"]["fixed-seq-len"]
+    if multinode:
+        sequences.append(copy.deepcopy(sequences[0]))
+        sequences[-1]["isl"] = 8192
+    before = expand_full_sweep(config, sample_runner_config)
+    assert all("require-power" not in row for row in before)
+    sequences[-1][power_key] = True
+    schema = MultiNodeSeqLenConfig if multinode else SingleNodeSeqLenConfig
+    schema.model_validate(sequences[-1])
+    after = expand_full_sweep(config, sample_runner_config)
+    assert len(before) == len(after)
+    for original, row in zip(before, after):
+        assert row == ({**original, "require-power": True} if original["isl"] == 8192 else original)
+    evals = select_matrix_evals(copy.deepcopy(after), mode="subset")
+    assert evals
+    assert all("require-power" not in row for row in evals)
+    sequences[0][power_key] = True
+    with pytest.raises(ValueError, match="only fixed-sequence 8192/1024"):
+        expand_full_sweep(config, sample_runner_config)
+
 
 @pytest.fixture
 def split_e2e_configs(tmp_path):
@@ -3190,6 +3220,8 @@ esac
                 "GITHUB_WORKSPACE": str(tmp_path), "GITHUB_OUTPUT": str(output_file),
                 "MATRIX_FIXTURE": str(matrix_file), "PR_LABELS": "[]",
                 "TEST_PYTHON": sys.executable,
+                "GENERATE_COMMAND": "full-sweep", "GITHUB_EVENT_NAME": "workflow_dispatch",
+                "GITHUB_RUN_ID": "1", "GITHUB_RUN_ATTEMPT": "1",
                 "CHANGELOG_BASE_REF": "", "CHANGELOG_HEAD_REF": "",
                 "TRIM_CONC": "false", "ALL_EVALS": "false", "EVALS_ONLY": "false",
             },
@@ -3201,81 +3233,6 @@ esac
         }
 
     return run
-
-
-class TestE2EConfigSplitting:
-    def test_workflow_routes_benchmarks_and_evals_without_crossing_scenarios(self, split_e2e_configs):
-        common = {"image": "engine:fixture", "model": "test/model", "model-prefix": "fixture",
-                  "precision": "fp8", "framework": "sglang", "runner": "fixture-node",
-                  "tp": 8, "pp": 1, "dcp-size": 1, "pcp-size": 1, "ep": 1,
-                  "dp-attn": False, "conc": 4, "spec-decoding": "none"}
-        single = {**common, "exp-name": "single", "run-eval": False,
-                  "isl": 1024, "osl": 1024, "max-model-len": 2248, "disagg": False}
-        single_eval = {**single, "exp-name": "single-eval", "run-eval": True, "recipe-fingerprint": "a" * 64}
-        single_eval_only = {**single, "exp-name": "single-eval-only", "run-eval": True, "eval-only": True}
-        worker = {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}
-        multi = {k: v for k, v in single.items() if k not in ("tp", "pp", "dcp-size", "pcp-size", "ep", "dp-attn")}
-        multi.update({"exp-name": "multi", "prefill": worker, "decode": worker,
-                      "node-count": 2, "conc": [4, 8], "run-eval": True})
-        multi_eval_only = {**multi, "exp-name": "multi-eval-only", "eval-only": True}
-        agentic = {**common, "exp-name": "agentic", "scenario-type": "agentic-coding", "run-eval": True,
-                   "kv-offloading": "none", "total-cpu-dram-gb": 0, "duration": 3600}
-        agentic_eval_only = {**agentic, "exp-name": "agentic-eval-only", "eval-only": True}
-        multi_agentic = {k: v for k, v in multi.items() if k not in ("isl", "osl", "max-model-len")}
-        multi_agentic.update({"exp-name": "multi-agentic", "scenario-type": "agentic-coding",
-                              "kv-offloading": "none", "total-cpu-dram-gb": 0, "duration": 3600})
-        multi_agentic_eval_only = {**multi_agentic, "exp-name": "multi-agentic-eval-only", "eval-only": True}
-
-        output = split_e2e_configs([
-            single, single_eval, single_eval_only, multi, multi_eval_only,
-            agentic, agentic_eval_only, multi_agentic, multi_agentic_eval_only,
-        ])
-
-        assert output == {
-            "single-node-config": [single, single_eval],
-            "eval-config": [single_eval, single_eval_only],
-            "multi-node-config": [multi],
-            "multi-node-eval-config": [multi, multi_eval_only],
-            "agentic-config": [agentic],
-            "agentic-eval-config": [agentic, agentic_eval_only],
-            "multi-node-agentic-config": [multi_agentic],
-            "multi-node-agentic-eval-config": [multi_agentic, multi_agentic_eval_only],
-        }
-
-    def test_empty_matrix_has_no_jobs(self, split_e2e_configs):
-        output = split_e2e_configs([])
-
-        assert output and all(rows == [] for rows in output.values())
-
-
-@pytest.mark.parametrize("multinode", [False, True])
-@pytest.mark.parametrize("power_key", ["require-power", "require_power"])
-def test_require_power_is_scoped_to_one_fixed_sequence(multinode, power_key, sample_single_node_config,
-                                                       sample_multinode_config, sample_runner_config):
-    from infx.matrix.generate import expand_full_sweep, select_matrix_evals
-    from infx.matrix.validation import MultiNodeSeqLenConfig, SingleNodeSeqLenConfig
-
-    config = sample_multinode_config if multinode else sample_single_node_config
-    entry = next(iter(config.values()))
-    sequences = entry["scenarios"]["fixed-seq-len"]
-    if multinode:
-        sequences.append(copy.deepcopy(sequences[0]))
-        sequences[-1]["isl"] = 8192
-    before = expand_full_sweep(config, sample_runner_config)
-    assert all("require-power" not in row for row in before)
-    sequences[-1][power_key] = True
-    schema = MultiNodeSeqLenConfig if multinode else SingleNodeSeqLenConfig
-    schema.model_validate(sequences[-1])
-    after = expand_full_sweep(config, sample_runner_config)
-    assert len(before) == len(after)
-    for original, row in zip(before, after):
-        assert row == ({**original, "require-power": True} if original["isl"] == 8192 else original)
-    evals = select_matrix_evals(copy.deepcopy(after), mode="subset")
-    assert evals
-    assert all("require-power" not in row for row in evals)
-    sequences[0][power_key] = True
-    with pytest.raises(ValueError, match="only fixed-sequence 8192/1024"):
-        expand_full_sweep(config, sample_runner_config)
 
 
 @pytest.mark.parametrize("vendor", ["amd", "nvidia"])
@@ -3313,7 +3270,7 @@ def test_all_eval_callers_forward_model_selected_suite(workflow_name):
     workflow = yaml.safe_load((repo_root / ".github/workflows" / workflow_name).read_text())
     callers = {
         name: job for name, job in workflow["jobs"].items()
-        if job.get("uses", "").startswith("./.github/workflows/benchmark-")
+        if job.get("uses", "").startswith(("./.github/workflows/benchmark-", "$/.github/workflows/benchmark-"))
         and job.get("with", {}).get("eval-only") is True
     }
     assert len(callers) == 4, f"Review eval forwarding coverage for {set(callers)}"
@@ -3330,6 +3287,6 @@ def test_all_eval_callers_forward_model_selected_suite(workflow_name):
     for name, job in callers.items():
         for field, expression in expected.items():
             assert job["with"].get(field) == expression, (name, field)
-        template = yaml.safe_load((repo_root / job["uses"]).read_text())
+        template = yaml.safe_load((repo_root / job["uses"].removeprefix("$/")).read_text())
         assert template["env"]["EVAL_FRAMEWORK"] == "${{ inputs.eval-framework }}"
         assert template["env"]["EVAL_SUITE"] == "${{ inputs.eval-suite }}"

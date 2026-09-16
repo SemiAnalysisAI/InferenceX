@@ -25,6 +25,20 @@ SERVER_LOG="$RESULT_DIR/server.log"
 export VLLM_USE_RUST_FRONTEND=1
 export PYTHONUNBUFFERED=1
 
+# Safetensors load strategy. vLLM auto-prefetches checkpoints only on NFS or
+# Lustre; on other filesystems it memory-maps lazily. On cluster:h200-dgxc the
+# HF cache is a VIRTIOFS mount, and on nightly-cd10ed6f the lazy path read this
+# 475 GiB checkpoint at ~170 s/shard (19/48 shards when the 3600 s readiness
+# deadline fired, run 35012494184) against ~12.5 s/shard for the same files on
+# the deepseekv41-flash-0909 build (run 34504985992). Launchers whose cache is
+# not a recognized network FS export VLLM_SAFETENSORS_LOAD_STRATEGY=prefetch so
+# the shards are streamed into page cache by parallel readers first; the
+# checkpoint fits comfortably in the ~1 TiB of host RAM those nodes expose.
+LOAD_ARGS=()
+if [[ -n "${VLLM_SAFETENSORS_LOAD_STRATEGY:-}" ]]; then
+    LOAD_ARGS=(--safetensors-load-strategy "$VLLM_SAFETENSORS_LOAD_STRATEGY")
+fi
+
 # Preserve the upstream scheduler defaults; size graph capture for the sweep.
 NUM_SPEC_TOKENS=5
 CAPTURE_SIZE="${DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE}"
@@ -58,6 +72,7 @@ VLLM_CMD=(
     --max-model-len 1048576
     --max-cudagraph-capture-size "$CAPTURE_SIZE"
     --disable-uvicorn-access-log
+    "${LOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"

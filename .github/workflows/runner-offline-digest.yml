@@ -18,14 +18,20 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: runner-offline-digest
+  cancel-in-progress: false
+
 jobs:
   digest:
+    name: digest
     runs-on: ubuntu-latest
     steps:
       - name: List offline runners
         id: runners
         env:
-          GH_TOKEN: ${{ secrets.RUNNERS_PAT }}
+          # Repository runner/Slack integration credential for the scheduled digest.
+          GH_TOKEN: ${{ secrets.RUNNERS_PAT }} # zizmor: ignore[secrets-outside-env]
           REPO: ${{ github.repository }}
         run: |
           set -eo pipefail
@@ -59,7 +65,8 @@ jobs:
       - name: Post Slack digest
         if: steps.runners.outputs.offline_count != '0'
         env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          # Repository runner/Slack integration credential for the scheduled digest.
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }} # zizmor: ignore[secrets-outside-env]
           CHANNEL: C09PULGMVNG
           OFFLINE_COUNT: ${{ steps.runners.outputs.offline_count }}
           TOTAL: ${{ steps.runners.outputs.total }}

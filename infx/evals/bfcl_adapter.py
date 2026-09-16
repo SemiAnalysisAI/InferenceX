@@ -11,6 +11,7 @@ import sys
 import urllib.parse
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from importlib.metadata import distribution
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal, Protocol
@@ -87,9 +88,7 @@ SMOKE_SUITE = SuiteSpec(
     default_num_threads=DEFAULT_NUM_THREADS,
     threshold=REQUIRED_SCORE,
 )
-RESPONSES_SMOKE_SUITE = replace(
-    SMOKE_SUITE, name="bfcl_responses_smoke", api_format="responses"
-)
+RESPONSES_SMOKE_SUITE = replace(SMOKE_SUITE, name="bfcl_responses_smoke", api_format="responses")
 MINIMAX_SUITE = SuiteSpec(
     name="bfcl_vllm_minimax_m3",
     generation_categories=(
@@ -295,8 +294,9 @@ def _native_report(
     total_count = sum(score.total_count for score in scores or ())
     accuracy = correct_count / total_count if total_count else 0.0
     report: dict[str, Any] = {
-        "verifier": (ADAPTER_NAME if suite.api_format == "chat-completions"
-                     else "bfcl-v4-openai-responses"),
+        "verifier": (
+            ADAPTER_NAME if suite.api_format == "chat-completions" else "bfcl-v4-openai-responses"
+        ),
         "task": suite.name,
         "model": model,
         "endpoint": base_url,
@@ -401,9 +401,14 @@ def _write_upstream_attribution(project_root: Path) -> None:
     """Keep BFCL provenance and its Apache license with archived outputs."""
     project_root.mkdir(parents=True, exist_ok=True)
     repository_license = Path(__file__).resolve().parents[2] / "LICENSE"
-    if not repository_license.is_file():
-        raise FileNotFoundError(f"Apache license file not found: {repository_license}")
-    (project_root / UPSTREAM_LICENSE_FILENAME).write_bytes(repository_license.read_bytes())
+    if repository_license.is_file():
+        license_bytes = repository_license.read_bytes()
+    else:
+        license_text = distribution("infx").read_text("licenses/LICENSE")
+        if license_text is None:
+            raise FileNotFoundError("Apache license file not found in infx distribution")
+        license_bytes = license_text.encode("utf-8")
+    (project_root / UPSTREAM_LICENSE_FILENAME).write_bytes(license_bytes)
     _write_json(
         project_root / UPSTREAM_ATTRIBUTION_FILENAME,
         {
@@ -570,7 +575,9 @@ def _read_selected_suite(
     for suite in candidates:
         if shape != suite.expected_leaf_counts:
             continue
-        if suite in (SMOKE_SUITE, RESPONSES_SMOKE_SUITE) and case_ids_by_category != dict(SMOKE_CASE_IDS):
+        if suite in (SMOKE_SUITE, RESPONSES_SMOKE_SUITE) and case_ids_by_category != dict(
+            SMOKE_CASE_IDS
+        ):
             continue
         return suite, case_ids_by_category
     raise ValueError(f"test-case ID map does not match a supported suite: {shape!r}")
@@ -593,6 +600,7 @@ def _run_upstream(
     import bfcl_eval.constants.model_config as bfcl_model_config
     from bfcl_eval.__main__ import evaluate, generate
     from bfcl_eval.constants.model_config import ModelConfig
+
     if suite.api_format == "responses":
         from bfcl_eval.model_handler.api_inference.openai_response import OpenAIResponsesHandler
 
@@ -793,7 +801,9 @@ def publish_integration_error(
     """Publish required zero-score artifacts without importing BFCL or Typer."""
     native_path, compatibility_path = _prepare_output_paths(output_dir)
     case_ids_by_category = (
-        dict(SMOKE_CASE_IDS) if suite in (SMOKE_SUITE, RESPONSES_SMOKE_SUITE) else dict.fromkeys(suite.leaf_categories, ())
+        dict(SMOKE_CASE_IDS)
+        if suite in (SMOKE_SUITE, RESPONSES_SMOKE_SUITE)
+        else dict.fromkeys(suite.leaf_categories, ())
     )
     _write_json(
         native_path,
@@ -833,7 +843,9 @@ def run_evaluation(
     """Run one immutable BFCL suite and always publish both report formats."""
     native_path, compatibility_path = _prepare_output_paths(output_dir)
     selected_case_ids: dict[str, tuple[str, ...]] = (
-        dict(SMOKE_CASE_IDS) if suite in (SMOKE_SUITE, RESPONSES_SMOKE_SUITE) else dict.fromkeys(suite.leaf_categories, ())
+        dict(SMOKE_CASE_IDS)
+        if suite in (SMOKE_SUITE, RESPONSES_SMOKE_SUITE)
+        else dict.fromkeys(suite.leaf_categories, ())
     )
     resolved_num_threads = suite.default_num_threads if num_threads is None else num_threads
     try:

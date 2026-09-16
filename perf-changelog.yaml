@@ -7824,6 +7824,124 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2867
 
 - config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Update vLLM image from vllm/vllm-openai:deepseekv41-flash-0909 to vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 (2026-09-15 upstream nightly, vllm-project/vllm@cd10ed6f); recipe script, DSpark settings, and the TP4 c1–128 grid are unchanged"
+    - "将 vLLM 镜像从 vllm/vllm-openai:deepseekv41-flash-0909 更新为 vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3（2026-09-15 上游 nightly，vllm-project/vllm@cd10ed6f）；配方脚本、DSpark 设置及 TP4 c1–128 网格保持不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3136
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  description:
+    - "Update vLLM image from vllm/vllm-openai:deepseekv41-flash-0909 to vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 (2026-09-15 upstream nightly, vllm-project/vllm@cd10ed6f); recipe script, DSpark settings, and the TP8 c1–4 grid are unchanged"
+    - "将 vLLM 镜像从 vllm/vllm-openai:deepseekv41-flash-0909 更新为 vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3（2026-09-15 上游 nightly，vllm-project/vllm@cd10ed6f）；配方脚本、DSpark 设置及 TP8 c1–4 网格保持不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3135
+
+- config-keys:
+    - dsv41flash-fp4-gb200-vllm-agentic-dspark
+  description:
+    - "Update vLLM image from vllm/vllm-openai:deepseekv41-flash-0909 to vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 (2026-09-15 upstream nightly, vllm-project/vllm@cd10ed6f); recipe script, DSpark settings, and the TP4 c1–128 grid are unchanged"
+    - "将 vLLM 镜像从 vllm/vllm-openai:deepseekv41-flash-0909 更新为 vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3（2026-09-15 上游 nightly，vllm-project/vllm@cd10ed6f）；配方脚本、DSpark 设置及 TP4 c1–128 网格保持不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3138
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Update vLLM image from vllm/vllm-openai:deepseekv41-flash-0909 to vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 (2026-09-15 upstream nightly, vllm-project/vllm@cd10ed6f); recipe script, DSpark settings, and the TP4 c1–128 grid are unchanged"
+    - "将 vLLM 镜像从 vllm/vllm-openai:deepseekv41-flash-0909 更新为 vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3（2026-09-15 上游 nightly，vllm-project/vllm@cd10ed6f）；配方脚本、DSpark 设置及 TP4 c1–128 网格保持不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3139
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the MI355X disaggregated AgentX recipe to DeepSeek-V4-Pro-0813 on lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260911 with the FP4 sparse-attention indexer."
+    - "Keep the supported EAGLE three-step, top-k-one, four-token verification path and use the committed Pro-0813 thinking-on golden AL of 3.01 for throughput, replacing the original V4 value of 2.49. Evaluation retains real target verification."
+    - "Use checkpoint-specific Pro-0813 golden AL values for draft lengths one through three and reject unsupported lengths rather than falling through to the original V4 curve."
+    - "Run the full seven-point sweep: TP4 prefill/decode at concurrency 4, TP8 at 16 without offload, TP8 with HiCache at 32 and 48, and TP8/DP8 with UMBP linker at 128, 192, and 256."
+    - "Gate DP environment settings by role, scale request limits and graph ranges with concurrency, and extend UMBP readiness and barrier timeouts. Remove commented-out environment assignments."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2823
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Select CUDA graph batch-size flags from the installed SGLang argument parser. Preserve --cuda-graph-bs on older images and use explicit phase flags only when the legacy option is absent."
+    - "Restore compatibility for existing AMD disaggregated recipes on older SGLang images without changing the Pro-0813 image's graph sizes, disabled prefill graphs, golden AL 3.01, topology, or precision. Fail before launch if neither supported spelling is available."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2823
+
+- config-keys:
+    - dsv4-fp8-h200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh DeepSeek-V4-Pro-0813 FP8 H200 Dynamo+SGLang AgentX aggregate serving with DSpark K=6."
+    - "Image: lmsysorg/sglang:nightly-dev-20260914-4358a161"
+    - "Update simulated acceptance length from 2.49 to 3.77 and replace the removed cuda-graph-max-bs flag with cuda-graph-max-bs-decode."
+    - "Preserve the eight-hour DSV4 AgentX allocation through the H200 launcher's default time limit."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3100
+
+- config-keys:
+    - dsv41flash-fp4-h200-vllm-agentic-dspark
+  description:
+    - "Update vLLM image from vllm/vllm-openai:deepseekv41-flash-0909 to vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 (2026-09-15 upstream nightly, vllm-project/vllm@cd10ed6f); recipe script, DSpark settings, and the TP8 c1–128 grid are unchanged"
+    - "将 vLLM 镜像从 vllm/vllm-openai:deepseekv41-flash-0909 更新为 vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3（2026-09-15 上游 nightly，vllm-project/vllm@cd10ed6f）；配方脚本、DSpark 设置及 TP8 c1–128 网格保持不变"
+    - "H200 checkpoint loading: on nightly-cd10ed6f the lazy safetensors path read the 475 GiB checkpoint from the VIRTIOFS HF cache at ~170 s/shard and the Rust frontend hit its 3600 s readiness deadline at 19/48 shards (run 35012494184, c1 and the c128 eval), versus ~12.5 s/shard on deepseekv41-flash-0909 (run 34504985992). runners/launch_h200-dgxc-slurm.sh now exports VLLM_SAFETENSORS_LOAD_STRATEGY=prefetch, which the shared script forwards as --safetensors-load-strategy so shards are streamed into page cache by parallel readers, and VLLM_ENGINE_READY_TIMEOUT_S=7200 like the GB300 launcher. Serve flags and the grid are otherwise unchanged; other SKUs do not set the variable."
+    - "H200 检查点加载：在 nightly-cd10ed6f 上，惰性 safetensors 路径从 VIRTIOFS HF 缓存读取 475 GiB 检查点仅约 170 秒/分片，Rust 前端在 3600 秒就绪期限内只加载了 19/48 分片（运行 35012494184，c1 与 c128 评测），而 deepseekv41-flash-0909 约为 12.5 秒/分片（运行 34504985992）。runners/launch_h200-dgxc-slurm.sh 现导出 VLLM_SAFETENSORS_LOAD_STRATEGY=prefetch（共享脚本转发为 --safetensors-load-strategy，由并行读取器先将分片流式载入页缓存）以及 VLLM_ENGINE_READY_TIMEOUT_S=7200（与 GB300 启动器一致）。其余服务参数与网格不变；其他 SKU 不设置该变量。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3134
+
+- config-keys:
+    - glm5.2-fp8-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the first GLM-5.2 FP8 AgentX (agentic-coding) recipe on B300: zai-org/GLM-5.2-FP8 on single-node SGLang with EAGLE off the checkpoint's built-in nextn head (num-steps 3, eagle-topk 1, 4 draft tokens = 3 speculative tokens), spec-decoding=mtp only per the AgentX policy, routed to benchmarks/single_node/agentic/glm5.2_fp8_b300_sglang_mtp.sh on cluster:b300-dsxe."
+    - "Port of the FP8 B200 sibling glm5.2_fp8_b200_sglang_mtp.sh (#2863) with the B300 deltas the NVFP4 B300 sibling carries: --mem-fraction-static 0.85 on the 288 GB part and a fixed 270 GB/rank HiCache target pool at every concurrency (#2651) in place of the B200 recipe's ratio mode at c1-c8. Serve flags are otherwise identical: TP8 low-latency arm with --kv-cache-dtype fp8_e4m3, --bf16-gemm-backend cutedsl, --max-prefill-tokens 8192, chunked-prefill 8192, --quantization fp8 (the checkpoint ships quant_method=fp8 with 128x128 weight blocks), glm47 tool-call and glm45 reasoning parsers, cuda-graph-max-bs min(2*CONC, 64), HiCache write_back/direct/page_first_direct."
+    - "Throughput runs pin SGLang simulated acceptance to the committed golden AL 2.99 (golden_al_distribution/glm5.2_mtp.yaml, thinking_on, K=3, run 28058352479), which was measured on the FP8 checkpoint itself; EVAL_ONLY runs keep real target verification and double the SWE-bench step budget to 150 like the other GLM-5.2 recipes."
+    - "Memory: the ~756 GB block-FP8 checkpoint (141 shards) is ~94.5 GB/GPU at TP8 on 288 GB B300s (NVFP4: ~58 GB/GPU), leaving an fp8 KV pool of roughly 150 GB/GPU inside the 0.85 static share against ~187 GB/GPU on NVFP4 B300 and ~55 GB/GPU on FP8 B200. TP8-only for memory and comparability. HiCache 270 GB/rank target plus the ~38.73 GB/rank DSA indexer host pool uses about 2.47 TB across TP8, inside the ~3.18 TB (80% of 3,977,095 MiB) cluster:b300-dsxe exposes."
+    - "Search space mirrors glm5.2-fp4-b300-sglang-agentic-mtp exactly so the two precision curves on B300 are comparable: one TP8 + HiCache arm at conc [1, 4, 8, 12, 16], dram-utilization 0.80."
+    - "Image lmsysorg/sglang:nightly-dev-cu13-20260908-20ca564b (2026-09-08 cu13 dev nightly, digest sha256:9a352a35c973a2357372e85f3bcb5388b6b3c46c1329165987260f3b089647dc, sgl-project/sglang@20ca564b), the first nightly carrying sgl-project/sglang#38318, the None guard for the EAGLE DSA fp8 KV read path that crashed the 2026-09-07 build intermittently; same tag as the FP8 B200 sibling in #2863. SGLANG_SIMULATE_ACC_TOKEN_MODE requires v0.5.16 or newer."
+    - "zai-org/GLM-5.2-FP8 is now pre-staged on cluster:b300-dsxe like the other DSXE checkpoints, so runners/launch_b300-dsxe.sh adds GLM-5.2-FP8 to STAGED_MODELS (plus glm-5.2-fp8 / zai-org/GLM-5.2-FP8 aliases) and exports MODEL_PATH=/scratch/models/GLM-5.2-FP8; the script no longer downloads the checkpoint and instead verifies the staged tree is complete (tokenizer, shard index, every shard) and fails fast if it is not. Supersedes #2884, whose only sweep died on an enroot squash-import I/O error before serving."
+    - "新增 B300 上首个 GLM-5.2 FP8 AgentX（agentic-coding）配方：zai-org/GLM-5.2-FP8，单节点 SGLang，EAGLE 使用检查点自带 nextn 头（3 步 / topk 1 / 4 草稿 token），吞吐按黄金 AL 2.99 固定接受率，评测保留真实验证；TP8 + 270 GB/rank HiCache，并发 [1, 4, 8, 12, 16]，mem-fraction-static 0.85。检查点已在 cluster:b300-dsxe 预先暂存，启动器将 GLM-5.2-FP8 加入 STAGED_MODELS，脚本不再下载，仅校验暂存目录完整。取代 #2884。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3146
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-mtp
+    - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+  description:
+    - "Update SGLang image for the resident arm from lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 and the HiCache arm from lmsysorg/sglang:v0.5.19-cu130 to lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161 (2026-09-14 upstream cu13 nightly, sgl-project/sglang@4358a161). The 2026-09-15 nightly (nightly-dev-cu13-20260915-8874c51a) cannot start any HiCache arm: sgl-project/sglang#35233 (merged 2026-09-14T22:49Z) made the host pool import get_device_accessible_ptr from a kernel wheel that image does not ship, so every kv-offloading dram point died at startup (runs 35016956476, 35016965515); sgl-project/sglang#39516 fixes it for the 2026-09-16 build, and 09-14 is the newest nightly that predates the regression. NEXTN MTP settings, HiCache arms, and the grid are unchanged"
+    - "将 SGLang 镜像（驻留分支自 lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00，HiCache 分支自 lmsysorg/sglang:v0.5.19-cu130）更新为 lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161（2026-09-14 上游 cu13 nightly，sgl-project/sglang@4358a161）。2026-09-15 nightly（nightly-dev-cu13-20260915-8874c51a）的所有 HiCache 分支无法启动：sgl-project/sglang#35233（2026-09-14T22:49Z 合入）令主机池从镜像未附带的内核 wheel 导入 get_device_accessible_ptr，所有 kv-offloading dram 点在启动时失败（运行 35016956476、35016965515）；sgl-project/sglang#39516 已修复并将随 2026-09-16 构建发布，09-14 是早于该回归的最新 nightly。NEXTN MTP 设置、HiCache 分支及网格保持不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3149
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260915."
+    - "Switch HiCache defaults to --hicache-io-backend kernel and --hicache-mem-layout page_first (from direct / page_first_direct). Ratio 1.5 and write_through are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3118
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260914."
+    - "Raise --prefill-decode-interval from 10 to 20 on both the TP-only and DP-attention serving paths, so the scheduler runs more decode steps between prefill admissions."
+    - "Switch the sglang-router policy for the DP-attention arms from consistent_hashing to cache_aware, and set the cache-aware absolute balance threshold to 32, down from the router default of 64, at concurrency above 160."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3120
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  description:
+    - "Update vLLM image from vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 to vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e (2026-09-16 upstream nightly, vllm-project/vllm@af1c0149, manifest digest sha256:f3b756ede21083a9415baac77b38998b89c738d2a9c1441c22de2d49cacf5282); the 59 upstream commits touch the DeepSeek-V4.1 path (Mega-mHC via the vLLM DeepGEMM fork, DSpark collapse before SP all-gather, KV-only context insertion, renderer and XGrammar tool-schema fixes). v0.29.0 predates the deepseek_v41 package this recipe needs. Recipe script, DSpark settings and the TP4 c1-128 grid are unchanged"
+    - "将 vLLM 镜像从 vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 更新为 vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e（2026-09-16 上游 nightly，vllm-project/vllm@af1c0149，manifest digest sha256:f3b756ede21083a9415baac77b38998b89c738d2a9c1441c22de2d49cacf5282）；上游 59 个提交涉及 DeepSeek-V4.1 路径（基于 vLLM DeepGEMM 分支的 Mega-mHC、DSpark 在 SP all-gather 前折叠、仅 KV 的上下文插入、渲染器与 XGrammar 工具 schema 修复）。v0.29.0 早于该配方所需的 deepseek_v41 包。配方脚本、DSpark 设置及 TP4 c1-128 网格保持不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3176
+
+- config-keys:
     - minimaxm3-fp4-b200-trtllm-agentic-mtp
     - minimaxm3-fp4-b300-trtllm-agentic-mtp
   scenario-type:
