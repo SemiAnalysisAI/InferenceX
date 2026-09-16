@@ -1216,7 +1216,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
+          - "CONFIG_FILE=recipes/dsv4/sglang/mi355x/agentic/disagg-mtp.yaml:override_tp4"
           - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907"
         decode:
           num-worker: 1
@@ -1224,7 +1224,6 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=3"
       - spec-decoding: "mtp"
         conc-list: [ 16 ]
@@ -1235,7 +1234,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
+          - "CONFIG_FILE=recipes/dsv4/sglang/mi355x/agentic/disagg-mtp.yaml:base"
           - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907"
         decode:
           num-worker: 1
@@ -1243,7 +1242,6 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=3"
       - spec-decoding: "mtp"
         conc-list: [ 32, 48 ]
@@ -1255,7 +1253,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
+          - "CONFIG_FILE=recipes/dsv4/sglang/mi355x/agentic/disagg-mtp.yaml:override_hicache"
           - "HICACHE_RATIO=2.5"
           - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907"
         decode:
@@ -1264,7 +1262,6 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=3"
       - spec-decoding: "mtp"
         conc-list: [ 128, 192, 256 ]
@@ -1276,14 +1273,8 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "PREFILL_NODES=1"
+          - "CONFIG_FILE=recipes/dsv4/sglang/mi355x/agentic/disagg-mtp.yaml:override_umbp"
           - "PREFILL_ROUTER_POLICY=consistent_hashing"
-          # Rank 0 opens the barrier port only after umbp_standalone_server has
-          # registered the 1.5 TB tier for GPU access; that took 305.7s on n08-25
-          # but had not finished after 780s on n09-29, which killed job 29871 at
-          # the 900s default. Sit above UMBP_SA_WAIT_SECONDS (1800) so UMBP's own
-          # wait is the binding one rather than the barrier.
-          - "CONTAINER_BARRIER_TIMEOUT=2400"
           - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907"
         decode:
           num-worker: 1
@@ -1291,7 +1282,6 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=3"
 
 minimaxm3-fp4-mi355x-vllm-agentic-mtp:

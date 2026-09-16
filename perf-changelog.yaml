@@ -7882,3 +7882,21 @@
     - "Update simulated acceptance length from 2.49 to 3.77 and replace the removed cuda-graph-max-bs flag with cuda-graph-max-bs-decode."
     - "Preserve the eight-hour DSV4 AgentX allocation through the H200 launcher's default time limit."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3100
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Port the seven-point MI355X Pro-0813 AgentX sweep from #2823 to srt-slurm, preserving images, engine settings, MTP, HiCache and UMBP capacities, and concurrency points."
+    - "Use native SGLang routing and managed UMBP service readiness instead of the legacy multi-node launch and barrier scripts."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2555
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Validate the synced srt-slurm fork with cluster-configured GPU visibility and GPU telemetry defaults, plus the current native sglang-router frontend."
+    - "Keep the #2823 model, serving image, engine flags, offload capacities, and seven AgentX concurrency points unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2555

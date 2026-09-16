@@ -47,6 +47,12 @@ case "${RUNNER_NAME%%_*}" in
     mi355x-amds)
         check_env_vars GITHUB_WORKSPACE
         export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
+        export SRT_SLURM_REPOSITORY=https://github.com/SemiAnalysisAI/srt-slurm.git
+        export SRT_SLURM_COMMIT=dd5fe669dba5a09b7f0c483c756d5d274984e7ca
+        export SRT_SLURM_SHARED_BASE=/it-share/gharunners2/srt-slurm
+        export SRT_SLURM_CLUSTER_CONFIG="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/cluster-configs/mi355x-amds.yaml"
+        export SRT_SLURM_COMPUTE_ARCH=x86_64
+        export AIPERF_MMAP_CACHE_HOST_PATH=/it-share/aiperf-cache
         ;;
     rtx6000pro-lat)
         export HF_HUB_CACHE_MOUNT=/var/lib/inferencex/hf-hub-cache
