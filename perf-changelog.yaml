@@ -7935,4 +7935,4 @@
     - "Spread offload ranks across NUMA nodes by selecting GPUs 0,4 for TP2 and 0,1,4,5 for TP4 when the caller has not pinned devices. Move to rocm/atom-dev:nightly_202609161144-yitingw1-opt_m3_dense_splits and record LMCache 0.5.5rc3+rocm7.2.4 for both offload arms."
     - "Known limitation: the recipe still allocates 256 GB of CPU DRAM per rank while the scenario metadata records dram-utilization 0.20; the actual allocation is 512 GB at TP2 and 1,024 GB at TP4. The configuration remains unchanged because the reported measurements used that allocation."
     - "将 MiniMax-M3 ATOM AgentX 的 GPU 显存利用率提高到 0.95，并按真实运行 batch 增加细粒度 CUDA graph；在经测量的 TP4 C28 及以上启用 indexer-only CP，C40/C48 恢复 EAGLE3。新增 TP2 C20/C25/C30 的 LMCache SLRU offload 曲线，按 TP 生成 lookup worker，并将 offload GPU 跨 NUMA 节点放置；更新到 20260916 rocm7 ATOM 镜像和 LMCache 0.5.5rc3。已知限制是实际 CPU DRAM 仍为每 rank 256 GB，与 dram-utilization 元数据不一致。"
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3189
