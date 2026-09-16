@@ -93,3 +93,10 @@ Download `cxshard-swap-<sku>-<run_id>-<attempt>` for the two JSON results.
 Each artifact records the actual GPU, framework versions, image, source SHA,
 correctness status, and measurements. The existing allocation/stage cleanup
 also runs on failure. CPU CI is separate and does not establish GPU correctness.
+
+The workflow selects `/var/tmp` for H100 container-import scratch because its `/tmp`
+does not support the overlay whiteout attributes required by enroot. Other pools use
+`/tmp`. Job-private import scratch is removed on exit. Slurm node exclusions are
+intersected with the current node inventory: retired names cannot invalidate the
+allocation, while exclusions of existing nodes are preserved. B300/GB300 use the
+partition default QoS, matching their serving launchers.
