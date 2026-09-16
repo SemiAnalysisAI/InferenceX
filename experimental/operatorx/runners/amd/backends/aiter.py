@@ -9,7 +9,7 @@ from operatorx.runners import attention
 
 
 def versions() -> dict[str, str]:
-    return lookup_versions("aiter", "torch")
+    return lookup_versions("amd-aiter", "torch")
 
 
 def prepare(op: Op) -> dict:
