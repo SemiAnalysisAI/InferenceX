@@ -280,7 +280,7 @@ if name == 'srun' and sys.argv[-1] == 'rank':
                             "partition": "test",
                             "stage_dir": str(tmp_path / "shared"),
                             "account": "fixture",
-                            "qos": "fixture-qos",
+                            **({"qos": "fixture-qos"} if pool != "b300" else {}),
                             "exclude_nodes": "quarantined",
                             "enroot_cache_path": str(tmp_path / "shared/enroot"),
                             **(
@@ -379,7 +379,10 @@ if name == 'srun' and sys.argv[-1] == 'rank':
     assert f"--gres=gpu:{gpus}" in allocation
     assert "--nodes=1" in allocation
     assert "--account=fixture" in allocation
-    assert "--qos=fixture-qos" in allocation
+    if pool == "b300":
+        assert not any(arg.startswith("--qos=") for arg in allocation)
+    else:
+        assert "--qos=fixture-qos" in allocation
     assert "--exclude=quarantined" in allocation
     if not cancel:
         imported = next(c for c in calls if "import" in c["argv"])

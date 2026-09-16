@@ -60,7 +60,9 @@ gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
   规划和导入主机都必须能匿名读取镜像。导入前校验主机 CPU 架构；B300 沿用 CollectiveX
   的提交主机导入方式，其他运行器池在已分配的计算节点上导入。Enroot 使用显式 registry
   地址、私有临时目录和运行器池指定的缓存路径。分配请求保留 account、QoS 和隔离节点
-  列表，并沿用 B300/GB 平台的 remap-root 与内存设置。
+  列表，并沿用 B300/GB 平台的 remap-root 与内存设置。B300 与推理启动器一致，由
+  partition/account 选择 QoS；原来的 `batch_1_qos` 覆盖值会被当前集群拒绝。
+  GB300 继续使用其配置的 QoS。
 - 启动器等待分配、导入和执行完成。Slurm 分配限时 45 分钟；Actions 允许 70 分钟，
   包含排队与清理时间。Slurm 作业名与 Actions 运行器名称一致。
 - 信号处理和工作流的 `always()` 恢复步骤会取消已记录的分配、停止写入、保留部分结果，

@@ -70,7 +70,9 @@ Do not infer that Blackwell-specific FP4 kernels work on Hopper.
   other pools import inside their allocation. Enroot uses explicit registry URLs,
   private temporary directories, and any pool-configured cache path. Allocation
   forwards account, QoS, and quarantined nodes; B300/GB pools retain their existing
-  remap-root and memory settings.
+  remap-root and memory settings. B300 leaves QoS selection to its partition/account,
+  matching the inference launcher; the former `batch_1_qos` override is rejected
+  by the current cluster. GB300 retains its configured QoS.
 - The launcher remains active through allocation, import, and execution. The
   allocation time limit is 45 minutes; Actions permits 70 minutes including
   queueing and cleanup. Slurm job names match the Actions runner name.
