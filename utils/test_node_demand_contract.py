@@ -103,7 +103,7 @@ def test_b200_nscale_preserves_logs_when_the_orchestrator_fails() -> None:
     assert "-name 'benchmark.out'" in launcher
 
 
-def test_b200_disaggregated_recipes_use_intra_node_nvlink_mooncake_pool() -> None:
+def test_b200_disaggregated_recipes_use_standard_rdma_mooncake_buffers() -> None:
     recipe_dir = (
         REPO_ROOT
         / "benchmarks"
@@ -118,8 +118,7 @@ def test_b200_disaggregated_recipes_use_intra_node_nvlink_mooncake_pool() -> Non
 
     for recipe in recipes:
         contents = recipe.read_text(encoding="utf-8")
-        assert contents.count(
-            "SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'INTRA_NODE_NVLINK'"
-        ) == 2
-        assert contents.count("MC_INTRANODE_NVLINK: 'true'") == 2
+        assert contents.count("disaggregation-transfer-backend: mooncake") == 2
+        assert "SGLANG_MOONCAKE_CUSTOM_MEM_POOL" not in contents
+        assert "MC_INTRANODE_NVLINK" not in contents
         assert "MC_FORCE_MNNVL" not in contents

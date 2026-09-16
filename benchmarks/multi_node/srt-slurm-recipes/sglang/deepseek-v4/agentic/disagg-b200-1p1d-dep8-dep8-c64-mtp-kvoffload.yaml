@@ -78,10 +78,8 @@ backend:
     SGLANG_OPT_USE_ONLINE_COMPRESS: '0'
     NCCL_MNNVL_ENABLE: '1'
     NCCL_CUMEM_ENABLE: '1'
-    # HGX B200 is an intra-node NVLink domain, not an NVL72 MNNVL domain.
-    # Keep cross-node KV movement on RDMA while using NVLink within the node.
-    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'INTRA_NODE_NVLINK'
-    MC_INTRANODE_NVLINK: 'true'
+    # P/D workers are on separate HGX B200 nodes, so use Mooncake's standard
+    # RDMA-registered CUDA buffers rather than an NVL72 custom memory pool.
     NCCL_TIMEOUT: '100000'
     NCCL_MNNVL_UUID_QUERY_TIMEOUT: '100000'
     SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
@@ -110,8 +108,6 @@ backend:
     SGLANG_OPT_USE_ONLINE_COMPRESS: '0'
     NCCL_MNNVL_ENABLE: '1'
     NCCL_CUMEM_ENABLE: '1'
-    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'INTRA_NODE_NVLINK'
-    MC_INTRANODE_NVLINK: 'true'
     NCCL_TIMEOUT: '100000'
     NCCL_MNNVL_UUID_QUERY_TIMEOUT: '100000'
     SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
