@@ -91,6 +91,8 @@ UID/GID 写入文件。产物记录 SKU 和源码 SHA，名称为 `cxshard-swap-
 H100 首先检查 `/mnt/nfs/lustre/containers` 中由运维预置的推理镜像缓存，
 按推理启动器的文件命名规则查找与请求标签完全一致的镜像。有效的 squash 可直接复用，
 无需在计算 pod 内重新导入；不存在时，常规导入路径会报告失败。
+`swap_h100_image` 显式选择该池的镜像，默认 `vllm/vllm-openai:v0.27.1`；
+其他 CUDA 池使用 `swap_image`。产物记录所选镜像及实际 vLLM 版本，便于识别跨版本结果。
 工作流为 H100 选择 `/var/tmp` 作为镜像导入临时目录，其他平台使用 `/tmp`。
 导入时记录文件系统和 enroot 版本，以便诊断主机上的 whiteout 转换失败。
 每个任务的临时导入目录在退出时清理。Slurm 排除列表与当前节点清单取交集，忽略已退役
