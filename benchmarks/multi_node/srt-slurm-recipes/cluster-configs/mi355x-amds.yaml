@@ -8,7 +8,8 @@ default_time_limit: "01:00:00"
 output_dir: /it-share/gharunners2/srt-slurm/outputs
 
 gpus_per_node: 8
-accelerator_vendor: amd
+visible_devices_env: ROCR_VISIBLE_DEVICES
+default_gpu_exporter: null
 network_interface: eno0
 
 use_gpus_per_node_directive: false

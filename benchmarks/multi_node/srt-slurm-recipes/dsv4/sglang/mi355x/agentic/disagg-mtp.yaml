@@ -18,7 +18,7 @@ base:
     gpus_per_prefill: 8
     gpus_per_decode: 8
   frontend:
-    type: sglang
+    type: sglang-router
     enable_multiple_frontends: false
     args:
       policy: consistent_hashing

@@ -7891,3 +7891,12 @@
     - "Port the seven-point MI355X Pro-0813 AgentX sweep from #2823 to srt-slurm, preserving images, engine settings, MTP, HiCache and UMBP capacities, and concurrency points."
     - "Use native SGLang routing and managed UMBP service readiness instead of the legacy multi-node launch and barrier scripts."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2555
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Validate the synced srt-slurm fork with cluster-configured GPU visibility and GPU telemetry defaults, plus the current native sglang-router frontend."
+    - "Keep the #2823 model, serving image, engine flags, offload capacities, and seven AgentX concurrency points unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2555

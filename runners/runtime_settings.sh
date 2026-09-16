@@ -48,7 +48,7 @@ case "${RUNNER_NAME%%_*}" in
         check_env_vars GITHUB_WORKSPACE
         export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
         export SRT_SLURM_REPOSITORY=https://github.com/SemiAnalysisAI/srt-slurm.git
-        export SRT_SLURM_COMMIT=ab40e28d99ec4085d02f2444f9b644486fbed8f1
+        export SRT_SLURM_COMMIT=dd5fe669dba5a09b7f0c483c756d5d274984e7ca
         export SRT_SLURM_SHARED_BASE=/it-share/gharunners2/srt-slurm
         export SRT_SLURM_CLUSTER_CONFIG="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/cluster-configs/mi355x-amds.yaml"
         export SRT_SLURM_COMPUTE_ARCH=x86_64
