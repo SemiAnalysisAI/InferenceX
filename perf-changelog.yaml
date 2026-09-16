@@ -7916,6 +7916,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3149
 
 - config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260915."
+    - "Switch HiCache defaults to --hicache-io-backend kernel and --hicache-mem-layout page_first (from direct / page_first_direct). Ratio 1.5 and write_through are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3118
+
+- config-keys:
     - glm5.2-fp4-mi355x-atom-agentic-mtp
   scenario-type:
     - agentic-coding
