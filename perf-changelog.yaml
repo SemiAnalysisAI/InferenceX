@@ -7615,14 +7615,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3097
 
 - config-keys:
-    - kimik3-fp4-mi355x-vllm-agentic-mtp
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Image : vllm/vllm-openai-rocm:nightly-e7edf17cea217e52701f913cd8491fcacf2d9490"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3059
-
-- config-keys:
     - qwen3.5-fp4-mi355x-sglang
     - qwen3.5-fp4-mi355x-sglang-mtp
   scenario-type:
@@ -7931,3 +7923,21 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260915."
     - "Switch HiCache defaults to --hicache-io-backend kernel and --hicache-mem-layout page_first (from direct / page_first_direct). Ratio 1.5 and write_through are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3118
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260914."
+    - "Raise --prefill-decode-interval from 10 to 20 on both the TP-only and DP-attention serving paths, so the scheduler runs more decode steps between prefill admissions."
+    - "Switch the sglang-router policy for the DP-attention arms from consistent_hashing to cache_aware, and set the cache-aware absolute balance threshold to 32, down from the router default of 64, at concurrency above 160."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3120
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Image : vllm/vllm-openai-rocm:nightly-af1c01499b289be555c475669ba50a88e96d846e"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3059
