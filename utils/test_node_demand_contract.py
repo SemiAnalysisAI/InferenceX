@@ -101,3 +101,25 @@ def test_b200_nscale_preserves_logs_when_the_orchestrator_fails() -> None:
     assert launcher.index("trap snapshot_nscale_logs EXIT") < exit_check
     assert "bundle_server_logs \"$LOGS_DIR\"" in launcher
     assert "-name 'benchmark.out'" in launcher
+
+
+def test_b200_disaggregated_recipes_use_intra_node_nvlink_mooncake_pool() -> None:
+    recipe_dir = (
+        REPO_ROOT
+        / "benchmarks"
+        / "multi_node"
+        / "srt-slurm-recipes"
+        / "sglang"
+        / "deepseek-v4"
+        / "agentic"
+    )
+    recipes = sorted(recipe_dir.glob("disagg-b200-*.yaml"))
+    assert len(recipes) == 2
+
+    for recipe in recipes:
+        contents = recipe.read_text(encoding="utf-8")
+        assert contents.count(
+            "SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'INTRA_NODE_NVLINK'"
+        ) == 2
+        assert contents.count("MC_INTRANODE_NVLINK: 'true'") == 2
+        assert "MC_FORCE_MNNVL" not in contents
