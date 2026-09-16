@@ -71,7 +71,7 @@ def test_kv_cache_pool_tokens_from_sglang_per_rank_lines() -> None:
     log = "\n".join(
         [
             "[2026-06-23 01:10:14 DP0 TP0 EP0] max_total_num_tokens=1000",
-            "[2026-06-23 01:10:14 DP1 TP1 EP1] max_total_num_tokens=1200",
+            "[2026-06-23 01:10:14 DP1  TP1\tEP1] max_total_num_tokens=1200",
             "[2026-06-23 01:10:14 DP1 TP1 EP1] max_total_num_tokens=1200",
         ]
     )

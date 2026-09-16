@@ -2,57 +2,37 @@
 
 # GLM-5.2 B300 vLLM SPEED-Bench AL matrix collector.
 #
-# Identical to glm5_fp4_b300_vllm.sh (same GLM DSA architecture, same MTP,
-# same serve flags) but with a proper download guard: if MODEL_PATH points to
-# an empty directory (model not pre-staged), the script downloads weights from
-# HuggingFace before starting the server. The GLM-5 collector skips the
-# download when MODEL_PATH is already set (assumes pre-staged); this variant
-# handles the not-yet-staged case for GLM-5.2.
+# Same serve parameters, sampling and thinking kwargs as glm5_fp4_b300_vllm.sh (GLM-5.2
+# shares the glm_moe_dsa architecture, MTP head and chat template), plus a download
+# guard for the not-yet-staged checkpoint.
 #
-# Serve parameters, sampling, thinking kwargs, and the chat-template-kwargs
-# shim are all inherited from the GLM-5 collector unchanged — GLM-5.2 shares
-# the same architecture (glm_moe_dsa), MTP head, and chat template.
-#
-# Usage (inside the vLLM container, on a B300 node):
-#   export MODEL=zai-org/GLM-5.2-FP8
-#   bash benchmarks/single_node/speedbench/glm52_fp4_b300_vllm.sh
+# Dispatch this collector through speedbench-al.yml.
 #
 # Tunables (env): same as glm5_fp4_b300_vllm.sh
 
-set -uo pipefail
+set -o pipefail
 source "$(dirname "$0")/../../benchmark_lib.sh"
+check_env_vars \
+    CATEGORY CHAT_TEMPLATE_KWARGS_ON DP_ATTENTION EP_SIZE MODEL MODEL_PATH \
+    MTP_LIST OUT_YAML PORT SPEEDBENCH_OUTPUT_LEN THINKING_MODES TP
 
-MODEL="${MODEL:?MODEL env var required (e.g. zai-org/GLM-5.2-FP8)}"
-SERVE_MODEL="${MODEL_PATH:-$MODEL}"
-TP="${TP:-8}"
-DP_ATTENTION="${DP_ATTENTION:-false}"
-EP_SIZE="${EP_SIZE:-1}"
-PORT="${PORT:-8888}"
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.80}"
+SERVE_MODEL="${MODEL_PATH}"
+GPU_MEM_UTIL="0.80"
 
-MTP_LIST="${MTP_LIST:-1 2 3 4 5 6 7 8}"
-THINKING_MODES="${THINKING_MODES:-off on}"
-CATEGORY="${CATEGORY:-coding}"
-MODEL_KEY="${MODEL_KEY:-$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')}"
-SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
-CONCURRENCY="${CONCURRENCY:-1}"
-TEMPERATURE="${TEMPERATURE:-1.0}"
-TOP_P="${TOP_P:-0.95}"
-DEFAULT_CHAT_TEMPLATE_KWARGS_ON='{"enable_thinking": true}'
-DEFAULT_CHAT_TEMPLATE_KWARGS_OFF='{"enable_thinking": false}'
-CHAT_TEMPLATE_KWARGS_ON="${CHAT_TEMPLATE_KWARGS_ON:-$DEFAULT_CHAT_TEMPLATE_KWARGS_ON}"
-CHAT_TEMPLATE_KWARGS_OFF="${CHAT_TEMPLATE_KWARGS_OFF:-$DEFAULT_CHAT_TEMPLATE_KWARGS_OFF}"
+MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
+CONCURRENCY="1"
+TEMPERATURE="1.0"
+TOP_P="0.95"
+CHAT_TEMPLATE_KWARGS_OFF='{"enable_thinking": false}'
 
-SPEEDBENCH_DIR="${SPEEDBENCH_DIR:-/workspace/speed_bench_data}"
-RESULTS_DIR="${RESULTS_DIR:-/workspace/speedbench_results}"
-OUT_YAML="${OUT_YAML:-$RESULTS_DIR/speedbench-reference-al.yaml}"
+SPEEDBENCH_DIR="/workspace/speed_bench_data"
+RESULTS_DIR="/workspace/speedbench_results"
 
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
 mkdir -p "$RESULTS_DIR"
 nvidia-smi
 
-# ---- Download model if not pre-staged ----
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         echo "=== MODEL_PATH ($MODEL_PATH) is empty, downloading $MODEL ==="
@@ -62,7 +42,6 @@ else
     if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
 fi
 
-# ---- Download SPEED-Bench dataset ----
 echo "=== Downloading SPEED-Bench dataset ==="
 pip install -q datasets tiktoken
 curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/refs/heads/main/nemo_skills/dataset/speed-bench/prepare.py \
@@ -73,17 +52,16 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# NOTE: --chat-template-kwargs is consumed natively by `vllm bench serve` here.
-# GLM-5.2 only loads on the dedicated vLLM image (>=0.23), which already carries
-# vllm-project/vllm#44244, so no client-side shim is needed (unlike the v0.22
-# collectors that still patch it in).
+# --chat-template-kwargs is consumed natively by `vllm bench serve` here: GLM-5.2 only
+# loads on the dedicated vLLM image (>=0.23), which carries vllm-project/vllm#44244,
+# so no client-side shim is needed.
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
 if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
 fi
 EP_ARGS=()
-if [ "${EP_SIZE:-1}" -gt 1 ]; then
+if [ "${EP_SIZE}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
@@ -216,7 +194,6 @@ done
 
 stop_gpu_monitor
 
-# ---- Emit the YAML matrix ----
 emit_mode_block() {
     local mode="$1"
     for mtp in $MTP_LIST; do
