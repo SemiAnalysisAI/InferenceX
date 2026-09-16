@@ -86,7 +86,7 @@ async function upsert(github, context, prNumber, comment, body) {
 
 async function publishStatus(github, context, sha, status, comment) {
   await github.rest.repos.createCommitStatus({
-    ...context.repo, sha, context: 'codeowner-signoff-verify', state: status,
+    ...context.repo, sha, context: 'CODEOWNER sign-off', state: status,
     description: status === 'success' ? 'CODEOWNER sign-off covers this commit' :
       status === 'pending' ? 'Verifying CODEOWNER sign-off' : 'Fresh CODEOWNER sign-off verification required',
     target_url: comment?.html_url ||
@@ -132,7 +132,7 @@ async function publish({ github, context, core, prNumber, headSha, verdictPath, 
     await publishStatus(github, context, pr.head.sha,
       coveredCommit(comment) === pr.head.sha ? 'success' : 'failure', comment);
   }
-  core.info(`codeowner-signoff-verify=${passed ? 'success' : 'failure'} for assessed commit ${headSha}`);
+  core.info(`CODEOWNER sign-off=${passed ? 'success' : 'failure'} for assessed commit ${headSha}`);
 }
 
 module.exports = { prepare, carry, publish };
