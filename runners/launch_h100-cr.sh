@@ -5,8 +5,6 @@ PORT=8888
 
 server_name="bmk-server"
 
-# Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
-# the h200 launchers, which have carried SPEC_SUFFIX since #392).
 SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"

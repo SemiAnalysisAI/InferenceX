@@ -8,6 +8,7 @@ set -x
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars EVAL_ONLY
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
     echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -29,14 +30,10 @@ fi
 rocm-smi || true
 amd-smi || true
 
-# A server killed on this node minutes earlier (previous job, crashed run)
-# can still be draining its HBM: KFD reclaim takes minutes, and booting into a
-# half-drained node fails RCCL init with HIP 'unhandled cuda error' /
-# 'invalid argument'. DeepSeek-V4-Pro is an 805 GiB checkpoint, so the drain
-# window here is at the long end. Wait for the GPUs to come back before
-# launching. Per-GPU threshold: idle nodes hold a small driver/firmware VRAM
-# baseline (observed up to ~4%/GPU), while a draining or occupied GPU sits at
-# 50-90%. Require every GPU <= 10%.
+# A server killed minutes earlier can still be draining HBM (KFD reclaim takes
+# minutes), and booting into a half-drained node fails RCCL init with HIP
+# 'unhandled cuda error'. Idle GPUs sit at up to ~4% VRAM, draining ones at
+# 50-90%, so require every GPU <= 10%.
 GPU_CLEAN=false
 for i in $(seq 1 90); do
     VRAM_MAX=$(rocm-smi --showmemuse 2>/dev/null | grep -oE "GPU Memory Allocated \(VRAM%\): [0-9]+" | awk '{if ($NF > m) m = $NF} END {print m+0}')
@@ -45,7 +42,6 @@ for i in $(seq 1 90); do
 done
 [ "$GPU_CLEAN" = "true" ] || { echo "Error: GPUs still draining prior job's memory after 15min" >&2; exit 1; }
 
-# ---- Resolve traces and install deps ----------------------------------------
 resolve_trace_source
 install_agentic_deps
 
@@ -53,21 +49,15 @@ SERVER_LOG="$RESULT_DIR/server.log"
 ROUTER_LOG="$RESULT_DIR/router.log"
 mkdir -p "$RESULT_DIR"
 
-# ---- Client config ----------------------------------------------------------
 export PYTHONNOUSERSITE=1
 # Agentic warmup dispatches hundreds of large prompts at once; allow up to
 # 15 minutes of TCP progress before AIPerf declares a connection dead.
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
-# AIPerf pins one pooled keep-alive connection per session (client-side
-# keep-alive 300s) while uvicorn's default SGLANG_TIMEOUT_KEEP_ALIVE is 5s;
-# inter-turn idle gaps can reuse a socket exactly as the server closes it.
-# Outlast the client pool so the race cannot occur.
+# AIPerf pins one pooled keep-alive connection per session while uvicorn's
+# default keep-alive is 5 s; outlast the client pool so the reuse race cannot occur.
 export SGLANG_TIMEOUT_KEEP_ALIVE=900
 
-# ---- DSv4 kernel routing / thinking mode ------------------------------------
-# Mirrors the deleted spec-none sibling plus the DSv4 block in
-# benchmarks/multi_node/amd_utils/env.sh. AgentX measures the thinking-on
-# regime, which is also the golden-AL curve committed for this model.
+# AgentX measures the thinking-on regime, which is also the committed golden-AL curve.
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV4_REASONING_EFFORT=high
 export SGLANG_USE_ROCM700A=0
@@ -75,35 +65,27 @@ export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
 export AITER_BF16_FP8_MOE_BOUND=0
 export TORCH_BLAS_PREFER_HIPBLASLT=1
 export HSA_NO_SCRATCH_RECLAIM=0
-# aiter batched GEMM for the absorbed MLA projections, carried by the v0.5.18
-# image and off by default in environ.py.
+# aiter batched GEMM for the absorbed MLA projections; off by default in environ.py.
 export SGLANG_OPT_USE_AITER_BATCHED_GEMM=1
 
-# Unified radix tree: per-component (full-attn / SWA) cache management for
-# hybrid-attention models, plus proactive release of out-of-window SWA KV
-# slots during chunked prefill. Without the latter, in-flight requests pin SWA
-# KV for their whole context and the trailing window of cached sessions gets
-# flushed under LRU, collapsing the effective prefix-cache hit rate on
-# multi-turn agentic workloads.
+# Unified radix tree with proactive release of out-of-window SWA slots.
+# Without it in-flight requests pin SWA KV for their whole context and the
+# trailing window of cached sessions is flushed under LRU, collapsing the
+# prefix-cache hit rate on multi-turn agentic workloads.
 export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
 export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
 
-# ---- HiCache (host DRAM KV tier) --------------------------------------------
-# Per-arm L2 sizing: host pinned memory is roughly
-# HICACHE_RATIO * (per-rank device KV pool) * TP, which must stay under the
-# node's ~2.7 TB of DRAM. The deleted spec-none sibling used ratio 4 with a
-# smaller device pool; at TP8 with mem-fraction-static 0.85 that would
-# oversubscribe host DRAM, so this recipe starts from 1.5 (the value validated
-# on this cluster by glm5.2_fp4_mi355x_sglang_mtp.sh) and leaves every knob
-# overridable for tuning.
+# Host pinned memory is roughly HICACHE_RATIO * per-rank device KV pool * TP
+# and must stay under the node's ~2.7 TB; ratio 4 oversubscribes at TP8 with
+# mem-fraction-static 0.85, so start from 1.5.
 CACHE_ARGS=()
 if agentic_kv_offload_enabled; then
     case "$KV_OFFLOAD_BACKEND" in
         hicache)
-            HICACHE_RATIO="${HICACHE_RATIO:-1.5}"
-            HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
-            HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-            HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+            HICACHE_RATIO="1.5"
+            HICACHE_WRITE_POLICY="write_through"
+            HICACHE_IO_BACKEND="direct"
+            HICACHE_MEM_LAYOUT="page_first_direct"
             echo "HiCache DSv4 CPU tier: ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT, dram_budget=${TOTAL_CPU_DRAM_GB} GB, tp=$TP"
             CACHE_ARGS=(
                 --enable-hierarchical-cache
@@ -122,13 +104,13 @@ fi
 
 # ---- Parallelism ------------------------------------------------------------
 # The DP-attention path below is live: sglang-router fronts the DP ranks with
-# consistent hashing on the AIPerf correlation id, keeping multi-turn sessions
-# on the DP rank that holds their radix/hicache prefix.
+# cache-aware routing, which picks the rank holding the longest radix/hicache
+# prefix match for the incoming prompt.
 USE_SGLANG_ROUTER=false
+ROUTER_POLICY_ARGS=()
 SGLANG_BACKEND_PORT="$PORT"
-# Small prefill chunks interleave long-context agentic prefills. The flag is
-# engine-wide and DP divides it by dp_size (=TP), so DP uses 8192*TP to keep
-# 8192 per rank. TP-only: 8192 at TP4, 16384 at TP8.
+# The flag is engine-wide and DP divides it by dp_size (=TP), so DP uses
+# 8192*TP to keep 8192 per rank.
 case "$TP" in
     4|8) ;;
     *) echo "Error: unsupported TP '$TP' (expected: 4 or 8)" >&2; exit 1 ;;
@@ -140,11 +122,11 @@ elif [ "$TP" -eq 8 ]; then
 else
     CHUNKED_PREFILL_SIZE=8192
 fi
-MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.86}"
+MEM_FRACTION_STATIC="0.86"
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 SHARED_EXPERTS_ARGS=(--enforce-shared-experts-fusion)
-SWA_FULL_TOKENS_RATIO="${SWA_FULL_TOKENS_RATIO:-0.10}"
-export GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES:-2}"
+SWA_FULL_TOKENS_RATIO="0.10"
+export GPU_MAX_HW_QUEUES="2"
 if [ "$DP_ATTENTION" = "true" ]; then
     USE_SGLANG_ROUTER=true
     export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
@@ -156,8 +138,12 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_DP_SHARED_EXPERT_LOCAL=1
     export SGLANG_DP_USE_GATHERV=1
     export SGLANG_DP_USE_REDUCE_SCATTER=1
-    export GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES_DP:-5}"
-    MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC_DP:-0.92}"
+    export GPU_MAX_HW_QUEUES="5"
+    MEM_FRACTION_STATIC="0.92"
+
+    if [ "$CONC" -gt 160 ]; then
+        ROUTER_POLICY_ARGS+=(--balance-abs-threshold 32)
+    fi
 
     PARALLEL_ARGS+=(
         --dp "$TP"
@@ -167,11 +153,11 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --enable-dp-attention-local-control-broadcast
         --tokenizer-worker-num "$TP"
         --stream-interval 20
-        --prefill-decode-interval "${PREFILL_DECODE_INTERVAL:-10}"
-        --prefill-delayer-token-usage-low-watermark "${DP_PREFILL_DELAYER_LOW_WATERMARK:-0.7}"
+        --prefill-decode-interval "20"
+        --prefill-delayer-token-usage-low-watermark "0.7"
     )
 else
-    PARALLEL_ARGS+=(--prefill-decode-interval "${PREFILL_DECODE_INTERVAL:-10}")
+    PARALLEL_ARGS+=(--prefill-decode-interval "20")
 fi
 
 if [ "$EP_SIZE" -gt 1 ]; then
@@ -192,14 +178,9 @@ if [ "$CONC" -ge 32 ]; then
     export AGENTIC_WARMUP_GRACE_PERIOD=3600
 fi
 
-# ---- Speculative decoding ---------------------------------------------------
-# DeepSeek-V4-Pro-0813 bundles the DSpark draft head in the target checkpoint
-# (dspark_block_size / dspark_markov_rank / dspark_target_layer_ids in
-# config.json), so --speculative-draft-model-path defaults to --model-path and
-# no separate draft checkpoint is needed.
-#
-# gamma=6 is the AL-optimal draft length on the committed golden curve.
-DSV4_DSPARK_GAMMA="${DSV4_DSPARK_GAMMA:-6}"
+# The DSpark draft head is bundled in the target checkpoint (dspark_* keys in
+# config.json), so no separate draft path. gamma=6 is AL-optimal on the golden curve.
+DSV4_DSPARK_GAMMA="6"
 
 SPEC_ARGS=(
     --speculative-algorithm DSPARK
@@ -209,24 +190,19 @@ SPEC_ARGS=(
     --speculative-num-draft-tokens $((DSV4_DSPARK_GAMMA + 1))
 )
 
-# Throughput runs pin acceptance to the committed golden AL for this model,
-# thinking mode, and draft length (golden_al_distribution/dsv4-pro-0813-dspark.yaml,
-# thinking_on column, key = gamma: 6 -> 3.77). Eval-only runs keep real target
-# verification so accuracy stays meaningful.
+# Golden AL: golden_al_distribution/dsv4-pro-0813-dspark.yaml, thinking_on,
+# gamma 6 -> 3.77. Eval-only runs keep real target verification.
 DSV4_GOLDEN_AL=3.77
-if [ "${EVAL_ONLY:-false}" != "true" ]; then
+if [ "${EVAL_ONLY}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN="$DSV4_GOLDEN_AL"
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
 fi
 echo "DSpark draft length: gamma=$DSV4_DSPARK_GAMMA (verify window $((DSV4_DSPARK_GAMMA + 1))), golden AL=$DSV4_GOLDEN_AL"
 
-# ---- Launch -----------------------------------------------------------------
-# No --chat-template: the AgentX traces are tool-heavy, and
-# chat_templates/deepseek_v4_thinking.jinja renders only system/user/assistant
-# (tool definitions and role: tool messages are silently dropped, which would
-# truncate prompts and distort ISL). The multi-node DeepSeek-V4-Pro-AgentX
-# profile and the vLLM agentic sibling both serve DSv4 without an override.
+# No --chat-template: deepseek_v4_thinking.jinja renders only
+# system/user/assistant and silently drops tool definitions and tool messages,
+# which would truncate prompts and distort ISL.
 SGLANG_CMD=(
     python3 -m sglang.launch_server
     --model-path "$MODEL_PATH"
@@ -275,7 +251,8 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     echo "Starting SGLang router on port $PORT for $TP DP ranks..."
     "${SGLANG_ROUTER_CMD[@]}" \
         --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
-        --policy consistent_hashing \
+        --policy cache_aware \
+        "${ROUTER_POLICY_ARGS[@]}" \
         --request-id-headers x-correlation-id \
         --dp-aware \
         --host 0.0.0.0 \

@@ -22,25 +22,23 @@ echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTIO
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
-# ========= Determine other parameters based on ISL, OSL, CONC =========
 MOE_BACKEND="TRTLLM"
 PIECEWISE_CUDA_GRAPHS="true"
 MAX_BATCH_SIZE=$CONC
 KV_CACHE_FREE_MEM_FRACTION=0.8
 MTP=3
 
-# DP ATTENTION requires different optimizations
 if [[ "$DP_ATTENTION" == "true" ]]; then
     MOE_BACKEND="DEEPGEMM"
     PIECEWISE_CUDA_GRAPHS="false"
     MAX_BATCH_SIZE=$(( CONC < 8 ? CONC : CONC / 8 ))
     KV_CACHE_FREE_MEM_FRACTION=0.7
-    # use the new MOE backend from latest trtllm to get better comms
+    # Configurable MoE backend has better comms under attention DP.
     export ENABLE_CONFIGURABLE_MOE=1
     MTP=1
 fi
 
-# currently narrow CONC cases don't benefit from PW CUDA
+# Low-CONC cases do not benefit from piecewise CUDA graphs.
 if [[ "$ISL" == "1024" && "$OSL" == "1024" ]]; then
     if [[ $CONC -le 4 ]]; then
         PIECEWISE_CUDA_GRAPHS="false"
@@ -94,9 +92,7 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     MAX_NUM_TOKENS="$EVAL_MAX_MODEL_LEN"
 fi
 
-# prep PW CUDA config per the documentation
 if [[ "$PIECEWISE_CUDA_GRAPHS" == "true" ]]; then
-    # [2^i for i in range(8)] + [i for i in range(256, max_num_tokens, 256)] + [max_num_tokens]
     capture_tokens=(1 2 4 8 16 32 64 128)
     capture_tokens+=( $(seq 256 256 $MAX_NUM_TOKENS))
     if [ $((MAX_NUM_TOKENS%256)) -ne 0 ]; then
@@ -110,11 +106,9 @@ torch_compile_config:
     enable_piecewise_cuda_graph: true
 EOF
 fi
-# Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
-# Launch TRT-LLM server
 mpirun -n 1 --oversubscribe --allow-run-as-root \
     trtllm-serve $MODEL --port=$PORT \
     --trust_remote_code \
@@ -128,7 +122,6 @@ mpirun -n 1 --oversubscribe --allow-run-as-root \
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 run_benchmark_serving \
@@ -144,11 +137,9 @@ run_benchmark_serving \
     --result-dir /workspace/ \
     --use-chat-template
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
