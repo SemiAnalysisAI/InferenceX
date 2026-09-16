@@ -707,16 +707,24 @@ collx_ensure_squash() {
       || { collx_log_tail "$log"; return 1; }
     # </dev/null: never block on an interactive password prompt.
     if [ "${COLLX_ENROOT_LOCAL_IMPORT:-0}" = 1 ]; then
-      enroot_local="$(mktemp -d /tmp/inferencex-collectivex-enroot.XXXXXX)" \
+      if [ -n "${COLLX_IMPORT_TMPDIR:-}" ]; then
+        [[ "$COLLX_IMPORT_TMPDIR" = /* ]] && [ -d "$COLLX_IMPORT_TMPDIR" ] || return 1
+        enroot_local="$(mktemp -d "$COLLX_IMPORT_TMPDIR/inferencex-collectivex-enroot.XXXXXX")" \
+          || { collx_log_tail "$log"; return 1; }
+      else
+        enroot_local="$(mktemp -d /tmp/inferencex-collectivex-enroot.XXXXXX)" \
         || { collx_log_tail "$log"; return 1; }
+      fi
       (
         trap 'rm -rf -- "$enroot_local"' EXIT
         export ENROOT_TEMP_PATH="$enroot_local/tmp"
         export ENROOT_CACHE_PATH="$enroot_local/cache"
         export ENROOT_DATA_PATH="$enroot_local/data"
         export ENROOT_RUNTIME_PATH="$enroot_local/run"
+        export TMPDIR="$ENROOT_TEMP_PATH"
         mkdir -p "$ENROOT_TEMP_PATH" "$ENROOT_CACHE_PATH" \
           "$ENROOT_DATA_PATH" "$ENROOT_RUNTIME_PATH"
+        df -hT "$ENROOT_TEMP_PATH" "$squash_dir"
         enroot import -o "$sq" "docker://$image" </dev/null
       ) >> "$log" 2>&1 || import_rc=$?
       rm -rf -- "$enroot_local" >/dev/null 2>&1 || true

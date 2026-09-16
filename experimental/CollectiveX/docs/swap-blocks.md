@@ -96,7 +96,8 @@ also runs on failure. CPU CI is separate and does not establish GPU correctness.
 
 The workflow imports H100 images on the submit host because the compute pods reject
 enroot whiteout conversion; other pools import on their allocated compute nodes.
-Both paths use private `/tmp` scratch. Compute imports log the filesystem and enroot version to diagnose host-level
+H100 uses private `/var/tmp` scratch, including GNU parallel's temporary output;
+other pools use `/tmp`. Compute imports log the filesystem and enroot version to diagnose host-level
 whiteout conversion failures. Job-private import scratch is removed on exit. Slurm node exclusions are
 intersected with the current node inventory: retired names cannot invalidate the
 allocation, while exclusions of existing nodes are preserved. B300/GB300 use the
