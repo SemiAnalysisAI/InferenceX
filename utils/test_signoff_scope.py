@@ -107,6 +107,21 @@ def test_owned_file_after_first_page_is_not_missed(scope_case):
     assert scope_case["statuses"] == []
 
 
+@pytest.mark.parametrize("preceding_files", [0, 99])
+def test_type_change_entries_count_as_one_file_and_still_require_signoff(scope_case, preceding_files):
+    scope_case["files"] = [
+        {"filename": f"docs/{i}.md"} for i in range(preceding_files)
+    ] + [
+        {"filename": "configs/model.yaml", "status": "removed"},
+        {"filename": "configs/model.yaml", "status": "added"},
+    ]
+    scope_case["pr"]["changed_files"] = preceding_files + 1
+    assert signoff_scope.check_scope("example/repo", 7, "token") == {
+        "required": "true", "pr-number": "7", "head-sha": "head",
+    }
+    assert scope_case["statuses"] == []
+
+
 @pytest.mark.parametrize("changed", ["head", "base"])
 def test_pr_changes_during_scope_resolution_do_not_publish_an_exemption(scope_case, changed):
     scope_case["files"] = [{"filename": "README.md"}]
@@ -125,13 +140,18 @@ def test_matching_an_owner_more_than_once_checks_their_role_once(scope_case):
     ]
 
 
-@pytest.mark.parametrize("problem", ["files", "codeowners", "permission", "incomplete", "invalid", "empty"])
+@pytest.mark.parametrize("problem", ["files", "codeowners", "permission", "incomplete", "incomplete-duplicate", "invalid", "empty"])
 def test_scope_failures_revoke_an_earlier_exemption(scope_case, problem):
     scope_case["statuses"].append({"context": "CODEOWNER sign-off", "state": "success", "description": "N/A"})
     if problem in {"files", "codeowners", "permission"}:
         scope_case["fail_path"] = {"files": "/pulls/7/files", "codeowners": "/contents/.github/CODEOWNERS", "permission": "/collaborators/admin/permission"}[problem]
-    elif problem == "incomplete":
+    elif problem in {"incomplete", "incomplete-duplicate"}:
         scope_case["pr"]["changed_files"] = 2
+        if problem == "incomplete-duplicate":
+            scope_case["files"] = [
+                {"filename": "configs/model.yaml", "status": "removed"},
+                {"filename": "configs/model.yaml", "status": "added"},
+            ]
     elif problem == "invalid":
         scope_case["errors"] = [{"kind": "Unknown owner"}]
     else:
