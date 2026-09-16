@@ -8656,7 +8656,7 @@ dsv4-fp4-b200-dynamo-sglang-agentic-agg:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - spec-decoding: draft_model
+      - spec-decoding: mtp
         conc-list: [1]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -8670,7 +8670,7 @@ dsv4-fp4-b200-dynamo-sglang-agentic-agg:
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/agg-b200-tp8-c1-mtp-hicache.yaml"
-      - spec-decoding: draft_model
+      - spec-decoding: mtp
         conc-list: [2]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -8684,7 +8684,7 @@ dsv4-fp4-b200-dynamo-sglang-agentic-agg:
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/agg-b200-tp8-c2-mtp-hicache.yaml"
-      - spec-decoding: draft_model
+      - spec-decoding: mtp
         conc-list: [4]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -8698,7 +8698,7 @@ dsv4-fp4-b200-dynamo-sglang-agentic-agg:
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/agg-b200-tp8-c4-mtp-hicache.yaml"
-      - spec-decoding: draft_model
+      - spec-decoding: mtp
         conc-list: [8]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -8712,7 +8712,7 @@ dsv4-fp4-b200-dynamo-sglang-agentic-agg:
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/agg-b200-tp8-c8-mtp-hicache.yaml"
-      - spec-decoding: draft_model
+      - spec-decoding: mtp
         conc-list: [12]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -8726,7 +8726,7 @@ dsv4-fp4-b200-dynamo-sglang-agentic-agg:
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/agg-b200-tp8-c12-mtp-hicache.yaml"
-      - spec-decoding: draft_model
+      - spec-decoding: mtp
         conc-list: [16]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -8755,7 +8755,7 @@ dsv4-fp4-b200-dynamo-sglang-agentic-disagg:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - spec-decoding: draft_model
+      - spec-decoding: mtp
         conc-list: [64]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -8773,7 +8773,7 @@ dsv4-fp4-b200-dynamo-sglang-agentic-disagg:
           tp: 8
           ep: 8
           dp-attn: true
-      - spec-decoding: draft_model
+      - spec-decoding: mtp
         conc-list: [128]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
