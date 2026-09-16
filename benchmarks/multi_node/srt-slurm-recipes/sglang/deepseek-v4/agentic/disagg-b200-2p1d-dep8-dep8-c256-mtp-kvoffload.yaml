@@ -186,6 +186,11 @@ backend:
       disaggregation-transfer-backend: mooncake
       disaggregation-ib-device: mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11
       disaggregation-mode: decode
+      # DSV4 uses a specialized SWA pool that this nightly does not infer as
+      # host-pool capable. Select the supported backend explicitly so decode
+      # retraction preserves KV in host memory instead of calling the
+      # unsupported SWA get_cpu_copy() path.
+      disaggregation-decode-retraction-backup: host_pool
       load-balance-method: total_tokens
       mem-fraction-static: 0.9
       page-size: 256
@@ -200,6 +205,9 @@ backend:
       speculative-num-steps: 1
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 7
+      hicache-ratio: 8
+      hicache-io-backend: direct
+      hicache-mem-layout: page_first_direct
 
 
 sbatch_directives:
