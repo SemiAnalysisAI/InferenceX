@@ -1,32 +1,29 @@
---- a/models/deepseek_v4_1/common/engram.py	2026-09-13 21:00:26
-+++ b/models/deepseek_v4_1/common/engram.py	2026-09-13 21:00:26
-@@ -34,12 +34,20 @@
+--- a/models/deepseek_v4_1/common/engram.py
++++ b/models/deepseek_v4_1/common/engram.py
+@@ -34,12 +34,19 @@
    cache for the rest.
  """
- 
+
 +import contextlib
 +import json
 +import math
 +import os
  import weakref
-+from concurrent.futures import ThreadPoolExecutor
 +from typing import Any
- 
+
  import numpy as np
  import torch
  from torch import nn
- 
+
 +import vllm.envs as envs
 +from vllm.compilation.breakable_cudagraph import eager_break_during_capture
  from vllm.config import VllmConfig, get_current_vllm_config
  from vllm.distributed import (
      get_engram_dp_group,
-@@ -676,8 +684,87 @@
-             (values.to(tl.float32) * scale).to(tl.bfloat16),
-             mask=valid[:, None],
+@@ -678,6 +685,85 @@
          )
-+
-+
+
+
 +_ENGRAM_DISK_MAPS: dict[str, Any] = {}
 +
 +# numpy has no fp8/bf16, so files are mapped with a same-width integer dtype
@@ -48,9 +45,9 @@
 +    readahead around them only evicts rows another token still wants.
 +    """
 +    import mmap as _mmap
- 
++
 +    import numpy as np
- 
++
 +    arr = np.memmap(
 +        path,
 +        dtype=_ENGRAM_DISK_NP_DTYPE[dtype],
@@ -109,7 +106,7 @@
  class ParallelEngramEmbedding(nn.Module):
      """The n-gram hash table, sharded by complete hash heads over TP ranks.
      Rows stay fp8 and are dequantized with ue8m0 per-32 scales on lookup.
-@@ -698,13 +785,18 @@
+@@ -698,13 +784,18 @@
          head_sizes: tuple[int, ...],
          block_size: int = 32,
          cpu_offload: bool = False,
@@ -129,7 +126,7 @@
              raise RuntimeError("Engram CPU offload requires UVA support")
          self.num_embeddings = num_embeddings
          self.dim = dim
-@@ -724,30 +816,34 @@
+@@ -724,30 +815,34 @@
          self.tp_size = tp_size
          self.dp_size = dp_size
          self.cpu_offload = cpu_offload
@@ -144,7 +141,7 @@
          self._num_sms = torch.cuda.get_device_properties(
              torch.accelerator.current_device_index()
          ).multi_processor_count
- 
+
 -        # Explicit device: model init runs under a `torch.device("cuda")`
 -        # context, which would otherwise put the shard in HBM.
 -        kwargs = {"device": "cpu", "pin_memory": True} if cpu_offload else {}
@@ -182,7 +179,7 @@
          for param in (self.weight, self.weight_scale_inv):
              set_weight_attrs(
                  param,
-@@ -758,20 +854,212 @@
+@@ -758,20 +853,212 @@
              )
          if cpu_offload:
              logger.info(
@@ -193,8 +190,8 @@
                  self.part_num_embeddings,
                  dim,
                  self.part_num_embeddings * (dim + dim // block_size) / 1024**3,
-+            )
-+
+             )
+
 +    def _open_disk_shard(
 +        self,
 +        disk_dir: str,
@@ -321,7 +318,7 @@
 +                    dtype=torch.uint8,
 +                    pin_memory=True,
 +                ),
-             )
++            )
 +        return self._stage[0][:rows], self._stage[1][:rows]
 +
 +    def stage_disk_rows(self, indices: torch.Tensor) -> tuple[torch.Tensor, ...]:
@@ -362,7 +359,7 @@
 +        )
 +        torch.index_select(self.weight_scale_inv.data, 0, unique_cpu, out=s_stage)
 +        return w_stage, s_stage, inverse, flat
- 
++
 +    def finish_disk_rows(
 +        self, staged: tuple[torch.Tensor, ...], out: torch.Tensor
 +    ) -> None:
@@ -389,7 +386,7 @@
 +
      def _storage(self) -> tuple[torch.Tensor, torch.Tensor]:
          """Parameters when resident, else cached UVA views of the pinned shard.
- 
+
          Rebuilt if anything swaps `.data`, so a stale device pointer cannot
          survive silently.
          """
@@ -398,28 +395,25 @@
              return self.weight.data, self.weight_scale_inv.data
          src = (self.weight.data_ptr(), self.weight_scale_inv.data_ptr())
          if self._view_src != src:
-@@ -793,6 +1081,9 @@
+@@ -792,6 +1079,9 @@
+         """
          rows = indices.shape[0] * self.part_n_hash_cols
          if not rows:
-             return
++            return
 +        if self.disk_offload_dir is not None:
 +            self._lookup_from_disk(indices, out)
-+            return
+             return
          weight, scales = self._storage()
          # The table dwarfs TLB reach, so a persistent grid near the SM count
-         # beats one program per row; halve it to leave SMs for the main stream.
-@@ -1004,6 +1295,10 @@
-     stream against the key, signed-sqrt'ed before the sigmoid (matching the
+@@ -1005,6 +1295,7 @@
      training kernel).
      """
+
 +
-+    _disk_pool = None
-+    _disk_pending = None
-+    _disk_stream = None
- 
      def __init__(
          self,
-@@ -1031,6 +1326,7 @@
+         config,
+@@ -1031,6 +1322,7 @@
              layout.head_dim,
              tuple(size for order in layout.primes[layer_hash_index] for size in order),
              cpu_offload=engram_config.cpu_offload if engram_config else True,
@@ -427,13 +421,13 @@
          )
          n_hash_cols = (layout.max_ngram_size - 1) * layout.n_heads
          self.wkv = ReplicatedLinear(
-@@ -1073,15 +1369,77 @@
+@@ -1073,13 +1365,33 @@
          return self._extra_staged_rows[ubatch_id - 1]
- 
+
      def prepare_embeddings(self, hash_ids: torch.Tensor) -> None:
 -        """Gather this layer's rows on the main stream before decoder layers.
 +        """Gather this layer's rows before the decoder layers consume them.
- 
+
          `hash_ids` covers every DP replica sharing the table (see
          `gather_engram_hashes`), so only `embed` narrows back to this one.
          """
@@ -442,85 +436,32 @@
 +        if self.embed_tokens.disk_offload_dir is None:
 +            self.embed_tokens.lookup(hash_ids, rows)
 +            return
-+        if torch.cuda.is_current_stream_capturing():
-+            # Capture stub. The gather is host work -- a device-to-host copy of
-+            # the ids, a dedup that syncs, and a read from a mapped file -- and
-+            # none of it is legal while a stream is capturing. Warmup output is
-+            # discarded, so leaving the staging buffer alone is harmless; the
-+            # real gather runs from Python on every live step, which needs a
-+            # cudagraph mode that still executes this forward (piecewise)
-+            # rather than replaying it wholesale.
-+            return
-+        # Inline, on this thread, rather than on the prefetch pool. Capture
-+        # state is per-thread: a worker cannot see that the main thread is
-+        # capturing, so an in-flight gather would run straight through the
-+        # capture window and invalidate it under global capture mode. Overlap
-+        # has to wait for a capture context that can break around host work.
-         self.embed_tokens.lookup(hash_ids, rows)
- 
-+    def _start_disk_prefetch(
-+        self, hash_ids: torch.Tensor, rows: torch.Tensor
-+    ) -> None:
-+        """Read this layer's rows off the forward thread.
-+
-+        The gather blocks on a device-to-host copy of the hash ids and then on
-+        the filesystem. Both are host work, so a side CUDA stream would overlap
-+        neither -- and doing them inline invalidates a cudagraph capture. Run
-+        them in a worker while the decoder layers ahead of this one execute.
-+        """
-+        if self._disk_pool is None:
-+            # One worker, so a layer's gathers stay ordered and cannot outrun
-+            # the single staging buffer it owns.
-+            self._disk_pool = ThreadPoolExecutor(
-+                max_workers=1, thread_name_prefix="engram-disk"
-+            )
-+            self._disk_stream = torch.cuda.Stream(device=rows.device)
-+        device = rows.device
-+        embed = self.embed_tokens
-+
-+        def _gather():
-+            # A worker thread starts on device 0; the copy must target ours.
-+            with torch.cuda.device(device):
-+                return embed.stage_disk_rows(hash_ids)
-+
-+        self._disk_pending = (self._disk_pool.submit(_gather), rows)
-+
-+    def _finish_disk_prefetch(self) -> None:
-+        pending, self._disk_pending = self._disk_pending, None
-+        if pending is None:
-+            return
-+        if torch.cuda.is_current_stream_capturing():
-+            return
-+        future, rows = pending
-+        self._finish_disk_rows(future.result(), rows, self._disk_stream)
++        self._prepare_disk_embeddings(hash_ids, rows)
 +
 +    @eager_break_during_capture
-+    def _finish_disk_rows(self, staged, rows, stream) -> None:
-+        # Breaks the capture: the copy back and dequantization run eagerly on
-+        # the capture stream rather than being recorded.
-+        stream.wait_stream(torch.cuda.current_stream())
-+        with torch.cuda.stream(stream):
-+            self.embed_tokens.finish_disk_rows(staged, rows)
-+        torch.cuda.current_stream().wait_stream(stream)
++    def _prepare_disk_embeddings(
++        self, hash_ids: torch.Tensor, rows: torch.Tensor
++    ) -> None:
++        """Refresh fixed staging buffers on every breakable-graph replay.
 +
++        A capture-time early return would omit the lookup from replay and
++        reuse old row values. An eager segment performs the actual host work
++        between graph segments, using the live IDs and the same output buffer.
++        """
++        if torch.cuda.is_current_stream_capturing():
++            raise RuntimeError(
++                "Engram disk lookup requires breakable PIECEWISE graphs; "
++                "host retrieval cannot be skipped during CUDA capture"
++            )
+         self.embed_tokens.lookup(hash_ids, rows)
+
      def _trade_dp_tokens_for_heads(self, num_tokens: int) -> torch.Tensor:
-         """Keep this replica's tokens, take the heads its DP peers own.
- 
-@@ -1096,6 +1454,8 @@
- 
-     def embed(self, hash_ids: torch.Tensor) -> torch.Tensor:
-         """Gather heads, returning only local tokens when SP is enabled."""
-+        if self.embed_tokens.disk_offload_dir is not None:
-+            self._finish_disk_prefetch()
-         if self.embed_tokens.dp_size > 1:
-             rows = self._trade_dp_tokens_for_heads(hash_ids.shape[0])
-             if self.embed_tokens.tp_size == 1:
---- a/config/engram.py	2026-09-13 21:00:26
-+++ b/config/engram.py	2026-09-13 21:00:26
+--- a/config/engram.py
++++ b/config/engram.py
 @@ -37,6 +37,31 @@
      Each rank offloads its assigned hash heads, so host table storage and
      lookup traffic scale with the number of heads assigned to the rank."""
- 
+
 +    disk_offload_dir: str | None = None
 +    """Directory holding file-backed n-gram tables, one shard per rank.
 +
@@ -549,8 +490,8 @@
      def verify_model_config(self, model_config: "ModelConfig | None") -> None:
          """Reject Engram configuration for models without n-gram embeddings."""
          from vllm.platforms import current_platform
---- a/envs.py	2026-09-13 21:00:26
-+++ b/envs.py	2026-09-13 21:00:26
+--- a/envs.py
++++ b/envs.py
 @@ -301,6 +301,7 @@
      VLLM_USE_V2_MODEL_RUNNER: bool | None = None
      VLLM_LOG_MODEL_INSPECTION: bool = False

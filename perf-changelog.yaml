@@ -7994,3 +7994,12 @@
     - "Restore asynchronous SSD Engram retrieval and piecewise graphs from run 34758729095, retaining the sweep through concurrency 128 including 96"
     - "恢复运行 34758729095 的异步 SSD Engram 读取和分段图，保留包含并发 96 的完整扫描，最高并发为 128"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3080
+
+- config-keys:
+    - dsv41flashssd-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Fix stale SSD Engram rows with a retrieval callback on every piecewise graph replay; add GPU changing-ID checks and use the B200 capture floor of 64; eval retains real rejection with adaptive verification off"
+    - "修复 SSD Engram 旧行复用：每次分段图回放均执行读取回调，增加 GPU ID 变化检查并使用 B200 最小捕获值 64；eval 保留真实拒绝采样并禁用自适应验证"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3080

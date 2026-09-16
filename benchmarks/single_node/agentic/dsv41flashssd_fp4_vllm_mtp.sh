@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-# DeepSeek-V4.1-Flash Engram on local NVMe. Async host row retrieval
-# overlaps decoder execution, with piecewise CUDA graphs around host work.
+# DeepSeek-V4.1-Flash Engram on local NVMe. Eager retrieval callbacks
+# refresh fixed staging rows on every piecewise CUDA graph replay.
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 export GPU_COUNT="$TP"
@@ -24,6 +24,8 @@ MOONCAKE_MASTER_PID=""
 export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-3600}"
 export VLLM_USE_RUST_FRONTEND=1
 export VLLM_USE_V2_MODEL_RUNNER=1
+# Set before importing vLLM: the eager-break decorator is resolved at import.
+export VLLM_USE_BREAKABLE_CUDAGRAPH=1
 # SimpleCPUOffloadConnector resolves prefix-cache block hashes when it selects
 # blocks to store, and asserts if they have already been retired. The other
 # B200 vLLM agentic recipes carry the same retention interval for this reason;
@@ -44,7 +46,9 @@ elif ! patch -p1 -R --dry-run -d "$VLLM_DIR" < "$ENGRAM_PATCH" > /dev/null 2>&1;
     echo "Re-generate benchmarks/patches/vllm-dsv41flash-engram-ssd.patch." >&2
     exit 1
 fi
-python3 -c "from vllm.config.engram import EngramConfig; assert 'disk_offload_dir' in EngramConfig.__dataclass_fields__"
+# Exercise the installed patch with changing IDs across actual CUDA replays.
+python3 "$INFERENCEX_REPO_ROOT/benchmarks/patches/check_dsv41flash_ssd_replay.py" \
+    --result-dir "$RESULT_DIR" 2>&1 | tee "$RESULT_DIR/engram_replay_check.log"
 
 # Node-local NVMe. A network mount would make every row gather a round trip,
 # so fail loudly rather than silently benchmarking the filesystem.
@@ -173,13 +177,16 @@ EOF
 esac
 
 NUM_SPEC_TOKENS=5
-CAPTURE_SIZE=1
+check_env_vars DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE
+CAPTURE_SIZE="$DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE"
 while (( CAPTURE_SIZE < CONC * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
     CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
 done
 
+# Adaptive verification forces FULL graphs in this image; real block
+# rejection remains enabled for eval, using the supported PIECEWISE path.
 if [[ "${EVAL_ONLY:-false}" == true ]]; then
-    SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":true}'
+    SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
 else
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":3.51,"enable_adaptive_verification":false}'
 fi
