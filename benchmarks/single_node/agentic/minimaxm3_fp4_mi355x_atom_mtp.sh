@@ -99,7 +99,9 @@ case "$CONC" in
         SPEC_DECODE_AL=2.78
         STATE_OFFLOAD_CPU_GIB=0
         ;;
-    8|10|12|14|15|20|24|28)
+    # 25 and 30 are the TP2 offload curve; ATOM_ENABLE_REPLAYSSM is a no-op for
+    # M3 (it only gates gdn_attn, and M3 has no SSM layers), so they share a band.
+    8|10|12|14|15|20|24|25|28|30)
         MAX_NUM_SEQS=32
         MAX_NUM_BATCHED_TOKENS=4096
         GPU_MEM_UTIL=0.88
@@ -127,14 +129,19 @@ case "$CONC" in
         SPEC_DECODE_AL=2.78
         STATE_OFFLOAD_CPU_GIB=32
         ;;
-    # No draft model past the throughput knee and no hybrid CPU state tier.
+    # No hybrid CPU state tier past the throughput knee; the draft model stays on.
+    # These two bands ran without it and paid for it: at CONC=40/48 the forward
+    # step is 37-41 ms either way, so dropping EAGLE3 hands back the whole
+    # acceptance-length multiplier and ITL p50 goes 13.9 ms (CONC=32, spec on) to
+    # 37.1/40.7 ms. Interactivity p90 fell 43.9 -> 23.4/19.7 for that reason
+    # alone, not because of the offload tier those bands also enable.
     40)
         MAX_NUM_SEQS=80
         MAX_NUM_BATCHED_TOKENS=8192
         GPU_MEM_UTIL=0.86
         ATOM_ENABLE_REPLAYSSM=0
-        NUM_SPEC_TOKENS=0
-        SPEC_DECODE_AL=0
+        NUM_SPEC_TOKENS=3
+        SPEC_DECODE_AL=2.78
         STATE_OFFLOAD_CPU_GIB=0
         ;;
     48)
@@ -142,8 +149,8 @@ case "$CONC" in
         MAX_NUM_BATCHED_TOKENS=8192
         GPU_MEM_UTIL=0.86
         ATOM_ENABLE_REPLAYSSM=0
-        NUM_SPEC_TOKENS=0
-        SPEC_DECODE_AL=0
+        NUM_SPEC_TOKENS=3
+        SPEC_DECODE_AL=2.78
         STATE_OFFLOAD_CPU_GIB=0
         ;;
     56)
@@ -163,8 +170,9 @@ esac
 # Official MiniMax-M3 ATOM launch settings override the per-band capacity knobs.
 MAX_NUM_SEQS=$((2 * CONC))
 MAX_NUM_BATCHED_TOKENS=32768
-GPU_MEM_UTIL=0.9
+GPU_MEM_UTIL=0.95
 export ATOM_ENABLE_REPLAYSSM
+CUDAGRAPH_CAPTURE_SIZES="[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,20,22,24,26,28,30,32,34,36,40,48,56,64]"
 
 # MiniMax-M3 attention carries a per-request recurrent state alongside the
 # paged KV. The CPU state tier is what makes a resumed agentic turn cheap; the
@@ -181,16 +189,28 @@ case "$KV_OFFLOAD_BACKEND" in
         export PYTHONHASHSEED=0
         export LMCACHE_LOCAL_CPU=True
 
+        # GPUs 0-3 are on NUMA node 0 and 4-7 on node 1. Ranks pinning host memory
+        # on the same node starve each other: 256 GB/rank took 45 min to pin with
+        # both TP2 ranks on node 0 and 21 s with one per node, at no measurable
+        # throughput cost. Only chosen when the caller has not pinned a set.
+        if [[ -z "${ROCR_VISIBLE_DEVICES+x}" && "$TP" -eq 2 ]]; then
+            export ROCR_VISIBLE_DEVICES=0,4
+            export HIP_VISIBLE_DEVICES=0,4
+            echo "NUMA-spread GPUs for offload: $ROCR_VISIBLE_DEVICES"
+        fi
+
         case "$CONC" in
-            40|48)
-                # Validated high-concurrency tier: CPU only, chunk 256, no hybrid state offload.
+            20|25|30|40|48)
+                # Validated tier: CPU only, chunk 256, no hybrid state offload.
                 export LMCACHE_MAX_LOCAL_CPU_SIZE=256
                 export LMCACHE_CHUNK_SIZE=256
                 # ATOM_SLRU needs rocm/atom-dev:nightly_202609140645-lirzhang-triton-build or later.
                 export ATOM_PREFIX_CACHE_POLICY=slru
                 export ATOM_PREFIX_CACHE_PROTECTED_RATIO=0.5
                 export LMCACHE_CACHE_POLICY=ATOM_SLRU
-                export LMCACHE_LOOKUP_SERVER_WORKER_IDS=0,1,2,3
+                # Must cover every rank. Leaving it at rank 0 alone halves the
+                # measured offload benefit (all lookups serialise there).
+                export LMCACHE_LOOKUP_SERVER_WORKER_IDS="$(seq -s, 0 $((TP - 1)))"
                 ;;
             *)
                 # TOTAL_CPU_DRAM_GB is the aggregate budget; these are per rank, so
@@ -232,6 +252,11 @@ case "$KV_OFFLOAD_BACKEND" in
         ;;
 esac
 
+if [ "$TP" -eq 4 ] && [ "$CONC" -gt 24 ]; then
+    export ATOM_M3_INDEXER_CP=1
+    echo "ATOM_M3_INDEXER_CP=1 (TP4, CONC=$CONC > 24)"
+fi
+
 echo "Starting atom server..."
 export PYTHONNOUSERSITE=1
 
@@ -270,6 +295,7 @@ ATOM_CMD=(
     --max-num-seqs "$MAX_NUM_SEQS"
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS"
     --gpu-memory-utilization "$GPU_MEM_UTIL"
+    --cudagraph-capture-sizes "$CUDAGRAPH_CAPTURE_SIZES"
     --index-cache-dtype fp8
     --online_quant_config '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","vision_tower","multi_modal_projector","patch_merge_mlp","*block_sparse_moe"]}'
     --default-chat-template-kwargs '{"thinking_mode":"enabled"}'
