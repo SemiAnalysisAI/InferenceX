@@ -77,7 +77,6 @@ case "$CONC" in
             1)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-6}}" ;;
             4)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-5}}" ;;
             10)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-5}}" ;;
-            14)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-3}}" ;;
             *)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-3}}" ;;
         esac
         case "$SPEC_NUM_TOKENS" in
@@ -101,7 +100,6 @@ case "$CONC" in
             echo "MTP: k=$SPEC_NUM_TOKENS synthetic_accept=$SYNTHETIC_ACCEPT_LEN draft_kv=$DRAFT_KV_DTYPE"
         fi
         SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 ))
-        KDA_ARGS=(--additional-config '{"kda_prefill_backend":"triton"}')
         case "$CONC" in
             1)  SPEC_SEATS=2  ;;
             2)  SPEC_SEATS=4  ;;
