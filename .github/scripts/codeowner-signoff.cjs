@@ -64,8 +64,7 @@ async function coverage(github, context, prNumber) {
 
 function formatComment(verdict, assessed, covered) {
   return `${MARKER}\n${verdict}\n\nAssessed commit: \`${assessed}\`.\n` +
-    'Admin updates retain sign-off. Non-admin changes require fresh verification.' +
-    `\nCovered commit: \`${covered}\`.\n`;
+    `Covered commit: \`${covered}\`.\n`;
 }
 
 async function upsert(github, context, prNumber, comment, body) {
