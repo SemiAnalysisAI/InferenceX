@@ -8011,4 +8011,6 @@
     - "新增实验性 Kimi MI355X vLLM c8 纯 GPU 驻留 BFCL 诊断；不作为缺失 LMCache 依赖的 offload 路径验证。"
     - "Upgrade Kimi MI355X vLLM to upstream nightly-af1c0149 and use its bundled LMCache 0.5.3, built against the image's PyTorch. Remove runtime LMCache, Python dependency and OS package installation; validate the native DRAM offload path separately."
     - "Kimi MI355X vLLM 升级至上游 nightly-af1c0149，使用镜像内针对其 PyTorch 构建的 LMCache 0.5.3。移除运行时 LMCache、Python 依赖及系统包安装；原生 DRAM offload 路径单独验证。"
+    - "Remove the obsolete MiniMax TRT fuse_qkv_index_projection option rejected by rc26. Set Kimi DCP1 LMCache prefill batches to 1536 tokens, preserving every recurrent-state snapshot as required by the bundled connector. These recipe changes require fresh throughput validation."
+    - "移除 rc26 已不支持的 MiniMax TRT fuse_qkv_index_projection 配置。Kimi DCP1 LMCache 的预填充批次改为 1536 token，按镜像内连接器的要求保留每个循环状态快照；这些配方变更需重新验证吞吐量。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156

@@ -219,6 +219,13 @@ case "$CONC" in
         ;;
 esac
 
+if agentic_kv_offload_enabled && [[ "${KV_OFFLOAD_BACKEND:-}" == "lmcache" && "$DCP_SIZE" -eq 1 ]]; then
+    # Bundled LMCache 0.5.3 requires one Mamba state snapshot per prefill
+    # block. The pinned Kimi image selects 1536-token attention blocks;
+    # the batch must stay in [1536, 3072) to avoid skipping snapshots.
+    MAX_NUM_BATCHED_TOKENS=1536
+fi
+
 SPEC_ARGS=()
 if [ "$SPEC_NUM_TOKENS" -gt 0 ]; then
 if [ "${EVAL_ONLY}" = "true" ]; then

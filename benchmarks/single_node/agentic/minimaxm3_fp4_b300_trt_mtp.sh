@@ -96,7 +96,6 @@ sparse_attention_config:
     implementation: msa
     indexer_kv_dtype: fp8
     sparse_disable_index_value: true
-    fuse_qkv_index_projection: true
 kv_cache_config:
     free_gpu_memory_fraction: 0.94
     enable_block_reuse: true
