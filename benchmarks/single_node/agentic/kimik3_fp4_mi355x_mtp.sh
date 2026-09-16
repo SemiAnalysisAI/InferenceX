@@ -42,7 +42,7 @@ export AITER_DISABLE_FMHA_OPUS=1
 export SAFETENSORS_FAST_GPU=1
 export GPU_ARCHS=gfx950
 export HSA_NO_SCRATCH_RECLAIM=1
-export VLLM_USE_BREAKABLE_CUDAGRAPH="${VLLM_USE_BREAKABLE_CUDAGRAPH:-0}"
+export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export VLLM_K3_KDA_SAFE_STAGES=1
 export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=1
 export VLLM_ENGINE_READY_TIMEOUT_S=7200
@@ -67,16 +67,16 @@ trap 'exit 143' TERM
 
 SPEC_ARGS=()
 SPEC_ROWS=1
-KDA_ARGS=(--additional-config "{\"kda_prefill_backend\":\"${KDA_PREFILL_BACKEND:-triton}\"}")
+KDA_ARGS=()
 case "$CONC" in
     1|2|4|8|10|12|14|16)
         DCP_SIZE=1
         OFFLOAD_POLICY=harness
-        GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.92}"
         case "$CONC" in
             1)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-6}}" ;;
             4)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-5}}" ;;
-            12) SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-3}}" ;;
+            10)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-5}}" ;;
+            14)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-4}}" ;;
             *)  SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-${SPEC_K:-3}}" ;;
         esac
         case "$SPEC_NUM_TOKENS" in
@@ -100,6 +100,7 @@ case "$CONC" in
             echo "MTP: k=$SPEC_NUM_TOKENS synthetic_accept=$SYNTHETIC_ACCEPT_LEN draft_kv=$DRAFT_KV_DTYPE"
         fi
         SPEC_ROWS=$(( SPEC_NUM_TOKENS + 1 ))
+        KDA_ARGS=(--additional-config '{"kda_prefill_backend":"triton"}')
         case "$CONC" in
             1)  SPEC_SEATS=2  ;;
             2)  SPEC_SEATS=4  ;;
