@@ -42,9 +42,7 @@ def validate_parallelism(
 ) -> None:
     """Validate PP/DCP/PCP after the caller has parsed all its inputs."""
     if any(
-        size <= 0
-        for layout in layouts
-        for size in (layout.pp, layout.dcp_size, layout.pcp_size)
+        size <= 0 for layout in layouts for size in (layout.pp, layout.dcp_size, layout.pcp_size)
     ):
         dimensions = (
             "Multinode PP, DCP, and PCP sizes"

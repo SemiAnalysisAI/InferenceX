@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Find an approved pull-request sweep run that can be reused after merge.
 
 This script is used by ``run-sweep.yml`` on push-to-main runs.  It only enables
@@ -18,7 +17,7 @@ import sys
 import urllib.parse
 from typing import Any
 
-from .. import github
+from infx import github
 
 # Preserve the existing helper imports used through the legacy entrypoint.
 
@@ -44,8 +43,7 @@ def write_outputs(path: str | None, outputs: dict[str, str]) -> None:
     if not path:
         return
     with open(path, "a") as handle:
-        for key, value in outputs.items():
-            handle.write(f"{key}={value}\n")
+        handle.writelines(f"{key}={value}\n" for key, value in outputs.items())
 
 
 def result(
@@ -72,9 +70,7 @@ def result(
     }
 
 
-def parse_reuse_command(
-    body: str, command: str = "/reuse-sweep-run"
-) -> tuple[bool, int | None]:
+def parse_reuse_command(body: str, command: str = "/reuse-sweep-run") -> tuple[bool, int | None]:
     """Use the last standalone command in a comment, preserving unpinned requests."""
     matches = re.findall(rf"(?m)^\s*{re.escape(command)}(?:[^\S\r\n]+(\d+))?\s*$", body)
     if not matches:
@@ -101,9 +97,7 @@ def find_reuse_request(
         association = str(comment.get("author_association") or "")
         if association not in allowed_author_associations:
             continue
-        matches, pinned_run_id = parse_reuse_command(
-            str(comment.get("body") or ""), command
-        )
+        matches, pinned_run_id = parse_reuse_command(str(comment.get("body") or ""), command)
         if not matches:
             continue
         return comment, pinned_run_id
@@ -217,9 +211,7 @@ def validate_reusable_run(
     # points.  ``cancelled`` belongs here alongside ``failure`` because a
     # fail-fast sweep cancels its remaining jobs, so a run whose benchmark jobs
     # all passed still concludes ``cancelled`` when a later job is cut short.
-    allowed_conclusions = (
-        {"success", "failure", "cancelled"} if allow_failed else {"success"}
-    )
+    allowed_conclusions = {"success", "failure", "cancelled"} if allow_failed else {"success"}
     if run.get("conclusion") not in allowed_conclusions:
         expected = "success, failure, or cancelled" if allow_failed else "success"
         raise RuntimeError(
@@ -245,8 +237,7 @@ def validate_reusable_run(
     names = artifact_names(repo, run_id, token)
     if not has_reusable_result_artifacts(names):
         raise RuntimeError(
-            f"Reusable source run {run_id} has no benchmark, eval, or "
-            "agentic result artifact."
+            f"Reusable source run {run_id} has no benchmark, eval, or agentic result artifact."
         )
 
 
@@ -351,15 +342,11 @@ def main() -> int:
     if not token:
         raise RuntimeError("GH_TOKEN or GITHUB_TOKEN is required")
     allowed_author_associations = {
-        value.strip()
-        for value in args.allowed_author_associations.split(",")
-        if value.strip()
+        value.strip() for value in args.allowed_author_associations.split(",") if value.strip()
     }
 
     incompatible_labels = {
-        value.strip()
-        for value in args.reuse_incompatible_label.split(",")
-        if value.strip()
+        value.strip() for value in args.reuse_incompatible_label.split(",") if value.strip()
     }
 
     if args.event_name == "pull_request":
@@ -370,9 +357,7 @@ def main() -> int:
             )
         else:
             if args.pr_number is None:
-                raise RuntimeError(
-                    "--pr-number is required for pull_request synchronize"
-                )
+                raise RuntimeError("--pr-number is required for pull_request synchronize")
             authorized, pinned_run_id = find_reuse_authorization(
                 args.repo,
                 args.pr_number,
@@ -498,9 +483,9 @@ def cli() -> None:
     """Keep the same error presentation for package and legacy entrypoints."""
     try:
         raise SystemExit(main())
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         print(f"error: {exc}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":

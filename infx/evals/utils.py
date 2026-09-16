@@ -8,12 +8,12 @@ LETTERS = "ABCD"
 def process_docs(
     dataset: datasets.Dataset, n_repeats: int = 2, seed: int = 3407
 ) -> datasets.Dataset:
-    rng = random.Random(seed)
+    rng = random.Random(seed)  # noqa: S311
     docs = list(dataset)
 
     rows = []
     for r in range(n_repeats):
-        for i, doc in enumerate(docs):
+        for doc in docs:
             base_choices = [
                 doc["Correct Answer"],
                 doc["Incorrect Answer 1"],

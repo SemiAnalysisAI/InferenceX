@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
 import os
@@ -91,9 +92,7 @@ def choose(
     families: dict[tuple, set[str]],
 ) -> list[dict]:
     # Preserve claims made before the agent's spelling was corrected.
-    occupied = {
-        re.sub(r"^klaud[e]?/auto-", "klaud/auto-", branch) for branch in occupied
-    }
+    occupied = {re.sub(r"^klaud[e]?/auto-", "klaud/auto-", branch) for branch in occupied}
     selected = []
     seen = set()
     valid = [item for item in items if item["needs-review"]]
@@ -175,14 +174,10 @@ def plan(root: Path, directory: Path) -> None:
         for owner in claims.family_owners(repository)
         for candidate in owner.candidates
     }
-    recovery_file = (
-        Path(os.environ.get("RUNNER_TEMP", directory.parent)) / "klaud-recovery.json"
-    )
+    recovery_file = Path(os.environ.get("RUNNER_TEMP", directory.parent)) / "klaud-recovery.json"
     if recovery_file.exists():
         blocked.update(json.loads(recovery_file.read_text()))
-    candidates = [
-        candidate for candidate in candidates if candidate["family"] not in blocked
-    ]
+    candidates = [candidate for candidate in candidates if candidate["family"] not in blocked]
     base = subprocess.check_output(
         ["git", "-C", str(root), "rev-parse", "HEAD"], text=True, timeout=30
     ).strip()
@@ -241,11 +236,11 @@ def plan(root: Path, directory: Path) -> None:
     # Private selection hints for the read-only reviewer; excluded from artifacts.
     (directory / "capacity.json").write_text(json.dumps(capacity) + "\n")
     if filename := os.environ.get("GITHUB_OUTPUT"):
+        schema = PRReview.model_json_schema(by_alias=True)
+        schema["properties"]["decisions"].update(minItems=len(contexts), maxItems=len(contexts))
         with open(filename, "a") as output:
             output.write(f"has_candidates={str(bool(candidates)).lower()}\n")
-            output.write(
-                f"review_schema={json.dumps(PRReview.model_json_schema(by_alias=True))}\n"
-            )
+            output.write(f"review_schema={json.dumps(schema)}\n")
 
 
 def denied_bash_category(denial: dict) -> str:
@@ -305,9 +300,7 @@ def execution_diagnostics(path: Path) -> dict:
         key: value
         for key in ("duration_ms", "num_turns", "total_cost_usd")
         if (
-            type(value := result.get(key)) is int
-            or type(value) is float
-            and math.isfinite(value)
+            type(value := result.get(key)) is int or (type(value) is float and math.isfinite(value))
         )
         and value >= 0
     }
@@ -347,12 +340,8 @@ def execution_diagnostics(path: Path) -> dict:
         "result-present": bool(result),
         **metrics,
         "structured-output-present": isinstance(result.get("structured_output"), dict),
-        "termination": subtype
-        if isinstance(subtype, str) and subtype in subtypes
-        else "unknown",
-        "is-error": result.get("is_error")
-        if type(result.get("is_error")) is bool
-        else None,
+        "termination": subtype if isinstance(subtype, str) and subtype in subtypes else "unknown",
+        "is-error": result.get("is_error") if type(result.get("is_error")) is bool else None,
         "permission-denials": dict(denied_tools),
         "denied-bash-categories": dict(
             Counter(
@@ -452,16 +441,9 @@ def save_diagnostics(
             if outcome.pull_request
             else "—"
         )
-        runs = (
-            ", ".join(
-                f"[{run}]({prefix}/actions/runs/{run})" for run in outcome.run_ids
-            )
-            or "—"
-        )
+        runs = ", ".join(f"[{run}]({prefix}/actions/runs/{run})" for run in outcome.run_ids) or "—"
         repairs = (
-            str(outcome.repairs_used)
-            if outcome.repairs_used is not None
-            else "unknown / 未知"
+            str(outcome.repairs_used) if outcome.repairs_used is not None else "unknown / 未知"
         )
         with open(filename, "a") as summary:
             summary.write(
@@ -472,9 +454,7 @@ def save_diagnostics(
     return outcome.outcome != "unexpected-error"
 
 
-def select(
-    directory: Path, max_candidates: int, execution_file: Path | None = None
-) -> None:
+def select(directory: Path, max_candidates: int, execution_file: Path | None = None) -> None:
     from . import claims
 
     contexts = json.loads((directory / "candidates.json").read_text())
@@ -485,17 +465,13 @@ def select(
             deferred = "review-action-failed"
         else:
             try:
-                review = PRReview.model_validate_json(
-                    os.environ.get("KLAUD_PR_REVIEW", "")
-                )
+                review = PRReview.model_validate_json(os.environ.get("KLAUD_PR_REVIEW", ""))
                 ids = [decision.candidate_id for decision in review.decisions]
-                if len(set(ids)) != len(ids) or not set(ids) <= {
+                if len(set(ids)) != len(ids) or set(ids) != {
                     candidate["id"] for candidate in contexts
                 }:
-                    raise ValueError("Duplicate or unknown candidate IDs")
-                expected = {
-                    candidate["id"]: candidate["family"] for candidate in contexts
-                }
+                    raise ValueError("Review must cover every candidate exactly once")
+                expected = {candidate["id"]: candidate["family"] for candidate in contexts}
                 if any(
                     decision.family != expected[decision.candidate_id]
                     for decision in review.decisions
@@ -514,18 +490,10 @@ def select(
         except ReadError:
             deferred = "capacity-unavailable"
     capacity_deferred = []
-    families = {
-        decision.family
-        for decision in review.decisions
-        if decision.decision != "proceed"
-    }
+    families = {decision.family for decision in review.decisions if decision.decision != "proceed"}
     for candidate in contexts:
         decision = decisions.get(candidate["id"])
-        if (
-            decision is None
-            or decision.decision != "proceed"
-            or decision.family in families
-        ):
+        if decision is None or decision.decision != "proceed" or decision.family in families:
             continue
         if not set(decision.telemetry_clusters) <= available:
             capacity_deferred.append(candidate["id"])
@@ -550,15 +518,11 @@ def select(
     ownership = Ownership(
         run_id=int(os.environ["GITHUB_RUN_ID"]),
         candidates=[
-            OwnedCandidate.model_validate(
-                {key: candidate[key] for key in ("id", "family", "base")}
-            )
+            OwnedCandidate.model_validate({key: candidate[key] for key in ("id", "family", "base")})
             for candidate in selected
         ],
     )
-    (directory / "ownership.json").write_text(
-        ownership.model_dump_json(by_alias=True) + "\n"
-    )
+    (directory / "ownership.json").write_text(ownership.model_dump_json(by_alias=True) + "\n")
     candidates = [candidate["id"] for candidate in selected]
     (directory / "selection.json").write_text(
         json.dumps(
@@ -581,7 +545,9 @@ def select(
         summary += f" Invocation deferred: {deferred}; no candidates launched."
         print(f"::warning::{summary}")
     if capacity_deferred:
-        summary += f" {len(capacity_deferred)} reviewed candidates deferred by the latest capacity check."
+        summary += (
+            f" {len(capacity_deferred)} reviewed candidates deferred by the latest capacity check."
+        )
     if filename := os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(filename, "a") as output:
             output.write(
@@ -604,9 +570,7 @@ def main() -> int:
         help="InferenceX checkout used to resolve the candidate base SHA",
     )
     commands = parser.add_subparsers(dest="command", required=True)
-    prepare = commands.add_parser(
-        "plan", help="Prepare candidates and open PRs for overlap review"
-    )
+    prepare = commands.add_parser("plan", help="Prepare candidates and open PRs for overlap review")
     prepare.add_argument(
         "--directory",
         type=Path,
@@ -642,9 +606,7 @@ def main() -> int:
         "check-stop",
         help="Claude Stop hook: require finished runs and validated, closed or handed-off PRs",
     )
-    commands.add_parser(
-        "recover", help="Reconcile interrupted sessions from completed autosweeps"
-    )
+    commands.add_parser("recover", help="Reconcile interrupted sessions from completed autosweeps")
     commands.add_parser(
         "recover-current",
         help="Reconcile after an interrupted agent without waiting for healthy children",
@@ -683,17 +645,13 @@ def main() -> int:
     )
     report.add_argument("--kind", choices=["baseline", "attempt"], required=True)
     report.add_argument("--file", type=Path, required=True)
-    schema = commands.add_parser(
-        "report-schema", help="Print the baseline or attempt JSON schema"
-    )
+    schema = commands.add_parser("report-schema", help="Print the baseline or attempt JSON schema")
     schema.add_argument("--kind", choices=["baseline", "attempt"], required=True)
     finish = commands.add_parser(
         "finish", help="Verify validation or finish owned cleanup and reporting"
     )
     finish.add_argument("--outcome-file", type=Path, required=True)
-    commands.add_parser(
-        "outcome-schema", help="Print the public-safe candidate outcome schema"
-    )
+    commands.add_parser("outcome-schema", help="Print the public-safe candidate outcome schema")
     diagnostics = commands.add_parser(
         "diagnostics",
         help="Save sanitized candidate outcomes, termination metrics and permission categories",
@@ -722,9 +680,7 @@ def main() -> int:
                 or parent["head_branch"] != "main"
             ):
                 raise VerificationError("Untrusted ownership parent")
-            release_candidate(
-                Session(repository, parent, candidate, recovering=True), args.head
-            )
+            release_candidate(Session(repository, parent, candidate, recovering=True), args.head)
             return 0
         if args.command in ("report", "report-schema", "prepare-baseline"):
             from .lifecycle import current_session
@@ -747,31 +703,32 @@ def main() -> int:
             if args.command == "report-schema":
                 print(json.dumps(model.model_json_schema(by_alias=True)))
             else:
-                publish(
-                    current_session(), model.model_validate_json(args.file.read_text())
-                )
+                publish(current_session(), model.model_validate_json(args.file.read_text()))
             return 0
         if args.command == "check-final":
             from .lifecycle import current_session
+            from .reporting import baseline_for, check_baseline_coverage
             from .validation import canonical_matrix, check_matrix
 
             session = current_session()
             pull = session.pulls()[0]
             head = pull["head"]["sha"]
+            matrix = json.loads(args.matrix_file.read_text())
+            canonical = canonical_matrix(session.repository, head, session.candidate.family)
             check_matrix(
-                json.loads(args.matrix_file.read_text()),
-                canonical_matrix(session.repository, head, session.candidate.family),
+                matrix,
+                canonical,
                 head,
                 session.candidate.family,
             )
+            check_baseline_coverage(canonical, baseline_for(session, pull))
             return 0
         if args.command == "recover-current":
             from .lifecycle import PendingCleanup, current_session, reconcile
 
-            try:
+            # Ownership persists; the next autosweep will revisit these children.
+            with contextlib.suppress(PendingCleanup):
                 reconcile(current_session())
-            except PendingCleanup:
-                pass  # Ownership persists; the next autosweep will revisit these children.
             return 0
         if args.command == "recover":
             from .lifecycle import recover
@@ -781,9 +738,7 @@ def main() -> int:
         if args.command == "finish":
             from .lifecycle import current_session
 
-            outcome = CandidateOutcome.model_validate_json(
-                args.outcome_file.read_text()
-            )
+            outcome = CandidateOutcome.model_validate_json(args.outcome_file.read_text())
             outcome = current_session().finish(outcome)
             (Path(os.environ["KLAUD_EVIDENCE"]) / "outcome.json").write_text(
                 outcome.model_dump_json(by_alias=True) + "\n"

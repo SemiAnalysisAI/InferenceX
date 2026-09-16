@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Sample Claude Code traces from the agentic-proxy Neon DB.
 
 Selects sessions in `public.requests` / `public.sessions` matching the
@@ -37,7 +36,7 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -52,7 +51,7 @@ def _redact_url(url: str) -> str:
     try:
         p = urlsplit(url)
         return f"{p.hostname}{p.path}"
-    except Exception:
+    except Exception:  # noqa: BLE001
         return "<connection string>"
 
 
@@ -397,14 +396,12 @@ def parse_args() -> argparse.Namespace:
                 pass
             else:
                 req_int = (
-                    int(req_parts[0]) * 1_000_000
-                    + int(req_parts[1]) * 1_000
-                    + int(req_parts[2])
+                    int(req_parts[0]) * 1_000_000 + int(req_parts[1]) * 1_000 + int(req_parts[2])
                 )
                 if req_int < 2_001_139:
                     p.error(
                         "--max-parallel-subagents requires --require-cli-min "
-                        ">= 2.1.139 (got %s)" % args.require_cli_min
+                        f">= 2.1.139 (got {args.require_cli_min})"
                     )
     else:
         # --session-id short-circuits all session-discovery logic.
@@ -422,18 +419,14 @@ def parse_args() -> argparse.Namespace:
             if val is not None
         ]
         if ignored:
-            sys.stderr.write(
-                f"warning: --session-id is set; ignoring {' '.join(ignored)}\n"
-            )
+            sys.stderr.write(f"warning: --session-id is set; ignoring {' '.join(ignored)}\n")
     return args
 
 
 def get_db_url(args: argparse.Namespace) -> str:
     url = args.db_url or os.environ.get(DEFAULT_ENV)
     if not url:
-        sys.exit(
-            f"ERROR: connection string missing. Set ${DEFAULT_ENV} or pass --db-url."
-        )
+        sys.exit(f"ERROR: connection string missing. Set ${DEFAULT_ENV} or pass --db-url.")
     return url
 
 
@@ -502,7 +495,7 @@ SELECT *
         %(min_cli_int)s::int IS NULL
         OR (min_cli_int >= %(min_cli_int)s::int AND rows_unknown_cli = 0)
    )
-"""
+"""  # noqa: S608
 
 # Phase 2: image-content check, bounded to candidate session_ids that
 # passed phase 1. session_id = ANY(...) uses idx_requests_session_id so
@@ -572,7 +565,7 @@ running AS (
 SELECT session_id, MAX(in_flight)::int AS max_parallel_subagents
   FROM running
  GROUP BY session_id
-"""
+"""  # noqa: S608
 
 
 def _sort_and_limit(rows: list[dict], args: argparse.Namespace) -> list[dict]:
@@ -601,7 +594,9 @@ def _sort_and_limit(rows: list[dict], args: argparse.Namespace) -> list[dict]:
     return rows
 
 
-def find_sessions(conn, args: argparse.Namespace, model_like: str) -> list[dict]:
+def find_sessions(
+    conn: psycopg.Connection, args: argparse.Namespace, model_like: str
+) -> list[dict]:
     def _encode_cli_int(s: str | None) -> int | None:
         if not s:
             return None
@@ -623,9 +618,7 @@ def find_sessions(conn, args: argparse.Namespace, model_like: str) -> list[dict]
         "privacy": args.privacy_mode,
         "min_requests": args.min_requests,
         "max_requests": args.max_requests,
-        "max_span_sec": (
-            args.max_span_hours * 3600.0 if args.max_span_hours is not None else None
-        ),
+        "max_span_sec": (args.max_span_hours * 3600.0 if args.max_span_hours is not None else None),
         "min_main_turns": args.min_main_turns,
         "min_trace_version": args.min_trace_version,
         "max_trace_version": args.max_trace_version,
@@ -649,9 +642,7 @@ def find_sessions(conn, args: argparse.Namespace, model_like: str) -> list[dict]
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(CANDIDATES_PHASE1_SQL, phase1_params)
         candidates = cur.fetchall()
-    logger.info(
-        "phase 1: %d candidate session(s) in %.1fs", len(candidates), time.time() - t1
-    )
+    logger.info("phase 1: %d candidate session(s) in %.1fs", len(candidates), time.time() - t1)
 
     if not candidates:
         return []
@@ -751,11 +742,11 @@ SELECT session_id,
    AND privacy_mode = %(privacy)s
    AND ({SECURITY_MONITOR_FILTER_SQL})
  GROUP BY session_id
-"""
+"""  # noqa: S608
 
 
 def find_one_session(
-    conn, session_id: str, privacy_mode: str, model_like: str
+    conn: psycopg.Connection, session_id: str, privacy_mode: str, model_like: str
 ) -> list[dict]:
     logger.info("looking up session %s (--session-id mode)", session_id)
     t = time.time()
@@ -818,7 +809,7 @@ SELECT
    AND privacy_mode = %(privacy)s
    AND ({SECURITY_MONITOR_FILTER_SQL})
  ORDER BY timestamp
-"""
+"""  # noqa: S608
 
 
 # ---------------------------------------------------------------------------
@@ -860,7 +851,7 @@ def _parse_cli_tuple(s: str | None) -> tuple[int, int, int] | None:
 
 def _hash_lcp(a: list, b: list) -> int:
     n = 0
-    for x, y in zip(a, b):
+    for x, y in zip(a, b, strict=False):
         if x == y:
             n += 1
         else:
@@ -879,16 +870,16 @@ def is_dynamic_workflow_bug(rows: list[dict], min_peak: int) -> bool:
     main = [r for r in rows if not r.get("subagent_label")]
     trajs: list[list] = []  # [head_hash_ids, [(start_s, dur_s), ...]]
     for r in main:
-        H = r.get("hash_ids") or []
-        if not H:
+        hash_ids = r.get("hash_ids") or []
+        if not hash_ids:
             continue
         t = r.get("t_sec") or 0.0
         dur = (r.get("duration_ms") or 0) / 1000.0
         best, bi = -1, -1
         for i, (head, _) in enumerate(trajs):
-            lcp = _hash_lcp(head, H)
-            # H extends this trajectory if the trajectory's head is a (near-)
-            # prefix of H: at least one block matches AND at most the trailing
+            lcp = _hash_lcp(head, hash_ids)
+            # hash_ids extends this trajectory if the trajectory's head is a (near-)
+            # prefix of hash_ids: at least one block matches AND at most the trailing
             # _DWBUG_TAIL_TOLERANCE blocks (the per-turn ephemeral footer) of
             # the head diverge. max(1, ...) keeps the tail tolerance from
             # collapsing the threshold below 1 for short heads (which would
@@ -897,17 +888,13 @@ def is_dynamic_workflow_bug(rows: list[dict], min_peak: int) -> bool:
             if lcp >= need and lcp > best:
                 best, bi = lcp, i
         if bi >= 0:
-            trajs[bi][0] = H
+            trajs[bi][0] = hash_ids
             trajs[bi][1].append((t, dur))
         else:
-            trajs.append([H, [(t, dur)]])
+            trajs.append([hash_ids, [(t, dur)]])
     # Only multi-turn trajectories (>=2 turns) count; single-shot utility
     # calls are not interleaved subagents.
-    spans = [
-        (min(s for s, _ in rr), max(s + d for s, d in rr))
-        for _, rr in trajs
-        if len(rr) >= 2
-    ]
+    spans = [(min(s for s, _ in rr), max(s + d for s, d in rr)) for _, rr in trajs if len(rr) >= 2]
     if not spans:
         return False
     events: list[tuple[float, int]] = []
@@ -925,7 +912,7 @@ def is_dynamic_workflow_bug(rows: list[dict], min_peak: int) -> bool:
 
 
 def fetch_session_rows(
-    conn, session_id: str, privacy_mode: str, model_like: str
+    conn: psycopg.Connection, session_id: str, privacy_mode: str, model_like: str
 ) -> list[dict]:
     """Fetch all filtered rows for a session (ordered by timestamp)."""
     with conn.cursor(row_factory=dict_row) as cur:
@@ -978,9 +965,7 @@ def main() -> int:
     with psycopg.connect(url) as conn:
         logger.info("connected")
         if args.session_id:
-            sessions = find_one_session(
-                conn, args.session_id, args.privacy_mode, model_like
-            )
+            sessions = find_one_session(conn, args.session_id, args.privacy_mode, model_like)
         else:
             sessions = find_sessions(conn, args, model_like)
 
@@ -1012,7 +997,7 @@ def main() -> int:
         args.out.mkdir(parents=True, exist_ok=True)
         logger.info("dumping %d session(s) to %s/", len(sessions), args.out)
         manifest: dict = {
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "filters": {
                 "migration_floor": SUBAGENT_MIGRATION_TS,
                 "until": args.until,

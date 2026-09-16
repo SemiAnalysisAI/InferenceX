@@ -23,6 +23,41 @@ BENCHMARK_LIB = REPO_ROOT / "benchmarks" / "benchmark_lib.sh"
 MULTINODE_AGENTIC_SCRIPT = REPO_ROOT / "benchmarks/multi_node/agentic_srt.sh"
 
 
+@pytest.fixture(autouse=True)
+def explicit_runtime_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Provide explicit caller inputs before each case applies its overrides."""
+    for name, value in {
+        "EVAL_ONLY": "false",
+        "IS_AGENTIC": "0",
+        "IS_MULTINODE": "false",
+        "PORT": "8888",
+        "CONC": "64",
+        "VENDOR_VERIFIER_PYTHON": "python3",
+        "SWEBENCH_GEN_MODE": "agentic",
+        "INFMAX_CONTAINER_WORKSPACE": str(REPO_ROOT),
+        "AIPERF_PYTHON_VERSION": "3.11",
+        "AIPERF_DRAIN_TIMEOUT_SECONDS": "120",
+        "AIPERF_DRAIN_POLL_SECONDS": "1",
+        "SGLANG_TORCH_PROFILER_DIR": "/workspace",
+        "VLLM_TORCH_PROFILER_DIR": "/workspace",
+        "EVAL_ENDPOINT_READY_TIMEOUT_SECONDS": "1800",
+        "EVAL_MODEL_STABILIZATION_SECONDS": "0",
+        "OPENAI_API_KEY": "EMPTY",
+        "SWEBENCH_USE_MODAL": "false",
+        "SWEBENCH_AGENT_STEP_LIMIT": "250",
+        "SWEBENCH_EXPECTED_INSTANCES": "300",
+        "SWEBENCH_AGENT_TIMEOUT": "21600",
+        "SWEBENCH_AGENT_EXIT_GRACE": "300",
+        "SWEBENCH_WATCHDOG_POLL": "30",
+        "SWEBENCH_SANDBOX_SWEEP": "1",
+        "SWEBENCH_SKIP_SCORE": "false",
+        "SWEBENCH_EVAL_TIMEOUT": "900",
+        "SWEBENCH_SCORE_TIMEOUT": "7200",
+        "SWEBENCH_MAX_WORKERS": "4",
+    }.items():
+        monkeypatch.setenv(name, value)
+
+
 _SCRIPT = r"""
 source "$BENCHMARK_LIB"
 _wait_for_openai_chat_route() { echo "READY=$*"; }
@@ -84,6 +119,9 @@ def test_agentic_dependency_install_is_rootless_without_git(tmp_path: Path) -> N
     fake_apt = fake_bin / "apt-get"
     fake_apt.write_text("#!/bin/sh\nexit 97\n")
     fake_apt.chmod(0o755)
+    fake_git = fake_bin / "git"
+    fake_git.write_text("#!/bin/sh\nexit 97\n")
+    fake_git.chmod(0o755)
 
     env = {
         **os.environ,
@@ -92,7 +130,7 @@ def test_agentic_dependency_install_is_rootless_without_git(tmp_path: Path) -> N
         "AIPERF_RUNTIME_DIR": str(tmp_path / "runtime"),
         "BENCHMARK_LIB": str(BENCHMARK_LIB),
         "FAKE_UV": str(fake_uv),
-        "PATH": f"{fake_bin}:/bin",
+        "PATH": f"{fake_bin}:/usr/bin:/bin",
         "PYTHONPYCACHEPREFIX": str(tmp_path / "pycache"),
     }
     result = subprocess.run(
@@ -183,16 +221,15 @@ run_eval --port 8888
     assert "UNEXPECTED_CONTEXT_LOAD" not in result.stdout
 
 
-def test_kimi_failure_preserves_rc_without_eval_only() -> None:
+def test_kimi_failure_preserves_rc_when_eval_only_is_false() -> None:
     script = r"""
-set -u
 source "$BENCHMARK_LIB"
 run_kimi_vendor_eval() { return 7; }
 export EVAL_FRAMEWORK=kimi-vendor
 export EVAL_CONCURRENT_REQUESTS=""
 export EVAL_MAX_MODEL_LEN=16384
 export IS_AGENTIC=0
-unset EVAL_ONLY
+export EVAL_ONLY=false
 run_eval --port 8888
 """
     result = subprocess.run(
@@ -205,6 +242,35 @@ run_eval --port 8888
 
     assert result.returncode == 7
     assert "unbound variable" not in result.stderr
+
+
+def test_run_eval_rejects_missing_eval_mode() -> None:
+    result = subprocess.run(
+        ["bash", "-c", 'source "$BENCHMARK_LIB"; unset EVAL_ONLY; run_eval'],
+        env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB)},
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 1
+    assert "  - EVAL_ONLY" in result.stdout
+
+
+def test_validation_only_source_does_not_initialize_runtime(tmp_path: Path) -> None:
+    cache_dir = tmp_path / "pycache"
+    result = subprocess.run(
+        ["bash", "-c", 'source "$BENCHMARK_LIB" --validation-only; '
+         'unset MISSING_INPUT; check_env_vars MISSING_INPUT'],
+        env={
+            "PATH": os.environ["PATH"],
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "PYTHONPYCACHEPREFIX": str(cache_dir),
+        },
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 1
+    assert "  - MISSING_INPUT" in result.stdout
+    assert not cache_dir.exists()
 
 
 def _run_invalid_call(call: str) -> subprocess.CompletedProcess:
@@ -1483,7 +1549,7 @@ append_lm_eval_summary >/dev/null
     }
     for key in (
         "EVAL_COMPLETED_SUITE", "EVAL_SUITE", "EVAL_TASKS_DIR",
-        "IS_MULTINODE", "DP_ATTENTION",
+        "DP_ATTENTION",
         "PREFILL_DP_ATTN", "PREFILL_DP_ATTENTION", "PREFILL_ENABLE_DP",
         "DECODE_DP_ATTN", "DECODE_DP_ATTENTION", "DECODE_ENABLE_DP",
     ):
@@ -1750,7 +1816,6 @@ def test_summary_metadata_prefers_completed_eval_identity(tmp_path: Path) -> Non
 
 def test_env_is_true_is_case_insensitive_and_unset_safe() -> None:
     script = r"""
-set -u
 source "$BENCHMARK_LIB"
 for value in TrUe yEs oN 1 false 0; do
     if _env_is_true "$value"; then
@@ -2217,7 +2282,7 @@ def _gen_mode(
     tmp_path: Path,
     *,
     is_agentic,
-    gen_mode=None,
+    gen_mode,
     eval_suite=None,
 ) -> str:
     env = {
@@ -2245,8 +2310,8 @@ def _gen_mode(
     return res.stdout
 
 
-def test_gen_mode_defaults_to_agentic(tmp_path):
-    output = _gen_mode(tmp_path, is_agentic="1")
+def test_explicit_agentic_generation_mode(tmp_path):
+    output = _gen_mode(tmp_path, is_agentic="1", gen_mode="agentic")
     assert "GEN=agentic" in output
     assert "SUITE=swebench_lite" in output
 

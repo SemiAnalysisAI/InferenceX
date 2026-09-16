@@ -5,6 +5,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 import infx.evals.minimax_provider_eval as mpe
 
 
@@ -46,16 +48,46 @@ def _compatibility(output_dir: Path) -> dict[str, Any]:
     return json.loads(paths[0].read_text(encoding="utf-8"))
 
 
-def test_prepare_smoke_input_preserves_fixture_row(tmp_path: Path) -> None:
+def test_prepare_smoke_input_preserves_request_and_unicode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = tmp_path / "fixture.json"
+    fixture.write_text(
+        json.dumps({
+            "source": mpe.UPSTREAM_SOURCE,
+            "ref": mpe.UPSTREAM_REF,
+            "indices": [71],
+            "license": "Test license\n",
+            "rows": [{
+                "messages": [{"role": "user", "content": "Find café hours"}],
+                "tools": [],
+            }],
+        }),
+        encoding="utf-8",
+    )
+    # Supply the trusted digests for this controlled input; run the real
+    # fixture validation and JSONL writer, including Unicode preservation.
+    monkeypatch.setattr(
+        mpe,
+        "EXPECTED_LICENSE_SHA256",
+        "c24d5f6da316a4bec6612e644e5fdcc0243fcb3a3ebcec4a2a16389ada6c520c",
+    )
+    monkeypatch.setattr(
+        mpe,
+        "EXPECTED_CASE_SHA256",
+        {71: "05b119b71e4dcc69cf439da009703721d993c5ec05c502da3c9daed79ec9a48a"},
+    )
     destination = tmp_path / "smoke.jsonl"
 
     mpe.prepare_smoke_input(
-        fixture_path=mpe.DEFAULT_FIXTURE_PATH,
+        fixture_path=fixture,
         destination=destination,
     )
 
-    rows = json.loads(mpe.DEFAULT_FIXTURE_PATH.read_text(encoding="utf-8"))["rows"]
-    assert [json.loads(line) for line in destination.read_text().splitlines()] == rows
+    assert destination.read_text(encoding="utf-8") == (
+        '{"messages": [{"role": "user", "content": "Find café hours"}], "tools": []}\n'
+    )
 
 
 def test_build_command_invokes_stock_verifier_without_source_changes(

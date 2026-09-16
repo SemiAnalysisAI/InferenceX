@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Plot sub-agent fan-out distributions over a directory of weka traces.
 
 Reads every <in-dir>/*.json (output of proxy_to_weka.py) and produces two
@@ -27,9 +26,14 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+if TYPE_CHECKING:
+    from matplotlib.axes import Axes
+
 
 PERCENTILES: tuple[int, ...] = (50, 75, 90, 99)
 PCT_COLORS: dict[int, str] = {
@@ -104,9 +108,7 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Directory to write *.png plots into.",
     )
-    p.add_argument(
-        "--bins", type=int, default=60, help="Number of histogram bins. Default: 60."
-    )
+    p.add_argument("--bins", type=int, default=60, help="Number of histogram bins. Default: 60.")
     p.add_argument(
         "--linear-clip-pct",
         type=float,
@@ -169,7 +171,16 @@ def collect_metrics(in_dir: Path) -> dict[str, list[float]]:
     }
 
 
-def _draw_histogram(ax, values, title, xlabel, bins, log_x, value_fmt, linear_clip_pct):
+def _draw_histogram(
+    ax: Axes,
+    values: list[float],
+    title: str,
+    xlabel: str,
+    bins: int,
+    log_x: bool,
+    value_fmt: str,
+    linear_clip_pct: float,
+) -> None:
     if not values:
         ax.set_title(f"{title}\n(no values)")
         ax.axis("off")
@@ -224,9 +235,15 @@ def _draw_histogram(ax, values, title, xlabel, bins, log_x, value_fmt, linear_cl
     ax.grid(axis="y", alpha=0.25)
 
 
-def plot_combined(metrics, out_path, bins, use_log, linear_clip_pct):
+def plot_combined(
+    metrics: dict[str, list[float]],
+    out_path: Path,
+    bins: int,
+    use_log: bool,
+    linear_clip_pct: float,
+) -> None:
     fig, axes = plt.subplots(3, 2, figsize=(20, 16))
-    for spec, ax in zip(PLOT_SPECS, axes.flat):
+    for spec, ax in zip(PLOT_SPECS, axes.flat, strict=False):
         log_x = use_log and spec["log_in_log_fig"]
         _draw_histogram(
             ax=ax,
