@@ -912,14 +912,12 @@ jobs:
         env:
             RESULTS_DIR: "results/"
             STATS_FILENAME: "run_stats"
-            # Repository integration credential for the scoped sweep/ingest job.
-            GITHUB_TOKEN: ${{ secrets.REPO_PAT }} # zizmor: ignore[secrets-outside-env]
+            GITHUB_TOKEN: ${{ github.token }}
 
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                  # Repository integration credential for the scoped sweep/ingest job.
-                  token: ${{ secrets.REPO_PAT }} # zizmor: ignore[secrets-outside-env]
+                  token: ${{ github.token }}
                   ref: ${{ needs.setup.outputs.tooling-ref }}
                   fetch-depth: 0
                   persist-credentials: false

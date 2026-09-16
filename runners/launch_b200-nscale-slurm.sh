@@ -257,7 +257,7 @@ cat srtslurm.yaml
 # Makefile default TACHOMETER_RELEASE=latest 404s and aborts setup before
 # nats-server, etcd and uv install. v2.6.0 is the newest release carrying the
 # x86_64 asset. Drop this pin once the release job is fixed.
-export TACHOMETER_RELEASE="${TACHOMETER_RELEASE:-v2.6.0}"
+export TACHOMETER_RELEASE="v2.6.0"
 echo "Running make setup (TACHOMETER_RELEASE=$TACHOMETER_RELEASE)..."
 make setup ARCH=x86_64 || exit 1
 
