@@ -8003,3 +8003,23 @@
     - "Adds glm5.2/fp8 routing to runners/launch_b200-nscale-compat.sh (MODEL_PATH default /scratch/models/GLM-5.2-FP8, SRT_SLURM_MODEL_PREFIX glm5.2-fp8), which previously hard-failed with 'Unsupported model prefix/precision' for this model. The script's completeness-checked, flock-serialized hf download stages the checkpoint on the day-zero run if it is not already on the cluster."
     - "Re-pin from lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 to lmsysorg/sglang:nightly-dev-cu13-20260908-20ca564b (2026-09-08 cu13 dev nightly, digest sha256:9a352a35c973a2357372e85f3bcb5388b6b3c46c1329165987260f3b089647dc; Docker Hub last pushed 2026-09-08T01:40:59Z, tag commit sgl-project/sglang@20ca564b). The 2026-09-07 build carries an unguarded kv_index_translator.translate_dcp_read_ids call on the DSA fp8 KV read path that the EAGLE draft backend never binds, so GLM-5.2 MTP runs crash intermittently with AttributeError (observed on the MI355X FP8 sibling in run 34173459478 after 74 minutes of serving). sgl-project/sglang#38318 (merged 2026-09-07T20:03Z) adds the None guard and is six commits behind 20ca564b."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2863
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro-0813 FP4 B300 Dynamo+SGLang AgentX aggregate TP8 c1 and TP4 c4/c8 recipes, plus disaggregated 1P1D DEP8 c240 and 2P1D DEP8 c480 recipes."
+    - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 on cluster:b300-dsxe, reserve aggregate HBM with mem-fraction-static 0.90, size aggregate request and decode graph limits to twice each concurrency, and cap disaggregated decode max-running-requests at twice concurrency (480/960)."
+    - "Use the eight-GPU B300 node topology, 192 logical CPUs per task, HiCache ratio 3, and the Mooncake EFA wheel with the DSXE Pyxis-provided RDMA libraries for cross-node transfers."
+    - "Pin the DSXE srt-slurm bootstrap assets to v2.2.1 so setup does not depend on the moving latest release."
+    - "Mount persistent AgentX dataset mmap and Hugging Face caches into DSXE multi-node jobs."
+    - "Raise the DSXE DSV4 Dynamo+SGLang AgentX allocation limit to eight hours so low-concurrency traces can finish."
+    - "新增 DeepSeek-V4-Pro-0813 FP4 B300 Dynamo+SGLang AgentX 配置：聚合式 TP8 c1、TP4 c4/c8，以及分离式 1P1D DEP8 c240 和 2P1D DEP8 c480。"
+    - "在 cluster:b300-dsxe 上使用 lmsysorg/sglang:nightly-dev-20260916-c9a8fba9；聚合式配方采用 mem-fraction-static 0.90，并将最大运行请求数与解码 CUDA Graph 上限设为并发数的两倍；分离式解码的 max-running-requests 同样限制为并发数的两倍（480/960）。"
+    - "采用每节点 8 张 B300、每任务 192 个逻辑 CPU、HiCache 比例 3，并通过 Mooncake EFA wheel 与 DSXE Pyxis 提供的 RDMA 库完成跨节点传输。"
+    - "将 DSXE 的 srt-slurm 启动资产固定为 v2.2.1，避免依赖不断变化的 latest release。"
+    - "为 DSXE 多节点任务挂载持久化的 AgentX 数据集 mmap 缓存与 Hugging Face 缓存。"
+    - "将 DSXE DSV4 Dynamo+SGLang AgentX 的作业时限提高到八小时，使低并发轨迹能够完成。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3190

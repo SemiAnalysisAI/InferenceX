@@ -53,6 +53,8 @@ declare -A MODEL_ALIASES=(
     [dsr1-fp8]="DeepSeek-R1-0528"
     [deepseek-v4-pro]="DeepSeek-V4-Pro"
     [deepseek-ai/DeepSeek-V4-Pro]="DeepSeek-V4-Pro"
+    [deepseek-v4-pro-0813]="DeepSeek-V4-Pro-0813"
+    [deepseek-ai/DeepSeek-V4-Pro-0813]="DeepSeek-V4-Pro-0813"
     [glm-5.2-fp4]="GLM-5.2-NVFP4"
     [glm-5.2-fp8]="GLM-5.2-FP8"
     [nvidia/GLM-5.2-NVFP4]="GLM-5.2-NVFP4"
@@ -102,6 +104,9 @@ import_squash_image() {
             exit 0
         fi
         rm -f \"$sqsh\"
+        enroot_tmp=\"\$(mktemp -d /dev/shm/inferencex-enroot.XXXXXX)\"
+        trap 'rm -rf \"\$enroot_tmp\"' EXIT
+        export TMPDIR=\"\$enroot_tmp\"
         enroot import -o \"$sqsh\" \"docker://$image_ref\"
         unsquashfs -l \"$sqsh\" > /dev/null
     " || { echo "Error: enroot import failed for $image_ref -> $sqsh" >&2; exit 1; }
@@ -183,8 +188,11 @@ echo "Creating srtslurm.yaml configuration..."
 default_account: "${SLURM_ACCOUNT}"
 default_partition: "${SLURM_PARTITION}"
 gpus_per_node: 8
-network_interface: ""
+network_interface: "enp71s0"
 srtctl_root: "${SRTCTL_ROOT}"
+default_mounts:
+  "/opt/amazon/efa": "/opt/amazon/efa"
+  "/opt/amazon/ofi-nccl": "/opt/amazon/ofi-nccl"
 model_paths:
 EOF
     for alias in "${!MODEL_ALIASES[@]}"; do
