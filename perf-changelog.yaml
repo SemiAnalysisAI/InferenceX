@@ -7981,6 +7981,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3144
 
 - config-keys:
+    - dsv41flash-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use a B300-specific vLLM AgentX script with explicit FULL_AND_PIECEWISE CUDA graph capture sizes, concurrency-tiered batched-token limits, and an explicit maximum sequence count."
+    - "Add a TP2 search-space variant at concurrency 2-128 while retaining the TP4 concurrency 1-128 variant."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3109
+
+- config-keys:
     - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
