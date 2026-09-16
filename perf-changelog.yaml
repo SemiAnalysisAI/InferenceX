@@ -7925,7 +7925,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3118
 
 - config-keys:
-    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
   scenario-type:
     - agentic-coding
   description:
@@ -7934,4 +7934,6 @@
     - "server_sglang.sh builds DSpark flags as --speculative-dspark-block-size DECODE_MTP_SIZE --speculative-num-steps 1 --speculative-num-draft-tokens (DECODE_MTP_SIZE + 1). DECODE_MTP_SIZE is the draft length for both algorithms but EAGLE spends it as sequential draft passes while DSpark emits one block, so num-steps is pinned to 1. The verify window is identical for both, so the MORI decode dispatch scaling by (DECODE_MTP_SIZE + 1) is unchanged. A model set to draft_model without dspark_flags now fails hard instead of silently serving EAGLE."
     - "Golden AL is unchanged: the AgentX curve is keyed on checkpoint, thinking mode, and draft length, not on the algorithm, so DeepSeek-V4-Pro-0813 at draft length 3 keeps AL 3.01 from golden_al_distribution/dsv4-pro-0813-dspark.yaml (thinking_on)."
     - "将四条臂全部从 EAGLE（spec-decoding: mtp）切换为 DSpark（spec-decoding: draft_model），DECODE_MTP_SIZE=3；镜像由 lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260911 升级到 -20260913（首个带 DSpark 优化的标签），CLIENT_IMAGE 保持 20260907（仅负载生成器）。拓扑、并发列表、HiCache/UMBP 设置与精度均不变。models.yaml 中 DeepSeek-V4-Pro-AgentX 新增 dspark_flags（与 mtp_flags 并列而非替换，因此仍用 mtp 的配方 EAGLE 分支不受影响），dp_flags 增加 --enable-dp-lm-head。server_sglang.sh 按 SPEC_DECODING == draft_model 分流：DSpark 一次前向出一整块，故 num-steps 钉死为 1，草稿长度转为 --speculative-dspark-block-size；验证窗口（长度+1）与 EAGLE 相同，所以 MORI 解码 dispatch 的 ×(DECODE_MTP_SIZE+1) 缩放无需改动。黄金 AL 不变：按检查点而非算法选表，DeepSeek-V4-Pro-0813 在草稿长度 3 仍为 AL 3.01。"
+    - "Rename the config key from dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp to dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark to reflect the DSpark algorithm and the UMBP-linker arm; earlier entries for this recipe are recorded under the old key. No other field changes with the rename."
+    - "配置键由 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp 改名为 dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark，以反映 DSpark 算法与 UMBP-linker 分支；该配方此前的条目仍记录在旧键名下。改名不伴随任何其他字段变化。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3188

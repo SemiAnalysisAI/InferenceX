@@ -1193,7 +1193,10 @@ minimaxm3-fp8-mi325x-vllm-agentic-mtp:
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 18] }
 
-dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
+dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
+  # Renamed from dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp when this arm
+  # moved from EAGLE/MTP to DSpark; earlier perf-changelog entries are recorded
+  # under the old key.
   # 20260913 rather than 20260911: it is the first tag carrying the DSpark
   # optimizations, which is the whole point of this arm. CLIENT_IMAGE stays at
   # 20260907 -- that container only runs the load generator, so the
