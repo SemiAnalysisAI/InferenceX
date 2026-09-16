@@ -8,8 +8,8 @@
 # DeepSeek-V4-Pro FP4 Dynamo-SGLang MTP, on the b200-nscale runner label.
 # Anything else exits non-zero.
 
-SLURM_PARTITION="batch_1"
-SLURM_ACCOUNT="benchmark"
+SLURM_PARTITION="batch_2"
+SLURM_ACCOUNT="restricted"
 POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
 POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
 TILERT_SRT_SLURM_URL="https://github.com/SemiAnalysisAI/srt-slurm.git"
@@ -18,9 +18,9 @@ TILERT_SRT_SLURM_PIN="d1e6c97b3baf3e87103b6d83189544c3c7d61c38"
 # Node-local NVMe, not a shared filesystem: much faster for the ~1.6T
 # DeepSeek-V4-Pro load, and already pre-staged on every nscale compute node.
 NSCALE_MODEL_ROOT="/scratch/models"
-SQUASH_DIR="/data/home/sa-shared/containers"
-AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/aiperf-cache"
-HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
+SQUASH_DIR="/data/home/slurm-shared/containers"
+AIPERF_MMAP_CACHE_HOST_PATH="/data/home/slurm-shared/gharunners/aiperf-cache"
+HF_HUB_CACHE_HOST_PATH="/data/home/slurm-shared/gharunners/hf-hub-cache"
 # Importing the vLLM image over this cluster's shared home can take a while.
 SQUASH_LOCK_TIMEOUT=3600
 
@@ -266,7 +266,7 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
   ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
 fi
 if [[ $FRAMEWORK == "tilert" ]]; then
-    TILERT_WEIGHTS_HOST_PATH="/data/home/sa-shared/gharunners/tilert-cache"
+    TILERT_WEIGHTS_HOST_PATH="/data/home/slurm-shared/gharunners/tilert-cache"
     mkdir -p "$TILERT_WEIGHTS_HOST_PATH"
     DEFAULT_MOUNTS_BLOCK="${DEFAULT_MOUNTS_BLOCK}
   ${GITHUB_WORKSPACE}: /infmax-workspace
