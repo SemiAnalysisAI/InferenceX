@@ -43,7 +43,7 @@ def prepare(op: Op, *, layout: str = "bhsd") -> dict:
         or h % hkv
     ):
         raise ValueError(
-            "attention dimensions must be positive with query heads divisible by KV heads"
+            "attention dimensions must be positive; query heads must divide by KV heads"
         )
     dims = ((b, h, sq, dq), (b, hkv, sk, dq), (b, hkv, sk, dv))
     if layout == "bshd":

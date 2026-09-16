@@ -170,7 +170,6 @@ def _moe_routed_buffer(op: Op) -> torch.Tensor:
     a = op.args
     dt = _resolve(a["dtype"])
     nt, k, h = a["num_tokens"], a["top_k"], a["hidden"]
-    ws = a["world_size"]
     # Total per-rank send/recv volume = nt * k * h elements (split evenly across ws).
     return torch.randn(nt * k * h, dtype=dt, device="cuda")
 
