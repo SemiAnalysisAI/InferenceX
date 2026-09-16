@@ -16,6 +16,8 @@ SLURM_ACCOUNT="benchmark"
 # enroot squash images. Must be on storage every compute node mounts and writable
 # by the runner user (/data/squash is root-owned, hence the per-user default).
 SQUASH_DIR="/data/home/sa-gha-runner/squash"
+AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-gha-runner/aiperf-cache"
+HF_HUB_CACHE_HOST_PATH="/data/home/sa-gha-runner/hf-hub-cache"
 
 # Weights. MODEL_ROOT is node-local NVMe with the same layout on every compute node;
 # it is read-only from the job's point of view. Anything not in STAGED_MODELS is
@@ -73,7 +75,7 @@ declare -A MODEL_ALIASES=(
 )
 
 
-mkdir -p "$SQUASH_DIR"
+mkdir -p "$SQUASH_DIR" "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH"
 set -x
 
 # Keep this definition above the IS_MULTINODE branch: both paths call it, and
@@ -193,6 +195,8 @@ srtctl_root: "${SRTCTL_ROOT}"
 default_mounts:
   "/opt/amazon/efa": "/opt/amazon/efa"
   "/opt/amazon/ofi-nccl": "/opt/amazon/ofi-nccl"
+  "${AIPERF_MMAP_CACHE_HOST_PATH}": "/aiperf_mmap_cache"
+  "${HF_HUB_CACHE_HOST_PATH}": "/hf_hub_cache"
 model_paths:
 EOF
     for alias in "${!MODEL_ALIASES[@]}"; do
