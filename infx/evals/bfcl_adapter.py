@@ -11,6 +11,7 @@ import sys
 import urllib.parse
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from importlib.metadata import distribution
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Protocol
@@ -395,9 +396,14 @@ def _write_upstream_attribution(project_root: Path) -> None:
     """Keep BFCL provenance and its Apache license with archived outputs."""
     project_root.mkdir(parents=True, exist_ok=True)
     repository_license = Path(__file__).resolve().parents[2] / "LICENSE"
-    if not repository_license.is_file():
-        raise FileNotFoundError(f"Apache license file not found: {repository_license}")
-    (project_root / UPSTREAM_LICENSE_FILENAME).write_bytes(repository_license.read_bytes())
+    if repository_license.is_file():
+        license_bytes = repository_license.read_bytes()
+    else:
+        license_text = distribution("infx").read_text("licenses/LICENSE")
+        if license_text is None:
+            raise FileNotFoundError("Apache license file not found in infx distribution")
+        license_bytes = license_text.encode("utf-8")
+    (project_root / UPSTREAM_LICENSE_FILENAME).write_bytes(license_bytes)
     _write_json(
         project_root / UPSTREAM_ATTRIBUTION_FILENAME,
         {

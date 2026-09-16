@@ -49,23 +49,55 @@ def test_reuse_entrypoints_preserve_outputs_and_errors_without_installation(
     assert dict(line.split("=", 1) for line in output.read_text().splitlines()) == expected
 
 
-def test_find_reuse_authorization_uses_latest_allowed_comment(monkeypatch) -> None:
+@pytest.mark.parametrize("body,expected", [
+    ("  /use\t0042 \r\n", (True, 42)),
+    ("/reuse-sweep-run 11\n/use 22", (True, 22)),
+    ("/use 22\n/reuse-sweep-run 11", (True, 11)),
+    ("/use 22\n/reuse-sweep-run", (True, None)),
+    ("/use", (False, None)),
+    ("/use\n42", (False, None)),
+    ("/use\r\n42", (False, None)),
+    ("/use nope", (False, None)),
+    ("/use -1", (False, None)),
+    ("/use 42 extra", (False, None)),
+    ("please /use 42", (False, None)),
+    ("/useful 42", (False, None)),
+])
+def test_reuse_alias_parses_standalone_pins_and_preserves_command_order(body, expected):
+    assert reuse.parse_reuse_command(body) == expected
+
+
+@pytest.mark.parametrize("body,expected", [
+    ("/custom.run", (True, None)),
+    ("/custom.run 17", (True, 17)),
+    ("/customXrun 17", (False, None)),
+    ("/use 17", (False, None)),
+])
+def test_custom_command_keeps_its_existing_syntax(body, expected):
+    assert reuse.parse_reuse_command(body, "/custom.run") == expected
+
+
+@pytest.mark.parametrize("older,newer", [
+    ("/reuse-sweep-run 111", "/use 333"),
+    ("/use 111", "/reuse-sweep-run 333"),
+])
+def test_find_reuse_authorization_uses_latest_allowed_comment(monkeypatch, older, newer) -> None:
     def fake_paginated_github_api(*args, **kwargs):
         return [
             {
                 "created_at": "2026-05-13T00:00:00Z",
                 "author_association": "MEMBER",
-                "body": "/reuse-sweep-run 111",
+                "body": older,
             },
             {
-                "created_at": "2026-05-13T00:01:00Z",
+                "created_at": "2026-05-13T00:03:00Z",
                 "author_association": "CONTRIBUTOR",
-                "body": "/reuse-sweep-run 222",
+                "body": "/use 222",
             },
             {
                 "created_at": "2026-05-13T00:02:00Z",
                 "author_association": "OWNER",
-                "body": "approved\n/reuse-sweep-run 333",
+                "body": "approved\n" + newer,
             },
         ]
 
@@ -86,7 +118,7 @@ def test_find_reuse_authorization_lets_newer_no_arg_unpin_older_pin(monkeypatch)
             {
                 "created_at": "2026-05-13T00:00:00Z",
                 "author_association": "OWNER",
-                "body": "/reuse-sweep-run 111",
+                "body": "/use 111",
             },
             {
                 "created_at": "2026-05-13T00:01:00Z",
@@ -441,13 +473,16 @@ def test_validate_reusable_run_rejects_run_for_orphaned_commit(monkeypatch) -> N
         raise AssertionError("expected orphaned-commit run to be rejected")
 
 
-@pytest.mark.parametrize("labels", [[], ["documentation"], ["sweep-enabled"], ["full-sweep-enabled"]])
-def test_main_enables_pinned_reuse_without_sweep_label(monkeypatch, tmp_path, labels) -> None:
+@pytest.mark.parametrize("labels,command", [
+    ([], "/reuse-sweep-run"), ([], "/use"), (["documentation"], "/use"),
+    (["sweep-enabled"], "/use"), (["full-sweep-enabled"], "/use"),
+])
+def test_main_enables_pinned_reuse_without_sweep_label(monkeypatch, tmp_path, labels, command) -> None:
     comments = [
         {
             "created_at": "2026-05-13T00:00:00Z",
             "author_association": "OWNER",
-            "body": "/reuse-sweep-run 25763404168",
+            "body": f"{command} 25763404168",
         },
     ]
     run = {

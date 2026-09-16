@@ -16,6 +16,7 @@ Use this page to identify benchmark artifacts, inspect their contracts, and deci
 | [`utils/process_result.py`](../utils/process_result.py) | Fixed-sequence throughput aggregate schema and derived per-GPU metrics |
 | [`infx/results/collect_results.py`](../infx/results/collect_results.py), [`collect-results.yml`](../.github/workflows/collect-results.yml) | Recursive benchmark collection into `agg_<prefix>.json` and `results_<prefix>` |
 | [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py), [`collect-evals.yml`](../.github/workflows/collect-evals.yml) | Eval discovery, metric extraction, batched-concurrency selection, and `eval_results_<prefix>` |
+| [`infx/results/evals.py`](../infx/results/evals.py), [`eval_artifacts.py`](../infx/results/eval_artifacts.py) | Shared eval reading, result selection, reuse consistency checks, and rerun deduplication for collection and Klaud |
 | [`infx.results.agentic`](../infx/results/agentic/__init__.py), [`request_metrics.py`](../infx/results/agentic/request_metrics.py), [`artifacts.py`](../infx/results/agentic/artifacts.py) | AgentX aggregate schema, raw-record filtering, request accounting, and derived metrics |
 | [`validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py) | AgentX pre-upload error-rate gate |
 | [`run-sweep.yml`](../.github/workflows/run-sweep.yml), [`recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) | App dispatch payload and source/merge run identities |
@@ -119,6 +120,8 @@ The native collector sets UTC and records context beside its CSV for portable re
 ### Per-config identity and collection
 
 Each eval upload is named `eval_<EXP_NAME>_<RESULT_FILENAME>`. Its current allowed payload includes `meta_env.json`, `results*.json`, sample JSONL, predictions, SWE-bench reports, and trajectory files. The collector uses only the metadata and lm-eval result JSON for aggregate rows.
+
+Collection and reuse share result reading and selection, but retain different validation policies. Collection can report completed points from a failed batch; reuse rejects failed or incomplete batches. Each phase uses its loaded JSON for selection and validation. After deduplication rewrites or removes artifacts, validation reads the resulting files afresh.
 
 The shared eval metadata writer preserves single-node `DP_ATTENTION` and uses it
 as the default for both `prefill_dp_attention` and `decode_dp_attention`. Only

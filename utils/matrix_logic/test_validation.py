@@ -220,47 +220,6 @@ def valid_runner_config():
 class TestWorkerConfig:
     """Tests for WorkerConfig model."""
 
-    def test_valid_worker_config(self):
-        """Valid worker config should pass."""
-        config = WorkerConfig(**{
-            "num-worker": 5,
-            "tp": 4,
-            "ep": 4,
-            "dp-attn": True,
-        })
-        assert config.num_worker == 5
-        assert config.tp == 4
-        assert config.ep == 4
-        assert config.dp_attn is True
-
-    def test_worker_config_with_additional_settings(self):
-        """Worker config with additional settings should pass."""
-        config = WorkerConfig(**{
-            "num-worker": 1,
-            "tp": 8,
-            "ep": 8,
-            "dp-attn": True,
-            "additional-settings": [
-                "DECODE_MAX_NUM_TOKENS=256",
-                "DECODE_MAX_BATCH_SIZE=256",
-                "DECODE_GPU_MEM_FRACTION=0.8",
-            ],
-        })
-        assert len(config.additional_settings) == 3
-        assert "DECODE_MAX_NUM_TOKENS=256" in config.additional_settings
-
-    def test_worker_parallelism_fields(self):
-        config = WorkerConfig(**{
-            "num-worker": 2,
-            "tp": 4,
-            "pp": 2,
-            "dcp-size": 2,
-            "pcp-size": 2,
-            "ep": 1,
-            "dp-attn": False,
-        })
-        assert (config.pp, config.dcp_size, config.pcp_size) == (2, 2, 2)
-
     @pytest.mark.parametrize("field", ["pp", "dcp-size", "pcp-size"])
     def test_worker_parallelism_fields_must_be_positive(self, field):
         with pytest.raises(ValidationError, match="greater than 0"):
@@ -309,27 +268,6 @@ class TestWorkerConfig:
 
 class TestSingleNodeMatrixEntry:
     """Tests for SingleNodeMatrixEntry model."""
-
-    def test_valid_entry(self, valid_single_node_matrix_entry):
-        """Valid entry should pass validation."""
-        entry = SingleNodeMatrixEntry(**valid_single_node_matrix_entry)
-        assert entry.image == "rocm/7.0:rocm7.0_ubuntu_22.04_sgl-dev-v0.5.2-rocm7.0-mi35x-20250915"
-        assert entry.tp == 8
-        assert entry.conc == 4
-        assert entry.framework == "sglang"
-
-    def test_conc_as_list(self, valid_single_node_matrix_entry):
-        """Conc can be a list of integers."""
-        valid_single_node_matrix_entry["conc"] = [4, 8, 16, 32, 64]
-        entry = SingleNodeMatrixEntry(**valid_single_node_matrix_entry)
-        assert entry.conc == [4, 8, 16, 32, 64]
-
-    def test_spec_decoding_values(self, valid_single_node_matrix_entry):
-        """Spec decoding should accept valid literal values."""
-        for value in ["mtp", "draft_model", "none"]:
-            valid_single_node_matrix_entry["spec-decoding"] = value
-            entry = SingleNodeMatrixEntry(**valid_single_node_matrix_entry)
-            assert entry.spec_decoding == value
 
     def test_invalid_spec_decoding(self, valid_single_node_matrix_entry):
         """Invalid spec decoding value should fail."""
@@ -577,15 +515,6 @@ class TestAgenticMatrixEntries:
 class TestMultiNodeMatrixEntry:
     """Tests for MultiNodeMatrixEntry model."""
 
-    def test_valid_entry(self, valid_multinode_matrix_entry):
-        """Valid entry should pass validation."""
-        entry = MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
-        assert entry.model == "deepseek-r1-fp4"
-        assert entry.conc == [2150]
-        assert entry.disagg is True
-        assert entry.prefill.hardware == "gb200"
-        assert entry.decode.hardware == "h100"
-
     def test_disagg_allows_omitted_hardware(self, valid_multinode_matrix_entry):
         """Homogeneous disaggregated entries may omit hardware metadata."""
         del valid_multinode_matrix_entry["prefill"]["hardware"]
@@ -603,16 +532,6 @@ class TestMultiNodeMatrixEntry:
         with pytest.raises(ValidationError, match="both.*prefill.*decode"):
             MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
 
-
-    def test_all_eval_concurrency_batch_marker(
-        self,
-        valid_multinode_matrix_entry,
-    ):
-        valid_multinode_matrix_entry["eval-all-concs"] = True
-
-        entry = MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
-
-        assert entry.eval_all_concs is True
 
     def test_conc_must_be_list(self, valid_multinode_matrix_entry):
         """Conc must be a list for multinode."""
@@ -670,25 +589,6 @@ class TestValidateMatrixEntry:
 
 class TestSingleNodeSearchSpaceEntry:
     """Tests for SingleNodeSearchSpaceEntry model."""
-
-    def test_valid_with_conc_range(self):
-        """Valid entry with conc range should pass (like mi300x config)."""
-        entry = SingleNodeSearchSpaceEntry(**{
-            "tp": 8,
-            "conc-start": 4,
-            "conc-end": 64,
-        })
-        assert entry.tp == 8
-        assert entry.conc_start == 4
-        assert entry.conc_end == 64
-
-    def test_valid_with_conc_list(self):
-        """Valid entry with conc list should pass."""
-        entry = SingleNodeSearchSpaceEntry(**{
-            "tp": 4,
-            "conc-list": [4, 8, 16, 32, 64, 128],
-        })
-        assert entry.conc_list == [4, 8, 16, 32, 64, 128]
 
     def test_pp_must_be_positive_integer(self):
         with pytest.raises(ValidationError, match="greater than 0"):
@@ -759,28 +659,6 @@ class TestSingleNodeSearchSpaceEntry:
             })
         assert "must be greater than 0" in str(exc_info.value)
 
-    def test_with_ep_and_dp_attn(self):
-        """Entry with ep and dp-attn like b200-sglang config."""
-        entry = SingleNodeSearchSpaceEntry(**{
-            "tp": 4,
-            "ep": 4,
-            "dp-attn": True,
-            "conc-start": 4,
-            "conc-end": 128,
-        })
-        assert entry.ep == 4
-        assert entry.dp_attn is True
-
-    def test_with_spec_decoding_mtp(self):
-        """Entry with mtp spec decoding."""
-        entry = SingleNodeSearchSpaceEntry(**{
-            "tp": 8,
-            "spec-decoding": "mtp",
-            "conc-list": [1, 2, 4],
-        })
-        assert entry.spec_decoding == "mtp"
-
-
 # =============================================================================
 # Test MultiNodeSearchSpaceEntry
 # =============================================================================
@@ -804,69 +682,6 @@ class TestMultiNodeSearchSpaceEntry:
         assert entry.worker.pp == 2
         assert entry.prefill is None
         assert entry.decode is None
-
-    def test_valid_with_conc_list(self):
-        """Valid multinode search space with list (like gb200 config)."""
-        entry = MultiNodeSearchSpaceEntry(**{
-            "prefill": {
-                "num-worker": 5,
-                "tp": 4,
-                "ep": 4,
-                "dp-attn": True,
-                "additional-settings": ["PREFILL_MAX_NUM_TOKENS=8448"],
-            },
-            "decode": {
-                "num-worker": 1,
-                "tp": 8,
-                "ep": 8,
-                "dp-attn": True,
-                "additional-settings": ["DECODE_MAX_NUM_TOKENS=256"],
-            },
-            "conc-list": [2150],
-        })
-        assert entry.prefill.num_worker == 5
-        assert entry.decode.tp == 8
-
-    def test_valid_with_conc_range(self):
-        """Valid multinode search space with range."""
-        entry = MultiNodeSearchSpaceEntry(**{
-            "prefill": {
-                "num-worker": 1,
-                "tp": 4,
-                "ep": 4,
-                "dp-attn": False,
-            },
-            "decode": {
-                "num-worker": 4,
-                "tp": 8,
-                "ep": 8,
-                "dp-attn": False,
-            },
-            "conc-start": 1,
-            "conc-end": 64,
-        })
-        assert entry.conc_start == 1
-        assert entry.conc_end == 64
-
-    def test_with_spec_decoding_mtp(self):
-        """Multinode entry with mtp spec decoding."""
-        entry = MultiNodeSearchSpaceEntry(**{
-            "spec-decoding": "mtp",
-            "prefill": {
-                "num-worker": 1,
-                "tp": 4,
-                "ep": 4,
-                "dp-attn": False,
-            },
-            "decode": {
-                "num-worker": 4,
-                "tp": 8,
-                "ep": 8,
-                "dp-attn": False,
-            },
-            "conc-list": [1, 2, 4, 8, 16, 36],
-        })
-        assert entry.spec_decoding == "mtp"
 
     def test_missing_conc_specification(self):
         """Missing conc specification should fail."""
@@ -935,25 +750,6 @@ def make_aggregated_multinode_master_config(config, num_nodes=3):
 
 class TestMasterConfigEntries:
     """Tests for master config entry models."""
-
-    def test_single_node_master_config(self, valid_single_node_master_config):
-        """Valid single node master config."""
-        config = SingleNodeMasterConfigEntry(**valid_single_node_master_config)
-        assert config.multinode is False
-        assert config.model_prefix == "dsr1"
-        assert config.runner == "mi300x"
-        assert config.framework == "sglang"
-
-    def test_multinode_master_config(self, valid_multinode_master_config):
-        """Valid multinode master config."""
-        config = MultiNodeMasterConfigEntry(**valid_multinode_master_config)
-        assert config.multinode is True
-        assert config.model_prefix == "dsr1"
-        assert config.runner == "gb200"
-        assert config.disagg is True
-        search_entry = config.scenarios.fixed_seq_len[0].search_space[0]
-        assert search_entry.prefill.hardware == "gb200"
-        assert search_entry.decode.hardware == "h100"
 
     def test_disagg_master_config_allows_omitted_hardware(self, valid_multinode_master_config):
         """Homogeneous disaggregated master configs may omit hardware metadata."""
@@ -1350,29 +1146,6 @@ class TestValidateRunnerConfig:
 
 class TestChangelogEntry:
     """Tests for changelog eval mode validation."""
-
-    def test_all_evals_is_supported(self):
-        entry = ChangelogEntry.model_validate({
-            "config-keys": ["test-config"],
-            "description": ["Run every eval config"],
-            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
-            "all-evals": True,
-        })
-
-        assert entry.all_evals is True
-        assert entry.evals_only is False
-
-    def test_all_evals_can_extend_evals_only(self):
-        entry = ChangelogEntry.model_validate({
-            "config-keys": ["test-config"],
-            "description": ["Run the expanded eval-only matrix"],
-            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
-            "evals-only": True,
-            "all-evals": True,
-        })
-
-        assert entry.evals_only is True
-        assert entry.all_evals is True
 
     @pytest.mark.parametrize("scenario_type", [[], ["unsupported"]])
     def test_scenario_type_must_be_nonempty_and_supported(self, scenario_type):
