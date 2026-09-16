@@ -67,7 +67,7 @@ Tests 使用四个 pytest worker 运行 `utils/`、`runners/` 和 `experimental/
 
 [`pyproject.toml`](../pyproject.toml) 定义 `infx` 包及其依赖；[`uv.lock`](../uv.lock) 记录解析后的版本。运行 `uv sync --locked` 安装核心工具，然后用 `uv run --locked python -m infx.matrix.generate ...` 调用现有模块命令。CODEOWNER/GitHub 集成使用 `--extra workflows`，评测摘要和数据库比较使用 `--extra results`，仓库 MCP 服务使用 `--group mcp`。`test` 依赖组包含 MCP 和 CPU 测试所需依赖。
 
-开发时 uv 以 editable 模式安装包，源码修改立即生效。CI 使用普通 wheel。安装包测试创建仅含核心或 results 依赖的独立环境，并在源码 checkout 之外运行，检查配方节点数、运行器元数据、矩阵拒绝、包内阈值加载、分数验证、BFCL 许可证归属记录，以及生成的评测结果行与摘要。依赖仓库文件的命令在 editable 安装时使用源码仓库；使用 wheel 时，应从仓库根目录运行。评测 YAML/JSON 资源及 Apache 许可证随包分发。
+开发时 uv 以 editable 模式安装包，源码修改立即生效。CI 安装普通 wheel，但主 pytest 套件导入源码 checkout。独立的安装包测试创建仅含核心或 results 依赖的独立环境，并在源码 checkout 之外运行，检查配方节点数、运行器元数据、矩阵拒绝、包内阈值加载、分数验证、BFCL 许可证归属记录，以及生成的评测结果行与摘要。依赖仓库文件的命令在 editable 安装时使用源码仓库；使用 wheel 时，应从仓库根目录运行。评测 YAML/JSON 资源及 Apache 许可证随包分发。
 
 核心依赖使用 `uv add` 添加，集成依赖使用 `uv add --optional <extra>`，测试工具使用 `uv add --group test`。同时提交 manifest 和 lockfile。`uv lock --upgrade-package <name>` 更新指定依赖；解析时按 `pyproject.toml` 执行 12 小时发布冷却期。Ruff 和 Zizmor 不加入 lockfile，CI 继续使用满足冷却期的最新版本。基准测试镜像、供应商评测环境和测量历史 checkout 的命令保留原有依赖安装方式。
 
