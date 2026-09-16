@@ -35,8 +35,8 @@ native DRAM control before attributing it solely to storage hardware.
 
 ## Full canonical runs
 
-Use fresh main's `nvidia/MiniMax-M3-NVFP4`, TP4, vLLM
-`nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45`, EAGLE3-GQA with the main recipe's
+Use fresh main's `nvidia/MiniMax-M3-NVFP4` TP4 recipe with the published vLLM
+`nightly-e962733e08d10f7ca65dac4df99e116460b8b174`, EAGLE3-GQA with the main recipe's
 synthetic acceptance length 2.78. All four arms reuse that exact recipe and its
 pinned AIPerf submodule. Keep ten extra warmups per lane, all mandatory snapshot
 primers, seed 42, recorded assistant replay, the same corpus, idle-gap policy and
@@ -52,6 +52,12 @@ changes, and repeat both sides of a candidate crossover on different nodes.
 Keep the maximum at 16,384. Failure or insufficient completed samples is a
 feasibility result, never a zero-throughput point. Canonical warmup that exceeds
 workflow execution limits needs an explicit new execution budget, not truncation.
+
+The original main image returned registry 404. All four arms therefore use the
+same published replacement above; [image-provenance.json](image-provenance.json)
+records its registry and AMD64 digests, exact engine commit, and compatibility
+checks. The canonical heterogeneous-layout patch applies cleanly and is idempotent
+against this source. No performance measurement completed on the unavailable image.
 
 ## InferenceX infrastructure only
 

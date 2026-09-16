@@ -1,0 +1,18 @@
+{
+  "verified_at": "2026-09-16T21:49:58.237559+00:00",
+  "image": "vllm/vllm-openai:nightly-e962733e08d10f7ca65dac4df99e116460b8b174",
+  "engine_commit": "e962733e08d10f7ca65dac4df99e116460b8b174",
+  "manifest_digest": "sha256:89dd8f442a3f4c08c6b3cd634c4f735cd709160651c296596673cf974ea6ee39",
+  "linux_amd64_digest": "sha256:bffbfdbe1236783933a19f0d6c62eb3a21742b0c2f0ab711ba324b9a16180de7",
+  "registry_manifest_url": "https://registry-1.docker.io/v2/vllm/vllm-openai/manifests/nightly-e962733e08d10f7ca65dac4df99e116460b8b174",
+  "original_main_image": "vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45",
+  "original_image_error": "Registry 404 on workflow 35154018672; no Docker Hub tag matching 1dc464d",
+  "worker_source_sha256": "4b106746952d25990b67b9f27865d17a796a6c1298ff885974b2ec5ec5099a26",
+  "worker_patch_applied": true,
+  "worker_patch_idempotent": true,
+  "selection_reason": "Published build preserving the canonical SimpleCPU heterogeneous-layout patch and connector interface; all arms use the same replacement.",
+  "source_sha256": {
+    "vllm/distributed/kv_transfer/kv_connector/v1/simple_cpu_offload_connector.py": "de9c3b3b31820141366a243a2667acd34cde63fb532ed42498b0fee41ce351b2",
+    "vllm/v1/kv_offload/tiering/spec.py": "ff882d9e406e084d845cdc476771ace68a55843efe7735d74525cdf45b13cb77"
+  }
+}

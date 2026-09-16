@@ -55,24 +55,45 @@
       "runner": "b200-nscale-slurm_08",
       "log_sha256": "4d204da666103ca712333d8d297e10a57ff9c7bc7228286b9cd56ffc7f89aa6a",
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35150286749/job/104976675069"
+    },
+    {
+      "run_id": 35154018672,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35154018672",
+      "arm": "nvme",
+      "concurrency": 16,
+      "repeat": 1,
+      "attempt": 1,
+      "retry_of": 35150085918,
+      "head_sha": "4034ac1f12411c236317f91503588fd91b33a56a",
+      "status": "failure",
+      "node": "im-b200-c001",
+      "artifacts": [],
+      "failure_stage": "container image import",
+      "diagnosis": "Checkout fallback passed; original vLLM image tag returned registry HTTP 404.",
+      "performance_result": false,
+      "job_id": 104989094819,
+      "runner": "b200-nscale-slurm_00",
+      "allocation_id": "15923",
+      "log_sha256": "1655290209ce7c18ed287042427dbe25c0ecc03fd409dc2ea2bae439498006ba",
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35154018672/job/104989094819"
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749",
-  "status": "Checkout compatibility fix pushed; retry not dispatched because competing B200 queue appeared and scheduler snapshot was stale.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749,35154018672",
+  "status": "Checkout fallback validated. Replaced unavailable image consistently across all four arms; retry NVMe before controls.",
+  "last_capacity_check": {
+    "cluster_observed_at": "2026-09-16T21:44:08.000Z",
+    "idle_nodes": 9,
+    "total_nodes": 11,
+    "legacy_task_nodes": 2,
+    "scheduler_snapshot_at": "2026-09-16T21:44:12.140Z",
+    "b200_queued_jobs": 0,
+    "dispatch_allowed": true
+  },
   "next_dispatch": {
     "arm": "nvme",
     "concurrency": 16,
     "repeat": 1,
-    "retry_of": 35150085918,
-    "requires": "Fresh scheduler capacity, then prove experiment checkout and launch succeed before dispatching controls."
-  },
-  "last_capacity_check": {
-    "cluster_observed_at": "2026-09-16T21:10:44.000Z",
-    "idle_nodes": 9,
-    "total_nodes": 11,
-    "legacy_task_nodes": 2,
-    "scheduler_snapshot_at": "2026-09-16T21:05:25.074Z",
-    "b200_queued_jobs": 19,
-    "dispatch_allowed": false
+    "retry_of": 35154018672,
+    "requires": "Fresh scheduler capacity and published replacement image; validate engine startup before controls."
   }
 }

@@ -1,6 +1,6 @@
 agentx-offload-none:
   experiment: agentx-offload
-  image: vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
+  image: vllm/vllm-openai:nightly-e962733e08d10f7ca65dac4df99e116460b8b174
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b200-nscale
@@ -18,7 +18,7 @@ agentx-offload-none:
 
 agentx-offload-dram:
   experiment: agentx-offload
-  image: vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
+  image: vllm/vllm-openai:nightly-e962733e08d10f7ca65dac4df99e116460b8b174
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b200-nscale
@@ -37,7 +37,7 @@ agentx-offload-dram:
 
 agentx-offload-nvme:
   experiment: agentx-offload
-  image: vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
+  image: vllm/vllm-openai:nightly-e962733e08d10f7ca65dac4df99e116460b8b174
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b200-nscale
@@ -56,7 +56,7 @@ agentx-offload-nvme:
 
 agentx-offload-dram-nvme:
   experiment: agentx-offload
-  image: vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
+  image: vllm/vllm-openai:nightly-e962733e08d10f7ca65dac4df99e116460b8b174
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b200-nscale

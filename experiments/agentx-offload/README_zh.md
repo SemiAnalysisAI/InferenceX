@@ -30,8 +30,8 @@ DRAM 使用 fresh main 根据 B200、TP4 和 `dram-utilization: 0.683` 实际生
 
 ## 完整规范运行
 
-沿用 main 的 `nvidia/MiniMax-M3-NVFP4`、TP4、vLLM
-`nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45`，以及 EAGLE3-GQA 和
+沿用 main 的 `nvidia/MiniMax-M3-NVFP4` TP4 配方，搭配已发布的 vLLM
+`nightly-e962733e08d10f7ca65dac4df99e116460b8b174`，以及 EAGLE3-GQA 和
 2.78 合成接受长度。四组复用同一启动脚本和固定的 AIPerf 子模块。
 保留每条轨迹额外十次预热、全部必需快照预热、seed 42、录制助手响应回放、相同语料和空闲间隔策略，
 并运行 **3,600 秒 profiling**。禁止 `agentx-fast`、缩短时长、unsafe 模式、合成工作负载、
@@ -41,6 +41,10 @@ DRAM 使用 fresh main 根据 B200、TP4 和 `dram-utilization: 0.683` 实际生
 不是立即全量扫描。根据观测结果在变化区间补任意正整数并发，并跨节点重复区间两侧。
 上限保持 16,384。失败或有效完成样本不足只能记录为可运行性结果，不能伪造零吞吐量点。
 若规范预热超过工作流时限，需要明确调整执行预算，不能截断预热。
+
+main 原镜像标签从 registry 返回 404，因此四组统一使用上述已发布的替代版本。
+[image-provenance.json](image-provenance.json) 记录 registry 和 AMD64 digest、准确引擎提交及兼容性检查。
+规范异构 KV 布局补丁可干净地应用，并通过幂等性验证。原镜像未产生任何完成的性能测量。
 
 ## 仅使用 InferenceX 基础设施
 

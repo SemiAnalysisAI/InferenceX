@@ -7958,3 +7958,12 @@
     - "Add the branch-only experiments/agentx-offload four-arm crossover study for MiniMax-M3 NVFP4 TP4 on B200. Explicit experiment metadata selects HBM, DRAM, NVMe or native tiered KV, fixed 80 GiB HBM/GPU, 739 GB host KV where enabled, and a 1 TiB NVMe budget/guard, with canonical 3600-second AgentX profiling. Standard recipes remain unchanged without the experiment selector. Launch each experiment config through e2e-tests.yml and retain separate workflow run IDs; no prior results are imported."
     - "新增分支内 experiments/agentx-offload 四组交叉点实验：B200 上的 MiniMax-M3 NVFP4 TP4，通过显式实验元数据选择 HBM、DRAM、NVMe 或原生三级 KV 缓存；固定每 GPU 80 GiB HBM，启用时使用 739 GB 主机 KV 和 1 TiB NVMe 容量或保护阈值，并保留完整 3600 秒 AgentX profiling。未指定实验时普通配方保持原行为。所有实验通过 e2e-tests.yml 提交并保留各自 workflow run ID，不导入旧结果。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin all four branch-only AgentX offload arms to published vLLM nightly-e962733e08d10f7ca65dac4df99e116460b8b174 after the original main image returned registry 404. Preserve the canonical MiniMax-M3 NVFP4 TP4 recipe and heterogeneous KV patch; record registry digests and source compatibility proof. No prior performance data exists to mix across engines."
+    - "main 原镜像返回 registry 404 后，将分支内四组 AgentX 卸载实验统一固定到已发布的 vLLM nightly-e962733e08d10f7ca65dac4df99e116460b8b174；保留规范 MiniMax-M3 NVFP4 TP4 配方及异构 KV 补丁，记录镜像 digest 和源码兼容性证据。此前没有完成的性能数据，不混用引擎结果。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload

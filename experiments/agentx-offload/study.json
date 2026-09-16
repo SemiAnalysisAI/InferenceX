@@ -25,5 +25,8 @@
     16384
   ],
   "legacy_results_imported": false,
-  "run_transport": "InferenceX e2e-tests.yml and priority scheduler only"
+  "run_transport": "InferenceX e2e-tests.yml and priority scheduler only",
+  "image": "vllm/vllm-openai:nightly-e962733e08d10f7ca65dac4df99e116460b8b174",
+  "image_manifest_digest": "sha256:89dd8f442a3f4c08c6b3cd634c4f735cd709160651c296596673cf974ea6ee39",
+  "image_provenance": "image-provenance.json"
 }

@@ -133,6 +133,8 @@ def storage_proof(root: Path) -> dict[str, Any]:
 
 def prepare() -> None:
     study = json.loads((ROOT / "study.json").read_text())
+    if os.environ.get("IMAGE") != study["image"]:
+        raise ValueError("Engine image differs from the matched study pin")
     arm, tp, conc = (
         os.environ["KV_OFFLOADING"],
         int(os.environ["TP"]),
