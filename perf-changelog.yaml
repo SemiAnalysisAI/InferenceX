@@ -7979,3 +7979,23 @@
     - "Rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode: the 2026-09-15 SGLang nightly splits the flag into decode/prefill variants and rejects the old spelling as ambiguous (run 35013444957, canary c4)"
     - "将 --cuda-graph-max-bs 改为 --cuda-graph-max-bs-decode：2026-09-15 SGLang nightly 将该参数拆分为 decode/prefill 两个变体，旧写法因歧义被拒绝（运行 35013444957，canary c4）"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3144
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B200 Dynamo+SGLang AgentX TP8 aggregate HiCache recipes at concurrency 1, 4, and 8."
+    - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with bundled DSpark K=6, full-node CPU/DRAM allocation, and per-point request/CUDA-graph limits."
+    - "Preinstall uv with the pinned GitHub Action on NScale so benchmark startup does not depend on direct access to astral.sh."
+  pr-link: XXX
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B200 Dynamo+SGLang AgentX DEP8/DEP8 HiCache recipes for 1P1D at concurrency 64 and 128, plus 2P1D at concurrency 256."
+    - "Limit decode max-running-requests to 128, 256, and 512, respectively, and reserve long-output KV admission for the c256 trace."
+    - "Reuse the preinstalled uv binary in the NScale launcher, with the existing astral.sh installer retained as a fallback."
+  pr-link: XXX

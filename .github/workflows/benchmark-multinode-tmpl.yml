@@ -304,6 +304,13 @@ jobs:
           submodules: true
           persist-credentials: false
 
+      # NScale's login nodes can reach GitHub Actions/releases while direct
+      # access to astral.sh is intermittently blocked. Install uv through the
+      # pinned action so the B200 launcher does not depend on that endpoint.
+      - name: Install uv for NScale B200
+        if: ${{ inputs.runner == 'cluster:b200-nscale' }}
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
       - name: Launch multi-node job script
         env:
           PREFILL_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).prefill.additional-settings) }}
