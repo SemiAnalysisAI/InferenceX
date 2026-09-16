@@ -9,13 +9,17 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "4d465b7b6a2b908f068b9b709f0804a27cd56e2b",
-      "status": "failed",
+      "status": "failure",
       "node": null,
       "artifacts": [],
       "failure_stage": "repository checkout",
       "diagnosis": "Git fetch could not read Username; conditional credential file not applied.",
       "performance_result": false,
-      "artifact_evidence": "GitHub job logs retained by workflow"
+      "artifact_evidence": "GitHub job logs retained by workflow",
+      "job_id": 104976023895,
+      "runner": "b200-nscale-slurm_00",
+      "log_sha256": "1417e0e259154ca879f3d5c32415e817cb73c24d57546b25216562a94686dadf",
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35150085918/job/104976023895"
     },
     {
       "run_id": 35150281066,
@@ -25,7 +29,7 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "4d465b7b6a2b908f068b9b709f0804a27cd56e2b",
-      "status": "cancellation_requested",
+      "status": "cancelled",
       "node": null,
       "artifacts": [],
       "diagnosis": "Stopped queued control pending shared checkout compatibility repair.",
@@ -40,15 +44,35 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "4d465b7b6a2b908f068b9b709f0804a27cd56e2b",
-      "status": "failed",
+      "status": "failure",
       "node": null,
       "artifacts": [],
       "failure_stage": "repository checkout",
       "diagnosis": "Git fetch could not read Username; conditional credential file not applied.",
       "performance_result": false,
-      "artifact_evidence": "GitHub job logs retained by workflow"
+      "artifact_evidence": "GitHub job logs retained by workflow",
+      "job_id": 104976675069,
+      "runner": "b200-nscale-slurm_08",
+      "log_sha256": "4d204da666103ca712333d8d297e10a57ff9c7bc7228286b9cd56ffc7f89aa6a",
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35150286749/job/104976675069"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749",
-  "status": "Testing experiment-only checkout fallback after two pre-GPU authentication failures."
+  "status": "Checkout compatibility fix pushed; retry not dispatched because competing B200 queue appeared and scheduler snapshot was stale.",
+  "next_dispatch": {
+    "arm": "nvme",
+    "concurrency": 16,
+    "repeat": 1,
+    "retry_of": 35150085918,
+    "requires": "Fresh scheduler capacity, then prove experiment checkout and launch succeed before dispatching controls."
+  },
+  "last_capacity_check": {
+    "cluster_observed_at": "2026-09-16T21:10:44.000Z",
+    "idle_nodes": 9,
+    "total_nodes": 11,
+    "legacy_task_nodes": 2,
+    "scheduler_snapshot_at": "2026-09-16T21:05:25.074Z",
+    "b200_queued_jobs": 19,
+    "dispatch_allowed": false
+  }
 }

@@ -99,6 +99,11 @@ issue](https://github.com/actions/checkout/issues/2393), not offload performance
 evidence. Ordinary workflow checkouts retain v7.0.1. Remove the fallback once the
 runner paths or an upstream release are verified compatible.
 
+After the first checkout failures, retry only the NVMe arm first. Confirm that
+checkout and the experiment launch step succeed before dispatching the other
+matched arms. Require cluster and scheduler observations no older than 90 seconds;
+an available API response with an old scheduler snapshot does not permit launch.
+
 ## Evidence and visualization
 
 Retain standard `bmk_agentic_*`, `agentic_*`, server and GPU metrics artifacts.
