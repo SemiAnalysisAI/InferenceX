@@ -7802,4 +7802,4 @@
     - "Replace the LMCache 0.5.5.dev114+rocm7.2 KV-offload backend with vllm-simple (SimpleCPUOffloadConnector) on every offload arm; conc 48 measured 11,083 tok/s per GPU vs 10,947 for the LMCache baseline, with no external cache server"
     - "Bump the image to vllm/vllm-openai-rocm:nightly-rocm100-af1c0149 (vLLM 0.29.1rc1.dev187), the first nightly carrying vLLM #55966. Conc 1 on it measured 146.41 interactivity p90 (ITL p90 6.83 ms), flat against the previous 2671fed reference's 146.14"
     - "Add conc 70 to the dcp-size 8 arm"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PENDING
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3124
