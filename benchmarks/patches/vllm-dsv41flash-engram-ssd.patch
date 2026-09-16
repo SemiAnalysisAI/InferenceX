@@ -397,7 +397,7 @@
  
          `hash_ids` covers every DP replica sharing the table (see
          `gather_engram_hashes`), so only `embed` narrows back to this one.
-@@ -1184,3 +1450,224 @@
+@@ -1184,3 +1450,229 @@
              num_warps=num_warps,
          )
          return output
@@ -488,6 +488,11 @@
 +    """Deduplicated contiguous page ranges covering the requested rows."""
 +    if not len(row_ids):
 +        return []
++    # Hash IDs fit int32, byte offsets into the ~24 GiB shard do not.
++    # Widen before multiplication, never after an already-overflowed result.
++    row_ids = np.asarray(row_ids, dtype=np.int64)
++    if row_bytes <= 0 or page_size <= 0 or np.any(row_ids < 0) or np.any(row_ids >= file_bytes // row_bytes):
++        raise ValueError("Engram prefetch row lies outside its mapped table")
 +    first = row_ids * row_bytes // page_size
 +    last = ((row_ids + 1) * row_bytes - 1) // page_size
 +    pages = np.unique(np.concatenate([

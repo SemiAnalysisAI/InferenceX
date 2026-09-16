@@ -35,6 +35,17 @@ def check() -> None:
     assert engram_page_ranges(np.array([], dtype=np.int64), 256, 8448) == []
     assert engram_page_ranges(np.array([0, 1, 0, 32]), 256, 8448) == [(0, 4096), (8192, 256)]
     assert engram_page_ranges(np.array([15, 15]), 264, 16384) == [(0, 8192)]
+    # Exercise the real mmap advice API above the signed 32-bit byte limit.
+    import mmap
+    for dtype in (np.int32, np.int64):
+        assert engram_page_ranges(np.array([8388608, 8388609], dtype=dtype), 256, 24576000000) == [(2147483648, 4096)]
+        assert engram_page_ranges(np.array([90000000], dtype=dtype), 256, 24576000000) == [(23040000000, 4096)]
+        assert engram_page_ranges(np.array([95999999], dtype=dtype), 256, 24576000000) == [(24575995904, 4096)]
+    with tempfile.TemporaryFile() as sparse:
+        sparse.truncate((1 << 31) + mmap.PAGESIZE)
+        with mmap.mmap(sparse.fileno(), 0, access=mmap.ACCESS_READ) as mapping:
+            for offset, length in engram_page_ranges(np.array([8388608], dtype=np.int32), 256, len(mapping), mmap.PAGESIZE):
+                mapping.madvise(mmap.MADV_WILLNEED, offset, length)
     torch.cuda.set_device(0)
     with tempfile.TemporaryDirectory(prefix="engram-graph-") as directory:
         layers = []
