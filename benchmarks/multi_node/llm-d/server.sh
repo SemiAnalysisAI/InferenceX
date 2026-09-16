@@ -18,10 +18,9 @@ set -eo pipefail
 
 source /workspace/benchmarks/benchmark_lib.sh
 
-# ----------------------------------------------------------------
-# Config + service ports
-# ----------------------------------------------------------------
-check_env_vars NODE_RANK PREFILL_NODES DECODE_NODES GPUS_PER_NODE PREFILL_WORKERS DECODE_WORKERS ALL_IPS
+check_env_vars \
+    NODE_RANK PREFILL_NODES DECODE_NODES GPUS_PER_NODE PREFILL_WORKERS \
+    DECODE_WORKERS EVAL_ONLY RUN_EVAL ALL_IPS
 IS_AGGREGATED=$(( DECODE_NODES == 0 ))
 VLLM_PORT=8200
 SIDECAR_PORT=8000
@@ -61,7 +60,7 @@ print(ip, iface)
 ' 2>/dev/null) || true
 HOST_IP=$(echo "$_HOST_INFO" | awk '{print $1}')
 DEFAULT_IFACE=$(echo "$_HOST_INFO" | awk '{print $2}')
-check_env_vars HOST_IP DEFAULT_IFACE
+DEFAULT_IFACE="${DEFAULT_IFACE:-eth0}"
 
 VLLM_LOG="/benchmark_logs/vllm_rank${NODE_RANK}.log"
 SIDECAR_LOG="/benchmark_logs/sidecar_rank${NODE_RANK}.log"
@@ -77,7 +76,7 @@ echo "=== rank=$NODE_RANK host=$HOST_IP model=$MODEL ==="
 # engines, each spanning (role_nodes / role_workers) nodes with its own DP
 # coordinator (leader IP) and rank range. workers=1 => one engine over all role
 # nodes (1P+1D / mid-curve); >1 => high-tpt (e.g. 2 prefill : 1 decode, DEP8 each).
-IFS=',' read -r -a _ALL_IPS <<< "${ALL_IPS}"
+IFS=',' read -r -a _ALL_IPS <<< "${ALL_IPS:-}"
 
 if [[ "$NODE_RANK" -lt "$PREFILL_NODES" ]]; then
     ROLE="prefill"
@@ -100,9 +99,14 @@ else
     exit 1
 fi
 
-# job.slurm supplies the complete rank-ordered address list.
-DP_ADDR="${_ALL_IPS[$_group_leader_rank]}"
-check_env_vars DP_ADDR
+# Each engine's DP coordinator = its leader node's IP; fall back to role leaders.
+if [[ -n "${_ALL_IPS[${_group_leader_rank}]:-}" ]]; then
+    DP_ADDR="${_ALL_IPS[${_group_leader_rank}]}"
+elif [[ "$ROLE" == "prefill" ]]; then
+    DP_ADDR="$PREFILL_DP_ADDR"
+else
+    DP_ADDR="$DECODE_DP_ADDR"
+fi
 
 DP_SIZE_LOCAL="$GPUS_PER_NODE"
 START_RANK=$((LWS_WORKER_INDEX * DP_SIZE_LOCAL))
@@ -114,19 +118,21 @@ PREFILL_ENABLE_EP=true
 
 echo "ROLE=$ROLE DP_SIZE=$DP_SIZE DP_ADDR=$DP_ADDR LWS_WORKER_INDEX=$LWS_WORKER_INDEX START_RANK=$START_RANK"
 
-# Explicit transport baseline; role recipe env is applied afterwards.
-export GLOO_SOCKET_IFNAME=$DEFAULT_IFACE
-export NCCL_SOCKET_IFNAME=$DEFAULT_IFACE
+export GLOO_SOCKET_IFNAME=${GLOO_SOCKET_IFNAME:-$DEFAULT_IFACE}
+export NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-$DEFAULT_IFACE}
+check_env_vars \
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS VLLM_ENGINE_READY_TIMEOUT_S VLLM_LOGGING_LEVEL UCX_TLS \
+    NVSHMEM_REMOTE_TRANSPORT NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_SYMMETRIC_SIZE
 export VLLM_SKIP_P2P_CHECK=1
 # Randomized DP dummy inputs make idle DP ranks fan their lockstep dummy passes
 # across all experts (full MoE all-to-all), wasting prefill bandwidth; a recipe
 # may set this to 0.
-export VLLM_RANDOMIZE_DP_DUMMY_INPUTS=1
+export VLLM_RANDOMIZE_DP_DUMMY_INPUTS
 export VLLM_USE_DEEP_GEMM=1
 # Cold-start budget for engine-core readiness. DSV4-Pro on GB200 cold-starts in
 # ~9-11 min (weight load + DeepGEMM JIT warmup + cudagraph capture + NIXL/UCX
 # handshake); the 600s vLLM default is too tight, so allow 30 min.
-export VLLM_ENGINE_READY_TIMEOUT_S=1800
+export VLLM_ENGINE_READY_TIMEOUT_S
 # DeepGEMM JIT links -l:libcuda.so.1 at warmup; the compat dir is on
 # LD_LIBRARY_PATH (runtime) but not LIBRARY_PATH (link time). Prepend it, plus
 # the arch-specific toolkit lib dir resolved from `uname -m`.
@@ -134,23 +140,28 @@ case "$(uname -m)" in
     aarch64|arm64) _NCT_LIB=/usr/lib/aarch64-linux-gnu ;;
     *)             _NCT_LIB=/usr/lib/x86_64-linux-gnu ;;
 esac
-export LIBRARY_PATH=/usr/local/cuda/compat:${_NCT_LIB}:${LIBRARY_PATH}
+export LIBRARY_PATH=/usr/local/cuda/compat:${_NCT_LIB}:${LIBRARY_PATH:-}
 export VLLM_NIXL_SIDE_CHANNEL_HOST="$HOST_IP"
-export VLLM_LOGGING_LEVEL=INFO
+export VLLM_LOGGING_LEVEL
 
 # Pin NIXL/UCX to IB verbs (rc) so cross-node KV rides the IB HCAs (job.slurm
 # exposes /dev/infiniband + IPC_LOCK); cuda_copy/cuda_ipc cover intra-node.
-export UCX_TLS=cuda_copy,cuda_ipc,rc
+export UCX_TLS
 
 
 if [[ "$LWS_GROUP_SIZE" -gt 1 ]]; then
     export NVIDIA_GDRCOPY=enabled
     # ibgda default kept for future DeepEP/wide-EP recipes; a recipe may override
     # NVSHMEM_REMOTE_TRANSPORT to none.
-    export NVSHMEM_REMOTE_TRANSPORT=ibgda
-    export NVSHMEM_IB_ENABLE_IBGDA=true
-    export NVSHMEM_SYMMETRIC_SIZE=16G
-    export NVSHMEM_BOOTSTRAP_UID_SOCK_IFNAME=$DEFAULT_IFACE
+    export NVSHMEM_REMOTE_TRANSPORT
+    export NVSHMEM_IB_ENABLE_IBGDA
+    export NVSHMEM_SYMMETRIC_SIZE
+    export NVSHMEM_BOOTSTRAP_UID_SOCK_IFNAME=${NVSHMEM_BOOTSTRAP_UID_SOCK_IFNAME:-$DEFAULT_IFACE}
+    # NVSHMEM ignores NVSHMEM_HCA_PE_MAPPING when NVSHMEM_HCA_LIST is set, so
+    # clear the latter when the recipe provides an explicit PE mapping.
+    if [[ -n "${NVSHMEM_HCA_PE_MAPPING:-}" ]]; then
+        unset NVSHMEM_HCA_LIST 2>/dev/null || true
+    fi
 fi
 
 # ----------------------------------------------------------------
@@ -201,15 +212,6 @@ if [[ -n "${CONFIG_FILE}" && -f "/etc/llmd-recipes/${CONFIG_FILE}" ]]; then
             --retry 30 --retry-connrefused --retry-delay 1 \
             "http://${_ALL_IPS[0]}:50052/metrics" > /dev/null
     fi
-fi
-
-# ----------------------------------------------------------------
-# Wide-EP NVSHMEM / ibgda env (only when an engine spans >1 node)
-# ----------------------------------------------------------------
-# Single-node-per-role recipes avoid DeepEP / NVSHMEM ibgda, so leave these off
-# there to avoid triggering ibgda code paths that are not needed.
-if [[ "$LWS_GROUP_SIZE" -gt 1 && -n "$NVSHMEM_HCA_PE_MAPPING" ]]; then
-    unset NVSHMEM_HCA_LIST
 fi
 
 # ----------------------------------------------------------------

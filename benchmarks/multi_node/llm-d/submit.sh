@@ -17,33 +17,26 @@ set -eo pipefail
 # invoking this script).
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
-check_env() {
-    local name="$1"
-    if [[ -z "${!name}" ]]; then
-        echo "Error: ${name} not set" >&2
-        exit 1
-    fi
-}
-
-check_env SLURM_ACCOUNT
-check_env SLURM_PARTITION
-check_env TIME_LIMIT
-check_env MODEL_PATH
-check_env MODEL_NAME
-check_env CONTAINER_IMAGE
-check_env RUNNER_NAME
-check_env BENCHMARK_LOGS_DIR
+source "$REPO_ROOT/benchmarks/benchmark_lib.sh" --validation-only
+check_env_vars \
+    SLURM_ACCOUNT SLURM_PARTITION TIME_LIMIT MODEL_PATH MODEL_NAME \
+    CONTAINER_IMAGE RUNNER_NAME BENCHMARK_LOGS_DIR GPUS_PER_NODE PREFILL_WORKERS \
+    DECODE_WORKERS BENCH_NUM_PROMPTS_MULTIPLIER RUN_EVAL EVAL_ONLY EVAL_FRAMEWORK \
+    SWEBENCH_USE_MODAL IS_AGENTIC FRAMEWORK SPEC_DECODING IS_MULTINODE
+if [[ $# -ne 7 ]]; then
+    echo "Usage: submit.sh prefill_nodes decode_nodes isl osl concurrencies request_rate random_range_ratio" >&2
+    exit 1
+fi
 
 PREFILL_NODES=$1
 DECODE_NODES=$2
 ISL=$3
 OSL=$4
 CONCURRENCIES=$5
-REQUEST_RATE=$6
-RANDOM_RANGE_RATIO=$7
+REQUEST_RATE=${6}
+RANDOM_RANGE_RATIO=${7}
 
 NUM_NODES=$((PREFILL_NODES + DECODE_NODES))
-check_env GPUS_PER_NODE
 
 export DOCKER_IMAGE_NAME=$CONTAINER_IMAGE
 export MODEL_DIR=$MODEL_PATH
@@ -52,13 +45,10 @@ export NUM_NODES=$NUM_NODES
 export PREFILL_NODES=$PREFILL_NODES
 export DECODE_NODES=$DECODE_NODES
 export GPUS_PER_NODE=$GPUS_PER_NODE
-# Worker count per role (Option B): the role's nodes are split into this many
-# INDEPENDENT DP/EP engines (default 1 = one engine over all role nodes). Each
-# engine spans role_nodes/workers nodes, so DP_SIZE is PER-ENGINE. Matches how
-# dynamo/AMD and upstream oci-high-tpt run 2P high-tpt (2 prefill : 1 decode).
-check_env PREFILL_WORKERS
+# Each role's nodes split into this many INDEPENDENT DP/EP engines (default 1 = one
+# engine over all role nodes), so DP_SIZE is PER-ENGINE. Matches how dynamo/AMD and
+# upstream oci-high-tpt run 2P high-tpt (2 prefill : 1 decode).
 export PREFILL_WORKERS
-check_env DECODE_WORKERS
 export DECODE_WORKERS
 if (( PREFILL_NODES % PREFILL_WORKERS != 0 )); then
     echo "Error: PREFILL_NODES ($PREFILL_NODES) not divisible by PREFILL_WORKERS ($PREFILL_WORKERS)" >&2
@@ -75,22 +65,28 @@ export BENCH_OUTPUT_LEN=$OSL
 export BENCH_MAX_CONCURRENCY=$CONCURRENCIES
 export BENCH_REQUEST_RATE=$REQUEST_RATE
 export BENCH_RANDOM_RANGE_RATIO=$RANDOM_RANGE_RATIO
-# Match the AMD multinode default.
-export BENCH_NUM_PROMPTS_MULTIPLIER="10"
+export BENCH_NUM_PROMPTS_MULTIPLIER
 
-export RUN_EVAL EVAL_ONLY EVAL_CONC
-export EVAL_FRAMEWORK EVAL_LIMIT EVAL_SUITE SWEBENCH_GEN_MODE
-export SWEBENCH_USE_MODAL MODAL_TOKEN_ID MODAL_TOKEN_SECRET
-export IS_AGENTIC SCENARIO_TYPE
-export FRAMEWORK PRECISION MODEL_PREFIX RUNNER_TYPE RESULT_FILENAME
-export SPEC_DECODING IS_MULTINODE CONFIG_FILE
-
-# Explicit fleet/container mapping shared by every llm-d wrapper.
-case "${RUNNER_TYPE#cluster:}" in
-    b200|b200-*|gb200|gb200-*) export LLMD_CONTAINER_ENGINE=pyxis ;;
-    h200|h200-*) export LLMD_CONTAINER_ENGINE=docker ;;
-    *) echo "Unsupported llm-d runner hardware: $RUNNER_TYPE" >&2; exit 1 ;;
-esac
+export RUN_EVAL
+export EVAL_ONLY
+export EVAL_CONC="${EVAL_CONC:-}"
+export EVAL_FRAMEWORK
+export EVAL_LIMIT="${EVAL_LIMIT:-}"
+export EVAL_SUITE="${EVAL_SUITE:-}"
+export SWEBENCH_GEN_MODE="${SWEBENCH_GEN_MODE:-}"
+export SWEBENCH_USE_MODAL
+export MODAL_TOKEN_ID="${MODAL_TOKEN_ID:-}"
+export MODAL_TOKEN_SECRET="${MODAL_TOKEN_SECRET:-}"
+export IS_AGENTIC
+export SCENARIO_TYPE="${SCENARIO_TYPE:-}"
+export FRAMEWORK
+export PRECISION="${PRECISION:-}"
+export MODEL_PREFIX="${MODEL_PREFIX:-}"
+export RUNNER_TYPE="${RUNNER_TYPE:-}"
+export RESULT_FILENAME="${RESULT_FILENAME:-}"
+export SPEC_DECODING
+export IS_MULTINODE
+export CONFIG_FILE="${CONFIG_FILE:-}"
 
 # Recipe may override SLURM time limit (longer topologies need more wall time).
 if [[ -n "$CONFIG_FILE" ]]; then
