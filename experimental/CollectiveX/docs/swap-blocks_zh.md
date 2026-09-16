@@ -57,11 +57,8 @@ gh workflow run collectivex-sweep.yml --ref codex/collectivex-swap-blocks \
   -f swap_image=vllm/vllm-openai:v0.25.1
 ```
 
-合并后使用 `--ref main`。该模式只调度一个 `h200-dgxc` 任务，优先级队列需求为
-`nodes:1`，独占分配一个物理节点并运行一个 GPU 进程。不构建 EP 库，也不执行 EP
-测试点。EP 筛选参数应留空；`only_sku` 可留空或设为 `h200-dgxc`。
-现有的 `all` 选项仍只覆盖 EP。调用方指定的官方 vLLM 镜像通过现有 CollectiveX
-容器缓存导入，并从计算节点可见的隔离暂存目录运行。
+合并后使用 `--ref main`。多平台运行和镜像选择见下方说明；`all` 仍仅运行 EP。
+
 
 `smoke` 覆盖三个方向、两种布局、257/4096/65536/262144 字节（最大 256 KiB）的块大小及 1/4/16/64/256/1024/2048 个块，
 每个测试点预热 4 次、采样 20 次，共 168 个测试点。`standard` 使用
@@ -77,7 +74,7 @@ gh workflow run collectivex-sweep.yml --ref codex/collectivex-swap-blocks \
 每个传输缓冲区还包含两个保护块，因此 1 GiB 块的测试点每个缓冲区分配 3 GiB，
 此外还需 CPU 正确性参考缓冲区。
 
-下载 `cxshard-swap-blocks-<run_id>-<attempt>` 可获得两个 JSON 结果文件，
+下载 `cxshard-swap-<sku>-<run_id>-<attempt>` 可获得两个 JSON 结果文件，
 其中记录实际 GPU、框架版本、镜像、源代码 SHA、正确性状态和测量数据。
 失败时同样执行现有的资源分配和暂存目录清理。CPU CI 独立运行，不能证明 GPU 正确性。
 
