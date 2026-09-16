@@ -67,7 +67,7 @@ Tests 使用四个 pytest worker 运行 `utils/`、`runners/` 和 `experimental/
 
 [`pyproject.toml`](../pyproject.toml) 定义 `infx` 包及其依赖；[`uv.lock`](../uv.lock) 记录解析后的版本。运行 `uv sync --locked` 安装核心工具，然后用 `uv run --locked python -m infx.matrix.generate ...` 调用现有模块命令。CODEOWNER/GitHub 集成使用 `--extra workflows`，评测摘要和数据库比较使用 `--extra results`，仓库 MCP 服务使用 `--group mcp`。`test` 依赖组包含 MCP 和 CPU 测试所需依赖。
 
-开发时 uv 以 editable 模式安装包，源码修改立即生效。CI 使用普通 wheel。安装包测试创建仅含核心或 results 依赖的独立环境，并在源码 checkout 之外运行，检查配方节点数、运行器元数据、矩阵拒绝、包内阈值加载、分数验证，以及生成的评测结果行与摘要。依赖仓库文件的命令在 editable 安装时使用源码仓库；使用 wheel 时，应从仓库根目录运行。评测 YAML/JSON 资源及 Apache 许可证随包分发。
+开发时 uv 以 editable 模式安装包，源码修改立即生效。CI 使用普通 wheel。安装包测试创建仅含核心或 results 依赖的独立环境，并在源码 checkout 之外运行，检查配方节点数、运行器元数据、矩阵拒绝、包内阈值加载、分数验证、BFCL 许可证归属记录，以及生成的评测结果行与摘要。依赖仓库文件的命令在 editable 安装时使用源码仓库；使用 wheel 时，应从仓库根目录运行。评测 YAML/JSON 资源及 Apache 许可证随包分发。
 
 核心依赖使用 `uv add` 添加，集成依赖使用 `uv add --optional <extra>`，测试工具使用 `uv add --group test`。同时提交 manifest 和 lockfile。`uv lock --upgrade-package <name>` 更新指定依赖；解析时按 `pyproject.toml` 执行 12 小时发布冷却期。Ruff 和 Zizmor 不加入 lockfile，CI 继续使用满足冷却期的最新版本。基准测试镜像、供应商评测环境和测量历史 checkout 的命令保留原有依赖安装方式。
 
@@ -136,7 +136,7 @@ uv run --locked \
   --seq-lens 1k1k 8k1k
 ```
 
-不要只检查退出码或行数，还要检查发出的值：配置键、模型、镜像、运行器、场景、并发、`max-model-len`、TP/PP/EP/DCP/PCP、prefill/decode worker、硬件、路由器、KV 传输、评测标志、`additional-settings` 和 `spec-decoding`。模式位于 [`validation.py`](../utils/matrix_logic/validation.py)，生成器是 [`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py)。
+不要只检查退出码或行数，还要检查发出的值：配置键、模型、镜像、运行器、场景、并发、`max-model-len`、TP/PP/EP/DCP/PCP、prefill/decode worker、硬件、路由器、KV 传输、评测标志、`additional-settings` 和 `spec-decoding`。模式位于 [`validation.py`](../infx/matrix/validation.py)，生成器是 [`generate.py`](../infx/matrix/generate.py)。
 
 ### 按变更契约选择聚焦测试套件
 
@@ -146,7 +146,7 @@ uv run --locked \
 | Changelog 内容或 PR 门禁 | `python -m pytest utils/test_process_changelog.py utils/changelog_gate_tests/ -v` |
 | 结果处理与拓扑 | `python -m pytest utils/test_process_result.py utils/agentic/aggregation/test_process_agentic_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
 | AgentX 聚合与工件加载 | `python -m pytest utils/agentic/aggregation/ -v` |
-| 评测分发、批处理或补丁 | `python -m pytest infx/evals/ -v` |
+| 评测分发、批处理或补丁 | `python -m pytest utils/evals/ -v` |
 | 评测收集 | `python -m pytest utils/test_collect_eval_results.py -v` |
 | 扫描复用或可复用制品 | `python -m pytest utils/test_github.py utils/test_find_reusable_sweep_run.py utils/test_acknowledge_sweep_reuse.py utils/test_validate_reusable_sweep_artifacts.py -v` |
 
@@ -174,7 +174,7 @@ uv run --locked --all-extras --group test --no-editable \
   python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
 ```
 
-串行调试时使用 `-n 0`。测试必须隔离临时文件和端口，并确保各 worker 收集到的参数化用例一致。changelog-gate CI 任务同样使用四个 worker；并行执行不改变其测试范围和断言。
+串行调试时使用 `-n 0`。测试必须隔离临时文件和端口，并确保各 worker 收集到的参数化用例一致。
 
 ## 冒烟、扫描与评测
 

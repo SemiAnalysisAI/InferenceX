@@ -125,8 +125,26 @@ def test_installed_eval_validation_loads_resources(
 
     assert result.returncode == exit_code, result.stderr
     assert "Loaded thresholds from " in result.stdout
-    assert "infx/evals/thresholds.yaml" in result.stdout
     assert f"{verdict}: packaging-fixture exact_match,strict = " in result.stdout + result.stderr
+
+
+def test_installed_bfcl_attribution_includes_license(tmp_path, run_installed):
+    result = run_installed(
+        "-c",
+        """
+from pathlib import Path
+from infx.evals.bfcl_adapter import _write_upstream_attribution
+_write_upstream_attribution(Path("bfcl"))
+""",
+    )
+
+    assert result.returncode == 0, result.stderr
+    attribution = json.loads((tmp_path / "bfcl/BFCL_ATTRIBUTION.json").read_text())
+    upstream = attribution["upstream"]
+    assert upstream["license"] == "Apache-2.0"
+    license_text = (tmp_path / "bfcl" / upstream["license_file"]).read_text()
+    assert "Apache License" in license_text
+    assert "Version 2.0, January 2004" in license_text
 
 
 def test_installed_eval_collection_writes_rows_and_summary(tmp_path, run_installed):

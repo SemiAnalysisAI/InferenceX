@@ -67,7 +67,7 @@ Run checks from the repository root and replace placeholders with the exact chan
 
 [`pyproject.toml`](../pyproject.toml) defines the `infx` package and its dependencies; [`uv.lock`](../uv.lock) records their resolved versions. Run `uv sync --locked` to install the core tooling, then `uv run --locked python -m infx.matrix.generate ...` to use the existing module commands. Use `--extra workflows` for CODEOWNER/GitHub integrations, `--extra results` for eval summaries/database comparisons, or `--group mcp` for the repository MCP server. The `test` group includes MCP and the CPU test dependencies.
 
-For development, uv installs the package in editable mode, so source edits apply immediately. CI uses a regular wheel. Installed-package tests create clean environments with only core or results dependencies and run outside the source checkout. They check recipe node counts, runner metadata, matrix rejection, packaged threshold loading, score validation, and generated eval rows and summaries. Repository-dependent commands use their source checkout when installed editable; with a wheel, run them from the repository root. Eval YAML/JSON resources and the Apache license ship with the package.
+For development, uv installs the package in editable mode, so source edits apply immediately. CI uses a regular wheel. Installed-package tests create clean environments with only core or results dependencies and run outside the source checkout. They check recipe node counts, runner metadata, matrix rejection, packaged threshold loading, score validation, BFCL license attribution, and generated eval rows and summaries. Repository-dependent commands use their source checkout when installed editable; with a wheel, run them from the repository root. Eval YAML/JSON resources and the Apache license ship with the package.
 
 Use `uv add` for core dependencies, `uv add --optional <extra>` for an integration, or `uv add --group test` for test-only tools. Commit both the manifest and lockfile. `uv lock --upgrade-package <name>` updates a dependency; resolution enforces a 12-hour age cutoff from `pyproject.toml`. Ruff and Zizmor remain outside the lockfile so their CI checks keep using the latest eligible release. Benchmark images, vendor eval environments, and commands that measure historical checkouts retain their existing dependency setup.
 
@@ -136,7 +136,7 @@ uv run --locked \
   --seq-lens 1k1k 8k1k
 ```
 
-Inspect the emitted values, not only the exit code or row count: config key, model, image, runner, scenario, concurrency, `max-model-len`, TP/PP/EP/DCP/PCP, prefill/decode workers, hardware, router, KV transfer, eval flags, `additional-settings`, and `spec-decoding`. The schema lives in [`validation.py`](../utils/matrix_logic/validation.py), and the generator is [`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py).
+Inspect the emitted values, not only the exit code or row count: config key, model, image, runner, scenario, concurrency, `max-model-len`, TP/PP/EP/DCP/PCP, prefill/decode workers, hardware, router, KV transfer, eval flags, `additional-settings`, and `spec-decoding`. The schema lives in [`validation.py`](../infx/matrix/validation.py), and the generator is [`generate.py`](../infx/matrix/generate.py).
 
 ### Focused suites by changed contract
 
@@ -146,7 +146,7 @@ Inspect the emitted values, not only the exit code or row count: config key, mod
 | Changelog content or PR gating | `python -m pytest utils/test_process_changelog.py utils/changelog_gate_tests/ -v` |
 | Result processing and topology | `python -m pytest utils/test_process_result.py utils/agentic/aggregation/test_process_agentic_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
 | AgentX aggregation and artifact loading | `python -m pytest utils/agentic/aggregation/ -v` |
-| Eval dispatch, batching, or patches | `python -m pytest infx/evals/ -v` |
+| Eval dispatch, batching, or patches | `python -m pytest utils/evals/ -v` |
 | Eval collection | `python -m pytest utils/test_collect_eval_results.py -v` |
 | Sweep reuse or reusable artifacts | `python -m pytest utils/test_github.py utils/test_find_reusable_sweep_run.py utils/test_acknowledge_sweep_reuse.py utils/test_validate_reusable_sweep_artifacts.py -v` |
 
@@ -174,7 +174,7 @@ uv run --locked --all-extras --group test --no-editable \
   python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
 ```
 
-Use `-n 0` for serial debugging. Tests must keep temporary files and ports isolated and collect deterministic parameter cases across workers. The changelog-gate CI job also uses four workers; parallel execution preserves its test selection and assertions.
+Use `-n 0` for serial debugging. Tests must keep temporary files and ports isolated and collect deterministic parameter cases across workers.
 
 ## Smoke, sweep, and eval
 
