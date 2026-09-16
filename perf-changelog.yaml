@@ -7929,7 +7929,6 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Rerun the MI355X disaggregated MTP sweep with the original DeepSeek-V4-Pro checkpoint, whose native MTP weights match the existing EAGLE recipe. The existing checkpoint selector restores thinking-on golden AL 2.49 for three draft tokens; evals use real acceptance."
-    - "Collect completed server logs from every Slurm node into the shared artifact directory after the benchmark server step exits, including decode-node logs."
-    - "Pass the existing router port to evaluation and forward workflow-owned AgentX fast-mode and power requirements across container boundaries."
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913."
+    - "Rerun the MI355X disaggregated MTP sweep with DeepSeek-V4-Pro-0813 + Dspark."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3170
