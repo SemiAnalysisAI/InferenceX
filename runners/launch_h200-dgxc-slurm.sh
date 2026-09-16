@@ -8,7 +8,6 @@ SLURM_PARTITION="main"
 SLURM_ACCOUNT="sa-shared"
 check_env_vars HF_HUB_CACHE_MOUNT
 check_env_vars AIPERF_MMAP_CACHE_HOST_PATH
-DSV4_MODEL_REPO="deepseek-ai/DeepSeek-V4-Pro-0813"
 
 
 set -x
@@ -57,16 +56,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # recipe's model.path alias.
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp8" ]]; then
-            # Stage the dated checkpoint into shared storage below before
-            # srtctl preflight. DSV4_MODEL_PATH remains available for clusters
-            # that manage the checkpoint out of band.
-            if [[ -n "${DSV4_MODEL_PATH:-}" ]]; then
-                export MODEL_PATH="$DSV4_MODEL_PATH"
-                DSV4_STAGE_MODEL=0
-            else
-                export MODEL_PATH="${HF_HUB_CACHE_MOUNT}/DeepSeek-V4-Pro-0813"
-                DSV4_STAGE_MODEL=1
-            fi
+            check_env_vars DSV4_MODEL_PATH
+            export MODEL_PATH="$DSV4_MODEL_PATH"
             export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-0813"
         elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
             export MODEL_PATH="/models/DeepSeek-R1-0528"
@@ -121,27 +112,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     source .venv/bin/activate
     uv pip install -e .
 
-    # A full sweep starts several independent runner jobs at once. Serialize
-    # the initial DSV4 download into the shared model directory so those jobs
-    # cannot race on Hugging Face's per-file locks. The completion marker is
-    # written only after `hf download` verifies every repository file, making
-    # interrupted downloads resumable by the next job.
-    if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp8" && $DSV4_STAGE_MODEL == "1" ]]; then
-        DSV4_MODEL_READY="${MODEL_PATH}/.inference-max-download-complete"
-        DSV4_MODEL_LOCK="${MODEL_PATH}.download.lock"
-        if [[ ! -f "$DSV4_MODEL_READY" ]]; then
-            uv pip install huggingface-hub
-            mkdir -p "$(dirname "$MODEL_PATH")"
-            (
-                exec 9>"$DSV4_MODEL_LOCK"
-                flock -w 14400 9 || { echo "Error: Timed out waiting for $DSV4_MODEL_LOCK" >&2; exit 1; }
-                if [[ ! -f "$DSV4_MODEL_READY" ]]; then
-                    hf download "$DSV4_MODEL_REPO" --local-dir "$MODEL_PATH"
-                    touch "$DSV4_MODEL_READY"
-                fi
-            )
-        fi
-    fi
     if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp8" ]]; then
         test -r "$MODEL_PATH/config.json" || { echo "Error: DSV4 model path is unavailable: $MODEL_PATH" >&2; exit 1; }
     fi

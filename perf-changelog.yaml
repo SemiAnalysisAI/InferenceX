@@ -7923,3 +7923,12 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260915."
     - "Switch HiCache defaults to --hicache-io-backend kernel and --hicache-mem-layout page_first (from direct / page_first_direct). Ratio 1.5 and write_through are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3118
+
+- config-keys:
+    - dsv4-fp8-h200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the pre-staged DeepSeek-V4-Pro-0813 checkpoint on H200 and remove launcher-side model downloading."
+    - "H200 使用预先暂存的 DeepSeek-V4-Pro-0813 检查点，并移除启动器中的模型下载逻辑。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX

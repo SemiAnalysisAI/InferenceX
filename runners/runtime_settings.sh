@@ -36,7 +36,7 @@ case "${RUNNER_NAME%%_*}" in
     h200-dgxc-slurm)
         export HF_HUB_CACHE_MOUNT=/models/gharunners/hf-hub-cache
         export AIPERF_MMAP_CACHE_HOST_PATH=/home/sa-shared/gharunners/ai-perf-cache
-        export DSV4_MODEL_PATH="$HF_HUB_CACHE_MOUNT/DeepSeek-V4-Pro"
+        export DSV4_MODEL_PATH="$HF_HUB_CACHE_MOUNT/DeepSeek-V4-Pro-0813"
         export GLM52_FP8_MODEL_PATH=/models/GLM-5.2-FP8
         ;;
     b300-dsxe)
