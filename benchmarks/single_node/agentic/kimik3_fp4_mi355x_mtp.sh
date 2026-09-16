@@ -110,30 +110,21 @@ case "${KV_OFFLOAD_BACKEND:-}" in
       lmcache)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
 
-    LMCACHE_VERSION=0.5.5.dev114+rocm7.2
-    LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm"
+    # The pinned upstream ROCm image builds LMCache against its own PyTorch.
+    # External ROCm wheels target a different PyTorch ABI; use the bundled
+    # package and keep its version aligned with the master config metadata.
+    python3 - <<'PY'
+from importlib.metadata import version
 
-    agentic_pip_install --quiet --no-cache-dir --no-deps \
-        "sortedcontainers==2.4.0" \
-        "opentelemetry-exporter-prometheus==0.61b0" \
-        "cupy-rocm-7-0==14.1.1" \
-        "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
+import lmcache.c_ops
+import lmcache.integration.vllm.lmcache_mp_connector
+import torch
 
-    # LMCache 0.5.5 eagerly imports the Mooncake backend, whose native .so
-    # needs libglog, libjsoncpp, libibverbs, librdmacm and libnuma; the vLLM
-    # ROCm image ships none of them.
-    LMCACHE_NATIVE_LIBS=(libglog.so.0 libjsoncpp.so.25 libibverbs.so.1 librdmacm.so.1 libnuma.so.1)
-    for lib in "${LMCACHE_NATIVE_LIBS[@]}"; do
-        if ! ldconfig -p | grep -q "$lib"; then
-            apt-get update
-            apt-get install -y \
-                libgoogle-glog0v5 libjsoncpp25 libibverbs1 librdmacm1 libnuma1
-            break
-        fi
-    done
-    python3 -c \
-        "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
-        >/dev/null
+installed = version("lmcache")
+if installed != "0.5.3":
+    raise RuntimeError(f"Expected image-bundled LMCache 0.5.3, found {installed}")
+print(f"Image-bundled LMCache {installed}; PyTorch {torch.__version__}; HIP {torch.version.hip}")
+PY
 
     # One MP server per node (docs.lmcache.ai/recipes/kimi_k3.html). The chunk
     # must be a multiple of every KV group's tokens_per_block: the hybrid
