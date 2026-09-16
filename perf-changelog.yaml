@@ -7958,6 +7958,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2989
 
 - config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
     - minimaxm3-fp4-b200-vllm-agentic-mtp
     - minimaxm3-fp4-b200-trtllm-agentic-mtp
     - minimaxm3-fp4-b300-trtllm-agentic-mtp
@@ -7974,4 +7975,6 @@
     - "B200 MiniMax EAGLE3 草稿模型改用原生 FlashInfer attention，避开 FA4 FP8 descale stride 故障；需重新验证吞吐量。"
     - "Upgrade B200/B300 MiniMax TRT to rc26 and preserve per-conversation reuse using block_reuse_config.policy. Refresh the experimental vLLM image to include the upstream MSA/QuACK compatibility fix."
     - "B200/B300 MiniMax TRT 升级至 rc26，通过 block_reuse_config.policy 保留按会话复用语义；实验性 vLLM 镜像同步到包含上游 MSA/QuACK 兼容修复的版本。"
+    - "Add an experimental resident-only Kimi MI355X vLLM c8 BFCL diagnostic; this does not validate the unavailable LMCache offload dependency."
+    - "新增实验性 Kimi MI355X vLLM c8 纯 GPU 驻留 BFCL 诊断；不作为缺失 LMCache 依赖的 offload 路径验证。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156

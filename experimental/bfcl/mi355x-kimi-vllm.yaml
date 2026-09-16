@@ -1,0 +1,15 @@
+# Resident-only full BFCL diagnostic; c8 gives the native server 16 sequence slots.
+# 纯 GPU 驻留完整 BFCL 诊断；c8 为原生服务提供 16 个序列槽位。
+kimik3-fp4-mi355x-vllm-bfcl-probe:
+  image: vllm/vllm-openai-rocm:nightly-7c5dc571cbd1064ecc8a9b1045637ff647aa22cb
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [8], spec-decoding: mtp }
