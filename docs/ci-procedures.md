@@ -522,7 +522,7 @@ jq -r '
 ' "$OUT/eval_results_all/agg_eval_all.json"
 ```
 
-Inspect run statistics without conflating skipped jobs with attempted jobs:
+Inspect run statistics without conflating skipped jobs with attempted jobs. Collection fails on GitHub request errors or malformed responses; it publishes counts only after all job pages have been read:
 
 ```bash
 jq -r 'to_entries[] | [.key, .value.n_success, .value.total] | @tsv' \

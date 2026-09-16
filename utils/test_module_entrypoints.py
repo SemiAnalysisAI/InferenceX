@@ -82,3 +82,13 @@ def test_filename_entrypoint_retains_environment_and_point_arguments(invoke):
                      "--point", "model_tp8", "config", "four", "8", "", "")
     assert invalid.returncode != 0
     assert "Expected numeric point identity" in invalid.stderr
+
+
+def test_run_statistics_reject_invalid_run_id_without_publishing(invoke, tmp_path):
+    result = invoke(
+        "infx.workflows.calc_success_rate", "utils/calc_success_rate.py", "stats",
+        GITHUB_RUN_ID="not-an-integer", GITHUB_REPOSITORY="example/project", GITHUB_TOKEN="unused",
+    )
+    assert result.returncode != 0
+    assert "ValueError" in result.stderr
+    assert not (tmp_path / "stats.json").exists()

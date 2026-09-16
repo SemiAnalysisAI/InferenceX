@@ -1,6 +1,8 @@
+import io
+import json
 import sys
-from types import SimpleNamespace
-from unittest.mock import Mock
+from urllib.error import HTTPError
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 import yaml
@@ -79,40 +81,103 @@ def test_hardware_matching_respects_case_boundaries_and_literal_punctuation(job_
     assert success_rate.extract_hardware_from_name(job_name, patterns) == expected
 
 
-def test_success_rates_include_retries_and_exclude_skipped_or_unrelated_jobs(monkeypatch):
-    labels = ["sample-a", "sample-b"]
-    monkeypatch.setattr(success_rate, "HARDWARE_LABELS", labels)
-    monkeypatch.setattr(success_rate, "_HARDWARE_MATCH_PATTERNS",
-                        success_rate.build_hardware_match_patterns(labels))
-    monkeypatch.setattr(success_rate, "RUN_ID", "42")
-    client = Mock()
-    run = client.get_repo.return_value.get_workflow_run.return_value
+@pytest.fixture
+def run_stats_environment(tmp_path, monkeypatch):
+    configs = tmp_path / "configs"
+    configs.mkdir()
+    (configs / "runners.yaml").write_text(
+        "labels: {cluster:sample-a: [], cluster:sample-b: [], cluster:unused: []}\n"
+    )
+    monkeypatch.setattr(infx.config, "__file__", str(tmp_path / "infx/config.py"))
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    monkeypatch.setenv("GITHUB_RUN_ID", "42")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
+    output = tmp_path / "stats"
+    monkeypatch.setattr(sys, "argv", ["calc_success_rate", str(output)])
+    return output.with_suffix(".json")
+
+
+def test_success_rates_include_all_pages_and_retries(
+    run_stats_environment, monkeypatch, capsys
+):
     jobs = [
-        SimpleNamespace(name=f"benchmark cluster:{hardware}", conclusion=conclusion)
+        {"name": f"benchmark cluster:{hardware}", "conclusion": conclusion}
         for hardware, conclusion in [
             ("sample-a", "failure"), ("sample-a", "success"),
             ("sample-a", "skipped"), ("sample-b", "cancelled"),
             ("sample-b", None), ("unrelated", "success"),
         ]
     ]
-    # The first failure belongs to an earlier attempt and is absent from the default API view.
-    run.jobs.side_effect = lambda _filter="latest": jobs if _filter == "all" else jobs[1:]
-    monkeypatch.setitem(sys.modules, "github", SimpleNamespace(
-        Auth=SimpleNamespace(Token=Mock()), Github=Mock(return_value=client),
-    ))
+    jobs.extend({"name": "setup", "conclusion": "success"} for _ in range(94))
+    jobs.append({"name": "benchmark cluster:sample-b", "conclusion": "success"})
 
-    assert success_rate.calculate_hardware_success_rates() == {
+    def urlopen(request, timeout):
+        assert urlparse(request.full_url).path == "/repos/example/project/actions/runs/42/jobs"
+        query = parse_qs(urlparse(request.full_url).query)
+        selected = jobs if query.get("filter") == ["all"] else jobs[1:]
+        start = (int(query["page"][0]) - 1) * int(query["per_page"][0])
+        return io.BytesIO(json.dumps({"jobs": selected[start:start + 100]}).encode())
+
+    monkeypatch.setattr(success_rate.github.urllib.request, "urlopen", urlopen)
+    success_rate.main()
+
+    assert json.loads(run_stats_environment.read_text()) == {
         "sample-a": {"n_success": 1, "total": 2},
-        "sample-b": {"n_success": 0, "total": 2},
+        "sample-b": {"n_success": 1, "total": 3},
+        "unused": {"n_success": 0, "total": 0},
     }
+    table = capsys.readouterr().out
+    rows = [line.split() for line in table.splitlines() if line.startswith("sample-")]
+    assert rows == [["sample-a", "1", "2", "50.00", "%"], ["sample-b", "1", "3", "33.33", "%"]]
+    assert "unused" not in table
 
 
-def test_success_rates_do_not_report_success_when_authentication_fails(monkeypatch):
-    client = Mock()
-    client.get_user.side_effect = RuntimeError("authentication unavailable")
-    monkeypatch.setitem(sys.modules, "github", SimpleNamespace(
-        Auth=SimpleNamespace(Token=Mock()), Github=Mock(return_value=client),
-    ))
+@pytest.mark.parametrize("response,error,match", [
+    (401, RuntimeError, "HTTP 401"),
+    ({}, RuntimeError, "unexpected shape"),
+    ({"jobs": None}, RuntimeError, "unexpected shape"),
+    ({"jobs": [{}]}, KeyError, "name"),
+])
+def test_failed_stats_do_not_publish_an_artifact(
+    run_stats_environment, monkeypatch, response, error, match
+):
+    def urlopen(request, timeout):
+        if response == 401:
+            raise HTTPError(request.full_url, 401, "Unauthorized", {}, io.BytesIO(b"denied"))
+        return io.BytesIO(json.dumps(response).encode())
 
-    assert success_rate.calculate_hardware_success_rates() is None
-    client.get_repo.assert_not_called()
+    monkeypatch.setattr(success_rate.github.urllib.request, "urlopen", urlopen)
+    with pytest.raises(error, match=match):
+        success_rate.main()
+    assert not run_stats_environment.exists()
+
+
+def test_later_page_failure_preserves_previous_artifact(run_stats_environment, monkeypatch):
+    run_stats_environment.write_text('{"previous": true}\n')
+
+    def urlopen(request, timeout):
+        query = parse_qs(urlparse(request.full_url).query)
+        if query["page"] == ["1"]:
+            return io.BytesIO(json.dumps({"jobs": [
+                {"name": "benchmark cluster:sample-a", "conclusion": "success"}
+                for _ in range(100)
+            ]}).encode())
+        raise HTTPError(request.full_url, 503, "Unavailable", {}, io.BytesIO(b"unavailable"))
+
+    monkeypatch.setattr(success_rate.github.urllib.request, "urlopen", urlopen)
+    with pytest.raises(RuntimeError, match="HTTP 503"):
+        success_rate.main()
+    assert run_stats_environment.read_text() == '{"previous": true}\n'
+
+
+def test_empty_job_list_still_writes_zero_counts(run_stats_environment, monkeypatch):
+    monkeypatch.setattr(
+        success_rate.github.urllib.request, "urlopen",
+        lambda request, timeout: io.BytesIO(b'{"jobs": []}'),
+    )
+    success_rate.main()
+    assert json.loads(run_stats_environment.read_text()) == {
+        "sample-a": {"n_success": 0, "total": 0},
+        "sample-b": {"n_success": 0, "total": 0},
+        "unused": {"n_success": 0, "total": 0},
+    }

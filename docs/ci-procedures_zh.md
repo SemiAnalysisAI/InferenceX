@@ -507,7 +507,7 @@ jq -r '
 ' "$OUT/eval_results_all/agg_eval_all.json"
 ```
 
-检查 Run Statistics 时，不要把 Skipped Job 与实际尝试的 Job 混为一谈：
+检查 Run Statistics 时，不要把 Skipped Job 与实际尝试的 Job 混为一谈。GitHub 请求失败或响应格式无效时，收集会报错；只有读取所有 Job 分页后才会写入统计结果：
 
 ```bash
 jq -r 'to_entries[] | [.key, .value.n_success, .value.total] | @tsv' \

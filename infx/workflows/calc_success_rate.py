@@ -3,10 +3,10 @@ import os
 import re
 import sys
 from collections.abc import Iterable
-from enum import Enum
 
 import yaml
 
+from infx import github
 from infx.config import repository_root
 
 CLUSTER_LABEL_PREFIX = "cluster:"
@@ -45,26 +45,12 @@ def build_hardware_match_patterns(
     }
 
 
-class JobStates(Enum):
-    SUCCESS = "success"
-    FAILURE = "failure"
-    CANCELLED = "cancelled"
-    SKIPPED = "skipped"
-
-
-HARDWARE_LABELS = load_hardware_labels()
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-RUN_ID = os.environ.get("GITHUB_RUN_ID")
-REPO_NAME = os.environ.get("GITHUB_REPOSITORY")
-
-_HARDWARE_MATCH_PATTERNS = build_hardware_match_patterns(HARDWARE_LABELS)
-
-
 def extract_hardware_from_name(
     job_name: str, match_patterns: dict[str, tuple[re.Pattern[str], ...]] | None = None
 ) -> str | None:
     job_lower = job_name.lower()
-    match_patterns = match_patterns or _HARDWARE_MATCH_PATTERNS
+    if match_patterns is None:
+        match_patterns = build_hardware_match_patterns(load_hardware_labels())
 
     for hardware, patterns in match_patterns.items():
         if any(pattern.search(job_lower) for pattern in patterns):
@@ -72,55 +58,24 @@ def extract_hardware_from_name(
     return None
 
 
-def calculate_hardware_success_rates() -> dict[str, dict[str, int]] | None:
-    from github import Auth, Github
-
-    auth = Auth.Token(GITHUB_TOKEN)
-    g = Github(auth=auth)
-
-    try:
-        user = g.get_user().login
-        print(f"Authenticated as user: {user}")
-    except Exception as e:  # noqa: BLE001
-        print(f"Authentication failed: {e}")
-        return None
-
-    try:
-        repo = g.get_repo(REPO_NAME)
-        print(f"Found repo: {repo.full_name}")
-
-        run = repo.get_workflow_run(int(RUN_ID))
-        print(f"Found run: {run.id} - {run.name}")
-
-    except Exception as e:
-        print(f"Error: {e}")
-        raise
-
-    success_runs = dict.fromkeys(HARDWARE_LABELS, 0)
-    total_runs = dict.fromkeys(HARDWARE_LABELS, 0)
-
-    # Use _filter="all" to include jobs from all attempts (retries), not just the latest
-    for job in run.jobs(_filter="all"):
-        job_name = job.name
-        conclusion = job.conclusion  # success, failure, cancelled, or skipped
-        hardware = extract_hardware_from_name(job_name)
-
-        if hardware:
-            if conclusion == JobStates.SKIPPED.value:
-                continue
-
-            total_runs[hardware] += 1
-
-            if conclusion == JobStates.SUCCESS.value:
-                success_runs[hardware] += 1
-
-    success_rates = {}
-    for hardware in success_runs:
-        success_rates[hardware] = {
-            "n_success": success_runs[hardware],
-            "total": total_runs[hardware],
-        }
-
+def calculate_hardware_success_rates() -> dict[str, dict[str, int]]:
+    hardware_labels = load_hardware_labels()
+    patterns = build_hardware_match_patterns(hardware_labels)
+    run_id = int(os.environ["GITHUB_RUN_ID"])
+    jobs = github.paginate(
+        os.environ["GITHUB_REPOSITORY"],
+        f"/actions/runs/{run_id}/jobs",
+        os.environ["GITHUB_TOKEN"],
+        "jobs",
+        {"filter": "all"},
+    )
+    success_rates = {hardware: {"n_success": 0, "total": 0} for hardware in hardware_labels}
+    for job in jobs:
+        hardware = extract_hardware_from_name(job["name"], patterns)
+        if hardware and job["conclusion"] != "skipped":
+            success_rates[hardware]["total"] += 1
+            if job["conclusion"] == "success":
+                success_rates[hardware]["n_success"] += 1
     return success_rates
 
 
@@ -146,9 +101,13 @@ def print_success_rates(success_rates: dict[str, dict[str, int]] | None) -> None
     print("=" * 60)
 
 
-if __name__ == "__main__":
+def main() -> None:
     run_stats = calculate_hardware_success_rates()
     print_success_rates(run_stats)
 
     with open(f"{sys.argv[1]}.json", "w") as f:
         json.dump(run_stats, f, indent=2)
+
+
+if __name__ == "__main__":
+    main()

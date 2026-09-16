@@ -107,6 +107,21 @@ def test_installed_matrix_validation_rejects_zero_concurrency(run_installed):
     assert result.stdout == ""
 
 
+def test_installed_hardware_matching_works_without_repository_files(run_installed):
+    result = run_installed(
+        "-c",
+        """
+from infx.workflows.calc_success_rate import build_hardware_match_patterns, extract_hardware_from_name
+patterns = build_hardware_match_patterns(["gpu.a"])
+print(extract_hardware_from_name("benchmark cluster:gpu.a tp8", patterns))
+print(extract_hardware_from_name("benchmark gpuXa tp8", patterns))
+""",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "gpu.a\nNone\n"
+
+
 @pytest.mark.parametrize("score,exit_code,verdict", [(0.9, 0, "PASS"), (0.7, 1, "FAIL")])
 def test_installed_eval_validation_loads_resources(
     tmp_path, run_installed, score, exit_code, verdict
