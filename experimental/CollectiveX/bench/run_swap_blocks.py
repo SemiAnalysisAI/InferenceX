@@ -19,6 +19,38 @@ def positive_int(value: str) -> int:
     return result
 
 
+def plan_cases(
+    directions: list[str],
+    block_sizes: list[int],
+    counts: list[int],
+    max_payload_bytes: int | None,
+) -> tuple[list[dict], list[dict]]:
+    """Bound copied payload before allocation and retain excluded-point provenance."""
+    if max_payload_bytes is not None and max_payload_bytes <= 0:
+        raise ValueError("max payload bytes must be positive")
+    runnable, skipped = [], []
+    for direction in directions:
+        for block_bytes in block_sizes:
+            for count in counts:
+                if block_bytes <= 0 or count <= 0:
+                    raise ValueError("block sizes and counts must be positive")
+                point = {
+                    "direction": direction,
+                    "block_bytes": block_bytes,
+                    "count": count,
+                }
+                if (
+                    max_payload_bytes is not None
+                    and block_bytes * count > max_payload_bytes
+                ):
+                    skipped.append({**point, "reason": "exceeds-max-payload-bytes"})
+                else:
+                    runnable.append(point)
+    if not runnable:
+        raise ValueError("no runnable points within the requested payload budget")
+    return runnable, skipped
+
+
 def block_pairs(count: int, layout: str, seed: int) -> list[list[int]]:
     """Use disjoint buffers and leave a destination guard block untouched."""
     if count <= 0:
@@ -175,10 +207,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--device", type=int, default=0)
     parser.add_argument("--warmup", type=int, default=32)
     parser.add_argument("--iterations", type=positive_int, default=100)
+    parser.add_argument(
+        "--max-payload-bytes",
+        type=positive_int,
+        help="exclude points whose block_bytes * num_blocks exceeds this limit",
+    )
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args(argv)
     if args.warmup < 0 or args.device < 0:
         parser.error("warmup and device must be non-negative")
+    try:
+        points, skipped = plan_cases(
+            args.directions, args.block_bytes, args.num_blocks, args.max_payload_bytes
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
 
     import torch
     import vllm
@@ -195,6 +238,12 @@ def main(argv: list[str] | None = None) -> int:
         "timing": "drained-wall-clock-including-submission-and-synchronization",
         "warmup": args.warmup,
         "iterations": args.iterations,
+        "selection": {
+            "requested_block_bytes": args.block_bytes,
+            "requested_num_blocks": args.num_blocks,
+            "max_payload_bytes": args.max_payload_bytes,
+            "skipped_cases": skipped,
+        },
         "runtime": {
             "torch": str(torch.__version__),
             "vllm": vllm.__version__,
@@ -208,27 +257,27 @@ def main(argv: list[str] | None = None) -> int:
         },
         "cases": [],
     }
-    for direction in args.directions:
-        for block_bytes in args.block_bytes:
-            for count in args.num_blocks:
-                row = run_case(
-                    torch,
-                    swap_blocks,
-                    device=args.device,
-                    direction=direction,
-                    block_bytes=block_bytes,
-                    count=count,
-                    layout=args.layout,
-                    seed=args.seed,
-                    warmup=args.warmup,
-                    iterations=args.iterations,
-                )
-                result["cases"].append(row)
-                print(
-                    f"{direction} block_bytes={block_bytes} blocks={count}: "
-                    f"p50={row['latency']['percentiles_us']['p50']:.3f} us",
-                    flush=True,
-                )
+    print(
+        f"Selected {len(points)} points; excluded {len(skipped)} over budget",
+        flush=True,
+    )
+    for point in points:
+        row = run_case(
+            torch,
+            swap_blocks,
+            device=args.device,
+            **point,
+            layout=args.layout,
+            seed=args.seed,
+            warmup=args.warmup,
+            iterations=args.iterations,
+        )
+        result["cases"].append(row)
+        print(
+            f"{row['direction']} block_bytes={row['block_bytes']} blocks={row['num_blocks']}: "
+            f"p50={row['latency']['percentiles_us']['p50']:.3f} us",
+            flush=True,
+        )
     # The caller supplies an existing output directory, including in containers.
     args.output.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
     return 0

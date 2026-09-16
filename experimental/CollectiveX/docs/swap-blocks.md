@@ -37,7 +37,11 @@ counts copied bytes once, not read-plus-write traffic. Records include direction
 layout, seed, API variant, device and runtime versions. The EP summarizer and
 bandwidth consumer do not consume this schema. Output directories must already
 exist; the benchmark creates no directories. Large cases require memory for both
-transfer buffers and CPU correctness references.
+transfer buffers and CPU correctness references. Optional `--max-payload-bytes`
+filters out points above `block_bytes * num_blocks` before allocation. An empty
+selection fails. JSON `selection` records the requested grid, budget, and excluded
+points with reasons; excluded points have no timing or correctness result. The
+payload limit does not include the two guard blocks or CPU reference buffers.
 
 For a GPU smoke check, use `--block-bytes 257 --num-blocks 4 --warmup 1
 --iterations 2` with all three directions. The optional GPU test also exercises
@@ -70,7 +74,17 @@ The `smoke` profile covers all three directions, both layouts, block sizes
 257/4096/65536/262144 bytes (up to 256 KiB), and counts 1/4/16/64/256/1024/2048, with 4 warmups and 20 samples
 per point (168 points total). `standard` uses sizes 4096/65536/1048576 and the same
 block counts, 32 warmups, and 100 samples (126 points). Both check the actual GPU copies before and after
-timing and fail if a GPU or compatible vLLM is unavailable.
+timing and fail if a GPU or compatible vLLM is unavailable. Both existing profiles
+use a 2 GiB payload cap, which retains every point in their grids.
+
+For the byte-to-GiB sweep, dispatch with `-f swap_profile=large-blocks`. It uses
+257 B, 4 KiB, 64 KiB, 256 KiB, 1 MiB, 4 MiB, 16 MiB, 64 MiB, 256 MiB, and 1 GiB
+blocks with the same count ladder, 4 warmups, and 20 samples per point. A **1 GiB
+copied-payload cap** excludes larger products: 1 GiB blocks run with one block per
+call; 256 MiB blocks run with 1 or 4. This produces 294 measured points across
+both layouts and all directions, with 126 over-budget combinations explicitly
+recorded as excluded. Each transfer buffer also contains two guard blocks, so a
+1 GiB block case allocates 3 GiB per buffer plus CPU correctness references.
 
 Download `cxshard-swap-blocks-<run_id>-<attempt>` for the two JSON results.
 Each artifact records the actual GPU, framework versions, image, source SHA,

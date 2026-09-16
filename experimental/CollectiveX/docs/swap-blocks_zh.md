@@ -33,6 +33,10 @@ nearest-rank p50/p90/p95/p99 延迟，以及各延迟分位数对应的有效载
 不累计读写流量。记录还包含方向、布局、种子、API 类型、设备和运行时版本。
 EP 汇总与带宽工具不读取该 schema。输出目录必须已存在；基准测试不创建目录。
 较大的测试点需要为传输缓冲区和 CPU 正确性参考数据预留内存。
+可选参数 `--max-payload-bytes` 在分配内存之前排除 `block_bytes * num_blocks`
+超过上限的组合；没有可执行测试点时直接失败。JSON 的 `selection` 记录请求网格、
+预算及被排除的组合与原因；被排除的组合没有计时或正确性结果。
+该有效载荷上限不包含两个保护块及 CPU 参考缓冲区。
 
 GPU smoke 检查可使用 `--block-bytes 257 --num-blocks 4 --warmup 1
 --iterations 2` 并覆盖全部三个方向。可选 GPU 测试同样执行这些复制及正确性检查：
@@ -63,6 +67,15 @@ gh workflow run collectivex-sweep.yml --ref codex/collectivex-swap-blocks \
 每个测试点预热 4 次、采样 20 次，共 168 个测试点。`standard` 使用
 4096/65536/1048576 字节的块大小和相同的块数量，预热 32 次、采样 100 次，共 126 个测试点。
 两种配置均在计时前后检查真实 GPU 复制；缺少 GPU 或兼容 vLLM 时直接失败。
+现有两种配置均使用 2 GiB 有效载荷上限，保留其网格中的全部测试点。
+
+如需从字节扫描到 GiB，请使用 `-f swap_profile=large-blocks`。块大小依次为
+257 B、4 KiB、64 KiB、256 KiB、1 MiB、4 MiB、16 MiB、64 MiB、256 MiB 和 1 GiB，
+块数量梯度不变，每点预热 4 次、采样 20 次。**复制有效载荷上限为 1 GiB**，
+超过该乘积的组合会被排除：1 GiB 块每次只复制 1 个，256 MiB 块每次复制 1 或 4 个。
+两种布局和三个方向合计测量 294 个测试点，并显式记录 126 个超预算组合。
+每个传输缓冲区还包含两个保护块，因此 1 GiB 块的测试点每个缓冲区分配 3 GiB，
+此外还需 CPU 正确性参考缓冲区。
 
 下载 `cxshard-swap-blocks-<run_id>-<attempt>` 可获得两个 JSON 结果文件，
 其中记录实际 GPU、框架版本、镜像、源代码 SHA、正确性状态和测量数据。

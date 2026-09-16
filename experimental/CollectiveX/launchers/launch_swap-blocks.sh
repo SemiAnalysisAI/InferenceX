@@ -6,7 +6,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
 source "$REPO_ROOT/benchmarks/benchmark_lib.sh" --validation-only
 check_env_vars COLLX_SHARD_SKU COLLX_NODES COLLX_GPUS_PER_NODE COLLX_SWAP_IMAGE \
-  COLLX_SWAP_BLOCK_BYTES COLLX_SWAP_NUM_BLOCKS COLLX_SWAP_WARMUP COLLX_SWAP_ITERATIONS \
+  COLLX_SWAP_MAX_PAYLOAD_BYTES COLLX_SWAP_BLOCK_BYTES COLLX_SWAP_NUM_BLOCKS COLLX_SWAP_WARMUP COLLX_SWAP_ITERATIONS \
   COLLX_SWAP_SEED COLLX_SWAP_DEVICE COLLX_SWAP_TIME COLLX_JOB_ROOT \
   COLLECTIVEX_SOURCE_SHA COLLECTIVEX_EXECUTION_ID COLLECTIVEX_CANONICAL_GHA
 source "$HERE/../runtime/common.sh"
@@ -19,8 +19,8 @@ for value in "$COLLX_SWAP_BLOCK_BYTES" "$COLLX_SWAP_NUM_BLOCKS"; do
   [[ "$value" =~ ^[1-9][0-9]*(\ [1-9][0-9]*)*$ ]] \
     || collx_die "block sizes and counts must be space-separated positive integers"
 done
-for value in "$COLLX_SWAP_ITERATIONS" "$COLLX_SWAP_TIME"; do
-  [[ "$value" =~ ^[1-9][0-9]*$ ]] || collx_die "iterations and time must be positive integers"
+for value in "$COLLX_SWAP_ITERATIONS" "$COLLX_SWAP_TIME" "$COLLX_SWAP_MAX_PAYLOAD_BYTES"; do
+  [[ "$value" =~ ^[1-9][0-9]*$ ]] || collx_die "iterations, time, and payload budget must be positive integers"
 done
 for value in "$COLLX_SWAP_WARMUP" "$COLLX_SWAP_SEED" "$COLLX_SWAP_DEVICE"; do
   [[ "$value" =~ ^[0-9]+$ ]] || collx_die "warmup, seed, and device must be non-negative integers"
@@ -64,6 +64,7 @@ for layout in contiguous random; do
       python3 bench/run_swap_blocks.py --directions h2d d2h d2d \
       --block-bytes "${block_bytes[@]}" --num-blocks "${num_blocks[@]}" \
       --layout "$layout" --seed "$COLLX_SWAP_SEED" --device "$COLLX_SWAP_DEVICE" \
+      --max-payload-bytes "$COLLX_SWAP_MAX_PAYLOAD_BYTES" \
       --warmup "$COLLX_SWAP_WARMUP" --iterations "$COLLX_SWAP_ITERATIONS" \
       --output "results/swap-blocks-$layout.json" </dev/null > "$runtime_log" 2>&1; then
     collx_log_tail "$runtime_log"

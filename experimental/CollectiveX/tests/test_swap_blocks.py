@@ -11,6 +11,57 @@ import run_swap_blocks as bench
 
 
 class SwapBlocksMeasurementTests(unittest.TestCase):
+    def test_payload_budget_includes_boundary_and_records_exclusions(self):
+        points, skipped = bench.plan_cases(["h2d"], [8, 17], [1, 2], 16)
+        self.assertEqual(
+            points,
+            [
+                {"direction": "h2d", "block_bytes": 8, "count": 1},
+                {"direction": "h2d", "block_bytes": 8, "count": 2},
+            ],
+        )
+        self.assertEqual(
+            skipped,
+            [
+                {
+                    "direction": "h2d",
+                    "block_bytes": 17,
+                    "count": 1,
+                    "reason": "exceeds-max-payload-bytes",
+                },
+                {
+                    "direction": "h2d",
+                    "block_bytes": 17,
+                    "count": 2,
+                    "reason": "exceeds-max-payload-bytes",
+                },
+            ],
+        )
+
+    def test_uncapped_selection_keeps_both_directions(self):
+        points, skipped = bench.plan_cases(["h2d", "d2h"], [17], [2], None)
+        self.assertEqual(
+            points,
+            [
+                {"direction": "h2d", "block_bytes": 17, "count": 2},
+                {"direction": "d2h", "block_bytes": 17, "count": 2},
+            ],
+        )
+        self.assertEqual(skipped, [])
+
+    def test_invalid_or_empty_selection_fails(self):
+        for sizes, counts, budget in (
+            ([8], [1], 0),
+            ([0], [1], 8),
+            ([8], [0], 8),
+            ([17], [1], 16),
+        ):
+            with (
+                self.subTest(sizes=sizes, counts=counts, budget=budget),
+                self.assertRaises(ValueError),
+            ):
+                bench.plan_cases(["h2d"], sizes, counts, budget)
+
     def test_nearest_rank_latency_and_payload_bandwidth(self):
         result = bench.summarize([8.0, 2.0, 4.0, 1.0], 8000)
         self.assertEqual(result["sample_count"], 4)
