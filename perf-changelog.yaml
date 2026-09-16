@@ -7925,6 +7925,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3118
 
 - config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260914."
+    - "Raise --prefill-decode-interval from 10 to 20 on both the TP-only and DP-attention serving paths, so the scheduler runs more decode steps between prefill admissions."
+    - "Switch the sglang-router policy for the DP-attention arms from consistent_hashing to cache_aware, and set the cache-aware absolute balance threshold to 32, down from the router default of 64, at concurrency above 160."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3120
+
+- config-keys:
     - dsv41flash-fp4-gb300-vllm-agentic-dspark
   description:
     - "Update vLLM image from vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 to vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e (2026-09-16 upstream nightly, vllm-project/vllm@af1c0149, manifest digest sha256:f3b756ede21083a9415baac77b38998b89c738d2a9c1441c22de2d49cacf5282); the 59 upstream commits touch the DeepSeek-V4.1 path (Mega-mHC via the vLLM DeepGEMM fork, DSpark collapse before SP all-gather, KV-only context insertion, renderer and XGrammar tool-schema fixes). v0.29.0 predates the deepseek_v41 package this recipe needs. Recipe script, DSpark settings and the TP4 c1-128 grid are unchanged"

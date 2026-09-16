@@ -182,7 +182,7 @@ Add `--all-evals` and/or `--evals-only` when those PR modifiers will be active. 
 
 ## Manual end-to-end dispatch
 
-Use [`e2e-tests.yml`](../.github/workflows/e2e-tests.yml) for a bounded one-off run only after the identical generator command succeeds locally. Make the test name unique. In the common pattern, `--ref main` selects the deployed workflow definition while input `ref` selects the branch or SHA checked out by matrix generation and benchmark jobs.
+Use [`e2e-tests.yml`](../.github/workflows/e2e-tests.yml) for a bounded one-off run only after the identical generator command succeeds locally. Make the test name unique. In the common pattern, `--ref main` selects the deployed workflow definition while input `ref` selects the branch or SHA to measure. Setup resolves that ref once and passes its checkout SHA to all eight benchmark/eval routes, covering single-node, multi-node, fixed-sequence, and AgentX jobs. Queued jobs keep that SHA if the branch advances. With no input `ref`, the run uses `github.sha` as before.
 
 ```bash
 REPO=SemiAnalysisAI/InferenceX
@@ -522,7 +522,7 @@ jq -r '
 ' "$OUT/eval_results_all/agg_eval_all.json"
 ```
 
-Inspect run statistics without conflating skipped jobs with attempted jobs:
+Inspect run statistics without conflating skipped jobs with attempted jobs. Collection fails on GitHub request errors or malformed responses; it publishes counts only after all job pages have been read:
 
 ```bash
 jq -r 'to_entries[] | [.key, .value.n_success, .value.total] | @tsv' \
