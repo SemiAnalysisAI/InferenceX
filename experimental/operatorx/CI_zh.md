@@ -9,17 +9,22 @@ GPU 执行必须通过 `workflow_dispatch` 触发。首个验证目标是 H100�
 ## 触发运行
 
 GitHub 注册该工作流后，选择 **OperatorX Sweep → Run workflow**，指定源码分支，
-并保留初始默认值：`pool=h100-dgxc`、`backends=torch`、`testlists=gemm_perf`、
-`world_sizes=1`、`chunk_size=50`。这会生成一个包含 11 个 BF16 GEMM 形状的分片。
+并保留初始默认值：`pool=h100-dgxc`、`backends=torch`、`testlists=gemm`、
+`world_sizes=1`、`chunk_size=500`。这会将完整的 GEMM 测试列表拆分为有界分片（目前为 7,212 个测试、15 个分片）。
+列表中包含所选后端不支持的精度，以及可能超出设备显存的形状。不支持的测试会保留
+在结果中；实际的内核和显存分配错误仍会使 CI 失败。运行完整列表不代表其中每个
+测试都能在 H100 上执行。
 新工作流可能需要先进入默认分支，GitHub 才允许手动触发。
 
 ```bash
 gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
   --ref <branch> -f pool=h100-dgxc -f backends=torch \
-  -f testlists=gemm_perf -f world_sizes=1 -f chunk_size=50
+  -f testlists=gemm -f world_sizes=1 -f chunk_size=500
 ```
 
-其他 NVIDIA 后端和测试列表需要显式选择，不能视为已经通过 Hopper 验证。
+快速检查基础设施时，可显式选择 `testlists=gemm_perf` 和 `chunk_size=50`
+（11 个 BF16 测试）。其他 NVIDIA 后端和测试列表需要显式选择，
+不能视为已经通过 Hopper 验证。
 不支持的操作会保留在结果中。后端导入错误、基准错误，以及没有任何成功结果，
 都会使分片失败。先验证 BF16 GEMM，再验证范围受限的集合通信和兼容的 MoE 组合。
 不要假定面向 Blackwell 的 FP4 内核可以在 Hopper 上运行。

@@ -15,7 +15,7 @@ on:
       testlists:
         description: Comma-separated testlist stems
         type: string
-        default: gemm_perf
+        default: gemm
       world_sizes:
         description: Comma-separated world sizes from 1,2,4,8
         type: string
@@ -23,7 +23,7 @@ on:
       chunk_size:
         description: Maximum shapes per shard (1-500)
         type: number
-        default: 50
+        default: 500
       recovery_run_id:
         description: Optional recent OperatorX run on this pool whose failed cleanup should be retried
         type: string
@@ -59,10 +59,10 @@ jobs:
         env:
           OPERATORX_POOL: ${{ inputs.pool || 'h100-dgxc' }}
           OPERATORX_BACKENDS: ${{ inputs.backends || 'torch' }}
-          OPERATORX_TESTLISTS: ${{ inputs.testlists || 'gemm_perf' }}
+          OPERATORX_TESTLISTS: ${{ inputs.testlists || 'gemm' }}
           OPERATORX_WORLD_SIZES: ${{ inputs.world_sizes || '1' }}
           OPERATORX_RECOVERY_RUN: ${{ inputs.recovery_run_id }}
-          OPERATORX_CHUNK_SIZE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.chunk_size) || '50' }}
+          OPERATORX_CHUNK_SIZE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.chunk_size) || '500' }}
           PYTHONPATH: experimental
         run: |
           set -eo pipefail

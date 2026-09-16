@@ -10,18 +10,23 @@ GPU work requires `workflow_dispatch`. The first validation target is H100.
 
 Once GitHub has registered the workflow, select **OperatorX Sweep → Run workflow**,
 choose the source branch, and keep the initial defaults: `pool=h100-dgxc`,
-`backends=torch`, `testlists=gemm_perf`, `world_sizes=1`, `chunk_size=50`.
-This schedules one shard containing 11 BF16 GEMM shapes. A newly added workflow
+`backends=torch`, `testlists=gemm`, `world_sizes=1`, `chunk_size=500`.
+This schedules the complete checked-in GEMM catalog in bounded shards (currently
+7,212 cases in 15 shards). The catalog includes formats unsupported by a selected
+backend and shapes that can exceed device memory. Unsupported rows remain visible;
+actual kernel and allocation errors fail CI. A full catalog run is not a promise
+that every case fits or is supported on H100. A newly added workflow
 may need to reach the default branch before GitHub accepts manual dispatch.
 
 ```bash
 gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
   --ref <branch> -f pool=h100-dgxc -f backends=torch \
-  -f testlists=gemm_perf -f world_sizes=1 -f chunk_size=50
+  -f testlists=gemm -f world_sizes=1 -f chunk_size=500
 ```
 
-Other NVIDIA backends and testlists are explicit selections, not validated
-Hopper coverage. Unsupported operations remain visible in results. Backend
+For a quick infrastructure smoke check, explicitly select `testlists=gemm_perf`
+and `chunk_size=50` (11 BF16 cases). Other NVIDIA backends and testlists are explicit
+selections, not validated Hopper coverage. Unsupported operations remain visible in results. Backend
 import errors, benchmark errors, and zero successful rows fail the shard.
 Start with BF16 GEMM, then bounded collectives and compatible MoE combinations.
 Do not infer that Blackwell-specific FP4 kernels work on Hopper.
