@@ -8,27 +8,27 @@ license = "Apache-2.0"
 license-files = ["LICENSE"]
 dependencies = [
     "pydantic>=2.10,<3",
-    "pyyaml>=6.0",
+    "pyyaml>=6,<7",
 ]
 
 [project.optional-dependencies]
-workflows = ["codeowners", "PyGithub"]
-results = ["psycopg2-binary", "tabulate"]
+workflows = ["codeowners>=0.9,<0.10", "PyGithub>=2,<3"]
+results = ["psycopg2-binary>=2,<3", "tabulate>=0.10,<0.11"]
 
 [dependency-groups]
-mcp = ["gitpython>=3.1.40", "mcp>=0.9.0,<2"]
+mcp = ["gitpython>=3.1.40,<4", "mcp>=1.30,<2"]
 test = [
     { include-group = "mcp" },
-    "aiohttp",
-    "codeowners",
-    "matplotlib",
-    "numpy",
-    "packaging",
-    "pytest",
-    "pytest-xdist",
-    "tabulate",
-    "torch",
-    "transformers",
+    "aiohttp>=3,<4",
+    "codeowners>=0.9,<0.10",
+    "matplotlib>=3,<4",
+    "numpy>=2,<3",
+    "packaging>=26,<27",
+    "pytest>=9,<10",
+    "pytest-xdist>=3,<4",
+    "tabulate>=0.10,<0.11",
+    "torch>=2,<3",
+    "transformers>=5,<6",
 ]
 
 [build-system]

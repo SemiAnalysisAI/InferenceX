@@ -4,9 +4,9 @@ requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
     "python_full_version >= '3.14' and sys_platform != 'darwin' and sys_platform != 'win32'",
+    "python_full_version >= '3.14' and sys_platform == 'darwin'",
     "python_full_version < '3.14' and sys_platform == 'win32'",
     "python_full_version < '3.14' and sys_platform != 'darwin' and sys_platform != 'win32'",
-    "python_full_version >= '3.14' and sys_platform == 'darwin'",
     "python_full_version < '3.14' and sys_platform == 'darwin'",
 ]
 
@@ -905,34 +905,34 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "codeowners", marker = "extra == 'workflows'" },
-    { name = "psycopg2-binary", marker = "extra == 'results'" },
+    { name = "codeowners", marker = "extra == 'workflows'", specifier = ">=0.9,<0.10" },
+    { name = "psycopg2-binary", marker = "extra == 'results'", specifier = ">=2,<3" },
     { name = "pydantic", specifier = ">=2.10,<3" },
-    { name = "pygithub", marker = "extra == 'workflows'" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "tabulate", marker = "extra == 'results'" },
+    { name = "pygithub", marker = "extra == 'workflows'", specifier = ">=2,<3" },
+    { name = "pyyaml", specifier = ">=6,<7" },
+    { name = "tabulate", marker = "extra == 'results'", specifier = ">=0.10,<0.11" },
 ]
 provides-extras = ["workflows", "results"]
 
 [package.metadata.requires-dev]
 mcp = [
-    { name = "gitpython", specifier = ">=3.1.40" },
-    { name = "mcp", specifier = ">=0.9.0,<2" },
+    { name = "gitpython", specifier = ">=3.1.40,<4" },
+    { name = "mcp", specifier = ">=1.30,<2" },
 ]
 test = [
-    { name = "aiohttp" },
-    { name = "codeowners" },
-    { name = "gitpython", specifier = ">=3.1.40" },
-    { name = "matplotlib" },
-    { name = "mcp", specifier = ">=0.9.0,<2" },
-    { name = "numpy" },
-    { name = "packaging" },
-    { name = "pytest" },
-    { name = "pytest-xdist" },
-    { name = "tabulate" },
-    { name = "torch", marker = "sys_platform != 'darwin'", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "torch", marker = "sys_platform == 'darwin'" },
-    { name = "transformers" },
+    { name = "aiohttp", specifier = ">=3,<4" },
+    { name = "codeowners", specifier = ">=0.9,<0.10" },
+    { name = "gitpython", specifier = ">=3.1.40,<4" },
+    { name = "matplotlib", specifier = ">=3,<4" },
+    { name = "mcp", specifier = ">=1.30,<2" },
+    { name = "numpy", specifier = ">=2,<3" },
+    { name = "packaging", specifier = ">=26,<27" },
+    { name = "pytest", specifier = ">=9,<10" },
+    { name = "pytest-xdist", specifier = ">=3,<4" },
+    { name = "tabulate", specifier = ">=0.10,<0.11" },
+    { name = "torch", marker = "sys_platform != 'darwin'", specifier = ">=2,<3", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torch", marker = "sys_platform == 'darwin'", specifier = ">=2,<3" },
+    { name = "transformers", specifier = ">=5,<6" },
 ]
 
 [[package]]

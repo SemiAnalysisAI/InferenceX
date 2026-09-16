@@ -71,6 +71,10 @@ For development, uv installs the package in editable mode, so source edits apply
 
 Use `uv add` for core dependencies, `uv add --optional <extra>` for an integration, or `uv add --group test` for test-only tools. Commit both the manifest and lockfile. `uv lock --upgrade-package <name>` updates a dependency; resolution enforces a 12-hour age cutoff from `pyproject.toml`. Ruff and Zizmor remain outside the lockfile so their CI checks keep using the latest eligible release. Benchmark images, vendor eval environments, and commands that measure historical checkouts retain their existing dependency setup.
 
+Dependencies stay within the latest supported major; minor and patch upgrades are recorded in `uv.lock` and validated in CI. For pre-1.0 packages, review minor upgrades too. MCP stays on 1.x because 2.x replaces the server's decorator-based handler API. New releases do not automatically change a locked environment.
+
+Result collection, comparisons, and run statistics use `infx` from current `main`, resolved once during sweep setup and shared across those jobs. Klaud resolves `main` once and passes that commit to every candidate; candidate hooks use a separate tooling checkout so recipe edits cannot replace the imported package. Sign-off also checks out current trusted `main`. These tools have no release-version pin or cooldown on repository commits. PR CI tests the PR's package, while matrix generation, benchmark scripts, and recipes retain the selected checkout.
+
 ### Python lint and formatting
 
 Ruff checks `infx/` with the rules in [`infx/ruff.toml`](../infx/ruff.toml), targeting Python 3.12 and a line length of 100. CI runs on any Python-file change and uses the latest Ruff release at least 12 hours old.

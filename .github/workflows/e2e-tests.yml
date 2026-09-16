@@ -211,6 +211,7 @@ jobs:
         name: get-jobs
         runs-on: ubuntu-latest
         outputs:
+            tooling-ref: ${{ steps.tooling.outputs.result }}
             single-node-config: ${{ steps.get-jobs.outputs.single-node-config }}
             multi-node-config: ${{ steps.get-jobs.outputs.multi-node-config }}
             eval-config: ${{ steps.get-jobs.outputs.eval-config }}
@@ -220,6 +221,16 @@ jobs:
             multi-node-agentic-config: ${{ steps.get-jobs.outputs.multi-node-agentic-config }}
             multi-node-agentic-eval-config: ${{ steps.get-jobs.outputs.multi-node-agentic-eval-config }}
         steps:
+            - name: Resolve workflow tooling
+              id: tooling
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              with:
+                result-encoding: string
+                script: |
+                  const { data } = await github.rest.repos.getCommit({
+                    ...context.repo, ref: context.payload.repository.default_branch,
+                  });
+                  return data.sha;
             - name: Checkout code (ref)
               if: ${{ inputs.ref && inputs.ref != '' }}
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -570,22 +581,25 @@ jobs:
 
     collect-results:
         name: collect-results
-        needs: [test-sweep-multi-node, test-sweep-single-node, test-sweep-agentic, test-sweep-multi-node-agentic]
+        needs: [get-jobs, test-sweep-multi-node, test-sweep-single-node, test-sweep-agentic, test-sweep-multi-node-agentic]
         if: ${{ always() && (needs.test-sweep-multi-node.result != 'skipped' || needs.test-sweep-single-node.result != 'skipped' || needs.test-sweep-agentic.result != 'skipped' || needs.test-sweep-multi-node-agentic.result != 'skipped') }}
         uses: $/.github/workflows/collect-results.yml
         with:
             result-prefix: "bmk"
+            tooling-ref: ${{ needs.get-jobs.outputs.tooling-ref }}
 
     collect-evals:
         name: collect-evals
-        needs: [test-sweep-evals, test-sweep-multi-node-evals, test-sweep-agentic-evals, test-sweep-multi-node-agentic-evals]
+        needs: [get-jobs, test-sweep-evals, test-sweep-multi-node-evals, test-sweep-agentic-evals, test-sweep-multi-node-agentic-evals]
         if: ${{ always() && (needs.test-sweep-evals.result != 'skipped' || needs.test-sweep-multi-node-evals.result != 'skipped' || needs.test-sweep-agentic-evals.result != 'skipped' || needs.test-sweep-multi-node-agentic-evals.result != 'skipped') }}
         uses: $/.github/workflows/collect-evals.yml
+        with:
+            tooling-ref: ${{ needs.get-jobs.outputs.tooling-ref }}
 
     calc-success-rate:
         name: calc-success-rate
-        needs: [collect-results, collect-evals]
-        if: ${{ always() }}
+        needs: [get-jobs, collect-results, collect-evals]
+        if: ${{ always() && needs.get-jobs.outputs.tooling-ref != '' }}
         runs-on: ubuntu-latest
 
         env:
@@ -597,6 +611,7 @@ jobs:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   token: ${{ secrets.REPO_PAT }}
+                  ref: ${{ needs.get-jobs.outputs.tooling-ref }}
                   fetch-depth: 0
                   persist-credentials: false
 
@@ -611,7 +626,7 @@ jobs:
 
             - name: Calculate success rate
               run: >-
-                  uv run --no-project --exclude-newer PT12H --python 3.12 --with PyGithub --with pyyaml
+                  uv run --locked --extra workflows
                   python -m infx.workflows.calc_success_rate "$STATS_FILENAME"
 
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

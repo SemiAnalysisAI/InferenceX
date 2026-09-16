@@ -3,6 +3,9 @@ name: Template - Collect Results
 on:
   workflow_call:
     inputs:
+      tooling-ref:
+        required: true
+        type: string
       result-prefix:
         required: false
         type: string
@@ -20,7 +23,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          ref: ${{ inputs.tooling-ref }}
           persist-credentials: false
 
       - name: Download JSON artifacts
@@ -29,11 +32,14 @@ jobs:
           path: results/
           pattern: ${{ inputs.result-prefix && format('{0}_*', inputs.result-prefix) || '*' }}
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
       - name: Aggregate results
         env:
           RESULT_PREFIX: ${{ inputs.result-prefix || 'all' }}
         run: |
-          python3 -m infx.results.collect_results results/ "${RESULT_PREFIX}"
+          uv run --locked python -m infx.results.collect_results results/ "${RESULT_PREFIX}"
 
       - name: Upload aggregated results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

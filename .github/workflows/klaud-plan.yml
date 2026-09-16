@@ -24,11 +24,14 @@ jobs:
       # Total candidates per invocation; selected candidates run in parallel.
       MAX_CANDIDATES_PER_RUN: '5'
     outputs:
+      tooling-ref: ${{ steps.checkout.outputs.commit }}
       selected: ${{ steps.select.outputs.selected }}
       candidates: ${{ steps.select.outputs.candidates }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
           fetch-depth: 0
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -145,6 +148,7 @@ jobs:
     uses: $/.github/workflows/klaud-candidate.yml
     with:
       candidate: ${{ matrix.candidate }}
+      tooling-ref: ${{ needs.plan.outputs.tooling-ref }}
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       CLAUDE_PAT: ${{ secrets.CLAUDE_PAT }}

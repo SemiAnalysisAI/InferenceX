@@ -71,6 +71,10 @@ Tests 使用四个 pytest worker 运行 `utils/`、`runners/` 和 `experimental/
 
 核心依赖使用 `uv add` 添加，集成依赖使用 `uv add --optional <extra>`，测试工具使用 `uv add --group test`。同时提交 manifest 和 lockfile。`uv lock --upgrade-package <name>` 更新指定依赖；解析时按 `pyproject.toml` 执行 12 小时发布冷却期。Ruff 和 Zizmor 不加入 lockfile，CI 继续使用满足冷却期的最新版本。基准测试镜像、供应商评测环境和测量历史 checkout 的命令保留原有依赖安装方式。
 
+依赖限制在当前支持的最新主版本内；次版本和补丁更新记录在 `uv.lock` 中，并通过 CI 验证。对尚未达到 1.0 的包，次版本升级也需审查。MCP 保持在 1.x，因为 2.x 替换了当前服务使用的装饰器式处理器 API。新版本发布不会自动改变已锁定的环境。
+
+结果收集、结果比较和运行统计使用当前 `main` 中的 `infx`，在 sweep setup 时解析一次提交，并在这些 job 间共享。Klaud 同样只解析一次 `main`，将该提交传给所有候选任务；候选任务的 hook 使用独立的工具 checkout，避免配方编辑替换导入的包。Sign-off 也检出当前受信任的 `main`。这些工具不固定到发布版本，仓库提交不受依赖发布冷却期限制。PR CI 测试 PR 自身的包；矩阵生成、基准测试脚本和配方仍使用所选 checkout。
+
 ### Python 静态检查与格式化
 
 Ruff 按照 [`infx/ruff.toml`](../infx/ruff.toml) 中的规则检查 `infx/`，目标版本为 Python 3.12，行长度设为 100。任何 Python 文件变更都会触发 CI，使用已发布至少 12 小时的最新 Ruff 版本。
