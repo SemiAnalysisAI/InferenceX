@@ -198,7 +198,7 @@ def test_platform_overlay_preserves_base_and_replaces_explicit_profile(tmp_path)
 
 @pytest.mark.parametrize(
     "backend,worlds,kind",
-    [("aiter", [1], "gemm"), ("torch", [2], "gemm"), ("torch", [1], "allreduce")],
+    [("flashinfer", [1], "gemm"), ("torch", [2], "gemm"), ("torch", [1], "allreduce")],
 )
 def test_amd_plan_rejects_unimplemented_execution(backend, worlds, kind):
     with pytest.raises(ValueError, match="single-GPU torch GEMM"):
@@ -214,7 +214,8 @@ def test_amd_plan_rejects_unimplemented_execution(backend, worlds, kind):
 
 
 @pytest.mark.parametrize(
-    "outcome,expected_rc", [("ok", 0), ("error", 1), ("unsupported", 1)]
+    "outcome,expected_rc",
+    [("ok", 0), ("error", 1), ("unsupported", 1), ("unclaimed", 1)],
 )
 def test_strict_benchmark_writes_actual_status(
     tmp_path, monkeypatch, outcome, expected_rc
@@ -222,7 +223,9 @@ def test_strict_benchmark_writes_actual_status(
     # The GPU kernel is an external collaborator; selection, exception handling,
     # checkpointing, serialization and exit decisions execute the real main().
     backend = types.ModuleType("operatorx.runners.testgpu.backends.kernel")
-    backend.IMPLS = [types.SimpleNamespace(op_type="gemm")]
+    backend.IMPLS = (
+        [] if outcome == "unclaimed" else [types.SimpleNamespace(op_type="gemm")]
+    )
     runner = types.ModuleType("operatorx.runners.testgpu.runner")
 
     def kernel(op):
@@ -259,7 +262,9 @@ def test_strict_benchmark_writes_actual_status(
     )
     assert benchmark.main() == expected_rc
     body = json.loads(next((tmp_path / "output").rglob("*.json")).read_text())
-    assert body["rows"][0]["status"] == outcome
+    assert body["rows"][0]["status"] == (
+        "unsupported" if outcome == "unclaimed" else outcome
+    )
     assert body["rows"][0]["metrics"] == (
         {"latency_us": 12.5} if outcome == "ok" else {}
     )

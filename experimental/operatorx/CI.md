@@ -137,8 +137,26 @@ can return a Slurm error even after that allocation has terminated.
 ## AMD execution
 
 `platforms.json` overlays the CollectiveX registry with the AMDS Slurm pools.
-AMD currently accepts single-GPU `torch` GEMM. ROCm PyTorch uses HIP events through
+AMD accepts single-GPU `torch` GEMM and `torch,aiter` attention. ROCm PyTorch uses HIP events through
 `torch.cuda`; FP8 selects FNUZ on gfx942 and OCP on gfx950. Unsupported formats
 remain explicit. Staging lives outside `_work`, below the shared runner root
 derived from `RUNNER_TEMP`. Containers never write to the checkout. MI300X/MI325X
 forward `/dev/kfd` and `/dev/dri`; CPU requests follow each inference launcher.
+
+## Attention
+
+Select `testlists=attention_perf` for eight BF16/FP16 MHA/GQA and materialized MLA
+prefill/decode cases, or `attention` for the full 2,315-case catalog. NVIDIA uses
+`backends=torch`; AMD also supports `backends=torch,aiter`. Attention measures
+latency in microseconds. Unsupported precision/layout combinations are recorded,
+and allocation or kernel errors still fail CI. Strict CI retains unsupported
+backend/operator pairs instead of dropping requested coverage.
+
+PyTorch uses bottom-right causal masking for rectangular decode inputs. Grouped
+KV expansion happens before timing. Both MLA backends time attention on
+materialized Q/K/V; compressed-cache projection and RoPE are excluded. AITER calls
+`flash_attn_func` directly with native grouped KV heads and bottom-right causality.
+It accepts uniform BF16/FP16, contiguous KV, and head dimensions divisible by eight
+up to 256; other requests remain unsupported rather than fall back to torch.
+Experimental operator changes are recorded in the adjacent `perf-changelog.yaml`,
+separately from the root inference-recipe changelog's config-key schema.

@@ -9,7 +9,7 @@ on:
         default: h100-dgxc
         options: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300, mi300x, mi325x, mi355x]
       backends:
-        description: Comma-separated backends for the selected GPU platform (AMD supports torch GEMM)
+        description: Comma-separated backends for the selected GPU platform (AMD torch GEMM and torch/aiter attention)
         type: string
         default: torch
       testlists:
@@ -138,7 +138,7 @@ jobs:
         run: |
           set -eo pipefail
           source benchmarks/benchmark_lib.sh --validation-only
-          check_env_vars OPERATORX_RECOVERY_RUN OPERATORX_POOL OPERATORX_CLEANUP_SECONDS
+          check_env_vars RUNNER_TEMP OPERATORX_RECOVERY_RUN OPERATORX_POOL OPERATORX_CLEANUP_SECONDS
           python3 -m operatorx.ci recover --artifacts operatorx-recovery \
             --run-id "$OPERATORX_RECOVERY_RUN" --pool "$OPERATORX_POOL" \
             --cleanup-seconds "$OPERATORX_CLEANUP_SECONDS" \

@@ -116,7 +116,21 @@ CPU 检查不能证明 GPU 兼容性或集群存储可见性。
 ## AMD 执行
 
 `platforms.json` 在 CollectiveX 配置之上补充 AMDS Slurm 运行器池。
-AMD 目前接受单卡 `torch` GEMM。ROCm PyTorch 通过 `torch.cuda` 使用 HIP 事件计时；
+AMD 接受单卡 `torch` GEMM 和 `torch,aiter` attention。ROCm PyTorch 通过 `torch.cuda` 使用 HIP 事件计时；
 FP8 在 gfx942 上选择 FNUZ，在 gfx950 上选择 OCP。不支持的格式会明确记录。
 暂存目录由 `RUNNER_TEMP` 推导，位于共享运行器根目录下、`_work` 之外。容器不写入
 源码检出目录。MI300X/MI325X 显式传递 `/dev/kfd` 和 `/dev/dri`；CPU 请求沿用各推理启动器。
+
+## Attention
+
+`testlists=attention_perf` 包含八个 BF16/FP16 MHA/GQA 及物化 MLA 的 prefill/decode
+测试；`attention` 运行完整的 2,315 个测试。NVIDIA 使用 `backends=torch`，AMD 还支持
+`backends=torch,aiter`。Attention 记录微秒延迟。不支持的精度或布局会明确记录；显存分配
+或内核错误仍使 CI 失败。严格模式保留不支持的后端/算子组合，不会静默丢弃计划覆盖。
+
+PyTorch 为矩形 decode 输入使用右下对齐的因果掩码，分组 KV 在计时前展开。两个 MLA
+后端只测量物化 Q/K/V 的 attention，不包含压缩缓存投影或 RoPE。AITER 直接调用
+`flash_attn_func`，保留原生分组 KV 和右下对齐的因果语义。当前支持统一 BF16/FP16、
+连续 KV，以及不超过 256 且能被八整除的 head dimension；其他请求记录为不支持，
+不会回退到 torch。实验算子变更记录在相邻的 `perf-changelog.yaml`，与根目录中受推理
+配置键约束的变更日志分开维护。

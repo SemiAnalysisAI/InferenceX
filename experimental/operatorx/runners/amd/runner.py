@@ -1,11 +1,12 @@
-"""ROCm GEMM timing with HIP events exposed through torch.cuda."""
+"""ROCm operator timing with HIP events exposed through torch.cuda."""
 
 from __future__ import annotations
+
+from importlib import import_module
 
 import torch
 
 from operatorx.core import Op, Result, UnsupportedOpError
-from operatorx.runners.amd.backends import torch as backend
 
 _L2_BUF: dict[int, torch.Tensor] = {}
 _WARMUP = 5
@@ -13,7 +14,11 @@ _ITERS = 10
 
 
 def run(op: Op) -> Result:
-    if op.backend != "torch" or op.type != "gemm":
+    if op.backend not in {"torch", "aiter"}:
+        raise UnsupportedOpError(f"unknown AMD backend: {op.backend}")
+    backend = import_module(f"operatorx.runners.amd.backends.{op.backend}")
+    impl = next((item for item in backend.IMPLS if item.op_type == op.type), None)
+    if impl is None:
         raise UnsupportedOpError(f"amd/{op.backend} has no impl for {op.type!r}")
     if not torch.version.hip:
         raise RuntimeError("AMD measurements require a ROCm PyTorch build")
@@ -23,16 +28,16 @@ def run(op: Op) -> Result:
         if size <= 0:
             raise RuntimeError("ROCm did not report a positive L2 cache size")
         _L2_BUF[device] = torch.empty(size, dtype=torch.int8, device="cuda")
-    ctx = backend.prepare(op)
+    ctx = impl.prepare(op)
     for _ in range(_WARMUP):
-        backend.kernel(ctx)
+        impl.kernel(ctx)
     torch.cuda.synchronize()
     starts = [torch.cuda.Event(enable_timing=True) for _ in range(_ITERS)]
     ends = [torch.cuda.Event(enable_timing=True) for _ in range(_ITERS)]
     for start, end in zip(starts, ends):
         _L2_BUF[device].zero_()
         start.record()
-        backend.kernel(ctx)
+        impl.kernel(ctx)
         end.record()
     torch.cuda.synchronize()
     times = sorted(start.elapsed_time(end) * 1000.0 for start, end in zip(starts, ends))

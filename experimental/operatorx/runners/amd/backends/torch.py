@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import torch
 
+from operatorx.runners import attention
+
 from operatorx.core import BackendImpl, Op, UnsupportedOpError, lookup_versions
 
 
@@ -77,4 +79,12 @@ def kernel(ctx: dict) -> None:
         ctx["C"] = torch.matmul(ctx["A"], ctx["B"])
 
 
-IMPLS = [BackendImpl(op_type="gemm", prepare=prepare, kernel=kernel)]
+IMPLS = [
+    BackendImpl(op_type="gemm", prepare=prepare, kernel=kernel),
+    BackendImpl(
+        op_type="attention_mha", prepare=attention.prepare, kernel=attention.kernel
+    ),
+    BackendImpl(
+        op_type="attention_mla", prepare=attention.prepare, kernel=attention.kernel
+    ),
+]
