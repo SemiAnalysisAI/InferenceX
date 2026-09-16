@@ -1,11 +1,12 @@
 --- a/models/deepseek_v4_1/common/engram.py
 +++ b/models/deepseek_v4_1/common/engram.py
-@@ -34,12 +34,19 @@
+@@ -34,12 +34,20 @@
    cache for the rest.
  """
 
 +import contextlib
-+import json
++import fcntl
++import hashlib
 +import math
 +import os
  import weakref
@@ -20,7 +21,19 @@
  from vllm.config import VllmConfig, get_current_vllm_config
  from vllm.distributed import (
      get_engram_dp_group,
-@@ -678,6 +685,85 @@
+@@ -617,7 +625,11 @@
+     assert shard.shape == param.shape, (
+         f"engram shard {tuple(shard.shape)} does not fit param {tuple(param.shape)}"
+     )
++    if getattr(param, "engram_disk_read_only", False):
++        raise RuntimeError("Reloading a finalized Engram shard requires a new model instance")
+     param.data.copy_(shard)
++    if hasattr(param, "engram_disk_loaded"):
++        param.engram_disk_loaded = True
+
+
+ @triton.jit
+@@ -678,6 +690,85 @@
          )
 
 
@@ -106,11 +119,12 @@
  class ParallelEngramEmbedding(nn.Module):
      """The n-gram hash table, sharded by complete hash heads over TP ranks.
      Rows stay fp8 and are dequantized with ue8m0 per-32 scales on lookup.
-@@ -698,13 +784,18 @@
+@@ -698,13 +789,19 @@
          head_sizes: tuple[int, ...],
          block_size: int = 32,
          cpu_offload: bool = False,
 +        disk_offload_dir: str | None = None,
++        disk_shard_id: str | None = None,
      ):
          super().__init__()
          tp_size = get_tensor_model_parallel_world_size()
@@ -126,17 +140,20 @@
              raise RuntimeError("Engram CPU offload requires UVA support")
          self.num_embeddings = num_embeddings
          self.dim = dim
-@@ -724,30 +815,34 @@
+@@ -724,31 +821,40 @@
          self.tp_size = tp_size
          self.dp_size = dp_size
          self.cpu_offload = cpu_offload
 +        self.disk_offload_dir = disk_offload_dir
++        if disk_offload_dir is not None and not disk_shard_id:
++            raise ValueError("Engram disk tables require a layer-specific shard ID")
++        self.disk_shard_id = disk_shard_id
          self._views: tuple[torch.Tensor, torch.Tensor] | None = None
          self._view_src: tuple[int, int] | None = None
 +        # Set once the written mapping has been flushed and remapped read-only.
 +        self._disk_finalized = False
 +        # Pinned staging for gathered rows, grown on demand and reused so a
-+        # steady-state step allocates nothing.
++        # steady-state host staging avoids repeated allocation.
 +        self._stage: tuple[torch.Tensor, torch.Tensor] | None = None
          self._num_sms = torch.cuda.get_device_properties(
              torch.accelerator.current_device_index()
@@ -177,9 +194,12 @@
 +        self.weight = nn.Parameter(weight_data, requires_grad=False)
 +        self.weight_scale_inv = nn.Parameter(scale_data, requires_grad=False)
          for param in (self.weight, self.weight_scale_inv):
++            if disk_offload_dir is not None:
++                param.engram_disk_loaded = False
              set_weight_attrs(
                  param,
-@@ -758,20 +853,212 @@
+                 {
+@@ -758,20 +864,180 @@
              )
          if cpu_offload:
              logger.info(
@@ -198,96 +218,64 @@
 +        weight_shape: tuple[int, int],
 +        scale_shape: tuple[int, int],
 +    ) -> tuple[torch.Tensor, torch.Tensor]:
-+        """Map this rank's table files, creating them on a first boot.
++        """Refresh shared file mappings from this startup's checkpoint.
 +
-+        A shard is only reusable if a sidecar records the same geometry, so a
-+        half-written file from a killed load, or one left by a different TP
-+        layout, is rebuilt rather than silently gathered from.
++        Geometry alone is not checkpoint identity. The normal loader always
++        writes parameters, so loading into a COW mapping would silently create
++        a private RAM copy. Load through writable shared mappings every time;
++        only after both parameters are loaded and flushed may they become COW.
++        A per-layer/rank lock prevents overlapping engines from rewriting files.
 +        """
 +        os.makedirs(disk_dir, exist_ok=True)
++        layer_key = hashlib.sha256(self.disk_shard_id.encode()).hexdigest()[:16]
 +        base = os.path.join(
 +            disk_dir,
-+            f"engram_v{self.vocab_start_idx}_{self.vocab_end_idx}"
++            f"engram_{layer_key}_v{self.vocab_start_idx}_{self.vocab_end_idx}"
 +            f"_r{engram_head_shard_rank()}",
 +        )
 +        self._disk_base = base
-+        meta_path = f"{base}.done.json"
++        self._disk_lock = open(f"{base}.lock", "a+b")
++        try:
++            fcntl.flock(self._disk_lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
++        except BlockingIOError as exc:
++            self._disk_lock.close()
++            raise RuntimeError(f"Engram disk shard is in use: {base}") from exc
 +        specs = (
 +            (f"{base}.weight.bin", weight_shape, torch.float8_e4m3fn),
 +            (f"{base}.scale.bin", scale_shape, torch.uint8),
 +        )
-+
-+        want = {
-+            "weight_shape": list(weight_shape),
-+            "scale_shape": list(scale_shape),
-+            "vocab_start": self.vocab_start_idx,
-+            "vocab_end": self.vocab_end_idx,
-+        }
-+
-+        def nbytes(shape: tuple[int, ...], dt: torch.dtype) -> int:
-+            return math.prod(shape) * torch.tensor([], dtype=dt).element_size()
-+
-+        complete = False
-+        if os.path.exists(meta_path):
-+            with contextlib.suppress(Exception):
-+                with open(meta_path) as fh:
-+                    recorded = json.load(fh)
-+                complete = recorded == want and all(
-+                    os.path.getsize(path) == nbytes(shape, dt)
-+                    for path, shape, dt in specs
-+                )
-+        if not complete:
-+            with contextlib.suppress(FileNotFoundError):
-+                os.remove(meta_path)
-+            for path, shape, dt in specs:
-+                with open(path, "ab") as fh:
-+                    fh.truncate(nbytes(shape, dt))
-+
-+        self._disk_want = want
-+        self._disk_finalized = complete
-+        logger.info(
-+            "Engram disk shard %s: %s",
-+            base,
-+            "reusing finished files" if complete else "first boot, writing through",
-+        )
++        with contextlib.suppress(FileNotFoundError):
++            os.remove(f"{base}.done.json")
++        for path, shape, dt in specs:
++            with open(path, "ab") as fh:
++                fh.truncate(math.prod(shape) * torch.tensor([], dtype=dt).element_size())
++        self._disk_finalized = False
++        logger.info("Engram disk shard %s: refreshing from checkpoint", base)
 +        return tuple(
-+            _engram_disk_tensor(path, shape, dt, writable=not complete)
++            _engram_disk_tensor(path, shape, dt, writable=True)
 +            for path, shape, dt in specs
 +        )
 +
 +    def finalize_disk_shard(self) -> None:
-+        """Flush the loaded shard and remap it copy-on-write.
-+
-+        Called on the first lookup rather than from a load hook: by then every
-+        shard write has happened, and a reused shard skips straight past it.
-+        Remapping copy-on-write is what stops a stray write reaching the file
-+        and invalidating the sidecar for the next boot.
-+        """
++        """Publish only fully loaded, successfully flushed table contents."""
 +        if self._disk_finalized or self.disk_offload_dir is None:
 +            return
-+        for path in (f"{self._disk_base}.weight.bin", f"{self._disk_base}.scale.bin"):
-+            arr = _ENGRAM_DISK_MAPS.get(path)
-+            if arr is not None:
-+                with contextlib.suppress(Exception):
-+                    arr.flush()
-+        with open(f"{self._disk_base}.done.json", "w") as fh:
-+            json.dump(self._disk_want, fh)
++        if not all(p.engram_disk_loaded for p in (self.weight, self.weight_scale_inv)):
++            raise RuntimeError("Engram disk lookup attempted before both weights and scales loaded")
++        paths = (f"{self._disk_base}.weight.bin", f"{self._disk_base}.scale.bin")
++        for path in paths:
++            _ENGRAM_DISK_MAPS[path].flush()
 +        self.weight.data = _engram_disk_tensor(
-+            f"{self._disk_base}.weight.bin",
-+            tuple(self.weight.shape),
-+            self.weight.dtype,
-+            writable=False,
++            paths[0], tuple(self.weight.shape), self.weight.dtype, writable=False
 +        )
 +        self.weight_scale_inv.data = _engram_disk_tensor(
-+            f"{self._disk_base}.scale.bin",
-+            tuple(self.weight_scale_inv.shape),
-+            self.weight_scale_inv.dtype,
-+            writable=False,
++            paths[1], tuple(self.weight_scale_inv.shape),
++            self.weight_scale_inv.dtype, writable=False
 +        )
++        self.weight.engram_disk_read_only = True
++        self.weight_scale_inv.engram_disk_read_only = True
 +        self._disk_finalized = True
-+        logger.info(
-+            "Engram disk shard %s finalized, remapped copy-on-write.", self._disk_base
-+        )
++        logger.info("Engram disk shard %s loaded and flushed", self._disk_base)
 +
 +    def _local_row_ids(self, indices: torch.Tensor) -> torch.Tensor:
 +        """Row ids the lookup kernel would read, as [T, local_heads], -1 unowned.
@@ -395,7 +383,7 @@
              return self.weight.data, self.weight_scale_inv.data
          src = (self.weight.data_ptr(), self.weight_scale_inv.data_ptr())
          if self._view_src != src:
-@@ -792,6 +1079,9 @@
+@@ -792,6 +1058,9 @@
          """
          rows = indices.shape[0] * self.part_n_hash_cols
          if not rows:
@@ -405,23 +393,16 @@
              return
          weight, scales = self._storage()
          # The table dwarfs TLB reach, so a persistent grid near the SM count
-@@ -1005,6 +1295,7 @@
-     training kernel).
-     """
-
-+
-     def __init__(
-         self,
-         config,
-@@ -1031,6 +1322,7 @@
+@@ -1031,6 +1300,8 @@
              layout.head_dim,
              tuple(size for order in layout.primes[layer_hash_index] for size in order),
              cpu_offload=engram_config.cpu_offload if engram_config else True,
 +            disk_offload_dir=engram_config.disk_offload_dir if engram_config else None,
++            disk_shard_id=prefix,
          )
          n_hash_cols = (layout.max_ngram_size - 1) * layout.n_heads
          self.wkv = ReplicatedLinear(
-@@ -1073,13 +1365,33 @@
+@@ -1073,13 +1344,33 @@
          return self._extra_staged_rows[ubatch_id - 1]
 
      def prepare_embeddings(self, hash_ids: torch.Tensor) -> None:
@@ -458,7 +439,7 @@
      def _trade_dp_tokens_for_heads(self, num_tokens: int) -> torch.Tensor:
 --- a/config/engram.py
 +++ b/config/engram.py
-@@ -37,6 +37,31 @@
+@@ -37,6 +37,30 @@
      Each rank offloads its assigned hash heads, so host table storage and
      lookup traffic scale with the number of heads assigned to the rank."""
 
@@ -466,15 +447,14 @@
 +    """Directory holding file-backed n-gram tables, one shard per rank.
 +
 +    Requires `cpu_offload`. The shard is memory-mapped from
-+    `<dir>/engram_r<rank>.{weight,scale}.bin` rather than occupying anonymous
++    `<dir>/engram_<layer>_v<start>_<end>_r<rank>.{weight,scale}.bin` rather than occupying anonymous
 +    pinned host RAM, so what it costs in memory is whatever the page cache
 +    keeps, not the size of the table. Lookups then gather their rows on the
 +    host and copy only those rows to the device: a mapped file cannot be read
 +    through UVA, which needs page-locked memory, and pinning the mapping would
 +    pull the whole table back into RAM.
 +
-+    Point this at local NVMe. On a network filesystem every row gather becomes
-+    a network round trip. Defaults to VLLM_ENGRAM_DISK_OFFLOAD_DIR."""
++    Point this at local NVMe. Network filesystems add remote I/O latency on page-cache misses. Defaults to VLLM_ENGRAM_DISK_OFFLOAD_DIR."""
 +
 +    def __post_init__(self) -> None:
 +        import vllm.envs as envs
@@ -505,8 +485,8 @@
      ),
      # Disable using pytorch's pin memory for CPU offloading.
 +    # Default for EngramConfig.disk_offload_dir: directory holding file-backed
-+    # Engram n-gram tables. Use a local NVMe path; a network mount makes every
-+    # row gather a network round trip.
++    # Engram n-gram tables. Use local NVMe; remote page-cache misses
++    # otherwise add filesystem latency.
 +    "VLLM_ENGRAM_DISK_OFFLOAD_DIR": lambda: os.getenv(
 +        "VLLM_ENGRAM_DISK_OFFLOAD_DIR", ""
 +    ),

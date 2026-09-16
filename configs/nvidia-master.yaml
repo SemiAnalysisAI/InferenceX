@@ -8244,8 +8244,8 @@ dsv41flashssd-fp4-b200-vllm-agentic-dspark:
     - dram-utilization: 0.92
       search-space:
       # Same layout as dsv41flash-fp4-b200-vllm-agentic-dspark, with the Engram
-      # tables mapped from node-local NVMe instead of pinned host DRAM, and the
-      # DRAM that frees handed to a KV tier the pinned recipe has no room for.
+      # tables mapped from node-local NVMe instead of pinned host DRAM.
+      # This sweep keeps KV on GPU; any reclaimed DRAM is not a CPU KV tier.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 96, 128] }
       # KV offload rows are held back, not dropped. SimpleCPUOffloadConnector
       # asserts block_size % hash_block_size == 0 in resolve_block_hashes, and

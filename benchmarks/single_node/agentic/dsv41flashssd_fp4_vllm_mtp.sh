@@ -4,7 +4,8 @@ set -eo pipefail
 # DeepSeek-V4.1-Flash Engram on local NVMe. Eager retrieval callbacks
 # refresh fixed staging rows on every piecewise CUDA graph replay.
 source "$(dirname "$0")/../../benchmark_lib.sh"
-check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION \
+    EVAL_ONLY ENGRAM_SSD_DIR VLLM_ENGINE_READY_TIMEOUT_S DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE
 export GPU_COUNT="$TP"
 
 if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
@@ -21,7 +22,7 @@ mkdir -p "$RESULT_DIR"
 SERVER_LOG="$RESULT_DIR/server.log"
 MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 MOONCAKE_MASTER_PID=""
-export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-3600}"
+export VLLM_ENGINE_READY_TIMEOUT_S
 export VLLM_USE_RUST_FRONTEND=1
 export VLLM_USE_V2_MODEL_RUNNER=1
 # Set before importing vLLM: the eager-break decorator is resolved at import.
@@ -50,13 +51,13 @@ fi
 python3 "$INFERENCEX_REPO_ROOT/benchmarks/patches/check_dsv41flash_ssd_replay.py" \
     --result-dir "$RESULT_DIR" 2>&1 | tee "$RESULT_DIR/engram_replay_check.log"
 
-# Node-local NVMe. A network mount would make every row gather a round trip,
-# so fail loudly rather than silently benchmarking the filesystem.
-ENGRAM_SSD_DIR="${ENGRAM_SSD_DIR:-/raid/engram}"
+# Require the caller's local-disk mount. Warm page-cache hits can hide a
+# network mount, so inspect the filesystem rather than assuming the path.
 mkdir -p "$ENGRAM_SSD_DIR"
 ENGRAM_FSTYPE="$(df -PT "$ENGRAM_SSD_DIR" | awk 'NR==2{print $2}')"
 case "$ENGRAM_FSTYPE" in
-    nfs|nfs4|cifs|tmpfs|ramfs)
+    xfs|ext4) ;;
+    *)
         echo "ENGRAM_SSD_DIR=$ENGRAM_SSD_DIR is $ENGRAM_FSTYPE, not local disk." >&2
         exit 1
         ;;
@@ -82,7 +83,7 @@ echo "Using vLLM endpoint ${AIPERF_SERVER_URL}"
 # unreclaimable, while the Engram mapping is clean page cache, so the kernel
 # evicts Engram pages under pressure instead of failing the KV allocation. The
 # cost of that eviction is a page fault on the next lookup of an evicted row,
-# measured at about 70 microseconds per 4 KiB read on this array.
+# which must be measured separately from logical gather traffic.
 OFFLOAD_ARGS=()
 case "$KV_OFFLOAD_BACKEND" in
     "")
@@ -185,7 +186,7 @@ done
 
 # Adaptive verification forces FULL graphs in this image; real block
 # rejection remains enabled for eval, using the supported PIECEWISE path.
-if [[ "${EVAL_ONLY:-false}" == true ]]; then
+if [[ "$EVAL_ONLY" == true ]]; then
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
 else
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":3.51,"enable_adaptive_verification":false}'
@@ -227,14 +228,14 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 # means two layers collided on one path and are being served from one table,
 # which no throughput number would reveal.
 EXPECTED_SHARDS=$((TP * 2))
-FOUND_SHARDS="$(find "$ENGRAM_SSD_DIR" -name 'engram_v*_r*.weight.bin' | wc -l)"
+FOUND_SHARDS="$(find "$ENGRAM_SSD_DIR" -name 'engram_*_v*_r*.weight.bin' | wc -l)"
 du -sh "$ENGRAM_SSD_DIR"
 if [[ "$FOUND_SHARDS" -ne "$EXPECTED_SHARDS" ]]; then
     echo "Expected $EXPECTED_SHARDS Engram shards, found $FOUND_SHARDS." >&2
     exit 1
 fi
 
-if [[ "${EVAL_ONLY:-false}" == true ]]; then
+if [[ "$EVAL_ONLY" == true ]]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"

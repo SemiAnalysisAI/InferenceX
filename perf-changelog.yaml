@@ -8003,3 +8003,12 @@
     - "Fix stale SSD Engram rows with a retrieval callback on every piecewise graph replay; add GPU changing-ID checks and use the B200 capture floor of 64; eval retains real rejection with adaptive verification off"
     - "修复 SSD Engram 旧行复用：每次分段图回放均执行读取回调，增加 GPU ID 变化检查并使用 B200 最小捕获值 64；eval 保留真实拒绝采样并禁用自适应验证"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3080
+
+- config-keys:
+    - dsv41flashssd-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Audit SSD Engram loading: refresh shared mappings from checkpoint, reject partial loads and concurrent writers, isolate layers, and extend GPU correctness checks; remove receiver-side configuration defaults"
+    - "审查 SSD Engram 加载：从 checkpoint 刷新共享映射，拒绝部分加载和并发写入，隔离各层并扩展 GPU 正确性检查；移除接收端配置默认值"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3080
