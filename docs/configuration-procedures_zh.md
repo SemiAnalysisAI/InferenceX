@@ -208,6 +208,8 @@ H200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工�
 
 B300 在 c1/c2/c4 使用相同的最小捕获范围。其 c1 CI 对比中，请求 ITL P90/P99 从 38.74/41.42 ms 降至 2.62/3.45 ms；c2/c4 仍需 CI 验证。
 
+B300 的 Engram HBM 实验在启动器中设置 `DSV41_ENGRAM_CPU_OFFLOAD=false`。共享脚本对其他 SKU 仍启用 CPU/UVA 卸载。应先将其 AgentX 扫描与 B300 的固定页 DRAM 运行比较，再判断 HBM 放置是否有益；尤其要检查 c128 的 GPU KV 池是否缩小。
+
 仅运行 AgentX 的 `dsv41flash-fp4-<sku>-vllm-agentic-dspark` 配方使用
 `vllm/vllm-openai:deepseekv41-flash-0909`，在 Blackwell SKU 上采用 TP4、原生五 token DSpark、
 概率采样草稿。吞吐测试使用[已提交的黄金 AL](../golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样和自适应验证。

@@ -7923,3 +7923,12 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260915."
     - "Switch HiCache defaults to --hicache-io-backend kernel and --hicache-mem-layout page_first (from direct / page_first_direct). Ratio 1.5 and write_through are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3118
+
+- config-keys:
+    - dsv41flash-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Keep DeepSeek-V4.1-Flash Engram tables in B300 HBM instead of pinned DRAM for the AgentX 1–128 sweep; preserve DSpark5, synthetic AL 3.51, the full trace, and GPU-resident KV"
+    - "在 B300 AgentX 并发 1–128 扫描中将 DeepSeek-V4.1-Flash Engram 表保留在 HBM，而不是固定页 DRAM；保持 DSpark5、合成 AL 3.51、完整轨迹及 GPU 驻留 KV"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3181
