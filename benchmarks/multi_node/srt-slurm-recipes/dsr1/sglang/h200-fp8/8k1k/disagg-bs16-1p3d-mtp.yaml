@@ -3,7 +3,7 @@ name: "bs16-1p3d-h200-fp8-mtp"
 
 model:
   path: "dsr1"
-  container: "lmsysorg/sglang:v0.5.8.post1-cu130"
+  container: "lmsysorg/sglang:v0.5.19-cu130"
   precision: "fp8"
 
 frontend:
@@ -14,12 +14,15 @@ resources:
   gpus_per_node: 8
 
 dynamo:
-  # Dynamo 0.8.0 was the default when this recipe was written; pin it explicitly.
-  # Use NATS for a recipe prior to Dynamo commit 39d2a68.
+  # SGLang v0.5.19 removed sglang.srt.server_args_config_parser and sglang.srt.tracing,
+  # which ai-dynamo releases through 1.4.2 import at worker startup. ai-dynamo
+  # 1.5.0.dev20260910 pins sglang==0.5.19 and imports only modules in that release.
+  # NATS request plane retained from the measured 0.8.0 configuration; Dynamo 1.5 still
+  # accepts --request-plane nats.
   request_plane: "nats"
 
   source:
-    pypi: "0.8.0"
+    wheel: "1.5.0.dev20260910"
 engine: sglang
 roles:
   prefill:
