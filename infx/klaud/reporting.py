@@ -830,6 +830,15 @@ def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -
         raise VerificationError("Baseline source image no longer matches the selected base")
     historical: dict[str, list[dict]] = {}
     published: dict[str, Point] = {}
+    unverified: list[dict] = []
+    family_runs = {
+        int(change["workflow_run_id"])
+        for change in info.payload["changelogs"]
+        if any(
+            fnmatchcase(session.candidate.family.split(":", 1)[1], key)
+            for key in change["config_keys"]
+        )
+    }
     for row in feed.payload:
         # Do not filter ISL/OSL here: that would erase other curves in the original family.
         if any(
@@ -858,7 +867,10 @@ def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -
             or len(heads.get(run_id, ())) != 1
             or (run_attempt is not None and run_attempt > int(producers[run_id]["run_attempt"]))
         ):
-            raise VerificationError("Public baseline producer provenance is unavailable")
+            # Classify after reconstructing the complete historical family, so an
+            # unrelated sibling cannot block it and feed ordering cannot hide points.
+            unverified.append(row)
+            continue
         head = next(iter(heads[run_id]))
         if head not in historical:
             historical[head] = matrix_points(
@@ -879,14 +891,7 @@ def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -
                 for entry in matches
                 if entry["recipe-fingerprint"] == row["recipe_fingerprint"]
             ]
-        elif not any(
-            int(change["workflow_run_id"]) == run_id
-            and any(
-                fnmatchcase(session.candidate.family.split(":", 1)[1], key)
-                for key in change["config_keys"]
-            )
-            for change in info.payload["changelogs"]
-        ):
+        elif run_id not in family_runs:
             raise VerificationError("Legacy baseline producer does not select the candidate family")
         if len(matches) != 1:
             raise VerificationError("Public baseline recipe identity is ambiguous or mismatched")
@@ -910,6 +915,12 @@ def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -
             head=head,
             run_attempt=run_attempt,
         )
+    identities = [public_point(entry) for entry in entries.values()]
+    if any(
+        any(all(row.get(key) == value for key, value in point.items()) for point in identities)
+        for row in unverified
+    ):
+        raise VerificationError("Public baseline producer provenance is unavailable")
     if not published:
         raise VerificationError("No verified public baseline points for the selected family")
     points = [
