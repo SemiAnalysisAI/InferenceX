@@ -681,7 +681,7 @@ def publish_final(
     session: Session, run: dict, evidence: tuple[dict, list[dict], list[dict]]
 ) -> None:
     """Normal finish and recovery publish the same artifact-derived final report."""
-    from infx.workflows import validate_reusable_sweep_artifacts as reuse
+    from infx.results.eval_artifacts import eval_key
 
     from .validation import benchmark_entries, expected_evals
 
@@ -709,7 +709,7 @@ def publish_final(
         )
     evaluations = [
         Evaluation(
-            key=identity(reuse.eval_key(row)),
+            key=identity(eval_key(row)),
             suite=row.get("eval_suite") or "gsm8k",
             label=f"c{row['conc']}",
             metric=row.get("score_name") or "em_strict",

@@ -5,6 +5,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths: &python-paths
       - '**/*.py'
+      - '.github/scripts/**'
       - '.github/workflows/ci.yml'
       - 'pyproject.toml'
       - 'uv.lock'

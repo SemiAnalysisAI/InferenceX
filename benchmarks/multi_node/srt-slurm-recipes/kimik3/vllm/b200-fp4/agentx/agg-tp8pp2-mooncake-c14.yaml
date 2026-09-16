@@ -119,7 +119,7 @@ telemetry:
   storage_subdir: power
   required: true
   startup_timeout_seconds: 120
-  request_timeout_seconds: 2
+  request_timeout_seconds: 1
   collector_join_timeout_seconds: 12
   dcgm_exporter:
     container_image: dcgm-exporter

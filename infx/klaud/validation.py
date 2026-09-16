@@ -8,7 +8,7 @@ from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
-from infx.workflows import validate_reusable_sweep_artifacts as reuse
+from infx.results import artifacts, eval_artifacts
 
 from . import github
 from .github import VerificationError
@@ -156,7 +156,7 @@ def expected_evals(matrix: dict) -> set[tuple]:
                 if multi and entry.get("eval-all-concs")
                 else [entry["eval-conc"] if multi else entry["conc"]]
             )
-            expected.update(reuse.eval_key({**row, "conc": conc}) for conc in concs)
+            expected.update(eval_artifacts.eval_key({**row, "conc": conc}) for conc in concs)
     return expected
 
 
@@ -175,18 +175,18 @@ def check_coverage(
     expected = benchmark_points(benchmark_entries(matrix))
     paths = list((directory / "results_bmk").glob("*.json"))
     fixed = [
-        row for _, row in reuse.json_rows(paths) if row.get("scenario_type") != "agentic-coding"
+        row for _, row in artifacts.json_rows(paths) if row.get("scenario_type") != "agentic-coding"
     ]
-    agentic = [row for _, row in reuse.json_rows(reuse.agentic_point_files(directory))]
+    agentic = [row for _, row in artifacts.json_rows(artifacts.agentic_point_files(directory))]
     actual = [
         (row["recipe_fingerprint"], int(row["conc"]), row["image"]) for row in fixed + agentic
     ]
-    errors = reuse.duplicate_identity_errors("benchmark", actual)
-    errors += reuse.validate_identity_set("benchmark", expected, set(actual))
-    reuse.dedupe_reran_evals(directory)
-    eval_rows, eval_errors = reuse.raw_eval_key_rows(directory)
-    errors += eval_errors + reuse.validate_eval_artifacts(directory)
-    errors += reuse.validate_identity_set(
+    errors = artifacts.duplicate_identity_errors("benchmark", actual)
+    errors += artifacts.validate_identity_set("benchmark", expected, set(actual))
+    eval_artifacts.dedupe_reran_evals(directory)
+    eval_rows, eval_errors = eval_artifacts.inspect_eval_artifacts(directory)
+    errors += eval_errors
+    errors += artifacts.validate_identity_set(
         "eval", expected_evals(matrix), {row[:-1] for row in eval_rows}
     )
     if errors:
@@ -264,8 +264,12 @@ def verify_sweep(repository: str, run: dict, family: str) -> tuple[dict, list[di
         check_coverage(directory, manifest, run, family, canonical)
         paths = list((directory / "results_bmk").glob("*.json"))
         fixed = [
-            row for _, row in reuse.json_rows(paths) if row.get("scenario_type") != "agentic-coding"
+            row
+            for _, row in artifacts.json_rows(paths)
+            if row.get("scenario_type") != "agentic-coding"
         ]
-        agentic = [row for _, row in reuse.json_rows(reuse.agentic_point_files(directory))]
-        evals = [row for _, row in reuse.json_rows((directory / "eval_results_all").glob("*.json"))]
+        agentic = [row for _, row in artifacts.json_rows(artifacts.agentic_point_files(directory))]
+        evals = [
+            row for _, row in artifacts.json_rows((directory / "eval_results_all").glob("*.json"))
+        ]
         return canonical, fixed + agentic, evals
