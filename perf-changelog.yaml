@@ -7950,3 +7950,12 @@
     - "Add a bounded 64 MiB HBM Engram row cache per table/rank, persistent GPU transfer buffers, and deduplicated page-range SSD prefetch on B200; log hit/miss and eviction counters while retaining the OS page cache as the DRAM tier"
     - "在 B200 上为每个表/rank 增加有界 64 MiB HBM Engram 行缓存、持久 GPU 传输缓冲区及去重页面范围 SSD 预取；记录命中、未命中和淘汰计数，保留 OS page cache 作为 DRAM 层"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3080
+
+- config-keys:
+    - dsv41flashssd-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Restore the validated SSD Engram pre-staging implementation with full CUDA graphs and a 64-token capture floor; omit the unqualified HBM row-cache and page-prefetch changes"
+    - "恢复已验证的 SSD Engram 预准备实现，使用完整 CUDA graphs 及最小 64-token 捕获范围；移除未达标的 HBM 行缓存及页面预取改动"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3080

@@ -16,7 +16,6 @@ from vllm.models.deepseek_v4_1.common.engram import (
     ParallelEngramEmbedding,
     _engram_disk_tensor,
     validate_disk_graph_config,
-    engram_page_ranges,
 )
 
 
@@ -32,20 +31,6 @@ def check() -> None:
             assert "SSD graph staging requires" in str(error), str(error)
         else:
             raise AssertionError(f"unsupported configuration accepted: {options}")
-    assert engram_page_ranges(np.array([], dtype=np.int64), 256, 8448) == []
-    assert engram_page_ranges(np.array([0, 1, 0, 32]), 256, 8448) == [(0, 4096), (8192, 256)]
-    assert engram_page_ranges(np.array([15, 15]), 264, 16384) == [(0, 8192)]
-    # Exercise the real mmap advice API above the signed 32-bit byte limit.
-    import mmap
-    for dtype in (np.int32, np.int64):
-        assert engram_page_ranges(np.array([8388608, 8388609], dtype=dtype), 256, 24576000000) == [(2147483648, 4096)]
-        assert engram_page_ranges(np.array([90000000], dtype=dtype), 256, 24576000000) == [(23040000000, 4096)]
-        assert engram_page_ranges(np.array([95999999], dtype=dtype), 256, 24576000000) == [(24575995904, 4096)]
-    with tempfile.TemporaryFile() as sparse:
-        sparse.truncate((1 << 31) + mmap.PAGESIZE)
-        with mmap.mmap(sparse.fileno(), 0, access=mmap.ACCESS_READ) as mapping:
-            for offset, length in engram_page_ranges(np.array([8388608], dtype=np.int32), 256, len(mapping), mmap.PAGESIZE):
-                mapping.madvise(mmap.MADV_WILLNEED, offset, length)
     torch.cuda.set_device(0)
     with tempfile.TemporaryDirectory(prefix="engram-graph-") as directory:
         layers = []
@@ -87,10 +72,8 @@ def check() -> None:
             ))
             reference.append(values * torch.pow(2., scales.float() - 127).repeat_interleave(32, 1))
 
-        stager = EngramDiskStager(layers, 64, 2, 3, cache_bytes=2 * 264)
+        stager = EngramDiskStager(layers, 64, 2, 3)
         addresses = [layer.staged_rows.data_ptr() for layer in layers]
-        transfers = [layer.embed_tokens._disk_transfer for layer in layers]
-        transfer_addresses = [(t.weights.data_ptr(), t.scales.data_ptr(), t.device_indices.data_ptr()) for t in transfers]
         graphs = {}
         for count in (1, 6, 64, 1, 64, 6, 1):
             if count not in graphs:
@@ -99,7 +82,7 @@ def check() -> None:
                     output = torch.stack([layer.staged_rows[:count] for layer in layers])
                     output = output * stager.mask[:count][None, :, None, None]
                 graphs[count] = graph, output
-            for shift in (0, 0, 3, 11):
+            for shift in (0, 3, 11):
                 ids = (np.arange(count * 2 * 3).reshape(count, 2, 3) + shift) % 15 - 1
                 # Duplicates stress inverse mapping; alternating calls change
                 # every table row, exposing a stale capture even at c1.
@@ -124,12 +107,8 @@ def check() -> None:
                                 expected[idx, token, head] = reference[idx][row - embed.vocab_start_idx]
                 torch.testing.assert_close(output.cpu(), expected, rtol=0, atol=0)
                 assert [layer.staged_rows.data_ptr() for layer in layers] == addresses
-                assert [(t.weights.data_ptr(), t.scales.data_ptr(), t.device_indices.data_ptr()) for t in transfers] == transfer_addresses
-        assert sum(t.hits for t in transfers) > 0
-        assert sum(t.misses for t in transfers) > 0
-        assert sum(t.evictions for t in transfers) > 0
         stager.pool.shutdown(wait=True)
-        print("Engram SSD full-graph fixed-buffer preflight: 28 cache-hit/miss/eviction replays passed exactly")
+        print("Engram SSD full-graph fixed-buffer preflight: 21 replays passed exactly")
 
 
 if __name__ == "__main__":
