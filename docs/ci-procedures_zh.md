@@ -343,6 +343,11 @@ Admin 权限；Read、Triage 以及没有仓库访问权限的用户不能执行
 保持不变。其他 Workflow（包括恢复流程）保留原有的授权和派发行为。
 执行凭据和 GitHub 保护措施仍在 Workflow 中明确配置。
 
+Python 工作流、Klaud 和恢复工具通过 `infx.github` 共用 GitHub 请求和列表验证逻辑。
+工作流继续显式传入 Token；Klaud 和恢复工具继续使用 `gh` 身份验证。
+分页格式错误、计数无效或列表不完整时，操作会终止。Klaud 公开错误仍经过脱敏处理；
+恢复工具的请求超时为 60 秒。
+
 ## 暂存结果
 
 [`stage-results.yml`](../.github/workflows/stage-results.yml) 允许具有 Write、Maintain 或 Admin 权限的用户将 PR 结果发布到预发布环境。它不会执行合并或生产入库。

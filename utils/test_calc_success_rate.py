@@ -116,7 +116,9 @@ def test_success_rates_include_all_pages_and_retries(
         query = parse_qs(urlparse(request.full_url).query)
         selected = jobs if query.get("filter") == ["all"] else jobs[1:]
         start = (int(query["page"][0]) - 1) * int(query["per_page"][0])
-        return io.BytesIO(json.dumps({"jobs": selected[start:start + 100]}).encode())
+        return io.BytesIO(json.dumps({
+            "jobs": selected[start:start + 100], "total_count": len(selected),
+        }).encode())
 
     monkeypatch.setattr(success_rate.github.urllib.request, "urlopen", urlopen)
     success_rate.main()
@@ -136,7 +138,7 @@ def test_success_rates_include_all_pages_and_retries(
     (401, RuntimeError, "HTTP 401"),
     ({}, RuntimeError, "unexpected shape"),
     ({"jobs": None}, RuntimeError, "unexpected shape"),
-    ({"jobs": [{}]}, KeyError, "name"),
+    ({"jobs": [{}], "total_count": 1}, KeyError, "name"),
 ])
 def test_failed_stats_do_not_publish_an_artifact(
     run_stats_environment, monkeypatch, response, error, match
@@ -158,7 +160,7 @@ def test_later_page_failure_preserves_previous_artifact(run_stats_environment, m
     def urlopen(request, timeout):
         query = parse_qs(urlparse(request.full_url).query)
         if query["page"] == ["1"]:
-            return io.BytesIO(json.dumps({"jobs": [
+            return io.BytesIO(json.dumps({"total_count": 101, "jobs": [
                 {"name": "benchmark cluster:sample-a", "conclusion": "success"}
                 for _ in range(100)
             ]}).encode())
@@ -173,7 +175,7 @@ def test_later_page_failure_preserves_previous_artifact(run_stats_environment, m
 def test_empty_job_list_still_writes_zero_counts(run_stats_environment, monkeypatch):
     monkeypatch.setattr(
         success_rate.github.urllib.request, "urlopen",
-        lambda request, timeout: io.BytesIO(b'{"jobs": []}'),
+        lambda request, timeout: io.BytesIO(b'{"jobs": [], "total_count": 0}'),
     )
     success_rate.main()
     assert json.loads(run_stats_environment.read_text()) == {

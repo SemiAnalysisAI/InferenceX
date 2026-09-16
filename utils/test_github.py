@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import subprocess
 
 import pytest
 
@@ -65,7 +66,7 @@ def test_pagination_reads_following_pages_without_losing_filters(monkeypatch, it
     def api(repo, path, token, params):
         pages.append(params)
         data = first_page if params["page"] == "1" else last_page
-        return {item_key: data} if item_key else data
+        return {item_key: data, "total_count": 101} if item_key else data
 
     monkeypatch.setattr(github, "api", api)
     result = github.paginate(
@@ -88,3 +89,57 @@ def test_pagination_rejects_malformed_responses(monkeypatch, payload):
     )
     with pytest.raises(RuntimeError, match="unexpected shape"):
         github.paginate("example/project", "/actions/runs/42/jobs", "token", "jobs")
+
+
+@pytest.mark.parametrize("transport", ["token", "cli"])
+@pytest.mark.parametrize("payload,message", [
+    ({"jobs": [], "total_count": 1}, "Incomplete GitHub listing"),
+    ({"jobs": []}, "Invalid GitHub listing count"),
+    ({"jobs": [], "total_count": True}, "Invalid GitHub listing count"),
+    ({"jobs": [], "total_count": -1}, "Invalid GitHub listing count"),
+    ({"jobs": [], "total_count": "0"}, "Invalid GitHub listing count"),
+    ({"jobs": [None], "total_count": 1}, "unexpected shape"),
+])
+def test_listing_rejects_invalid_or_incomplete_pages(monkeypatch, transport, payload, message):
+    if transport == "token":
+        monkeypatch.setattr(github.urllib.request, "urlopen",
+                            lambda request, timeout: io.BytesIO(json.dumps(payload).encode()))
+        fetch = lambda: github.paginate("example/project", "/jobs", "token", "jobs")
+    else:
+        monkeypatch.setattr(github.subprocess, "run", lambda args, **kwargs:
+                            subprocess.CompletedProcess(args, 0, json.dumps([payload]), ""))
+        fetch = lambda: github.cli_paginate("example/project", "jobs", "jobs")
+    with pytest.raises(github.ListingError, match=message):
+        fetch()
+
+
+def test_cli_pagination_uses_all_linked_pages_even_when_first_page_is_short(monkeypatch):
+    def run(args, **kwargs):
+        pages = [{"artifacts": [{"id": 7}], "total_count": 2},
+                 {"artifacts": [{"id": 9}], "total_count": 2}]
+        output = pages if "--paginate" in args and "--slurp" in args else pages[0]
+        return subprocess.CompletedProcess(args, 0, json.dumps(output), "")
+
+    monkeypatch.setattr(github.subprocess, "run", run)
+    assert github.cli_paginate("example/project", "actions/artifacts", "artifacts") == [
+        {"id": 7}, {"id": 9},
+    ]
+
+
+@pytest.mark.parametrize("pages,key,expected", [
+    ([[]], "", []),
+    ([{"jobs": [], "total_count": 0}], "jobs", []),
+    ([[{"id": 3}], [{"id": 5}]], "", [{"id": 3}, {"id": 5}]),
+])
+def test_cli_pagination_accepts_empty_and_bare_array_endpoints(monkeypatch, pages, key, expected):
+    monkeypatch.setattr(github.subprocess, "run", lambda args, **kwargs:
+                        subprocess.CompletedProcess(args, 0, json.dumps(pages), ""))
+    assert github.cli_paginate("example/project", "items", key) == expected
+
+
+@pytest.mark.parametrize("payload", [[], {}, None])
+def test_cli_pagination_rejects_missing_page_envelope(monkeypatch, payload):
+    monkeypatch.setattr(github.subprocess, "run", lambda args, **kwargs:
+                        subprocess.CompletedProcess(args, 0, json.dumps(payload), ""))
+    with pytest.raises(github.ListingError, match="Missing GitHub listing"):
+        github.cli_paginate("example/project", "items", "")

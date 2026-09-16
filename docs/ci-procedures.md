@@ -358,6 +358,11 @@ Other workflows, including recovery, retain their original authorization and
 dispatch behavior. Execution credentials and GitHub protections remain explicit
 in the workflows.
 
+Python workflow, Klaud, and recovery helpers share GitHub transport and listing validation
+in `infx.github`. Workflows retain explicit tokens; Klaud and recovery retain `gh` authentication.
+Malformed pages, invalid counts, and incomplete listings stop the operation. Klaud's public
+errors remain sanitized; recovery requests have a 60-second timeout.
+
 ## Stage results
 
 [`stage-results.yml`](../.github/workflows/stage-results.yml) publishes PR results to staging for users with Write, Maintain, or Admin access. It does not merge or publish to production.

@@ -59,11 +59,11 @@ def make_request_case(monkeypatch) -> dict:
         if path == "/actions/runs/123":
             return case["run"]
         if path == "/actions/workflows/run-sweep.yml/runs":
-            return {"workflow_runs": [case["run"]]}
+            return {"workflow_runs": [case["run"]], "total_count": 1}
         if path == "/actions/runs/123/artifacts":
             if callback := case.get("during_validation"):
                 callback()
-            return {"artifacts": case["artifacts"]}
+            return {"artifacts": case["artifacts"], "total_count": len(case["artifacts"])}
         raise AssertionError((method, path))
 
     monkeypatch.setattr(acknowledgment.github, "api", api)
