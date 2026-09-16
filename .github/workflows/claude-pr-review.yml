@@ -12,8 +12,12 @@ concurrency:
   group: pr-review-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   review:
+    name: review
     runs-on: ubuntu-latest
     # Only run if:
     # 1. It's a PR event from someone with write access, OR
@@ -26,14 +30,15 @@ jobs:
        contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     permissions:
       contents: read
-      pull-requests: write
-      actions: read
-      id-token: write
+      pull-requests: write # Publish PR feedback.
+      actions: read # Read workflow runs and artifacts.
+      id-token: write # Authenticate the Claude action with GitHub OIDC.
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -48,7 +53,9 @@ jobs:
         id: claude-code
         run: |
           # The native installer can report success without creating its launcher.
-          npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.265
+          mkdir -p "$RUNNER_TEMP/claude-code"
+          cp .github/claude-code/package{,-lock}.json "$RUNNER_TEMP/claude-code/"
+          npm ci --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund
           claude_path="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
           "$claude_path" --version
           echo "path=$claude_path" >> "$GITHUB_OUTPUT"
@@ -58,7 +65,8 @@ jobs:
         env:
           INFERENCEMAX_ROOT: ${{ github.workspace }}
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Repository review credential; the job gates eligible review requests.
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
           path_to_claude_code_executable: ${{ steps.claude-code.outputs.path }}
           trigger_phrase: "@pr-claude"
           track_progress: true

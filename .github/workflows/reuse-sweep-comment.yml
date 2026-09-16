@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   acknowledge:
+    name: acknowledge
     if: >-
       github.event.issue.pull_request &&
       (contains(github.event.comment.body, '/reuse-sweep-run') ||
@@ -20,10 +21,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      actions: read
+      actions: read # Read workflow runs and artifacts.
       contents: read
-      issues: write
-      pull-requests: write
+      issues: write # Update comments, labels, and reactions.
+      pull-requests: write # Publish PR feedback.
     steps:
       - name: Checkout trusted workflow code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

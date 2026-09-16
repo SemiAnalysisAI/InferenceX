@@ -1,6 +1,7 @@
 name: Claude Code
 
-on:
+# Distinct authorized comment requests must complete independently.
+on: # zizmor: ignore[concurrency-limits]
   issue_comment:
     types: [created]
   issues:
@@ -8,23 +9,29 @@ on:
   pull_request_review_comment:
     types: [created]
 
+permissions:
+  contents: read
+
 jobs:
   claude:
+    name: claude
     if: |
       ((github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment') && (contains(github.event.comment.body, '@claude') || contains(github.event.comment.body, '@Klaud-Cold'))) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude') || contains(github.event.issue.body, '@Klaud-Cold') || contains(github.event.issue.title, '@Klaud-Cold')))
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      actions: read
+      contents: write # Let the authorized agent commit and push changes.
+      pull-requests: write # Publish PR feedback.
+      issues: write # Update comments, labels, and reactions.
+      actions: read # Read workflow runs and artifacts.
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          token: ${{ secrets.CLAUDE_PAT }}
+          # Repository agent credential; the pinned action authorizes the triggering actor.
+          token: ${{ secrets.CLAUDE_PAT }} # zizmor: ignore[secrets-outside-env]
+          persist-credentials: false
 
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -33,14 +40,18 @@ jobs:
         id: claude
         uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
         env:
-          GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
-          GITHUB_TOKEN: ${{ secrets.CLAUDE_PAT }}
+          # Repository agent credential; the pinned action authorizes the triggering actor.
+          GH_TOKEN: ${{ secrets.CLAUDE_PAT }} # zizmor: ignore[secrets-outside-env]
+          # Repository agent credential; the pinned action authorizes the triggering actor.
+          GITHUB_TOKEN: ${{ secrets.CLAUDE_PAT }} # zizmor: ignore[secrets-outside-env]
           INFERENCEMAX_ROOT: ${{ github.workspace }}
           BASH_DEFAULT_TIMEOUT_MS: "1800000"
           BASH_MAX_TIMEOUT_MS: "3600000"
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.CLAUDE_PAT }}
+          # Repository agent credential; the pinned action authorizes the triggering actor.
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
+          # Repository agent credential; the pinned action authorizes the triggering actor.
+          github_token: ${{ secrets.CLAUDE_PAT }} # zizmor: ignore[secrets-outside-env]
           trigger_phrase: "${{ contains(github.event.comment.body || github.event.issue.body || github.event.issue.title || '', '@Klaud-Cold') && '@Klaud-Cold' || '@claude' }}"
           track_progress: true
           allowed_bots: '*'

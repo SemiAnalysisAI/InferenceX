@@ -31,7 +31,7 @@ These sources outrank this guide when behavior changes. Update the English page 
 
 ## Testing layers
 
-[`CI`](../.github/workflows/ci.yml) runs **Lint** and **Tests** in parallel when any `.py` file changes in a PR (including forks) or a push to `main`. GitHub handles path filtering; manual dispatch runs both jobs regardless of changed files. Changes only to docs, shell scripts, YAML, dependencies, or Ruff configuration do not trigger Python CI; run the applicable checks locally or dispatch CI manually.
+[`CI`](../.github/workflows/ci.yml) runs **Lint**, **Tests**, and **Zizmor** in parallel for PRs (including forks) and pushes to `main` that change Python files, `.github/` files, action definitions, pre-commit configuration, or zizmor configuration. Manual dispatch runs all three jobs. Changes only to other docs, shell scripts, or benchmark YAML do not trigger CI; run the applicable checks locally or dispatch CI manually.
 
 Tests runs every suite under `utils/`, `runners/`, and `experimental/CollectiveX/tests/` with four pytest workers, plus MCP compatibility. New tests in those directories are discovered automatically. The test environment uses Python 3.12 and CPU-only PyTorch; dependencies must be at least 12 hours old. A failing job does not cancel the other; a newer PR update cancels the superseded CI run. Branch pushes without a PR no longer start a separate changelog-test run.
 
@@ -73,6 +73,26 @@ uvx --exclude-newer PT12H ruff@latest format infx
 ```
 
 Fix findings where practical. Justified exceptions use inline `# noqa: CODE`; unused ignores are checked. Preview rules and automatic unsafe fixes are not enabled.
+
+### GitHub Actions security
+
+CI pins zizmor 1.30.1 and uses its strictest `auditor` persona, strict input collection, all supported input kinds, and online action-reference checks. Every unsuppressed finding fails the job, including informational and low-confidence findings. Run the same audit locally with an authenticated GitHub token:
+
+```bash
+GH_TOKEN="$(gh auth token)" uvx --exclude-newer PT12H zizmor==1.30.1 \
+  --persona auditor --strict-collection --collect all --no-config --no-progress .
+```
+
+All third-party actions remain pinned to commit SHAs. Same-repository workflow calls use `$/`, which resolves the workflow's exact commit and requires Actions runner 2.336.0 or newer. Dependabot waits seven days before action updates; Claude's review CLI installs from a committed npm lockfile.
+
+Auditor mode also reports deliberate architecture choices. Exceptions are attached to the exact affected YAML line with a reason, never disabled globally:
+
+- Independent GPU dispatches, comment requests, and Klaud waves must not supersede one another. The priority scheduler and candidate ownership claims handle their resource limits.
+- Fork sign-off and trusted external dispatch require `pull_request_target`; they execute trusted control code and enforce authorization before privileged operations.
+- Existing repository-scoped integration credentials are retained. Moving them into protected GitHub Environments requires migrating the actual stored secrets; adding an empty `environment:` field is not a fix.
+- The profiling storage checkout retains its scoped SSH deploy key only because the next step pushes a trace commit to that separate repository. Benchmark checkouts do not retain credentials.
+
+Add `--no-ignores` to review all of these exceptions. Keep new findings blocking, and review an exception again if its trigger, checkout, credential consumer, or authorization changes. No GPU execution is needed to run this security audit.
 
 ### Parse and syntax
 

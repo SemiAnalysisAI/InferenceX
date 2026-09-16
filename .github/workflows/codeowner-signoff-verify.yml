@@ -1,7 +1,8 @@
 name: CODEOWNER Sign-off Verify
 
 on:
-  pull_request_target:
+  # Fork sign-off needs a trusted status writer; only default-branch code executes and verifier authorization is checked.
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, synchronize, reopened, ready_for_review]
   issue_comment:
     types: [created, edited, deleted]
@@ -45,10 +46,10 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: read
-      pull-requests: write
-      issues: write
-      actions: read
-      statuses: write
+      pull-requests: write # Publish PR feedback.
+      issues: write # Update comments, labels, and reactions.
+      actions: read # Read workflow runs and artifacts.
+      statuses: write # Publish the CODEOWNER status.
     steps:
       - name: Checkout trusted workflow code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -281,14 +282,18 @@ jobs:
         if: steps.prepare.outputs.verify == 'true'
         uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
         env:
-          GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
-          GITHUB_TOKEN: ${{ secrets.CLAUDE_PAT }}
+          # Repository verifier credential; trusted code checks writer authorization before this step.
+          GH_TOKEN: ${{ secrets.CLAUDE_PAT }} # zizmor: ignore[secrets-outside-env]
+          # Repository verifier credential; trusted code checks writer authorization before this step.
+          GITHUB_TOKEN: ${{ secrets.CLAUDE_PAT }} # zizmor: ignore[secrets-outside-env]
           INFERENCEMAX_ROOT: ${{ github.workspace }}
           BASH_DEFAULT_TIMEOUT_MS: "1800000"
           BASH_MAX_TIMEOUT_MS: "3600000"
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.CLAUDE_PAT }}
+          # Repository verifier credential; trusted code checks writer authorization before this step.
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
+          # Repository verifier credential; trusted code checks writer authorization before this step.
+          github_token: ${{ secrets.CLAUDE_PAT }} # zizmor: ignore[secrets-outside-env]
           track_progress: false
           allowed_bots: ''
           additional_permissions: |
