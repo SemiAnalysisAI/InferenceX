@@ -183,7 +183,7 @@ dispatcher never checks out or executes PR code itself.
 
 This proof of concept produces benchmark and evaluation artifacts through the
 End-to-End Tests workflow. Those runs are not yet eligible for
-`/reuse-sweep-run`, which currently accepts only `run-sweep.yml` runs. The PoC
+`/use`, which currently accepts only `run-sweep.yml` runs. The PoC
 also fans out the selected matrix immediately. It does not reproduce
 `run-sweep.yml`'s canary-first sequencing.
 
@@ -196,15 +196,16 @@ An authorized maintainer can reuse an eligible completed sweep without keeping
 a sweep label on the PR:
 
 ```
-/reuse-sweep-run
+/use <run_id>
 ```
 
-This selects the latest successful `run-sweep.yml` PR run whose commit remains
-in the PR. A run ID can pin an eligible successful or failed run:
+Keep the command and required run ID on one line. This pins an eligible completed
+`run-sweep.yml` PR run whose commit remains in the PR, including failed or cancelled
+runs with usable results.
 
-```
-/reuse-sweep-run <run_id>
-```
+The legacy `/reuse-sweep-run <run_id>` remains equivalent. Bare `/reuse-sweep-run`
+selects the latest successful eligible run automatically; bare `/use` is rejected.
+Both names share authorization, validation, and reactions.
 
 Source validation checks identity and artifacts, not full-matrix coverage.
 A successful `sweep-enabled` trim sweep can also be selected automatically;
@@ -212,7 +213,7 @@ reusing it publishes only its recorded points on `main`. Acceptance does not
 certify a green full sweep. Verify coverage and pin the run ID when a full sweep
 is required by the review process.
 
-The latest matching comment by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
+The latest matching comment across both names by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
 The bot reacts with 👍 after validating the request, or 👎 on rejection; details
 are in the Actions run summary. Edits replace the bot's old reaction. No separate
 comment is posted. Comments do not trigger or cancel GPU sweeps. Later commits
