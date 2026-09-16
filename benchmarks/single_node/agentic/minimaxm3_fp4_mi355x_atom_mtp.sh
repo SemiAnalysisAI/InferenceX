@@ -85,93 +85,24 @@ trap cleanup_agentic_services EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-# Per-concurrency knobs. STATE_OFFLOAD_CPU_GIB is the per-rank slice of the
-# CPU budget reserved for the MiniMax-M3 state; 0 leaves it all to the paged KV.
-# MAX_NUM_SEQS, MAX_NUM_BATCHED_TOKENS and GPU_MEM_UTIL are overridden below
-# by the official ATOM launch settings.
-case "$CONC" in
-    1|2|4|5)
-        MAX_NUM_SEQS=32
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.88
-        ATOM_ENABLE_REPLAYSSM=0
-        NUM_SPEC_TOKENS=3
-        SPEC_DECODE_AL=2.78
-        STATE_OFFLOAD_CPU_GIB=0
-        ;;
-    # 25 and 30 are the TP2 offload curve; ATOM_ENABLE_REPLAYSSM is a no-op for
-    # M3 (it only gates gdn_attn, and M3 has no SSM layers), so they share a band.
-    8|10|12|14|15|20|24|25|28|30)
-        MAX_NUM_SEQS=32
-        MAX_NUM_BATCHED_TOKENS=4096
-        GPU_MEM_UTIL=0.88
-        ATOM_ENABLE_REPLAYSSM=1
-        NUM_SPEC_TOKENS=3
-        SPEC_DECODE_AL=2.78
-        STATE_OFFLOAD_CPU_GIB=0
-        ;;
-    # 32 GB/rank carved out for the attention state tier.
-    16)
-        MAX_NUM_SEQS=32
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.86
-        ATOM_ENABLE_REPLAYSSM=0
-        NUM_SPEC_TOKENS=3
-        SPEC_DECODE_AL=2.78
-        STATE_OFFLOAD_CPU_GIB=32
-        ;;
-    32)
-        MAX_NUM_SEQS=64
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.86
-        ATOM_ENABLE_REPLAYSSM=0
-        NUM_SPEC_TOKENS=3
-        SPEC_DECODE_AL=2.78
-        STATE_OFFLOAD_CPU_GIB=32
-        ;;
-    # No hybrid CPU state tier past the throughput knee; the draft model stays on.
-    # These two bands ran without it and paid for it: at CONC=40/48 the forward
-    # step is 37-41 ms either way, so dropping EAGLE3 hands back the whole
-    # acceptance-length multiplier and ITL p50 goes 13.9 ms (CONC=32, spec on) to
-    # 37.1/40.7 ms. Interactivity p90 fell 43.9 -> 23.4/19.7 for that reason
-    # alone, not because of the offload tier those bands also enable.
-    40)
-        MAX_NUM_SEQS=80
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.86
-        ATOM_ENABLE_REPLAYSSM=0
-        NUM_SPEC_TOKENS=3
-        SPEC_DECODE_AL=2.78
-        STATE_OFFLOAD_CPU_GIB=0
-        ;;
-    48)
-        MAX_NUM_SEQS=96
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.86
-        ATOM_ENABLE_REPLAYSSM=0
-        NUM_SPEC_TOKENS=3
-        SPEC_DECODE_AL=2.78
-        STATE_OFFLOAD_CPU_GIB=0
-        ;;
-    56)
-        MAX_NUM_SEQS=72
-        MAX_NUM_BATCHED_TOKENS=4096
-        GPU_MEM_UTIL=0.88
-        ATOM_ENABLE_REPLAYSSM=0
-        NUM_SPEC_TOKENS=0
-        SPEC_DECODE_AL=0
-        STATE_OFFLOAD_CPU_GIB=32
-        ;;
-    *)
-        echo "Unsupported CONC=$CONC" >&2
-        exit 2
-        ;;
-esac
-# Official MiniMax-M3 ATOM launch settings override the per-band capacity knobs.
+# Official MiniMax-M3 ATOM launch settings.
 MAX_NUM_SEQS=$((2 * CONC))
 MAX_NUM_BATCHED_TOKENS=32768
 GPU_MEM_UTIL=0.95
-export ATOM_ENABLE_REPLAYSSM
+
+NUM_SPEC_TOKENS=3
+SPEC_DECODE_AL=2.78
+# Per-rank CPU slice reserved for the M3 state; 0 leaves it all to paged KV.
+STATE_OFFLOAD_CPU_GIB=0
+case "$CONC" in
+    1|2|4|5|8|10|12|14|15|20|24|25|28|30|40|48) ;;
+    16|32) STATE_OFFLOAD_CPU_GIB=32 ;;
+    56)    STATE_OFFLOAD_CPU_GIB=32; NUM_SPEC_TOKENS=0; SPEC_DECODE_AL=0 ;;
+    *)     echo "Unsupported CONC=$CONC" >&2; exit 2 ;;
+esac
+
+# Sized for the running batch, which is 22-41% of CONC on this workload, not for
+# CONC itself. ModelRunner trims this to min(2*CONC, 8192).
 CUDAGRAPH_CAPTURE_SIZES="[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,20,22,24,26,28,30,32,34,36,40,48,56,64]"
 
 # MiniMax-M3 attention carries a per-request recurrent state alongside the
@@ -189,10 +120,8 @@ case "$KV_OFFLOAD_BACKEND" in
         export PYTHONHASHSEED=0
         export LMCACHE_LOCAL_CPU=True
 
-        # GPUs 0-3 are on NUMA node 0 and 4-7 on node 1. Ranks pinning host memory
-        # on the same node starve each other: 256 GB/rank took 45 min to pin with
-        # both TP2 ranks on node 0 and 21 s with one per node, at no measurable
-        # throughput cost. Only chosen when the caller has not pinned a set.
+        # GPUs 0-3 are on NUMA node 0, 4-7 on node 1; one rank per node so they
+        # do not starve each other pinning host memory (45 min -> 21 s).
         if [[ -z "${ROCR_VISIBLE_DEVICES+x}" && "$TP" -eq 2 ]]; then
             export ROCR_VISIBLE_DEVICES=0,4
             export HIP_VISIBLE_DEVICES=0,4
@@ -208,8 +137,7 @@ case "$KV_OFFLOAD_BACKEND" in
                 export ATOM_PREFIX_CACHE_POLICY=slru
                 export ATOM_PREFIX_CACHE_PROTECTED_RATIO=0.5
                 export LMCACHE_CACHE_POLICY=ATOM_SLRU
-                # Must cover every rank. Leaving it at rank 0 alone halves the
-                # measured offload benefit (all lookups serialise there).
+                # Must cover every rank; rank 0 alone halves the offload benefit.
                 export LMCACHE_LOOKUP_SERVER_WORKER_IDS="$(seq -s, 0 $((TP - 1)))"
                 ;;
             *)
