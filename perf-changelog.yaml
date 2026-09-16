@@ -7988,7 +7988,7 @@
     - "Add B200 Dynamo+SGLang AgentX TP8 aggregate HiCache recipes at concurrency 1, 4, and 8."
     - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with bundled DSpark K=6, full-node CPU/DRAM allocation, and per-point request/CUDA-graph limits."
     - "Preinstall uv with the pinned GitHub Action on NScale so benchmark startup does not depend on direct access to astral.sh."
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3211
 
 - config-keys:
     - dsv4-fp4-b200-dynamo-sglang-agentic-disagg
@@ -7998,4 +7998,4 @@
     - "Add B200 Dynamo+SGLang AgentX DEP8/DEP8 HiCache recipes for 1P1D at concurrency 64 and 128, plus 2P1D at concurrency 256."
     - "Limit decode max-running-requests to 128, 256, and 512, respectively, and reserve long-output KV admission for the c256 trace."
     - "Reuse the preinstalled uv binary in the NScale launcher, with the existing astral.sh installer retained as a fallback."
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3211
