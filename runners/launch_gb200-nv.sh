@@ -187,7 +187,14 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
         export SRT_SLURM_MODEL_PREFIX="dsr1-fp4"
     elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/deepseek-v4-pro"
+        if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+            # AgentX compute nodes have this checkpoint staged on local NVMe.
+            # It is intentionally invisible to the login-node runner, so the
+            # srtctl invocation below uses --no-preflight.
+            export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
+        else
+            export MODEL_PATH="/mnt/lustre01/models/deepseek-v4-pro"
+        fi
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
     elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
         # The GLM-5.1 sglang recipes reuse the glm-5-fp4 alias.
@@ -282,9 +289,12 @@ uses_watchtower_shared_fs() {
     case "$MODEL_PREFIX" in
         minimaxm2.5|minimaxm3|kimik2.5|kimik3|qwen3.5|glm5.2) return 0 ;;
     esac
-    # dsv4 multinode runs only under dynamo-vllm on watchtower, where the runner
-    # home is not cross-mounted to compute nodes.
-    [[ "$FRAMEWORK" == "dynamo-vllm" && "$MODEL_PREFIX" == "dsv4" ]] && return 0
+    # DSV4 multinode jobs need their checkout and outputs on a compute-visible
+    # filesystem because the runner home is not mounted on compute nodes.
+    if [[ "$MODEL_PREFIX" == "dsv4" ]]; then
+        [[ "$FRAMEWORK" == "dynamo-vllm" ]] && return 0
+        [[ "$FRAMEWORK" == "dynamo-sglang" && "$IS_AGENTIC" == "1" ]] && return 0
+    fi
     return 1
 }
 

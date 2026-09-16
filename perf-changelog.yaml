@@ -7923,3 +7923,24 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260915."
     - "Switch HiCache defaults to --hicache-io-backend kernel and --hicache-mem-layout page_first (from direct / page_first_direct). Ratio 1.5 and write_through are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3118
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 Dynamo+SGLang AgentX TP8 aggregate HiCache recipes at concurrency 1 and 4."
+    - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with EAGLE MTP and max-running-request/CUDA-graph limits set to twice each concurrency."
+    - "Use the compute-visible Watchtower workspace and node-local DeepSeek-V4-Pro checkpoint staging."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 Dynamo+SGLang AgentX HiCache recipes for 1P1D DEP8/DEP16 at concurrency 64, 128, and 400, plus 2P1D DEP8/DEP16 at concurrency 800."
+    - "Limit decode max-running-requests to 128, 256, 800, and 1600, respectively."
+    - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with the Dynamo 1.5.0.dev20260910 wheel and EAGLE MTP."
+    - "Use the compute-visible Watchtower workspace and node-local DeepSeek-V4-Pro checkpoint staging."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
