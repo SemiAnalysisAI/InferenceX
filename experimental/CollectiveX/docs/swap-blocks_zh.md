@@ -80,8 +80,8 @@ gh workflow run collectivex-sweep.yml --ref codex/collectivex-swap-blocks \
 
 ## 多 GPU 平台运行
 
-`only_sku` 留空时运行所有已注册 GPU 池，也可单独指定 `h200-dgxc`、`h100-dgxc`、
-`b200-nscale`、`b300`、`gb200`、`gb300`、`mi300x-tw`、`mi325x-tw` 或 `mi355x`。
+`only_sku` 留空时运行当前九个 Slurm GPU 池，也可单独指定 `h200-dgxc`、`h100-dgxc`、
+`b200-nscale`、`b300`、`gb200`、`gb300`、`mi300x`、`mi325x` 或 `mi355x`。
 `exclude_skus` 接受以逗号分隔的排除列表；EP 筛选项应留空。每个任务请求 `nodes:1`，
 只运行一个 GPU 进程。Slurm 独占分配一个节点，`-tw` 则使用 runner 所在主机的 Docker。
 CUDA 平台使用 `swap_image`，AMD 平台使用 `swap_rocm_image`，默认值为
@@ -92,3 +92,7 @@ H100 的 `/tmp` 无法存储 enroot 转换镜像层所需的 overlay whiteout �
 因此工作流将镜像导入临时目录设为 `/var/tmp`；其他平台使用 `/tmp`。每个任务
 的临时导入目录在退出时清理。Slurm 排除列表与当前节点清单取交集，忽略已退役
 名称，同时保留对现有节点的排除。B300/GB300 与推理启动器保持一致，使用分区默认 QoS。
+
+旧版 `mi300x-tw` 和 `mi325x-tw` Docker 池仍可显式选择，能否运行取决于 runner
+是否在线。Docker 主机无法报告 Slurm 节点容量，因此不进入 Slurm 优先级调度器。
+默认扫描使用当前的 `mi300x` 和 `mi325x` Slurm 池；这两个新增平台未启用 EP 后端。

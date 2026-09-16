@@ -96,12 +96,16 @@ check_env_vars SQUASH_FILE
 read -r -a block_bytes <<< "$COLLX_SWAP_BLOCK_BYTES"
 read -r -a num_blocks <<< "$COLLX_SWAP_NUM_BLOCKS"
 
+container_mounts="$MOUNT_SRC:/ix"
+case "$COLLX_SHARD_SKU" in
+  mi300x|mi325x) container_mounts+=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
+esac
 for layout in contiguous random; do
   runtime_log="$(collx_private_log_path "swap-blocks-$layout")"
   if ! srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks=1 --ntasks-per-node=1 \
       --chdir=/tmp --container-image="$SQUASH_FILE" \
       --container-name="cxep_${JOB_ID}" --container-writable --container-remap-root \
-      --container-mounts="$MOUNT_SRC:/ix" --no-container-mount-home --no-container-entrypoint \
+      --container-mounts="$container_mounts" --no-container-mount-home --no-container-entrypoint \
       --container-workdir=/ix/experimental/CollectiveX \
       --export="$(collx_host_exports),COLLECTIVEX_IMAGE,COLLECTIVEX_SOURCE_SHA,COLLX_SHARD_SKU" \
       python3 bench/run_swap_blocks.py --directions h2d d2h d2d \

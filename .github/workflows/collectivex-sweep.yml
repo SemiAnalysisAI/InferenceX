@@ -142,7 +142,7 @@ jobs:
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
     runs-on: >-
       ${{ fromJSON(
-        vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
+        vars.PRIORITY_SCHEDULER_ENABLED == 'true' && !endsWith(matrix.sku, '-tw') &&
         (
           vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
           format(
@@ -206,10 +206,10 @@ jobs:
       # the shard finishes.
       COLLX_TIME: '300'
       COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_${{ matrix.id }}
-      COLLX_JOB_PARENT: ${{ (matrix.launcher == 'mi-amds' || matrix.sku == 'mi355x') && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || '/tmp' }}
-      COLLX_JOB_ROOT: ${{ (matrix.launcher == 'mi-amds' || matrix.sku == 'mi355x') && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) }}
-      COLLX_SOURCE_ROOT: ${{ (matrix.launcher == 'mi-amds' || matrix.sku == 'mi355x') && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) }}
-      HOME: ${{ (matrix.launcher == 'mi-amds' || matrix.sku == 'mi355x') && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) }}
+      COLLX_JOB_PARENT: ${{ (matrix.launcher == 'mi-amds' || startsWith(matrix.sku, 'mi3') && !endsWith(matrix.sku, '-tw')) && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || '/tmp' }}
+      COLLX_JOB_ROOT: ${{ (matrix.launcher == 'mi-amds' || startsWith(matrix.sku, 'mi3') && !endsWith(matrix.sku, '-tw')) && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) }}
+      COLLX_SOURCE_ROOT: ${{ (matrix.launcher == 'mi-amds' || startsWith(matrix.sku, 'mi3') && !endsWith(matrix.sku, '-tw')) && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) }}
+      HOME: ${{ (matrix.launcher == 'mi-amds' || startsWith(matrix.sku, 'mi3') && !endsWith(matrix.sku, '-tw')) && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) }}
     steps:
       # Create the private mode-0700 /tmp job root and git-fetch the exact COLLECTIVEX_SOURCE_SHA into it; shards never execute from the runner's shared checkout.
       - name: Prepare isolated source

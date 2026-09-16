@@ -15,6 +15,8 @@ def build_matrix(platforms: dict, only_sku: str, exclude_skus: str) -> dict:
         raise ValueError("only-sku and exclude-skus must be disjoint")
     cells = []
     for sku, platform in platforms.items():
+        if not only_sku and sku.endswith("-tw"):
+            continue
         if (only_sku and sku != only_sku) or sku in excluded:
             continue
         cells.append(

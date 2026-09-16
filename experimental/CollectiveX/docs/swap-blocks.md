@@ -63,9 +63,9 @@ gh workflow run collectivex-sweep.yml --ref codex/collectivex-swap-blocks \
   -f swap_image=vllm/vllm-openai:v0.25.1
 ```
 
-Use `--ref main` after merge. Blank `only_sku` selects every registered GPU pool;
+Use `--ref main` after merge. Blank `only_sku` selects the nine current Slurm GPU pools;
 set it to `h200-dgxc`, `h100-dgxc`, `b200-nscale`, `b300`, `gb200`, `gb300`,
-`mi300x-tw`, `mi325x-tw`, or `mi355x` for an isolated GPU sweep. `exclude_skus`
+`mi300x`, `mi325x`, or `mi355x` for an isolated GPU sweep. `exclude_skus`
 accepts a comma-separated exclusion list. Leave EP filters blank. Each cell requests
 `nodes:1` and runs one GPU process; Slurm cells allocate an exclusive node, while
 `-tw` cells use the runner's Docker host. `all` remains EP-only.
@@ -100,3 +100,8 @@ does not support the overlay whiteout attributes required by enroot. Other pools
 intersected with the current node inventory: retired names cannot invalidate the
 allocation, while exclusions of existing nodes are preserved. B300/GB300 use the
 partition default QoS, matching their serving launchers.
+
+`mi300x-tw` and `mi325x-tw` remain explicitly selectable legacy Docker pools,
+subject to runner availability. They bypass the Slurm priority scheduler because
+Docker-only hosts cannot advertise Slurm node capacity. The default sweep uses
+the current `mi300x` and `mi325x` Slurm pools; their EP backend registries remain empty.
