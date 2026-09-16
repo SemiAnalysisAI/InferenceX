@@ -27,11 +27,11 @@ jobs:
           token: ${{ secrets.CLAUDE_PAT }}
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
+        uses: anthropics/claude-code-action@9cdae7f0d995e3ba7c33f226087fdf82a59cd520 # v1.0.223
         env:
           GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
           GITHUB_TOKEN: ${{ secrets.CLAUDE_PAT }}
