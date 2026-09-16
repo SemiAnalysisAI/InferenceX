@@ -7762,3 +7762,12 @@
     - "Pin the measured C56 best serving shape: STP, resident KV, Quick Reduce INT4, async scheduling, PP partition 48/45, max-num-seqs 104, max-num-batched-tokens 12288, GPU memory utilization 0.85, scheduler cap 104, and the image-resident v2/v5 PP transport, hybrid-PP, AITER IPC, Triton 3.7.0, and tuned GEMM changes; runtime patching is disabled."
     - "The source profile measured 96,826.74 total tok/s (6,051.67 tok/s/GPU) with p90 ITL 88.39 ms over 1200 seconds. A PIT TP8xPP2 dummy-load smoke using the baked image reached READY, completed FULL and PIECEWISE CUDA Graph capture, activated Quick Reduce and v2/v5 PP transport, and completed a C56 fast-warmup 300-second profile."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-tp8pp2
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Route the MI355X TP8xPP2 AgentX test configuration to the public aigmkt/rocm-runtime:250916 image so MIA runners can pull without registry authentication."
+    - "将 MI355X TP8xPP2 AgentX 测试配置切换到公开镜像 aigmkt/rocm-runtime:250916，使 MIA runner 无需 registry 认证即可拉取。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD

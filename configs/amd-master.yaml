@@ -646,7 +646,7 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
 # Launcher: runners/launch_mi355x-amds.sh → multi_node/agentic/kimik3_fp4_mi355x_vllm.sh
 # → kimik3_fp4_mi355x_vllm_tp8pp2.sh (container serve).
 kimik3-fp4-mi355x-vllm-agentic-tp8pp2:
-  image: rocm/pytorch-private:vllm-k3-pp-v0
+  image: aigmkt/rocm-runtime:250916
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
