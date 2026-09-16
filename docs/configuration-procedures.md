@@ -203,7 +203,7 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 
 ### DeepSeek-V4.1-Flash DSpark
 
-The experimental B200 SSD Engram recipe in PR #3080 computes live hash IDs in the V2 runner before graph replay, stages rows from both disk tables into fixed GPU buffers, and uses FULL_AND_PIECEWISE graphs with a minimum capture size of 64. Host gathers deduplicate and sort IDs and run concurrently across the two tables. It is restricted to PP1/DP1 with microbatching disabled. A GPU preflight checks changing rows and graph shapes against an independent exact reference before serving; CI throughput and real-verification eval remain required.
+The experimental B200 SSD Engram recipe in PR #3080 restores the asynchronous row-retrieval implementation from run 34758729095. Host gathers overlap decoder execution and use PIECEWISE CUDA graphs instead of staging both tables before full graph replay. Capture sizes grow from 1 to cover concurrency times six DSpark verification tokens. The sweep includes concurrency 1, 2, 4, 8, 16, 32, 64, 96, and 128; CI throughput and real-verification eval remain required.
 
 The GB200 DSpark recipe uses a minimum CUDA graph capture size of 64 tokens to cover concurrent AgentX subagents. This raises c1/c2/c4 from 8/16/32 to 64; c8 and above retain their existing sizes. The full trace, AL 3.51, and Engram UVA settings are preserved; low-concurrency tail latency improvements require CI confirmation.
 The B200 DSpark recipe uses the same minimum capture size and preserves the same workload settings.

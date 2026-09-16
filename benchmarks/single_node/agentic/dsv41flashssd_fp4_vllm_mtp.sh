@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-# DeepSeek-V4.1-Flash Engram on local NVMe. The pinned image patch stages
-# current hash IDs and disk rows before graph replay into fixed GPU buffers.
-# Correctness is checked on changing IDs and graph sizes before model startup.
+# DeepSeek-V4.1-Flash Engram on local NVMe. Async host row retrieval
+# overlaps decoder execution, with piecewise CUDA graphs around host work.
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 export GPU_COUNT="$TP"
@@ -46,7 +45,6 @@ elif ! patch -p1 -R --dry-run -d "$VLLM_DIR" < "$ENGRAM_PATCH" > /dev/null 2>&1;
     exit 1
 fi
 python3 -c "from vllm.config.engram import EngramConfig; assert 'disk_offload_dir' in EngramConfig.__dataclass_fields__"
-python3 "$INFERENCEX_REPO_ROOT/benchmarks/patches/check_dsv41flash_ssd_graph.py"
 
 # Node-local NVMe. A network mount would make every row gather a round trip,
 # so fail loudly rather than silently benchmarking the filesystem.
@@ -175,7 +173,7 @@ EOF
 esac
 
 NUM_SPEC_TOKENS=5
-CAPTURE_SIZE=64
+CAPTURE_SIZE=1
 while (( CAPTURE_SIZE < CONC * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
     CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
 done
@@ -186,8 +184,7 @@ else
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":3.51,"enable_adaptive_verification":false}'
 fi
 
-# SSD hash/row staging runs before replay. Decode captures the complete GPU
-# forward; mixed/prefill batches use the image's piecewise fallback.
+# Host row retrieval executes between graph pieces on each live step.
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0 --port "$PORT" --tensor-parallel-size "$TP"
@@ -197,7 +194,7 @@ VLLM_CMD=(
     --reasoning-parser deepseek_v41
     --engram-config "{\"cpu_offload\":true,\"disk_offload_dir\":\"$ENGRAM_SSD_DIR\"}"
     "${OFFLOAD_ARGS[@]}"
-    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+    --compilation-config '{"cudagraph_mode":"PIECEWISE"}'
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576
     --max-cudagraph-capture-size "$CAPTURE_SIZE"
