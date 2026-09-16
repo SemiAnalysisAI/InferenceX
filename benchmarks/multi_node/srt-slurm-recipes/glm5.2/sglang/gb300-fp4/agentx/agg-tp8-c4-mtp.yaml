@@ -65,8 +65,8 @@ roles:
       expert-parallel-size: 1
       enable-dp-attention: false
       enable-dp-lm-head: false
-      max-running-requests: 10
-      cuda-graph-max-bs-decode: 10
+      max-running-requests: 8
+      cuda-graph-max-bs-decode: 8
       chunked-prefill-size: 8192
       max-prefill-tokens: 8192
       context-length: 1048576
