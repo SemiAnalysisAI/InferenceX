@@ -44,7 +44,7 @@
 | Changelog 字节、Diff 与矩阵 Gate | [`infx/workflows/validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py)、[`infx.matrix.plan`](../infx/matrix/plan.py) |
 | 复用授权与源 Run 选择 | [`infx/workflows/reuse.py`](../infx/workflows/reuse.py) |
 | 受支持的复用合并与冲突准备 | [`utils/merge_with_reuse.sh`](../utils/merge_with_reuse.sh)、[`infx/workflows/prepare_perf_changelog_merge.py`](../infx/workflows/prepare_perf_changelog_merge.py) |
-| 预发布请求与回调 | [`.github/workflows/stage-results.yml`](../.github/workflows/stage-results.yml)、[`.github/workflows/stage-results-callback.yml`](../.github/workflows/stage-results-callback.yml) |
+| 预发布请求与回调 | [`infx/workflows/stage_results.py`](../infx/workflows/stage_results.py)、[`.github/workflows/stage-results.yml`](../.github/workflows/stage-results.yml)、[`.github/workflows/stage-results-callback.yml`](../.github/workflows/stage-results-callback.yml) |
 | 复用 Agentic 入库的重新派发 | [`.github/workflows/recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) |
 | 合并后责任提醒 | [`.github/workflows/pr-recipe-reminder.yml`](../.github/workflows/pr-recipe-reminder.yml) |
 
@@ -324,8 +324,8 @@ Checkout Ref、凭据和审阅
 
 ## 基于仓库角色的授权
 
-结果暂存和可信外部扫描派发直接通过 `actions/github-script` 检查仓库权限，
-使用其已通过 `GITHUB_TOKEN` 认证的客户端。两项操作都要求 Write、Maintain 或
+结果暂存和可信外部扫描派发均使用 `GITHUB_TOKEN` 检查仓库权限。暂存通过
+`infx.workflows.stage_results` 执行，外部派发使用 `actions/github-script`。两项操作都要求 Write、Maintain 或
 Admin 权限；Read、Triage 以及没有仓库访问权限的用户不能执行这些操作。
 
 授权要求原有基础 `permission` 和有效 `role_name` 均为 `admin`、`maintain` 或
@@ -336,8 +336,8 @@ Admin 权限；Read、Triage 以及没有仓库访问权限的用户不能执行
 `author_association` 不会通过这些检查赋予访问权限，也无需查询团队成员身份的额外 Token。
 
 结果暂存检查评论作者；外部批准检查原始 `github.actor`，重跑时也不改用重跑者
-身份。授权检查保留在各自的可信 Workflow 中，无需仓库 Checkout 或 Python
-辅助程序。现有 PR、SHA、标签历史、Source Run、Artifact 和 CODEOWNER 检查
+身份。暂存检出评论事件记录的默认分支提交，并运行依赖已锁定的 `infx` 包，
+绝不加载 PR 代码；外部派发保留内联授权检查。现有 PR、SHA、标签历史、Source Run、Artifact 和 CODEOWNER 检查
 保持不变。其他 Workflow（包括恢复流程）保留原有的授权和派发行为。
 执行凭据和 GitHub 保护措施仍在 Workflow 中明确配置。
 
@@ -377,7 +377,7 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 
 ### 资格与授权
 
-`infx.github` 提供仓库范围的 REST 调用、分页及评论表态基础操作，不包含扫描策略。`infx.workflows.reuse` 负责命令解析、授权查找及源 Run 的选择和验证。`infx.workflows.reuse_comment` 使用相同规则提供表态反馈。工作流通过 `python3 -m` 调用这些模块；现有 `utils/find_reusable_sweep_run.py` 命令和导入路径保持兼容。这些辅助程序使用 Python 标准库和 GitHub CLI；从检出目录运行时无需安装 Python 包。
+`infx.github` 提供仓库范围的 REST 调用、分页及评论表态基础操作，不包含扫描策略。`infx.workflows.sweep_runs` 为暂存和复用共享 PR 提交查询、已完成 Run 列表及未过期结果工件查找；各调用方保留自身的资格规则。`infx.workflows.reuse` 负责命令解析、授权查找及源 Run 的选择和验证。`infx.workflows.reuse_comment` 使用相同规则提供表态反馈。工作流通过 `python3 -m` 调用这些模块；现有 `utils/find_reusable_sweep_run.py` 命令和导入路径保持兼容。这些辅助程序使用 Python 标准库和 GitHub CLI；从检出目录运行时无需安装 Python 包。
 
 1. 复用不要求扫描标签。标签用于选择新的 GPU 工作；移除主标签不会使已有源 Run 失效。Changelog 验证和合并辅助脚本仍会拒绝冲突的主标签。
 2. `evals-only` 与 `agentx-fast` 会令 Run 不可复用。默认完整扫描以及带 `all-evals` 的完整扫描仍可复用。
