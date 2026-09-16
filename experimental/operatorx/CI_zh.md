@@ -54,7 +54,8 @@ gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
   未被所选大小覆盖的形状会计入 `excluded_shapes`。
 - 每个 Actions 分片独占一个物理 Slurm 节点，包含四张或八张 GPU。GPU 进程数等于所选 world size。
   准入沿用优先级评分器，以及 `ci-job-*`、`ci-attempt-*` 和唯一的 `nodes:1` 标签。
-  初始并发上限为两个分片。两个调度开关都必须保持启用。
+  所有分片均可被调度，由优先级/节点调度器控制物理节点准入。额外的 GitHub matrix
+  并发上限可能将标签分配给尚未获准启动的作业，导致停滞。两个调度开关都必须保持启用。
 - 运行器设置来自 CollectiveX 已纳入版本控制的平台配置。源码按工作流 SHA 检出，
   再复制到共享 squash 父目录或配置中可写的 `storage_roots` 路径（GB200）下的私有目录，
   该目录必须在计算节点上可见。B300 沿用 CollectiveX，从系统账户数据库读取计算节点可见

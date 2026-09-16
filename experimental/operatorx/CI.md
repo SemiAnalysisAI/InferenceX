@@ -57,8 +57,9 @@ Do not infer that Blackwell-specific FP4 kernels work on Hopper.
   requested sizes are counted in `excluded_shapes`.
 - Each Actions shard holds exactly one exclusive physical Slurm node (four or eight GPUs). The GPU
   process count is the selected world size. Admission uses the existing priority
-  scorer and `ci-job-*`, `ci-attempt-*`, and exactly one `nodes:1` label. Initial
-  concurrency is two shards. Both scheduler switches must remain enabled.
+  scorer and `ci-job-*`, `ci-attempt-*`, and exactly one `nodes:1` label. All shards remain eligible; the priority/node scheduler controls physical-node
+  admission. A second GitHub matrix cap can strand assigned labels on held jobs.
+  Both scheduler switches must remain enabled.
 - Runner settings come from CollectiveX's tracked platform registry. Source is
   checked out at the workflow SHA and copied into a private, compute-visible
   directory below the configured shared squash parent or a writable configured

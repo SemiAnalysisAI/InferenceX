@@ -97,7 +97,8 @@ jobs:
     timeout-minutes: 70
     strategy:
       fail-fast: false
-      max-parallel: 2
+      # Keep every shard eligible: a second matrix cap can strand priority labels
+      # on GitHub-held jobs. Runner/node admission is owned by the scheduler.
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
     runs-on: >-
       ${{ fromJSON(vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
