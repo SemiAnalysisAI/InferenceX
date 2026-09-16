@@ -7931,4 +7931,4 @@
   description:
     - "Keep DeepSeek-V4.1-Flash Engram tables in B300 HBM instead of pinned DRAM for the AgentX 1–128 sweep; preserve DSpark5, synthetic AL 3.51, the full trace, and GPU-resident KV"
     - "在 B300 AgentX 并发 1–128 扫描中将 DeepSeek-V4.1-Flash Engram 表保留在 HBM，而不是固定页 DRAM；保持 DSpark5、合成 AL 3.51、完整轨迹及 GPU 驻留 KV"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3181
