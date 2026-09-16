@@ -1215,6 +1215,8 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
             # Must run from repo root so infx/evals/gsm8k.yaml resolves
             pushd /workspace
 
+            # Match the disaggregation router launched above.
+            export PORT=30000
             source /workspace/benchmarks/benchmark_lib.sh
 
             # CONC must be exported before run_eval so meta_env.json matches validate_scores.py.
@@ -1236,9 +1238,9 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
             # arrive via Docker -e flags from job.slurm.
 
             if [[ "$DRY_RUN" -eq 1 ]]; then
-                echo "DRY RUN: run_eval --port 30000 (framework=${EVAL_FRAMEWORK}, conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
+                echo "DRY RUN: run_eval --port ${PORT} (framework=${EVAL_FRAMEWORK}, conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
             else
-                run_eval --port 30000
+                run_eval --port "$PORT"
                 eval_rc=$?
 
                 if [[ $eval_rc -ne 0 ]]; then
