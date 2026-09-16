@@ -22,7 +22,6 @@ Use this page for matrix generation, CI dispatch, PR sweeps, result staging, art
 | Diagnose or rerun a workflow | [Monitoring and reruns](#monitoring-and-reruns) |
 | Check privileged workflow access | [Repository-role authorization](#repository-role-authorization) |
 | Manage CI Python dependencies | [CI Python environments](#ci-python-environments) |
-| Configure workflow credentials | [Workflow credentials](#workflow-credentials) |
 | Publish a PR run to staging | [Stage results](#stage-results) |
 | Merge without repeating an approved sweep | [Artifact reuse and merge-with-reuse](#artifact-reuse-and-merge-with-reuse) |
 | Recover an append-only changelog conflict | [Changelog conflict recovery](#changelog-conflict-recovery) |
@@ -332,53 +331,6 @@ to be verified before requesting review.
 Standard-library-only helpers continue using the runner's Python. Benchmark
 containers and their framework environments remain managed by their existing
 launchers; this CI dependency migration does not change those environments.
-
-## Workflow credentials
-
-These are the minimum grants required by current consumers, not a verification of
-the credentials' actual provider-side grants. GitHub token rows use fine-grained
-repository permissions; Metadata read is automatic. Keep the four stored GitHub
-credentials separate so an exposed runner-reader or frontend token cannot write
-InferenceX branches.
-
-| Secret | Previous name | Resource scope | Required permissions and use |
-| --- | --- | --- | --- |
-| `GH_SPEEDBENCH_PR_TOKEN` | `REPO_PAT` | `SemiAnalysisAI/InferenceX` only | Contents write; Pull requests write. Push SpeedBench reference updates and open their PRs. |
-| `GH_AGENT_WRITE_TOKEN` | `CLAUDE_PAT` | `SemiAnalysisAI/InferenceX` only | Contents write; Pull requests write; Issues write; Actions write; Workflows write. Coding agents push changes, manage PRs/comments/labels, dispatch/cancel runs, and may edit workflow files. No Administration or organization grants. |
-| `GH_FRONTEND_DISPATCH_TOKEN` | `INFX_FRONTEND_PAT` | `SemiAnalysisAI/InferenceX-app` only | Contents write for `repository_dispatch` to stage or ingest results. |
-| `GH_RUNNERS_READ_TOKEN` | `RUNNERS_PAT` | `SemiAnalysisAI/InferenceX` only | Administration read to list self-hosted runners for the offline digest. |
-| `ANTHROPIC_API_KEY` | Unchanged | Dedicated InferenceX workspace | Model API access with workspace spend/rate limits. No Admin API key. |
-| `DASHBOARD_STATUS_READ_API_KEY` | `KLAUD_DASHBOARD_API_KEY` | Required dashboard clusters | Expiring `status:read` access for `GET /api/status/clusters`. No scheduler-control or key-management access. |
-| `MODAL_TOKEN_ID` + `MODAL_TOKEN_SECRET` | Unchanged | Dedicated evaluation environment | One service-user credential pair with Contributor access to create, run, and terminate SWE-bench sandboxes and associated apps/images. |
-| `NEON_PROD_READONLY_URL` | `NEON_PROD_RO_URL` | Production benchmark database | CONNECT; schema USAGE; SELECT on `benchmark_results`, `configs`, and `workflow_runs`. No writes, DDL, or role management. |
-| `PROFILER_STORAGE_DEPLOY_KEY` | Unchanged | `SemiAnalysisAI/InferenceX-trace-storage` only | Git read/write deploy key for profile uploads. |
-| `SLACK_BOT_TOKEN` | Unchanged | Runner-digest channel `C09PULGMVNG` | `chat:write`; the bot must be a channel member. No history, admin, or `chat:write.public` scope. |
-| `HF_MODELS_READ_TOKEN` | `INFERENCEX_OFFICIAL_RO_HF_TOKEN` | Required model repositories; inherited organization secret | Fine-grained model read/download, including gated-model authorization where required. No upload/delete/admin access. |
-
-The built-in `GITHUB_TOKEN` is not a stored secret. Benchmark and SpeedBench
-checkouts use `contents: read` without persisted credentials; their current
-submodules are public. Statistics jobs also grant `actions: read` to list jobs.
-Other jobs retain their explicit permissions. The SpeedBench writer is passed
-only to its PR-creation step, retaining the existing push/PR-trigger behavior.
-
-GitHub requires [Contents write for repository dispatch](https://docs.github.com/en/rest/repos/repos#create-a-repository-dispatch-event)
-and [Administration read for runner inventory](https://docs.github.com/en/rest/actions/self-hosted-runners#list-self-hosted-runners-for-a-repository).
-Neither credential needs repository access beyond the scope above. A secret rename
-does not narrow an existing token's grants or restrict which workflows can obtain
-it; provider scopes and protected environments are separate controls.
-
-Before deploying these names, provision every renamed secret with the required
-scope, including the inherited HF secret's repository access. Runtime inputs such
-as `HF_TOKEN`, `DATABASE_URL`, and `KLAUD_DASHBOARD_API_KEY` keep their existing names.
-Keep the old secrets while supporting historical workflow reruns; reruns use the
-original workflow revision. Remove old copies only after those consumers retire,
-and check other repositories or services before revoking the underlying credential.
-
-`APP_ID`, `APP_PRIVATE_KEY`, `PAT_WITH_WORKFLOW_SCOPE`, `DATABASE_WRITE_URL`,
-`TEST_HF_TOKEN`, `VERCEL_REVALIDATE_URL`, and `INFX_CI_SCHEDULER_PAT` have no active
-workflow consumer in this repository. They need no grants for current workflows;
-check historical and external consumers before retiring them. A scheduler's
-Administration-write credential must remain separate from the runner reader.
 
 ## Repository-role authorization
 
