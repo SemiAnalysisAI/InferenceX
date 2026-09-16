@@ -8769,4 +8769,5 @@
     - "Align prefill speculative steps and draft tokens with decode, use FlashInfer CuteDSL for disaggregate MoE/FP4 backends unless the existing backend is TensorRT-LLM, and run from the nightly's bundled Dynamo."
     - "For 4P1D c227, cap prefill chunks and max prefill tokens at 8192 and lower prefill mem-fraction-static to 0.75 to avoid the observed prefill allocator OOM and rank stall."
     - "Set aggregate max-running-requests and cuda-graph-max-bs-decode to twice each point's concurrency: 2 for c1, 4 for c2, and 8 for c4."
+    - "Set the SGLang scheduler watchdog to 1800 seconds on both roles of the high-throughput c227/c260 recipes; the c227 sweep reached long-context KV handoff on all prefill DP ranks and exceeded the default 300-second watchdog without an OOM or worker crash."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3178
