@@ -93,6 +93,7 @@ roles:
       speculative-num-steps: 2
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 3
+      watchdog-timeout: 1800
       enable-metrics: true
       enable-cache-report: true
   decode:
@@ -159,6 +160,7 @@ roles:
       model-loader-extra-config: '{"enable_multithread_load": true}'
       mem-fraction-static: 0.85
       disaggregation-decode-extra-slots: 0
+      watchdog-timeout: 1800
       enable-metrics: true
       enable-cache-report: true
       deepep-config: /configs/deepep_config.json
