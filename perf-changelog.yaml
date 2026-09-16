@@ -7923,4 +7923,3 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260915."
     - "Switch HiCache defaults to --hicache-io-backend kernel and --hicache-mem-layout page_first (from direct / page_first_direct). Ratio 1.5 and write_through are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3118
-  
