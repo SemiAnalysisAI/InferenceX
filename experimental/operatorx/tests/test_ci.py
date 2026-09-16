@@ -118,7 +118,9 @@ def test_testlist_loading_and_unknown_selection(tmp_path):
         benchmark._load_testlists(["two"], tmp_path)
 
 
-@pytest.mark.parametrize("exit_code,cancel", [(0, False), (3, False), (0, True)])
+@pytest.mark.parametrize(
+    "exit_code,cancel", [(0, False), (3, False), (0, True), (0, "queued")]
+)
 def test_allocation_completion_failure_and_cancellation(tmp_path, exit_code, cancel):
     binaries = tmp_path / "bin"
     binaries.mkdir()
@@ -126,7 +128,12 @@ def test_allocation_completion_failure_and_cancellation(tmp_path, exit_code, can
 import json, os, pathlib, sys, time
 name = pathlib.Path(sys.argv[0]).name
 with open(os.environ['TRACE'], 'a') as f: f.write(name + '\\n')
-if name == 'salloc': print('salloc: Granted job allocation 12345')
+if name == 'salloc':
+    if os.environ['QUEUED'] == '1':
+        print('salloc: Pending job allocation 12345', flush=True)
+        pathlib.Path(os.environ['READY']).touch()
+        time.sleep(60)
+    else: print('salloc: Granted job allocation 12345')
 if name == 'srun' and sys.argv[-1] == 'rank':
     mount = next(x for x in sys.argv if x.startswith('--container-mounts=')).split('=',1)[1].split(':')[0]
     out = pathlib.Path(mount) / 'results' / 'partial.json'
@@ -174,7 +181,8 @@ if name == 'srun' and sys.argv[-1] == 'rank':
         TRACE=str(tmp_path / "trace"),
         READY=str(tmp_path / "ready"),
         EXIT_CODE=str(exit_code),
-        CANCEL=str(int(cancel)),
+        CANCEL=str(int(bool(cancel))),
+        QUEUED=str(int(cancel == "queued")),
     )
     process = subprocess.Popen(
         [
@@ -219,9 +227,62 @@ if name == 'srun' and sys.argv[-1] == 'rank':
             process.kill()
             process.wait()
     assert (rc == 0) == (exit_code == 0 and not cancel)
-    assert json.loads((output / "results/partial.json").read_text())["rows"] == [
-        {"status": "ok"}
-    ]
+    if cancel == "queued":
+        assert not (output / "results/partial.json").exists()
+    else:
+        assert json.loads((output / "results/partial.json").read_text())["rows"] == [
+            {"status": "ok"}
+        ]
     assert "scancel" in (tmp_path / "trace").read_text().splitlines()
     stage = Path(json.loads((output / "execution.json").read_text())["stage"])
     assert not stage.exists()
+
+
+def test_summary_uses_latest_attempt_and_reports_missing_coverage(tmp_path):
+    manifest = {
+        "run_id": "12",
+        "source_sha": "abc",
+        "include": [{"id": "one", "cases": [{}, {}]}, {"id": "two", "cases": [{}]}],
+    }
+    for attempt, status in [(1, "error"), (2, "ok")]:
+        root = tmp_path / str(attempt)
+        ci.write_json(
+            root / "execution.json",
+            {
+                "run_id": "12",
+                "source_sha": "abc",
+                "attempt": str(attempt),
+                "cell": {"id": "one"},
+            },
+        )
+        ci.write_json(root / "status.json", {"exit_code": 0 if attempt == 2 else 1})
+        ci.write_json(
+            root / "results/run.json",
+            {"rows": [{"status": status}, {"status": "unsupported"}]},
+        )
+    report = ci.summarize(manifest, tmp_path)
+    assert report == {
+        "success": False,
+        "shards": [
+            {
+                "shard": "one",
+                "requested_shapes": 2,
+                "status": "success",
+                "ok": 1,
+                "unsupported": 1,
+                "error": 0,
+                "attempt": 2,
+            },
+            {
+                "shard": "two",
+                "requested_shapes": 1,
+                "status": "missing",
+                "ok": 0,
+                "unsupported": 0,
+                "error": 0,
+            },
+        ],
+    }
+    manifest["source_sha"] = "different"
+    with pytest.raises(ValueError, match="provenance"):
+        ci.summarize(manifest, tmp_path)

@@ -136,3 +136,40 @@ jobs:
           path: ${{ env.OPERATORX_OUTPUT }}
           if-no-files-found: error
           retention-days: 14
+
+  summarize:
+    name: Summarize OperatorX coverage
+    if: always() && github.event_name == 'workflow_dispatch' && needs.setup.result == 'success'
+    needs: [setup, sweep]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: operatorx-manifest-${{ github.run_id }}
+          path: operatorx-control
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: operatorx-shard-${{ github.run_id }}-*
+          path: operatorx-artifacts
+      - name: Report latest attempt for every requested shard
+        env:
+          PYTHONPATH: experimental
+        run: |
+          set -eo pipefail
+          source benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars GITHUB_STEP_SUMMARY
+          python3 -m operatorx.ci summarize \
+            --manifest operatorx-control/operatorx-manifest.json \
+            --artifacts operatorx-artifacts --out operatorx-summary.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: operatorx-summary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: operatorx-summary.json
+          if-no-files-found: error
+          retention-days: 14

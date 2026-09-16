@@ -82,3 +82,8 @@ uv run --no-project --python 3.12 --with pytest --with pyyaml \
 Real acceptance additionally requires a Hopper smoke run with artifacts, a
 failed-shard rerun, and cancellation with confirmed allocation release. CPU
 checks alone do not establish GPU compatibility or cluster storage visibility.
+
+The final coverage job selects the newest artifact attempt for each requested
+shard, preserves successful shards from previous attempts, and fails if any shard
+is missing or failed. Its summary separates requested shapes from result rows
+(one shape may run on multiple backends).

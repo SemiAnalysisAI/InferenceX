@@ -108,6 +108,7 @@ def digest_probe():
 
 
 def command(argv: list[str], log: Path, *, env=None) -> None:
+    print(f"[operatorx] phase={log.stem}", flush=True)
     with log.open("a") as stream:
         process = subprocess.Popen(
             argv, stdout=stream, stderr=subprocess.STDOUT, env=env
@@ -403,6 +404,53 @@ def rank() -> None:
     )
 
 
+def summarize(manifest: dict, artifacts: Path) -> dict:
+    latest = {}
+    for execution in artifacts.rglob("execution.json"):
+        data = json.loads(execution.read_text())
+        if (
+            data["run_id"] != manifest["run_id"]
+            or data["source_sha"] != manifest["source_sha"]
+        ):
+            raise ValueError("artifact provenance does not match the requested run")
+        identity = data["cell"]["id"]
+        attempt = int(data["attempt"])
+        if identity not in latest or attempt > latest[identity][0]:
+            latest[identity] = (attempt, execution.parent)
+    rows = []
+    for cell in manifest["include"]:
+        record = {
+            "shard": cell["id"],
+            "requested_shapes": len(cell["cases"]),
+            "status": "missing",
+            "ok": 0,
+            "unsupported": 0,
+            "error": 0,
+        }
+        if cell["id"] in latest:
+            attempt, directory = latest[cell["id"]]
+            record["attempt"] = attempt
+            for result in (directory / "results").rglob("*.json"):
+                for row in json.loads(result.read_text())["rows"]:
+                    status = row["status"]
+                    if status not in ("ok", "unsupported", "error"):
+                        raise ValueError(f"invalid result status: {status}")
+                    record[status] += 1
+            status_file = directory / "status.json"
+            success = (
+                status_file.exists()
+                and json.loads(status_file.read_text())["exit_code"] == 0
+                and record["ok"] > 0
+                and record["error"] == 0
+            )
+            record["status"] = "success" if success else "failed"
+        rows.append(record)
+    return {
+        "shards": rows,
+        "success": bool(rows) and all(r["status"] == "success" for r in rows),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -433,6 +481,10 @@ def main() -> None:
     sub.add_parser("rank")
     p = sub.add_parser("finalize")
     p.add_argument("--output", required=True, type=Path)
+    p = sub.add_parser("summarize")
+    p.add_argument("--manifest", required=True, type=Path)
+    p.add_argument("--artifacts", required=True, type=Path)
+    p.add_argument("--out", required=True, type=Path)
     args = parser.parse_args()
     if args.command == "plan":
         import tomllib
@@ -474,6 +526,19 @@ def main() -> None:
             ]
         }
         print(json.dumps(slim, separators=(",", ":")))
+    elif args.command == "summarize":
+        report = summarize(json.loads(args.manifest.read_text()), args.artifacts)
+        write_json(args.out, report)
+        print(
+            "| Shard | Status | Shapes requested | OK rows | Unsupported rows | Error rows |"
+        )
+        print("| --- | --- | ---: | ---: | ---: | ---: |")
+        for row in report["shards"]:
+            print(
+                f"| {row['shard']} | {row['status']} | {row['requested_shapes']} | "
+                f"{row['ok']} | {row['unsupported']} | {row['error']} |"
+            )
+        raise SystemExit(0 if report["success"] else 1)
     elif args.command == "execute":
         execute(args)
     elif args.command == "finalize":
