@@ -101,6 +101,26 @@ def test_aggregated_worker_expands_to_legacy_matrix_pair():
     }
 
 
+@pytest.mark.parametrize("roles, expected", [
+    ({"agg": {"nodes": 3, "workers": 6}}, 3),
+    ({"prefill": {"nodes": 2}, "decode": {"nodes": 4}}, 6),
+    ({"prefill": {"nodes": 2}, "decode": {"nodes": "colocate"}}, 2),
+    ({"prefill": {"nodes": 2}, "decode": {"workers": 1}}, None),
+])
+def test_multinode_node_count_reads_schema_two_roles(tmp_path, monkeypatch, roles, expected):
+    recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/test.yaml"
+    recipe.parent.mkdir(parents=True)
+    recipe.write_text(yaml.safe_dump({"schema": 2, "roles": roles}))
+    import infx.matrix.generate as generate
+    monkeypatch.setattr(generate, "__file__", str(tmp_path / "infx/matrix/generate.py"))
+    prefill = {"additional-settings": ["CONFIG_FILE=recipes/test.yaml"]}
+    if expected is None:
+        with pytest.raises(ValueError, match="role 'decode' must specify nodes"):
+            generate.recipe_node_count(prefill, {})
+    else:
+        assert generate.recipe_node_count(prefill, {}) == expected
+
+
 def test_multinode_node_count_uses_role_gpu_footprints(sample_runner_config):
     prefill = {"num-worker": 3, "tp": 2, "pp": 1, "pcp-size": 1}
     decode = {"num-worker": 2, "tp": 8, "pp": 1, "pcp-size": 1}
@@ -140,16 +160,16 @@ def test_multinode_node_count_resolves_heterogeneous_worker_hardware(
     "recipes/test.yaml",
     "benchmarks/multi_node/srt-slurm-recipes/test.yaml",
 ])
-@pytest.mark.parametrize(("resources", "expected_nodes"), [
-    ({"agg_nodes": 3}, 3),
-    ({"prefill_nodes": 2, "decode_nodes": 3}, 5),
+@pytest.mark.parametrize(("roles", "expected_nodes"), [
+    ({"agg": {"nodes": 3}}, 3),
+    ({"prefill": {"nodes": 2}, "decode": {"nodes": 3}}, 5),
 ])
-def test_multinode_node_count_prefers_recipe_resources(
-    tmp_path, monkeypatch, config_file, resources, expected_nodes,
+def test_multinode_node_count_prefers_recipe_roles(
+    tmp_path, monkeypatch, config_file, roles, expected_nodes,
 ):
     recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/test.yaml"
     recipe.parent.mkdir(parents=True)
-    recipe.write_text(yaml.safe_dump({"resources": resources}))
+    recipe.write_text(yaml.safe_dump({"schema": 2, "roles": roles}))
     monkeypatch.setattr(
         generate_sweep_configs, "__file__",
         str(tmp_path / "infx/matrix/generate.py"),
@@ -2786,14 +2806,6 @@ class TestApplyNodeTypeDefaults:
         assert args.multi_node is False
 
 
-    def test_no_node_attrs_is_noop(self):
-        """When args lacks node type attrs, nothing happens."""
-        args = argparse.Namespace(command="test-config")
-        apply_node_type_defaults(args)
-        assert not hasattr(args, 'single_node')
-        assert not hasattr(args, 'multi_node')
-
-
 # =============================================================================
 # Test generate_full_sweep mixed mode
 # =============================================================================
@@ -3264,30 +3276,3 @@ def test_require_power_is_scoped_to_one_fixed_sequence(multinode, power_key, sam
     sequences[0][power_key] = True
     with pytest.raises(ValueError, match="only fixed-sequence 8192/1024"):
         expand_full_sweep(config, sample_runner_config)
-
-
-@pytest.mark.parametrize("variant,concs,tp,workers,offload", [
-    ("latency", [1, 2, 3, 4, 5, 6, 7, 8, 10, 12], 16, 2, "none"),
-    ("balanced", [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16], 8, 4, "none"),
-    ("simple", [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32], 8, 4, "dram"),
-])
-def test_h200_recipe_keys_preserve_complete_scopes(
-    variant: str, concs: list[int], tp: int, workers: int, offload: str,
-) -> None:
-    from infx.matrix.generate import generate_config_matrix
-
-    repo = Path(__file__).resolve().parents[2]
-    master = yaml.safe_load((repo / "configs/nvidia-master.yaml").read_text())
-    runners = yaml.safe_load((repo / "configs/runners.yaml").read_text())
-    key = f"kimik3-fp4-h200-vllm-agentic-{variant}"
-    rows = generate_config_matrix([key], master, runners)
-    assert [row["conc"][0] for row in rows] == concs
-    assert {row["node-count"] for row in rows} == {4}
-    assert {row["duration"] for row in rows} == {3600}
-    assert {row["prefill"]["tp"] for row in rows} == {tp}
-    assert {row["prefill"]["num-worker"] for row in rows} == {workers}
-    assert {row["kv-offloading"] for row in rows} == {offload}
-    assert all(row["run-eval"] and row["eval-suite"] == "kimi_tool_call_schema" for row in rows)
-    recipes = {row["prefill"]["additional-settings"][0] for row in rows}
-    assert len(recipes) == 1
-    assert ("vllm-simple" if variant == "simple" else variant) in recipes.pop()

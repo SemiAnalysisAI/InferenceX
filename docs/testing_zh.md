@@ -59,6 +59,17 @@
 
 从仓库根目录运行检查，并用实际变更路径或键替换占位符。
 
+### Python 静态检查与格式化
+
+Ruff 按照 [`infx/ruff.toml`](../infx/ruff.toml) 中的规则检查 `infx/`，目标版本为 Python 3.12，行长度设为 100。任何 Python 文件变更都会触发 CI，使用已发布至少 12 小时的最新 Ruff 版本。
+
+```bash
+uvx --exclude-newer PT12H ruff@latest check --fix infx
+uvx --exclude-newer PT12H ruff@latest format infx
+```
+
+应尽量修复问题。确有理由保留的例外使用行内 `# noqa: CODE`；多余的忽略标记会被检查。未启用预览规则或自动不安全修复。
+
 ### 解析与语法
 
 ```bash
@@ -173,7 +184,7 @@ python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
 3. **CODEOWNER 签署前：**遵循 [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md)，包括适用的代码质量、架构、镜像来源、上游配方、补丁/豁免、聊天模板和 AgentX 要求。
 4. **扫描/评测验收：**当前仍在 PR 中的至少一个提交拥有成功、未跳过且实际执行的 `single-node */` 与 `eval /` 检查。仅 `collect-evals` 成功不够。下载对应评测制品，确认其非空、准确率达标且使用同一推理镜像。这些可执行规则位于[验证器检查 1 和 2](../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr)。
 5. **合并时复用：**获授权的 `OWNER`、`MEMBER` 或 `COLLABORATOR` 必须在受支持的合并路径前发布独占一行的 `/reuse-sweep-run` 命令（可附带合格来源 run ID）。验证器会把命令缺失或发布者未授权视为失败；参见[验证器检查 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted)和[复用流程](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
-6. **合并时：**CODEOWNER 的精确签署须由 [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) 独立接受。如果 PR head 变化，重新评估并签署新提交的证据。
+6. **合并时：**当前 head 必须满足[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)定义的 CODEOWNER 签核状态要求。验证、管理员更新后的签核保留、撤销及恢复规则以该指南为准。
 7. **合并后：**作者按照 [`CONTRIBUTING.md`](../CONTRIBUTING.md#after-merging) 的要求确认 main 分支任务通过。
 
 ## 停止条件

@@ -24,7 +24,7 @@ check_env_vars \
 
 export MODEL_NAME=glm5
 export TILERT_MODEL_TYPE=glm-5
-export MAX_MODEL_LEN="${MAX_MODEL_LEN:-202752}"
+check_env_vars MAX_MODEL_LEN
 
 export DECODE_KV_DTYPE=fp8
 export PREFILL_KV_DTYPE=fp8_ds_mla

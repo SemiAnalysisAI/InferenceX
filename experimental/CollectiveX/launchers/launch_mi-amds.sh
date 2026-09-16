@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
 # CollectiveX shared AMD Slurm launcher (one or two nodes).
 # shellcheck disable=SC2034
-#
-# Flow (container import runs inside the allocation retry loop):
-#   identity -> setup -> repository-stage -> scheduler-allocation + container-import
-#   -> container-launch -> artifact-collection
-set -euo pipefail
+set -eo pipefail
 
 HERE="$(cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 COLLX_DIR="$(cd "$HERE/.." && pwd)"
@@ -13,7 +9,6 @@ REPO_ROOT="$(cd "$COLLX_DIR/../.." && pwd)"
 # shellcheck source=../runtime/common.sh
 source "$HERE/../runtime/common.sh"
 
-# ---- identity: resolve SKU, backend, platform -------------------------------
 RUNNER="${COLLX_SHARD_SKU:-}"
 case "$RUNNER" in
   mi300x|mi325x) CPUS_PER_NODE=256; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
@@ -22,7 +17,6 @@ case "$RUNNER" in
 esac
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-mori}"
 export COLLX_VENDOR=amd
-# ---- setup: operator config, canonical env, topology, network profile -------
 collx_launcher_prologue "$RUNNER"
 
 NODES="${COLLX_NODES:-1}"; GPN="${COLLX_GPUS_PER_NODE:-8}"
@@ -57,7 +51,6 @@ PARTITION="$COLLX_PARTITION"; SQUASH_DIR="$COLLX_SQUASH_DIR"
 
 collx_log "runner=$RUNNER nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$COLLX_BENCH"
 
-# ---- repository-stage: compute-visible copy of the checkout -----------------
 MOUNT_SRC="$(collx_stage_path "$REPO_ROOT" "$COLLX_STAGE_DIR")"
 collx_stage_repo "$REPO_ROOT" "$MOUNT_SRC"
 # UCCL builds from source (mori ships in the image); stage the pinned tree pre-allocation.
@@ -67,9 +60,6 @@ if [ "$COLLX_BENCH" = uccl-ep ]; then
 fi
 collx_select_image "$IMAGE"
 
-# ---- scheduler-allocation + container-import: retry until nodes validate ----
-# Each attempt must pass the network profile AND import the squash; a rejected
-# allocation is cancelled and its nodes excluded from the next attempt.
 command -v salloc >/dev/null || collx_die "salloc not found on this runner"
 
 allocation=(--partition="$PARTITION" --nodes="$NODES" --gres=gpu:"$GPN"
@@ -93,10 +83,8 @@ for allocation_attempt in 1 2 3; do
   [ -n "$JOB_ID" ] || collx_die "could not resolve allocated JOB_ID from salloc"
   reject_reason=""
   if ! collx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$COLLX_TRANSPORT"; then
-    # A node whose RoCE devices do not match the pinned selector (e.g. an
-    # outlier still using default rocepXXXs0 names instead of the rdmaN udev
-    # names the rest of the fleet exposes) must be rejected and retried
-    # elsewhere, not treated as a hard failure.
+    # A node whose RoCE devices do not match the pinned selector (an outlier still exposing
+    # default rocepXXXs0 names instead of the fleet's rdmaN udev names) is retried elsewhere.
     reject_reason=network
   else
     if SQUASH_FILE="$(collx_ensure_squash_on_job \
@@ -122,16 +110,10 @@ for allocation_attempt in 1 2 3; do
 done
 unset COLLX_SALLOC_ATTEMPT COLLX_NETWORK_VALIDATION_ATTEMPT
 CONTAINER_MOUNTS="$MOUNT_SRC:$MOUNT_DIR$DEVICE_MOUNTS"
-# uccl-ep builds from source, so give it the same cross-allocation backend cache the single-slurm
-# launcher provides (built once per arch/image/commit under /cx-cache, reused each allocation).
-# mori ships in the image and needs no cache, so its mounts are left untouched.
-#
-# The cache parent is the runner-shared stage BASE, not SQUASH_DIR. single-slurm can use its
-# squash dir because that sits on shared storage, but this SKU's squash dir is node-local and
-# root-owned (/var/lib/squash), which fails twice over: the submit-side mkdir is denied to the
-# runner account, and even as root the directory it creates is not the one the compute node
-# would bind-mount. COLLX_STAGE_DIR is runner-owned and compute-visible, and the cache lands
-# beside job_<tag> rather than inside it, so it still survives stage cleanup between allocations.
+# uccl-ep builds from source, so it gets the cross-allocation backend cache single-slurm uses.
+# Its parent is COLLX_STAGE_DIR, not SQUASH_DIR: this SKU's squash dir is node-local and
+# root-owned (/var/lib/squash), so the submit-side mkdir fails and the path is not what compute
+# nodes bind-mount. Beside job_<tag>, the cache also survives stage cleanup between allocations.
 if [ "$COLLX_BENCH" = uccl-ep ]; then
   collx_prepare_backend_cache "$COLLX_STAGE_DIR" \
     || collx_die "cannot prepare the isolated backend cache"
@@ -139,7 +121,6 @@ if [ "$COLLX_BENCH" = uccl-ep ]; then
   export COLLX_BACKEND_CACHE_ROOT=/cx-cache
 fi
 
-# ---- container-launch -> artifact-collection (shared tail) ------------------
 COLLX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)
 collx_execute_and_collect "$MOUNT_SRC" "$REPO_ROOT"
 rm -f "$MOUNT_SRC"/experimental/CollectiveX/gpucore.* 2>/dev/null || true

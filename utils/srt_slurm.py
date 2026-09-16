@@ -21,6 +21,10 @@ import yaml
 
 _FORWARDED_ENV = (
     "AIPERF_EXPERIMENTAL_FAST",
+    "AIPERF_DRAIN_TIMEOUT_SECONDS",
+    "AIPERF_DRAIN_POLL_SECONDS",
+    "CLEAR_CACHE_BETWEEN_CONC",
+    "FLUSH_DRAIN_TIMEOUT",
     "CONC",
     "CONC_LIST",
     "DECODE_DP_ATTN",
@@ -29,6 +33,8 @@ _FORWARDED_ENV = (
     "DECODE_PCP_SIZE",
     "DECODE_PP_SIZE",
     "DECODE_TP",
+    "DECODE_HARDWARE",
+    "DISAGG",
     "DURATION",
     "EVAL_CONC",
     "EVAL_FRAMEWORK",
@@ -39,6 +45,9 @@ _FORWARDED_ENV = (
     "IS_AGENTIC",
     "ISL",
     "KV_OFFLOADING",
+    "KV_OFFLOAD_BACKEND",
+    "KV_OFFLOAD_BACKEND_METADATA",
+    "KV_P2P_TRANSFER",
     "MAX_MODEL_LEN",
     "MODEL",
     "MODEL_PREFIX",
@@ -48,19 +57,28 @@ _FORWARDED_ENV = (
     "PREFILL_PCP_SIZE",
     "PREFILL_PP_SIZE",
     "PREFILL_TP",
+    "PREFILL_HARDWARE",
     "PRECISION",
     "RANDOM_RANGE_RATIO",
     "RESULT_FILENAME",
     "RUN_EVAL",
     "RUNNER_TYPE",
+    "RUNNER_NAME",
+    "SCENARIO_TYPE",
     "OSL",
     "SPEC_DECODING",
     "SWEBENCH_GEN_MODE",
+    "SWEBENCH_USE_MODAL",
+    "MODAL_TOKEN_ID",
+    "MODAL_TOKEN_SECRET",
     "TOTAL_CPU_DRAM_GB",
+    "WEKA_LOADER_OVERRIDE",
 )
 
 _EVAL_COMMAND = r"""
-set -euo pipefail
+set -eo pipefail
+source /infmax-workspace/benchmarks/benchmark_lib.sh --validation-only
+check_env_vars SLURM_JOB_ID SRT_FRONTEND_HOST SRT_FRONTEND_PORT CONC_LIST
 eval_root="/results/${SLURM_JOB_ID}/eval"
 mkdir -p "${eval_root}"
 cd "${eval_root}"
@@ -70,7 +88,7 @@ export EVAL_SERVER_HOST="${SRT_FRONTEND_HOST}"
 if [[ -n "${EVAL_CONC:-}" ]]; then
   export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
 else
-  export EVAL_CONCURRENT_REQUESTS="$(printf '%s\n' "${CONC_LIST:-${CONC:-1}}" | tr ' ' '\n' | sort -n | tail -1)"
+  export EVAL_CONCURRENT_REQUESTS="$(printf '%s\n' "$CONC_LIST" | tr ' ' '\n' | sort -n | tail -1)"
 fi
 export CONC="${EVAL_CONCURRENT_REQUESTS}"
 bridge_disagg_eval_metadata
@@ -91,6 +109,16 @@ def prepare_recipe(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Adapt CI metadata without changing the recipe's serving contract."""
     recipe = copy.deepcopy(recipe)
+    if "base" in recipe:
+        from srtctl.core.config import generate_override_configs
+
+        _, separator, selector = environment["CONFIG_FILE"].partition(":")
+        if not separator:
+            raise ValueError("CONFIG_FILE must select one recipe variant")
+        variants = generate_override_configs(recipe, selector=selector)
+        if len(variants) != 1:
+            raise ValueError("Each CI job must select exactly one recipe variant")
+        recipe = variants[0][1]
     profile = copy.deepcopy(profile)
     profile.setdefault("default_mounts", {}).update(
         {
@@ -107,7 +135,12 @@ def prepare_recipe(
         str(cached_image) if cached_image.is_file() else image
     )
     benchmark_env = recipe.setdefault("benchmark", {}).setdefault("env", {})
-    for key in _FORWARDED_ENV:
+    if environment.get("CLIENT_IMAGE"):
+        recipe["benchmark"]["container_image"] = environment["CLIENT_IMAGE"]
+    for key in (
+        *_FORWARDED_ENV,
+        *environment.get("INFERENCEX_RUNTIME_ENV_VARS", "").split(),
+    ):
         value = environment.get(key)
         if value:
             benchmark_env[key] = value
@@ -117,37 +150,45 @@ def prepare_recipe(
     return recipe, profile
 
 
-def _configure_sglang_contract(recipe: dict[str, Any], environment: Mapping[str, str]) -> None:
-    # The original SGLang launcher sized DP+EP admission from the largest
-    # concurrency exercised by a recipe. It also honored a model-specific MoRI
-    # dispatch pin when present; only the inter-kernel switch threshold was
-    # derived per topology. Preserve those semantics rather than treating MTP
-    # draft tokens as additional independent requests.
-    if environment.get("PREFILL_DP_ATTN", "false").lower() == "true" and int(environment.get("PREFILL_EP", "1")) > 1:
-        concurrency_text = environment.get("CONC_LIST") or environment.get("CONC")
-        if not concurrency_text:
-            raise ValueError("DP+EP recipe requires CONC_LIST or CONC")
-        concurrency_values = concurrency_text.split()
-        concurrency = max(int(value) for value in concurrency_values)
-        prefill = recipe["backend"]["sglang_config"]["prefill"]
-        decode = recipe["backend"]["sglang_config"]["decode"]
-        prefill["max-running-requests"] = concurrency
-        decode["max-running-requests"] = concurrency
+def _configure_sglang_contract(
+    recipe: dict[str, Any], environment: Mapping[str, str]
+) -> None:
+    server = recipe.get("backend", {}).get("sglang_config", {})
+    prefill, decode = server.get("prefill", {}), server.get("decode", {})
+    # The Pro-0813 recipe leaves this range empty for the workflow's actual
+    # concurrency, just as models.yaml sizes each legacy allocation at launch.
+    if decode.get("cuda-graph-bs-decode") != []:
+        return
+    concurrency = max(int(value) for value in environment["CONC_LIST"].split())
+    if concurrency <= 0:
+        raise ValueError("CONC_LIST must contain positive concurrency values")
+    for role, config in (("PREFILL", prefill), ("DECODE", decode)):
+        if int(environment[f"{role}_TP"]) != config["tp-size"]:
+            raise ValueError(f"{role}_TP disagrees with the selected recipe")
+        dp = environment[f"{role}_DP_ATTN"].lower() == "true"
+        if dp != config.get("enable-dp-attention", False):
+            raise ValueError(f"{role}_DP_ATTN disagrees with the selected recipe")
+        config["max-running-requests"] = concurrency * 2
+        if environment["DISABLE_CUSTOM_ALL_REDUCE"] == "1":
+            config["disable-custom-all-reduce"] = True
+    graph_max = (
+        concurrency // 4 if decode.get("enable-dp-attention") else concurrency * 2
+    )
+    if graph_max < 1:
+        raise ValueError("Concurrency is too small for the DP decode graph range")
+    decode["cuda-graph-bs-decode"] = list(range(1, graph_max + 1))
+    if decode.get("enable-dp-attention"):
+        decode["max-running-requests"] = min(
+            concurrency * 2, graph_max * decode["tp-size"]
+        )
+    if prefill.get("enable-hierarchical-cache"):
+        prefill["hicache-ratio"] = float(environment["HICACHE_RATIO"])
+    recipe["frontend"]["args"]["policy"] = environment["PREFILL_ROUTER_POLICY"]
 
-        decode_tp = int(environment["DECODE_TP"])
-        decode_environment = recipe["backend"]["decode_environment"]
-        dispatch_tokens = max(1, concurrency // decode_tp)
-        decode_environment.setdefault("SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK", str(dispatch_tokens))
-        # The retired launcher also exposed its harness-level dispatch budget to
-        # the server environment after scaling it by the MTP draft width. Keep that
-        # auxiliary value distinct from the model-specific per-rank SGLang pin.
-        if "MORI_MAX_DISPATCH_TOKENS_DECODE" in decode_environment:
-            mtp_size = int(environment.get("DECODE_MTP_SIZE", "0"))
-            decode_environment["MORI_MAX_DISPATCH_TOKENS_DECODE"] = str(dispatch_tokens * (mtp_size + 1))
-        decode_environment["SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD"] = str(2 * dispatch_tokens)
 
-
-def _configure_evaluation(recipe: dict[str, Any], environment: Mapping[str, str]) -> None:
+def _configure_evaluation(
+    recipe: dict[str, Any], environment: Mapping[str, str]
+) -> None:
     benchmark_env = recipe["benchmark"]["env"]
     eval_only = environment.get("EVAL_ONLY", "false").lower() == "true"
     run_eval = environment.get("RUN_EVAL", "false").lower() == "true"
@@ -177,13 +218,23 @@ def _configure_evaluation(recipe: dict[str, Any], environment: Mapping[str, str]
         topology_defaults = {
             "IS_MULTINODE": "true",
             "MODEL_NAME": environment["MODEL"],
-            "EVAL_MAX_MODEL_LEN": str(prefill.get("context-length", environment.get("MAX_MODEL_LEN", "16384"))),
-            "PREFILL_TP": str(topology_value(prefill, "tp-size", "tensor-parallel-size")),
-            "PREFILL_EP": str(topology_value(prefill, "ep-size", "expert-parallel-size")),
-            "PREFILL_NUM_WORKERS": str(resources.get("prefill_workers", resources.get("agg_workers", 1))),
+            "EVAL_MAX_MODEL_LEN": str(
+                prefill.get("context-length", environment.get("MAX_MODEL_LEN", "16384"))
+            ),
+            "PREFILL_TP": str(
+                topology_value(prefill, "tp-size", "tensor-parallel-size")
+            ),
+            "PREFILL_EP": str(
+                topology_value(prefill, "ep-size", "expert-parallel-size")
+            ),
+            "PREFILL_NUM_WORKERS": str(
+                resources.get("prefill_workers", resources.get("agg_workers", 1))
+            ),
             "DECODE_TP": str(topology_value(decode, "tp-size", "tensor-parallel-size")),
             "DECODE_EP": str(topology_value(decode, "ep-size", "expert-parallel-size")),
-            "DECODE_NUM_WORKERS": str(resources.get("decode_workers", resources.get("agg_workers", 1))),
+            "DECODE_NUM_WORKERS": str(
+                resources.get("decode_workers", resources.get("agg_workers", 1))
+            ),
             "PREFILL_DP_ATTN": str(prefill.get("enable-dp-attention", False)).lower(),
             "DECODE_DP_ATTN": str(decode.get("enable-dp-attention", False)).lower(),
         }
@@ -193,7 +244,9 @@ def _configure_evaluation(recipe: dict[str, Any], environment: Mapping[str, str]
         if eval_only:
             recipe["benchmark"]["command"] = _EVAL_COMMAND
         else:
-            recipe["benchmark"]["command"] = recipe["benchmark"]["command"].rstrip() + "\n" + _EVAL_COMMAND
+            recipe["benchmark"]["command"] = (
+                recipe["benchmark"]["command"].rstrip() + "\n" + _EVAL_COMMAND
+            )
 
 
 def collect_results(
@@ -210,7 +263,9 @@ def collect_results(
     log_dir = Path(submission["output_dir"]) / "logs"
     result_dir = results_root / job_id
     if log_dir.is_dir():
-        with tarfile.open(workspace / "multinode_server_logs.tar.gz", "w:gz") as archive:
+        with tarfile.open(
+            workspace / "multinode_server_logs.tar.gz", "w:gz"
+        ) as archive:
             archive.add(log_dir, arcname=".")
     if result_dir.is_dir():
         shutil.copytree(result_dir, workspace / "LOGS", dirs_exist_ok=True)
@@ -224,9 +279,13 @@ def collect_results(
         results = sorted((result_dir / "fixed-seq").glob("*.json"))
         if not results:
             raise ValueError(f"No fixed-sequence results found in {result_dir}")
-        prefill_gpus = int(environment["PREFILL_NUM_WORKERS"]) * int(environment["PREFILL_TP"])
+        prefill_gpus = int(environment["PREFILL_NUM_WORKERS"]) * int(
+            environment["PREFILL_TP"]
+        )
         if environment.get("DISAGG", "false").lower() == "true":
-            decode_gpus = int(environment["DECODE_NUM_WORKERS"]) * int(environment["DECODE_TP"])
+            decode_gpus = int(environment["DECODE_NUM_WORKERS"]) * int(
+                environment["DECODE_TP"]
+            )
             suffix = f"gpus_{prefill_gpus + decode_gpus}_ctx_{prefill_gpus}_gen_{decode_gpus}"
         else:
             total = (
@@ -239,7 +298,9 @@ def collect_results(
             match = re.search(r"-c([0-9]+)\.json$", result.name)
             if not match:
                 raise ValueError(f"Cannot parse concurrency from {result}")
-            destination = workspace / f"{filename}_srt-{job_id}_conc{match[1]}_{suffix}.json"
+            destination = (
+                workspace / f"{filename}_srt-{job_id}_conc{match[1]}_{suffix}.json"
+            )
             shutil.copy2(result, destination)
             print(f"Collected {destination}")
 
@@ -277,8 +338,12 @@ def main() -> None:
             aiperf_cache=args.aiperf_cache,
             image_cache=args.image_cache,
         )
-        (args.work_dir / "recipe.yaml").write_text(yaml.safe_dump(recipe, sort_keys=False))
-        (args.work_dir / "srtslurm.yaml").write_text(yaml.safe_dump(profile, sort_keys=False))
+        (args.work_dir / "recipe.yaml").write_text(
+            yaml.safe_dump(recipe, sort_keys=False)
+        )
+        (args.work_dir / "srtslurm.yaml").write_text(
+            yaml.safe_dump(profile, sort_keys=False)
+        )
     else:
         collect_results(
             json.loads(args.submission.read_text()),

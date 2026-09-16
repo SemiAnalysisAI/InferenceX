@@ -2,23 +2,17 @@
 set -eo pipefail
 set -x
 
-# Agentic trace replay for DeepSeek-V4-Pro-0813 FP4 on B200 with DSpark K=6.
-# Throughput uses the committed golden synthetic AL; eval retains real target
-# verification.
-#
+# DeepSeek-V4-Pro-0813 FP4 on B200 with SGLang DSpark K=6.
 # KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=hicache.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFERENCEX_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-export INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/workspace}"
+source "$INFERENCEX_ROOT/benchmarks/benchmark_lib.sh" --validation-only
+check_env_vars INFMAX_CONTAINER_WORKSPACE RESULT_DIR
 
-# The B200 DeepSeek-V4 Blackwell image installs SGLang editable under
-# /workspace, so its launcher mounts InferenceX at /ix instead. Resolve the
-# agentic tooling and results against the actual repository mount so the image
-# can keep its /workspace install and GitHub Actions can collect the outputs.
-if [[ ! -d "$INFMAX_CONTAINER_WORKSPACE/utils/aiperf" ]]; then
-    export INFMAX_CONTAINER_WORKSPACE="$INFERENCEX_ROOT"
-fi
+# The B200 DeepSeek-V4 image installs SGLang editable under /workspace, so its
+# launcher mounts InferenceX at /ix. Resolve tooling and results against the
+# actual repository mount.
 if [[ "${RESULT_DIR:-}" == /workspace/* && "$INFMAX_CONTAINER_WORKSPACE" != /workspace ]]; then
     export RESULT_DIR="$INFMAX_CONTAINER_WORKSPACE/${RESULT_DIR#/workspace/}"
 fi
@@ -44,13 +38,12 @@ nvidia-smi
 
 resolve_trace_source
 
-# Keep AIPerf's Transformers-main dependency from replacing the older
-# Transformers build pinned by the B200-specialized SGLang image. The server
-# always launches with the image's original interpreter; AIPerf and result
-# processing use the isolated environment when InferenceX is mounted at /ix.
+# AIPerf's Transformers-main dependency would replace the Transformers build
+# pinned by the B200 SGLang image; the server keeps the image interpreter and
+# AIPerf runs from an isolated venv when InferenceX is mounted at /ix.
 SGLANG_PYTHON="$(command -v python3)"
 if [[ "$INFMAX_CONTAINER_WORKSPACE" != /workspace ]]; then
-    AGENTIC_VENV="${AGENTIC_VENV:-/tmp/inferencex-agentic-venv}"
+    AGENTIC_VENV="/tmp/inferencex-agentic-venv"
     "$SGLANG_PYTHON" -m venv "$AGENTIC_VENV"
     export PATH="$AGENTIC_VENV/bin:$PATH"
 fi
@@ -65,23 +58,16 @@ export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
 CACHE_ARGS=()
 if require_agentic_kv_offload_backend hicache; then
     # DeepSeek V4 HiCache currently rejects --hicache-size and supports
-    # capacity control only through a host/device token-capacity ratio.
-    # DSv4 exposes capacity as a host/device token ratio rather than bytes.
-    # DEP8 shards the host pools and fits ratio=8 on NScale. The replicated
-    # TP8 pools need a lower ratio: 2.75 allocates about 121 GiB per rank and
-    # leaves startup headroom on the 1.7 TiB NScale hosts.
-    DEFAULT_HICACHE_RATIO=2.75
+    # DeepSeek V4 HiCache rejects --hicache-size; capacity is a host/device
+    # token ratio. DEP8 shards the host pools and fits ratio=8; replicated TP8
+    # pools need 2.75 (~121 GiB/rank) to leave startup headroom on 1.7 TiB hosts.
+    HICACHE_RATIO=2.75
     if [ "$DP_ATTENTION" = "true" ]; then
-        DEFAULT_HICACHE_RATIO=8
+        HICACHE_RATIO=8
     fi
-    HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
-    if awk -v ratio="$HICACHE_RATIO" -v max="$DEFAULT_HICACHE_RATIO" 'BEGIN { exit !(ratio > max) }'; then
-        echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds configured limit $DEFAULT_HICACHE_RATIO" >&2
-        exit 1
-    fi
-    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
-    HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-    HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+    HICACHE_WRITE_POLICY="write_through"
+    HICACHE_IO_BACKEND="direct"
+    HICACHE_MEM_LAYOUT="page_first_direct"
     CACHE_ARGS=(
         --enable-hierarchical-cache
         --hicache-ratio "$HICACHE_RATIO"
@@ -154,11 +140,8 @@ else
     )
 fi
 
-# The B200-specialized image deadlocks immediately after weight loading when
-# forced through the B300 compressed-attention/page-size overrides.
-# DeepGEMM's DSv4 indexer needs a multi-GiB temporary allocation at long
-# contexts. The selected fractions preserve the measured indexer and CUDA
-# graph headroom while HiCache spills to host memory.
+# The B300 compressed-attention/page-size overrides deadlock this image right
+# after weight loading, so they are not passed here.
 
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts.
@@ -171,12 +154,9 @@ CUDA_GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
 
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=10.0
-# Agentic warmup dispatches hundreds of large prompts at once. SGLang's
-# tokenizer process can leave request bytes unacknowledged for longer than
-# AIPerf's 30-second TCP_USER_TIMEOUT while it admits that initial burst,
-# causing Linux to abort otherwise-live localhost connections. Keep the
-# six-hour request timeout unchanged, but allow up to 15 minutes for TCP
-# progress before declaring the connection dead.
+# Agentic warmup dispatches hundreds of large prompts at once and SGLang's
+# tokenizer can leave bytes unacknowledged past AIPerf's default 30 s
+# TCP_USER_TIMEOUT, so Linux aborts live localhost connections.
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 # Outlast AIPerf's pooled connections so an inter-turn idle gap cannot race
 # Uvicorn's five-second keep-alive closure.
@@ -223,9 +203,9 @@ SGLANG_CMD=(
     --speculative-num-steps 1
     --speculative-eagle-topk 1
     --speculative-num-draft-tokens 7
-    # The B200 checkpoint lives on Lustre. Partition sequential prefetching
-    # across local ranks so post-load weight repacking reads from page cache
-    # instead of issuing redundant fragmented mmap faults from every rank.
+    # The B200 checkpoint lives on Lustre: prefetch sequentially across local
+    # ranks so post-load repacking reads from page cache instead of every rank
+    # issuing fragmented mmap faults.
     --weight-loader-prefetch-checkpoints
     --model-loader-extra-config '{"enable_multithread_load": true}'
     "${METRICS_ARGS[@]}"
