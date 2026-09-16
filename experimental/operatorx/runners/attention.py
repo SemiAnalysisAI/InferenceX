@@ -24,7 +24,7 @@ def prepare(op: Op, *, layout: str = "bhsd") -> dict:
         if mla
         else [a[k] for k in ("dtype_q", "dtype_k", "dtype_v")]
     )
-    names.append(a["dtype_o"])
+    names.append(a.get("dtype_o", "bf16"))
     if len(set(names)) != 1 or names[0] not in {"bf16", "fp16", "fp32"}:
         raise UnsupportedOpError(
             "attention requires uniform bf16/fp16/fp32 inputs and output"

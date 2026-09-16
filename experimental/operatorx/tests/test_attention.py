@@ -64,8 +64,13 @@ def test_causal_decode_alignment(cpu, sq, sk, causal, expected):
     assert ctx["out"].shape == (1, 4, sq, 8)
 
 
-def test_gqa_keeps_each_kv_head_with_its_query_group(cpu):
-    ctx = attention.prepare(mha(seq_len_q=1, seq_len_kv=1))
+def test_gqa_keeps_each_kv_head_and_defaults_output_to_bf16(cpu):
+    op = mha(
+        seq_len_q=1, seq_len_kv=1, dtype_q="bf16", dtype_k="bf16", dtype_v="bf16"
+    )
+    args = dict(op.args)
+    del args["dtype_o"]
+    ctx = attention.prepare(Op(op.type, args, op.backend))
     # Preparation repeats head 0 for query heads 0/1, head 1 for heads 2/3.
     torch.testing.assert_close(ctx["v"][:, 0], ctx["v"][:, 1])
     torch.testing.assert_close(ctx["v"][:, 2], ctx["v"][:, 3])
@@ -74,6 +79,7 @@ def test_gqa_keeps_each_kv_head_with_its_query_group(cpu):
     ctx["v"][:, :2].fill_(3)
     ctx["v"][:, 2:].fill_(7)
     attention.kernel(ctx)
+    assert ctx["out"].dtype == torch.bfloat16
     assert ctx["out"][0, :, 0, 0].tolist() == [3, 3, 7, 7]
 
 
