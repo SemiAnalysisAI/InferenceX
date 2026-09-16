@@ -220,7 +220,7 @@ uv run --locked --all-extras --group test --no-editable \
 3. **CODEOWNER 签署前：**遵循 [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md)，包括适用的代码质量、架构、镜像来源、上游配方、补丁/豁免、聊天模板和 AgentX 要求。
 4. **扫描/评测验收：**当前仍在 PR 中的至少一个提交拥有成功、未跳过且实际执行的 `single-node */` 与 `eval /` 检查。仅 `collect-evals` 成功不够。下载对应评测制品，确认其非空、准确率达标且使用同一推理镜像。这些可执行规则位于[验证器检查 1 和 2](../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr)。
 5. **合并时复用：**获授权的 `OWNER`、`MEMBER` 或 `COLLABORATOR` 必须在受支持的合并路径前发布独占一行的 `/use <run_id>` 命令来指定合格的源 Run（原有的 `/reuse-sweep-run` 命令仍受支持）。验证器会把命令缺失或发布者未授权视为失败；参见[验证器检查 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted)和[复用流程](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
-6. **合并时：**当前 head 必须满足[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)定义的 CODEOWNER 签核状态要求。验证、管理员更新后的签核保留、撤销及恢复规则以该指南为准。
+6. **合并时：**满足 GitHub 的 Core 团队和 CODEOWNER 批准要求，或由有权限的维护者使用绕过权限。自动 `CODEOWNER sign-off` 验证仅供参考；详见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
 7. **合并后：**作者按照 [`CONTRIBUTING.md`](../CONTRIBUTING.md#after-merging) 的要求确认 main 分支任务通过。
 
 ## 停止条件

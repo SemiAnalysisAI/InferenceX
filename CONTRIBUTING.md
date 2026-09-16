@@ -19,6 +19,8 @@ Thanks for contributing! PRs are welcome. This page covers the review process ev
 
 ## The PR Review Checklist (CODEOWNER sign-off)
 
+Automated CODEOWNER verification is advisory for now. The workflow still checks submitted checklists and updates its verdict comment, but its `CODEOWNER sign-off` status is not required to merge. GitHub's separate Core-team and CODEOWNER approval requirements remain in effect unless bypassed by an authorized maintainer.
+
 Sign-off is required only when a changed file has a CODEOWNER other than a repository admin or `@SemiAnalysisAI/core`. Ownership comes from the current tip of the PR target branch, resolved once and pinned to the same SHA for CODEOWNERS validation and content reads, using the last matching rule; renames check both old and new paths. The PR head and its potentially stale recorded base SHA do not supply ownership rules. A matching core owner does not exempt another owner on the same file. Individual admins must have both repository `permission: admin` and `role_name: admin`; other teams and email owners require sign-off. Missing ownership data or failed permission lookups cannot grant an exemption. Changes without a qualifying owner receive a successful “not applicable” status without starting the verifier.
 
 One eligible CODEOWNER reviewer fills in the latest [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) template in their approval comment.
@@ -32,7 +34,7 @@ A friendly reminder. Please follow the latest checklist template **correctly**:
 
   > As a PR reviewer and CODEOWNER, I have reviewed this and have:
 
-  Our CI verification workflow, [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml), triggers on exactly this phrase. **If your approval comment does not follow the checklist template, including that phrase, the sign-off verification CI will not trigger at all**, and your sign-off won't count toward merge.
+  Our CI verification workflow, [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml), triggers on exactly this phrase. **If your approval comment omits that phrase, the workflow will not verify the checklist.**
 - The sign-off can be posted as a regular conversation comment, a review summary, or an inline review comment. All three trigger verification.
 - Before the first PASS, head updates, reopening a PR, and marking it ready recover the latest eligible existing sign-off on the current head. This catches reviews missed during merge conflicts without requiring a duplicate checklist.
 - Starting Claude still requires an eligible actor with repository write access. After an update by a non-writer or disallowed bot, a collaborator with write access can request the initial verification. Carrying an existing PASS forward does not require a new verification.

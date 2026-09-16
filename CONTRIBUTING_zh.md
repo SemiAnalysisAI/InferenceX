@@ -19,6 +19,8 @@
 
 ## PR Review Checklist（CODEOWNER 签署）
 
+CODEOWNER 自动验证目前仅供审阅参考。工作流仍会核验提交的清单并更新裁定评论，但合并不再要求 `CODEOWNER sign-off` 状态通过。GitHub 单独设置的 Core 团队和 CODEOWNER 批准要求仍然有效，除非有权限的维护者使用绕过权限。
+
 仅当修改的文件存在仓库管理员及 `@SemiAnalysisAI/core` 之外的 CODEOWNER 时，才要求签核。归属以 PR 目标分支当前最新提交中的 CODEOWNERS 为准：先解析该分支的 SHA，再使用同一 SHA 校验并读取 CODEOWNERS，最后匹配的规则生效；重命名同时检查旧路径和新路径。归属规则不从 PR 的 Head 或其记录中可能过期的基础提交读取。同一文件有 core 团队作为 owner，不会豁免其他 owner。个人管理员必须同时拥有仓库 `permission: admin` 和 `role_name: admin`；其他团队和邮箱 owner 均要求签核。归属信息缺失或权限查询失败不能授予豁免。不涉及此类 owner 的改动会获得成功的“不适用”状态，无需启动验证器。
 
 由一名符合条件的 CODEOWNER 审阅者在批准评论中填写最新的 [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md)（[中文说明](docs/PR_REVIEW_CHECKLIST_zh.md)）模板。
@@ -32,7 +34,7 @@
 
   > As a PR reviewer and CODEOWNER, I have reviewed this and have:
 
-  我们的 CI 验证工作流 [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml) 正是通过这句话触发的。**如果你的批准评论没有遵循清单模板，包括这句话，签署验证 CI 将完全不会触发**，你的签署也不会计入合并要求。
+  我们的 CI 验证工作流 [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml) 正是通过这句话触发的。**如果批准评论缺少这句话，工作流就不会核验该清单。**
 - 签署可以以普通会话评论、review 总结或行内 review 评论的形式发布。这三种方式都会触发验证。
 - 首次 PASS 前，更新 Head、重新打开 PR 或退出草稿状态会在当前 Head 上补查最新的合格签署，找回合并冲突期间遗漏的 Review，无需重复发布清单。
 - 启动 Claude 仍要求触发者具备合格的仓库写权限。如果更新来自无写权限用户或未获允许的机器人，具有写权限的协作者可发起首次验证。延续已有 PASS 无需重新验证。
