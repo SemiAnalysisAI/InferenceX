@@ -7959,3 +7959,12 @@
     - "Restore the validated SSD Engram pre-staging implementation with full CUDA graphs and a 64-token capture floor; omit the unqualified HBM row-cache and page-prefetch changes"
     - "恢复已验证的 SSD Engram 预准备实现，使用完整 CUDA graphs 及最小 64-token 捕获范围；移除未达标的 HBM 行缓存及页面预取改动"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3080
+
+- config-keys:
+    - dsv41flashssd-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add concurrency 96 to the B200 SSD Engram full-graph sweep between 64 and 128"
+    - "在 B200 SSD Engram 完整图扫描的并发 64 和 128 之间新增并发 96"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3080
