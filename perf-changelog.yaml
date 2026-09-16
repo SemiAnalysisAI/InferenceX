@@ -7942,6 +7942,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3176
 
 - config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B200 DeepSeek-V4-Pro AgentX to lmsysorg/sglang:v0.5.19-cu130; recipe settings unchanged."
+    - "将 B200 DeepSeek-V4-Pro AgentX 镜像更新为 lmsysorg/sglang:v0.5.19-cu130；配方参数不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3012
+
+- config-keys:
     - dsv41flashssd-fp4-b200-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
