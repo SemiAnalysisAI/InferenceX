@@ -195,7 +195,7 @@ echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
 
 echo "Running make setup..."
-make setup ARCH=x86_64
+make setup ARCH=x86_64 TACHOMETER_RELEASE=v2.2.1
 
 # Read by srt-slurm's post-benchmark eval.
 export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
