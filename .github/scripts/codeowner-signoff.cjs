@@ -64,8 +64,7 @@ async function coverage(github, context, prNumber) {
 
 function formatComment(verdict, assessed, covered) {
   return `${MARKER}\n${verdict}\n\nAssessed commit: \`${assessed}\`.\n` +
-    'Admin updates retain sign-off. Non-admin changes require fresh verification.' +
-    `\nCovered commit: \`${covered}\`.\n`;
+    `Covered commit: \`${covered}\`.\n`;
 }
 
 async function upsert(github, context, prNumber, comment, body) {
@@ -84,11 +83,12 @@ async function upsert(github, context, prNumber, comment, body) {
   })).data;
 }
 
-async function publishStatus(github, context, sha, status, comment) {
+async function publishStatus(github, context, sha, status, comment,
+  failureDescription = 'Fresh CODEOWNER sign-off verification required') {
   await github.rest.repos.createCommitStatus({
-    ...context.repo, sha, context: 'codeowner-signoff-verify', state: status,
+    ...context.repo, sha, context: 'CODEOWNER sign-off', state: status,
     description: status === 'success' ? 'CODEOWNER sign-off covers this commit' :
-      status === 'pending' ? 'Verifying CODEOWNER sign-off' : 'Fresh CODEOWNER sign-off verification required',
+      status === 'pending' ? 'Verifying CODEOWNER sign-off' : failureDescription,
     target_url: comment?.html_url ||
       `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
   });
@@ -126,13 +126,14 @@ async function publish({ github, context, core, prNumber, headSha, verdictPath, 
   const passed = PASS.test(verdict);
   const comment = await upsert(github, context, prNumber, current.comment,
     formatComment(verdict, headSha, headSha));
-  await publishStatus(github, context, headSha, passed ? 'success' : 'failure', comment);
+  await publishStatus(github, context, headSha, passed ? 'success' : 'failure', comment,
+    'CODEOWNER sign-off rejected');
   const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: prNumber });
   if (pr.head.sha !== headSha) {
     await publishStatus(github, context, pr.head.sha,
       coveredCommit(comment) === pr.head.sha ? 'success' : 'failure', comment);
   }
-  core.info(`codeowner-signoff-verify=${passed ? 'success' : 'failure'} for assessed commit ${headSha}`);
+  core.info(`CODEOWNER sign-off=${passed ? 'success' : 'failure'} for assessed commit ${headSha}`);
 }
 
 module.exports = { prepare, carry, publish };

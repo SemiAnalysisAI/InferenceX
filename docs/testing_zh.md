@@ -31,6 +31,10 @@
 
 ## 测试层级
 
+[`CI`](../.github/workflows/ci.yml) 在 PR（包括 fork）或向 `main` 的推送修改 Python 文件、`ci.yml`、MCP 依赖、Ruff 配置或 `pytest.ini` 时，并行运行 **Lint** 和 **Tests**。[`Workflow security`](../.github/workflows/zizmor.yml) 在工作流、action 定义、Dependabot、pre-commit 或 zizmor 配置变更时运行 **Zizmor**。仅修改 Python 文件不会触发 Zizmor；仅修改其他工作流不会触发 Lint 或 Tests。修改 `ci.yml` 会触发全部三项任务。两个工作流均可手动分发。仅修改其他文档、Shell 脚本或基准测试 YAML 不会触发这两个工作流；请在本地执行相应检查，或手动分发。
+
+Tests 使用四个 pytest worker 运行 `utils/`、`runners/` 和 `experimental/CollectiveX/tests/` 下的全部测试，并检查 MCP 兼容性。这些目录中的新增测试会自动发现。测试环境使用 Python 3.12 和仅支持 CPU 的 PyTorch；依赖必须已发布至少 12 小时。一项任务失败不会取消另一项；PR 更新会取消旧提交的 CI。尚未创建 PR 的分支推送不再单独触发变更日志测试。
+
 | 层级 | 能够证明 | 不能证明 |
 | --- | --- | --- |
 | 解析与语法 | 编辑后的 YAML 可加载；编辑后的 Bash 可解析 | 模式有效性、运行时路由或 GPU 行为 |
@@ -69,6 +73,26 @@ uvx --exclude-newer PT12H ruff@latest format infx
 ```
 
 应尽量修复问题。确有理由保留的例外使用行内 `# noqa: CODE`；多余的忽略标记会被检查。未启用预览规则或自动不安全修复。
+
+### GitHub Actions 安全检查
+
+CI 使用发布至少 12 小时的最新 zizmor 版本，启用最严格的 `auditor` 模式、严格输入收集、全部受支持的输入类型，以及在线 action 引用检查。所有未豁免的发现都会使任务失败，包括信息级和低置信度发现。使用已认证的 GitHub token 在本地执行同样的检查：
+
+```bash
+GH_TOKEN="$(gh auth token)" uvx --exclude-newer PT12H zizmor@latest \
+  --persona auditor --strict-collection --collect all --no-config --no-progress .
+```
+
+所有第三方 action 仍固定到提交 SHA。同仓库工作流使用 `$/` 引用，解析到工作流的确切提交，要求 Actions runner 版本至少为 2.336.0。Dependabot 在 action 发布七天后才更新。合并后的 Claude 工作流保留审阅和编码两个独立任务，分别设置权限；固定到提交 SHA 的 Claude action 负责安装其支持的 CLI 版本。
+
+Auditor 模式也会报告有意保留的架构选择。豁免仅标注在对应的 YAML 行，并附上原因，不会全局禁用规则：
+
+- 独立的 GPU 分发、评论请求和 Klaud 批次不应互相取消。资源限制由优先级调度器和候选任务归属声明处理。
+- Fork sign-off 和可信外部分发需要 `pull_request_target`；它们运行可信控制代码，并在执行特权操作前验证授权。
+- 保留现有仓库级集成凭据。迁移到受保护的 GitHub Environments 必须同步迁移实际存储的 secret；仅添加空的 `environment:` 字段不算修复。
+- Profiling 存储仓库的 checkout 保留其专用 SSH deploy key，因为下一步需要向该独立仓库推送 trace 提交。基准测试 checkout 不保留凭据。
+
+添加 `--no-ignores` 可复查全部豁免。新增发现仍必须阻止 CI；若豁免涉及的触发器、checkout、凭据使用方或授权发生变化，必须重新审查。该安全检查不需要运行 GPU 任务。
 
 ### 解析与语法
 
