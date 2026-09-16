@@ -18,8 +18,8 @@ PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: fals
 - 私有读取仅使用 `/api/status/clusters`。要求响应新鲜且实际读取的字段有效、API 对集群判定为 `stale: false`、观测与接收时间戳有效且顺序正确、状态为 operational 或 degraded，并且至少有一个空闲节点。集群数据的过期阈值由 API 配置决定；Klaud 的 120 秒限制只用于响应获取/生成时间，不用于集群观测时间。排队任务、调度器预留和优先级覆盖不会改变低于 80% 的利用率规则。
 - 公开 API/CDN 负责 HTTP 缓存的新鲜度；Klaud 校验响应内容和本地获取时间。准备失败时，Actions 日志和摘要会报告具体错误码。
 - `plan` 使用现有矩阵生成器和 runner 元数据，从当前根目录的 `configs/*-master.yaml` 生成配置身份。按模型前缀、硬件、框架、精度、投机解码、分离部署、场景、ISL/OSL 和当前镜像与公开观测求交集，已归档工作负载不会挤掉有效匹配。无法生成矩阵的配置族单独告警并排除。每个有效配置族选取最新匹配观测作为基线，再对不同配置族随机打乱一次。分支身份包含精确主配置文件/键及源镜像/发布元数据；旧的粗粒度身份和拼写对应的占用仍用于去重。关闭的 PR 不参与去重，但保留的分支仍占用候选。分页读取全部打开的 PR 及修改文件，包括草稿和重命名；失败或不完整的读取留给检查阶段处理。
-- Claude 根据 runner 和现有配置，对照私有 `capacity.json` 中的路由线索，验证已提供的精确当前配置族及其**全部实际目标集群**。每个目标都必须符合条件；同类硬件的健康兄弟集群不能替代另一个集群。无法证实映射或目标不可用时标记为 `uncertain`，并按随机顺序继续检查，直到补足名额。路由解释仍由 agent 负责，不新增 Python recipe/别名目录。Claude 还会检查开放 PR 的变更文件，再按需阅读正文和 diff。已有镜像更新、重叠的修改或共享依赖会阻止候选，即使目标镜像 tag 不同；不同配置族仅模型或镜像相同不足以判为重复。不得替换为兄弟配置或归档工作负载。结构化决策包含 `candidate-id`、`decision`（`proceed`、`duplicate` 或 `uncertain`）、`family`、精确的 `telemetry-clusters`、重叠 PR 编号列表 `pull-requests` 和不含私有资格数据的简短 `reason`。
-- `select` 仅接受通过校验且保留已提供配置族的 `proceed` 决策，刷新私有容量数据，要求检查结果中的每个目标仍符合条件，按解析后的配置族去重，再按随机顺序应用总数量上限。`capacity-deferred-candidates` 记录最终容量检查未通过的候选。某个配置族被标记为重复或不确定时，即使另一条观测允许继续，也会排除整个配置族。缺失或未检查的候选延后。检查 action 失败、输出格式错误、未知/重复 ID 或容量 API 不可用会让本次选择延后，绝不绕过重叠检查。候选失去容量资格后，可由后续已检查且仍符合条件的配置族补位。
+- Claude 根据 runner 和现有配置，对照私有 `capacity.json` 中的路由线索，验证已提供的精确当前配置族及其**全部实际目标集群**。每个目标都必须符合条件；同类硬件的健康兄弟集群不能替代另一个集群。无法证实映射或目标不可用时标记为 `uncertain`，并按随机顺序检查整个候选池。重复或不确定的候选不占调度名额，不再检查十个就停止。结构化 schema 要求每个候选恰有一个决策，使后续符合条件的配置族能够补位容量变化或并发认领导致的空缺。路由解释仍由 agent 负责，不新增 Python recipe/别名目录。Claude 还会检查开放 PR 的变更文件，再按需阅读正文和 diff。已有镜像更新、重叠的修改或共享依赖会阻止候选，即使目标镜像 tag 不同；不同配置族仅模型或镜像相同不足以判为重复。不得替换为兄弟配置或归档工作负载。结构化决策包含 `candidate-id`、`decision`（`proceed`、`duplicate` 或 `uncertain`）、`family`、精确的 `telemetry-clusters`、重叠 PR 编号列表 `pull-requests` 和不含私有资格数据的简短 `reason`。
+- `select` 仅接受通过校验且保留已提供配置族的 `proceed` 决策，刷新私有容量数据，要求检查结果中的每个目标仍符合条件，按解析后的配置族去重，再按随机顺序应用总数量上限。`capacity-deferred-candidates` 记录最终容量检查未通过的候选。某个配置族被标记为重复或不确定时，即使另一条观测允许继续，也会排除整个配置族。检查不完整时延后本次选择，不将其报告为候选池已耗尽。检查 action 失败、输出格式错误、未知/重复 ID 或容量 API 不可用会让本次选择延后，绝不绕过重叠检查。候选失去容量资格后，可由后续已检查且仍符合条件的配置族补位。
 
 两个 agent 都明确获得证据目录的访问权限。检查 agent 使用 Read/Glob/Grep 检查本地内容，每次 Bash 调用只执行一个允许的只读 gh/git 命令，避免 shell 包装和管道。两个 Klaud 工作流均不设置作业/步骤超时或 Bash 超时覆盖，使用 GitHub Actions 默认限制。预取也不设置整体截止时间。`selection.json` 记录延后原因，作业摘要报告所选/延后数量。`review-diagnostics.json` 仅保留时长、轮数、费用等数值指标、按工具汇总的拒绝次数及固定的 Bash 分类（例如 shell 包装或文件过滤）；不包含原始命令、路径、消息、结果或凭据。历史日志只提供拒绝次数，无法还原之前被拒绝的具体命令；新增分类和访问指令仍需实际运行验证。检查阶段诊断文件缺失不阻止选择收尾。检查步骤之外的基础设施故障或整个作业被取消仍可能导致无法完成。
 
@@ -39,9 +39,11 @@ PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: fals
 
 选择或修复镜像前，比较新旧镜像实际内置版本对应的 vLLM、SGLang、ATOM 或 TensorRT-LLM 源码标签/提交，以及关联的 serving 依赖。检查参数和配置解析器及执行路径，确认默认值或语义变化、改名/移除的选项和相关新增选项。仅看 release notes 不够；核实镜像与源码的对应关系，无法确认时如实说明，不能假定最新 `main` 就是镜像内容。将源码链接、相关变化和范围内的决策写入尝试评论。这不扩大允许修改的范围，也不允许运行时补丁。
 
-定向尝试只测试更新后的镜像：从 `main` 调度 `e2e-tests.yml`，将 `inputs.ref` 设为实际测量 SHA，并使用 `generate-cli-command="test-config --config-files FILE --config-keys FAMILY --smoke"`。生成器将最低并发的吞吐量检查与规范并发上的代表性 eval 分开，不再把长评测降到吞吐量最低并发。这只能证明启动和兼容性，不能代表完整曲线。smoke 通过后，追加精确配置族的 changelog 条目，不使用场景、eval 选择或 append-only 修饰项；保持 PR 为草稿并添加 `full-sweep-enabled`。最终 sweep 保留全部测试点和默认 eval。任何同仓库 PR 均可通过 sweep 标签授权草稿运行；fork PR 仍使用受信任调度路径。最终失败后，先移除 sweep 标签、保持草稿，再推送修复。补全尝试评论后调用 `finish`；它先验证全部必需结果，再将 PR 标记为 ready，触发自动审阅。标记为 ready 不会启动 sweep，已完成的结果仍可用于 staging 和复用。不要求性能差值为正；回退应如实报告。Klaud 不自行 staging、授权复用、请求 review 或合并。
+定向尝试只测试更新后的镜像：从 `main` 调度 `e2e-tests.yml`，将 `inputs.ref` 设为实际测量 SHA，并使用 `generate-cli-command="test-config --config-files FILE --config-keys FAMILY --smoke"`。生成器将最低并发的吞吐量检查与规范并发上的代表性 eval 分开，不再把长评测降到吞吐量最低并发。这只能证明启动和兼容性，不能代表完整曲线。smoke 通过后，追加精确配置族的 changelog 条目，不使用场景、eval 选择或 append-only 修饰项；保持 PR 为草稿并添加 `full-sweep-fail-fast`。最终 sweep 保留全部测试点和默认 eval。任何同仓库 PR 均可通过 sweep 标签授权草稿运行；fork PR 仍使用受信任调度路径。最终失败后，先移除 sweep 标签、保持草稿，再推送修复。补全尝试评论后调用 `finish`；它先验证全部必需结果，再将 PR 标记为 ready，触发自动审阅。标记为 ready 不会启动 sweep，已完成的结果仍可用于 staging 和复用。不要求性能差值为正；回退应如实报告。Klaud 不自行 staging、授权复用、请求 review 或合并。
 
 在编辑或创建分支之前、每次定向调度之前，以及最终 sweep 的标签转换之前，使用 `check-capacity --cluster ID` 检查精确目标；通过重复 `--cluster` 指定每个可能的目标。退出状态 0 要求全部目标均通过新鲜度、可用性和低于 80% 利用率检查。如果该检查在定向调度、最终 sweep 转换或恢复调度之前失败，Klaud 会先在已有 PR 的评论中记录可公开的容量延后原因和当前尝试状态。随后取消并确认全部所属运行已经结束，再用终态或已取消行及确认后的状态更新尝试评论。最后移除所有 sweep 标签、将 PR 改回草稿、关闭 PR，并删除远程 Klaud 分支，使后续扫描可以重试该候选。如果尚无 PR，则在最终响应中记录延后结果，不创建占位 PR。调度后利用率上升不会导致健康运行被取消。Klaud 不会等待恢复或承诺自动继续。命令不打印容量详情。
+
+Fail-fast 只会取消失败矩阵内排队或运行中的其他任务；其他矩阵仍可能继续运行。先诊断首个失败，并等待所有自有任务结束后再重试。被取消的测试点仍须取得成功结果；若基础设施故障导致整个 run 以 cancelled 结束，应在同一 head 上重跑整个 attempt。保留现有重试预算，不得将确定性的镜像失败归类为基础设施问题。只有在已记录基础设施例外、需要让健康任务在同矩阵其他任务失败后继续运行时，才使用 `full-sweep-enabled`；必须等自有任务结束后才能切换标签。已有的非 fail-fast 运行仍可用于验证。两种模式都要求唯一的 sweep 标签、精确 head 上成功的最终运行，以及全部基线测试点和默认 eval。
 
 使用 `report` 分别记录初次尝试、修复 N/5、基础设施重试和最终完整 sweep。在等待前持久化所属 run/head/attempt。发生实质变化或等待满 30 分钟时更新同一条评论，完成的历史保留。渲染器统一处理匹配、单位、差值及大记录拆分。已确认的临时基础设施重试与 recipe 修复分开计算，每次尝试最多两次。`finish` 从已验证产物生成最终报告，发布后才标记就绪。缺失基线记为 N/A，回归如实报告，不设置拒绝阈值。
 
@@ -104,7 +106,7 @@ action 失败后，`recover-current` 执行一次非阻塞收尾。即使 SDK �
 
 权威[候选指令](../.github/klaud-candidate-prompt.md)仅允许修改所选 master 镜像，以及其已引用且未共享的单节点 recipe 或 srt-slurm YAML 中有源码依据的兼容性参数/环境变量。模型、精度、拓扑、推测解码、工作负载/数据集、时长、资源、全部配置点和 eval 保持不变。`model.container` 和 `identity.container.image` 必须一致。Klaud 不进行广泛调优，也不修改共享脚本、launcher、库或工作流。运行时引擎/serving 技术栈补丁必须为零，包括选定路径已有的补丁：禁止改写源码、容器、site-packages，禁止 overlay、monkey patch 或重建/fork 的 wheel。选择可原样运行的镜像，否则报告不兼容。
 
-smoke benchmark 和代表性 eval 都通过后，在 changelog 物理末尾追加条目并保留历史字节，推送精确 head，生成/检查完整矩阵并重新检查容量。保持草稿，只添加 `full-sweep-enabled`。最终失败后，先移除 sweep 标签并保持草稿，再修复。仅 `finish` 在结果验证和最终报告发布后标记就绪；就绪触发审查，不启动新 sweep。审查、staging/reuse 和合并仍由维护者决定。
+smoke benchmark 和代表性 eval 都通过后，在 changelog 物理末尾追加条目并保留历史字节，推送精确 head，生成/检查完整矩阵并重新检查容量。保持草稿，只添加 `full-sweep-fail-fast`。最终失败后，先移除 sweep 标签并保持草稿，再修复。仅 `finish` 在结果验证和最终报告发布后标记就绪；就绪触发审查，不启动新 sweep。审查、staging/reuse 和合并仍由维护者决定。
 
 ## 工作流操作与凭据
 
@@ -126,7 +128,7 @@ smoke benchmark 和代表性 eval 都通过后，在 changelog 物理末尾追�
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" python -m infx.klaud --help
-uvx zizmor==1.30.0 --offline --no-config --no-ignores .github/workflows/klaud-plan.yml .github/workflows/klaud-candidate.yml
+uvx --exclude-newer PT12H zizmor@latest --offline --no-config --no-ignores .github/workflows/klaud-plan.yml .github/workflows/klaud-candidate.yml
 ```
 
 CLI 和工作流检查不能证明 GPU 实际可运行。Klaud Cold 使用现有 InferenceX 校验和 e2e 工作流验证候选修改。本地验证不调用真实模型、不调度 benchmark、不创建 PR、不部署。

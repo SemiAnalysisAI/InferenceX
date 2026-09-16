@@ -36,7 +36,7 @@ Read the sources that apply before editing:
 | [`docs/PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md) | Current CODEOWNER sign-off template and merge standard |
 | [`.github/CODEOWNERS`](../.github/CODEOWNERS) | Owners for the paths changed by a PR |
 | [`.github/codeowner-signoff-verify-prompt.md`](../.github/codeowner-signoff-verify-prompt.md) | Independent checks encoded by the sign-off verifier |
-| [`.github/workflows/codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) | Sign-off trigger events, exact-phrase detection, and status publication |
+| [`.github/workflows/codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) | Sign-off trigger events, exact-phrase detection, and verdict comments |
 | [`.github/PULL_REQUEST_TEMPLATE/pull_request_template.md`](../.github/PULL_REQUEST_TEMPLATE/pull_request_template.md) | PR fields and author checklist |
 | [`.github/ISSUE_TEMPLATE/`](../.github/ISSUE_TEMPLATE/) | Bug and feature issue prompts |
 
@@ -290,8 +290,8 @@ Follow [`CONTRIBUTING.md`](../CONTRIBUTING.md) before requesting or posting sign
 6. Fill `Signed:` with the actual GitHub username. Do not sign for another reviewer.
 7. Only one eligible CODEOWNER reviewer needs to post the checklist per PR. First check for an existing checklist. Post the exact English template once as a conversation comment, review summary, or inline review comment; all three are supported. The original reviewer must edit that existing comment for corrections, added evidence, or retries. Other reviewers do not need to duplicate it. Create a replacement only if the original was deleted.
 8. Confirm [`.github/workflows/codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) triggered and read its verdict. The verifier re-derives merge-gating claims. Checkmarks alone are not accepted.
-9. Once verification passes, later commits and rebases retain acceptance without another Claude run or fresh sign-off. Automation carries the required status onto the latest head; the single verdict comment identifies the SHA actually assessed. To explicitly reassess, manually dispatch the verifier with the sign-off's `comment_url`. This updates the verdict comment without revoking an earlier PASS. See [the contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off).
-10. Only an authorized maintainer may record `/reuse-sweep-run` and use the supported merge path. A CODEOWNER approval does not grant that authorization.
+9. The verdict records only the assessed SHA. To reassess later changes or retry a missed review event, edit the existing checklist or manually dispatch the verifier with `pr-number` and the checklist’s `comment_url`. This updates the same advisory comment without publishing a commit status. See [CONTRIBUTING.md](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off).
+10. Only an authorized maintainer may record `/use <run_id>` and use the supported merge path. A CODEOWNER approval does not grant that authorization.
 
 Stop instead of signing when a required source, workflow link, recipe, exception rationale, or verification result is missing. Use unchecked boxes and concrete follow-up requests. Never convert an unknown into an approval claim.
 

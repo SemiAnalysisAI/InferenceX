@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,77 @@ from infx.workflows.recover_failed_ingest import (
     validate_recovery_workflow,
 )
 from infx.workflows.validate_perf_changelog import ChangelogValidationError
+
+
+@pytest.mark.parametrize("truncated", [False, True])
+def test_inspection_requires_complete_jobs_before_writing_recovery_metadata(
+    tmp_path, monkeypatch, capsys, truncated
+):
+    from infx.workflows import recover_failed_ingest as recovery
+
+    def run(args, **kwargs):
+        if args[0] == "git":
+            return subprocess.CompletedProcess(args, 0, "parent\n", "")
+        endpoint = next(arg for arg in args if arg.startswith("repos/"))
+        if endpoint.endswith("actions/runs/42"):
+            response = {
+                "event": "push", "status": "completed", "conclusion": "failure",
+                "path": ".github/workflows/run-sweep.yml", "head_branch": "main",
+                "head_sha": "merge", "run_attempt": 3, "html_url": "run-url",
+            }
+        elif "/jobs?" in endpoint:
+            assert "filter=all" in endpoint
+            first = [{"id": 7, "status": "completed", "conclusion": "failure",
+                      "name": "ingest", "html_url": "job-url"}]
+            first += [{"id": index, "status": "completed", "conclusion": "success"}
+                      for index in range(100, 199)]
+            response = [{"total_count": 101, "jobs": first}]
+            if not truncated:
+                response.append({"total_count": 101, "jobs": [
+                    {"id": 200, "status": "completed", "conclusion": "success"},
+                ]})
+        elif endpoint.endswith("commits/merge/pulls"):
+            response = [{"number": 9, "merged_at": "2026-01-01", "merge_commit_sha": "merge",
+                         "html_url": "pr-url"}]
+        else:
+            raise AssertionError(endpoint)
+        return subprocess.CompletedProcess(args, 0, json.dumps(response), "")
+
+    output = tmp_path / "recovery.json"
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(sys, "argv", ["recover", "inspect-target",
+                        "https://github.com/example/project/actions/runs/42",
+                        "--repo", "example/project", "--output", str(output)])
+    status = recovery.main()
+    if truncated:
+        assert status == 1
+        assert "Incomplete GitHub listing" in capsys.readouterr().err
+        assert not output.exists()
+    else:
+        assert status == 0
+        assert json.loads(output.read_text()) == {
+            "repo": "example/project", "run_id": 42, "run_attempt": 3, "run_url": "run-url",
+            "job_id": 7, "job_name": "ingest", "job_url": "job-url", "merge_sha": "merge",
+            "base_sha": "parent", "pr_number": 9, "pr_url": "pr-url",
+        }
+
+
+@pytest.mark.parametrize("failure,message", [
+    ("json", "invalid JSON"), ("command", "permission denied"), ("timeout", "timed out"),
+])
+def test_github_failures_keep_recovery_errors(monkeypatch, failure, message):
+    from infx.workflows import recover_failed_ingest as recovery
+
+    def run(args, **kwargs):
+        if failure == "command":
+            raise subprocess.CalledProcessError(1, args, output="", stderr="permission denied")
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired(args, kwargs["timeout"])
+        return subprocess.CompletedProcess(args, 0, "invalid", "")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(RecoveryError, match=message):
+        recovery.gh_api("example/project", "actions/runs/42")
 
 
 @pytest.mark.parametrize("packaged", [False, True])
