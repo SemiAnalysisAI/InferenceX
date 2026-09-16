@@ -8,8 +8,8 @@
 # DeepSeek-V4-Pro FP4 Dynamo-SGLang MTP, on the b200-nscale runner label.
 # Anything else exits non-zero.
 
-SLURM_PARTITION="batch_2"
-SLURM_ACCOUNT="restricted"
+SLURM_PARTITION="batch_1"
+SLURM_ACCOUNT="benchmark"
 POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
 POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
 TILERT_SRT_SLURM_URL="https://github.com/SemiAnalysisAI/srt-slurm.git"
