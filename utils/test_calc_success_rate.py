@@ -1,7 +1,6 @@
-import io
 import json
+import subprocess
 import sys
-from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -111,16 +110,16 @@ def test_success_rates_include_all_pages_and_retries(
     jobs.extend({"name": "setup", "conclusion": "success"} for _ in range(94))
     jobs.append({"name": "benchmark cluster:sample-b", "conclusion": "success"})
 
-    def urlopen(request, timeout):
-        assert urlparse(request.full_url).path == "/repos/example/project/actions/runs/42/jobs"
-        query = parse_qs(urlparse(request.full_url).query)
+    def run(args, **kwargs):
+        endpoint = next(arg for arg in args if arg.startswith("repos/"))
+        query = parse_qs(urlparse(endpoint).query)
         selected = jobs if query.get("filter") == ["all"] else jobs[1:]
-        start = (int(query["page"][0]) - 1) * int(query["per_page"][0])
-        return io.BytesIO(json.dumps({
-            "jobs": selected[start:start + 100], "total_count": len(selected),
-        }).encode())
+        pages = [{"jobs": selected[:100], "total_count": len(selected)}]
+        if "--paginate" in args:
+            pages.append({"jobs": selected[100:], "total_count": len(selected)})
+        return subprocess.CompletedProcess(args, 0, json.dumps(pages), "")
 
-    monkeypatch.setattr(success_rate.github.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(success_rate.github.subprocess, "run", run)
     success_rate.main()
 
     assert json.loads(run_stats_environment.read_text()) == {
@@ -143,12 +142,12 @@ def test_success_rates_include_all_pages_and_retries(
 def test_failed_stats_do_not_publish_an_artifact(
     run_stats_environment, monkeypatch, response, error, match
 ):
-    def urlopen(request, timeout):
+    def run(args, **kwargs):
         if response == 401:
-            raise HTTPError(request.full_url, 401, "Unauthorized", {}, io.BytesIO(b"denied"))
-        return io.BytesIO(json.dumps(response).encode())
+            raise subprocess.CalledProcessError(1, args, stderr="gh: Unauthorized (HTTP 401)")
+        return subprocess.CompletedProcess(args, 0, json.dumps([response]), "")
 
-    monkeypatch.setattr(success_rate.github.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(success_rate.github.subprocess, "run", run)
     with pytest.raises(error, match=match):
         success_rate.main()
     assert not run_stats_environment.exists()
@@ -157,16 +156,15 @@ def test_failed_stats_do_not_publish_an_artifact(
 def test_later_page_failure_preserves_previous_artifact(run_stats_environment, monkeypatch):
     run_stats_environment.write_text('{"previous": true}\n')
 
-    def urlopen(request, timeout):
-        query = parse_qs(urlparse(request.full_url).query)
-        if query["page"] == ["1"]:
-            return io.BytesIO(json.dumps({"total_count": 101, "jobs": [
-                {"name": "benchmark cluster:sample-a", "conclusion": "success"}
-                for _ in range(100)
-            ]}).encode())
-        raise HTTPError(request.full_url, 503, "Unavailable", {}, io.BytesIO(b"unavailable"))
+    def run(args, **kwargs):
+        partial = json.dumps([{"total_count": 101, "jobs": [
+            {"name": "benchmark cluster:sample-a", "conclusion": "success"}
+            for _ in range(100)
+        ]}])
+        raise subprocess.CalledProcessError(1, args, output=partial,
+                                            stderr="gh: Unavailable (HTTP 503)")
 
-    monkeypatch.setattr(success_rate.github.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(success_rate.github.subprocess, "run", run)
     with pytest.raises(RuntimeError, match="HTTP 503"):
         success_rate.main()
     assert run_stats_environment.read_text() == '{"previous": true}\n'
@@ -174,8 +172,9 @@ def test_later_page_failure_preserves_previous_artifact(run_stats_environment, m
 
 def test_empty_job_list_still_writes_zero_counts(run_stats_environment, monkeypatch):
     monkeypatch.setattr(
-        success_rate.github.urllib.request, "urlopen",
-        lambda request, timeout: io.BytesIO(b'{"jobs": [], "total_count": 0}'),
+        success_rate.github.subprocess, "run",
+        lambda args, **kwargs: subprocess.CompletedProcess(
+            args, 0, '[{"jobs": [], "total_count": 0}]', ""),
     )
     success_rate.main()
     assert json.loads(run_stats_environment.read_text()) == {

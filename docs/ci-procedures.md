@@ -358,10 +358,13 @@ Other workflows, including recovery, retain their original authorization and
 dispatch behavior. Execution credentials and GitHub protections remain explicit
 in the workflows.
 
-Python workflow, Klaud, and recovery helpers share GitHub transport and listing validation
-in `infx.github`. Workflows retain explicit tokens; Klaud and recovery retain `gh` authentication.
-Malformed pages, invalid counts, and incomplete listings stop the operation. Klaud's public
-errors remain sanitized; recovery requests have a 60-second timeout.
+Python workflow, Klaud, and recovery helpers use `gh api` through `infx.github`.
+GitHub CLI must be installed; GitHub-hosted runners already include it. Workflow tokens
+are passed through `GH_TOKEN` for that subprocess only, targeting `github.com`; an empty
+explicit token fails instead of using local credentials. Klaud and recovery retain existing
+`gh` authentication. GitHub CLI follows pagination links; malformed pages, invalid counts,
+and incomplete listings stop the operation. Klaud's public errors remain sanitized.
+Each request, including all its pages, has a 60-second timeout.
 
 ## Stage results
 
@@ -392,7 +395,7 @@ Reuse prevents an approved full PR sweep from being rerun on `main`. It is not a
 
 ### Eligibility and authorization
 
-`infx.github` provides repository-scoped REST calls, pagination, and comment-reaction primitives. It contains no sweep policy. `infx.workflows.reuse` owns command parsing, authorization lookup, and source-run selection/validation. `infx.workflows.reuse_comment` uses those same rules for reaction feedback. Workflows run these modules with `python3 -m`; the existing `utils/find_reusable_sweep_run.py` command and imports remain compatible. The package uses only the standard library and requires no installation from a checkout.
+`infx.github` provides repository-scoped REST calls, pagination, and comment-reaction primitives. It contains no sweep policy. `infx.workflows.reuse` owns command parsing, authorization lookup, and source-run selection/validation. `infx.workflows.reuse_comment` uses those same rules for reaction feedback. Workflows run these modules with `python3 -m`; the existing `utils/find_reusable_sweep_run.py` command and imports remain compatible. These helpers use Python’s standard library and the GitHub CLI; no Python package installation is needed when running them from a checkout.
 
 1. Reuse does not require a sweep label. Labels select new GPU work; removing a primary label does not invalidate an existing source run. Conflicting primary labels remain rejected by changelog validation and the merge helper.
 2. `evals-only` and `agentx-fast` make the run ineligible. A default full sweep and a full sweep with `all-evals` remain eligible.

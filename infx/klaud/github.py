@@ -17,18 +17,18 @@ class VerificationError(ValueError):
 
 
 def read(repository: str, path: str, *, paginate: bool = False) -> list | dict:
-    return github.cli_api(repository, path, paginate=paginate)
+    return github.api(repository, path, paginate=paginate)
 
 
 def items(repository: str, path: str, key: str | None = None) -> list[dict]:
     try:
-        return github.cli_paginate(repository, path, key or "")
+        return github.paginate(repository, path, item_key=key or "")
     except github.ListingError as error:
         raise VerificationError(str(error)) from error
 
 
 def write(repository: str, path: str, method: str, payload: dict | None = None) -> dict:
-    return github.cli_api(repository, path, method=method, data=payload)
+    return github.api(repository, path, method=method, data=payload)
 
 
 def artifacts(repository: str, run_id: int) -> list[dict]:

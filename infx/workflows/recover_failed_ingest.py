@@ -92,8 +92,8 @@ def gh_api(repo: str, endpoint: str, *, item_key: str | None = None) -> Any:
     """Call GitHub through the authenticated gh CLI."""
     try:
         if item_key is None:
-            return github.cli_api(repo, endpoint)
-        return github.cli_paginate(repo, endpoint, item_key)
+            return github.api(repo, endpoint)
+        return github.paginate(repo, endpoint, item_key=item_key)
     except subprocess.CalledProcessError as exc:
         detail = exc.stderr.strip() or exc.stdout.strip()
         raise RecoveryError(f"{' '.join(exc.cmd)} failed: {detail}") from exc

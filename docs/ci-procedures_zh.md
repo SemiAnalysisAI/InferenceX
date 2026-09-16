@@ -343,10 +343,12 @@ Admin 权限；Read、Triage 以及没有仓库访问权限的用户不能执行
 保持不变。其他 Workflow（包括恢复流程）保留原有的授权和派发行为。
 执行凭据和 GitHub 保护措施仍在 Workflow 中明确配置。
 
-Python 工作流、Klaud 和恢复工具通过 `infx.github` 共用 GitHub 请求和列表验证逻辑。
-工作流继续显式传入 Token；Klaud 和恢复工具继续使用 `gh` 身份验证。
-分页格式错误、计数无效或列表不完整时，操作会终止。Klaud 公开错误仍经过脱敏处理；
-恢复工具的请求超时为 60 秒。
+Python 工作流、Klaud 和恢复工具通过 `infx.github` 调用 `gh api`。
+运行环境必须安装 GitHub CLI；GitHub 托管 Runner 已预装。工作流 Token 仅通过该子进程的
+`GH_TOKEN` 传入，并固定访问 `github.com`；显式传入空 Token 会失败，不会回退到本地凭据。
+Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页链接；页面格式错误、
+计数无效或列表不完整时会停止操作。Klaud 的公开错误继续过滤敏感数据。
+每次请求（包括全部分页）的超时为 60 秒。
 
 ## 暂存结果
 
@@ -377,7 +379,7 @@ Python 工作流、Klaud 和恢复工具通过 `infx.github` 共用 GitHub 请�
 
 ### 资格与授权
 
-`infx.github` 提供仓库范围的 REST 调用、分页及评论表态基础操作，不包含扫描策略。`infx.workflows.reuse` 负责命令解析、授权查找及源 Run 的选择和验证。`infx.workflows.reuse_comment` 使用相同规则提供表态反馈。工作流通过 `python3 -m` 调用这些模块；现有 `utils/find_reusable_sweep_run.py` 命令和导入路径保持兼容。包仅使用标准库，从检出目录运行时无需安装。
+`infx.github` 提供仓库范围的 REST 调用、分页及评论表态基础操作，不包含扫描策略。`infx.workflows.reuse` 负责命令解析、授权查找及源 Run 的选择和验证。`infx.workflows.reuse_comment` 使用相同规则提供表态反馈。工作流通过 `python3 -m` 调用这些模块；现有 `utils/find_reusable_sweep_run.py` 命令和导入路径保持兼容。这些辅助程序使用 Python 标准库和 GitHub CLI；从检出目录运行时无需安装 Python 包。
 
 1. 复用不要求扫描标签。标签用于选择新的 GPU 工作；移除主标签不会使已有源 Run 失效。Changelog 验证和合并辅助脚本仍会拒绝冲突的主标签。
 2. `evals-only` 与 `agentx-fast` 会令 Run 不可复用。默认完整扫描以及带 `all-evals` 的完整扫描仍可复用。

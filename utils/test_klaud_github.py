@@ -13,7 +13,7 @@ from infx.klaud import claims, github
 @pytest.mark.parametrize("current_head,expected", [("ours", True), ("other", False)])
 def test_claim_conflict_checks_the_actual_owner(monkeypatch, current_head, expected):
     def run(args, **kwargs):
-        endpoint = next(arg for arg in args if arg.startswith("repos/"))
+        endpoint = next(arg for arg in args if arg.startswith("repos/")).partition("?")[0]
         method = args[args.index("--method") + 1]
         if endpoint.endswith("git/commits/base") and method == "GET":
             response = {"tree": {"sha": "tree"}}
