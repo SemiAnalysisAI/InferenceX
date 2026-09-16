@@ -32,27 +32,36 @@ def benchmark_points(entries: list[dict]) -> set[tuple]:
     }
 
 
-def canonical_matrix(repository: str, head: str, family: str) -> dict:
+def canonical_matrix(repository: str, head: str, family: str, *, historical: bool = False) -> dict:
     """Generate the unfiltered family from exact-head YAML using trusted local code.
 
     Candidate source is data only. A future generator-policy change can require manual
     inspection of an older run; it cannot silently waive points or required evals.
     """
+    import yaml
+
     from infx.matrix.generate import generate_test_config_sweep, mark_eval_entries
     from infx.matrix.plan import recipe_fingerprint
-    from infx.matrix.validation import load_config_files, load_runner_file
+    from infx.matrix.validation import validate_master_config, validate_runner_config
 
     OwnedCandidate(id="0" * 16 + "-" + "0" * 16, family=family, base=head)
     source, key = family.split(":", 1)
-    with tempfile.TemporaryDirectory(prefix="klaud-matrix-") as temp:
-        master, runners = Path(temp) / "master.yaml", Path(temp) / "runners.yaml"
-        master.write_bytes(github.file_at(repository, head, source))
-        runners.write_bytes(github.file_at(repository, head, "configs/runners.yaml"))
-        entries = generate_test_config_sweep(
-            SimpleNamespace(config_keys=[key]),
-            load_config_files([str(master)]),
-            load_runner_file(str(runners)),
-        )
+    prefix = ""
+    if historical:
+        tree = github.read(repository, f"git/trees/{head}")
+        if not any(item["path"] == "configs" for item in tree["tree"]):
+            prefix = ".github/"
+    master = yaml.safe_load(github.file_at(repository, head, prefix + source))
+    runners = yaml.safe_load(github.file_at(repository, head, prefix + "configs/runners.yaml"))
+    # Old runner files were the labels mapping itself. Never synthesize hardware facts.
+    if historical and "labels" not in runners:
+        runners = {"labels": runners}
+    # Only the selected family is relevant; retired sibling schemas may have changed.
+    entries = generate_test_config_sweep(
+        SimpleNamespace(config_keys=[key]),
+        validate_master_config({key: master[key]}),
+        validate_runner_config(runners),
+    )
     evals = [
         dict(row, **{"eval-only": True})
         for row in mark_eval_entries(deepcopy(entries), include_agentic=True)
@@ -67,7 +76,21 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
 
 
 def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:
-    from infx.matrix.plan import recipe_fingerprint
+    from pydantic import TypeAdapter
+
+    from infx.matrix.validation import (
+        MultiNodeAgenticMatrixEntry,
+        MultiNodeMatrixEntry,
+        SingleNodeAgenticMatrixEntry,
+        SingleNodeMatrixEntry,
+    )
+
+    schema = TypeAdapter(
+        SingleNodeMatrixEntry
+        | SingleNodeAgenticMatrixEntry
+        | MultiNodeMatrixEntry
+        | MultiNodeAgenticMatrixEntry
+    )
 
     metadata = matrix["changelog_metadata"]
     if metadata["head_ref"] != head:
@@ -76,12 +99,20 @@ def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:
     if len(entries) != 1 or entries[0]["config-keys"] != [family.split(":", 1)[1]]:
         raise VerificationError("Final changelog must select exactly the candidate family")
     expected = benchmark_points(benchmark_entries(canonical))
+    generated = {
+        point: schema.validate_python(entry).model_dump(by_alias=True, exclude_none=True)
+        for entry in benchmark_entries(canonical)
+        for point in benchmark_points([entry])
+    }
     for entry in benchmark_entries(matrix):
         measured = {
             key: value for key, value in entry.items() if key not in ("priority", "queue-token")
         }
-        if recipe_fingerprint(measured) != entry["recipe-fingerprint"]:
-            raise VerificationError("Matrix settings do not match their recipe fingerprint")
+        # The workflow adds schema defaults AFTER fingerprinting. Compare complete
+        # settings with the independently generated recipe under that same schema.
+        normalized = schema.validate_python(measured).model_dump(by_alias=True, exclude_none=True)
+        if any(generated.get(point) != normalized for point in benchmark_points([entry])):
+            raise VerificationError("Matrix settings do not match the canonical recipe")
     count = sum(
         len(entry["conc"]) if isinstance(entry["conc"], list) else 1
         for entry in benchmark_entries(matrix)

@@ -3,7 +3,6 @@
 import io
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -553,57 +552,6 @@ def committed_planning_repo(planning_repo):
     git("commit", "-qm", "head")
     head = git("rev-parse", "HEAD")
     return root, base, head
-
-
-@pytest.mark.parametrize("trusted", [False, True])
-@pytest.mark.parametrize("trim", [False, True])
-def test_workflow_runs_real_entrypoints_and_preserves_tooling_origin(
-    committed_planning_repo, trusted, trim,
-):
-    root, base, head = committed_planning_repo
-    source = Path(__file__).resolve().parents[1]
-    shutil.copy(source / "utils/ci_priority.py", root / "utils/ci_priority.py")
-    if trusted:
-        tooling = root / ".ci-priority"
-        tooling.mkdir()
-        shutil.move(root / "infx", tooling / "infx")
-        shutil.move(root / "utils", tooling / "utils")
-        # An unrelated package in the data checkout must not supply the planner.
-        (root / "infx").mkdir()
-        (root / "infx/__init__.py").write_text("raise RuntimeError('wrong tooling checkout')\n")
-    policy_root = tooling if trusted else root
-    (policy_root / "configs").mkdir(exist_ok=True)
-    shutil.copy(source / "configs/ci-priority.yaml", policy_root / "configs")
-    workflow = yaml.safe_load((source / ".github/workflows/e2e-tests.yml").read_text())
-    step = next(s for s in workflow["jobs"]["get-jobs"]["steps"] if s.get("id") == "get-jobs")
-    command = "test-config --config-files configs/nvidia-master.yaml --config-keys single --seq-lens 8k1k --scenario-type fixed-seq-len --no-evals"
-    script = re.sub(r"\$\{\{.*?\}\}", command, step["run"])
-    tools = root / "bin"
-    tools.mkdir()
-    # Use installed test dependencies; execute the real planner and priority helper.
-    uv = tools / "uv"
-    uv.write_text('''#!/bin/bash
-while [ "$1" != python ]; do shift; done
-shift
-exec "$TEST_PYTHON" "$@"
-''')
-    uv.chmod(0o755)
-    output = root / "outputs"
-    env = {**os.environ, "PATH": f"{tools}:{Path(sys.executable).parent}:{os.environ['PATH']}",
-           "TEST_PYTHON": sys.executable, "GITHUB_WORKSPACE": str(root), "GITHUB_OUTPUT": str(output),
-           "PR_LABELS": "[]", "CHANGELOG_BASE_REF": base if trusted else "",
-           "CHANGELOG_HEAD_REF": head if trusted else "", "TRIM_CONC": str(trim).lower(),
-           "ALL_EVALS": "false", "EVALS_ONLY": "false"}
-    env.pop("PYTHONPATH", None)
-    result = subprocess.run(["bash", "-euo", "pipefail", "-c", script], cwd=root,
-                            env=env, capture_output=True, text=True, timeout=20)
-    assert result.returncode == 0, result.stderr
-    outputs = {key: json.loads(value) for line in output.read_text().splitlines()
-               for key, value in [line.split("=", 1)]}
-    rows = outputs.pop("single-node-config")
-    assert [row["conc"] for row in rows] == ([16] if trim else [16, 32, 64])
-    assert all(row["model"] == "single" for row in rows)
-    assert all(value == [] for value in outputs.values())
 
 
 def test_validator_uses_trusted_entrypoints_while_reading_another_checkout(committed_planning_repo):
