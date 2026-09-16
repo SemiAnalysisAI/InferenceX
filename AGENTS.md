@@ -48,6 +48,14 @@ Then validate it in the receiving script after sourcing the shared helper:
 check_env_vars IS_MULTINODE MODEL_NAME PRECISION
 ```
 
+## SRT Slurm synthetic acceptance
+
+- **Do not hard-code synthetic acceptance lengths in SRT recipes, master configs, or launchers.** InferenceX automatically selects the measured value from [`golden_al_distribution/`](golden_al_distribution/) for speculative AgentX throughput runs. Do not add manual `SYNTHETIC_ACCEPTANCE_LENGTH`, vLLM `synthetic_acceptance_length`, SGLang `SGLANG_SIMULATE_ACC_LEN`, or TRT-LLM `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` settings.
+- Submit recipes through [`apply_srt_recipe`](runners/slurm_utils.sh). Its [`infx/srt_slurm` connector](infx/srt_slurm/synthetic_acceptance.py) applies native SRT `--set` / `--unset` overrides; calling upstream `srtctl` directly does not perform InferenceX's automatic selection.
+- Keep the actual speculative method, draft model, draft-token count, and relevant sampling settings explicit in the recipe. The connector combines the generation role's settings (decode, otherwise aggregated), after caller overrides, with `MODEL_PREFIX` and `THINKING_MODE` to select the golden curve. For Kimi DSpark, explicitly set `draft_sample_method` to `greedy` or `probabilistic`.
+- Eval-only and non-AgentX runs use real verification; the connector removes stale synthetic settings. Non-speculative roles do not receive simulation settings. `RUN_EVAL` does not disable simulation for the throughput portion.
+- Missing golden curves or unmeasured draft lengths fail before submission. Add the corresponding measured golden data when supporting a new combination; do not work around the error with a guessed or hard-coded acceptance length.
+
 ## Test quality
 
 **The one rule: a test must exercise the real implementation with concrete inputs and assert on what it computes, returns, writes, or raises. A test that inspects the code, the repo, or a config file instead of running behavior is not a test and must be deleted.** These rules are mandatory for every test added, modified, or reviewed in this repository. When in doubt, delete the test.
