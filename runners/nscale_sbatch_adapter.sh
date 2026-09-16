@@ -32,6 +32,7 @@ time_limit="$(directive time)"
 account="$(directive account)"
 partition="$(directive partition)"
 gres="$(directive gres)"
+gpus_per_node="$(directive gpus-per-node)"
 
 : "${nodes:?missing #SBATCH --nodes}"
 : "${ntasks:?missing #SBATCH --ntasks}"
@@ -41,7 +42,17 @@ gres="$(directive gres)"
 : "${time_limit:?missing #SBATCH --time}"
 : "${account:?missing #SBATCH --account}"
 : "${partition:?missing #SBATCH --partition}"
-: "${gres:?missing #SBATCH --gres}"
+if [[ -z "$gres" && -z "$gpus_per_node" ]]; then
+    echo "Error: missing #SBATCH --gres or #SBATCH --gpus-per-node" >&2
+    exit 2
+fi
+
+gpu_allocation_args=()
+if [[ -n "$gres" ]]; then
+    gpu_allocation_args+=("--gres=$gres")
+else
+    gpu_allocation_args+=("--gpus-per-node=$gpus_per_node")
+fi
 
 allocation_output="$(salloc \
     --nodes="$nodes" \
@@ -49,7 +60,7 @@ allocation_output="$(salloc \
     --ntasks-per-node="$ntasks_per_node" \
     --exclusive \
     --mem=0 \
-    --gres="$gres" \
+    "${gpu_allocation_args[@]}" \
     --time="$time_limit" \
     --account="$account" \
     --partition="$partition" \
