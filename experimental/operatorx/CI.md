@@ -92,3 +92,7 @@ If cleanup failed, a single-shard dispatch can set `recovery_run_id` to the rece
 OperatorX run from the same pool. It downloads the execution artifacts and retries
 allocation/staging cleanup before allocating a new node. Recovery checks the run,
 pool, and private staging parent; do not select unrelated or old Slurm executions.
+
+`cleanup.log` records the active-job query used to confirm allocation release.
+It queries the current user’s job list because querying a removed job ID directly
+can return a Slurm error even after that allocation has terminated.
