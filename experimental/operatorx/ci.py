@@ -142,13 +142,17 @@ def cleanup(root: Path) -> None:
         subprocess.run(["scancel", job], check=False, timeout=15)
         for _ in range(15):
             state = subprocess.run(
-                ["squeue", "-h", "-j", job, "-o", "%A"],
+                ["squeue", "-h", "-u", str(os.getuid()), "-o", "%A"],
                 check=False,
                 capture_output=True,
                 text=True,
                 timeout=10,
             )
-            if state.returncode == 0 and not state.stdout.strip():
+            with (root / "cleanup.log").open("a") as log:
+                log.write(
+                    f"job={job} rc={state.returncode} active={state.stdout!r} error={state.stderr!r}\n"
+                )
+            if state.returncode == 0 and job not in state.stdout.split():
                 break
             time.sleep(1)
         else:
@@ -218,6 +222,24 @@ def finalize(root: Path) -> None:
             shutil.copytree(stage / "results", root / "results", dirs_exist_ok=True)
         if stage.exists():
             shutil.rmtree(stage)
+
+
+def recover(artifacts: Path, run_id: str, pool: str, platform_config: Path) -> None:
+    profile = json.loads(platform_config.read_text())["platforms"][pool]["operator"]
+    base = (Path(profile["squash_dir"]).parent / f".operatorx-{os.getuid()}").resolve()
+    recovered = 0
+    for execution in artifacts.rglob("execution.json"):
+        data = json.loads(execution.read_text())
+        if data["run_id"] != run_id or data["cell"]["pool"] != pool:
+            raise ValueError("recovery artifact does not match requested run/pool")
+        stage = Path(data["stage"])
+        if stage.parent.resolve() != base:
+            raise ValueError("recovery stage does not belong to this pool/user")
+        finalize(execution.parent)
+        recovered += 1
+    if not recovered:
+        raise ValueError("no execution artifacts found to recover")
+    print(f"Recovered {recovered} execution(s) from run {run_id}", flush=True)
 
 
 def execute(args) -> None:
@@ -485,6 +507,11 @@ def main() -> None:
     p.add_argument("--manifest", required=True, type=Path)
     p.add_argument("--artifacts", required=True, type=Path)
     p.add_argument("--out", required=True, type=Path)
+    p = sub.add_parser("recover")
+    p.add_argument("--artifacts", required=True, type=Path)
+    p.add_argument("--run-id", required=True)
+    p.add_argument("--pool", required=True, choices=tuple(POOLS))
+    p.add_argument("--platform-config", required=True, type=Path)
     args = parser.parse_args()
     if args.command == "plan":
         import tomllib
@@ -539,6 +566,8 @@ def main() -> None:
                 f"{row['ok']} | {row['unsupported']} | {row['error']} |"
             )
         raise SystemExit(0 if report["success"] else 1)
+    elif args.command == "recover":
+        recover(args.artifacts, args.run_id, args.pool, args.platform_config)
     elif args.command == "execute":
         execute(args)
     elif args.command == "finalize":

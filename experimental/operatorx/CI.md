@@ -87,3 +87,8 @@ The final coverage job selects the newest artifact attempt for each requested
 shard, preserves successful shards from previous attempts, and fails if any shard
 is missing or failed. Its summary separates requested shapes from result rows
 (one shape may run on multiple backends).
+
+If cleanup failed, a single-shard dispatch can set `recovery_run_id` to the recent
+OperatorX run from the same pool. It downloads the execution artifacts and retries
+allocation/staging cleanup before allocating a new node. Recovery checks the run,
+pool, and private staging parent; do not select unrelated or old Slurm executions.

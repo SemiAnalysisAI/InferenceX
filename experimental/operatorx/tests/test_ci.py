@@ -134,6 +134,11 @@ if name == 'salloc':
         pathlib.Path(os.environ['READY']).touch()
         time.sleep(60)
     else: print('salloc: Granted job allocation 12345')
+if name == 'squeue':
+    if '-j' in sys.argv:
+        print('slurm_load_jobs error: Invalid job id specified', file=sys.stderr)
+        sys.exit(1)
+    print('99999')
 if name == 'srun' and sys.argv[-1] == 'rank':
     mount = next(x for x in sys.argv if x.startswith('--container-mounts=')).split('=',1)[1].split(':')[0]
     out = pathlib.Path(mount) / 'results' / 'partial.json'
@@ -286,3 +291,30 @@ def test_summary_uses_latest_attempt_and_reports_missing_coverage(tmp_path):
     manifest["source_sha"] = "different"
     with pytest.raises(ValueError, match="provenance"):
         ci.summarize(manifest, tmp_path)
+
+
+def test_recovery_refuses_unrelated_pool_or_storage(tmp_path):
+    artifacts = tmp_path / "artifacts"
+    profile = tmp_path / "platforms.json"
+    ci.write_json(
+        profile,
+        {
+            "platforms": {
+                "h100-dgxc": {
+                    "operator": {"squash_dir": str(tmp_path / "shared/squash")}
+                }
+            }
+        },
+    )
+    data = {
+        "run_id": "12",
+        "cell": {"pool": "h200-dgxc"},
+        "stage": str(tmp_path / "unrelated"),
+    }
+    ci.write_json(artifacts / "execution.json", data)
+    with pytest.raises(ValueError, match="run/pool"):
+        ci.recover(artifacts, "12", "h100-dgxc", profile)
+    data["cell"]["pool"] = "h100-dgxc"
+    ci.write_json(artifacts / "execution.json", data)
+    with pytest.raises(ValueError, match="pool/user"):
+        ci.recover(artifacts, "12", "h100-dgxc", profile)
