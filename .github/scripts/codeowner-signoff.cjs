@@ -83,11 +83,12 @@ async function upsert(github, context, prNumber, comment, body) {
   })).data;
 }
 
-async function publishStatus(github, context, sha, status, comment) {
+async function publishStatus(github, context, sha, status, comment,
+  failureDescription = 'Fresh CODEOWNER sign-off verification required') {
   await github.rest.repos.createCommitStatus({
     ...context.repo, sha, context: 'CODEOWNER sign-off', state: status,
     description: status === 'success' ? 'CODEOWNER sign-off covers this commit' :
-      status === 'pending' ? 'Verifying CODEOWNER sign-off' : 'Fresh CODEOWNER sign-off verification required',
+      status === 'pending' ? 'Verifying CODEOWNER sign-off' : failureDescription,
     target_url: comment?.html_url ||
       `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
   });
@@ -125,7 +126,8 @@ async function publish({ github, context, core, prNumber, headSha, verdictPath, 
   const passed = PASS.test(verdict);
   const comment = await upsert(github, context, prNumber, current.comment,
     formatComment(verdict, headSha, headSha));
-  await publishStatus(github, context, headSha, passed ? 'success' : 'failure', comment);
+  await publishStatus(github, context, headSha, passed ? 'success' : 'failure', comment,
+    'CODEOWNER sign-off rejected');
   const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: prNumber });
   if (pr.head.sha !== headSha) {
     await publishStatus(github, context, pr.head.sha,
