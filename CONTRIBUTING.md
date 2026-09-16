@@ -19,7 +19,7 @@ Thanks for contributing! PRs are welcome. This page covers the review process ev
 
 ## The PR Review Checklist (CODEOWNER sign-off)
 
-Sign-off is required only when a changed file has a CODEOWNER other than a repository admin or `@SemiAnalysisAI/core`. Ownership comes from the PR base commit, using the last matching CODEOWNERS rule; renames check both old and new paths. A matching core owner does not exempt another owner on the same file. Individual admins must have both repository `permission: admin` and `role_name: admin`; other teams and email owners require sign-off. Missing ownership data or failed permission lookups cannot grant an exemption. Changes without a qualifying owner receive a successful “not applicable” status without starting the verifier.
+Sign-off is required only when a changed file has a CODEOWNER other than a repository admin or `@SemiAnalysisAI/core`. Ownership comes from the current tip of the PR target branch, resolved once and pinned to the same SHA for CODEOWNERS validation and content reads, using the last matching rule; renames check both old and new paths. The PR head and its potentially stale recorded base SHA do not supply ownership rules. A matching core owner does not exempt another owner on the same file. Individual admins must have both repository `permission: admin` and `role_name: admin`; other teams and email owners require sign-off. Missing ownership data or failed permission lookups cannot grant an exemption. Changes without a qualifying owner receive a successful “not applicable” status without starting the verifier.
 
 One eligible CODEOWNER reviewer fills in the latest [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) template in their approval comment.
 

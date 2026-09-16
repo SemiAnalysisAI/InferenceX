@@ -19,7 +19,7 @@
 
 ## PR Review Checklist（CODEOWNER 签署）
 
-仅当修改的文件存在仓库管理员及 `@SemiAnalysisAI/core` 之外的 CODEOWNER 时，才要求签核。归属以 PR 基础提交中的 CODEOWNERS 为准，最后匹配的规则生效；重命名同时检查旧路径和新路径。同一文件有 core 团队作为 owner，不会豁免其他 owner。个人管理员必须同时拥有仓库 `permission: admin` 和 `role_name: admin`；其他团队和邮箱 owner 均要求签核。归属信息缺失或权限查询失败不能授予豁免。不涉及此类 owner 的改动会获得成功的“不适用”状态，无需启动验证器。
+仅当修改的文件存在仓库管理员及 `@SemiAnalysisAI/core` 之外的 CODEOWNER 时，才要求签核。归属以 PR 目标分支当前最新提交中的 CODEOWNERS 为准：先解析该分支的 SHA，再使用同一 SHA 校验并读取 CODEOWNERS，最后匹配的规则生效；重命名同时检查旧路径和新路径。归属规则不从 PR 的 Head 或其记录中可能过期的基础提交读取。同一文件有 core 团队作为 owner，不会豁免其他 owner。个人管理员必须同时拥有仓库 `permission: admin` 和 `role_name: admin`；其他团队和邮箱 owner 均要求签核。归属信息缺失或权限查询失败不能授予豁免。不涉及此类 owner 的改动会获得成功的“不适用”状态，无需启动验证器。
 
 由一名符合条件的 CODEOWNER 审阅者在批准评论中填写最新的 [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md)（[中文说明](docs/PR_REVIEW_CHECKLIST_zh.md)）模板。
 
