@@ -79,21 +79,21 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749,35154018672",
-  "status": "Checkout fallback validated. Replaced unavailable image consistently across all four arms; retry NVMe before controls.",
+  "status": "Checkout fallback verified; published compatible image pushed. Image-fix retry not dispatched because capacity check closed.",
   "last_capacity_check": {
-    "cluster_observed_at": "2026-09-16T21:44:08.000Z",
-    "idle_nodes": 9,
+    "cluster_observed_at": "2026-09-16T21:53:45.000Z",
+    "idle_nodes": 5,
     "total_nodes": 11,
     "legacy_task_nodes": 2,
-    "scheduler_snapshot_at": "2026-09-16T21:44:12.140Z",
-    "b200_queued_jobs": 0,
-    "dispatch_allowed": true
+    "scheduler_snapshot_at": "2026-09-16T21:53:50.173Z",
+    "b200_queued_jobs": 3,
+    "dispatch_allowed": false
   },
   "next_dispatch": {
     "arm": "nvme",
     "concurrency": 16,
     "repeat": 1,
     "retry_of": 35154018672,
-    "requires": "Fresh scheduler capacity and published replacement image; validate engine startup before controls."
+    "requires": "Fresh scheduler capacity; validate startup with the published replacement image before controls."
   }
 }
