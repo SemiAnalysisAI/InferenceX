@@ -25,6 +25,8 @@ MOONCAKE_MASTER_PID=""
 export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-3600}"
 export VLLM_USE_RUST_FRONTEND=1
 export VLLM_USE_V2_MODEL_RUNNER=1
+# 64 MiB per table/rank = 512 MiB across two tables and TP4.
+export VLLM_ENGRAM_SSD_CACHE_MIB=64
 # SimpleCPUOffloadConnector resolves prefix-cache block hashes when it selects
 # blocks to store, and asserts if they have already been retired. The other
 # B200 vLLM agentic recipes carry the same retention interval for this reason;

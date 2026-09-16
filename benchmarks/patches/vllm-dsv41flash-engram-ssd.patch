@@ -183,7 +183,7 @@
          for param in (self.weight, self.weight_scale_inv):
              set_weight_attrs(
                  param,
-@@ -758,20 +857,265 @@
+@@ -758,20 +857,182 @@
              )
          if cpu_offload:
              logger.info(
@@ -340,102 +340,19 @@
 +        return view
 +
 +    def stage_disk_rows_from_host(self, ids_host: torch.Tensor, num_tokens: int):
-+        """Resolve and read rows with no CUDA involvement, for a worker thread."""
-+        # The previous async H2D must finish before its pinned source is reused.
-+        if self._disk_h2d_done is not None:
-+            self._disk_h2d_done.synchronize()
 +        self.finalize_disk_shard()
-+        ids = ids_host[:num_tokens].numpy()
-+        heads = self.head_start + np.arange(self.part_n_hash_cols)
-+        owned_head = heads < self.n_hash_cols
-+        gathered = ids[:, np.clip(heads, None, self.n_hash_cols - 1)]
-+        owned = (
-+            owned_head
-+            & (gathered >= self.vocab_start_idx)
-+            & (gathered < self.vocab_end_idx)
-+        )
-+        flat = np.where(owned, gathered - self.vocab_start_idx, -1).reshape(-1)
-+        unique_np, inverse_np = np.unique(flat.clip(min=0), return_inverse=True)
-+        unique_cpu = torch.from_numpy(unique_np).to(torch.int64)
-+        w_stage, s_stage = self._staging(unique_cpu.numel())
-+        torch.index_select(
-+            self.weight.data.view(torch.uint8),
-+            0,
-+            unique_cpu,
-+            out=w_stage.view(torch.uint8),
-+        )
-+        torch.index_select(self.weight_scale_inv.data, 0, unique_cpu, out=s_stage)
-+        return (
-+            w_stage,
-+            s_stage,
-+            torch.from_numpy(inverse_np.astype("int32")),
-+            torch.from_numpy(flat.astype("int32")),
-+        )
++        return self._disk_transfer.prepare(ids_host[:num_tokens].numpy())
 +
-+    def stage_disk_rows(self, indices: torch.Tensor) -> tuple[torch.Tensor, ...]:
-+        """Host half of a disk lookup: resolve rows and read them into pinned memory.
++    def stage_disk_rows(self, indices: torch.Tensor):
++        # Standalone eager lookup follows the same cache path.
++        if not hasattr(self, "_disk_transfer"):
++            self._disk_transfer = EngramRowCache(
++                self, indices.shape[0] * self.part_n_hash_cols, 0, indices.device
++            )
++        return self.stage_disk_rows_from_host(indices.cpu(), indices.shape[0])
 +
-+        Split out from the device half so a caller can run it off the forward
-+        thread. This is the part that touches the filesystem, takes the page
-+        faults, and blocks on a device-to-host copy of the hash ids; a side
-+        CUDA stream would not overlap any of it.
-+
-+        Rows are deduplicated first: a batch repeats n-grams often enough that
-+        the distinct-row count, not the token count, is what the disk serves.
-+        """
-+        self.finalize_disk_shard()
-+        local = self._local_row_ids(indices)
-+        flat = local.reshape(-1)
-+        # Dedup on the host, not the device. torch.unique syncs to learn the
-+        # distinct count, so doing it on device costs a second stall per layer
-+        # per step on top of the copy the host gather already needs. One
-+        # device-to-host copy of the ids is enough; numpy does the rest.
-+        flat_cpu = flat.to("cpu", non_blocking=False).numpy()
-+        unique_np, inverse_np = np.unique(flat_cpu.clip(min=0), return_inverse=True)
-+        unique_cpu = torch.from_numpy(unique_np).to(torch.int64)
-+        # Unowned rows read row 0 and are masked to zero at dequantization, so
-+        # the gather stays a single dense index_select.
-+        inverse = torch.from_numpy(inverse_np.astype("int32")).to(
-+            indices.device, non_blocking=True
-+        )
-+        flat = flat.to(indices.device)
-+
-+        w_stage, s_stage = self._staging(unique_cpu.numel())
-+        # index_select has no fp8 overload; the gather is byte-wise either way.
-+        torch.index_select(
-+            self.weight.data.view(torch.uint8),
-+            0,
-+            unique_cpu,
-+            out=w_stage.view(torch.uint8),
-+        )
-+        torch.index_select(self.weight_scale_inv.data, 0, unique_cpu, out=s_stage)
-+        return w_stage, s_stage, inverse, flat
-+
-+    def finish_disk_rows(
-+        self, staged: tuple[torch.Tensor, ...], out: torch.Tensor
-+    ) -> None:
-+        """Device half: copy the gathered rows over and dequantize them."""
-+        w_stage, s_stage, inverse, flat = staged
-+        w_dev = w_stage.to(out.device, non_blocking=True)
-+        s_dev = s_stage.to(out.device, non_blocking=True)
-+        inverse = inverse.to(out.device, non_blocking=True)
-+        flat = flat.to(out.device, non_blocking=True)
-+        rows = flat.numel()
-+        _engram_dequant_rows_kernel[(triton.cdiv(rows, 16),)](
-+            w_dev,
-+            s_dev,
-+            inverse,
-+            flat,
-+            out,
-+            rows,
-+            DIM=self.dim,
-+            QUANT_BLOCK=self.block_size,
-+            BLOCK_R=16,
-+        )
-+
-+        if self._disk_h2d_done is None:
-+            self._disk_h2d_done = torch.cuda.Event()
-+        self._disk_h2d_done.record()
++    def finish_disk_rows(self, staged, out: torch.Tensor) -> None:
++        self._disk_transfer.finish(staged, out)
 +
 +    def _lookup_from_disk(self, indices: torch.Tensor, out: torch.Tensor) -> None:
 +        """Synchronous disk lookup, for callers with nothing to overlap it with."""
@@ -452,7 +369,7 @@
              return self.weight.data, self.weight_scale_inv.data
          src = (self.weight.data_ptr(), self.weight_scale_inv.data_ptr())
          if self._view_src != src:
-@@ -792,6 +1136,9 @@
+@@ -792,6 +1053,9 @@
          """
          rows = indices.shape[0] * self.part_n_hash_cols
          if not rows:
@@ -462,7 +379,7 @@
              return
          weight, scales = self._storage()
          # The table dwarfs TLB reach, so a persistent grid near the SM count
-@@ -1031,6 +1378,8 @@
+@@ -1031,6 +1295,8 @@
              layout.head_dim,
              tuple(size for order in layout.primes[layer_hash_index] for size in order),
              cpu_offload=engram_config.cpu_offload if engram_config else True,
@@ -471,7 +388,7 @@
          )
          n_hash_cols = (layout.max_ngram_size - 1) * layout.n_heads
          self.wkv = ReplicatedLinear(
-@@ -1073,7 +1422,7 @@
+@@ -1073,7 +1339,7 @@
          return self._extra_staged_rows[ubatch_id - 1]
  
      def prepare_embeddings(self, hash_ids: torch.Tensor) -> None:
@@ -480,7 +397,7 @@
  
          `hash_ids` covers every DP replica sharing the table (see
          `gather_engram_hashes`), so only `embed` narrows back to this one.
-@@ -1184,3 +1533,74 @@
+@@ -1184,3 +1450,224 @@
              num_warps=num_warps,
          )
          return output
@@ -508,7 +425,8 @@
 +    contains only device operations consuming these persistent buffers.
 +    """
 +
-+    def __init__(self, layers, max_tokens: int, num_layers: int, num_heads: int):
++    def __init__(self, layers, max_tokens: int, num_layers: int, num_heads: int,
++                 cache_bytes: int | None = None):
 +        self.layers = layers
 +        device = layers[0].staged_rows.device
 +        self.hashes = torch.zeros(
@@ -519,8 +437,16 @@
 +            self.hashes.shape, dtype=torch.int32, device="cpu", pin_memory=True
 +        )
 +        self.pool = ThreadPoolExecutor(max_workers=len(layers), thread_name_prefix="engram-stage")
++        if cache_bytes is None:
++            cache_bytes = int(os.environ.get("VLLM_ENGRAM_SSD_CACHE_MIB", "64")) * 1024**2
++        if cache_bytes < 0:
++            raise ValueError("Engram HBM cache budget must be nonnegative")
 +        for layer in layers:
 +            layer.staged_rows.zero_()
++            layer.embed_tokens._disk_transfer = EngramRowCache(
++                layer.embed_tokens, max_tokens * layer.embed_tokens.part_n_hash_cols,
++                cache_bytes, device,
++            )
 +        self.steps = 0
 +
 +    def stage(self, hashes: torch.Tensor, mask: torch.Tensor) -> None:
@@ -555,6 +481,147 @@
 +        self.steps += 1
 +        if self.steps == 1:
 +            logger.info("Engram SSD staged before graph replay: %d tokens, %d layers", count, len(self.layers))
++
++
++def engram_page_ranges(row_ids: np.ndarray, row_bytes: int, file_bytes: int,
++                       page_size: int = 4096) -> list[tuple[int, int]]:
++    """Deduplicated contiguous page ranges covering the requested rows."""
++    if not len(row_ids):
++        return []
++    first = row_ids * row_bytes // page_size
++    last = ((row_ids + 1) * row_bytes - 1) // page_size
++    pages = np.unique(np.concatenate([
++        (first + shift)[first + shift <= last]
++        for shift in range(int((last - first).max()) + 1)
++    ]))
++    starts = np.r_[0, np.flatnonzero(np.diff(pages) > 1) + 1]
++    ends = np.r_[starts[1:] - 1, len(pages) - 1]
++    return [(int(pages[a]) * page_size,
++             min((int(pages[b]) + 1) * page_size, file_bytes) - int(pages[a]) * page_size)
++            for a, b in zip(starts, ends)]
++
++
++@triton.jit
++def _engram_cache_insert(weight, scales, source, slots, scratch_start: tl.constexpr,
++                         DIM: tl.constexpr, SCALE_DIM: tl.constexpr):
++    row = tl.program_id(0)
++    src = scratch_start + tl.load(source + row)
++    dst = tl.load(slots + row)
++    cols = tl.arange(0, DIM)
++    tl.store(weight + dst * DIM + cols, tl.load(weight + src * DIM + cols))
++    sc = tl.arange(0, SCALE_DIM)
++    tl.store(scales + dst * SCALE_DIM + sc, tl.load(scales + src * SCALE_DIM + sc))
++
++
++class EngramRowCache:
++    """Bounded HBM cache + persistent transfer scratch; mmap is the DRAM tier.
++
++    A direct-mapped tag array keeps lookup overhead bounded. Colliding misses
++    use scratch for the current step; insertion happens AFTER dequantization,
++    so a miss cannot overwrite a cached hit still needed by that same batch.
++    Immutable rows need no writeback on eviction.
++    """
++
++    def __init__(self, embed, max_rows: int, budget: int, device):
++        self.embed = embed
++        self.max_rows = max_rows
++        self.capacity = min(budget // (embed.dim + embed.dim // embed.block_size),
++                            embed.weight.shape[0])
++        self.tags = np.full(self.capacity, -1, dtype=np.int64)
++        self.weights = torch.empty((self.capacity + max_rows, embed.dim),
++                                   dtype=torch.float8_e4m3fn, device=device)
++        self.scales = torch.empty((self.capacity + max_rows, embed.dim // embed.block_size),
++                                  dtype=torch.uint8, device=device)
++        self.host_w = torch.empty((max_rows, embed.dim), dtype=torch.uint8,
++                                  device="cpu", pin_memory=True)
++        self.host_s = torch.empty((max_rows, embed.dim // embed.block_size), dtype=torch.uint8,
++                                  device="cpu", pin_memory=True)
++        self.host_indices = torch.empty((4, max_rows), dtype=torch.int32,
++                                        device="cpu", pin_memory=True)
++        self.device_indices = torch.empty((4, max_rows), dtype=torch.int32, device=device)
++        self.done = None
++        self.steps = self.hits = self.misses = self.evictions = self.prefetch_ranges = 0
++
++    def _prefetch(self, rows: np.ndarray) -> None:
++        # WILLNEED queues batched readahead; cached pages do not require I/O.
++        # Small decode miss sets skip the hint overhead. mmap remains the
++        # authoritative reader and surfaces read errors during the gather.
++        if len(rows) < 64:
++            return
++        import mmap
++        for suffix, row_bytes in (("weight.bin", self.embed.dim),
++                                  ("scale.bin", self.embed.dim // self.embed.block_size)):
++            arr = _ENGRAM_DISK_MAPS[f"{self.embed._disk_base}.{suffix}"]
++            for offset, length in engram_page_ranges(rows, row_bytes, arr.nbytes, mmap.PAGESIZE):
++                arr._mmap.madvise(mmap.MADV_WILLNEED, offset, length)
++                self.prefetch_ranges += 1
++
++    def prepare(self, ids: np.ndarray):
++        if self.done is not None:
++            self.done.synchronize()
++        e = self.embed
++        heads = e.head_start + np.arange(e.part_n_hash_cols)
++        gathered = ids[:, np.minimum(heads, e.n_hash_cols - 1)]
++        owned = ((heads < e.n_hash_cols) & (gathered >= e.vocab_start_idx)
++                 & (gathered < e.vocab_end_idx))
++        flat = np.where(owned, gathered - e.vocab_start_idx, -1).reshape(-1)
++        if len(flat) > self.max_rows:
++            raise ValueError("SSD transfer scratch capacity exceeded")
++        unique, inverse = np.unique(flat.clip(min=0), return_inverse=True)
++        slots = unique % self.capacity if self.capacity else np.zeros(len(unique), dtype=np.int64)
++        hits = self.tags[slots] == unique if self.capacity else np.zeros(len(unique), dtype=bool)
++        missing = unique[~hits]
++        count = len(missing)
++        locations = slots.copy()
++        locations[~hits] = self.capacity + np.arange(count)
++        self.host_indices[0, :len(flat)].numpy()[:] = locations[inverse]
++        self.host_indices[1, :len(flat)].numpy()[:] = flat
++        self._prefetch(missing)
++        if count:
++            index = torch.from_numpy(missing)
++            torch.index_select(e.weight.data.view(torch.uint8), 0, index, out=self.host_w[:count])
++            torch.index_select(e.weight_scale_inv.data, 0, index, out=self.host_s[:count])
++        # Select one deterministic winner for each colliding cache slot.
++        insert = np.empty(0, dtype=np.int64)
++        destinations = np.empty(0, dtype=np.int64)
++        if self.capacity and count:
++            destinations, insert = np.unique(missing % self.capacity, return_index=True)
++            self.host_indices[2, :len(insert)].numpy()[:] = insert
++            self.host_indices[3, :len(insert)].numpy()[:] = destinations
++        self.hits += int(hits.sum())
++        self.misses += count
++        self.evictions += int((self.tags[destinations] >= 0).sum())
++        return len(flat), missing, destinations, insert
++
++    def finish(self, staged, out: torch.Tensor) -> None:
++        rows, missing, destinations, insert = staged
++        count = len(missing)
++        if count:
++            self.weights[self.capacity:self.capacity + count].view(torch.uint8).copy_(
++                self.host_w[:count], non_blocking=True)
++            self.scales[self.capacity:self.capacity + count].copy_(self.host_s[:count], non_blocking=True)
++        if rows:
++            for plane in (0, 1):
++                self.device_indices[plane, :rows].copy_(self.host_indices[plane, :rows], non_blocking=True)
++            _engram_dequant_rows_kernel[(triton.cdiv(rows, 16),)](
++                self.weights, self.scales, self.device_indices[0], self.device_indices[1],
++                out, rows, DIM=self.embed.dim, QUANT_BLOCK=self.embed.block_size, BLOCK_R=16,
++            )
++        if len(insert):
++            for plane in (2, 3):
++                self.device_indices[plane, :len(insert)].copy_(self.host_indices[plane, :len(insert)], non_blocking=True)
++            _engram_cache_insert[(len(insert),)](
++                self.weights, self.scales, self.device_indices[2], self.device_indices[3],
++                self.capacity, DIM=self.embed.dim, SCALE_DIM=self.embed.dim // self.embed.block_size,
++            )
++            self.tags[destinations] = missing[insert]
++        if self.done is None:
++            self.done = torch.cuda.Event()
++        self.done.record()
++        self.steps += 1
++        if self.steps == 1 or self.steps % 1000 == 0:
++            logger.info("Engram SSD row cache: steps=%d capacity=%d unique_hits=%d unique_misses=%d evictions=%d page_ranges=%d",
++                        self.steps, self.capacity, self.hits, self.misses, self.evictions, self.prefetch_ranges)
 --- a/config/engram.py
 +++ b/config/engram.py
 @@ -37,6 +37,31 @@

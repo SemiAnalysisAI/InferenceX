@@ -201,7 +201,7 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 
 ### DeepSeek-V4.1-Flash DSpark
 
-PR #3080 的实验性 B200 SSD Engram 配方在 V2 runner 中于图回放前计算实时 hash ID，将两个磁盘表的行放入固定 GPU 缓冲区，并使用 FULL_AND_PIECEWISE 图及最小 64-token 捕获范围。主机读取对 ID 去重、排序，并并行读取两个表。该实验仅支持关闭微批次的 PP1/DP1。服务启动前，GPU 预检将变化的行及图大小与独立精确参考进行比较；仍需 CI 吞吐和真实验证 eval。
+PR #3080 的实验性 B200 SSD Engram 配方在 V2 runner 中于图回放前计算实时 hash ID，将两个磁盘表的行放入固定 GPU 缓冲区，并使用 FULL_AND_PIECEWISE 图及最小 64-token 捕获范围。主机读取对 ID 去重、排序，并并行读取两个表。该实验仅支持关闭微批次的 PP1/DP1。服务启动前，GPU 预检将变化的行及图大小与独立精确参考进行比较；仍需 CI 吞吐和真实验证 eval。 下一轮实验为每个表/每个 rank 增加 64 MiB HBM 行缓存（TP4 共 512 MiB）、可复用 GPU 传输缓冲区，以及较大 miss 批次的去重页面范围预读。OS page cache 提供可回收 DRAM 层。日志记录缓存命中、未命中和淘汰计数；发生槽冲突时先用临时区生成当前输出，再更新持久缓存槽。
 
 GB200 的 DSpark 配方将 CUDA graph 最小捕获范围设为 64 tokens，以覆盖 AgentX 子代理并发。这会将 c1/c2/c4 的上限从 8/16/32 提升至 64；c8 及以上保持原有大小。完整轨迹、AL 3.51 和 Engram UVA 配置保持不变；需通过 CI 验证低并发尾延迟改善。
 B200 的 DSpark 配方使用相同的最小捕获范围，并保持相同的工作负载配置。

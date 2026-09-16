@@ -7941,3 +7941,12 @@
     - "Stage SSD Engram rows before full CUDA graph replay on B200 using live V2 input/lookback hashes, fixed GPU buffers, deduplicated sorted reads and concurrent table gathers; raise the graph floor to 64"
     - "在 B200 上使用实时 V2 输入及回看 hash、固定 GPU 缓冲区、去重排序读取和并行表读取，于完整 CUDA graph 回放前准备 SSD Engram 行；将最小图捕获范围提升至 64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3080
+
+- config-keys:
+    - dsv41flashssd-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a bounded 64 MiB HBM Engram row cache per table/rank, persistent GPU transfer buffers, and deduplicated page-range SSD prefetch on B200; log hit/miss and eviction counters while retaining the OS page cache as the DRAM tier"
+    - "在 B200 上为每个表/rank 增加有界 64 MiB HBM Engram 行缓存、持久 GPU 传输缓冲区及去重页面范围 SSD 预取；记录命中、未命中和淘汰计数，保留 OS page cache 作为 DRAM 层"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3080
