@@ -57,9 +57,10 @@ gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
   的账户主目录；显式配置的 `stage_dir` 优先。结果不依赖提交主机的 `/tmp` 在计算节点上可见。
 - 规划步骤解析镜像 digest。导入操作加锁，并按镜像、digest 和 CPU 架构缓存，导入后再次核对
   digest。标签发生变化或无法解析时运行失败，避免错误标注测量所用镜像。
-  规划和导入主机都必须能匿名读取镜像。导入前校验主机 CPU 架构；B300 沿用 CollectiveX
-  的提交主机导入方式，其他运行器池在已分配的计算节点上导入。Enroot 使用显式 registry
-  地址、私有临时目录和运行器池指定的缓存路径。分配请求保留 account、QoS 和隔离节点
+  规划和导入主机都必须能匿名读取镜像。导入前校验主机 CPU 架构，并在已分配的计算节点
+  上执行。B300 提交主机缺少该镜像所需的解压空间，因此沿用推理启动器的计算节点导入方式。
+  Enroot 和 GNU parallel 使用私有临时目录；Enroot 使用显式 registry 地址及运行器池指定的
+  缓存路径。分配请求保留 account、QoS 和隔离节点
   列表，并沿用 B300/GB 平台的 remap-root 与内存设置。B300 与推理启动器一致，由
   partition/account 选择 QoS；原来的 `batch_1_qos` 覆盖值会被当前集群拒绝。
   原配置中的隔离节点名称也不存在于该运行器池，已移除；Slurm 仍会遵循节点的 drain

@@ -66,9 +66,10 @@ Do not infer that Blackwell-specific FP4 kernels work on Hopper.
   plus digest and CPU architecture, with a second digest check after import. A moved or unresolvable
   tag fails rather than claiming the planned image was measured. Images must be
   anonymously readable from the planning and import hosts. Imports verify the host
-  CPU architecture; B300 imports on its submit host, matching CollectiveX, while
-  other pools import inside their allocation. Enroot uses explicit registry URLs,
-  private temporary directories, and any pool-configured cache path. Allocation
+  CPU architecture and run inside their allocation. B300 follows the inference
+  launcher's compute-node import because its submit host lacks extraction space
+  for this image. Enroot and GNU parallel use private temporary directories;
+  Enroot uses explicit registry URLs and any pool-configured cache path. Allocation
   forwards account, QoS, and quarantined nodes; B300/GB pools retain their existing
   remap-root and memory settings. B300 leaves QoS selection to its partition/account,
   matching the inference launcher; the former `batch_1_qos` override is rejected

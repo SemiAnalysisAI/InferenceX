@@ -242,6 +242,7 @@ def import_image(args) -> None:
             # temporary paths. Preserve an explicitly configured shared cache.
             with tempfile.TemporaryDirectory(prefix="operatorx-enroot-") as scratch:
                 env = dict(os.environ)
+                env["TMPDIR"] = scratch
                 for name in ("TEMP", "DATA", "RUNTIME"):
                     directory = Path(scratch) / name.lower()
                     directory.mkdir()
@@ -404,6 +405,11 @@ def execute(args) -> None:
         cache = base / "containers"
         launcher = stage / "source/experimental/operatorx/ci.py"
         import_command = [
+            "srun",
+            f"--jobid={job}",
+            "--nodes=1",
+            "--ntasks=1",
+            "--chdir=/tmp",
             "python3",
             str(launcher),
             "import",
@@ -416,17 +422,8 @@ def execute(args) -> None:
             "--image-platform",
             image_platform,
         ]
-        # The B300 submit host has registry access; mirror CollectiveX's local
-        # import. Other pools import on their allocated compute architecture.
-        if cell["pool"] != "b300":
-            import_command = [
-                "srun",
-                f"--jobid={job}",
-                "--nodes=1",
-                "--ntasks=1",
-                "--chdir=/tmp",
-                *import_command,
-            ]
+        # Import on the allocated architecture, including B300: its submit host
+        # lacks PyTorch extraction space, as the inference launcher notes.
         import_env = dict(os.environ)
         if profile.get("enroot_cache_path"):
             import_env["ENROOT_CACHE_PATH"] = profile["enroot_cache_path"]

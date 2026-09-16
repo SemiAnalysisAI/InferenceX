@@ -100,6 +100,7 @@ def test_image_import_separates_architectures_and_refuses_wrong_host(
     tmp_path, monkeypatch
 ):
     trace = []
+    scratch_paths = []
 
     def external(argv, **kwargs):
         trace.append(argv)
@@ -107,6 +108,9 @@ def test_image_import_separates_architectures_and_refuses_wrong_host(
             Path(argv[3]).write_bytes(b"validated squash fixture")
             env = kwargs["env"]
             assert Path(env["ENROOT_TEMP_PATH"]).is_dir()
+            scratch = Path(env["TMPDIR"])
+            (scratch / "parallel-buffer").write_text("importer scratch")
+            scratch_paths.append(scratch)
         return subprocess.CompletedProcess(argv, 0)
 
     monkeypatch.setattr(ci.subprocess, "run", external)
@@ -140,6 +144,7 @@ def test_image_import_separates_architectures_and_refuses_wrong_host(
     imports = [argv for argv in trace if argv[0] == "enroot"]
     assert len(imports) == 2
     assert imports[0][-1] == "docker://nvcr.io#nvidia/pytorch:test"
+    assert all(not path.exists() for path in scratch_paths)
 
 
 def test_shared_storage_uses_only_configured_writable_roots(tmp_path, monkeypatch):
@@ -388,9 +393,7 @@ if name == 'srun' and sys.argv[-1] == 'rank':
         imported = next(c for c in calls if "import" in c["argv"])
         assert imported["cache"] == str(tmp_path / "shared/enroot")
         assert imported["argv"][-2:] == ["--image-platform", architecture]
-        assert Path(imported["argv"][0]).name == (
-            "python3" if pool == "b300" else "srun"
-        )
+        assert Path(imported["argv"][0]).name == "srun"
         launched = next(c["argv"] for c in calls if c["argv"][-1] == "rank")
         assert "--ntasks=1" in launched
         if pool in ("gb200", "gb300", "b300"):
