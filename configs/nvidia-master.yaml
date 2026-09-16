@@ -900,7 +900,7 @@ dsr1-fp4-b200-sglang-mtp:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
 
 dsv4-fp4-b200-sglang-agentic-hicache-mtp:
-  image: lmsysorg/sglang:nightly-dev-20260827-20621aa1
+  image: lmsysorg/sglang:v0.5.19-cu130
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:b200-nscale
