@@ -3123,6 +3123,7 @@ resolve_trace_source() {
 }
 
 build_replay_cmd() {
+    echo "[benchmark_lib.sh build_replay_cmd] AIPERF_EXPERIMENTAL_FAST=${AIPERF_EXPERIMENTAL_FAST:-UNSET}"
     check_env_vars INFMAX_CONTAINER_WORKSPACE MODEL PORT CONC DURATION
     check_env_vars \
         AIPERF_FAILED_REQUEST_THRESHOLD AIPERF_LIVE_FAILED_REQUEST_THRESHOLD \

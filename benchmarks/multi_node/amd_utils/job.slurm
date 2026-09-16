@@ -444,6 +444,14 @@ DOCKER_ENV_COMMON=(
     -e MAX_MODEL_LEN=\${MAX_MODEL_LEN:-}
     -e DURATION=\${DURATION}
     -e IS_AGENTIC=\${IS_AGENTIC}
+    # Was missing entirely: server_sglang.sh's client-passthrough loop lists
+    # AIPERF_EXPERIMENTAL_FAST for forwarding into the sibling aiperf client
+    # container, but that loop only sees vars already present in *this*
+    # container's env -- without a -e flag here it was always unset by the
+    # time that loop ran, so build_replay_cmd's check_env_vars in
+    # benchmark_lib.sh failed with "AIPERF_EXPERIMENTAL_FAST not set" for
+    # every agentic multinode run.
+    -e AIPERF_EXPERIMENTAL_FAST=\${AIPERF_EXPERIMENTAL_FAST:-0}
     -e FLUSH_DRAIN_TIMEOUT=\$FLUSH_DRAIN_TIMEOUT
     -e CLEAR_CACHE_BETWEEN_CONC=\$CLEAR_CACHE_BETWEEN_CONC
     -e KV_OFFLOADING=\${KV_OFFLOADING}

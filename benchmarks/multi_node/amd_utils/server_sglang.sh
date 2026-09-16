@@ -1093,6 +1093,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         # HOST_BENCH_LOGS / CLIENT_CONT_NAME for this.
         CLIENT_ENV_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/client.env"
         mkdir -p "/run_logs/slurm_job-${SLURM_JOB_ID}"
+        echo "[server_sglang.sh] AIPERF_EXPERIMENTAL_FAST=${AIPERF_EXPERIMENTAL_FAST:-UNSET}"
         check_env_vars INFERENCEX_RUNTIME_ENV_VARS
         # Unset vars are skipped so the client keeps its own defaults.
         {

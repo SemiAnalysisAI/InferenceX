@@ -281,6 +281,8 @@ if [[ -n "${SLURM_REUSE_JOBID:-}" ]]; then
     exit 0
 fi
 
+echo "[submit.sh] AIPERF_EXPERIMENTAL_FAST=${AIPERF_EXPERIMENTAL_FAST:-UNSET}" >&2
+
 sbatch_cmd=(
     sbatch
     --parsable

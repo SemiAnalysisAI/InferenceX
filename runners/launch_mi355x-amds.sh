@@ -2,6 +2,7 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
 check_env_vars EVAL_ONLY IS_AGENTIC IS_MULTINODE KEEP_LOGS RUN_EVAL
+echo "[launch_mi355x-amds.sh] AIPERF_EXPERIMENTAL_FAST=${AIPERF_EXPERIMENTAL_FAST:-UNSET}"
 
 scancel_sync() {
     local jobid=$1
