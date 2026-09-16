@@ -102,7 +102,7 @@ Use compact metadata lines, exact `8k/1k` shorthand and shared settings above th
 
 ## Final preflight and maintainer retry
 
-Before adding `full-sweep-enabled`, validate the exact pushed head's full matrix:
+Before adding `full-sweep-fail-fast`, validate the exact pushed head's full matrix:
 
 ```bash
 head_sha=$(git rev-parse HEAD)

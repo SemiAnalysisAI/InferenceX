@@ -81,7 +81,12 @@ After smoke benchmarks AND selected evals pass, append one exact-family perf-cha
 entry at the physical tail with this PR URL, preserving every prior byte. Omit scenario,
 append-only and eval-selection modifiers. Commit/push, generate the final matrix with
 utils/process_changelog.py and run `check-final --matrix-file FILE` before dispatch.
-Recheck capacity, keep DRAFT and apply full-sweep-enabled as the SOLE sweep-related label.
+Recheck capacity, keep DRAFT and apply full-sweep-fail-fast as the SOLE sweep-related label.
+Only use full-sweep-enabled for a documented infrastructure exception where healthy jobs
+must survive sibling failures. Never switch labels while owned jobs are active.
+Fail-fast cancels siblings within a matrix, not every matrix; wait for all owned jobs.
+Classify the first failure, not the resulting cancellations. Retry cancelled points too;
+for an infrastructure retry of a cancelled run, rerun the whole attempt on the same head.
 Wait for complete run-sweep.yml coverage on the exact head, all points/default evals and
 reusable artifacts. Check BOTH the final matrix before dispatch and completed final artifacts
 against EVERY frozen baseline point by identity, not count alone; extra points cannot replace

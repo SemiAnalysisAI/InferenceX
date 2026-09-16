@@ -218,14 +218,12 @@ class Session:
         if outcome.pull_request != (pull["number"] if pull else None):
             raise VerificationError("Outcome PR mismatch")
         if outcome.outcome == "validated":
-            if (
-                not pull
-                or pull["state"] != "open"
-                or (require_ready and pull["draft"])
-                or not any(label["name"] == "full-sweep-enabled" for label in pull["labels"])
-            ):
+            if not pull or pull["state"] != "open" or (require_ready and pull["draft"]):
                 raise VerificationError("Validated PR must remain ready for review")
-            if {label["name"] for label in pull["labels"]} & SWEEP_LABELS != {"full-sweep-enabled"}:
+            if {label["name"] for label in pull["labels"]} & SWEEP_LABELS not in (
+                {"full-sweep-fail-fast"},
+                {"full-sweep-enabled"},
+            ):
                 raise VerificationError("Validated PR has incompatible sweep labels")
             finals = [
                 run

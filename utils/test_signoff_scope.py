@@ -3,7 +3,8 @@ from __future__ import annotations
 import base64
 import copy
 import json
-from urllib.parse import quote
+import subprocess
+from urllib.parse import parse_qsl, quote
 
 import pytest
 
@@ -20,7 +21,7 @@ def scope_case(monkeypatch):
         "codeowners": "* @SemiAnalysisAI/core\n/configs/ @admin @writer\n",
         "permissions": {"admin": {"permission": "admin", "role_name": "admin"},
                         "writer": {"permission": "write", "role_name": "write"}},
-        "errors": [], "requests": [], "statuses": [],
+        "errors": [], "requests": [],
     }
 
     def api(repo, path, token, params=None, *, method="GET", data=None):
@@ -34,8 +35,7 @@ def scope_case(monkeypatch):
         if path == "/pulls/7/files":
             if callback := case.get("during_listing"):
                 callback()
-            page = int(params["page"]) - 1
-            return case["files"][page * 100:(page + 1) * 100]
+            return case["files"]
         if path == "/codeowners/errors":
             if params == {"ref": "stale-base"}:
                 return {"errors": [{"kind": "Unknown owner"}]}
@@ -50,12 +50,19 @@ def scope_case(monkeypatch):
             return {"type": "file", "encoding": "base64", "content": base64.b64encode(case["codeowners"].encode()).decode()}
         if path.startswith("/collaborators/"):
             return case["permissions"][path.split("/")[2]]
-        if path == "/statuses/head" and method == "POST":
-            case["statuses"].append(data)
-            return data
         raise AssertionError((method, path))
 
-    monkeypatch.setattr(signoff_scope.github, "api", api)
+    def run(args, **kwargs):
+        endpoint = next(arg for arg in args if arg.startswith("repos/"))
+        path, _, query = endpoint.split("/", 3)[3].partition("?")
+        response = api("example/repo", "/" + path, kwargs["env"]["GH_TOKEN"],
+                       dict(parse_qsl(query)) or None, method=args[args.index("--method") + 1],
+                       data=json.loads(kwargs["input"]) if kwargs["input"] else None)
+        if "--slurp" in args:
+            response = [response[:100], response[100:]] if response else [[]]
+        return subprocess.CompletedProcess(args, 0, json.dumps(response), "")
+
+    monkeypatch.setattr(signoff_scope.github.subprocess, "run", run)
     return case
 
 
@@ -106,14 +113,12 @@ def test_effective_ownership_respects_precedence_and_path_boundaries(scope_case,
 def test_renaming_or_deleting_an_owned_file_still_requires_signoff(scope_case, file):
     scope_case["files"] = [file]
     assert signoff_scope.check_scope("example/repo", 7, "token")["required"] == "true"
-    assert scope_case["statuses"] == []
 
 
 def test_owned_file_after_first_page_is_not_missed(scope_case):
     scope_case["files"] = [{"filename": f"docs/{i}.md"} for i in range(100)] + [{"filename": "configs/model.yaml"}]
     scope_case["pr"]["changed_files"] = 101
     assert signoff_scope.check_scope("example/repo", 7, "token")["required"] == "true"
-    assert scope_case["statuses"] == []
 
 
 @pytest.mark.parametrize("base_ref", ["main", "release/next"])
@@ -122,7 +127,6 @@ def test_stale_pr_base_uses_current_target_ownership_pinned_to_one_commit(scope_
     scope_case["target_ref"] = base_ref
     scope_case["during_errors"] = lambda: scope_case.update(branch_sha="newer-base")
     assert signoff_scope.check_scope("example/repo", 7, "token")["required"] == "true"
-    assert scope_case["statuses"] == []
 
 
 @pytest.mark.parametrize("preceding_files", [0, 99])
@@ -137,11 +141,10 @@ def test_type_change_entries_count_as_one_file_and_still_require_signoff(scope_c
     assert signoff_scope.check_scope("example/repo", 7, "token") == {
         "required": "true", "pr-number": "7", "head-sha": "head",
     }
-    assert scope_case["statuses"] == []
 
 
 @pytest.mark.parametrize("changed", ["head", "base", "base-ref"])
-def test_pr_changes_during_scope_resolution_do_not_publish_an_exemption(scope_case, changed):
+def test_pr_changes_during_scope_resolution_are_rejected(scope_case, changed):
     scope_case["files"] = [{"filename": "README.md"}]
     if changed == "base-ref":
         scope_case["during_listing"] = lambda: scope_case["pr"]["base"].update(ref="release/next")
@@ -149,7 +152,6 @@ def test_pr_changes_during_scope_resolution_do_not_publish_an_exemption(scope_ca
         scope_case["during_listing"] = lambda: scope_case["pr"][changed].update(sha="new-commit")
     with pytest.raises(RuntimeError, match="PR changed"):
         signoff_scope.check_scope("example/repo", 7, "token")
-    assert scope_case["statuses"][-1]["state"] == "error"
 
 
 def test_matching_an_owner_more_than_once_checks_their_role_once(scope_case):
@@ -162,8 +164,7 @@ def test_matching_an_owner_more_than_once_checks_their_role_once(scope_case):
 
 
 @pytest.mark.parametrize("problem", ["files", "branch", "codeowners", "permission", "incomplete", "incomplete-duplicate", "invalid", "empty"])
-def test_scope_failures_revoke_an_earlier_exemption(scope_case, problem):
-    scope_case["statuses"].append({"context": "CODEOWNER sign-off", "state": "success", "description": "N/A"})
+def test_scope_failures_do_not_exempt_changes(scope_case, problem):
     if problem in {"files", "branch", "codeowners", "permission"}:
         scope_case["fail_path"] = {"files": "/pulls/7/files", "branch": "/branches/main", "codeowners": "/contents/.github/CODEOWNERS", "permission": "/collaborators/admin/permission"}[problem]
     elif problem in {"incomplete", "incomplete-duplicate"}:
@@ -179,10 +180,6 @@ def test_scope_failures_revoke_an_earlier_exemption(scope_case, problem):
         scope_case["codeowners"] = ""
     with pytest.raises(RuntimeError):
         signoff_scope.check_scope("example/repo", 7, "token")
-    assert scope_case["statuses"][-1] == {
-        "context": "CODEOWNER sign-off", "state": "error",
-        "description": "Could not determine sign-off scope",
-    }
 
 
 @pytest.mark.parametrize("event", [
@@ -190,7 +187,7 @@ def test_scope_failures_revoke_an_earlier_exemption(scope_case, problem):
     {"issue": {"number": 7}},
     {"inputs": {"pr-number": "7", "comment_url": "https://github.com/example/repo/pull/7#pullrequestreview-9"}},
 ])
-def test_unowned_changes_publish_not_applicable_and_disable_verifier(scope_case, monkeypatch, tmp_path, event):
+def test_unowned_changes_disable_verifier(scope_case, monkeypatch, tmp_path, event):
     scope_case["files"] = [{"filename": "infx/github.py"}]
     event_path = tmp_path / "event.json"
     event_path.write_text(json.dumps(event))
@@ -200,10 +197,6 @@ def test_unowned_changes_publish_not_applicable_and_disable_verifier(scope_case,
         monkeypatch.setenv(key, str(value))
     signoff_scope.main()
     assert output.read_text() == "required=false\npr-number=7\nhead-sha=head\n"
-    assert scope_case["statuses"] == [{
-        "context": "CODEOWNER sign-off", "state": "success",
-        "description": "N/A",
-    }]
 
 
 @pytest.mark.parametrize("number,url", [

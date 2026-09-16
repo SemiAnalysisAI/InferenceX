@@ -31,7 +31,7 @@
 
 ## 测试层级
 
-[`CI`](../.github/workflows/ci.yml) 在 PR（包括 fork）或向 `main` 的推送修改 Python 文件、`ci.yml`、`pyproject.toml`、`uv.lock`、`.python-version`、MCP 配置、Ruff 配置或 `pytest.ini` 时，并行运行 **Lint** 和 **Tests**。[`Workflow security`](../.github/workflows/zizmor.yml) 在工作流、action 定义、Dependabot、pre-commit 或 zizmor 配置变更时运行 **Zizmor**。仅修改 Python 文件不会触发 Zizmor；仅修改其他工作流不会触发 Lint 或 Tests。修改 `ci.yml` 会触发全部三项任务。两个工作流均可手动分发。仅修改其他文档、Shell 脚本或基准测试 YAML 不会触发这两个工作流；请在本地执行相应检查，或手动分发。
+[`CI`](../.github/workflows/ci.yml) 在 PR（包括 fork）或向 `main` 的推送修改 Python 文件、`.github/scripts/` 辅助脚本、`ci.yml`、`pyproject.toml`、`uv.lock`、`.python-version`、MCP 配置、Ruff 配置或 `pytest.ini` 时，并行运行 **Lint** 和 **Tests**。[`Workflow security`](../.github/workflows/zizmor.yml) 在工作流、action 定义、Dependabot、pre-commit 或 zizmor 配置变更时运行 **Zizmor**。仅修改 Python 文件不会触发 Zizmor；仅修改其他工作流不会触发 Lint 或 Tests。修改 `ci.yml` 会触发全部三项任务。两个工作流均可手动分发。仅修改其他文档、Shell 脚本或基准测试 YAML 不会触发这两个工作流；请在本地执行相应检查，或手动分发。
 
 Tests 使用四个 pytest worker 运行 `utils/`、`runners/` 和 `experimental/CollectiveX/tests/` 下的全部测试，并检查 MCP 兼容性。这些目录中的新增测试会自动发现。CI 通过 `uv sync --locked --all-extras --group test --no-editable` 将 `infx` 安装为 wheel，使用 Python 3.12 和仅支持 CPU 的 PyTorch。一项任务失败不会取消另一项；PR 更新会取消旧提交的 CI。尚未创建 PR 的分支推送不再单独触发变更日志测试。
 
@@ -100,7 +100,7 @@ GH_TOKEN="$(gh auth token)" uvx --exclude-newer PT12H zizmor@latest \
 Auditor 模式也会报告有意保留的架构选择。豁免仅标注在对应的 YAML 行，并附上原因，不会全局禁用规则：
 
 - 独立的 GPU 分发、评论请求和 Klaud 批次不应互相取消。资源限制由优先级调度器和候选任务归属声明处理。
-- Fork sign-off 和可信外部分发需要 `pull_request_target`；它们运行可信控制代码，并在执行特权操作前验证授权。
+- 可信外部分发使用 `pull_request_target`，运行可信控制代码，并在执行特权操作前验证授权。
 - 保留现有仓库级集成凭据。迁移到受保护的 GitHub Environments 必须同步迁移实际存储的 secret；仅添加空的 `environment:` 字段不算修复。
 - Profiling 存储仓库的 checkout 保留其专用 SSH deploy key，因为下一步需要向该独立仓库推送 trace 提交。基准测试 checkout 不保留凭据。
 
@@ -219,8 +219,8 @@ uv run --locked --all-extras --group test --no-editable \
 2. **扩大范围前：**冒烟或 canary 已证明变更后的运行时路径。如果失败，先诊断该层级，再花费全量扫描资源。
 3. **CODEOWNER 签署前：**遵循 [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md)，包括适用的代码质量、架构、镜像来源、上游配方、补丁/豁免、聊天模板和 AgentX 要求。
 4. **扫描/评测验收：**当前仍在 PR 中的至少一个提交拥有成功、未跳过且实际执行的 `single-node */` 与 `eval /` 检查。仅 `collect-evals` 成功不够。下载对应评测制品，确认其非空、准确率达标且使用同一推理镜像。这些可执行规则位于[验证器检查 1 和 2](../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr)。
-5. **合并时复用：**获授权的 `OWNER`、`MEMBER` 或 `COLLABORATOR` 必须在受支持的合并路径前发布独占一行的 `/reuse-sweep-run` 命令（可附带合格来源 run ID）。验证器会把命令缺失或发布者未授权视为失败；参见[验证器检查 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted)和[复用流程](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
-6. **合并时：**当前 head 必须满足[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)定义的 CODEOWNER 签核状态要求。验证、管理员更新后的签核保留、撤销及恢复规则以该指南为准。
+5. **合并时复用：**获授权的 `OWNER`、`MEMBER` 或 `COLLABORATOR` 必须在受支持的合并路径前发布独占一行的 `/use <run_id>` 命令来指定合格的源 Run（原有的 `/reuse-sweep-run` 命令仍受支持）。验证器会把命令缺失或发布者未授权视为失败；参见[验证器检查 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted)和[复用流程](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
+6. **合并时：**满足 GitHub 的 Core 团队和 CODEOWNER 批准要求，或由有权限的维护者使用绕过权限。自动清单验证只发布供审阅参考的评论；详见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
 7. **合并后：**作者按照 [`CONTRIBUTING.md`](../CONTRIBUTING.md#after-merging) 的要求确认 main 分支任务通过。
 
 ## 停止条件

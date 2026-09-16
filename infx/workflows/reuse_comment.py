@@ -19,6 +19,10 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
         "pull_request"
     ):
         return 0
+    command_pattern = re.compile(r"(?m)^\s*/(?:reuse-sweep-run|use)(?:\s|$)")
+    bodies = [event["comment"].get("body"), event.get("changes", {}).get("body", {}).get("from")]
+    if not any(command_pattern.search(str(body or "")) for body in bodies):
+        return 0
     pr_number = int(event["issue"]["number"])
     comment_id = int(event["comment"]["id"])
     comment_path = f"/issues/comments/{comment_id}"
@@ -28,7 +32,7 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
         return 0
     github.set_comment_reaction(repo, comment_id, token, None, replace=("+1", "-1"))
     body = str(comment.get("body") or "")
-    if not re.search(r"(?m)^\s*/reuse-sweep-run(?:\s|$)", body):
+    if not command_pattern.search(body):
         return 0  # Includes edits that remove the command and its old acknowledgment.
 
     try:
@@ -37,7 +41,7 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
             raise RuntimeError("Reuse requires an OWNER, MEMBER, or COLLABORATOR request.")
         matched, pinned_run_id = reuse.parse_reuse_command(body)
         if not matched:
-            raise RuntimeError("Usage: /reuse-sweep-run [run_id]")
+            raise RuntimeError("Usage: /use <run_id> or /reuse-sweep-run [run_id]")
         selected, _ = reuse.find_reuse_request(repo, pr_number, token, "/reuse-sweep-run", allowed)
         if selected is None or selected.get("id") != comment_id:
             raise RuntimeError("A newer reuse request supersedes this comment.")
