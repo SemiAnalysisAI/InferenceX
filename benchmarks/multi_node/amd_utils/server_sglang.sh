@@ -100,6 +100,7 @@ def parse_range(cuda_range, default_start, default_end):
 # Output shell variables
 print(f'MODEL_BASE_FLAGS=\"{m.get(\"base_flags\", \"\")}\"')
 print(f'MODEL_MTP_FLAGS=\"{m.get(\"mtp_flags\", \"\")}\"')
+print(f'MODEL_DSPARK_FLAGS=\"{m.get(\"dspark_flags\", \"\")}\"')
 print(f'MODEL_DP_FLAGS=\"{m.get(\"dp_flags\", \"\")}\"')
 print(f'MODEL_EP_FLAGS=\"{m.get(\"ep_flags\", \"\")}\"')
 
@@ -381,8 +382,30 @@ build_server_config() {
     local ep_config=""
     local specific_config=""
 
+    # Speculative-decoding config (only if a draft length is set).
+    #
+    # DECODE_MTP_SIZE carries the draft length for BOTH algorithms, but the two
+    # spend it differently:
+    #   EAGLE/MTP   -- num-steps = draft length, i.e. that many sequential draft
+    #                  forward passes, each producing one token.
+    #   DSPARK      -- one draft pass emits a whole block, so num-steps is
+    #                  pinned to 1 and the draft length becomes the block size
+    #                  (gamma). Passing gamma as num-steps here would ask for
+    #                  gamma sequential DSpark passes instead of one gamma-token
+    #                  block.
+    # The verify window (num-draft-tokens = draft length + 1) is the same for
+    # both, which is also what makes the MORI decode dispatch scaling
+    # (x (DECODE_MTP_SIZE + 1)) correct for DSpark without further change.
     if [ "$decode_mtp_size" -gt 0 ]; then
-        mtp_config="${MODEL_MTP_FLAGS} --speculative-num-steps ${decode_mtp_size} --speculative-num-draft-tokens $((decode_mtp_size + 1))"
+        if [[ "${SPEC_DECODING:-}" == "draft_model" ]]; then
+            if [[ -z "${MODEL_DSPARK_FLAGS// }" ]]; then
+                echo "FATAL: SPEC_DECODING=draft_model but model '${model_name}' has no dspark_flags in models.yaml." >&2
+                exit 1
+            fi
+            mtp_config="${MODEL_DSPARK_FLAGS} --speculative-dspark-block-size ${decode_mtp_size} --speculative-num-steps 1 --speculative-num-draft-tokens $((decode_mtp_size + 1))"
+        else
+            mtp_config="${MODEL_MTP_FLAGS} --speculative-num-steps ${decode_mtp_size} --speculative-num-draft-tokens $((decode_mtp_size + 1))"
+        fi
     fi
 
     if [[ "$enable_dp" == "true" ]]; then
@@ -1393,7 +1416,7 @@ else
             if [[ -n "$DSV4_GOLDEN_AL" ]]; then
                 DECODE_SIM_ACC_ENV="SGLANG_SIMULATE_ACC_LEN=${DSV4_GOLDEN_AL} SGLANG_SIMULATE_ACC_METHOD=match-expected SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token"
             else
-                echo "WARNING: agentic MTP run (model=${MODEL_NAME}, DECODE_MTP_SIZE=${DECODE_MTP_SIZE}) has no golden AL wired in server_sglang.sh -- falling back to real (unsimulated, non-representative) acceptance. Add a case in server_sglang.sh and golden_al_distribution/ before shipping this arm. See golden_al_distribution/README.md." >&2
+                echo "WARNING: agentic spec-decoding run (model=${MODEL_NAME}, algorithm=${SPEC_DECODING:-mtp}, DECODE_MTP_SIZE=${DECODE_MTP_SIZE}) has no golden AL wired in server_sglang.sh -- falling back to real (unsimulated, non-representative) acceptance. Add a case in server_sglang.sh and golden_al_distribution/ before shipping this arm. See golden_al_distribution/README.md." >&2
             fi
         fi
     fi
