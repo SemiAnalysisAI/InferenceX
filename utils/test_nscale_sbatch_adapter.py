@@ -36,6 +36,7 @@ def test_adapter_forwards_rendered_gpu_directive(tmp_path, gpu_directive, expect
                 "#SBATCH --time=00:10:00",
                 "#SBATCH --account=benchmark",
                 "#SBATCH --partition=batch_1",
+                "#SBATCH --cpus-per-task=192",
                 gpu_directive,
             ]
         )
@@ -55,3 +56,4 @@ def test_adapter_forwards_rendered_gpu_directive(tmp_path, gpu_directive, expect
 
     assert result.returncode == 42
     assert expected_arg in result.stderr
+    assert "--cpus-per-task=192" in result.stderr

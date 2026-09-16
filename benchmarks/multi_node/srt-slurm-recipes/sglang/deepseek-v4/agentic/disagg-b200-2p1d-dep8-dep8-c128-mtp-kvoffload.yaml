@@ -1,11 +1,11 @@
 name: "disagg-b200-2p1d-dep8-dep8-c128-mtp-kvoffload"
 
 # B200 AgentX SGLang disaggregated recipe for DeepSeek-V4-Pro-0813
-# (2P x DEP8 / 1D x DEP8, native EAGLE MTP + HiCache KV offload), tuned for concurrency 128.
+# (2P x DEP8 / 1D x DEP8, bundled DSpark + HiCache KV offload), tuned for concurrency 128.
 # Each DEP8 worker occupies one eight-GPU B200 node.
 
 model:
-  path: "deepseek-v4-pro"
+  path: "deepseek-v4-pro-0813"
   container: "dynamo-sglang"
   precision: "fp4"
 
@@ -15,11 +15,11 @@ identity:
   container:
     image: "lmsysorg/sglang:nightly-dev-20260916-c9a8fba9"
   frameworks:
-    dynamo: "1.5.0.dev20260902"
+    dynamo: "1.5.0.dev20260914"
 
 dynamo:
   install: true
-  wheel: "1.5.0.dev20260902"
+  wheel: "1.5.0.dev20260914"
 
 health_check:
   max_attempts: 1440
@@ -153,10 +153,11 @@ backend:
       disable-flashinfer-autotune: true
       model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
       kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5557"}'
-      speculative-algorithm: EAGLE
-      speculative-num-steps: 3
+      speculative-algorithm: DSPARK
+      speculative-dspark-block-size: 6
+      speculative-num-steps: 1
       speculative-eagle-topk: 1
-      speculative-num-draft-tokens: 4
+      speculative-num-draft-tokens: 7
       enable-hierarchical-cache: true
       hicache-write-policy: write_back
       hicache-ratio: 8
@@ -192,15 +193,18 @@ backend:
       disable-flashinfer-autotune: true
       model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
       kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5567"}'
-      speculative-algorithm: EAGLE
-      speculative-num-steps: 3
+      speculative-algorithm: DSPARK
+      speculative-dspark-block-size: 6
+      speculative-num-steps: 1
       speculative-eagle-topk: 1
-      speculative-num-draft-tokens: 4
+      speculative-num-draft-tokens: 7
 
 
 sbatch_directives:
   mem: "0"
-  cpus-per-task: "144"
+  # NScale B200 nodes expose 192 logical CPUs. Request the full node CPU set;
+  # mem=0 reserves all 1.7 TiB of allocatable host DRAM for HiCache.
+  cpus-per-task: "192"
 
 srun_options:
   mem: "0"

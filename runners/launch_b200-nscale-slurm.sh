@@ -40,8 +40,11 @@ if [[ "$IS_MULTINODE" != "true" ]]; then
 fi
 
 if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/DeepSeek-V4-Pro}"
-    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+    # AgentX publishes the 0813 model identity and DSpark relies on the
+    # dspark_* metadata bundled in that checkpoint's config.json. The base
+    # DeepSeek-V4-Pro checkpoint lacks those fields and cannot self-draft.
+    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/DeepSeek-V4-Pro-0813}"
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-0813"
 elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/Kimi-K2.6-NVFP4}"
     export SRT_SLURM_MODEL_PREFIX="kimi-k2.6-nvfp4"

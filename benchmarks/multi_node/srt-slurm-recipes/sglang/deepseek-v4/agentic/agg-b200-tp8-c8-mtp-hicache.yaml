@@ -1,10 +1,10 @@
 name: "agg-b200-tp8-c8-mtp-hicache"
 
 # B200 AgentX aggregate topology: one TP8 worker uses one eight-GPU node
-# and serves both prefill and decode with native EAGLE MTP and HiCache.
+# and serves both prefill and decode with bundled DSpark and HiCache.
 
 model:
-  path: "deepseek-v4-pro"
+  path: "deepseek-v4-pro-0813"
   container: "dynamo-sglang"
   precision: "fp4"
 
@@ -14,11 +14,11 @@ identity:
   container:
     image: "lmsysorg/sglang:nightly-dev-20260916-c9a8fba9"
   frameworks:
-    dynamo: "1.5.0.dev20260910"
+    dynamo: "1.5.0.dev20260914"
 
 dynamo:
   install: true
-  wheel: "1.5.0.dev20260910"
+  wheel: "1.5.0.dev20260914"
 
 health_check:
   max_attempts: 1440
@@ -90,10 +90,11 @@ backend:
       dp-size: 1
       tp-size: 8
       ep-size: 1
-      speculative-algorithm: EAGLE
-      speculative-num-steps: 3
+      speculative-algorithm: DSPARK
+      speculative-dspark-block-size: 6
+      speculative-num-steps: 1
       speculative-eagle-topk: 1
-      speculative-num-draft-tokens: 4
+      speculative-num-draft-tokens: 7
       enable-hierarchical-cache: true
       hicache-ratio: 2.75
       hicache-write-policy: write_through
@@ -102,7 +103,9 @@ backend:
 
 sbatch_directives:
   mem: "0"
-  cpus-per-task: "144"
+  # NScale B200 nodes expose 192 logical CPUs. Request the full node CPU set;
+  # mem=0 reserves all 1.7 TiB of allocatable host DRAM for HiCache.
+  cpus-per-task: "192"
 
 srun_options:
   mem: "0"

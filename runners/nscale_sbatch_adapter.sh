@@ -33,6 +33,7 @@ account="$(directive account)"
 partition="$(directive partition)"
 gres="$(directive gres)"
 gpus_per_node="$(directive gpus-per-node)"
+cpus_per_task="$(directive cpus-per-task)"
 
 : "${nodes:?missing #SBATCH --nodes}"
 : "${ntasks:?missing #SBATCH --ntasks}"
@@ -54,12 +55,18 @@ else
     gpu_allocation_args+=("--gpus-per-node=$gpus_per_node")
 fi
 
+cpu_allocation_args=()
+if [[ -n "$cpus_per_task" ]]; then
+    cpu_allocation_args+=("--cpus-per-task=$cpus_per_task")
+fi
+
 allocation_output="$(salloc \
     --nodes="$nodes" \
     --ntasks="$ntasks" \
     --ntasks-per-node="$ntasks_per_node" \
     --exclusive \
     --mem=0 \
+    "${cpu_allocation_args[@]}" \
     "${gpu_allocation_args[@]}" \
     --time="$time_limit" \
     --account="$account" \
