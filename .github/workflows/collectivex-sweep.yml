@@ -178,7 +178,7 @@ jobs:
     env:
       COLLX_BENCH: ${{ matrix.backend }}
       COLLX_SWAP_IMAGE: ${{ inputs.swap_image }}
-      COLLX_SWAP_BLOCK_BYTES: ${{ inputs.swap_profile == 'standard' && '4096 65536 1048576' || '257 4096 65536' }}
+      COLLX_SWAP_BLOCK_BYTES: ${{ inputs.swap_profile == 'standard' && '4096 65536 1048576' || '257 4096 65536 262144' }}
       COLLX_SWAP_NUM_BLOCKS: '1 4 16 64 256 1024 2048'
       COLLX_SWAP_WARMUP: ${{ inputs.swap_profile == 'standard' && '32' || '4' }}
       COLLX_SWAP_ITERATIONS: ${{ inputs.swap_profile == 'standard' && '100' || '20' }}
