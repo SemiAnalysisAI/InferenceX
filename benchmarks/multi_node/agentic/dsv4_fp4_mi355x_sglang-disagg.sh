@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 
 # Agentic trace-replay recipe for a disaggregated SGLang server on MI355X
-# (DeepSeek-V4-Pro FP4, 1P1D TP8).
-#
-# CI-style sibling of dsr1_fp4_mi355x_sglang-disagg.sh: driven entirely by
-# environment variables and submits a SLURM job via submit.sh. The agentic /
-# HiCache-offload configuration mirrors the DSR1 recipe but uses DSV4-Pro
-# specific flags (dsv4 attention backend, page-size 256, SWA settings).
+# (DeepSeek-V4-Pro FP4, 1P1D TP8). Driven by environment variables; submits a SLURM
+# job via submit.sh.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../../benchmark_lib.sh"
+source "$SCRIPT_DIR/../../benchmark_lib.sh" --validation-only
+
+check_env_vars \
+    TIME_LIMIT MODEL_PREFIX PRECISION RESULT_FILENAME DURATION \
+    MAX_MODEL_LEN DISABLE_CUSTOM_ALL_REDUCE KV_OFFLOADING MORI_IO_SQ_BACKOFF_TIMEOUT_US \
+    MORI_IO_QP_MAX_SEND_WR PREFILL_ROUTER_POLICY ENABLE_METRICS DECODE_MTP_SIZE
 
 check_env_vars \
     CONC_LIST \
@@ -40,101 +41,116 @@ fi
 
 set -x
 
-# Use upstreamed multi_node scripts (no external clone needed)
 cd "$GITHUB_WORKSPACE/benchmarks/multi_node/amd_utils" || exit 1
 
-# Set up SGL launch script-specific environment variables
-export TIME_LIMIT="${TIME_LIMIT:-08:00:00}"
+export TIME_LIMIT
 export MODEL_PATH=$MODEL_PATH
 export MODEL_NAME=$MODEL_NAME
 export CONTAINER_IMAGE=$IMAGE
 
-# ── Identity / result naming ──
-export MODEL_PREFIX="${MODEL_PREFIX:-dsv4}"
-export PRECISION="${PRECISION:-fp4}"
-export RESULT_FILENAME="${RESULT_FILENAME:-${RUNNER_NAME:-dsv4-fp4-agentic}}"
+export MODEL_PREFIX
+export PRECISION
+export RESULT_FILENAME
 
-# ── Agentic benchmark params ──
-export DURATION="${DURATION:-1800}"
-# DSV4-Pro max model len for agentic traces (matches single-node recipe).
-export MAX_MODEL_LEN="${MAX_MODEL_LEN:-1000000}"
+export DURATION
+export MAX_MODEL_LEN
 
-# ── In-tree sglang patches ──
-# mori_conn.py targets hybrid-state bugs (GLM-5, Qwen3.5). DSV4-Pro uses a
-# pure MoE/DSA architecture without hybrid state; skip to avoid interference.
-export MORI_CONN_PATCH="${MORI_CONN_PATCH:-skip}"
-
-# ── Aiter fault mitigation ──
 # --disable-custom-all-reduce avoids a known aiter fault on MI355X.
-export DISABLE_CUSTOM_ALL_REDUCE="${DISABLE_CUSTOM_ALL_REDUCE:-0}"
+export DISABLE_CUSTOM_ALL_REDUCE
 
-# ── KV cache offloading (HiCache) ──
-# KV_OFFLOADING=none | dram (passed from YAML; default none for disagg).
-# KV_OFFLOAD_BACKEND selects the backend when offloading is on; this recipe
-# only implements HiCache, so "hicache" is the only supported value.
-# HICACHE_TIER: L2 -> GPU + CPU-DRAM host pool. L3 -> + Mooncake store.
-export KV_OFFLOADING="${KV_OFFLOADING:-none}"
+# ── KV cache offloading ──
+# KV_OFFLOADING=none | dram (passed from YAML).
+# KV_OFFLOAD_BACKEND selects the backend when offloading is on:
+#   hicache      GPU + CPU-DRAM host pool (HICACHE_TIER L2), optionally + a
+#                Mooncake L3 store (HICACHE_TIER L3). The tunables below.
+#   umbp-linker  UMBP as a DIRECT external store for the unified radix tree,
+#                with NO host cache tier in between. A different sglang code
+#                path, not a variation of HiCache -- sglang rejects the two
+#                together -- so it reads NONE of the HICACHE_*/MC_* tunables
+#                and takes UMBP_* instead (block further down). Implemented in
+#                amd_utils/server_sglang.sh; prefill-side only, like HiCache
+#                on this path, and dp-attn: true only.
+export KV_OFFLOADING
 if [[ "$KV_OFFLOADING" != "none" ]]; then
-  export KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-hicache}"
+  check_env_vars KV_OFFLOAD_BACKEND
 fi
-# HiCache/Mooncake tunables only matter when KV offloading is enabled.
 if [[ "$KV_OFFLOADING" != "none" && "${KV_OFFLOAD_BACKEND:-}" == "hicache" ]]; then
-  export HICACHE_TIER="${HICACHE_TIER:-L2}"
-  export HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-1}"
+  check_env_vars \
+      HICACHE_TIER HICACHE_HOST_POOL_COUNT HICACHE_PAGE_SIZE HICACHE_RATIO HICACHE_MEM_LAYOUT \
+      HICACHE_IO_BACKEND HICACHE_WRITE_POLICY HICACHE_PREFETCH_POLICY MC_MASTER_PORT MC_METADATA_PORT \
+      MC_METRICS_PORT MC_MASTER_THREADS MC_EVICTION_HIGH_WATERMARK MC_PROTOCOL \
+      MC_GLOBAL_SEG
+  export HICACHE_TIER
+  export HICACHE_HOST_POOL_COUNT
   # DSV4 uses page-size 256 (set in models.yaml); HiCache must match.
-  export HICACHE_PAGE_SIZE="${HICACHE_PAGE_SIZE:-256}"
-  # HiCache ratio (host pool = ratio * GPU KV pool).
-  export HICACHE_RATIO="${HICACHE_RATIO:-3}"
-  # DSv4 wants the ratio-based pool, but server_sglang.sh prefers
-  # --hicache-size over --hicache-ratio when TOTAL_CPU_DRAM_GB is set.
-  # Opt out via FORCE_HICACHE_RATIO instead of unsetting TOTAL_CPU_DRAM_GB
-  # (also required client-side by benchmark_lib.sh when KV_OFFLOADING=dram).
+  export HICACHE_PAGE_SIZE
+  export HICACHE_RATIO
+  # server_sglang.sh prefers --hicache-size over --hicache-ratio when TOTAL_CPU_DRAM_GB
+  # is set; opt out via FORCE_HICACHE_RATIO rather than unsetting TOTAL_CPU_DRAM_GB,
+  # which benchmark_lib.sh also requires client-side when KV_OFFLOADING=dram.
   export FORCE_HICACHE_RATIO=1
 
-  # ── HiCache layout/backend by tier ──
-  #   L3 (Mooncake): page_first + direct + write_through     + storage=mooncake
-  #   L2 (CPU DRAM): layer_first + direct + write_through_selective + storage=none
-  # NOTE: write_through_selective evicts only under GPU memory pressure, avoiding
-  # the mori RDMA race that causes GPU memory access faults with write_through.
   if [[ "${HICACHE_TIER^^}" == "L3" ]]; then
-    export HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first}"
-    export HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-    export HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
-    export HICACHE_STORAGE_BACKEND="${HICACHE_STORAGE_BACKEND:-mooncake}"
+    export HICACHE_MEM_LAYOUT
+    export HICACHE_IO_BACKEND
+    export HICACHE_WRITE_POLICY
+    if [[ -z "${HICACHE_STORAGE_BACKEND:-}" ]]; then
+      export HICACHE_STORAGE_BACKEND=mooncake
+    fi
   else
-    export HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first}"
-    export HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-    export HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
+    export HICACHE_MEM_LAYOUT
+    export HICACHE_IO_BACKEND
+    export HICACHE_WRITE_POLICY
     export HICACHE_STORAGE_BACKEND="${HICACHE_STORAGE_BACKEND:-}"
   fi
-  export HICACHE_PREFETCH_POLICY="${HICACHE_PREFETCH_POLICY:-best_effort}"
+  export HICACHE_PREFETCH_POLICY
   # Shared nodes: use non-default Mooncake ports to avoid collisions.
-  export MC_MASTER_PORT="${MC_MASTER_PORT:-58137}"
-  export MC_METADATA_PORT="${MC_METADATA_PORT:-8080}"
-  export MC_METRICS_PORT="${MC_METRICS_PORT:-19003}"
-  export MC_MASTER_THREADS="${MC_MASTER_THREADS:-64}"
-  export MC_EVICTION_HIGH_WATERMARK="${MC_EVICTION_HIGH_WATERMARK:-0.95}"
-  export MC_PATCH_HOSTPOOL="${MC_PATCH_HOSTPOOL:-1}"
-  export MC_PROTOCOL="${MC_PROTOCOL:-tcp}"
-  export MC_GLOBAL_SEG="${MC_GLOBAL_SEG:-64gb}"
+  export MC_MASTER_PORT
+  export MC_METADATA_PORT
+  export MC_METRICS_PORT
+  export MC_MASTER_THREADS
+  export MC_EVICTION_HIGH_WATERMARK
+  export MC_PROTOCOL
+  export MC_GLOBAL_SEG
   export MC_DEVICE="${MC_DEVICE:-}"
   export MC_MASTER_ADDR="${MC_MASTER_ADDR:-}"
   export MC_METADATA_SERVER="${MC_METADATA_SERVER:-}"
 fi
 
+# ── UMBP direct-linker tunables ──
+# Only read when KV_OFFLOAD_BACKEND is a umbp-linker* arm. Defaults live in
+# server_sglang.sh; these exports exist so the values are visible in the
+# recipe (and in the commands dump) rather than buried, and so job.slurm has
+# something to forward.
+#   UMBP_DRAM_BYTES      NODE total for the tier, on the prefill node only.
+#                        1.5 TB matches the single-node linker arms, so a PD
+#                        number can be read against them directly. Guarded in
+#                        server_sglang.sh against half of the host's MemTotal.
+#   UMBP_MAX_TOTAL_TOKENS  optional device KV pool cap. UNSET on purpose: the
+#                        linker is compared against the HiCache control at an
+#                        IDENTICAL profiled pool, not at a capped one.
+#   UMBP_SA_WAIT_SECONDS ceiling for each of the three server-readiness waits
+#                        (socket -> data plane -> host memory registered for
+#                        GPU access). A 1.5 TB tier can take many minutes to
+#                        register on a node holding a lot of page cache.
+if [[ "$KV_OFFLOADING" != "none" && "${KV_OFFLOAD_BACKEND:-}" == umbp-linker* ]]; then
+  export UMBP_DRAM_BYTES="${UMBP_DRAM_BYTES:-1500000000000}"
+  export UMBP_DRAM_USE_HUGEPAGES="${UMBP_DRAM_USE_HUGEPAGES:-0}"
+  export UMBP_SA_WAIT_SECONDS="${UMBP_SA_WAIT_SECONDS:-1800}"
+  export UMBP_SA_WAIT_REGISTERED="${UMBP_SA_WAIT_REGISTERED:-1}"
+  export MORI_UMBP_LOG_LEVEL="${MORI_UMBP_LOG_LEVEL:-info}"
+fi
+
 # ── MoRIIO RDMA Send Queue tuning ──
-export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
-export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-32768}"
+export MORI_IO_SQ_BACKOFF_TIMEOUT_US
+export MORI_IO_QP_MAX_SEND_WR
 
-# ── SGLang PD router policy + server metrics ──
-export PREFILL_ROUTER_POLICY="${PREFILL_ROUTER_POLICY:-consistent_hashing}"
-export ENABLE_METRICS="${ENABLE_METRICS:-1}"
+export PREFILL_ROUTER_POLICY
+export ENABLE_METRICS
 
-# ── MTP ──
-export DECODE_MTP_SIZE="${DECODE_MTP_SIZE:-0}"
+export DECODE_MTP_SIZE
 
-# Derive EP/DP enable flags from the topology inputs.
-if [[ "${PREFILL_EP:-1}" -eq 1 ]]; then
+if [[ "${PREFILL_EP}" -eq 1 ]]; then
 export PREFILL_ENABLE_EP=false
 else
 export PREFILL_ENABLE_EP=true
@@ -146,7 +162,7 @@ else
 export PREFILL_ENABLE_DP=false
 fi
 
-if [[ "${DECODE_EP:-1}" -eq 1 ]]; then
+if [[ "${DECODE_EP}" -eq 1 ]]; then
 export DECODE_ENABLE_EP=false
 else
 export DECODE_ENABLE_EP=true

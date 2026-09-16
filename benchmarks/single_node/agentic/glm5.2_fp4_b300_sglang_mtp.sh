@@ -1,22 +1,11 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
-# Agentic trace replay benchmark for GLM-5.2 NVFP4 on B300 using SGLang with
-# EAGLE/MTP speculative decoding.
-#
-# MTP-only recipe following the AgentX policy that agentic recipes are run and
-# published with speculative decoding enabled rather than as an STP/MTP A/B
-# (MODELS.md: GLM-5.2 agentic non-MTP is deprecated after 2026-08-03).
-#
-# Server flags follow the SGLang cookbook B300 NVFP4 single-node recipes
-# (https://docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.2):
-#   DP_ATTENTION=false -> low-latency arm (TP8, fp8 KV, cutedsl bf16 GEMM)
-#   DP_ATTENTION=true  -> high-throughput DEP arm (TP8 + DP8 attention-DP +
-#                         EP_SIZE expert-parallel MoE via --ep-size)
-# Only the low-latency arm is wired into the master config for this MTP recipe
-# (see the entry comment on glm5.2-fp4-b300-sglang-agentic-mtp); the DEP branch
-# is kept intact so the throughput arm can be added without re-deriving it.
+# GLM-5.2 NVFP4 on B300 with SGLang EAGLE/MTP.
+# DP_ATTENTION=false is the low-latency arm (TP8, fp8 KV, cutedsl bf16 GEMM);
+# DP_ATTENTION=true is the DEP arm (TP8 + DP8 attention + --ep-size), kept
+# intact but not wired into the master config.
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION,
@@ -27,14 +16,12 @@ set -x
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars EVAL_ONLY
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
-# `hf download` creates the target dir if missing and is itself idempotent.
-# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE.
-# Either way, MODEL_PATH is what the server is launched with.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -53,26 +40,17 @@ mkdir -p "$RESULT_DIR"
 
 CACHE_ARGS=()
 if require_agentic_kv_offload_backend hicache; then
-    # HiCache extends RadixAttention: prefixes evicted from the HBM KV pool
-    # spill to a pinned host pool instead of being recomputed. On the
-    # 1M-context agentic corpus the live working set outgrows HBM past
-    # conc 8 (TP8) / 64 (DP8) and the radix hit rate collapses to <0.1
-    # against a ~0.97 theoretical ceiling, so every turn re-prefills its
-    # whole history; the host tier restores those hits at C2C bandwidth.
-    # GLM-5.2 is DSA/MLA-family (attention_backend=dsa): every TP rank holds
-    # complete per-token KV. Use an absolute main-pool size so all points get
-    # the same host token capacity even if the HBM pool changes. In SGLang
-    # v0.5.16, --hicache-size directly sizes only the target KV host pool;
-    # the DSA indexer and MTP draft pools inherit its token-slot count and use
-    # their own smaller bytes/token. A 270 GB target pool was measured as
-    # 270.00 + 61.88 + 3.46 = 335.34 GB/rank, or 2.683 TB across TP8, with
-    # 6,009,728 slots in each pool. This is larger than the ratio-1.50 c16
-    # configuration whose full run improved from 76.26 / 10,311.95 to
-    # 100.49 tok/s/user / 12,120.27 tok/s/GPU and retained ~1.74 TiB minimum
-    # node MemAvailable.
+    # HiCache spills evicted prefixes to a pinned host pool. On the 1M-context
+    # corpus the working set outgrows HBM past conc 8 (TP8) / 64 (DP8) and the
+    # radix hit rate collapses to <0.1, so every turn re-prefills its history.
+    # GLM-5.2 is MLA-family: every TP rank holds complete per-token KV, so use
+    # an absolute pool size. In SGLang v0.5.16 --hicache-size sizes only the
+    # target KV host pool; the DSA indexer and MTP draft pools inherit its slot
+    # count. 270 GB measured as 335.34 GB/rank (2.683 TB across TP8) and left
+    # ~1.74 TiB node MemAvailable.
     DEFAULT_HICACHE_SIZE=270
     MAX_HICACHE_SIZE=270
-    HICACHE_SIZE="${HICACHE_SIZE:-$DEFAULT_HICACHE_SIZE}"
+    HICACHE_SIZE="$DEFAULT_HICACHE_SIZE"
     if ! [[ "$HICACHE_SIZE" =~ ^[0-9]+$ ]]; then
         echo "Error: HICACHE_SIZE must be a positive integer, got $HICACHE_SIZE" >&2
         exit 1
@@ -81,9 +59,9 @@ if require_agentic_kv_offload_backend hicache; then
         echo "Error: HICACHE_SIZE=$HICACHE_SIZE must be in (0, $MAX_HICACHE_SIZE]" >&2
         exit 1
     fi
-    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_back}"
-    HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-    HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+    HICACHE_WRITE_POLICY="write_back"
+    HICACHE_IO_BACKEND="direct"
+    HICACHE_MEM_LAYOUT="page_first_direct"
     echo "HiCache CPU tier: conc=$CONC, target_size=$HICACHE_SIZE GB, total_capacity=${TOTAL_CPU_DRAM_GB} GB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
     CACHE_ARGS=(
         --enable-hierarchical-cache
@@ -107,11 +85,8 @@ if [ "$DP_ATTENTION" = "true" ]; then
     SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
 fi
 
-# MTP: GLM-5.2 ships its own nextn head, so EAGLE runs off the checkpoint with
-# no external draft model. num-steps 3 / eagle-topk 1 / num-draft-tokens 4 is
-# 3 speculative tokens per verification step -- the same shape the GLM-5.2
-# GB300 dynamo-sglang agentic recipes use, and the draft length whose golden AL
-# is pinned below.
+# GLM-5.2 ships its own nextn head, so EAGLE runs off the checkpoint. Three
+# draft tokens per step is the draft length whose golden AL is pinned below.
 SPEC_ARGS=(
     --speculative-algorithm EAGLE
     --speculative-num-steps 3
@@ -123,11 +98,8 @@ PARALLEL_ARGS=(--tp "$TP" --ep-size "$EP_SIZE")
 CHUNKED_PREFILL_SIZE=8192
 if [ "$DP_ATTENTION" = "true" ]; then
     # chunked-prefill-size is a whole-engine budget split across DP ranks:
-    # the cookbook HT cell's 8192 becomes 1,024 tokens/rank/step under dp8,
-    # which starves prefill on the 1M-context agentic corpus (observed: a
-    # conc-256 warmup could not drain within AIPerf's 1800s grace period
-    # while KV usage sat at ~0.01). Use the cookbook's own dp8 lever from
-    # the B200 cells (32768 = ~4096/rank).
+    # 8192 becomes 1,024 tokens/rank/step under dp8 and a conc-256 warmup
+    # could not drain within AIPerf's 1800 s grace period. 32768 = ~4096/rank.
     CHUNKED_PREFILL_SIZE=32768
     PARALLEL_ARGS+=(
         --dp "$TP"
@@ -135,16 +107,11 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --tokenizer-worker-num "$TP"
         --dist-init-addr "127.0.0.1:$((PORT + 2000))"
     )
-    # GLM-5.2-NVFP4 leaves the MTP/nextn layer unquantized (hf_quant_config
-    # excludes model.layers.78*), so the EAGLE draft MoE is bf16 and
-    # UnquantizedFusedMoEMethod pins it to the triton runner core. Inheriting
-    # the target model's FlashInfer all-to-all then has no (flashinfer, triton)
-    # pre-permute and the engine dies at init with "Pre-permute function for
-    # flashinfer to triton is not registered". SGLang handles this in
-    # _deepseek_spec_moe_resolution but gates the hook on is_hip(), so on CUDA
-    # the draft silently inherits; set upstream's own ROCm values explicitly.
-    # Only needed once expert parallelism puts an a2a in the MoE path -- the
-    # plain-TP arm below has none.
+    # The nextn layer is unquantized (hf_quant_config excludes model.layers.78*),
+    # so the draft MoE is bf16 and pinned to the triton runner; inheriting the
+    # target's FlashInfer all-to-all dies at init with "Pre-permute function for
+    # flashinfer to triton is not registered". SGLang only applies its fix on
+    # is_hip(), so set the ROCm values explicitly. Only matters with EP a2a.
     SPEC_ARGS+=(
         --speculative-moe-a2a-backend none
         --speculative-moe-runner-backend triton
@@ -163,11 +130,8 @@ fi
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 GRAPH_ARGS=()
 if [ "$DP_ATTENTION" != "true" ]; then
-    # Cookbook low-latency captures graphs up to its request cap; the
-    # DP-attention cell leaves the CUDA-graph batch list at SGLang defaults.
-    # --cuda-graph-max-bs counts requests, not verification tokens: SGLang's
-    # spec-decode graph runner scales each captured batch by
-    # --speculative-num-draft-tokens itself.
+    # --cuda-graph-max-bs counts requests, not verification tokens; SGLang's
+    # spec-decode graph runner scales by --speculative-num-draft-tokens itself.
     CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
     [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
     GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
@@ -178,30 +142,20 @@ export TORCH_CUDA_ARCH_LIST=10.0
 # Agentic warmup dispatches hundreds of large prompts at once; allow up to
 # 15 minutes of TCP progress before AIPerf declares a connection dead.
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
-# AIPerf pins one pooled keep-alive connection per session (client-side
-# keep-alive 300s) while uvicorn's default SGLANG_TIMEOUT_KEEP_ALIVE is 5s;
-# inter-turn idle gaps (capped at 10s) can reuse a socket exactly as the
-# server closes it -> ECONNRESET -> terminal warmup failure. Outlast the
-# client pool so the race cannot occur.
+# AIPerf pins one pooled keep-alive connection per session while uvicorn's
+# default keep-alive is 5 s; an inter-turn idle gap can reuse a socket as the
+# server closes it (ECONNRESET, terminal warmup failure).
 export SGLANG_TIMEOUT_KEEP_ALIVE=900
 
-# AgentX pins acceptance to the committed golden AL so submissions are compared
-# on system performance at a fixed acceptance target rather than on draft-head
-# quality (golden_al_distribution/README.md). 2.99 is the GLM-5.2 curve at
-# num_speculative_tokens=3, thinking_on
-# (golden_al_distribution/glm5.2_mtp.yaml, SPEED-Bench coding, run 28058352479).
-# One curve per model: it was collected on the FP8 checkpoint, and the NVFP4
-# checkpoint ships the same nextn head.
-#
-# SGLANG_SIMULATE_ACC_TOKEN_MODE only exists from SGLang v0.5.16, which is why
-# this recipe pins v0.5.16-cu130 rather than the STP sibling's v0.5.15.post1 --
-# an older image would silently honor ACC_LEN/ACC_METHOD and ignore the
-# token-mode half of the contract.
-#
-# EVAL_ONLY leaves simulated acceptance off: it commits drafted tokens
-# regardless of the target logits, so generated text is wrong and the eval
-# would score ~0.
-if [ "${EVAL_ONLY:-false}" != "true" ]; then
+# Acceptance is pinned to the committed golden AL (golden_al_distribution/README.md):
+# 2.99 is glm5.2_mtp.yaml at num_speculative_tokens=3, thinking_on. One curve
+# per model: collected on FP8, and the NVFP4 checkpoint ships the same nextn head.
+# SGLANG_SIMULATE_ACC_TOKEN_MODE exists from SGLang v0.5.16, which is why the
+# image is pinned there; an older image silently honors ACC_LEN/ACC_METHOD and
+# ignores the token mode.
+# EVAL_ONLY leaves it off: simulated acceptance commits drafted tokens
+# regardless of target logits and the eval would score ~0.
+if [ "${EVAL_ONLY}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=2.99
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
@@ -216,14 +170,9 @@ SGLANG_CMD=(
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --quantization modelopt_fp4
-    # GLM-5.2 emits the GLM-4.7-style <tool_call>/<arg_key>/<arg_value> format;
-    # the glm47 parser is required for structured message.tool_calls (glm45
-    # leaves calls as raw text). Without it the SWE-bench mini-swe-agent eval
-    # dies with RepeatedFormatError ("No tool calls found in the response") on
-    # every instance and scores 0. Reasoning parser keeps hybrid-thinking
-    # output in reasoning_content instead of polluting content. Neither flag
-    # affects trace-replay throughput (pre-canned replay discards live
-    # responses).
+    # GLM-5.2 emits the GLM-4.7 tool-call format; glm45 leaves calls as raw
+    # text and the SWE-bench eval dies with RepeatedFormatError. Neither parser
+    # affects replay throughput.
     --tool-call-parser glm47
     --reasoning-parser glm45
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
@@ -273,12 +222,9 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
 fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
-    # GLM-5.2's chat template defaults to reasoning_effort=Max when the
-    # client passes no chat_template_kwargs (mini-swe-agent doesn't), and the
-    # heavy thinking burns the default 75-step budget: on the 23-instance
-    # slice, 12/23 trajectories exited LimitsExceeded unsubmitted while 10 of
-    # the 11 that submitted resolved. Double the step budget for this recipe;
-    # other recipes keep the shared 75 default.
+    # The chat template defaults to reasoning_effort=Max when no
+    # chat_template_kwargs are passed (mini-swe-agent passes none), and the heavy
+    # thinking burns the shared 75-step budget (12/23 exited LimitsExceeded).
     export SWEBENCH_AGENT_STEP_LIMIT=150
     run_eval --port "$PORT"
 else

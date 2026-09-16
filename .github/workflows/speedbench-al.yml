@@ -6,7 +6,8 @@ name: SpeedBench AL Collection
 # synthetic-acceptance framework and (optionally) opens a PR updating
 # benchmarks/speedbench-reference-al.yaml.
 
-on:
+# Independent collection requests use priority-scheduled runner slots.
+on: # zizmor: ignore[concurrency-limits]
   workflow_dispatch:
     inputs:
       runner:
@@ -73,6 +74,21 @@ permissions:
   contents: read
 
 env:
+  DRAFT_SAMPLE_METHOD: greedy
+  PORT: '8888'
+  INFMAX_CONTAINER_WORKSPACE: '/workspace'
+  DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE: '1'
+  MODEL_DOWNLOAD_LOCK_TIMEOUT: '21600'
+  ENROOT_IMPORT_TIME_LIMIT: '120'
+  GPU_MONITOR_INTERVAL: '1'
+  GPU_METRICS_CSV: 'gpu_metrics.csv'
+  KEEP_LOGS: '0'
+  IS_MULTINODE: 'false'
+  EVAL_ONLY: 'false'
+  RUN_EVAL: 'false'
+  IS_AGENTIC: '0'
+  REQUIRE_POWER: '0'
+  SCENARIO_SUBDIR: fixed_seq_len/
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   # Drive the single-node path in runners/launch_b300-dsxe.sh. MODEL is the HF id;
@@ -104,6 +120,7 @@ env:
 
 jobs:
   setup:
+    name: setup
     runs-on: ubuntu-latest
     outputs:
       priority: ${{ steps.score.outputs.priority }}
@@ -130,7 +147,7 @@ jobs:
           scored=$(printf '%s' "$entry" |
             uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
               python -m infx.workflows.ci_priority \
-              --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}")
+              --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}")
           echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
           echo "queue-token=$(jq -r '.[0]["queue-token"]' <<<"$scored")" >> "$GITHUB_OUTPUT"
 
@@ -144,7 +161,7 @@ jobs:
           format(
             '["self-hosted",{0},{1},{2},{3}]',
             toJSON(inputs.runner),
-            toJSON('nodes:1'),
+            '"nodes:1"',
             toJSON(format(
               'ci-job-{0}-{1}',
               needs.setup.outputs.priority,
@@ -183,25 +200,27 @@ jobs:
 
           # Cleanup SLURM resources
           if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
-            scancel --name="${{ runner.name }}" || true
-            while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
-              squeue --name="${{ runner.name }}"
+            echo "[Slurm] Cleaning up jobs with name: ${RUNNER_NAME} ..."
+            scancel --name="${RUNNER_NAME}" || true
+            while [ -n "$(squeue --name="${RUNNER_NAME}" --noheader --format='%i')" ]; do
+              squeue --name="${RUNNER_NAME}"
               sleep 5
             done
           fi
 
           # Cleanup AL-matrix outputs from a prior job on this runner so a stale
           # matrix from a previous run is never picked up as this job's output.
-          rm -rf "${{ github.workspace }}/speedbench_results" 2>/dev/null || true
+          rm -rf "${GITHUB_WORKSPACE}/speedbench_results" 2>/dev/null || true
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          token: ${{ secrets.REPO_PAT }}
+          # Repository write credential for authorized reference-data collection.
+          token: ${{ secrets.REPO_PAT }} # zizmor: ignore[secrets-outside-env]
           fetch-depth: 0
           ref: ${{ inputs.ref || github.sha }}
           clean: true
           submodules: true
+          persist-credentials: false
 
       - name: Cleanup stale outputs (pre-run)
         run: |
@@ -213,7 +232,15 @@ jobs:
         env:
           RUNNER_NAME: ${{ runner.name }}
         run: |
-          set -euo pipefail
+          set -eo pipefail
+          export GPU_COUNT="$TP"
+          # Historical measured revisions own their configuration in the launchers.
+          if [[ -f benchmarks/runtime_settings.sh ]]; then
+            source benchmarks/runtime_settings.sh
+          fi
+          if [[ -f runners/runtime_settings.sh ]]; then
+            source runners/runtime_settings.sh
+          fi
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
           if [ ! -f "speedbench-reference-al.yaml" ]; then
@@ -236,15 +263,16 @@ jobs:
       - name: Open PR updating reference yaml
         if: ${{ inputs.open-pr && success() }}
         env:
-          GH_TOKEN: ${{ secrets.REPO_PAT }}
+          # Repository write credential for authorized reference-data collection.
+          GH_TOKEN: ${{ secrets.REPO_PAT }} # zizmor: ignore[secrets-outside-env]
         run: |
-          set -euo pipefail
+          set -eo pipefail
           # NOTE: the reference yaml is keyed by model at the top level. This
           # overwrites it with the current model's matrix; when more than one
           # model is collected, replace this cp with a per-model-key YAML merge.
           cp speedbench-reference-al.yaml benchmarks/speedbench-reference-al.yaml
 
-          BRANCH="speedbench-al/${{ inputs.model-prefix }}-auto-${{ github.run_id }}"
+          BRANCH="speedbench-al/${MODEL_PREFIX}-auto-${GITHUB_RUN_ID}"
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git checkout -b "$BRANCH"
@@ -253,11 +281,11 @@ jobs:
             echo "No change in reference yaml; skipping PR."
             exit 0
           fi
-          git commit -m "Update SpeedBench AL reference matrix for ${{ inputs.model }} (auto, run ${{ github.run_id }})"
-          git push -u origin "$BRANCH"
+          git commit -m "Update SpeedBench AL reference matrix for ${MODEL} (auto, run ${GITHUB_RUN_ID})"
+          git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push -u origin "$BRANCH"
           gh pr create \
-            --title "Update SpeedBench AL reference matrix for ${{ inputs.model-prefix }} (auto)" \
-            --body "Auto-generated by the SpeedBench AL Collection workflow (run ${{ github.run_id }}). Model: \`${{ inputs.model }}\`, category: \`${{ inputs.category }}\`, MTP: \`${{ inputs.mtp-list }}\`, thinking: \`${{ inputs.thinking-modes }}\`, output_len: \`${{ inputs.output-len }}\`. Please review the measured values before merging." \
+            --title "Update SpeedBench AL reference matrix for ${MODEL_PREFIX} (auto)" \
+            --body "Auto-generated by the SpeedBench AL Collection workflow (run ${GITHUB_RUN_ID}). Model: \`${MODEL}\`, category: \`${CATEGORY}\`, MTP: \`${MTP_LIST}\`, thinking: \`${THINKING_MODES}\`, output_len: \`${SPEEDBENCH_OUTPUT_LEN}\`. Please review the measured values before merging." \
             --base main \
             --head "$BRANCH"
 

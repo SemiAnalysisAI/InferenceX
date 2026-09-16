@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
 # AgentX trace replay for Qwen3.5-397B-A17B MXFP4 on MI355X with SGLang
@@ -13,8 +13,9 @@ export EVAL_FRAMEWORK="lm-eval"
 check_env_vars \
     MODEL TP CONC EP_SIZE KV_OFFLOADING \
     TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+check_env_vars EVAL_ONLY
 
-SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-60}
+SCHEDULER_RECV_INTERVAL=60
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -56,10 +57,10 @@ trap 'exit 143' TERM
 
 CACHE_ARGS=()
 if require_agentic_kv_offload_backend hicache; then
-    HICACHE_RATIO="${HICACHE_RATIO:-1.5}"
-    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
-    HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-    HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+    HICACHE_RATIO="1.5"
+    HICACHE_WRITE_POLICY="write_through"
+    HICACHE_IO_BACKEND="kernel"
+    HICACHE_MEM_LAYOUT="page_first"
     echo "HiCache CPU tier: ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT, dram_budget=${TOTAL_CPU_DRAM_GB} GB, tp=$TP"
     CACHE_ARGS=(
         --enable-hierarchical-cache
@@ -93,7 +94,7 @@ export SGLANG_MAMBA_SSM_DTYPE=bfloat16
 export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export SGLANG_TIMEOUT_KEEP_ALIVE=1800
 
-if [ "${EVAL_ONLY:-false}" != "true" ]; then
+if [ "${EVAL_ONLY}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=3.39
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
@@ -139,7 +140,7 @@ SERVER_PID=$!
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
+if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"

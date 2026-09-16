@@ -13,8 +13,9 @@ export EVAL_FRAMEWORK="lm-eval"
 check_env_vars \
     MODEL TP CONC EP_SIZE \
     TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+check_env_vars EVAL_ONLY
 
-SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-30}
+SCHEDULER_RECV_INTERVAL=30
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -40,9 +41,8 @@ export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_062126_256k
 resolve_trace_source
 install_agentic_deps
 
-# This is a single aggregate SGLang engine, so one logical backend metrics
-# endpoint is authoritative. build_replay_cmd also discovers the public
-# endpoint; AIPerf deduplicates the explicit copy.
+# Single aggregate engine: one backend metrics endpoint; AIPerf deduplicates
+# the public copy build_replay_cmd discovers.
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="sglang:"
 
@@ -92,10 +92,9 @@ export SGLANG_USE_AITER=1
 export SGLANG_USE_AITER_UNIFIED_ATTN=1
 export SGLANG_TIMEOUT_KEEP_ALIVE=1800
 
-# Synthetic rejection sampling is only for performance replay. The AL is the
-# committed Qwen3.5 thinking-on value for three speculative tokens. Evals use
-# real target-model verification.
-if [ "${EVAL_ONLY:-false}" != "true" ]; then
+# Golden AL 3.39: committed Qwen3.5 thinking-on value for three speculative
+# tokens. Evals use real target-model verification.
+if [ "${EVAL_ONLY}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=3.39
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
@@ -142,7 +141,7 @@ SERVER_PID=$!
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
+if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"

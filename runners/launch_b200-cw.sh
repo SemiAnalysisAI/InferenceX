@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars IS_MULTINODE
+
 export HF_HUB_CACHE_MOUNT="/tmp/gharunner/hf-hub-cache"
 export PORT=8888
 
@@ -30,7 +33,7 @@ else
     CONTAINER_MOUNT_DIR=/workspace
 fi
 
-export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+check_env_vars GPU_COUNT
 
 set -x
 
@@ -41,11 +44,10 @@ if [ -z "$JOB_ID" ]; then
     exit 1
 fi
 
-# Use Docker image directly for openai/gpt-oss-120b with trt, otherwise use squash file
 if [[ "$MODEL" == "openai/gpt-oss-120b" && "$FRAMEWORK" == "trt" ]]; then
     CONTAINER_IMAGE=$IMAGE
 else
-    # Use flock to serialize concurrent imports to the same squash file
+    # Concurrent jobs import to the same squash file; serialize them.
     srun --jobid=$JOB_ID --job-name="$RUNNER_NAME" bash -c "
         exec 9>\"$LOCK_FILE\"
         flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
@@ -56,9 +58,8 @@ else
             enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
         fi
     "
-    # Squash file lives on the allocated worker node's /tmp, which is not
-    # visible from the host, so realpath on the host would return empty.
-    # Pass the path as-is; srun resolves it inside the job.
+    # The squash file is on the worker node's /tmp, invisible from the host, so
+    # realpath here would return empty; srun resolves the raw path in the job.
     CONTAINER_IMAGE=$SQUASH_FILE
 fi
 
