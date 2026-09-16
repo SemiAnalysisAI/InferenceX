@@ -60,4 +60,3 @@ while IFS= read -r mooncake_so; do
     fi
 done < <(find "${mooncake_pkg}" -type f -name '*.so*' -print)
 rm -rf "${rdma_tmp}"
-
