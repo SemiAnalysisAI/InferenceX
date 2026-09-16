@@ -40,8 +40,8 @@ class ServerMetricsBackend:
 
     def gpu_kv_capacity_tokens(
         self,
-        metrics: dict[str, dict[str, Any]],
-        server_logs: Iterable[str | None],
+        metrics: dict[str, dict[str, Any]],  # noqa: ARG002
+        server_logs: Iterable[str | None],  # noqa: ARG002
     ) -> int | None:
         return None
 
@@ -110,7 +110,7 @@ def apply_profile_totals(flat: dict[str, Any], records: list[dict[str, Any]]) ->
 def counter_int(value: float | None) -> int | None:
     if value is None:
         return None
-    return int(round(value))
+    return round(value)
 
 
 def _record_token_sum(records: list[dict[str, Any]], metric_name: str) -> int | None:

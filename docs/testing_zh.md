@@ -31,6 +31,10 @@
 
 ## 测试层级
 
+[`CI`](../.github/workflows/ci.yml) 在 PR（包括 fork）或向 `main` 的推送修改任意 `.py` 文件时，并行运行 **Lint** 和 **Tests**。由 GitHub 原生路径筛选决定是否触发；手动分发始终运行两项任务。仅修改文档、Shell 脚本、YAML、依赖或 Ruff 配置不会触发 Python CI；请在本地执行相应检查，或手动分发 CI。
+
+Tests 使用四个 pytest worker 运行 `utils/`、`runners/` 和 `experimental/CollectiveX/tests/` 下的全部测试，并检查 MCP 兼容性。这些目录中的新增测试会自动发现。测试环境使用 Python 3.12 和仅支持 CPU 的 PyTorch；依赖必须已发布至少 12 小时。一项任务失败不会取消另一项；PR 更新会取消旧提交的 CI。尚未创建 PR 的分支推送不再单独触发变更日志测试。
+
 | 层级 | 能够证明 | 不能证明 |
 | --- | --- | --- |
 | 解析与语法 | 编辑后的 YAML 可加载；编辑后的 Bash 可解析 | 模式有效性、运行时路由或 GPU 行为 |
@@ -58,6 +62,17 @@
 ## 本地检查
 
 从仓库根目录运行检查，并用实际变更路径或键替换占位符。
+
+### Python 静态检查与格式化
+
+Ruff 按照 [`infx/ruff.toml`](../infx/ruff.toml) 中的规则检查 `infx/`，目标版本为 Python 3.12，行长度设为 100。任何 Python 文件变更都会触发 CI，使用已发布至少 12 小时的最新 Ruff 版本。
+
+```bash
+uvx --exclude-newer PT12H ruff@latest check --fix infx
+uvx --exclude-newer PT12H ruff@latest format infx
+```
+
+应尽量修复问题。确有理由保留的例外使用行内 `# noqa: CODE`；多余的忽略标记会被检查。未启用预览规则或自动不安全修复。
 
 ### 解析与语法
 
@@ -173,7 +188,7 @@ python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
 3. **CODEOWNER 签署前：**遵循 [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md)，包括适用的代码质量、架构、镜像来源、上游配方、补丁/豁免、聊天模板和 AgentX 要求。
 4. **扫描/评测验收：**当前仍在 PR 中的至少一个提交拥有成功、未跳过且实际执行的 `single-node */` 与 `eval /` 检查。仅 `collect-evals` 成功不够。下载对应评测制品，确认其非空、准确率达标且使用同一推理镜像。这些可执行规则位于[验证器检查 1 和 2](../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr)。
 5. **合并时复用：**获授权的 `OWNER`、`MEMBER` 或 `COLLABORATOR` 必须在受支持的合并路径前发布独占一行的 `/reuse-sweep-run` 命令（可附带合格来源 run ID）。验证器会把命令缺失或发布者未授权视为失败；参见[验证器检查 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted)和[复用流程](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
-6. **合并时：**CODEOWNER 的精确签署只需由 [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) 独立验证并获得一次 PASS。自动化通过 `codeowner-signoff-verified` 保留接受状态，并将必需状态延续到后续 head（包括 rebase 后），无需重新运行 Claude。每次实际验证都会更新同一条 PR 裁定评论，注明所评估的 SHA；延续 PASS 不代表新增提交已被审阅。删除评论不会重置接受状态，手动重新评估也不会撤销已有 PASS。评论恢复和手动分发说明见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
+6. **合并时：**当前 head 必须满足[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)定义的 CODEOWNER 签核状态要求。验证、管理员更新后的签核保留、撤销及恢复规则以该指南为准。
 7. **合并后：**作者按照 [`CONTRIBUTING.md`](../CONTRIBUTING.md#after-merging) 的要求确认 main 分支任务通过。
 
 ## 停止条件

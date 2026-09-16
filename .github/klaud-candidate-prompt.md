@@ -53,9 +53,9 @@ insufficient: recheck capacity before deciding to defer.
 Freeze the COMPLETE original public baseline point roster before attempts, using
 candidate.source.date, verified old-image producer IDs/SHAs and full recipe/workload/topology/
 concurrency/dataset identities. Use the reporting guide's prepare-baseline/report commands;
-reconcile the helper's generated roster with the source-date public API and supplement
-missing published points/eval/dataset evidence before freezing. Never reduce the baseline
-to overlapping points, displayed rows or a smaller current family. Never dispatch the old
+the helper recovers original points from producer revisions. Supplement verified public
+eval/dataset evidence before freezing; never replace a failed lookup with a partial roster.
+Never reduce the baseline to overlapping points, displayed rows or a smaller current family. Never dispatch the old
 image. Unproven deltas are N/A with a reason; N/A never excuses missing updated-image results.
 The baseline remains fixed across attempts.
 
@@ -85,8 +85,8 @@ Recheck capacity, keep DRAFT and apply full-sweep-enabled as the SOLE sweep-rela
 Wait for complete run-sweep.yml coverage on the exact head, all points/default evals and
 reusable artifacts. Check BOTH the final matrix before dispatch and completed final artifacts
 against EVERY frozen baseline point by identity, not count alone; extra points cannot replace
-missing ones. A green workflow or check-final alone is insufficient. If any baseline point
-is omitted, or lacks a successful verified updated-image result at final validation, report
+missing ones. check-final and finish enforce this roster as well as the current family.
+If any baseline point is omitted, or lacks a successful verified updated-image result at final validation, report
 the affected points and finish with outcome=failed: clean up owned runs and close the PR,
 never mark ready/validated. Smoke subsets remain allowed only for targeted attempts.
 For a failed-job retry, reuse the same run's surviving successful

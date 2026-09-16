@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
-# Follows the SGLang cookbook recipe at
-# https://cookbook.sglang.io/autoregressive/Qwen/Qwen3.5 as of 2026-04-17.
+# Follows https://cookbook.sglang.io/autoregressive/Qwen/Qwen3.5
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -15,9 +14,6 @@ check_env_vars \
     RESULT_FILENAME \
     EP_SIZE
 
-# `hf download` creates the target dir if missing and is itself idempotent. 
-# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
-# Either way, MODEL_PATH is what the server is launched with.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -41,7 +37,6 @@ export PYTHONUNBUFFERED=1
 
 SERVER_LOG=/workspace/server.log
 
-# Default: recv every ~10 requests; if CONC >= 16, relax to ~30 requests between scheduler recv polls.
 if [[ $CONC -ge 16 ]]; then
   SCHEDULER_RECV_INTERVAL=30
 else
@@ -67,7 +62,6 @@ fi
 
 echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
-# Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
@@ -94,7 +88,6 @@ $EXTRA_ARGS --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 pip install -q datasets pandas
@@ -112,12 +105,10 @@ run_benchmark_serving \
     --result-dir /workspace/ \
     --use-chat-template
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
 set +x

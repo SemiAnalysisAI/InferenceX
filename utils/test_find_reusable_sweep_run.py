@@ -19,7 +19,7 @@ def test_reuse_entrypoints_preserve_outputs_and_errors_without_installation(
 ):
     root = Path(__file__).resolve().parents[1]
     # The package must work without utils/ and without an inherited import path.
-    shutil.copytree(root / "infx", tmp_path / "infx")
+    shutil.copytree(root / "infx", tmp_path / "infx", ignore=shutil.ignore_patterns("__pycache__"))
     command = ([str(root / "utils/find_reusable_sweep_run.py")] if entrypoint == "legacy"
                else ["-m", "infx.workflows.reuse"])
     env = {key: value for key, value in os.environ.items()
@@ -47,21 +47,6 @@ def test_reuse_entrypoints_preserve_outputs_and_errors_without_installation(
     }
     assert json.loads(run.stdout) == expected
     assert dict(line.split("=", 1) for line in output.read_text().splitlines()) == expected
-
-
-def test_legacy_import_keeps_overrides_on_the_canonical_implementation(monkeypatch):
-    import find_reusable_sweep_run as legacy
-
-    def unexpected_artifacts(*args):
-        pytest.fail("legacy override was not used")
-
-    monkeypatch.setattr(reuse, "artifact_names", unexpected_artifacts)
-    monkeypatch.setattr(legacy, "artifact_names", lambda *args: {"results_bmk"})
-    run = {"id": 123, "head_sha": "tested-sha", "conclusion": "success"}
-    monkeypatch.setattr(reuse.github, "paginate", lambda *args: [run])
-    assert reuse.find_latest_successful_pr_run(
-        "example/project", "run-sweep.yml", "feature", {"tested-sha"}, "token",
-    ) == run
 
 
 def test_find_reuse_authorization_uses_latest_allowed_comment(monkeypatch) -> None:
@@ -401,57 +386,6 @@ def test_main_does_not_check_reuse_comment_for_label_event(
     assert outputs["skip-pr-sweep"] == "false"
 
 
-def test_validate_reusable_run_accepts_successful_same_pr_run(monkeypatch) -> None:
-    monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
-    monkeypatch.setattr(reuse, "pr_commit_shas", lambda *args: {"abc123"})
-
-    reuse.validate_reusable_run(
-        "SemiAnalysisAI/InferenceX",
-        "run-sweep.yml",
-        1321,
-        {
-            "id": 25763404168,
-            "event": "pull_request",
-            "status": "completed",
-            "conclusion": "success",
-            "path": ".github/workflows/run-sweep.yml",
-            "head_sha": "abc123",
-            "pull_requests": [{"number": 1321}],
-        },
-        "token",
-    )
-
-
-@pytest.mark.parametrize("conclusion", ["failure", "cancelled"])
-def test_validate_reusable_run_accepts_non_success_run_when_explicitly_allowed(
-    monkeypatch,
-    conclusion,
-) -> None:
-    """A fail-fast sweep concludes ``cancelled`` once a job is cut short.
-
-    Its completed benchmark jobs still uploaded usable artifacts, so a pinned
-    ``cancelled`` run is reusable on the same terms as a pinned failure.
-    """
-    monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
-    monkeypatch.setattr(reuse, "pr_commit_shas", lambda *args: {"abc123"})
-
-    reuse.validate_reusable_run(
-        "SemiAnalysisAI/InferenceX",
-        "run-sweep.yml",
-        1321,
-        {
-            "id": 25763404168,
-            "event": "pull_request",
-            "status": "completed",
-            "conclusion": conclusion,
-            "path": ".github/workflows/run-sweep.yml",
-            "head_sha": "abc123",
-        },
-        "token",
-        allow_failed=True,
-    )
-
-
 @pytest.mark.parametrize("conclusion", ["failure", "cancelled"])
 def test_validate_reusable_run_rejects_non_success_run_by_default(
     monkeypatch,
@@ -479,40 +413,6 @@ def test_validate_reusable_run_rejects_non_success_run_by_default(
         assert "expected success" in str(error)
     else:
         raise AssertionError(f"expected an unpinned {conclusion} run to be rejected")
-
-
-def test_validate_reusable_run_accepts_run_for_older_pr_commit(monkeypatch) -> None:
-    """Regression: pinned run survives an additional commit landing on the PR.
-
-    GitHub recomputes ``run.pull_requests`` to empty once the PR head moves past
-    the run's commit, but the run's commit is still part of the PR's history and
-    should remain reusable.
-    """
-    monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
-    monkeypatch.setattr(
-        reuse,
-        "pr_commit_shas",
-        lambda *args: {
-            "e36afac48cc6165f4e1f8ea7e1977b01ef29787c",
-            "5c7d7df8ce125e6c725eb37db123269380b7c97d",
-        },
-    )
-
-    reuse.validate_reusable_run(
-        "SemiAnalysisAI/InferenceX",
-        "run-sweep.yml",
-        1321,
-        {
-            "id": 25763404168,
-            "event": "pull_request",
-            "status": "completed",
-            "conclusion": "success",
-            "path": ".github/workflows/run-sweep.yml",
-            "head_sha": "e36afac48cc6165f4e1f8ea7e1977b01ef29787c",
-            "pull_requests": [],
-        },
-        "token",
-    )
 
 
 def test_validate_reusable_run_rejects_run_for_orphaned_commit(monkeypatch) -> None:

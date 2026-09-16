@@ -1,14 +1,20 @@
 const fs = require('node:fs');
 
-const LABEL = 'codeowner-signoff-verified';
 const MARKER = '<!-- codeowner-signoff-verify -->';
 const AUTHORS = new Set(['Klaud-Cold', 'github-actions[bot]']);
 const PASS = /^## ✅✅✅ \*\*Verdict: PASS\*\* ✅✅✅$/m;
 const REJECT = /^## ❌❌❌ \*\*REJECTED\*\* ❌❌❌$/m;
+const SHA = /^[a-f0-9]{40}$/;
 
 function isVerdict(comment) {
   return AUTHORS.has(comment.user?.login) &&
     /^<!-- codeowner-signoff-verify(?: sha=[a-f0-9]{40})? -->\r?\n/.test(comment.body || '');
+}
+
+function assessedCommit(comment) {
+  if (!comment || !isVerdict(comment) || !PASS.test(comment.body) || REJECT.test(comment.body)) return null;
+  return comment.body.match(/^<!-- codeowner-signoff-verify sha=([a-f0-9]{40}) -->/)?.[1] ||
+    [...comment.body.matchAll(/^Assessed commit: `([a-f0-9]{40})`\.$/gm)].at(-1)?.[1];
 }
 
 async function state(github, context, prNumber) {
@@ -19,49 +25,46 @@ async function state(github, context, prNumber) {
   const comments = (await github.paginate(github.rest.issues.listComments, {
     ...params, per_page: 100,
   })).filter(isVerdict);
-  const labeled = pr.labels.some(label => label.name === LABEL);
-  let labelTrusted = false;
-  if (labeled) {
-    const events = await github.paginate(github.rest.issues.listEventsForTimeline, {
-      ...params, per_page: 100,
-    });
-    const applied = events.filter(event => event.event === 'labeled' && event.label?.name === LABEL).at(-1);
-    labelTrusted = AUTHORS.has(applied?.actor?.login);
-  }
-  return {
-    pr, comments, labelTrusted,
-    passed: labelTrusted || comments.some(c => PASS.test(c.body)),
-    labeled,
-    comment: comments.find(c => c.body.startsWith(MARKER)) || comments[0],
-  };
-}
-
-async function rememberPass(github, context, prNumber, current) {
-  if (current.labelTrusted) return;
-  if (current.labeled) {
-    // Replace a manually applied label so its timeline provenance is automation.
-    await github.rest.issues.removeLabel({
-      ...context.repo, issue_number: prNumber, name: LABEL,
-    });
-  }
-  try {
-    await github.rest.issues.getLabel({ ...context.repo, name: LABEL });
-  } catch (error) {
-    if (error.status !== 404) throw error;
+  if (pr.labels.some(label => label.name === 'codeowner-signoff-verified')) {
     try {
-      await github.rest.issues.createLabel({
-        ...context.repo, name: LABEL, color: '0e8a16',
-        description: 'CODEOWNER checklist passed once; retained across PR commits',
-      });
-    } catch (createError) {
-      // Another PR may have created the repository label concurrently.
-      if (createError.status !== 422) throw createError;
-      await github.rest.issues.getLabel({ ...context.repo, name: LABEL });
+      await github.rest.issues.removeLabel({ ...params, name: 'codeowner-signoff-verified' });
+    } catch (error) {
+      if (error.status !== 404) throw error;
     }
   }
-  await github.rest.issues.addLabels({
-    ...context.repo, issue_number: prNumber, labels: [LABEL],
+  return { pr, comment: comments.find(c => c.body.startsWith(MARKER)) || comments.at(-1) };
+}
+
+function coveredCommit(comment) {
+  const assessed = assessedCommit(comment);
+  if (!assessed) return null;
+  return (comment.body.startsWith(MARKER) &&
+    comment.body.match(/\nCovered commit: `([a-f0-9]{40})`\.\s*$/)?.[1]) || assessed;
+}
+
+async function coverage(github, context, prNumber) {
+  const current = await state(github, context, prNumber);
+  const covered = coveredCommit(current.comment);
+  const event = context.payload;
+  if (!covered || context.eventName !== 'pull_request_target' || event.action !== 'synchronize' ||
+      event.before !== covered || !SHA.test(event.after) || event.after === covered ||
+      event.pull_request?.head?.sha !== event.after || event.pull_request.number !== prNumber ||
+      event.sender?.type !== 'User' || event.sender.login !== context.actor) return current;
+  const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+    ...context.repo, username: context.actor,
   });
+  if (data?.permission !== 'admin' || data?.role_name !== 'admin') return current;
+  let verdict = current.comment.body.replace(/^<!-- codeowner-signoff-verify[^\n]*\r?\n/, '');
+  const footer = verdict.lastIndexOf('\n\nAssessed commit:');
+  if (footer !== -1) verdict = verdict.slice(0, footer);
+  current.comment = await upsert(github, context, prNumber, current.comment,
+    formatComment(verdict, assessedCommit(current.comment), event.after));
+  return current;
+}
+
+function formatComment(verdict, assessed, covered) {
+  return `${MARKER}\n${verdict}\n\nAssessed commit: \`${assessed}\`.\n` +
+    `Covered commit: \`${covered}\`.\n`;
 }
 
 async function upsert(github, context, prNumber, comment, body) {
@@ -73,7 +76,6 @@ async function upsert(github, context, prNumber, comment, body) {
       })).data;
     } catch (error) {
       if (error.status !== 404) throw error;
-      // The comment was deleted after listing it.
     }
   }
   return (await github.rest.issues.createComment({
@@ -81,53 +83,32 @@ async function upsert(github, context, prNumber, comment, body) {
   })).data;
 }
 
-async function publishStatus(github, context, prNumber, passed, comment, assessedSha) {
-  // Refresh after verification: a push may have arrived while Claude was running.
-  const { data: pr } = await github.rest.pulls.get({
-    ...context.repo, pull_number: prNumber,
+async function publishStatus(github, context, sha, status, comment,
+  failureDescription = 'Fresh CODEOWNER sign-off verification required') {
+  await github.rest.repos.createCommitStatus({
+    ...context.repo, sha, context: 'CODEOWNER sign-off', state: status,
+    description: status === 'success' ? 'CODEOWNER sign-off covers this commit' :
+      status === 'pending' ? 'Verifying CODEOWNER sign-off' : failureDescription,
+    target_url: comment?.html_url ||
+      `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
   });
-  const shas = new Set([pr.head.sha, assessedSha].filter(Boolean));
-  for (const sha of shas) {
-    await github.rest.repos.createCommitStatus({
-      ...context.repo, sha, context: 'codeowner-signoff-verify',
-      state: passed ? 'success' : 'failure',
-      description: passed ? 'CODEOWNER checklist passed for this PR (retained across commits)' :
-        'Sign-off verification rejected - see verdict comment',
-      target_url: comment.html_url,
-    });
-  }
 }
 
 async function carry({ github, context, core, prNumber }) {
-  const current = await state(github, context, prNumber);
-  if (!current.passed) {
-    core.info(`PR #${prNumber} has no passing checklist to carry forward.`);
-    return false;
-  }
-  await rememberPass(github, context, prNumber, current);
-  let comment = current.comment;
-  if (comment && !comment.body.startsWith(MARKER)) {
-    // Adopt the first legacy comment in place, using the most recent passing
-    // assessment if older runs left multiple SHA-specific comments behind.
-    const source = current.comments.filter(c => PASS.test(c.body)).at(-1) || comment;
-    const sha = source.body.match(/^<!-- codeowner-signoff-verify sha=([a-f0-9]{40}) -->/);
-    const body = source.body.replace(/^<!-- codeowner-signoff-verify[^\n]*\r?\n/, `${MARKER}\n`) +
-      (sha ? `\n\nAssessed commit: \`${sha[1]}\`.\n` : '\n\n') +
-      'This PR has passed the checklist. That pass is retained across later commits and reassessments.';
-    comment = await upsert(github, context, prNumber, comment, body);
-  } else if (!comment) {
-    comment = await upsert(github, context, prNumber, null,
-      `${MARKER}\n## ✅✅✅ **Verdict: PASS** ✅✅✅\n\n` +
-      'This PR previously passed the CODEOWNER checklist. The original verdict comment was deleted.\n' +
-      'The passing result is retained across commits; later commits have not been reverified.');
-  }
-  await publishStatus(github, context, prNumber, true, comment);
-  return true;
+  const { pr, comment } = await coverage(github, context, prNumber);
+  const passed = SHA.test(pr.head.sha) && coveredCommit(comment) === pr.head.sha;
+  await publishStatus(github, context, pr.head.sha, passed ? 'success' : 'failure', comment);
+  return passed;
 }
 
-async function prepare(args) {
-  const passed = await carry(args);
-  args.core.setOutput('verify', !passed || args.context.eventName === 'workflow_dispatch' ? 'true' : 'false');
+async function prepare({ github, context, core, prNumber, headSha }) {
+  const { comment } = await coverage(github, context, prNumber);
+  const passed = SHA.test(headSha) && coveredCommit(comment) === headSha;
+  const verify = context.eventName === 'workflow_dispatch' ||
+    (!passed && (context.eventName !== 'pull_request_target' || !assessedCommit(comment)));
+  await publishStatus(github, context, headSha,
+    verify ? 'pending' : passed ? 'success' : 'failure', comment);
+  core.setOutput('verify', String(verify));
 }
 
 async function publish({ github, context, core, prNumber, headSha, verdictPath, verificationSucceeded }) {
@@ -136,21 +117,23 @@ async function publish({ github, context, core, prNumber, headSha, verdictPath, 
   if (verificationSucceeded && fs.existsSync(verdictPath)) {
     verdict = fs.readFileSync(verdictPath, 'utf8').trim();
   }
-  // The model supplies text only. The workflow owns comment identity and status.
   const valid = (PASS.test(verdict) !== REJECT.test(verdict)) &&
     (verdict.startsWith('## ✅✅✅ **Verdict: PASS** ✅✅✅') ||
      verdict.startsWith('## ❌❌❌ **REJECTED** ❌❌❌'));
   if (!valid) {
     verdict = '## ❌❌❌ **REJECTED** ❌❌❌\n\nThe verifier did not produce a valid verdict. Retry the sign-off verification.';
   }
-  const passed = current.passed || PASS.test(verdict);
-  if (passed) await rememberPass(github, context, prNumber, current);
-  const body = `${MARKER}\n${verdict}\n\nAssessed commit: \`${headSha}\`.\n` +
-    (passed ? 'This PR has passed the checklist. That pass is retained across later commits and reassessments.' :
-      'Edit the sign-off or rerun the workflow after addressing the findings.');
-  const comment = await upsert(github, context, prNumber, current.comment, body);
-  await publishStatus(github, context, prNumber, passed, comment, headSha);
-  core.info(`codeowner-signoff-verify=${passed ? 'success' : 'failure'} for PR #${prNumber}`);
+  const passed = PASS.test(verdict);
+  const comment = await upsert(github, context, prNumber, current.comment,
+    formatComment(verdict, headSha, headSha));
+  await publishStatus(github, context, headSha, passed ? 'success' : 'failure', comment,
+    'CODEOWNER sign-off rejected');
+  const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: prNumber });
+  if (pr.head.sha !== headSha) {
+    await publishStatus(github, context, pr.head.sha,
+      coveredCommit(comment) === pr.head.sha ? 'success' : 'failure', comment);
+  }
+  core.info(`CODEOWNER sign-off=${passed ? 'success' : 'failure'} for assessed commit ${headSha}`);
 }
 
 module.exports = { prepare, carry, publish };

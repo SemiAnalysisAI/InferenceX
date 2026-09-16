@@ -39,22 +39,16 @@ def require_environment(env: Mapping[str, str], names: Iterable[str]) -> None:
     """Reject missing values in declaration order; empty strings remain present."""
     missing = [name for name in names if env.get(name) is None]
     if missing:
-        raise EnvironmentError(
-            f"Missing required environment variables: {', '.join(missing)}"
-        )
+        raise OSError(f"Missing required environment variables: {', '.join(missing)}")
 
 
-def build_result(
-    benchmark: Mapping[str, Any], env: Mapping[str, str]
-) -> dict[str, Any]:
+def build_result(benchmark: Mapping[str, Any], env: Mapping[str, str]) -> dict[str, Any]:
     """Build fixed-sequence metrics without reading environment or writing files.
 
     Input mappings are read-only. The returned dictionary is independent and
     can be enriched by other result transformations before serialization.
     """
-    require_environment(
-        env, (key for key in _BASE_ENV_VARS if key != "RESULT_FILENAME")
-    )
+    require_environment(env, (key for key in _BASE_ENV_VARS if key != "RESULT_FILENAME"))
     disagg = env["DISAGG"].lower() == "true"
     data = {
         "hw": env["RUNNER_TYPE"],
@@ -75,10 +69,8 @@ def build_result(
         expected = benchmark_outcome(outcome["requested"], outcome["completed"])
         if (
             outcome != expected
-            or benchmark.get("completed", expected["completed"])
-            != expected["completed"]
-            or benchmark.get("num_prompts", expected["requested"])
-            != expected["requested"]
+            or benchmark.get("completed", expected["completed"]) != expected["completed"]
+            or benchmark.get("num_prompts", expected["requested"]) != expected["requested"]
         ):
             raise ValueError(
                 "Benchmark outcome does not match the recorded request counts and gate"
@@ -112,9 +104,7 @@ def build_result(
         prefill_hardware = env.get("PREFILL_HARDWARE", "")
         decode_hardware = env.get("DECODE_HARDWARE", "")
         if bool(prefill_hardware) != bool(decode_hardware):
-            raise ValueError(
-                "PREFILL_HARDWARE and DECODE_HARDWARE must be specified together."
-            )
+            raise ValueError("PREFILL_HARDWARE and DECODE_HARDWARE must be specified together.")
         prefill_gpus = int(env["PREFILL_GPUS"])
         decode_gpus = int(env["DECODE_GPUS"])
         aggregate_gpus = int(env.get("AGGREGATE_GPUS", "0"))
@@ -167,11 +157,9 @@ def build_result(
             "num_prefill_gpu": prefill_gpus,
             "num_decode_gpu": decode_gpus,
             "tput_per_gpu": float(benchmark["total_token_throughput"]) / total_gpus,
-            "output_tput_per_gpu": float(benchmark["output_throughput"])
-            / output_tput_denominator,
+            "output_tput_per_gpu": float(benchmark["output_throughput"]) / output_tput_denominator,
             "input_tput_per_gpu": (
-                float(benchmark["total_token_throughput"])
-                - float(benchmark["output_throughput"])
+                float(benchmark["total_token_throughput"]) - float(benchmark["output_throughput"])
             )
             / prefill_gpus,
         }
@@ -205,8 +193,7 @@ def build_result(
             "tput_per_gpu": float(benchmark["total_token_throughput"]) / num_gpus,
             "output_tput_per_gpu": float(benchmark["output_throughput"]) / num_gpus,
             "input_tput_per_gpu": (
-                float(benchmark["total_token_throughput"])
-                - float(benchmark["output_throughput"])
+                float(benchmark["total_token_throughput"]) - float(benchmark["output_throughput"])
             )
             / num_gpus,
         }
@@ -217,9 +204,7 @@ def build_result(
         if key.endswith("ms") and math.isfinite(float(value)):
             data[key.replace("_ms", "")] = float(value) / 1000.0
         if "tpot" in key and math.isfinite(float(value)) and float(value) > 0:
-            data[key.replace("_ms", "").replace("tpot", "intvty")] = 1000.0 / float(
-                value
-            )
+            data[key.replace("_ms", "").replace("tpot", "intvty")] = 1000.0 / float(value)
     return data
 
 
@@ -268,8 +253,7 @@ def record_power_internal_error(
         AttributeError,
     ) as fallback_error:
         print(
-            f"[process_result] failed to preserve power validation fallback: "
-            f"{fallback_error}",
+            f"[process_result] failed to preserve power validation fallback: {fallback_error}",
             file=sys.stderr,
         )
 
@@ -300,9 +284,7 @@ def aggregate_power_result(
             Path(next(p for p in candidates if p)),
         )
         expected_num_gpus = (
-            int(env["TP"])
-            * int(env.get("PP_SIZE", "1"))
-            * int(env.get("PCP_SIZE", "1"))
+            int(env["TP"]) * int(env.get("PP_SIZE", "1")) * int(env.get("PCP_SIZE", "1"))
         )
     try:
         if is_multinode:
@@ -382,9 +364,7 @@ def process_result(env: Mapping[str, str]) -> int:
         print(f"[process_result] audit summary unavailable: {exc}", file=sys.stderr)
         result["power_invalid_reasons"] = ["validation_artifact_unavailable"]
         # A required run must preserve its audit as well as numeric metrics.
-        status = max(
-            status, int(env.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"})
-        )
+        status = max(status, int(env.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"}))
     agg_path.write_text(json.dumps(result, indent=2))
     with open(agg_path) as f:
         print(json.dumps(json.load(f), indent=2))
@@ -400,7 +380,7 @@ def process_multinode_results(env: Mapping[str, str]) -> int:
     ignored_sidecars: list[str] = []
     observed: set[int] = set()
     status = 0
-    for path in sorted(Path(".").glob(f"{env['RESULT_FILENAME']}_*.json")):
+    for path in sorted(Path().glob(f"{env['RESULT_FILENAME']}_*.json")):
         if path.name.endswith(".pytorch.json") or path.name in {
             f"{env['RESULT_FILENAME']}_gpu_metrics_context.json",
             f"{env['RESULT_FILENAME']}_gpu_metrics_identity.json",
@@ -415,9 +395,7 @@ def process_multinode_results(env: Mapping[str, str]) -> int:
                 path.stem,
             )
             if match is None:
-                raise ValueError(
-                    "Result filename lacks concurrency and physical GPU counts"
-                )
+                raise ValueError("Result filename lacks concurrency and physical GPU counts")
             concurrency, total = int(match[1]), int(match[2])
             raw = json.loads(path.read_text())
             if raw["max_concurrency"] != concurrency:
@@ -433,12 +411,8 @@ def process_multinode_results(env: Mapping[str, str]) -> int:
             # execution; the group-level flag cannot manufacture role energy.
             aggregate = not disagg or int(env["DECODE_NUM_WORKERS"]) == 0
             if aggregate:
-                if match[3] is not None and (
-                    int(match[3]) != total or int(match[4]) != 0
-                ):
-                    raise ValueError(
-                        "Aggregate result contains separate role GPU counts"
-                    )
+                if match[3] is not None and (int(match[3]) != total or int(match[4]) != 0):
+                    raise ValueError("Aggregate result contains separate role GPU counts")
                 point_env.update(
                     DISAGG="false",
                     PREFILL_GPUS="0",
@@ -447,9 +421,7 @@ def process_multinode_results(env: Mapping[str, str]) -> int:
                 )
             else:
                 if match[3] is None:
-                    raise ValueError(
-                        "Disaggregated result lacks prefill/decode GPU counts"
-                    )
+                    raise ValueError("Disaggregated result lacks prefill/decode GPU counts")
                 prefill, decode = int(match[3]), int(match[4])
                 if prefill + decode != total:
                     raise ValueError("Role GPU counts do not equal total GPU count")
