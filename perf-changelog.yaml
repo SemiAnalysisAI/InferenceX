@@ -7965,4 +7965,6 @@
     - "新增实验性原生 TensorRT-LLM rc26 BFCL Responses 探测配置，使用上游 token 用量统计。"
     - "Select native FlashInfer attention for the B200 MiniMax EAGLE3 draft to avoid the FA4 FP8 descale stride failure. Requires fresh throughput validation."
     - "B200 MiniMax EAGLE3 草稿模型改用原生 FlashInfer attention，避开 FA4 FP8 descale stride 故障；需重新验证吞吐量。"
+    - "Upgrade B200/B300 MiniMax TRT to rc26 and preserve per-conversation reuse using block_reuse_config.policy. Refresh the experimental vLLM image to include the upstream MSA/QuACK compatibility fix."
+    - "B200/B300 MiniMax TRT 升级至 rc26，通过 block_reuse_config.policy 保留按会话复用语义；实验性 vLLM 镜像同步到包含上游 MSA/QuACK 兼容修复的版本。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156

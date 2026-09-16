@@ -1,7 +1,7 @@
-# Resident-only diagnostic for PR #3156; upstream image selected by PR #3131.
-# PR #3156 的纯 GPU 驻留诊断配置；上游镜像与 PR #3131 一致。
+# Resident-only diagnostic using the upstream MSA/QuACK compatibility fix.
+# 纯 GPU 驻留诊断配置，使用上游 MSA/QuACK 兼容性修复。
 minimaxm3-fp4-b200-vllm-bfcl-probe:
-  image: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3
+  image: vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b200-nscale
