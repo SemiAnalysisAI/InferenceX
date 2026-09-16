@@ -2,15 +2,22 @@ schema: 2
 name: b200-fp8-stp-max-tpt-dep8-3p-1d
 
 dynamo:
-  # Use NATS for a recipe prior to Dynamo commit 39d2a68.
+  # Keep the NATS request plane this recipe was tuned with; Dynamo 1.5 still accepts it.
   request_plane: "nats"
   source:
-    pypi: 0.9.1
+    # ai-dynamo 0.9.1 imports sglang.srt.server_args_config_parser, which SGLang
+    # v0.5.19 moved to sglang.srt.utils; 1.5.0.dev20260910 is the first ai-dynamo
+    # release whose sglang extra pins sglang==0.5.19.
+    wheel: "1.5.0.dev20260910"
 
 model:
   path: dsr1-fp8
   container: dynamo-sglang
   precision: fp8
+
+identity:
+  container:
+    image: lmsysorg/sglang:v0.5.19-cu130
 
 resources:
   gpu_type: b200
