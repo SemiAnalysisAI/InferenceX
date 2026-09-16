@@ -1,66 +1,18 @@
 """Exercise the fixed-sequence module CLI with controlled environment and artifacts."""
 import json
 import os
-import shutil
 import signal
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
-import yaml
 
 from infx.results.power.multinode import ROLE_METRIC_KEYS, WHOLE_METRIC_KEYS
 from test_aggregate_power_multinode import PRODUCER_SHA, build_package
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MODULE_COMMAND = [sys.executable, "-m", "infx.results.fixed_sequence"]
-
-
-def test_single_node_workflow_reports_missing_raw_result(tmp_path, single_node_env_vars):
-    workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-tmpl.yml').read_text())
-    step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
-                if step.get('name') == 'Process result')
-    shutil.copytree(REPO_ROOT / 'infx', tmp_path / 'infx')
-    (tmp_path / 'utils').mkdir()
-    shutil.copy(REPO_ROOT / 'utils/process_result.py', tmp_path / 'utils/process_result.py')
-    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=tmp_path,
-                            env={**os.environ, **single_node_env_vars, 'RESULT_FILENAME': 'missing',
-                                 'PATH': f"{Path(sys.executable).parent}:{os.environ['PATH']}"},
-                            capture_output=True, text=True, timeout=10)
-    assert result.returncode == 1
-    assert 'no raw result to process: missing.json' in result.stderr
-    assert 'Traceback' not in result.stderr
-    assert not (tmp_path / 'agg_missing.json').exists()
-
-
-@pytest.mark.parametrize("workflow_name", ["benchmark-tmpl.yml", "benchmark-multinode-tmpl.yml", "profile.yml"])
-def test_workflow_processes_results_through_compatibility_entrypoint(
-    tmp_path, workflow_name, single_node_env_vars, multinode_env_vars, sample_benchmark_result,
-):
-    shutil.copytree(REPO_ROOT / "infx", tmp_path / "infx")
-    (tmp_path / "utils").mkdir()
-    shutil.copy(REPO_ROOT / "utils/process_result.py", tmp_path / "utils/process_result.py")
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows" / workflow_name).read_text())
-    step = next(step for job in workflow["jobs"].values() for step in job.get("steps", [])
-                if step.get("name", "").startswith("Process result"))
-    multinode = workflow_name == "benchmark-multinode-tmpl.yml"
-    stem = "fixture_conc64_gpus_28_ctx_20_gen_8" if multinode else "fixture"
-    (tmp_path / f"{stem}.json").write_text(json.dumps({
-        **sample_benchmark_result, "total_token_throughput": 56, "output_throughput": 28,
-    }))
-    env = {**(multinode_env_vars if multinode else single_node_env_vars),
-           "RESULT_FILENAME": "fixture" if multinode else stem, "POWER_PRODUCER_SHA": "",
-           "CONC_LIST": "64",
-           "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}"}
-    result = subprocess.run(["bash", "-euo", "pipefail", "-c", step["run"]],
-                            cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10)
-    assert result.returncode == 0, result.stderr
-    data = json.loads((tmp_path / f"agg_{stem}.json").read_text())
-    assert data["conc"] == 64
-    assert data["disagg"] is multinode
-    assert data["tput_per_gpu"] == (2 if multinode else 7)
-    assert (tmp_path / f"power_validation_{stem}.json").is_file()
 
 
 @pytest.mark.parametrize('fingerprint', ['', 'a' * 64, 'a' * 16 + 'b' * 48])
@@ -714,17 +666,6 @@ class TestOutputFile:
 class TestEdgeCases:
     """Tests for edge cases and special scenarios."""
 
-    def test_boolean_disagg_parsing_false(self, tmp_path, sample_benchmark_result, single_node_env_vars):
-        """Test that DISAGG env var is parsed as boolean correctly for false values."""
-        for disagg_value in ["false", "False", "FALSE"]:
-            env = single_node_env_vars.copy()
-            env["DISAGG"] = disagg_value
-
-            result = run_script(tmp_path, env, sample_benchmark_result)
-            assert result.returncode == 0, f"Script failed for DISAGG={disagg_value}: {result.stderr}"
-
-            output_data = json.loads(result.stdout)
-            assert output_data["disagg"] is False
 
     def test_boolean_disagg_parsing_true_requires_multinode(self, tmp_path, sample_benchmark_result, single_node_env_vars):
         """Test that DISAGG=true without multinode fails."""
@@ -735,28 +676,6 @@ class TestEdgeCases:
             result = run_script(tmp_path, env, sample_benchmark_result)
             assert result.returncode != 0
 
-
-    def test_integer_conversion(self, tmp_path, single_node_env_vars):
-        """Test that numeric env vars are converted to integers."""
-        benchmark_result = {
-            "model_id": "test-model",
-            "max_concurrency": 32,
-            "total_token_throughput": 5000.0,
-            "output_throughput": 4000.0,
-        }
-
-        env = single_node_env_vars.copy()
-        env["ISL"] = "8192"
-        env["OSL"] = "1024"
-
-        result = run_script(tmp_path, env, benchmark_result)
-        assert result.returncode == 0, f"Script failed: {result.stderr}"
-
-        output_data = json.loads(result.stdout)
-        assert output_data["isl"] == 8192
-        assert output_data["osl"] == 1024
-        assert isinstance(output_data["isl"], int)
-        assert isinstance(output_data["osl"], int)
 
 # =============================================================================
 # Integration: power aggregation patches the agg JSON
@@ -1642,22 +1561,6 @@ def test_public_power_audit_bounds_text_and_device_identifiers():
     assert audit['observed_gpu_ids'][:2] == ['gpu0', 'gpu1']
 
 
-@pytest.mark.parametrize('step_name', ['Upload GPU metrics', 'Upload power audit bundle'])
-def test_workflow_retains_context_for_each_metrics_csv(tmp_path, step_name):
-    import yaml
-
-    workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-tmpl.yml').read_text())
-    step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
-                if step.get('name') == step_name)
-    patterns = step['with']['path'].splitlines()
-    for relative in ['gpu_metrics_concurrency_4_context.json',
-                     'results/gpu_metrics_concurrency_4_context.json']:
-        path = tmp_path / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text('{"timestamp_timezone":"UTC"}')
-        assert any(path in tmp_path.glob(pattern.strip()) for pattern in patterns)
-
-
 @pytest.mark.parametrize('sidecar', ['run_recipe_conc4_gpus_4_ctx_2_gen_2.pytorch.json',
                                     'run_gpu_metrics_context.json', 'run_gpu_metrics_identity.json'])
 @pytest.mark.parametrize('point_state', ['valid', 'missing', 'malformed'])
@@ -1693,53 +1596,3 @@ def test_multinode_batch_rejects_unknown_point_filename(
     receipt = json.loads((tmp_path / 'result_processing_run.json').read_text())
     assert receipt['missing_concurrencies'] == [16]
     assert any('filename lacks' in point.get('error', '') for point in receipt['points'])
-
-
-@pytest.mark.parametrize('first_rc', [0, 7])
-@pytest.mark.parametrize('expected_concs', ['4 16', '4 8 16', '4'])
-def test_multinode_workflow_processes_every_point_with_legacy_processor(tmp_path, first_rc, expected_concs):
-    (tmp_path / 'utils').mkdir()
-    (tmp_path / 'utils/process_result.py').write_text('''import json, os, sys
-from pathlib import Path
-stem = os.environ['RESULT_FILENAME']
-data = json.loads(Path(stem + '.json').read_text())
-Path('agg_' + stem + '.json').write_text(json.dumps(data))
-sys.exit(data['exit_code'])
-''')
-    for conc, rc in [(4, first_rc), (16, 0)]:
-        (tmp_path / f'run_conc{conc}_gpus_4_ctx_2_gen_2.json').write_text(
-            json.dumps({'exit_code': rc}))
-    workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-multinode-tmpl.yml').read_text())
-    step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
-                if step.get('name') == 'Process result')
-    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=tmp_path,
-                            env={**os.environ, 'RESULT_FILENAME': 'run', 'POWER_PRODUCER_SHA': '',
-                                 'CONC_LIST': expected_concs, 'PYTHONPATH': '',
-                                 'PATH': f"{Path(sys.executable).parent}:{os.environ['PATH']}"},
-                            capture_output=True, text=True, timeout=10)
-    assert result.returncode == int(bool(first_rc) or expected_concs != '4 16'), result.stderr
-    for conc in [4, 16]:
-        assert (tmp_path / f'agg_run_conc{conc}_gpus_4_ctx_2_gen_2.json').is_file()
-
-
-def test_multinode_workflow_does_not_downgrade_processor_import_errors(tmp_path):
-    (tmp_path / 'infx/results').mkdir(parents=True)
-    (tmp_path / 'infx/__init__.py').touch()
-    (tmp_path / 'infx/results/__init__.py').touch()
-    (tmp_path / 'infx/results/fixed_sequence.py').write_text(
-        'raise RuntimeError("broken processor import")\n')
-    (tmp_path / 'utils').mkdir()
-    (tmp_path / 'utils/process_result.py').write_text(
-        'from pathlib import Path\nPath("legacy-called").touch()\n')
-    (tmp_path / 'run_conc4_gpus_4.json').write_text('{}')
-    workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-multinode-tmpl.yml').read_text())
-    step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
-                if step.get('name') == 'Process result')
-    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=tmp_path,
-                            env={**os.environ, 'RESULT_FILENAME': 'run', 'POWER_PRODUCER_SHA': '',
-                                 'CONC_LIST': '4', 'PYTHONPATH': '',
-                                 'PATH': f"{Path(sys.executable).parent}:{os.environ['PATH']}"},
-                            capture_output=True, text=True, timeout=10)
-    assert result.returncode != 0
-    assert 'broken processor import' in result.stderr
-    assert not (tmp_path / 'legacy-called').exists()

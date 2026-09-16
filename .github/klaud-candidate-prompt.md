@@ -50,11 +50,14 @@ If the check fails, report capacity-deferred and call finish. A utilization incr
 dispatch never justifies cancelling healthy work. A benchmark capacity error alone is
 insufficient: recheck capacity before deciding to defer.
 
-Freeze the public baseline before attempts, using candidate.source.date, verified old-image
-producer IDs/SHAs and full recipe/topology/concurrency/dataset identities. Use the reporting
-guide's prepare-baseline/report commands; supplement missing published eval/dataset evidence
-from the public API before freezing. Never dispatch the old image. Unproven comparisons
-are N/A with a reason, not guessed values. The baseline remains fixed across attempts.
+Freeze the COMPLETE original public baseline point roster before attempts, using
+candidate.source.date, verified old-image producer IDs/SHAs and full recipe/workload/topology/
+concurrency/dataset identities. Use the reporting guide's prepare-baseline/report commands;
+the helper recovers original points from producer revisions. Supplement verified public
+eval/dataset evidence before freezing; never replace a failed lookup with a partial roster.
+Never reduce the baseline to overlapping points, displayed rows or a smaller current family. Never dispatch the old
+image. Unproven deltas are N/A with a reason; N/A never excuses missing updated-image results.
+The baseline remains fixed across attempts.
 
 Keep targeted work draft with no sweep labels. Dispatch ONLY updated-image e2e-tests.yml
 from main, with ref=exact measured SHA, fail-fast=true, klaud-run=true,
@@ -80,7 +83,13 @@ append-only and eval-selection modifiers. Commit/push, generate the final matrix
 utils/process_changelog.py and run `check-final --matrix-file FILE` before dispatch.
 Recheck capacity, keep DRAFT and apply full-sweep-enabled as the SOLE sweep-related label.
 Wait for complete run-sweep.yml coverage on the exact head, all points/default evals and
-reusable artifacts. For a failed-job retry, reuse the same run's surviving successful
+reusable artifacts. Check BOTH the final matrix before dispatch and completed final artifacts
+against EVERY frozen baseline point by identity, not count alone; extra points cannot replace
+missing ones. check-final and finish enforce this roster as well as the current family.
+If any baseline point is omitted, or lacks a successful verified updated-image result at final validation, report
+the affected points and finish with outcome=failed: clean up owned runs and close the PR,
+never mark ready/validated. Smoke subsets remain allowed only for targeted attempts.
+For a failed-job retry, reuse the same run's surviving successful
 artifacts; do not redispatch a full sweep just because several manifests exist.
 Before a repair push, remove sweep labels and keep draft, then repeat within budget.
 

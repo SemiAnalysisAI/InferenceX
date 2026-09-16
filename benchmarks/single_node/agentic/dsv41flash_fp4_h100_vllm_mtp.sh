@@ -1,21 +1,16 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-# DeepSeek-V4.1-Flash on H100, with the memory caps 80 GB cards need.
-#
-# This is a copy of the shared dsv41flash_fp4_vllm_mtp.sh rather than a symlink
-# to it, because H100 cannot serve 1M context on the shared flags. At 1M context
-# the sparse attention indexer allocates a
-# [max-num-batched-tokens, max-model-len] logits buffer in
-# fp8_fp4_paged_mqa_logits: 8192 x 1048576 x 2 bytes is exactly 16.00 GiB. That
-# is a fixed cost paid during startup memory profiling, independent of
-# concurrency, so it OOMs at concurrency 1 next to ~35.9 GiB/GPU of resident
-# weights (run 34467029236). Capping batched tokens shrinks the buffer
-# proportionally; capping --max-model-len would too, but that would force the
-# 256k-capped trace corpus onto a 1M-context model.
+# DeepSeek-V4.1-Flash on H100. A copy of dsv41flash_fp4_vllm_mtp.sh rather than
+# a symlink: at 1M context the sparse-attention indexer allocates a
+# [max-num-batched-tokens, max-model-len] fp8 logits buffer during startup
+# profiling (8192 x 1048576 x 2 B = 16 GiB), which OOMs next to ~36 GiB/GPU of
+# weights on 80 GB cards. Capping batched tokens shrinks it; capping
+# --max-model-len would force the 256k-capped corpus onto a 1M-context model.
 # https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+check_env_vars EVAL_ONLY
 require_agentic_kv_offload_none
 export GPU_COUNT="$TP"
 
@@ -36,16 +31,14 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_RUST_FRONTEND=1
 export VLLM_USE_V2_MODEL_RUNNER=1
 export PYTHONUNBUFFERED=1
-# The failing allocation left 1.04 GiB reserved but unallocated, and the
-# indexer buffer is large enough that fragmentation costs a KV block.
+# The indexer buffer is large enough that allocator fragmentation costs a KV block.
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # The indexer buffer scales linearly with batched tokens: 4096 puts it at
-# 8 GiB. Anything larger did not fit alongside the weights on this SKU.
+# 8 GiB, and anything larger did not fit next to the weights on this SKU.
 MAX_NUM_BATCHED_TOKENS=4096
-# Scheduler headroom for AgentX subagent fan-out. Set explicitly because
-# vLLM's default of 1024 sizes sampler and scheduler buffers for a batch this
-# recipe never runs.
+# vLLM's default 1024 sizes sampler and scheduler buffers for a batch this
+# recipe never runs; 2*CONC leaves headroom for AgentX subagent fan-out.
 MAX_NUM_SEQS=$((2 * CONC))
 NUM_SPEC_TOKENS=5
 CAPTURE_SIZE=1
@@ -62,7 +55,7 @@ echo "Using vLLM endpoint ${AIPERF_SERVER_URL}"
 
 # Golden AL: golden_al_distribution/dsv41flash_dspark.yaml, thinking_on, five draft tokens.
 # Accuracy evals keep real block rejection; throughput fixes acceptance to AL 3.51.
-if [[ "${EVAL_ONLY:-false}" == true ]]; then
+if [[ "${EVAL_ONLY}" == true ]]; then
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":true}'
 else
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":3.51,"enable_adaptive_verification":false}'
@@ -89,7 +82,7 @@ printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
 SERVER_PID=$!
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [[ "${EVAL_ONLY:-false}" == true ]]; then
+if [[ "${EVAL_ONLY}" == true ]]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"

@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-# DeepSeek-V4.1-Flash on MI355X: native DSpark and GPU-resident KV.
-# Follow upstream AMD defaults for Engram; storage behavior needs verification.
-# Image: vllm/vllm-openai-rocm:deepseekv41-flash-0909 (configured in amd-master.yaml); GPU validation is pending.
+# DeepSeek-V4.1-Flash on MI355X: native DSpark, GPU-resident KV.
 # https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+check_env_vars EVAL_ONLY
 require_agentic_kv_offload_none
 export GPU_COUNT="$TP"
 
@@ -23,10 +22,13 @@ if [[ -n "${ROCR_VISIBLE_DEVICES:-}" ]]; then
 fi
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
+# AITER's Triton MoE GEMM warns on every call that Gluon (gfx1250-only) is
+# unavailable; on gfx950 that was 98% of the server log. Set back to WARNING
+# when diagnosing new AITER startup or runtime failures.
+export AITER_TRITON_LOG_LEVEL=ERROR
 # DeepseekV41ForCausalLM is not torch-compiled upstream, so the default
-# cudagraph_mode=FULL_AND_PIECEWISE aborts at engine init with "piecewise CUDA
-# graphs unavailable" (run 34566727564). The model is built for the breakable
-# cudagraph path -- amd/attention.py uses eager_break_during_capture.
+# cudagraph_mode=FULL_AND_PIECEWISE aborts at engine init ("piecewise CUDA
+# graphs unavailable"); amd/attention.py uses eager_break_during_capture.
 export VLLM_USE_BREAKABLE_CUDAGRAPH=1
 export OMP_NUM_THREADS=1
 # Pin the full-context corpus for this 1M-context recipe.
@@ -39,8 +41,9 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_RUST_FRONTEND=1
 export PYTHONUNBUFFERED=1
 
-# Match the sibling's scheduler headroom for AgentX subagent fan-out.
-MAX_NUM_SEQS=$((2 * CONC))
+# Upstream picks 1024 on GPUs with >= 160 GiB, and 2*CONC starves AgentX
+# subagent fan-out at low CONC. 128 also keeps CAPTURE_SIZE deterministic.
+MAX_NUM_SEQS=128
 NUM_SPEC_TOKENS=5
 CAPTURE_SIZE=1
 while (( CAPTURE_SIZE < MAX_NUM_SEQS * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
@@ -57,8 +60,8 @@ echo "Using vLLM endpoint ${AIPERF_SERVER_URL}"
 # Accuracy evals keep real block rejection; throughput fixes acceptance to AL 3.51.
 # Adaptive verification stays off in both modes on ROCm: it trims verification
 # requests on device, which DeepseekV4IndexerBackend does not support, so the
-# engine refused to start with it enabled (run 34651830283, eval-only c32).
-if [[ "${EVAL_ONLY:-false}" == true ]]; then
+# engine refuses to start with it enabled.
+if [[ "${EVAL_ONLY}" == true ]]; then
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
 else
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":3.51,"enable_adaptive_verification":false}'
@@ -70,7 +73,12 @@ VLLM_CMD=(
     --tokenizer-mode deepseek_v41
     --tool-call-parser deepseek_v41 --enable-auto-tool-choice
     --reasoning-parser deepseek_v41
-    --moe-backend aiter_triton_mxfp4_bf16
+    # aiter, not aiter_triton_mxfp4_bf16: the plain name opens vLLM's full
+    # priority list and the CK kernel at its head wins. CK quantizes
+    # activations to FP8 internally and dispatches the a8w4 experts
+    # (mfma_moe1_silu_mul_afp8_wfp4_bf16 / mfma_moe2_afp8_wfp4_bf16); the
+    # Triton name forces the W4A16 _moe_gemm_a16w4 kernel instead.
+    --moe-backend aiter
     --gpu-memory-utilization 0.9
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576
@@ -95,7 +103,7 @@ trap 'exit 143' TERM
 SERVER_PID=$!
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [[ "${EVAL_ONLY:-false}" == true ]]; then
+if [[ "${EVAL_ONLY}" == true ]]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"

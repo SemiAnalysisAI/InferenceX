@@ -197,39 +197,59 @@ docs/<topic>_zh.md
 <English title> / <中文标题>
 ```
 
+标题不支持折叠区块；两种语言仍并列显示。
+
 正文要求：
 
 1. 完整填写现有 PR 或 issue 模板；不要删除必填字段或检查清单。
-2. 用英文写明摘要、动机、改动、验证、风险和来源链接。
-3. 添加 `## 中文说明` 章节，镜像英文中的实质内容。
-4. 代码块、命令、日志、堆栈跟踪、路径、标识符和 URL 保持不变。在原始块前后用中文解释其含义。
-5. 证据必须对称。英文部分链接了工作流、产物、issue 或源码时，中文部分必须保留相同链接。
+2. 先用英文写明摘要、动机、改动、验证、风险和来源链接，放在折叠区块之外。
+3. 在末尾添加一个 `<details>` 区块，以 `<summary>中文</summary>` 为标题，放入简体中文翻译。翻译所有实质内容，包括注意事项和未通过的检查。不添加 `open` 属性，使其默认折叠，并在区块内的 Markdown 前后保留空行。
+4. 数值表格、代码块、命令、日志和截图只展示一次，放在翻译区块之外。中文说明引用这些共用证据；路径、标识符和 URL 保持不变。
+5. 证据必须对称。中文说明应保留相同的工作流、产物、issue 和源码链接，或明确引用包含这些链接的共用表格或内容块。
 6. 只有实际观察到对应操作完成后，才能勾选 checklist 项。
 
 最小结构：
 
 ```markdown
 ## Summary
+
 - Explain what changed and why.
 
 ## Verification
+
 - Link or state the exact check that ran.
 
-## 中文说明
+<details>
+<summary>中文</summary>
+
 ### 摘要
+
 - 说明改动内容及原因。
 
 ### 验证
+
 - 保留相同的检查结果或链接。
+
+</details>
 ```
 
 ### 评论与审阅总结
 
-- 简短评论：单行使用 `<English> / <中文>`。
-- 较长评论：先写英文段落，再添加 `中文：` 段落或标题明确的中文章节。
-- 行内 review comment、对话评论和 review summary 都必须提供中文翻译。
+- 简短和较长评论都使用相同布局：先写英文，再添加一个默认折叠的 `中文` 区块。
+- 这也适用于行内 review comment、对话评论和 review summary。
 - 代码摘录和证据保持不变；翻译诊断、影响和所需修复。
 - CODEOWNER checklist 签核是例外：必须复制精确英文原文，不要在签核内容中追加翻译后的 checklist。
+
+```markdown
+The empty-input case still raises an exception. Please return an empty result.
+
+<details>
+<summary>中文</summary>
+
+输入为空时仍会抛出异常，请改为返回空结果。
+
+</details>
+```
 
 ### Commit
 
@@ -268,9 +288,9 @@ Squash merge commit 会继承双语 PR 标题，因此自动满足 subject 要�
 4. 勾选前独立验证每一项。审阅 diff、源码行为、全量扫描与评估证据、上游 recipe 状态、镜像来源、架构限制、patch/waiver 状态、chat-template 要求，以及适用时的 AgentX acceptance 证据。
 5. 在 additional-detail section 中填写准确的验证和评估工作流链接、已合并的上游 vLLM recipe/SGLang cookbook PR 或已发布 recipe 链接，并对每个例外或不适用项给出明确理由。
 6. 在 `Signed:` 中填写真实 GitHub 用户名。不得代替其他审阅者签名。
-7. 将精确英文模板作为对话评论、review summary 或 inline review comment 发布。验证器支持这三类事件。
+7. 每个 PR 只需一名符合条件的 CODEOWNER 审阅者发布清单。先检查是否已有清单，再将精确英文模板作为对话评论、review summary 或 inline review comment 发布一次；验证器支持这三类形式。需要更正、补充证据或重试时，原审阅者必须编辑已有评论。其他审阅者无需重复发布。只有原评论被删除时才创建替代评论。
 8. 确认 [`.github/workflows/codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) 已触发，并阅读 verdict。验证器会重新推导合并门禁陈述；不会直接信任勾选结果。
-9. 如果签核后 PR head 前进，应重新审阅新 diff 并发布新的签核。旧证据只对应之前审阅的 commit。
+9. 验证通过后，经认证的管理员更新会保留接受状态；非管理员改动需要重新验证。自动化会将必需状态延续到最新 head；同一条裁定评论会注明实际评估的 SHA。若需明确重新评估，可手动分发验证器，并传入同一 PR 的 `pr-number` 和签署的 `comment_url`。这会更新同一条裁定评论；重新评估被拒绝时会撤销接受状态。参见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
 10. 只有获得授权的维护者才能记录 `/reuse-sweep-run` 并使用受支持的合并路径。CODEOWNER 批准本身不会授予该权限。
 
 缺少必需的来源、工作流链接、recipe、例外理由或验证结果时，应停止而不是签核。保留未勾选项并提出具体后续要求；绝不能把未知状态写成批准声明。

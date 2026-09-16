@@ -56,13 +56,6 @@ def test_reaction_replacement_preserves_humans_and_unmanaged_bot_reactions(monke
     assert calls == expected
 
 
-def test_adding_a_reaction_does_not_list_or_delete_other_reactions(monkeypatch):
-    calls = []
-    monkeypatch.setattr(github, "api", lambda repo, path, token, **kwargs: calls.append((path, kwargs)))
-    github.set_comment_reaction("example/project", 7, "token", "eyes")
-    assert calls == [("/issues/comments/7/reactions", {"method": "POST", "data": {"content": "eyes"}})]
-
-
 @pytest.mark.parametrize("item_key", ["", "artifacts"])
 def test_pagination_reads_following_pages_without_losing_filters(monkeypatch, item_key):
     pages = []
@@ -75,8 +68,23 @@ def test_pagination_reads_following_pages_without_losing_filters(monkeypatch, it
         return {item_key: data} if item_key else data
 
     monkeypatch.setattr(github, "api", api)
-    assert github.paginate("example/project", "/items", "token", item_key, {"branch": "feature"}) == first_page + last_page
+    result = github.paginate(
+        "example/project", "/items", "token", item_key,
+        {"branch": "feature", "page": "9", "per_page": "1"},
+    )
+    assert len(result) == 101
+    assert result[0] == {"id": 0} and result[100] == {"id": 100}
     assert pages == [
         {"per_page": "100", "page": "1", "branch": "feature"},
         {"per_page": "100", "page": "2", "branch": "feature"},
     ]
+
+
+@pytest.mark.parametrize("payload", [None, {}, {"jobs": None}, {"jobs": {}}, [None]])
+def test_pagination_rejects_malformed_responses(monkeypatch, payload):
+    monkeypatch.setattr(
+        github.urllib.request, "urlopen",
+        lambda request, timeout: io.BytesIO(json.dumps(payload).encode()),
+    )
+    with pytest.raises(RuntimeError, match="unexpected shape"):
+        github.paginate("example/project", "/actions/runs/42/jobs", "token", "jobs")

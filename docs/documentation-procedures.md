@@ -197,39 +197,59 @@ Use this title format:
 <English title> / <中文标题>
 ```
 
+Titles do not support collapsible sections; keep both languages inline.
+
 For bodies:
 
 1. Complete the existing PR or issue template. Do not delete required fields or checklists.
-2. Write the English summary, motivation, changes, verification, risks, and source links.
-3. Add a `## 中文说明` section that mirrors the substantive English content.
-4. Keep code blocks, commands, logs, stack traces, paths, identifiers, and URLs unchanged. Explain their meaning in Chinese before or after the unchanged block.
-5. Keep evidence symmetric. If the English section links a workflow, artifact, issue, or source, the Chinese section must preserve that link.
+2. Write the English summary, motivation, changes, verification, risks, and source links first, outside the collapsed section.
+3. Put the Simplified Chinese translation in one `<details>` block with `<summary>中文</summary>` at the end. Translate all substantive content, including caveats and failed checks. Leave out the `open` attribute so it starts collapsed, and leave blank lines around the Markdown inside it.
+4. Show numeric tables, code blocks, commands, logs, and screenshots once, outside the translation block. Refer to this shared evidence from the Chinese prose; keep paths, identifiers, and URLs unchanged.
+5. Keep evidence symmetric. Preserve the same workflow, artifact, issue, and source links in the Chinese prose, or refer explicitly to the shared table or block containing them.
 6. Do not mark a checklist item complete unless the underlying action was observed.
 
 Minimal shape:
 
 ```markdown
 ## Summary
+
 - Explain what changed and why.
 
 ## Verification
+
 - Link or state the exact check that ran.
 
-## 中文说明
+<details>
+<summary>中文</summary>
+
 ### 摘要
+
 - 说明改动内容及原因。
 
 ### 验证
+
 - 保留相同的检查结果或链接。
+
+</details>
 ```
 
 ### Comments and review summaries
 
-- Short comment: `<English> / <中文>` on one line.
-- Longer comment: English paragraphs followed by a `中文：` paragraph or a clearly labeled Chinese section.
-- Inline review comments, conversation comments, and review summaries all require Chinese translation.
+- Use the same layout for short and long comments: English first, followed by one collapsed `中文` section.
+- This includes inline review comments, conversation comments, and review summaries.
 - Preserve code excerpts and evidence unchanged. Translate the diagnosis, impact, and requested fix.
 - The CODEOWNER checklist sign-off is the exception: copy it in exact English and do not append a translated checklist inside the sign-off.
+
+```markdown
+The empty-input case still raises an exception. Please return an empty result.
+
+<details>
+<summary>中文</summary>
+
+输入为空时仍会抛出异常，请改为返回空结果。
+
+</details>
+```
 
 ### Commits
 
@@ -268,9 +288,9 @@ Follow [`CONTRIBUTING.md`](../CONTRIBUTING.md) before requesting or posting sign
 4. Independently verify every item before checking it. Review the diff, source behavior, full-sweep and eval evidence, upstream recipe status, image provenance, architecture constraints, patch/waiver status, chat-template requirements, and AgentX acceptance evidence when applicable.
 5. Fill the additional-detail section with the exact validation and eval workflow links, the merged upstream vLLM recipe/SGLang cookbook PR or published recipe link, and explicit reasoning for every exception or non-applicable item.
 6. Fill `Signed:` with the actual GitHub username. Do not sign for another reviewer.
-7. Post the exact English template as a conversation comment, review summary, or inline review comment. All three event types are supported by the verifier.
+7. Only one eligible CODEOWNER reviewer needs to post the checklist per PR. First check for an existing checklist. Post the exact English template once as a conversation comment, review summary, or inline review comment; all three are supported. The original reviewer must edit that existing comment for corrections, added evidence, or retries. Other reviewers do not need to duplicate it. Create a replacement only if the original was deleted.
 8. Confirm [`.github/workflows/codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) triggered and read its verdict. The verifier re-derives merge-gating claims. Checkmarks alone are not accepted.
-9. If the PR head advances after sign-off, reassess the new diff and post a fresh sign-off. The previous evidence was tied to the reviewed commit.
+9. Once verification passes, authenticated admin updates retain acceptance; non-admin changes require fresh verification. Automation carries the required status onto the latest head; the single verdict comment identifies the SHA actually assessed. To explicitly reassess, manually dispatch the verifier with `pr-number` and the sign-off's `comment_url` for that PR. This updates the same verdict comment; a rejected reassessment revokes acceptance. See [the contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off).
 10. Only an authorized maintainer may record `/reuse-sweep-run` and use the supported merge path. A CODEOWNER approval does not grant that authorization.
 
 Stop instead of signing when a required source, workflow link, recipe, exception rationale, or verification result is missing. Use unchecked boxes and concrete follow-up requests. Never convert an unknown into an approval claim.
