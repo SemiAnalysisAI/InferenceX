@@ -449,6 +449,31 @@ echo "Extracted JOB_ID: $JOB_ID"
 
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
+
+# Preserve worker and benchmark logs on every exit path. In particular, the
+# orchestrator writes the useful benchmark error to benchmark.out, while the
+# streamed sweep log only reports its non-zero exit status. Without this trap,
+# the error path below exits before GitHub's artifact steps have anything to
+# upload.
+snapshot_nscale_logs() {
+    local rc=$?
+    local benchmark_log
+
+    if [[ -d "${LOGS_DIR:-}" ]]; then
+        rm -rf "$GITHUB_WORKSPACE/LOGS"
+        cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
+        bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
+
+        if [[ "$rc" -ne 0 ]]; then
+            while IFS= read -r -d '' benchmark_log; do
+                echo "===== tail -n 400 $benchmark_log =====" >&2
+                tail -n 400 "$benchmark_log" >&2 || true
+            done < <(find "$LOGS_DIR" -type f -name 'benchmark.out' -print0 2>/dev/null)
+        fi
+    fi
+}
+trap snapshot_nscale_logs EXIT
+
 touch "$NSCALE_SALLOC_STATE_DIR/${JOB_ID}.ready"
 
 # Waits for the log file to appear, fails fast if the job dies first, then
@@ -482,8 +507,8 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
     cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
 fi
 
-cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
-bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
+# The EXIT trap copies and archives this directory after all result processing
+# has completed.
 
 if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
     RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)

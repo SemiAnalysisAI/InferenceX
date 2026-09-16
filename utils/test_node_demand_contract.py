@@ -90,3 +90,14 @@ def test_b200_dsv4_agentx_uses_the_0813_bundled_dspark_checkpoint() -> None:
         assert 'dynamo: "1.5.0.dev20260914"' in contents
         assert 'cpus-per-task: "192"' in contents
         assert 'mem: "0"' in contents
+
+
+def test_b200_nscale_preserves_logs_when_the_orchestrator_fails() -> None:
+    launcher = (REPO_ROOT / "runners" / "launch_b200-nscale-slurm.sh").read_text(
+        encoding="utf-8"
+    )
+
+    exit_check = launcher.index('if [[ "$NSCALE_EXIT_CODE" != "0" ]]')
+    assert launcher.index("trap snapshot_nscale_logs EXIT") < exit_check
+    assert "bundle_server_logs \"$LOGS_DIR\"" in launcher
+    assert "-name 'benchmark.out'" in launcher
