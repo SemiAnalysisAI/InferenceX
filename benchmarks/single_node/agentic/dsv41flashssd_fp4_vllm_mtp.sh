@@ -7,6 +7,14 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 export GPU_COUNT="$TP"
 
+# Diagnostic experiment only: prove direct cuFile reads before model loading.
+# No AgentX aggregate is emitted by this capability probe.
+mkdir -p "$RESULT_DIR"
+python3 "$INFERENCEX_REPO_ROOT/benchmarks/patches/check_engram_gds.py" \
+    --directory /raid/engram --result-dir "$RESULT_DIR" \
+    2>&1 | tee "$RESULT_DIR/server.log"
+exit 0
+
 if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
     hf download "$MODEL" --local-dir "$MODEL_PATH"
 else

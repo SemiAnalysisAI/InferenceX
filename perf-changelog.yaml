@@ -7994,3 +7994,12 @@
     - "Restore asynchronous SSD Engram retrieval and piecewise graphs from run 34758729095, retaining the sweep through concurrency 128 including 96"
     - "恢复运行 34758729095 的异步 SSD Engram 读取和分段图，保留包含并发 96 的完整扫描，最高并发为 128"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3080
+
+- config-keys:
+    - dsv41flashssd-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Diagnostic-only GDS capability probe: disable CPU fallback and verify direct GPU reads before loading Engram; no performance results are emitted"
+    - "仅诊断 GDS 能力：禁用 CPU 回退，在加载 Engram 前验证 GPU 直接读取；不生成性能结果"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3080
