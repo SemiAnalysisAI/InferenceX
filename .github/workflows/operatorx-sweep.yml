@@ -98,7 +98,7 @@ jobs:
     name: p${{ needs.setup.outputs.priority }} | OperatorX ${{ matrix.id }}
     env:
       OPERATORX_SHARD: ${{ matrix.id }}
-      OPERATORX_OUTPUT: ${{ runner.temp }}/operatorx-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}
+      OPERATORX_OUTPUT: ${{ github.workspace }}/operatorx-output-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}
       PYTHONPATH: experimental
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
