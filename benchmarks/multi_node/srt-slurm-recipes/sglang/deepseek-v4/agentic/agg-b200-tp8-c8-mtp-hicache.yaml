@@ -1,7 +1,7 @@
 name: "agg-b200-tp8-c8-mtp-hicache"
 
 # B200 AgentX aggregate topology: one TP8 worker uses one eight-GPU node
-# and serves both prefill and decode with DSpark K=6 and HiCache.
+# and serves both prefill and decode with native EAGLE MTP and HiCache.
 
 model:
   path: "deepseek-v4-pro"
@@ -90,11 +90,10 @@ backend:
       dp-size: 1
       tp-size: 8
       ep-size: 1
-      speculative-algorithm: DSPARK
-      speculative-dspark-block-size: 6
-      speculative-num-steps: 1
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 3
       speculative-eagle-topk: 1
-      speculative-num-draft-tokens: 7
+      speculative-num-draft-tokens: 4
       enable-hierarchical-cache: true
       hicache-ratio: 2.75
       hicache-write-policy: write_through

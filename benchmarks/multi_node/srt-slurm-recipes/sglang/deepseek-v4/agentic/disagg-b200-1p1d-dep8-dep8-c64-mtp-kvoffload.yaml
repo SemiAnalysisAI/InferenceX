@@ -1,7 +1,7 @@
 name: "disagg-b200-1p1d-dep8-dep8-c64-mtp-kvoffload"
 
 # B200 AgentX SGLang disaggregated recipe for DeepSeek-V4-Pro-0813
-# (1P x DEP8 / 1D x DEP8, DSpark K=6 + HiCache KV offload), tuned for concurrency 64.
+# (1P x DEP8 / 1D x DEP8, native EAGLE MTP + HiCache KV offload), tuned for concurrency 64.
 # Each DEP8 worker occupies one eight-GPU B200 node.
 
 model:
@@ -151,11 +151,10 @@ backend:
       disable-flashinfer-autotune: true
       model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
       kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5557"}'
-      speculative-algorithm: DSPARK
-      speculative-dspark-block-size: 6
-      speculative-num-steps: 1
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 3
       speculative-eagle-topk: 1
-      speculative-num-draft-tokens: 7
+      speculative-num-draft-tokens: 4
       enable-hierarchical-cache: true
       hicache-write-policy: write_back
       hicache-ratio: 8
@@ -191,11 +190,10 @@ backend:
       disable-flashinfer-autotune: true
       model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
       kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5567"}'
-      speculative-algorithm: DSPARK
-      speculative-dspark-block-size: 6
-      speculative-num-steps: 1
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 3
       speculative-eagle-topk: 1
-      speculative-num-draft-tokens: 7
+      speculative-num-draft-tokens: 4
 
 
 sbatch_directives:
