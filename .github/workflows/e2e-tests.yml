@@ -610,16 +610,19 @@ jobs:
         needs: [get-jobs, collect-results, collect-evals]
         if: ${{ always() && needs.get-jobs.outputs.tooling-ref != '' }}
         runs-on: ubuntu-latest
+        permissions:
+            actions: read
+            contents: read
 
         env:
             RESULTS_DIR: "results/"
             STATS_FILENAME: "run_stats"
-            GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
+            GITHUB_TOKEN: ${{ github.token }}
 
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                  token: ${{ secrets.REPO_PAT }}
+                  token: ${{ github.token }}
                   ref: ${{ needs.get-jobs.outputs.tooling-ref }}
                   fetch-depth: 0
                   persist-credentials: false
