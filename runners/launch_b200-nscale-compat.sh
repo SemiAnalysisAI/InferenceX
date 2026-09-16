@@ -13,9 +13,8 @@ check_env_vars SLURM_ACCOUNT
 set -x
 
 # Bench scripts and srt-slurm recipes name HF model IDs; resolve them to
-# pre-staged paths so every Nscale node does not re-download. SRT_SLURM_MODEL_PREFIX
-# must match the recipe's model.path alias.
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "$IS_MULTINODE" != "true" ]]; then
+# pre-staged paths so every Nscale node does not re-download.
+if [[ "$MODEL_PREFIX" == dsv41flash* && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "$IS_MULTINODE" != "true" ]]; then
     export MODEL_PATH="$MODEL"
     export HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
     mkdir -p "$HF_HUB_CACHE_HOST_PATH"
@@ -452,9 +451,13 @@ else
         CONTAINER_MOUNT_DIR=/workspace
     fi
 
-    if [[ "$MODEL_PREFIX" == "dsv41flash" ]]; then
+    if [[ "$MODEL_PREFIX" == dsv41flash* ]]; then
         # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
         export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
+        if [[ "$MODEL_PREFIX" == dsv41flashssd ]]; then
+            export ENGRAM_SSD_DIR=/raid/engram-replay-v2
+            export VLLM_ENGINE_READY_TIMEOUT_S=3600
+        fi
         CONTAINER_MOUNT_DIR=/ix
         export INFMAX_CONTAINER_WORKSPACE=/ix
         export RESULT_DIR=/ix/results
