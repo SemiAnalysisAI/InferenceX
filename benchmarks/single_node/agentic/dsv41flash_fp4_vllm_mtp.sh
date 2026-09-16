@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-# Native DeepSeek-V4.1-Flash DSpark and Engram UVA weight offload.
+# Native DeepSeek-V4.1-Flash DSpark with configurable Engram placement.
 # https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
@@ -67,7 +67,7 @@ VLLM_CMD=(
     --tokenizer-mode deepseek_v41
     --tool-call-parser deepseek_v41 --enable-auto-tool-choice
     --reasoning-parser deepseek_v41
-    --engram-config '{"cpu_offload":true}'
+    --engram-config "{\"cpu_offload\":${DSV41_ENGRAM_CPU_OFFLOAD:-true}}"
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576
     --max-cudagraph-capture-size "$CAPTURE_SIZE"
