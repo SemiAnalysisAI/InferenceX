@@ -8255,7 +8255,7 @@ dsv41flashssd-fp4-b200-vllm-agentic-dspark:
       # vllm-simple and mooncake branches for when a connector can use it.
 
 dsv41flash-fp4-gb300-vllm-agentic-dspark:
-  image: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3
+  image: vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb300-nv
