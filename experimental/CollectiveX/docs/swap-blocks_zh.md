@@ -88,9 +88,9 @@ CUDA 平台使用 `swap_image`，AMD 平台使用 `swap_rocm_image`，默认值�
 `vllm/vllm-openai-rocm:v0.27.1`；GB 平台选择 ARM64 镜像。Docker 以 runner 的
 UID/GID 写入文件。产物记录 SKU 和源码 SHA，名称为 `cxshard-swap-<sku>-<run_id>-<attempt>`。
 
-H100 的 `/tmp` 无法存储 enroot 转换镜像层所需的 overlay whiteout 属性，
-因此工作流将镜像导入临时目录设为 `/var/tmp`；其他平台使用 `/tmp`。每个任务
-的临时导入目录在退出时清理。Slurm 排除列表与当前节点清单取交集，忽略已退役
+工作流为 H100 选择 `/var/tmp` 作为镜像导入临时目录，其他平台使用 `/tmp`。
+导入时记录文件系统和 enroot 版本，以便诊断主机上的 whiteout 转换失败。
+每个任务的临时导入目录在退出时清理。Slurm 排除列表与当前节点清单取交集，忽略已退役
 名称，同时保留对现有节点的排除。B300/GB300 与推理启动器保持一致，使用分区默认 QoS。
 
 旧版 `mi300x-tw` 和 `mi325x-tw` Docker 池仍可显式选择，能否运行取决于 runner

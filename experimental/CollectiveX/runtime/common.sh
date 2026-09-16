@@ -791,8 +791,7 @@ case "$platform:$machine" in
   linux/amd64:x86_64|linux/amd64:amd64|linux/arm64:aarch64|linux/arm64:arm64) ;;
   *) exit 13 ;;
 esac
-# The caller may select disk-backed scratch on hosts whose /tmp cannot store
-# the overlay whiteout xattrs required by enroot's image-layer conversion.
+# The caller may select the scratch filesystem used for image-layer conversion.
 if [ -n "$8" ]; then
   [[ "$8" = /* ]] && [ -d "$8" ] || exit 14
   compute_home="$(mktemp -d "$8/inferencex-collectivex-home.XXXXXX")"
@@ -832,6 +831,14 @@ if [ "$reuse" = yes ]; then
   echo 'container squash ready (reusing staged import)'
 else
   echo "importing configured container image ($reuse)"
+  enroot version || true
+  df -hT "$ENROOT_TEMP_PATH" "$(dirname "$sq")" || true
+  findmnt -T "$ENROOT_TEMP_PATH" -o TARGET,SOURCE,FSTYPE,OPTIONS || true
+  for scratch in /tmp /var/tmp /dev/shm /scratch /local; do
+    [ ! -d "$scratch" ] || df -hT "$scratch" || true
+  done
+  converter="$(command -v enroot-aufs2ovlfs || true)"
+  [ -z "$converter" ] || getcap "$converter" || true
   rm -f -- "$sq" "$sq.digest"
   enroot import -o "$sq" "docker://$image" </dev/null
   unsquashfs -l "$sq" >/dev/null 2>&1
