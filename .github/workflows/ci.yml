@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: &python-paths
+      - '**/*.py'
+      - '.github/workflows/ci.yml'
+      - '.claude/requirements-mcp.txt'
+      - 'infx/ruff.toml'
+      - '**/pytest.ini'
+  push:
+    branches: [main]
+    paths: *python-paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: ${{ matrix.check }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [Lint, Tests]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - name: Lint and format
+        if: matrix.check == 'Lint'
+        run: |
+          uvx --exclude-newer PT12H ruff@latest check --output-format=github infx
+          uvx --exclude-newer PT12H ruff@latest format --check --diff infx
+
+      - name: Prepare test environment
+        if: matrix.check == 'Tests'
+        run: |
+          uv venv --python 3.12 "$RUNNER_TEMP/test-venv"
+          uv pip install --python "$RUNNER_TEMP/test-venv/bin/python" \
+            --exclude-newer PT12H --torch-backend cpu \
+            -r .claude/requirements-mcp.txt \
+            pytest pytest-xdist pydantic tabulate codeowners \
+            numpy aiohttp transformers matplotlib torch packaging
+          echo "$RUNNER_TEMP/test-venv/bin" >> "$GITHUB_PATH"
+
+      - name: Verify MCP server compatibility
+        if: matrix.check == 'Tests'
+        run: |
+          python - <<'PY'
+          import asyncio
+          import runpy
+
+          module = runpy.run_path(".claude/mcp/server.py")
+          server = module["InferenceXMCPServer"]()
+          tools = asyncio.run(server.list_tools())
+          assert any(tool.name == "list_versions" for tool in tools)
+          assert asyncio.run(server.list_resources()) == []
+          print("MCP server construction and discovery passed.")
+          PY
+
+      - name: Run tests
+        if: matrix.check == 'Tests'
+        run: |
+          python -c "import torch; assert torch.version.cuda is None and torch.version.hip is None"
+          python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4

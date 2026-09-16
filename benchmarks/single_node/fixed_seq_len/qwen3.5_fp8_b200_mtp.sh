@@ -28,7 +28,6 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     CONTEXT_LENGTH="$EVAL_MAX_MODEL_LEN"
 fi
 
-# Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
@@ -59,7 +58,6 @@ SGLANG_ENABLE_SPEC_V2=1 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --mod
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 pip install -q datasets pandas
@@ -77,12 +75,10 @@ run_benchmark_serving \
     --result-dir /workspace/ \
     --use-chat-template
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
 set +x

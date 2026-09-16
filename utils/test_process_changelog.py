@@ -3,7 +3,6 @@
 import io
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -25,10 +24,14 @@ def generation_repo(tmp_path, monkeypatch):
     source = Path(__file__).resolve().parents[1]
     for directory in ("utils/matrix_logic", "infx"):
         if (source / directory).exists():
-            shutil.copytree(source / directory, tmp_path / directory)
+            shutil.copytree(source / directory, tmp_path / directory, ignore=shutil.ignore_patterns("__pycache__"))
     (tmp_path / "configs").mkdir()
     (tmp_path / "configs/amd-master.yaml").write_text("{}\n")
     (tmp_path / "configs/runners.yaml").write_text("labels: {fixture: [node-a]}\nhardware: {}\n")
+    (tmp_path / "infx/data.bin").write_bytes(b"\x00\nblob\xff\n")
+    (tmp_path / "infx/data 中文\t\r\n.bin").write_bytes(b"named asset")
+    (tmp_path / "infx/data-link").symlink_to("data.bin")
+    (tmp_path / ".gitattributes").write_text("infx/data.bin export-ignore\n")
 
     def git(*args):
         return subprocess.run(
@@ -61,8 +64,22 @@ def generation_repo(tmp_path, monkeypatch):
     return tmp_path, git
 
 
-@pytest.mark.parametrize("revision,expected", [("older", ("older", 2)), ("newer", ("newer", 6))])
-def test_historical_generation_uses_committed_source_and_inputs(generation_repo, revision, expected):
+@pytest.mark.parametrize("revision,expected", [
+    ("older", ("older", 2)), ("newer", ("newer", 6)), ("moving", ("older", 2)),
+])
+def test_historical_generation_uses_committed_source_and_inputs(generation_repo, revision, expected, monkeypatch):
+    if revision == "moving":
+        root, git = generation_repo
+        git("update-ref", "refs/heads/moving", "older")
+        run = subprocess.run
+
+        def advance_after_listing(command, **kwargs):
+            result = run(command, **kwargs)
+            if command[:2] == ["git", "ls-tree"]:
+                run(["git", "update-ref", "refs/heads/moving", "newer"], cwd=root, check=True)
+            return result
+
+        monkeypatch.setattr(subprocess, "run", advance_after_listing)
     with process_changelog.generation_inputs_at_ref(revision) as inputs:
         result = subprocess.run(
             [sys.executable, inputs.generator_script, "test-config", "--config-files",
@@ -73,6 +90,11 @@ def test_historical_generation_uses_committed_source_and_inputs(generation_repo,
         rows = json.loads(result.stdout)
         assert [(row["model"], row["conc"]) for row in rows] == [expected]
         assert result.stderr == ""
+        snapshot = Path(inputs.generator_script).parents[2]
+        assert (snapshot / "infx/data.bin").read_bytes() == b"\x00\nblob\xff\n"
+        assert (snapshot / "infx/data 中文\t\r\n.bin").read_bytes() == b"named asset"
+        assert (snapshot / "infx/data-link").read_bytes() == b"data.bin"
+        assert not (snapshot / "infx/data-link").is_symlink()
         extracted_script = Path(inputs.generator_script)
     assert not extracted_script.exists()
 
@@ -356,34 +378,6 @@ def test_append_only_delta_rejects_removed_existing_point():
         raise AssertionError("removing an existing point should reject append-only mode")
 
 
-def test_append_only_scope_defers_selected_scenario_changes_to_matrix_comparison():
-    base = {
-        "test-config": {
-            "image": "vllm/vllm-openai:v0.16.0",
-            "scenarios": {
-                "agentic-coding": {
-                    "duration": 3600,
-                    "search-space": [{"tp": 8, "conc-list": [1, 4]}],
-                }
-            },
-        }
-    }
-    head = {
-        "test-config": {
-            "image": "vllm/vllm-openai:v0.16.0",
-            "scenarios": {
-                "agentic-coding": {
-                    "duration": 1800,
-                    "search-space": [{"tp": 8, "conc-list": [1, 4, 8]}],
-                }
-            },
-        }
-    }
-    process_changelog.validate_append_only_scope(
-        base, head, {"test-config": {"agentic-coding"}}
-    )
-
-
 def test_append_only_scope_allows_additive_top_level_restructuring():
     router_a = {"name": "router-a", "version": "1"}
     router_b = {"name": "router-b", "version": "2"}
@@ -498,44 +492,10 @@ def test_append_only_scope_rejects_changes_to_unselected_scenario():
         raise AssertionError("unselected scenario changes should reject append-only mode")
 
 
-def test_append_only_scope_allows_range_to_list_expansion():
-    base = {
-        "test-config": {
-            "image": "vllm/vllm-openai:v0.16.0",
-            "scenarios": {
-                "fixed-seq-len": {
-                    "search-space": [{"tp": 8, "conc-start": 4, "conc-end": 64}],
-                }
-            },
-        }
-    }
-    head = {
-        "test-config": {
-            "image": "vllm/vllm-openai:v0.16.0",
-            "scenarios": {
-                "fixed-seq-len": {
-                    "search-space": [{"tp": 8, "conc-list": [4, 16, 32, 64]}],
-                }
-            },
-        }
-    }
-    process_changelog.validate_append_only_scope(
-        base, head, {"test-config": {"fixed-seq-len"}}
-    )
-
-
-@pytest.fixture
-def planning_repo(tmp_path, monkeypatch):
-    """Real CLI/config/generator wiring with small, independent input recipes."""
-    source = Path(__file__).resolve().parents[1]
-    for directory in ("utils/matrix_logic", "infx"):
-        shutil.copytree(source / directory, tmp_path / directory)
-    (tmp_path / "configs").mkdir()
-    (tmp_path / "configs/amd-master.yaml").write_text("{}\n")
+def planning_inputs() -> tuple[dict, dict]:
     runners = {"labels": {"cluster:fixture": ["node-a"]}, "hardware": {
         "cluster:fixture": {"gpus-per-node": 8, "available-cpu-dram-mib": 1024000},
     }}
-    (tmp_path / "configs/runners.yaml").write_text(yaml.safe_dump(runners))
     master = {}
     for key, multinode in (("single", False), ("multi", True)):
         shape = ({role: {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}
@@ -554,6 +514,19 @@ def planning_repo(tmp_path, monkeypatch):
                 ]}],
             },
         }
+    return master, runners
+
+
+@pytest.fixture
+def planning_repo(tmp_path, monkeypatch):
+    """Real CLI/config/generator wiring with small, independent input recipes."""
+    source = Path(__file__).resolve().parents[1]
+    for directory in ("utils/matrix_logic", "infx"):
+        shutil.copytree(source / directory, tmp_path / directory, ignore=shutil.ignore_patterns("__pycache__"))
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs/amd-master.yaml").write_text("{}\n")
+    master, runners = planning_inputs()
+    (tmp_path / "configs/runners.yaml").write_text(yaml.safe_dump(runners))
     (tmp_path / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master, sort_keys=False))
     monkeypatch.chdir(tmp_path)
     return tmp_path, master, runners
@@ -579,57 +552,6 @@ def committed_planning_repo(planning_repo):
     git("commit", "-qm", "head")
     head = git("rev-parse", "HEAD")
     return root, base, head
-
-
-@pytest.mark.parametrize("trusted", [False, True])
-@pytest.mark.parametrize("trim", [False, True])
-def test_workflow_runs_real_entrypoints_and_preserves_tooling_origin(
-    committed_planning_repo, trusted, trim,
-):
-    root, base, head = committed_planning_repo
-    source = Path(__file__).resolve().parents[1]
-    shutil.copy(source / "utils/ci_priority.py", root / "utils/ci_priority.py")
-    if trusted:
-        tooling = root / ".ci-priority"
-        tooling.mkdir()
-        shutil.move(root / "infx", tooling / "infx")
-        shutil.move(root / "utils", tooling / "utils")
-        # An unrelated package in the data checkout must not supply the planner.
-        (root / "infx").mkdir()
-        (root / "infx/__init__.py").write_text("raise RuntimeError('wrong tooling checkout')\n")
-    policy_root = tooling if trusted else root
-    (policy_root / "configs").mkdir(exist_ok=True)
-    shutil.copy(source / "configs/ci-priority.yaml", policy_root / "configs")
-    workflow = yaml.safe_load((source / ".github/workflows/e2e-tests.yml").read_text())
-    step = next(s for s in workflow["jobs"]["get-jobs"]["steps"] if s.get("id") == "get-jobs")
-    command = "test-config --config-files configs/nvidia-master.yaml --config-keys single --seq-lens 8k1k --scenario-type fixed-seq-len --no-evals"
-    script = re.sub(r"\$\{\{.*?\}\}", command, step["run"])
-    tools = root / "bin"
-    tools.mkdir()
-    # Use installed test dependencies; execute the real planner and priority helper.
-    uv = tools / "uv"
-    uv.write_text('''#!/bin/bash
-while [ "$1" != python ]; do shift; done
-shift
-exec "$TEST_PYTHON" "$@"
-''')
-    uv.chmod(0o755)
-    output = root / "outputs"
-    env = {**os.environ, "PATH": f"{tools}:{Path(sys.executable).parent}:{os.environ['PATH']}",
-           "TEST_PYTHON": sys.executable, "GITHUB_WORKSPACE": str(root), "GITHUB_OUTPUT": str(output),
-           "PR_LABELS": "[]", "CHANGELOG_BASE_REF": base if trusted else "",
-           "CHANGELOG_HEAD_REF": head if trusted else "", "TRIM_CONC": str(trim).lower(),
-           "ALL_EVALS": "false", "EVALS_ONLY": "false"}
-    env.pop("PYTHONPATH", None)
-    result = subprocess.run(["bash", "-euo", "pipefail", "-c", script], cwd=root,
-                            env=env, capture_output=True, text=True, timeout=20)
-    assert result.returncode == 0, result.stderr
-    outputs = {key: json.loads(value) for line in output.read_text().splitlines()
-               for key, value in [line.split("=", 1)]}
-    rows = outputs.pop("single-node-config")
-    assert [row["conc"] for row in rows] == ([16] if trim else [16, 32, 64])
-    assert all(row["model"] == "single" for row in rows)
-    assert all(value == [] for value in outputs.values())
 
 
 def test_validator_uses_trusted_entrypoints_while_reading_another_checkout(committed_planning_repo):

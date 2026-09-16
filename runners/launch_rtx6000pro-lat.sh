@@ -1,16 +1,19 @@
 #!/usr/bin/bash
-set -euo pipefail
+
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars IS_MULTINODE
+set -eo pipefail
 
 # This runner executes directly on the single RTX PRO 6000 GPU node. Docker
 # therefore owns a separate image cache from the node's RKE2/containerd cache.
-HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/var/lib/inferencex/hf-hub-cache}"
-export HF_HUB_CACHE="${HF_HUB_CACHE:-/mnt/hf_hub_cache/}"
-PORT="${PORT:-8888}"
+check_env_vars HF_HUB_CACHE_MOUNT
+check_env_vars HF_HUB_CACHE
+check_env_vars PORT
 
 # NCCL 2.28.9 segfaults while probing this node's bnxt_re RDMA devices.
 # Disable that RDMA path by default while preserving local CUDA P2P/SHM and
 # allowing an explicit caller override.
-export NCCL_IB_DISABLE="${NCCL_IB_DISABLE:-1}"
+check_env_vars NCCL_IB_DISABLE
 
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set}"
 : "${IMAGE:?IMAGE must be set}"
@@ -19,7 +22,7 @@ export NCCL_IB_DISABLE="${NCCL_IB_DISABLE:-1}"
 
 mkdir -p "$HF_HUB_CACHE_MOUNT"
 
-export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+check_env_vars GPU_COUNT
 if [[ ! "$GPU_COUNT" =~ ^[1-9][0-9]*$ ]]; then
     echo "GPU_COUNT must be a positive integer, got: $GPU_COUNT" >&2
     exit 1
@@ -37,12 +40,11 @@ if [[ "${SPEC_DECODING:-}" == "mtp" ]]; then
     SPEC_SUFFIX="_mtp"
 fi
 
-export SCENARIO_SUBDIR="${SCENARIO_SUBDIR:-fixed_seq_len/}"
+check_env_vars SCENARIO_SUBDIR
 SCENARIO_SUBDIR="${SCENARIO_SUBDIR#/}"
 SCENARIO_SUBDIR="${SCENARIO_SUBDIR%/}/"
-# Prefer a framework-tagged script (e.g. qwen3.5_fp4_rtx6000pro_sglang.sh) so
-# models with multiple inference engines can coexist; fall back to the name
-# without an engine suffix for scripts that haven't been retagged.
+# Prefer a framework-tagged script so engines can coexist; fall back to the
+# untagged name for scripts not yet retagged.
 BENCH_BASE="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_rtx6000pro"
 BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK:-}${SPEC_SUFFIX}.sh"
 if [[ ! -f "$GITHUB_WORKSPACE/$BENCH_SCRIPT" ]]; then
@@ -54,7 +56,8 @@ if [[ ! -f "$GITHUB_WORKSPACE/$BENCH_SCRIPT" ]]; then
     exit 1
 fi
 
-server_name="bmk-server-${RUNNER_NAME:-rtx6000pro-lat}"
+check_env_vars RUNNER_NAME
+server_name="bmk-server-${RUNNER_NAME}"
 server_name="${server_name//[^a-zA-Z0-9_.-]/-}"
 
 cleanup() {
@@ -65,7 +68,19 @@ trap cleanup EXIT
 # Clear a container left behind by a cancelled or interrupted workflow.
 cleanup
 
+check_env_vars INFERENCEX_RUNTIME_ENV_VARS
+RUNTIME_ENV_ARGS=()
+for runtime_var in $INFERENCEX_RUNTIME_ENV_VARS; do
+    check_env_vars "$runtime_var"
+    RUNTIME_ENV_ARGS+=(--env "$runtime_var")
+done
+
 docker run \
+    "${RUNTIME_ENV_ARGS[@]}" \
+    --env IS_MULTINODE \
+    --env REQUIRE_POWER \
+    --env INFMAX_CONTAINER_WORKSPACE \
+    --env AIPERF_EXPERIMENTAL_FAST \
     --rm \
     --pull=missing \
     --name="$server_name" \
