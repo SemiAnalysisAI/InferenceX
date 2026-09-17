@@ -215,8 +215,8 @@ def main() -> int:
             elif shape["type"] == "moe_forward":
                 continue
             for backend in backends:
-                if shape["type"] not in backend_ops.get(backend, set()):
-                    continue  # silent skip — backend doesn't claim this op type
+                if not args.strict and shape["type"] not in backend_ops.get(backend, set()):
+                    continue  # Strict CI retains unsupported backend/operator pairs.
                 entries.append((
                     Op(type=shape["type"], args=shape["args"], backend=backend,
                        name=shape.get("name")),
@@ -235,6 +235,8 @@ def main() -> int:
     for op, tl in entries:
         _t0 = _time.perf_counter()
         try:
+            if op.type not in backend_ops.get(op.backend, set()):
+                raise UnsupportedOpError(f"{platform}/{op.backend} has no implementation for {op.type}")
             r = runner_mod.run(op)
             results.append(Result(op=op, metrics=r.metrics, status="ok",
                                   testlist=tl))
