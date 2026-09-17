@@ -1,12 +1,14 @@
 #!/usr/bin/bash
 
-# shellcheck source=runners/slurm_utils.sh
-source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars ENROOT_IMPORT_TIME_LIMIT EVAL_ONLY IS_AGENTIC IS_MULTINODE RUN_EVAL SALLOC_TIME_LIMIT
 
-# Launcher for the B300 DSXE Slurm cluster (dsxe-sa-b300-prd0), runners run as sa-gha-runner.
-#
-# Every cluster-specific fact lives in this block. The rest of the file is generic:
-# multi-node jobs go through srt-slurm/srtctl, single-node jobs through salloc + pyxis.
+# shellcheck source=runners/slurm_utils.sh
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
+
+# B300 DSXE Slurm cluster (dsxe-sa-b300-prd0); runners run as sa-gha-runner.
+# Cluster-specific facts live in this block. Multi-node jobs go through
+# srt-slurm/srtctl, single-node jobs through salloc + pyxis.
 
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
@@ -22,10 +24,6 @@ MODEL_ROOT="/scratch/models"
 SHARED_MODEL_ROOT="/data/models"
 WRITABLE_MODELS_DIR="/data/home/sa-gha-runner/models"
 
-# Official power (dcgm-power) runs use a separate, pinned producer; CI derives
-# POWER_PRODUCER_SHA from the stamp this script writes. Keep in sync with the other launchers.
-POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
-POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
 
 # Directory names under MODEL_ROOT (upstream HF repo basenames).
 STAGED_MODELS=(
@@ -34,6 +32,7 @@ STAGED_MODELS=(
     DeepSeek-V4-Pro
     DeepSeek-V4-Pro-0813
     DeepSeek-V4-Pro-NVFP4
+    GLM-5.2-FP8
     GLM-5.2-NVFP4
     Kimi-K2.6-NVFP4
     Kimi-K3
@@ -55,7 +54,9 @@ declare -A MODEL_ALIASES=(
     [deepseek-v4-pro]="DeepSeek-V4-Pro"
     [deepseek-ai/DeepSeek-V4-Pro]="DeepSeek-V4-Pro"
     [glm-5.2-fp4]="GLM-5.2-NVFP4"
+    [glm-5.2-fp8]="GLM-5.2-FP8"
     [nvidia/GLM-5.2-NVFP4]="GLM-5.2-NVFP4"
+    [zai-org/GLM-5.2-FP8]="GLM-5.2-FP8"
     [kimi-k2.6-nvfp4]="Kimi-K2.6-NVFP4"
     [kimi-k3]="Kimi-K3"
     [kimik3]="Kimi-K3"
@@ -73,20 +74,15 @@ declare -A MODEL_ALIASES=(
 mkdir -p "$SQUASH_DIR"
 set -x
 
-# !! KEEP THIS DEFINITION ABOVE THE IS_MULTINODE BRANCH BELOW. !!
-# Both the multi-node and single-node paths call it. Bash only defines a function
-# when execution reaches it, so moving this inside either branch silently removes
-# it from the other and the job dies on "command not found" at import time.
+# Keep this definition above the IS_MULTINODE branch: both paths call it, and
+# bash only defines a function when execution reaches it.
 #
-# Import a container image into the shared squash dir. Concurrent callers target the
-# same path, so serialize on a per-file lock and skip when a valid squash file exists.
-# --time bounds the step; an unbounded srun hangs the job if its step is lost.
-#
-# The import itself must run on a compute node: enroot builds the squashfs over an
-# overlay mount, which the shared filesystem cannot back, and the login host is too
-# small to unpack a multi-GB image. Reading the finished file is just I/O, so probe
-# it here first -- a warm cache then costs no Slurm allocation at all. The in-srun
-# check under the lock stays authoritative, so a stale probe only costs one step.
+# Concurrent callers target the same squash path, so serialize on a per-file
+# lock. The import must run on a compute node (enroot builds the squashfs over
+# an overlay mount the shared FS cannot back, and the login host is too small),
+# but reading a finished file is plain I/O, so probe here first; a warm cache
+# then costs no allocation. --time bounds the step because an unbounded srun
+# hangs the job if its step is lost.
 import_squash_image() {
     local image_ref="$1"
     local sqsh="$2"
@@ -98,8 +94,8 @@ import_squash_image() {
     fi
 
     srun -N 1 -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION" \
-        --time="${ENROOT_IMPORT_TIME_LIMIT:-120}" bash -c "
-        set -euo pipefail
+        --time="${ENROOT_IMPORT_TIME_LIMIT}" bash -c "
+        set -eo pipefail
         exec 9>\"$lock\"
         flock -w 3600 9
         if unsquashfs -l \"$sqsh\" > /dev/null 2>&1; then
@@ -115,7 +111,6 @@ import_squash_image() {
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
-# Validate framework
 if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" && $FRAMEWORK != "dynamo-vllm" ]]; then
     echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, dynamo-vllm"
     exit 1
@@ -127,14 +122,14 @@ _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE
 if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
     /^telemetry:/ { t = 1; next }
     t && /^[^ ]/  { t = 0 }
-    t && /^  provider: dcgm-power$/ { p = 1 }
+    t && /^  dcgm_exporter:/ { p = 1 }
     t && /^  enabled: true$/        { e = 1 }
     END { exit !(p && e) }
 ' "$_RECIPE_SRC"; then
     USES_DCGM_POWER=1
 fi
 if [[ "$USES_DCGM_POWER" == "1" && (
-    "${IS_AGENTIC:-0}" == "1" ||
+    "${IS_AGENTIC}" == "1" ||
     "$MODEL_PREFIX" != "dsv4" ||
     "$PRECISION" != "fp4" ||
     ( "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" )
@@ -143,48 +138,9 @@ if [[ "$USES_DCGM_POWER" == "1" && (
     exit 1
 fi
 
-# Default is the newest tag. Add a branch here to pin a ref per model / precision /
-# framework when a recipe needs one, so results stay reproducible.
-select_srt_slurm_version() {
-    if false; then
-        :
-    else
-        SRT_SLURM_REPO="https://github.com/NVIDIA/srt-slurm.git"
-        SRT_SLURM_REF="v1.0.87"
-    fi
-}
-
-# ---------------------------------------------------------------------------
-# srt-slurm checkout: one clone at the selected ref, plus every in-repo recipe.
-# ---------------------------------------------------------------------------
 SRT_REPO_DIR="srt-slurm"
 rm -rf "$SRT_REPO_DIR"
-
-if [[ "$USES_DCGM_POWER" == "1" ]]; then
-    SRT_SLURM_REPO="$POWER_SRT_SLURM_URL"
-    SRT_SLURM_REF="$POWER_SRT_SLURM_PIN"
-else
-    select_srt_slurm_version
-fi
-
-echo "Cloning srt-slurm ($SRT_SLURM_REPO @ $SRT_SLURM_REF)..."
-git clone "$SRT_SLURM_REPO" "$SRT_REPO_DIR" || exit 1
-cd "$SRT_REPO_DIR" || exit 1
-git checkout --quiet "$SRT_SLURM_REF" || exit 1
-git rev-parse HEAD > "$GITHUB_WORKSPACE/srt-slurm-sha.txt"
-if [[ "$USES_DCGM_POWER" == "1" ]]; then
-    test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" \
-        || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
-    cp "$GITHUB_WORKSPACE/srt-slurm-sha.txt" "$GITHUB_WORKSPACE/power-producer-sha.txt"
-fi
-
-# Recipes live in this repo; overlay all of them onto the checkout's recipes/ dir.
-mkdir -p recipes
-cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes" recipes || exit 1
-
-if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
-    python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" || exit 1
-fi
+setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" "$USES_DCGM_POWER" || exit 1
 
 echo "Installing srtctl..."
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
@@ -200,12 +156,10 @@ if ! command -v srtctl &> /dev/null; then
     exit 1
 fi
 
-# Map container images to local squash files
 NGINX_IMAGE="nginx:1.27.4"
 SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-# Import containers via enroot
 import_squash_image "$IMAGE" "$SQUASH_FILE"
 import_squash_image "$NGINX_IMAGE" "$NGINX_SQUASH_FILE"
 
@@ -220,11 +174,7 @@ fi
 
 export ISL="$ISL"
 export OSL="$OSL"
-export EVAL_ONLY="${EVAL_ONLY:-false}"
 
-# ---------------------------------------------------------------------------
-# srtslurm.yaml: cluster defaults, every model alias, container aliases.
-# ---------------------------------------------------------------------------
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
 echo "Creating srtslurm.yaml configuration..."
 {
@@ -260,7 +210,7 @@ cat srtslurm.yaml
 echo "Running make setup..."
 make setup ARCH=x86_64
 
-# Export eval-related env vars for srt-slurm post-benchmark eval
+# Read by srt-slurm's post-benchmark eval.
 export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 
 echo "Submitting job with srtctl..."
@@ -271,20 +221,14 @@ if [[ -z "$CONFIG_FILE" ]]; then
     exit 1
 fi
 
-# Resolve the recipe path before editing it. CONFIG_FILE may include an
-# srt-slurm matrix selector such as :zip_override_dep4_dep8[0].
+# CONFIG_FILE may carry an srt-slurm matrix selector such as :zip_override_dep4_dep8[0].
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 if [[ ! -f "$CONFIG_PATH" ]]; then
     echo "Error: CONFIG_FILE does not exist after srt-slurm setup: $CONFIG_PATH" >&2
     exit 1
 fi
 
-# Override the job name in the recipe with the runner name.
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
-if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
-    python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-        "$CONFIG_PATH" "$FRAMEWORK" || exit 1
-fi
 
 # Weights live on node-local MODEL_ROOT, which this login host cannot stat, so
 # srtctl's preflight model.path check is always skipped. Runtime loading still
@@ -294,10 +238,9 @@ SRTCTL_APPLY_ARGS=(
     --no-preflight
     --tags "b300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
-SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
+SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
-# Extract JOB_ID from srtctl output
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
 
 set +x
@@ -309,12 +252,9 @@ fi
 
 echo "Extracted JOB_ID: $JOB_ID"
 
-# Use the JOB_ID to find the logs directory
-# srtctl creates logs in outputs/JOB_ID/logs/
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
-# Wait for log file to appear (also check job is still alive)
 while ! ls "$LOG_FILE" &>/dev/null; do
     if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
         echo "ERROR: Job $JOB_ID failed before creating log file"
@@ -325,7 +265,6 @@ while ! ls "$LOG_FILE" &>/dev/null; do
     sleep 5
 done
 
-# Poll for job completion in background
 (
     while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
         sleep 10
@@ -335,7 +274,7 @@ POLL_PID=$!
 
 echo "Tailing LOG_FILE: $LOG_FILE"
 
-# Stream the log file until job completes (-F follows by name, polls instead of inotify for NFS)
+# -F follows by name and polls; inotify does not work on NFS.
 tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
 
 wait $POLL_PID
@@ -361,14 +300,13 @@ fi
 cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
 tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
-if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+if [[ "${EVAL_ONLY}" != "true" ]]; then
     copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" || exit 1
 else
     echo "EVAL_ONLY=true: Skipping benchmark result collection"
 fi
 
-# Collect eval results if eval was requested
-if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
+if [[ "${RUN_EVAL}" == "true" || "${EVAL_ONLY}" == "true" ]]; then
     EVAL_DIR="$LOGS_DIR/eval_results"
     if [ -d "$EVAL_DIR" ]; then
         echo "Extracting eval results from $EVAL_DIR"
@@ -398,8 +336,10 @@ else
     # AgentX trace datasets need a writable persistent cache. Keep the host and
     # container paths separate so the cache remains valid with
     # --no-container-mount-home.
-    HF_CACHE_HOST_DIR="${B300_HF_CACHE_HOST_DIR:-$HOME/.cache/huggingface}"
-    HF_CACHE_CONTAINER_DIR="${B300_HF_CACHE_CONTAINER_DIR:-/hf_hub_cache}"
+    check_env_vars B300_HF_CACHE_HOST_DIR
+    HF_CACHE_HOST_DIR="${B300_HF_CACHE_HOST_DIR}"
+    check_env_vars B300_HF_CACHE_CONTAINER_DIR
+    HF_CACHE_CONTAINER_DIR="${B300_HF_CACHE_CONTAINER_DIR}"
     mkdir -p "$HF_CACHE_HOST_DIR/hub" "$HF_CACHE_HOST_DIR/xet"
     export HF_HOME="$HF_CACHE_CONTAINER_DIR"
     export HF_HUB_CACHE="$HF_CACHE_CONTAINER_DIR/hub"
@@ -421,8 +361,8 @@ else
 
     SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" || "$SPEC_DECODING" == "draft_model" ]] && printf '_mtp' || printf '')
-    # Prefer a framework-tagged script (e.g. dsv4_fp4_b300_sglang.sh); fall back to
-    # the untagged historical name for scripts that haven't been retagged yet.
+    # Prefer a framework-tagged script (dsv4_fp4_b300_sglang.sh) so engines can
+    # coexist; fall back to the untagged name for scripts not yet retagged.
     BENCH_BASE="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_b300"
     BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
     if [[ ! -f "$BENCH_SCRIPT" ]]; then
@@ -456,7 +396,7 @@ else
 
     import_squash_image "$IMAGE" "$SQUASH_FILE"
 
-    export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+    check_env_vars GPU_COUNT
 
     SALLOC_ARGS=(
         --partition="$SLURM_PARTITION"
@@ -465,7 +405,7 @@ else
         --gres="gpu:$GPU_COUNT"
         --exclusive
         --mem=0
-        --time="${SALLOC_TIME_LIMIT:-480}"
+        --time="${SALLOC_TIME_LIMIT}"
         --no-shell
         --job-name="$RUNNER_NAME"
     )
@@ -494,7 +434,7 @@ else
         "$MODEL_MOUNT_DIR:$MODEL_MOUNT_DIR"
         "$HF_CACHE_HOST_DIR:$HF_CACHE_CONTAINER_DIR"
     )
-    if [[ "$MODEL_PREFIX" == "kimik3" && "$FRAMEWORK" == "vllm" && "${IS_AGENTIC:-0}" == "1" ]]; then
+    if [[ "$MODEL_PREFIX" == "kimik3" && "$FRAMEWORK" == "vllm" && "${IS_AGENTIC}" == "1" ]]; then
         # The pre-staged target is read-only; DSpark needs the writable,
         # persistent model root as a separate mount.
         mkdir -p "$WRITABLE_MODELS_DIR"

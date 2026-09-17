@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Acknowledge reuse requests with reactions; never post a separate comment."""
 
 from __future__ import annotations
@@ -10,12 +9,19 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .. import github
+from infx import github
+
 from . import reuse
 
 
 def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
-    if event.get("action") not in {"created", "edited"} or not event.get("issue", {}).get("pull_request"):
+    if event.get("action") not in {"created", "edited"} or not event.get("issue", {}).get(
+        "pull_request"
+    ):
+        return 0
+    command_pattern = re.compile(r"(?m)^\s*/(?:reuse-sweep-run|use)(?:\s|$)")
+    bodies = [event["comment"].get("body"), event.get("changes", {}).get("body", {}).get("from")]
+    if not any(command_pattern.search(str(body or "")) for body in bodies):
         return 0
     pr_number = int(event["issue"]["number"])
     comment_id = int(event["comment"]["id"])
@@ -26,7 +32,7 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
         return 0
     github.set_comment_reaction(repo, comment_id, token, None, replace=("+1", "-1"))
     body = str(comment.get("body") or "")
-    if not re.search(r"(?m)^\s*/reuse-sweep-run(?:\s|$)", body):
+    if not command_pattern.search(body):
         return 0  # Includes edits that remove the command and its old acknowledgment.
 
     try:
@@ -35,7 +41,7 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
             raise RuntimeError("Reuse requires an OWNER, MEMBER, or COLLABORATOR request.")
         matched, pinned_run_id = reuse.parse_reuse_command(body)
         if not matched:
-            raise RuntimeError("Usage: /reuse-sweep-run [run_id]")
+            raise RuntimeError("Usage: /use <run_id> or /reuse-sweep-run [run_id]")
         selected, _ = reuse.find_reuse_request(repo, pr_number, token, "/reuse-sweep-run", allowed)
         if selected is None or selected.get("id") != comment_id:
             raise RuntimeError("A newer reuse request supersedes this comment.")
@@ -48,7 +54,8 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
         selected, _ = reuse.find_reuse_request(repo, pr_number, token, "/reuse-sweep-run", allowed)
         if (
             any(latest.get(key) != comment.get(key) for key in ("body", "updated_at"))
-            or selected is None or selected.get("id") != comment_id
+            or selected is None
+            or selected.get("id") != comment_id
             or any(selected.get(key) != comment.get(key) for key in ("body", "updated_at"))
         ):
             github.set_comment_reaction(repo, comment_id, token, None, replace=("+1", "-1"))
@@ -56,7 +63,7 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
         github.set_comment_reaction(repo, comment_id, token, "+1", replace=("+1", "-1"))
         message = f"Reuse accepted / 复用请求已接受: PR #{pr_number}, run {run['id']} ({run['conclusion']})."
         code = 0
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         latest = github.api(repo, comment_path, token)
         if any(latest.get(key) != comment.get(key) for key in ("body", "updated_at")):
             return 0

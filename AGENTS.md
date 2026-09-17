@@ -13,9 +13,48 @@ Guidance for AI agents working with InferenceX.
 
 - Repository skills are canonical under `.agents/skills/`. Add or update skills there. `.claude/skills/` contains compatibility symlinks for Claude discovery.
 - PR and issue titles, descriptions, and human-authored PR comments must include English and natural Simplified Chinese. Titles use `<English title> / <中文标题>`. In bodies and comments, keep English visible and put Chinese in one collapsed `<details><summary>中文</summary>` section. Keep code, commands, logs, stack traces, model names, hardware SKUs, framework names, flags, and identifiers unchanged. The exact CODEOWNER sign-off template is English-only. See [`docs/documentation-procedures.md`](docs/documentation-procedures.md) and [`.github/AGENT_OPERATIONS.md`](.github/AGENT_OPERATIONS.md#translation-terminology).
+- **One reviewer checklist per PR:** Only one eligible CODEOWNER reviewer needs to post the completed PR Review Checklist. Check for an existing checklist before posting; other reviewers do not need to duplicate it. The original reviewer must edit their existing checklist comment when correcting items or adding evidence, rather than post a new checklist. Create a replacement only if the original was deleted. See [`CONTRIBUTING.md`](CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off).
 - **Klaud Cold reports:** Follow the compact body/comment templates in [`docs/klaud-reporting.md`](docs/klaud-reporting.md), including cleanup and completion reports.
 - Commit subjects use conventional English style, while commit bodies include the Chinese translation. Contributor-facing docs use English as the source version and ship with a synchronized `_zh.md` page and language switcher.
+- Python under `infx/` uses all stable Ruff rules with reviewed exclusions in `infx/ruff.toml`, line length 100, and the Ruff formatter. The Lint job in `.github/workflows/ci.yml` runs whenever Python files change and fails on any finding. Before pushing Python changes, run the [commands in the testing guide](docs/testing.md#python-lint-and-formatting). Fix findings where practical; justified exceptions use inline `# noqa: CODE` rather than file-wide ignores.
 - Follow the nearest existing pattern. Python uses typed signatures and strict Pydantic schemas. YAML uses kebab-case fields. Shared benchmark Bash behavior belongs in `benchmark_lib.sh`, with parameters passed through environment variables.
+
+## Bash conventions (mandatory)
+
+These rules apply to active Bash scripts and shell commands embedded in workflows and recipes. Follow them when adding, changing, or reviewing Bash code. Leave deprecated code alone unless explicitly asked to update it.
+
+- **Configuration flows from the caller.** Workflows, master configs, runtime profiles, and launchers explicitly supply configuration to the scripts they invoke. Receiving scripts consume and validate those inputs; they must not silently choose defaults.
+- **No fallback defaults for caller-supplied configuration.** Avoid `${VAR:-default}`, `${VAR:=default}`, their colon-free equivalents, and equivalent "if unset, assign a default" logic. A missing input is a caller error and must fail clearly. Pass values such as `false` and `0` explicitly too.
+- **Validate every required environment input with `check_env_vars` before use.** Use the shared helper in `benchmarks/benchmark_lib.sh`. Group required inputs near the beginning, after sourcing the helper; validate inputs used only by a particular execution path when entering that path. The helper rejects both missing and empty values. Do not duplicate it or remove its safe handling of unset variables. Callers needing validation without benchmark initialization can source the library with `--validation-only`.
+- **Do not enable nounset.** No `set -u`, `set -o nounset`, combined flags such as `set -euo pipefail`, or `bash -u` invocation flags. Use explicit validation; preserve other intended shell options, for example `set -eo pipefail`.
+- **Preserve configuration precedence and forwarding.** Apply caller-owned settings before recipe-specific overrides, and explicitly forward required inputs across container or job boundaries. Do not replace a supported override with an unconditional assignment in the receiving script.
+- Preserve deliberate optional-input handling, runtime-derived values, and unset-safe internal-state probes. These are not permission to invent fallback configuration or replace a documented automatic selection with an arbitrary constant.
+
+For example, remove this from the receiving script:
+
+```bash
+export IS_MULTINODE="${IS_MULTINODE:-true}"
+```
+
+Set it in the responsible caller:
+
+```bash
+export IS_MULTINODE=true
+```
+
+Then validate it in the receiving script after sourcing the shared helper:
+
+```bash
+check_env_vars IS_MULTINODE MODEL_NAME PRECISION
+```
+
+## SRT Slurm synthetic acceptance
+
+- **Do not hard-code synthetic acceptance lengths in SRT recipes, master configs, or launchers.** InferenceX automatically selects the measured value from [`golden_al_distribution/`](golden_al_distribution/) for speculative AgentX throughput runs. Do not add manual `SYNTHETIC_ACCEPTANCE_LENGTH`, vLLM `synthetic_acceptance_length`, SGLang `SGLANG_SIMULATE_ACC_LEN`, or TRT-LLM `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` settings.
+- Submit recipes through [`apply_srt_recipe`](runners/slurm_utils.sh). Its [`infx/srt_slurm` connector](infx/srt_slurm/synthetic_acceptance.py) applies native SRT `--set` / `--unset` overrides; calling upstream `srtctl` directly does not perform InferenceX's automatic selection.
+- Keep the actual speculative method, draft model, draft-token count, and relevant sampling settings explicit in the recipe. The connector combines the generation role's settings (decode, otherwise aggregated), after caller overrides, with `MODEL_PREFIX` and `THINKING_MODE` to select the golden curve. For Kimi DSpark, explicitly set `draft_sample_method` to `greedy` or `probabilistic`.
+- Eval-only and non-AgentX runs use real verification; the connector removes stale synthetic settings. Non-speculative roles do not receive simulation settings. `RUN_EVAL` does not disable simulation for the throughput portion.
+- Missing golden curves or unmeasured draft lengths fail before submission. Add the corresponding measured golden data when supporting a new combination; do not work around the error with a guessed or hard-coded acceptance length.
 
 ## Test quality
 

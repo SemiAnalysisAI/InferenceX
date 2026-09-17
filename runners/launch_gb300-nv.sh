@@ -1,43 +1,38 @@
 #!/usr/bin/bash
 
-# This script sets up the environment and launches multi-node benchmarks
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars EVAL_ONLY IS_AGENTIC IS_MULTINODE RUN_EVAL SALLOC_TIME_LIMIT
+
 
 set -exo pipefail
 
 # shellcheck source=runners/slurm_utils.sh
-source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 
-export SLURM_PARTITION="${SLURM_PARTITION:-batch_1}"
+check_env_vars SLURM_PARTITION
 export SBATCH_PARTITION="$SLURM_PARTITION"
 export SLURM_ACCOUNT="benchmark"
 export ENROOT_ROOTFS_WRITABLE=1
 
-# Host-side directory holding aiperf's content-addressed dataset mmap cache.
-# Bind-mounted into worker containers at /aiperf_mmap_cache via the
-# default_mounts: block in srtslurm.yaml below; aiperf reads it via
-# AIPERF_DATASET_MMAP_CACHE_DIR (set in each agentic recipe's benchmark.env).
-# Without it, every run re-tokenizes and re-writes ~65 GB of mmap files
-# per dataset on first use. 777 mode so all gharunner_X SLURM users can
-# write to it.
+# aiperf's dataset mmap cache, mounted at /aiperf_mmap_cache via default_mounts
+# below and read through AIPERF_DATASET_MMAP_CACHE_DIR in each agentic recipe's
+# benchmark.env. Without it every run rewrites ~65 GB of mmap files per dataset.
 export AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/ai-perf-cache"
 
 export HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
 mkdir -p "$HF_HUB_CACHE_HOST_PATH"
 
-# Persistent dynamo source-build cache. srtctl's hash-pinned dynamo install
-# (_hash_cached_source_install) caches the built wheel + src tarball at
-# /configs/dynamo-wheels/<hash> with a .complete sentinel; on a warm cache the
-# install is just `pip install` from the cache (no apt, no root). In CI /configs
-# is the per-job srt-slurm checkout (cold every job → cold build needs apt +
-# root, which the non-root server containers can't do), so persist and share
-# the cache across jobs by bind-mounting this host dir at /configs/dynamo-wheels.
-# Seed it once with a --container-remap-root build. 777 for multi-user runners.
+# srtctl's hash-pinned dynamo install (_hash_cached_source_install) caches the
+# built wheel at /configs/dynamo-wheels/<hash>. In CI /configs is the per-job
+# checkout, so a cold build would need apt and root, which the non-root server
+# containers lack; share this host dir there instead. Seed it once with a
+# --container-remap-root build.
 export DYNAMO_WHEELS_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/dynamo-wheels"
 mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
 
 export MODEL_PATH=$MODEL
 
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE}" != "true" ]]; then
     # Download the new checkpoint into the persistent shared HF cache.
     export MODEL_PATH="$MODEL"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
@@ -52,15 +47,9 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $MODEL == "deepseek-ai
     export MODEL_PATH="/scratch/models/DeepSeek-V4-Pro-0813"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-0813"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    # Use the node-local /scratch SSD for the 806 GB DSv4-Pro
-    # checkpoint. Faster than the Vast NFS path, but this dir only
-    # exists on compute nodes — the GHA runner pod's view does NOT
-    # have /scratch/models, so srtctl preflight (which stats the path
-    # from the runner pod) may fail with "Model alias resolved to
-    # /scratch/models/DeepSeek-V4-Pro, but that path is unavailable."
-    # If that happens, the next step is either to (a) patch srt-slurm
-    # to add a skip_model_preflight recipe field, or (b) stub a
-    # symlink on the runner pod that points at the NFS copy.
+    # Node-local /scratch SSD for the 806 GB checkpoint, faster than Vast NFS.
+    # It exists only on compute nodes, so srtctl's preflight (which stats from
+    # the runner pod) can fail with "path is unavailable".
     export MODEL_PATH=/scratch/models/DeepSeek-V4-Pro
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-trt" ]]; then
@@ -68,8 +57,7 @@ elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-
     export MODEL_PATH=/scratch/models/GLM-5-NVFP4
     export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5-NVFP4"
 elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
-    # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp4")
-    # in our GLM-5.1 sglang recipes.
+    # The GLM-5.1 sglang recipes reuse the glm-5-fp4 alias.
     export MODEL_PATH=/scratch/models/GLM-5.1-NVFP4
     export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
 elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-trt" ]]; then
@@ -104,13 +92,9 @@ elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/Kimi-K3
     export SRT_SLURM_MODEL_PREFIX="moonshotai/Kimi-K3"
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
-    # SRT_SLURM_MODEL_PREFIX must match the model.path alias used in our
-    # Qwen3.5 sglang recipes (qwen3.5-fp4).
     export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-NVFP4-V2
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
-    # SRT_SLURM_MODEL_PREFIX must match the model.path alias used in our
-    # Qwen3.5 sglang recipes (qwen3.5-fp8).
     export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-FP8
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
 else
@@ -120,18 +104,14 @@ fi
 
 NGINX_IMAGE="nginx:1.27.4"
 
-# Squash files live on the Vast NFS storage; use the /data/ mount
-# (not /home/sa-shared/) — both are the same backing storage but the
-# /home/sa-shared/ mount has a chronic ELOOP / "Too many levels of
-# symbolic links" bug from workflow worker NFS sessions on lockfiles
-# AND data files. /data/ has a separate NFS client cache that isn't
-# poisoned. See feedback_gb300_nfs_eloop_workaround for diagnosis.
+# Use the /data/ mount, not /home/sa-shared/: same Vast NFS backing store, but
+# the /home mount has a chronic ELOOP ("Too many levels of symbolic links") bug
+# from workflow worker NFS sessions, and /data/ has a separate client cache.
+# See feedback_gb300_nfs_eloop_workaround.
 SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-# Run the import on a compute node via srun, not on the login node:
-# the login node is x86_64 while the compute nodes are aarch64, so the
-# arm64 squash file has to be built on a compute node.
+# The login node is x86_64 and the compute nodes aarch64, so import on a compute node.
 import_squash() {
     local squash="$1" image="$2"
     local lock="${squash}.lock"
@@ -148,13 +128,12 @@ import_squash() {
 }
 
 import_squash "$SQUASH_FILE" "$IMAGE"
-# Direct vLLM single-node bring-up uses the same four-GPU tray and shared
-# storage as srt-slurm. Keep this before the router import and srtctl setup.
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE:-false}" != "true" ]]; then
+# Keep this branch before the nginx import and srtctl setup.
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE}" != "true" ]]; then
     BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb300_${FRAMEWORK}_mtp.sh"
     # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
     export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
-    [[ "${IS_AGENTIC:-0}" == "1" && "${SPEC_DECODING:-}" == "mtp" && -f "$BENCH_SCRIPT" ]] || {
+    [[ "${IS_AGENTIC}" == "1" && "${SPEC_DECODING:-}" == "mtp" && -f "$BENCH_SCRIPT" ]] || {
         echo "Unsupported single-node recipe: $BENCH_SCRIPT" >&2
         exit 1
     }
@@ -165,7 +144,7 @@ if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINO
     export VLLM_ENGINE_READY_TIMEOUT_S=7200
     srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
         --nodes=1 --ntasks=1 --gpus="${TP:?}" --cpus-per-task=144 --exclusive --mem=0 \
-        --time="${SALLOC_TIME_LIMIT:-480}" --job-name="$RUNNER_NAME" \
+        --time="${SALLOC_TIME_LIMIT}" --job-name="$RUNNER_NAME" \
         --mpi=none --container-image="$SQUASH_FILE" \
         --container-mounts="$GITHUB_WORKSPACE:/ix,$HF_HUB_CACHE_HOST_PATH:/hf-cache" \
         --no-container-mount-home --container-remap-root \
@@ -176,19 +155,17 @@ fi
 
 import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 
-# Power lane detection: a recipe opts in via an enabled dcgm-power telemetry
-# block. CONFIG_FILE is srt-slurm-relative; resolve it against the workspace
-# recipe mirror (the same tree the clone step overlays), since the checkout
-# doesn't exist yet. Recipes that only exist upstream stay non-power.
+# A recipe opts into the power lane via an enabled dcgm-power telemetry block.
+# The srt-slurm checkout does not exist yet, so read the workspace mirror;
+# recipes that exist only upstream stay non-power.
 USES_DCGM_POWER=0
 _RECIPE_REL="${CONFIG_FILE%%:*}"
 _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
-# Note (wenyao): a stray "enabled: true" outside the telemetry block must
-# not flip the lane, so the match is scoped instead of file-wide greps.
+# Scoped match: a stray "enabled: true" outside the telemetry block must not flip the lane.
 if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
     /^telemetry:/ { t = 1; next }
     t && /^[^ ]/  { t = 0 }
-    t && /^  provider: dcgm-power$/ { p = 1 }
+    t && /^  dcgm_exporter:/ { p = 1 }
     t && /^  enabled: true$/        { e = 1 }
     END { exit !(p && e) }
 ' "$_RECIPE_SRC"; then
@@ -199,7 +176,7 @@ USES_AGENTX_POWER=0
 if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
     "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" &&
     "$FRAMEWORK" == "dynamo-vllm" &&
-    "$_RECIPE_REL" == recipes/vllm/kimi-k3/agentic/* ]]; then
+    "$_RECIPE_REL" == recipes/kimik3/vllm/*/agentx/* ]]; then
     USES_AGENTX_POWER=1
 fi
 if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" && "$USES_AGENTX_POWER" != "1" ]]; then
@@ -207,29 +184,20 @@ if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" && "$USES_AGE
     exit 1
 fi
 
-# dcgm-power producer pin — single source of truth for power lanes. Swap
-# URL+PIN here (and identically in launch_gb200-nv.sh) when the upstream
-# srt-slurm merge lands.
-POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
-POWER_SRT_SLURM_PIN="6fc1bed01a0b82dae0088a105c03ce0cfb353443"
-AGENTX_POWER_SRT_SLURM_PIN="80d7203e424f903c9017de4608ee2044afce9574"
 
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
     # enroot resolves bare paths against Docker Hub; nvcr.io pulls need the registry# form
     DCGM_EXPORTER_ENROOT_REF="${DCGM_EXPORTER_IMAGE/nvcr.io\//nvcr.io#}"
     DCGM_EXPORTER_SQSH="/data/home/sa-shared/gharunners/squash/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    # Note (wenyao): import_squash treats an existing unsquashfs-valid file
-    # as a cache hit but does not re-validate a fresh import, so check
-    # explicitly — on a compute node, like the import itself (login node is
-    # x86, nodes aarch64).
+    # import_squash does not re-validate a fresh import, so check explicitly on
+    # a compute node (login node is x86, nodes aarch64).
     import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_ENROOT_REF"
     test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
     srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" --exclusive --time=30 bash -c "unsquashfs -l \"$DCGM_EXPORTER_SQSH\" > /dev/null" || { echo "Error: DCGM exporter squash invalid: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
     sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
 fi
 
-export EVAL_ONLY="${EVAL_ONLY:-false}"
 if [[ "$EVAL_ONLY" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
     CONFIG_FILE="$EVAL_CONFIG_FILE"
     echo "EVAL_ONLY=true: selecting real-verification recipe $CONFIG_FILE"
@@ -238,260 +206,37 @@ fi
 export ISL="$ISL"
 export OSL="$OSL"
 
-echo "Cloning srt-slurm repository..."
-RUN_KEY=$(printf "%s" "${RESULT_FILENAME:-${RUNNER_NAME:-gb300-nv}}" | sha1sum | cut -c1-12)
-SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUN_KEY}"
-SRTCTL_SETUP_SCRIPT=""
+echo "Preparing job-local srt-slurm checkout..."
+check_env_vars RESULT_FILENAME
+RUN_KEY=$(printf "%s" "${RESULT_FILENAME}" | sha1sum | cut -c1-12)
+check_env_vars GITHUB_RUN_ID GITHUB_RUN_ATTEMPT
+SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RUN_KEY}"
 rm -rf "$SRT_REPO_DIR"
 
-if [[ "$USES_AGENTX_POWER" == "1" ]]; then
-    git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout "$AGENTX_POWER_SRT_SLURM_PIN" || exit 1
-    test "$(git rev-parse HEAD)" = "$AGENTX_POWER_SRT_SLURM_PIN" || exit 1
-    git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
-    mkdir -p recipes/vllm/kimi-k3/agentic
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
-        recipes/vllm/kimi-k3/agentic
-elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qwen3.5" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout v1.0.50
-    TRTLLM_RECIPES_DIR="recipes/trtllm/qwen3.5/gb300-fp4/disagg/agentx"
-    mkdir -p "$TRTLLM_RECIPES_DIR"
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/gb300-fp4/disagg/agentx" \
-        "$TRTLLM_RECIPES_DIR"
-    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
-        find "$TRTLLM_RECIPES_DIR" -name "*.yaml" \
-            -exec sed -i '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' {} +
-    fi
-elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "glm5.2" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    # The GB300 AgentX recipes put the benchmark client on its own allocation node
-    # (client_dedicated_node), a schema added in srt-slurm v1.0.62; v1.0.72 is the
-    # release this runner's Dynamo TRT path already exercises.
-    git checkout v1.0.72
-    TRTLLM_RECIPES_DIR="benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2"
-    mkdir -p "$TRTLLM_RECIPES_DIR"
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5.2" \
-        "$TRTLLM_RECIPES_DIR"
-    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
-        find "$TRTLLM_RECIPES_DIR" -name "*.yaml" \
-            -exec sed -i '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' {} +
-    fi
-elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
-    # Qwen3.5 agentic uses NVIDIA/srt-slurm v1.0.38: the two features the
-    # cquil11 fork was pinned for are merged upstream (present in v1.0.36) —
-    #   - `srtctl apply --no-preflight` (skip the in-process model FS check):
-    #     model.path resolves to /scratch/models/Qwen3.5-397B-A17B-NVFP4
-    #     (compute-node-only NVMe), which the GHA runner pod can't stat, so
-    #     the Path.is_dir() preflight would fail before sbatch is ever
-    #     called. The engine still fails loudly at runtime if the path is
-    #     genuinely missing on the compute node.
-    #   - benchmark_stage propagates srun_options (container-remap-root must
-    #     reach the agentic_srt.sh srun).
-    # v1.0.38 additionally injects AIPERF_SERVER_METRICS_URLS for custom
-    # benchmarks using each logical SGLang worker leader. This is required for
-    # complete AgentX trace artifacts; the public frontend alone may expose no
-    # Prometheus endpoint or only Dynamo frontend metrics.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout v1.0.38
-    mkdir -p recipes/sglang/qwen3.5
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" \
-        recipes/sglang/qwen3.5
-elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-    # DSv4 GB300 SGLang agentic uses NVIDIA/srt-slurm v1.0.40. In addition to
-    # the nginx body-size fix, session-affinity frontend, and custom benchmark
-    # schema required by these recipes, this release injects every logical
-    # SGLang worker leader's /metrics URL into AIPERF_SERVER_METRICS_URLS and
-    # supports long-lived nginx keepalive for multi-turn AgentX replay.
-    # AgentX forwards that list to aiperf's --server-metrics argument so its
-    # trace artifacts include backend metrics for every engine.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout v1.0.40
-    mkdir -p recipes/sglang/deepseek-v4/agentic
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
-        recipes/sglang/deepseek-v4/agentic
-elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
-    SRT_SLURM_MODEL_PREFIX="deepseek-ai/DeepSeek-V4-Pro"
-    git clone --branch v1.0.50 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
+setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" "$USES_DCGM_POWER" || exit 1
 
-    mkdir -p benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4" \
-        benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 || exit 1
-    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
-        # srt-slurm v1.0.50 launches lm-eval on the allocation head and uses
-        # localhost:8000. Keep AgentX frontends on first_decode for throughput,
-        # but co-locate the eval-only frontend with lm-eval so loopback resolves.
-        find benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4 -name "*.yaml" \
-            -exec sed -i \
-                -e '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' \
-                -e 's/^  orchestrator_placement: first_decode$/  orchestrator_placement: head/' \
-                {} +
-    fi
-elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.2" ]]; then
-    # GLM-5.2 GB300 sglang AgentX: srt-slurm main has the agentx-mvp scenario,
-    # the zip_override sweep selectors, and the multi-frontend session-affinity
-    # schema these recipes need.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout main
-    mkdir -p recipes/sglang/glm5.2/gb300-fp4
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/gb300-fp4" \
-        recipes/sglang/glm5.2/gb300-fp4
-elif [[ "$IS_AGENTIC" == "1" ]]; then
-    # Agentic recipes use NVIDIA/srt-slurm v1.0.36. This is the upstream
-    # version validated in InferenceX PR #2302 and includes per-node DP,
-    # matching Dynamo health counts, multi-node TP port handling, and
-    # Mooncake compatibility. Keep it pinned so sweeps are reproducible.
-    git clone --branch v1.0.36 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-
-    mkdir -p recipes/vllm/deepseek-v4/agentic || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
-        recipes/vllm/deepseek-v4/agentic || exit 1
-    mkdir -p recipes/vllm/minimax-m3/agentic || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/agentic" \
-        recipes/vllm/minimax-m3/agentic || exit 1
-    mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
-        recipes/vllm/kimi-k3/agentic || exit 1
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout aflowers/gb200-dsv4-recipes
-    mkdir -p recipes/vllm/deepseek-v4
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-    # Fixed-length DeepSeek-V4 recipes are version-controlled in this repository;
-    # overlay them onto the selected srt-slurm checkout. Power lanes use the
-    # exact producer pin and stamp it for strict result provenance; non-power
-    # lanes retain the v1.0.25 release that bootstraps cargo/maturin for the
-    # hash-pinned Dynamo source build before launch.
-    if [[ "$USES_DCGM_POWER" == "1" ]]; then
-        git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout "$POWER_SRT_SLURM_PIN" || exit 1
-        # The power lane must run the exact pinned producer SHA, never a moving branch.
-        test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
-        git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
-    else
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout v1.0.25 || exit 1
-    fi
-    mkdir -p recipes/sglang/deepseek-v4/8k1k || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k" \
-        recipes/sglang/deepseek-v4/8k1k || exit 1
-elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout main
-    if [[ $PRECISION == "fp4" ]]; then
-        mkdir -p recipes/sglang/glm5/gb300-fp4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/gb300-fp4" recipes/sglang/glm5/gb300-fp4
-    fi
-elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
-    # GLM-5.1 FP8 (gb300) recipes are version-controlled in-repo; overlay them
-    # onto the pinned submission branch.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
-    mkdir -p recipes/sglang/glm5.1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.1" recipes/sglang/glm5.1
-elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
-    # GLM-5.1 MTP recipe (recipes/gb300-fp4/glm5-mtp.yaml) lives on
-    # NVIDIA/srt-slurm:main — check it out; no in-repo overlay needed.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout main
-elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
-    # Overlay our version-controlled Qwen3.5 recipes onto the srt-slurm checkout.
-    # fp8 recipes pin dynamo by commit hash (source install), which needs the
-    # cargo/maturin bootstrap included in the srt-slurm v1.0.25 release — the
-    # sa-submission-q2-2026 sglang install path assumes maturin ships in the
-    # image, and the lmsysorg/sglang nightly-dev-cu13 image doesn't include it.
-    # Same branch the identical gb200-fp8 recipes run on. fp4 recipes pin
-    # dynamo by version (pip install) and stay on the submission branch they
-    # were validated against.
-    if [[ "$USES_DCGM_POWER" == "1" ]]; then
-        git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-        git checkout "$POWER_SRT_SLURM_PIN" || exit 1
-        # The power lane must run the exact pinned producer SHA, never a moving branch.
-        test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
-        git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
-    else
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-        if [[ $PRECISION == "fp8" ]]; then
-            git checkout v1.0.25
-        else
-            git checkout sa-submission-q2-2026
-        fi
-    fi
-    mkdir -p recipes/sglang/qwen3.5
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" recipes/sglang/qwen3.5
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    if [[ "${SPEC_DECODING:-}" == "mtp" ]]; then
-        git checkout v1.0.38
-    else
-        git checkout sa-submission-q2-2026
-    fi
-    mkdir -p recipes/vllm/minimax-m3-gb300-fp8
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3-gb300-fp8" recipes/vllm/minimax-m3-gb300-fp8
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout main
-    mkdir -p recipes/vllm/kimi-k2.5-fp4
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.5-fp4" recipes/vllm/kimi-k2.5-fp4
-elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
-    # DSv4 dynamo-trt recipes use the HuggingFace model ID as model.path,
-    # so override SRT_SLURM_MODEL_PREFIX to match the recipe's model path key.
+if [[ "$FRAMEWORK" == "dynamo-trt" && "$MODEL_PREFIX" == "dsv4" ]]; then
     SRT_SLURM_MODEL_PREFIX="deepseek-ai/DeepSeek-V4-Pro"
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
-elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout v1.0.72
-    mkdir -p recipes/trtllm/qwen3.5/gb300-fp4/disagg
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/gb300-fp4/disagg" \
-        recipes/trtllm/qwen3.5/gb300-fp4/disagg
-else
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
 fi
-
-if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
-    python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
-        || exit 1
+# Accuracy runs use real speculative verification and a frontend colocated
+# with the post-eval client on the allocation head.
+if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-trt" && "$EVAL_ONLY" == "true" ]]; then
+    find recipes -path 'recipes/*/trtllm/*' -name '*.yaml' -exec sed -i '/TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS/d' {} +
+    if [[ "$MODEL_PREFIX" == "dsv4" ]]; then
+        SRTCTL_EVAL_ARGS+=(--set frontend.placement.node=head)
+    fi
 fi
 
 echo "Installing srtctl..."
-if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-trt" && ( "$MODEL_PREFIX" == "qwen3.5" || "$MODEL_PREFIX" == "glm5.2" || "$MODEL_PREFIX" == "dsv4" ) ]]; then
-    sed -i 's#git clone https://github.com/ai-dynamo/dynamo.git#git clone https://github.com/cquil11/dynamo.git#' src/srtctl/core/schema.py
-    grep -q 'git clone https://github.com/cquil11/dynamo.git' src/srtctl/core/schema.py || exit 1
-fi
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
 curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$UV_INSTALL_DIR:$PATH"
 
-VENV_DIR="${GITHUB_WORKSPACE}/.venv-srt-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUN_KEY}"
+check_env_vars GITHUB_RUN_ID GITHUB_RUN_ATTEMPT
+VENV_DIR="${GITHUB_WORKSPACE}/.venv-srt-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RUN_KEY}"
 rm -rf "$VENV_DIR"
-# --seed installs pip+setuptools+wheel into the venv. Without it, the
-# upstream prefetch-ai-dynamo-wheel.sh script (called by srtctl when a
-# recipe has dynamo.wheel set) fails with "No module named pip" because
-# uv venv defaults to no-pip.
+# --seed installs pip; srtctl's prefetch-ai-dynamo-wheel.sh (recipes with
+# dynamo.wheel) otherwise fails with "No module named pip".
 uv venv --seed "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
 uv pip install -e .
@@ -503,7 +248,6 @@ fi
 
 echo "Configs available at: $SRT_REPO_DIR/"
 
-# Create srtslurm.yaml for srtctl (used by both frameworks)
 SRTCTL_ROOT="${SRT_REPO_DIR}"
 echo "Creating srtslurm.yaml configuration..."
 SRT_DEFAULT_TIME_LIMIT="4:00:00"
@@ -552,7 +296,7 @@ EOF
 # Appended via sed so non-power lanes' generated yaml stays byte-identical.
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
     sed -i "/^  nginx-sqsh:/a\\  dcgm-exporter: ${DCGM_EXPORTER_SQSH}" srtslurm.yaml
-    # Note (wenyao): sed's append is a silent no-op if the anchor drifts.
+    # sed's append is a silent no-op if the anchor drifts.
     grep -q "^  dcgm-exporter: " srtslurm.yaml || { echo "Error: dcgm-exporter injection failed: nginx-sqsh anchor not found in srtslurm.yaml" >&2; exit 1; }
 fi
 
@@ -562,7 +306,7 @@ cat srtslurm.yaml
 echo "Running make setup..."
 make setup ARCH=aarch64
 
-# Export eval-related env vars for srt-slurm post-benchmark eval
+# Read by srt-slurm's post-benchmark eval.
 export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 
 echo "Submitting job with srtctl..."
@@ -573,17 +317,13 @@ if [[ -z "$CONFIG_FILE" ]]; then
     exit 1
 fi
 
-# Override the job name in the config file with the runner name.
-# CONFIG_FILE may carry a ":zip_override_...[i]" selector suffix that only
-# `srtctl apply -f` parses; strip it to the real path for the sed. srtctl
-# below still receives the full CONFIG_FILE (with selector).
+# CONFIG_FILE may carry a ":zip_override_...[i]" selector that only
+# `srtctl apply -f` parses; strip it for the sed, pass the full value to srtctl.
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
-# Throughput recipes opt into synthetic acceptance through the master config.
-# Eval-only jobs remove those settings so generated tokens use real target-model
-# verification.
-inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
+# Throughput recipes opt into synthetic acceptance via the master config;
+# eval-only jobs strip it so tokens get real target-model verification.
 
 if [[ "$USES_AGENTX_POWER" == "1" ]]; then
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
@@ -591,22 +331,8 @@ if [[ "$USES_AGENTX_POWER" == "1" ]]; then
         "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
 fi
 
-# --no-preflight skips srtctl's pre-submit model-path stat, which runs on
-# the GHA runner host (im-gb300-login-02, an x86 login node). It's required
-# whenever model.path resolves to the node-local /scratch NVMe that the login
-# node can't see:
-#   - the agentic path (DSv4-Pro checkpoint),
-#   - glm5.1, whose GLM-5.1-NVFP4 weights are prestaged on the compute-node
-#     /scratch/models, and
-#   - qwen3.5 fp8, whose weights are also on the compute-node /scratch/models
-#     and which runs on srt-slurm:v1.0.25 (the release that has the preflight),
-#   - qwen3.5 fp4 dynamo-trt, which runs on v1.0.72 without that preflight, and
-#   - the qwen3.5 fp4 and dsv4 sglang power lanes, which run the pinned
-#     producer (a main-lineage fork that has the preflight) against the same
-#     /scratch checkpoints.
-# The engine still fails loudly at runtime if the path is genuinely missing on
-# the compute node. Other fixed-seq-len recipes resolve model.path to a
-# login-visible location, so keep the precheck enforced for them.
+# Skip the login-host model check for checkpoints staged only on compute
+# nodes. The worker still validates the model path during startup.
 SRTCTL_APPLY_ARGS=(
     -f "$CONFIG_FILE"
     --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
@@ -614,11 +340,8 @@ SRTCTL_APPLY_ARGS=(
 if [[ "$IS_AGENTIC" == "1" || "$MODEL_PREFIX" == "glm5.1" || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" ) || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && ( "$FRAMEWORK" == "dynamo-trt" || "$USES_DCGM_POWER" == "1" ) ) || ( "$USES_DCGM_POWER" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ) ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
-if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
-    SRTCTL_APPLY_ARGS+=(--setup-script "$SRTCTL_SETUP_SCRIPT")
-fi
 
-SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
+SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
@@ -632,33 +355,22 @@ fi
 
 echo "Extracted JOB_ID: $JOB_ID"
 
-# Use the JOB_ID to find the logs directory
-# srtctl creates logs in outputs/JOB_ID/logs/
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
-# Snapshot worker logs on any exit path — normal completion, error,
-# SIGTERM (gh run cancel sends this to the launcher), even SIGKILL of
-# our parent. Without this trap, the cancel-time tar lives only in the
-# main flow below (after `wait $POLL_PID`), so a manual `gh run cancel`
-# during the tail wait skips it entirely and the
-# `Upload server logs` workflow step finds nothing to upload.
-# Idempotent: the main-flow tar at the bottom of this script is now a
-# no-op because the trap already produced the artifact, but it stays
-# for narrative continuity in normal (non-cancel) runs.
+# Snapshot worker logs on every exit path, including the SIGTERM that
+# `gh run cancel` sends during the tail wait; otherwise the Upload server logs
+# step finds nothing.
 _snapshot_server_logs() {
     if [ -n "${LOGS_DIR:-}" ] && [ -d "$LOGS_DIR" ] && [ -n "${GITHUB_WORKSPACE:-}" ]; then
-        # Note (wenyao): provenance markers are copied in the trap, not the
-        # main flow, so cancel paths that fire the trap early still bundle
-        # them for the offline audit.
+        # Provenance markers ride in the trap so cancel paths still bundle them for the audit.
         if [[ "$USES_DCGM_POWER" == "1" ]]; then
             mkdir -p "$LOGS_DIR/power" 2>/dev/null || true
             cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256" 2>/dev/null || true
             cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt" 2>/dev/null || true
         fi
-        # Copy + tar are independent best-effort; an in-flight write
-        # from a worker .out file at SIGTERM time would otherwise abort
-        # the whole script before either succeeds.
+        # Independent best-effort steps: an in-flight worker .out write at SIGTERM
+        # would otherwise abort the script before either succeeds.
         cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
         tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" . 2>/dev/null || true
     fi
@@ -669,7 +381,6 @@ AGENTX_POWER_RC=0
 if [[ "$USES_AGENTX_POWER" == "1" ]]; then
     stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || AGENTX_POWER_RC=$?
 else
-    # Wait for log file to appear (also check job is still alive)
     while ! ls "$LOG_FILE" &>/dev/null; do
         if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
             echo "ERROR: Job $JOB_ID failed before creating log file"
@@ -680,7 +391,6 @@ else
         sleep 5
     done
 
-    # Poll for job completion in background
     (
         while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
             sleep 10
@@ -690,7 +400,7 @@ else
 
     echo "Tailing LOG_FILE: $LOG_FILE"
 
-    # Stream the log file until job completes (-F follows by name, polls instead of inotify for NFS)
+    # -F follows by name and polls; inotify does not work on NFS.
     tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
 
     wait $POLL_PID
@@ -701,18 +411,16 @@ set -x
 echo "Job $JOB_ID completed!"
 echo "Collecting results..."
 
-if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY}" != "true" ]]; then
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
     collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" "$INFMAX_WORKSPACE" \
-        "$GITHUB_WORKSPACE" "$RESULT_FILENAME" "$AGENTX_POWER_SRT_SLURM_PIN" \
+        "$GITHUB_WORKSPACE" "$RESULT_FILENAME" "$SRT_SLURM_COMMIT" \
         "${POWER_CONCURRENCIES[@]}" || AGENTX_POWER_RC=$?
 fi
 
 if [ -d "$LOGS_DIR" ]; then
     echo "Found logs directory: $LOGS_DIR"
-    # Tarball + LOGS copy + power provenance markers are produced by the EXIT
-    # trap defined near JOB_ID extraction (so cancel paths also get them);
-    # just log here.
+    # The EXIT trap produces the tarball, LOGS copy, and provenance markers.
     echo "multinode_server_logs.tar.gz will be (re)produced on script EXIT."
 else
     echo "Warning: Logs directory not found at $LOGS_DIR"
@@ -723,7 +431,7 @@ if [[ "$AGENTX_POWER_RC" != "0" ]]; then
     exit "$AGENTX_POWER_RC"
 fi
 
-if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+if [[ "${EVAL_ONLY}" != "true" ]]; then
     if [ ! -d "$LOGS_DIR" ]; then
         exit 1
     fi
@@ -733,8 +441,7 @@ else
     echo "EVAL_ONLY=true: Skipping benchmark result collection"
 fi
 
-# Collect eval results if eval was requested
-if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
+if [[ "${RUN_EVAL}" == "true" || "${EVAL_ONLY}" == "true" ]]; then
     EVAL_DIR="$LOGS_DIR/eval_results"
     if [ -d "$EVAL_DIR" ]; then
         echo "Extracting eval results from $EVAL_DIR"
@@ -754,10 +461,10 @@ if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
         echo "WARNING: RUN_EVAL=true but no eval results found at $EVAL_DIR"
     fi
 
-    # srt-slurm stages eval artifacts but does not write the metadata file
-    # consumed by score validation. Reuse the canonical metadata writer so
-    # topology and recipe identity stay aligned with the workflow inputs.
-    eval_conc_value="${EVAL_CONC:-${CONC:-1}}"
+    # srt-slurm stages eval artifacts but not the metadata file score validation
+    # consumes; the canonical writer keeps topology aligned with workflow inputs.
+    check_env_vars EVAL_CONC
+    eval_conc_value="$EVAL_CONC"
     (
         export IS_MULTINODE=true
         # shellcheck source=benchmarks/benchmark_lib.sh
@@ -768,10 +475,8 @@ if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
     echo "Wrote meta_env.json (conc=${eval_conc_value}, prefix=${MODEL_PREFIX:-unknown})"
 fi
 
-# Snapshot logs to GITHUB_WORKSPACE BEFORE cleanup, so the EXIT trap's
-# `[ -d "$LOGS_DIR" ]` guard isn't already false by the time it fires
-# (it runs AFTER the rm below, since EXIT traps are last-thing-before-exit).
-# Without this inline call, R25 lost both 1p6d shards' logs.
+# The EXIT trap fires after the rm below, when its LOGS_DIR guard is already
+# false, so snapshot here first.
 _snapshot_server_logs
 
 # Clean up srt-slurm outputs to prevent NFS silly-rename lock files

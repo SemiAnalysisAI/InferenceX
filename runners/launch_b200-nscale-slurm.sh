@@ -1,21 +1,13 @@
 #!/usr/bin/bash
 
-# Standalone launcher for the B200 nscale Slurm cluster.
-#
-# Self-contained because Nscale has its own Slurm and storage layout.
-#
-# Scope: multi-node Dynamo-vLLM DeepSeek-V4-Pro and Kimi K2.6 FP4 runs, plus
-# DeepSeek-V4-Pro FP4 Dynamo-SGLang STP and MTP runs, GLM-5.2 FP4
-# Dynamo-SGLang MTP runs, and Kimi-K3 AgentX on the b200-nscale runner label.
-# Anything else exits non-zero.
+# B200 nscale Slurm launcher for the native srt-slurm lanes selected below;
+# everything else falls through to launch_b200-nscale-compat.sh.
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars EVAL_ONLY IS_AGENTIC RUN_EVAL
+
 
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
-POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
-POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
-AGENTX_POWER_SRT_SLURM_PIN="80d7203e424f903c9017de4608ee2044afce9574"
-TILERT_SRT_SLURM_URL="https://github.com/SemiAnalysisAI/srt-slurm.git"
-TILERT_SRT_SLURM_PIN="d1e6c97b3baf3e87103b6d83189544c3c7d61c38"
 
 # Node-local NVMe, not a shared filesystem: much faster for the ~1.6T
 # DeepSeek-V4-Pro load, and already pre-staged on every nscale compute node.
@@ -27,7 +19,7 @@ HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
 SQUASH_LOCK_TIMEOUT=3600
 
 # shellcheck source=runners/slurm_utils.sh
-source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 
 set -x
 
@@ -41,21 +33,21 @@ if [[ "$IS_MULTINODE" != "true" ]]; then
     run_compat_launcher
 fi
 
-if [[ "$FRAMEWORK" == "tilert" && "${IS_AGENTIC:-0}" != "1" ]]; then
+if [[ "$FRAMEWORK" == "tilert" && "${IS_AGENTIC}" != "1" ]]; then
     run_compat_launcher
 fi
 
 if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/DeepSeek-V4-Pro}"
+    check_env_vars MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/Kimi-K2.6-NVFP4}"
+    check_env_vars MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="kimi-k2.6-nvfp4"
 elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/Kimi-K3}"
+    check_env_vars MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="kimik3"
 elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/GLM-5.2-NVFP4}"
+    check_env_vars MODEL_PATH
     # This alias must match model.path in the checked-in GLM-5.2 recipes.
     export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
 elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" && $FRAMEWORK == "tilert" ]]; then
@@ -75,7 +67,7 @@ fi
 USES_DCGM_POWER=0
 USES_AGENTX_POWER=0
 _POWER_CONFIG_FILE="${CONFIG_FILE:-}"
-if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+if [[ "${EVAL_ONLY}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
     _POWER_CONFIG_FILE="$EVAL_CONFIG_FILE"
 fi
 _RECIPE_REL="${_POWER_CONFIG_FILE%%:*}"
@@ -83,7 +75,7 @@ _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE
 if [[ -n "$_POWER_CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
     /^telemetry:/ { t = 1; next }
     t && /^[^ ]/  { t = 0 }
-    t && /^  provider: dcgm-power$/ { p = 1 }
+    t && /^  dcgm_exporter:/ { p = 1 }
     t && /^  enabled: true$/        { e = 1 }
     END { exit !(p && e) }
 ' "$_RECIPE_SRC"; then
@@ -93,7 +85,7 @@ if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
     "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-vllm" ]]; then
     USES_AGENTX_POWER=1
 elif [[ "$USES_DCGM_POWER" == "1" && (
-    "${IS_AGENTIC:-0}" == "1" ||
+    "${IS_AGENTIC}" == "1" ||
     "$PRECISION" != "fp4" ||
     ( "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" ) ||
     ( "$MODEL_PREFIX" == "kimik2.6" && "$FRAMEWORK" != "dynamo-vllm" ) ||
@@ -105,90 +97,10 @@ fi
 
 export SERVED_MODEL_NAME=$MODEL
 
-echo "Cloning srt-slurm repository..."
+echo "Preparing job-local srt-slurm checkout..."
 SRT_REPO_DIR="srt-slurm"
 rm -rf "$SRT_REPO_DIR"
-if [[ "$USES_DCGM_POWER" == "1" ]]; then
-    SELECTED_POWER_SRT_SLURM_PIN="$POWER_SRT_SLURM_PIN"
-    if [[ "$USES_AGENTX_POWER" == "1" ]]; then
-        SELECTED_POWER_SRT_SLURM_PIN="$AGENTX_POWER_SRT_SLURM_PIN"
-    fi
-    git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout "$SELECTED_POWER_SRT_SLURM_PIN" || exit 1
-    test "$(git rev-parse HEAD)" = "$SELECTED_POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match selected power producer $SELECTED_POWER_SRT_SLURM_PIN" >&2; exit 1; }
-    git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
-    if [[ "$USES_AGENTX_POWER" == "1" ]]; then
-        mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
-            recipes/vllm/kimi-k3/agentic || exit 1
-    elif [[ "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
-        mkdir -p recipes/sglang/deepseek-v4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
-    elif [[ "$MODEL_PREFIX" == "dsv4" ]]; then
-        mkdir -p recipes/vllm/deepseek-v4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-    else
-        mkdir -p recipes/vllm/kimi-k2.6
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.6" recipes/vllm/kimi-k2.6
-    fi
-elif [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "glm5.1" && $FRAMEWORK == "tilert" ]]; then
-    git clone "$TILERT_SRT_SLURM_URL" "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout "$TILERT_SRT_SLURM_PIN" || exit 1
-    test "$(git rev-parse HEAD)" = "$TILERT_SRT_SLURM_PIN" || {
-        echo "Error: srt-slurm HEAD does not match TILERT_SRT_SLURM_PIN=$TILERT_SRT_SLURM_PIN" >&2
-        exit 1
-    }
-    mkdir -p recipes/tilert/glm5.1/b200-fp8/agentic || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/tilert/glm5.1/b200-fp8/agentic" \
-        recipes/tilert/glm5.1/b200-fp8/agentic || exit 1
-elif [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "kimik3" ]]; then
-    # Pin the tested renderer so branch movement cannot change generated rank
-    # commands between sweep points.
-    git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout 217f9438 || exit 1
-    mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
-        recipes/vllm/kimi-k3/agentic || exit 1
-elif [[ $MODEL_PREFIX == "glm5.2" && $FRAMEWORK == "dynamo-sglang" ]]; then
-    # Pin the renderer used for the validated checked-in recipes.
-    git clone --branch v1.0.53 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    test "$(git rev-parse HEAD)" = "217f94387abeddfed7149a71955dc523e07cd765" || {
-        echo "Error: srt-slurm v1.0.53 did not resolve to the pinned commit" >&2
-        exit 1
-    }
-    mkdir -p recipes/sglang/glm5.2/b200-fp4/agentic || exit 1
-    cp -rT \
-        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/b200-fp4/agentic" \
-        recipes/sglang/glm5.2/b200-fp4/agentic || exit 1
-elif [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-sglang" ]]; then
-    git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    # Pin the srt-slurm revision used by these checked-in recipes.
-    git checkout 04e87fcc505d6d851451781a5499ca19a02ec2b4 || exit 1
-    mkdir -p recipes/sglang/deepseek-v4
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
-elif [[ $MODEL_PREFIX == "dsv4" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout aflowers/vllm-gb200-v0.20.0 || exit 1
-    mkdir -p recipes/vllm/deepseek-v4
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-else
-    git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout c180328b98c3793ca84a1e24a030f90545eb7d5d || exit 1
-    mkdir -p recipes/vllm/kimi-k2.6
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.6" recipes/vllm/kimi-k2.6
-fi
-if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
-    python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
-        || exit 1
-fi
-
+setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" "$USES_DCGM_POWER" || exit 1
 
 echo "Installing srtctl..."
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
@@ -203,7 +115,6 @@ if ! command -v srtctl &> /dev/null; then
     exit 1
 fi
 
-# Map container images to local squash files
 NGINX_IMAGE="nginx:1.27.4"
 if ! mkdir -p "$SQUASH_DIR" 2>/dev/null || [[ ! -w "$SQUASH_DIR" ]]; then
     echo "Warning: $SQUASH_DIR is not writable; using workspace-local squash cache" >&2
@@ -286,12 +197,9 @@ fi
 
 export ISL="$ISL"
 export OSL="$OSL"
-export EVAL_ONLY="${EVAL_ONLY:-false}"
 
-# Agentic runs bind-mount two persistent caches into every worker container:
-# aiperf's content-addressed dataset mmap cache and the HF hub cache holding
-# the trace dataset. Container-side paths are referenced by the agentic
-# recipes' benchmark.env.
+# Persistent caches for aiperf's dataset mmap files and the HF trace dataset;
+# the container paths are referenced by the agentic recipes' benchmark.env.
 DEFAULT_MOUNTS_BLOCK=""
 if [[ "$IS_AGENTIC" == "1" ]]; then
     mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH"
@@ -347,17 +255,15 @@ cat srtslurm.yaml
 echo "Running make setup..."
 make setup ARCH=x86_64
 
-# Export eval-related env vars for srt-slurm post-benchmark eval
+# Read by srt-slurm's post-benchmark eval.
 export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 
 echo "Submitting job with srtctl..."
 echo "MODEL_PATH=$MODEL_PATH"
 
-# An eval row may point at a committed real-verification recipe while its
-# throughput row keeps synthetic golden acceptance. Only configs that set
-# EVAL_CONFIG_FILE opt into this selection; all other configs keep using
-# CONFIG_FILE unchanged.
-if [[ "${EVAL_ONLY:-false}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
+# An eval row may use a real-verification recipe while its throughput row
+# keeps synthetic acceptance; only configs setting EVAL_CONFIG_FILE opt in.
+if [[ "${EVAL_ONLY}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
     CONFIG_FILE="$EVAL_CONFIG_FILE"
     echo "EVAL_ONLY=true: selecting real-verification recipe $CONFIG_FILE"
 fi
@@ -371,7 +277,6 @@ fi
 # Strip any :override[N] selector so sed and the injector operate on the file.
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 
-# Override the job name in the config file with the runner name
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 # Give recipes at least 720 attempts without shortening a larger model-specific
 # load budget (GLM-5.2 intentionally requests 1440x10s).
@@ -380,7 +285,6 @@ if [[ $RECIPE_MAX_ATTEMPTS =~ ^[0-9]+$ ]] && (( RECIPE_MAX_ATTEMPTS < 720 )); th
     sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "$CONFIG_PATH"
 fi
 
-inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
 if [[ "$USES_AGENTX_POWER" == "1" ]]; then
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
@@ -397,7 +301,7 @@ if [[ $MODEL_PREFIX == "kimik2.6" ]] ||
     SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
 fi
 
-SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
@@ -414,8 +318,6 @@ echo "Extracted JOB_ID: $JOB_ID"
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
-# Waits for the log file to appear, fails fast if the job dies first, then
-# streams until the job leaves the queue.
 SRT_JOB_RC=0
 stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
 if [[ "$SRT_JOB_RC" != "0" && "$USES_AGENTX_POWER" != "1" ]]; then
@@ -433,11 +335,11 @@ if [ ! -d "$LOGS_DIR" ]; then
 fi
 
 AGENTX_POWER_RC="$SRT_JOB_RC"
-if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY:-false}" != "true" ]]; then
+if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY}" != "true" ]]; then
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
     collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" \
         "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" \
-        "$SELECTED_POWER_SRT_SLURM_PIN" "${POWER_CONCURRENCIES[@]}" || AGENTX_POWER_RC=$?
+        "$SRT_SLURM_COMMIT" "${POWER_CONCURRENCIES[@]}" || AGENTX_POWER_RC=$?
 fi
 
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
@@ -454,7 +356,7 @@ if [[ "$AGENTX_POWER_RC" != "0" ]]; then
     exit "$AGENTX_POWER_RC"
 fi
 
-if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+if [[ "${EVAL_ONLY}" != "true" ]]; then
     RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
 
     if [ -z "$RESULT_SUBDIRS" ]; then
@@ -493,9 +395,7 @@ else
     echo "EVAL_ONLY=true: Skipping benchmark result collection"
 fi
 
-# Collect eval results if eval was requested. copy_eval_artifacts warns and
-# returns 0 when the directory is absent.
-if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
+if [[ "${RUN_EVAL}" == "true" || "${EVAL_ONLY}" == "true" ]]; then
     copy_eval_artifacts "$LOGS_DIR/eval_results" "$GITHUB_WORKSPACE"
 fi
 

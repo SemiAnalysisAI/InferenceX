@@ -1,86 +1,55 @@
 #!/usr/bin/env bash
 
-# Kimi-K2.5 B300 vLLM SPEED-Bench AL matrix collector for EAGLE3 speculative
-# decoding.
+# Kimi-K2.5 B300 vLLM SPEED-Bench AL matrix collector for EAGLE3 speculative decoding.
 #
-# Produces the golden acceptance-length (AL) reference matrix consumed by the
-# synthetic-acceptance framework: for each thinking mode (on/off) and each
-# EAGLE3 speculative-token count, measure the REAL AL on a single SPEED-Bench
-# category (default: coding) and emit a YAML matrix identical in shape to
-# benchmarks/speedbench-reference-al.yaml.
-#
-# Kimi-K2.5 uses the lightseekorg/kimi-k2.5-eagle3-mla draft head (MLA
-# variant, recommended by official docs). The draft model is downloaded
-# alongside the target checkpoint before the sweep begins.
-#
-# Differences vs the GLM-5 MTP template (glm5_fp4_b300_vllm.sh):
-#   - speculative-config     eagle3 with external draft model (not mtp)
-#   - reasoning-parser       kimi_k2        (was glm45)
-#   - tool-call-parser       kimi_k2        (was glm47)
-#   - thinking toggle        {"thinking": true/false}   (was enable_thinking)
-#   - temperature            1.0 (thinking) / 0.6 (instant)  (was fixed 1.0)
-#   - NO --chat-template-content-format, --tokenizer-mode, --block-size,
-#     or --attention_config.use_fp4_indexer_cache
-#   - --language-model-only  (text-only benchmark, no vision)
+# For each thinking mode (on/off) and EAGLE3 speculative-token count, measure the REAL
+# acceptance length (AL) on one SPEED-Bench category and emit a YAML matrix in the
+# golden_al_distribution shape. Draft head: lightseekorg/kimi-k2.5-eagle3-mla (MLA
+# variant, recommended by the official docs), downloaded before the sweep.
+# --language-model-only: text-only benchmark, no vision.
 #
 # Usage (inside the Kimi vLLM container, on a B300 node):
 #   export MODEL=moonshotai/Kimi-K2.5-NVFP4
 #   bash benchmarks/single_node/speedbench/kimik2.5_fp4_b300_vllm.sh
 #
-# Tunables (env):
-#   MTP_LIST          space-separated EAGLE3 spec-token counts (default "1 2 3 4 5 6 7 8")
-#   THINKING_MODES    space-separated: off|on       (default "off on")
-#   CATEGORY          SPEED-Bench category          (default coding)
-#   SPEEDBENCH_OUTPUT_LEN  per-request output len   (default 4096)
-#   OUT_YAML          output matrix path            (default $RESULTS_DIR/speedbench-reference-al.yaml)
+# Required collection settings come from speedbench-al.yml.
 
-set -uo pipefail
+set -o pipefail
 source "$(dirname "$0")/../../benchmark_lib.sh"
+check_env_vars \
+    CATEGORY CHAT_TEMPLATE_KWARGS_ON DP_ATTENTION EP_SIZE MODEL MODEL_PATH \
+    MTP_LIST OUT_YAML PORT SPEEDBENCH_OUTPUT_LEN THINKING_MODES TP
 
-MODEL="${MODEL:?MODEL env var required (e.g. moonshotai/Kimi-K2.5-NVFP4)}"
-SERVE_MODEL="${MODEL_PATH:-$MODEL}"
-TP="${TP:-8}"
-DP_ATTENTION="${DP_ATTENTION:-false}"
-EP_SIZE="${EP_SIZE:-1}"
-PORT="${PORT:-8888}"
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.80}"
+SERVE_MODEL="${MODEL_PATH}"
+GPU_MEM_UTIL="0.80"
 
 DRAFT_MODEL="lightseekorg/kimi-k2.5-eagle3-mla"
 
-MTP_LIST="${MTP_LIST:-1 2 3 4 5 6 7 8}"
-THINKING_MODES="${THINKING_MODES:-off on}"
-CATEGORY="${CATEGORY:-coding}"
-MODEL_KEY="${MODEL_KEY:-$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')}"
-SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
-# AL is concurrency-independent (per-token accept/reject; no spec-disable-by-batch
-# is set below), so batch the SPEED-Bench pass to keep wall-time under the CI
-# limit. conc=1 made Kimi-K2.5 exceed the 8h budget. 64 captures most of the
-# batch-decode speedup before it saturates / KV pressure grows; override via env.
-CONCURRENCY="${CONCURRENCY:-64}"
-TOP_P="${TOP_P:-0.95}"
+MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
+# AL is concurrency-independent (per-token accept/reject; no spec-disable-by-batch is
+# set), so batch the SPEED-Bench pass to stay under the CI wall-time limit; conc=1
+# blew the 8h budget. 64 captures most of the batch-decode speedup before KV
+# pressure grows.
+CONCURRENCY="64"
+TOP_P="0.95"
 # Kimi thinking toggles via the thinking chat_template key (default ON).
-DEFAULT_CHAT_TEMPLATE_KWARGS_ON='{"thinking": true}'
-DEFAULT_CHAT_TEMPLATE_KWARGS_OFF='{"thinking": false}'
-CHAT_TEMPLATE_KWARGS_ON="${CHAT_TEMPLATE_KWARGS_ON:-$DEFAULT_CHAT_TEMPLATE_KWARGS_ON}"
-CHAT_TEMPLATE_KWARGS_OFF="${CHAT_TEMPLATE_KWARGS_OFF:-$DEFAULT_CHAT_TEMPLATE_KWARGS_OFF}"
+CHAT_TEMPLATE_KWARGS_OFF='{"thinking": false}'
 
-SPEEDBENCH_DIR="${SPEEDBENCH_DIR:-/workspace/speed_bench_data}"
-RESULTS_DIR="${RESULTS_DIR:-/workspace/speedbench_results}"
-OUT_YAML="${OUT_YAML:-$RESULTS_DIR/speedbench-reference-al.yaml}"
+SPEEDBENCH_DIR="/workspace/speed_bench_data"
+RESULTS_DIR="/workspace/speedbench_results"
 
 # Blackwell NVFP4 checkpoints need FlashInfer FP4 MoE kernels; auto-enable
 # when the served model name contains NVFP4 (e.g. nvidia/Kimi-K2.5-NVFP4).
 if [[ "$SERVE_MODEL" == *NVFP4* || "$SERVE_MODEL" == *nvfp4* ]]; then
-    export VLLM_USE_FLASHINFER_MOE_FP4="${VLLM_USE_FLASHINFER_MOE_FP4:-1}"
+    export VLLM_USE_FLASHINFER_MOE_FP4="1"
 fi
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
 mkdir -p "$RESULTS_DIR"
 nvidia-smi
 
-# ---- Download target if it is not pre-staged ----
-# A pre-staged target lands in the read-only staged mount (/scratch/models);
-# only download when MODEL_PATH is an empty writable dir (non-staged run).
+# A pre-staged target lives in the read-only staged mount (/scratch/models); only
+# download when MODEL_PATH is an empty writable dir.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -89,18 +58,15 @@ else
     if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
 fi
 
-# ---- Download EAGLE3 draft model to a WRITABLE dir ----
-# The draft must NOT go next to a pre-staged target: dirname(MODEL_PATH) is the
-# read-only staged mount (/scratch/models), so writing the draft there fails
-# with PermissionError. Use a writable workspace dir regardless of staging.
-DRAFT_DIR="${DRAFT_MODEL_DIR:-/workspace/draft_models}"
+# dirname(MODEL_PATH) is the read-only staged mount (/scratch/models), so the draft
+# must go to a writable workspace dir, not next to the target.
+DRAFT_DIR="/workspace/draft_models"
 mkdir -p "$DRAFT_DIR"
 DRAFT_MODEL_PATH="$DRAFT_DIR/${DRAFT_MODEL##*/}"
 if [[ ! -d "$DRAFT_MODEL_PATH" || -z "$(ls -A "$DRAFT_MODEL_PATH" 2>/dev/null)" ]]; then
     hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
 fi
 
-# ---- Download SPEED-Bench dataset ----
 echo "=== Downloading SPEED-Bench dataset ==="
 pip install -q datasets tiktoken
 curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/refs/heads/main/nemo_skills/dataset/speed-bench/prepare.py \
@@ -111,81 +77,6 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# ---- Temporary shim: add a real --chat-template-kwargs CLI option ----
-# Upstream gap (until vllm-project/vllm#44244 lands): speed_bench/CustomDataset
-# pre-renders the chat template client-side WITHOUT chat_template_kwargs and
-# posts to /v1/completions, so thinking mode cannot be enabled via --extra-body
-# or --default-chat-template-kwargs. This wires a proper --chat-template-kwargs
-# option through get_samples into CustomDataset.sample's apply_chat_template.
-# Model agnostic (forwards whatever dict it is given). TODO: delete once #44244
-# is released in the benchmark image; idempotent (marker check), safe to leave.
-apply_chat_template_kwargs_shim() {
-    echo "=== Patching vLLM benchmark to add --chat-template-kwargs (temporary shim) ==="
-    python3 - <<'PYEOF'
-import vllm.benchmarks.serve as S
-import vllm.benchmarks.datasets.datasets as D
-
-def patch(mod, edits, marker):
-    f = mod.__file__
-    src = open(f).read()
-    if marker in src:
-        print("already patched:", f)
-        return
-    for old, new in edits:
-        n = src.count(old)
-        assert n == 1, f"anchor matched {n} times in {f}, aborting:\n{old[:80]}..."
-        src = src.replace(old, new, 1)
-    open(f, "w").write(src)
-    print("patched OK ->", f)
-
-# Edit 1: serve.py -- declare the --chat-template-kwargs argument before --extra-body
-serve_old = '''    parser.add_argument(
-        "--extra-body",'''
-serve_new = '''    parser.add_argument(
-        "--chat-template-kwargs",
-        type=json.loads,
-        default=None,
-        help="JSON dict forwarded to apply_chat_template during "
-        "client-side prompt rendering, e.g. to enable reasoning mode.",
-    )
-    parser.add_argument(
-        "--extra-body",'''
-patch(S, [(serve_old, serve_new)], marker='"--chat-template-kwargs"')
-
-# Edit 2: datasets.py -- forward args.chat_template_kwargs into the speed_bench .sample() call
-disp_old = '''                output_len=args.speed_bench_output_len,
-                enable_multimodal_chat=args.enable_multimodal_chat,'''
-disp_new = '''                output_len=args.speed_bench_output_len,
-                chat_template_kwargs=args.chat_template_kwargs,
-                enable_multimodal_chat=args.enable_multimodal_chat,'''
-
-# Edit 3: datasets.py -- forward chat_template_kwargs into CustomDataset.sample's template call
-samp_old = '''                # apply template
-                if not skip_chat_template:
-                    prompt = tokenizer.apply_chat_template(
-                        [{"role": "user", "content": prompt}],
-                        add_generation_prompt=True,
-                        tokenize=False,
-                    )
-
-                prompt_len = len(tokenizer(prompt).input_ids)'''
-samp_new = '''                # apply template
-                if not skip_chat_template:
-                    _ctk = kwargs.get("chat_template_kwargs") or {}
-                    prompt = tokenizer.apply_chat_template(
-                        [{"role": "user", "content": prompt}],
-                        add_generation_prompt=True,
-                        tokenize=False,
-                        **_ctk,
-                    )
-
-                prompt_len = len(tokenizer(prompt).input_ids)'''
-patch(D, [(disp_old, disp_new), (samp_old, samp_new)],
-      marker="chat_template_kwargs=args.chat_template_kwargs")
-PYEOF
-}
-
-# Apply the shim once if any cell will pass chat_template_kwargs.
 NEED_SHIM=0
 if [[ " $THINKING_MODES " == *" on "*  && -n "$CHAT_TEMPLATE_KWARGS_ON"  ]]; then NEED_SHIM=1; fi
 if [[ " $THINKING_MODES " == *" off "* && -n "$CHAT_TEMPLATE_KWARGS_OFF" ]]; then NEED_SHIM=1; fi
@@ -201,7 +92,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
 fi
 EP_ARGS=()
-if [ "${EP_SIZE:-1}" -gt 1 ]; then
+if [ "${EP_SIZE}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
@@ -341,7 +232,6 @@ done
 
 stop_gpu_monitor
 
-# ---- Emit the YAML matrix ----
 emit_mode_block() {
     local mode="$1"
     for mtp in $MTP_LIST; do

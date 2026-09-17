@@ -6,16 +6,17 @@ import re
 from collections.abc import Iterable
 from typing import Any
 
-from ..common import (
+from infx.results.agentic.common import (
     gauge_stat,
     label_value,
     metric_series,
     normalize_fraction,
     rate,
     sum_by_label,
-    sum_stat,
     sum_server_log_capacities,
+    sum_stat,
 )
+
 from .base import ServerMetricsBackend, counter_int
 
 
@@ -190,7 +191,7 @@ class VllmBackend(ServerMetricsBackend):
 
     def gpu_kv_capacity_tokens(
         self,
-        metrics: dict[str, dict[str, Any]],
+        metrics: dict[str, dict[str, Any]],  # noqa: ARG002
         server_logs: Iterable[str | None],
     ) -> int | None:
         return sum_server_log_capacities(
@@ -266,7 +267,10 @@ def _vllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     for source_id in sorted(source_ids):
         if not source_id:
             continue
-        series_filter = lambda series, source_id=source_id: _source_id(series) == source_id
+
+        def series_filter(series: dict, source_id: str = source_id) -> bool:
+            return _source_id(series) == source_id
+
         prompt_tokens = sum_stat(metrics, "vllm:prompt_tokens", series_filter=series_filter)
         generation_tokens = sum_stat(metrics, "vllm:generation_tokens", series_filter=series_filter)
         hits = sum_stat(metrics, "vllm:prefix_cache_hits", series_filter=series_filter)

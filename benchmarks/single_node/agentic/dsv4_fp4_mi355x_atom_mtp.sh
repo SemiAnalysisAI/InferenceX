@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
 # Agentic trace replay benchmark for DeepSeek-V4-Pro-0813 FP4 on MI355X using
@@ -9,6 +9,7 @@ set -x
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars EVAL_ONLY
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -53,7 +54,6 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
-# ATOM runtime settings validated with the DeepSeek-V4-Pro AgentX baseline.
 export AITER_BF16_FP8_MOE_BOUND=0
 export AITER_LOG_LEVEL=WARNING
 export ATOM_MOE_GU_ITLV=1
@@ -97,9 +97,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     )
 fi
 
-# Raise the AIPerf HTTP TCP user timeout to 900000 ms (15 min), well above the
-# aiperf default of 30000 ms (30 s), so long-stalling AgentX request
-# connections are not torn down as dead during extended server-side pauses.
+# Long AgentX stalls exceed aiperf's default 30 s TCP_USER_TIMEOUT.
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 export AIPERF_TIMING_CANCEL_DRAIN_TIMEOUT=300
 export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=0
@@ -255,7 +253,7 @@ SPEC_ARGS=(
     --method dspark
     --num-speculative-tokens "$NUM_SPEC_TOKENS"
 )
-if [ "${EVAL_ONLY:-false}" != "true" ]; then
+if [ "${EVAL_ONLY}" != "true" ]; then
     SPEC_ARGS+=(--spec-decode-acceptance-length "$SPEC_DECODE_AL")
 fi
 
@@ -266,11 +264,8 @@ ATOM_CMD=(
     --served-model-name "$MODEL"
     --host 0.0.0.0
     --server-port "$PORT"
-    # uvicorn defaults to a 5s idle keep-alive; AIPerf pools sockets for far
-    # longer (aiohttp ~15s) and warmup inter-turn gaps under backlog exceed 5s,
-    # so the server closes an idle pooled socket and the reused write hits
-    # 'Connection reset by peer' (errno 104). One such reset on a root AgentX
-    # warmup request aborts the whole run. Outlast the client idle window.
+    # uvicorn's default 5 s idle keep-alive is shorter than AIPerf's pooled
+    # socket reuse; a reset on a root warmup request aborts the whole run.
     --timeout-keep-alive 900
     --tensor-parallel-size "$TP"
     --data-parallel-size 1
@@ -296,7 +291,7 @@ echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
+if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
     # AgentX DSv4 traces already carry fully formed chat payloads; do not apply

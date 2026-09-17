@@ -2,6 +2,66 @@
 
 # Launchers source this file before changing into srt-slurm.
 INFERENCEX_SLURM_UTILS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$INFERENCEX_SLURM_UTILS_DIR/../benchmarks/benchmark_lib.sh" --validation-only || return 1
+
+SRTCTL_EVAL_ARGS=(
+    --set 'post_eval.command=["bash", "{infmax_workspace}/benchmarks/multi_node/srt_eval.sh", "{endpoint}", "{infmax_workspace}"]'
+)
+
+# Leaves the caller in the checkout, matching the launchers' installation flow.
+# Every recipe is owned by InferenceX; srt-slurm 2 no longer ships recipes/.
+setup_srt_slurm() {
+    if [[ $# -ne 3 || -z "$1" || -z "$2" || ( "$3" != 0 && "$3" != 1 ) ]]; then
+        echo "Usage: setup_srt_slurm destination framework uses_power (0 or 1)" >&2
+        return 1
+    fi
+    local destination="$1" framework="$2" uses_power="$3"
+    check_env_vars INFERENCEX_RUNTIME_ENV_VARS AIPERF_DRAIN_TIMEOUT_SECONDS AIPERF_DRAIN_POLL_SECONDS EVAL_ONLY
+    local eval_passthrough
+    eval_passthrough=$(python3 - <<'PYENV'
+import json
+import os
+
+names = [
+    "EVAL_FRAMEWORK", "EVAL_CONC", "EVAL_LIMIT", "EVAL_SUITE",
+    "SWEBENCH_GEN_MODE", "SWEBENCH_USE_MODAL", "MODAL_TOKEN_ID",
+    "MODAL_TOKEN_SECRET", "IS_AGENTIC", "SCENARIO_TYPE",
+]
+print(json.dumps(names + os.environ["INFERENCEX_RUNTIME_ENV_VARS"].split()))
+PYENV
+    ) || return 1
+    SRTCTL_EVAL_ARGS+=(--set "post_eval.passthrough_env=$eval_passthrough")
+    # Custom benchmarks inherit exported workflow settings through sbatch/srun;
+    # native recipe environment and benchmark.env retain their override priority.
+    local source="$INFERENCEX_SLURM_UTILS_DIR/../utils/srt-slurm"
+    if [[ "$framework" == "tilert" ]]; then
+        # Sole fork exception until NVIDIA supports the TileRT backend and router.
+        SRT_SLURM_COMMIT=6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde
+        git init "$destination" || return 1
+        git -C "$destination" remote add origin https://github.com/SemiAnalysisAI/srt-slurm.git || return 1
+        git -C "$destination" fetch --depth=1 origin "$SRT_SLURM_COMMIT" || return 1
+        git -C "$destination" checkout --detach "$SRT_SLURM_COMMIT" || return 1
+    else
+        if [[ ! -e "$source/.git" ]]; then
+            echo "Missing srt-slurm submodule; run git submodule update --init before launching." >&2
+            return 1
+        fi
+        SRT_SLURM_COMMIT=$(git -C "$source" rev-parse HEAD) || return 1
+        # A local clone keeps job writes isolated and preserves upstream Git provenance.
+        git clone --no-hardlinks "$source" "$destination" || return 1
+    fi
+    cd "$destination" || return 1
+    [[ "$(git rev-parse HEAD)" == "$SRT_SLURM_COMMIT" ]] || return 1
+    git rev-parse HEAD > "$GITHUB_WORKSPACE/srt-slurm-sha.txt" || return 1
+    if [[ "$uses_power" == "1" ]]; then
+        cp "$GITHUB_WORKSPACE/srt-slurm-sha.txt" "$GITHUB_WORKSPACE/power-producer-sha.txt" || return 1
+    fi
+    mkdir -p recipes benchmarks/multi_node || return 1
+    cp -R "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/." recipes/ || return 1
+    # Both CONFIG_FILE spellings currently occur in master configs.
+    ln -s ../../recipes benchmarks/multi_node/srt-slurm-recipes || return 1
+    cp -R "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/." configs/ || return 1
+}
 
 # Use the requested image's cache identity, never a convenient older squash file.
 resolve_h100_srt_container() {
@@ -27,17 +87,21 @@ check_staged_srt_assets() {
     fi
 }
 
-# Optionally inject synthetic acceptance into a recipe's speculative-config when
-# SYNTHETIC_ACCEPTANCE=true (no-op otherwise). Call after the job-name override
-# and before `srtctl apply` so the rendered job picks it up. Returns non-zero if
-# the injector fails, so a broken opt-in never reaches srtctl with an unrewritten
-# recipe; callers should propagate that rather than continuing.
-inject_synthetic_acceptance() {
-    local config_path="$1"
-    local framework="$2"
-
-    python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-        "$config_path" "$framework"
+# AgentX acceptance comes from the committed golden curve; evals use real verification.
+apply_srt_recipe() {
+    if [[ $# -lt 2 || -z "$1" || -z "$2" ]]; then
+        echo "Usage: apply_srt_recipe config framework [srtctl arguments...]" >&2
+        return 1
+    fi
+    check_env_vars MODEL_PREFIX IS_AGENTIC EVAL_ONLY SPEC_DECODING
+    if [[ "$IS_AGENTIC" == 1 || "$IS_AGENTIC" == true ]] && [[ "$EVAL_ONLY" != true && "$SPEC_DECODING" != none ]]; then
+        check_env_vars THINKING_MODE
+    fi
+    local config="$1" framework="$2"
+    shift 2
+    PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" \
+        python3 -m infx.srt_slurm.synthetic_acceptance \
+        "$config" "$framework" -- "$@"
 }
 
 slurm_job_is_active() {
@@ -74,10 +138,8 @@ copy_to_workspace() {
     local source_file="$1"
     local destination_file="$2"
 
-    # A compute-visible runner workspace may be mounted directly into the
-    # benchmark container. In that case the staged result already is the
-    # workflow artifact, so copying it onto itself would fail with cp's
-    # "same file" error even though the benchmark succeeded.
+    # When the runner workspace is mounted into the container the staged result
+    # already is the artifact, and cp onto itself fails with "same file".
     if [[ -e "$destination_file" && "$source_file" -ef "$destination_file" ]]; then
         echo "Result already present at $destination_file"
         return 0

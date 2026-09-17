@@ -1,24 +1,24 @@
 #!/usr/bin/bash
+
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars EVAL_ONLY IS_MULTINODE RUN_EVAL
 set -e
 
 # shellcheck source=runners/slurm_utils.sh
-source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 
-# System-specific configuration for H100 DGXC Slurm cluster
 SLURM_PARTITION="hpc-gpu-1"
 SLURM_ACCOUNT="customer"
 
-# Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
-# the h200 launchers, which have carried SPEC_SUFFIX since #392).
 SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 set -x
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
-    # MODEL_PATH: Override with pre-downloaded paths on H100 runner
-    # The yaml files specify HuggingFace model IDs for portability, but we use
-    # local paths to avoid repeated downloading on the shared H100 cluster.
+    # Recipes name HF model IDs; resolve them to pre-staged paths so the shared
+    # cluster does not re-download. SRT_SLURM_MODEL_PREFIX must match the
+    # recipe's model.path alias.
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
             export MODEL_PATH="/mnt/nfs/lustre/models/dsr1-fp8"
@@ -41,27 +41,14 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         exit 1
     fi
 
-    echo "Cloning srt-slurm repository..."
+    echo "Preparing job-local srt-slurm checkout..."
     SRT_REPO_DIR="srt-slurm"
     if [ -d "$SRT_REPO_DIR" ]; then
         echo "Removing existing $SRT_REPO_DIR..."
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    # TODO(CJQ): make first class upon srt-slurm upstream refactor
-    if [[ "$IS_AGENTIC" == "1" ]]; then
-        git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-    else
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-        git checkout sa-submission-q2-2026
-    fi
-    if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
-        python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
-            || exit 1
-    fi
-
+    setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" 0 || exit 1
 
     echo "Installing srtctl..."
     export UV_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/bin"
@@ -85,7 +72,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     echo "Configs available at: $SRT_REPO_DIR/"
 
-    # Map container images to local squash files based on framework
     NGINX_SQUASH_FILE="/mnt/nfs/lustre/containers/nginx_1.27.4.sqsh"
 
     resolve_h100_srt_container "$IMAGE" "$FRAMEWORK" || exit 1
@@ -93,9 +79,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     export ISL="$ISL"
     export OSL="$OSL"
-    export EVAL_ONLY="${EVAL_ONLY:-false}"
 
-    # Create srtslurm.yaml for srtctl (used by both frameworks)
     SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
     echo "Creating srtslurm.yaml configuration..."
     cat > srtslurm.yaml <<EOF
@@ -131,7 +115,7 @@ EOF
     echo "Running make setup..."
     make setup ARCH=x86_64
 
-    # Export eval-related env vars for srt-slurm post-benchmark eval
+    # Read by srt-slurm's post-benchmark eval.
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 
     echo "Submitting job with srtctl..."
@@ -142,18 +126,12 @@ EOF
         exit 1
     fi
 
-    # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
-    # Raise sglang's torch-distributed TCPStore timeout from the 600s gloo default
+    # sglang's torch-distributed TCPStore defaults to gloo's 600s, too short for large loads.
     sed -i '/^      watchdog-timeout:/a\      dist-timeout: 1800' "${CONFIG_FILE%%:*}"
-    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
-        python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-            "${CONFIG_FILE%%:*}" "$FRAMEWORK" || exit 1
-    fi
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
-    # Extract JOB_ID from srtctl output
     JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
 
     set +x
@@ -165,12 +143,9 @@ EOF
 
     echo "Extracted JOB_ID: $JOB_ID"
 
-    # Use the JOB_ID to find the logs directory
-    # srtctl creates logs in outputs/JOB_ID/logs/
     LOGS_DIR="outputs/$JOB_ID/logs"
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
-    # Wait for log file to appear (also check job is still alive)
     while ! ls "$LOG_FILE" &>/dev/null; do
         if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
             echo "ERROR: Job $JOB_ID failed before creating log file"
@@ -181,7 +156,6 @@ EOF
         sleep 5
     done
 
-    # Poll for job completion in background
     (
         while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
             sleep 10
@@ -191,7 +165,7 @@ EOF
 
     echo "Tailing LOG_FILE: $LOG_FILE"
 
-    # Stream the log file until job completes (-F follows by name, polls instead of inotify for NFS)
+    # -F follows by name and polls; inotify does not work on NFS.
     tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
 
     wait $POLL_PID
@@ -211,14 +185,13 @@ EOF
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
     tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
-    if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+    if [[ "${EVAL_ONLY}" != "true" ]]; then
         copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME"
     else
         echo "EVAL_ONLY=true: Skipping benchmark result collection"
     fi
 
-    # Collect eval results if eval was requested
-    if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
+    if [[ "${RUN_EVAL}" == "true" || "${EVAL_ONLY}" == "true" ]]; then
         EVAL_DIR="$LOGS_DIR/eval_results"
         if [ -d "$EVAL_DIR" ]; then
             echo "Extracting eval results from $EVAL_DIR"
@@ -251,7 +224,7 @@ else
     SQUASH_FILE="/mnt/nfs/lustre/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     LOCK_FILE="${SQUASH_FILE}.lock"
 
-    export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+    check_env_vars GPU_COUNT
 
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
@@ -280,8 +253,8 @@ else
         fi
     "
 
-    # Prefer the framework-tagged script name, as the h200 launchers do, and
-    # keep the untagged name working for the recipes that predate frameworks.
+    # Prefer the framework-tagged script so engines can coexist; the untagged
+    # name still works for recipes that predate frameworks.
     BENCH_BASE="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_h100"
     BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
     if [[ ! -f "$BENCH_SCRIPT" ]]; then
