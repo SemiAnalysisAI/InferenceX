@@ -425,9 +425,9 @@ python -m pytest utils/matrix_logic/ -v
 
 ### TP2 Engram CPU 卸载实验
 
-`dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp2-engram-cpu` 和
-`dsv41flash-fp4-mi355x-vllm-mtp-tp2-engram-cpu` 分别覆盖 AgentX 与 8k1k，
-均使用 TP2，并发为 1、2、4、8、16、32。两个配置固定使用
+`dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp2-engram-cpu` 仅覆盖 AgentX，
+使用 TP2，并发为 1、2、4、8、16、32，c32 执行 eval。
+此实验不运行固定序列或 8k1k 基准。配置固定使用
 `vllm/vllm-openai-rocm:nightly-af1c01499b289be555c475669ba50a88e96d846e`，
 先应用 [ROCm Engram 补丁](../utils/patches/dsv41flash_rocm_engram/README.md)，
 再传入 `--engram-config '{"cpu_offload":true}'`。这是 Engram 权重卸载，
@@ -437,8 +437,8 @@ python -m pytest utils/matrix_logic/ -v
 TP 分片和图暂存逻辑保持不变，仍拒绝 Engram DP 分片及 DP 共享内存。
 模型加载前的 GPU 预检验证 host/HBM 查找一致性、TP2 分片重建、
 变更 ID 后的图回放及存储替换。AgentX 吞吐保留黄金 AL 3.51；
-固定序列吞吐和全部 eval 使用真实 block rejection。
-只有 GPU 预检、完整扫描和 eval 全部通过后，才能将此实验视为已验证。
+eval 使用真实 block rejection。
+只有 GPU 预检、完整 AgentX 扫描和 eval 全部通过后，才能将此实验视为已验证。
 原有 TP4 配置和镜像保持不变。
 
 ### 原有 TP4 配方

@@ -451,11 +451,11 @@ A configuration is ready for sweep only when the executable files agree, the exa
 
 ### Experimental TP2 Engram CPU offload
 
-The `dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp2-engram-cpu` and
-`dsv41flash-fp4-mi355x-vllm-mtp-tp2-engram-cpu` entries test TP2 at concurrency
-1, 2, 4, 8, 16, and 32 for AgentX and 8k1k respectively. They pin
+The `dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp2-engram-cpu` entry tests TP2 at
+concurrency 1, 2, 4, 8, 16, and 32 for AgentX only, with a c32 eval.
+Do not run fixed-sequence or 8k1k benchmarks for this experiment. It pins
 `vllm/vllm-openai-rocm:nightly-af1c01499b289be555c475669ba50a88e96d846e`
-and apply the [ROCm Engram patch](../utils/patches/dsv41flash_rocm_engram/README.md)
+and applies the [ROCm Engram patch](../utils/patches/dsv41flash_rocm_engram/README.md)
 before passing `--engram-config '{"cpu_offload":true}'`. This is Engram weight
 offload, not KV-cache offload; KV remains on the GPU.
 
@@ -464,8 +464,8 @@ Hashing, lookup math, TP ownership, and graph staging remain unchanged. It
 rejects Engram DP sharding and DP shared memory. GPU preflight checks host/HBM
 lookup equivalence, TP2 shard reconstruction, changed-ID graph replay, and
 storage replacement before the model starts. AgentX throughput retains golden
-AL 3.51; fixed-sequence throughput and all evals use real block rejection.
-GPU preflight, full sweeps, and evals are required before this experiment can
+AL 3.51; the eval uses real block rejection.
+GPU preflight, the full AgentX sweep, and eval are required before this experiment can
 be called validated. The stock TP4 entry and its image remain unchanged.
 
 ### Stock TP4 recipe

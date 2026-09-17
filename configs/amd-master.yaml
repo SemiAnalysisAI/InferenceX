@@ -1429,18 +1429,3 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp2-engram-cpu:
     - dram-utilization: 0.60
       search-space:
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
-
-dsv41flash-fp4-mi355x-vllm-mtp-tp2-engram-cpu:
-  image: vllm/vllm-openai-rocm:nightly-af1c01499b289be555c475669ba50a88e96d846e
-  model: deepseek-ai/DeepSeek-V4.1-Flash
-  model-prefix: dsv41flash
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 2, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }

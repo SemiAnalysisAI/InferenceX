@@ -20,9 +20,9 @@ The two shard owners are exercised on one GPU; real two-GPU collectives are
 qualified by the serving sweep and evaluation jobs.
 
 GPU preflight success alone does not qualify this serving recipe. Require
-the full 8k1k and AgentX sweeps plus real-rejection evaluation results.
-AgentX throughput retains golden AL 3.51; fixed-sequence throughput and all
-evaluations use real block rejection.
+the full AgentX sweep plus the c32 real-rejection evaluation result.
+AgentX throughput retains golden AL 3.51; evaluation uses real block rejection.
+This experiment is AgentX only. Do not run fixed-sequence or 8k1k benchmarks.
 
 The upstream-ready source and tests are bundled for human review. No
 upstream submission or approval is implied by this patch.
@@ -38,7 +38,7 @@ DeepSeek V4.1 Engram。不支持 Engram DP 分片或 DP 共享主机内存。
 
 启动前会校验镜像并执行真实 GPU 查找和图回放测试；单卡上分别验证两个 TP
 分片，真实双卡通信由服务扫描和评估验证。仅通过预检不代表配方通过验证。
-必须完成 8k1k、AgentX 全扫描及真实拒绝采样评估。
+仅运行 AgentX，必须完成全扫描及 c32 真实拒绝采样评估，不运行固定序列或 8k1k。
 上游候选补丁需人工审核，此目录不代表已提交或获上游批准。
 
 </details>
