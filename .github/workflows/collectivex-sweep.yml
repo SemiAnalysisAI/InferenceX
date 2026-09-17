@@ -19,6 +19,10 @@ on:
         description: Official ROCm vLLM image for AMD swap-blocks
         type: string
         default: vllm/vllm-openai-rocm:v0.27.1
+      swap_h100_image:
+        description: Official CUDA vLLM image staged in the H100 serving cache
+        type: string
+        default: vllm/vllm-openai:v0.27.1
       swap_profile:
         description: swap-blocks workload size (both profiles cover all directions and layouts)
         type: choice
@@ -174,7 +178,7 @@ jobs:
     timeout-minutes: 350
     env:
       COLLX_BENCH: ${{ matrix.backend }}
-      COLLX_SWAP_IMAGE: ${{ matrix.vendor == 'amd' && inputs.swap_rocm_image || inputs.swap_image }}
+      COLLX_SWAP_IMAGE: ${{ matrix.vendor == 'amd' && inputs.swap_rocm_image || matrix.sku == 'h100-dgxc' && inputs.swap_h100_image || inputs.swap_image }}
       COLLX_VENDOR: ${{ matrix.vendor }}
       COLLX_SWAP_BLOCK_BYTES: ${{ inputs.swap_profile == 'large-blocks' && '257 4096 65536 262144 1048576 4194304 16777216 67108864 268435456 1073741824' || inputs.swap_profile == 'standard' && '4096 65536 1048576' || '257 4096 65536 262144' }}
       COLLX_SWAP_MAX_PAYLOAD_BYTES: ${{ inputs.swap_profile == 'large-blocks' && '1073741824' || '2147483648' }}
@@ -185,6 +189,7 @@ jobs:
       COLLX_SWAP_DEVICE: '0'
       COLLX_SWAP_TIME: '45'
       COLLX_IMPORT_TMPDIR: ${{ matrix.sku == 'h100-dgxc' && '/var/tmp' || '/tmp' }}
+      COLLX_SWAP_STAGED_DIR: ${{ matrix.sku == 'h100-dgxc' && '/mnt/nfs/lustre/containers' || '' }}
       COLLX_NODES: ${{ matrix.nodes }}
       COLLX_GPUS_PER_NODE: ${{ matrix.gpus_per_node }}
       COLLX_SCALE_UP_DOMAIN: ${{ matrix.scale_up_domain }}

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import torch
-import torch.nn.functional as F
+from operatorx.runners import attention
 
 from operatorx.core import BackendImpl, Op, UnsupportedOpError, lookup_versions
 
@@ -70,83 +70,6 @@ def _kernel_gemm(ctx: dict) -> None:
         ctx["C"] = torch.addmm(ctx["bias"], ctx["A"], ctx["B"])
     else:
         ctx["C"] = torch.matmul(ctx["A"], ctx["B"])
-
-
-def _prepare_attention_mha(op: Op) -> dict:
-    a = op.args
-    if a.get("kv_layout", "contig") != "contig":
-        raise UnsupportedOpError("torch attention_mha here only handles contiguous KV")
-    # F.scaled_dot_product_attention doesn't accept fp8 — and we use one dtype for Q/K/V.
-    for k in ("dtype_q", "dtype_k", "dtype_v"):
-        if a[k] == "fp8":
-            raise UnsupportedOpError(
-                f"torch SDPA doesn't support fp8 ({k}={a[k]}); use flashinfer for fp8 attention"
-            )
-    if not (a["dtype_q"] == a["dtype_k"] == a["dtype_v"]):
-        raise UnsupportedOpError(
-            f"torch SDPA needs uniform Q/K/V dtype "
-            f"(got {a['dtype_q']}/{a['dtype_k']}/{a['dtype_v']})"
-        )
-
-    B, S_q, S_kv = a["batch_size"], a["seq_len_q"], a["seq_len_kv"]
-    H, H_kv, D = a["num_heads"], a["num_heads_kv"], a["head_dim"]
-    dt = _resolve(a["dtype_q"])
-    causal = a.get("causal", True) and S_q == S_kv
-
-    q = torch.randn(B, H, S_q, D, dtype=dt, device="cuda")
-    k = torch.randn(B, H_kv, S_kv, D, dtype=dt, device="cuda")
-    v = torch.randn(B, H_kv, S_kv, D, dtype=dt, device="cuda")
-
-    if H_kv != H:
-        rep = H // H_kv
-        k = k.repeat_interleave(rep, dim=1)
-        v = v.repeat_interleave(rep, dim=1)
-
-    return {"q": q, "k": k, "v": v, "causal": causal}
-
-
-def _kernel_attention_mha(ctx: dict) -> None:
-    ctx["out"] = F.scaled_dot_product_attention(
-        ctx["q"], ctx["k"], ctx["v"], is_causal=ctx["causal"]
-    )
-
-
-def _prepare_attention_mla(op: Op) -> dict:
-    """Inner-kernel MLA: pre-materialise (Q, K, V) outside the timed region,
-    then time only F.scaled_dot_product_attention. The c_kv -> K_nope / V
-    up-projection is a plain gemm and is benchmarked separately via the
-    ``gemm`` op."""
-    a = op.args
-    for k in ("dtype_q", "dtype_kv"):
-        if a[k] == "fp8":
-            raise UnsupportedOpError(
-                f"torch SDPA doesn't support fp8 ({k}={a[k]})"
-            )
-    if a["dtype_q"] != a["dtype_kv"]:
-        raise UnsupportedOpError(
-            f"torch SDPA needs uniform Q/KV dtype (got {a['dtype_q']} vs {a['dtype_kv']})"
-        )
-    B, S_q, S_kv = a["batch_size"], a["seq_len_q"], a["seq_len_kv"]
-    H = a["num_heads"]
-    qk_dim = a["head_dim_qk_nope"] + a["head_dim_qk_rope"]
-    D_v = a["head_dim_v"]
-    dt = _resolve(a["dtype_q"])
-
-    q = torch.randn(B, H, S_q, qk_dim, dtype=dt, device="cuda")
-    k = torch.randn(B, H, S_kv, qk_dim, dtype=dt, device="cuda")
-    v = torch.randn(B, H, S_kv, D_v, dtype=dt, device="cuda")
-    causal = a.get("causal", True) and S_q == S_kv
-    return {"q": q, "k": k, "v": v, "causal": causal}
-
-
-def _kernel_attention_mla(ctx: dict) -> None:
-    ctx["out"] = F.scaled_dot_product_attention(
-        ctx["q"], ctx["k"], ctx["v"], is_causal=ctx["causal"]
-    )
-
-
-
-
 
 
 def _ensure_dist() -> None:
@@ -247,7 +170,6 @@ def _moe_routed_buffer(op: Op) -> torch.Tensor:
     a = op.args
     dt = _resolve(a["dtype"])
     nt, k, h = a["num_tokens"], a["top_k"], a["hidden"]
-    ws = a["world_size"]
     # Total per-rank send/recv volume = nt * k * h elements (split evenly across ws).
     return torch.randn(nt * k * h, dtype=dt, device="cuda")
 
@@ -277,8 +199,8 @@ def _kernel_combine(ctx: dict) -> None:
 
 IMPLS = [
     BackendImpl(op_type="gemm", prepare=_prepare_gemm, kernel=_kernel_gemm),
-    BackendImpl(op_type="attention_mha", prepare=_prepare_attention_mha, kernel=_kernel_attention_mha),
-    BackendImpl(op_type="attention_mla", prepare=_prepare_attention_mla, kernel=_kernel_attention_mla),
+    BackendImpl(op_type="attention_mha", prepare=attention.prepare, kernel=attention.kernel),
+    BackendImpl(op_type="attention_mla", prepare=attention.prepare, kernel=attention.kernel),
     BackendImpl(op_type="allreduce", prepare=_prepare_allreduce, kernel=_kernel_allreduce),
     BackendImpl(op_type="allgather", prepare=_prepare_allgather, kernel=_kernel_allgather),
     BackendImpl(op_type="reduce_scatter", prepare=_prepare_reduce_scatter, kernel=_kernel_reduce_scatter),
