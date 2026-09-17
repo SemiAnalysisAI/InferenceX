@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 from collections import Counter
 from collections.abc import Iterable
 from pathlib import Path
@@ -188,40 +187,8 @@ def agentic_keys_from_paths(paths: Iterable[Path]) -> list[tuple[Any, ...]]:
     return [
         agentic_key(row)
         for _, row in json_rows(paths)
-        if row.get("scenario_type") == "agentic-coding" and not failed_agentic_row(row)
+        if row.get("scenario_type") == "agentic-coding"
     ]
-
-
-def failed_agentic_row(row: Any) -> bool:
-    """Identify explicit zero-success results without treating unknown counts as failures."""
-    if not isinstance(row, dict) or row.get("scenario_type") != "agentic-coding":
-        return False
-    successful = row.get("num_requests_successful")
-    total = row.get("num_requests_total")
-    return (
-        isinstance(successful, (int, float))
-        and not isinstance(successful, bool)
-        and successful == 0
-        and isinstance(total, (int, float))
-        and not isinstance(total, bool)
-        and total >= 0
-        and (isinstance(total, int) or (math.isfinite(total) and total.is_integer()))
-    )
-
-
-def failed_agentic_point_names(artifacts_dir: Path, paths: Iterable[Path]) -> set[str]:
-    """Find failed-only artifacts; mixed, empty and unknown payloads stay strict."""
-    failed_names: set[str] = set()
-    other_names: set[str] = set()
-    for path in paths:
-        name = path.relative_to(artifacts_dir).parts[0].removeprefix("bmk_")
-        data = load_json(path)
-        rows = data if isinstance(data, list) else [data]
-        if rows and all(failed_agentic_row(row) for row in rows):
-            failed_names.add(name)
-        else:
-            other_names.add(name)
-    return failed_names - other_names
 
 
 def actual_agentic_keys(artifacts_dir: Path) -> set[tuple[Any, ...]]:
@@ -287,8 +254,7 @@ def validate_agentic_artifacts(
     artifacts_dir: Path,
 ) -> list[str]:
     """Validate agentic point, raw, and aggregate artifacts agree."""
-    point_paths = agentic_point_files(artifacts_dir)
-    point_rows = agentic_keys_from_paths(point_paths)
+    point_rows = agentic_keys_from_paths(agentic_point_files(artifacts_dir))
     errors = duplicate_identity_errors("agentic point", point_rows)
 
     results_bmk = artifacts_dir / "results_bmk"
@@ -304,19 +270,14 @@ def validate_agentic_artifacts(
         )
 
     point_names = {
-        path.relative_to(artifacts_dir).parts[0].removeprefix("bmk_") for path in point_paths
+        path.relative_to(artifacts_dir).parts[0].removeprefix("bmk_")
+        for path in agentic_point_files(artifacts_dir)
     }
-    # Failed attempts can upload a point stub before a raw profile exists. Keep
-    # their files, but neither require nor reject a raw partner for failed-only
-    # artifacts. A successful or unknown row still requires its original partner.
-    failed_names = failed_agentic_point_names(artifacts_dir, point_paths)
-    point_names -= failed_names
     raw_names = {
         path.name
         for path in artifacts_dir.iterdir()
         if path.is_dir() and path.name.startswith("agentic_")
     }
-    raw_names -= failed_names
     if point_names != raw_names:
         missing_raw = point_names - raw_names
         extra_raw = raw_names - point_names

@@ -178,8 +178,6 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 
 The aggregate artifact matches the `bmk_*` collection pattern and therefore also appears as a row in `results_bmk/agg_bmk.json`. The raw sibling is not fed to `collect_results.py`. InferenceX-app pairs `bmk_agentic_<suffix>` with `agentic_<suffix>` after stripping `bmk_` and `agentic_`. For files named with `_concN.json`, the concurrency is part of trace-sibling lookup.
 
-AgentX reuse validation excludes explicitly failed rows with numeric zero successful requests and a finite, nonnegative integer-valued numeric total, consistent with ingestion excluding failed runs. A failed-only point artifact may lack its raw sibling; neither artifact is deleted. Successful, mixed, empty, unknown or malformed results retain existing identity and raw-sibling checks. A wholly failed source with no reusable results is still rejected, and excluding diagnostic failure rows does not establish full-sweep coverage.
-
 Server logs are separate `server_logs_<RESULT_FILENAME>` artifacts. The app uses the fully stripped suffix fallback so AgentX rows can find a server log even though the log artifact has no `agentic_` prefix.
 
 Ordinary single-node AgentX runs enable the shared GPU power monitor by default.
