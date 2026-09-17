@@ -8009,3 +8009,12 @@
     - "Switch DEP8 llm-d wide-EP from hybrid LB to multi-port external LB: register one EPP endpoint per DP rank, open multi-port pd-sidecar on decode, probe DP supervisor /health on 8100, use Nixl-only decode KV, and scrape per-rank vLLM metrics in AgentX."
     - "将 DEP8 llm-d 宽 EP 从 hybrid LB 切换为多端口外部 LB：按 DP rank 注册 EPP 端点，decode 侧启用多端口 pd-sidecar，在 8100 探测 DP supervisor /health，decode 仅保留 Nixl KV，并在 AgentX 中按 rank 抓取 vLLM 指标。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-remove archived dsv4-fp4-gb200-llmd-vllm 8k1k master key reintroduced by the upstream merge and restore the thin GB200 llmd-vllm disagg wrapper for AgentX P/D launches."
+    - "重新移除 upstream 合并误带回的已归档 dsv4-fp4-gb200-llmd-vllm 8k1k 主配置项，并恢复供 AgentX P/D 启动使用的 GB200 llmd-vllm disagg 精简 wrapper。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
