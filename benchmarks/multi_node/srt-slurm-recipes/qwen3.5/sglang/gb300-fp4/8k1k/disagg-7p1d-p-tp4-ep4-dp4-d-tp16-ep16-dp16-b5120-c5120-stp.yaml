@@ -17,7 +17,7 @@ model:
 
 dynamo:
   source:
-    pypi: "1.1.0"
+    pypi: "1.5.0.dev20260910"
 
 frontend:
   type: dynamo
