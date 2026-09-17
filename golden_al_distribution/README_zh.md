@@ -24,7 +24,7 @@ AL 取决于工作负载：草稿模型的预测在某些领域比其他领域�
 
 根据 AgentX 指南，每个模型、思考模式和草稿长度都有一个已提交的黄金 AL。当某个基准场景启用合成接受后，提交可以选择任意受支持的草稿长度，但不能替换为其他接受目标。不同模型保留各自基于 SPEED-Bench 测得的曲线。所有评估同一模型和模式的提交都使用同一条曲线。
 
-对于 Qwen3.5 的 srt-slurm 启动，`runners/inject_synthetic_acceptance.py` 即使在显式设置 `SYNTHETIC_ACCEPTANCE_LENGTH` 时，也会根据 recipe 中的 `speculative-num-steps` 查询已提交曲线。若该值与黄金表对应行不一致、`NUM_SPEC_TOKENS` 与 recipe 不一致，或 `speculative-num-draft-tokens` 不等于 `steps + 1`，启动都会失败。验证 token 不能额外计为一个 MTP 步数。
+对于 Qwen3.5 的 srt-slurm 启动，`apply_srt_recipe` 通过 `infx/srt_slurm/synthetic_acceptance.py` 连接器，在应用调用方覆盖设置后，根据生成角色的 `speculative-num-steps` 和 `THINKING_MODE` 选择已提交的曲线。验证 token 不计为额外的 MTP 步数。对于采用合成接受的 SGLang MTP 吞吐测试，如果生成角色缺少 `speculative-num-draft-tokens`，或者其值不是等于 `speculative-num-steps + 1` 的整数，连接器会拒绝启动。无需手动设置接受长度。仅评测运行会移除合成设置并使用真实验证。
 
 vLLM 通过合成拒绝采样支持这一策略。例如，EAGLE3 运行可以通过 `synthetic_acceptance_length` 注入所选 YAML 值：
 

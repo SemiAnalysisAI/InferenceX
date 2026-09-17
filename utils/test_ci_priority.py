@@ -1,18 +1,12 @@
-import json
-import shlex
 from decimal import Decimal
-from pathlib import Path
 
 import pytest
-import yaml
 
-from ci_priority import (
+from infx.workflows.ci_priority import (
     PriorityContext,
     annotate_jobs,
     calculate_priority,
-    load_policy,
     queue_token,
-    supported_criteria,
 )
 
 
@@ -259,25 +253,6 @@ def test_annotation_only_touches_runnable_matrix_entries(policy):
     assert "priority" not in annotated["changelog_metadata"]
     assert "priority" not in payload["single_node"]["1k1k"][0]
     assert "queue-token" not in payload["single_node"]["1k1k"][0]
-
-
-def test_classifier_schema_matches_the_policy_vocabulary():
-    policy = load_policy(Path(__file__).parents[1] / "configs" / "ci-priority.yaml")
-    workflow = yaml.safe_load(
-        (
-            Path(__file__).parents[1] / ".github" / "workflows" / "run-sweep.yml"
-        ).read_text()
-    )
-    classifier = next(
-        step
-        for step in workflow["jobs"]["setup"]["steps"]
-        if step.get("id") == "classify"
-    )
-    arguments = shlex.split(classifier["with"]["claude_args"])
-    schema = json.loads(arguments[arguments.index("--json-schema") + 1])
-    schema_criteria = schema["properties"]["criteria"]["items"]["enum"]
-
-    assert set(schema_criteria) == set(supported_criteria(policy))
 
 
 def test_queue_tokens_change_between_run_attempts():

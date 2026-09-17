@@ -54,6 +54,7 @@ labels:
     - b200-nscale-slurm_07
     - b200-nscale-slurm_08
     - b200-nscale-slurm_09
+    - b200-nscale-slurm_10
   b200-nscale:
     - b200-nscale-slurm_00
     - b200-nscale-slurm_01
@@ -65,6 +66,7 @@ labels:
     - b200-nscale-slurm_07
     - b200-nscale-slurm_08
     - b200-nscale-slurm_09
+    - b200-nscale-slurm_10
   mi300x:
     - mi300x-amd_00
     - mi300x-amd_01
@@ -194,6 +196,7 @@ labels:
     - b200-nscale-slurm_07
     - b200-nscale-slurm_08
     - b200-nscale-slurm_09
+    - b200-nscale-slurm_10
   cluster:gb200-nv:
     - gb200-nv_0
     - gb200-nv_1

@@ -1485,7 +1485,7 @@ glm5-fp4-gb200-dynamo-trt:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch1_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch1_eplb0_mtp0.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p4d-dep4-tep8-b1-eplb0-mtp0.yaml"
         decode:
           num-worker: 4
           tp: 8
@@ -1499,7 +1499,7 @@ glm5-fp4-gb200-dynamo-trt:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen5tep4_batch1_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen5tep4_batch1_eplb0_mtp0.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p5d-dep4-tep4-b1-eplb0-mtp0.yaml"
         decode:
           num-worker: 5
           tp: 4
@@ -1513,7 +1513,7 @@ glm5-fp4-gb200-dynamo-trt:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch4_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch4_eplb0_mtp0.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p4d-dep4-tep8-b4-eplb0-mtp0.yaml"
         decode:
           num-worker: 4
           tp: 8
@@ -1527,7 +1527,7 @@ glm5-fp4-gb200-dynamo-trt:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen5tep4_batch4_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen5tep4_batch4_eplb0_mtp0.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p5d-dep4-tep4-b4-eplb0-mtp0.yaml"
         decode:
           num-worker: 5
           tp: 4
@@ -1541,7 +1541,7 @@ glm5-fp4-gb200-dynamo-trt:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch16_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch16_eplb0_mtp0.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p4d-dep4-tep8-b16-eplb0-mtp0.yaml"
         decode:
           num-worker: 4
           tp: 8
@@ -1555,7 +1555,7 @@ glm5-fp4-gb200-dynamo-trt:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch32_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch32_eplb0_mtp0.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p4d-dep4-tep8-b32-eplb0-mtp0.yaml"
         decode:
           num-worker: 4
           tp: 8
@@ -1569,7 +1569,7 @@ glm5-fp4-gb200-dynamo-trt:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch64_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch64_eplb0_mtp0.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p4d-dep4-tep8-b64-eplb0-mtp0.yaml"
         decode:
           num-worker: 4
           tp: 8
@@ -1583,7 +1583,7 @@ glm5-fp4-gb200-dynamo-trt:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch16_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch16_eplb0_mtp0.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p1d-dep4-dep32-b16-eplb0-mtp0.yaml"
         decode:
           num-worker: 1
           tp: 32
@@ -1597,7 +1597,7 @@ glm5-fp4-gb200-dynamo-trt:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch32_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch32_eplb0_mtp0.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p1d-dep4-dep32-b32-eplb0-mtp0.yaml"
         decode:
           num-worker: 1
           tp: 32
@@ -1611,7 +1611,7 @@ glm5-fp4-gb200-dynamo-trt:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx2dep4_gen1dep32_batch64_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx2dep4_gen1dep32_batch64_eplb0_mtp0.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-2p1d-dep4-dep32-b64-eplb0-mtp0.yaml"
         decode:
           num-worker: 1
           tp: 32
@@ -1625,7 +1625,7 @@ glm5-fp4-gb200-dynamo-trt:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx2dep4_gen1dep16_batch128_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx2dep4_gen1dep16_batch128_eplb0_mtp0.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-2p1d-dep4-dep16-b128-eplb0-mtp0.yaml"
         decode:
           num-worker: 1
           tp: 16
@@ -1639,7 +1639,7 @@ glm5-fp4-gb200-dynamo-trt:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx2dep4_gen1dep16_batch256_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx2dep4_gen1dep16_batch256_eplb0_mtp0.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-2p1d-dep4-dep16-b256-eplb0-mtp0.yaml"
         decode:
           num-worker: 1
           tp: 16
@@ -1653,7 +1653,7 @@ glm5-fp4-gb200-dynamo-trt:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep8_batch512_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep8_batch512_eplb0_mtp0.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p1d-dep4-dep8-b512-eplb0-mtp0.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -1685,7 +1685,7 @@ glm5-fp4-gb200-dynamo-trt-mtp:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen4tep8_batch1_eplb0_mtp3.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen4tep8_batch1_eplb0_mtp3.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p4d-dep4-tep8-b1-eplb0-mtp3.yaml"
         decode:
           num-worker: 4
           tp: 8
@@ -1700,7 +1700,7 @@ glm5-fp4-gb200-dynamo-trt-mtp:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen5tep4_batch1_eplb0_mtp3.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen5tep4_batch1_eplb0_mtp3.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p5d-dep4-tep4-b1-eplb0-mtp3.yaml"
         decode:
           num-worker: 5
           tp: 4
@@ -1715,7 +1715,7 @@ glm5-fp4-gb200-dynamo-trt-mtp:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen4tep8_batch4_eplb0_mtp3.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen4tep8_batch4_eplb0_mtp3.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p4d-dep4-tep8-b4-eplb0-mtp3.yaml"
         decode:
           num-worker: 4
           tp: 8
@@ -1730,7 +1730,7 @@ glm5-fp4-gb200-dynamo-trt-mtp:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen4tep8_batch8_eplb0_mtp3.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen4tep8_batch8_eplb0_mtp3.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p4d-dep4-tep8-b8-eplb0-mtp3.yaml"
         decode:
           num-worker: 4
           tp: 8
@@ -1745,7 +1745,7 @@ glm5-fp4-gb200-dynamo-trt-mtp:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen4tep8_batch16_eplb0_mtp3.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen4tep8_batch16_eplb0_mtp3.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p4d-dep4-tep8-b16-eplb0-mtp3.yaml"
         decode:
           num-worker: 4
           tp: 8
@@ -1760,7 +1760,7 @@ glm5-fp4-gb200-dynamo-trt-mtp:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen1dep32_batch4_eplb0_mtp3.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen1dep32_batch4_eplb0_mtp3.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p1d-dep4-dep32-b4-eplb0-mtp3.yaml"
         decode:
           num-worker: 1
           tp: 32
@@ -1775,7 +1775,7 @@ glm5-fp4-gb200-dynamo-trt-mtp:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen1dep32_batch8_eplb0_mtp3.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen1dep32_batch8_eplb0_mtp3.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p1d-dep4-dep32-b8-eplb0-mtp3.yaml"
         decode:
           num-worker: 1
           tp: 32
@@ -1790,7 +1790,7 @@ glm5-fp4-gb200-dynamo-trt-mtp:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen1dep16_batch32_eplb0_mtp3.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen1dep16_batch32_eplb0_mtp3.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p1d-dep4-dep16-b32-eplb0-mtp3.yaml"
         decode:
           num-worker: 1
           tp: 16
@@ -1805,7 +1805,7 @@ glm5-fp4-gb200-dynamo-trt-mtp:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen1dep32_batch16_eplb0_mtp3.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen1dep32_batch16_eplb0_mtp3.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p1d-dep4-dep32-b16-eplb0-mtp3.yaml"
         decode:
           num-worker: 1
           tp: 32
@@ -1820,7 +1820,7 @@ glm5-fp4-gb200-dynamo-trt-mtp:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen1dep16_batch64_eplb0_mtp1.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx1dep4_gen1dep16_batch64_eplb0_mtp1.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-1p1d-dep4-dep16-b64-eplb0-mtp1.yaml"
         decode:
           num-worker: 1
           tp: 16
@@ -1835,7 +1835,7 @@ glm5-fp4-gb200-dynamo-trt-mtp:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx2dep4_gen1dep16_batch128_eplb0_mtp1.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx2dep4_gen1dep16_batch128_eplb0_mtp1.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-2p1d-dep4-dep16-b128-eplb0-mtp1.yaml"
         decode:
           num-worker: 1
           tp: 16
@@ -1850,7 +1850,7 @@ glm5-fp4-gb200-dynamo-trt-mtp:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx2dep4_gen1dep16_batch256_eplb256_mtp1.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx2dep4_gen1dep16_batch256_eplb256_mtp1.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-2p1d-dep4-dep16-b256-eplb256-mtp1.yaml"
         decode:
           num-worker: 1
           tp: 16
@@ -1865,7 +1865,7 @@ glm5-fp4-gb200-dynamo-trt-mtp:
           dp-attn: true
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/v1.0.26/recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx2dep4_gen1dep8_batch512_eplb0_mtp1.yaml
-          - "CONFIG_FILE=recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/ISL1K_OSL1K/MTP/ctx2dep4_gen1dep8_batch512_eplb0_mtp1.yaml"
+          - "CONFIG_FILE=recipes/glm5/trtllm/gb200-fp4/1k1k/disagg-2p1d-dep4-dep8-b512-eplb0-mtp1.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -4488,7 +4488,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/b200-fp4/1k1k/disagg/mtp/1k1k_mtp_lowlat_0.yaml"
+          - "CONFIG_FILE=recipes/dsr1/sglang/b200-fp4/1k1k/disagg-1p5d-p-tp4-ep4-dp4-d-tp8-ep8-b512-c16x512-mtp.yaml"
         decode:
           num-worker: 5
           tp: 8
@@ -4502,7 +4502,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/b200-fp4/1k1k/disagg/mtp/1k1k_mtp_lowlat_1.yaml"
+          - "CONFIG_FILE=recipes/dsr1/sglang/b200-fp4/1k1k/disagg-1p6d-p-tp4-ep4-dp4-d-tp8-ep8-b512-c32x64x256x512-mtp.yaml"
         decode:
           num-worker: 6
           tp: 8
@@ -4516,7 +4516,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/b200-fp4/1k1k/disagg/mtp/1k1k_mtp_maxtpt_0.yaml"
+          - "CONFIG_FILE=recipes/dsr1/sglang/b200-fp4/1k1k/disagg-1p1d-p-tp4-ep4-dp4-d-tp8-ep8-dp8-b1024-c512x1024-mtp.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -4530,7 +4530,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/dsr1/b200-fp4/1k1k/disagg/mtp/1k1k_mtp_maxtpt_1.yaml"
+          - "CONFIG_FILE=recipes/dsr1/sglang/b200-fp4/1k1k/disagg-1p2d-p-tp4-ep4-dp4-d-tp8-ep8-dp8-b512-c512-mtp.yaml"
         decode:
           num-worker: 2
           tp: 8
@@ -4945,7 +4945,7 @@ kimik2.5-fp4-gb200-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/1k1k/disagg-gb200-1p1d-dep4-dep8.yaml"
+          - "CONFIG_FILE=recipes/kimik2.5/vllm/gb200-fp4/1k1k/disagg-1p1d-dep4-dep8-stp.yaml"
         decode:
           num-worker: 1
           tp: 1
@@ -4958,7 +4958,7 @@ kimik2.5-fp4-gb200-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/1k1k/disagg-gb200-1p4d-dep4-tp8.yaml"
+          - "CONFIG_FILE=recipes/kimik2.5/vllm/gb200-fp4/1k1k/disagg-1p4d-dep4-tp8-stp.yaml"
         decode:
           num-worker: 4
           tp: 8
@@ -4971,7 +4971,7 @@ kimik2.5-fp4-gb200-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/1k1k/disagg-gb200-1p1d-dep4-dep16.yaml"
+          - "CONFIG_FILE=recipes/kimik2.5/vllm/gb200-fp4/1k1k/disagg-1p1d-dep4-dep16-stp.yaml"
         decode:
           num-worker: 1
           tp: 1
@@ -5002,7 +5002,7 @@ qwen3.5-fp8-gb200-dynamo-sglang:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb200-fp8/1k1k/1p1d-tp4-tp4.yaml"
+          - "CONFIG_FILE=recipes/qwen3.5/sglang/gb200-fp8/1k1k/disagg-1p1d-tp4-tp4-stp.yaml"
         decode:
           num-worker: 1
           tp: 4
@@ -5017,7 +5017,7 @@ qwen3.5-fp8-gb200-dynamo-sglang:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb200-fp8/1k1k/1p1d-dep4-dep16.yaml"
+          - "CONFIG_FILE=recipes/qwen3.5/sglang/gb200-fp8/1k1k/disagg-1p1d-dep4-dep16-stp.yaml"
         decode:
           num-worker: 1
           tp: 16
@@ -5032,7 +5032,7 @@ qwen3.5-fp8-gb200-dynamo-sglang:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb200-fp8/1k1k/2p1d-dep4-dep16.yaml"
+          - "CONFIG_FILE=recipes/qwen3.5/sglang/gb200-fp8/1k1k/disagg-2p1d-dep4-dep16-stp.yaml"
         decode:
           num-worker: 1
           tp: 16
@@ -5063,7 +5063,7 @@ glm5-fp4-gb200-dynamo-sglang-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[0]"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp4/fixed-seq-len/disagg-mtp-variants.yaml:zip_override_mtp_1k1k_hightpt[0]"
         decode:
           num-worker: 1
           tp: 16
@@ -5078,7 +5078,7 @@ glm5-fp4-gb200-dynamo-sglang-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[1]"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp4/fixed-seq-len/disagg-mtp-variants.yaml:zip_override_mtp_1k1k_hightpt[1]"
         decode:
           num-worker: 1
           tp: 16
@@ -5093,7 +5093,7 @@ glm5-fp4-gb200-dynamo-sglang-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[2]"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp4/fixed-seq-len/disagg-mtp-variants.yaml:zip_override_mtp_1k1k_hightpt[2]"
         decode:
           num-worker: 1
           tp: 16
@@ -5108,7 +5108,7 @@ glm5-fp4-gb200-dynamo-sglang-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[3]"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp4/fixed-seq-len/disagg-mtp-variants.yaml:zip_override_mtp_1k1k_hightpt[3]"
         decode:
           num-worker: 1
           tp: 32
@@ -5127,7 +5127,7 @@ glm5-fp4-gb200-dynamo-sglang-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_lowlat[0]"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp4/fixed-seq-len/disagg-mtp-variants.yaml:zip_override_mtp_1k1k_lowlat[0]"
         decode:
           num-worker: 16
           tp: 4
@@ -5142,7 +5142,7 @@ glm5-fp4-gb200-dynamo-sglang-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_lowlat[1]"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp4/fixed-seq-len/disagg-mtp-variants.yaml:zip_override_mtp_1k1k_lowlat[1]"
         decode:
           num-worker: 16
           tp: 4
@@ -5157,7 +5157,7 @@ glm5-fp4-gb200-dynamo-sglang-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_lowlat[2]"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp4/fixed-seq-len/disagg-mtp-variants.yaml:zip_override_mtp_1k1k_lowlat[2]"
         decode:
           num-worker: 16
           tp: 4
@@ -5749,7 +5749,7 @@ glm5-fp4-gb200-dynamo-sglang:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_maxtpt_0.yaml"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp4/1k1k/disagg-2p1d-p-tp4-ep4-dp4-d-tp32-ep32-dp32-b2048-c3160-stp.yaml"
         decode:
           num-worker: 1
           tp: 32
@@ -5767,7 +5767,7 @@ glm5-fp4-gb200-dynamo-sglang:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_0.yaml"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp4/1k1k/disagg-1p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b2023-c2115-stp.yaml"
         decode:
           num-worker: 1
           tp: 16
@@ -5781,7 +5781,7 @@ glm5-fp4-gb200-dynamo-sglang:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_1.yaml"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp4/1k1k/disagg-1p1d-p-tp4-ep4-dp4-d-tp32-ep32-dp32-b1024-c1156-stp.yaml"
         decode:
           num-worker: 1
           tp: 32
@@ -5795,7 +5795,7 @@ glm5-fp4-gb200-dynamo-sglang:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_2.yaml"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp4/1k1k/disagg-1p1d-p-tp4-ep4-dp4-d-tp32-ep32-dp32-b512-c556-stp.yaml"
         decode:
           num-worker: 1
           tp: 32
@@ -5809,7 +5809,7 @@ glm5-fp4-gb200-dynamo-sglang:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_3.yaml"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp4/1k1k/disagg-1p16d-p-tp4-ep4-dp4-d-tp4-b1-c23-stp.yaml"
         decode:
           num-worker: 16
           tp: 4
@@ -5823,7 +5823,7 @@ glm5-fp4-gb200-dynamo-sglang:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_4.yaml"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp4/1k1k/disagg-1p16d-p-tp4-ep4-dp4-d-tp4-b16-c290-stp.yaml"
         decode:
           num-worker: 16
           tp: 4
@@ -5837,7 +5837,7 @@ glm5-fp4-gb200-dynamo-sglang:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_5.yaml"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp4/1k1k/disagg-1p16d-p-tp4-ep4-dp4-d-tp4-b4-c73-stp.yaml"
         decode:
           num-worker: 16
           tp: 4
@@ -5963,7 +5963,7 @@ glm5-fp8-gb200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_hightpt_0.yaml"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp8/1k1k/disagg-2p1d-p-tp8-dp8-d-tp32-ep32-dp32-b1024-c2161-stp.yaml"
         decode:
           num-worker: 1
           tp: 32
@@ -5981,7 +5981,7 @@ glm5-fp8-gb200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_0.yaml"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp8/1k1k/disagg-1p1d-p-tp8-dp8-d-tp16-ep16-dp16-b1815-c1955-stp.yaml"
         decode:
           num-worker: 1
           tp: 16
@@ -5995,7 +5995,7 @@ glm5-fp8-gb200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_1.yaml"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp8/1k1k/disagg-1p1d-p-tp8-dp8-d-tp16-ep16-dp16-b1024-c1170-stp.yaml"
         decode:
           num-worker: 1
           tp: 16
@@ -6009,7 +6009,7 @@ glm5-fp8-gb200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_2.yaml"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp8/1k1k/disagg-1p1d-p-tp8-dp8-d-tp16-ep16-dp16-b256-c298-stp.yaml"
         decode:
           num-worker: 1
           tp: 16
@@ -6023,7 +6023,7 @@ glm5-fp8-gb200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_3.yaml"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp8/1k1k/disagg-1p6d-p-tp8-dp8-d-tp8-b1-c8-stp.yaml"
         decode:
           num-worker: 6
           tp: 8
@@ -6037,7 +6037,7 @@ glm5-fp8-gb200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_4.yaml"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp8/1k1k/disagg-1p6d-p-tp8-dp8-d-tp8-b16-c72-stp.yaml"
         decode:
           num-worker: 6
           tp: 8
@@ -6051,7 +6051,7 @@ glm5-fp8-gb200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_5.yaml"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb200-fp8/1k1k/disagg-1p6d-p-tp8-dp8-d-tp8-b4-c20-stp.yaml"
         decode:
           num-worker: 6
           tp: 8
@@ -6335,7 +6335,7 @@ glm5-fp8-gb300-dynamo-sglang-mtp:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5.1/gb300-fp8/1k1k/disagg/mtp/1k1k_mtp_hightpt_3.yaml"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb300-fp8/1k1k/disagg-6p1d-p-tp4-dp4-d-tp48-ep48-dp48-b6144-c6500-mtp.yaml"
         decode:
           num-worker: 1
           tp: 48
@@ -6349,7 +6349,7 @@ glm5-fp8-gb300-dynamo-sglang-mtp:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5.1/gb300-fp8/1k1k/disagg/mtp/1k1k_mtp_hightpt_4.yaml"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb300-fp8/1k1k/disagg-4p1d-p-tp4-dp4-d-tp56-ep56-dp56-b5600-c5700-mtp.yaml"
         decode:
           num-worker: 1
           tp: 56
@@ -6367,7 +6367,7 @@ glm5-fp8-gb300-dynamo-sglang-mtp:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5.1/gb300-fp8/1k1k/disagg/mtp/1k1k_mtp_lowlat_0.yaml"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb300-fp8/1k1k/disagg-1p17d-p-tp4-dp4-d-tp4-b32-c512x256x128x64-mtp.yaml"
         decode:
           num-worker: 17
           tp: 4
@@ -6381,7 +6381,7 @@ glm5-fp8-gb300-dynamo-sglang-mtp:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5.1/gb300-fp8/1k1k/disagg/mtp/1k1k_mtp_lowlat_1.yaml"
+          - "CONFIG_FILE=recipes/glm5.1/sglang/gb300-fp8/1k1k/disagg-1p17d-p-tp4-dp4-d-tp4-b1-c32-mtp.yaml"
         decode:
           num-worker: 17
           tp: 4
@@ -6418,7 +6418,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/1k1k/1p1d-dep2-tep8-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/b300-fp8/1k1k/disagg-1p1d-dep2-tep8-stp.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -6431,7 +6431,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/1k1k/1p1d-dep2-tp4-marlin-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/b300-fp8/1k1k/disagg-1p1d-dep2-tp4-marlin-stp.yaml"
         decode:
           num-worker: 1
           tp: 4
@@ -6444,7 +6444,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/1k1k/1p2d-dep2-dep4-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/b300-fp8/1k1k/disagg-1p2d-dep2-dep4-stp.yaml"
         decode:
           num-worker: 2
           tp: 4
@@ -6457,7 +6457,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/1k1k/2p1d-dep2-dep8-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/b300-fp8/1k1k/disagg-2p1d-dep2-dep8-stp.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -6470,7 +6470,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/1k1k/2p1d-dep2-tep8-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/b300-fp8/1k1k/disagg-2p1d-dep2-tep8-stp.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -6483,7 +6483,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/1k1k/2p2d-dep2-tep8-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/b300-fp8/1k1k/disagg-2p2d-dep2-tep8-stp.yaml"
         decode:
           num-worker: 2
           tp: 8
@@ -6496,7 +6496,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/1k1k/3p2d-dep2-tep8-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/b300-fp8/1k1k/disagg-3p2d-dep2-tep8-stp.yaml"
         decode:
           num-worker: 2
           tp: 8
@@ -6525,7 +6525,7 @@ minimaxm3-fp4-b300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp4/1k1k/1p1d-dep2-tep8-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/b300-fp4/1k1k/disagg-1p1d-dep2-tep8-stp.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -6538,7 +6538,7 @@ minimaxm3-fp4-b300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp4/1k1k/1p1d-dep2-tp4-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/b300-fp4/1k1k/disagg-1p1d-dep2-tp4-stp.yaml"
         decode:
           num-worker: 1
           tp: 4
@@ -6551,7 +6551,7 @@ minimaxm3-fp4-b300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp4/1k1k/1p2d-dep2-dep4-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/b300-fp4/1k1k/disagg-1p2d-dep2-dep4-stp.yaml"
         decode:
           num-worker: 2
           tp: 4
@@ -6564,7 +6564,7 @@ minimaxm3-fp4-b300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp4/1k1k/2p1d-dep2-dep8-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/b300-fp4/1k1k/disagg-2p1d-dep2-dep8-stp.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -6577,7 +6577,7 @@ minimaxm3-fp4-b300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp4/1k1k/2p1d-dep2-tep8-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/b300-fp4/1k1k/disagg-2p1d-dep2-tep8-stp.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -6590,7 +6590,7 @@ minimaxm3-fp4-b300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp4/1k1k/2p2d-dep2-tep8-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/b300-fp4/1k1k/disagg-2p2d-dep2-tep8-stp.yaml"
         decode:
           num-worker: 2
           tp: 8
@@ -6603,7 +6603,7 @@ minimaxm3-fp4-b300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp4/1k1k/3p2d-dep2-tep8-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/b300-fp4/1k1k/disagg-3p2d-dep2-tep8-stp.yaml"
         decode:
           num-worker: 2
           tp: 8
@@ -6635,7 +6635,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/1p1d-dep2-dep4-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/gb300-fp8/1k1k/disagg-1p1d-dep2-dep4-stp.yaml"
         decode:
           num-worker: 1
           tp: 4
@@ -6650,7 +6650,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/1p2d-dep2-tep8-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/gb300-fp8/1k1k/disagg-1p2d-dep2-tep8-stp.yaml"
         decode:
           num-worker: 2
           tp: 8
@@ -6665,7 +6665,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/2p2d-dep2-tep8-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/gb300-fp8/1k1k/disagg-2p2d-dep2-tep8-stp.yaml"
         decode:
           num-worker: 2
           tp: 8
@@ -6680,7 +6680,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/2p3d-dep2-dep4-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/gb300-fp8/1k1k/disagg-2p3d-dep2-dep4-stp.yaml"
         decode:
           num-worker: 3
           tp: 4
@@ -6695,7 +6695,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/2p4d-dep2-dep4-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/gb300-fp8/1k1k/disagg-2p4d-dep2-dep4-stp.yaml"
         decode:
           num-worker: 4
           tp: 4
@@ -6710,7 +6710,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/4p2d-dep2-dep8-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/gb300-fp8/1k1k/disagg-4p2d-dep2-dep8-stp.yaml"
         decode:
           num-worker: 2
           tp: 8
@@ -6759,7 +6759,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/1p1d-dep4-dep8-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/gb200-fp8/1k1k/disagg-1p1d-dep4-dep8-stp.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -6774,7 +6774,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/1p1d-dep4-tep8-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/gb200-fp8/1k1k/disagg-1p1d-dep4-tep8-stp.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -6789,7 +6789,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/1p2d-dep4-dep8-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/gb200-fp8/1k1k/disagg-1p2d-dep4-dep8-stp.yaml"
         decode:
           num-worker: 2
           tp: 8
@@ -6804,7 +6804,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/1p2d-dep4-tep8-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/gb200-fp8/1k1k/disagg-1p2d-dep4-tep8-stp.yaml"
         decode:
           num-worker: 2
           tp: 8
@@ -6819,7 +6819,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/1p4d-dep4-tp4-marlin-1k1k.yaml"
+          - "CONFIG_FILE=recipes/minimaxm3/vllm/gb200-fp8/1k1k/disagg-1p4d-dep4-tp4-marlin-stp.yaml"
         decode:
           num-worker: 4
           tp: 4
@@ -7051,7 +7051,7 @@ kimik2.5-fp4-gb300-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/1k1k/disagg-gb300-1p1d-dep4-dep16.yaml"
+          - "CONFIG_FILE=recipes/kimik2.5/vllm/gb300-fp4/1k1k/disagg-1p1d-dep4-dep16-stp.yaml"
         decode:
           num-worker: 1
           tp: 1
@@ -7064,7 +7064,7 @@ kimik2.5-fp4-gb300-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/1k1k/disagg-gb300-1p1d-dep4-dep24.yaml"
+          - "CONFIG_FILE=recipes/kimik2.5/vllm/gb300-fp4/1k1k/disagg-1p1d-dep4-dep24-stp.yaml"
         decode:
           num-worker: 1
           tp: 1
@@ -7077,7 +7077,7 @@ kimik2.5-fp4-gb300-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/1k1k/disagg-gb300-1p2d-dep4-dep4.yaml"
+          - "CONFIG_FILE=recipes/kimik2.5/vllm/gb300-fp4/1k1k/disagg-1p2d-dep4-dep4-stp.yaml"
         decode:
           num-worker: 2
           tp: 1
@@ -7090,7 +7090,7 @@ kimik2.5-fp4-gb300-dynamo-vllm:
           ep: 4
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/1k1k/disagg-gb300-1p7d-tep4-tp4.yaml"
+          - "CONFIG_FILE=recipes/kimik2.5/vllm/gb300-fp4/1k1k/disagg-1p7d-tep4-tp4-stp.yaml"
         decode:
           num-worker: 7
           tp: 4
@@ -7103,7 +7103,7 @@ kimik2.5-fp4-gb300-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/1k1k/disagg-gb300-2p3d-dep4-dep8.yaml"
+          - "CONFIG_FILE=recipes/kimik2.5/vllm/gb300-fp4/1k1k/disagg-2p3d-dep4-dep8-stp.yaml"
         decode:
           num-worker: 3
           tp: 1
@@ -7316,7 +7316,7 @@ qwen3.5-fp8-gb300-dynamo-sglang:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp8/1k1k/1p1d-tp4-tp4.yaml"
+          - "CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp8/1k1k/disagg-1p1d-tp4-tp4-stp.yaml"
         decode:
           num-worker: 1
           tp: 4
@@ -7331,7 +7331,7 @@ qwen3.5-fp8-gb300-dynamo-sglang:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp8/1k1k/1p1d-dep4-dep16.yaml"
+          - "CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp8/1k1k/disagg-1p1d-dep4-dep16-stp.yaml"
         decode:
           num-worker: 1
           tp: 16
@@ -7346,7 +7346,7 @@ qwen3.5-fp8-gb300-dynamo-sglang:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp8/1k1k/2p1d-dep4-dep16.yaml"
+          - "CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp8/1k1k/disagg-2p1d-dep4-dep16-stp.yaml"
         decode:
           num-worker: 1
           tp: 16
