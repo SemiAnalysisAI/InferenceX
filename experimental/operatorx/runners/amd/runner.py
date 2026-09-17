@@ -14,7 +14,7 @@ _ITERS = 10
 
 
 def run(op: Op) -> Result:
-    if op.backend not in {"torch", "aiter"}:
+    if op.backend not in {"torch", "aiter", "vllm"}:
         raise UnsupportedOpError(f"unknown AMD backend: {op.backend}")
     backend = import_module(f"operatorx.runners.amd.backends.{op.backend}")
     impl = next((item for item in backend.IMPLS if item.op_type == op.type), None)
