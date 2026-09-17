@@ -6,7 +6,7 @@ name: "agg-gb200-tp8-c4-mtp-hicache"
 # and HiCache.
 
 model:
-  path: "deepseek-v4-pro"
+  path: "deepseek-v4-pro-0813"
   container: "dynamo-sglang"
   precision: "fp4"
 
