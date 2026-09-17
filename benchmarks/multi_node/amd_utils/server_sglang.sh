@@ -23,6 +23,12 @@ export BENCH_MAX_CONC_VALUE
 source $SGLANG_WS_PATH/setup_deps.sh
 source $SGLANG_WS_PATH/env.sh
 
+# Install before starting UMBP or serving processes. Early readiness failures must
+# close the same owned groups as normal completion, including orphaned workers.
+SGLANG_OWNED_PGIDS=()
+UMBP_SA_PID=""
+trap 'exit_after_background_process_cleanup "$?" 30 5 "$UMBP_SA_PID" "${SGLANG_OWNED_PGIDS[@]}"' EXIT
+
 host_ip=$(ip route get 1.1.1.1 | awk '/src/ {print $7}')
 host_name=$(hostname)
 
@@ -100,6 +106,7 @@ def parse_range(cuda_range, default_start, default_end):
 # Output shell variables
 print(f'MODEL_BASE_FLAGS=\"{m.get(\"base_flags\", \"\")}\"')
 print(f'MODEL_MTP_FLAGS=\"{m.get(\"mtp_flags\", \"\")}\"')
+print(f'MODEL_DSPARK_FLAGS=\"{m.get(\"dspark_flags\", \"\")}\"')
 print(f'MODEL_DP_FLAGS=\"{m.get(\"dp_flags\", \"\")}\"')
 print(f'MODEL_EP_FLAGS=\"{m.get(\"ep_flags\", \"\")}\"')
 
@@ -381,8 +388,30 @@ build_server_config() {
     local ep_config=""
     local specific_config=""
 
+    # Speculative-decoding config (only if a draft length is set).
+    #
+    # DECODE_MTP_SIZE carries the draft length for BOTH algorithms, but the two
+    # spend it differently:
+    #   EAGLE/MTP   -- num-steps = draft length, i.e. that many sequential draft
+    #                  forward passes, each producing one token.
+    #   DSPARK      -- one draft pass emits a whole block, so num-steps is
+    #                  pinned to 1 and the draft length becomes the block size
+    #                  (gamma). Passing gamma as num-steps here would ask for
+    #                  gamma sequential DSpark passes instead of one gamma-token
+    #                  block.
+    # The verify window (num-draft-tokens = draft length + 1) is the same for
+    # both, which is also what makes the MORI decode dispatch scaling
+    # (x (DECODE_MTP_SIZE + 1)) correct for DSpark without further change.
     if [ "$decode_mtp_size" -gt 0 ]; then
-        mtp_config="${MODEL_MTP_FLAGS} --speculative-num-steps ${decode_mtp_size} --speculative-num-draft-tokens $((decode_mtp_size + 1))"
+        if [[ "${SPEC_DECODING:-}" == "draft_model" ]]; then
+            # MODEL_DSPARK_FLAGS is validated at the call site, not here: this
+            # function is only ever invoked inside $( ), where an exit would
+            # terminate the subshell and leave the caller with an empty config
+            # rather than aborting the launch.
+            mtp_config="${MODEL_DSPARK_FLAGS} --speculative-dspark-block-size ${decode_mtp_size} --speculative-num-steps 1 --speculative-num-draft-tokens $((decode_mtp_size + 1))"
+        else
+            mtp_config="${MODEL_MTP_FLAGS} --speculative-num-steps ${decode_mtp_size} --speculative-num-draft-tokens $((decode_mtp_size + 1))"
+        fi
     fi
 
     if [[ "$enable_dp" == "true" ]]; then
@@ -438,6 +467,15 @@ build_server_config() {
 
     echo "$full_config"
 }
+
+# Validate the DSpark path before building either config. This has to happen at
+# top level: build_server_config only ever runs inside $( ), so an exit there
+# would kill the subshell and hand the caller an empty config string instead of
+# stopping the launch.
+if [[ "$DECODE_MTP_SIZE" -gt 0 ]] && [[ "${SPEC_DECODING:-}" == "draft_model" ]] && [[ -z "${MODEL_DSPARK_FLAGS// }" ]]; then
+    echo "FATAL: SPEC_DECODING=draft_model but model '${MODEL_NAME}' has no dspark_flags in models.yaml." >&2
+    exit 1
+fi
 
 PREFILL_SERVER_CONFIG=$(build_server_config "prefill" "$MODEL_NAME" "$PREFILL_TP_SIZE" "$PREFILL_ENABLE_EP" "$PREFILL_ENABLE_DP" "$DECODE_MTP_SIZE")
 DECODE_SERVER_CONFIG=$(build_server_config "decode" "$MODEL_NAME" "$DECODE_TP_SIZE" "$DECODE_ENABLE_EP" "$DECODE_ENABLE_DP" "$DECODE_MTP_SIZE")
@@ -654,7 +692,6 @@ elif [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == umbp-linker* ]]; 
             "$UMBP_SA_BIN" "$UMBP_STANDALONE_ADDRESS" > "$UMBP_SA_LOG" 2>&1 &
         UMBP_SA_PID=$!
         echo "[UMBP] standalone server PID: $UMBP_SA_PID"
-        trap '[[ -n "${UMBP_SA_PID:-}" ]] && kill "$UMBP_SA_PID" 2>/dev/null || true' EXIT
 
         # Three waits, all bounded by wall time rather than by a guess at how
         # fast this node is. Bind time for a 549 GB tier measured 120 s on
@@ -927,8 +964,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
             > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log >/dev/null) 2>&1 &
         set +x
         prefill0_pid=$!
-        prefill0_pgid=$(ps -o pgid= -p "$prefill0_pid" 2>/dev/null | tr -d ' ')
-        : "${prefill0_pgid:=$prefill0_pid}"
+        prefill0_pgid=$prefill0_pid
+        SGLANG_OWNED_PGIDS+=("$prefill0_pgid")
     fi
 
     echo "Waiting for all prefill and decode servers to be up . . ."
@@ -985,8 +1022,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
         fi
         set +x
         proxy_pid=$!
-        proxy_pgid=$(ps -o pgid= -p "$proxy_pid" 2>/dev/null | tr -d ' ')
-        : "${proxy_pgid:=$proxy_pid}"
+        proxy_pgid=$proxy_pid
+        SGLANG_OWNED_PGIDS+=("$proxy_pgid")
 
         HEALTH_BARRIER_CMD="python3 $SGLANG_WS_PATH/sync.py barrier \
             --node-ips ${NODE0_ADDR} \
@@ -1082,6 +1119,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         IS_AGENTIC_RUN=1
     fi
 
+    BENCHMARK_EXIT_CODE=0
     if [[ "${EVAL_ONLY}" == "true" ]]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"
     elif [[ "$DRY_RUN" -eq 1 ]]; then
@@ -1156,10 +1194,12 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
             --entrypoint "" \
             "${CLIENT_IMAGE}" \
             bash -lc "cd /workspace/benchmarks/multi_node/amd_utils && bash trace_replay.sh /models ${MODEL_NAME} \"${BENCH_MAX_CONCURRENCY}\" /run_logs/slurm_job-${SLURM_JOB_ID}"
+        BENCHMARK_EXIT_CODE=$?
         set +x
     else
         set -x
         eval "$BENCH_CMD"
+        BENCHMARK_EXIT_CODE=$?
         set +x
     fi
 
@@ -1183,6 +1223,8 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
             # Must run from repo root so infx/evals/gsm8k.yaml resolves
             pushd /workspace
 
+            # Match the disaggregation router launched above.
+            export PORT=30000
             source /workspace/benchmarks/benchmark_lib.sh
 
             # CONC must be exported before run_eval so meta_env.json matches validate_scores.py.
@@ -1204,9 +1246,9 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
             # arrive via Docker -e flags from job.slurm.
 
             if [[ "$DRY_RUN" -eq 1 ]]; then
-                echo "DRY RUN: run_eval --port 30000 (framework=${EVAL_FRAMEWORK}, conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
+                echo "DRY RUN: run_eval --port ${PORT} (framework=${EVAL_FRAMEWORK}, conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
             else
-                run_eval --port 30000
+                run_eval --port "$PORT"
                 eval_rc=$?
 
                 if [[ $eval_rc -ne 0 ]]; then
@@ -1247,22 +1289,11 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
         echo "Copied results to $LOGS_OUTPUT/slurm_job-${SLURM_JOB_ID}"
     fi
 
-    echo "Killing the proxy server and prefill server"
-
-    if [[ "$DRY_RUN" -eq 0 ]]; then
-        # Group-kill the router (setsid at launch): the python launcher has usually
-        # exited after spawning the Rust worker, which reparents to init but stays in
-        # this group; kill $proxy_pid alone misses it and :30000 stays open.
-        kill -TERM -"${proxy_pgid:-$proxy_pid}" 2>/dev/null || true
-        # Group-kill the prefill tree so TP-scheduler children release the tee pipe
-        # and the container can exit.
-        kill -TERM -"${prefill0_pgid:-$prefill0_pid}" 2>/dev/null || true
+    node_exit_status=$BENCHMARK_EXIT_CODE
+    if [[ "${EVAL_FAILED:-0}" -eq 1 && "$node_exit_status" -eq 0 ]]; then
+        node_exit_status=1
     fi
-
-    if [[ "${EVAL_FAILED:-0}" -eq 1 ]]; then
-        echo "ERROR: eval failed; exiting node-0 with rc=1"
-        exit 1
-    fi
+    exit "$node_exit_status"
 
 elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     echo "${host_name}:${host_ip} is Prefill Node (Model: ${MODEL_NAME})"
@@ -1306,8 +1337,8 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
             > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log >/dev/null) 2>&1 &
         set +x
         prefill_pid=$!
-        prefill_pgid=$(ps -o pgid= -p "$prefill_pid" 2>/dev/null | tr -d ' ')
-        : "${prefill_pgid:=$prefill_pid}"
+        prefill_pgid=$prefill_pid
+        SGLANG_OWNED_PGIDS+=("$prefill_pgid")
     fi
 
     echo "Waiting for proxy server to be up..."
@@ -1337,8 +1368,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     echo "Killing the rank $NODE_RANK prefill server"
 
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        # Group-kill so TP-scheduler children release the tee pipe and the container exits.
-        kill -TERM -"${prefill_pgid:-$prefill_pid}" 2>/dev/null || true
+        exit 0
     fi
 
 else
@@ -1393,7 +1423,7 @@ else
             if [[ -n "$DSV4_GOLDEN_AL" ]]; then
                 DECODE_SIM_ACC_ENV="SGLANG_SIMULATE_ACC_LEN=${DSV4_GOLDEN_AL} SGLANG_SIMULATE_ACC_METHOD=match-expected SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token"
             else
-                echo "WARNING: agentic MTP run (model=${MODEL_NAME}, DECODE_MTP_SIZE=${DECODE_MTP_SIZE}) has no golden AL wired in server_sglang.sh -- falling back to real (unsimulated, non-representative) acceptance. Add a case in server_sglang.sh and golden_al_distribution/ before shipping this arm. See golden_al_distribution/README.md." >&2
+                echo "WARNING: agentic spec-decoding run (model=${MODEL_NAME}, algorithm=${SPEC_DECODING:-mtp}, DECODE_MTP_SIZE=${DECODE_MTP_SIZE}) has no golden AL wired in server_sglang.sh -- falling back to real (unsimulated, non-representative) acceptance. Add a case in server_sglang.sh and golden_al_distribution/ before shipping this arm. See golden_al_distribution/README.md." >&2
             fi
         fi
     fi
@@ -1425,8 +1455,8 @@ else
 
         set +x
         decode_pid=$!
-        decode_pgid=$(ps -o pgid= -p "$decode_pid" 2>/dev/null | tr -d ' ')
-        : "${decode_pgid:=$decode_pid}"
+        decode_pgid=$decode_pid
+        SGLANG_OWNED_PGIDS+=("$decode_pgid")
     fi
 
     echo "Waiting for proxy server to be up..."
@@ -1455,8 +1485,7 @@ else
 
     echo "Killing the rank $RANK decode server"
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        # Group-kill so TP-scheduler children release the tee pipe and the container exits.
-        kill -TERM -"${decode_pgid:-$decode_pid}" 2>/dev/null || true
+        exit 0
     fi
 
 fi
