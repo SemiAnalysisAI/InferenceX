@@ -8034,6 +8034,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3188
 
 - config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-mtp
+  description:
+    - "Pin the Qwen3.5 FP8 H200 SGLang AgentX image to lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9, replacing the 2026-09-14 nightly; recipe settings and the c4/8/12/16 grid are unchanged."
+    - "将 Qwen3.5 FP8 H200 SGLang AgentX 镜像从 2026-09-14 nightly 更新为按摘要固定的 lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9；配方设置及 c4/8/12/16 网格保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3198
+
+- config-keys:
     - kimik3-fp4-mi355x-vllm-agentic-mtp
     - minimaxm3-fp4-b200-vllm-agentic-mtp
     - minimaxm3-fp4-b300-vllm-agentic-mtp
