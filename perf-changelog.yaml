@@ -7836,3 +7836,12 @@
     - "Use BF16 KV cache for every concurrency at or below 16 (C1/C2/C4/C8/C16), while retaining FP8 KV cache for the C48/C64/C96/C128/C256 native RCCL DEP band. Preserve the FP4 index cache and all other serving settings."
     - "将 C16 及以下的全部任务（C1/C2/C4/C8/C16）切换为 BF16 KV cache；C48/C64/C96/C128/C256 原生 RCCL DEP 任务继续使用 FP8 KV cache。FP4 index cache 及其他服务配置保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace rocm/atom-dev:pr2233-4f3a808 with rocm/atom-dev:nightly_202609161445 (digest sha256:f00a9dc588a380038fdad54cd57a956043cb316ddda54ebb1b62a24f8caa343b), the official nightly ATOM image containing the merged ROCm/ATOM#2233 inference-mode fix. Preserve DSpark K6, golden AL 3.77, communication fusion, graph capture, and the BF16/FP8 KV split across TP and DEP bands."
+    - "将临时镜像 rocm/atom-dev:pr2233-4f3a808 切换到包含已合并 ROCm/ATOM#2233 修复的官方 nightly rocm/atom-dev:nightly_202609161445；保留 DSpark K6、golden AL 3.77、通信融合、graph capture，以及 TP/DEP 分段 BF16/FP8 KV cache。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912
