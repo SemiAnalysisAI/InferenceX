@@ -81,30 +81,27 @@
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749,35154018672",
   "status": "Checkout fallback verified; published compatible image pushed. Image-fix retry not dispatched because capacity check closed.",
   "last_capacity_check": {
-    "checked_at": "2026-09-17T01:04:52.128377+00:00",
-    "cluster_observed_at": "2026-09-17T01:04:38.000Z",
+    "checked_at": "2026-09-17T16:31:37.242943+00:00",
+    "cluster_observed_at": "2026-09-17T16:31:21.000Z",
     "cluster_stale": false,
-    "idle_nodes": 1,
+    "idle_nodes": 2,
     "total_nodes": 11,
-    "legacy_task_nodes": 2,
-    "legacy_job_ids": [
-      "15749",
-      "15763"
-    ],
-    "scheduler_snapshot_at": "2026-09-17T01:04:35.478Z",
+    "legacy_task_nodes": 0,
+    "legacy_job_ids": [],
+    "scheduler_snapshot_at": "2026-09-17T16:31:00.000Z",
     "scheduler_available": true,
-    "b200_queued_jobs": 35,
+    "b200_queued_jobs": 27,
     "competing_run_ids": [
-      35156261493,
       35157470870,
-      35162632965,
-      35162706961,
-      35164601003
+      35205093411,
+      35207457378,
+      35227409600,
+      35244609202
     ],
-    "active_reservations_global": 4,
-    "reserved_nodes_global": 1,
+    "active_reservations_global": 3,
+    "reserved_nodes_global": 5,
     "dispatch_allowed": false,
-    "reason": "Only one idle B200 node and competing queued work; no workflow dispatched under the agreed capacity limits."
+    "reason": "Legacy allocations no longer present. Two idle B200 nodes remain reserved by our launch policy, and competing queued work blocks dispatch."
   },
   "next_dispatch": {
     "arm": "nvme",
