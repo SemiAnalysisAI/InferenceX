@@ -8003,3 +8003,15 @@
     - "Adds glm5.2/fp8 routing to runners/launch_b200-nscale-compat.sh (MODEL_PATH default /scratch/models/GLM-5.2-FP8, SRT_SLURM_MODEL_PREFIX glm5.2-fp8), which previously hard-failed with 'Unsupported model prefix/precision' for this model. The script's completeness-checked, flock-serialized hf download stages the checkpoint on the day-zero run if it is not already on the cluster."
     - "Re-pin from lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 to lmsysorg/sglang:nightly-dev-cu13-20260908-20ca564b (2026-09-08 cu13 dev nightly, digest sha256:9a352a35c973a2357372e85f3bcb5388b6b3c46c1329165987260f3b089647dc; Docker Hub last pushed 2026-09-08T01:40:59Z, tag commit sgl-project/sglang@20ca564b). The 2026-09-07 build carries an unguarded kv_index_translator.translate_dcp_read_ids call on the DSA fp8 KV read path that the EAGLE draft backend never binds, so GLM-5.2 MTP runs crash intermittently with AttributeError (observed on the MI355X FP8 sibling in run 34173459478 after 74 minutes of serving). sgl-project/sglang#38318 (merged 2026-09-07T20:03Z) adds the None guard and is six commits behind 20ca564b."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2863
+
+- config-keys:
+    - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.8-Flash-Next Quark MXFP4 (FP8 PLE, \"PLEFP8\") AgentX on MI355X with SGLang, TP1/EP1 and concurrency 1/4/8/12/16."
+    - "Serve fanwu103/Qwen3.8-Flash-Next-MXFP4-PLEFP8 from the aigmkt/qwen3.8-flash-next:v0.5.19-rocm724-mi35x-20260910-pr36601-pr37242 image with no KV offloading. TP1: the ~126 GiB checkpoint fits on a single MI355X, so no tensor parallel is needed; quantization is read from the checkpoint (Quark MXFP4 MoE, FP8 PLE)."
+    - "Run with SGLang native NEXTN MTP (--speculative-algorithm NEXTN, 3 steps, eagle-topk 1, 4 draft tokens), the cookbook speculative card and the shape of the B200/B300/H200 qwen3.8next SGLang AgentX arms; spec-decode only per the AgentX policy. Throughput pins acceptance to the golden AL 2.32 (golden_al_distribution/qwen3.8next_mtp.yaml, thinking_on, K=3) through SGLANG_SIMULATE_ACC_*; EVAL_ONLY keeps real verification. Serve flags follow the verified single-node bring-up: --attention-backend aiter, --moe-runner-backend aiter, --mamba-ssm-dtype bfloat16, page-size 32, kv-cache-dtype auto, chunked-prefill 16384, --mem-fraction-static 0.9 with SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION=1, --cuda-graph-max-bs min(CONC, 64), and --reasoning-parser qwen3-thinking."
+    - "使用 SGLang 原生 NEXTN MTP（3 步、eagle-topk 1、4 草稿 token），与 B200/B300/H200 的 qwen3.8next SGLang AgentX 配方同形；按 AgentX 政策仅运行投机解码。TP1 单卡可容纳整个 MXFP4-PLEFP8 检查点；吞吐通过 SGLANG_SIMULATE_ACC_* 固定黄金 AL 2.32，评测保留真实验证；--mem-fraction-static 0.9。"
+    - "Mount this recipe outside package directories is unnecessary: the aigmkt image keeps SGLang and AITER under /sgl-workspace, so the default repository bind mount at /workspace does not shadow them; the tag-based image also needs no Enroot digest-URI translation."
+  pr-link: XXX
