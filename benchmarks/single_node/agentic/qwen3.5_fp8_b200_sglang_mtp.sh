@@ -116,7 +116,7 @@ SGLANG_CMD=(
     --mamba-ssm-dtype bfloat16
     --attention-backend trtllm_mha
     --moe-runner-backend flashinfer_trtllm
-    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --max-prefill-tokens 16384
     --chunked-prefill-size 16384

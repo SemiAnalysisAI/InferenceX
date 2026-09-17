@@ -58,40 +58,20 @@ def required_owners(repo: str, pr: dict[str, Any], token: str) -> list[str]:
 
 def check_scope(repo: str, number: int, token: str) -> dict[str, str]:
     pr = github.api(repo, f"/pulls/{number}", token)
-    status = "error"
-    try:
-        required = required_owners(repo, pr, token)
-        current = github.api(repo, f"/pulls/{number}", token)
-        if (
-            current["head"]["sha"],
-            current["base"]["sha"],
-            current["base"]["ref"],
-            current["changed_files"],
-        ) != (
-            pr["head"]["sha"],
-            pr["base"]["sha"],
-            pr["base"]["ref"],
-            pr["changed_files"],
-        ):
-            raise RuntimeError(
-                "PR changed while determining sign-off scope; retry on the current head"
-            )
-        status = None if required else "success"
-    finally:
-        if status:
-            github.api(
-                repo,
-                f"/statuses/{pr['head']['sha']}",
-                token,
-                method="POST",
-                data={
-                    "context": "CODEOWNER sign-off",
-                    "state": status,
-                    "description": "N/A"
-                    if status == "success"
-                    else "Could not determine sign-off scope",
-                },
-            )
+    required = required_owners(repo, pr, token)
+    current = github.api(repo, f"/pulls/{number}", token)
+    if (
+        current["head"]["sha"],
+        current["base"]["sha"],
+        current["base"]["ref"],
+        current["changed_files"],
+    ) != (
+        pr["head"]["sha"],
+        pr["base"]["sha"],
+        pr["base"]["ref"],
+        pr["changed_files"],
+    ):
+        raise RuntimeError("PR changed while determining sign-off scope; retry on the current head")
     return {
         "required": str(bool(required)).lower(),
         "pr-number": str(number),

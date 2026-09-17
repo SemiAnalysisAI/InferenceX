@@ -1,0 +1,13 @@
+# Experimental operator changes; root perf-changelog.yaml indexes inference recipes.
+- date: 2026-09-16
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3209
+  operators: [gemm, attention_mha, attention_mla]
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300, mi300x, mi325x, mi355x]
+  description:
+    - Add ROCm GEMM with architecture-correct FP8 and AMD attention with torch/AITER.
+    - Correct rectangular causal masking in torch attention; preserve requested output precision.
+    - MLA timings cover materialized Q/K/V attention, excluding cache projection and RoPE.
+  description-zh:
+    - 新增 ROCm GEMM，按架构选择 FP8 格式，并通过 torch/AITER 支持 AMD attention。
+    - 修正 torch attention 的矩形因果掩码，并遵循请求的输出精度。
+    - MLA 计时覆盖物化 Q/K/V 的 attention，不包含缓存投影和 RoPE。
