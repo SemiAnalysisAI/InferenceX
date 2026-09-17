@@ -8018,3 +8018,14 @@
     - "配置键由 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp 改名为 dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark，以反映 DSpark 算法与 UMBP-linker 分支；该配方此前的条目仍记录在旧键名下。改名不伴随任何其他字段变化。"
     - "Collect completed logs from every Slurm node so both prefill and decode artifacts are uploaded; forward workflow-owned AgentX fast-mode and power inputs, and supply the existing router port to evaluation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3188
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260915 to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917."
+    - "Move TP2 concurrency 16 from GPU-resident KV to HiCache and remove the TP2 GPU-resident concurrency-20 point. The resulting TP2 grids are resident [1, 4, 8, 12] and HiCache [16, 20, 24, 28, 32, 36, 40]."
+    - "Enable --enable-aiter-allreduce-fusion for every arm. A local 1,200-second AgentX A-B-A at TP4 concurrency 4 reduced token-weighted ITL by 1.96-2.18% versus two baselines whose weighted ITL differed by 0.15%; a matched GPU profile reduced the target-verify graph by 4.75%."
+    - "Pass --speculative-draft-model-quantization quark_mxfp4 so the Quark checkpoint's BF16 MTP routed experts are quantized online to MXFP4; only the draft changes, while target verification retains the serialized Quark weights. SGLang #38748 reported TP2 concurrency-32 HiCache p50/p90 TPOT reductions of 10.3%/18% and throughput per GPU improving by 13.6%."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3227
