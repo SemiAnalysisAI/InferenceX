@@ -2796,6 +2796,7 @@ def test_bfcl_full_suites_use_suite_specific_runtime_and_archive_before_cleanup(
     suite_contracts = (
         ("bfcl_vllm_minimax_m3", "8", "7200"),
         ("bfcl_vllm_kimi", "16", "14400"),
+        ("bfcl_kimi_diagnostic", "16", "600"),
     )
 
     for suite, expected_threads, expected_timeout in suite_contracts:

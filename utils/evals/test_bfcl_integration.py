@@ -16,7 +16,7 @@ bfcl = pytest.importorskip("bfcl_eval", reason="Install pinned BFCL for integrat
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.mark.parametrize("suite", ["bfcl_smoke", "bfcl_responses_smoke"])
+@pytest.mark.parametrize("suite", ["bfcl_smoke", "bfcl_responses_smoke", "bfcl_kimi_diagnostic"])
 @pytest.mark.parametrize("reject_store", [False, True])
 def test_stock_bfcl_generation_scoring_and_error_reports(tmp_path: Path, reject_store: bool, suite: str):
     """Run the real CLI, corpus and scorer; distinguish a quality miss from HTTP failure."""
@@ -94,7 +94,11 @@ def test_stock_bfcl_generation_scoring_and_error_reports(tmp_path: Path, reject_
     assert native["bfcl"]["source"]["api_format"] == (
         "responses" if suite == "bfcl_responses_smoke" else "chat-completions"
     )
-    assert len(requests) == 4
+    diagnostic = suite == "bfcl_kimi_diagnostic"
+    assert len(requests) == (16 if diagnostic else 4)
+    assert all(payload["temperature"] == (0.001 if diagnostic else 0.0)
+               for _, payload in requests)
+    assert native["transport"]["request_timeout_seconds"] == (60 if diagnostic else 180)
     route = "/v1/responses" if suite == "bfcl_responses_smoke" else "/v1/chat/completions"
     assert all(path == route for path, _ in requests)
     # Never silently strip the unsupported field to hide a backend incompatibility.
@@ -105,6 +109,6 @@ def test_stock_bfcl_generation_scoring_and_error_reports(tmp_path: Path, reject_
         assert compatibility["n-samples"][suite]["effective"] == 0
     else:
         assert "integration_error" not in native
-        assert compatibility["n-samples"][suite]["effective"] == 4
-        assert compatibility["results"][suite]["acc,none"] == 0.25
+        assert compatibility["n-samples"][suite]["effective"] == (16 if diagnostic else 4)
+        assert compatibility["results"][suite]["acc,none"] == (0.0 if diagnostic else 0.25)
     assert before == {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in sources}

@@ -135,6 +135,16 @@ KIMI_SUITE = SuiteSpec(
     # The launcher still bounds the entire Kimi selection to four hours.
     request_timeout_seconds=600,
 )
+KIMI_DIAGNOSTIC_SUITE = SuiteSpec(
+    name="bfcl_kimi_diagnostic",
+    generation_categories=("multiple",),
+    expected_leaf_counts=(("multiple", 16),),
+    category_limits=(("multiple", 16),),
+    temperature=0.001,
+    default_num_threads=16,
+    threshold=0.0,
+    request_timeout_seconds=60,
+)
 SUITE_SPECS: Mapping[str, SuiteSpec] = MappingProxyType(
     {
         suite.name: suite
@@ -143,6 +153,7 @@ SUITE_SPECS: Mapping[str, SuiteSpec] = MappingProxyType(
             RESPONSES_SMOKE_SUITE,
             MINIMAX_SUITE,
             KIMI_SUITE,
+            KIMI_DIAGNOSTIC_SUITE,
         )
     }
 )

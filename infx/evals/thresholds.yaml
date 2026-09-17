@@ -21,6 +21,8 @@
     "bfcl_vllm_minimax_m3_parallel": 0.0,
     "bfcl_vllm_minimax_m3_parallel_multiple": 0.0,
     "bfcl_vllm_kimi": 0.0,
+    "bfcl_kimi_diagnostic": 0.0,
+    "bfcl_kimi_diagnostic_multiple": 0.0,
     "bfcl_vllm_kimi_simple_python": 0.0,
     "bfcl_vllm_kimi_multiple": 0.0,
     "bfcl_vllm_kimi_parallel": 0.0,

@@ -442,6 +442,13 @@ eight worker threads and a two-hour whole-suite timeout. Kimi allows 600 seconds
 per attempt for long multi-turn generations, uses 16 threads, retains the pinned
 upstream multi-turn step limit (20), and uses a four-hour whole-suite timeout.
 Native reports record the request timeout and retry limit in `transport`.
+For timeout investigation, `bfcl_kimi_diagnostic` runs only `multiple_0` through
+`multiple_15`, using the same temperature 0.001 and 16 threads, with a 60-second
+request timeout, two SDK retries and a 600-second suite bound. It archives the
+upstream artifacts under its own task identity and is not full-suite evidence.
+The MI355X Kimi launcher enables native NaN-logit counters only for this diagnostic
+and saves `/metrics` as `bfcl_diagnostic_metrics.txt`, including after BFCL failure.
+The normal smoke, full suites and throughput retain their existing settings.
 InferenceX does not override BFCL module globals. Older
 Kimi runs used a local ten-step override and are not directly comparable.
 

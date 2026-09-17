@@ -250,6 +250,14 @@ echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="1200"
 
+BFCL_KIMI_DIAGNOSTIC=false
+if [[ "$EVAL_ONLY" == "true" && "${EVAL_FRAMEWORK:-}" == "bfcl" \
+    && "${EVAL_SUITE:-}" == "bfcl_kimi_diagnostic" ]]; then
+    # Native observability only: retain stock generation and verification.
+    export VLLM_COMPUTE_NANS_IN_LOGITS=1
+    BFCL_KIMI_DIAGNOSTIC=true
+fi
+
 NATIVE_CPU_RESTORE_PROBE=false
 NATIVE_CPU_RESTORE_ARGS=()
 if [[ "$EVAL_ONLY" == "true" && "${EVAL_FRAMEWORK:-}" == "bfcl" \
@@ -315,6 +323,17 @@ echo "Server PID: $SERVER_PID"
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 if [ "${EVAL_ONLY}" = "true" ]; then
+    if [ "$BFCL_KIMI_DIAGNOSTIC" = true ]; then
+        # Preserve metrics even when BFCL exits with a transport failure.
+        diagnostic_rc=0
+        run_eval --port "$PORT" || diagnostic_rc=$?
+        curl --fail --silent --show-error --max-time 10 \
+            "http://127.0.0.1:${PORT}/metrics" \
+            -o "$RESULT_DIR/bfcl_diagnostic_metrics.txt" || {
+                if [ "$diagnostic_rc" -eq 0 ]; then diagnostic_rc=1; fi
+            }
+        exit "$diagnostic_rc"
+    fi
     run_eval --port "$PORT"
     if [ "$NATIVE_CPU_RESTORE_PROBE" = true ]; then
         timeout 600 python3 "$(dirname "$0")/../../../experimental/bfcl/verify_native_cpu_restore.py" \
