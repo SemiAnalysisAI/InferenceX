@@ -6633,8 +6633,6 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-agg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/gb200-fp4/agentx/agg-gb200-tp8-c1-mtp-hicache.yaml"
       - spec-decoding: draft_model
         conc-list: [4]
@@ -6647,8 +6645,6 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-agg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/gb200-fp4/agentx/agg-gb200-tp8-c4-mtp-hicache.yaml"
 dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
   image: lmsysorg/sglang:nightly-dev-20260916-c9a8fba9
@@ -6675,8 +6671,6 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/gb200-fp4/agentx/disagg-gb200-1p1d-dep8-dep16-c64-mtp-kvoffload.yaml"
         decode:
           num-worker: 1
@@ -6693,8 +6687,6 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/gb200-fp4/agentx/disagg-gb200-1p1d-dep8-dep16-c128-mtp-kvoffload.yaml"
         decode:
           num-worker: 1
@@ -6711,8 +6703,6 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/gb200-fp4/agentx/disagg-gb200-1p1d-dep8-dep16-c400-mtp-kvoffload.yaml"
         decode:
           num-worker: 1
@@ -6729,8 +6719,6 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/gb200-fp4/agentx/disagg-gb200-2p1d-dep8-dep16-c800-mtp-kvoffload.yaml"
         decode:
           num-worker: 1
