@@ -261,10 +261,6 @@ Canary and fail-fast solve different problems:
 
 Manual `e2e-tests.yml` has no canary. Its `fail-fast` input defaults to false and is passed to every matrix job family. Always use the definition from the dispatch ref.
 
-## SpeedBench reference PRs
-
-[`speedbench-al.yml`](../.github/workflows/speedbench-al.yml) measures the selected `ref`. With `open-pr: true`, it uses a separate checkout of current `main` to publish only `benchmarks/speedbench-reference-al.yaml`. Recipe or workflow changes from the measured ref are not included in that PR. The existing reference file is replaced by the collected matrix; unchanged results skip PR creation. `SPEEDBENCH_PAT` needs Contents and Pull requests write access to InferenceX, without Workflows write access. Leaving `open-pr` off keeps the artifact-only behavior.
-
 ## Monitoring and reruns
 
 PR sweeps maintain one bot comment with `View unofficial run (performance)` and `View unofficial run (accuracy)` links. Each newer run updates that comment; rerunning an older run does not replace newer links. Existing PRs reuse their latest legacy visualizer comment, leaving earlier historical comments intact.

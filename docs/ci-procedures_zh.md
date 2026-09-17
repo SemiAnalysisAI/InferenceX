@@ -253,10 +253,6 @@ Canary 和 Fail-fast 解决不同问题：
 
 手动 `e2e-tests.yml` 没有 Canary。它的 `fail-fast` 输入默认为 false，并传递给每个矩阵 Job Family。始终使用派发 Ref 对应的定义。
 
-## SpeedBench 参考数据 PR
-
-[`speedbench-al.yml`](../.github/workflows/speedbench-al.yml) 在选定的 `ref` 上执行测量。设置 `open-pr: true` 时，工作流会单独检出最新 `main`，仅提交 `benchmarks/speedbench-reference-al.yaml`；测量 ref 中的 recipe 或工作流改动不会进入该 PR。采集矩阵会替换已有参考文件；结果未变化时跳过 PR 创建。`SPEEDBENCH_PAT` 仅需 InferenceX 的 Contents 和 Pull requests write 权限，无需 Workflows write 权限。不启用 `open-pr` 时仍只上传 artifact。
-
 ## 监控与重跑
 
 PR 扫描维护一条机器人评论，包含 `View unofficial run (performance)` 和 `View unofficial run (accuracy)` 链接。每个更新的 Run 都会编辑该评论；重跑旧 Run 不会覆盖更新的链接。已有 PR 会复用最新的旧格式可视化评论，更早的历史评论保持不变。
