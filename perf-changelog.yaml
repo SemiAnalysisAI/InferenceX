@@ -8033,7 +8033,7 @@
     - "Collect completed logs from every Slurm node so both prefill and decode artifacts are uploaded; forward workflow-owned AgentX fast-mode and power inputs, and supply the existing router port to evaluation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3188
   
- - config-keys:
+- config-keys:
     - dsv4-fp4-gb200-dynamo-sglang-agentic-agg
   scenario-type:
     - agentic-coding
@@ -8043,7 +8043,7 @@
     - "Use the compute-visible Watchtower workspace and node-local DeepSeek-V4-Pro checkpoint staging."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3182
 
- - config-keys:
+- config-keys:
     - dsv4-fp4-gb200-dynamo-sglang-agentic-disagg
   scenario-type:
     - agentic-coding
