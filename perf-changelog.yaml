@@ -8040,4 +8040,4 @@
     - "Add GB300 MiniMax-M3 Dynamo-vLLM AgentX aggregate and disaggregated recipes with EAGLE3-GQA"
     - "Use srt-slurm v2.11.0 for process-local Mooncake store configuration"
     - "新增采用 EAGLE3-GQA 的 GB300 MiniMax-M3 Dynamo-vLLM AgentX 聚合与分离式部署配置；采用 srt-slurm v2.11.0 为各工作进程配置 Mooncake 存储"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3232
