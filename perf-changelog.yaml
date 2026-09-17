@@ -8003,3 +8003,12 @@
     - "Adds glm5.2/fp8 routing to runners/launch_b200-nscale-compat.sh (MODEL_PATH default /scratch/models/GLM-5.2-FP8, SRT_SLURM_MODEL_PREFIX glm5.2-fp8), which previously hard-failed with 'Unsupported model prefix/precision' for this model. The script's completeness-checked, flock-serialized hf download stages the checkpoint on the day-zero run if it is not already on the cluster."
     - "Re-pin from lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 to lmsysorg/sglang:nightly-dev-cu13-20260908-20ca564b (2026-09-08 cu13 dev nightly, digest sha256:9a352a35c973a2357372e85f3bcb5388b6b3c46c1329165987260f3b089647dc; Docker Hub last pushed 2026-09-08T01:40:59Z, tag commit sgl-project/sglang@20ca564b). The 2026-09-07 build carries an unguarded kv_index_translator.translate_dcp_read_ids call on the DSA fp8 KV read path that the EAGLE draft backend never binds, so GLM-5.2 MTP runs crash intermittently with AttributeError (observed on the MI355X FP8 sibling in run 34173459478 after 74 minutes of serving). sgl-project/sglang#38318 (merged 2026-09-07T20:03Z) adds the None guard and is six commits behind 20ca564b."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2863
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp2-engram-cpu
+    - dsv41flash-fp4-mi355x-vllm-mtp-tp2-engram-cpu
+  description:
+    - "Add experimental DeepSeek V4.1 Flash MI355X TP2 Engram CPU offload on vllm/vllm-openai-rocm:nightly-af1c01499b289be555c475669ba50a88e96d846e. Apply the bundled TP-only ROCm pinned-host embedding patch and pass --engram-config '{\"cpu_offload\":true}'; run mandatory device lookup and graph-replay preflight before model loading. Keep stock TP4 unchanged."
+    - "Cover AgentX and fixed-sequence 8k1k at concurrency 1, 2, 4, 8, 16, 32, with c32 evals. KV stays GPU-resident. AgentX throughput retains golden AL 3.51; fixed-sequence throughput and all evals use real block rejection. Patch scope, upstream submission status, and removal plan are disclosed in docs/waiver/3217.md."
+    - "添加 DeepSeek V4.1 Flash MI355X TP2 Engram CPU 卸载实验，固定使用 af1c014 ROCm 镜像及附带的 pinned-host TP 补丁，传入 --engram-config '{\"cpu_offload\":true}'，模型加载前必须通过设备查找和图回放预检。保留原有 TP4。AgentX 与 8k1k 均覆盖并发 1、2、4、8、16、32，并在 c32 执行 eval；KV 驻留 GPU，AgentX 吞吐保留黄金 AL 3.51，其余使用真实 block rejection。补丁范围、上游提交状态及移除计划见 docs/waiver/3217.md。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3217
