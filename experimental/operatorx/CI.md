@@ -192,4 +192,6 @@ benchmark's EP emulation. Do not divide the measured work by EP again or multipl
 by the number of GPUs in the allocation. These kernel measurements exclude
 activation and routing FLOPs and are not full-model throughput.
 
-The optional `operator.import_tmp_dir` selects the importer’s temporary filesystem. H100 uses `/var/tmp` because its `/tmp` filesystem rejects the opaque whiteout xattrs used by the vLLM image. Each import still creates and removes a private temporary directory; no system configuration is changed. Platform overrides merge individual `operator` settings with the base profile, preserving scheduler and shared-storage settings.
+### GPU validation status
+
+The complete eight-case BF16 profile passed on H200, MI300X and MI325X. H100 currently fails before kernel execution: its Enroot importer rejects OCI whiteout conversion for the vLLM image on both `/tmp` and `/var/tmp`. The same host limitation is recorded by CollectiveX swap-blocks. H100 requires a working image-import environment before performance can be reported; this change does not modify node configuration. B200, B300, GB200, GB300 and MI355X dispatches are awaiting shared GPU capacity. A registered pool is not runtime validation.

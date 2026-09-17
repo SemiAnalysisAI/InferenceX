@@ -21,43 +21,6 @@ def platforms(pool="h100-dgxc", gpus=8, architecture="linux/amd64"):
     return {pool: {"gpus_per_node": gpus, "image_platform": architecture}}
 
 
-def test_platform_override_preserves_inherited_operator_settings(tmp_path):
-    (tmp_path / "base.json").write_text(
-        json.dumps(
-            {
-                "platforms": {
-                    "gpu": {
-                        "arch": "old",
-                        "operator": {
-                            "partition": "test",
-                            "squash_dir": "/shared/cache",
-                        },
-                    }
-                }
-            }
-        )
-    )
-    override = tmp_path / "override.json"
-    override.write_text(
-        json.dumps(
-            {
-                "base": "base.json",
-                "platforms": {
-                    "gpu": {"arch": "new", "operator": {"import_tmp_dir": "/disk/tmp"}}
-                },
-            }
-        )
-    )
-    assert ci.load_platforms(override)["gpu"] == {
-        "arch": "new",
-        "operator": {
-            "partition": "test",
-            "squash_dir": "/shared/cache",
-            "import_tmp_dir": "/disk/tmp",
-        },
-    }
-
-
 def test_plan_chunks_and_preserves_moe_groups():
     ordinary = {"type": "gemm", "args": {"m": 2}}
     moe = {"type": "moe_forward", "args": {"world_size": 4, "expert_parallel_size": 2}}
@@ -340,7 +303,7 @@ import json, os, pathlib, sys, time
 name = pathlib.Path(sys.argv[0]).name
 with open(os.environ['TRACE'], 'a') as f: f.write(name + '\\n')
 with open(os.environ['TRACE_ARGS'], 'a') as f:
-    row = {'argv': sys.argv, 'cache': os.environ.get('ENROOT_CACHE_PATH'), 'tmpdir': os.environ.get('TMPDIR')}
+    row = {'argv': sys.argv, 'cache': os.environ.get('ENROOT_CACHE_PATH')}
     f.write(json.dumps(row) + '\\n')
 if name == 'salloc':
     if os.environ['QUEUED'] == '1':
@@ -384,7 +347,6 @@ if name == 'srun' and sys.argv[-1] == 'rank':
                             **({"qos": "fixture-qos"} if pool != "b300" else {}),
                             "exclude_nodes": "quarantined",
                             "enroot_cache_path": str(tmp_path / "shared/enroot"),
-                            "import_tmp_dir": str(tmp_path / "scratch"),
                             **(
                                 {"storage_roots": [str(tmp_path / "shared")]}
                                 if pool == "gb200"
@@ -491,7 +453,6 @@ if name == 'srun' and sys.argv[-1] == 'rank':
     if not cancel:
         imported = next(c for c in calls if "import" in c["argv"])
         assert imported["cache"] == str(tmp_path / "shared/enroot")
-        assert imported["tmpdir"] == str(tmp_path / "scratch")
         assert imported["argv"][-2:] == ["--image-platform", architecture]
         assert Path(imported["argv"][0]).name == "srun"
         launched = next(c["argv"] for c in calls if c["argv"][-1] == "rank")
@@ -613,21 +574,12 @@ def test_cleanup_waits_for_delayed_release_but_stays_bounded(
 
 def test_amd_plan_keeps_requested_moe_shard_factors_with_one_gpu():
     result = ci.plan(
-        "mi300x",
-        ["vllm"],
-        {
-            "tiny": [
-                {
-                    "type": "moe_gemm",
-                    "args": {"num_tokens": 16, "expert_parallel_size": 8},
-                },
-                {"type": "moe_gemm", "args": {"num_tokens": 32, "world_size": 2}},
-            ]
-        },
-        {"vllm": {"image": "rocm:fixture"}},
-        [1],
-        50,
-        platforms("mi300x"),
+        "mi300x", ["vllm"],
+        {"tiny": [
+            {"type": "moe_gemm", "args": {"num_tokens": 16, "expert_parallel_size": 8}},
+            {"type": "moe_gemm", "args": {"num_tokens": 32, "world_size": 2}},
+        ]},
+        {"vllm": {"image": "rocm:fixture"}}, [1], 50, platforms("mi300x"),
     )
     cell = result["include"][0]
     assert cell["world_size"] == cell["nodes"] == 1
