@@ -565,6 +565,9 @@ The former `kimik3-fp4-h200-vllm-agentic` key is split into `-latency`, `-balanc
 
 ## OperatorX microbenchmarks
 
-The manual OperatorX workflow starts on H100/H200 with one Slurm node per shard.
+The manual OperatorX workflow supports H100, H200, B200, B300, GB200, GB300,
+MI300X, MI325X, and MI355X with one physical Slurm node per shard. GB200/GB300 use
+four-GPU Arm nodes; the other pools use eight-GPU x86 nodes. GEMM and attention
+use one GPU per measurement. AMD attention supports both torch and AITER.
 See [OperatorX GitHub Actions](../experimental/operatorx/CI.md) for dispatch,
 coverage, artifacts, cancellation, and validation.
