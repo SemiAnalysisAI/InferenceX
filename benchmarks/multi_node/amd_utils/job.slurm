@@ -775,6 +775,26 @@ echo \"[rank 0] Main container exited (rc=\$DOCKER_EXIT_CODE). Stopping vllm-rou
 \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
 exit \$DOCKER_EXIT_CODE
 "
+SERVER_SRUN_RC=$?
+
+# /run_logs is backed by each compute node's local /tmp, so the node-0 copy
+# performed by the engine launcher cannot see prefill/decode logs written on
+# other nodes. Once every server container (and its outer tee) has exited,
+# merge each node's complete log tree into the shared benchmark directory.
+# Use sudo because the container-created source and the existing node-0
+# destination can be root-owned. Restore ownership after the fan-in so a
+# subsequent runner job can clean the workspace normally.
+SHARED_JOB_LOGS="${BENCHMARK_LOGS_DIR}/logs/slurm_job-${SLURM_JOB_ID}"
+if ! srun --nodelist="$SELECTED_NODELIST_SRUN" \
+    bash "$DI_REPO_DIR/benchmarks/multi_node/amd_utils/stage_node_logs.sh" \
+    "/tmp/slurm_job-${SLURM_JOB_ID}" "$SHARED_JOB_LOGS"; then
+    echo "[logs][WARN] failed to stage logs from one or more Slurm nodes" >&2
+fi
+
+if [[ -d "$SHARED_JOB_LOGS" ]]; then
+    sudo chown -R "$(id -u):$(id -g)" "$SHARED_JOB_LOGS" 2>/dev/null || true
+    chmod -R a+rwX "$SHARED_JOB_LOGS" 2>/dev/null || true
+fi
 
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
     srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' '"$CLIENT_CONT_NAME"' 2>/dev/null || true'
@@ -786,3 +806,5 @@ if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
         '
     fi
 fi
+
+exit "$SERVER_SRUN_RC"

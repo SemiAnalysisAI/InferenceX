@@ -277,7 +277,7 @@ rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
 
 智能体吞吐量作业采用不同的契约。它们使用 [`infx/results/agentic/validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py) 验证 AIPerf 输出，上传聚合的 `bmk_agentic_<suffix>` 工件，并上传包含追踪重放材料的原始 `agentic_<suffix>` 同级工件。InferenceX-app 通过它们共享的后缀对这些同级工件进行配对。智能体仅评测作业改为遵循评测输出契约，不要求吞吐量结果。
 
-服务器日志和 GPU 指标是诊断辅助工件。它们通过 `always()` 上传，因此失败的运行仍可供调查。它们的存在不会将失败的基准测试转变为有效结果。
+服务器日志和 GPU 指标是诊断辅助工件。它们通过 `always()` 上传，因此失败的运行仍可供调查。它们的存在不会将失败的基准测试转变为有效结果。在 AMD Slurm 机群上，`/run_logs` 是节点本地目录；服务器步骤结束后，`job.slurm` 会把每个已分配节点上已经关闭的日志树合并到共享存储中，使诊断工件包含整个部署的 Prefill 和 Decode 日志。
 
 ## 阶段 6：工件收集与交接
 
