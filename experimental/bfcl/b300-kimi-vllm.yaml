@@ -1,0 +1,19 @@
+# Resident-only probe of the existing Kimi B300 launcher; no Mooncake/RDMA.
+# 使用现有 Kimi B300 启动器的纯 GPU 驻留探测，不依赖 Mooncake/RDMA。
+# A pass does not validate the production Mooncake offload path.
+# 通过此探测不代表正式 Mooncake offload 路径已验证。
+kimik3-fp4-b300-vllm-resident-bfcl-probe:
+  image: vllm/vllm-openai:nightly-dev-x86_64-cu13-3696c77
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.75
+      search-space:
+      # c8 provides 16 native sequence slots for the selected multi-turn suite.
+      # c8 为选定多轮套件提供 16 个原生序列槽位。
+      - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 8] }

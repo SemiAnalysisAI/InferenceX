@@ -8039,3 +8039,36 @@
     - "Pin the Qwen3.5 FP8 H200 SGLang AgentX image to lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9, replacing the 2026-09-14 nightly; recipe settings and the c4/8/12/16 grid are unchanged."
     - "将 Qwen3.5 FP8 H200 SGLang AgentX 镜像从 2026-09-14 nightly 更新为按摘要固定的 lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9；配方设置及 c4/8/12/16 网格保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3198
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+    - minimaxm3-fp4-b300-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Remove the TRT-LLM chat request schema patch; stock Chat Completions still rejects BFCL store=false."
+    - "移除 TRT-LLM 聊天请求结构补丁；原生 Chat Completions 仍拒绝 BFCL 的 store=false。"
+    - "Remove the TRT executor metrics rewrite, select the native MiniMax-M3 tool parser, and add a stock BFCL Responses smoke; native metrics overhead requires fresh performance validation."
+    - "移除 TRT 执行器指标改写，选择原生 MiniMax-M3 工具解析器，并添加上游 BFCL Responses smoke；原生指标采集开销需重新验证性能。"
+    - "Add an experimental native TensorRT-LLM rc26 BFCL Responses probe with upstream token-usage reporting."
+    - "新增实验性原生 TensorRT-LLM rc26 BFCL Responses 探测配置，使用上游 token 用量统计。"
+    - "Select native FlashInfer attention for the B200 MiniMax EAGLE3 draft to avoid the FA4 FP8 descale stride failure. Requires fresh throughput validation."
+    - "B200 MiniMax EAGLE3 草稿模型改用原生 FlashInfer attention，避开 FA4 FP8 descale stride 故障；需重新验证吞吐量。"
+    - "Upgrade B200/B300 MiniMax TRT to rc26 and preserve per-conversation reuse using block_reuse_config.policy. Refresh the experimental vLLM image to include the upstream MSA/QuACK compatibility fix."
+    - "B200/B300 MiniMax TRT 升级至 rc26，通过 block_reuse_config.policy 保留按会话复用语义；实验性 vLLM 镜像同步到包含上游 MSA/QuACK 兼容修复的版本。"
+    - "Add an experimental resident-only Kimi MI355X vLLM c8 BFCL diagnostic; this does not validate the unavailable LMCache offload dependency."
+    - "新增实验性 Kimi MI355X vLLM c8 纯 GPU 驻留 BFCL 诊断；不作为缺失 LMCache 依赖的 offload 路径验证。"
+    - "Upgrade Kimi MI355X vLLM to upstream nightly-af1c0149 and use its bundled LMCache 0.5.3, built against the image's PyTorch. Remove runtime LMCache, Python dependency and OS package installation; validate the native DRAM offload path separately."
+    - "Kimi MI355X vLLM 升级至上游 nightly-af1c0149，使用镜像内针对其 PyTorch 构建的 LMCache 0.5.3。移除运行时 LMCache、Python 依赖及系统包安装；原生 DRAM offload 路径单独验证。"
+    - "Remove the obsolete MiniMax TRT fuse_qkv_index_projection option rejected by rc26. Set Kimi DCP1 LMCache prefill batches to 1536 tokens, preserving every recurrent-state snapshot as required by the bundled connector. These recipe changes require fresh throughput validation."
+    - "移除 rc26 已不支持的 MiniMax TRT fuse_qkv_index_projection 配置。Kimi DCP1 LMCache 的预填充批次改为 1536 token，按镜像内连接器的要求保留每个循环状态快照；这些配方变更需重新验证吞吐量。"
+    - "Upgrade both B200/B300 MiniMax vLLM images to nightly-af1c0149 with upstream mixed-layout CPU-offload and MSA fixes. Remove both runtime offload patch calls and their shared helper together; use native FlashInfer draft attention on both SKUs. Offload and B300 validation remain separate from the successful B200 resident evaluation; fresh throughput validation is required."
+    - "B200/B300 MiniMax vLLM 同步升级至包含上游混合布局 CPU offload 和 MSA 修复的 nightly-af1c0149 镜像，一并移除两个运行时 offload 补丁调用及共享脚本；两种 SKU 均使用原生 FlashInfer 草稿 attention。Offload 和 B300 验证独立于已通过的 B200 纯 GPU 驻留评估，仍需重新验证吞吐量。"
+    - "Convert the generated MiniMax B200/B300 CPU offload budget from decimal GB to bytes without inflating it by 7.4 percent. Revalidate the corrected budget."
+    - "MiniMax B200/B300 的 CPU offload 预算按生成配置中的十进制 GB 转换为字节，避免多分配约 7.4%；重新验证修正后的预算。"
+    - "Add a bounded 16-case Kimi BFCL diagnostic with native NaN-logit counters and archived metrics; preserve full-suite sampling and quality gates."
+    - "新增 16 用例 Kimi BFCL 限时诊断，启用原生 NaN logits 计数并保留指标；完整套件的采样和质量门槛保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156

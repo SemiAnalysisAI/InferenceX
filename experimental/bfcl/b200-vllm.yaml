@@ -1,0 +1,15 @@
+# Resident-only diagnostic using the upstream MSA/QuACK compatibility fix.
+# 纯 GPU 驻留诊断配置，使用上游 MSA/QuACK 兼容性修复。
+minimaxm3-fp4-b200-vllm-bfcl-probe:
+  image: vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e
+  model: nvidia/MiniMax-M3-NVFP4
+  model-prefix: minimaxm3
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.683
+      search-space:
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1] }

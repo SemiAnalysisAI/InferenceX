@@ -367,9 +367,10 @@ typically `http://127.0.0.1:$PORT/v1`. The OpenAI SDK appends
 not download a model or call a remote inference API.
 
 The smoke fixes temperature to `0` and uses four BFCL worker threads. Request
-construction, response interpretation, and retry behavior remain those of the
-pinned stock BFCL OpenAI-completions handler and OpenAI SDK. The adapter only
-registers the served model against that stock handler. A 900-second external
+construction and response interpretation remain those of the pinned stock
+BFCL OpenAI-completions handler. All suites register a transport-only subclass
+that sets a 180-second per-attempt timeout and two OpenAI SDK retries; it does
+not rewrite requests, responses, dependency source, or scoring. A 900-second external
 process deadline bounds the smoke; each full suite uses its declared deadline.
 Dependency installation is separately bounded at 600 seconds. Dependency,
 setup, transport, timeout, and collection failures write
@@ -384,6 +385,38 @@ function names and JSON-encoded `function.arguments`; the response must also
 support a normal no-tool answer for the irrelevance case. Starting a nominally
 OpenAI-compatible server is not sufficient if it cannot parse that model's
 native tool-call syntax.
+
+BFCL sends `store=false` in its stock chat requests. Stock TRT-LLM
+`1.3.0rc23.post1` rejects this field; InferenceX does not patch its request
+schema. Its native Responses endpoint accepts that field. Select
+`eval-framework: bfcl` and `eval-suite: bfcl_responses_smoke` to exercise
+BFCL's stock `OpenAIResponsesHandler` through `/v1/responses`, with the same
+four smoke case IDs and request budgets. Reports use a distinct task name and
+record `api_format`; do not combine these scores with Chat Completions results.
+BFCL's upstream handlers differ in request formatting, including system versus
+developer roles. No request or response rewriting is added by InferenceX.
+
+MiniMax TRT launchers explicitly select the stock `--tool_parser minimax_m3`;
+the pinned TRT CLI defaults to no tool parser.
+
+The native Responses path is a compatibility candidate until validated on live
+hardware. A successful vendor smoke does not establish BFCL support. TRT now
+uses its native performance-metrics behavior as well; removing the executor
+rewrite can change timing overhead, so old throughput results need revalidation.
+
+The same model/suite uses identical cases and scoring on AMD and NVIDIA.
+Vendor evals remain automatic; BFCL is an explicit additional diagnostic.
+To test the real pinned BFCL package locally, including strict endpoint-error
+reporting, without launching a model:
+
+```bash
+uv run --no-project --python 3.12 --with pytest \
+  --with bfcl-eval==2026.3.23 --with soundfile==0.13.1 \
+  python -m pytest utils/evals/test_bfcl_integration.py -v
+```
+
+This fixture test exercises upstream generation and scoring, not live hardware
+compatibility or model quality. The test skips when BFCL is not installed.
 
 Configure the server's model-specific function-calling parser and, when the
 model's default template does not render tools correctly, its tool-aware chat
@@ -434,9 +467,20 @@ remains the framework default. Both suites use BFCL's OpenAI completions
 handler against the local endpoint rather than a hosted-provider handler. They
 fix temperature to `0.001` and retain the stock handler's request construction,
 response interpretation, and retry behavior. A transport-only subclass pins
-the OpenAI SDK to two retries and a 180-second per-attempt timeout. MiniMax uses
-eight worker threads and a two-hour whole-suite timeout. Kimi uses 16 threads,
-caps multi-turn cases at ten steps, and uses a four-hour whole-suite timeout.
+the OpenAI SDK to two retries. MiniMax uses a 180-second per-attempt timeout,
+eight worker threads and a two-hour whole-suite timeout. Kimi allows 600 seconds
+per attempt for long multi-turn generations, uses 16 threads, retains the pinned
+upstream multi-turn step limit (20), and uses a four-hour whole-suite timeout.
+Native reports record the request timeout and retry limit in `transport`.
+For timeout investigation, `bfcl_kimi_diagnostic` runs only `multiple_0` through
+`multiple_15`, using the same temperature 0.001 and 16 threads, with a 60-second
+request timeout, two SDK retries and a 600-second suite bound. It archives the
+upstream artifacts under its own task identity and is not full-suite evidence.
+The MI355X Kimi launcher enables native NaN-logit counters only for this diagnostic
+and saves `/metrics` as `bfcl_diagnostic_metrics.txt`, including after BFCL failure.
+The normal smoke, full suites and throughput retain their existing settings.
+InferenceX does not override BFCL module globals. Older
+Kimi runs used a local ten-step override and are not directly comparable.
 
 The adapter builds a deterministic run-ID map from the pinned BFCL dataset.
 Single-turn suites select every case in their named categories. The Kimi
@@ -461,6 +505,24 @@ revision, integration revision, per-category score headers,
 case IDs, failure records, and sampling settings. The compatibility
 `results_bfcl.json` remains the only input to the normal InferenceX eval
 collector and dashboard path.
+
+### Experimental native CPU-cache restore check
+
+The Kimi MI355X vLLM `bfcl_smoke` path with `vllm-simple` offload also runs
+`experimental/bfcl/verify_native_cpu_restore.py` after BFCL. Only this isolated
+eval-only combination enables vLLM's native development cache-reset API and
+request-level cached-token reporting. Resident runs, other eval suites and
+throughput runs do not enable this diagnostic.
+
+The check clears both caches, generates a greedy completion for a long synthetic
+prefix, clears only the GPU cache, and repeats the identical request. A pass
+requires an unchanged nonempty completion, a native cached-token count on the
+second request, and an increase in the external-prefix-hit counter. This checks
+one CPU restore; it is not a quality benchmark or comprehensive offload coverage.
+The 600-second process bound includes bounded HTTP calls and reset/metric settling.
+`results/native_cpu_restore_report.json` preserves both native responses and
+counter evidence, including failures, in the agentic raw artifact. It does not
+rewrite BFCL results. A restore failure fails the job independently of BFCL.
 
 ### Benchmark script flow
 

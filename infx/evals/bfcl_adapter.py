@@ -10,11 +10,11 @@ import os
 import sys
 import urllib.parse
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib.metadata import distribution
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 TASK_NAME = "bfcl_smoke"
 NATIVE_REPORT_FILENAME = "bfcl_report.json"
@@ -24,9 +24,8 @@ RESULT_FORMAT = "inferencex-eval-v1"
 ADAPTER_NAME = "bfcl-v4-openai-completions"
 DEFAULT_NUM_THREADS = 4
 REQUIRED_SCORE = 0.0
-FULL_SUITE_REQUEST_TIMEOUT_SECONDS = 180
-FULL_SUITE_REQUEST_MAX_RETRIES = 2
-KIMI_MAXIMUM_STEP_LIMIT = 10
+REQUEST_TIMEOUT_SECONDS = 180
+REQUEST_MAX_RETRIES = 2
 
 BFCL_PACKAGE = "bfcl-eval"
 BFCL_PACKAGE_VERSION = "2026.3.23"
@@ -63,6 +62,8 @@ class SuiteSpec:
     default_num_threads: int
     threshold: float
     category_limits: tuple[tuple[str, int], ...] = ()
+    api_format: Literal["chat-completions", "responses"] = "chat-completions"
+    request_timeout_seconds: int = REQUEST_TIMEOUT_SECONDS
 
     @property
     def leaf_categories(self) -> tuple[str, ...]:
@@ -88,6 +89,7 @@ SMOKE_SUITE = SuiteSpec(
     default_num_threads=DEFAULT_NUM_THREADS,
     threshold=REQUIRED_SCORE,
 )
+RESPONSES_SMOKE_SUITE = replace(SMOKE_SUITE, name="bfcl_responses_smoke", api_format="responses")
 MINIMAX_SUITE = SuiteSpec(
     name="bfcl_vllm_minimax_m3",
     generation_categories=(
@@ -129,14 +131,29 @@ KIMI_SUITE = SuiteSpec(
     default_num_threads=16,
     threshold=0.0,
     category_limits=(("multi_turn", 240),),
+    # Long multi-turn generations can exceed the short smoke request budget.
+    # The launcher still bounds the entire Kimi selection to four hours.
+    request_timeout_seconds=600,
+)
+KIMI_DIAGNOSTIC_SUITE = SuiteSpec(
+    name="bfcl_kimi_diagnostic",
+    generation_categories=("multiple",),
+    expected_leaf_counts=(("multiple", 16),),
+    category_limits=(("multiple", 16),),
+    temperature=0.001,
+    default_num_threads=16,
+    threshold=0.0,
+    request_timeout_seconds=60,
 )
 SUITE_SPECS: Mapping[str, SuiteSpec] = MappingProxyType(
     {
         suite.name: suite
         for suite in (
             SMOKE_SUITE,
+            RESPONSES_SMOKE_SUITE,
             MINIMAX_SUITE,
             KIMI_SUITE,
+            KIMI_DIAGNOSTIC_SUITE,
         )
     }
 )
@@ -222,10 +239,11 @@ def _positive_int(value: str) -> int:
 
 
 def _source_details(
-    suite: SuiteSpec,  # noqa: ARG001
+    suite: SuiteSpec,
     case_ids_by_category: Mapping[str, tuple[str, ...]],
 ) -> dict[str, Any]:
     return {
+        "api_format": suite.api_format,
         "url": UPSTREAM_SOURCE,
         "repository": UPSTREAM_REPOSITORY,
         "ref": UPSTREAM_REF,
@@ -291,7 +309,9 @@ def _native_report(
     total_count = sum(score.total_count for score in scores or ())
     accuracy = correct_count / total_count if total_count else 0.0
     report: dict[str, Any] = {
-        "verifier": ADAPTER_NAME,
+        "verifier": (
+            ADAPTER_NAME if suite.api_format == "chat-completions" else "bfcl-v4-openai-responses"
+        ),
         "task": suite.name,
         "model": model,
         "endpoint": base_url,
@@ -301,6 +321,10 @@ def _native_report(
         "sampling": {
             "temperature": suite.temperature,
             "num_threads": num_threads,
+        },
+        "transport": {
+            "request_timeout_seconds": suite.request_timeout_seconds,
+            "max_retries": REQUEST_MAX_RETRIES,
         },
         "summary": {
             "accuracy": accuracy,
@@ -445,23 +469,17 @@ def _clear_upstream_modules() -> None:
             sys.modules.pop(module_name, None)
 
 
-def _apply_suite_runtime_limits(suite: SuiteSpec) -> None:
-    """Apply pinned BFCL limits before importing its model handlers."""
-    if suite is KIMI_SUITE:
-        from bfcl_eval.constants import default_prompts as bfcl_prompts
-
-        bfcl_prompts.MAXIMUM_STEP_LIMIT = KIMI_MAXIMUM_STEP_LIMIT
-
-
-def _bounded_openai_handler(stock_handler: type[Any]) -> type[Any]:
+def _bounded_openai_handler(
+    stock_handler: type[Any], *, timeout_seconds: int = REQUEST_TIMEOUT_SECONDS
+) -> type[Any]:
     """Retain BFCL's handler while bounding its OpenAI transport."""
 
     class BoundedOpenAICompletionsHandler(stock_handler):
         def _build_client_kwargs(self) -> dict[str, Any]:
             kwargs = super()._build_client_kwargs()
             kwargs.update(
-                timeout=FULL_SUITE_REQUEST_TIMEOUT_SECONDS,
-                max_retries=FULL_SUITE_REQUEST_MAX_RETRIES,
+                timeout=timeout_seconds,
+                max_retries=REQUEST_MAX_RETRIES,
             )
             return kwargs
 
@@ -509,7 +527,7 @@ def _load_dataset_helpers() -> tuple[
 def _build_suite_case_ids(
     suite: SuiteSpec,
 ) -> dict[str, tuple[str, ...]]:
-    if suite is SMOKE_SUITE:
+    if suite in (SMOKE_SUITE, RESPONSES_SMOKE_SUITE):
         return dict(SMOKE_CASE_IDS)
 
     load_dataset_entry, parse_test_category_argument, sort_key = _load_dataset_helpers()
@@ -564,10 +582,23 @@ def _read_selected_suite(
         case_ids_by_category[category] = tuple(case_ids)
 
     shape = tuple((category, len(case_ids)) for category, case_ids in case_ids_by_category.items())
-    for suite in SUITE_SPECS.values():
+    manifest_path = project_root / "inferencex_suite.json"
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        suite_name = manifest.get("suite") if isinstance(manifest, dict) else None
+        if not isinstance(suite_name, str) or suite_name not in SUITE_SPECS:
+            raise ValueError("BFCL suite manifest does not name a supported suite")
+        candidates = (SUITE_SPECS[suite_name],)
+    else:
+        # Legacy maps predate the Responses suite; never infer a different API
+        # from an identical set of case IDs.
+        candidates = tuple(s for s in SUITE_SPECS.values() if s.api_format == "chat-completions")
+    for suite in candidates:
         if shape != suite.expected_leaf_counts:
             continue
-        if suite is SMOKE_SUITE and case_ids_by_category != dict(SMOKE_CASE_IDS):
+        if suite in (SMOKE_SUITE, RESPONSES_SMOKE_SUITE) and case_ids_by_category != dict(
+            SMOKE_CASE_IDS
+        ):
             continue
         return suite, case_ids_by_category
     raise ValueError(f"test-case ID map does not match a supported suite: {shape!r}")
@@ -583,7 +614,6 @@ def _run_upstream(
 ) -> None:
     """Lazily load and invoke the pinned BFCL API against an existing server."""
     suite, case_ids_by_category = _read_selected_suite(project_root)
-    _apply_suite_runtime_limits(suite)
     os.environ["BFCL_PROJECT_ROOT"] = str(project_root)
     os.environ["OPENAI_BASE_URL"] = base_url
     os.environ["OPENAI_API_KEY"] = api_key
@@ -591,15 +621,16 @@ def _run_upstream(
     import bfcl_eval.constants.model_config as bfcl_model_config
     from bfcl_eval.__main__ import evaluate, generate
     from bfcl_eval.constants.model_config import ModelConfig
-    from bfcl_eval.model_handler.api_inference.openai_completion import (
-        OpenAICompletionsHandler,
-    )
 
-    handler = (
-        OpenAICompletionsHandler
-        if suite is SMOKE_SUITE
-        else _bounded_openai_handler(OpenAICompletionsHandler)
-    )
+    if suite.api_format == "responses":
+        from bfcl_eval.model_handler.api_inference.openai_response import OpenAIResponsesHandler
+
+        stock_handler = OpenAIResponsesHandler
+    else:
+        from bfcl_eval.model_handler.api_inference.openai_completion import OpenAICompletionsHandler
+
+        stock_handler = OpenAICompletionsHandler
+    handler = _bounded_openai_handler(stock_handler, timeout_seconds=suite.request_timeout_seconds)
 
     bfcl_model_config.MODEL_CONFIG_MAPPING[model] = ModelConfig(
         model_name=model,
@@ -791,7 +822,9 @@ def publish_integration_error(
     """Publish required zero-score artifacts without importing BFCL or Typer."""
     native_path, compatibility_path = _prepare_output_paths(output_dir)
     case_ids_by_category = (
-        dict(SMOKE_CASE_IDS) if suite is SMOKE_SUITE else dict.fromkeys(suite.leaf_categories, ())
+        dict(SMOKE_CASE_IDS)
+        if suite in (SMOKE_SUITE, RESPONSES_SMOKE_SUITE)
+        else dict.fromkeys(suite.leaf_categories, ())
     )
     _write_json(
         native_path,
@@ -831,7 +864,9 @@ def run_evaluation(
     """Run one immutable BFCL suite and always publish both report formats."""
     native_path, compatibility_path = _prepare_output_paths(output_dir)
     selected_case_ids: dict[str, tuple[str, ...]] = (
-        dict(SMOKE_CASE_IDS) if suite is SMOKE_SUITE else dict.fromkeys(suite.leaf_categories, ())
+        dict(SMOKE_CASE_IDS)
+        if suite in (SMOKE_SUITE, RESPONSES_SMOKE_SUITE)
+        else dict.fromkeys(suite.leaf_categories, ())
     )
     resolved_num_threads = suite.default_num_threads if num_threads is None else num_threads
     try:
@@ -852,6 +887,7 @@ def run_evaluation(
         _write_upstream_attribution(bfcl_project_root)
         selected_case_ids = _build_suite_case_ids(suite)
         _write_id_map(bfcl_project_root, selected_case_ids)
+        _write_json(bfcl_project_root / "inferencex_suite.json", {"suite": suite.name})
         upstream_runner(
             model=normalized_model,
             project_root=bfcl_project_root,

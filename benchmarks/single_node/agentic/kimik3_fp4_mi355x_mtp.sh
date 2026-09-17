@@ -110,30 +110,21 @@ case "${KV_OFFLOAD_BACKEND:-}" in
       lmcache)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
 
-    LMCACHE_VERSION=0.5.5.dev114+rocm7.2
-    LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/nightly-rocm"
+    # The pinned upstream ROCm image builds LMCache against its own PyTorch.
+    # External ROCm wheels target a different PyTorch ABI; use the bundled
+    # package and keep its version aligned with the master config metadata.
+    python3 - <<'PY'
+from importlib.metadata import version
 
-    agentic_pip_install --quiet --no-cache-dir --no-deps \
-        "sortedcontainers==2.4.0" \
-        "opentelemetry-exporter-prometheus==0.61b0" \
-        "cupy-rocm-7-0==14.1.1" \
-        "lmcache==${LMCACHE_VERSION}" --find-links "$LMCACHE_ROCM_INDEX"
+import lmcache.c_ops
+import lmcache.integration.vllm.lmcache_mp_connector
+import torch
 
-    # LMCache 0.5.5 eagerly imports the Mooncake backend, whose native .so
-    # needs libglog, libjsoncpp, libibverbs, librdmacm and libnuma; the vLLM
-    # ROCm image ships none of them.
-    LMCACHE_NATIVE_LIBS=(libglog.so.0 libjsoncpp.so.25 libibverbs.so.1 librdmacm.so.1 libnuma.so.1)
-    for lib in "${LMCACHE_NATIVE_LIBS[@]}"; do
-        if ! ldconfig -p | grep -q "$lib"; then
-            apt-get update
-            apt-get install -y \
-                libgoogle-glog0v5 libjsoncpp25 libibverbs1 librdmacm1 libnuma1
-            break
-        fi
-    done
-    python3 -c \
-        "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus" \
-        >/dev/null
+installed = version("lmcache")
+if installed != "0.5.3":
+    raise RuntimeError(f"Expected image-bundled LMCache 0.5.3, found {installed}")
+print(f"Image-bundled LMCache {installed}; PyTorch {torch.__version__}; HIP {torch.version.hip}")
+PY
 
     # One MP server per node (docs.lmcache.ai/recipes/kimi_k3.html). The chunk
     # must be a multiple of every KV group's tokens_per_block: the hybrid
@@ -241,6 +232,13 @@ case "$CONC" in
         ;;
 esac
 
+if agentic_kv_offload_enabled && [[ "${KV_OFFLOAD_BACKEND:-}" == "lmcache" && "$DCP_SIZE" -eq 1 ]]; then
+    # Bundled LMCache 0.5.3 requires one Mamba state snapshot per prefill
+    # block. The pinned Kimi image selects 1536-token attention blocks;
+    # the batch must stay in [1536, 3072) to avoid skipping snapshots.
+    MAX_NUM_BATCHED_TOKENS=1536
+fi
+
 # ---- DSpark draft ------------------------------------------------------------
 # Published checkpoint, unmodified. vLLM #55966 makes ROCM_AITER_MLA accept its
 # non-causal dflash_config, so the local causal rewrite is no longer needed.
@@ -286,6 +284,26 @@ echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="1200"
 
+BFCL_KIMI_DIAGNOSTIC=false
+if [[ "$EVAL_ONLY" == "true" && "${EVAL_FRAMEWORK:-}" == "bfcl" \
+    && "${EVAL_SUITE:-}" == "bfcl_kimi_diagnostic" ]]; then
+    # Native observability only: retain stock generation and verification.
+    export VLLM_COMPUTE_NANS_IN_LOGITS=1
+    BFCL_KIMI_DIAGNOSTIC=true
+fi
+
+NATIVE_CPU_RESTORE_PROBE=false
+NATIVE_CPU_RESTORE_ARGS=()
+if [[ "$EVAL_ONLY" == "true" && "${EVAL_FRAMEWORK:-}" == "bfcl" \
+    && "${EVAL_SUITE:-}" == "bfcl_smoke" && "${KV_OFFLOAD_BACKEND:-}" == "vllm-simple" ]] \
+    && agentic_kv_offload_enabled; then
+    # Only the isolated native-offload smoke exposes vLLM's cache-reset API.
+    # The diagnostic never changes framework source or BFCL requests/scores.
+    export VLLM_SERVER_DEV_MODE=1
+    NATIVE_CPU_RESTORE_PROBE=true
+    NATIVE_CPU_RESTORE_ARGS=(--enable-prompt-tokens-details)
+fi
+
 
 # DCP shards decode KV across the TP ranks, so it must divide TP.
 if [ $((TP % DCP_SIZE)) -ne 0 ]; then
@@ -328,6 +346,7 @@ VLLM_CMD=(
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
     "${CP_ARGS[@]}"
+    "${NATIVE_CPU_RESTORE_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
@@ -338,7 +357,23 @@ echo "Server PID: $SERVER_PID"
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 if [ "${EVAL_ONLY}" = "true" ]; then
+    if [ "$BFCL_KIMI_DIAGNOSTIC" = true ]; then
+        # Preserve metrics even when BFCL exits with a transport failure.
+        diagnostic_rc=0
+        run_eval --port "$PORT" || diagnostic_rc=$?
+        curl --fail --silent --show-error --max-time 10 \
+            "http://127.0.0.1:${PORT}/metrics" \
+            -o "$RESULT_DIR/bfcl_diagnostic_metrics.txt" || {
+                if [ "$diagnostic_rc" -eq 0 ]; then diagnostic_rc=1; fi
+            }
+        exit "$diagnostic_rc"
+    fi
     run_eval --port "$PORT"
+    if [ "$NATIVE_CPU_RESTORE_PROBE" = true ]; then
+        timeout 600 python3 "$(dirname "$0")/../../../experimental/bfcl/verify_native_cpu_restore.py" \
+            --base-url "http://127.0.0.1:${PORT}" --model "$MODEL" \
+            --output "$RESULT_DIR/native_cpu_restore_report.json"
+    fi
 else
     build_replay_cmd "$RESULT_DIR"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"

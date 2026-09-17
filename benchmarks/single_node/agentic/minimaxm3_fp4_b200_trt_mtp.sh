@@ -40,13 +40,6 @@ fi
 nvidia-smi
 resolve_trace_source
 install_agentic_deps
-# rc23 gates Prometheus and its expensive per-step timing collector behind one
-# option; keep request/iteration metrics without timing payloads.
-disable_trtllm_detailed_perf_metrics
-
-# BFCL's stock OpenAI client sends the standard `store=false` field. TRT-LLM
-# 1.3 rejects that field even though this server never persists responses.
-python3 "$(dirname "$0")/../../../runners/patch_trtllm_chat_store.py"
 
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
@@ -114,11 +107,11 @@ sparse_attention_config:
     implementation: msa
     indexer_kv_dtype: fp8
     sparse_disable_index_value: true
-    fuse_qkv_index_projection: true
 kv_cache_config:
     free_gpu_memory_fraction: 0.94
     enable_block_reuse: true
-    block_reuse_policy: per_conversation
+    block_reuse_config:
+        policy: per_conversation
     tokens_per_block: 128
     use_kv_cache_manager_v2: true
     dtype: fp8
@@ -174,6 +167,7 @@ TRTLLM_CMD=(
     --host 0.0.0.0
     --port "$PORT"
     --chat_template "$MODEL_PATH/chat_template.jinja"
+    --tool_parser minimax_m3
     --config ser.yaml
 )
 printf '%q ' "${TRTLLM_CMD[@]}" | tee "$RESULT_DIR/trtllm_command.txt"

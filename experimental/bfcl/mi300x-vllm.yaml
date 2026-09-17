@@ -1,0 +1,15 @@
+# Resident-only diagnostic: the production d9105ea8 ROCm tag is unavailable.
+# 纯 GPU 驻留诊断：正式配置使用的 d9105ea8 ROCm 镜像标签已不可用。
+minimaxm3-fp8-mi300x-vllm-bfcl-probe:
+  image: vllm/vllm-openai-rocm:nightly-af1c01499b289be555c475669ba50a88e96d846e
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: cluster:mi300x-amd
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2] }
