@@ -67,6 +67,7 @@ DOCKER_CONT_NAME="llmd_bench_${SANITIZED_USER}_${SLURM_JOB_ID}"
 export DOCKER_CONT_NAME
 : "${BENCHMARK_LOGS_DIR:?BENCHMARK_LOGS_DIR not set}"
 DOCKER_MOUNT_PATH="/workspace"
+export INFMAX_CONTAINER_WORKSPACE="$DOCKER_MOUNT_PATH"
 
 cleanup() {
     echo "[${SLURM_JOB_ID}] cleanup on $(hostname)"
@@ -109,6 +110,7 @@ done
 # metadata on both engines. Forward names, not interpolated values: JSON and
 # HF_TOKEN must never be embedded in the nested shell command or printed.
 AGENTIC_ENV_NAMES=(
+    INFMAX_CONTAINER_WORKSPACE
     IS_AGENTIC SCENARIO_TYPE CONC CONC_LIST DURATION AIPERF_EXPERIMENTAL_FAST
     IMAGE RECIPE_FINGERPRINT DISAGG HF_TOKEN
     KV_OFFLOADING KV_OFFLOAD_BACKEND KV_OFFLOAD_BACKEND_METADATA

@@ -586,7 +586,7 @@ PY
     echo "All ${#_prefill_ips[@]} prefill vLLM node(s) ready"
 
     if [[ "${IS_AGENTIC}" == "1" && "${EVAL_ONLY}" != "true" ]]; then
-        export ENVOY_PORT VLLM_PORT INFMAX_CONTAINER_WORKSPACE
+        export ENVOY_PORT VLLM_PORT INFMAX_CONTAINER_WORKSPACE=/workspace
         bash /workspace/benchmarks/multi_node/llm-d/agentic.sh
     elif [[ "${EVAL_ONLY}" != "true" ]]; then
         # ---- Benchmark sweep (one run per concurrency level) ----
