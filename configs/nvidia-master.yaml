@@ -6758,7 +6758,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d:
 # Prefill uses PCP8 and a host-DRAM-backed hierarchical KV cache; decode uses
 # TP8/DP8 with a GPU-resident KV cache. Both roles enable six-step EAGLE MTP.
 glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache:
-  image: lmsysorg/sglang:v0.5.16-cu130
+  image: lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:h200-dgxc

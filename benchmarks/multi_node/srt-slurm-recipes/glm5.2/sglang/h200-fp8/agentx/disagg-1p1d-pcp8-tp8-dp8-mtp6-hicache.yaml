@@ -6,7 +6,7 @@ name: "disagg-h200-1p1d-pcp8-tp8-dp8-mtp6-hicache"
 
 model:
   path: "hf:zai-org/GLM-5.2-FP8"
-  container: "lmsysorg/sglang:v0.5.16-cu130"
+  container: "lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9"
   precision: "fp8"
 
 dynamo:
