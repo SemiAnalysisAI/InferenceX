@@ -547,6 +547,9 @@ jq -r 'to_entries[] | [.key, .value.n_success, .value.total] | @tsv' \
 
 ## OperatorX 微基准
 
-OperatorX 手动工作流先支持 H100/H200，每个分片使用一个 Slurm 节点。
+OperatorX 手动工作流支持 H100、H200、B200、B300、GB200、GB300、MI300X、MI325X
+和 MI355X，每个分片使用一个物理 Slurm 节点。GB200/GB300 使用四卡 Arm 节点，其余
+运行器池使用八卡 x86 节点。GEMM 和 attention 每次测量只使用一张 GPU；AMD
+attention 支持 torch 和 AITER。
 触发方式、覆盖范围、产物、取消及验证说明见
 [OperatorX GitHub Actions](../experimental/operatorx/CI_zh.md)。
