@@ -8091,4 +8091,4 @@
   description:
     - "Refresh DeepSeek-V4-Pro-0813 AgentX on GB300 with TP8 concurrency 1 and TP4 concurrency 4 aggregate points plus DEP8/DEP16 disaggregated points at concurrency 64-1920."
     - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9, Dynamo 1.5.0.dev20260914, and the current SGLang CUDA graph flag names."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3218
