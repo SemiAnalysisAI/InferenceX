@@ -1,0 +1,1365 @@
+From 44354a387f996a7685c9b2debad03fa9a3361e50 Mon Sep 17 00:00:00 2001
+From: CharlesWu <296364977+charxwu@users.noreply.github.com>
+Date: Wed, 19 Aug 2026 17:36:41 +0800
+Subject: [PATCH 01/10] fix(simple_kv_offload): align CPU offload pool size
+ across PP workers
+
+Under pipeline parallelism or spec decode, SimpleCPUOffload workers on
+different ranks can derive different num_cpu_blocks from their local KV
+tensor layouts while the scheduler assigns a shared cpu_block_id space.
+Align worker pool sizes via world-group MIN all-reduce on live tensor
+strides, collect the value in the engine after KV cache registration,
+and size the scheduler pool from that aligned count.
+
+Signed-off-by: CharlesWu <296364977+charxwu@users.noreply.github.com>
+---
+ tests/v1/simple_kv_offload/test_scheduler.py  |  66 +++++++++
+ tests/v1/simple_kv_offload/test_sizing.py     |  48 +++++++
+ tests/v1/simple_kv_offload/test_worker.py     |  37 +++++
+ vllm/config/cache.py                          |   8 ++
+ .../v1/simple_cpu_offload_connector.py        |  28 ++++
+ vllm/v1/engine/core.py                        |   6 +
+ vllm/v1/executor/abstract.py                  |  15 ++
+ vllm/v1/simple_kv_offload/manager.py          |  45 +++++-
+ vllm/v1/simple_kv_offload/sizing.py           | 130 ++++++++++++++++++
+ vllm/v1/simple_kv_offload/worker.py           |  27 +++-
+ vllm/v1/worker/gpu_worker.py                  |  16 +++
+ 11 files changed, 413 insertions(+), 13 deletions(-)
+ create mode 100644 tests/v1/simple_kv_offload/test_sizing.py
+ create mode 100644 vllm/v1/simple_kv_offload/sizing.py
+
+diff --git a/tests/v1/simple_kv_offload/test_scheduler.py b/tests/v1/simple_kv_offload/test_scheduler.py
+index 714617a4f687..c42df016ae5f 100644
+--- a/tests/v1/simple_kv_offload/test_scheduler.py
++++ b/tests/v1/simple_kv_offload/test_scheduler.py
+@@ -1833,3 +1833,69 @@ def test_cp_lazy_target_blocks_scaling(cp_world_size: int) -> None:
+             f"cp_world_size={cp_world_size}: target_cp={target_cp} should be "
+             f"less than target_base={target_base}"
+         )
++
++
++# ---------------------------------------------------------------------------
++# Test 18: PP / spec-decode sizing alignment
++# ---------------------------------------------------------------------------
++def test_compute_num_cpu_blocks_uses_heaviest_worker() -> None:
++    """Offload block count must follow the worker with the largest bytes/block."""
++    num_gpu_blocks = 100
++    cpu_capacity = 8 * _BYTES_PER_BLOCK
++    light = _make_kv_cache_config(num_gpu_blocks, num_groups=1)
++    heavy = _make_kv_cache_config(num_gpu_blocks, num_groups=2)
++
++    heavy_only = SimpleCPUOffloadScheduler.compute_num_cpu_blocks(
++        [heavy], cpu_capacity
++    )
++    aligned = SimpleCPUOffloadScheduler.compute_num_cpu_blocks(
++        [light, heavy], cpu_capacity
++    )
++    light_only = SimpleCPUOffloadScheduler.compute_num_cpu_blocks(
++        [light], cpu_capacity
++    )
++
++    assert aligned == heavy_only
++    assert aligned < light_only
++
++
++def test_scheduler_uses_worker_kv_cache_configs() -> None:
++    """Scheduler must not size the CPU pool from worker 0 alone under PP."""
++    num_gpu_blocks = 16
++    cpu_capacity = 4 * _BYTES_PER_BLOCK
++    light = _make_kv_cache_config(num_gpu_blocks, num_groups=1)
++    heavy = _make_kv_cache_config(num_gpu_blocks, num_groups=2)
++
++    sched = SimpleCPUOffloadScheduler(
++        vllm_config=_make_vllm_config(),
++        kv_cache_config=light,
++        cpu_capacity_bytes=cpu_capacity,
++        scheduler_block_size=BLOCK_SIZE,
++        hash_block_size=BLOCK_SIZE,
++        worker_kv_cache_configs=[light, heavy],
++    )
++
++    expected = SimpleCPUOffloadScheduler.compute_num_cpu_blocks(
++        [light, heavy], cpu_capacity
++    )
++    assert sched.num_cpu_blocks == expected
++    assert sched.num_cpu_blocks == 2
++
++
++def test_scheduler_uses_worker_aligned_num_cpu_blocks() -> None:
++    """Authoritative worker-aligned sizing overrides config-only estimates."""
++    num_gpu_blocks = 16
++    cpu_capacity = 4 * _BYTES_PER_BLOCK
++    light = _make_kv_cache_config(num_gpu_blocks, num_groups=1)
++    heavy = _make_kv_cache_config(num_gpu_blocks, num_groups=2)
++
++    sched = SimpleCPUOffloadScheduler(
++        vllm_config=_make_vllm_config(),
++        kv_cache_config=light,
++        cpu_capacity_bytes=cpu_capacity,
++        scheduler_block_size=BLOCK_SIZE,
++        hash_block_size=BLOCK_SIZE,
++        worker_kv_cache_configs=[light, heavy],
++        aligned_num_cpu_blocks=1,
++    )
++    assert sched.num_cpu_blocks == 1
+diff --git a/tests/v1/simple_kv_offload/test_sizing.py b/tests/v1/simple_kv_offload/test_sizing.py
+new file mode 100644
+index 000000000000..1d5b6d3ca756
+--- /dev/null
++++ b/tests/v1/simple_kv_offload/test_sizing.py
+@@ -0,0 +1,48 @@
++# SPDX-License-Identifier: Apache-2.0
++# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++"""Unit tests for SimpleCPUOffload sizing helpers."""
++
++from __future__ import annotations
++
++import pytest
++import torch
++
++from vllm.platforms import current_platform
++from vllm.v1.simple_kv_offload.sizing import (
++    compute_num_offload_blocks_from_configs,
++    compute_total_bytes_per_block_from_kv_caches,
++    local_num_offload_blocks,
++)
++
++if not current_platform.is_cuda_alike():
++    pytest.skip("Requires CUDA or ROCm", allow_module_level=True)
++
++from tests.v1.simple_kv_offload.test_scheduler import (  # noqa: E402
++    BLOCK_SIZE,
++    _BYTES_PER_BLOCK,
++    _make_kv_cache_config,
++)
++
++
++def test_live_tensor_bytes_can_exceed_config_estimate() -> None:
++    """Stride-based sizing can be larger than KVCacheConfig tensor sizes."""
++    num_gpu_blocks = 16
++    gpu_config = _make_kv_cache_config(num_gpu_blocks, num_groups=1)
++    capacity = 4 * _BYTES_PER_BLOCK
++
++    config_blocks = compute_num_offload_blocks_from_configs([gpu_config], capacity)
++
++    kv_caches = {
++        "layer_0": torch.zeros(
++            (2, num_gpu_blocks, BLOCK_SIZE, 1, 16),
++            dtype=torch.float16,
++            device="cuda",
++        )
++    }
++    live_bytes = compute_total_bytes_per_block_from_kv_caches(
++        kv_caches, num_gpu_blocks, kv_caches["layer_0"].device
++    )
++    live_blocks = local_num_offload_blocks(capacity, live_bytes)
++
++    assert live_bytes > _BYTES_PER_BLOCK
++    assert live_blocks < config_blocks
+diff --git a/tests/v1/simple_kv_offload/test_worker.py b/tests/v1/simple_kv_offload/test_worker.py
+index 645cd5dabab8..e336edde50e7 100644
+--- a/tests/v1/simple_kv_offload/test_worker.py
++++ b/tests/v1/simple_kv_offload/test_worker.py
+@@ -14,6 +14,7 @@
+ 
+ import pytest
+ import torch
++import torch.distributed as dist
+ 
+ from vllm.platforms import current_platform
+ 
+@@ -30,6 +31,7 @@
+     pin_tensor,
+ )
+ from vllm.v1.simple_kv_offload.metadata import SimpleCPUOffloadMetadata
++from vllm.v1.simple_kv_offload.sizing import sync_num_offload_blocks_across_workers
+ from vllm.v1.simple_kv_offload.worker import SimpleCPUOffloadWorker
+ 
+ NUM_BLOCKS = 64
+@@ -278,3 +280,38 @@ def test_register_separate_kv_head_groups(monkeypatch):
+     assert {cache.shape for cache in worker.gpu_kv_caches.values()} == {
+         (num_blocks, per_group_block_bytes)
+     }
++
++
++def test_sync_num_cpu_blocks_across_workers_noop_when_world_size_one(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    class FakeGroup:
++        world_size = 1
++
++    monkeypatch.setattr(
++        "vllm.distributed.parallel_state.get_world_group",
++        lambda: FakeGroup(),
++    )
++    assert sync_num_offload_blocks_across_workers(42) == 42
++
++
++def test_sync_num_cpu_blocks_across_workers_all_reduce_min(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    class FakeGroup:
++        world_size = 4
++        cpu_group = object()
++
++    def fake_all_reduce(tensor, group, op) -> None:
++        assert op is dist.ReduceOp.MIN
++        tensor.fill_(5)
++
++    monkeypatch.setattr(
++        "vllm.distributed.parallel_state.get_world_group",
++        lambda: FakeGroup(),
++    )
++    monkeypatch.setattr(
++        "vllm.v1.simple_kv_offload.sizing.dist.all_reduce",
++        fake_all_reduce,
++    )
++    assert sync_num_offload_blocks_across_workers(10) == 5
+diff --git a/vllm/config/cache.py b/vllm/config/cache.py
+index dc4e6faf3cec..59869c3fd443 100644
+--- a/vllm/config/cache.py
++++ b/vllm/config/cache.py
+@@ -213,6 +213,14 @@ class CacheConfig:
+     num_cpu_blocks: int | None = field(default=None, init=False)
+     """The number of blocks to allocate for CPU memory."""
+ 
++    worker_kv_cache_configs: Any | None = field(default=None, init=False)
++    """Per-worker ``KVCacheConfig`` list populated during engine init.
++
++    Used by connectors such as ``SimpleCPUOffloadConnector`` to size the
++    offload pool consistently across PP stages with uneven layer counts."""
++    simple_cpu_offload_num_blocks: int | None = field(default=None, init=False)
++    """Worker-aligned offload block count for ``SimpleCPUOffloadConnector``."""
++
+     # Set after KV cache initialization.
+     kv_cache_size_tokens: int | None = field(default=None, init=False)
+     """Per-DP-engine KV cache capacity in tokens (group-aware). Uses
+diff --git a/vllm/distributed/kv_transfer/kv_connector/v1/simple_cpu_offload_connector.py b/vllm/distributed/kv_transfer/kv_connector/v1/simple_cpu_offload_connector.py
+index e19819221717..506b39350a78 100644
+--- a/vllm/distributed/kv_transfer/kv_connector/v1/simple_cpu_offload_connector.py
++++ b/vllm/distributed/kv_transfer/kv_connector/v1/simple_cpu_offload_connector.py
+@@ -51,6 +51,20 @@
+ )
+ 
+ 
++def _find_simple_cpu_offload_connector(
++    connector: KVConnectorBase_V1,
++) -> "SimpleCPUOffloadConnector | None":
++    if isinstance(connector, SimpleCPUOffloadConnector):
++        return connector
++    child_connectors = getattr(connector, "_connectors", None)
++    if child_connectors:
++        for child in child_connectors:
++            found = _find_simple_cpu_offload_connector(child)
++            if found is not None:
++                return found
++    return None
++
++
+ class SimpleCPUOffloadConnector(KVConnectorBase_V1, SupportsHMA):
+     """CPU KV cache offloading with custom kernel transfers and BlockPool LRU."""
+ 
+@@ -149,6 +163,12 @@ def __init__(
+             scheduler_block_size, hash_block_size = resolve_kv_cache_block_sizes(
+                 kv_cache_config, vllm_config
+             )
++            worker_kv_cache_configs = (
++                vllm_config.cache_config.worker_kv_cache_configs
++            )
++            aligned_num_cpu_blocks = (
++                vllm_config.cache_config.simple_cpu_offload_num_blocks
++            )
+             self.scheduler_manager = SimpleCPUOffloadScheduler(
+                 vllm_config,
+                 kv_cache_config,
+@@ -157,6 +177,8 @@ def __init__(
+                 hash_block_size=hash_block_size,
+                 lazy_offload=lazy_offload,
+                 disk_capacity_bytes=disk_capacity_bytes if disk_mode else 0,
++                worker_kv_cache_configs=worker_kv_cache_configs,
++                aligned_num_cpu_blocks=aligned_num_cpu_blocks,
+             )
+         elif role == KVConnectorRole.WORKER:
+             self.worker_handler = SimpleCPUOffloadWorker(
+@@ -176,6 +198,12 @@ def register_kv_caches(self, kv_caches: dict[str, torch.Tensor]) -> None:
+         if self.worker_handler is not None:
+             self.worker_handler.register_kv_caches(kv_caches)
+ 
++    def get_aligned_num_cpu_blocks(self) -> int | None:
++        if self.worker_handler is None:
++            return None
++        num_cpu_blocks = self.worker_handler.num_cpu_blocks
++        return num_cpu_blocks if num_cpu_blocks > 0 else None
++
+     def bind_connector_metadata(
+         self,
+         connector_metadata: KVConnectorMetadata,
+diff --git a/vllm/v1/engine/core.py b/vllm/v1/engine/core.py
+index 0ee3435b3d2e..dda673e06260 100644
+--- a/vllm/v1/engine/core.py
++++ b/vllm/v1/engine/core.py
+@@ -321,6 +321,7 @@ def _initialize_kv_caches(self, vllm_config: VllmConfig) -> KVCacheConfig:
+         )
+         for kv_cache_config in kv_cache_configs:
+             kv_cache_config.kv_cache_layout = vllm_config.cache_config.kv_cache_layout
++        vllm_config.cache_config.worker_kv_cache_configs = kv_cache_configs
+ 
+         # If auto-fit reduced max_model_len, sync the new value to workers.
+         # This is needed because workers were spawned before memory profiling
+@@ -341,6 +342,11 @@ def _initialize_kv_caches(self, vllm_config: VllmConfig) -> KVCacheConfig:
+         vllm_config.validate_block_size()
+ 
+         self.model_executor.initialize_from_config(kv_cache_configs)
++        aligned_num_cpu_blocks = self.model_executor.get_simple_cpu_offload_num_blocks()
++        if aligned_num_cpu_blocks is not None:
++            vllm_config.cache_config.simple_cpu_offload_num_blocks = (
++                aligned_num_cpu_blocks
++            )
+         if not envs.VLLM_ELASTIC_EP_SCALE_UP_LAUNCH:
+             self.model_executor.compile_or_warm_up_model()
+ 
+diff --git a/vllm/v1/executor/abstract.py b/vllm/v1/executor/abstract.py
+index 964f16ed2421..87c68c8f523a 100644
+--- a/vllm/v1/executor/abstract.py
++++ b/vllm/v1/executor/abstract.py
+@@ -148,6 +148,21 @@ def register_failure_callback(self, callback: FailureCallback):  # noqa: B027
+     def determine_available_memory(self) -> list[int]:  # in bytes
+         return self.collective_rpc("determine_available_memory")
+ 
++    def get_simple_cpu_offload_num_blocks(self) -> int | None:
++        values = self.collective_rpc("get_simple_cpu_offload_num_cpu_blocks")
++        nums = [value for value in values if value is not None]
++        if not nums:
++            return None
++        aligned = min(nums)
++        if len(set(nums)) > 1:
++            logger.warning(
++                "SimpleCPUOffload workers reported mismatched num_cpu_blocks %s; "
++                "using min=%d",
++                nums,
++                aligned,
++            )
++        return aligned
++
+     def get_kv_cache_specs(self) -> list[dict[str, KVCacheSpec]]:
+         return self.collective_rpc("get_kv_cache_spec")
+ 
+diff --git a/vllm/v1/simple_kv_offload/manager.py b/vllm/v1/simple_kv_offload/manager.py
+index 0a78c5e9c6a3..4fa8fc4e4584 100644
+--- a/vllm/v1/simple_kv_offload/manager.py
++++ b/vllm/v1/simple_kv_offload/manager.py
+@@ -28,6 +28,10 @@
+     SimpleCPUOffloadMetadata,
+     SimpleCPUOffloadWorkerMetadata,
+ )
++from vllm.v1.simple_kv_offload.sizing import (
++    compute_num_offload_blocks_from_config,
++    compute_num_offload_blocks_from_configs,
++)
+ 
+ if TYPE_CHECKING:
+     from vllm.v1.core.kv_cache_manager import KVCacheBlocks
+@@ -76,6 +80,8 @@ def __init__(
+         hash_block_size: int,
+         lazy_offload: bool = False,
+         disk_capacity_bytes: int = 0,
++        worker_kv_cache_configs: list["KVCacheConfig"] | None = None,
++        aligned_num_cpu_blocks: int | None = None,
+     ):
+         self.vllm_config = vllm_config
+         self.kv_cache_config = kv_cache_config
+@@ -94,8 +100,23 @@ def __init__(
+         assert self.block_size % self.hash_block_size == 0
+         # Derive a CPU KVCacheConfig from the GPU config and build a coordinator
+         assert kv_cache_config is not None
++        if aligned_num_cpu_blocks is not None:
++            num_cpu_blocks = aligned_num_cpu_blocks
++        else:
++            sizing_configs = worker_kv_cache_configs or [kv_cache_config]
++            num_cpu_blocks = compute_num_offload_blocks_from_configs(
++                sizing_configs, offload_capacity
++            )
++            if worker_kv_cache_configs is not None:
++                logger.warning(
++                    "SimpleCPUOffloadScheduler: worker-aligned num_cpu_blocks is "
++                    "unavailable; falling back to config-based sizing (%d blocks). "
++                    "PP/spec-decode deployments should always provide the aligned "
++                    "value from workers.",
++                    num_cpu_blocks,
++                )
+         self.cpu_kv_cache_config = self._derive_cpu_config(
+-            kv_cache_config, offload_capacity
++            kv_cache_config, offload_capacity, num_cpu_blocks=num_cpu_blocks
+         )
+         self.num_cpu_blocks = self.cpu_kv_cache_config.num_blocks
+         # Find the full attention kv group for prefix cache matching.
+@@ -183,9 +204,21 @@ def __init__(
+         self._expected_worker_count = vllm_config.parallel_config.world_size
+         self._store_event_pending_counts: dict[int, int] = {}
+ 
++    @staticmethod
++    def compute_num_cpu_blocks(
++        kv_cache_configs: list["KVCacheConfig"],
++        cpu_capacity_bytes: int,
++    ) -> int:
++        """Return the offload block count aligned across worker configs."""
++        return compute_num_offload_blocks_from_configs(
++            kv_cache_configs, cpu_capacity_bytes
++        )
++
+     @staticmethod
+     def _derive_cpu_config(
+-        gpu_config: "KVCacheConfig", cpu_capacity_bytes: int
++        gpu_config: "KVCacheConfig",
++        cpu_capacity_bytes: int,
++        num_cpu_blocks: int | None = None,
+     ) -> "KVCacheConfig":
+         """Derive a CPU KVCacheConfig from the GPU config.
+         Same kv_cache_groups, num_blocks scaled by CPU/GPU memory ratio."""
+@@ -194,11 +227,11 @@ def _derive_cpu_config(
+ 
+         assert len(gpu_config.kv_cache_tensors) > 0
+ 
+-        # Every KVCacheTensor describes placement within the same backing allocation,
+-        # so its size is the total GPU KV cache size.
+-        gpu_total_bytes = gpu_config.kv_cache_tensors[0].size
+         num_gpu_blocks = gpu_config.num_blocks
+-        num_cpu_blocks = max(1, num_gpu_blocks * cpu_capacity_bytes // gpu_total_bytes)
++        if num_cpu_blocks is None:
++            num_cpu_blocks = compute_num_offload_blocks_from_config(
++                gpu_config, cpu_capacity_bytes
++            )
+         # Create CPU kv_cache_tensors mirroring GPU by scaling size proportionally.
+         cpu_tensors = [
+             KVCacheTensor(
+diff --git a/vllm/v1/simple_kv_offload/sizing.py b/vllm/v1/simple_kv_offload/sizing.py
+new file mode 100644
+index 000000000000..69b0471ba7c1
+--- /dev/null
++++ b/vllm/v1/simple_kv_offload/sizing.py
+@@ -0,0 +1,130 @@
++# SPDX-License-Identifier: Apache-2.0
++# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++"""Shared sizing helpers for SimpleCPUOffloadConnector."""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING
++
++import torch
++import torch.distributed as dist
++
++from vllm.logger import init_logger
++
++if TYPE_CHECKING:
++    from vllm.v1.kv_cache_interface import KVCacheConfig
++
++logger = init_logger(__name__)
++
++
++def repr_kv_cache_tensor(value: torch.Tensor | list[torch.Tensor]) -> torch.Tensor:
++    assert isinstance(value, torch.Tensor | list)
++    return value if isinstance(value, torch.Tensor) else value[0]
++
++
++def build_unique_gpu_block_views(
++    kv_caches: dict[str, torch.Tensor | list[torch.Tensor]],
++    num_blocks: int,
++    device: torch.device,
++) -> dict[str, torch.Tensor]:
++    """Build [num_blocks, block_bytes] views used for offload copy sizing."""
++    unique_gpu_caches: dict[str, torch.Tensor] = {}
++    seen: set[tuple[torch.device, int]] = set()
++    for name, value in kv_caches.items():
++        tensor = repr_kv_cache_tensor(value)
++        storage = tensor.untyped_storage()
++        key = (tensor.device, storage.data_ptr())
++        if key in seen:
++            continue
++        seen.add(key)
++
++        physical_per_block, remainder = divmod(tensor.shape[0], num_blocks)
++        assert remainder == 0, (
++            f"KV cache {name!r} has {tensor.shape[0]} physical blocks, which "
++            f"is not divisible by {num_blocks} scheduler blocks"
++        )
++        block_bytes = tensor.stride(0) * tensor.element_size() * physical_per_block
++        raw = torch.empty(0, dtype=torch.int8, device=device).set_(storage)
++        regions = raw.view(-1, num_blocks, block_bytes)
++        for idx, region in enumerate(regions):
++            key_name = name if len(regions) == 1 else f"{name}.{idx}"
++            unique_gpu_caches[key_name] = region
++    return unique_gpu_caches
++
++
++def total_bytes_per_block_from_views(
++    unique_gpu_caches: dict[str, torch.Tensor],
++) -> int:
++    per_tensor_bpb = [
++        t.stride(0) * t.element_size() for t in unique_gpu_caches.values()
++    ]
++    return sum(per_tensor_bpb)
++
++
++def compute_total_bytes_per_block_from_kv_caches(
++    kv_caches: dict[str, torch.Tensor | list[torch.Tensor]],
++    num_blocks: int,
++    device: torch.device,
++) -> int:
++    """Compute per-block offload bytes from live GPU KV tensors."""
++    unique_gpu_caches = build_unique_gpu_block_views(kv_caches, num_blocks, device)
++    return total_bytes_per_block_from_views(unique_gpu_caches)
++
++
++def local_num_offload_blocks(capacity_bytes: int, total_bytes_per_block: int) -> int:
++    assert total_bytes_per_block > 0
++    return max(1, capacity_bytes // total_bytes_per_block)
++
++
++def sync_num_offload_blocks_across_workers(num_offload_blocks: int) -> int:
++    """All-reduce MIN so every rank allocates the same offload pool size."""
++    from vllm.distributed.parallel_state import get_world_group
++
++    world_group = get_world_group()
++    if world_group.world_size <= 1:
++        return num_offload_blocks
++
++    blocks_tensor = torch.tensor(
++        [num_offload_blocks], dtype=torch.int64, device="cpu"
++    )
++    dist.all_reduce(blocks_tensor, group=world_group.cpu_group, op=dist.ReduceOp.MIN)
++    synced = int(blocks_tensor.item())
++    if synced != num_offload_blocks:
++        logger.info(
++            "SimpleCPUOffload: aligned num_offload_blocks from %d to %d "
++            "across %d workers",
++            num_offload_blocks,
++            synced,
++            world_group.world_size,
++        )
++    return synced
++
++
++def gpu_total_bytes(gpu_config: KVCacheConfig) -> int:
++    assert len(gpu_config.kv_cache_tensors) > 0
++    is_packed = any(t.block_stride for t in gpu_config.kv_cache_tensors)
++    assert not is_packed or all(t.block_stride for t in gpu_config.kv_cache_tensors)
++    if is_packed:
++        return gpu_config.kv_cache_tensors[0].size
++    return sum(t.size for t in gpu_config.kv_cache_tensors)
++
++
++def compute_num_offload_blocks_from_config(
++    gpu_config: KVCacheConfig,
++    capacity_bytes: int,
++) -> int:
++    """Conservative config-based estimate before live tensors are registered."""
++    gpu_total = gpu_total_bytes(gpu_config)
++    return max(1, gpu_config.num_blocks * capacity_bytes // gpu_total)
++
++
++def compute_num_offload_blocks_from_configs(
++    kv_cache_configs: list[KVCacheConfig],
++    capacity_bytes: int,
++) -> int:
++    """Return the min offload block count implied by all worker configs."""
++    assert kv_cache_configs
++    return min(
++        compute_num_offload_blocks_from_config(cfg, capacity_bytes)
++        for cfg in kv_cache_configs
++    )
+diff --git a/vllm/v1/simple_kv_offload/worker.py b/vllm/v1/simple_kv_offload/worker.py
+index f2925915d835..aa2e44b0e9f1 100644
+--- a/vllm/v1/simple_kv_offload/worker.py
++++ b/vllm/v1/simple_kv_offload/worker.py
+@@ -9,6 +9,10 @@
+ from vllm.config import VllmConfig
+ from vllm.logger import init_logger
+ from vllm.utils.torch_utils import PIN_MEMORY
++from vllm.v1.simple_kv_offload.sizing import (
++    local_num_offload_blocks,
++    sync_num_offload_blocks_across_workers,
++)
+ from vllm.v1.simple_kv_offload.copy_backend import DmaCopyBackend
+ from vllm.v1.simple_kv_offload.cuda_mem_ops import pin_tensor
+ from vllm.v1.simple_kv_offload.disk_backend import DiskBackend
+@@ -130,8 +134,6 @@ def register_kv_caches(
+         ]
+         total_bytes_per_block = sum(per_tensor_bpb)
+ 
+-        self.num_cpu_blocks = max(1, self.cpu_capacity_bytes // total_bytes_per_block)
+-
+         # Use lowest priority so KV cache I/O yields to compute streams.
+         low_pri, _ = torch.cuda.Stream.priority_range()
+         self.load_stream = torch.cuda.Stream(priority=low_pri)
+@@ -150,14 +152,18 @@ def _init_disk_mode(
+         total_bytes_per_block: int,
+         device: torch.device,
+     ) -> None:
+-        num_disk_slots = max(1, self.disk_capacity_bytes // total_bytes_per_block)
+-        self.num_cpu_blocks = num_disk_slots
++        local_num_disk_slots = local_num_offload_blocks(
++            self.disk_capacity_bytes, total_bytes_per_block
++        )
++        self.num_cpu_blocks = sync_num_offload_blocks_across_workers(
++            local_num_disk_slots
++        )
+ 
+         logger.info(
+             "SimpleCPUOffloadWorker [DISK]: %d tensors, %d disk slots (%.2f GB)",
+             len(unique_gpu_caches),
+-            num_disk_slots,
+-            (num_disk_slots * total_bytes_per_block) / (1024**3),
++            self.num_cpu_blocks,
++            (self.num_cpu_blocks * total_bytes_per_block) / (1024**3),
+         )
+ 
+         assert self.disk_path is not None
+@@ -169,7 +175,7 @@ def _init_disk_mode(
+             self.load_stream,
+             self.store_stream,
+             rank_path,
+-            num_disk_slots,
++            self.num_cpu_blocks,
+             total_bytes_per_block,
+             self.disk_buffer_slots,
+             self.use_page_cache,
+@@ -181,6 +187,13 @@ def _init_cpu_mode(
+         total_bytes_per_block: int,
+         device: torch.device,
+     ) -> None:
++        local_num_cpu_blocks = local_num_offload_blocks(
++            self.cpu_capacity_bytes, total_bytes_per_block
++        )
++        self.num_cpu_blocks = sync_num_offload_blocks_across_workers(
++            local_num_cpu_blocks
++        )
++
+         logger.info(
+             "SimpleCPUOffloadWorker [CPU]: %d tensors, %d CPU blocks (%.2f GB)",
+             len(unique_gpu_caches),
+diff --git a/vllm/v1/worker/gpu_worker.py b/vllm/v1/worker/gpu_worker.py
+index 7ac9a2c6c9df..de75459b4ce2 100644
+--- a/vllm/v1/worker/gpu_worker.py
++++ b/vllm/v1/worker/gpu_worker.py
+@@ -701,6 +701,22 @@ def initialize_from_config(self, kv_cache_config: KVCacheConfig) -> None:
+         ):
+             self.model_runner._init_kv_zero_meta()
+ 
++    def get_simple_cpu_offload_num_cpu_blocks(self) -> int | None:
++        from vllm.distributed.kv_transfer.kv_connector.utils import (
++            get_kv_transfer_group,
++            has_kv_transfer_group,
++        )
++        from vllm.distributed.kv_transfer.kv_connector.v1.simple_cpu_offload_connector import (  # noqa: E501
++            _find_simple_cpu_offload_connector,
++        )
++
++        if not has_kv_transfer_group():
++            return None
++        connector = _find_simple_cpu_offload_connector(get_kv_transfer_group())
++        if connector is None:
++            return None
++        return connector.get_aligned_num_cpu_blocks()
++
+     @instrument(span_name="Warmup (GPU)")
+     def compile_or_warm_up_model(self) -> CompilationTimes:
+         warmup_sizes: list[int] = []
+
+From 140fcec4e0e5115241756bf2b712088769c6cf49 Mon Sep 17 00:00:00 2001
+From: CharlesWu <296364977+charxwu@users.noreply.github.com>
+Date: Thu, 20 Aug 2026 15:46:46 +0800
+Subject: [PATCH 02/10] fix(simple_kv_offload): use module-level kv_transfer
+ imports in worker RPC
+
+get_simple_cpu_offload_num_cpu_blocks imported get_kv_transfer_group from
+kv_connector.utils, which does not export it. Reuse the existing imports
+from vllm.distributed.kv_transfer instead.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+Signed-off-by: CharlesWu <296364977+charxwu@users.noreply.github.com>
+---
+ vllm/v1/worker/gpu_worker.py | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/vllm/v1/worker/gpu_worker.py b/vllm/v1/worker/gpu_worker.py
+index de75459b4ce2..cc5750b352d9 100644
+--- a/vllm/v1/worker/gpu_worker.py
++++ b/vllm/v1/worker/gpu_worker.py
+@@ -702,10 +702,6 @@ def initialize_from_config(self, kv_cache_config: KVCacheConfig) -> None:
+             self.model_runner._init_kv_zero_meta()
+ 
+     def get_simple_cpu_offload_num_cpu_blocks(self) -> int | None:
+-        from vllm.distributed.kv_transfer.kv_connector.utils import (
+-            get_kv_transfer_group,
+-            has_kv_transfer_group,
+-        )
+         from vllm.distributed.kv_transfer.kv_connector.v1.simple_cpu_offload_connector import (  # noqa: E501
+             _find_simple_cpu_offload_connector,
+         )
+
+From 68e2606365f0a9fd33274878969062f85176b787 Mon Sep 17 00:00:00 2001
+From: CharlesWu <296364977+charxwu@users.noreply.github.com>
+Date: Thu, 20 Aug 2026 15:49:42 +0800
+Subject: [PATCH 03/10] test(simple_kv_offload): use padded KV tensor in sizing
+ test
+
+The previous layout summed K/V views to exactly the config byte estimate
+on ROCm. Use a wider head dim so live stride-based sizing strictly
+exceeds the KVCacheConfig estimate on all platforms.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+Signed-off-by: CharlesWu <296364977+charxwu@users.noreply.github.com>
+Signed-off-by: root <root@XBJCHARWU01.amd.com>
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ tests/v1/simple_kv_offload/test_sizing.py | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tests/v1/simple_kv_offload/test_sizing.py b/tests/v1/simple_kv_offload/test_sizing.py
+index 1d5b6d3ca756..63f278bf6804 100644
+--- a/tests/v1/simple_kv_offload/test_sizing.py
++++ b/tests/v1/simple_kv_offload/test_sizing.py
+@@ -18,7 +18,6 @@
+     pytest.skip("Requires CUDA or ROCm", allow_module_level=True)
+ 
+ from tests.v1.simple_kv_offload.test_scheduler import (  # noqa: E402
+-    BLOCK_SIZE,
+     _BYTES_PER_BLOCK,
+     _make_kv_cache_config,
+ )
+@@ -32,9 +31,10 @@ def test_live_tensor_bytes_can_exceed_config_estimate() -> None:
+ 
+     config_blocks = compute_num_offload_blocks_from_configs([gpu_config], capacity)
+ 
++    # Block-outermost layout: each row is one scheduler block with padded bytes.
+     kv_caches = {
+         "layer_0": torch.zeros(
+-            (2, num_gpu_blocks, BLOCK_SIZE, 1, 16),
++            (num_gpu_blocks, _BYTES_PER_BLOCK * 2),
+             dtype=torch.float16,
+             device="cuda",
+         )
+
+From 186bf7312f34ae07788a41edf15478a78b75bd58 Mon Sep 17 00:00:00 2001
+From: root <root@XBJCHARWU01.amd.com>
+Date: Mon, 24 Aug 2026 15:44:08 +0800
+Subject: [PATCH 04/10] fix(simple_kv_offload): correct config-based GPU total
+ byte sizing
+
+gpu_total_bytes() should treat multiple KVCacheTensor entries with the
+same size as views into one backing allocation. Update scheduler test
+fixtures to model heavier workers by scaling the shared allocation size
+instead of duplicating full per-group sizes.
+
+Signed-off-by: root <root@XBJCHARWU01.amd.com>
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ tests/v1/simple_kv_offload/test_scheduler.py |  6 +++++-
+ vllm/v1/simple_kv_offload/sizing.py          | 12 +++++++-----
+ 2 files changed, 12 insertions(+), 6 deletions(-)
+
+diff --git a/tests/v1/simple_kv_offload/test_scheduler.py b/tests/v1/simple_kv_offload/test_scheduler.py
+index c42df016ae5f..023c232c415a 100644
+--- a/tests/v1/simple_kv_offload/test_scheduler.py
++++ b/tests/v1/simple_kv_offload/test_scheduler.py
+@@ -75,6 +75,8 @@ def _make_kv_cache_config(
+     register_all_kvcache_specs(
+         vllm_config=None
+     )  # Ensure specs are registered for tests
++    total_size = _BYTES_PER_BLOCK * num_blocks * num_groups
++    byte_offset = 0
+     for g in range(num_groups):
+         layer_names = [f"layer_{g}"]
+         groups.append(
+@@ -90,12 +92,14 @@ def _make_kv_cache_config(
+         )
+         tensors.append(
+             KVCacheTensor(
+-                size=_BYTES_PER_BLOCK * num_blocks,
++                size=total_size,
+                 layers=layer_names,
+                 layer_stride=_BYTES_PER_BLOCK * num_blocks,
+                 block_stride=_BYTES_PER_BLOCK,
++                offset=byte_offset,
+             )
+         )
++        byte_offset += _BYTES_PER_BLOCK * num_blocks
+     return KVCacheConfig(
+         num_blocks=num_blocks,
+         kv_cache_tensors=tensors,
+diff --git a/vllm/v1/simple_kv_offload/sizing.py b/vllm/v1/simple_kv_offload/sizing.py
+index 69b0471ba7c1..b315681e0ae7 100644
+--- a/vllm/v1/simple_kv_offload/sizing.py
++++ b/vllm/v1/simple_kv_offload/sizing.py
+@@ -102,11 +102,13 @@ def sync_num_offload_blocks_across_workers(num_offload_blocks: int) -> int:
+ 
+ def gpu_total_bytes(gpu_config: KVCacheConfig) -> int:
+     assert len(gpu_config.kv_cache_tensors) > 0
+-    is_packed = any(t.block_stride for t in gpu_config.kv_cache_tensors)
+-    assert not is_packed or all(t.block_stride for t in gpu_config.kv_cache_tensors)
+-    if is_packed:
+-        return gpu_config.kv_cache_tensors[0].size
+-    return sum(t.size for t in gpu_config.kv_cache_tensors)
++    tensors = gpu_config.kv_cache_tensors
++    sizes = {t.size for t in tensors}
++    if len(sizes) == 1:
++        # All KVCacheTensor entries describe regions in one backing allocation.
++        return tensors[0].size
++    # Fallback when tensors describe disjoint allocations.
++    return sum(t.size for t in tensors)
+ 
+ 
+ def compute_num_offload_blocks_from_config(
+
+From 951fa151c68dee38d8f3c921a42ef32e78b2bd69 Mon Sep 17 00:00:00 2001
+From: CharlesWu <296364977+charxwu@users.noreply.github.com>
+Date: Tue, 25 Aug 2026 16:19:22 +0800
+Subject: [PATCH 05/10] style(simple_kv_offload): fix ruff import order in
+ worker
+
+Apply pre-commit ruff-check isort fix for CI.
+
+Signed-off-by: CharlesWu <296364977+charxwu@users.noreply.github.com>
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ vllm/v1/simple_kv_offload/worker.py | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/vllm/v1/simple_kv_offload/worker.py b/vllm/v1/simple_kv_offload/worker.py
+index aa2e44b0e9f1..82b97b164abb 100644
+--- a/vllm/v1/simple_kv_offload/worker.py
++++ b/vllm/v1/simple_kv_offload/worker.py
+@@ -9,10 +9,6 @@
+ from vllm.config import VllmConfig
+ from vllm.logger import init_logger
+ from vllm.utils.torch_utils import PIN_MEMORY
+-from vllm.v1.simple_kv_offload.sizing import (
+-    local_num_offload_blocks,
+-    sync_num_offload_blocks_across_workers,
+-)
+ from vllm.v1.simple_kv_offload.copy_backend import DmaCopyBackend
+ from vllm.v1.simple_kv_offload.cuda_mem_ops import pin_tensor
+ from vllm.v1.simple_kv_offload.disk_backend import DiskBackend
+@@ -20,6 +16,10 @@
+     SimpleCPUOffloadMetadata,
+     SimpleCPUOffloadWorkerMetadata,
+ )
++from vllm.v1.simple_kv_offload.sizing import (
++    local_num_offload_blocks,
++    sync_num_offload_blocks_across_workers,
++)
+ 
+ if TYPE_CHECKING:
+     from vllm.v1.kv_cache_interface import KVCacheConfig
+
+From 2c44d151a5976e96e276a572f58d71275e4c49dc Mon Sep 17 00:00:00 2001
+From: CharlesWu <296364977+charxwu@users.noreply.github.com>
+Date: Tue, 25 Aug 2026 16:38:33 +0800
+Subject: [PATCH 06/10] Fix pre-commit: mypy annotation and ruff format.
+
+Co-authored-by: Auto
+Signed-off-by: CharlesWu <296364977+charxwu@users.noreply.github.com>
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ tests/v1/simple_kv_offload/test_scheduler.py              | 8 ++------
+ .../kv_connector/v1/simple_cpu_offload_connector.py       | 4 +---
+ vllm/v1/executor/abstract.py                              | 4 +++-
+ vllm/v1/simple_kv_offload/sizing.py                       | 4 +---
+ 4 files changed, 7 insertions(+), 13 deletions(-)
+
+diff --git a/tests/v1/simple_kv_offload/test_scheduler.py b/tests/v1/simple_kv_offload/test_scheduler.py
+index 023c232c415a..a4c33398970c 100644
+--- a/tests/v1/simple_kv_offload/test_scheduler.py
++++ b/tests/v1/simple_kv_offload/test_scheduler.py
+@@ -1849,15 +1849,11 @@ def test_compute_num_cpu_blocks_uses_heaviest_worker() -> None:
+     light = _make_kv_cache_config(num_gpu_blocks, num_groups=1)
+     heavy = _make_kv_cache_config(num_gpu_blocks, num_groups=2)
+ 
+-    heavy_only = SimpleCPUOffloadScheduler.compute_num_cpu_blocks(
+-        [heavy], cpu_capacity
+-    )
++    heavy_only = SimpleCPUOffloadScheduler.compute_num_cpu_blocks([heavy], cpu_capacity)
+     aligned = SimpleCPUOffloadScheduler.compute_num_cpu_blocks(
+         [light, heavy], cpu_capacity
+     )
+-    light_only = SimpleCPUOffloadScheduler.compute_num_cpu_blocks(
+-        [light], cpu_capacity
+-    )
++    light_only = SimpleCPUOffloadScheduler.compute_num_cpu_blocks([light], cpu_capacity)
+ 
+     assert aligned == heavy_only
+     assert aligned < light_only
+diff --git a/vllm/distributed/kv_transfer/kv_connector/v1/simple_cpu_offload_connector.py b/vllm/distributed/kv_transfer/kv_connector/v1/simple_cpu_offload_connector.py
+index 506b39350a78..30cf911ae084 100644
+--- a/vllm/distributed/kv_transfer/kv_connector/v1/simple_cpu_offload_connector.py
++++ b/vllm/distributed/kv_transfer/kv_connector/v1/simple_cpu_offload_connector.py
+@@ -163,9 +163,7 @@ def __init__(
+             scheduler_block_size, hash_block_size = resolve_kv_cache_block_sizes(
+                 kv_cache_config, vllm_config
+             )
+-            worker_kv_cache_configs = (
+-                vllm_config.cache_config.worker_kv_cache_configs
+-            )
++            worker_kv_cache_configs = vllm_config.cache_config.worker_kv_cache_configs
+             aligned_num_cpu_blocks = (
+                 vllm_config.cache_config.simple_cpu_offload_num_blocks
+             )
+diff --git a/vllm/v1/executor/abstract.py b/vllm/v1/executor/abstract.py
+index 87c68c8f523a..3c1e687ac31f 100644
+--- a/vllm/v1/executor/abstract.py
++++ b/vllm/v1/executor/abstract.py
+@@ -149,7 +149,9 @@ def determine_available_memory(self) -> list[int]:  # in bytes
+         return self.collective_rpc("determine_available_memory")
+ 
+     def get_simple_cpu_offload_num_blocks(self) -> int | None:
+-        values = self.collective_rpc("get_simple_cpu_offload_num_cpu_blocks")
++        values: list[int | None] = self.collective_rpc(
++            "get_simple_cpu_offload_num_cpu_blocks"
++        )
+         nums = [value for value in values if value is not None]
+         if not nums:
+             return None
+diff --git a/vllm/v1/simple_kv_offload/sizing.py b/vllm/v1/simple_kv_offload/sizing.py
+index b315681e0ae7..eb5adad9da59 100644
+--- a/vllm/v1/simple_kv_offload/sizing.py
++++ b/vllm/v1/simple_kv_offload/sizing.py
+@@ -84,9 +84,7 @@ def sync_num_offload_blocks_across_workers(num_offload_blocks: int) -> int:
+     if world_group.world_size <= 1:
+         return num_offload_blocks
+ 
+-    blocks_tensor = torch.tensor(
+-        [num_offload_blocks], dtype=torch.int64, device="cpu"
+-    )
++    blocks_tensor = torch.tensor([num_offload_blocks], dtype=torch.int64, device="cpu")
+     dist.all_reduce(blocks_tensor, group=world_group.cpu_group, op=dist.ReduceOp.MIN)
+     synced = int(blocks_tensor.item())
+     if synced != num_offload_blocks:
+
+From dec940730f6ca61601178a1473cd54b780d17196 Mon Sep 17 00:00:00 2001
+From: CharlesWu <296364977+charxwu@users.noreply.github.com>
+Date: Wed, 26 Aug 2026 16:35:23 +0800
+Subject: [PATCH 07/10] refactor(simple_kv_offload): remove test-only sizing
+ helpers
+
+Remove dead sizing helpers and the test-only scheduler wrapper so tests exercise the production sizing path directly.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+Signed-off-by: CharlesWu <296364977+charxwu@users.noreply.github.com>
+---
+ tests/v1/simple_kv_offload/test_scheduler.py | 15 +++---
+ tests/v1/simple_kv_offload/test_sizing.py    | 48 -----------------
+ vllm/v1/simple_kv_offload/manager.py         | 10 ----
+ vllm/v1/simple_kv_offload/sizing.py          | 54 --------------------
+ 4 files changed, 7 insertions(+), 120 deletions(-)
+ delete mode 100644 tests/v1/simple_kv_offload/test_sizing.py
+
+diff --git a/tests/v1/simple_kv_offload/test_scheduler.py b/tests/v1/simple_kv_offload/test_scheduler.py
+index a4c33398970c..06d6ed6e76b1 100644
+--- a/tests/v1/simple_kv_offload/test_scheduler.py
++++ b/tests/v1/simple_kv_offload/test_scheduler.py
+@@ -44,6 +44,9 @@
+ from vllm.v1.request import Request
+ from vllm.v1.simple_kv_offload.manager import SimpleCPUOffloadScheduler
+ from vllm.v1.simple_kv_offload.metadata import SimpleCPUOffloadWorkerMetadata
++from vllm.v1.simple_kv_offload.sizing import (
++    compute_num_offload_blocks_from_configs,
++)
+ 
+ # ---------------------------------------------------------------------------
+ # Constants
+@@ -1849,11 +1852,9 @@ def test_compute_num_cpu_blocks_uses_heaviest_worker() -> None:
+     light = _make_kv_cache_config(num_gpu_blocks, num_groups=1)
+     heavy = _make_kv_cache_config(num_gpu_blocks, num_groups=2)
+ 
+-    heavy_only = SimpleCPUOffloadScheduler.compute_num_cpu_blocks([heavy], cpu_capacity)
+-    aligned = SimpleCPUOffloadScheduler.compute_num_cpu_blocks(
+-        [light, heavy], cpu_capacity
+-    )
+-    light_only = SimpleCPUOffloadScheduler.compute_num_cpu_blocks([light], cpu_capacity)
++    heavy_only = compute_num_offload_blocks_from_configs([heavy], cpu_capacity)
++    aligned = compute_num_offload_blocks_from_configs([light, heavy], cpu_capacity)
++    light_only = compute_num_offload_blocks_from_configs([light], cpu_capacity)
+ 
+     assert aligned == heavy_only
+     assert aligned < light_only
+@@ -1875,9 +1876,7 @@ def test_scheduler_uses_worker_kv_cache_configs() -> None:
+         worker_kv_cache_configs=[light, heavy],
+     )
+ 
+-    expected = SimpleCPUOffloadScheduler.compute_num_cpu_blocks(
+-        [light, heavy], cpu_capacity
+-    )
++    expected = compute_num_offload_blocks_from_configs([light, heavy], cpu_capacity)
+     assert sched.num_cpu_blocks == expected
+     assert sched.num_cpu_blocks == 2
+ 
+diff --git a/tests/v1/simple_kv_offload/test_sizing.py b/tests/v1/simple_kv_offload/test_sizing.py
+deleted file mode 100644
+index 63f278bf6804..000000000000
+--- a/tests/v1/simple_kv_offload/test_sizing.py
++++ /dev/null
+@@ -1,48 +0,0 @@
+-# SPDX-License-Identifier: Apache-2.0
+-# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+-"""Unit tests for SimpleCPUOffload sizing helpers."""
+-
+-from __future__ import annotations
+-
+-import pytest
+-import torch
+-
+-from vllm.platforms import current_platform
+-from vllm.v1.simple_kv_offload.sizing import (
+-    compute_num_offload_blocks_from_configs,
+-    compute_total_bytes_per_block_from_kv_caches,
+-    local_num_offload_blocks,
+-)
+-
+-if not current_platform.is_cuda_alike():
+-    pytest.skip("Requires CUDA or ROCm", allow_module_level=True)
+-
+-from tests.v1.simple_kv_offload.test_scheduler import (  # noqa: E402
+-    _BYTES_PER_BLOCK,
+-    _make_kv_cache_config,
+-)
+-
+-
+-def test_live_tensor_bytes_can_exceed_config_estimate() -> None:
+-    """Stride-based sizing can be larger than KVCacheConfig tensor sizes."""
+-    num_gpu_blocks = 16
+-    gpu_config = _make_kv_cache_config(num_gpu_blocks, num_groups=1)
+-    capacity = 4 * _BYTES_PER_BLOCK
+-
+-    config_blocks = compute_num_offload_blocks_from_configs([gpu_config], capacity)
+-
+-    # Block-outermost layout: each row is one scheduler block with padded bytes.
+-    kv_caches = {
+-        "layer_0": torch.zeros(
+-            (num_gpu_blocks, _BYTES_PER_BLOCK * 2),
+-            dtype=torch.float16,
+-            device="cuda",
+-        )
+-    }
+-    live_bytes = compute_total_bytes_per_block_from_kv_caches(
+-        kv_caches, num_gpu_blocks, kv_caches["layer_0"].device
+-    )
+-    live_blocks = local_num_offload_blocks(capacity, live_bytes)
+-
+-    assert live_bytes > _BYTES_PER_BLOCK
+-    assert live_blocks < config_blocks
+diff --git a/vllm/v1/simple_kv_offload/manager.py b/vllm/v1/simple_kv_offload/manager.py
+index 4fa8fc4e4584..2b0bcf7c2a9e 100644
+--- a/vllm/v1/simple_kv_offload/manager.py
++++ b/vllm/v1/simple_kv_offload/manager.py
+@@ -204,16 +204,6 @@ def __init__(
+         self._expected_worker_count = vllm_config.parallel_config.world_size
+         self._store_event_pending_counts: dict[int, int] = {}
+ 
+-    @staticmethod
+-    def compute_num_cpu_blocks(
+-        kv_cache_configs: list["KVCacheConfig"],
+-        cpu_capacity_bytes: int,
+-    ) -> int:
+-        """Return the offload block count aligned across worker configs."""
+-        return compute_num_offload_blocks_from_configs(
+-            kv_cache_configs, cpu_capacity_bytes
+-        )
+-
+     @staticmethod
+     def _derive_cpu_config(
+         gpu_config: "KVCacheConfig",
+diff --git a/vllm/v1/simple_kv_offload/sizing.py b/vllm/v1/simple_kv_offload/sizing.py
+index eb5adad9da59..afc962c66c74 100644
+--- a/vllm/v1/simple_kv_offload/sizing.py
++++ b/vllm/v1/simple_kv_offload/sizing.py
+@@ -17,60 +17,6 @@
+ logger = init_logger(__name__)
+ 
+ 
+-def repr_kv_cache_tensor(value: torch.Tensor | list[torch.Tensor]) -> torch.Tensor:
+-    assert isinstance(value, torch.Tensor | list)
+-    return value if isinstance(value, torch.Tensor) else value[0]
+-
+-
+-def build_unique_gpu_block_views(
+-    kv_caches: dict[str, torch.Tensor | list[torch.Tensor]],
+-    num_blocks: int,
+-    device: torch.device,
+-) -> dict[str, torch.Tensor]:
+-    """Build [num_blocks, block_bytes] views used for offload copy sizing."""
+-    unique_gpu_caches: dict[str, torch.Tensor] = {}
+-    seen: set[tuple[torch.device, int]] = set()
+-    for name, value in kv_caches.items():
+-        tensor = repr_kv_cache_tensor(value)
+-        storage = tensor.untyped_storage()
+-        key = (tensor.device, storage.data_ptr())
+-        if key in seen:
+-            continue
+-        seen.add(key)
+-
+-        physical_per_block, remainder = divmod(tensor.shape[0], num_blocks)
+-        assert remainder == 0, (
+-            f"KV cache {name!r} has {tensor.shape[0]} physical blocks, which "
+-            f"is not divisible by {num_blocks} scheduler blocks"
+-        )
+-        block_bytes = tensor.stride(0) * tensor.element_size() * physical_per_block
+-        raw = torch.empty(0, dtype=torch.int8, device=device).set_(storage)
+-        regions = raw.view(-1, num_blocks, block_bytes)
+-        for idx, region in enumerate(regions):
+-            key_name = name if len(regions) == 1 else f"{name}.{idx}"
+-            unique_gpu_caches[key_name] = region
+-    return unique_gpu_caches
+-
+-
+-def total_bytes_per_block_from_views(
+-    unique_gpu_caches: dict[str, torch.Tensor],
+-) -> int:
+-    per_tensor_bpb = [
+-        t.stride(0) * t.element_size() for t in unique_gpu_caches.values()
+-    ]
+-    return sum(per_tensor_bpb)
+-
+-
+-def compute_total_bytes_per_block_from_kv_caches(
+-    kv_caches: dict[str, torch.Tensor | list[torch.Tensor]],
+-    num_blocks: int,
+-    device: torch.device,
+-) -> int:
+-    """Compute per-block offload bytes from live GPU KV tensors."""
+-    unique_gpu_caches = build_unique_gpu_block_views(kv_caches, num_blocks, device)
+-    return total_bytes_per_block_from_views(unique_gpu_caches)
+-
+-
+ def local_num_offload_blocks(capacity_bytes: int, total_bytes_per_block: int) -> int:
+     assert total_bytes_per_block > 0
+     return max(1, capacity_bytes // total_bytes_per_block)
+
+From d793b7e69f96bb0e2a871babc617b6e2d9dc2268 Mon Sep 17 00:00:00 2001
+From: CharlesWu <296364977+charxwu@users.noreply.github.com>
+Date: Wed, 26 Aug 2026 18:05:02 +0800
+Subject: [PATCH 08/10] fix(simple_kv_offload): handle uninitialized
+ distributed state
+
+Worker layout tests and standalone registration can run before vLLM creates a world group. Preserve the local block count in that case while retaining MIN synchronization for initialized distributed workers.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+Signed-off-by: CharlesWu <296364977+charxwu@users.noreply.github.com>
+---
+ tests/v1/simple_kv_offload/test_worker.py | 18 ++++++++++++++++++
+ vllm/v1/simple_kv_offload/sizing.py       |  3 +++
+ 2 files changed, 21 insertions(+)
+
+diff --git a/tests/v1/simple_kv_offload/test_worker.py b/tests/v1/simple_kv_offload/test_worker.py
+index e336edde50e7..1b4cda85da18 100644
+--- a/tests/v1/simple_kv_offload/test_worker.py
++++ b/tests/v1/simple_kv_offload/test_worker.py
+@@ -282,12 +282,26 @@ def test_register_separate_kv_head_groups(monkeypatch):
+     }
+ 
+ 
++def test_sync_num_cpu_blocks_across_workers_noop_when_dist_uninitialized(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    monkeypatch.setattr(
++        "vllm.v1.simple_kv_offload.sizing.dist.is_initialized",
++        lambda: False,
++    )
++    assert sync_num_offload_blocks_across_workers(42) == 42
++
++
+ def test_sync_num_cpu_blocks_across_workers_noop_when_world_size_one(
+     monkeypatch: pytest.MonkeyPatch,
+ ) -> None:
+     class FakeGroup:
+         world_size = 1
+ 
++    monkeypatch.setattr(
++        "vllm.v1.simple_kv_offload.sizing.dist.is_initialized",
++        lambda: True,
++    )
+     monkeypatch.setattr(
+         "vllm.distributed.parallel_state.get_world_group",
+         lambda: FakeGroup(),
+@@ -306,6 +320,10 @@ def fake_all_reduce(tensor, group, op) -> None:
+         assert op is dist.ReduceOp.MIN
+         tensor.fill_(5)
+ 
++    monkeypatch.setattr(
++        "vllm.v1.simple_kv_offload.sizing.dist.is_initialized",
++        lambda: True,
++    )
+     monkeypatch.setattr(
+         "vllm.distributed.parallel_state.get_world_group",
+         lambda: FakeGroup(),
+diff --git a/vllm/v1/simple_kv_offload/sizing.py b/vllm/v1/simple_kv_offload/sizing.py
+index afc962c66c74..7216d35175b2 100644
+--- a/vllm/v1/simple_kv_offload/sizing.py
++++ b/vllm/v1/simple_kv_offload/sizing.py
+@@ -24,6 +24,9 @@ def local_num_offload_blocks(capacity_bytes: int, total_bytes_per_block: int) ->
+ 
+ def sync_num_offload_blocks_across_workers(num_offload_blocks: int) -> int:
+     """All-reduce MIN so every rank allocates the same offload pool size."""
++    if not dist.is_initialized():
++        return num_offload_blocks
++
+     from vllm.distributed.parallel_state import get_world_group
+ 
+     world_group = get_world_group()
+
+From 7e0e63645df9ebac8d9fc91eb49c2bb57ee07006 Mon Sep 17 00:00:00 2001
+From: CharlesWu <296364977+charxwu@users.noreply.github.com>
+Date: Wed, 26 Aug 2026 18:40:35 +0800
+Subject: [PATCH 09/10] fix(config): exclude runtime offload sizing from cache
+ hash
+
+Worker KV cache configs are populated after profiling and can contain values such as Fraction that are not compilation-hash serializable. Exclude these runtime-only sizing results because they do not affect the compiled graph.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+Signed-off-by: CharlesWu <296364977+charxwu@users.noreply.github.com>
+---
+ tests/config/test_config_utils.py | 11 +++++++++++
+ vllm/config/cache.py              |  2 ++
+ 2 files changed, 13 insertions(+)
+
+diff --git a/tests/config/test_config_utils.py b/tests/config/test_config_utils.py
+index 24ef1b52a95d..fa8e255bf04f 100644
+--- a/tests/config/test_config_utils.py
++++ b/tests/config/test_config_utils.py
+@@ -3,6 +3,7 @@
+ 
+ from dataclasses import dataclass
+ from enum import Enum
++from fractions import Fraction
+ 
+ import pytest
+ 
+@@ -221,6 +222,16 @@ def test_cache_config_hash_ignores_prefix_cache_retention_interval():
+     assert CacheConfig(prefix_cache_retention_interval=64).compute_hash() == base_hash
+ 
+ 
++def test_cache_config_hash_ignores_runtime_offload_sizing():
++    config = CacheConfig()
++    base_hash = config.compute_hash()
++
++    config.worker_kv_cache_configs = [Fraction(1, 2)]
++    config.simple_cpu_offload_num_blocks = 42
++
++    assert config.compute_hash() == base_hash
++
++
+ def test_envs_compile_factors_relocation_invariant(tmp_path):
+     """Relocating HOME or the XDG roots must not change the compile-cache
+     env hash.
+diff --git a/vllm/config/cache.py b/vllm/config/cache.py
+index 59869c3fd443..24283893e64a 100644
+--- a/vllm/config/cache.py
++++ b/vllm/config/cache.py
+@@ -288,6 +288,8 @@ def compute_hash(self) -> str:
+             # Post-init/derived counters
+             "num_gpu_blocks",
+             "num_cpu_blocks",
++            "worker_kv_cache_configs",
++            "simple_cpu_offload_num_blocks",
+             "kv_cache_size_tokens",
+             "kv_cache_max_concurrency",
+             # WIP feature toggle not impacting compiled graph shape
+
+From 5446d87cc318595426ea4ca6c9eef9f2ec7b5e85 Mon Sep 17 00:00:00 2001
+From: CharlesWu <296364977+charxwu@users.noreply.github.com>
+Date: Thu, 27 Aug 2026 23:29:04 +0800
+Subject: [PATCH 10/10] fix(simple_kv_offload): ignore allocator padding in KV
+ storage
+
+Only expose complete KV cache regions so alignment bytes at the end of a backing allocation cannot make the block view invalid.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+Signed-off-by: CharlesWu <296364977+charxwu@users.noreply.github.com>
+
+Signed-off-by:  <>
+---
+ tests/v1/simple_kv_offload/test_scheduler.py | 18 ++++++++++++++++++
+ vllm/v1/simple_kv_offload/sizing.py          | 12 ++++++++++++
+ vllm/v1/simple_kv_offload/worker.py          |  3 ++-
+ 3 files changed, 32 insertions(+), 1 deletion(-)
+
+diff --git a/tests/v1/simple_kv_offload/test_scheduler.py b/tests/v1/simple_kv_offload/test_scheduler.py
+index 06d6ed6e76b1..fb6146003762 100644
+--- a/tests/v1/simple_kv_offload/test_scheduler.py
++++ b/tests/v1/simple_kv_offload/test_scheduler.py
+@@ -46,6 +46,7 @@
+ from vllm.v1.simple_kv_offload.metadata import SimpleCPUOffloadWorkerMetadata
+ from vllm.v1.simple_kv_offload.sizing import (
+     compute_num_offload_blocks_from_configs,
++    view_complete_kv_cache_regions,
+ )
+ 
+ # ---------------------------------------------------------------------------
+@@ -1845,6 +1846,23 @@ def test_cp_lazy_target_blocks_scaling(cp_world_size: int) -> None:
+ # ---------------------------------------------------------------------------
+ # Test 18: PP / spec-decode sizing alignment
+ # ---------------------------------------------------------------------------
++@pytest.mark.parametrize("padding_bytes", [0, 5])
++def test_view_complete_kv_cache_regions_excludes_storage_padding(
++    padding_bytes: int,
++) -> None:
++    num_regions = 2
++    num_blocks = 3
++    block_bytes = 4
++    data_bytes = num_regions * num_blocks * block_bytes
++    raw = torch.arange(data_bytes + padding_bytes, dtype=torch.int8)
++
++    regions = view_complete_kv_cache_regions(raw, num_blocks, block_bytes)
++
++    assert regions.shape == (num_regions, num_blocks, block_bytes)
++    assert regions.data_ptr() == raw.data_ptr()
++    torch.testing.assert_close(regions.flatten(), raw[:data_bytes])
++
++
+ def test_compute_num_cpu_blocks_uses_heaviest_worker() -> None:
+     """Offload block count must follow the worker with the largest bytes/block."""
+     num_gpu_blocks = 100
+diff --git a/vllm/v1/simple_kv_offload/sizing.py b/vllm/v1/simple_kv_offload/sizing.py
+index 7216d35175b2..07991ae47b9d 100644
+--- a/vllm/v1/simple_kv_offload/sizing.py
++++ b/vllm/v1/simple_kv_offload/sizing.py
+@@ -22,6 +22,18 @@ def local_num_offload_blocks(capacity_bytes: int, total_bytes_per_block: int) ->
+     return max(1, capacity_bytes // total_bytes_per_block)
+ 
+ 
++def view_complete_kv_cache_regions(
++    raw: torch.Tensor,
++    num_blocks: int,
++    block_bytes: int,
++) -> torch.Tensor:
++    """View complete KV cache regions while excluding storage padding."""
++    region_bytes = num_blocks * block_bytes
++    num_regions = raw.numel() // region_bytes
++    assert num_regions > 0
++    return raw[: num_regions * region_bytes].view(num_regions, num_blocks, block_bytes)
++
++
+ def sync_num_offload_blocks_across_workers(num_offload_blocks: int) -> int:
+     """All-reduce MIN so every rank allocates the same offload pool size."""
+     if not dist.is_initialized():
+diff --git a/vllm/v1/simple_kv_offload/worker.py b/vllm/v1/simple_kv_offload/worker.py
+index 82b97b164abb..98e5c85239ec 100644
+--- a/vllm/v1/simple_kv_offload/worker.py
++++ b/vllm/v1/simple_kv_offload/worker.py
+@@ -19,6 +19,7 @@
+ from vllm.v1.simple_kv_offload.sizing import (
+     local_num_offload_blocks,
+     sync_num_offload_blocks_across_workers,
++    view_complete_kv_cache_regions,
+ )
+ 
+ if TYPE_CHECKING:
+@@ -122,7 +123,7 @@ def register_kv_caches(
+             )
+             block_bytes = tensor.stride(0) * tensor.element_size() * physical_per_block
+             raw = torch.empty(0, dtype=torch.int8, device=tensor.device).set_(storage)
+-            regions = raw.view(-1, num_blocks, block_bytes)
++            regions = view_complete_kv_cache_regions(raw, num_blocks, block_bytes)
+             for idx, region in enumerate(regions):
+                 key_name = name if len(regions) == 1 else f"{name}.{idx}"
+                 unique_gpu_caches[key_name] = region

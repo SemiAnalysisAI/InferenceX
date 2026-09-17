@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
+import dataclasses
+
+import torch.nn as nn
+
+from vllm.config import VllmConfig, replace
+from vllm.model_executor.model_loader import get_model
+from vllm.v1.worker.gpu.spec_decode.eagle.utils import (
+    _should_share,
+    get_target_lm_head,
+    maybe_share_target_embed,
+)
+
+
+def _draft_safetensors_load_config(vllm_config: VllmConfig):
+    # [50514] draft loads only on the last PP stage; fastsafetensors broadcasts
+    # shards over the world process group, so the stages that never enter draft
+    # loading (PP<last) never join that collective and the run dies at the
+    # distributed timeout. Load the draft with a plain per-rank safetensors read
+    # (no cross-rank collective); the target keeps its fast fastsafetensors path.
+    load_config = vllm_config.load_config
+    load_format = load_config.load_format
+    if isinstance(load_format, str):
+        safe_format = "safetensors"
+    else:
+        # LoadFormat is a str-enum; resolve the member by value.
+        safe_format = type(load_format)("safetensors")
+    # replace() (not in-place) so we do not mutate the target's shared config.
+    return dataclasses.replace(load_config, load_format=safe_format)
+
+
+def load_dspark_model(target_model: nn.Module, vllm_config: VllmConfig) -> nn.Module:
+    speculative_config = vllm_config.speculative_config
+    assert speculative_config is not None
+    draft_model_config = speculative_config.draft_model_config
+
+    from vllm.compilation.backends import set_model_tag
+    from vllm.model_executor.models.qwen3_dflash import dflash_has_any_non_causal
+    from vllm.model_executor.models.utils import get_draft_quant_config
+
+    draft_vllm_config = replace(
+        vllm_config,
+        attention_config=replace(
+            vllm_config.attention_config,
+            use_non_causal=dflash_has_any_non_causal(draft_model_config.hf_config),
+            backend=speculative_config.attention_backend,
+        ),
+        cache_config=(
+            replace(
+                vllm_config.cache_config,
+                cache_dtype=speculative_config.kv_cache_dtype,
+            )
+            if speculative_config.kv_cache_dtype is not None
+            else vllm_config.cache_config
+        ),
+        load_config=_draft_safetensors_load_config(vllm_config),
+    )
+    # VllmConfig post-init restores the target's quant config because the target
+    # config is retained for DSpark's target-layer metadata, so we must override it.
+    draft_vllm_config.quant_config = get_draft_quant_config(vllm_config)
+
+    with set_model_tag("dspark_head"):
+        draft_model = get_model(
+            vllm_config=draft_vllm_config, model_config=draft_model_config
+        )
+
+    target_language_model = (
+        target_model.get_language_model()
+        if hasattr(target_model, "get_language_model")
+        else target_model
+    )
+    target_inner = target_language_model.model
+    draft_inner = draft_model.model
+
+    maybe_share_target_embed(draft_model, draft_inner, target_inner)
+
+    target_lm_head = get_target_lm_head(target_model, target_language_model)
+    draft_lm_head = getattr(draft_model, "lm_head", None)
+    if target_lm_head is not None and _should_share(
+        draft_model, "has_own_lm_head", draft_lm_head, target_lm_head
+    ):
+        if draft_lm_head is not None:
+            del draft_model.lm_head
+        draft_model.lm_head = target_lm_head
+
+    return draft_model
