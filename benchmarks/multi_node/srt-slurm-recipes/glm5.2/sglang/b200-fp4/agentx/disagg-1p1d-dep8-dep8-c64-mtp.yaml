@@ -57,7 +57,6 @@ roles:
       NVSHMEM_REMOTE_TRANSPORT: none
       SGLANG_DG_CACHE_DIR: /deepgemm_cache
       FLASHINFER_WORKSPACE_BASE: /flashinfer_cache
-      SGLANG_SIMULATE_ACC_LEN: '2.5'
     args:
       served-model-name: nvidia/GLM-5.2-NVFP4
       trust-remote-code: true
@@ -121,9 +120,6 @@ roles:
       NVSHMEM_REMOTE_TRANSPORT: none
       SGLANG_DG_CACHE_DIR: /deepgemm_cache
       FLASHINFER_WORKSPACE_BASE: /flashinfer_cache
-      SGLANG_SIMULATE_ACC_LEN: '2.5'
-      SGLANG_SIMULATE_ACC_METHOD: match-expected
-      SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
     args:
       served-model-name: nvidia/GLM-5.2-NVFP4
       trust-remote-code: true
