@@ -250,6 +250,18 @@ echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="1200"
 
+NATIVE_CPU_RESTORE_PROBE=false
+NATIVE_CPU_RESTORE_ARGS=()
+if [[ "$EVAL_ONLY" == "true" && "${EVAL_FRAMEWORK:-}" == "bfcl" \
+    && "${EVAL_SUITE:-}" == "bfcl_smoke" && "${KV_OFFLOAD_BACKEND:-}" == "vllm-simple" ]] \
+    && agentic_kv_offload_enabled; then
+    # Only the isolated native-offload smoke exposes vLLM's cache-reset API.
+    # The diagnostic never changes framework source or BFCL requests/scores.
+    export VLLM_SERVER_DEV_MODE=1
+    NATIVE_CPU_RESTORE_PROBE=true
+    NATIVE_CPU_RESTORE_ARGS=(--enable-prompt-tokens-details)
+fi
+
 
 # DCP shards decode KV across the TP ranks, so it must divide TP.
 if [ $((TP % DCP_SIZE)) -ne 0 ]; then
@@ -292,6 +304,7 @@ VLLM_CMD=(
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
     "${CP_ARGS[@]}"
+    "${NATIVE_CPU_RESTORE_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
@@ -303,6 +316,11 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
+    if [ "$NATIVE_CPU_RESTORE_PROBE" = true ]; then
+        timeout 600 python3 "$(dirname "$0")/../../../experimental/bfcl/verify_native_cpu_restore.py" \
+            --base-url "http://127.0.0.1:${PORT}" --model "$MODEL" \
+            --output "$RESULT_DIR/native_cpu_restore_report.json"
+    fi
 else
     build_replay_cmd "$RESULT_DIR"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"

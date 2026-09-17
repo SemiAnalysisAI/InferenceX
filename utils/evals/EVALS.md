@@ -469,6 +469,24 @@ case IDs, failure records, and sampling settings. The compatibility
 `results_bfcl.json` remains the only input to the normal InferenceX eval
 collector and dashboard path.
 
+### Experimental native CPU-cache restore check
+
+The Kimi MI355X vLLM `bfcl_smoke` path with `vllm-simple` offload also runs
+`experimental/bfcl/verify_native_cpu_restore.py` after BFCL. Only this isolated
+eval-only combination enables vLLM's native development cache-reset API and
+request-level cached-token reporting. Resident runs, other eval suites and
+throughput runs do not enable this diagnostic.
+
+The check clears both caches, generates a greedy completion for a long synthetic
+prefix, clears only the GPU cache, and repeats the identical request. A pass
+requires an unchanged nonempty completion, a native cached-token count on the
+second request, and an increase in the external-prefix-hit counter. This checks
+one CPU restore; it is not a quality benchmark or comprehensive offload coverage.
+The 600-second process bound includes bounded HTTP calls and reset/metric settling.
+`results/native_cpu_restore_report.json` preserves both native responses and
+counter evidence, including failures, in the agentic raw artifact. It does not
+rewrite BFCL results. A restore failure fails the job independently of BFCL.
+
 ### Benchmark script flow
 
 All benchmark scripts in `benchmarks/` follow one of two flows:
