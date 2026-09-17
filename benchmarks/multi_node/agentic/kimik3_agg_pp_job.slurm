@@ -118,6 +118,15 @@ fi
 HOST_MODEL_PATH="$RESOLVED_MODEL_PATH"
 echo "Resolved HOST_MODEL_PATH=${HOST_MODEL_PATH}"
 
+# benchmark_lib.sh rejects KV_OFFLOAD_BACKEND when KV_OFFLOADING=none.
+# Do not apply :-vllm-simple here: an empty matrix value must stay empty.
+KV_OFFLOADING_EFFECTIVE="${KV_OFFLOADING:-none}"
+if [[ "$KV_OFFLOADING_EFFECTIVE" == "dram" ]]; then
+    KV_OFFLOAD_BACKEND_EFFECTIVE="${KV_OFFLOAD_BACKEND:-vllm-simple}"
+else
+    KV_OFFLOAD_BACKEND_EFFECTIVE=""
+fi
+
 cleanup_containers() {
     set +e
     for node in "${NODES[@]}"; do
@@ -196,8 +205,8 @@ set -o pipefail
   -e PORT='${PORT}' \\
   -e CONC='${CONC:-}' \\
   -e CONC_LIST='${CONC_LIST}' \\
-  -e KV_OFFLOADING='${KV_OFFLOADING:-dram}' \\
-  -e KV_OFFLOAD_BACKEND='${KV_OFFLOAD_BACKEND:-vllm-simple}' \\
+  -e KV_OFFLOADING='${KV_OFFLOADING_EFFECTIVE}' \\
+  -e KV_OFFLOAD_BACKEND='${KV_OFFLOAD_BACKEND_EFFECTIVE}' \\
   -e TOTAL_CPU_DRAM_GB='${TOTAL_CPU_DRAM_GB}' \\
   -e DURATION='${DURATION:-3600}' \\
   -e RESULT_FILENAME='${RESULT_FILENAME}' \\

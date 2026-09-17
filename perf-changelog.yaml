@@ -7771,3 +7771,12 @@
     - "Route the MI355X TP8xPP2 AgentX test configuration to the public aigmkt/rocm-runtime:250916 image so MIA runners can pull without registry authentication."
     - "将 MI355X TP8xPP2 AgentX 测试配置切换到公开镜像 aigmkt/rocm-runtime:250916，使 MIA runner 无需 registry 认证即可拉取。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-tp8pp2
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Fix aggregated PP Slurm launcher env forwarding so KV_OFFLOAD_BACKEND stays empty when KV_OFFLOADING=none instead of defaulting to vllm-simple inside the container."
+    - "修复聚合 PP Slurm launcher 的环境变量转发：当 KV_OFFLOADING=none 时，容器内 KV_OFFLOAD_BACKEND 保持为空，不再默认填入 vllm-simple。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
