@@ -29,6 +29,14 @@ def identity(value: Any) -> str:
     ).hexdigest()
 
 
+def normalized_image(value: str) -> str:
+    """Normalize registry paths without changing tags, digests or repositories."""
+    registry, separator, remainder = value.partition("#")
+    if separator and remainder and ("." in registry or ":" in registry):
+        return registry + "/" + remainder
+    return value
+
+
 class Contract(BaseModel):
     model_config = ConfigDict(
         extra="forbid",

@@ -76,9 +76,9 @@ jobs:
             {"fastMode": false}
           claude_args: >-
             --model 'claude-opus-5'
-            --max-turns 200
+            --max-turns 500
             --add-dir '${{ runner.temp }}/klaud'
-            --allowedTools "Read,Glob,Grep,Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api --method GET:*),Bash(git show:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*),Bash(git ls-tree:*)"
+            --allowedTools "Read,Glob,Grep,WebFetch,WebSearch,Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api --method GET:*),Bash(git show:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*),Bash(git ls-tree:*)"
             --json-schema '${{ steps.prepare.outputs.review_schema }}'
           prompt: |
             Use Read on candidates.json, open-prs.json and capacity.json under ${{ runner.temp }}/klaud/.
@@ -91,10 +91,14 @@ jobs:
             Read docs/index.md and AGENTS.md. Titles alone cannot exclude
             overlap; incomplete file lists require investigation, not assumptions.
 
-            Each candidate names its live configs/*-master.yaml:KEY family and a matching public
-            observation from the canonical matrix generator. Verify that exact family; never substitute
-            a sibling or a retired workload. Duplicate means overlapping edits or shared dependencies,
-            not merely the same model/image on a different family.
+            Each candidate names its live configs/*-master.yaml:KEY family and an exact published
+            benchmark baseline from the canonical matrix generator. The public observation is benchmark
+            evidence only: do not trust it to decide whether an image is current or compatible. Verify the
+            exact current family, then independently inspect the actual bundled engine source, official
+            upstream releases and available images for vLLM, SGLang, ATOM or TensorRT-LLM. Prefer official
+            source and registry evidence; release notes alone are insufficient. Never substitute a sibling
+            or retired workload. Duplicate means overlapping edits or shared dependencies, not merely the
+            same model/image on a different family.
             Resolve ALL possible target clusters from its runner and configs/runners.yaml to the
             exact IDs in capacity.json. Same-hardware sibling clusters cannot stand in for the
             recipe's target. Proceed only if every target is in eligible-telemetry-clusters;
@@ -102,11 +106,11 @@ jobs:
             to fill the cap. Never copy private eligibility data into reasons or reports.
             Mark duplicate when an open PR owns that family's image refresh or overlapping
             compatibility work, even with another image tag; unrelated work on the same hardware
-            is not a duplicate. Return the supplied schema: candidate-id, decision
+            is not a duplicate. Proceed only when independent upstream inspection finds a plausible newer
+            supported image for the exact family. Return the supplied schema: candidate-id, decision
             (proceed/duplicate/uncertain), family (null if unresolved), telemetry-clusters (exact
             target IDs, empty if unresolved), pull-requests (overlapping
-            PR numbers), reason (brief evidence). Proceed only when the family is current,
-            still needs an update and has no overlap. Missing evidence or ambiguity means uncertain.
+            PR numbers), reason (brief evidence). Missing evidence or ambiguity means uncertain.
             Review EVERY supplied candidate in shuffled order, returning exactly one decision per ID.
             Duplicate/uncertain candidates do not consume dispatch slots. Do not stop after ten reviews
             or after finding ${{ env.MAX_CANDIDATES_PER_RUN }} proceed decisions: the selector needs the

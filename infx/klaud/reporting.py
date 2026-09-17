@@ -827,6 +827,7 @@ def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -
     from fnmatch import fnmatchcase
 
     from .api import fetch
+    from .models import normalized_image
     from .validation import canonical_matrix
 
     matrix = canonical_matrix(session.repository, session.candidate.base, session.candidate.family)
@@ -840,7 +841,10 @@ def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -
             heads.setdefault(int(row["github_run_id"]), set()).add(row["head_sha"])
     old_image = context["source"]["image"]
     entries = {point_key(entry): entry for entry in matrix_points(matrix)}
-    if not entries or any(entry["image"] != old_image for entry in entries.values()):
+    if not entries or any(
+        normalized_image(entry["image"]) != normalized_image(old_image)
+        for entry in entries.values()
+    ):
         raise VerificationError("Baseline source image no longer matches the selected base")
     historical: dict[str, list[dict]] = {}
     published: dict[str, Point] = {}
@@ -856,7 +860,11 @@ def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -
     for row in feed.payload:
         # Do not filter ISL/OSL here: that would erase other curves in the original family.
         if any(
-            row.get(key) != context["source"][key]
+            (
+                normalized_image(row.get(key, "")) != normalized_image(context["source"][key])
+                if key == "image"
+                else row.get(key) != context["source"][key]
+            )
             for key in (
                 "model",
                 "hardware",

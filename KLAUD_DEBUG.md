@@ -219,7 +219,7 @@ directory to the normal ingestion code. The only reuse-specific substitution is
 that changelog metadata comes from the merge run. A generator-policy change
 between the PR sweep and merge therefore does not require another GPU sweep.
 
-### 7.2 Capacity deferrals must release the candidate claim
+### 7.2 Every unsuccessful outcome must release the candidate claim
 
 The planner ignores closed PRs but treats every matching `klaud/auto-*` branch
 as occupied. If the capacity check fails before a targeted dispatch, the final
@@ -231,13 +231,13 @@ can select the candidate again. Without a PR, report the deferral in the agent's
 final response. A utilization increase after dispatch does not cancel healthy
 work. Closing the PR alone does not make the candidate eligible.
 
-Confirmed infrastructure blockers such as missing staged weights also require a
-failure/deferral report, confirmed child-run completion, PR closure and branch
-deletion at session termination. For image incompatibility, exhausted image
-repairs or uncertain causes, close the unsuccessful PR but retain its branch:
-this blocks the exact candidate without blocking newer releases for the family.
-Uncertain causes require manual review, not an incompatibility claim. Apply
-cleanup only to the session's own PR and runs.
+Confirmed infrastructure blockers, image incompatibility, exhausted repairs,
+uncertain causes and unexpected failures all require a failure/deferral report,
+confirmed child-run completion, PR closure and branch deletion at session
+termination. This returns the family to the pool for a later independent check.
+Uncertain causes remain distinct from incompatibility. Apply cleanup only to the
+session's own unchanged exact-head branch, PR and runs; an explicit maintainer
+handoff remains untouched.
 
 ### 7.3 Final reusable sweeps stay draft until reporting finishes
 
@@ -324,7 +324,9 @@ availability, count consistency and the strict below-80% utilization checks.
 The former `klaud-auto-sweep` concurrency group held new waves behind the entire
 previous invocation. It is removed; five candidates is a per-invocation cap.
 Recovery now makes a nonblocking pass under per-session leases. Active child work
-and uncertain families remain owned and excluded, while unrelated families proceed.
+remains owned and excluded, while unrelated families proceed. Once an unsuccessful
+session is terminal, recovery closes it, deletes its unchanged branch and releases
+the family instead of retaining the failed candidate indefinitely.
 Unknown global ownership/inventory still fails closed.
 
 Run `34597845951` waited 3h35m before planning, then rejected #3012's successful
@@ -346,6 +348,7 @@ returned no `structured_output` after 154 turns. More turns do not extend that
 limit. Durable typed reports and ownership refs survive agent interruption;
 verified lifecycle receipts take precedence over missing SDK output. Recovery
 publishes the artifact-derived final comparison before readiness. Completed but
-uncertifiable work closes for inspection, not as invented image incompatibility.
+uncertifiable work closes for inspection and releases its branch, not as invented
+image incompatibility.
 See [workflow operation](docs/klaud.md#workflow-operation-and-credentials),
 [reporting](docs/klaud-reporting.md) and [中文报告指南](docs/klaud-reporting_zh.md).

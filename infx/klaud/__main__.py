@@ -24,12 +24,16 @@ from .models import (
     Policy,
     PRReview,
     identity,
+    normalized_image,
 )
 
 
 def observation_key(row: dict) -> tuple:
+    image = row.get("image")
+    if isinstance(image, str):
+        image = normalized_image(image)
     return tuple(
-        row.get(key)
+        image if key == "image" else row.get(key)
         for key in (
             "model",
             "hardware",
@@ -95,7 +99,10 @@ def choose(
     occupied = {re.sub(r"^klaud[e]?/auto-", "klaud/auto-", branch) for branch in occupied}
     selected = []
     seen = set()
-    valid = [item for item in items if item["needs-review"]]
+    # The public feed is benchmark history, not an image-release authority.
+    # Every current family with an exact published baseline is eligible for
+    # independent upstream inspection by Klaud.
+    valid = [item for item in items if item["source-status"] == "baseline"]
     # Prefer the latest matching baseline within each live family before shuffling.
     for item in sorted(
         valid,
@@ -121,14 +128,14 @@ def choose(
                 )
             }
         )[:16]
-        release_key = identity([row["image"], item["release"]])[:16]
+        image_key = identity(observation_key(row)[-1])[:16]
         for family in sorted(families.get(observation_key(row), ())):
             prefix = "klaud/auto-" + identity(family)[:16] + "-"
-            branch = prefix + release_key
+            branch = prefix + image_key
             claims = {
                 branch,
                 prefix,
-                f"klaud/auto-{legacy}-{release_key}",
+                f"klaud/auto-{legacy}-{image_key}",
                 f"klaud/auto-{legacy}-",
             }
             if family in seen or claims & occupied:
@@ -138,8 +145,6 @@ def choose(
                     "id": branch.removeprefix("klaud/auto-"),
                     "family": family,
                     "source": row,
-                    "release": item["release"],
-                    "review-reasons": item["review-reasons"],
                     "branch": branch,
                 }
             )
@@ -189,7 +194,8 @@ def plan(root: Path, directory: Path) -> None:
             "public-api": {
                 "schema": PUBLIC + "/api/openapi.json",
                 "images": PUBLIC + "/api/v1/latest-images",
-                "releases": PUBLIC + "/api/v1/framework-releases",
+                "benchmarks": PUBLIC + "/api/v1/benchmarks",
+                "workflow-info": PUBLIC + "/api/v1/workflow-info",
             },
         }
         for candidate in candidates
@@ -616,15 +622,6 @@ def main() -> int:
         help="Check a generated final matrix against the complete exact-head family",
     )
     preflight.add_argument("--matrix-file", type=Path, required=True)
-    release = commands.add_parser(
-        "release-candidate",
-        help="Maintainer-only release of a verified closed candidate after its blocker is fixed",
-    )
-    release.add_argument("--parent-run-id", type=int, required=True)
-    release.add_argument(
-        "--candidate-file", type=Path, required=True, help="Original candidate.json"
-    )
-    release.add_argument("--head", required=True, help="Reviewed closed PR head SHA")
     baseline = commands.add_parser(
         "prepare-baseline",
         help="Fetch and freeze matched published data locally before attempts",
@@ -666,22 +663,6 @@ def main() -> int:
     )
     args = parser.parse_args()
     try:
-        if args.command == "release-candidate":
-            from .lifecycle import Session, release_candidate
-
-            context = json.loads(args.candidate_file.read_text())
-            candidate = OwnedCandidate.model_validate(
-                {key: context[key] for key in ("id", "family", "base")}
-            )
-            repository = os.environ["GITHUB_REPOSITORY"]
-            parent = github_read(repository, f"actions/runs/{args.parent_run_id}")
-            if (
-                parent["path"] != ".github/workflows/klaud-plan.yml"
-                or parent["head_branch"] != "main"
-            ):
-                raise VerificationError("Untrusted ownership parent")
-            release_candidate(Session(repository, parent, candidate, recovering=True), args.head)
-            return 0
         if args.command in ("report", "report-schema", "prepare-baseline"):
             from .lifecycle import current_session
             from .reporting import Attempt, Baseline, Prose, prepare_baseline, publish
