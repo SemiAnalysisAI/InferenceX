@@ -206,6 +206,10 @@ class WorkerConfig(BaseModel):
     tp: int
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
+    # Prefill attention context-parallel size (sglang --attn-cp-size), reusing
+    # the existing pcp-size interface. Only meaningful on the prefill role of
+    # a disaggregated worker pair; decode leaves this at the default (no CP
+    # flags emitted).
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
     ep: int
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)

@@ -8,6 +8,7 @@ check_env_vars \
 check_env_vars \
     NODE0_ADDR NODE_RANK MODEL_NAME xP yD \
     IPADDRS PREFILL_TP_SIZE DECODE_TP_SIZE PREFILL_ENABLE_EP PREFILL_ENABLE_DP \
+    PREFILL_PCP_SIZE \
     DECODE_ENABLE_EP DECODE_ENABLE_DP DECODE_MTP_SIZE BENCH_INPUT_LEN BENCH_OUTPUT_LEN \
     BENCH_RANDOM_RANGE_RATIO BENCH_REQUEST_RATE BENCH_NUM_PROMPTS_MULTIPLIER BENCH_MAX_CONCURRENCY DRY_RUN \
     GPUS_PER_NODE RUN_EVAL EVAL_ONLY EVAL_FRAMEWORK BENCHMARK_LOGS_DIR \
@@ -440,6 +441,16 @@ build_server_config() {
 
     if [[ "$mode" == "prefill" ]]; then
         specific_config="$PREFILL_MODE_FLAGS"
+        # Prefill attention context-parallelism: shards the prefill sequence
+        # dimension across PREFILL_PCP_SIZE ranks (sglang --attn-cp-size).
+        # --enable-cp-decode-attn-tp switches the CP ranks back to plain
+        # tensor-parallel attention for the decode-shaped (single-token)
+        # forward passes CP does not help, e.g. draft/verify steps under
+        # speculative decoding. Decode-role workers never set this; only the
+        # prefill role reads PREFILL_PCP_SIZE.
+        if [[ "${PREFILL_PCP_SIZE:-1}" -gt 1 ]]; then
+            specific_config="$specific_config --enable-prefill-cp --cp-strategy interleave --attn-cp-size ${PREFILL_PCP_SIZE} --enable-cp-decode-attn-tp"
+        fi
     elif [[ "$mode" == "decode" ]]; then
         specific_config="$DECODE_MODE_FLAGS"
     fi
@@ -868,7 +879,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "================================================"
     echo "${host_name}:${host_ip} is Proxy Node and Prefill Node"
     echo "Using prefill config: $PREFILL_SERVER_CONFIG"
-    echo "Prefill parallelism: TP=${PREFILL_TP_SIZE}, EP enabled: ${PREFILL_ENABLE_EP}, DP enabled: ${PREFILL_ENABLE_DP}, MTP size=${DECODE_MTP_SIZE}"
+    echo "Prefill parallelism: TP=${PREFILL_TP_SIZE}, EP enabled: ${PREFILL_ENABLE_EP}, DP enabled: ${PREFILL_ENABLE_DP}, CP size: ${PREFILL_PCP_SIZE}, MTP size=${DECODE_MTP_SIZE}"
     echo "Decode  parallelism: TP=${DECODE_TP_SIZE},  EP enabled: ${DECODE_ENABLE_EP},  DP enabled: ${DECODE_ENABLE_DP},  MTP size=${DECODE_MTP_SIZE}"
     echo "Prefill servers ($((PREFILL_TP_SIZE/GPUS_PER_NODE)) nodes): ${PREFILL_ARGS}"
     echo "Decode servers  ($((DECODE_TP_SIZE/GPUS_PER_NODE))  nodes): ${DECODE_ARGS}"
@@ -1298,7 +1309,7 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
 elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     echo "${host_name}:${host_ip} is Prefill Node (Model: ${MODEL_NAME})"
     echo "Using prefill config: $PREFILL_SERVER_CONFIG"
-    echo "Prefill parallelism: TP=${PREFILL_TP_SIZE}, EP enabled: ${PREFILL_ENABLE_EP}, DP enabled: ${PREFILL_ENABLE_DP}"
+    echo "Prefill parallelism: TP=${PREFILL_TP_SIZE}, EP enabled: ${PREFILL_ENABLE_EP}, DP enabled: ${PREFILL_ENABLE_DP}, CP size: ${PREFILL_PCP_SIZE}"
 
     CMD_DUMP="/run_logs/slurm_job-${SLURM_JOB_ID}/commands_${host_name}.txt"
     dump_cmd() { echo -e "\n# ── $1 ──\n$2" >> "$CMD_DUMP"; }
@@ -1412,6 +1423,8 @@ else
                 DeepSeek-V4-Pro-0813:1) DSV4_GOLDEN_AL=1.84 ;;
                 DeepSeek-V4-Pro-0813:2) DSV4_GOLDEN_AL=2.51 ;;
                 DeepSeek-V4-Pro-0813:3) DSV4_GOLDEN_AL=3.01 ;;
+                DeepSeek-V4-Pro-0813:4) DSV4_GOLDEN_AL=3.36 ;;
+                DeepSeek-V4-Pro-0813:5) DSV4_GOLDEN_AL=3.61 ;;
                 DeepSeek-V4-Pro-0813:*)
                     echo "ERROR: Pro-0813 draft length ${DECODE_MTP_SIZE} has no golden AL wired here; refusing to use the original V4 curve." >&2
                     exit 1

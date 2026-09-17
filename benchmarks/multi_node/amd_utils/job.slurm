@@ -438,6 +438,9 @@ DOCKER_ENV_COMMON=(
     # defaulted to ep=1/dp_attention=false even for DEP8 arms.
     -e PREFILL_EP=\${PREFILL_EP}
     -e PREFILL_DP_ATTN=\${PREFILL_DP_ATTN}
+    # Prefill attention context-parallel size (drives sglang's
+    # --enable-prefill-cp/--attn-cp-size in server_sglang.sh). 
+    -e PREFILL_PCP_SIZE=\${PREFILL_PCP_SIZE}
     -e PREFILL_CONTEXT_LENGTH=\${PREFILL_CONTEXT_LENGTH:-}
     -e PREFILL_CHUNKED_PREFILL_SIZE=\${PREFILL_CHUNKED_PREFILL_SIZE:-}
     -e DISABLE_CUSTOM_ALL_REDUCE=\${DISABLE_CUSTOM_ALL_REDUCE:-}

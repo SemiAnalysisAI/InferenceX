@@ -1201,7 +1201,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
   # optimizations, which is the whole point of this arm. CLIENT_IMAGE stays at
   # 20260907 -- that container only runs the load generator, so the
   # server-side DSpark work does not reach it.
-  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913
+  image: aigmkt/sglang-rocm:v0.5.19-rocm724-mi35x-pr34200-39950-20260917
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1221,6 +1221,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
           num-worker: 1
           tp: 4
           ep: 1
+          pcp-size: 8
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
@@ -1232,7 +1233,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
+          - "DECODE_MTP_SIZE=5"
       - spec-decoding: "draft_model"
         conc-list: [ 16 ]
         kv-offloading: none
@@ -1240,6 +1241,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
           num-worker: 1
           tp: 8
           ep: 1
+          pcp-size: 8
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
@@ -1251,15 +1253,16 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
+          - "DECODE_MTP_SIZE=5"
       - spec-decoding: "draft_model"
-        conc-list: [ 32, 48 ]
+        conc-list: [ 48 ]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         prefill:
           num-worker: 1
           tp: 8
           ep: 1
+          pcp-size: 8
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
@@ -1272,34 +1275,34 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-      - spec-decoding: "draft_model"
-        conc-list: [ 128, 192, 256 ]
-        kv-offloading: dram
-        kv-offload-backend: { name: umbp-linker }
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-          - "PREFILL_ROUTER_POLICY=consistent_hashing"
-          # Rank 0 opens the barrier port only after umbp_standalone_server has
-          # registered the 1.5 TB tier for GPU access; that took 305.7s on n08-25
-          # but had not finished after 780s on n09-29, which killed job 29871 at
-          # the 900s default. Sit above UMBP_SA_WAIT_SECONDS (1800) so UMBP's own
-          # wait is the binding one rather than the barrier.
-          - "CONTAINER_BARRIER_TIMEOUT=2400"
-          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
+          - "DECODE_MTP_SIZE=5"
+      # - spec-decoding: "draft_model"
+      #   conc-list: [ 128, 192, 256 ]
+      #   kv-offloading: dram
+      #   kv-offload-backend: { name: umbp-linker }
+      #   prefill:
+      #     num-worker: 1
+      #     tp: 8
+      #     ep: 1
+      #     dp-attn: true
+      #     additional-settings:
+      #     - "PREFILL_NODES=1"
+      #     - "PREFILL_ROUTER_POLICY=consistent_hashing"
+      #     # Rank 0 opens the barrier port only after umbp_standalone_server has
+      #     # registered the 1.5 TB tier for GPU access; that took 305.7s on n08-25
+      #     # but had not finished after 780s on n09-29, which killed job 29871 at
+      #     # the 900s default. Sit above UMBP_SA_WAIT_SECONDS (1800) so UMBP's own
+      #     # wait is the binding one rather than the barrier.
+      #     - "CONTAINER_BARRIER_TIMEOUT=2400"
+      #     - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907"
+      #   decode:
+      #     num-worker: 1
+      #     tp: 8
+      #     ep: 1
+      #     dp-attn: true
+      #     additional-settings:
+      #     - "DECODE_NODES=1"
+      #     - "DECODE_MTP_SIZE=3"
 
 minimaxm3-fp4-mi355x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:nightly-2a02f6efe319c885e3ccbcecde402e0028f9ec1e
