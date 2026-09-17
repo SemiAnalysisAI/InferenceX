@@ -8011,4 +8011,4 @@
     - "Add B200 TP2 DeepSeek-V4.1-Flash with --engram-config '{\"cpu_offload\":true}' for AgentX and fixed 8K/1K, at concurrency 1, 2, 4, 8, 16, 32, 64, 128; retain the existing TP4 AgentX arm and pinned vLLM image."
     - "Keep DSpark5, golden AL 3.51 for throughput, real block rejection with adaptive verification for evals, and GPU-resident KV. Add deepseek_v41 tokenizer support to the fixed-sequence client."
     - "新增 B200 TP2 DeepSeek-V4.1-Flash AgentX 和固定 8K/1K 配方，启用 Engram CPU 卸载，并发为 1、2、4、8、16、32、64、128；保留现有 TP4 AgentX 分支和固定 vLLM 镜像。吞吐使用 DSpark5 和黄金 AL 3.51，eval 使用真实块拒绝采样和自适应验证，KV 保留在 GPU 上；固定序列客户端新增 deepseek_v41 tokenizer 支持。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
