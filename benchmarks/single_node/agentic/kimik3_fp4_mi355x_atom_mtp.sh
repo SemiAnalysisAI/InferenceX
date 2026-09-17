@@ -240,6 +240,19 @@ ATOM_CMD=(
     --host 0.0.0.0
     --server-port "$PORT"
     --trust-remote-code
+    # ATOM reads the tool-call wire format off the chat template at startup
+    # ("auto", the default), and this image already resolves it correctly --
+    # the server log says `Tool-call format: kimi_k3 (from the chat template)`.
+    # Pinning it is for the day the template stops rendering a tools payload:
+    # auto then falls back to delivering tool calls as plain text, which the
+    # vendor verifier reads as a model that cannot call tools. An explicit name
+    # fails closed instead, and the log line changes to `(from
+    # --tool-call-parser)` so which path ran is visible.
+    #
+    # This is ATOM's own flag. It has no --enable-auto-tool-choice, and
+    # --reasoning-parser belongs to the mesh router, not this server; argparse
+    # here is strict, so either one would fail the launch.
+    --tool-call-parser kimi_k3
     --tensor-parallel-size "$TP"
     --decode-context-parallel-size "${DCP_SIZE}"
     --kv_cache_dtype fp8
