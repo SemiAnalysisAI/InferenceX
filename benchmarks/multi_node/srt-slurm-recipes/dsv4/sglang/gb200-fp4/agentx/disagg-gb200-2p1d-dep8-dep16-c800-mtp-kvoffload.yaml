@@ -7,7 +7,7 @@ name: "disagg-gb200-2p1d-dep8-dep16-c800-mtp-kvoffload"
 # Each DEP8 prefill worker spans two nodes; the DEP16 decode worker spans four.
 
 model:
-  path: "deepseek-v4-pro"
+  path: "deepseek-v4-pro-0813"
   container: "dynamo-sglang"
   precision: "fp4"
 
