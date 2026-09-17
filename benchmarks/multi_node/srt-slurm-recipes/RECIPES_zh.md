@@ -4,7 +4,7 @@
 
 InferenceX 负责维护本目录中的配置。所有 NVIDIA srt-slurm 启动器均调用 [`runners/slurm_utils.sh`](../../../runners/slurm_utils.sh) 中的 `setup_srt_slurm()`，为作业创建固定版本子模块的本地 Git 克隆，并将整个目录复制到 `recipes/`。共享函数将实际提交记录到 `srt-slurm-sha.txt`；功耗测试路径还会将其复制到 `power-producer-sha.txt`，供结果校验使用。
 
-统一版本由 [`utils/srt-slurm`](../../../utils/srt-slurm) 的 Git 子模块指针指定，目前为 [v2.2.1](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.2.1)（`984180e5b8755aef85e9995048b5a16cb5336bce`）。升级时更新该子模块指针，然后运行配置和集成检查。不要在启动器中新增按模型选择检出版本的分支。
+统一版本由 [`utils/srt-slurm`](../../../utils/srt-slurm) 的 Git 子模块指针指定，目前为 [v2.11.0](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.11.0)（`8939ac513c2646a301dfef46971ff8bb48a9d6ff`）。升级时更新该子模块指针，然后运行配置和集成检查。不要在启动器中新增按模型选择检出版本的分支。
 
 InferenceX 要求 srt-slurm 2.0 或更新版本，且配置必须声明 `schema: 2`。不支持旧版配置结构；加入本目录前必须先完成迁移。
 

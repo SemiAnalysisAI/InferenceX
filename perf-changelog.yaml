@@ -8032,3 +8032,12 @@
     - "配置键由 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp 改名为 dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark，以反映 DSpark 算法与 UMBP-linker 分支；该配方此前的条目仍记录在旧键名下。改名不伴随任何其他字段变化。"
     - "Collect completed logs from every Slurm node so both prefill and decode artifacts are uploaded; forward workflow-owned AgentX fast-mode and power inputs, and supply the existing router port to evaluation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3188
+
+- config-keys:
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg-mooncake
+  description:
+    - "Add GB300 MiniMax-M3 Dynamo-vLLM AgentX aggregate and disaggregated recipes with EAGLE3-GQA"
+    - "Use srt-slurm v2.11.0 for process-local Mooncake store configuration"
+    - "新增采用 EAGLE3-GQA 的 GB300 MiniMax-M3 Dynamo-vLLM AgentX 聚合与分离式部署配置；采用 srt-slurm v2.11.0 为各工作进程配置 Mooncake 存储"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
