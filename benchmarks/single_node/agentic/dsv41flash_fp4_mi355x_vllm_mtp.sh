@@ -4,10 +4,21 @@ set -eo pipefail
 # DeepSeek-V4.1-Flash on MI355X: native DSpark, GPU-resident KV.
 # https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml
 source "$(dirname "$0")/../../benchmark_lib.sh"
-check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
-check_env_vars EVAL_ONLY
-require_agentic_kv_offload_none
+check_env_vars MODEL TP CONC RESULT_DIR PORT EVAL_ONLY IS_AGENTIC
+if [[ "$IS_AGENTIC" == 1 ]]; then
+    check_env_vars KV_OFFLOADING TOTAL_CPU_DRAM_GB DURATION
+    require_agentic_kv_offload_none
+else
+    check_env_vars ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME
+fi
 export GPU_COUNT="$TP"
+
+ENGRAM_ARGS=()
+if [[ "$TP" == 2 ]]; then
+    # Scoped to the new experimental TP2 recipes; stock TP4 stays unpatched.
+    bash "$(dirname "$0")/../../../utils/patches/dsv41flash_rocm_engram/apply.sh"
+    ENGRAM_ARGS=(--engram-config '{"cpu_offload":true}')
+fi
 
 # Complete/resume partial downloads instead of trusting nonempty directories.
 if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
@@ -32,9 +43,11 @@ export AITER_TRITON_LOG_LEVEL=ERROR
 export VLLM_USE_BREAKABLE_CUDAGRAPH=1
 export OMP_NUM_THREADS=1
 # Pin the full-context corpus for this 1M-context recipe.
-export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_062126
-resolve_trace_source
-install_agentic_deps
+if [[ "$IS_AGENTIC" == 1 ]]; then
+    export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_062126
+    resolve_trace_source
+    install_agentic_deps
+fi
 mkdir -p "$RESULT_DIR"
 SERVER_LOG="$RESULT_DIR/server.log"
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
@@ -61,7 +74,7 @@ echo "Using vLLM endpoint ${AIPERF_SERVER_URL}"
 # Adaptive verification stays off in both modes on ROCm: it trims verification
 # requests on device, which DeepseekV4IndexerBackend does not support, so the
 # engine refuses to start with it enabled.
-if [[ "${EVAL_ONLY}" == true ]]; then
+if [[ "${EVAL_ONLY}" == true || "$IS_AGENTIC" == 0 ]]; then
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
 else
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":3.51,"enable_adaptive_verification":false}'
@@ -79,6 +92,7 @@ VLLM_CMD=(
     # (mfma_moe1_silu_mul_afp8_wfp4_bf16 / mfma_moe2_afp8_wfp4_bf16); the
     # Triton name forces the W4A16 _moe_gemm_a16w4 kernel instead.
     --moe-backend aiter
+    "${ENGRAM_ARGS[@]}"
     --gpu-memory-utilization 0.9
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576
@@ -106,6 +120,19 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 if [[ "${EVAL_ONLY}" == true ]]; then
     run_eval --port "$PORT"
 else
-    build_replay_cmd "$RESULT_DIR"
-    run_agentic_replay_and_write_outputs "$RESULT_DIR"
+    if [[ "$IS_AGENTIC" == 1 ]]; then
+        build_replay_cmd "$RESULT_DIR"
+        run_agentic_replay_and_write_outputs "$RESULT_DIR"
+    else
+        start_gpu_monitor
+        run_benchmark_serving \
+            --model "$MODEL" --port "$PORT" --backend vllm \
+            --input-len "$ISL" --output-len "$OSL" \
+            --random-range-ratio "$RANDOM_RANGE_RATIO" \
+            --num-prompts "$((CONC * 10))" --max-concurrency "$CONC" \
+            --use-chat-template --tokenizer-mode deepseek_v41 \
+            --result-filename "$RESULT_FILENAME" \
+            --result-dir "$PWD" --server-pid "$SERVER_PID"
+        stop_gpu_monitor
+    fi
 fi
