@@ -19,6 +19,115 @@ check_env_vars() {
     fi
 }
 
+# Report live members of explicitly owned process groups. Zombies cannot hold
+# output pipes open. Do not use leader liveness: a router can orphan its workers.
+_background_process_groups_alive() {
+    local groups=" $* "
+    local listing
+    listing=$(ps -eo pgid=,stat=) || return 1
+    awk -v groups="$groups" '
+        index(groups, " " $1 " ") && $2 !~ /^[ZX]/ { alive[$1] = 1 }
+        END { for (group in alive) print group }
+    ' <<< "$listing"
+}
+
+# Called only after benchmark/eval work ends. Preserve its exit status while
+# bounding teardown of the setsid groups recorded by the launcher. Grace periods
+# are explicit arguments, independent of benchmark duration and server readiness.
+stop_background_process_groups() {
+    local work_status="$1" term_grace="$2" kill_grace="$3"
+    shift 3
+    local pgid own_pgid remaining deadline cleanup_status=0
+    local groups=("$@")
+    if [[ ! "$work_status" =~ ^[0-9]+$ || ! "$term_grace" =~ ^[0-9]+$ || ! "$kill_grace" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: invalid process-group cleanup status or grace period" >&2
+        return 1
+    fi
+    if ! own_pgid=$(ps -o pgid= -p "$$"); then
+        if [[ "$work_status" -ne 0 ]]; then return "$work_status"; fi
+        return 1
+    fi
+    own_pgid="${own_pgid//[[:space:]]/}"
+    for pgid in "${groups[@]}"; do
+        if [[ ! "$pgid" =~ ^[1-9][0-9]*$ || "$pgid" -le 1 || "$pgid" == "$own_pgid" ]]; then
+            echo "ERROR: refusing unsafe process-group cleanup: '$pgid'" >&2
+            if [[ "$work_status" -ne 0 ]]; then return "$work_status"; fi
+            return 1
+        fi
+    done
+    if [[ ${#groups[@]} -eq 0 ]]; then return "$work_status"; fi
+
+    echo "Stopping owned process groups: ${groups[*]}"
+    for pgid in "${groups[@]}"; do
+        kill -TERM -- "-$pgid" 2>/dev/null || true
+    done
+    deadline=$((SECONDS + term_grace))
+    while true; do
+        remaining=$(_background_process_groups_alive "${groups[@]}") || { cleanup_status=1; break; }
+        [[ -n "$remaining" && $SECONDS -lt $deadline ]] || break
+        sleep 1
+    done
+    if [[ -n "$remaining" ]]; then
+        echo "TERM grace expired; force-stopping owned process groups: $remaining"
+        for pgid in $remaining; do
+            kill -KILL -- "-$pgid" 2>/dev/null || true
+        done
+        deadline=$((SECONDS + kill_grace))
+        while true; do
+            remaining=$(_background_process_groups_alive "${groups[@]}") || { cleanup_status=1; break; }
+            [[ -n "$remaining" && $SECONDS -lt $deadline ]] || break
+            sleep 1
+        done
+        if [[ -n "$remaining" ]]; then
+            echo "ERROR: process groups still alive after KILL grace: $remaining" >&2
+            cleanup_status=1
+        fi
+    fi
+    if [[ "$work_status" -ne 0 ]]; then return "$work_status"; fi
+    return "$cleanup_status"
+}
+
+# EXIT handler for launchers that own explicit setsid groups and optionally one
+# auxiliary daemon PID. Disable this handler before exiting to avoid recursion.
+# Run auxiliary cleanup even when group cleanup fails, preserving the work code.
+exit_after_background_process_cleanup() {
+    local work_status="$1" term_grace="$2" kill_grace="$3" auxiliary_pid="$4"
+    shift 4
+    local final_status
+    trap - EXIT
+    if stop_background_process_groups "$work_status" "$term_grace" "$kill_grace" "$@"; then
+        final_status=0
+    else
+        final_status=$?
+    fi
+    if [[ -n "$auxiliary_pid" ]]; then
+        kill "$auxiliary_pid" 2>/dev/null || true
+    fi
+    exit "$final_status"
+}
+
+# Finish preflight on every allocated node before any server container starts its
+# peer-readiness deadline. A failed node prevents the entire serving step.
+run_amd_multinode_after_preflight() {
+    local nodelist="$1" node_count="$2" preflight_script="$3"
+    local container_filter="$4" skip_gpu_sanity="$5"
+    shift 5
+    local preflight_rc
+    if srun --nodelist="$nodelist" \
+        --nodes="$node_count" --ntasks="$node_count" --ntasks-per-node=1 \
+        --kill-on-bad-exit=1 --unbuffered \
+        bash "$preflight_script" "$container_filter" "$skip_gpu_sanity"; then
+        echo "[preflight] all nodes ready; launching server containers"
+    else
+        preflight_rc=$?
+        echo "[preflight][ERROR] node preflight failed; no server containers launched" >&2
+        return "$preflight_rc"
+    fi
+    srun --nodelist="$nodelist" \
+        --nodes="$node_count" --ntasks="$node_count" --ntasks-per-node=1 \
+        --kill-on-bad-exit=1 --signal=TERM@30 --unbuffered "$@"
+}
+
 # Launchers may load only input validation, without benchmark initialization.
 if [[ "${1-}" == "--validation-only" ]]; then
     return 0
@@ -1234,10 +1343,6 @@ _run_kimi_tool_call_schema_eval() {
     local verifier_ref="3dad65a760a8867cda72f6dd8848d876a4e851b4"
     local verifier_archive_sha256="ede9ea300c72ccfde9d8975ea4b1b54e423c7625690f6631ab1e65a715821e01"
     local eval_suite="${EVAL_SUITE:-kimi_tool_call_schema}"
-    local timeout_seconds=900
-    if [ "$eval_suite" = "kimi_tool_call_schema_full" ]; then
-        timeout_seconds=7200
-    fi
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1313,7 +1418,6 @@ _run_kimi_tool_call_schema_eval() {
             --model-prefix "${MODEL_PREFIX:-}" \
             --output-dir "$results_dir" \
             --task-name "$eval_suite" \
-            --timeout-seconds "$timeout_seconds" \
             || eval_rc=$?
     if [ "$eval_rc" -ne 0 ] \
         && ! _has_eval_result "$results_dir" "results_kimi_vendor_"; then
