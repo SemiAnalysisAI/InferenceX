@@ -8032,3 +8032,23 @@
     - "配置键由 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp 改名为 dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark，以反映 DSpark 算法与 UMBP-linker 分支；该配方此前的条目仍记录在旧键名下。改名不伴随任何其他字段变化。"
     - "Collect completed logs from every Slurm node so both prefill and decode artifacts are uploaded; forward workflow-owned AgentX fast-mode and power inputs, and supply the existing router port to evaluation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3188
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro-0813 FP4 B300 Dynamo+SGLang AgentX aggregate TP8 c1 and TP4 c4/c8 recipes, plus disaggregated 1P1D DEP8 c240 and 2P1D DEP8 c480 recipes."
+    - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 on cluster:b300-dsxe, reserve aggregate HBM with mem-fraction-static 0.90, size aggregate request and decode graph limits to twice each concurrency, and cap disaggregated decode max-running-requests at twice concurrency (480/960)."
+    - "Use the eight-GPU B300 node topology, 192 logical CPUs per task, HiCache ratio 3, and the Mooncake EFA wheel with the DSXE Pyxis-provided RDMA libraries for cross-node transfers."
+    - "Pin the DSXE srt-slurm bootstrap assets to v2.2.1 so setup does not depend on the moving latest release."
+    - "Mount persistent AgentX dataset mmap and Hugging Face caches into DSXE multi-node jobs."
+    - "Raise the DSXE DSV4 Dynamo+SGLang AgentX allocation limit to eight hours so low-concurrency traces can finish."
+    - "新增 DeepSeek-V4-Pro-0813 FP4 B300 Dynamo+SGLang AgentX 配置：聚合式 TP8 c1、TP4 c4/c8，以及分离式 1P1D DEP8 c240 和 2P1D DEP8 c480。"
+    - "在 cluster:b300-dsxe 上使用 lmsysorg/sglang:nightly-dev-20260916-c9a8fba9；聚合式配方采用 mem-fraction-static 0.90，并将最大运行请求数与解码 CUDA Graph 上限设为并发数的两倍；分离式解码的 max-running-requests 同样限制为并发数的两倍（480/960）。"
+    - "采用每节点 8 张 B300、每任务 192 个逻辑 CPU、HiCache 比例 3，并通过 Mooncake EFA wheel 与 DSXE Pyxis 提供的 RDMA 库完成跨节点传输。"
+    - "将 DSXE 的 srt-slurm 启动资产固定为 v2.2.1，避免依赖不断变化的 latest release。"
+    - "为 DSXE 多节点任务挂载持久化的 AgentX 数据集 mmap 缓存与 Hugging Face 缓存。"
+    - "将 DSXE DSV4 Dynamo+SGLang AgentX 的作业时限提高到八小时，使低并发轨迹能够完成。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3190
