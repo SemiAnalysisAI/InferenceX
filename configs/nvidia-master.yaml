@@ -6647,7 +6647,7 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
           - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/gb300-fp4/agentx/agg-tp4-mtp.yaml"
 dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260908-20ca564b
+  image: lmsysorg/sglang:nightly-dev-cu13-20260916-c9a8fba9
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:gb300-nv
