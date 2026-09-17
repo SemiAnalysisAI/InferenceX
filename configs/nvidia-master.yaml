@@ -8127,7 +8127,7 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 96, 128] }
 
 dsv41flash-fp4-gb300-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e
