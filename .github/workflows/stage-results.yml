@@ -25,234 +25,20 @@ jobs:
       issues: read # Read labels and label-history timeline events
       pull-requests: write # Post staging status as github-actions rather than a PAT user
     steps:
+      - name: Checkout trusted workflow code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
       - name: Authorize request and resolve source run
         id: request
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          github-token: ${{ github.token }}
-          script: |
-            const body = context.payload.comment.body.trim();
-            const command = /^\/stage-results(?:\s+(?<runId>\d+))?$/u.exec(body);
-            if (!command) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: 'Usage: `/stage-results` or `/stage-results <run-id>`.',
-              });
-              core.setFailed('Unsupported /stage-results syntax');
-              return;
-            }
-
-            const actor = context.payload.comment.user.login;
-            const {data: access} = await github.rest.repos.getCollaboratorPermissionLevel({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              username: actor,
-            });
-            if (typeof access?.permission !== 'string' || !access.permission ||
-                typeof access?.role_name !== 'string' || !access.role_name) {
-              throw new Error('Invalid repository permission response.');
-            }
-            const {permission, role_name: role} = access;
-            const trustedPermissions = ['admin', 'maintain', 'write'];
-            if (!trustedPermissions.includes(permission) || !trustedPermissions.includes(role)) {
-              const reason = `@${actor} has repository permission "${permission}" and role "${role}"; ` +
-                'both must be write, maintain, or admin to stage results.';
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: `${reason}\n\n@${actor} 的仓库权限为 "${permission}"，角色为 "${role}"；` +
-                  '两者都必须是 write、maintain 或 admin 才能暂存结果。',
-              });
-              core.setFailed(reason);
-              return;
-            }
-
-            const pull = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-            });
-
-            const fullSweepLabels = [
-              'full-sweep-enabled',
-              'non-canary-full-sweep-enabled',
-              'full-sweep-fail-fast',
-              'full-sweep-fail-fast-no-canary',
-            ];
-            const pullLabels = new Set(
-              pull.data.labels
-                .map((label) => (typeof label === 'string' ? label : label.name))
-                .filter(Boolean),
-            );
-            const hasFullSweepLabel = fullSweepLabels.some((label) => pullLabels.has(label));
-            if (!hasFullSweepLabel) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: `@${actor} \`/stage-results\` requires a completed run from a PR using one of: ${fullSweepLabels.map((label) => `\`${label}\``).join(', ')}.`,
-              });
-              core.setFailed('PR does not have a full-sweep label');
-              return;
-            }
-
-            const timelineEvents = await github.paginate(
-              github.rest.issues.listEventsForTimeline,
-              {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                per_page: 100,
-              },
-            );
-            const fullSweepLabelEvents = timelineEvents
-              .filter(
-                (event) =>
-                  ['labeled', 'unlabeled'].includes(event.event) &&
-                  fullSweepLabels.includes(event.label?.name),
-              )
-              .toSorted(
-                (left, right) =>
-                  Date.parse(left.created_at ?? '') - Date.parse(right.created_at ?? ''),
-              );
-            const fullSweepLabelsAt = (createdAt) => {
-              const candidateCreatedAt = Date.parse(createdAt);
-              if (!Number.isFinite(candidateCreatedAt)) return [];
-
-              const activeLabels = new Set();
-              for (const event of fullSweepLabelEvents) {
-                const eventCreatedAt = Date.parse(event.created_at ?? '');
-                if (!Number.isFinite(eventCreatedAt)) continue;
-                if (eventCreatedAt > candidateCreatedAt) break;
-                if (event.event === 'labeled') activeLabels.add(event.label.name);
-                else activeLabels.delete(event.label.name);
-              }
-              return [...activeLabels];
-            };
-
-            const pullCommits = await github.paginate(github.rest.pulls.listCommits, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-              per_page: 100,
-            });
-            const pullCommitShas = new Set(pullCommits.map((commit) => commit.sha));
-
-            const usableArtifactNames = async (runId) => {
-              const artifacts = await github.paginate(
-                github.rest.actions.listWorkflowRunArtifacts,
-                {
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  run_id: runId,
-                  per_page: 100,
-                },
-              );
-              return artifacts
-                .filter((artifact) => !artifact.expired)
-                .map((artifact) => artifact.name);
-            };
-            const hasBenchmarkData = (names) => names.some(
-              (name) =>
-                name === 'results_bmk' ||
-                name === 'eval_results_all' ||
-                name.startsWith('bmk_agentic_'),
-            );
-            const validateRun = async (candidate, allowHistoricalAssociation = false) => {
-              if (
-                candidate.path !== '.github/workflows/run-sweep.yml' ||
-                candidate.event !== 'pull_request'
-              ) {
-                return { valid: false, reason: 'not a pull-request run of run-sweep.yml' };
-              }
-              const isAssociatedWithPull = candidate.pull_requests?.some(
-                (candidatePull) => candidatePull.number === context.issue.number,
-              );
-              if (
-                !pullCommitShas.has(candidate.head_sha) &&
-                !(allowHistoricalAssociation && isAssociatedWithPull)
-              ) {
-                return { valid: false, reason: 'its head commit is not in the PR commit list' };
-              }
-              if (fullSweepLabelsAt(candidate.created_at).length === 0) {
-                return {
-                  valid: false,
-                  reason: 'it was not created while a full-sweep label was applied',
-                };
-              }
-              const stageableConclusions = new Set(['success', 'cancelled', 'failure']);
-              if (
-                candidate.status !== 'completed' ||
-                !stageableConclusions.has(candidate.conclusion)
-              ) {
-                return {
-                  valid: false,
-                  reason: `it is ${candidate.status}/${candidate.conclusion}`,
-                };
-              }
-
-              // Cancelled or failed sweeps may still contain useful partial results. The
-              // artifact checks below keep empty or metadata-only runs ineligible.
-              const artifactNames = await usableArtifactNames(candidate.id);
-              if (!artifactNames.includes('changelog-metadata')) {
-                return { valid: false, reason: 'it has no unexpired changelog-metadata artifact' };
-              }
-              if (!hasBenchmarkData(artifactNames)) {
-                return { valid: false, reason: 'it has no unexpired benchmark result artifacts' };
-              }
-              return { valid: true };
-            };
-
-            let run;
-            const requestedRunId = command.groups?.runId;
-            if (requestedRunId) {
-              const response = await github.rest.actions.getWorkflowRun({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                run_id: Number(requestedRunId),
-              });
-              run = response.data;
-              const validation = await validateRun(run, true);
-              if (!validation.valid) {
-                core.setFailed(`Run ${requestedRunId} cannot be staged because ${validation.reason}`);
-                return;
-              }
-            } else {
-              const candidates = await github.paginate(
-                github.rest.actions.listWorkflowRuns,
-                {
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  workflow_id: 'run-sweep.yml',
-                  event: 'pull_request',
-                  branch: pull.data.head.ref,
-                  status: 'completed',
-                  per_page: 100,
-                },
-              );
-              for (const candidate of candidates) {
-                const validation = await validateRun(candidate);
-                if (validation.valid) {
-                  run = candidate;
-                  break;
-                }
-              }
-              if (!run) {
-                core.setFailed(
-                  `No stageable completed run-sweep.yml run with unexpired staging artifacts was found for PR #${context.issue.number}`,
-                );
-                return;
-              }
-            }
-
-            core.setOutput('run-id', String(run.id));
-            core.setOutput('run-attempt', String(run.run_attempt ?? 1));
-            core.setOutput('run-date', run.created_at.slice(0, 10));
-            core.setOutput('requested-by', actor);
-            core.setOutput('run-url', run.html_url);
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run --locked python -m infx.workflows.stage_results
 
       - name: Acknowledge staging request
         id: acknowledge
@@ -282,7 +68,8 @@ jobs:
           REQUESTED_BY: ${{ steps.request.outputs.requested-by }}
           COMMENT_ID: ${{ steps.acknowledge.outputs.comment-id }}
         with:
-          github-token: ${{ secrets.INFX_FRONTEND_PAT }}
+          # Cross-repository dispatch credential; trusted control code validates maintainer authorization.
+          github-token: ${{ secrets.INFX_FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
           script: |
             await github.rest.repos.createDispatchEvent({
               owner: 'SemiAnalysisAI',

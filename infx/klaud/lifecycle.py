@@ -55,7 +55,11 @@ class Session:
     def validation(self, run: dict) -> tuple[dict, list[dict], list[dict]]:
         key = (run["id"], run["head_sha"], run["run_attempt"])
         if key not in self.validations:
-            self.validations[key] = verify_sweep(self.repository, run, self.candidate.family)
+            from .reporting import baseline_for, check_baseline_coverage
+
+            evidence = verify_sweep(self.repository, run, self.candidate.family)
+            check_baseline_coverage(evidence[0], baseline_for(self, self.pulls()[0]))
+            self.validations[key] = evidence
         return self.validations[key]
 
     def pulls(self) -> list[dict]:
@@ -214,14 +218,12 @@ class Session:
         if outcome.pull_request != (pull["number"] if pull else None):
             raise VerificationError("Outcome PR mismatch")
         if outcome.outcome == "validated":
-            if (
-                not pull
-                or pull["state"] != "open"
-                or (require_ready and pull["draft"])
-                or not any(label["name"] == "full-sweep-enabled" for label in pull["labels"])
-            ):
+            if not pull or pull["state"] != "open" or (require_ready and pull["draft"]):
                 raise VerificationError("Validated PR must remain ready for review")
-            if {label["name"] for label in pull["labels"]} & SWEEP_LABELS != {"full-sweep-enabled"}:
+            if {label["name"] for label in pull["labels"]} & SWEEP_LABELS not in (
+                {"full-sweep-fail-fast"},
+                {"full-sweep-enabled"},
+            ):
                 raise VerificationError("Validated PR has incompatible sweep labels")
             finals = [
                 run

@@ -450,6 +450,18 @@ DOCKER_ENV_COMMON=(
     -e KV_OFFLOAD_BACKEND=\${KV_OFFLOAD_BACKEND:-}
     -e KV_OFFLOAD_BACKEND_METADATA=\"\${KV_OFFLOAD_BACKEND_METADATA:-}\"
     -e TOTAL_CPU_DRAM_GB=\${TOTAL_CPU_DRAM_GB:-}
+    # UMBP direct-linker arm (KV_OFFLOAD_BACKEND=umbp-linker*). server_sglang.sh
+    # starts the standalone server INSIDE this container on the prefill node and
+    # exports UMBP_STANDALONE_ADDRESS itself, so only the knobs the recipe sets
+    # need a route in. Empty for every other arm, and server_sglang.sh only
+    # reads them on the umbp-linker branch, so this is inert elsewhere.
+    -e UMBP_DRAM_BYTES=\${UMBP_DRAM_BYTES:-}
+    -e UMBP_DRAM_USE_HUGEPAGES=\${UMBP_DRAM_USE_HUGEPAGES:-}
+    -e UMBP_MAX_TOTAL_TOKENS=\${UMBP_MAX_TOTAL_TOKENS:-}
+    -e UMBP_SA_WAIT_SECONDS=\${UMBP_SA_WAIT_SECONDS:-}
+    -e UMBP_SA_WAIT_REGISTERED=\${UMBP_SA_WAIT_REGISTERED:-}
+    -e MORI_UMBP_LOG_LEVEL=\${MORI_UMBP_LOG_LEVEL:-}
+    -e CONTAINER_BARRIER_TIMEOUT=\${CONTAINER_BARRIER_TIMEOUT:-}
     -e ENABLE_METRICS=\${ENABLE_METRICS}
     -e PREFILL_ROUTER_POLICY=\${PREFILL_ROUTER_POLICY}
     -e DECODE_ROUTER_POLICY=\${DECODE_ROUTER_POLICY}
