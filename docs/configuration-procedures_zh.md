@@ -228,6 +228,15 @@ TP2 并发 128 使用 `--max-num-batched-tokens 2048`，其余情况使用 8192�
 `--max-num-seqs` 固定为 256。TP2 并发 128 还设置
 `--gpu-memory-utilization 0.97`。其他 SKU 继续使用共享脚本。
 
+B200 保留 TP4 AgentX 分支，并新增 TP2，并发为
+`[1, 2, 4, 8, 16, 32, 64, 128]`。新增的
+`dsv41flash-fp4-b200-vllm-dspark` 固定序列配方以 TP2 运行 8K/1K，
+使用相同并发列表。两个场景均沿用现有 B200 vLLM 镜像和
+`--engram-config '{"cpu_offload":true}'`，KV 保留在 GPU 上。
+固定序列脚本保留 AgentX 的服务设置和 DSpark 黄金 AL，使用聊天模板编码
+提示词，并在 eval 中使用真实块拒绝采样。TP2 的显存容量、正确性和吞吐量
+仍需 GPU 扫描验证。
+
 GB300 launcher 将引擎就绪等待时间设为 7200 秒。在[运行 34504969146](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34504969146) 中，仅模型加载就耗时 18–23 分钟；Rust frontend 达到 3600 秒期限时，引擎仍在捕获 CUDA graph。此次仅延长启动等待时间，基准测试时长和解码设置保持不变。
 
 来源：[上游配方](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash)。

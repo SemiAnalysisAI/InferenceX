@@ -233,6 +233,15 @@ at 2046 or 8190 tokens. It sets `--max-num-batched-tokens` to 2048 for concurren
 TP2 concurrency-128 variant also sets `--gpu-memory-utilization 0.97`. Other SKUs
 continue to use the shared script.
 
+B200 retains its TP4 AgentX arm and adds TP2 at concurrency
+`[1, 2, 4, 8, 16, 32, 64, 128]`. The new
+`dsv41flash-fp4-b200-vllm-dspark` fixed-sequence recipe runs 8K/1K at TP2 over
+the same concurrency list. Both use the existing B200 vLLM image and
+`--engram-config '{"cpu_offload":true}'`, with GPU-resident KV.
+The fixed-sequence script preserves the AgentX serving settings and golden
+DSpark AL, uses chat-formatted prompts, and uses real block rejection for evals.
+TP2 memory fit, correctness, and throughput require GPU sweep evidence.
+
 The GB300 launcher allows 7200 seconds for engine readiness. In [run 34504969146](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34504969146), the Rust frontend exhausted its 3600-second deadline while the engine was still capturing graphs; model loading alone took 18–23 minutes. This extends startup time without changing the benchmark duration or decoding settings.
 
 GPU sweep and eval evidence is required before calling any recipe validated.
