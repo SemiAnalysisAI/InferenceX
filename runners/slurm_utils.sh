@@ -87,15 +87,21 @@ check_staged_srt_assets() {
     fi
 }
 
-# Injects synthetic acceptance when SYNTHETIC_ACCEPTANCE=true, no-op otherwise.
-# Call after the job-name override and before `srtctl apply`; propagate a
-# non-zero return so an unrewritten recipe never reaches srtctl.
-inject_synthetic_acceptance() {
-    local config_path="$1"
-    local framework="$2"
-
-    python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-        "$config_path" "$framework"
+# AgentX acceptance comes from the committed golden curve; evals use real verification.
+apply_srt_recipe() {
+    if [[ $# -lt 2 || -z "$1" || -z "$2" ]]; then
+        echo "Usage: apply_srt_recipe config framework [srtctl arguments...]" >&2
+        return 1
+    fi
+    check_env_vars MODEL_PREFIX IS_AGENTIC EVAL_ONLY SPEC_DECODING
+    if [[ "$IS_AGENTIC" == 1 || "$IS_AGENTIC" == true ]] && [[ "$EVAL_ONLY" != true && "$SPEC_DECODING" != none ]]; then
+        check_env_vars THINKING_MODE
+    fi
+    local config="$1" framework="$2"
+    shift 2
+    PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" \
+        python3 -m infx.srt_slurm.synthetic_acceptance \
+        "$config" "$framework" -- "$@"
 }
 
 slurm_job_is_active() {
