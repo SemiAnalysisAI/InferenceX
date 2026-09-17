@@ -8,13 +8,15 @@ import psycopg2
 from tabulate import tabulate
 
 
-def parse_bool(value):
+def parse_bool(value: object) -> bool:
     if isinstance(value, bool):
         return value
     return str(value).lower() == "true"
 
 
-def colorize_delta(delta_val, pct_val, higher_is_better=True, fmt=".4f"):
+def colorize_delta(
+    delta_val: float, pct_val: float, higher_is_better: bool = True, fmt: str = ".4f"
+) -> str:
     """Format a colored delta string using LaTeX color syntax for GitHub markdown."""
     improved = (delta_val > 0) if higher_is_better else (delta_val < 0)
     regressed = (delta_val < 0) if higher_is_better else (delta_val > 0)
@@ -22,12 +24,17 @@ def colorize_delta(delta_val, pct_val, higher_is_better=True, fmt=".4f"):
     pct_str = f"({pct_val:+.1f}%)"
     if improved:
         return f"$\\color{{green}}\\text{{{delta_str}}}$ {pct_str}"
-    elif regressed:
+    if regressed:
         return f"$\\color{{red}}\\text{{{delta_str}}}$ {pct_str}"
     return f"{delta_str} {pct_str}"
 
 
-def compute_delta_str(current, baseline, higher_is_better=True, fmt=".4f"):
+def compute_delta_str(
+    current: float | None,
+    baseline: float | None,
+    higher_is_better: bool = True,
+    fmt: str = ".4f",
+) -> str:
     """Compute a colored delta string between current and baseline values."""
     if current is None or baseline is None or baseline == 0:
         return "N/A"
@@ -36,12 +43,12 @@ def compute_delta_str(current, baseline, higher_is_better=True, fmt=".4f"):
     return colorize_delta(delta, pct, higher_is_better, fmt)
 
 
-def extract_hardware(runner):
+def extract_hardware(runner: str) -> str:
     """Strip suffixes like -multinode, -trt, -disagg from runner to get hardware name."""
     return re.split(r"-(multinode|trt|disagg)$", runner)[0].lower()
 
 
-def build_config_params(result):
+def build_config_params(result: dict) -> dict:
     """Build the DB config lookup parameters from a result JSON."""
     is_multinode = result.get("is_multinode", False)
     hw = extract_hardware(result["hw"])
@@ -67,25 +74,24 @@ def build_config_params(result):
             "decode_ep": int(result["decode_ep"]),
             "decode_dp_attention": parse_bool(result["decode_dp_attention"]),
         }
-    else:
-        tp = int(result["tp"])
-        ep = int(result["ep"])
-        dp_attention = parse_bool(result["dp_attention"])
-        return {
-            "hardware": hw,
-            "model": model,
-            "framework": framework,
-            "precision": precision,
-            "spec_method": spec_method,
-            "disagg": disagg,
-            "is_multinode": False,
-            "prefill_tp": tp,
-            "prefill_ep": ep,
-            "prefill_dp_attention": dp_attention,
-            "decode_tp": tp,
-            "decode_ep": ep,
-            "decode_dp_attention": dp_attention,
-        }
+    tp = int(result["tp"])
+    ep = int(result["ep"])
+    dp_attention = parse_bool(result["dp_attention"])
+    return {
+        "hardware": hw,
+        "model": model,
+        "framework": framework,
+        "precision": precision,
+        "spec_method": spec_method,
+        "disagg": disagg,
+        "is_multinode": False,
+        "prefill_tp": tp,
+        "prefill_ep": ep,
+        "prefill_dp_attention": dp_attention,
+        "decode_tp": tp,
+        "decode_ep": ep,
+        "decode_dp_attention": dp_attention,
+    }
 
 
 # Use LIKE prefix match on model to handle cases where DB model name
@@ -130,7 +136,6 @@ METRIC_DEFS = [
     ("p90_ttft", "TTFT P90 (ms)", False, ".4f"),
     ("p99_ttft", "TTFT P99 (ms)", False, ".4f"),
     ("p99.9_ttft", "TTFT P99.9 (ms)", False, ".4f"),
-    # Interactivity (higher is better)
     ("median_intvty", "Intvty Median", True, ".4f"),
     ("p90_intvty", "Intvty@P90 TPOT", True, ".4f"),
     ("p99_intvty", "Intvty@P99 TPOT", True, ".4f"),
@@ -146,7 +151,7 @@ METRIC_DEFS = [
 MS_DISPLAY_KEYS = {"median_ttft", "p90_ttft", "p99_ttft", "p99.9_ttft"}
 
 
-def get_metric_value(data, key):
+def get_metric_value(data: dict, key: str) -> float | None:
     """Get a metric value from a result dict, converting to float if present."""
     val = data.get(key)
     if val is None:
@@ -154,7 +159,7 @@ def get_metric_value(data, key):
     return float(val)
 
 
-def format_value(val, key, fmt):
+def format_value(val: float | None, key: str, fmt: str) -> str:
     """Format a metric value for display, converting seconds to ms for TTFT keys."""
     if val is None:
         return "N/A"
@@ -163,7 +168,13 @@ def format_value(val, key, fmt):
     return f"{val:{fmt}}"
 
 
-def compute_metric_delta(current_data, baseline_data, key, higher_is_better, fmt):
+def compute_metric_delta(
+    current_data: dict,
+    baseline_data: dict | None,
+    key: str,
+    higher_is_better: bool,
+    fmt: str,
+) -> str:
     """Compute colored delta string for a metric."""
     current = get_metric_value(current_data, key)
     baseline = get_metric_value(baseline_data, key) if baseline_data else None
@@ -181,7 +192,7 @@ def compute_metric_delta(current_data, baseline_data, key, higher_is_better, fmt
     return colorize_delta(delta, pct, higher_is_better, fmt)
 
 
-def main():
+def main() -> None:
     if len(sys.argv) < 2:
         print("Usage: python compare_results.py <results_dir>")
         sys.exit(1)
@@ -232,9 +243,7 @@ def main():
         baseline_metrics = None
         if row:
             matched += 1
-            baseline_metrics = (
-                row[0] if isinstance(row[0], dict) else json.loads(row[0])
-            )
+            baseline_metrics = row[0] if isinstance(row[0], dict) else json.loads(row[0])
             print(
                 f"  -> Matched DB model={row[1]}, tput={baseline_metrics.get('tput_per_gpu')}",
                 file=sys.stderr,
@@ -308,7 +317,8 @@ def main():
             "EP",
             "DP Attention",
             "Conc",
-        ] + metric_headers
+            *metric_headers,
+        ]
 
         table_rows = []
         for row in single_node:
@@ -361,14 +371,13 @@ def main():
             "Decode TP",
             "Decode EP",
             "Conc",
-        ] + metric_headers
+            *metric_headers,
+        ]
 
         table_rows = []
         for row in multi_node:
             # Parse P(tp4/ep4) D(tp8/ep8)
-            m = re.match(
-                r"P\(tp(\d+)/ep(\d+)\) D\(tp(\d+)/ep(\d+)\)", row["parallelism"]
-            )
+            m = re.match(r"P\(tp(\d+)/ep(\d+)\) D\(tp(\d+)/ep(\d+)\)", row["parallelism"])
             config_cols = [
                 row["model"],
                 row["served_model"],

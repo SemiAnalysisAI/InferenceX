@@ -11,7 +11,7 @@ import os
 import subprocess
 import urllib.parse
 from collections.abc import Callable, Mapping, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -28,9 +28,7 @@ DEFAULT_FIXTURE_PATH = Path(__file__).with_name("minimax_m3_smoke.json")
 RESULT_FORMAT = "inferencex-eval-v1"
 ADAPTER_NAME = "minimax-provider-verifier"
 EXPECTED_INDICES = (71,)
-EXPECTED_LICENSE_SHA256 = (
-    "aa7cec386fcb5e555aba0e8b1c31307940af41967708c9bc0f78b4e02e235dd5"
-)
+EXPECTED_LICENSE_SHA256 = "aa7cec386fcb5e555aba0e8b1c31307940af41967708c9bc0f78b4e02e235dd5"
 EXPECTED_CASE_SHA256 = {
     71: "3d51571a1ed7d0bb644c3ae978ef5822b3150479b1e34bbbae7276f671657870",
 }
@@ -92,9 +90,7 @@ def _normalized_base_url(value: str) -> str:
         or parsed.query
         or parsed.fragment
     ):
-        raise ValueError(
-            "base_url must be an absolute HTTP(S) URL without query or fragment"
-        )
+        raise ValueError("base_url must be an absolute HTTP(S) URL without query or fragment")
     return normalized
 
 
@@ -172,7 +168,7 @@ def _nonnegative_count(value: Any, name: str) -> int:
 def _compatibility_path(output_dir: Path) -> Path:
     for stale_path in output_dir.glob(COMPATIBILITY_GLOB):
         stale_path.unlink()
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S.%f")
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S.%f")
     return output_dir / f"results_minimax_vendor_{timestamp}.json"
 
 
@@ -220,9 +216,7 @@ def _compatibility_result(
 
 
 def _write_json(path: Path, value: Mapping[str, Any]) -> None:
-    path.write_text(
-        json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def project_native_artifacts(*, output_dir: Path, model: str) -> Path:
@@ -231,9 +225,7 @@ def project_native_artifacts(*, output_dir: Path, model: str) -> Path:
         json.loads((output_dir / NATIVE_REPORT_FILENAME).read_text(encoding="utf-8")),
         "native summary",
     )
-    result_lines = (
-        (output_dir / NATIVE_RESULTS_FILENAME).read_text(encoding="utf-8").splitlines()
-    )
+    result_lines = (output_dir / NATIVE_RESULTS_FILENAME).read_text(encoding="utf-8").splitlines()
     if len(result_lines) != 1 or not result_lines[0].strip():
         raise SmokeSuiteError("native results must contain exactly one row")
     result = _mapping(json.loads(result_lines[0]), "native result")
@@ -256,9 +248,7 @@ def project_native_artifacts(*, output_dir: Path, model: str) -> Path:
     )
     if schema_errors > tool_call_total:
         raise SmokeSuiteError("native summary tool-call schema counts are inconsistent")
-    schema_rate = (
-        0.0 if tool_call_total == 0 else 1.0 - (schema_errors / tool_call_total)
-    )
+    schema_rate = 0.0 if tool_call_total == 0 else 1.0 - (schema_errors / tool_call_total)
     reasoning_error_rate = _rate(
         report.get("error_only_reasoning_rate"), "error_only_reasoning_rate"
     )
@@ -331,9 +321,7 @@ def run_evaluation(
             output_dir=output_dir,
         )
         environment = os.environ.copy()
-        environment["PYTHONPATH"] = os.pathsep.join(
-            (str(source_dir), str(dependency_dir))
-        )
+        environment["PYTHONPATH"] = os.pathsep.join((str(source_dir), str(dependency_dir)))
         environment["PYTHONNOUSERSITE"] = "1"
         completed = runner(
             command,

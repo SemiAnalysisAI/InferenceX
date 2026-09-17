@@ -36,7 +36,7 @@
 | [`docs/PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md) | 当前 CODEOWNER 签核模板与合并标准 |
 | [`.github/CODEOWNERS`](../.github/CODEOWNERS) | PR 所改路径对应的所有者 |
 | [`.github/codeowner-signoff-verify-prompt.md`](../.github/codeowner-signoff-verify-prompt.md) | 签核验证器编码的独立检查项 |
-| [`.github/workflows/codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) | 签核触发事件、精确短语检测与状态发布 |
+| [`.github/workflows/codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) | 签核触发事件、精确短语检测与裁定评论 |
 | [`.github/PULL_REQUEST_TEMPLATE/pull_request_template.md`](../.github/PULL_REQUEST_TEMPLATE/pull_request_template.md) | PR 字段和作者检查清单 |
 | [`.github/ISSUE_TEMPLATE/`](../.github/ISSUE_TEMPLATE/) | Bug 与功能需求 issue 模板 |
 
@@ -290,8 +290,8 @@ Squash merge commit 会继承双语 PR 标题，因此自动满足 subject 要�
 6. 在 `Signed:` 中填写真实 GitHub 用户名。不得代替其他审阅者签名。
 7. 每个 PR 只需一名符合条件的 CODEOWNER 审阅者发布清单。先检查是否已有清单，再将精确英文模板作为对话评论、review summary 或 inline review comment 发布一次；验证器支持这三类形式。需要更正、补充证据或重试时，原审阅者必须编辑已有评论。其他审阅者无需重复发布。只有原评论被删除时才创建替代评论。
 8. 确认 [`.github/workflows/codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) 已触发，并阅读 verdict。验证器会重新推导合并门禁陈述；不会直接信任勾选结果。
-9. 验证通过后，后续提交和 rebase 都会保留接受状态，无需再次运行 Claude 或重新签署。自动化会将必需状态延续到最新 head；同一条裁定评论会注明实际评估的 SHA。若需明确重新评估，可手动分发验证器，并传入签署的 `comment_url`。这会更新裁定评论，但不会撤销已有 PASS。参见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
-10. 只有获得授权的维护者才能记录 `/reuse-sweep-run` 并使用受支持的合并路径。CODEOWNER 批准本身不会授予该权限。
+9. 裁定只记录实际评估的 SHA。需要重新评估后续改动或重试遗漏的 Review 事件时，请编辑已有清单，或传入 `pr-number` 和清单的 `comment_url` 手动分发验证器。流程会更新同一条参考评论，不再发布提交状态。参见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
+10. 只有获得授权的维护者才能记录 `/use <run_id>` 并使用受支持的合并路径。CODEOWNER 批准本身不会授予该权限。
 
 缺少必需的来源、工作流链接、recipe、例外理由或验证结果时，应停止而不是签核。保留未勾选项并提出具体后续要求；绝不能把未知状态写成批准声明。
 

@@ -9,8 +9,9 @@ import os
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any, Never
 
 from pydantic import ValidationError
 
@@ -35,11 +36,19 @@ class ReadError(ValueError):
 
 
 class NoRedirects(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
+    def redirect_request(
+        self,
+        req: urllib.request.Request,  # noqa: ARG002
+        fp: Any,  # noqa: ARG002
+        code: int,  # noqa: ARG002
+        msg: str,  # noqa: ARG002
+        headers: Any,  # noqa: ARG002
+        newurl: str,  # noqa: ARG002
+    ) -> None:
         return None
 
 
-def reject_nonfinite(value: str):
+def reject_nonfinite(value: str) -> Never:  # noqa: ARG001
     raise ReadError("invalid-json-number")
 
 
@@ -56,8 +65,8 @@ def fetch(
     token: str | None = None,
     model: str | None = None,
     date: str | None = None,
-    clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
-    opener=None,
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    opener: Callable[..., Any] | None = None,
 ) -> Feed:
     query = {}
     if resource == "benchmarks" and model:
@@ -78,7 +87,7 @@ def fetch(
         if any(ord(char) < 33 or ord(char) > 126 for char in token.strip()):
             raise ReadError("private-status-key-invalid")
         headers["Authorization"] = "Bearer " + token.strip()
-    request = urllib.request.Request(url, headers=headers, method="GET")
+    request = urllib.request.Request(url, headers=headers, method="GET")  # noqa: S310
     open_request = opener or urllib.request.build_opener(NoRedirects()).open
     try:
         with open_request(request, timeout=15) as response:
@@ -87,19 +96,14 @@ def fetch(
             raw = response.read(MAX_BYTES + 1)
             if len(raw) > MAX_BYTES:
                 raise ReadError("response-too-large")
-            if (
-                "application/json"
-                not in response.headers.get("Content-Type", "").lower()
-            ):
+            if "application/json" not in response.headers.get("Content-Type", "").lower():
                 raise ReadError("response-not-json")
             metadata = {
                 key.lower(): response.headers[key]
                 for key in ("Age", "Cache-Control", "Date", "ETag")
                 if key in response.headers
             }
-        payload = json.loads(
-            raw, parse_constant=reject_nonfinite, parse_float=finite_float
-        )
+        payload = json.loads(raw, parse_constant=reject_nonfinite, parse_float=finite_float)
         if resource == "images" and not isinstance(payload, list):
             raise ReadError("invalid-images-payload")
         if resource == "releases" and (
@@ -160,9 +164,7 @@ def catalog(
 ) -> tuple[list[dict], list[str]]:
     issues = [f"images:{issue}" for issue in feed_issues(images, now, policy)]
     issues += [f"releases:{issue}" for issue in feed_issues(releases, now, policy)]
-    release_map = (
-        releases.payload if releases and isinstance(releases.payload, dict) else {}
-    )
+    release_map = releases.payload if releases and isinstance(releases.payload, dict) else {}
     if releases is not None and not isinstance(releases.payload, dict):
         issues.append("releases:invalid-payload")
     for value in release_map.values():
@@ -171,7 +173,7 @@ def catalog(
             release_map = {}
             break
     if images is None or not isinstance(images.payload, list):
-        return [], issues + ["images:invalid-or-missing-payload"]
+        return [], [*issues, "images:invalid-or-missing-payload"]
     result = []
     for index, raw in enumerate(images.payload):
         item: dict[str, Any] = {
@@ -204,9 +206,7 @@ def catalog(
             days = max(0, (utc(now) - utc(f"{row.date}T00:00:00Z")).days)
             if row.benchmark_type == "agentic_traces" and days > 14:
                 reasons.append("agentx-age")
-            needs_review = any(
-                reason != "release-comparison-unknown" for reason in reasons
-            )
+            needs_review = any(reason != "release-comparison-unknown" for reason in reasons)
             item.update(
                 {
                     "source-status": "review"
@@ -231,9 +231,7 @@ def fetch_catalog(policy: Policy) -> tuple[list[dict], list[str]]:
             feeds[resource] = fetch(resource)
         except ReadError as error:
             raise ReadError(f"{resource}:{error}") from None
-    return catalog(
-        feeds["images"], feeds["releases"], datetime.now(timezone.utc), policy
-    )
+    return catalog(feeds["images"], feeds["releases"], datetime.now(UTC), policy)
 
 
 def fresh(value: Any, now: datetime, policy: Policy) -> bool:
@@ -313,14 +311,14 @@ def fetch_capacity(policy: Policy) -> set[str]:
     return available_clusters(
         fetch("clusters", token=os.environ.get("KLAUD_DASHBOARD_API_KEY")),
         policy,
-        datetime.now(timezone.utc),
+        datetime.now(UTC),
     )
 
 
 def capacity_context(policy: Policy) -> dict:
     """Private routing hints for review, without node counts or raw responses."""
     feed = fetch("clusters", token=os.environ.get("KLAUD_DASHBOARD_API_KEY"))
-    available = available_clusters(feed, policy, datetime.now(timezone.utc))
+    available = available_clusters(feed, policy, datetime.now(UTC))
     try:
         clusters = sorted(
             {

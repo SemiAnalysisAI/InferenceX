@@ -1,52 +1,38 @@
 #!/usr/bin/env bash
 
+source "$(dirname "$0")/../../benchmark_lib.sh" --validation-only
+
+check_env_vars \
+    MODEL_NAME MAX_MODEL_LEN GPU_MEM_UTIL RESULT_DIR BENCHMARK_LOGS_DIR \
+    DECODE_CTRL_PORT DECODE_HTTP_PORT PREFILL_PORT PORT DECODE_WAIT \
+    KV_P2P_TRANSFER TILERT_WEIGHTS_DIR TILERT_MODEL_TYPE TILERT_PARSER DECODE_KV_DTYPE \
+    PREFILL_KV_DTYPE IS_AGENTIC TILERT_QUEUE_TIMEOUT SLURM_JOB_ID POWERX_NATIVE_ENABLED \
+    PREFILL_TP PREFILL_NUM_WORKERS DECODE_TP DECODE_NUM_WORKERS TILERT_RDMA_STRICT \
+    TILERT_CONVERT_LOCK_WAIT PREFILL_WAIT EVAL_ONLY DECODE_HOST PREFILL_HOST \
+    TILERT_ROLE
+SERVER_MAX_MODEL_LEN="$MAX_MODEL_LEN"
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-MODEL_NAME=${MODEL_NAME:-glm5}
-MAX_MODEL_LEN=${MAX_MODEL_LEN:-202752}
-GPU_MEM_UTIL=${GPU_MEM_UTIL:-0.75}
-RESULT_DIR=${RESULT_DIR:-/workspace}
-BENCHMARK_LOGS_DIR=${BENCHMARK_LOGS_DIR:-/workspace}
-
-DECODE_CTRL_PORT=${DECODE_CTRL_PORT:-5556}
-DECODE_HTTP_PORT=${DECODE_HTTP_PORT:-5557}
-PREFILL_PORT=${PREFILL_PORT:-8000}
-ROUTER_PORT=${PORT:-8888}
-DECODE_WAIT=${DECODE_WAIT:-3600}
-KV_P2P_TRANSFER=${KV_P2P_TRANSFER:-nixl}
-TILERT_WEIGHTS_DIR=${TILERT_WEIGHTS_DIR:-/workspace/GLM-5-FP8-TileRT}
-TILERT_MODEL_TYPE=${TILERT_MODEL_TYPE:-glm-5}
-TILERT_PARSER=${TILERT_PARSER:-none}
-DECODE_KV_DTYPE=${DECODE_KV_DTYPE:-fp8}
-PREFILL_KV_DTYPE=${PREFILL_KV_DTYPE:-fp8_ds_mla}
+ROUTER_PORT=${PORT}
 
 PREFILL_SPEC=(--speculative-config '{"method":"mtp","num_speculative_tokens":1}')
 DECODE_MTP=(--with-mtp)
 
 TILERT_IS_AGENTIC=0
-if [[ "${IS_AGENTIC:-0}" == "1" || "${SCENARIO_TYPE:-}" == "agentic-coding" ]]; then
+if [[ "${IS_AGENTIC}" == "1" || "${SCENARIO_TYPE:-}" == "agentic-coding" ]]; then
     TILERT_IS_AGENTIC=1
 fi
 
-if [[ "$TILERT_IS_AGENTIC" == "1" ]]; then
-    TILERT_QUEUE_TIMEOUT=${TILERT_QUEUE_TIMEOUT:-1800}
-fi
-TILERT_QUEUE_TIMEOUT=${TILERT_QUEUE_TIMEOUT:-0}
-
 AGENTIC_LOGS_DIR=${AGENTIC_LOGS_DIR:-$RESULT_DIR/LOGS/agentic}
-
-: "${DECODE_HOST:?DECODE_HOST is unset -- submit.sh must export it}"
-: "${PREFILL_HOST:?PREFILL_HOST is unset -- submit.sh must export it}"
-: "${TILERT_ROLE:?TILERT_ROLE is unset -- submit.sh must set it to decode or prefill}"
 
 mkdir -p "$BENCHMARK_LOGS_DIR"
 
-DONE_SENTINEL="$BENCHMARK_LOGS_DIR/.tilert_done.${SLURM_JOB_ID:-local}"
+DONE_SENTINEL="$BENCHMARK_LOGS_DIR/.tilert_done.${SLURM_JOB_ID}"
 source "$(dirname "$0")/../../native_power_lifecycle.sh"
 finish_tilert_node() {
     local rc=$? pid
     trap - EXIT
-    if [[ "${POWERX_NATIVE_ENABLED:-0}" == 1 && -n "${POWERX_COLLECTOR_PID:-}" ]]; then
+    if [[ "${POWERX_NATIVE_ENABLED}" == 1 && -n "${POWERX_COLLECTOR_PID:-}" ]]; then
         if [[ "$TILERT_ROLE" == prefill || "$rc" != 0 ]]; then
             powerx_stop_collectors || rc=$?
         else
@@ -68,7 +54,7 @@ finish_tilert_node() {
 trap finish_tilert_node EXIT
 trap 'exit 143' TERM HUP
 trap 'exit 130' INT
-if [[ "${POWERX_NATIVE_ENABLED:-0}" == 1 ]]; then
+if [[ "${POWERX_NATIVE_ENABLED}" == 1 ]]; then
     powerx_start_collector "/powerx_native/node-$POWERX_RANK" "/powerx_control" \
         nvidia "$POWERX_RANK" "$TILERT_ROLE" "$POWERX_GPU_COUNT" 2
 fi
@@ -91,8 +77,8 @@ log_and_run_bg() {
 
 bench_result_stem() {
     local conc="$1"
-    local pg=$(( ${PREFILL_TP:-8} * ${PREFILL_NUM_WORKERS:-1} ))
-    local dg=$(( ${DECODE_TP:-8} * ${DECODE_NUM_WORKERS:-1} ))
+    local pg=$(( ${PREFILL_TP} * ${PREFILL_NUM_WORKERS} ))
+    local dg=$(( ${DECODE_TP} * ${DECODE_NUM_WORKERS} ))
     printf '%s_c%s_gpus_%s_ctx_%s_gen_%s' \
         "${RESULT_FILENAME}" "$conc" "$(( pg + dg ))" "$pg" "$dg"
 }
@@ -123,7 +109,7 @@ rdma_preflight() {
         echo "[rdma] ibv_devices:"; ibv_devices 2>&1 | sed 's/^/[rdma]   /'
     fi
 
-    if (( warn )) && [[ "${TILERT_RDMA_STRICT:-0}" == "1" ]]; then
+    if (( warn )) && [[ "${TILERT_RDMA_STRICT}" == "1" ]]; then
         echo "[rdma] TILERT_RDMA_STRICT=1 and preflight did not fully pass -- aborting" >&2
         return 1
     fi
@@ -163,7 +149,7 @@ convert_weights() {
 
     mkdir -p "$TILERT_WEIGHTS_DIR"
     exec 9>"$TILERT_WEIGHTS_DIR/.convert.lock"
-    flock -w "${TILERT_CONVERT_LOCK_WAIT:-21600}" 9 || {
+    flock -w "${TILERT_CONVERT_LOCK_WAIT}" 9 || {
         echo "[weight_converter] timed out waiting for the conversion lock (another job still converting?)"; return 1; }
     if [[ -f "$index_json" ]]; then
         echo "[weight_converter] cache produced by a concurrent job, skipping conversion"; exec 9>&-; return 0
@@ -174,7 +160,7 @@ convert_weights() {
     fi
 
     echo "[weight_converter] $MODEL_PATH -> $TILERT_WEIGHTS_DIR (model_type=$TILERT_MODEL_TYPE)"
-    "${PY:-python}" -m tilert.models.preprocess.weight_converter \
+    "$PY" -m tilert.models.preprocess.weight_converter \
         --model_type "$TILERT_MODEL_TYPE" --model_dir "$MODEL_PATH" --save_dir "$TILERT_WEIGHTS_DIR"
     local rc=$?
     exec 9>&-
@@ -186,10 +172,10 @@ convert_weights() {
 }
 
 start_decode() {
-    local cmd=("${PY:-python}" -m tilert.pd_vllm.decode_server
+    local cmd=("$PY" -m tilert.pd_vllm.decode_server
         --engine tilert --model "$MODEL_NAME"
         --model-weights-dir "$TILERT_WEIGHTS_DIR"
-        --max-seq-len "$MAX_MODEL_LEN"
+        --max-seq-len "$SERVER_MAX_MODEL_LEN"
         --kv-cache-dtype "$DECODE_KV_DTYPE" --transport "$KV_P2P_TRANSFER"
         --ctrl-port "$DECODE_CTRL_PORT" --http-port "$DECODE_HTTP_PORT"
         "${DECODE_MTP[@]}")
@@ -202,17 +188,17 @@ start_prefill() {
     [[ -n "${MODEL:-}" && "$MODEL" != "$MODEL_NAME" ]] && served+=("$MODEL")
     local cmd=(vllm serve "$MODEL_PATH"
         --served-model-name "${served[@]}" --port "$PREFILL_PORT"
-        --tensor-parallel-size "$PREFILL_TP" --max-model-len "$MAX_MODEL_LEN"
+        --tensor-parallel-size "$PREFILL_TP" --max-model-len "$SERVER_MAX_MODEL_LEN"
         --enforce-eager --trust-remote-code --return-tokens-as-token-ids
         --gpu-memory-utilization "$GPU_MEM_UTIL" --kv-cache-dtype "$PREFILL_KV_DTYPE"
         "${PREFILL_SPEC[@]}"
-        --kv-transfer-config "{\"kv_connector\":\"TileRTConnector\",\"kv_connector_module_path\":\"tilert.pd_vllm.prefill_connector\",\"kv_role\":\"kv_producer\",\"kv_connector_extra_config\":{\"tilert_host\":\"$DECODE_HOST\",\"tilert_ctrl_port\":$DECODE_CTRL_PORT,\"tilert_model\":\"$MODEL_NAME\",\"tilert_max_seq_len\":$MAX_MODEL_LEN,\"tilert_transport\":\"$KV_P2P_TRANSFER\"}}")
+        --kv-transfer-config "{\"kv_connector\":\"TileRTConnector\",\"kv_connector_module_path\":\"tilert.pd_vllm.prefill_connector\",\"kv_role\":\"kv_producer\",\"kv_connector_extra_config\":{\"tilert_host\":\"$DECODE_HOST\",\"tilert_ctrl_port\":$DECODE_CTRL_PORT,\"tilert_model\":\"$MODEL_NAME\",\"tilert_max_seq_len\":$SERVER_MAX_MODEL_LEN,\"tilert_transport\":\"$KV_P2P_TRANSFER\"}}")
     log_and_run_bg prefill "$BENCHMARK_LOGS_DIR/tilert_prefill.log" "${cmd[@]}"
     PREFILL_PID=$LAST_BG_PID
 }
 
 start_router() {
-    local cmd=(env CUDA_VISIBLE_DEVICES= "${PY:-python}" -m tilert.pd_vllm.pd_router
+    local cmd=(env CUDA_VISIBLE_DEVICES= "$PY" -m tilert.pd_vllm.pd_router
         --vllm-url "http://$PREFILL_HOST:$PREFILL_PORT"
         --decode "$DECODE_HOST:$DECODE_CTRL_PORT:$DECODE_HTTP_PORT"
         --port "$ROUTER_PORT" --model-path "$MODEL_PATH" --parser "$TILERT_PARSER"
@@ -241,10 +227,10 @@ run_bench_and_eval() {
     wait_for_server_ready --port "$ROUTER_PORT" \
         --server-log "$BENCHMARK_LOGS_DIR/tilert_router.log" --server-pid "$ROUTER_PID"
     local rc=0 conc np
-    if [[ "${POWERX_NATIVE_ENABLED:-0}" == 1 ]]; then
+    if [[ "${POWERX_NATIVE_ENABLED}" == 1 ]]; then
         powerx_wait_collectors ready || return $?
     fi
-    if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+    if [[ "${EVAL_ONLY}" != "true" ]]; then
     for conc in $CONC_LIST; do
         np=$(( conc * 10 ))
         [[ "$np" -lt 16 ]] && np=16
@@ -330,7 +316,7 @@ case "$TILERT_ROLE" in
         wait_for_tcp "$DECODE_HOST" "$DECODE_CTRL_PORT" "$DECODE_WAIT" \
             || echo "[prefill] WARNING: timed out waiting for the decode ctrl port ($DECODE_HOST:$DECODE_CTRL_PORT), starting anyway"
         start_prefill
-        wait_for_tcp "$PREFILL_HOST" "$PREFILL_PORT" "${PREFILL_WAIT:-3600}" \
+        wait_for_tcp "$PREFILL_HOST" "$PREFILL_PORT" "${PREFILL_WAIT}" \
             || echo "[prefill] WARNING: timed out waiting for the vLLM port ($PREFILL_HOST:$PREFILL_PORT), continuing (see $BENCHMARK_LOGS_DIR/tilert_prefill.log)"
         start_router
         if [[ "$TILERT_IS_AGENTIC" == "1" ]]; then

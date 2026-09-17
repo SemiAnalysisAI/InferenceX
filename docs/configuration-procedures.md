@@ -21,6 +21,18 @@ Use this page for benchmark configuration, recipe, image, and runner changes. It
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | Append-only benchmark trigger log |
 | [`AGENTS.md`](../AGENTS.md) | Repository-wide config, MTP, changelog, and sweep rules |
 
+## Dependency submodules
+
+Git records the exact dependency commits. [`.gitmodules`](../.gitmodules) defines the repositories: AIPerf at `utils/aiperf`, NVIDIA srt-slurm at `utils/srt-slurm`. TileRT is a documented manual fork checkout in `setup_srt_slurm()`, not a separate submodule.
+
+Initialize them before running benchmarks locally:
+
+```bash
+git submodule update --init
+```
+
+To upgrade, fetch and check out the desired commit inside the relevant submodule, then commit the updated submodule pointer in InferenceX. Benchmark workflows already initialize submodules. Slurm launchers make a local Git clone for each job so recipe staging and runtime writes do not modify the submodule, and record the actual commit for result provenance. NVIDIA setup clones locally; TileRT setup fetches its pinned fork commit over the network.
+
 ## Procedure index
 
 1. [Prepare a worktree](#prepare-a-worktree)
@@ -139,7 +151,7 @@ Only fixed 8192/1024 `glm5.1-fp8-b200-tilert` requires native power. TileRT runs
 Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md). Checked-in recipes: [`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/).
 
 1. Locate the exact upstream [NVIDIA/srt-slurm](https://github.com/NVIDIA/srt-slurm) recipe and record its commit-pinned source path.
-2. Stage the YAML under the matching checked-in recipe tree. Read the closest sibling and selected cluster launcher.
+2. Stage the YAML under `benchmarks/multi_node/srt-slurm-recipes/<model-prefix>/<engine>/<gpu>-<precision>/<workload>/`, following the naming rules in `RECIPES.md`. Read the closest sibling and selected cluster launcher.
 3. Map source fields to the master search-space entry: resource worker counts → `num-worker`, TP/EP/DP-attention → worker topology, benchmark concurrencies → `conc-list`, and recipe path → `additional-settings: ["CONFIG_FILE=..."]`.
 4. Add/update the matching [`nvidia-master.yaml`](../configs/nvidia-master.yaml) entry in the same change. Keep worker counts, TP/PP/EP/DCP/PCP, hardware, router, transfer engine, and concurrency labels synchronized.
 5. For an image bump, make recipe `model.container` exactly equal master `image`. The launcher uses the master image as the container-alias key.
@@ -205,15 +217,22 @@ stores Engram embedding tables in pinned host DRAM accessed through UVA;
 `kv-offloading: none` describes the separate, GPU-resident KV cache. MXFP4 expert
 weights determine the recipe's `precision: fp4` label.
 
-The GPU-specific entry points share the text-only serving script, `deepseek_v41` tokenizer and
+The GPU-specific entry points share the text-only serving behavior, `deepseek_v41` tokenizer and
 parsers, 1M context, and the shared AgentX trace replay, power, metrics, and eval
-helpers. Concurrency is 1–128. Model-runner selection and scheduler batching follow the
-official single-node TP recipe defaults; graph capture covers concurrency times
-the six-token DSpark verification block. The launchers mount the repository at `/ix` for this recipe so
+helpers. The TP4 concurrency range is 1–128. The shared script sizes graph capture
+for the six-token DSpark verification block. The launchers mount the repository at `/ix` for this recipe so
 AgentX runtime directories are not created under `/workspace`. Launcher-specific model paths and persistent caches are reused.
 The recipe probes the serving port on the compute node and selects an available
 port if the preferred one is occupied. Serving, replay, metrics, and eval share
 that endpoint.
+
+The B300 entry also includes a TP2 variant at concurrency 2–128. Its dedicated
+script uses `FULL_AND_PIECEWISE` CUDA graphs with explicit capture-size sets ending
+at 2046 or 8190 tokens. It sets `--max-num-batched-tokens` to 2048 for concurrency
+1–4 and TP2 concurrency 128, and to 8192 otherwise; `--max-num-seqs` is 256. The
+TP2 concurrency-128 variant also sets `--gpu-memory-utilization 0.97`. Other SKUs
+continue to use the shared script.
+
 The GB300 launcher allows 7200 seconds for engine readiness. In [run 34504969146](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34504969146), the Rust frontend exhausted its 3600-second deadline while the engine was still capturing graphs; model loading alone took 18–23 minutes. This extends startup time without changing the benchmark duration or decoding settings.
 
 GPU sweep and eval evidence is required before calling any recipe validated.

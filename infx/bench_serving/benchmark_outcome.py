@@ -23,9 +23,7 @@ def benchmark_outcome(requested: int, completed: int) -> BenchmarkOutcome:
         or requested <= 0
         or not 0 <= completed <= requested
     ):
-        raise ValueError(
-            "Benchmark request counts must satisfy 0 <= completed <= requested > 0"
-        )
+        raise ValueError("Benchmark request counts must satisfy 0 <= completed <= requested > 0")
     failed = requested - completed
     return {
         "status": "failed" if failed / requested > MAX_FAILURE_RATE else "passed",

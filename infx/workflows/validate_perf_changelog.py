@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
 """Validate perf-changelog.yaml changes."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -17,9 +17,7 @@ from yaml.resolver import BaseResolver
 
 from infx.matrix.validation import ChangelogEntry
 
-CANONICAL_PR_LINK = re.compile(
-    r"https://github\.com/SemiAnalysisAI/InferenceX/pull/\d+"
-)
+CANONICAL_PR_LINK = re.compile(r"https://github\.com/SemiAnalysisAI/InferenceX/pull/\d+")
 PR_LINK_PLACEHOLDERS = {
     "XXX",
     "https://github.com/SemiAnalysisAI/InferenceX/pull/XXX",
@@ -73,6 +71,7 @@ def read_git_file(ref: str, path: str) -> bytes:
     """Read a repository file exactly as stored at a git ref."""
     result = subprocess.run(
         ["git", "show", f"{ref}:{path}"],
+        check=False,
         capture_output=True,
     )
     if result.returncode != 0:
@@ -98,16 +97,14 @@ def parse_changelog(raw: bytes, label: str) -> list[dict[str, Any]]:
         raise ChangelogValidationError(f"{label} is not UTF-8: {exc}") from exc
 
     try:
-        data = yaml.load(text, Loader=UniqueKeyLoader)
+        data = yaml.load(text, Loader=UniqueKeyLoader)  # noqa: S506
     except yaml.YAMLError as exc:
         raise ChangelogValidationError(f"{label} is not valid YAML: {exc}") from exc
 
     if not isinstance(data, list):
         raise ChangelogValidationError(f"{label} root must be a YAML list")
 
-    top_level_entries = sum(
-        line.startswith("- config-keys:") for line in text.splitlines()
-    )
+    top_level_entries = sum(line.startswith("- config-keys:") for line in text.splitlines())
     if top_level_entries != len(data):
         raise ChangelogValidationError(
             f"{label} has {top_level_entries} top-level config entries "
@@ -138,9 +135,7 @@ def validate_added_pr_link(link: str, pr_number: int | None) -> None:
     """Require a canonical link, with placeholders allowed only on PR runs."""
     if pr_number is None:
         if not CANONICAL_PR_LINK.fullmatch(link):
-            raise ChangelogValidationError(
-                f"new main-branch entry has invalid pr-link: {link!r}"
-            )
+            raise ChangelogValidationError(f"new main-branch entry has invalid pr-link: {link!r}")
         return
 
     expected = f"https://github.com/SemiAnalysisAI/InferenceX/pull/{pr_number}"
@@ -210,9 +205,7 @@ def validate_raw_change(
             )
 
         suffix = head_raw[len(base_raw) :]
-        expected_start = (
-            b"- config-keys:" if base_raw.endswith(b"\n\n") else b"\n- config-keys:"
-        )
+        expected_start = b"- config-keys:" if base_raw.endswith(b"\n\n") else b"\n- config-keys:"
         if not suffix.startswith(expected_start):
             raise ChangelogValidationError(
                 "new changelog entries must be separated from history by one "
@@ -230,8 +223,7 @@ def validate_raw_change(
             prefix = head_raw[:start]
             if not prefix.endswith(b"\n\n") or prefix.endswith(b"\n\n\n"):
                 raise ChangelogValidationError(
-                    "appended changelog entries must have exactly one empty "
-                    "separator line"
+                    "appended changelog entries must have exactly one empty separator line"
                 )
         if head_raw.endswith(b"\n\n"):
             raise ChangelogValidationError(
@@ -243,13 +235,11 @@ def validate_raw_change(
         base_lines = base_raw.splitlines(keepends=True)
         head_lines = head_raw.splitlines(keepends=True)
         if len(base_lines) != len(head_lines):
-            raise ChangelogValidationError(
-                "pr-link corrections may not add or delete lines"
-            )
+            raise ChangelogValidationError("pr-link corrections may not add or delete lines")
 
         changed = 0
         for line_number, (base_line, head_line) in enumerate(
-            zip(base_lines, head_lines),
+            zip(base_lines, head_lines, strict=False),
             start=1,
         ):
             if base_line == head_line:
@@ -262,8 +252,7 @@ def validate_raw_change(
                 and head_line.endswith(b"\n")
             ):
                 raise ChangelogValidationError(
-                    "historical bytes changed outside a pr-link line at "
-                    f"line {line_number}"
+                    f"historical bytes changed outside a pr-link line at line {line_number}"
                 )
 
         if changed != corrections:
@@ -290,7 +279,9 @@ def validate_generated_config(
     """Run the same changelog processor used by sweep setup."""
     command = [
         sys.executable,
-        str(Path(__file__).resolve().parents[2] / "utils/process_changelog.py"),
+        "-P",
+        "-m",
+        "infx.matrix.plan",
         "--changelog-file",
         path,
         "--base-ref",
@@ -304,14 +295,14 @@ def validate_generated_config(
         command.append("--evals-only")
     result = subprocess.run(
         command,
+        check=False,
         capture_output=True,
         text=True,
+        env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2])},
     )
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()
-        raise ChangelogValidationError(
-            f"process_changelog.py rejected the diff:\n{detail}"
-        )
+        raise ChangelogValidationError(f"process_changelog.py rejected the diff:\n{detail}")
     try:
         json.loads(result.stdout)
     except json.JSONDecodeError as exc:
@@ -331,9 +322,7 @@ def validate_matrix_compatible_change(
     """Validate the final newline and the diff accepted by sweep setup."""
     head_raw = read_git_file(head_ref, path)
     if not head_raw.endswith(b"\n"):
-        raise ChangelogValidationError(
-            f"{path} at {head_ref} does not end with a newline"
-        )
+        raise ChangelogValidationError(f"{path} at {head_ref} does not end with a newline")
 
     validate_generated_config(
         base_ref,
@@ -366,9 +355,7 @@ def main() -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
-    print(
-        f"Validated {args.changelog_file}: final newline present and matrix generated"
-    )
+    print(f"Validated {args.changelog_file}: final newline present and matrix generated")
     return 0
 
 

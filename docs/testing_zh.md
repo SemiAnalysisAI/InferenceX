@@ -31,6 +31,10 @@
 
 ## 测试层级
 
+[`CI`](../.github/workflows/ci.yml) 在 PR（包括 fork）或向 `main` 的推送修改 Python 文件、`.github/scripts/` 辅助脚本、`ci.yml`、`pyproject.toml`、`uv.lock`、`.python-version`、MCP 配置、Ruff 配置或 `pytest.ini` 时，并行运行 **Lint** 和 **Tests**。[`Workflow security`](../.github/workflows/zizmor.yml) 在工作流、action 定义、Dependabot、pre-commit 或 zizmor 配置变更时运行 **Zizmor**。仅修改 Python 文件不会触发 Zizmor；仅修改其他工作流不会触发 Lint 或 Tests。修改 `ci.yml` 会触发全部三项任务。两个工作流均可手动分发。仅修改其他文档、Shell 脚本或基准测试 YAML 不会触发这两个工作流；请在本地执行相应检查，或手动分发。
+
+Tests 使用四个 pytest worker 运行 `utils/`、`runners/` 和 `experimental/CollectiveX/tests/` 下的全部测试，并检查 MCP 兼容性。这些目录中的新增测试会自动发现。CI 通过 `uv sync --locked --all-extras --group test --no-editable` 将 `infx` 安装为 wheel，使用 Python 3.12 和仅支持 CPU 的 PyTorch。一项任务失败不会取消另一项；PR 更新会取消旧提交的 CI。尚未创建 PR 的分支推送不再单独触发变更日志测试。
+
 | 层级 | 能够证明 | 不能证明 |
 | --- | --- | --- |
 | 解析与语法 | 编辑后的 YAML 可加载；编辑后的 Bash 可解析 | 模式有效性、运行时路由或 GPU 行为 |
@@ -59,6 +63,49 @@
 
 从仓库根目录运行检查，并用实际变更路径或键替换占位符。
 
+### Python 环境
+
+[`pyproject.toml`](../pyproject.toml) 定义 `infx` 包及其依赖；[`uv.lock`](../uv.lock) 记录解析后的版本。运行 `uv sync --locked` 安装核心工具，然后用 `uv run --locked python -m infx.matrix.generate ...` 调用现有模块命令。CODEOWNER/GitHub 集成使用 `--extra workflows`，评测摘要和数据库比较使用 `--extra results`，仓库 MCP 服务使用 `--group mcp`。`test` 依赖组包含 MCP 和 CPU 测试所需依赖。
+
+开发时 uv 以 editable 模式安装包，源码修改立即生效。CI 安装普通 wheel，但主 pytest 套件导入源码 checkout。独立的安装包测试创建仅含核心或 results 依赖的独立环境，并在源码 checkout 之外运行，检查配方节点数、运行器元数据、矩阵拒绝、包内阈值加载、分数验证、BFCL 许可证归属记录，以及生成的评测结果行与摘要。依赖仓库文件的命令在 editable 安装时使用源码仓库；使用 wheel 时，应从仓库根目录运行。评测 YAML/JSON 资源及 Apache 许可证随包分发。
+
+核心依赖使用 `uv add` 添加，集成依赖使用 `uv add --optional <extra>`，测试工具使用 `uv add --group test`。同时提交 manifest 和 lockfile。`uv lock --upgrade-package <name>` 更新指定依赖；解析时按 `pyproject.toml` 执行 12 小时发布冷却期。Ruff 和 Zizmor 不加入 lockfile，CI 继续使用满足冷却期的最新版本。基准测试镜像、供应商评测环境和测量历史 checkout 的命令保留原有依赖安装方式。
+
+依赖限制在当前支持的最新主版本内；次版本和补丁更新记录在 `uv.lock` 中，并通过 CI 验证。对尚未达到 1.0 的包，次版本升级也需审查。MCP 保持在 1.x，因为 2.x 替换了当前服务使用的装饰器式处理器 API。新版本发布不会自动改变已锁定的环境。
+
+结果收集、结果比较和运行统计使用当前 `main` 中的 `infx`，在 sweep setup 时解析一次提交，并在这些 job 间共享。Klaud 同样只解析一次 `main`，将该提交传给所有候选任务；候选任务的 hook 使用独立的工具 checkout，避免配方编辑替换导入的包。Sign-off 也检出当前受信任的 `main`。这些工具不固定到发布版本，仓库提交不受依赖发布冷却期限制。PR CI 测试 PR 自身的包；矩阵生成、基准测试脚本和配方仍使用所选 checkout。Sweep 摘要显示解析后的 setup 和工具提交；复用基准测试时还显示源 head。E2E 基准测试和评测 job 使用与矩阵生成相同的已解析 SHA，即使请求的分支在任务排队时发生移动也不受影响。Klaud 摘要显示作为候选任务基础的工具提交。
+
+### Python 静态检查与格式化
+
+Ruff 按照 [`infx/ruff.toml`](../infx/ruff.toml) 中的规则检查 `infx/`，目标版本为 Python 3.12，行长度设为 100。任何 Python 文件变更都会触发 CI，使用已发布至少 12 小时的最新 Ruff 版本。
+
+```bash
+uvx --exclude-newer PT12H ruff@latest check --fix infx
+uvx --exclude-newer PT12H ruff@latest format infx
+```
+
+应尽量修复问题。确有理由保留的例外使用行内 `# noqa: CODE`；多余的忽略标记会被检查。未启用预览规则或自动不安全修复。
+
+### GitHub Actions 安全检查
+
+CI 使用发布至少 12 小时的最新 zizmor 版本，启用最严格的 `auditor` 模式、严格输入收集、全部受支持的输入类型，以及在线 action 引用检查。所有未豁免的发现都会使任务失败，包括信息级和低置信度发现。使用已认证的 GitHub token 在本地执行同样的检查：
+
+```bash
+GH_TOKEN="$(gh auth token)" uvx --exclude-newer PT12H zizmor@latest \
+  --persona auditor --strict-collection --collect all --no-config --no-progress .
+```
+
+所有第三方 action 仍固定到提交 SHA。同仓库工作流使用 `$/` 引用，解析到工作流的确切提交，要求 Actions runner 版本至少为 2.336.0。Dependabot 在 action 发布七天后才更新。合并后的 Claude 工作流保留审阅和编码两个独立任务，分别设置权限；固定到提交 SHA 的 Claude action 负责安装其支持的 CLI 版本。
+
+Auditor 模式也会报告有意保留的架构选择。豁免仅标注在对应的 YAML 行，并附上原因，不会全局禁用规则：
+
+- 独立的 GPU 分发、评论请求和 Klaud 批次不应互相取消。资源限制由优先级调度器和候选任务归属声明处理。
+- 可信外部分发使用 `pull_request_target`，运行可信控制代码，并在执行特权操作前验证授权。
+- 保留现有仓库级集成凭据。迁移到受保护的 GitHub Environments 必须同步迁移实际存储的 secret；仅添加空的 `environment:` 字段不算修复。
+- Profiling 存储仓库的 checkout 保留其专用 SSH deploy key，因为下一步需要向该独立仓库推送 trace 提交。基准测试 checkout 不保留凭据。
+
+添加 `--no-ignores` 可复查全部豁免。新增发现仍必须阻止 CI；若豁免涉及的触发器、checkout、凭据使用方或授权发生变化，必须重新审查。该安全检查不需要运行 GPU 任务。
+
 ### 解析与语法
 
 ```bash
@@ -72,13 +119,13 @@ bash -n runners/launch_<cluster>.sh
 ### 先精确配置，再过滤配置族
 
 ```bash
-uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+uv run --locked \
   python -m infx.matrix.generate test-config \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --config-keys <exact-key>
 
-uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+uv run --locked \
   python -m infx.matrix.generate full-sweep \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
@@ -89,7 +136,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
   --seq-lens 1k1k 8k1k
 ```
 
-不要只检查退出码或行数，还要检查发出的值：配置键、模型、镜像、运行器、场景、并发、`max-model-len`、TP/PP/EP/DCP/PCP、prefill/decode worker、硬件、路由器、KV 传输、评测标志、`additional-settings` 和 `spec-decoding`。模式位于 [`validation.py`](../utils/matrix_logic/validation.py)，生成器是 [`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py)。
+不要只检查退出码或行数，还要检查发出的值：配置键、模型、镜像、运行器、场景、并发、`max-model-len`、TP/PP/EP/DCP/PCP、prefill/decode worker、硬件、路由器、KV 传输、评测标志、`additional-settings` 和 `spec-decoding`。模式位于 [`validation.py`](../infx/matrix/validation.py)，生成器是 [`generate.py`](../infx/matrix/generate.py)。
 
 ### 按变更契约选择聚焦测试套件
 
@@ -99,7 +146,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
 | Changelog 内容或 PR 门禁 | `python -m pytest utils/test_process_changelog.py utils/changelog_gate_tests/ -v` |
 | 结果处理与拓扑 | `python -m pytest utils/test_process_result.py utils/agentic/aggregation/test_process_agentic_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
 | AgentX 聚合与工件加载 | `python -m pytest utils/agentic/aggregation/ -v` |
-| 评测分发、批处理或补丁 | `python -m pytest infx/evals/ -v` |
+| 评测分发、批处理或补丁 | `python -m pytest utils/evals/ -v` |
 | 评测收集 | `python -m pytest utils/test_collect_eval_results.py -v` |
 | 扫描复用或可复用制品 | `python -m pytest utils/test_github.py utils/test_find_reusable_sweep_run.py utils/test_acknowledge_sweep_reuse.py utils/test_validate_reusable_sweep_artifacts.py -v` |
 
@@ -120,14 +167,14 @@ python3 -m infx.workflows.validate_perf_changelog \
 
 现有 Python 测试套件也覆盖工作流契约。`utils/matrix_logic/test_validation.py` 测试工作流输入模式，并使用受控的生成器输出执行两个准备脚本。非法数据行必须在发布作业输出前失败；合法数据行必须保持不变，包括手动分派测量旧 checkout 的情况。`utils/test_process_result.py` 通过记录环境的启动器执行实际启动步骤，覆盖当前和旧版 checkout。这些测试不模拟 GitHub 表达式引擎，也不证明 GPU 性能；表达式修改需结合工作流验证和适用的 smoke 证据进行审查。
 
-安装好测试所需依赖后，在同一 Python 环境中添加 [`pytest-xdist`](https://pytest-xdist.readthedocs.io/en/stable/distribution.html)，使用四个 worker 运行全部本地测试套件：
+使用与 CI 相同的锁定环境和四个 worker 运行测试套件：
 
 ```bash
-python -m pip install pytest-xdist
-python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
+uv run --locked --all-extras --group test --no-editable \
+  python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
 ```
 
-串行调试时使用 `-n 0`。测试必须隔离临时文件和端口，并确保各 worker 收集到的参数化用例一致。changelog-gate CI 任务同样使用四个 worker；并行执行不改变其测试范围和断言。
+串行调试时使用 `-n 0`。测试必须隔离临时文件和端口，并确保各 worker 收集到的参数化用例一致。
 
 ## 冒烟、扫描与评测
 
@@ -172,8 +219,8 @@ python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
 2. **扩大范围前：**冒烟或 canary 已证明变更后的运行时路径。如果失败，先诊断该层级，再花费全量扫描资源。
 3. **CODEOWNER 签署前：**遵循 [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md)，包括适用的代码质量、架构、镜像来源、上游配方、补丁/豁免、聊天模板和 AgentX 要求。
 4. **扫描/评测验收：**当前仍在 PR 中的至少一个提交拥有成功、未跳过且实际执行的 `single-node */` 与 `eval /` 检查。仅 `collect-evals` 成功不够。下载对应评测制品，确认其非空、准确率达标且使用同一推理镜像。这些可执行规则位于[验证器检查 1 和 2](../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr)。
-5. **合并时复用：**获授权的 `OWNER`、`MEMBER` 或 `COLLABORATOR` 必须在受支持的合并路径前发布独占一行的 `/reuse-sweep-run` 命令（可附带合格来源 run ID）。验证器会把命令缺失或发布者未授权视为失败；参见[验证器检查 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted)和[复用流程](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
-6. **合并时：**CODEOWNER 的精确签署只需由 [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml) 独立验证并获得一次 PASS。自动化通过 `codeowner-signoff-verified` 保留接受状态，并将必需状态延续到后续 head（包括 rebase 后），无需重新运行 Claude。每次实际验证都会更新同一条 PR 裁定评论，注明所评估的 SHA；延续 PASS 不代表新增提交已被审阅。删除评论不会重置接受状态，手动重新评估也不会撤销已有 PASS。评论恢复和手动分发说明见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
+5. **合并时复用：**获授权的 `OWNER`、`MEMBER` 或 `COLLABORATOR` 必须在受支持的合并路径前发布独占一行的 `/use <run_id>` 命令来指定合格的源 Run（原有的 `/reuse-sweep-run` 命令仍受支持）。验证器会把命令缺失或发布者未授权视为失败；参见[验证器检查 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted)和[复用流程](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
+6. **合并时：**满足 GitHub 的 Core 团队和 CODEOWNER 批准要求，或由有权限的维护者使用绕过权限。自动清单验证只发布供审阅参考的评论；详见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
 7. **合并后：**作者按照 [`CONTRIBUTING.md`](../CONTRIBUTING.md#after-merging) 的要求确认 main 分支任务通过。
 
 ## 停止条件

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,23 @@ def is_eval_result(data: object) -> bool:
     return isinstance(data, dict) and (
         "lm_eval_version" in data or data.get("result_format") == EVAL_RESULT_FORMAT
     )
+
+
+def read_eval_results(
+    paths: Iterable[Path],
+    *,
+    skip_errors: tuple[type[Exception], ...] = (OSError, UnicodeDecodeError, json.JSONDecodeError),
+) -> dict[Path, dict[str, Any]]:
+    results = {}
+    for path in paths:
+        try:
+            with open(path) as handle:
+                data = json.load(handle)
+        except skip_errors:
+            continue
+        if is_eval_result(data):
+            results[path] = data
+    return results
 
 
 def result_concurrency(name: str) -> int | None:
@@ -37,15 +55,11 @@ def result_order(path: Path) -> tuple[int, str]:
     if match:
         try:
             base, separator, fraction = match.group(0).partition(".")
-            parsed = datetime.strptime(base, "%Y-%m-%dT%H-%M-%S").replace(
-                tzinfo=timezone.utc
-            )
-            delta = parsed - datetime(1970, 1, 1, tzinfo=timezone.utc)
+            parsed = datetime.strptime(base, "%Y-%m-%dT%H-%M-%S").replace(tzinfo=UTC)
+            delta = parsed - datetime(1970, 1, 1, tzinfo=UTC)
             fractional_ns = int((fraction + "000000000")[:9]) if separator else 0
             return (
-                delta.days * 86_400_000_000_000
-                + delta.seconds * 1_000_000_000
-                + fractional_ns,
+                delta.days * 86_400_000_000_000 + delta.seconds * 1_000_000_000 + fractional_ns,
                 path.name,
             )
         except ValueError:
@@ -71,9 +85,7 @@ def select_latest_result(
     return max(candidates, key=result_order, default=None)
 
 
-def select_latest_results(
-    paths: Iterable[Path], *, batched: bool = False
-) -> list[Path]:
+def select_latest_results(paths: Iterable[Path], *, batched: bool = False) -> list[Path]:
     """Select one result, or one per suffixed concurrency in numeric order."""
     if not batched:
         latest = select_latest_result(paths)
@@ -147,12 +159,8 @@ def extract_metrics(data: dict[str, Any], *, source: str) -> list[dict[str, Any]
         metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
         model = data.get("model_name") or metadata.get("model")
         sample_counts = data.get("n-samples")
-        task_samples = (
-            sample_counts.get(task) if isinstance(sample_counts, dict) else None
-        )
-        n_eff = (
-            task_samples.get("effective") if isinstance(task_samples, dict) else None
-        )
+        task_samples = sample_counts.get(task) if isinstance(sample_counts, dict) else None
+        n_eff = task_samples.get("effective") if isinstance(task_samples, dict) else None
 
         invalid_count = "n-samples" in data and not is_valid_effective_count(n_eff)
         integration_error = data.get("integration_error")
@@ -204,9 +212,7 @@ def extract_metrics(data: dict[str, Any], *, source: str) -> list[dict[str, Any]
                         family = "accuracy"
                     if family is not None:
                         metrics[family] = task_results.get(f"{base_metric},{name}")
-                        metrics[f"{family}_se"] = task_results.get(
-                            f"{base_metric}_stderr,{name}"
-                        )
+                        metrics[f"{family}_se"] = task_results.get(f"{base_metric}_stderr,{name}")
         extracted.append(metrics)
     return extracted
 
@@ -215,7 +221,7 @@ def as_int(x: Any, default: int = 0) -> int:
     """Convert a metadata field to int with a fallback."""
     try:
         return int(x)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return default
 
 
@@ -323,3 +329,77 @@ def build_rows(
                 }
         rows.append(build_row(meta, metrics))
     return rows
+
+
+def result_error(data: Any) -> str | None:
+    """Return a structural error for a raw result, or None when reusable."""
+    if not isinstance(data, dict):
+        return "is not an object"
+    if "integration_error" in data:
+        return "reports an integration error"
+    if not is_eval_result(data):
+        return "has no recognized eval result format"
+
+    results = data.get("results")
+    if not isinstance(results, dict) or not results:
+        return "has empty or malformed results"
+    configs = data.get("configs", {})
+    if not isinstance(configs, dict):
+        return "has malformed configs"
+
+    sample_counts = data.get("n-samples")
+    if "n-samples" in data and not isinstance(sample_counts, dict):
+        return "has malformed effective sample counts"
+
+    for task, metrics in results.items():
+        if not isinstance(task, str) or not task:
+            return "has an invalid task name"
+        if not isinstance(metrics, dict) or not metrics:
+            return f"has empty or malformed results for task {task!r}"
+        task_config = configs.get(task, {})
+        if not isinstance(task_config, dict):
+            return f"has malformed config for task {task!r}"
+        metric_list = task_config.get("metric_list", [])
+        filter_list = task_config.get("filter_list", [])
+        if not isinstance(metric_list, list) or not isinstance(filter_list, list):
+            return f"has malformed config for task {task!r}"
+        if metric_list:
+            first_metric = metric_list[0]
+            if (
+                not isinstance(first_metric, dict)
+                or not isinstance(first_metric.get("metric"), str)
+                or not first_metric["metric"]
+            ):
+                return f"has malformed metric config for task {task!r}"
+            base_metric = first_metric["metric"]
+        else:
+            base_metric = "exact_match"
+        if filter_list:
+            if any(
+                not isinstance(item, dict)
+                or not isinstance(item.get("name"), str)
+                or not item["name"]
+                for item in filter_list
+            ):
+                return f"has malformed filter config for task {task!r}"
+            configured_names = [f"{base_metric},{item['name']}" for item in filter_list]
+            strict_names = [name for name in configured_names if metric_family(name) == "strict"]
+            fallback_names = [name for name in configured_names if metric_family(name) == "flex"]
+            primary_names = strict_names or fallback_names or configured_names
+        else:
+            primary_names = ["acc" if "acc" in metrics else base_metric]
+        if not primary_names or any(name not in metrics for name in primary_names):
+            return f"has no score for task {task!r}"
+
+        for name in primary_names:
+            score = metrics[name]
+            if not is_valid_score(score):
+                return f"has invalid score {name!r} for task {task!r}: {score!r}"
+        if sample_counts is not None:
+            task_counts = sample_counts.get(task)
+            if not isinstance(task_counts, dict) or "effective" not in task_counts:
+                return f"has malformed effective sample count for task {task!r}"
+            effective = task_counts["effective"]
+            if not is_valid_effective_count(effective):
+                return f"has invalid effective sample count for task {task!r}: {effective!r}"
+    return None

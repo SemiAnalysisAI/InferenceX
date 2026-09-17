@@ -31,6 +31,10 @@ These sources outrank this guide when behavior changes. Update the English page 
 
 ## Testing layers
 
+[`CI`](../.github/workflows/ci.yml) runs **Lint** and **Tests** in parallel for PRs (including forks) and pushes to `main` that change Python files, `.github/scripts/` helpers, `ci.yml`, `pyproject.toml`, `uv.lock`, `.python-version`, MCP configuration, Ruff configuration, or `pytest.ini`. [`Workflow security`](../.github/workflows/zizmor.yml) runs **Zizmor** for changes to workflows, action definitions, Dependabot, pre-commit, or zizmor configuration. Python-only changes do not trigger Zizmor; other workflow-only changes do not trigger Lint or Tests. Editing `ci.yml` triggers all three jobs. Each workflow can be dispatched manually. Changes only to other docs, shell scripts, or benchmark YAML do not trigger either workflow; run the applicable checks locally or dispatch them manually.
+
+Tests runs every suite under `utils/`, `runners/`, and `experimental/CollectiveX/tests/` with four pytest workers, plus MCP compatibility. New tests in those directories are discovered automatically. CI installs `infx` as a wheel with `uv sync --locked --all-extras --group test --no-editable`, using Python 3.12 and CPU-only PyTorch. A failing job does not cancel the other; a newer PR update cancels the superseded CI run. Branch pushes without a PR no longer start a separate changelog-test run.
+
 | Layer | What it can prove | What it cannot prove |
 | --- | --- | --- |
 | Parse and syntax | Edited YAML loads, and edited Bash parses | Schema validity, runtime routing, or GPU behavior |
@@ -59,6 +63,49 @@ See [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/2
 
 Run checks from the repository root and replace placeholders with the exact changed path or key.
 
+### Python environment
+
+[`pyproject.toml`](../pyproject.toml) defines the `infx` package and its dependencies; [`uv.lock`](../uv.lock) records their resolved versions. Run `uv sync --locked` to install the core tooling, then `uv run --locked python -m infx.matrix.generate ...` to use the existing module commands. Use `--extra workflows` for CODEOWNER/GitHub integrations, `--extra results` for eval summaries/database comparisons, or `--group mcp` for the repository MCP server. The `test` group includes MCP and the CPU test dependencies.
+
+For development, uv installs the package in editable mode, so source edits apply immediately. CI installs a regular wheel, but the main pytest suite imports the source checkout. Dedicated installed-package tests create clean environments with only core or results dependencies and run outside the source checkout. They check recipe node counts, runner metadata, matrix rejection, packaged threshold loading, score validation, BFCL license attribution, and generated eval rows and summaries. Repository-dependent commands use their source checkout when installed editable; with a wheel, run them from the repository root. Eval YAML/JSON resources and the Apache license ship with the package.
+
+Use `uv add` for core dependencies, `uv add --optional <extra>` for an integration, or `uv add --group test` for test-only tools. Commit both the manifest and lockfile. `uv lock --upgrade-package <name>` updates a dependency; resolution enforces a 12-hour age cutoff from `pyproject.toml`. Ruff and Zizmor remain outside the lockfile so their CI checks keep using the latest eligible release. Benchmark images, vendor eval environments, and commands that measure historical checkouts retain their existing dependency setup.
+
+Dependencies stay within the latest supported major; minor and patch upgrades are recorded in `uv.lock` and validated in CI. For pre-1.0 packages, review minor upgrades too. MCP stays on 1.x because 2.x replaces the server's decorator-based handler API. New releases do not automatically change a locked environment.
+
+Result collection, comparisons, and run statistics use `infx` from current `main`, resolved once during sweep setup and shared across those jobs. Klaud resolves `main` once and passes that commit to every candidate; candidate hooks use a separate tooling checkout so recipe edits cannot replace the imported package. Sign-off also checks out current trusted `main`. These tools have no release-version pin or cooldown on repository commits. PR CI tests the PR's package, while matrix generation, benchmark scripts, and recipes retain the selected checkout. Sweep summaries show the resolved setup and tooling commits, plus the source head when reusing benchmarks. E2E benchmark and eval jobs use the same resolved SHA as matrix generation, even if the requested branch moves while jobs queue. Klaud summaries show the tooling commit used as the candidate base.
+
+### Python lint and formatting
+
+Ruff checks `infx/` with the rules in [`infx/ruff.toml`](../infx/ruff.toml), targeting Python 3.12 and a line length of 100. CI runs on any Python-file change and uses the latest Ruff release at least 12 hours old.
+
+```bash
+uvx --exclude-newer PT12H ruff@latest check --fix infx
+uvx --exclude-newer PT12H ruff@latest format infx
+```
+
+Fix findings where practical. Justified exceptions use inline `# noqa: CODE`; unused ignores are checked. Preview rules and automatic unsafe fixes are not enabled.
+
+### GitHub Actions security
+
+CI uses the latest zizmor release at least 12 hours old, with its strictest `auditor` persona, strict input collection, all supported input kinds, and online action-reference checks. Every unsuppressed finding fails the job, including informational and low-confidence findings. Run the same audit locally with an authenticated GitHub token:
+
+```bash
+GH_TOKEN="$(gh auth token)" uvx --exclude-newer PT12H zizmor@latest \
+  --persona auditor --strict-collection --collect all --no-config --no-progress .
+```
+
+All third-party actions remain pinned to commit SHAs. Same-repository workflow calls use `$/`, which resolves the workflow's exact commit and requires Actions runner 2.336.0 or newer. Dependabot waits seven days before action updates. The combined Claude workflow keeps separate review and coding jobs with their own permissions; the pinned Claude action installs its supported CLI version.
+
+Auditor mode also reports deliberate architecture choices. Exceptions are attached to the exact affected YAML line with a reason, never disabled globally:
+
+- Independent GPU dispatches, comment requests, and Klaud waves must not supersede one another. The priority scheduler and candidate ownership claims handle their resource limits.
+- Trusted external dispatch uses `pull_request_target`; it executes trusted control code and enforces authorization before privileged operations.
+- Existing repository-scoped integration credentials are retained. Moving them into protected GitHub Environments requires migrating the actual stored secrets; adding an empty `environment:` field is not a fix.
+- The profiling storage checkout retains its scoped SSH deploy key only because the next step pushes a trace commit to that separate repository. Benchmark checkouts do not retain credentials.
+
+Add `--no-ignores` to review all of these exceptions. Keep new findings blocking, and review an exception again if its trigger, checkout, credential consumer, or authorization changes. No GPU execution is needed to run this security audit.
+
 ### Parse and syntax
 
 ```bash
@@ -72,13 +119,13 @@ Parsing is only the first gate. Do not report a YAML parse as matrix validation.
 ### Exact config, then filtered family
 
 ```bash
-uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+uv run --locked \
   python -m infx.matrix.generate test-config \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
   --config-keys <exact-key>
 
-uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+uv run --locked \
   python -m infx.matrix.generate full-sweep \
   --config-files configs/<nvidia|amd>-master.yaml \
   --runner-config configs/runners.yaml \
@@ -89,7 +136,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
   --seq-lens 1k1k 8k1k
 ```
 
-Inspect the emitted values, not only the exit code or row count: config key, model, image, runner, scenario, concurrency, `max-model-len`, TP/PP/EP/DCP/PCP, prefill/decode workers, hardware, router, KV transfer, eval flags, `additional-settings`, and `spec-decoding`. The schema lives in [`validation.py`](../utils/matrix_logic/validation.py), and the generator is [`generate_sweep_configs.py`](../utils/matrix_logic/generate_sweep_configs.py).
+Inspect the emitted values, not only the exit code or row count: config key, model, image, runner, scenario, concurrency, `max-model-len`, TP/PP/EP/DCP/PCP, prefill/decode workers, hardware, router, KV transfer, eval flags, `additional-settings`, and `spec-decoding`. The schema lives in [`validation.py`](../infx/matrix/validation.py), and the generator is [`generate.py`](../infx/matrix/generate.py).
 
 ### Focused suites by changed contract
 
@@ -99,7 +146,7 @@ Inspect the emitted values, not only the exit code or row count: config key, mod
 | Changelog content or PR gating | `python -m pytest utils/test_process_changelog.py utils/changelog_gate_tests/ -v` |
 | Result processing and topology | `python -m pytest utils/test_process_result.py utils/agentic/aggregation/test_process_agentic_result.py utils/test_aggregate_power.py utils/test_calc_success_rate.py -v` |
 | AgentX aggregation and artifact loading | `python -m pytest utils/agentic/aggregation/ -v` |
-| Eval dispatch, batching, or patches | `python -m pytest infx/evals/ -v` |
+| Eval dispatch, batching, or patches | `python -m pytest utils/evals/ -v` |
 | Eval collection | `python -m pytest utils/test_collect_eval_results.py -v` |
 | Sweep reuse or reusable artifacts | `python -m pytest utils/test_github.py utils/test_find_reusable_sweep_run.py utils/test_acknowledge_sweep_reuse.py utils/test_validate_reusable_sweep_artifacts.py -v` |
 
@@ -120,14 +167,14 @@ A local matrix cannot prove Slurm allocation or llm-d endpoint discovery. Multi-
 
 The existing Python suites cover workflow contracts too. `utils/matrix_logic/test_validation.py` tests the workflow input schemas and runs both preparation scripts with controlled generator output. Invalid rows must fail before publishing job outputs; accepted rows must remain unchanged, including when manual dispatch measures an older checkout. `utils/test_process_result.py` executes the shipped launch step with a recording launcher for current and historical checkouts. These tests do not emulate GitHub's expression engine or prove GPU performance; review expression changes with workflow validation and applicable smoke evidence.
 
-With the test dependencies installed, add [`pytest-xdist`](https://pytest-xdist.readthedocs.io/en/stable/distribution.html) to the same Python environment and run all local suites with four workers:
+Run the same locked environment and four-worker suite as CI:
 
 ```bash
-python -m pip install pytest-xdist
-python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
+uv run --locked --all-extras --group test --no-editable \
+  python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
 ```
 
-Use `-n 0` for serial debugging. Tests must keep temporary files and ports isolated and collect deterministic parameter cases across workers. The changelog-gate CI job also uses four workers; parallel execution preserves its test selection and assertions.
+Use `-n 0` for serial debugging. Tests must keep temporary files and ports isolated and collect deterministic parameter cases across workers.
 
 ## Smoke, sweep, and eval
 
@@ -172,8 +219,8 @@ Record enough information for another reviewer to reproduce the claim without gu
 2. **Before broadening:** a smoke or canary proves the changed runtime path. If it fails, diagnose that layer before spending a full sweep.
 3. **Before CODEOWNER sign-off:** follow [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md), including its code-quality, architecture, image provenance, upstream recipe, patch/waiver, chat-template, and AgentX requirements where applicable.
 4. **For sweep/eval acceptance:** at least one commit currently in the PR has successful, non-skipped executed `single-node */` and `eval /` checks. A successful `collect-evals` alone is insufficient. Download the corresponding eval artifacts and confirm non-empty, passing accuracy and the same inference image. These are the executable rules in [verifier Checks 1 and 2](../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr).
-5. **For reuse at merge:** an authorized `OWNER`, `MEMBER`, or `COLLABORATOR` posts a whole-line `/reuse-sweep-run` command (optionally with the eligible source run ID) before the supported merge path. The verifier treats a missing or unauthorized command as a failure. See [verifier Check 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted) and [the reuse procedure](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep).
-6. **At merge:** a CODEOWNER's exact sign-off needs one independent PASS from [`codeowner-signoff-verify.yml`](../.github/workflows/codeowner-signoff-verify.yml). Automation preserves acceptance with `codeowner-signoff-verified` and carries the required status onto subsequent heads without rerunning Claude, including after rebases. Each actual verification updates one PR verdict comment with the assessed SHA; carrying a PASS forward does not attest to review of new commits. Deleting the comment does not reset acceptance, and manual reassessment cannot revoke an earlier PASS. See [the contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off) for comment recovery and manual dispatch.
+5. **For reuse at merge:** an authorized `OWNER`, `MEMBER`, or `COLLABORATOR` posts `/use <run_id>` on its own line to select the eligible source run (the legacy `/reuse-sweep-run` command remains supported) before the supported merge path. The verifier treats a missing or unauthorized command as a failure. See [verifier Check 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted) and [the reuse procedure](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep).
+6. **At merge:** satisfy GitHub's Core-team and CODEOWNER approval requirements, or use an authorized maintainer bypass. Automated checklist verification posts an advisory comment; see [the contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off).
 7. **After merge:** the author confirms the main-branch jobs pass, as required by [`CONTRIBUTING.md`](../CONTRIBUTING.md#after-merging).
 
 ## Stop conditions

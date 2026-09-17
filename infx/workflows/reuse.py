@@ -1,10 +1,9 @@
-#!/usr/bin/env python3
 """Find an approved pull-request sweep run that can be reused after merge.
 
 This script is used by ``run-sweep.yml`` on push-to-main runs.  It only enables
 reuse when the merge commit maps unambiguously to one pull request and a
-maintainer has left a ``/reuse-sweep-run`` comment on that PR.  The comment
-may include a specific source run ID; without one, the latest successful
+maintainer has left a ``/use <run_id>`` or legacy ``/reuse-sweep-run`` comment.
+The legacy command may omit the source run ID; without one, the latest successful
 ``pull_request`` ``run-sweep.yml`` run for the PR head is used.
 """
 
@@ -15,19 +14,20 @@ import json
 import os
 import re
 import sys
-import urllib.parse
 from typing import Any
 
-from .. import github
+from infx import github
 
-# Preserve the existing helper imports used through the legacy entrypoint.
+from .sweep_runs import (
+    REUSABLE_AGGREGATE_ARTIFACTS as REUSABLE_AGGREGATE_ARTIFACTS,
+    artifact_names as artifact_names,
+    completed_pr_runs,
+    has_reusable_result_artifacts as has_reusable_result_artifacts,
+    pr_commit_shas as pr_commit_shas,
+)
 
 DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR")
 REUSE_INCOMPATIBLE_LABELS = {"evals-only", "agentx-fast"}
-REUSABLE_AGGREGATE_ARTIFACTS = {
-    "results_bmk",
-    "eval_results_all",
-}
 
 
 def label_names(pr: dict[str, Any]) -> set[str]:
@@ -44,8 +44,7 @@ def write_outputs(path: str | None, outputs: dict[str, str]) -> None:
     if not path:
         return
     with open(path, "a") as handle:
-        for key, value in outputs.items():
-            handle.write(f"{key}={value}\n")
+        handle.writelines(f"{key}={value}\n" for key, value in outputs.items())
 
 
 def result(
@@ -72,14 +71,16 @@ def result(
     }
 
 
-def parse_reuse_command(
-    body: str, command: str = "/reuse-sweep-run"
-) -> tuple[bool, int | None]:
+def parse_reuse_command(body: str, command: str = "/reuse-sweep-run") -> tuple[bool, int | None]:
     """Use the last standalone command in a comment, preserving unpinned requests."""
-    matches = re.findall(rf"(?m)^\s*{re.escape(command)}(?:\s+(\d+))?\s*$", body)
+    pattern = rf"{re.escape(command)}(?:[^\S\r\n]+(\d+))?"
+    if command == "/reuse-sweep-run":
+        pattern += r"|/use[^\S\r\n]+(\d+)"
+    matches = list(re.finditer(rf"(?m)^\s*(?:{pattern})\s*$", body))
     if not matches:
         return False, None
-    return True, int(matches[-1]) if matches[-1] else None
+    run_id = next((value for value in matches[-1].groups() if value), None)
+    return True, int(run_id) if run_id else None
 
 
 def find_reuse_request(
@@ -101,9 +102,7 @@ def find_reuse_request(
         association = str(comment.get("author_association") or "")
         if association not in allowed_author_associations:
             continue
-        matches, pinned_run_id = parse_reuse_command(
-            str(comment.get("body") or ""), command
-        )
+        matches, pinned_run_id = parse_reuse_command(str(comment.get("body") or ""), command)
         if not matches:
             continue
         return comment, pinned_run_id
@@ -141,18 +140,7 @@ def find_latest_successful_pr_run(
     """
     if not head_branch or not valid_shas:
         return None
-    encoded_workflow = urllib.parse.quote(workflow_id, safe="")
-    runs = github.paginate(
-        repo,
-        f"/actions/workflows/{encoded_workflow}/runs",
-        token,
-        "workflow_runs",
-        {
-            "event": "pull_request",
-            "branch": head_branch,
-            "status": "completed",
-        },
-    )
+    runs = completed_pr_runs(repo, workflow_id, head_branch, token)
     # GitHub returns runs newest-first.  Skip gated no-op runs (synchronize
     # events suppressed by a /reuse-sweep-run comment) which complete as
     # "success" but produce no benchmark or eval artifacts.
@@ -175,29 +163,6 @@ def workflow_path(workflow_id: str) -> str:
     return f".github/workflows/{workflow_id}"
 
 
-def pr_commit_shas(repo: str, pr_number: int, token: str) -> set[str]:
-    """Return the set of commit SHAs currently on a PR.
-
-    The Actions ``run.pull_requests`` field is dynamically recomputed and only
-    lists PRs whose *current* head matches the run's ``head_sha``.  After any
-    additional commit lands on the PR (e.g. a ``main`` merge to resolve a
-    ``perf-changelog.yaml`` conflict), the pinned source run drops out of that
-    field even though its commit is still part of the PR.  Checking the PR
-    commit list directly survives that case.
-    """
-    commits = github.paginate(
-        repo,
-        f"/pulls/{pr_number}/commits",
-        token,
-        "",
-    )
-    return {
-        str(commit.get("sha"))
-        for commit in commits
-        if isinstance(commit, dict) and commit.get("sha")
-    }
-
-
 def validate_reusable_run(
     repo: str,
     workflow_id: str,
@@ -217,9 +182,7 @@ def validate_reusable_run(
     # points.  ``cancelled`` belongs here alongside ``failure`` because a
     # fail-fast sweep cancels its remaining jobs, so a run whose benchmark jobs
     # all passed still concludes ``cancelled`` when a later job is cut short.
-    allowed_conclusions = (
-        {"success", "failure", "cancelled"} if allow_failed else {"success"}
-    )
+    allowed_conclusions = {"success", "failure", "cancelled"} if allow_failed else {"success"}
     if run.get("conclusion") not in allowed_conclusions:
         expected = "success, failure, or cancelled" if allow_failed else "success"
         raise RuntimeError(
@@ -245,33 +208,8 @@ def validate_reusable_run(
     names = artifact_names(repo, run_id, token)
     if not has_reusable_result_artifacts(names):
         raise RuntimeError(
-            f"Reusable source run {run_id} has no benchmark, eval, or "
-            "agentic result artifact."
+            f"Reusable source run {run_id} has no benchmark, eval, or agentic result artifact."
         )
-
-
-def has_reusable_result_artifacts(names: set[str]) -> bool:
-    """Return whether a run produced ingest-relevant result artifacts."""
-    return bool(names & REUSABLE_AGGREGATE_ARTIFACTS) or any(
-        name.startswith("bmk_agentic_") for name in names
-    )
-
-
-def artifact_names(repo: str, run_id: int, token: str) -> set[str]:
-    """Return unexpired artifact names from a workflow run."""
-    artifacts = github.paginate(
-        repo,
-        f"/actions/runs/{run_id}/artifacts",
-        token,
-        "artifacts",
-    )
-    return {
-        str(artifact.get("name"))
-        for artifact in artifacts
-        if isinstance(artifact, dict)
-        and artifact.get("name")
-        and not artifact.get("expired", False)
-    }
 
 
 def resolve_reusable_run(
@@ -351,15 +289,11 @@ def main() -> int:
     if not token:
         raise RuntimeError("GH_TOKEN or GITHUB_TOKEN is required")
     allowed_author_associations = {
-        value.strip()
-        for value in args.allowed_author_associations.split(",")
-        if value.strip()
+        value.strip() for value in args.allowed_author_associations.split(",") if value.strip()
     }
 
     incompatible_labels = {
-        value.strip()
-        for value in args.reuse_incompatible_label.split(",")
-        if value.strip()
+        value.strip() for value in args.reuse_incompatible_label.split(",") if value.strip()
     }
 
     if args.event_name == "pull_request":
@@ -370,9 +304,7 @@ def main() -> int:
             )
         else:
             if args.pr_number is None:
-                raise RuntimeError(
-                    "--pr-number is required for pull_request synchronize"
-                )
+                raise RuntimeError("--pr-number is required for pull_request synchronize")
             authorized, pinned_run_id = find_reuse_authorization(
                 args.repo,
                 args.pr_number,
@@ -498,9 +430,9 @@ def cli() -> None:
     """Keep the same error presentation for package and legacy entrypoints."""
     try:
         raise SystemExit(main())
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         print(f"error: {exc}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":

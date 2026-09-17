@@ -31,9 +31,7 @@ def record(repository: str, value: dict) -> dict:
     try:
         return json.loads(commit["message"])
     except (KeyError, ValueError) as error:
-        raise VerificationError(
-            "Unknown claim owner; manual inspection required"
-        ) from error
+        raise VerificationError("Unknown claim owner; manual inspection required") from error
 
 
 def create(
@@ -68,9 +66,7 @@ def create(
             )
     except subprocess.CalledProcessError:
         current = ref(repository, name)
-        if current and current["object"]["sha"] != (previous or {}).get(
-            "object", {}
-        ).get("sha"):
+        if current and current["object"]["sha"] != (previous or {}).get("object", {}).get("sha"):
             return current["object"]["sha"] == new["sha"]
         raise
     return True

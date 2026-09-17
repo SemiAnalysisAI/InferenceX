@@ -44,6 +44,8 @@ def _make_run_id(cluster: str | None) -> str:
 
 
 def _git_sha() -> str | None:
+    if os.environ.get("OPERATORX_SOURCE_SHA"):
+        return os.environ["OPERATORX_SOURCE_SHA"]
     try:
         repo = Path(__file__).resolve().parent.parent
         out = subprocess.run(
