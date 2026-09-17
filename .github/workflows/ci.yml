@@ -80,4 +80,4 @@ jobs:
         if: matrix.check == 'Tests'
         run: |
           python -c "import torch; assert torch.version.cuda is None and torch.version.hip is None"
-          python -m pytest infx/srt_slurm/tests/ utils/ runners/ experimental/CollectiveX/tests/ experimental/operatorx/tests/ -n 4
+          python -m pytest utils/ runners/ experimental/CollectiveX/tests/ experimental/operatorx/tests/ -n 4

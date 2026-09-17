@@ -17,7 +17,7 @@ from infx.srt_slurm.synthetic_acceptance import (
     selected_recipes,
 )
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
 
 # Exercise the pinned upstream checkout without installing its serving dependencies.
@@ -112,7 +112,7 @@ def test_automatic_curve_selection_preserves_json(
     }
     result = apply_native(recipe, build_overrides(recipe, "vllm", env, golden_dir=golden_dir))
     spec = json.loads(result["roles"]["agg"]["args"]["speculative-config"])
-    assert spec == {  # noqa: S101 - pytest assertion verifies behavior.
+    assert spec == {
         "method": method,
         "num_speculative_tokens": 3,
         **extra,
@@ -120,7 +120,7 @@ def test_automatic_curve_selection_preserves_json(
         "rejection_sample_method": "synthetic",
         "synthetic_acceptance_length": expected,
     }
-    assert recipe == original  # noqa: S101 - pytest assertion verifies behavior.
+    assert recipe == original
 
 
 def test_thinking_mode_and_decode_priority(golden_dir: Path) -> None:
@@ -136,13 +136,13 @@ def test_thinking_mode_and_decode_priority(golden_dir: Path) -> None:
             golden_dir=golden_dir,
         ),
     )
-    assert (  # noqa: S101 - pytest assertion verifies behavior.
+    assert (
         json.loads(result["roles"]["decode"]["args"]["speculative-config"])[
             "synthetic_acceptance_length"
         ]
         == 2.1
     )
-    assert result["roles"]["prefill"] == {"args": {"tensor-parallel-size": 8}}  # noqa: S101 - pytest assertion verifies behavior.
+    assert result["roles"]["prefill"] == {"args": {"tensor-parallel-size": 8}}
 
 
 @pytest.mark.parametrize("sampling", [None, "unknown"])
@@ -215,8 +215,8 @@ def test_engine_token_selection_and_environment(
         recipe,
         build_overrides(recipe, framework, {**ENV, **environment}, golden_dir=golden_dir),
     )
-    assert result["roles"]["decode"]["env"] == {"KEEP": "worker", **expected}  # noqa: S101 - pytest assertion verifies behavior.
-    assert result["benchmark"] == {"env": {"KEEP": "client"}}  # noqa: S101 - pytest assertion verifies behavior.
+    assert result["roles"]["decode"]["env"] == {"KEEP": "worker", **expected}
+    assert result["benchmark"] == {"env": {"KEEP": "client"}}
 
 
 @pytest.mark.parametrize(
@@ -245,16 +245,16 @@ def test_real_runs_clear_synthetic_without_a_curve(
     )
     role = result["roles"]["agg"]
     if framework == "vllm":
-        assert json.loads(role["args"]["speculative-config"]) == {  # noqa: S101 - pytest assertion verifies behavior.
+        assert json.loads(role["args"]["speculative-config"]) == {
             "method": "dspark",
             "num_speculative_tokens": 3,
             "rejection_sample_method": "block",
         }
     elif framework == "trt":
-        assert "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS" not in role["env"]  # noqa: S101 - pytest assertion verifies behavior.
+        assert "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS" not in role["env"]
     else:
-        assert not any(key.startswith("SGLANG_SIMULATE_ACC_") for key in role["env"])  # noqa: S101 - pytest assertion verifies behavior.
-    assert role["env"]["KEEP"] == "yes"  # noqa: S101 - pytest assertion verifies behavior.
+        assert not any(key.startswith("SGLANG_SIMULATE_ACC_") for key in role["env"])
+    assert role["env"]["KEEP"] == "yes"
 
 
 @pytest.mark.parametrize(
@@ -279,7 +279,7 @@ def test_missing_or_invalid_golden_rejects_injection(
 
 
 def test_non_speculative_passthrough_and_malformed_spec(tmp_path: Path) -> None:
-    assert (  # noqa: S101 - pytest assertion verifies behavior.
+    assert (
         build_overrides(
             {"roles": {"agg": {}}},
             "vllm",
@@ -334,21 +334,21 @@ def test_variants_use_resolved_tokens_and_preserve_caller_arguments(
         ENV,
         golden_dir=golden_dir,
     )
-    assert len(commands) == 2  # noqa: S101 - pytest assertion verifies behavior.
+    assert len(commands) == 2
     for index, command in enumerate(commands):
-        assert command[:2] == ["srtctl", "apply"]  # noqa: S101 - pytest assertion verifies behavior.
-        assert command[command.index("--tags") + 1] == "x y"  # noqa: S101 - pytest assertion verifies behavior.
+        assert command[:2] == ["srtctl", "apply"]
+        assert command[command.index("--tags") + 1] == "x y"
         selector = f"zip_override_test[{index}]"
-        assert f"{recipe}:{selector}" in command  # noqa: S101 - pytest assertion verifies behavior.
+        assert f"{recipe}:{selector}" in command
         resolved = selected_recipes(apply_native(raw, command), selector)[0][1]
-        assert (  # noqa: S101 - pytest assertion verifies behavior.
+        assert (
             json.loads(resolved["roles"]["agg"]["args"]["speculative-config"])[
                 "synthetic_acceptance_length"
             ]
             == [1.8, 2.4][index]
         )
-        assert resolved["benchmark"]["env"] == {"KEEP": "caller"}  # noqa: S101 - pytest assertion verifies behavior.
-    assert recipe.read_text() == original  # noqa: S101 - pytest assertion verifies behavior.
+        assert resolved["benchmark"]["env"] == {"KEEP": "caller"}
+    assert recipe.read_text() == original
 
 
 def test_caller_json_is_merged_before_golden_selection(tmp_path: Path, golden_dir: Path) -> None:
@@ -367,7 +367,7 @@ def test_caller_json_is_merged_before_golden_selection(tmp_path: Path, golden_di
         golden_dir=golden_dir,
     )
     result = apply_native(yaml.safe_load(recipe.read_text()), commands[0])
-    assert json.loads(result["roles"]["agg"]["args"]["speculative-config"]) == {  # noqa: S101 - pytest assertion verifies behavior.
+    assert json.loads(result["roles"]["agg"]["args"]["speculative-config"]) == {
         "method": "dspark",
         "num_speculative_tokens": 3,
         "model": "draft model",
@@ -409,11 +409,11 @@ def test_shell_forwards_options_and_submission_failure(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 7, result.stderr  # noqa: S101 - pytest assertion verifies behavior.
+    assert result.returncode == 7, result.stderr
     argv = json.loads(result.stdout)
-    assert argv[:5] == ["apply", "-f", str(recipe), "--tags", "a b"]  # noqa: S101 - pytest assertion verifies behavior.
+    assert argv[:5] == ["apply", "-f", str(recipe), "--tags", "a b"]
     result_recipe = apply_native(yaml.safe_load(recipe.read_text()), argv)
-    assert (  # noqa: S101 - pytest assertion verifies behavior.
+    assert (
         json.loads(result_recipe["roles"]["agg"]["args"]["speculative-config"])[
             "rejection_sample_method"
         ]
