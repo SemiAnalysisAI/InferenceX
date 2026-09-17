@@ -2,7 +2,8 @@ schema: 2
 name: "agg-gb200-tp8-c4-mtp-hicache"
 
 # GB200 AgentX aggregate topology: one TP8 worker spans two four-GPU nodes
-# and serves both prefill and decode with MTP speculation and HiCache.
+# and serves both prefill and decode with bundled DSpark speculation (K=6)
+# and HiCache.
 
 model:
   path: "deepseek-v4-pro"
@@ -98,10 +99,11 @@ roles:
       dp-size: 1
       tp-size: 8
       ep-size: 1
-      speculative-algorithm: EAGLE
-      speculative-num-steps: 3
+      speculative-algorithm: DSPARK
+      speculative-dspark-block-size: 6
+      speculative-num-steps: 1
       speculative-eagle-topk: 1
-      speculative-num-draft-tokens: 4
+      speculative-num-draft-tokens: 7
       enable-hierarchical-cache: true
       hicache-ratio: 2.75
       hicache-write-policy: write_through
