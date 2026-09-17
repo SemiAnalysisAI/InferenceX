@@ -8011,4 +8011,4 @@
   description:
     - "Add concurrency 96 to the B200 TP4 AgentX sweep between 64 and 128; image, recipe script, DSpark AL 3.51, Engram UVA and the other concurrencies are unchanged"
     - "在 B200 TP4 AgentX 扫描的并发 64 和 128 之间新增并发 96；镜像、配方脚本、DSpark AL 3.51、Engram UVA 及其他并发保持不变"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3224
