@@ -1,4 +1,5 @@
 schema: 2
+setup_script: diagnose-pmix.sh
 engine:
   type: trtllm
   publish_events_and_metrics: false

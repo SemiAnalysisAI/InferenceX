@@ -309,10 +309,6 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
 fi
 
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
-if [[ "${EVAL_ONLY}" == "true" ]]; then
-    python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-        "$CONFIG_PATH" "$FRAMEWORK" || exit 1
-fi
 
 # Weights live on node-local MODEL_ROOT, which this login host cannot stat, so
 # srtctl's preflight model.path check is always skipped. Runtime loading still
@@ -322,7 +318,7 @@ SRTCTL_APPLY_ARGS=(
     --no-preflight
     --tags "b300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
-SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_EVAL_ARGS[@]}" "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
+SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')

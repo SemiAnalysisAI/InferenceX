@@ -866,20 +866,25 @@ jobs:
                   SWEEP_MATRIX: ${{ needs.setup.outputs.search-space-config }}
                   SWEEP_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
                   SWEEP_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
-                  FULL_SWEEP: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') && !contains(github.event.pull_request.labels.*.name, 'evals-only') && !contains(github.event.pull_request.labels.*.name, 'agentx-fast') && needs.setup.outputs.reuse-enabled != 'true' }}
+                  FULL_SWEEP: ${{ github.event_name == 'pull_request' && needs.setup.outputs.reuse-enabled != 'true' }}
               run: |
                   python3 - <<'PY'
                   import json, os
                   from pathlib import Path
                   matrix = json.loads(os.environ['SWEEP_MATRIX'])
                   labels = set(json.loads(os.environ['SWEEP_LABELS']) or [])
-                  incompatible = {'sweep-enabled', 'non-canary-full-sweep-enabled', 'full-sweep-fail-fast',
-                                  'full-sweep-fail-fast-no-canary', 'evals-only', 'agentx-fast'}
+                  sweep_labels = labels & {
+                      'sweep-enabled', 'full-sweep-enabled', 'non-canary-full-sweep-enabled',
+                      'full-sweep-fail-fast', 'full-sweep-fail-fast-no-canary',
+                      'all-evals', 'evals-only', 'agentx-fast',
+                  }
                   Path('changelog_metadata.json').write_text(json.dumps(matrix['changelog_metadata']))
                   Path('sweep_manifest.json').write_text(json.dumps({
                       'head': os.environ['SWEEP_HEAD'], 'run-id': int(os.environ['GITHUB_RUN_ID']),
                       'run-attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
-                      'full-sweep': os.environ['FULL_SWEEP'] == 'true' and not labels & incompatible,
+                      'full-sweep': os.environ['FULL_SWEEP'] == 'true' and sweep_labels in (
+                          {'full-sweep-fail-fast'}, {'full-sweep-enabled'},
+                      ),
                       'matrix': matrix,
                   }))
                   PY
