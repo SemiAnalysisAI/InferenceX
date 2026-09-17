@@ -8032,3 +8032,24 @@
     - "配置键由 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp 改名为 dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark，以反映 DSpark 算法与 UMBP-linker 分支；该配方此前的条目仍记录在旧键名下。改名不伴随任何其他字段变化。"
     - "Collect completed logs from every Slurm node so both prefill and decode artifacts are uploaded; forward workflow-owned AgentX fast-mode and power inputs, and supply the existing router port to evaluation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3188
+  
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 Dynamo+SGLang AgentX TP8 aggregate HiCache recipes at concurrency 1 and 4."
+    - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with the checkpoint's bundled DSpark head at block size 6 (golden AL 3.77, thinking_on) and max-running-request/CUDA-graph limits set to twice each concurrency."
+    - "Use the compute-visible Watchtower workspace and node-local DeepSeek-V4-Pro checkpoint staging."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3182
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 Dynamo+SGLang AgentX HiCache recipes for 1P1D DEP8/DEP16 at concurrency 64, 128, and 400, plus 2P1D DEP8/DEP16 at concurrency 800."
+    - "Limit decode max-running-requests to 128, 256, 800, and 1600, respectively."
+    - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with the Dynamo 1.5.0.dev20260910 wheel and the checkpoint's bundled DSpark head at block size 6 (golden AL 3.77, thinking_on)."
+    - "Use the compute-visible Watchtower workspace and node-local DeepSeek-V4-Pro checkpoint staging."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3182
