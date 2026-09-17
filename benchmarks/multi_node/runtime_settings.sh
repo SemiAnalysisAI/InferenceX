@@ -61,7 +61,7 @@ case "$FRAMEWORK" in
         ;;
     llmd-vllm)
         export LLMD_CONTAINER_ENGINE=docker VLLM_RANDOMIZE_DP_DUMMY_INPUTS=1
-        export VLLM_ENGINE_READY_TIMEOUT_S=1800 VLLM_LOGGING_LEVEL=INFO UCX_TLS=cuda_copy,cuda_ipc,rc
+        export VLLM_ENGINE_READY_TIMEOUT_S=1800 VLLM_LOGGING_LEVEL=DEBUG UCX_TLS=cuda_copy,cuda_ipc,rc
         export NVSHMEM_REMOTE_TRANSPORT=ibgda NVSHMEM_IB_ENABLE_IBGDA=true NVSHMEM_SYMMETRIC_SIZE=16G
         export LLMD_API_SERVER_COUNT=4
         ;;

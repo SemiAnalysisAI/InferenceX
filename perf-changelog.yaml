@@ -8033,3 +8033,13 @@
     - "Re-remove archived dsv4-fp4-gb200-llmd-vllm 8k1k master key reintroduced by the upstream merge and restore the thin GB200 llmd-vllm disagg wrapper for AgentX P/D launches."
     - "重新移除 upstream 合并误带回的已归档 dsv4-fp4-gb200-llmd-vllm 8k1k 主配置项，并恢复供 AgentX P/D 启动使用的 GB200 llmd-vllm disagg 精简 wrapper。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+    - dsv4-fp4-gb200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Raise llm-d vLLM logging to DEBUG on GB200 DSpark AgentX recipes to capture worker-death diagnostics during external-LB DEP8 bring-up."
+    - "将 GB200 DSpark AgentX llm-d 配方的 vLLM 日志级别提升至 DEBUG，以便在外部 LB DEP8 启动阶段捕获 worker 异常退出诊断信息。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
