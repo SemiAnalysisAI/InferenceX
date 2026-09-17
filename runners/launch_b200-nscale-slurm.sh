@@ -37,7 +37,10 @@ if [[ "$FRAMEWORK" == "tilert" && "${IS_AGENTIC}" != "1" ]]; then
     run_compat_launcher
 fi
 
-if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $MODEL == "deepseek-ai/DeepSeek-V4-Pro-0813" ]]; then
+    export MODEL_PATH="$NSCALE_MODEL_ROOT/DeepSeek-V4-Pro-0813"
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-0813"
+elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     check_env_vars MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
@@ -287,7 +290,6 @@ if [[ $RECIPE_MAX_ATTEMPTS =~ ^[0-9]+$ ]] && (( RECIPE_MAX_ATTEMPTS < 720 )); th
     sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "$CONFIG_PATH"
 fi
 
-inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
 if [[ "$USES_AGENTX_POWER" == "1" ]]; then
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
@@ -304,7 +306,7 @@ if [[ $MODEL_PREFIX == "kimik2.6" ]] ||
     SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
 fi
 
-SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')

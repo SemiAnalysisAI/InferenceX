@@ -59,6 +59,9 @@ elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
     check_env_vars MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="glm5.2-fp4"
+elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp8" ]]; then
+    export MODEL_PATH="${MODEL_PATH:-/scratch/models/GLM-5.2-FP8}"
+    export SRT_SLURM_MODEL_PREFIX="glm5.2-fp8"
 elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "int4" ]]; then
     export MODEL_PATH="/scratch/models/Kimi-K2.5"
     export SRT_SLURM_MODEL_PREFIX="kimik2.5"
@@ -321,10 +324,6 @@ EOF
     # 720x10s health-check budget so large loads (DSR1-FP8 ~680GB off shared FS)
     # finish. CONFIG_FILE may carry an :override[N] suffix.
     sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "${CONFIG_FILE%%:*}"
-    if [[ "${EVAL_ONLY}" == "true" ]]; then
-        python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-            "${CONFIG_FILE%%:*}" "$FRAMEWORK" || exit 1
-    fi
 
     SRTCTL_PREFLIGHT_ARGS=()
     # Kimi K2.6 weights are staged on the Slurm compute nodes, not the login node.
@@ -332,7 +331,7 @@ EOF
         SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
     fi
 
-    SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
     JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')

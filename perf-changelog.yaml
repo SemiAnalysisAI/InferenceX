@@ -7990,6 +7990,21 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3109
 
 - config-keys:
+    - glm5.2-fp8-b200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the first GLM-5.2 FP8 AgentX (agentic-coding) recipe on B200: zai-org/GLM-5.2-FP8 on single-node SGLang with EAGLE off the checkpoint's built-in nextn head (num-steps 3, eagle-topk 1, 4 draft tokens = 3 speculative tokens), spec-decoding=mtp only per the AgentX policy, routed to benchmarks/single_node/agentic/glm5.2_fp8_b200_sglang_mtp.sh."
+    - "Port of the validated glm5.2_fp4_b200_sglang_mtp.sh with two functional deltas: HF_MODEL_ID zai-org/GLM-5.2-FP8 and --quantization fp8 (the checkpoint ships quant_method=fp8 with 128x128 weight blocks and dynamic e4m3 activations) in place of modelopt_fp4. Serve flags are otherwise identical: TP8 low-latency arm with --kv-cache-dtype fp8_e4m3, --bf16-gemm-backend cutedsl, --max-prefill-tokens 8192, chunked-prefill 8192, --mem-fraction-static 0.83, glm47 tool-call and glm45 reasoning parsers, cuda-graph-max-bs min(2*CONC, 64), HiCache write_back/direct/page_first_direct with ratio 0.75 at c1-c8 and a 169 GB/rank target pool at c12/c16."
+    - "Throughput runs pin SGLang simulated acceptance to the committed golden AL 2.99 (golden_al_distribution/glm5.2_mtp.yaml, thinking_on, K=3, run 28058352479), which was measured on the FP8 checkpoint itself; EVAL_ONLY runs keep real target verification."
+    - "Image lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 (2026-09-07 cu13 dev nightly, digest sha256:19b8fa1223cc339c1eae7a5b703f1a8c2543b5b119155bf3d7efaef18f77f007, tag commit sgl-project/sglang@30705c00; Docker Hub last pushed 2026-09-07T01:43:42Z). The same tag the B200 Qwen3.5 FP8/FP4 SGLang AgentX recipes moved to in #2861/#2862; SGLANG_SIMULATE_ACC_TOKEN_MODE requires v0.5.16 or newer."
+    - "Memory: the ~756 GB block-FP8 checkpoint (141 shards) is ~94.5 GB/GPU at TP8 on 180 GB B200s (NVFP4: ~58 GB/GPU), leaving an fp8 KV pool of roughly 55 GB/GPU inside the 0.83 static share against ~91 GB/GPU on NVFP4. TP8-only for memory and comparability; HiCache absorbs the smaller HBM pool as host spill. MEM_FRACTION_STATIC and HICACHE_* stay env-overridable for on-node tuning."
+    - "Search space mirrors glm5.2-fp4-b200-sglang-agentic-mtp exactly so the two precision curves are comparable: one TP8 + HiCache arm at conc [1, 4, 8, 12, 16], dram-utilization 0.80."
+    - "Adds glm5.2/fp8 routing to runners/launch_b200-nscale-compat.sh (MODEL_PATH default /scratch/models/GLM-5.2-FP8, SRT_SLURM_MODEL_PREFIX glm5.2-fp8), which previously hard-failed with 'Unsupported model prefix/precision' for this model. The script's completeness-checked, flock-serialized hf download stages the checkpoint on the day-zero run if it is not already on the cluster."
+    - "Re-pin from lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 to lmsysorg/sglang:nightly-dev-cu13-20260908-20ca564b (2026-09-08 cu13 dev nightly, digest sha256:9a352a35c973a2357372e85f3bcb5388b6b3c46c1329165987260f3b089647dc; Docker Hub last pushed 2026-09-08T01:40:59Z, tag commit sgl-project/sglang@20ca564b). The 2026-09-07 build carries an unguarded kv_index_translator.translate_dcp_read_ids call on the DSA fp8 KV read path that the EAGLE draft backend never binds, so GLM-5.2 MTP runs crash intermittently with AttributeError (observed on the MI355X FP8 sibling in run 34173459478 after 74 minutes of serving). sgl-project/sglang#38318 (merged 2026-09-07T20:03Z) adds the None guard and is six commits behind 20ca564b."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2863
+
+- config-keys:
     - dsv4-fp4-b200-dynamo-sglang-agentic-agg
   scenario-type:
     - agentic-coding
@@ -7997,6 +8012,7 @@
     - "Add B200 Dynamo+SGLang AgentX TP8 aggregate HiCache recipes at concurrency 1, 4, and 8."
     - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with bundled DSpark K=6, full-node CPU/DRAM allocation, and per-point request/CUDA-graph limits."
     - "Preinstall uv with the pinned GitHub Action on NScale so benchmark startup does not depend on direct access to astral.sh."
+    - "Map the exact DeepSeek-V4-Pro-0813 recipe alias to the pre-staged NScale checkpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3211
 
 - config-keys:
@@ -8007,4 +8023,5 @@
     - "Add B200 Dynamo+SGLang AgentX DEP8/DEP8 HiCache recipes for 1P1D at concurrency 64 and 128, plus 2P1D at concurrency 256."
     - "Limit decode max-running-requests to 128, 256, and 512, respectively, and reserve long-output KV admission for the c256 trace."
     - "Reuse the preinstalled uv binary in the NScale launcher, with the existing astral.sh installer retained as a fallback."
+    - "Map the exact DeepSeek-V4-Pro-0813 recipe alias to the pre-staged NScale checkpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3211
