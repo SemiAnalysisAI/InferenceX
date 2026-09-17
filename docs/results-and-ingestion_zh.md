@@ -177,6 +177,8 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 
 聚合工件匹配 `bmk_*` 收集模式，因此也会成为 `results_bmk/agg_bmk.json` 中的一条记录。原始同级工件不会交给 `collect_results.py`。InferenceX-app 移除 `bmk_` 和 `agentic_` 后缀前缀，将 `bmk_agentic_<suffix>` 与 `agentic_<suffix>` 配对。对于以 `_concN.json` 命名的文件，并发也参与 trace 同级工件查找。
 
+AgentX 复用校验会排除明确失败的结果行：成功请求数必须是数值零，总请求数必须是有限、非负、整数值的数值。这与入库时排除失败运行的规则一致。只包含此类失败结果的点工件可以没有原始同级工件；校验不会删除任何工件。成功、混合、空、未知或格式不合法的结果仍接受原有身份及原始同级工件检查。没有任何可复用结果的全失败来源仍会被拒绝，排除失败诊断行本身不证明完整 sweep 已覆盖。
+
 服务器日志是单独的 `server_logs_<RESULT_FILENAME>` 工件。应用会使用完全移除前缀后的后缀作为回退，从而让 AgentX 记录找到不含 `agentic_` 前缀的日志工件。
 
 普通单节点 AgentX 提交默认启用共享 GPU 功耗监控。
