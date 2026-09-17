@@ -583,11 +583,10 @@ if [[ -n "${CLIENT_IMAGE:-}" ]]; then
     srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD pull '"$CLIENT_IMAGE"' >/dev/null 2>&1 || true' 2>/dev/null || true
 fi
 
-srun \
-  --nodelist="$SELECTED_NODELIST_SRUN" \
-  --kill-on-bad-exit=1 \
-  --signal=TERM@30 \
-  --unbuffered \
+run_amd_multinode_after_preflight \
+  "$SELECTED_NODELIST_SRUN" "$NUM_NODES" \
+  "$DI_REPO_DIR/benchmarks/multi_node/amd_utils/preflight_node.sh" \
+  "$CONT_FILTER" "$SKIP_GPU_SANITY" \
   bash -lc "
 set -eo pipefail
 
@@ -674,23 +673,6 @@ else
     echo \"[rdma] no out-of-tree RDMA mounts needed\"
 fi
 fi  # end: if ENGINE == atom-disagg
-
-# Pre-clean (idempotent): stop then force-remove so GPU VRAM is released
-# before the drain gate. stop-only left containers in Created/Exited state
-# on some nodes.
-\$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
-\$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop -t 15 || true
-\$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD rm -f || true
-sleep 2
-
-# GPU drain gate: fail fast on leftover VRAM use instead of OOMing in model
-# load ~15 min later. Reuses wait_for_amd_gpu_clean from benchmark_lib.sh.
-if [[ \"${SKIP_GPU_SANITY}\" == \"1\" ]]; then
-    echo \"[INFO] SKIP_GPU_SANITY=1 set; skipping GPU pre-flight drain check\"
-else
-    # Unset so benchmark_lib.sh's unrelated agentic KV_OFFLOADING check doesn't exit 1 here.
-    bash -c \"unset IS_AGENTIC SCENARIO_TYPE; source $DI_REPO_DIR/benchmarks/benchmark_lib.sh && wait_for_amd_gpu_clean\"
-fi
 
 # Start vLLM external router container on node 0
 if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then

@@ -437,3 +437,14 @@ readiness deadlines. A failed client retains its exit status; unresolved cleanup
 fails an otherwise successful node. Kernel-blocked processes may still require
 separately authorized node repair. Do not change or discard completed metrics to
 work around teardown failures.
+
+### AMD multi-node GPU preflight coordination
+
+The Slurm launcher completes Docker pre-clean and the existing GPU VRAM drain
+check on every selected node in a separate Slurm step before launching any server
+container. A failed preflight prevents the serving step; it does not consume a
+healthy peer's container-readiness deadline. Node-local `preflight_<hostname>.log`
+files are included in the normal log fan-in, including failures. The VRAM threshold,
+15-minute GPU guard, and container/server readiness deadlines remain unchanged.
+This coordination prevents a peer-barrier race; it does not repair a GPU driver
+that fails to reclaim memory. The existing Docker pre-clean scope is unchanged.
