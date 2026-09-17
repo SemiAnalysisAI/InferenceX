@@ -22,7 +22,7 @@
     - 新增明确标注的 Kimi K3 vLLM 基准测试配置，测量 BF16 EP8/TP8 路由专家内核。
     - 在计时前生成本地均匀路由，不包含共享专家、通信或原生 K3 的latent 投影及 SITU 层。
 - date: 2026-09-17
-  pr-link: pending
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3214
   operators: [moe_gemm]
   pools: [h100-dgxc]
   description:
