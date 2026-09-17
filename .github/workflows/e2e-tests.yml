@@ -601,7 +601,7 @@ jobs:
         if: ${{ always() && needs.get-jobs.outputs.tooling-ref != '' }}
         runs-on: ubuntu-latest
         permissions:
-            actions: read # List jobs for run statistics.
+            actions: read # Read job timings for run statistics.
             contents: read
 
         env:

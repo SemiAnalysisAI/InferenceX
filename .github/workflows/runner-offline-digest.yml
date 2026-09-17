@@ -2,6 +2,13 @@ name: Runner Offline Digest
 
 # Daily check that lists self-hosted runners reporting `offline` and posts
 # a summary + threaded details to Slack. No post when nothing is offline.
+#
+# Required secrets:
+#   RUNNERS_PAT      — PAT (or GitHub App token) with repo "Administration: Read"
+#                      so it can list self-hosted runners. The default GITHUB_TOKEN
+#                      cannot read this endpoint.
+#   SLACK_BOT_TOKEN  — Slack bot token with `chat:write`. The bot must be a member
+#                      of channel C09PULGMVNG.
 
 on:
   schedule:
