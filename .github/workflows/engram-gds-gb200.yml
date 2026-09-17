@@ -4,6 +4,9 @@ on:
   push:
     branches: [experiment/gb200-engram-gds]
   workflow_dispatch:
+concurrency:
+  group: gb200-engram-gds-single-node
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -29,6 +32,10 @@ jobs:
           assert rows and all(r['runner'] == 'cluster:gb200-nv' and r['tp'] == 4 for r in rows)
           concs = [r['conc'] for r in rows]
           assert len(concs) == len(set(concs))
+          print('One node; sequential concurrency points:', concs, flush=True)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('One GB200 node, fresh server per point. Sequential concurrencies: '
+                            + ', '.join(map(str, concs)) + '.\n')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('config=' + json.dumps(rows[0]) + '\n')
               output.write('concs=' + json.dumps(concs) + '\n')

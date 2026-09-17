@@ -222,7 +222,7 @@ jobs:
       ${{ fromJSON(inputs.config).spec-decoding != 'none' && fromJSON(inputs.config).spec-decoding || '' }}
       ${{ inputs.scenario-type == 'agentic-coding' && format('{0}', fromJSON(inputs.config).kv-offloading) != '' && fromJSON(inputs.config).kv-offloading != 'none' && format('{0} KV offload', fromJSON(inputs.config).kv-offloading) || '' }}
       ${{ inputs.scenario-type == 'agentic-coding' && fromJSON(inputs.config).kv-offload-backend.name != 'none' && fromJSON(inputs.config).kv-offload-backend.name != 'default' && format('{0}', fromJSON(inputs.config).kv-offload-backend.name) || '' }}
-      c${{ fromJSON(inputs.config).conc }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
+      c${{ inputs.agentic-conc-list != '' && join(fromJSON(inputs.agentic-conc-list), ',') || fromJSON(inputs.config).conc }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
     steps:
       - name: Repair root-owned artifacts (pre-run)
         if: ${{ inputs.runner == 'cluster:mi355x-amds' }}
