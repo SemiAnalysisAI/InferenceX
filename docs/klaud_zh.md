@@ -39,7 +39,7 @@ PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: fals
 
 选择或修复镜像前，比较新旧镜像实际内置版本对应的 vLLM、SGLang、ATOM 或 TensorRT-LLM 源码标签/提交，以及关联的 serving 依赖。检查参数和配置解析器及执行路径，确认默认值或语义变化、改名/移除的选项和相关新增选项。仅看 release notes 不够；核实镜像与源码的对应关系，无法确认时如实说明，不能假定最新 `main` 就是镜像内容。将源码链接、相关变化和范围内的决策写入尝试评论。这不扩大允许修改的范围，也不允许运行时补丁。
 
-定向尝试只测试更新后的镜像：从 `main` 调度 `e2e-tests.yml`，将 `inputs.ref` 设为实际测量 SHA，并使用 `generate-cli-command="test-config --config-files FILE --config-keys FAMILY --smoke"`。生成器将最低并发的吞吐量检查与规范并发上的代表性 eval 分开，不再把长评测降到吞吐量最低并发。这只能证明启动和兼容性，不能代表完整曲线。smoke 通过后，追加精确配置族的 changelog 条目，不使用场景、eval 选择或 append-only 修饰项；保持 PR 为草稿并添加 `full-sweep-fail-fast`。最终 sweep 保留全部测试点和默认 eval。任何同仓库 PR 均可通过 sweep 标签授权草稿运行；fork PR 仍使用受信任调度路径。最终失败后，先移除 sweep 标签、保持草稿，再推送修复。补全尝试评论后调用 `finish`；它先验证全部必需结果，再将 PR 标记为 ready，触发自动审阅。标记为 ready 不会启动 sweep，已完成的结果仍可用于 staging 和复用。不要求性能差值为正；回退应如实报告。Klaud 不自行 staging、授权复用、请求 review 或合并。
+定向尝试只测试更新后的镜像：从 `main` 调度 `e2e-tests.yml`，将 `inputs.ref` 设为实际测量 SHA，并使用 `generate-cli-command="test-config --config-files FILE --config-keys FAMILY --smoke"`。生成器将最低并发的吞吐量检查与规范并发上的代表性 eval 分开，不再把长评测降到吞吐量最低并发。这只能证明启动和兼容性，不能代表完整曲线。smoke 通过后，追加精确配置族的 changelog 条目，不使用场景、eval 选择或 append-only 修饰项；保持 PR 为草稿并添加 `full-sweep-fail-fast`。最终 sweep 保留全部测试点和默认 eval。任何同仓库 PR 均可通过 sweep 标签授权草稿运行；fork PR 仍使用受信任调度路径。最终失败后，先移除 sweep 标签、保持草稿，再推送修复。补全尝试评论后调用 `finish`；它先验证全部必需结果，再将 PR 标记为 ready，触发自动审阅。标记为 ready 不会启动 sweep。确认结果为 `validated` 后，Klaud 仅发布一次 `/use <verified-final-run-id>`，保留已完成运行供合并时复用。不要求性能差值为正；回退应如实报告。Klaud 不自行 staging、请求 review 或合并。
 
 在编辑或创建分支之前、每次定向调度之前，以及最终 sweep 的标签转换之前，使用 `check-capacity --cluster ID` 检查精确目标；通过重复 `--cluster` 指定每个可能的目标。退出状态 0 要求全部目标均通过新鲜度、可用性和低于 80% 利用率检查。如果该检查在定向调度、最终 sweep 转换或恢复调度之前失败，Klaud 会先在已有 PR 的评论中记录可公开的容量延后原因和当前尝试状态。随后取消并确认全部所属运行已经结束，再用终态或已取消行及确认后的状态更新尝试评论。最后移除所有 sweep 标签、将 PR 改回草稿、关闭 PR，并删除远程 Klaud 分支，使后续扫描可以重试该候选。如果尚无 PR，则在最终响应中记录延后结果，不创建占位 PR。调度后利用率上升不会导致健康运行被取消。Klaud 不会等待恢复或承诺自动继续。命令不打印容量详情。
 
@@ -106,7 +106,7 @@ action 失败后，`recover-current` 执行一次非阻塞收尾。即使 SDK �
 
 权威[候选指令](../.github/klaud-candidate-prompt.md)仅允许修改所选 master 镜像，以及其已引用且未共享的单节点 recipe 或 srt-slurm YAML 中有源码依据的兼容性参数/环境变量。模型、精度、拓扑、推测解码、工作负载/数据集、时长、资源、全部配置点和 eval 保持不变。`model.container` 和 `identity.container.image` 必须一致。Klaud 不进行广泛调优，也不修改共享脚本、launcher、库或工作流。运行时引擎/serving 技术栈补丁必须为零，包括选定路径已有的补丁：禁止改写源码、容器、site-packages，禁止 overlay、monkey patch 或重建/fork 的 wheel。选择可原样运行的镜像，否则报告不兼容。
 
-smoke benchmark 和代表性 eval 都通过后，在 changelog 物理末尾追加条目并保留历史字节，推送精确 head，生成/检查完整矩阵并重新检查容量。保持草稿，只添加 `full-sweep-fail-fast`。最终失败后，先移除 sweep 标签并保持草稿，再修复。仅 `finish` 在结果验证和最终报告发布后标记就绪；就绪触发审查，不启动新 sweep。审查、staging/reuse 和合并仍由维护者决定。
+smoke benchmark 和代表性 eval 都通过后，在 changelog 物理末尾追加条目并保留历史字节，推送精确 head，生成/检查完整矩阵并重新检查容量。保持草稿，只添加 `full-sweep-fail-fast`。最终失败后，先移除 sweep 标签并保持草稿，再修复。仅 `finish` 在结果验证和最终报告发布后标记就绪；就绪触发审查，不启动新 sweep。随后 Klaud 用 `/use` 记录已验证的最终运行；审查、staging 和合并仍由维护者决定。
 
 ## 工作流操作与凭据
 
