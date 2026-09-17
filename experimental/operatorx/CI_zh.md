@@ -161,3 +161,5 @@ NVIDIA 使用 `vllm/vllm-openai:v0.19.0`（amd64/arm64），AMD 复用现有 ROC
 `6*num_tokens*top_k*hidden*(intermediate/routed_tensor_parallel_size)/(latency_us*1e6)`。
 本地 top-k 全部指向本地专家表，与通用基准测试的 EP 模拟方式一致。不要再次除以 EP，
 也不要乘以节点分配的 GPU 数。该指标不计激活或路由的 FLOP，不代表完整模型吞吐量。
+
+可选的 `operator.import_tmp_dir` 用于指定镜像导入的临时文件系统。H100 使用 `/var/tmp`，因为其 `/tmp` 文件系统不支持 vLLM 镜像所需的 opaque whiteout xattr。每次导入仍创建并清理独立临时目录，不修改系统配置。

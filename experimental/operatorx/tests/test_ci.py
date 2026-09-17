@@ -303,7 +303,7 @@ import json, os, pathlib, sys, time
 name = pathlib.Path(sys.argv[0]).name
 with open(os.environ['TRACE'], 'a') as f: f.write(name + '\\n')
 with open(os.environ['TRACE_ARGS'], 'a') as f:
-    row = {'argv': sys.argv, 'cache': os.environ.get('ENROOT_CACHE_PATH')}
+    row = {'argv': sys.argv, 'cache': os.environ.get('ENROOT_CACHE_PATH'), 'tmpdir': os.environ.get('TMPDIR')}
     f.write(json.dumps(row) + '\\n')
 if name == 'salloc':
     if os.environ['QUEUED'] == '1':
@@ -347,6 +347,7 @@ if name == 'srun' and sys.argv[-1] == 'rank':
                             **({"qos": "fixture-qos"} if pool != "b300" else {}),
                             "exclude_nodes": "quarantined",
                             "enroot_cache_path": str(tmp_path / "shared/enroot"),
+                            "import_tmp_dir": str(tmp_path / "scratch"),
                             **(
                                 {"storage_roots": [str(tmp_path / "shared")]}
                                 if pool == "gb200"
@@ -453,6 +454,7 @@ if name == 'srun' and sys.argv[-1] == 'rank':
     if not cancel:
         imported = next(c for c in calls if "import" in c["argv"])
         assert imported["cache"] == str(tmp_path / "shared/enroot")
+        assert imported["tmpdir"] == str(tmp_path / "scratch")
         assert imported["argv"][-2:] == ["--image-platform", architecture]
         assert Path(imported["argv"][0]).name == "srun"
         launched = next(c["argv"] for c in calls if c["argv"][-1] == "rank")

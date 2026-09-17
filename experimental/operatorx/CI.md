@@ -191,3 +191,5 @@ The local top-k routes all target the local expert table, matching the generic
 benchmark's EP emulation. Do not divide the measured work by EP again or multiply
 by the number of GPUs in the allocation. These kernel measurements exclude
 activation and routing FLOPs and are not full-model throughput.
+
+The optional `operator.import_tmp_dir` selects the importer’s temporary filesystem. H100 uses `/var/tmp` because its `/tmp` filesystem rejects the opaque whiteout xattrs used by the vLLM image. Each import still creates and removes a private temporary directory; no system configuration is changed.

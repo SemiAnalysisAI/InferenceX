@@ -12,6 +12,7 @@
     - 修正 torch attention 的矩形因果掩码，并遵循请求的输出精度。
     - MLA 计时覆盖物化 Q/K/V 的 attention，不包含缓存投影和 RoPE。
 - date: 2026-09-16
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3213
   operators: [moe_gemm]
   pools: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300, mi300x, mi325x, mi355x]
   description:
@@ -19,4 +20,4 @@
     - Prepare uniform local routing outside timing; exclude shared experts, communication and native K3 latent/SITU layers.
   description-zh:
     - 新增明确标注的 Kimi K3 vLLM 基准测试配置，测量 BF16 EP8/TP8 路由专家内核。
-    - 在计时前生成本地均匀路由，不包含共享专家、通信或原生 K3 的潜在投影及 SITU 层。
+    - 在计时前生成本地均匀路由，不包含共享专家、通信或原生 K3 的latent 投影及 SITU 层。

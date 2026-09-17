@@ -461,6 +461,8 @@ def execute(args) -> None:
         # Import on the allocated architecture, including B300: its submit host
         # lacks PyTorch extraction space, as the inference launcher notes.
         import_env = dict(os.environ)
+        if profile.get("import_tmp_dir"):
+            import_env["TMPDIR"] = profile["import_tmp_dir"]
         if profile.get("enroot_cache_path"):
             import_env["ENROOT_CACHE_PATH"] = profile["enroot_cache_path"]
         command(import_command, root / "import.log", env=import_env)
