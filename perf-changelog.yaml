@@ -8003,3 +8003,12 @@
     - "Adds glm5.2/fp8 routing to runners/launch_b200-nscale-compat.sh (MODEL_PATH default /scratch/models/GLM-5.2-FP8, SRT_SLURM_MODEL_PREFIX glm5.2-fp8), which previously hard-failed with 'Unsupported model prefix/precision' for this model. The script's completeness-checked, flock-serialized hf download stages the checkpoint on the day-zero run if it is not already on the cluster."
     - "Re-pin from lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 to lmsysorg/sglang:nightly-dev-cu13-20260908-20ca564b (2026-09-08 cu13 dev nightly, digest sha256:9a352a35c973a2357372e85f3bcb5388b6b3c46c1329165987260f3b089647dc; Docker Hub last pushed 2026-09-08T01:40:59Z, tag commit sgl-project/sglang@20ca564b). The 2026-09-07 build carries an unguarded kv_index_translator.translate_dcp_read_ids call on the DSA fp8 KV read path that the EAGLE draft backend never binds, so GLM-5.2 MTP runs crash intermittently with AttributeError (observed on the MI355X FP8 sibling in run 34173459478 after 74 minutes of serving). sgl-project/sglang#38318 (merged 2026-09-07T20:03Z) adds the None guard and is six commits behind 20ca564b."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2863
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add concurrency 96 to the B200 TP4 AgentX sweep between 64 and 128; image, recipe script, DSpark AL 3.51, Engram UVA and the other concurrencies are unchanged"
+    - "在 B200 TP4 AgentX 扫描的并发 64 和 128 之间新增并发 96；镜像、配方脚本、DSpark AL 3.51、Engram UVA 及其他并发保持不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3224
