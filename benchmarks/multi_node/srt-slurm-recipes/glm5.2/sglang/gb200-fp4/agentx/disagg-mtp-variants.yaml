@@ -66,9 +66,6 @@ base:
         SGLANG_DG_CACHE_DIR: /deepgemm_cache
         FLASHINFER_WORKSPACE_BASE: /flashinfer_cache
         SGLANG_FLASHINFER_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '2048'
-        SGLANG_SIMULATE_ACC_LEN: '2.99'
-        SGLANG_SIMULATE_ACC_METHOD: match-expected
-        SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
       args:
         served-model-name: nvidia/GLM-5.2-NVFP4
         trust-remote-code: true
@@ -143,9 +140,6 @@ base:
         SGLANG_DG_CACHE_DIR: /deepgemm_cache
         FLASHINFER_WORKSPACE_BASE: /flashinfer_cache
         SGLANG_FLASHINFER_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '2048'
-        SGLANG_SIMULATE_ACC_LEN: '2.99'
-        SGLANG_SIMULATE_ACC_METHOD: match-expected
-        SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
       args:
         served-model-name: nvidia/GLM-5.2-NVFP4
         trust-remote-code: true

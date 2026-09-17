@@ -544,3 +544,12 @@ jq -r 'to_entries[] | [.key, .value.n_success, .value.total] | @tsv' \
 当源 Run、Merge Run、Artifact 覆盖、Changelog Metadata 或下游 Event 含糊不清时，应停止并升级处理。绝不能替换成方便的 Run ID，也不能仅凭 Actions Dispatch 就宣称发布成功。
 
 原 `kimik3-fp4-h200-vllm-agentic` key 拆为 `-latency`、`-balanced` 和 `-simple` 三个 key，合计保留原来的全部 35 个点（10/12/13）、配方指纹及图表序列。每个 key 选择一份完整配方及其默认评估；功耗启用范围由该配方的 `telemetry.enabled` 决定。使用 `kimik3-fp4-h200-vllm-agentic-*` 可选择三份配方。局部配方运行不能证明其他 key 已通过资格验证。
+
+## OperatorX 微基准
+
+OperatorX 手动工作流支持 H100、H200、B200、B300、GB200、GB300、MI300X、MI325X
+和 MI355X，每个分片使用一个物理 Slurm 节点。GB200/GB300 使用四卡 Arm 节点，其余
+运行器池使用八卡 x86 节点。GEMM 和 attention 每次测量只使用一张 GPU；AMD
+attention 支持 torch 和 AITER。
+触发方式、覆盖范围、产物、取消及验证说明见
+[OperatorX GitHub Actions](../experimental/operatorx/CI_zh.md)。
