@@ -248,8 +248,6 @@ Optional modifiers do not replace a primary label:
 
 Changing a recognized primary or modifier label shares the active sweep concurrency group and normally cancels/restarts the active run. `skip_queue`, patchwork, waiver, and checklist labels are gating/priority inputs, not primary sweep modes. A head commit containing `[skip-sweep]` skips PR benchmark setup only. Changelog/reuse checks still run, and pushes to `main` ignore it.
 
-PR priority classification receives the exact base/head revisions and a direct `git diff` command, with up to 16 turns to inspect the diff and return structured criteria. Additional local reads use Read/Glob/Grep; Bash permits only individual `git diff` commands. Missing structured output falls back to `patchwork`. The `ci-patchwork-waived` label removes the forced zero score, but cannot restore criteria omitted by a failed classifier; verify both `Priority criteria` in the setup log and the generated jobs' priority scores.
-
 ## Canary and fail-fast semantics
 
 Canary and fail-fast solve different problems:

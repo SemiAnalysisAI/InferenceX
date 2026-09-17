@@ -240,8 +240,6 @@ RUN_ID=$(gh run list \
 
 修改被识别的主标签或修饰标签会共享活动扫描的 Concurrency Group，通常会取消并重启当前 Run。`skip_queue`、Patchwork、Waiver 与 Checklist 标签是 Gate/优先级输入，不是主扫描模式。Head Commit 含 `[skip-sweep]` 只会跳过 PR 基准 Setup；Changelog/复用检查仍会运行，推送到 `main` 时则忽略该标记。
 
-PR 优先级分类会收到确切的 Base/Head 版本和一条可直接执行的 `git diff` 命令，最多使用 16 轮检查 Diff 并返回结构化分类。补充读取本地文件时使用 Read/Glob/Grep；Bash 只允许单条 `git diff` 命令。缺少结构化输出时会回退为 `patchwork`。`ci-patchwork-waived` 标签可以解除强制零分，但不能补回分类器失败时遗漏的加分项；应同时核对 Setup 日志中的 `Priority criteria` 和生成任务的实际优先级分数。
-
 ## Canary 与 Fail-fast 语义
 
 Canary 和 Fail-fast 解决不同问题：
