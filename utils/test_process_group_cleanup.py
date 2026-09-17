@@ -189,3 +189,114 @@ def test_signal_failure_is_bounded_and_preserves_work_failure(
             assert leader.poll() is None
         finally:
             leader.kill()
+
+
+@pytest.mark.parametrize("work_status", [0, 17])
+def test_exit_handler_cleans_failed_startup_or_normal_work_and_umbp(
+    tmp_path: Path, work_status: int
+) -> None:
+    ready = tmp_path / "group-ready"
+    auxiliary_ready = tmp_path / "auxiliary-ready"
+    auxiliary_stopped = tmp_path / "auxiliary-stopped"
+    worker_code = (
+        "import signal,pathlib,sys,time; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "pathlib.Path(sys.argv[1]).touch(); "
+        'print("retained server output", flush=True); time.sleep(60)'
+    )
+    auxiliary_code = (
+        "import signal,pathlib,sys,time; "
+        "signal.signal(signal.SIGTERM, lambda *_: (pathlib.Path(sys.argv[2]).touch(), sys.exit(0))); "
+        "pathlib.Path(sys.argv[1]).touch(); time.sleep(60)"
+    )
+    with (
+        subprocess.Popen(
+            [sys.executable, "-c", worker_code, str(ready)],
+            start_new_session=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        ) as worker,
+        subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                auxiliary_code,
+                str(auxiliary_ready),
+                str(auxiliary_stopped),
+            ]
+        ) as auxiliary,
+    ):
+        try:
+            await_file(ready)
+            await_file(auxiliary_ready)
+            completed = subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    (
+                        'source "$1" --validation-only; '
+                        'owned_groups=("$3"); auxiliary_pid=$4; '
+                        'trap \'exit_after_background_process_cleanup "$?" 1 1 '
+                        '"$auxiliary_pid" "${owned_groups[@]}"\' EXIT; '
+                        'bash -c "exit $2"; exit $?'
+                    ),
+                    "startup",
+                    str(LIBRARY),
+                    str(work_status),
+                    str(worker.pid),
+                    str(auxiliary.pid),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=7,
+            )
+            assert completed.returncode == work_status, completed.stderr
+            assert "force-stopping owned process groups" in completed.stdout
+            # EOF proves the failed startup cannot retain the outer tee pipe.
+            output, _ = worker.communicate(timeout=2)
+            assert output == "retained server output\n"
+            assert worker.returncode == -signal.SIGKILL
+            assert auxiliary.wait(timeout=2) == 0
+            assert auxiliary_stopped.exists()
+        finally:
+            if worker.poll() is None:
+                worker.kill()
+            if auxiliary.poll() is None:
+                auxiliary.kill()
+
+
+@pytest.mark.parametrize("work_status, expected", [(0, 1), (17, 17)])
+def test_exit_handler_runs_auxiliary_cleanup_even_if_group_cleanup_fails(
+    work_status: int, expected: int
+) -> None:
+    with subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(60)"]
+    ) as auxiliary:
+        try:
+            completed = subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    (
+                        'source "$1" --validation-only; auxiliary_pid=$3; '
+                        'trap \'exit_after_background_process_cleanup "$?" 1 1 '
+                        '"$auxiliary_pid" 1\' EXIT; exit "$2"'
+                    ),
+                    "startup",
+                    str(LIBRARY),
+                    str(work_status),
+                    str(auxiliary.pid),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+            )
+            assert completed.returncode == expected
+            assert "refusing unsafe process-group cleanup" in completed.stderr
+            assert auxiliary.wait(timeout=2) == -signal.SIGTERM
+        finally:
+            if auxiliary.poll() is None:
+                auxiliary.kill()

@@ -23,6 +23,12 @@ export BENCH_MAX_CONC_VALUE
 source $SGLANG_WS_PATH/setup_deps.sh
 source $SGLANG_WS_PATH/env.sh
 
+# Install before starting UMBP or serving processes. Early readiness failures must
+# close the same owned groups as normal completion, including orphaned workers.
+SGLANG_OWNED_PGIDS=()
+UMBP_SA_PID=""
+trap 'exit_after_background_process_cleanup "$?" 30 5 "$UMBP_SA_PID" "${SGLANG_OWNED_PGIDS[@]}"' EXIT
+
 host_ip=$(ip route get 1.1.1.1 | awk '/src/ {print $7}')
 host_name=$(hostname)
 
@@ -686,7 +692,6 @@ elif [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == umbp-linker* ]]; 
             "$UMBP_SA_BIN" "$UMBP_STANDALONE_ADDRESS" > "$UMBP_SA_LOG" 2>&1 &
         UMBP_SA_PID=$!
         echo "[UMBP] standalone server PID: $UMBP_SA_PID"
-        trap '[[ -n "${UMBP_SA_PID:-}" ]] && kill "$UMBP_SA_PID" 2>/dev/null || true' EXIT
 
         # Three waits, all bounded by wall time rather than by a guess at how
         # fast this node is. Bind time for a 549 GB tier measured 120 s on
@@ -960,6 +965,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         set +x
         prefill0_pid=$!
         prefill0_pgid=$prefill0_pid
+        SGLANG_OWNED_PGIDS+=("$prefill0_pgid")
     fi
 
     echo "Waiting for all prefill and decode servers to be up . . ."
@@ -1017,6 +1023,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         set +x
         proxy_pid=$!
         proxy_pgid=$proxy_pid
+        SGLANG_OWNED_PGIDS+=("$proxy_pgid")
 
         HEALTH_BARRIER_CMD="python3 $SGLANG_WS_PATH/sync.py barrier \
             --node-ips ${NODE0_ADDR} \
@@ -1286,12 +1293,6 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
     if [[ "${EVAL_FAILED:-0}" -eq 1 && "$node_exit_status" -eq 0 ]]; then
         node_exit_status=1
     fi
-    if [[ "$DRY_RUN" -eq 0 ]]; then
-        # The router and prefill may retain TERM-resistant tokenizer workers.
-        # Keep the benchmark/eval status even when teardown also fails.
-        stop_background_process_groups "$node_exit_status" 30 5 "$proxy_pgid" "$prefill0_pgid"
-        exit $?
-    fi
     exit "$node_exit_status"
 
 elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
@@ -1337,6 +1338,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         set +x
         prefill_pid=$!
         prefill_pgid=$prefill_pid
+        SGLANG_OWNED_PGIDS+=("$prefill_pgid")
     fi
 
     echo "Waiting for proxy server to be up..."
@@ -1366,8 +1368,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     echo "Killing the rank $NODE_RANK prefill server"
 
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        stop_background_process_groups 0 30 5 "$prefill_pgid"
-        exit $?
+        exit 0
     fi
 
 else
@@ -1455,6 +1456,7 @@ else
         set +x
         decode_pid=$!
         decode_pgid=$decode_pid
+        SGLANG_OWNED_PGIDS+=("$decode_pgid")
     fi
 
     echo "Waiting for proxy server to be up..."
@@ -1483,8 +1485,7 @@ else
 
     echo "Killing the rank $RANK decode server"
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        stop_background_process_groups 0 30 5 "$decode_pgid"
-        exit $?
+        exit 0
     fi
 
 fi

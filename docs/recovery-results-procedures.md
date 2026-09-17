@@ -428,15 +428,17 @@ This evidence is the completion gate. “Workflow green” without artifact iden
 
 ### AMD multi-node SGLang teardown
 
-After benchmark/eval work and result staging, the AMD SGLang launcher sends TERM
-only to its recorded `setsid` process groups. It allows 30 seconds for graceful
+On exit, including a failed startup/readiness check, the AMD SGLang launcher sends
+TERM only to its recorded `setsid` process groups. Normal completion stages results
+before this cleanup. It allows 30 seconds for graceful
 exit, then sends KILL to surviving groups and checks for exit for another five
 seconds. This handles orphaned or TERM-resistant workers that otherwise hold log
 pipes open. These cleanup deadlines do not change profiling, evaluation, or server
 readiness deadlines. A failed client retains its exit status; unresolved cleanup
 fails an otherwise successful node. Kernel-blocked processes may still require
 separately authorized node repair. Do not change or discard completed metrics to
-work around teardown failures.
+work around teardown failures. A single EXIT handler owns group cleanup and the
+existing UMBP standalone PID cleanup; the latter still runs if group cleanup fails.
 
 ### AMD multi-node GPU preflight coordination
 

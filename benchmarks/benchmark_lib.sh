@@ -87,6 +87,25 @@ stop_background_process_groups() {
     return "$cleanup_status"
 }
 
+# EXIT handler for launchers that own explicit setsid groups and optionally one
+# auxiliary daemon PID. Disable this handler before exiting to avoid recursion.
+# Run auxiliary cleanup even when group cleanup fails, preserving the work code.
+exit_after_background_process_cleanup() {
+    local work_status="$1" term_grace="$2" kill_grace="$3" auxiliary_pid="$4"
+    shift 4
+    local final_status
+    trap - EXIT
+    if stop_background_process_groups "$work_status" "$term_grace" "$kill_grace" "$@"; then
+        final_status=0
+    else
+        final_status=$?
+    fi
+    if [[ -n "$auxiliary_pid" ]]; then
+        kill "$auxiliary_pid" 2>/dev/null || true
+    fi
+    exit "$final_status"
+}
+
 # Finish preflight on every allocated node before any server container starts its
 # peer-readiness deadline. A failed node prevents the entire serving step.
 run_amd_multinode_after_preflight() {
