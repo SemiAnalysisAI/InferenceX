@@ -41,6 +41,7 @@ def golden_dir(tmp_path: Path) -> Path:
     directory.mkdir()
     for filename, model, acceptance in [
         ("dsv4_mtp.yaml", "deepseek-v4-pro", 2.4),
+        ("qwen3.5_mtp.yaml", "qwen3.5", 2.6),
         ("dsv4-pro-0813-dspark.yaml", "deepseek-v4-pro-0813", 2.7),
         ("kimik3_dspark.yaml", "kimi-k3", 2.8),
         (
@@ -513,3 +514,76 @@ def test_sglang_conflicting_algorithm_aliases_fail(golden_dir: Path) -> None:
     }
     with pytest.raises(ValueError, match="Conflicting speculative-algorithm and speculative-algo"):
         build_overrides(recipe, "dynamo-sglang", ENV, golden_dir=golden_dir)
+
+
+@pytest.mark.parametrize("drafts", [None, 3, True, 4.0])
+def test_qwen_mtp_rejects_invalid_generation_window(golden_dir: Path, drafts: Any) -> None:
+    args = {"speculative-algorithm": "NEXTN", "speculative-num-steps": 3}
+    if drafts is not None:
+        args["speculative-num-draft-tokens"] = drafts
+    with pytest.raises(ValueError, match=r"speculative-num-steps \+ 1 \(4\)"):
+        build_overrides(
+            {"roles": {"agg": {"args": args}}},
+            "dynamo-sglang",
+            {**ENV, "MODEL_PREFIX": "qwen3.5"},
+            golden_dir=golden_dir,
+        )
+
+
+def test_qwen_mtp_checks_effective_generation_window(tmp_path: Path, golden_dir: Path) -> None:
+    raw = {
+        "schema": 2,
+        "roles": {
+            "prefill": {
+                "args": {"speculative-algorithm": "NEXTN", "speculative-num-steps": 2}
+            },
+            "decode": {
+                "args": {
+                    "speculative-algorithm": "NEXTN",
+                    "speculative-num-steps": 2,
+                    "speculative-num-draft-tokens": 3,
+                }
+            },
+        },
+    }
+    recipe = tmp_path / "recipe.yaml"
+    recipe.write_text(yaml.safe_dump(raw))
+    environment = {**ENV, "MODEL_PREFIX": "qwen3.5"}
+    arguments = ["--set", "roles.decode.args.speculative-num-steps=3"]
+    with pytest.raises(ValueError, match=r"speculative-num-steps \+ 1 \(4\)"):
+        plan_commands(str(recipe), "dynamo-sglang", arguments, environment, golden_dir=golden_dir)
+    commands = plan_commands(
+        str(recipe),
+        "dynamo-sglang",
+        [*arguments, "--set", "roles.decode.args.speculative-num-draft-tokens=4"],
+        environment,
+        golden_dir=golden_dir,
+    )
+    result = apply_native(raw, commands[0])
+    assert result["roles"]["decode"]["args"]["speculative-num-draft-tokens"] == 4
+    assert result["roles"]["decode"]["env"]["SGLANG_SIMULATE_ACC_LEN"] == "2.6"
+    assert result["roles"]["prefill"]["args"]["speculative-num-steps"] == 2
+
+
+@pytest.mark.parametrize("environment", [{"EVAL_ONLY": "true"}, {"IS_AGENTIC": "0"}])
+def test_qwen_real_verification_does_not_require_mtp_window(
+    tmp_path: Path, environment: dict[str, str]
+) -> None:
+    recipe = {
+        "roles": {
+            "agg": {
+                "args": {"speculative-algorithm": "NEXTN", "speculative-num-steps": 3},
+                "env": {"SGLANG_SIMULATE_ACC_LEN": "9", "KEEP": "worker"},
+            }
+        }
+    }
+    result = apply_native(
+        recipe,
+        build_overrides(
+            recipe,
+            "dynamo-sglang",
+            {**ENV, "MODEL_PREFIX": "qwen3.5", **environment},
+            golden_dir=tmp_path / "absent",
+        ),
+    )
+    assert result["roles"]["agg"]["env"] == {"KEEP": "worker"}

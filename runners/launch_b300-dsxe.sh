@@ -65,8 +65,10 @@ declare -A MODEL_ALIASES=(
     [nvidia/MiniMax-M3-NVFP4]="MiniMax-M3-NVFP4"
     [minimax-m3-mxfp8]="MiniMax-M3-MXFP8"
     [MiniMaxAI/MiniMax-M3-MXFP8]="MiniMax-M3-MXFP8"
-    [qwen3.5-fp4]="Qwen3.5-397B-A17B-NVFP4-V2"
+    [qwen3.5-fp4]="Qwen3.5-397B-A17B-NVFP4"
+    [nvidia/Qwen3.5-397B-A17B-NVFP4]="Qwen3.5-397B-A17B-NVFP4"
     [qwen3.5-fp8]="Qwen3.5-397B-A17B-FP8"
+    [qwen3.5-fp4-v2]="Qwen3.5-397B-A17B-NVFP4-V2"
     [nvidia/Qwen3.5-397B-A17B-NVFP4-V2]="Qwen3.5-397B-A17B-NVFP4-V2"
 )
 
