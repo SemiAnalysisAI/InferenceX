@@ -201,9 +201,9 @@ roles:
       disaggregation-mode: decode
       load-balance-method: total_tokens
       # DP attention multiplies this by 0.3. The c256 trace can otherwise fill
-      # a DP rank's full-attention pool even at an effective reserve of 1.0;
-      # keep an effective reserve of 3.0 so admission queues before retraction.
-      schedule-conservativeness: 10.0
+      # a DP rank's full-attention pool even at an effective reserve of 3.0;
+      # keep an effective reserve of 10.0 so admission queues before retraction.
+      schedule-conservativeness: 33.33
       mem-fraction-static: 0.9
       page-size: 256
       swa-full-tokens-ratio: 0.02
