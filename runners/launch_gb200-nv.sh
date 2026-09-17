@@ -186,15 +186,17 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
         export SRT_SLURM_MODEL_PREFIX="dsr1-fp4"
+    elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $MODEL == "deepseek-ai/DeepSeek-V4-Pro-0813" ]]; then
+        # The -0813 checkpoint bundles the DSpark draft head (dspark_block_size /
+        # dspark_markov_rank / dspark_target_layer_ids in config.json), which is
+        # what lets --speculative-draft-model-path default to --model-path. It is
+        # a distinct checkpoint from plain DeepSeek-V4-Pro below, so the alias
+        # must match the recipe's model.path exactly: resolving 0813 to the plain
+        # checkpoint silently serves the wrong weights.
+        export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro-0813"
+        export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-0813"
     elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-        if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
-            # AgentX compute nodes have this checkpoint staged on local NVMe.
-            # It is intentionally invisible to the login-node runner, so the
-            # srtctl invocation below uses --no-preflight.
-            export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
-        else
-            export MODEL_PATH="/mnt/lustre01/models/deepseek-v4-pro"
-        fi
+        export MODEL_PATH="/mnt/lustre01/models/deepseek-v4-pro"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
     elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
         # The GLM-5.1 sglang recipes reuse the glm-5-fp4 alias.
