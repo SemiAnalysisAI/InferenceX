@@ -26,7 +26,7 @@ seq_len_stoi = {"1k1k": (1024, 1024), "8k1k": (8192, 1024)}
 MIN_EVAL_CONC = 16
 DEFAULT_EVAL_FRAMEWORK = "lm-eval"
 AUTOMATIC_AGENTIC_VENDOR_EVALS = {
-    "kimik3": ("kimi-vendor", "kimi_tool_call_schema"),
+    "kimik3": ("kimi-vendor", "kimi_tool_call_schema_full"),
     "minimaxm3": ("minimax-vendor", "minimax_m3_smoke"),
 }
 # Bound how many multinode agentic conc points share one server allocation.
@@ -541,9 +541,9 @@ def automatic_agentic_vendor_eval(entry: dict) -> tuple[str, str] | None:
 def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) -> list[dict]:
     """Apply the default eval selection policy.
 
-    Kimi K3 and MiniMax M3 agentic rows use their vendor validators at every
-    generated concurrency. Other agentic rows remain opt-in and use GSM8K at
-    the highest concurrency in each deployment group.
+    Kimi K3 agentic rows use the full vendor suite and MiniMax M3 rows use the
+    vendor smoke at every generated concurrency. Other agentic rows remain
+    opt-in and use GSM8K at the highest concurrency in each deployment group.
 
     Fixed-sequence selection is unchanged: single-node 8k1k rows use the
     highest and median concurrency per model/runtime group, while multi-node

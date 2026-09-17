@@ -320,12 +320,15 @@ def test_full_report_classifies_endpoint_failures_as_integration_errors(
     assert (output_dir / kve.NATIVE_REPORT_FILENAME).read_bytes() == native_bytes
 
 
-def test_full_report_rejects_incomplete_modes(
+@pytest.mark.parametrize("smoke_report", [False, True])
+def test_full_report_rejects_incomplete_coverage(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    smoke_report: bool,
 ) -> None:
-    report = _full_report()
-    report["results"][-1]["mode"] = "non-stream"
+    report = _report() if smoke_report else _full_report()
+    if not smoke_report:
+        report["results"][-1]["mode"] = "non-stream"
 
     def fake_run(
         command: list[str], *, cwd: Path, check: bool, timeout: int
@@ -333,7 +336,7 @@ def test_full_report_rejects_incomplete_modes(
         Path(command[command.index("--tool-json-report") + 1]).write_text(
             json.dumps(report)
         )
-        return SimpleNamespace(returncode=1)
+        return SimpleNamespace(returncode=0 if smoke_report else 1)
 
     monkeypatch.setattr(kve.subprocess, "run", fake_run)
     output_dir = tmp_path / "output"
