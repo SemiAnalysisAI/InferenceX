@@ -38,6 +38,12 @@ for token, relative in sorted(required.items()):
 print(f"[sglang-mooncake-opt] verified source tree at {root}")
 PYEOF
 
+COMPAT_SHIM="${SGLANG_MOONCAKE_OPT_COMPAT:-/configs/sglang-server-args-compat}/sitecustomize.py"
+if [ ! -f "${COMPAT_SHIM}" ]; then
+    echo "ERROR: Dynamo compatibility shim missing at ${COMPAT_SHIM}." >&2
+    exit 1
+fi
+
 resolved=$(PYTHONPATH="${SGLANG_SRC}/python:${PYTHONPATH:-}" python3 -c 'import sglang; print(sglang.__file__)')
 case "${resolved}" in
     "${SGLANG_SRC}"/*) echo "[sglang-mooncake-opt] sglang resolves to ${resolved}" ;;

@@ -41,7 +41,7 @@ health_check:
 setup_script: dsv4-gb300-sglang-mooncake-opt.sh
 
 environment:
-  PYTHONPATH: /configs/sglang-mooncake-opt/python
+  PYTHONPATH: /configs/sglang-server-args-compat:/configs/sglang-mooncake-opt/python
 
 resources:
   gpu_type: gb300
