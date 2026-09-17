@@ -8011,4 +8011,4 @@
   description:
     - "Update MI355X DeepSeek-V4.1-Flash AgentX from vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657 to nightly-af1c01499b289be555c475669ba50a88e96d846e (2026-09-16, digest sha256:1fd21abe66455b4df5a2e83629e97cdcc9d58913b16052d8118b92b239792339). Preserve the serving script, TP4 concurrency 1-32, five-token DSpark, and golden AL 3.51. GPU sweep and eval validation pending."
     - "将 MI355X DeepSeek-V4.1-Flash AgentX 从 vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657 更新至 nightly-af1c01499b289be555c475669ba50a88e96d846e（2026-09-16，摘要 sha256:1fd21abe66455b4df5a2e83629e97cdcc9d58913b16052d8118b92b239792339）。保留服务脚本、TP4 并发 1-32、五 token DSpark 和黄金 AL 3.51。GPU 扫描和 eval 验证尚未完成。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3215
