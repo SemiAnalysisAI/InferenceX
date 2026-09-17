@@ -1,0 +1,20 @@
+{
+  "base": "../CollectiveX/configs/platform_config.json",
+  "platforms": {
+    "mi300x": {
+      "arch": "gfx942",
+      "gpus_per_node": 8,
+      "image_platform": "linux/amd64",
+      "operator": {"partition": "compute", "cpus_per_node": 128}
+    },
+    "mi325x": {
+      "arch": "gfx942",
+      "gpus_per_node": 8,
+      "image_platform": "linux/amd64",
+      "operator": {"partition": "compute", "cpus_per_node": 256}
+    },
+    "mi355x": {
+      "operator": {"partition": "compute", "cpus_per_node": 128}
+    }
+  }
+}

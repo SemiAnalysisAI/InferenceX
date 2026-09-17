@@ -223,7 +223,7 @@ gh api \
 gh pr edit "$RECOVERY_PR" --repo SemiAnalysisAI/InferenceX \
   --add-label full-sweep-fail-fast
 gh pr comment "$RECOVERY_PR" --repo SemiAnalysisAI/InferenceX \
-  --body "/reuse-sweep-run $SOURCE_RUN_ID"
+  --body "/use $SOURCE_RUN_ID"
 ```
 
 把恢复条目追加到 `perf-changelog.yaml` 末尾；绝不要修改历史字节。保留原始 `config-keys`、`description`、`evals-only` 和 `scenario-type`，但使用恢复 PR URL。验证 changelog 和生成的范围：
