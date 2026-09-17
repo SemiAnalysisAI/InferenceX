@@ -24,7 +24,7 @@ jobs:
         id: runners
         env:
           # Repository runner/Slack integration credential for the scheduled digest.
-          GH_TOKEN: ${{ secrets.GH_RUNNERS_READ_TOKEN }} # zizmor: ignore[secrets-outside-env]
+          GH_TOKEN: ${{ secrets.RUNNERS_PAT }} # zizmor: ignore[secrets-outside-env]
           REPO: ${{ github.repository }}
         run: |
           set -eo pipefail

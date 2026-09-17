@@ -89,7 +89,7 @@ env:
   IS_AGENTIC: '0'
   REQUIRE_POWER: '0'
   SCENARIO_SUBDIR: fixed_seq_len/
-  HF_TOKEN: ${{ secrets.HF_MODELS_READ_TOKEN }}
+  HF_TOKEN: ${{ secrets.HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   # Drive the single-node path in runners/launch_b300-dsxe.sh. MODEL is the HF id;
   # its basename (e.g. DeepSeek-V4-Pro) must be in the launcher's STAGED_MODELS so
@@ -262,7 +262,7 @@ jobs:
         if: ${{ inputs.open-pr && success() }}
         env:
           # Repository write credential for authorized reference-data collection.
-          GH_TOKEN: ${{ secrets.GH_SPEEDBENCH_PR_TOKEN }} # zizmor: ignore[secrets-outside-env]
+          GH_TOKEN: ${{ secrets.SPEEDBENCH_PAT }} # zizmor: ignore[secrets-outside-env]
         run: |
           set -eo pipefail
           # NOTE: the reference yaml is keyed by model at the top level. This

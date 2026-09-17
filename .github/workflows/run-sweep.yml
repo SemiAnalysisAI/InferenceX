@@ -458,7 +458,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.canary-select.outputs.canary-config) }}
         secrets:
-            HF_MODELS_READ_TOKEN: ${{ secrets.HF_MODELS_READ_TOKEN }}
+            HF_TOKEN: ${{ secrets.HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -490,7 +490,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k'] }}
         secrets:
-            HF_MODELS_READ_TOKEN: ${{ secrets.HF_MODELS_READ_TOKEN }}
+            HF_TOKEN: ${{ secrets.HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with: &multi-node-inputs
@@ -522,7 +522,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k'] }}
         secrets:
-            HF_MODELS_READ_TOKEN: ${{ secrets.HF_MODELS_READ_TOKEN }}
+            HF_TOKEN: ${{ secrets.HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with: *multi-node-inputs
@@ -545,7 +545,7 @@ jobs:
             matrix:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k'] }}
         secrets:
-            HF_MODELS_READ_TOKEN: ${{ secrets.HF_MODELS_READ_TOKEN }}
+            HF_TOKEN: ${{ secrets.HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with: &single-node-inputs
@@ -577,7 +577,7 @@ jobs:
             matrix:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k'] }}
         secrets:
-            HF_MODELS_READ_TOKEN: ${{ secrets.HF_MODELS_READ_TOKEN }}
+            HF_TOKEN: ${{ secrets.HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with: *single-node-inputs
@@ -599,7 +599,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).single_node['agentic'] }}
         secrets:
-            HF_MODELS_READ_TOKEN: ${{ secrets.HF_MODELS_READ_TOKEN }}
+            HF_TOKEN: ${{ secrets.HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -632,7 +632,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['agentic'] }}
         secrets:
-            HF_MODELS_READ_TOKEN: ${{ secrets.HF_MODELS_READ_TOKEN }}
+            HF_TOKEN: ${{ secrets.HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -669,7 +669,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).evals }}
         secrets:
-            HF_MODELS_READ_TOKEN: ${{ secrets.HF_MODELS_READ_TOKEN }}
+            HF_TOKEN: ${{ secrets.HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -706,7 +706,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).agentic_evals }}
         secrets:
-            HF_MODELS_READ_TOKEN: ${{ secrets.HF_MODELS_READ_TOKEN }}
+            HF_TOKEN: ${{ secrets.HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -742,7 +742,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_evals }}
         secrets:
-            HF_MODELS_READ_TOKEN: ${{ secrets.HF_MODELS_READ_TOKEN }}
+            HF_TOKEN: ${{ secrets.HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -784,7 +784,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals }}
         secrets:
-            HF_MODELS_READ_TOKEN: ${{ secrets.HF_MODELS_READ_TOKEN }}
+            HF_TOKEN: ${{ secrets.HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -947,7 +947,7 @@ jobs:
 
         env:
             # Repository integration credential for the scoped sweep/ingest job.
-            DATABASE_URL: ${{ secrets.NEON_PROD_READONLY_URL }} # zizmor: ignore[secrets-outside-env]
+            DATABASE_URL: ${{ secrets.DB_RO_URL }} # zizmor: ignore[secrets-outside-env]
 
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1008,7 +1008,7 @@ jobs:
                 MERGE_RUN_ID: ${{ github.run_id }}
               with:
                 # Repository integration credential for the scoped sweep/ingest job.
-                github-token: ${{ secrets.GH_FRONTEND_DISPATCH_TOKEN }} # zizmor: ignore[secrets-outside-env]
+                github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
                 script: |
                   await github.rest.repos.createDispatchEvent({
                     owner: "SemiAnalysisAI",
@@ -1073,7 +1073,7 @@ jobs:
                 MERGE_RUN_ID: ${{ github.run_id }}
               with:
                 # Repository integration credential for the scoped sweep/ingest job.
-                github-token: ${{ secrets.GH_FRONTEND_DISPATCH_TOKEN }} # zizmor: ignore[secrets-outside-env]
+                github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
                 script: |
                   await github.rest.repos.createDispatchEvent({
                     owner: "SemiAnalysisAI",

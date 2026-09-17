@@ -50,14 +50,14 @@ jobs:
         env:
           # Recovery mutates only sessions recorded by this workflow after their parent finishes.
           # Repository automation credential; the planner runs only on main.
-          GH_TOKEN: ${{ secrets.GH_AGENT_WRITE_TOKEN }} # zizmor: ignore[secrets-outside-env]
+          GH_TOKEN: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
         run: uv run --locked python -m infx.klaud recover
       - name: Prepare eligible candidates and open PRs
         id: prepare
         env:
           GH_TOKEN: ${{ github.token }}
           # Repository automation credential; the planner runs only on main.
-          KLAUD_DASHBOARD_API_KEY: ${{ secrets.DASHBOARD_STATUS_READ_API_KEY }} # zizmor: ignore[secrets-outside-env]
+          KLAUD_DASHBOARD_API_KEY: ${{ secrets.DASH_API_KEY }} # zizmor: ignore[secrets-outside-env]
         run: uv run --locked python -m infx.klaud plan --directory "$RUNNER_TEMP/klaud"
       - name: Check for overlapping open PRs
         id: review
@@ -120,9 +120,9 @@ jobs:
         id: select
         env:
           # Repository automation credential; the planner runs only on main.
-          GH_TOKEN: ${{ secrets.GH_AGENT_WRITE_TOKEN }} # zizmor: ignore[secrets-outside-env]
+          GH_TOKEN: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
           # Repository automation credential; the planner runs only on main.
-          KLAUD_DASHBOARD_API_KEY: ${{ secrets.DASHBOARD_STATUS_READ_API_KEY }} # zizmor: ignore[secrets-outside-env]
+          KLAUD_DASHBOARD_API_KEY: ${{ secrets.DASH_API_KEY }} # zizmor: ignore[secrets-outside-env]
           KLAUD_PR_REVIEW: ${{ steps.review.outputs.structured_output }}
           KLAUD_REVIEW_OUTCOME: ${{ steps.review.outcome }}
           KLAUD_REVIEW_EXECUTION: ${{ steps.review.outputs.execution_file }}
@@ -160,5 +160,5 @@ jobs:
       tooling-ref: ${{ needs.plan.outputs.tooling-ref }}
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      GH_AGENT_WRITE_TOKEN: ${{ secrets.GH_AGENT_WRITE_TOKEN }}
-      DASHBOARD_STATUS_READ_API_KEY: ${{ secrets.DASHBOARD_STATUS_READ_API_KEY }}
+      AGENT_PAT: ${{ secrets.AGENT_PAT }}
+      DASH_API_KEY: ${{ secrets.DASH_API_KEY }}

@@ -3,7 +3,7 @@ name: Template - Multi-Node Benchmark
 on:
   workflow_call:
     secrets:
-      HF_MODELS_READ_TOKEN:
+      HF_TOKEN:
         required: true
       MODAL_TOKEN_ID:
         required: false
@@ -133,7 +133,7 @@ env:
   # slurm job (srtctl pre-download + dynamo hub fetch). Anonymous requests
   # get 429-rate-limited when several workers pull a 444 GB snapshot at
   # once; sbatch/srun inherit this env so the token reaches the workers.
-  HF_TOKEN: ${{ secrets.HF_MODELS_READ_TOKEN }}
+  HF_TOKEN: ${{ secrets.HF_TOKEN }}
   EXP_NAME: ${{ fromJSON(inputs.config).exp-name }}
   RECIPE_FINGERPRINT: ${{ fromJSON(inputs.config)['recipe-fingerprint'] || '' }}
   IMAGE: ${{ fromJSON(inputs.config).image }}
