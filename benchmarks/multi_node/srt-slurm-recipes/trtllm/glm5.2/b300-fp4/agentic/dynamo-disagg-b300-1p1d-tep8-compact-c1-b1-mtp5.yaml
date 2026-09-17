@@ -1,4 +1,6 @@
 schema: 2
+slurm:
+  time_limit: "06:00:00"
 srun_options:
   no-container-remap-root: ""
 engine:

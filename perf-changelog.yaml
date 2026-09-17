@@ -8024,3 +8024,10 @@
     - "Preserve the Slurm identity for TensorRT-LLM MPI workers and install Dynamo in a separate virtual environment for each job step."
     - "为 TensorRT-LLM MPI 工作进程保留 Slurm 身份，并在各作业步骤的独立虚拟环境中安装 Dynamo。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
+  description:
+    - "Set an explicit Slurm time limit for server startup, AgentX replay, and result collection."
+    - "显式设置 Slurm 时限，为服务启动、AgentX 回放和结果收集预留时间。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
