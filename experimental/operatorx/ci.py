@@ -249,6 +249,20 @@ def import_image(args) -> None:
     # Runs on the configured import host with a compute-visible cache and lock.
     import fcntl
 
+    # Temporary fleet diagnostic: read host state before attempting image conversion.
+    for argv in (["enroot", "version"], ["df", "-hT", "/tmp", "/var/tmp", "/dev/shm"],
+                 ["findmnt", "-T", "/tmp", "-o", "FSTYPE,OPTIONS"],
+                 ["findmnt", "-T", "/var/tmp", "-o", "FSTYPE,OPTIONS"]):
+        subprocess.run(argv, check=False)
+    converter = shutil.which("enroot-aufs2ovlfs")
+    if converter:
+        subprocess.run(["getcap", converter], check=False)
+    for folder in (Path("/mnt/nfs/lustre/containers"), Path("/mnt/nfs/sa-shared/cx-squash")):
+        print("STAGED", str(folder), flush=True)
+        if folder.is_dir():
+            for candidate in sorted(folder.glob("*vllm*"))[:100]:
+                print(candidate.name, candidate.stat().st_size, flush=True)
+    raise RuntimeError("OperatorX diagnostic-only run completed; no benchmark executed")
     image, digest = args.image, args.digest
     machines = {"linux/amd64": {"x86_64", "amd64"}, "linux/arm64": {"aarch64", "arm64"}}
     if platform.machine() not in machines[args.image_platform]:
