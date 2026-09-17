@@ -12,7 +12,7 @@ existing ROCm HBM behavior. Offloaded tables use the existing ROCm-capable
 refreshed if the host parameter storage is replaced.
 
 `apply.sh` checks the image pin and applies the complete patch with
-`git apply --check`. It runs `test_engram_rocm.py` before model loading.
+`git apply --check`. It runs `rocm_preflight.py` before model loading.
 The preflight checks real TP2 shard outputs against an independent dequantized
 reference, masked IDs, noncontiguous hash inputs, graph replay with changed
 IDs, pinned allocation under a GPU device context, and storage replacement.
