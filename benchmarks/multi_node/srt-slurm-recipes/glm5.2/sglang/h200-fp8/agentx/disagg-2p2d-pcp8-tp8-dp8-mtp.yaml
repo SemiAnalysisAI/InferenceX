@@ -106,9 +106,6 @@ roles:
       SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
       SGLANG_OPT_USE_TOPK_V2: "1"
       SGLANG_TIMEOUT_KEEP_ALIVE: "900"
-      SGLANG_SIMULATE_ACC_LEN: "2.99"
-      SGLANG_SIMULATE_ACC_METHOD: "match-expected"
-      SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"
 
     args:
       host: 0.0.0.0
