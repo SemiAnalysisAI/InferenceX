@@ -211,7 +211,7 @@ roles:
       mem-fraction-static: 0.9
       page-size: 256
       swa-full-tokens-ratio: 0.02
-      max-running-requests: 512
+      max-running-requests: 480
       cuda-graph-max-bs-decode: 256
       disable-flashinfer-autotune: true
       model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
