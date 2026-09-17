@@ -98,8 +98,10 @@ SPEC_DECODE_AL=2.78
 INDEXER_CP=0
 OFFLOAD_TIER=""
 case "$CONC" in
-    1|2|4|5|8|10|12|14|15|16|24) ;;
-    20|25|30) OFFLOAD_TIER=cpu256 ;;
+    1|2|4|5|8|10|12|14|16) ;;
+    15|24)    INDEXER_CP=1 ;;
+    20)       INDEXER_CP=1; OFFLOAD_TIER=cpu256 ;;
+    25|30)    OFFLOAD_TIER=cpu256 ;;
     28|32)    INDEXER_CP=1 ;;
     40|48)    INDEXER_CP=1; OFFLOAD_TIER=cpu256 ;;
     *) echo "Unsupported CONC=$CONC" >&2; exit 2 ;;
@@ -165,7 +167,8 @@ case "$KV_OFFLOAD_BACKEND" in
         ;;
 esac
 
-# TP4 only: ATOM requires tp_size == sparse_num_index_heads (4 for M3).
+# TP4 only: ATOM requires tp_size == sparse_num_index_heads (4 for M3). CONC=20 is
+# in both search-space rows, so this is what keeps it off the TP2 offload curve.
 if [ "$INDEXER_CP" -eq 1 ] && [ "$TP" -eq 4 ]; then
     export ATOM_M3_INDEXER_CP=1
     echo "ATOM_M3_INDEXER_CP=1 (TP4, CONC=$CONC)"
