@@ -14,6 +14,10 @@ COPY c56best_dspark_image/patch_vllm_pr56621_no_forward_store.py /opt/k3-dspark/
 RUN PATCH_DIR=/opt/k3-dspark/vllm_pr50514_pp_only \
       bash /opt/k3-dspark/apply_vllm_50514_pp_spec.sh \
     && python3 /opt/k3-dspark/dspark_cache_reuse/patch_dspark_aux_contract_v028.py \
+    && python3 /opt/k3-dspark/dspark_cache_reuse/patch_dspark_pp_draft_transfer_decision.py \
+    && python3 /opt/k3-dspark/dspark_cache_reuse/patch_dspark_pp_draft_collective_stream.py \
+    && python3 /opt/k3-dspark/dspark_cache_reuse/patch_dspark_pp_combined_sample_draft_broadcast.py \
+    && python3 /opt/k3-dspark/dspark_cache_reuse/patch_dspark_pp_combined_broadcast_sync.py \
     && python3 /opt/k3-dspark/dspark_cache_reuse/patch_dspark_pp_scheduler_eagle_groups.py \
     && python3 /opt/k3-dspark/dspark_cache_reuse/patch_dspark_scheduler_kv_cache_eagle_merge.py \
     && DSPARK_REPLAY_PATCH=/opt/k3-dspark/dspark_cache_reuse/vllm-51295-replay-boundary.patch \

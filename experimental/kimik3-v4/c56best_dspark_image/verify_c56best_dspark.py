@@ -18,9 +18,16 @@ REQUIRED = {
     ),
     "vllm/v1/worker/gpu/model_runner.py": (
         "[50514] isolate draft cudagraph capture across PP",
+        "Send sampled outputs and proposals in one ordered PP packet.",
     ),
     "vllm/v1/worker/gpu/spec_decode/dspark/utils.py": (
         "[50514] draft loads only on the last PP stage",
+    ),
+    "vllm/v1/worker/gpu/pp_utils.py": (
+        "K3 PP draft transfer uses the exact sampled-token decision",
+        "_consume_draft_transfer_decision",
+        "K3 PP combined sample+draft packet posted",
+        "K3 PP synchronous combined packet",
     ),
     "vllm/v1/core/kv_cache_utils.py": (
         "K3 PP projection preserves global DSpark draft group",
