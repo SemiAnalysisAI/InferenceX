@@ -80,4 +80,5 @@ jobs:
         if: matrix.check == 'Tests'
         run: |
           python -c "import torch; assert torch.version.cuda is None and torch.version.hip is None"
-          python -m pytest utils/ runners/ experimental/CollectiveX/tests/ experimental/operatorx/tests/ -n 4
+          # SRT is initialized for our connector tests; its upstream suite runs in its own CI.
+          python -m pytest utils/ runners/ experimental/CollectiveX/tests/ experimental/operatorx/tests/ --ignore=utils/srt-slurm -n 4
