@@ -781,6 +781,7 @@ collx_ensure_squash_on_job() {
       --export="$(collx_host_exports)" \
       bash -s -- "$sq" "$lock" "$image" "$COLLX_IMAGE_PLATFORM" "$refresh_epoch" \
       "${COLLX_IMAGE_DIGEST:-}" "$(printf '%s' "$image" | sed 's#[/:@#]#_#g')" \
+      "${COLLX_IMPORT_TMPDIR:-}" \
       > "$log" 2>&1 <<'BASH' || rc=$?
 set -eo pipefail
 sq="$1"; lock="$2"; image="$3"; platform="$4"
@@ -790,7 +791,13 @@ case "$platform:$machine" in
   linux/amd64:x86_64|linux/amd64:amd64|linux/arm64:aarch64|linux/arm64:arm64) ;;
   *) exit 13 ;;
 esac
-compute_home="$(mktemp -d /tmp/inferencex-collectivex-home.XXXXXX)"
+# The caller may select the scratch filesystem used for image-layer conversion.
+if [ -n "$8" ]; then
+  [[ "$8" = /* ]] && [ -d "$8" ] || exit 14
+  compute_home="$(mktemp -d "$8/inferencex-collectivex-home.XXXXXX")"
+else
+  compute_home="$(mktemp -d /tmp/inferencex-collectivex-home.XXXXXX)"
+fi
 trap 'rm -rf -- "$compute_home"' EXIT
 export HOME="$compute_home" XDG_CACHE_HOME="$compute_home/.cache"
 export ENROOT_TEMP_PATH="$compute_home/enroot-tmp"
@@ -824,6 +831,14 @@ if [ "$reuse" = yes ]; then
   echo 'container squash ready (reusing staged import)'
 else
   echo "importing configured container image ($reuse)"
+  enroot version || true
+  df -hT "$ENROOT_TEMP_PATH" "$(dirname "$sq")" || true
+  findmnt -T "$ENROOT_TEMP_PATH" -o TARGET,SOURCE,FSTYPE,OPTIONS || true
+  for scratch in /tmp /var/tmp /dev/shm /scratch /local; do
+    [ ! -d "$scratch" ] || df -hT "$scratch" || true
+  done
+  converter="$(command -v enroot-aufs2ovlfs || true)"
+  [ -z "$converter" ] || getcap "$converter" || true
   rm -f -- "$sq" "$sq.digest"
   enroot import -o "$sq" "docker://$image" </dev/null
   unsquashfs -l "$sq" >/dev/null 2>&1

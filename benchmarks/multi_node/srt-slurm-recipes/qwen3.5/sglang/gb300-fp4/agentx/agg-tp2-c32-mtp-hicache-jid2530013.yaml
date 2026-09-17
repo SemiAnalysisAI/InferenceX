@@ -24,9 +24,6 @@ roles:
       NCCL_NVLS_ENABLE: '1'
       PYTHONNOUSERSITE: '1'
       SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
-      SGLANG_SIMULATE_ACC_LEN: '3.39'
-      SGLANG_SIMULATE_ACC_METHOD: match-expected
-      SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
       SGL_ENABLE_JIT_DEEPGEMM: 'false'
       TORCH_CUDA_ARCH_LIST: '10.0'
     args:
