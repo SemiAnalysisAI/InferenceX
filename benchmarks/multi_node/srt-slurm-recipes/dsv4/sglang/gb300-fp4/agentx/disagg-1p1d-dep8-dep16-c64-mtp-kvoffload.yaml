@@ -133,7 +133,7 @@ roles:
       speculative-num-draft-tokens: 4
       enable-hierarchical-cache: true
       hicache-write-policy: write_back
-      hicache-ratio: 8
+      hicache-ratio: 1
       hicache-io-backend: direct
       hicache-mem-layout: page_first_direct
 
