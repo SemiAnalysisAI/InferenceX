@@ -17,7 +17,8 @@ from throughput. Selection lives in `mark_eval_entries()` in
   `kimi-vendor` with `kimi_tool_call_schema_full` (204 schema cases in two
   stream modes, 408 checks). The two-check smoke requires an explicit override.
 - **MiniMax M3 agentic:** every generated point automatically runs
-  `minimax-vendor` with `minimax_m3_smoke`.
+  `minimax-vendor` with `minimax_m3_full` (102 provider cases). The one-case
+  smoke requires an explicit override.
 - **Other agentic models (GSM8K):** opt-in through `--evals-only` or
   `--all-evals`, at the highest concurrency per deployment group.
 - **BFCL:** explicit only. No automatic model mapping selects BFCL.
@@ -89,11 +90,11 @@ Capacity-limited campaigns can split a `test-config` result with `--conc` and
 row, so a shard cannot silently include another deployment that shares the same
 configuration key and concurrency.
 
-Kimi matrix rows select the full vendor suite automatically, including with
+Kimi and MiniMax matrix rows select their full vendor suites automatically, including with
 `--trim-conc`; that option trims deployment points, not schema cases. For an
 explicit deployment smoke, override `eval-framework: kimi-vendor` and
-`eval-suite: kimi_tool_call_schema`. Run the matching MiniMax smoke and
-`bfcl_smoke` explicitly as needed. Full suites use the same endpoint and
+`eval-suite: kimi_tool_call_schema`; for MiniMax, use `eval-framework: minimax-vendor`
+and `eval-suite: minimax_m3_smoke`. Run `bfcl_smoke` explicitly as needed. Full suites use the same endpoint and
 artifact paths; a smoke result does not establish full-suite quality.
 
 ### Artifact reuse
@@ -204,9 +205,15 @@ recipes that otherwise use synthetic acceptance for throughput.
 `kimi_tool_call_schema_full` runs the same pinned upstream test module with
 `--selection all`. It evaluates all 204 selected Walle schema cases in
 non-streaming and streaming modes, for 408 reported outcomes. Eight pytest
-workers share a two-hour whole-suite timeout. The native report must declare
+workers run without an adapter-level whole-suite deadline. The native report must declare
 the exact selected suite and line identities, contain both modes for every
 case, and reconcile all outcome counts before projection.
+
+The Python adapter's optional `--timeout-seconds <positive-seconds>` argument
+sets an explicit whole-suite deadline when needed. The smoke retains its
+900-second default deadline. Stock verifier request timeouts, engine readiness
+deadlines, and workflow/scheduler allocation limits still apply; removing the
+full-suite adapter deadline does not create an unlimited GPU allocation.
 
 Automatic Kimi K3 AgentX eval rows select this suite for both AMD and NVIDIA,
 including single-node and multi-node deployments. Manual dispatch can also
@@ -219,10 +226,9 @@ envelope, artifact staging, collector, and dashboard path.
 
 ### MiniMax provider compatibility smoke
 
-The Phase 1 MiniMax smoke runs automatically for every generated `minimaxm3`
-agentic point. The matrix selects `eval-framework: minimax-vendor` and
-`eval-suite: minimax_m3_smoke`. To invoke the same smoke manually from the
-repository root against an already-ready server:
+The MiniMax smoke is an explicit one-case endpoint check. Automatic `minimaxm3`
+agentic points select the full 102-case suite. To invoke the smoke manually from
+the repository root against an already-ready server:
 
 ```bash
 source benchmarks/benchmark_lib.sh
@@ -279,8 +285,10 @@ quality.
 
 ### MiniMax M3 full provider diagnostic
 
-`minimax_m3_full` is an explicit, non-gating expansion of the smoke to all 102
-rows in the pinned MiniMax Provider Verifier dataset:
+`minimax_m3_full` runs automatically for every generated `minimaxm3` AgentX
+eval point on AMD and NVIDIA, including single-node and multi-node deployments.
+It covers all 102 rows in the pinned MiniMax Provider Verifier dataset; completed
+quality scores remain diagnostic. It can also be selected explicitly:
 
 ```bash
 source benchmarks/benchmark_lib.sh

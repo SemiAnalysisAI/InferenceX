@@ -471,13 +471,14 @@ class TestMarkEvalEntries:
         )
 
     @pytest.mark.parametrize("all_evals", [False, True])
-    def test_marks_every_supported_vendor_point(self, all_evals):
+    @pytest.mark.parametrize("runner", ["mi355x", "b300"])
+    def test_marks_every_supported_vendor_point(self, all_evals, runner):
         matrix_values = [
             {
                 "scenario-type": "agentic-coding",
                 "model-prefix": model_prefix,
                 "model": model_prefix,
-                "runner": "b300",
+                "runner": runner,
                 "framework": "vllm",
                 "precision": "fp4",
                 "tp": 8,
@@ -503,7 +504,7 @@ class TestMarkEvalEntries:
 
         expected = {
             "kimik3": ("kimi-vendor", "kimi_tool_call_schema_full"),
-            "minimaxm3": ("minimax-vendor", "minimax_m3_smoke"),
+            "minimaxm3": ("minimax-vendor", "minimax_m3_full"),
         }
         for model_prefix, eval_spec in expected.items():
             rows = [row for row in result if row["model-prefix"] == model_prefix]
@@ -1006,7 +1007,7 @@ class TestMarkAllEvalEntries:
         ("model_prefix", "eval_framework", "eval_suite"),
         [
             ("kimik3", "kimi-vendor", "kimi_tool_call_schema_full"),
-            ("minimaxm3", "minimax-vendor", "minimax_m3_smoke"),
+            ("minimaxm3", "minimax-vendor", "minimax_m3_full"),
         ],
     )
     def test_keeps_every_multinode_vendor_point_separate(

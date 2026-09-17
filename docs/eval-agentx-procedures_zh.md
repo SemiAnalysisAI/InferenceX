@@ -32,9 +32,11 @@ modifier 中的任意一个。这类运行提供吞吐量证据，不提供模�
 
 默认选择会区分场景。单节点定长序列 eval 对每个 8k/1k 的模型/runner/framework/precision/并行配置分组选取符合条件的中位和最高并发；多节点 eval 对每种拓扑选取符合条件的最高并发。定长序列中低于 16 的并发不会被选中。Kimi K3 和 MiniMax M3 的 AgentX 行在每个生成的测试点自动运行厂商评估，包括低并发测试点。其他 agentic 评估需要显式启用，并选取每个部署分组中符合条件的最高并发。参见 [`mark_eval_entries()` 和 `mark_all_eval_entries()`](../infx/matrix/generate.py)。
 
-Kimi K3 在 AMD 和 NVIDIA 的单节点及多节点 recipe 上自动运行 `kimi-vendor` / `kimi_tool_call_schema_full`。完整套件对 204 个独立 schema 用例分别执行流式和非流式请求，共产生 408 项检查。快速诊断时，仍可显式设置工作流输入 `eval-framework=kimi-vendor` 和 `eval-suite=kimi_tool_call_schema`，运行一个用例、两项检查的冒烟评估。`--trim-conc` 只裁剪部署测试点，不缩减套件用例数。MiniMax 继续使用 `minimax_m3_smoke`，定长序列的 GSM8K 选择策略保持不变。
+Kimi K3 在 AMD 和 NVIDIA 的单节点及多节点 recipe 上自动运行 `kimi-vendor` / `kimi_tool_call_schema_full`。完整套件对 204 个独立 schema 用例分别执行流式和非流式请求，共产生 408 项检查。快速诊断时，仍可显式设置工作流输入 `eval-framework=kimi-vendor` 和 `eval-suite=kimi_tool_call_schema`，运行一个用例、两项检查的冒烟评估。`--trim-conc` 只裁剪部署测试点，不缩减套件用例数。MiniMax M3 在两家硬件厂商上自动运行 `minimax-vendor` / `minimax_m3_full`，覆盖全部 102 个厂商用例；仍可通过显式覆盖选择单用例 `minimax_m3_smoke`。定长序列的 GSM8K 选择策略保持不变。
 
 解读分数时应同时查看任务名和 `n_eff`：`kimi_tool_call_schema = 1.0, n_eff = 2` 表示一个 schema 用例在两种模式下均通过，不能视为完整套件结果或 GSM8K 分数。历史冒烟产物保留原有标识。Kimi 完整套件仍采用 `0.0` 的质量阈值，仅报告诊断分数；检查项缺失、准备失败和集成错误仍会使作业失败。参见[套件定义与产物约定](../utils/evals/EVALS.md#how)。
+
+Kimi 厂商完整套件不再设置适配器层面的整进程超时。原生验证器的请求超时、引擎就绪等待上限，以及工作流和调度器的资源分配时限仍然生效。冒烟评估保留 900 秒超时；直接调用 Python 适配器时，可通过正数 `--timeout-seconds` 参数为任一套件显式设置超时。
 
 在 PR 上，应将一个主要 sweep label（通常为 `full-sweep-fail-fast`）与 eval modifier 组合使用。`all-evals` 在不抑制吞吐量的情况下扩大覆盖范围；`evals-only` 会抑制吞吐量；两者一起使用时只运行所有符合条件的 eval。带有 `evals-only` 的运行不可复用，而常规 full sweep 和 `all-evals` full sweep 可以复用。添加或移除 modifier 会重启当前 sweep（[label 策略](../.github/workflows/README.md#pr-eval-modifiers)）。
 
