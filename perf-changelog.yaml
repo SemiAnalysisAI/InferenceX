@@ -8043,3 +8043,13 @@
     - "Raise llm-d vLLM logging to DEBUG on GB200 DSpark AgentX recipes to capture worker-death diagnostics during external-LB DEP8 bring-up."
     - "将 GB200 DSpark AgentX llm-d 配方的 vLLM 日志级别提升至 DEBUG，以便在外部 LB DEP8 启动阶段捕获 worker 异常退出诊断信息。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+    - dsv4-fp4-gb200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Lower GB200 DSpark AgentX Mooncake embedded segment budget from 60% to 45% node DRAM utilization and restore default vLLM INFO logging after unhelpful DEBUG bring-up."
+    - "将 GB200 DSpark AgentX Mooncake 嵌入式段预算从节点 DRAM 利用率的 60% 降至 45%，并在 DEBUG 启动诊断无效后恢复默认 vLLM INFO 日志级别。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
