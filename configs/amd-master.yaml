@@ -1193,8 +1193,15 @@ minimaxm3-fp8-mi325x-vllm-agentic-mtp:
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 18] }
 
-dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260911
+dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
+  # Renamed from dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp when this arm
+  # moved from EAGLE/MTP to DSpark; earlier perf-changelog entries are recorded
+  # under the old key.
+  # 20260913 rather than 20260911: it is the first tag carrying the DSpark
+  # optimizations, which is the whole point of this arm. CLIENT_IMAGE stays at
+  # 20260907 -- that container only runs the load generator, so the
+  # server-side DSpark work does not reach it.
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1207,7 +1214,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - spec-decoding: "mtp"
+      - spec-decoding: "draft_model"
         conc-list: [ 4 ]
         kv-offloading: none
         prefill:
@@ -1226,7 +1233,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=3"
-      - spec-decoding: "mtp"
+      - spec-decoding: "draft_model"
         conc-list: [ 16 ]
         kv-offloading: none
         prefill:
@@ -1245,7 +1252,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=3"
-      - spec-decoding: "mtp"
+      - spec-decoding: "draft_model"
         conc-list: [ 32, 48 ]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
@@ -1266,7 +1273,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=3"
-      - spec-decoding: "mtp"
+      - spec-decoding: "draft_model"
         conc-list: [ 128, 192, 256 ]
         kv-offloading: dram
         kv-offload-backend: { name: umbp-linker }
