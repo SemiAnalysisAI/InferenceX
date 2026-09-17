@@ -6704,7 +6704,7 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
           additional-settings:
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
-          - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/agg-gb300-tp8-c1-mtp-lowlatency.yaml"
+          - "CONFIG_FILE=recipes/dsv4/sglang/gb300-fp4/agentx/agg-tp8-c1-mtp-lowlatency.yaml"
     - search-space:
       - spec-decoding: draft_model
         conc-list: [4]
@@ -6717,7 +6717,7 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
           additional-settings:
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
-          - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/agg-gb300-tp4-c4-mtp-lowlatency.yaml"
+          - "CONFIG_FILE=recipes/dsv4/sglang/gb300-fp4/agentx/agg-tp4-c4-mtp-lowlatency.yaml"
 dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
   image: lmsysorg/sglang:nightly-dev-20260916-c9a8fba9
   model: deepseek-ai/DeepSeek-V4-Pro-0813
@@ -6745,7 +6745,7 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
           additional-settings:
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
-          - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/disagg-gb300-1p1d-dep8-dep16-c64-mtp-kvoffload.yaml"
+          - "CONFIG_FILE=recipes/dsv4/sglang/gb300-fp4/agentx/disagg-1p1d-dep8-dep16-c64-mtp-kvoffload.yaml"
         decode:
           num-worker: 1
           tp: 16
@@ -6779,7 +6779,7 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
           additional-settings:
           - "SYNTHETIC_ACCEPTANCE=true"
           - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
-          - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/disagg-gb300-1p2d-dep8-dep16-c480-mtp-kvoffload.yaml"
+          - "CONFIG_FILE=recipes/dsv4/sglang/gb300-fp4/agentx/disagg-1p2d-dep8-dep16-c480-mtp-kvoffload.yaml"
         decode:
           num-worker: 2
           tp: 16
