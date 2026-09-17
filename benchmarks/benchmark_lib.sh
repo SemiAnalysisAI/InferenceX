@@ -1328,10 +1328,6 @@ _run_kimi_tool_call_schema_eval() {
     local verifier_ref="3dad65a760a8867cda72f6dd8848d876a4e851b4"
     local verifier_archive_sha256="ede9ea300c72ccfde9d8975ea4b1b54e423c7625690f6631ab1e65a715821e01"
     local eval_suite="${EVAL_SUITE:-kimi_tool_call_schema}"
-    local timeout_seconds=900
-    if [ "$eval_suite" = "kimi_tool_call_schema_full" ]; then
-        timeout_seconds=7200
-    fi
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1407,7 +1403,6 @@ _run_kimi_tool_call_schema_eval() {
             --model-prefix "${MODEL_PREFIX:-}" \
             --output-dir "$results_dir" \
             --task-name "$eval_suite" \
-            --timeout-seconds "$timeout_seconds" \
             || eval_rc=$?
     if [ "$eval_rc" -ne 0 ] \
         && ! _has_eval_result "$results_dir" "results_kimi_vendor_"; then

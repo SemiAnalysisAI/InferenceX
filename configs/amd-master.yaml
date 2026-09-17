@@ -577,7 +577,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=2"
 
 kimik3-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-af1c01499b289be555c475669ba50a88e96d846e
+  image: vllm/vllm-openai-rocm:nightly-rocm100-af1c01499b289be555c475669ba50a88e96d846e
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
@@ -588,9 +588,9 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [1] , spec-decoding: mtp}
-      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.3" }, conc-list: [4, 8, 10, 12, 14], spec-decoding: mtp }
-      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.3" }, conc-list: [44, 48], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [1, 4] , spec-decoding: mtp}
+      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 10, 12, 14], spec-decoding: mtp }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [44, 48, 70], spec-decoding: mtp }
 
 # Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
 # speculative decoding. Acceptance is pinned to the committed golden curve in

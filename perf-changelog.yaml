@@ -7990,6 +7990,20 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3109
 
 - config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Switch the DSpark draft attention backend from TRITON_MLA to ROCM_AITER_MLA; measured +28.9% interactivity p90 and +14.5% per-GPU at conc 1 with k/AL held fixed"
+    - "Use the published Inferact/Kimi-K3-DSpark draft unmodified: vLLM #55966 landed upstream, so ROCM_AITER_MLA now accepts the stock checkpoint's dflash_config: null and the earlier local causal rewrite is dropped. The recipe carries no model patch and no vLLM patch"
+    - "Raise the conc-1 speculative envelope from k=6/AL 3.75 to k=7/AL 3.84, matching the NV B300 cell (+3.6% interactivity p90)"
+    - "Descend the speculative envelope with concurrency instead of a flat k=3 across conc 4-14: conc 4 k=5/AL 3.62, conc 8 and 10 k=4/AL 3.36, conc 12 and 14 k=3/AL 3.00. Each k is paired with its own acceptance length. Conc 4 measured 111.23 interactivity p90 (ITL p90 8.99 ms), 162.61 output tok/s, 2801.95 tok/s per GPU"
+    - "Scope the CUDA graph pairing by concurrency: conc 1 and 4 run FULL_AND_PIECEWISE with VLLM_USE_BREAKABLE_CUDAGRAPH=1, the pairing both measurements below were taken under. Every other cell keeps FULL with breakable off. Breakable costs KV pool in proportion to capture size 2*CONC*(1+k) -- 11.5% at conc 4 (capture 48) and a third at conc 48 (capture 96, deadlocks at 86% usage) -- so unmeasured cells default to the cheaper setting"
+    - "Move conc 4 to the kv-offloading: none arm, matching how it is measured and how CI runs it (kimik3_tp8_conc4_kvnone)"
+    - "Replace the LMCache 0.5.5.dev114+rocm7.2 KV-offload backend with vllm-simple (SimpleCPUOffloadConnector) on every offload arm; conc 48 measured 11,083 tok/s per GPU vs 10,947 for the LMCache baseline, with no external cache server"
+    - "Bump the image to vllm/vllm-openai-rocm:nightly-rocm100-af1c0149 (vLLM 0.29.1rc1.dev187), the first nightly carrying vLLM #55966. Conc 1 on it measured 146.41 interactivity p90 (ITL p90 6.83 ms), flat against the previous 2671fed reference's 146.14"
+    - "Add conc 70 to the dcp-size 8 arm"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3124
+
+- config-keys:
     - glm5.2-fp8-b200-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
