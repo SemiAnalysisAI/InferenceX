@@ -8032,3 +8032,12 @@
     - "配置键由 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp 改名为 dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark，以反映 DSpark 算法与 UMBP-linker 分支；该配方此前的条目仍记录在旧键名下。改名不伴随任何其他字段变化。"
     - "Collect completed logs from every Slurm node so both prefill and decode artifacts are uploaded; forward workflow-owned AgentX fast-mode and power inputs, and supply the existing router port to evaluation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3188
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Carry forward PR #3117's 20260916 image and HIP Top-K selection, then enable SGLANG_GLM_NEXTN_MOE_PTPC=1 so the GLM-5.2 MXFP4 NextN/MTP fused MoE uses per-token, per-channel FP8 quantization; topology, eight-point concurrency matrix, HiCache settings, and all other launch arguments are unchanged."
+    - "沿用 PR #3117 的 20260916 镜像和 HIP Top-K 选择，并启用 SGLANG_GLM_NEXTN_MOE_PTPC=1，使 GLM-5.2 MXFP4 NextN/MTP fused MoE 使用 per-token、per-channel FP8 量化；拓扑、8 个并发点、HiCache 设置及其他启动参数均保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3228

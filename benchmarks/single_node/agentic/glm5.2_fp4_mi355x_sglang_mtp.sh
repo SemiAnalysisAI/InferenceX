@@ -56,8 +56,11 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 # AIPerf pins one pooled keep-alive connection per session while uvicorn's
 # default keep-alive is 5 s; outlast the client pool so the reuse race cannot occur.
 export SGLANG_TIMEOUT_KEEP_ALIVE=900
-# SGLang PRs #36684 and #36851 enable the v2 fused top-k for GLM-5.x on ROCm.
-export SGLANG_OPT_USE_TOPK_V2=true
+# Use the precompiled HIP Top-K path; at c8 it improves P90 interactivity with
+# essentially unchanged throughput per GPU compared with fused Top-K v2.
+export SGLANG_OPT_USE_TOPK_V2=false
+# Run the GLM NextN/MTP fused MoE with per-token, per-channel FP8 quantization.
+export SGLANG_GLM_NEXTN_MOE_PTPC=1
  
 # HiCache L2 (host DRAM), optionally with Mooncake L3. KV_OFFLOADING=dram
 # requires KV_OFFLOAD_BACKEND=hicache or mooncake. TP arm: the corpus
