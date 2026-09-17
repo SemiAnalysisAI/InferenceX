@@ -44,7 +44,14 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
             raise ValueError("speculative-config must be a JSON object")
         return dict(spec)
     if engine == "sglang":
-        algorithm = str(args.get("speculative-algorithm", "")).lower()
+        algorithms = {
+            str(args[key]).lower()
+            for key in ("speculative-algorithm", "speculative-algo")
+            if key in args
+        }
+        if len(algorithms) > 1:
+            raise ValueError("Conflicting speculative-algorithm and speculative-algo values")
+        algorithm = next(iter(algorithms), "")
         if not algorithm:
             return {}
         return {
@@ -133,6 +140,12 @@ def build_overrides(
             environment["MODEL_PREFIX"], spec, environment["THINKING_MODE"], golden_dir
         )
     overrides = []
+    variables = {"sglang": SGLANG_VARIABLES, "trtllm": (TRT_VARIABLE,)}.get(engine, ())
+    # SRT applies recipe-wide environment after role environment. Keep simulation
+    # role-local so global values cannot override the golden AL or leak into evals.
+    for key in variables:
+        if key in (recipe.get("environment") or {}):
+            overrides += ["--unset", f"environment.{key}"]
     for name, role in roles.items():
         if name not in ("agg", "prefill", "decode"):
             continue
@@ -157,20 +170,18 @@ def build_overrides(
                 "--set",
                 f"{prefix}.args.speculative-config={json.dumps(worker_spec)}",
             ]
+        elif al is not None and worker_spec:
+            values = (
+                (f"{al:g}", "match-expected", "real-draft-token")
+                if engine == "sglang"
+                else (f"{al - 1:g}",)
+            )
+            for key, value in zip(variables, values, strict=True):
+                overrides += ["--set", f"{prefix}.env.{key}={json.dumps(value)}"]
         else:
-            variables = SGLANG_VARIABLES if engine == "sglang" else (TRT_VARIABLE,)
-            if al is not None and worker_spec:
-                values = (
-                    (f"{al:g}", "match-expected", "real-draft-token")
-                    if engine == "sglang"
-                    else (f"{al - 1:g}",)
-                )
-                for key, value in zip(variables, values, strict=True):
-                    overrides += ["--set", f"{prefix}.env.{key}={json.dumps(value)}"]
-            else:
-                for key in variables:
-                    if key in (role.get("env") or {}):
-                        overrides += ["--unset", f"{prefix}.env.{key}"]
+            for key in variables:
+                if key in (role.get("env") or {}):
+                    overrides += ["--unset", f"{prefix}.env.{key}"]
     return overrides
 
 
@@ -226,21 +237,23 @@ def plan_commands(
     parser.add_argument("--set", action="append")
     parser.add_argument("--unset", action="append")
     existing, _ = parser.parse_known_args(arguments)
-    apply_overrides_to_recipe(raw, parse_overrides(existing.set, existing.unset))
+    caller_overrides = parse_overrides(existing.set, existing.unset)
+    apply_overrides_to_recipe(raw, caller_overrides)
     commands = []
     for variant, recipe in selected_recipes(raw, selector or None):
         arguments_to_add = build_overrides(recipe, framework, environment, golden_dir=golden_dir)
         parsed, _ = parser.parse_known_args(arguments_to_add)
-        for removal in existing.unset or []:
-            if any(
-                item.split("=", 1)[0] == removal or item.split("=", 1)[0].startswith(f"{removal}.")
-                for item in parsed.set or []
+        generated_overrides = parse_overrides(parsed.set, parsed.unset)
+        for removal in caller_overrides:
+            if removal.unset and any(
+                not item.unset and item.path[: len(removal.path)] == removal.path
+                for item in generated_overrides
             ):
-                raise ValueError(f"Caller --unset {removal} conflicts with golden acceptance")
+                raise ValueError(f"Caller {removal.render()} conflicts with golden acceptance")
         # SRT broadcasts overrides into zip groups. Reject a collapsed selection
         # before any job is submitted, rather than selecting the wrong variant.
         materialized = copy.deepcopy(raw)
-        apply_overrides_to_recipe(materialized, parse_overrides(parsed.set, parsed.unset))
+        apply_overrides_to_recipe(materialized, generated_overrides)
         selected_recipes(materialized, variant)
         selected_file = f"{path}:{variant}" if variant is not None else path
         commands.append([*command, "--file", selected_file, *arguments_to_add])

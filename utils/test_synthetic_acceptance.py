@@ -208,15 +208,21 @@ def test_engine_token_selection_and_environment(
     expected: dict[str, str],
 ) -> None:
     recipe = {
-        "roles": {"decode": {"args": args, "env": {"KEEP": "worker"}}},
+        "roles": {
+            "prefill": {"args": {}, "env": {"KEEP": "prefill"}},
+            "decode": {"args": args, "env": {"KEEP": "worker"}},
+        },
         "benchmark": {"env": {"KEEP": "client"}},
+        "environment": {"KEEP_GLOBAL": "yes", **dict.fromkeys(expected, "99")},
     }
     result = apply_native(
         recipe,
         build_overrides(recipe, framework, {**ENV, **environment}, golden_dir=golden_dir),
     )
     assert result["roles"]["decode"]["env"] == {"KEEP": "worker", **expected}
+    assert result["roles"]["prefill"]["env"] == {"KEEP": "prefill"}
     assert result["benchmark"] == {"env": {"KEEP": "client"}}
+    assert result["environment"] == {"KEEP_GLOBAL": "yes"}
 
 
 @pytest.mark.parametrize(
@@ -237,6 +243,7 @@ def test_real_runs_clear_synthetic_without_a_curve(
         "SGLANG_SIMULATE_ACC_TOKEN_MODE": "real-draft-token",
         "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS": "7",
     }
+    recipe["environment"] = copy.deepcopy(recipe["roles"]["agg"]["env"])
     env = {**ENV, **environment}
     del env["THINKING_MODE"]
     result = apply_native(
@@ -252,9 +259,12 @@ def test_real_runs_clear_synthetic_without_a_curve(
         }
     elif framework == "trt":
         assert "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS" not in role["env"]
+        assert "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS" not in result["environment"]
     else:
         assert not any(key.startswith("SGLANG_SIMULATE_ACC_") for key in role["env"])
+        assert not any(key.startswith("SGLANG_SIMULATE_ACC_") for key in result["environment"])
     assert role["env"]["KEEP"] == "yes"
+    assert result["environment"]["KEEP"] == "yes"
 
 
 @pytest.mark.parametrize(
@@ -421,7 +431,10 @@ def test_shell_forwards_options_and_submission_failure(tmp_path: Path) -> None:
     )
 
 
-@pytest.mark.parametrize("conflict", ["zip_cardinality", "caller_unset"])
+@pytest.mark.parametrize(
+    "conflict",
+    ["zip_cardinality", "roles.agg.env", 'roles."agg".env', " roles.agg.env "],
+)
 def test_invalid_plan_fails_before_any_submission(
     tmp_path: Path, golden_dir: Path, conflict: str
 ) -> None:
@@ -460,7 +473,43 @@ def test_invalid_plan_fails_before_any_submission(
                 }
             },
         }
-        arguments += ["--unset", "roles.agg.env"]
+        arguments += ["--unset", conflict]
     recipe.write_text(yaml.safe_dump(raw))
     with pytest.raises(ValueError, match=r"(?:zip_override|conflicts with golden acceptance)"):
         plan_commands(str(recipe), framework, arguments, ENV, golden_dir=golden_dir)
+
+
+@pytest.mark.parametrize("canonical", [None, "eagle"])
+def test_sglang_abbreviated_algorithm_selects_golden(
+    golden_dir: Path, canonical: str | None
+) -> None:
+    args = {"speculative-algo": "EAGLE", "speculative-num-steps": 3}
+    if canonical is not None:
+        args["speculative-algorithm"] = canonical
+    recipe = {"roles": {"decode": {"args": args}}}
+    result = apply_native(
+        recipe,
+        build_overrides(recipe, "dynamo-sglang", ENV, golden_dir=golden_dir),
+    )
+    assert result["roles"]["decode"]["env"] == {
+        "SGLANG_SIMULATE_ACC_LEN": "2.4",
+        "SGLANG_SIMULATE_ACC_METHOD": "match-expected",
+        "SGLANG_SIMULATE_ACC_TOKEN_MODE": "real-draft-token",
+    }
+
+
+def test_sglang_conflicting_algorithm_aliases_fail(golden_dir: Path) -> None:
+    recipe = {
+        "roles": {
+            "decode": {
+                "args": {
+                    "speculative-algo": "EAGLE",
+                    "speculative-algorithm": "DSPARK",
+                    "speculative-num-steps": 3,
+                    "speculative-dspark-block-size": 3,
+                }
+            }
+        }
+    }
+    with pytest.raises(ValueError, match="Conflicting speculative-algorithm and speculative-algo"):
+        build_overrides(recipe, "dynamo-sglang", ENV, golden_dir=golden_dir)
