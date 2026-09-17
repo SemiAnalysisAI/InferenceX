@@ -41,7 +41,13 @@ def load_platforms(path: Path) -> dict:
         base = path.parent / document["base"]
         platforms.update(json.loads(base.read_text())["platforms"])
     for pool, hardware in document["platforms"].items():
-        platforms[pool] = {**platforms.get(pool, {}), **hardware}
+        inherited = platforms.get(pool, {})
+        platforms[pool] = {**inherited, **hardware}
+        if "operator" in hardware:
+            platforms[pool]["operator"] = {
+                **inherited.get("operator", {}),
+                **hardware["operator"],
+            }
     return platforms
 
 

@@ -21,6 +21,43 @@ def platforms(pool="h100-dgxc", gpus=8, architecture="linux/amd64"):
     return {pool: {"gpus_per_node": gpus, "image_platform": architecture}}
 
 
+def test_platform_override_preserves_inherited_operator_settings(tmp_path):
+    (tmp_path / "base.json").write_text(
+        json.dumps(
+            {
+                "platforms": {
+                    "gpu": {
+                        "arch": "old",
+                        "operator": {
+                            "partition": "test",
+                            "squash_dir": "/shared/cache",
+                        },
+                    }
+                }
+            }
+        )
+    )
+    override = tmp_path / "override.json"
+    override.write_text(
+        json.dumps(
+            {
+                "base": "base.json",
+                "platforms": {
+                    "gpu": {"arch": "new", "operator": {"import_tmp_dir": "/disk/tmp"}}
+                },
+            }
+        )
+    )
+    assert ci.load_platforms(override)["gpu"] == {
+        "arch": "new",
+        "operator": {
+            "partition": "test",
+            "squash_dir": "/shared/cache",
+            "import_tmp_dir": "/disk/tmp",
+        },
+    }
+
+
 def test_plan_chunks_and_preserves_moe_groups():
     ordinary = {"type": "gemm", "args": {"m": 2}}
     moe = {"type": "moe_forward", "args": {"world_size": 4, "expert_parallel_size": 2}}
@@ -576,12 +613,21 @@ def test_cleanup_waits_for_delayed_release_but_stays_bounded(
 
 def test_amd_plan_keeps_requested_moe_shard_factors_with_one_gpu():
     result = ci.plan(
-        "mi300x", ["vllm"],
-        {"tiny": [
-            {"type": "moe_gemm", "args": {"num_tokens": 16, "expert_parallel_size": 8}},
-            {"type": "moe_gemm", "args": {"num_tokens": 32, "world_size": 2}},
-        ]},
-        {"vllm": {"image": "rocm:fixture"}}, [1], 50, platforms("mi300x"),
+        "mi300x",
+        ["vllm"],
+        {
+            "tiny": [
+                {
+                    "type": "moe_gemm",
+                    "args": {"num_tokens": 16, "expert_parallel_size": 8},
+                },
+                {"type": "moe_gemm", "args": {"num_tokens": 32, "world_size": 2}},
+            ]
+        },
+        {"vllm": {"image": "rocm:fixture"}},
+        [1],
+        50,
+        platforms("mi300x"),
     )
     cell = result["include"][0]
     assert cell["world_size"] == cell["nodes"] == 1
