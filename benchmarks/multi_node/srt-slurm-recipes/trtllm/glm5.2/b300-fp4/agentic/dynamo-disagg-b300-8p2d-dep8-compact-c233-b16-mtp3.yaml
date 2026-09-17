@@ -1,4 +1,6 @@
 schema: 2
+srun_options:
+  no-container-remap-root: ""
 engine:
   type: trtllm
   publish_events_and_metrics: false

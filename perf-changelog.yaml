@@ -8017,3 +8017,10 @@
     - "Record bounded PMIx launch metadata before starting the concurrency-20 TensorRT-LLM workers."
     - "在启动并发 20 的 TensorRT-LLM 工作进程前，记录限定范围的 PMIx 启动元数据。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
+  description:
+    - "Preserve the Slurm identity for TensorRT-LLM MPI workers and install Dynamo in a separate virtual environment for each job step."
+    - "为 TensorRT-LLM MPI 工作进程保留 Slurm 身份，并在各作业步骤的独立虚拟环境中安装 Dynamo。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993

@@ -247,7 +247,7 @@ default_mounts:
   "${AIPERF_MMAP_CACHE_HOST_PATH}": "/aiperf_mmap_cache"
   "${HF_HUB_CACHE_HOST_PATH}": "/hf_hub_cache"
   "${TRTLLM_JIT_CACHE_HOST_PATH}": "/trtllm-jit-cache"
-default_bash_preamble: "export NIXL_PLUGIN_DIR=/nixl-libfabric/nixl; export LD_LIBRARY_PATH=/nixl-libfabric/efa/opt/amazon/efa/lib:/nixl-libfabric/efa/usr/lib/x86_64-linux-gnu:/nixl-libfabric/nixl:\${LD_LIBRARY_PATH:-}; export IBV_DRIVERS_PATH=/nixl-libfabric/efa/usr/lib/x86_64-linux-gnu/libibverbs; export FI_PROVIDER=efa; export FI_EFA_USE_DEVICE_RDMA=1"
+default_bash_preamble: "if command -v trtllm-llmapi-launch >/dev/null 2>&1; then source /configs/prepare-dynamo-venv.sh || exit; fi; export NIXL_PLUGIN_DIR=/nixl-libfabric/nixl; export LD_LIBRARY_PATH=/nixl-libfabric/efa/opt/amazon/efa/lib:/nixl-libfabric/efa/usr/lib/x86_64-linux-gnu:/nixl-libfabric/nixl:\${LD_LIBRARY_PATH:-}; export IBV_DRIVERS_PATH=/nixl-libfabric/efa/usr/lib/x86_64-linux-gnu/libibverbs; export FI_PROVIDER=efa; export FI_EFA_USE_DEVICE_RDMA=1"
 EOF
 )
 fi

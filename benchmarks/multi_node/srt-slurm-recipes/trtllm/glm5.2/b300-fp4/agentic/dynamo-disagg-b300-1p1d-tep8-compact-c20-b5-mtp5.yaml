@@ -1,4 +1,6 @@
 schema: 2
+srun_options:
+  no-container-remap-root: ""
 setup_script: diagnose-pmix.sh
 engine:
   type: trtllm
