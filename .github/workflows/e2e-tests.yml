@@ -103,7 +103,7 @@ on: # zizmor: ignore[concurrency-limits]
                 default: "[]"
     workflow_call:
         secrets:
-          HF_TOKEN:
+          INFERENCEX_OFFICIAL_RO_HF_TOKEN:
             required: true
           MODAL_TOKEN_ID:
             required: false
@@ -359,7 +359,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-config) }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -385,7 +385,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-eval-config) }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -415,7 +415,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-config) }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -442,7 +442,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-eval-config) }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -473,7 +473,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-config) }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -503,7 +503,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-eval-config) }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -536,7 +536,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.single-node-config) }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -560,7 +560,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.eval-config) }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:

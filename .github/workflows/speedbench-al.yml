@@ -89,7 +89,7 @@ env:
   IS_AGENTIC: '0'
   REQUIRE_POWER: '0'
   SCENARIO_SUBDIR: fixed_seq_len/
-  HF_TOKEN: ${{ secrets.HF_TOKEN }}
+  HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   # Drive the single-node path in runners/launch_b300-dsxe.sh. MODEL is the HF id;
   # its basename (e.g. DeepSeek-V4-Pro) must be in the launcher's STAGED_MODELS so

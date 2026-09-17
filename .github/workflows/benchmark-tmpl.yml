@@ -2,7 +2,7 @@ name: Template - Benchmark
 on:
   workflow_call:
     secrets:
-      HF_TOKEN:
+      INFERENCEX_OFFICIAL_RO_HF_TOKEN:
         required: true
       MODAL_TOKEN_ID:
         required: false
@@ -106,7 +106,7 @@ env:
   KEEP_LOGS: '0'
   IS_MULTINODE: 'false'
   RANDOM_RANGE_RATIO: 0.8
-  HF_TOKEN: ${{ secrets.HF_TOKEN }}
+  HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   EXP_NAME: ${{ fromJSON(inputs.config).exp-name }}
   RECIPE_FINGERPRINT: ${{ fromJSON(inputs.config).recipe-fingerprint || '' }}

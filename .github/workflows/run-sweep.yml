@@ -458,7 +458,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.canary-select.outputs.canary-config) }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -490,7 +490,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k'] }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with: &multi-node-inputs
@@ -522,7 +522,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k'] }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with: *multi-node-inputs
@@ -545,7 +545,7 @@ jobs:
             matrix:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k'] }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with: &single-node-inputs
@@ -577,7 +577,7 @@ jobs:
             matrix:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k'] }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with: *single-node-inputs
@@ -599,7 +599,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).single_node['agentic'] }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -632,7 +632,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['agentic'] }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -669,7 +669,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).evals }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -706,7 +706,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).agentic_evals }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -742,7 +742,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_evals }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
@@ -784,7 +784,7 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals }}
         secrets:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
