@@ -1,0 +1,54 @@
+name: GB200 Engram GDS single-node sweep
+run-name: GB200 local SSD Engram GDS — one node, c1–128
+on:
+  push:
+    branches: [experiment/gb200-engram-gds]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      config: ${{ steps.matrix.outputs.config }}
+      concs: ${{ steps.matrix.outputs.concs }}
+      token: ${{ steps.matrix.outputs.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+      - id: matrix
+        run: |
+          uv run python -m infx.matrix.generate test-config \
+            --config-files configs/nvidia-master.yaml \
+            --config-keys dsv41flashssd-fp4-gb200-vllm-agentic-gds --no-evals > /tmp/gds-matrix.json
+          python3 - <<'PY'
+          import json, os, uuid
+          rows = json.load(open('/tmp/gds-matrix.json'))
+          assert rows and all(r['runner'] == 'cluster:gb200-nv' and r['tp'] == 4 for r in rows)
+          concs = [r['conc'] for r in rows]
+          assert len(concs) == len(set(concs))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('config=' + json.dumps(rows[0]) + '\n')
+              output.write('concs=' + json.dumps(concs) + '\n')
+              output.write('token=' + uuid.uuid4().hex + '\n')
+          PY
+  sweep:
+    needs: prepare
+    uses: ./.github/workflows/benchmark-tmpl.yml
+    secrets: inherit
+    with:
+      config: ${{ needs.prepare.outputs.config }}
+      agentic-conc-list: ${{ needs.prepare.outputs.concs }}
+      runner: cluster:gb200-nv
+      priority: '4.000'
+      queue-token: ${{ needs.prepare.outputs.token }}
+      dp-attn: false
+      run-eval: false
+      eval-only: false
+      scenario-type: agentic-coding
+      duration: '1800'
+      job-timeout-minutes: 750
+      slurm-time-limit: '720'
+      ref: ${{ github.sha }}

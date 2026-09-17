@@ -428,3 +428,11 @@ python -m pytest utils/matrix_logic/ -v
 遵循已合并的[上游配方 #968](https://github.com/vllm-project/recipes/pull/968) 中的 AMD 设置：`VLLM_ROCM_USE_AITER=1`、`VLLM_ROCM_USE_AITER_MOE=1` 和 `--moe-backend aiter`。通用 AITER 选择器允许 vLLM 选择 CK a8w4 专家内核，与 DSV4-Pro MI355X 配方一致。配方通过 `WEKA_LOADER_OVERRIDE` 固定使用完整语料 `semianalysis_cc_traces_weka_062126`。KV 驻留 GPU；Engram 沿用上游 AMD 默认设置。不要复制 NVIDIA 的 `--engram-config` 选项：上游目前在 ROCm 上拒绝该选项。MI355X launcher 使用共享 HF 缓存，并将此模型的仓库挂载至 `/ix`，同时导出 `INFMAX_CONTAINER_WORKSPACE=/ix`，确保 AgentX 依赖与输出路径位于该挂载中。
 
 **GPU 验证：** [运行 34710937012](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34710937012) 使用精确固定的镜像，通过了并发 1、2、4、8、16、32 的吞吐测试以及仅评测并发 32。配方使用 `vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657`（摘要 `sha256:960228cf…`，发布于 2026-09-12）。较早的 `deepseekv41-flash-0909` 标签早于 [vllm-project/vllm#56503](https://github.com/vllm-project/vllm/pull/56503)，该 PR 将 mHC delayed pre 块从 eager Torch 参考实现切换到 AITER；已合并的[上游配方 #968](https://github.com/vllm-project/recipes/pull/968) 固定使用同一 nightly，并记录了完整的 InferenceX 命令。后续运行时证据请遵循 [AgentX 流程](./eval-agentx-procedures_zh.md)；仅有本地矩阵生成和镜像元数据不能证明 GPU 验证完成。
+
+### GB200 本地 SSD Engram GDS 实验
+
+`engram-gds-gb200.yml` 将 `dsv41flashssd-fp4-gb200-vllm-agentic-gds` 作为带有 `nodes:1` 的单个串行 CI 任务调度。在同一个 GB200 TP4 Slurm 分配中运行并发 1、2、4、8、16、32、64、96、128；每个点启动新服务器并测量 1800 秒，以适应集群 12 小时的分配上限。保留完整 AgentX 轨迹、DSpark5、合成 AL 3.51 和 GPU KV。
+
+GDS 路径在 GPU 上去重行及页 ID，通过 cuFile 批量读取对齐的 4 KiB 页到有界、已注册的 GPU 缓冲区，再由 GPU 提取行并反量化。CPU 仅提交页描述符，不提取表数据。两项 cuFile 兼容回退控制均禁用；不支持的存储会在模型加载前失败。每个任务先在实际本地挂载上验证 GPU 批量及随机读取、ID 变化图回放、checkpoint 持久化和 TP 边界。本实验提供性能证据，不代表完整的模型准确性验证。
+
+必须使用专用工作流，而非 PR 扫描标签；常规矩阵展开会为各点分别分配节点。每个点的聚合结果使用 `_concN.json` 后缀，原始输出位于 `results/concN/`，均由 CI 保留。实验不安装宿主机驱动，也不启用 P2PDMA。

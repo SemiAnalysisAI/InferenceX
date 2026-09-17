@@ -11,6 +11,16 @@ on:
       MODAL_TOKEN_SECRET:
         required: false
     inputs:
+      agentic-conc-list:
+        description: "Sequential single-node AgentX batch, as a JSON array; empty for ordinary jobs"
+        type: string
+        default: ''
+      job-timeout-minutes:
+        type: number
+        default: 500
+      slurm-time-limit:
+        type: string
+        default: '480'
       config:
         description: "Benchmark configuration as JSON"
         required: true
@@ -102,7 +112,8 @@ env:
   DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE: '1'
   MODEL_DOWNLOAD_LOCK_TIMEOUT: '21600'
   ENROOT_IMPORT_TIME_LIMIT: '120'
-  SALLOC_TIME_LIMIT: '480'
+  SALLOC_TIME_LIMIT: ${{ inputs.slurm-time-limit }}
+  AGENTIC_CONC_LIST: ${{ inputs.agentic-conc-list != '' && join(fromJSON(inputs.agentic-conc-list), ' ') || '' }}
   GPU_MONITOR_INTERVAL: '1'
   GPU_METRICS_CSV: 'gpu_metrics.csv'
   KEEP_LOGS: '0'
@@ -204,7 +215,7 @@ jobs:
         ) ||
         format('[{0}]', toJSON(inputs.runner))
       ) }}
-    timeout-minutes: 500
+    timeout-minutes: ${{ inputs.job-timeout-minutes }}
     name: >-
       ${{ inputs.klaud-run && 'klaud | ' || '' }}p${{ inputs.priority }} | ${{ fromJSON(inputs.config).model-prefix }} ${{ fromJSON(inputs.config).precision }} ${{ inputs.runner }} ${{ fromJSON(inputs.config).framework == 'sglang' && 'sgl' || fromJSON(inputs.config).framework == 'dynamo-sglang' && 'dyn-sgl' || fromJSON(inputs.config).framework == 'sglang-disagg' && 'sgl-disagg' || fromJSON(inputs.config).framework }}
       TP${{ fromJSON(inputs.config).tp }}${{ format('{0}', fromJSON(inputs.config).pp) != '' && format('{0}', fromJSON(inputs.config).pp) != '1' && format('/PP{0}', fromJSON(inputs.config).pp) || '' }}${{ format('{0}', fromJSON(inputs.config).dcp-size) != '' && format('{0}', fromJSON(inputs.config).dcp-size) != '1' && format('/DCP{0}', fromJSON(inputs.config).dcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).pcp-size) != '' && format('{0}', fromJSON(inputs.config).pcp-size) != '1' && format('/PCP{0}', fromJSON(inputs.config).pcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).ep) != '' && format('{0}', fromJSON(inputs.config).ep) != '1' && format('/EP{0}', fromJSON(inputs.config).ep) || '' }}${{ inputs.dp-attn && '/DPA' || '' }}
@@ -316,6 +327,13 @@ jobs:
               echo "Eval-only run failed: no results*.json files found." >&2
               exit 1
             fi
+          elif [[ -n "$AGENTIC_CONC_LIST" ]]; then
+            for batch_conc in $AGENTIC_CONC_LIST; do
+              test -s "${RESULT_FILENAME}_conc${batch_conc}.json"
+              python3 -m utils.agentic.validation.validate_agentic_result \
+                "results/conc${batch_conc}/aiperf_artifacts" \
+                --failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"
+            done
           else
             FOUND_RESULT_FILE=
             for i in {1..10}; do
@@ -362,7 +380,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}
-          path: ${{ env.RESULT_FILENAME }}.json
+          path: |
+            ${{ env.RESULT_FILENAME }}.json
+            ${{ env.RESULT_FILENAME }}_conc*.json
 
       - name: Upload agentic raw results
         if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
@@ -371,8 +391,8 @@ jobs:
           name: agentic_${{ env.RESULT_FILENAME }}
           path: |
             results/**
-            !results/aiperf_artifacts/inputs.json
-            !results/aiperf_artifacts/profile_export_raw.jsonl
+            !results/**/inputs.json
+            !results/**/profile_export_raw.jsonl
           if-no-files-found: ignore
 
       - name: Upload server logs

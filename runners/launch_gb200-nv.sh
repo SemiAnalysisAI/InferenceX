@@ -95,6 +95,31 @@ import_squash() {
     ) || exit 1
 }
 
+# GDS experiment: one allocation owns the entire sequential concurrency batch.
+if [[ "$MODEL_PREFIX" == dsv41flashssd && "$FRAMEWORK" == vllm && "$IS_MULTINODE" == false ]]; then
+    check_env_vars AGENTIC_CONC_LIST GITHUB_RUN_ID GITHUB_RUN_ATTEMPT TP
+    export ENGRAM_SSD_DIR="/mnt/numa1/engram-gds/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+    export ENGRAM_GDS_PAGE_CAPACITY=8192 ENGRAM_GDS_MAX_ROWS=65536
+    export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
+    export MODEL_PATH="$MODEL" HF_HUB_CACHE=/hf-cache
+    export INFMAX_CONTAINER_WORKSPACE=/ix RESULT_DIR=/ix/results
+    HF_HUB_CACHE_HOST_PATH=/mnt/lustre01/users-public/sa-shared/hf-hub-cache
+    SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    import_squash "$SQUASH_FILE" "$IMAGE"
+    GDS_MOUNTS="$GITHUB_WORKSPACE:/ix,$HF_HUB_CACHE_HOST_PATH:/hf-cache,/mnt/numa1:/mnt/numa1"
+    for device in {0..15}; do
+        GDS_MOUNTS+=",/dev/nvidia-fs${device}:/dev/nvidia-fs${device}"
+    done
+    srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
+        --nodes=1 --ntasks=1 --gpus="$TP" --exclusive --mem=0 \
+        --time="$SALLOC_TIME_LIMIT" --job-name="$RUNNER_NAME" --mpi=none \
+        --container-image="$SQUASH_FILE" --container-mounts="$GDS_MOUNTS" \
+        --no-container-mount-home --container-remap-root --container-workdir=/ix \
+        --no-container-entrypoint --export=ALL,PORT=8888 \
+        bash benchmarks/single_node/agentic/dsv41flashssd_fp4_gb200_vllm_mtp.sh
+    exit $?
+fi
+
 # Direct single-tray AgentX uses the existing shared image and HF caches.
 if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE}" != "true" ]]; then
     BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb200_${FRAMEWORK}_mtp.sh"

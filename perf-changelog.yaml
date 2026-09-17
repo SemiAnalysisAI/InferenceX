@@ -7988,3 +7988,12 @@
     - "Use a B300-specific vLLM AgentX script with explicit FULL_AND_PIECEWISE CUDA graph capture sizes, concurrency-tiered batched-token limits, and an explicit maximum sequence count."
     - "Add a TP2 search-space variant at concurrency 2-128 while retaining the TP4 concurrency 1-128 variant."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3109
+
+- config-keys:
+    - dsv41flashssd-fp4-gb200-vllm-agentic-gds
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Experimental GB200 local NVMe Engram GDS: GPU page deduplication and batched direct reads, strict no-fallback checks; use dedicated CI for all nine concurrency points on one node"
+    - "实验性 GB200 本地 NVMe Engram GDS：GPU 页去重及批量直接读取，严格禁用回退；使用专用 CI 在一个节点上运行九个并发点"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3080
