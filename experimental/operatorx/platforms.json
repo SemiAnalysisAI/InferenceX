@@ -5,16 +5,34 @@
       "arch": "gfx942",
       "gpus_per_node": 8,
       "image_platform": "linux/amd64",
-      "operator": {"partition": "compute", "cpus_per_node": 128}
+      "operator": {
+        "partition": "compute",
+        "cpus_per_node": 128
+      }
     },
     "mi325x": {
       "arch": "gfx942",
       "gpus_per_node": 8,
       "image_platform": "linux/amd64",
-      "operator": {"partition": "compute", "cpus_per_node": 256}
+      "operator": {
+        "partition": "compute",
+        "cpus_per_node": 256
+      }
     },
     "mi355x": {
-      "operator": {"partition": "compute", "cpus_per_node": 128}
+      "operator": {
+        "partition": "compute",
+        "cpus_per_node": 128
+      }
+    },
+    "h100-dgxc": {
+      "image_overrides": {
+        "vllm": {
+          "image": "vllm/vllm-openai:v0.19.1",
+          "staged_path": "/mnt/nfs/lustre/containers/vllm_vllm-openai_v0.19.1.sqsh",
+          "squashfs_sha256": "37bbb45bbf3f58e69bb87549b148a6f15d6e47889dee7c4afb77542d99270da0"
+        }
+      }
     }
   }
 }

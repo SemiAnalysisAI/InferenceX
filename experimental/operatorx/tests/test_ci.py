@@ -120,6 +120,7 @@ def test_image_import_separates_architectures_and_refuses_wrong_host(
     monkeypatch.setattr(probe, "resolve_image_digest", lambda image: digest)
     monkeypatch.setattr(ci, "probe_module", lambda: probe)
     args = types.SimpleNamespace(
+        staged_path=None,
         image="nvcr.io/nvidia/pytorch:test",
         digest=digest,
         cache=tmp_path / "cache",
@@ -135,7 +136,7 @@ def test_image_import_separates_architectures_and_refuses_wrong_host(
         ("linux/arm64", "aarch64"),
     ]:
         args.image_platform = architecture
-        monkeypatch.setattr(ci.platform, "machine", lambda: machine)
+        monkeypatch.setattr(ci.platform, "machine", lambda machine=machine: machine)
         ci.import_image(args)
         ci.import_image(args)  # Reuse a validated cache on the same architecture.
     images = list(args.cache.glob("*.sqsh"))
@@ -574,15 +575,107 @@ def test_cleanup_waits_for_delayed_release_but_stays_bounded(
 
 def test_amd_plan_keeps_requested_moe_shard_factors_with_one_gpu():
     result = ci.plan(
-        "mi300x", ["vllm"],
-        {"tiny": [
-            {"type": "moe_gemm", "args": {"num_tokens": 16, "expert_parallel_size": 8}},
-            {"type": "moe_gemm", "args": {"num_tokens": 32, "world_size": 2}},
-        ]},
-        {"vllm": {"image": "rocm:fixture"}}, [1], 50, platforms("mi300x"),
+        "mi300x",
+        ["vllm"],
+        {
+            "tiny": [
+                {
+                    "type": "moe_gemm",
+                    "args": {"num_tokens": 16, "expert_parallel_size": 8},
+                },
+                {"type": "moe_gemm", "args": {"num_tokens": 32, "world_size": 2}},
+            ]
+        },
+        {"vllm": {"image": "rocm:fixture"}},
+        [1],
+        50,
+        platforms("mi300x"),
     )
     cell = result["include"][0]
     assert cell["world_size"] == cell["nodes"] == 1
     assert result["excluded_shapes"] == 1
     assert len(result["include"]) == len(cell["cases"]) == 1
     assert cell["cases"][0]["shape"]["args"]["num_tokens"] == 16
+
+
+def test_plan_selects_verified_staged_image_only_for_overridden_backend():
+    hardware = platforms()
+    hardware["h100-dgxc"]["image_overrides"] = {
+        "vllm": {
+            "image": "vendor/moe:patch",
+            "staged_path": "/shared/moe.sqsh",
+            "squashfs_sha256": "a" * 64,
+        }
+    }
+    cells = ci.plan(
+        "h100-dgxc",
+        ["torch", "vllm"],
+        {"tiny": [{"type": "gemm", "args": {"m": 2}}]},
+        {"torch": {"image": "vendor/torch:1"}, "vllm": {"image": "vendor/moe:1"}},
+        [1],
+        50,
+        hardware,
+    )["include"]
+    staged, registry = cells
+    assert (
+        staged["image"],
+        staged["backends"],
+        staged["staged_path"],
+        staged["digest"],
+    ) == (
+        "vendor/moe:patch",
+        ["vllm"],
+        "/shared/moe.sqsh",
+        "squashfs-sha256:" + "a" * 64,
+    )
+    assert registry["image"] == "vendor/torch:1"
+    assert "staged_path" not in registry
+    hardware["h100-dgxc"]["image_overrides"]["vllm"]["squashfs_sha256"] = ""
+    with pytest.raises(ValueError, match="absolute path and SHA256"):
+        ci.plan(
+            "h100-dgxc",
+            ["vllm"],
+            {"tiny": [{"type": "gemm", "args": {}}]},
+            {"vllm": {"image": "vendor/moe:1"}},
+            [1],
+            50,
+            hardware,
+        )
+
+
+def test_staged_image_copy_verifies_source_and_cached_bytes(tmp_path, monkeypatch):
+    # SHA256 of the standard three-byte test vector "abc".
+    digest = "squashfs-sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    staged = tmp_path / "staged.sqsh"
+    staged.write_bytes(b"abc")
+
+    def external(argv, **kwargs):
+        if argv[0] != "unsquashfs":
+            raise AssertionError("staged import must not contact the registry")
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(ci.subprocess, "run", external)
+    monkeypatch.setattr(ci.platform, "machine", lambda: "x86_64")
+    args = types.SimpleNamespace(
+        image="vendor/moe:patch",
+        digest=digest,
+        staged_path=staged,
+        cache=tmp_path / "cache",
+        image_platform="linux/amd64",
+    )
+    ci.import_image(args)
+    (cached,) = args.cache.glob("*.sqsh")
+    assert cached.read_bytes() == b"abc"
+    assert not cached.is_symlink()
+    staged.write_bytes(b"mutated shared source")
+    ci.import_image(args)
+    assert cached.read_bytes() == b"abc"
+    cached.write_bytes(b"corrupt cache")
+    with pytest.raises(RuntimeError, match="checksum mismatch"):
+        ci.import_image(args)
+    cached.unlink()
+    with pytest.raises(RuntimeError, match="checksum mismatch"):
+        ci.import_image(args)
+    assert not list(args.cache.glob("*.sqsh"))
+    assert not list(args.cache.glob("*.partial"))
+    assert staged.read_bytes() == b"mutated shared source"

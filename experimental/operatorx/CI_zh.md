@@ -153,7 +153,8 @@ router/top-k 计算、共享专家和通信。该配置不测量已发布 Kimi K
 3584 维潜在专家路径、潜在投影或共享专家；这些需要独立的原生层测试配置。
 无需模型权重或 Hugging Face 凭据。
 
-NVIDIA 使用 `vllm/vllm-openai:v0.19.0`（amd64/arm64），AMD 复用现有 ROCm 镜像。
+NVIDIA 使用 `vllm/vllm-openai:v0.19.0`（amd64/arm64），但 H100 使用预构建的
+`vllm/vllm-openai:v0.19.1`；AMD 复用现有 ROCm 镜像。
 需显式选择 `backends=vllm`。不支持的精度、路由和共享专家请求会记录为 unsupported；
 导入或内核执行错误使 CI 失败。
 
@@ -164,4 +165,20 @@ NVIDIA 使用 `vllm/vllm-openai:v0.19.0`（amd64/arm64），AMD 复用现有 ROC
 
 ### GPU 验证状态
 
-完整的八项 BF16 测试已在 H200、MI300X 和 MI325X 上通过。H100 目前在执行内核前失败：Enroot 导入 vLLM 镜像时，在 `/tmp` 和 `/var/tmp` 均无法转换 OCI whiteout。CollectiveX swap-blocks 也记录了相同的主机限制。H100 需先恢复镜像导入环境，才能提供性能数据；本次改动不修改节点配置。B200、B300、GB200、GB300 和 MI355X 的任务正在等待共享 GPU 资源。注册 GPU 池不代表已完成运行时验证。
+### H100 预构建容器
+
+H100 的 Enroot 在 `/tmp` 和 `/var/tmp` 上均无法转换 vLLM 镜像的 OCI whiteout。
+与 CollectiveX swap-blocks 相同，OperatorX 可以复用已有的 squashfs，无需修改节点配置。
+`platforms.json` 的 `image_overrides` 为 H100 的 `vllm` 后端明确选择
+`vllm/vllm-openai:v0.19.1` 及其 squashfs SHA256。导入器将文件复制到私有缓存，
+校验复制后的字节和 squashfs 结构，并在复用缓存前再次校验哈希。
+文件缺失或内容变化会直接失败，不会回退到注册表导入。
+
+结果记录 `OPERATORX_IMAGE_SOURCE=staged-squashfs`，
+`OPERATORX_IMAGE_DIGEST` 使用 `squashfs-sha256:` 前缀。这是实际执行的 squashfs
+内容哈希，不是 OCI manifest digest。注册表导入记录 `registry` 和 OCI digest。
+清单和运行时软件版本保留相应来源信息。H100 使用 v0.19.1，其他 NVIDIA GPU
+使用 v0.19.0，比较结果时必须同时考虑软件版本差异。H100 的新路径尚待运行验证。
+
+完整八项 BF16 配置已在 H200、B300、GB300、MI300X 和 MI325X 上通过。
+B200、GB200 和 MI355X 仍在等待共享 GPU 容量；注册了资源池不等于完成运行验证。

@@ -21,3 +21,13 @@
   description-zh:
     - 新增明确标注的 Kimi K3 vLLM 基准测试配置，测量 BF16 EP8/TP8 路由专家内核。
     - 在计时前生成本地均匀路由，不包含共享专家、通信或原生 K3 的latent 投影及 SITU 层。
+- date: 2026-09-17
+  pr-link: pending
+  operators: [moe_gemm]
+  pools: [h100-dgxc]
+  description:
+    - Use the existing vLLM v0.19.1 staged squashfs on H100 to avoid Enroot whiteout import failures.
+    - Verify copied and cached squashfs bytes against a pinned SHA256; record the staged source and content digest separately from OCI provenance.
+  description-zh:
+    - H100 使用已有的 vLLM v0.19.1 squashfs，避免 Enroot whiteout 导入失败。
+    - 按固定 SHA256 校验复制文件和缓存，并区分预构建文件内容哈希与 OCI 来源信息。

@@ -116,9 +116,22 @@ def plan(
             groups[(ws, moe)].append({"testlist": name, "shape": shape})
     image_groups = defaultdict(list)
     for backend in sorted(set(backends)):
-        image_groups[images[backend]["image"]].append(backend)
+        spec = hardware.get("image_overrides", {}).get(backend, images[backend])
+        staged = spec.get("staged_path", "")
+        checksum = spec.get("squashfs_sha256", "")
+        if bool(staged) != bool(checksum) or (
+            staged
+            and (
+                not Path(staged).is_absolute()
+                or not re.fullmatch(r"[a-f0-9]{64}", checksum)
+            )
+        ):
+            raise ValueError(
+                "staged images require an absolute path and SHA256 checksum"
+            )
+        image_groups[(spec["image"], staged, checksum)].append(backend)
     cells = []
-    for image, selected in sorted(image_groups.items()):
+    for (image, staged, checksum), selected in sorted(image_groups.items()):
         for (ws, moe), cases in sorted(groups.items()):
             for offset in range(0, len(cases), chunk_size):
                 cell = {
@@ -134,6 +147,10 @@ def plan(
                     "offset": offset,
                     "cases": cases[offset : offset + chunk_size],
                 }
+                if staged:
+                    cell.update(
+                        staged_path=staged, digest=f"squashfs-sha256:{checksum}"
+                    )
                 identity = hashlib.sha256(
                     json.dumps(cell, sort_keys=True).encode()
                 ).hexdigest()[:16]
@@ -245,20 +262,23 @@ def shared_base(profile: dict, pool: str) -> Path:
     raise ValueError("no writable shared storage root configured for this pool")
 
 
+def verify_squash_checksum(path: Path, digest: str) -> None:
+    actual = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(8 * 1024 * 1024), b""):
+            actual.update(chunk)
+    if f"squashfs-sha256:{actual.hexdigest()}" != digest:
+        raise RuntimeError("staged squashfs checksum mismatch")
+
+
 def import_image(args) -> None:
     # Runs on the configured import host with a compute-visible cache and lock.
     import fcntl
 
-    # Temporary read-only verification of the existing official H100 serving image.
-    staged = Path("/mnt/nfs/lustre/containers/vllm_vllm-openai_v0.19.1.sqsh")
-    subprocess.run(["unsquashfs", "-s", str(staged)], check=True)
-    digest = hashlib.sha256()
-    with staged.open("rb") as source:
-        for chunk in iter(lambda: source.read(8 * 1024 * 1024), b""):
-            digest.update(chunk)
-    print("STAGED_SHA256", staged.name, digest.hexdigest(), flush=True)
-    raise RuntimeError("OperatorX diagnostic-only verification completed; no benchmark executed")
     image, digest = args.image, args.digest
+    staged = args.staged_path
+    if bool(staged) != digest.startswith("squashfs-sha256:"):
+        raise ValueError("staged images require a squashfs content digest")
     machines = {"linux/amd64": {"x86_64", "amd64"}, "linux/arm64": {"aarch64", "arm64"}}
     if platform.machine() not in machines[args.image_platform]:
         raise ValueError("image platform does not match the import host")
@@ -276,10 +296,20 @@ def import_image(args) -> None:
             ).returncode
             == 0
         ):
+            if staged:
+                verify_squash_checksum(squash, digest)
             return
         temporary = squash.with_suffix(".partial")
         temporary.unlink(missing_ok=True)
         try:
+            if staged:
+                # Copy into the private cache, then verify the bytes we will execute.
+                # Never modify or execute the mutable shared source directly.
+                shutil.copyfile(staged, temporary)
+                verify_squash_checksum(temporary, digest)
+                subprocess.run(["unsquashfs", "-s", str(temporary)], check=True)
+                temporary.replace(squash)
+                return
             host, repository, tag = probe_module().registry_reference(image)
             uri = f"docker://{host}#{repository}:{tag}"
             # B300 login/compute homes are node-local; every importer gets private
@@ -467,6 +497,8 @@ def execute(args) -> None:
             "--image-platform",
             image_platform,
         ]
+        if cell.get("staged_path"):
+            import_command.extend(["--staged-path", cell["staged_path"]])
         # Import on the allocated architecture, including B300: its submit host
         # lacks PyTorch extraction space, as the inference launcher notes.
         import_env = dict(os.environ)
@@ -481,6 +513,9 @@ def execute(args) -> None:
             OPERATORX_CONTAINER_IMAGE=cell["image"],
             OPERATORX_IMAGE_DIGEST=cell["digest"],
             OPERATORX_IMAGE_PLATFORM=image_platform,
+            OPERATORX_IMAGE_SOURCE="staged-squashfs"
+            if cell.get("staged_path")
+            else "registry",
             OPERATORX_GPUS_PER_NODE=str(gpus),
             OPERATORX_SOURCE_SHA=args.source_sha,
             OPERATORX_GITHUB_RUN_ID=args.run_id,
@@ -641,6 +676,7 @@ def main() -> None:
     p.add_argument("--cache", required=True, type=Path)
     p.add_argument("--image", required=True)
     p.add_argument("--digest", required=True)
+    p.add_argument("--staged-path", type=Path)
     p.add_argument(
         "--image-platform", required=True, choices=("linux/amd64", "linux/arm64")
     )
@@ -679,14 +715,17 @@ def main() -> None:
             args.chunk_size,
             load_platforms(args.platform_config),
         )
-        digests = {c["image"]: "" for c in result["include"]}
+        digests = {
+            c["image"]: "" for c in result["include"] if not c.get("staged_path")
+        }
         for image in digests:
             digest = probe_module().resolve_image_digest(image)
             digests[image] = digest
             if not digest:
                 raise RuntimeError(f"cannot resolve image digest: {image}")
         for cell in result["include"]:
-            cell["digest"] = digests[cell["image"]]
+            if not cell.get("staged_path"):
+                cell["digest"] = digests[cell["image"]]
             cell["queue-token"] = hashlib.sha256(
                 f"{args.run_id}:{args.attempt}:{cell['id']}".encode()
             ).hexdigest()[:32]
