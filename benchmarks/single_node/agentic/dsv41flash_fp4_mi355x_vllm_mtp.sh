@@ -5,9 +5,16 @@ set -eo pipefail
 # https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
-check_env_vars EVAL_ONLY
+check_env_vars PORT EVAL_ONLY
 require_agentic_kv_offload_none
 export GPU_COUNT="$TP"
+
+ENGRAM_ARGS=()
+if [[ "$TP" == 2 ]]; then
+    # Scoped to the new experimental TP2 recipes; stock TP4 stays unpatched.
+    bash "$(dirname "$0")/../../../utils/patches/dsv41flash_rocm_engram/apply.sh"
+    ENGRAM_ARGS=(--engram-config '{"cpu_offload":true}')
+fi
 
 # Complete/resume partial downloads instead of trusting nonempty directories.
 if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
@@ -79,6 +86,7 @@ VLLM_CMD=(
     # (mfma_moe1_silu_mul_afp8_wfp4_bf16 / mfma_moe2_afp8_wfp4_bf16); the
     # Triton name forces the W4A16 _moe_gemm_a16w4 kernel instead.
     --moe-backend aiter
+    "${ENGRAM_ARGS[@]}"
     --gpu-memory-utilization 0.9
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576

@@ -423,6 +423,30 @@ python -m pytest utils/matrix_logic/ -v
 
 ## MI355X 上的 DeepSeek-V4.1-Flash
 
+### TP2 Engram CPU 卸载实验
+
+`dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp2-engram-cpu` 仅覆盖 AgentX，
+使用 TP2，并发为 1、2、4、8、16、32，c32 执行 eval。
+此实验不运行固定序列或 8k1k 基准。配置固定使用
+`vllm/vllm-openai-rocm:nightly-af1c01499b289be555c475669ba50a88e96d846e`，
+先应用 [ROCm Engram 补丁](../utils/patches/dsv41flash_rocm_engram/README.md)，
+再传入 `--engram-config '{"cpu_offload":true}'`。这是 Engram 权重卸载，
+不是 KV cache 卸载；KV 仍驻留 GPU。
+
+附带补丁即上游 [vllm-project/vllm#57491](https://github.com/vllm-project/vllm/pull/57491)
+（仅包含运行时 hunk，测试文件的 hunk 不随镜像发布）。它不新增 AMD 代码：
+将 `vllm/config/engram.py` 与 `vllm/config/vllm.py` 中的两个 `is_cuda()` 门控放宽为
+`is_cuda_alike()`，并让 `amd/model.py` 从 `nvidia/engram.py` 导入共享的 `Engram`，
+其 pinned-host 表本就通过支持 ROCm 的设备视图 helper 读取。哈希、查找计算、TP 分片
+和图暂存均为上游代码路径。由于上游默认开启 `cpu_offload`，打补丁后的 ROCm 服务即使
+不传 `--engram-config` 也会卸载 Engram；TP2 配方仍显式传入该参数。模型加载前的
+GPU 预检验证放宽后的门控、共享 `Engram` 导入、host/HBM 查找一致性、TP2 分片重建、
+变更 ID 后的图回放及存储替换。AgentX 吞吐保留黄金 AL 3.51；eval 使用真实 block rejection。
+只有 GPU 预检、完整 AgentX 扫描和 eval 全部通过后，才能将此实验视为已验证。
+原有 TP4 配置和镜像保持不变。
+
+### 原有 TP4 配方
+
 草案配方 `dsv41flash-fp4-mi355x-vllm-agentic-dspark` 将 [#2958](https://github.com/SemiAnalysisAI/InferenceX/pull/2958) 扩展至 MI355X AgentX：TP4、并发 1–32、原生五 token DSpark。吞吐测试使用[已提交的黄金 AL](../golden_al_distribution/dsv41flash_dspark.yaml)：thinking 开启、五个草稿 token 对应 3.51，采用合成拒绝采样并关闭自适应验证。准确率 eval 保留真实块拒绝采样，但与 CUDA 分支不同，同样关闭自适应验证：它会在设备端裁剪验证请求，而 ROCm 的 `DeepseekV4IndexerBackend` 不支持该操作，启用后引擎拒绝启动（[运行 34651830283](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34651830283)）。FP4 表示 MXFP4 专家权重；检查点还包含 MXFP8 权重。
 
 遵循已合并的[上游配方 #968](https://github.com/vllm-project/recipes/pull/968) 中的 AMD 设置：`VLLM_ROCM_USE_AITER=1`、`VLLM_ROCM_USE_AITER_MOE=1` 和 `--moe-backend aiter`。通用 AITER 选择器允许 vLLM 选择 CK a8w4 专家内核，与 DSV4-Pro MI355X 配方一致。配方通过 `WEKA_LOADER_OVERRIDE` 固定使用完整语料 `semianalysis_cc_traces_weka_062126`。KV 驻留 GPU；Engram 沿用上游 AMD 默认设置。不要复制 NVIDIA 的 `--engram-config` 选项：上游目前在 ROCm 上拒绝该选项。MI355X launcher 使用共享 HF 缓存，并将此模型的仓库挂载至 `/ix`，同时导出 `INFMAX_CONTAINER_WORKSPACE=/ix`，确保 AgentX 依赖与输出路径位于该挂载中。

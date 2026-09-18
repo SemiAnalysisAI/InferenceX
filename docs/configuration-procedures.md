@@ -449,6 +449,34 @@ A configuration is ready for sweep only when the executable files agree, the exa
 
 ## DeepSeek-V4.1-Flash on MI355X
 
+### Experimental TP2 Engram CPU offload
+
+The `dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp2-engram-cpu` entry tests TP2 at
+concurrency 1, 2, 4, 8, 16, and 32 for AgentX only, with a c32 eval.
+Do not run fixed-sequence or 8k1k benchmarks for this experiment. It pins
+`vllm/vllm-openai-rocm:nightly-af1c01499b289be555c475669ba50a88e96d846e`
+and applies the [ROCm Engram patch](../utils/patches/dsv41flash_rocm_engram/README.md)
+before passing `--engram-config '{"cpu_offload":true}'`. This is Engram weight
+offload, not KV-cache offload; KV remains on the GPU.
+
+The bundled patch is upstream [vllm-project/vllm#57491](https://github.com/vllm-project/vllm/pull/57491)
+(runtime hunks only; its test-file hunk is not shipped in the image). It adds no
+AMD code: the two `is_cuda()` gates in `vllm/config/engram.py` and
+`vllm/config/vllm.py` widen to `is_cuda_alike()`, and `amd/model.py` imports the
+shared `Engram` from `nvidia/engram.py`, whose pinned-host tables already read
+through the ROCm-capable accelerator-view helper. Hashing, lookup math, TP
+ownership, and graph staging are the upstream code paths. Because upstream's
+default `cpu_offload` is on, a patched ROCm server offloads Engram even without
+`--engram-config`; the TP2 recipe still passes it explicitly. GPU preflight checks
+the widened gate, the shared `Engram` import, host/HBM lookup equivalence, TP2
+shard reconstruction, changed-ID graph replay, and storage replacement before the
+model starts. AgentX throughput retains golden AL 3.51; the eval uses real block
+rejection.
+GPU preflight, the full AgentX sweep, and eval are required before this experiment can
+be called validated. The stock TP4 entry and its image remain unchanged.
+
+### Stock TP4 recipe
+
 The draft `dsv41flash-fp4-mi355x-vllm-agentic-dspark` recipe extends [#2958](https://github.com/SemiAnalysisAI/InferenceX/pull/2958) to MI355X AgentX: TP4, concurrency 1–32, native five-token DSpark. Throughput uses the [committed golden AL](../golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking on and five draft tokens, with synthetic rejection sampling and adaptive verification disabled. Accuracy evals retain real block rejection but, unlike the CUDA arms, also keep adaptive verification disabled: it trims verification requests on device, which the ROCm `DeepseekV4IndexerBackend` does not support, and the engine refused to start with it enabled ([run 34651830283](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34651830283)). FP4 describes the MXFP4 experts; the checkpoint also contains MXFP8 weights.
 
 Follow the AMD overrides in the merged [upstream recipe #968](https://github.com/vllm-project/recipes/pull/968): `VLLM_ROCM_USE_AITER=1`, `VLLM_ROCM_USE_AITER_MOE=1`, and `--moe-backend aiter`. The generic AITER selector lets vLLM pick the CK a8w4 experts, matching the DSV4-Pro MI355X recipe. The recipe pins `semianalysis_cc_traces_weka_062126` (the unfiltered corpus) via `WEKA_LOADER_OVERRIDE`. KV stays GPU-resident; Engram follows upstream AMD defaults. Do not copy the NVIDIA `--engram-config` option: upstream currently rejects it on ROCm. The MI355X launcher uses the shared HF cache and mounts this model's repository at `/ix`, and exports `INFMAX_CONTAINER_WORKSPACE=/ix` so AgentX dependencies and outputs resolve inside that mount.

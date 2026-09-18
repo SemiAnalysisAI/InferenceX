@@ -1,0 +1,45 @@
+diff --git a/vllm/config/engram.py b/vllm/config/engram.py
+index 5abb2bd34a5e..773ca2091153 100644
+--- a/vllm/config/engram.py
++++ b/vllm/config/engram.py
+@@ -74,7 +74,7 @@ def verify_model_config(self, model_config: "ModelConfig | None") -> None:
+         if (
+             model_config is None
+             or field is None
+-            or not current_platform.is_cuda()
++            or not current_platform.is_cuda_alike()
+             or not getattr(model_config.hf_text_config, field, None)
+         ):
+             raise ValueError(
+diff --git a/vllm/config/vllm.py b/vllm/config/vllm.py
+index e5710dced396..930278e0669a 100644
+--- a/vllm/config/vllm.py
++++ b/vllm/config/vllm.py
+@@ -1260,7 +1260,7 @@ def _resolve_and_verify_engram_config(self) -> None:
+                 "Disable --enable-dbo and set --ubatch-size to 0."
+             )
+         if self.engram_config is None:
+-            if not current_platform.is_cuda() or not model_has_engram_layers(
++            if not current_platform.is_cuda_alike() or not model_has_engram_layers(
+                 model_config
+             ):
+                 return
+diff --git a/vllm/models/deepseek_v41/amd/model.py b/vllm/models/deepseek_v41/amd/model.py
+index b3eddc202452..1383bac820cb 100644
+--- a/vllm/models/deepseek_v41/amd/model.py
++++ b/vllm/models/deepseek_v41/amd/model.py
+@@ -61,9 +61,13 @@
+ from vllm.v1.attention.backends.registry import AttentionBackendEnum
+ from vllm.v1.worker.ubatching import dbo_current_ubatch_id
+ 
+-from ..common.engram import Engram, EngramLayout, NgramHashState
++from ..common.engram import EngramLayout, NgramHashState
+ from ..common.mm_preprocess import IMAGE_SENTINEL_BASE_ID, image_sentinel_mask
+ 
++# Engram host offload and its prefetch stream are neither ROCm- nor
++# NVIDIA-specific, so they are imported rather than duplicated.
++from ..nvidia.engram import Engram
++
+ if typing.TYPE_CHECKING:
+     from vllm.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
+ 
