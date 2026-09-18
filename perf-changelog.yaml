@@ -8193,7 +8193,6 @@
 
 - config-keys:
   - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
-  - qwen3.5-fp8-b300-sglang-agentic-latest
   scenario-type:
   - agentic-coding
   description:
@@ -8207,4 +8206,12 @@
   - agentic-coding
   description:
   - "Add the measured colocated 1P1D concurrency-48 point with 298 GB HiCache per prefill rank. B300 Slurm 4093 completed 2683 profiled requests with zero errors or grace cancellations at 29720.62 logical tok/s/GPU and 181.40 p90 interactivity, extending the published FP8 frontier between the C32 and C64 candidates. This fast result remains subject to the fresh official full sweep and accuracy evaluations."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - "Retain only the new measured disaggregated qualification scope. Keep latest-image aggregate controls as comparison evidence without publishing a sparse replacement for the existing aggregate curves; the dashboard selects the latest run per curve scope, so a lone new aggregate point would remove still-competitive published endpoints. Remove provisional aggregate configuration and its unused launcher, budget, and documentation changes. Preserve the existing aggregate FP8 scopes alongside the expanded PD curve."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268

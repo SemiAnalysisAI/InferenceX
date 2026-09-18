@@ -186,14 +186,6 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 6. 追加选择全部受影响 key 的 changelog 条目（有意覆盖多个 key 时可以使用通配符），并列出旧/新版本及实质运行时变更。
 7. 生成每个受影响的配置族，确认其运行时路径中没有残留旧 tag。
 
-B300 Qwen3.5 FP8 SGLang AgentX 通过调用方选择 `QWEN35_HICACHE_BUDGET_MODE`。
-`launch_b300-dsxe.sh` 对精确镜像 `nightly-dev-cu13-20260918-20518d85` 传入
-`combined`，对较旧镜像传入 `legacy`；benchmark 脚本要求并验证该值。
-combined 模式先为每个 rank 预留 1 GB，再按 TP rank 分配 `TOTAL_CPU_DRAM_GB`。
-legacy 模式保留目标 KV、Mamba 和 draft 池的内存倍率。TP4 的预算为 1,199 GB 时，
-combined 模式为每个 rank 传入 `--hicache-size 298`。修改此显式选择前，必须验证
-新镜像的实际内存池分配。
-
 ## 添加或修改 MTP
 
 来源：[`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-negotiable-benchmark-invariants)、[模型+硬件 playbook 的 MTP 附录](../.claude/commands/add-model-hardware.md#appendix--mtp--eagle3-spec-decoding-variant)和现有 [`*_mtp.sh` 同类项](../benchmarks/single_node/fixed_seq_len/)。

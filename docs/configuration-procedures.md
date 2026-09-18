@@ -209,15 +209,6 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 6. Append a changelog entry selecting all affected keys (wildcards are allowed when intentional), including old/new versions and material runtime changes.
 7. Generate each affected family and verify no stale tag survives in its runtime path.
 
-B300 Qwen3.5 FP8 SGLang AgentX uses caller-selected `QWEN35_HICACHE_BUDGET_MODE`.
-`launch_b300-dsxe.sh` supplies `combined` for the exact
-`nightly-dev-cu13-20260918-20518d85` image and `legacy` for older images; the
-benchmark script requires and validates that value. The combined mode divides
-`TOTAL_CPU_DRAM_GB` across TP ranks after reserving 1 GB per rank. Legacy mode
-retains the target KV, Mamba and draft-pool multiplier. For TP4 with a 1,199 GB
-budget, the combined mode supplies `--hicache-size 298` per rank. Qualify a new
-image's actual pool allocation before changing this explicit selection.
-
 ## Add or change MTP
 
 Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-negotiable-benchmark-invariants), [MTP appendix in the model+hardware playbook](../.claude/commands/add-model-hardware.md#appendix--mtp--eagle3-spec-decoding-variant), and current [`*_mtp.sh` siblings](../benchmarks/single_node/fixed_seq_len/).
