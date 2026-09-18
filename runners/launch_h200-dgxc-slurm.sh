@@ -287,8 +287,49 @@ EOF
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
 
-    echo "Running make setup..."
-    make setup ARCH=x86_64
+    # GitHub release downloads occasionally return a truncated NATS/etcd
+    # archive with a successful HTTP status. The pinned srt-slurm Makefile's
+    # wget retry only covers transport failures, so validate setup by its exit
+    # status. Retry only when an archive that remains on disk fails an
+    # integrity check, and discard only that incomplete archive.
+    SRT_SETUP_MAX_ATTEMPTS=5
+    SRT_SETUP_SUCCEEDED=0
+    for ((SRT_SETUP_ATTEMPT = 1; SRT_SETUP_ATTEMPT <= SRT_SETUP_MAX_ATTEMPTS; SRT_SETUP_ATTEMPT++)); do
+        echo "Running make setup (attempt ${SRT_SETUP_ATTEMPT}/${SRT_SETUP_MAX_ATTEMPTS})..."
+        if make setup ARCH=x86_64; then
+            SRT_SETUP_SUCCEEDED=1
+            break
+        fi
+
+        SRT_SETUP_INVALID_ARCHIVE=0
+        for archive in configs/nats-server-v*.deb; do
+            [[ -e "$archive" ]] || continue
+            if ! dpkg-deb --contents "$archive" >/dev/null 2>&1; then
+                echo "Removing incomplete NATS archive: $archive" >&2
+                rm -f "$archive"
+                SRT_SETUP_INVALID_ARCHIVE=1
+            fi
+        done
+        for archive in configs/etcd-*.tar.gz; do
+            [[ -e "$archive" ]] || continue
+            if ! tar -tzf "$archive" >/dev/null 2>&1; then
+                echo "Removing incomplete etcd archive: $archive" >&2
+                rm -f "$archive"
+                SRT_SETUP_INVALID_ARCHIVE=1
+            fi
+        done
+        if [[ "$SRT_SETUP_INVALID_ARCHIVE" != "1" ]]; then
+            echo "Error: srt-slurm setup failed without an invalid NATS/etcd archive; not retrying" >&2
+            exit 1
+        fi
+        if ((SRT_SETUP_ATTEMPT < SRT_SETUP_MAX_ATTEMPTS)); then
+            sleep $((SRT_SETUP_ATTEMPT * 5))
+        fi
+    done
+    if [[ "$SRT_SETUP_SUCCEEDED" != "1" ]]; then
+        echo "Error: srt-slurm setup failed after ${SRT_SETUP_MAX_ATTEMPTS} attempts" >&2
+        exit 1
+    fi
 
     if [[ -f "$LOCAL_CONFIG_FILE" ]]; then
         mkdir -p "$(dirname "$CONFIG_PATH")"
