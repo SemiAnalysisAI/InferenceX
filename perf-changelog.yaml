@@ -8082,3 +8082,12 @@
     - "Capture only full decode CUDA graphs (VLLM_USE_BREAKABLE_CUDAGRAPH=0 with cudagraph_mode FULL_DECODE_ONLY, as the MiniMax-M3 gfx942 arm does) and restore --moe-backend aiter: on gfx942 every worker segfaulted during piecewise graph capture with both the Triton W4A16 MoE kernel (run 35305045778) and the auto-selected unfused Triton kernel (run 35306398350), so the capture mode rather than the MoE kernel is the failing piece; prefill runs eagerly"
     - "仅捕获完整的 decode CUDA graph（VLLM_USE_BREAKABLE_CUDAGRAPH=0 并设置 cudagraph_mode FULL_DECODE_ONLY，与 MiniMax-M3 gfx942 配方一致）并恢复 --moe-backend aiter：在 gfx942 上，无论使用 Triton W4A16 MoE 内核（运行 35305045778）还是自动选择的未融合 Triton 内核（运行 35306398350），所有 worker 都在 piecewise graph 捕获期间段错误，说明问题在于捕获模式而非 MoE 内核；prefill 以 eager 方式运行"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3247
+
+- config-keys:
+    - qwen3.5-fp8-gb200-dynamo-sglang-mtp
+  description:
+    - "Update the Qwen3.5 FP8 GB200 Dynamo-SGLang 8k1k MTP SGLang image from lmsysorg/sglang:v0.5.14-cu130@sha256:5027e95bf6ec536856b1b52a91d1f35ff5c564ab83e8a94758a169ff09bb8df3 to lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85 (2026-09-18 upstream cu13 dev nightly, sgl-project/sglang@20518d85, amd64 + arm64)"
+    - "In the 7 srt-slurm recipes of this key, set model.container to the same image, rename cuda-graph-max-bs to cuda-graph-max-bs-decode for the same reason, and move the Dynamo install from source commit 46520ca59afe992fb5ef61b3197b2316f8df9b2b to the public 1.5.0.dev20260917 wheel (the master router version follows), the newest Dynamo nightly, since the June source build predates the SGLang ServerArgs compatibility fixes that Dynamo 1.5.0.dev20260910 and later carry; recipe topologies, concurrencies and serving flags are otherwise unchanged"
+    - "将 Qwen3.5 FP8 GB200 Dynamo-SGLang 8k1k MTP 的 SGLang 镜像从 lmsysorg/sglang:v0.5.14-cu130@sha256:5027e95bf6ec536856b1b52a91d1f35ff5c564ab83e8a94758a169ff09bb8df3 更新为 lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85（2026-09-18 上游 cu13 dev nightly，sgl-project/sglang@20518d85，amd64 + arm64）"
+    - "在该 key 的 7 个 srt-slurm 配方中，将 model.container 设为同一镜像，出于同样原因将 cuda-graph-max-bs 改为 cuda-graph-max-bs-decode，并将 Dynamo 安装从源码提交 46520ca59afe992fb5ef61b3197b2316f8df9b2b 改为公开的 1.5.0.dev20260917 wheel（master 中的 router 版本随之更新），这是最新的 Dynamo nightly，因为 6 月的源码构建早于 Dynamo 1.5.0.dev20260910 及之后版本所包含的 SGLang ServerArgs 兼容性修复；配方拓扑、并发与服务参数保持不变"
+  pr-link: TBD
