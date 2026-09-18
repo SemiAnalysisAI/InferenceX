@@ -9,7 +9,7 @@ set -x
 # (--speculative-algorithm NEXTN, 3 steps, eagle-topk 1, 4 draft tokens) is the
 # same shape the B200/B300/H200 qwen3.8next SGLang AgentX arms run:
 # https://docs.sglang.io/cookbook/autoregressive/Qwen/Qwen3.8-Flash-Next
-# Checkpoint: https://huggingface.co/fanwu103/Qwen3.8-Flash-Next-MXFP4-PLEFP8
+# Checkpoint: https://huggingface.co/amd/Qwen3.8-Flash-Next-Quark-MXFP4-PLEFP8
 # Quantization is read from the checkpoint (Quark MXFP4 MoE; FP8 PLE). The model
 # ships its own multi-step-trained MTP head, so NEXTN needs no external drafter.
 # Per the AgentX policy (MODELS.md) agentic recipes run with speculative
@@ -29,13 +29,9 @@ if [[ "$EP_SIZE" != 1 ]]; then
     exit 1
 fi
 
-# Let HF validate/resume downloads even when a local directory is nonempty.
-if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
-    hf download "$MODEL" --local-dir "$MODEL_PATH"
-else
-    hf download "$MODEL"
-    export MODEL_PATH="$MODEL"
-fi
+# Weights are pre-staged on the shared filesystem; read them directly instead
+# of downloading from the Hub (avoids gated/cache-permission issues).
+export MODEL_PATH=/it-share/data/Qwen3.8-Flash-Next-Quark-MXFP4-PLEFP8
 
 rocm-smi || true
 amd-smi || true
@@ -91,7 +87,7 @@ fi
 
 SGLANG_CMD=(
     python3 -m sglang.launch_server
-    --model-path "$MODEL_PATH"
+    --model-path /it-share/data/Qwen3.8-Flash-Next-Quark-MXFP4-PLEFP8
     --served-model-name "$MODEL"
     --host 0.0.0.0
     --port "$PORT"
@@ -122,7 +118,7 @@ SGLANG_CMD=(
     --stream-interval 50
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
     "${TOKENIZER_ARGS[@]}"
-    --tokenizer-path "$MODEL"
+    --tokenizer-path /it-share/data/Qwen3.8-Flash-Next-Quark-MXFP4-PLEFP8
     --enable-metrics
     --enable-cache-report
 )

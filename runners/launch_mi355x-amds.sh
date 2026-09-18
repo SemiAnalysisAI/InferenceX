@@ -305,9 +305,16 @@ else
         export EVAL_TASKS_DIR=infx/evals/gsm8k.yaml
     fi
 
+    # The Qwen3.8-Flash-Next MXFP4 recipe reads pre-staged weights from the
+    # shared /it-share/data path; bind-mount it so the container can see them.
+    EXTRA_CONTAINER_MOUNTS=""
+    if [[ "$MODEL" == "amd/Qwen3.8-Flash-Next-Quark-MXFP4-PLEFP8" && "$FRAMEWORK" == "sglang" ]]; then
+        EXTRA_CONTAINER_MOUNTS=",/it-share/data:/it-share/data"
+    fi
+
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_REPO/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_REPO/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache$EXTRA_CONTAINER_MOUNTS \
         $SLRUM_HOME_MOUNT \
         --container-writable \
         --container-workdir=$CONTAINER_REPO/ \
