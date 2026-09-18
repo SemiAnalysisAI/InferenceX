@@ -1194,14 +1194,17 @@ minimaxm3-fp8-mi325x-vllm-agentic-mtp:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 18] }
 
 # DeepSeek-V4.1-Flash AgentX on MI325X (gfx942), a copy of the validated MI355X vLLM
-# arm (run 34710937012) on the same ROCm nightly. gfx942 is not in the upstream
-# hardware table (h100, h200, b200, gb200, gb300, mi350x); TP8 rather than TP4
-# because a 256 GB card must hold its share of the 511 GB checkpoint, the
-# GPU-resident Engram tables and a 1M-context KV pool. Native five-token DSpark,
+# arm (run 34710937012), originally on the same 2026-09-12 ROCm nightly. gfx942 is
+# not in the upstream hardware table (h100, h200, b200, gb200, gb300, mi350x); TP8
+# rather than TP4 because a 256 GB card must hold its share of the 511 GB checkpoint,
+# the GPU-resident Engram tables and a 1M-context KV pool. Native five-token DSpark,
 # golden AL 3.51 for throughput, real block verification for evals, adaptive
 # verification off on ROCm.
+# Refreshed to the 2026-09-18 upstream ROCm nightly (vllm-project/vllm@dee37d89,
+# Docker Hub digest sha256:5550994c1874ef331c6aed3ea27ae1efb7f4cfd17a2f18f5466c2837b9bf5467)
+# on the same ROCm base image; the v0.29.0 release predates DeepSeek V4.1 support.
 dsv41flash-fp4-mi325x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
+  image: vllm/vllm-openai-rocm:nightly-dee37d89115db4c94a820a79a78a7828e141c910
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi325x-amds
