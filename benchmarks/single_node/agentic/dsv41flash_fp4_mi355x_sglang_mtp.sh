@@ -81,6 +81,14 @@ export SGLANG_DSV41_REASONING_EFFORT=high
 # 67 GB of HBM still free after the KV pool: the eager 1M-context prefill
 # path plus RCCL exhausted the device's hardware queues, not its memory.
 export GPU_MAX_HW_QUEUES=2
+# MEC firmware below 177 has an RCCL memory-reclaim issue (see the Kimi-K3
+# MI355X arm). With the queue cap alone, run 35372886390 still lost c8 to the
+# same RCCL HSA_STATUS_ERROR_OUT_OF_RESOURCES abort while c1-c32 served, so
+# keep scratch from being reclaimed on affected firmware as well.
+mec_version=$(rocm-smi --showfw 2>/dev/null | grep MEC | head -n 1 | awk '{print $NF}')
+if [[ "$mec_version" == "" || ${mec_version:-0} -lt 177 ]]; then
+    export HSA_NO_SCRATCH_RECLAIM=1
+fi
 export SGLANG_USE_AITER=1
 export SGLANG_MOE_PADDING=1
 export AITER_FLYDSL_FORCE_REDUCE=1

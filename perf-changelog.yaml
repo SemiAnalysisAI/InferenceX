@@ -8138,3 +8138,12 @@
     - "Set GPU_MAX_HW_QUEUES=2 as the DeepSeek-V4 MI355X SGLang arm does: in run 35362380897 (and the first sweep, run 35304555945) c4 came up, captured its decode graphs, then died three warmup requests in when RCCL queues on three ranks aborted with HSA_STATUS_ERROR_OUT_OF_RESOURCES while 67 GB of HBM was still free after the KV pool, which points at hardware-queue exhaustion under eager 1M-context prefill rather than memory"
     - "与 DeepSeek-V4 MI355X SGLang 配方一致，设置 GPU_MAX_HW_QUEUES=2：运行 35362380897（以及首次 sweep 运行 35304555945）中 c4 启动并完成 decode graph 捕获后，在第三个 warmup 请求时三个 rank 的 RCCL 队列因 HSA_STATUS_ERROR_OUT_OF_RESOURCES 中止，而 KV 池分配后仍有 67 GB HBM 空闲，说明是 eager 1M 上下文 prefill 下硬件队列耗尽而非显存不足"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Also set HSA_NO_SCRATCH_RECLAIM=1 when the MEC firmware is below 177, as the Kimi-K3 MI355X arm does for its RCCL memory-reclaim issue: with GPU_MAX_HW_QUEUES=2 alone, run 35372886390 served c1, c2, c4, c16, c32 and the eval with no HSA errors (the first attempt to get past warmup on this SKU) but c8 still died once to the same RCCL HSA_STATUS_ERROR_OUT_OF_RESOURCES abort at six running requests"
+    - "当 MEC 固件低于 177 时同时设置 HSA_NO_SCRATCH_RECLAIM=1，与 Kimi-K3 MI355X 配方针对其 RCCL 内存回收问题的做法一致：仅设置 GPU_MAX_HW_QUEUES=2 时，运行 35372886390 中 c1、c2、c4、c16、c32 与 eval 均无 HSA 错误地正常服务（该 SKU 首次通过 warmup），但 c8 在 6 个运行中请求时仍一次因相同的 RCCL HSA_STATUS_ERROR_OUT_OF_RESOURCES 中止"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
