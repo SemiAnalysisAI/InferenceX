@@ -36,8 +36,10 @@ SALLOC_TIME=180
 # kernel.apparmor_restrict_unprivileged_userns=1 (seen on smci300x-ccs-aus-e06-40
 # and e07-22 in run 35305037528). Drain that node so later jobs avoid it, then
 # retry on a fresh allocation that excludes every node that failed so far, up
-# to four allocations: run 35307258006 hit the same denial on e06-40, e06-01 and
-# e07-22 in turn. Draining needs Slurm operator rights (the runner account gets
+# to six allocations: run 35307258006 hit the same denial on e06-40, e06-01 and
+# e07-22 in turn, and run 35307840070 then drew e07-31, whose enroot import
+# could not resolve the registry (curl exit 28), before e06-10 served the eval.
+# A node that cannot import the image is excluded the same way. Draining needs Slurm operator rights (the runner account gets
 # "Invalid user id"); without them the exclusion list still steers the retries.
 container_start_failed() {
     grep -qE "pyxis: (couldn't start container|container start failed)|enroot-nsenter: failed to create user namespace" "$1"
@@ -59,7 +61,7 @@ BENCH_SCRIPT="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISI
 EXCLUDE_NODES=""
 JOB_ID=""
 trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
-MAX_ATTEMPTS=4
+MAX_ATTEMPTS=6
 for (( attempt = 1; attempt <= MAX_ATTEMPTS; attempt++ )); do
     SALLOC_EXCLUDE_ARGS=()
     if [[ -n "$EXCLUDE_NODES" ]]; then
@@ -85,6 +87,7 @@ for (( attempt = 1; attempt <= MAX_ATTEMPTS; attempt++ )); do
     NODE=$(scontrol show job "$JOB_ID" -o | grep -oP ' NodeList=\K\S+' || true)
 
     # Concurrent jobs import to the same node-local squash file; serialize them.
+    set +e
     srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c "
         set -eo pipefail
         exec 9>\"$LOCK_FILE\"
@@ -96,6 +99,18 @@ for (( attempt = 1; attempt <= MAX_ATTEMPTS; attempt++ )); do
             enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
         fi
     "
+    import_rc=$?
+    set -e
+    if (( import_rc != 0 )); then
+        if (( attempt < MAX_ATTEMPTS )) && [[ -n "$NODE" ]]; then
+            echo "WARNING: image import failed on $NODE (exit $import_rc); excluding it and retrying" >&2
+            scancel "$JOB_ID"
+            JOB_ID=""
+            EXCLUDE_NODES="${EXCLUDE_NODES:+$EXCLUDE_NODES,}$NODE"
+            continue
+        fi
+        exit "$import_rc"
+    fi
 
     SRUN_STDERR="$(mktemp)"
     set +e
