@@ -8151,3 +8151,13 @@
   description:
   - Select the explicit decode CUDA graph size flag when the installed SGLang CLI exposes separate prefill/decode graph flags, retaining the legacy flag for older images and preserving concurrency-derived graph sizes.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-experiment-1p1d-hicache
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-experiment-2p1d-hicache
+  scenario-type:
+  - agentic-coding
+  description:
+  - Resolve aisimulate from the NVIDIA vendor wheel index in frontend and worker environments while retaining pip integrity validation. Preserve artifacts before returning failed or unverifiable Slurm allocation status from the B300 launcher.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268

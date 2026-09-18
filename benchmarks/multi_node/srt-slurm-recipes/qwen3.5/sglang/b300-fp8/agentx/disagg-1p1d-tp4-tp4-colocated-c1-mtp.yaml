@@ -32,6 +32,7 @@ frontend:
   nginx_session_affinity: true
   env:
     PIP_BREAK_SYSTEM_PACKAGES: '1'
+    PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
   args:
     router-mode: kv
     router-session-affinity-ttl-secs: '3600'
@@ -48,6 +49,7 @@ roles:
     env:
       PYTHONUNBUFFERED: '1'
       PIP_BREAK_SYSTEM_PACKAGES: '1'
+      PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
       NCCL_NVLS_ENABLE: '1'
       SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
       SGLANG_ENABLE_SPEC_V2: '1'
@@ -101,6 +103,7 @@ roles:
     env:
       PYTHONUNBUFFERED: '1'
       PIP_BREAK_SYSTEM_PACKAGES: '1'
+      PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
       NCCL_NVLS_ENABLE: '1'
       SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
       SGLANG_ENABLE_SPEC_V2: '1'
