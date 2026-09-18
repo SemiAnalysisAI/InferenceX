@@ -8091,3 +8091,20 @@
     - "Disable SGLANG_OPT_USE_TOPK_V2 for the precompiled HIP Top-K path and update the SGLang ROCm 7.2.0 image from 20260913 to 20260916 for sgl-project/sglang#39155 and #39631; versus published run 34783501425, final run 35159075984 improves c8 P90 interactivity from 84.53 to 86.81 tok/s/user (+2.7%) and throughput per GPU from 10,389.25 to 12,695.57 tok/s (+22.2%)."
     - "关闭 SGLANG_OPT_USE_TOPK_V2 以使用预编译 HIP Top-K 路径，并将 SGLang ROCm 7.2.0 镜像从 20260913 更新到 20260916，以包含 sgl-project/sglang#39155 和 #39631；相比已发布运行 34783501425，最终运行 35159075984 的并发 8 P90 interactivity 从 84.53 提升到 86.81 tok/s/user（+2.7%），单卡吞吐从 10,389.25 提升到 12,695.57 tok/s（+22.2%）。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3117
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh GLM-5.2 NVFP4 GB300 Dynamo-SGLang AgentX with lmsysorg/sglang:nightly-dev-20260914-4358a161 and one schema-2 recipe per benchmark point."
+    - "Add aggregate concurrency 1 and retain aggregate concurrency 2/4; retain disaggregate 1P2D c48, 1P4D c48, and 1P6D c45; replace the unstable 2P1D c128/c192 points with 4P1D DEP4/DEP8 c227 and 5P1D DEP4/DEP16 c260."
+    - "Align prefill speculative steps and draft tokens with decode, use FlashInfer CuteDSL for disaggregate MoE/FP4 backends unless the existing backend is TensorRT-LLM, and run from the nightly's bundled Dynamo."
+    - "For 4P1D c227, cap prefill chunks and max prefill tokens at 8192 and lower prefill mem-fraction-static to 0.75 to avoid the observed prefill allocator OOM and rank stall."
+    - "Set aggregate max-running-requests and cuda-graph-max-bs-decode to twice each point's concurrency: 2 for c1, 4 for c2, and 8 for c4."
+    - "Set the SGLang scheduler watchdog to 1800 seconds on both roles of the high-throughput c227/c260 recipes; the c227 sweep reached long-context KV handoff on all prefill DP ranks and exceeded the default 300-second watchdog without an OOM or worker crash."
+    - "Lower prefill mem-fraction-static to 0.75 for every disaggregate point after 1P2D c48 exhausted its 0.80 static allocation during a 10.71 GiB DSA-indexer workspace request; this leaves activation/workspace headroom while HiCache retains the long-context KV capacity."
+    - "Cap the 5P1D c260 prefill chunk at 8192 tokens, matching max-prefill-tokens and the 4P1D c227 recipe, after a 65536-token chunk let one DEP4 worker's ranks diverge between request broadcast and DP-attention all-gather until the scheduler watchdog fired."
+    - "Use the HiCache kernel I/O backend for the c227 and c260 high-throughput prefill recipes after run 35294058942 exposed a write-back/direct eviction hang in c260; lower-throughput points remain unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3178

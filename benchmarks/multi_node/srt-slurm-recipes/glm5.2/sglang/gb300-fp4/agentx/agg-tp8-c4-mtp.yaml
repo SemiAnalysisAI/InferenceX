@@ -1,16 +1,12 @@
-# Agentic-coding SGLang aggregated recipe for GLM-5.2-NVFP4 on GB300
-# (single aggregated worker, TP8, EAGLE MTP + hierarchical-cache KV).
-#
-# Flat single-variant schema the agentic CI flow expects: applied via
-# CONFIG_FILE=<this file> with no zip_override selector, so it must NOT be
-# base:-wrapped. Concurrency is not a recipe field; the GHA matrix fans out
-# one job per concurrency from the master-config conc-list into agentic_srt.sh.
 schema: 2
-name: gb300-fp4-glm5.2-agentx-agg
+name: agg-tp8-c4-mtp
 model:
   path: glm-5.2-fp4
   container: dynamo-sglang
   precision: fp4
+identity:
+  container:
+    image: lmsysorg/sglang:nightly-dev-20260914-4358a161
 resources:
   gpu_type: gb300
   gpus_per_node: 4
@@ -25,9 +21,7 @@ frontend:
     active-prefill-tokens-threshold-frac: None
     router-session-affinity-ttl-secs: 3600
 dynamo:
-  install: true
-  source:
-    rev: 71eb001e17fa73c742f0afe1a6ed96836cb135fd
+  install: false
 engine: sglang
 roles:
   agg:
@@ -50,6 +44,9 @@ roles:
       SGLANG_MOE_NVFP4_DISPATCH: '1'
       SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '1'
       SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
+      SGLANG_SIMULATE_ACC_LEN: '3.33'
+      SGLANG_SIMULATE_ACC_METHOD: match-expected
+      SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
       PIP_BREAK_SYSTEM_PACKAGES: '1'
       SGLANG_DG_CACHE_DIR: /deepgemm_cache
       FLASHINFER_WORKSPACE_BASE: /flashinfer_cache
@@ -68,8 +65,8 @@ roles:
       expert-parallel-size: 1
       enable-dp-attention: false
       enable-dp-lm-head: false
-      max-running-requests: 10
-      cuda-graph-max-bs: 10
+      max-running-requests: 8
+      cuda-graph-max-bs-decode: 8
       chunked-prefill-size: 8192
       max-prefill-tokens: 8192
       context-length: 1048576
@@ -77,8 +74,8 @@ roles:
       speculative-num-steps: 4
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 5
-      nsa-prefill-backend: trtllm
-      nsa-decode-backend: trtllm
+      dsa-prefill-backend: trtllm
+      dsa-decode-backend: trtllm
       moe-runner-backend: flashinfer_trtllm
       fp4-gemm-backend: flashinfer_trtllm
       disable-shared-experts-fusion: true
@@ -101,9 +98,9 @@ benchmark:
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic
-    PORT: "8000"
-    IS_MULTINODE: "true"
-    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+    PORT: '8000'
+    IS_MULTINODE: 'true'
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
     AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
     HF_HUB_CACHE: /hf_hub_cache
 services:
