@@ -8190,3 +8190,14 @@
     nightly and full combined KV/Mamba HiCache host budget. These diagnostics
     test a lower-GPU-count alternative to the dominated TP8 C64 control.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-2p1d-hicache-experiment
+  scenario-type:
+  - agentic-coding
+  description:
+  - Restrict experimental B200 cross-node Mooncake RDMA to the eight
+    GPU-associated 400 Gb/s NDR interfaces verified on the pool. Exclude
+    secondary 100 Gb/s HDR functions seen in transfer retries; retain RDMA
+    transport and require runtime validation before promoting any point.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269

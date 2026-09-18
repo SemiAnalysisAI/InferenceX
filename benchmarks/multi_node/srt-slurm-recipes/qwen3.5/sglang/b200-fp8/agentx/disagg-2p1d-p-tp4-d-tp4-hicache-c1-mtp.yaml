@@ -33,6 +33,8 @@ roles:
     workers: 2
     gpus: 4
     env:
+      # Use the eight GPU-associated 400 Gb/s NDR rails on this pool.
+      MC_TE_FILTERS: mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11
       PYTHONUNBUFFERED: '1'
       PIP_BREAK_SYSTEM_PACKAGES: '1'
       SGLANG_ENABLE_SPEC_V2: '1'
@@ -82,6 +84,8 @@ roles:
     workers: 1
     gpus: 4
     env:
+      # Exclude secondary 100 Gb/s HDR functions and the Ethernet bond.
+      MC_TE_FILTERS: mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11
       PYTHONUNBUFFERED: '1'
       PIP_BREAK_SYSTEM_PACKAGES: '1'
       SGLANG_ENABLE_SPEC_V2: '1'
