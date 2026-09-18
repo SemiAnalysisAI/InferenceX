@@ -2,8 +2,8 @@
 set -eo pipefail
 set -x
 
-# DeepSeek-V4-Pro FP4 on B300 with vLLM MTP (num_speculative_tokens=3).
-# Throughput fixes synthetic acceptance to AL 2.49; EVAL_ONLY keeps real
+# DeepSeek-V4-Pro-0813 FP4 on B300 with vLLM DSpark (num_speculative_tokens=6).
+# Throughput fixes synthetic acceptance to AL 3.77; EVAL_ONLY keeps real
 # verification. Cudagraph capture sizes are in tokens (see the capture block).
 #
 # Required env vars:
@@ -85,7 +85,7 @@ export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 
 # Match the environment used by v4pro-b300.yaml.
 export VLLM_USE_V2_MODEL_RUNNER=1
-export VLLM_ENGINE_READY_TIMEOUT_S=3600
+export VLLM_ENGINE_READY_TIMEOUT_S=7200
 export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
 export VLLM_DSV4_MEGA_FP8_COMBINE=1
 export NCCL_NVLS_ENABLE=1
@@ -238,15 +238,16 @@ fi
 # S*(1+N) tokens, so capture the multiples (1+N)..MAX_NUM_SEQS*(1+N). vLLM
 # rounds sizes up to multiples of (1+N) and dedups, so a plain 1..MAX_NUM_SEQS
 # list would cover only MAX_NUM_SEQS/(1+N) sequences.
-NUM_SPEC_TOKENS=3
+NUM_SPEC_TOKENS=6
 TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
-# Golden AL: golden_al_distribution/dsv4_mtp.yaml, thinking_on, 3 draft tokens.
+# Golden AL: golden_al_distribution/dsv4-pro-0813-dspark.yaml, thinking_on,
+# probabilistic drafting, 6 draft tokens.
 # EVAL_ONLY keeps real verification; synthetic acceptance bypasses it and
 # zeroes the SWE-bench score.
 if [ "${EVAL_ONLY}" = "true" ]; then
-    SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}"
+    SPEC_CONFIG="{\"method\": \"dspark\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"draft_sample_method\": \"probabilistic\"}"
 else
-    SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": 2.49}"
+    SPEC_CONFIG="{\"method\": \"dspark\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": 3.77}"
 fi
 CUDA_GRAPH_CAPTURE_SIZES=""
 for ((num_seqs = 1; num_seqs <= MAX_NUM_SEQS; num_seqs++)); do
@@ -281,7 +282,7 @@ VLLM_CMD=(
     --kv-cache-dtype fp8
     --block-size 256
     --max-model-len 1048576
-    --attention-config '{"use_fp4_indexer_cache":true,"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true}'
+    --attention-config '{"indexer_kv_dtype":"mxfp4","backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true}'
     --speculative-config "$SPEC_CONFIG"
     --disable-uvicorn-access-log
     --tokenizer-mode deepseek_v4
