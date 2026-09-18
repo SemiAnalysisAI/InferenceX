@@ -14,8 +14,6 @@ export EVAL_FRAMEWORK="lm-eval"
 check_env_vars \
     MODEL TP CONC EP_SIZE KV_OFFLOADING \
     TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
-# Standalone callers retain the historical budget unless they opt in.
-QWEN35_HICACHE_BUDGET_MODE="${QWEN35_HICACHE_BUDGET_MODE:-legacy}"
 check_env_vars EVAL_ONLY QWEN35_HICACHE_BUDGET_MODE
 case "$QWEN35_HICACHE_BUDGET_MODE" in
     legacy|combined) ;;

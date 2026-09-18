@@ -8219,3 +8219,14 @@
     Compare neighboring 1P1D candidates and require official sweep success
     before final retention; the allocation contains 16 GPUs.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-sglang-agentic-mtp-latest
+  scenario-type:
+  - agentic-coding
+  description:
+  - Require the B200 aggregate caller to supply the HiCache budget mode,
+    following repository environment-input policy. The unified launcher
+    already supplies legacy or combined explicitly; generated benchmark
+    arguments and existing image-specific cache sizes remain unchanged.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
