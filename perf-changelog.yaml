@@ -8283,3 +8283,15 @@
     capacity. Keep decode static memory at 0.8, request limit 64 and graph
     limit 32. This is an unqualified diagnostic pending normalized results.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-sglang-agentic-mtp-latest-mid-concurrency-control
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add B200 Qwen3.5 FP8 aggregate TP4 controls at C8, C12 and C16 with
+    no KV offloading on the same SGLang 20518d85 nightly as the PD candidates.
+    Reuse the existing aggregate MTP launcher to separate nightly improvements
+    from disaggregation gains. These are unqualified controls; dispatch with
+    AgentX fast mode for initial screening and require canonical qualification.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
