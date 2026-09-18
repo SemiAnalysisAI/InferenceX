@@ -8034,6 +8034,25 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3188
 
 - config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-mtp
+  description:
+    - "Pin the Qwen3.5 FP8 H200 SGLang AgentX image to lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9, replacing the 2026-09-14 nightly; recipe settings and the c4/8/12/16 grid are unchanged."
+    - "将 Qwen3.5 FP8 H200 SGLang AgentX 镜像从 2026-09-14 nightly 更新为按摘要固定的 lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9；配方设置及 c4/8/12/16 网格保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3198
+  
+- config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add aggregate TP8 GLM-5.2 FP8 H200 AgentX recipes with EAGLE MTP and HiCache at concurrencies 2, 4, 8, 12, and 16."
+    - "Use one recipe per concurrency and cap max-running-requests and CUDA graph batch size at twice the trajectory concurrency."
+    - "Set mem-fraction-static to 0.75 to leave additional GPU workspace headroom for MTP."
+    - "Use SGLang nightly-dev-20260914-4358a161 with Dynamo 1.5.0.dev20260913 and retry truncated srt-slurm setup dependency downloads."
+    - "Update telemetry to the current srt-slurm schema, preserving the one-second collection interval and using a schema-compliant 12-second collector join timeout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3112
+
+- config-keys:
     - dsv4-fp4-b200-dynamo-sglang-agentic-agg
   scenario-type:
     - agentic-coding
