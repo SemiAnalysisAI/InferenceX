@@ -8111,3 +8111,12 @@
     - "Raise --chunked-prefill-size back from 2048 to 4096 while keeping --mem-fraction-static 0.7: in run 35307250127 c1 and c2 passed but c4 failed AIPerf's 95% latency-coverage check (TTFT 87.6%, inter-token latency 88.4% over the 3600 s window) because prefill of the 100k-600k-token prompts ran near 1,000 tok/s at the smaller chunk; 0.7 leaves 24 GB of headroom for the doubled per-chunk working set, against the 16 GB that OOMed c8 at 0.8/4096"
     - "将 --chunked-prefill-size 从 2048 恢复为 4096，--mem-fraction-static 保持 0.7：运行 35307250127 中 c1、c2 通过，但 c4 未达到 AIPerf 95% 的延迟覆盖率要求（3600 s 窗口内 TTFT 87.6%、token 间延迟 88.4%），原因是较小分块下 100k-600k token 提示的 prefill 仅约 1,000 tok/s；0.7 为翻倍的每分块工作集保留 24 GB 余量，而此前 0.8/4096 下 c8 仅有 16 GB 并发生 OOM"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3240
+
+- config-keys:
+    - dsv41flash-fp4-h100-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Honor the workflow's SALLOC_TIME_LIMIT (480 minutes) in the H100 DGX Cloud launcher instead of its hardcoded 180-minute salloc, as the B200, B300, GB200 and GB300 launchers already do: in run 35317886085 c8 finished its 87 warmup requests after 1h55m (the server log shows prefill-bound serving, median 2.8k input tok/s with 4096-token chunks and 210 tok/s decode at 6 running requests) and was 4 minutes from completing the 60-minute profiling phase when the Slurm step hit the 3-hour limit; the hpc-gpu-1 partition has no MaxTime"
+    - "H100 DGX Cloud 启动器改为使用工作流的 SALLOC_TIME_LIMIT（480 分钟），而非硬编码的 180 分钟 salloc，与 B200、B300、GB200、GB300 启动器一致：运行 35317886085 中 c8 在 1 小时 55 分后完成 87 个 warmup 请求（服务日志显示受 prefill 限制：4096 token 分块下输入吞吐中位数约 2.8k tok/s，6 个并发请求时解码 210 tok/s），距完成 60 分钟 profiling 阶段仅差 4 分钟时 Slurm step 触及 3 小时上限；hpc-gpu-1 分区无 MaxTime 限制"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3240
