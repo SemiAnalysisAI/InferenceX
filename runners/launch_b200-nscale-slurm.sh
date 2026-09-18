@@ -306,14 +306,15 @@ run_native_srt_lane() {
     import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE" || exit 1
 
     PREFILL_SQUASH_FILE=""
-    TILERT_CONTAINER_BLOCK=""
+    SRT_CLUSTER_ARGS=()
     if [[ $FRAMEWORK == "tilert" ]]; then
         : "${PREFILL_IMAGE:?PREFILL_IMAGE is required for TileRT prefill}"
         PREFILL_SQUASH_FILE="$SQUASH_DIR/$(echo "$PREFILL_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
         import_squash "$PREFILL_SQUASH_FILE" "$PREFILL_IMAGE" || exit 1
-        TILERT_CONTAINER_BLOCK="
-  tilert-decode: ${SQUASH_FILE}
-  tilert-prefill: ${PREFILL_SQUASH_FILE}"
+        SRT_CLUSTER_ARGS+=(
+            --container tilert-decode "$SQUASH_FILE"
+            --container tilert-prefill "$PREFILL_SQUASH_FILE"
+        )
     fi
 
     if [[ "$USES_DCGM_POWER" == "1" ]]; then
@@ -330,54 +331,28 @@ run_native_srt_lane() {
 
     # Persistent caches for aiperf's dataset mmap files and the HF trace dataset;
     # the container paths are referenced by the agentic recipes' benchmark.env.
-    DEFAULT_MOUNTS_BLOCK=""
     if [[ "$IS_AGENTIC" == "1" ]]; then
         mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH"
         chmod 777 "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH" 2>/dev/null || true
-        DEFAULT_MOUNTS_BLOCK="default_mounts:
-  ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
-  ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+        SRT_CLUSTER_ARGS+=(
+            --mount "$AIPERF_MMAP_CACHE_HOST_PATH" /aiperf_mmap_cache
+            --mount "$HF_HUB_CACHE_HOST_PATH" /hf_hub_cache
+        )
     fi
     if [[ $FRAMEWORK == "tilert" ]]; then
         TILERT_WEIGHTS_HOST_PATH="/data/home/sa-shared/gharunners/tilert-cache"
         mkdir -p "$TILERT_WEIGHTS_HOST_PATH"
-        DEFAULT_MOUNTS_BLOCK="${DEFAULT_MOUNTS_BLOCK}
-  ${GITHUB_WORKSPACE}: /infmax-workspace
-  ${TILERT_WEIGHTS_HOST_PATH}: ${TILERT_WEIGHTS_HOST_PATH}"
+        SRT_CLUSTER_ARGS+=(
+            --mount "$GITHUB_WORKSPACE" /infmax-workspace
+            --mount "$TILERT_WEIGHTS_HOST_PATH" "$TILERT_WEIGHTS_HOST_PATH"
+        )
     fi
 
     SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
     echo "Creating srtslurm.yaml configuration..."
-    cat > srtslurm.yaml <<EOF
-# SRT SLURM Configuration for B200 nscale
-
-# Default SLURM settings
-default_account: "${SLURM_ACCOUNT}"
-default_partition: "${SLURM_PARTITION}"
-default_time_limit: "4:00:00"
-# Resource defaults
-gpus_per_node: 8
-network_interface: ""
-# Path to srtctl repo root (where the configs live)
-srtctl_root: "${SRTCTL_ROOT}"
-# Model path aliases
-model_paths:
-  "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
-# Container aliases
-containers:
-  dynamo-vllm: "${SQUASH_FILE}"
-  dynamo-sglang: "${SQUASH_FILE}"
-  "${IMAGE}": "${SQUASH_FILE}"
-  nginx-sqsh: "${NGINX_SQUASH_FILE}"
-${TILERT_CONTAINER_BLOCK}
-use_exclusive_sbatch_directive: true
-${DEFAULT_MOUNTS_BLOCK}
-EOF
-
-    if [[ "$USES_DCGM_POWER" == "1" ]]; then
-        sed -i "/^  nginx-sqsh:/a\\  dcgm-exporter: ${DCGM_EXPORTER_SQSH}" srtslurm.yaml
-        grep -q "^  dcgm-exporter: " srtslurm.yaml || { echo "Error: dcgm-exporter injection failed: nginx-sqsh anchor not found in srtslurm.yaml" >&2; exit 1; }
-    fi
+    write_srt_cluster_config b200-nscale-slurm srtslurm.yaml "$USES_DCGM_POWER" \
+        --model "$SRT_SLURM_MODEL_PREFIX" "$MODEL_PATH" \
+        "${SRT_CLUSTER_ARGS[@]}" || exit 1
 
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
@@ -652,49 +627,24 @@ run_multinode_srt() {
     # Persistent Lustre caches for aiperf's dataset mmap files and the HF trace
     # dataset; the container paths are referenced by the agentic recipes'
     # benchmark.env.
-    DEFAULT_MOUNTS_BLOCK=""
+    SRT_CLUSTER_ARGS=()
     if [[ "$IS_AGENTIC" == "1" ]]; then
         HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
         mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH"
         chmod 777 "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH" 2>/dev/null || true
-        DEFAULT_MOUNTS_BLOCK="default_mounts:
-  ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
-  ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+        SRT_CLUSTER_ARGS+=(
+            --mount "$AIPERF_MMAP_CACHE_HOST_PATH" /aiperf_mmap_cache
+            --mount "$HF_HUB_CACHE_HOST_PATH" /hf_hub_cache
+        )
     fi
 
     SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
     echo "Creating srtslurm.yaml configuration..."
-    cat > srtslurm.yaml <<EOF
-# SRT SLURM Configuration for B200
-
-# Default SLURM settings
-default_account: "${SLURM_ACCOUNT}"
-default_partition: "${SLURM_PARTITION}"
-default_time_limit: "4:00:00"
-# Resource defaults
-gpus_per_node: 8
-network_interface: ""
-# Path to srtctl repo root (where the configs live)
-srtctl_root: "${SRTCTL_ROOT}"
-# Model path aliases
-model_paths:
-  "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
-# Container aliases
-containers:
-  dynamo-trtllm: "${SQUASH_FILE}"
-  dynamo-sglang: "${SQUASH_FILE}"
-  dynamo-vllm: "${SQUASH_FILE}"
-  sglang-v0.5.11-cu130: "${SQUASH_FILE}"
-  "${IMAGE}": "${SQUASH_FILE}"
-  nginx-sqsh: "${NGINX_SQUASH_FILE}"
-use_exclusive_sbatch_directive: true
-${DEFAULT_MOUNTS_BLOCK}
-EOF
-
-    if [[ "$USES_DCGM_POWER" == "1" ]]; then
-        sed -i "/^  nginx-sqsh:/a\\  dcgm-exporter: ${DCGM_EXPORTER_SQSH}" srtslurm.yaml
-        grep -q "^  dcgm-exporter: " srtslurm.yaml || { echo "Error: dcgm-exporter injection failed: nginx-sqsh anchor not found in srtslurm.yaml" >&2; exit 1; }
-    fi
+    write_srt_cluster_config b200-nscale-slurm srtslurm.yaml "$USES_DCGM_POWER" \
+        --model "$SRT_SLURM_MODEL_PREFIX" "$MODEL_PATH" \
+        --container dynamo-trtllm "$SQUASH_FILE" \
+        --container sglang-v0.5.11-cu130 "$SQUASH_FILE" \
+        "${SRT_CLUSTER_ARGS[@]}" || exit 1
 
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml

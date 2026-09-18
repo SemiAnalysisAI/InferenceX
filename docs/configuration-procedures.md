@@ -33,6 +33,27 @@ git submodule update --init
 
 To upgrade, fetch and check out the desired commit inside the relevant submodule, then commit the updated submodule pointer in InferenceX. Benchmark workflows already initialize submodules. Slurm launchers make a local Git clone for each job so recipe staging and runtime writes do not modify the submodule, and record the actual commit for result provenance. NVIDIA setup clones locally; TileRT setup fetches its pinned fork commit over the network.
 
+### Cluster profiles
+
+Launchers that use srt-slurm keep their cluster configuration in
+[`runners/srt-slurm/<launcher>.yaml`](../runners/srt-slurm/). The native settings
+(GPU count, scheduling directives, aliases, and mounts) are separate from workload recipes.
+Only launchers with an existing srt-slurm path have a profile. Both B200 Nscale
+srt-slurm paths share one profile, with path-specific container aliases supplied by
+the launcher.
+
+Call `write_srt_cluster_config <profile> srtslurm.yaml <uses_power>` from
+[`runners/slurm_utils.sh`](../runners/slurm_utils.sh) after staging images and paths.
+It writes the job-local config before `make setup`. `${NAME}` placeholders receive
+explicit `--var NAME VALUE` inputs, never implicit process-environment substitution.
+Optional `--model ALIAS PATH`, `--container ALIAS PATH`, and `--mount HOST CONTAINER`
+arguments add or override mapping entries. Power jobs add the staged DCGM image through
+the same writer. Missing variables fail before writing; values are substituted into
+parsed YAML scalars so quotes and punctuation remain data, not YAML or shell syntax.
+
+Keep model selection, cache preparation, and workload-dependent time limits in the
+launcher. Do not add profiles for non-srt-slurm launchers or change their routing here.
+
 ## Procedure index
 
 1. [Prepare a worktree](#prepare-a-worktree)

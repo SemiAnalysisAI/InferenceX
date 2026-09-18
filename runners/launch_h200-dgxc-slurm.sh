@@ -230,59 +230,25 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export OSL="$OSL"
 
     SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
-    DEFAULT_MOUNTS_BLOCK=""
+    SRT_HF_HUB_CACHE_MOUNT="$HF_HUB_CACHE_MOUNT"
     if [[ "$IS_AGENTIC" == "1" ]]; then
         AIPERF_MMAP_CACHE_HOST_PATH="/home/sa-shared/gharunners/ai-perf-cache"
         HF_HUB_CACHE_HOST_PATH="/models/gharunners/hf-hub-cache"
         mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH"
-        DEFAULT_MOUNTS_BLOCK="default_mounts:
-  ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
-  ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+        SRT_HF_HUB_CACHE_MOUNT="$HF_HUB_CACHE_HOST_PATH"
     fi
     echo "Creating srtslurm.yaml configuration..."
     SRT_DEFAULT_TIME_LIMIT="4:00:00"
     if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
         SRT_DEFAULT_TIME_LIMIT="8:00:00"
     fi
-    cat > srtslurm.yaml <<EOF
-# SRT SLURM Configuration for H200
-
-# Default SLURM settings
-default_account: "${SLURM_ACCOUNT}"
-default_partition: "${SLURM_PARTITION}"
-default_time_limit: "${SRT_DEFAULT_TIME_LIMIT}"
-# Resource defaults
-gpus_per_node: 8
-network_interface: ""
-# Path to srtctl repo root (where the configs live)
-srtctl_root: "${SRTCTL_ROOT}"
-# Persistent AgentX dataset and Hugging Face caches mounted into every
-# server and benchmark container.
-default_mounts:
-  "${AIPERF_MMAP_CACHE_HOST_PATH}": "/aiperf_mmap_cache"
-  "${HF_HUB_CACHE_MOUNT}": "/hf_hub_cache"
-# Model path aliases
-model_paths:
-  "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
-  "${MODEL_PREFIX}": "${MODEL_PATH}"
-containers:
-  dynamo-trtllm: "${SQUASH_FILE}"
-  dynamo-sglang: "${SQUASH_FILE}"
-  dynamo-vllm: "${SQUASH_FILE}"
-  nginx-sqsh: "${NGINX_SQUASH_FILE}"
-  latest: "${SQUASH_FILE}"
-  "${CONTAINER_KEY}": "${SQUASH_FILE}"
-# SLURM directive compatibility
-use_gpus_per_node_directive: true
-use_segment_sbatch_directive: false
-use_exclusive_sbatch_directive: false
-${DEFAULT_MOUNTS_BLOCK}
-EOF
-
-    if [[ "$USES_DCGM_POWER" == "1" ]]; then
-        sed -i "/^  nginx-sqsh:/a\\  dcgm-exporter: ${DCGM_EXPORTER_SQSH}" srtslurm.yaml
-        grep -q "^  dcgm-exporter: " srtslurm.yaml || { echo "Error: dcgm-exporter injection failed: nginx-sqsh anchor not found in srtslurm.yaml" >&2; exit 1; }
-    fi
+    write_srt_cluster_config h200-dgxc-slurm srtslurm.yaml "$USES_DCGM_POWER" \
+        --model "$SRT_SLURM_MODEL_PREFIX" "$MODEL_PATH" \
+        --var CONTAINER_KEY "$CONTAINER_KEY" \
+        --model "$MODEL_PREFIX" "$MODEL_PATH" \
+        --var SRT_DEFAULT_TIME_LIMIT "$SRT_DEFAULT_TIME_LIMIT" \
+        --var AIPERF_MMAP_CACHE_HOST_PATH "$AIPERF_MMAP_CACHE_HOST_PATH" \
+        --var HF_HUB_CACHE_MOUNT "$SRT_HF_HUB_CACHE_MOUNT" || exit 1
 
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
