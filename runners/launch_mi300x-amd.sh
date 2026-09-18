@@ -35,8 +35,10 @@ SALLOC_TIME=180
 # enroot-nsenter denied a user namespace after the node was reprovisioned with
 # kernel.apparmor_restrict_unprivileged_userns=1 (seen on smci300x-ccs-aus-e06-40
 # and e07-22 in run 35305037528). Drain that node so later jobs avoid it, then
-# retry once on a fresh allocation that excludes it. Draining needs Slurm
-# operator rights; without them the exclusion still protects the retry.
+# retry on a fresh allocation that excludes every node that failed so far, up
+# to four allocations: run 35307258006 hit the same denial on e06-40, e06-01 and
+# e07-22 in turn. Draining needs Slurm operator rights (the runner account gets
+# "Invalid user id"); without them the exclusion list still steers the retries.
 container_start_failed() {
     grep -qE "pyxis: (couldn't start container|container start failed)|enroot-nsenter: failed to create user namespace" "$1"
 }
@@ -57,7 +59,8 @@ BENCH_SCRIPT="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISI
 EXCLUDE_NODES=""
 JOB_ID=""
 trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
-for attempt in 1 2; do
+MAX_ATTEMPTS=4
+for (( attempt = 1; attempt <= MAX_ATTEMPTS; attempt++ )); do
     SALLOC_EXCLUDE_ARGS=()
     if [[ -n "$EXCLUDE_NODES" ]]; then
         SALLOC_EXCLUDE_ARGS=(--exclude="$EXCLUDE_NODES")
@@ -111,12 +114,12 @@ for attempt in 1 2; do
     if (( benchmark_rc == 0 )); then
         break
     fi
-    if (( attempt == 1 )) && [[ -n "$NODE" ]] && container_start_failed "$SRUN_STDERR"; then
+    if (( attempt < MAX_ATTEMPTS )) && [[ -n "$NODE" ]] && container_start_failed "$SRUN_STDERR"; then
         drain_broken_node "$NODE" "inferencex: pyxis container start failed (enroot user namespace)"
         scancel "$JOB_ID"
         JOB_ID=""
-        EXCLUDE_NODES="$NODE"
-        echo "Retrying on a fresh allocation that excludes $NODE" >&2
+        EXCLUDE_NODES="${EXCLUDE_NODES:+$EXCLUDE_NODES,}$NODE"
+        echo "Retrying on a fresh allocation that excludes $EXCLUDE_NODES" >&2
         continue
     fi
     exit "$benchmark_rc"
