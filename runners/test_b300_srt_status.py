@@ -100,7 +100,7 @@ fi
 setup_srt_slurm() {
     mkdir -p "$1/recipes"
     cd "$1" || return 1
-    printf 'name: fixture\n' > recipes/test.yaml
+    printf 'name: fixture\nbenchmark:\n  type: custom\n' > recipes/test.yaml
     SRT_SLURM_COMMIT=1111111111111111111111111111111111111111
     printf '%s\n' "$SRT_SLURM_COMMIT" > "$GITHUB_WORKSPACE/power-producer-sha.txt"
 }
@@ -190,6 +190,11 @@ builtin source "$1/runners/launch_b300-dsxe.sh"
         timeout=15,
     )
     assert result.returncode == expected_status, result.stdout + result.stderr
+    if power_mode != "off":
+        import yaml
+
+        emitted = yaml.safe_load((workspace / "srt-slurm/recipes/test.yaml").read_text())
+        assert emitted["benchmark"]["concurrencies"] == [1]
     aggregate = json.loads((workspace / "aggregate_conc1.json").read_text())
     assert aggregate["diagnostic"] == "retained"
     if power_mode == "missing":

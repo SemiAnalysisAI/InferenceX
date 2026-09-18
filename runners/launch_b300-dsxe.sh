@@ -181,6 +181,12 @@ fi
 
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+    python "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
+        "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
+fi
+
 # Weights live on node-local MODEL_ROOT, which this login host cannot stat, so
 # srtctl's preflight model.path check is always skipped. Runtime loading still
 # validates the path on the compute nodes.
