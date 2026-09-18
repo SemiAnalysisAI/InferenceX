@@ -79,7 +79,7 @@ roles:
       disaggregation-transfer-backend: mooncake
       watchdog-timeout: 3600
       disable-cuda-graph: true
-      mamba-scheduler-strategy: extra_buffer
+      mamba-radix-cache-strategy: extra_buffer
       mamba-track-interval: 2048
       scheduler-recv-interval: 10
       stream-interval: 50
@@ -130,7 +130,7 @@ roles:
       disaggregation-mode: decode
       disaggregation-transfer-backend: mooncake
       watchdog-timeout: 3600
-      mamba-scheduler-strategy: no_buffer
+      mamba-radix-cache-strategy: no_buffer
       disable-radix-cache: true
       speculative-algorithm: NEXTN
       speculative-num-steps: 3

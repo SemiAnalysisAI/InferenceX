@@ -8111,3 +8111,11 @@
     GPU groups; add concurrency 32 and match aggregate per-concurrency request limits,
     decode graph sizing, scheduler interval, and streaming cadence.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Use the Mamba radix-cache strategy argument declared by the pinned SGLang nightly for prefill and decode roles.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
