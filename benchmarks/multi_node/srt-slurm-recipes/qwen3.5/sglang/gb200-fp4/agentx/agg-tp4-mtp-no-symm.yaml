@@ -3,12 +3,12 @@ name: qwen35-gb200-dynsg-agentic-mtp-agg-tp4-k5-no-symm
 
 model:
   path: qwen3.5-fp4
-  container: lmsysorg/sglang:nightly-dev-20260818-c0b6474b
+  container: lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9
   precision: fp4
 
 identity:
   model: {repo: nvidia/Qwen3.5-397B-A17B-NVFP4-V2}
-  container: {image: lmsysorg/sglang:nightly-dev-20260818-c0b6474b}
+  container: {image: lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9}
 
 slurm: {time_limit: "8:00:00"}
 health_check: {max_attempts: 2160, interval_seconds: 10}
@@ -24,7 +24,7 @@ services:
 dynamo:
   install: true
   source:
-    wheel: 1.4.2
+    wheel: "1.5.0.dev20260910"
   request_plane: tcp
 environment:
   PIP_BREAK_SYSTEM_PACKAGES: "1"
