@@ -8089,3 +8089,10 @@
     - "Add the H100 Qwen3.8-27B bf16 enforce-eager recipe: vLLM nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 on one GPU (TP1), 1k1k only, with the RadixArk DSpark drafter Doopeworld/Qwen3.8-27B-DSpark-vLLM (a config-only copy vLLM loads as Qwen3DSparkModel) drafting seven tokens with probabilistic draft sampling, fp8 KV cache, the matrix context as --max-model-len, --language-model-only, and chat-templated prompts, with CUDA graphs disabled (--enforce-eager); concurrency 1-128"
     - "新增 H100 Qwen3.8-27B bf16 enforce-eager 配方：vLLM nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 单卡（TP1），仅 1k1k，使用 RadixArk 的 DSpark 草稿模型 Doopeworld/Qwen3.8-27B-DSpark-vLLM（仅修改配置以便 vLLM 按 Qwen3DSparkModel 加载）预测 7 个 token 并采用 probabilistic 草稿采样，fp8 KV cache，--max-model-len 使用矩阵上下文，--language-model-only，提示词经 chat template 处理，并禁用 CUDA graph（--enforce-eager）；并发 1-128"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3262
+
+- config-keys:
+    - qwen3.827beager-bf16-h100-vllm-mtp
+  description:
+    - "Set --max-num-seqs to the sweep point (floor 16; 256 for accuracy evals) and disable prefix caching (--no-enable-prefix-caching): in run 35357364404 the H100 canary died at engine start because vLLM's default max-num-seqs of 1024 exceeded the 472 GDN/Mamba cache blocks that fit next to the bf16 weights on the 80 GB card (each decode sequence needs one block), and prefix caching is off so every 1k1k request prefills its full random prompt"
+    - "将 --max-num-seqs 设为并发点（下限 16；精度评测为 256）并关闭 prefix caching（--no-enable-prefix-caching）：运行 35357364404 中 H100 canary 在引擎启动时失败，因为 vLLM 默认的 max-num-seqs 1024 超过了 80 GB 显卡上 bf16 权重旁仅剩的 472 个 GDN/Mamba cache block（每个 decode 序列需要一个 block）；关闭 prefix caching 使每个 1k1k 请求完整 prefill 其随机提示词"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3262
