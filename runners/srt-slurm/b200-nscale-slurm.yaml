@@ -1,0 +1,12 @@
+default_account: ${SLURM_ACCOUNT}
+default_partition: ${SLURM_PARTITION}
+default_time_limit: "4:00:00"
+gpus_per_node: 8
+network_interface: ""
+srtctl_root: ${SRTCTL_ROOT}
+containers:
+  dynamo-vllm: ${SQUASH_FILE}
+  dynamo-sglang: ${SQUASH_FILE}
+  "${IMAGE}": ${SQUASH_FILE}
+  nginx-sqsh: ${NGINX_SQUASH_FILE}
+use_exclusive_sbatch_directive: true
