@@ -8,6 +8,8 @@ The shared version is the Git submodule pointer at [`utils/srt-slurm`](../../../
 
 InferenceX requires srt-slurm 2.0 or newer and `schema: 2` recipes. Legacy recipe layouts are unsupported; migrate them before adding them to this tree.
 
+The MiniMax-M3 Mooncake setup installs its published wheel with `--no-deps` and `--require-hashes`. It clears `UV_OVERRIDE` for that command only so unrelated image-wide package overrides do not enter the wheel's hash check. Other package installers retain the image's overrides.
+
 ## Directory and filename convention
 
 Store every recipe at `<model-prefix>/<engine>/<gpu>-<precision>/<workload>/<recipe>.yaml`:

@@ -8034,10 +8034,67 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3188
 
 - config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-mtp
+  description:
+    - "Pin the Qwen3.5 FP8 H200 SGLang AgentX image to lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9, replacing the 2026-09-14 nightly; recipe settings and the c4/8/12/16 grid are unchanged."
+    - "将 Qwen3.5 FP8 H200 SGLang AgentX 镜像从 2026-09-14 nightly 更新为按摘要固定的 lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9；配方设置及 c4/8/12/16 网格保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3198
+  
+- config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add aggregate TP8 GLM-5.2 FP8 H200 AgentX recipes with EAGLE MTP and HiCache at concurrencies 2, 4, 8, 12, and 16."
+    - "Use one recipe per concurrency and cap max-running-requests and CUDA graph batch size at twice the trajectory concurrency."
+    - "Set mem-fraction-static to 0.75 to leave additional GPU workspace headroom for MTP."
+    - "Use SGLang nightly-dev-20260914-4358a161 with Dynamo 1.5.0.dev20260913 and retry truncated srt-slurm setup dependency downloads."
+    - "Update telemetry to the current srt-slurm schema, preserving the one-second collection interval and using a schema-compliant 12-second collector join timeout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3112
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the MI325X (gfx942) vLLM AgentX arm for DeepSeek-V4.1-Flash as a copy of the validated MI355X recipe on vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657: TP8 rather than TP4 so a 256 GB card holds its share of the 511 GB checkpoint, the GPU-resident Engram tables and a 1M-context KV pool; native five-token DSpark with thinking-on golden AL 3.51 for throughput and real block verification (adaptive verification off on ROCm) for evals; VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, VLLM_USE_BREAKABLE_CUDAGRAPH=1, --moe-backend aiter, --max-num-batched-tokens 16384, --max-num-seqs 128, concurrency 1-32"
+    - "runners/launch_mi325x-amds.sh now mounts the checkout at /ix for this checkpoint and rewrites RESULT_DIR so AgentX runtime directories stay out of /workspace"
+    - "新增 DeepSeek-V4.1-Flash 在 MI325X（gfx942）上的 vLLM AgentX 配方，复制自已验证的 MI355X 配方并使用同一镜像 vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657：采用 TP8 而非 TP4，使 256 GB 显卡可容纳 511 GB 检查点的分片、常驻 GPU 的 Engram 表以及 1M 上下文 KV 池；原生五 token DSpark，吞吐使用 thinking 开启的黄金 AL 3.51，eval 保留真实块验证（ROCm 上关闭自适应验证）；VLLM_ROCM_USE_AITER=1、VLLM_ROCM_USE_AITER_MOE=1、VLLM_USE_BREAKABLE_CUDAGRAPH=1、--moe-backend aiter、--max-num-batched-tokens 16384、--max-num-seqs 128，并发 1-32"
+    - "runners/launch_mi325x-amds.sh 现为该检查点将仓库挂载到 /ix 并重写 RESULT_DIR，使 AgentX 运行目录不落在 /workspace 下"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3247
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Drop --moe-backend aiter and let vLLM select the MXFP4 MoE kernel: on gfx942 the explicit aiter name resolved to the Triton W4A16 kernel (AITER_TRITON_MXFP4_BF16) and every worker segfaulted during breakable CUDA-graph capture at concurrency 16 (run 35305045778); auto selection prefers the CK W4A16 kernel (AITER_MXFP4_BF16) that the retired DeepSeek-V4-Pro gfx942 arm ran on"
+    - "runners/launch_mi325x-amds.sh drains the allocated node and retries once on a fresh allocation that excludes it when pyxis cannot start the container (enroot-nsenter user-namespace denial, as on the MI300X fleet in run 35305037528)"
+    - "去掉 --moe-backend aiter，改由 vLLM 自动选择 MXFP4 MoE 内核：在 gfx942 上显式指定 aiter 会解析为 Triton W4A16 内核（AITER_TRITON_MXFP4_BF16），并发 16 时所有 worker 在 breakable CUDA graph 捕获期间段错误（运行 35305045778）；自动选择优先使用已退役的 DeepSeek-V4-Pro gfx942 配方所用的 CK W4A16 内核（AITER_MXFP4_BF16）"
+    - "当 pyxis 无法启动容器时（enroot-nsenter 用户命名空间被拒，如运行 35305037528 中的 MI300X 节点），runners/launch_mi325x-amds.sh 会 drain 所分配的节点，并在排除该节点的新分配上重试一次"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3247
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Capture only full decode CUDA graphs (VLLM_USE_BREAKABLE_CUDAGRAPH=0 with cudagraph_mode FULL_DECODE_ONLY, as the MiniMax-M3 gfx942 arm does) and restore --moe-backend aiter: on gfx942 every worker segfaulted during piecewise graph capture with both the Triton W4A16 MoE kernel (run 35305045778) and the auto-selected unfused Triton kernel (run 35306398350), so the capture mode rather than the MoE kernel is the failing piece; prefill runs eagerly"
+    - "仅捕获完整的 decode CUDA graph（VLLM_USE_BREAKABLE_CUDAGRAPH=0 并设置 cudagraph_mode FULL_DECODE_ONLY，与 MiniMax-M3 gfx942 配方一致）并恢复 --moe-backend aiter：在 gfx942 上，无论使用 Triton W4A16 MoE 内核（运行 35305045778）还是自动选择的未融合 Triton 内核（运行 35306398350），所有 worker 都在 piecewise graph 捕获期间段错误，说明问题在于捕获模式而非 MoE 内核；prefill 以 eager 方式运行"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3247
+
+- config-keys:
     - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-agg
     - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg-mooncake
   description:
     - "Add GB300 MiniMax-M3 Dynamo-vLLM AgentX aggregate and disaggregated recipes with EAGLE3-GQA"
     - "Use srt-slurm v2.11.0 for process-local Mooncake store configuration"
     - "新增采用 EAGLE3-GQA 的 GB300 MiniMax-M3 Dynamo-vLLM AgentX 聚合与分离式部署配置；采用 srt-slurm v2.11.0 为各工作进程配置 Mooncake 存储"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3232
+
+- config-keys:
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg-mooncake
+  description:
+    - "Isolate the checksum-pinned Mooncake wheel install from unrelated image package overrides"
+    - "将固定校验和的 Mooncake wheel 安装与镜像中无关的软件包版本覆盖项隔离"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3232
