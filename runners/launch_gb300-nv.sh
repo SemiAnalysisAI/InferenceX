@@ -229,6 +229,13 @@ if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-sglang" && "$MODEL_PREFIX"
     git -C configs/sglang-mooncake-opt fetch --depth 1 \
         "$SGLANG_MOONCAKE_OPT_URL" "$SGLANG_MOONCAKE_OPT_PIN" || exit 1
     git -C configs/sglang-mooncake-opt checkout --detach FETCH_HEAD || exit 1
+
+    # The Mooncake store transfers from host buffers that only the RDMA
+    # transport registers on the fly. Without an explicit device list the
+    # client falls back to NVLink for same-domain peers, whose address lookup
+    # then fails and aborts every worker during the store warmup put. These
+    # are this cluster's RDMA devices; other clusters name theirs differently.
+    MOONCAKE_STORE_DEVICES="mlx5_0,mlx5_1,mlx5_2,mlx5_3"
 fi
 
 if [[ "$FRAMEWORK" == "dynamo-trt" && "$MODEL_PREFIX" == "dsv4" ]]; then
@@ -353,6 +360,10 @@ SRTCTL_APPLY_ARGS=(
     -f "$CONFIG_FILE"
     --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
+if [[ -n "${MOONCAKE_STORE_DEVICES:-}" ]]; then
+    SRTCTL_APPLY_ARGS+=(--set "roles.prefill.env.MOONCAKE_DEVICE=$MOONCAKE_STORE_DEVICES")
+    SRTCTL_APPLY_ARGS+=(--set "roles.decode.env.MOONCAKE_DEVICE=$MOONCAKE_STORE_DEVICES")
+fi
 if [[ "$IS_AGENTIC" == "1" || "$MODEL_PREFIX" == "glm5.1" || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" ) || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && ( "$FRAMEWORK" == "dynamo-trt" || "$USES_DCGM_POWER" == "1" ) ) || ( "$USES_DCGM_POWER" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ) ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
