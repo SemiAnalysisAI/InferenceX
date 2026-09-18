@@ -454,3 +454,28 @@ The draft `dsv41flash-fp4-mi355x-vllm-agentic-dspark` recipe extends [#2958](htt
 Follow the AMD overrides in the merged [upstream recipe #968](https://github.com/vllm-project/recipes/pull/968): `VLLM_ROCM_USE_AITER=1`, `VLLM_ROCM_USE_AITER_MOE=1`, and `--moe-backend aiter`. The generic AITER selector lets vLLM pick the CK a8w4 experts, matching the DSV4-Pro MI355X recipe. The recipe pins `semianalysis_cc_traces_weka_062126` (the unfiltered corpus) via `WEKA_LOADER_OVERRIDE`. KV stays GPU-resident; Engram follows upstream AMD defaults. Do not copy the NVIDIA `--engram-config` option: upstream currently rejects it on ROCm. The MI355X launcher uses the shared HF cache and mounts this model's repository at `/ix`, and exports `INFMAX_CONTAINER_WORKSPACE=/ix` so AgentX dependencies and outputs resolve inside that mount.
 
 **GPU validation:** [Run 34710937012](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34710937012) passed the exact pinned image for throughput at concurrency 1, 2, 4, 8, 16, and 32, plus eval-only concurrency 32. The recipe uses `vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657` (digest `sha256:960228cf…`, published 2026-09-12). The earlier `deepseekv41-flash-0909` tag predates [vllm-project/vllm#56503](https://github.com/vllm-project/vllm/pull/56503), which moves the mHC delayed pre block off the eager Torch reference and onto AITER; the merged [upstream recipe #968](https://github.com/vllm-project/recipes/pull/968) pins the same nightly and records the complete InferenceX command. Follow the [AgentX procedure](./eval-agentx-procedures.md#7-run-agentx-fast-feedback-versus-canonical-evidence) for future runtime evidence; local generation and registry metadata alone are not GPU proof.
+
+## DeepSeek-V4.1-Flash on MI300X and MI325X
+
+`dsv41flash-fp4-mi300x-vllm-agentic-dspark` and `dsv41flash-fp4-mi325x-vllm-agentic-dspark`
+copy the validated MI355X vLLM arm onto gfx942, on the same ROCm nightly and with the same
+AMD overrides (`VLLM_ROCM_USE_AITER=1`, `VLLM_ROCM_USE_AITER_MOE=1`,
+`VLLM_USE_BREAKABLE_CUDAGRAPH=1`, `--moe-backend aiter`, adaptive verification off). gfx942
+is not in the upstream hardware table, and it has no FP4 MFMA: the plain `aiter` MoE
+backend lets vLLM's selector skip the gfx950-only CK a8w4 experts, and pinning
+`aiter_triton_mxfp4_bf16` (the Triton W4A16 kernel) is the first repair lever if startup
+rejects every candidate.
+
+Both arms run **TP8**, not the MI355X TP4: a 192 GB (MI300X) or 256 GB (MI325X) card must
+hold its share of the 511 GB checkpoint plus the GPU-resident Engram tables (upstream AMD
+defaults; no CPU offload) and still leave a 1M-context KV pool. MI300X additionally caps
+`--max-num-batched-tokens` at 8192 because the sparse-attention indexer allocates a
+`[batched-tokens, max-model-len]` fp8 logits buffer at startup (16 GiB at 8192, 32 GiB at
+the MI355X arm's 16384). Concurrency is 1–32 on both.
+
+`runners/launch_mi300x-amd.sh` and `runners/launch_mi325x-amds.sh` mount the checkout at
+`/ix` for this checkpoint and rewrite `RESULT_DIR`, as the MI355X launcher does, so AgentX
+runtime directories stay out of `/workspace`. The MI300X launcher also raises its Slurm
+allocation from 180 to 480 minutes for this checkpoint: the HF cache there is node-local, so
+the first arm on each node downloads 511 GB before serving. GPU sweep and eval evidence is
+required before calling either arm validated.

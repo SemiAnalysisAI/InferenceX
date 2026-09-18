@@ -14,6 +14,23 @@ LOCK_FILE="${SQUASH_FILE}.lock"
 
 SPEC_SUFFIX=$([[ "${SPEC_DECODING:-}" == "mtp" ]] && printf '_mtp' || printf '')
 
+# DSv4.1 Flash AgentX creates runtime directories next to the repository, which
+# must not land under /workspace; mount the checkout at /ix like the other
+# dsv41flash launchers and rewrite the caller's RESULT_DIR to match.
+CONTAINER_REPO=/workspace
+if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4.1-Flash" ]]; then
+    CONTAINER_REPO=/ix
+    export INFMAX_CONTAINER_WORKSPACE="$CONTAINER_REPO"
+    case "${RESULT_DIR:-}" in
+        /workspace/*) export RESULT_DIR="/ix/${RESULT_DIR#/workspace/}" ;;
+    esac
+fi
+
+# A cold 511 GB checkpoint download plus a one-hour AgentX arm does not fit the
+# 180-minute default allocation; give DSv4.1 Flash the MI325X launcher's 480.
+SALLOC_TIME=180
+[[ "$CONTAINER_REPO" == /ix ]] && SALLOC_TIME=480
+
 check_env_vars GPU_COUNT
 
 set -x
@@ -22,7 +39,7 @@ JOB_ID=$(set +o pipefail; salloc \
     --partition="$PARTITION" \
     --gres="gpu:$GPU_COUNT" \
     --cpus-per-task=128 \
-    --time=180 \
+    --time="$SALLOC_TIME" \
     --no-shell \
     --job-name="$RUNNER_NAME" 2>&1 \
     | tee /dev/stderr \
@@ -52,10 +69,10 @@ srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c "
 srun --jobid="$JOB_ID" \
     --job-name="$RUNNER_NAME" \
     --container-image="$SQUASH_FILE" \
-    --container-mounts="$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_MOUNT:/aiperf_mmap_cache,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
+    --container-mounts="$GITHUB_WORKSPACE:$CONTAINER_REPO/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_MOUNT:/aiperf_mmap_cache,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
     --container-writable \
     --container-remap-root \
-    --container-workdir=/workspace/ \
+    --container-workdir="$CONTAINER_REPO/" \
     --no-container-entrypoint \
     --export=ALL \
     bash "benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_mi300x${SPEC_SUFFIX}.sh"
