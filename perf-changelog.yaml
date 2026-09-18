@@ -8359,3 +8359,11 @@
     - "Replace the decode-role prefill-round-robin-balance: true with load-balance-method: follow_bootstrap_room in the 5 srt-slurm recipes of this key that set it: SGLang nightly-dev-cu13-20260918-20518d85 no longer has --prefill-round-robin-balance (run 35319100186, every decode worker of the DEP16 arm exited at argument parsing) and its --load-balance-method choices are auto, round_robin, follow_bootstrap_room, total_requests and total_tokens; the prefill roles keep load-balance-method: round_robin"
     - "在该 key 中设置了该参数的 5 个 srt-slurm 配方里，将 decode 角色的 prefill-round-robin-balance: true 替换为 load-balance-method: follow_bootstrap_room：SGLang nightly-dev-cu13-20260918-20518d85 已没有 --prefill-round-robin-balance（运行 35319100186 中 DEP16 分支的所有 decode worker 在参数解析阶段退出），其 --load-balance-method 可选值为 auto、round_robin、follow_bootstrap_room、total_requests 与 total_tokens；prefill 角色保持 load-balance-method: round_robin"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3253
+
+- config-keys:
+    - dsv4-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B300 vLLM AgentX to DSpark6 and a new image with a sampled concurrency grid."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2302
