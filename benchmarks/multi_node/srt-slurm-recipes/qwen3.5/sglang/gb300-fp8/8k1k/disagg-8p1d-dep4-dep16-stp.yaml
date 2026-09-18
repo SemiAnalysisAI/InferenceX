@@ -18,7 +18,7 @@ dynamo:
   install: true
 
   source:
-    rev: 46520ca59afe992fb5ef61b3197b2316f8df9b2b
+    wheel: "1.5.0.dev20260917"
 frontend:
   type: dynamo
   enable_multiple_frontends: true
@@ -27,7 +27,7 @@ frontend:
 
 model:
   path: "qwen3.5-fp8"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85"
   precision: "fp8"
 
 resources:
@@ -145,7 +145,7 @@ roles:
       mem-fraction-static: 0.80
       max-mamba-cache-size: 2048
       max-running-requests: 2048
-      cuda-graph-max-bs: 128
+      cuda-graph-max-bs-decode: 128
       watchdog-timeout: 1000000
 
       page-size: 64
