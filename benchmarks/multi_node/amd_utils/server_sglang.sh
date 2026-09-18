@@ -1412,6 +1412,7 @@ else
                 DeepSeek-V4-Pro-0813:1) DSV4_GOLDEN_AL=1.84 ;;
                 DeepSeek-V4-Pro-0813:2) DSV4_GOLDEN_AL=2.51 ;;
                 DeepSeek-V4-Pro-0813:3) DSV4_GOLDEN_AL=3.01 ;;
+                DeepSeek-V4-Pro-0813:6) DSV4_GOLDEN_AL=3.77 ;;
                 DeepSeek-V4-Pro-0813:*)
                     echo "ERROR: Pro-0813 draft length ${DECODE_MTP_SIZE} has no golden AL wired here; refusing to use the original V4 curve." >&2
                     exit 1
