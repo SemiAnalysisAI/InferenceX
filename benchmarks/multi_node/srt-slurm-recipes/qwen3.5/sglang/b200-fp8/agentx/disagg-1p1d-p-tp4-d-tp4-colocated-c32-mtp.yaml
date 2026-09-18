@@ -13,7 +13,7 @@ engine: sglang
 dynamo:
   install: true
   source:
-    rev: 5a638087d82c990d35c69cb8e41c2c2582e9ef9a
+    rev: 805a77f053d807b0d8def5d27f674a6df0ed839e
 resources:
   gpu_type: b200
   gpus_per_node: 8

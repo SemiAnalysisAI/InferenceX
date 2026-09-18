@@ -8132,3 +8132,15 @@
     at C1/32/64 for B200 Qwen3.5 FP8. These candidate points require measured frontier
     improvement before promotion.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-1p1d-hicache-experiment
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-2p1d-hicache-experiment
+  scenario-type:
+  - agentic-coding
+  description:
+  - Update B200 Qwen3.5 FP8 AgentX to Dynamo 805a77f053d807b0d8def5d27f674a6df0ed839e
+    for compatibility with the latest SGLang nightly's relocated argument parser
+    and encoder modules. Keep recipe and result router version pins aligned.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
