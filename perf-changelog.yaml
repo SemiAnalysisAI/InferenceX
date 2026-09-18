@@ -8073,3 +8073,12 @@
     - "去掉 --moe-backend aiter，改由 vLLM 自动选择 MXFP4 MoE 内核：在 gfx942 上显式指定 aiter 会解析为 Triton W4A16 内核（AITER_TRITON_MXFP4_BF16），并发 16 时所有 worker 在 breakable CUDA graph 捕获期间段错误（运行 35305045778）；自动选择优先使用已退役的 DeepSeek-V4-Pro gfx942 配方所用的 CK W4A16 内核（AITER_MXFP4_BF16）"
     - "当 pyxis 无法启动容器时（enroot-nsenter 用户命名空间被拒，如运行 35305037528 中的 MI300X 节点），runners/launch_mi325x-amds.sh 会 drain 所分配的节点，并在排除该节点的新分配上重试一次"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3247
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Capture only full decode CUDA graphs (VLLM_USE_BREAKABLE_CUDAGRAPH=0 with cudagraph_mode FULL_DECODE_ONLY, as the MiniMax-M3 gfx942 arm does) and restore --moe-backend aiter: on gfx942 every worker segfaulted during piecewise graph capture with both the Triton W4A16 MoE kernel (run 35305045778) and the auto-selected unfused Triton kernel (run 35306398350), so the capture mode rather than the MoE kernel is the failing piece; prefill runs eagerly"
+    - "仅捕获完整的 decode CUDA graph（VLLM_USE_BREAKABLE_CUDAGRAPH=0 并设置 cudagraph_mode FULL_DECODE_ONLY，与 MiniMax-M3 gfx942 配方一致）并恢复 --moe-backend aiter：在 gfx942 上，无论使用 Triton W4A16 MoE 内核（运行 35305045778）还是自动选择的未融合 Triton 内核（运行 35306398350），所有 worker 都在 piecewise graph 捕获期间段错误，说明问题在于捕获模式而非 MoE 内核；prefill 以 eager 方式运行"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3247
