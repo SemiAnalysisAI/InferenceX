@@ -8127,3 +8127,11 @@
   description:
   - Prepare isolated latest-nightly 1P1D and 2P1D B300 HiCache experiments at concurrency 1, 32 and 64 for measured Pareto selection.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Use current Dynamo compatibility handling for the latest SGLang nightly in isolated B300 HiCache experiments.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268

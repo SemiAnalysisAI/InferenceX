@@ -40,7 +40,7 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-experiment-1p1d-hicache:
   framework: dynamo-sglang
   router:
     name: dynamo-router
-    version: 5a638087d82c990d35c69cb8e41c2c2582e9ef9a
+    version: 805a77f053d807b0d8def5d27f674a6df0ed839e
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
@@ -111,7 +111,7 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-experiment-2p1d-hicache:
   framework: dynamo-sglang
   router:
     name: dynamo-router
-    version: 5a638087d82c990d35c69cb8e41c2c2582e9ef9a
+    version: 805a77f053d807b0d8def5d27f674a6df0ed839e
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
