@@ -8071,3 +8071,12 @@
     - "Cut HBM pressure during 1M-context AgentX prefill after the first sweep (run 35304555945: c16 came up, then eager prefill of the first 66k-99k-token prompts aborted with HSA_STATUS_ERROR_OUT_OF_RESOURCES (0 MB free) inside the DSpark target prefill): move the Engram tables to one shared host copy (SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1, the SGLang analogue of the vLLM arm's Engram CPU offload, output bitwise unchanged), lower --mem-fraction-static from 0.8 to 0.75, bound --chunked-prefill-size at 8192 instead of the default 16384, fix the decode CUDA graph batch at the cookbook's 64, and cap --max-running-requests at 128 and the breakable prefill graph shrinks from 4096 to 2048 tokens"
     - "首次 sweep 后（run 35304555945: c16 came up, then eager prefill of the first 66k-99k-token prompts aborted with HSA_STATUS_ERROR_OUT_OF_RESOURCES (0 MB free) inside the DSpark target prefill）降低 1M 上下文 AgentX prefill 的 HBM 压力：将 Engram 表移至共享主机副本（SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1，对应 vLLM 配方的 Engram CPU offload，输出逐位一致），--mem-fraction-static 从 0.8 降至 0.75，--chunked-prefill-size 限制为 8192（默认 16384），decode CUDA graph batch 固定为 cookbook 的 64，--max-running-requests 上限设为 128，breakable prefill 图从 4096 缩小到 2048 token"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Disable the prefill CUDA graph (--cuda-graph-backend-prefill disabled, dropping --cuda-graph-max-bs-prefill): with the Engram tables in pinned host memory, capturing the breakable 2048-token prefill graph raised hipErrorIllegalAddress on every rank at c1 in run 35306715045, while the previous sweep with GPU-resident tables captured it and then OOMed in eager prefill; prefill now runs eagerly and the 64-request decode graphs are unchanged"
+    - "禁用 prefill CUDA graph（--cuda-graph-backend-prefill disabled，并去掉 --cuda-graph-max-bs-prefill）：Engram 表位于 pinned 主机内存时，运行 35306715045 的 c1 在捕获 2048 token 的 breakable prefill graph 时所有 rank 报 hipErrorIllegalAddress，而上一次表常驻 GPU 的 sweep 可完成捕获但随后在 eager prefill 中 OOM；prefill 现以 eager 方式运行，64 请求的 decode graph 不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245

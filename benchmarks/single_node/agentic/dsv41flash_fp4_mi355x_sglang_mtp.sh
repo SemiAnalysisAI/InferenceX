@@ -133,8 +133,11 @@ SGLANG_CMD=(
     --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
-    --cuda-graph-backend-prefill breakable
-    --cuda-graph-max-bs-prefill 2048
+    # The cookbook's breakable prefill graph is disabled here: with the Engram
+    # tables in host memory, capturing the 2048-token prefill graph raised
+    # hipErrorIllegalAddress on every rank (run 35306715045, c1). Prefill of
+    # 60k-600k-token AgentX prompts runs eagerly; decode graphs are unchanged.
+    --cuda-graph-backend-prefill disabled
     --reasoning-parser auto
     --tool-call-parser auto
     # Draft-token forward passes under long-context agentic load block the
