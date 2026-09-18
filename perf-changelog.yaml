@@ -8071,3 +8071,12 @@
     - "Lower --mem-fraction-static from 0.8 to 0.7 and --chunked-prefill-size from 4096 to 2048 after run 35304509605: c1-c4 served, but c8 OOMed in eager extend (1 GiB allocations with ~600 MB free of 80 GB) once five requests were live with a 570k-token prompt pending; the change leaves 24 GB of headroom instead of 16 GB and halves the per-chunk hyper-connection and indexer working set"
     - "在运行 35304509605 后将 --mem-fraction-static 从 0.8 降至 0.7，--chunked-prefill-size 从 4096 降至 2048：c1-c4 可服务，但 c8 在五个请求同时在线、且有 570k token 提示待处理时于 eager extend 中 OOM（80 GB 中仅剩约 600 MB 时申请 1 GiB）；调整后余量从 16 GB 增至 24 GB，并将每分块的 hyper-connection 与 indexer 工作集减半"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3240
+
+- config-keys:
+    - dsv41flash-fp4-h100-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Raise --chunked-prefill-size back from 2048 to 4096 while keeping --mem-fraction-static 0.7: in run 35307250127 c1 and c2 passed but c4 failed AIPerf's 95% latency-coverage check (TTFT 87.6%, inter-token latency 88.4% over the 3600 s window) because prefill of the 100k-600k-token prompts ran near 1,000 tok/s at the smaller chunk; 0.7 leaves 24 GB of headroom for the doubled per-chunk working set, against the 16 GB that OOMed c8 at 0.8/4096"
+    - "将 --chunked-prefill-size 从 2048 恢复为 4096，--mem-fraction-static 保持 0.7：运行 35307250127 中 c1、c2 通过，但 c4 未达到 AIPerf 95% 的延迟覆盖率要求（3600 s 窗口内 TTFT 87.6%、token 间延迟 88.4%），原因是较小分块下 100k-600k token 提示的 prefill 仅约 1,000 tok/s；0.7 为翻倍的每分块工作集保留 24 GB 余量，而此前 0.8/4096 下 c8 仅有 16 GB 并发生 OOM"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3240

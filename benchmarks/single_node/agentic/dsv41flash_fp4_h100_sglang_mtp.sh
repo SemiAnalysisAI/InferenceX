@@ -71,7 +71,12 @@ fi
 # of headroom on the 80 GB card and c8 OOMed in eager extend once five
 # requests were live with a 570k-token prompt pending (run 35304509605); 2048
 # with 0.7 leaves 24 GB and halves the per-chunk working set.
-CHUNKED_PREFILL_SIZE=2048
+# Back to 4096 with the static fraction kept at 0.7: at 2048 prefill ran near
+# 1,000 tok/s and c4 failed AIPerf's 95% latency-coverage check (TTFT 87.6%,
+# ITL 88.4% over the 3600 s window, run 35307250127) while c1/c2 passed.
+# 0.7 leaves 24 GB for the doubled per-chunk working set instead of the
+# 16 GB that OOMed c8 at 0.8/4096.
+CHUNKED_PREFILL_SIZE=4096
 
 # Saturation arms carry a larger in-flight working set than the 30-minute
 # default warmup drain allows.
