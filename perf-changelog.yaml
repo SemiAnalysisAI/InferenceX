@@ -8172,3 +8172,13 @@
     runs and preserve diagnostic artifacts before returning benchmark failure.
     Prevent aborted replay jobs from appearing successful after leaving squeue.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Resolve NVIDIA Dynamo dependencies directly from the official NVIDIA
+    wheel index. Retain pip integrity verification while avoiding the PyPI
+    placeholder downloader that repeatedly truncated aisimulate wheels.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
