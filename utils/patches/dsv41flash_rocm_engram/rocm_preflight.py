@@ -35,8 +35,9 @@ class TestROCmEngramConfig(unittest.TestCase):
             model.hf_text_config.engram_layer_ids = []
             with self.assertRaisesRegex(ValueError, "non-empty"):
                 EngramConfig().verify_model_config(model)
-            model.architecture = "Qwen4ExpForCausalLM"
-            model.hf_text_config.ple_layer_ids = [1]
+            # An architecture without an n-gram layer field stays rejected
+            # (Qwen4Exp is not a counterexample: upstream maps it to ple_layer_ids).
+            model.architecture = "LlamaForCausalLM"
             with self.assertRaisesRegex(ValueError, "supported Engram"):
                 EngramConfig().verify_model_config(model)
         # A platform that is neither CUDA nor ROCm stays rejected.
