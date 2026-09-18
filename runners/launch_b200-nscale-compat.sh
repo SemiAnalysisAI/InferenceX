@@ -15,7 +15,7 @@ set -x
 # Bench scripts and srt-slurm recipes name HF model IDs; resolve them to
 # pre-staged paths so every Nscale node does not re-download. SRT_SLURM_MODEL_PREFIX
 # must match the recipe's model.path alias.
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "$IS_MULTINODE" != "true" ]]; then
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && ( "$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "sglang" ) && "$IS_MULTINODE" != "true" ]]; then
     export MODEL_PATH="$MODEL"
     export HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
     mkdir -p "$HF_HUB_CACHE_HOST_PATH"
