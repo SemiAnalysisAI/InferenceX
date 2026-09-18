@@ -177,7 +177,12 @@ ATOM_CMD=(
     "${PARALLEL_ARGS[@]}"
     --gpu-memory-utilization 0.95
     --enable_prefix_caching
-    --online_quant_config '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*.mlp.gate","model.layers.[0-9].mlp.*expert*","model.layers.[1-6][0-9].mlp.*expert*","model.layers.7[0-7].mlp.*expert*"]}'
+    # "model.layers.78.*" excludes the MTP head from online quantization,
+    # keeping layer 78 in native BF16: it ships unquantized in amd/GLM-5.2-MXFP4,
+    # and the expert excludes only reach layers 0-77, so without this the whole
+    # MTP block would be online-quantized to ptpc_fp8 while the target's experts
+    # stay MXFP4.
+    --online_quant_config '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*.mlp.gate","model.layers.[0-9].mlp.*expert*","model.layers.[1-6][0-9].mlp.*expert*","model.layers.7[0-7].mlp.*expert*","model.layers.78.*"]}'
     --max-num-seqs "$((2 * CONC))"
     --cudagraph-capture-sizes "$CUDAGRAPH_CAPTURE_SIZES"
     --max-num-batched-tokens 16384
