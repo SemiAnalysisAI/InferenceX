@@ -8180,3 +8180,13 @@
     four real-verification short/long-input probes on B300; B200 validation and
     normalized performance qualification remain pending.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-sglang-agentic-mtp-tp4-high-concurrency-experiment
+  scenario-type:
+  - agentic-coding
+  description:
+  - Explore B200 Qwen3.5 FP8 aggregate TP4 at C64 and C96 with the latest
+    nightly and full combined KV/Mamba HiCache host budget. These diagnostics
+    test a lower-GPU-count alternative to the dominated TP8 C64 control.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
