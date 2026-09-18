@@ -73,14 +73,14 @@ fi
     )
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    for relative in (
-        "runners/launch_b200-nscale-slurm.sh",
-        "runners/slurm_utils.sh",
-        "benchmarks/benchmark_lib.sh",
-    ):
-        destination = workspace / relative
-        destination.parent.mkdir(exist_ok=True)
-        shutil.copyfile(ROOT / relative, destination)
+    # Keep launcher-owned runtime inputs with the real launcher and helpers.
+    shutil.copytree(ROOT / "runners", workspace / "runners")
+    (workspace / "benchmarks").mkdir()
+    shutil.copyfile(
+        ROOT / "benchmarks/benchmark_lib.sh", workspace / "benchmarks/benchmark_lib.sh"
+    )
+    # Run the real configuration renderer regardless of editable-install state.
+    (workspace / "infx").symlink_to(ROOT / "infx", target_is_directory=True)
     # Stub remote checkout and submission after loading the real shared helpers.
     with (workspace / "runners/slurm_utils.sh").open("a") as helpers:
         helpers.write(r"""
