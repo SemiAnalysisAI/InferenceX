@@ -134,3 +134,6 @@ telemetry:
     # 9401 is already bound by the cluster-level exporter on im-gb300 nodes;
     # use a port outside that range.
     port: 19401
+  cpu_power_exporter:
+    port: 9405
+    source: acpi
