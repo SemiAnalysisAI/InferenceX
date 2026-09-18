@@ -205,12 +205,25 @@ fi
 
 case "$CONC" in
     1)
-        SYNTHETIC_ACCEPT_LEN=3.75
-        SPEC_NUM_TOKENS=6
+        SYNTHETIC_ACCEPT_LEN=3.84
+        SPEC_NUM_TOKENS=7
         GPU_MEM_UTIL=0.9
         MAX_NUM_BATCHED_TOKENS=16384
         ;;
-    4|8|10|12|14)
+    # k descends with concurrency; each k is paired with its own AL.
+    4)
+        SYNTHETIC_ACCEPT_LEN=3.62
+        SPEC_NUM_TOKENS=5
+        GPU_MEM_UTIL=0.9
+        MAX_NUM_BATCHED_TOKENS=8192
+        ;;
+    8|10)
+        SYNTHETIC_ACCEPT_LEN=3.36
+        SPEC_NUM_TOKENS=4
+        GPU_MEM_UTIL=0.9
+        MAX_NUM_BATCHED_TOKENS=8192
+        ;;
+    12|14)
         SYNTHETIC_ACCEPT_LEN=3.00
         SPEC_NUM_TOKENS=3
         GPU_MEM_UTIL=0.9
@@ -228,17 +241,38 @@ case "$CONC" in
         ;;
 esac
 
+# ---- DSpark draft ------------------------------------------------------------
+# Published checkpoint, unmodified. vLLM #55966 makes ROCM_AITER_MLA accept its
+# non-causal dflash_config, so the local causal rewrite is no longer needed.
+DSPARK_DRAFT_PATH="${DSPARK_DRAFT_PATH:-Inferact/Kimi-K3-DSpark}"
+
+# ---- CUDA graph mode ---------------------------------------------------------
+# FULL_AND_PIECEWISE needs breakable graphs (no @support_torch_compile on K3 AMD).
+# Breakable costs KV pool, scaling with capture size 2*CONC*(1+k): -11.5% at conc 4
+# (capture 48), -1/3 at conc 48 (capture 96, deadlocks at 86% usage). Enabled only
+# for conc 1 and 4, the two cells measured under it.
+case "$CONC" in
+    1|4)
+        CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL_AND_PIECEWISE}"
+        export VLLM_USE_BREAKABLE_CUDAGRAPH=1
+        ;;
+    *)
+        CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL}"
+        export VLLM_USE_BREAKABLE_CUDAGRAPH=0
+        ;;
+esac
+
 SPEC_ARGS=()
 if [ "$SPEC_NUM_TOKENS" -gt 0 ]; then
 if [ "${EVAL_ONLY}" = "true" ]; then
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
+        "{\"model\":\"$DSPARK_DRAFT_PATH\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"ROCM_AITER_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
     )
 else
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+        "{\"model\":\"$DSPARK_DRAFT_PATH\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"ROCM_AITER_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
     )
     fi
 fi
@@ -246,7 +280,7 @@ fi
 MAX_NUM_SEQS=$((2 * CONC))
 MAX_CUDAGRAPH_CAPTURE_SIZE=$((MAX_NUM_SEQS * (1 + SPEC_NUM_TOKENS)))
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
-COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
+COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"$CUDAGRAPH_MODE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
