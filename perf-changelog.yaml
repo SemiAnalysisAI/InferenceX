@@ -8308,3 +8308,15 @@
     host KV and Mamba capacity; test first-use backup eligibility separately
     from admission tuning. Unqualified diagnostic pending measured results.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-1p1d-dmem88-write-through-c48-experiment
+  scenario-type:
+  - agentic-coding
+  description:
+  - Test first-use HiCache write-through at B200 Qwen3.5 FP8 concurrency 48, changing only the
+    prefill write policy from the measured selective C48 decode-memory-0.88 control. The selective
+    control had poor prefix reuse and unused host capacity; C48 tests the intermediate region
+    without the larger C64 decode working set. This is an unqualified diagnostic pending measured
+    GPU-normalized performance.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
