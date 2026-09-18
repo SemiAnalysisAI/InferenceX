@@ -193,7 +193,9 @@ builtin source "$1/runners/launch_b300-dsxe.sh"
     if power_mode != "off":
         import yaml
 
-        emitted = yaml.safe_load((workspace / "srt-slurm/recipes/test.yaml").read_text())
+        emitted = yaml.safe_load(
+            (workspace / "srt-slurm/recipes/test.yaml").read_text()
+        )
         assert emitted["benchmark"]["concurrencies"] == [1]
     aggregate = json.loads((workspace / "aggregate_conc1.json").read_text())
     assert aggregate["diagnostic"] == "retained"
