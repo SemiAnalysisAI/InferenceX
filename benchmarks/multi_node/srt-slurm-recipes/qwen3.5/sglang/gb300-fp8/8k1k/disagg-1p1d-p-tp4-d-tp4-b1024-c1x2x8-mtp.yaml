@@ -60,7 +60,7 @@ roles:
       trust-remote-code: true
       attention-backend: "trtllm_mha"
       tensor-parallel-size: 4
-      mamba-scheduler-strategy: "no_buffer"
+      mamba-radix-cache-strategy: "no_buffer"
       mamba-track-interval: 2048
       mamba-ssm-dtype: "bfloat16"
       moe-runner-backend: "flashinfer_trtllm"
@@ -113,7 +113,7 @@ roles:
       trust-remote-code: true
       attention-backend: "trtllm_mha"
       tensor-parallel-size: 4
-      mamba-scheduler-strategy: "no_buffer"
+      mamba-radix-cache-strategy: "no_buffer"
       mamba-track-interval: 128
       mamba-ssm-dtype: "bfloat16"
       max-mamba-cache-size: 1024
