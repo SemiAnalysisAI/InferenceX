@@ -97,6 +97,8 @@ actionlint 1.7.12 尚不识别该语法。
 `results/offload_config.json`、`offload-telemetry.jsonl` 和 `offload_cleanup.json`
 记录准确容量、存储及直接 I/O 验证、文件占用、节点内存与磁盘计数、以及专属缓存清理结果。
 磁盘计数属于整个节点，不等同于本进程 I/O。FS 回退到缓冲 I/O 的运行不能按声明的 NVMe 方案验收。
+存储验证通过 `/sys/class/block` 解析挂载设备及其底层叶设备；容器无需仅为证明本地文件系统位于
+非旋转 NVMe 设备之上而访问宿主机的 `/dev/md0` 设备节点。
 
 每组对照完成后，比较成功输出吞吐量/GPU、P90 延迟、失败及取消数量、缓存来源和 I/O 证据。
 原始 E2E-normalized X 轴需要从同一定义的 profiling 完成请求集合重新计算

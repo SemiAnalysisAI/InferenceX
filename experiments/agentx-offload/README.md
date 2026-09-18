@@ -118,6 +118,10 @@ Retain standard `bmk_agentic_*`, `agentic_*`, server and GPU metrics artifacts.
 file bytes, node memory/disk counters and owned-cache cleanup. Storage guard
 failures remain explicit. Node disk counters are not exclusively this process's
 I/O. Do not accept fallback buffered FS operation as the declared NVMe arm.
+The storage proof resolves the mounted device and its backing leaves through
+`/sys/class/block`; the container intentionally does not need the host `/dev/md0`
+device node merely to establish that the local filesystem rests on non-rotating
+NVMe devices.
 
 After each matched set, compare successful output throughput per GPU, P90 latency,
 request failure/cancellation counts and cache-source/I/O evidence. For the original

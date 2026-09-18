@@ -18,6 +18,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent
 GIB = 2**30
 SCRATCH_ROOT = Path("/offload-scratch")
+SYS_BLOCK_ROOT = Path("/sys/class/block")
 
 
 def connector_config(
@@ -92,25 +93,37 @@ def read_config() -> tuple[Path, dict[str, Any]]:
     return result, json.loads((result / "offload_config.json").read_text())
 
 
-def storage_proof(root: Path) -> dict[str, Any]:
-    mount = json.loads(
-        subprocess.check_output(["findmnt", "--json", "--target", str(root)], text=True)
-    )["filesystems"][0]
-    if mount["fstype"] not in {"xfs", "ext4"}:
-        raise RuntimeError(f"Expected local block filesystem, got {mount['fstype']}")
-    devices = json.loads(
-        subprocess.check_output(
-            [
-                "lsblk",
-                "--json",
-                "--inverse",
-                "--output",
-                "NAME,TYPE,ROTA,TRAN",
-                mount["source"].split("[", 1)[0],
-            ],
-            text=True,
-        )
-    )
+def sysfs_backing_devices(
+    source: str, sys_block_root: Path = SYS_BLOCK_ROOT
+) -> dict[str, Any]:
+    """Resolve a mounted block device through sysfs without requiring /dev access."""
+    source_name = Path(source.split("[", 1)[0]).name
+    visiting: set[str] = set()
+
+    def visit(name: str) -> dict[str, Any]:
+        if name in visiting:
+            raise RuntimeError(f"Block-device cycle while resolving {source_name}")
+        device = sys_block_root / name
+        if not device.exists():
+            raise RuntimeError(f"Block device {name} is not visible in sysfs")
+        visiting.add(name)
+        slaves = sorted((device / "slaves").iterdir(), key=lambda path: path.name)
+        node: dict[str, Any] = {"name": name}
+        if slaves:
+            node["children"] = [visit(slave.name) for slave in slaves]
+        else:
+            rotational = device / "queue" / "rotational"
+            if not rotational.is_file():
+                raise RuntimeError(f"Missing rotational proof for block device {name}")
+            node["rota"] = bool(int(rotational.read_text().strip()))
+            node["tran"] = "nvme" if name.startswith("nvme") else None
+        visiting.remove(name)
+        return node
+
+    return {"method": "sysfs", "blockdevices": [visit(source_name)]}
+
+
+def verify_nvme_backing(devices: dict[str, Any]) -> None:
     leaves: list[dict[str, Any]] = []
 
     def visit(node: dict[str, Any]) -> None:
@@ -124,6 +137,16 @@ def storage_proof(root: Path) -> dict[str, Any]:
         visit(device)
     if not leaves or any(not n["name"].startswith("nvme") or n["rota"] for n in leaves):
         raise RuntimeError("Could not verify NVMe backing devices")
+
+
+def storage_proof(root: Path) -> dict[str, Any]:
+    mount = json.loads(
+        subprocess.check_output(["findmnt", "--json", "--target", str(root)], text=True)
+    )["filesystems"][0]
+    if mount["fstype"] not in {"xfs", "ext4"}:
+        raise RuntimeError(f"Expected local block filesystem, got {mount['fstype']}")
+    devices = sysfs_backing_devices(mount["source"])
+    verify_nvme_backing(devices)
     return {
         "mount": mount,
         "devices": devices,

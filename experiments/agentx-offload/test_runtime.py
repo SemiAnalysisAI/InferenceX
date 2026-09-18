@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 import runtime
-from runtime import connector_config
+from runtime import connector_config, sysfs_backing_devices, verify_nvme_backing
 
 from infx.matrix.generate import generate_test_config_sweep
 from infx.matrix.validation import SingleNodeMasterConfigEntry
@@ -65,6 +65,45 @@ def test_combined_keeps_dram_and_secondary_fs():
             "locality": "LOCAL",
         }
     ]
+
+
+def test_sysfs_storage_proof_resolves_raid_without_device_node(tmp_path):
+    sys_block = tmp_path / "sys" / "class" / "block"
+    (sys_block / "md0" / "slaves").mkdir(parents=True)
+    for name in ("nvme0n1p1", "nvme1n1p1"):
+        (sys_block / "md0" / "slaves" / name).mkdir()
+        rotational = sys_block / name / "queue" / "rotational"
+        rotational.parent.mkdir(parents=True)
+        rotational.write_text("0\n")
+        (sys_block / name / "slaves").mkdir()
+
+    assert sysfs_backing_devices("/dev/md0[/offload-scratch]", sys_block) == {
+        "method": "sysfs",
+        "blockdevices": [
+            {
+                "name": "md0",
+                "children": [
+                    {"name": "nvme0n1p1", "rota": False, "tran": "nvme"},
+                    {"name": "nvme1n1p1", "rota": False, "tran": "nvme"},
+                ],
+            }
+        ],
+    }
+    verify_nvme_backing(sysfs_backing_devices("/dev/md0", sys_block))
+
+
+@pytest.mark.parametrize("name,rotational", [("sda", "0\n"), ("nvme0n1", "1\n")])
+def test_sysfs_storage_proof_rejects_non_nvme_or_rotational_leaf(
+    tmp_path, name, rotational
+):
+    sys_block = tmp_path / "sys" / "class" / "block"
+    (sys_block / name / "slaves").mkdir(parents=True)
+    rota = sys_block / name / "queue" / "rotational"
+    rota.parent.mkdir(parents=True)
+    rota.write_text(rotational)
+
+    with pytest.raises(RuntimeError, match="Could not verify NVMe"):
+        verify_nvme_backing(sysfs_backing_devices(f"/dev/{name}", sys_block))
 
 
 @pytest.mark.parametrize(

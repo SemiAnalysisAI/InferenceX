@@ -107,17 +107,25 @@
       "attempt": 3,
       "retry_of": 35344315025,
       "head_sha": "fe305fbb65eaa3f1bef3b5c9971217b348d4fe15",
-      "status": "in_progress",
-      "node": null,
-      "artifacts": [],
+      "status": "failure",
+      "node": "im-b200-c001",
+      "artifacts": [
+        {"id": 10565111803, "name": "results_bmk", "size_bytes": 142},
+        {"id": 10564238811, "name": "run-stats", "size_bytes": 280}
+      ],
+      "failure_stage": "offload storage proof",
+      "diagnosis": "The container mount source is /dev/md0, but that host block-device node is intentionally absent inside the container. The scoped lsblk call therefore failed before server launch; sysfs still exposes the backing-device topology and is the correct non-mutating proof path.",
       "performance_result": false,
       "workflow_name": "offload-v1-nvme-c16-r1-imagefix2-20260918T194421Z",
       "job_id": 105738186019,
-      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35387609866/job/105738186019"
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35387609866/job/105738186019",
+      "runner": "b200-nscale-slurm_00",
+      "allocation_id": "16443",
+      "log_sha256": "12f8110e64878a4a8a6867c0b915da13c2ae8255ce49f96fe3580e984525da46"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749,35154018672,35344315025,35387609866",
-  "status": "NVMe c16 repeat 1 attempt 3 dispatched after the capacity gate passed with five idle B200 nodes, an empty B200 queue, and no B200 reservations.",
+  "status": "NVMe c16 repeat 1 attempt 3 failed before serving because its storage proof required the container-visible /dev/md0 node. The repair now resolves the same backing-device chain through container-visible sysfs.",
   "last_capacity_check": {
     "checked_at": "2026-09-18T19:43:51.613Z",
     "cluster_observed_at": "2026-09-18T19:43:51.613Z",
@@ -136,6 +144,10 @@
     "reason": "Five B200 nodes were idle, the B200 queue was empty, and no B200 reservations were active; one one-node retry leaves four idle nodes."
   },
   "next_dispatch": {
-    "requires": "Wait for run 35387609866 to complete or fail, retain evidence, then choose the next matched arm or corrective retry from the observed result."
+    "arm": "nvme",
+    "concurrency": 16,
+    "repeat": 1,
+    "retry_of": 35387609866,
+    "requires": "Validate and push the sysfs storage-proof repair, then retry after a fresh scheduler capacity gate."
   }
 }
