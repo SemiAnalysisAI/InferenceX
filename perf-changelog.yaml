@@ -8332,3 +8332,16 @@
     artifacts when collection fails; eval-only jobs skip power collection.
     Require fresh official qualification with measured power for these points.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add measured B200 Qwen3.5 FP8 concurrency 64 with first-use prefill HiCache write-through
+    at 215 GB per rank and decode static memory 0.88. The short replay reaches 35684.49 logical
+    tokens/s/GPU at 132.967 p90 interactivity and 3.861s p90 TTFT, with zero errors or drain
+    cancellations, dominating published aggregate TP4 C24. Preserve exact serving settings and
+    require native power telemetry, a full official sweep and real-verification evals before
+    qualification.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
