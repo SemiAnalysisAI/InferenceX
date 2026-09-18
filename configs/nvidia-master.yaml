@@ -8113,7 +8113,7 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 dsv41flash-fp4-gb300-vllm-agentic-dspark:
-  image: vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e
+  image: vllm/vllm-openai:nightly-dee37d89115db4c94a820a79a78a7828e141c910@sha256:dea7fa047caa114167efccdeb42321b12d2c11da1add8728aa2662cb8d6b8cd5
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb300-nv
