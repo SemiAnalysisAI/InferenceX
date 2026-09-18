@@ -2,17 +2,17 @@ schema: 2
 name: agg-gb200-tp8-c2-mtp
 model:
   path: glm-5.2-fp4
-  container: dynamo-sglang
+  container: "lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9"
   precision: fp4
 identity:
   model:
     repo: nvidia/GLM-5.2-NVFP4
     revision: aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa
   container:
-    image: lmsysorg/sglang:nightly-dev-cu13-20260805-211ee642
+    image: "lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9"
   frameworks:
-    dynamo: 71eb001e17fa73c742f0afe1a6ed96836cb135fd
-    sglang: nightly-dev-cu13-20260805-211ee642
+    dynamo: 1.5.0.dev20260917
+    sglang: 0.5.19
 resources:
   gpu_type: gb200
   gpus_per_node: 4
@@ -32,7 +32,7 @@ frontend:
 dynamo:
   install: true
   source:
-    rev: 71eb001e17fa73c742f0afe1a6ed96836cb135fd
+    wheel: "1.5.0.dev20260917"
 engine: sglang
 roles:
   agg:
@@ -70,7 +70,7 @@ roles:
       enable-dp-attention: false
       enable-dp-lm-head: false
       max-running-requests: 10
-      cuda-graph-max-bs: 10
+      cuda-graph-max-bs-decode: 10
       chunked-prefill-size: 8192
       max-prefill-tokens: 8192
       context-length: 1048576
@@ -78,12 +78,12 @@ roles:
       speculative-num-steps: 4
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 5
-      nsa-prefill-backend: trtllm
-      nsa-decode-backend: trtllm
+      dsa-prefill-backend: trtllm
+      dsa-decode-backend: trtllm
       moe-runner-backend: flashinfer_trtllm
       fp4-gemm-backend: flashinfer_trtllm
       disable-shared-experts-fusion: true
-      enable-flashinfer-allreduce-fusion: true
+      flashinfer-allreduce-fusion-backend: auto
       weight-loader-prefetch-checkpoints: true
       model-loader-extra-config: '{"enable_multithread_load": true}'
       mem-fraction-static: 0.8
