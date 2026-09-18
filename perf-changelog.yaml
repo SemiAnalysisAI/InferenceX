@@ -8111,3 +8111,12 @@
     - "Disable the prefill CUDA graph (--cuda-graph-backend-prefill disabled, dropping --cuda-graph-max-bs-prefill): with the Engram tables in pinned host memory, capturing the breakable 2048-token prefill graph raised hipErrorIllegalAddress on every rank at c1 in run 35306715045, while the previous sweep with GPU-resident tables captured it and then OOMed in eager prefill; prefill now runs eagerly and the 64-request decode graphs are unchanged"
     - "禁用 prefill CUDA graph（--cuda-graph-backend-prefill disabled，并去掉 --cuda-graph-max-bs-prefill）：Engram 表位于 pinned 主机内存时，运行 35306715045 的 c1 在捕获 2048 token 的 breakable prefill graph 时所有 rank 报 hipErrorIllegalAddress，而上一次表常驻 GPU 的 sweep 可完成捕获但随后在 eager prefill 中 OOM；prefill 现以 eager 方式运行，64 请求的 decode graph 不变"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Keep the Engram tables on the GPU (drop SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1): in run 35311289442 c8 died during decode CUDA graph capture on gfx950 with hipErrorIllegalAddress at the first batch (bs=16, 0/12 captured) with the shared host table enabled, while the first sweep (run 35304555945) captured graphs up to bs=32 with the tables resident; the 288 GB card holds the tables next to the weights and the prefill working set stays bounded by --mem-fraction-static 0.75 and the 8192-token chunk"
+    - "将 Engram 表保留在 GPU 上（移除 SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1）：运行 35311289442 中 c8 在 gfx950 上于 decode CUDA graph 捕获的第一个 batch（bs=16，0/12 已捕获）因 hipErrorIllegalAddress 崩溃，当时启用了共享主机表；而首次 sweep（运行 35304555945）在表常驻 GPU 时可捕获至 bs=32 的 graph；288 GB 显卡可在权重旁容纳这些表，prefill 工作集仍由 --mem-fraction-static 0.75 与 8192 token 分块约束"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245

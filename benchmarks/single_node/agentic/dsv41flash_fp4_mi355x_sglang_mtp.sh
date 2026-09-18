@@ -64,13 +64,14 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# One shared host copy of the two fp8 Engram tables instead of a row-sharded
-# copy per rank: the SGLang analogue of the vLLM arm's Engram CPU offload. It
-# frees ~46 GiB of HBM per GPU for the 1M-context prefill working set and the
-# KV pool, and output is bitwise unchanged (cookbook). The first sweep ran
-# with the tables on GPU and the server died on the first long AgentX prompts
-# (run 35304555945: c16 came up, then eager prefill of the first 66k-99k-token prompts aborted with HSA_STATUS_ERROR_OUT_OF_RESOURCES (0 MB free) inside the DSpark target prefill).
-export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
+# Engram tables stay on the GPU here. The shared host copy
+# (SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1) that the CUDA arms use made decode
+# graph capture fail on gfx950 with hipErrorIllegalAddress at the first batch
+# (bs=16, 0/12 captured, run 35311289442), while the first sweep captured
+# graphs up to bs=32 with the tables resident (run 35304555945). The 288 GB
+# card holds the ~46 GiB of tables next to the weights; the 1M-context
+# prefill working set is bounded by --mem-fraction-static 0.75 and the
+# 8192-token chunk below instead.
 
 # Cookbook MI350X environment.
 export SGLANG_USE_AITER=1
