@@ -8235,3 +8235,14 @@
   - Use the official NVIDIA wheel index for Dynamo dependencies, preserving
     integrity checks and avoiding repeated truncated placeholder downloads.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-1p1d-dmem88-experiment
+  scenario-type:
+  - agentic-coding
+  description:
+  - Test B200 Qwen3.5 FP8 1P1D C64 with decode static memory fraction 0.88
+    and unchanged prefill HiCache. Live C64 logs show decode KV admission
+    saturation with 24.6 GiB free per decode GPU; target the decode capacity
+    bottleneck before adding prefill workers. Experimental, not qualified.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
