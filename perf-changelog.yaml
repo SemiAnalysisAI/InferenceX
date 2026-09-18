@@ -8295,3 +8295,16 @@
     from disaggregation gains. These are unqualified controls; dispatch with
     AgentX fast mode for initial screening and require canonical qualification.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-1p1d-dmem88-write-through-experiment
+  scenario-type:
+  - agentic-coding
+  description:
+  - Isolate prefill HiCache write policy in B200 Qwen3.5 FP8 1P1D C64:
+    change write_through_selective to write_through while retaining H215,
+    decode static memory 0.88, request capacity 128 and all other settings.
+    Live selective-policy observations show device KV eviction with spare
+    host KV and Mamba capacity; test first-use backup eligibility separately
+    from admission tuning. Unqualified diagnostic pending measured results.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
