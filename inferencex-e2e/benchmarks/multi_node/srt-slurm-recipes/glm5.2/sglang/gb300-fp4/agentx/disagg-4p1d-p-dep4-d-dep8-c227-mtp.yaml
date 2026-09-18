@@ -87,7 +87,7 @@ roles:
       enable-hierarchical-cache: true
       hicache-write-policy: write_back
       hicache-size: 135
-      hicache-io-backend: direct
+      hicache-io-backend: kernel
       speculative-algorithm: EAGLE
       speculative-moe-runner-backend: deep_gemm
       speculative-num-steps: 2
