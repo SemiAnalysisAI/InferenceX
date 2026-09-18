@@ -8246,3 +8246,15 @@
     saturation with 24.6 GiB free per decode GPU; target the decode capacity
     bottleneck before adding prefill workers. Experimental, not qualified.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-1p1d-mid-concurrency-experiment
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-1p1d-dmem88-experiment
+  scenario-type:
+  - agentic-coding
+  description:
+  - Densify B200 Qwen3.5 FP8 1P1D frontier screening with C8, C16 and C24
+    using measured C32 prefill HiCache sizing, plus C48 with the larger
+    decode static KV budget and full prefill HiCache. Require measured
+    normalized Pareto improvements before promotion and official sweeps.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
