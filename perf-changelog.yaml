@@ -8345,3 +8345,14 @@
     require native power telemetry, a full official sweep and real-verification evals before
     qualification.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Supply the custom AgentX measurement type, exact point concurrency and result root
+    explicitly to the native SRT power-window consumer. The pinned producer supplies
+    the window directory; the benchmark caller supplies the remaining contract fields.
+    Require fresh power qualification and the complete official sweep.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
