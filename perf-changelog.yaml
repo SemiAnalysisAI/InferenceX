@@ -8159,3 +8159,11 @@
   description:
   - Add the NVIDIA vendor wheel index to the recipe frontend and worker environments so aisimulate can resolve a verified vendor wheel directly instead of its fragile placeholder downloader; retain normal pip hash and package validation.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Verify the Slurm allocation terminal state and exit code after log streaming, preserve benchmark and eval artifacts, then fail the B300 launcher when the allocation failed or its final status cannot be verified. Prevent failed disaggregation runs from appearing successful solely because they left the queue.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
