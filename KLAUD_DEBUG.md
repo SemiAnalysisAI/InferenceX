@@ -370,3 +370,21 @@ uncertifiable work closes for inspection and releases its branch, not as invente
 image incompatibility.
 See [workflow operation](docs/klaud.md#workflow-operation-and-credentials),
 [reporting](docs/klaud-reporting.md) and [中文报告指南](docs/klaud-reporting_zh.md).
+
+### 7.6 Successful agent action without a verifiable lifecycle outcome
+
+**Symptom:** the Claude action reports success, but no PR or benchmark run exists and
+the diagnostics fall back to `unexpected-error`. Earlier workflow logic invoked
+`recover-current` only when the action itself failed, so this success-shaped failure
+kept its family claim until the next autosweep.
+
+**Resolution:** run trusted reconciliation after every non-skipped agent step. A
+no-PR/no-run session releases its claim immediately; active children remain owned;
+terminal sessions finish validation or cleanup. Upload sanitized diagnostics before
+failing an unverifiable candidate, and distinguish session, receipt, structured-output
+and lifecycle-verification failures with fixed public-safe codes.
+
+The planner now also reconstructs a candidate's complete public baseline before
+claiming its family or launching an agent. This prevents known incomplete or ambiguous
+baseline families from consuming a candidate slot. A bounded review batch and soft
+same-base cooldown reduce repeated work without removing candidates from the pool.

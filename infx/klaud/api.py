@@ -8,6 +8,7 @@ import io
 import json
 import math
 import os
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -31,6 +32,7 @@ ENDPOINTS = {
 }
 USER_AGENT = "InferenceX-Klaud-Cold/1.0"
 MAX_BYTES = 16 * 1024 * 1024
+RETRY_DELAYS_SECONDS = (0.5, 1.5)
 
 
 class ReadError(ValueError):
@@ -69,6 +71,7 @@ def fetch(
     date: str | None = None,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     opener: Callable[..., Any] | None = None,
+    sleeper: Callable[[float], None] = time.sleep,
 ) -> Feed:
     query = {}
     if resource == "benchmarks" and model:
@@ -91,33 +94,53 @@ def fetch(
         headers["Authorization"] = "Bearer " + token.strip()
     request = urllib.request.Request(url, headers=headers, method="GET")  # noqa: S310
     open_request = opener or urllib.request.build_opener(NoRedirects()).open
-    try:
-        with open_request(request, timeout=15) as response:
-            if response.status != 200:
-                raise ReadError("http-status-error")
-            raw = response.read(MAX_BYTES + 1)
-            if len(raw) > MAX_BYTES:
-                raise ReadError("response-too-large")
-            if "application/json" not in response.headers.get("Content-Type", "").lower():
-                raise ReadError("response-not-json")
-            encoding = response.headers.get("Content-Encoding", "").strip().lower()
-            if encoding == "gzip":
-                try:
-                    with gzip.GzipFile(fileobj=io.BytesIO(raw)) as compressed:
-                        decoded = compressed.read(MAX_BYTES + 1)
-                except (gzip.BadGzipFile, EOFError):
-                    raise ReadError("invalid-content-encoding") from None
-                if len(decoded) > MAX_BYTES:
+    for attempt in range(len(RETRY_DELAYS_SECONDS) + 1):
+        try:
+            with open_request(request, timeout=15) as response:
+                if response.status != 200:
+                    if (response.status in (408, 429) or response.status >= 500) and attempt < len(
+                        RETRY_DELAYS_SECONDS
+                    ):
+                        sleeper(RETRY_DELAYS_SECONDS[attempt])
+                        continue
+                    raise ReadError("http-status-error")
+                raw = response.read(MAX_BYTES + 1)
+                if len(raw) > MAX_BYTES:
                     raise ReadError("response-too-large")
-            elif encoding in ("", "identity"):
-                decoded = raw
-            else:
-                raise ReadError("unsupported-content-encoding")
-            metadata = {
-                key.lower(): response.headers[key]
-                for key in ("Age", "Cache-Control", "Date", "ETag")
-                if key in response.headers
-            }
+                if "application/json" not in response.headers.get("Content-Type", "").lower():
+                    raise ReadError("response-not-json")
+                encoding = response.headers.get("Content-Encoding", "").strip().lower()
+                if encoding == "gzip":
+                    try:
+                        with gzip.GzipFile(fileobj=io.BytesIO(raw)) as compressed:
+                            decoded = compressed.read(MAX_BYTES + 1)
+                    except (gzip.BadGzipFile, EOFError):
+                        raise ReadError("invalid-content-encoding") from None
+                    if len(decoded) > MAX_BYTES:
+                        raise ReadError("response-too-large")
+                elif encoding in ("", "identity"):
+                    decoded = raw
+                else:
+                    raise ReadError("unsupported-content-encoding")
+                metadata = {
+                    key.lower(): response.headers[key]
+                    for key in ("Age", "Cache-Control", "Date", "ETag")
+                    if key in response.headers
+                }
+            break
+        except urllib.error.HTTPError as error:
+            if (error.code in (408, 429) or error.code >= 500) and attempt < len(
+                RETRY_DELAYS_SECONDS
+            ):
+                sleeper(RETRY_DELAYS_SECONDS[attempt])
+                continue
+            raise ReadError(f"http-{error.code}") from None
+        except (urllib.error.URLError, TimeoutError, OSError):
+            if attempt < len(RETRY_DELAYS_SECONDS):
+                sleeper(RETRY_DELAYS_SECONDS[attempt])
+                continue
+            raise ReadError("network-error") from None
+    try:
         payload = json.loads(decoded, parse_constant=reject_nonfinite, parse_float=finite_float)
         if resource == "images" and not isinstance(payload, list):
             raise ReadError("invalid-images-payload")
@@ -129,10 +152,6 @@ def fetch(
             )
         ):
             raise ReadError("invalid-releases-payload")
-    except urllib.error.HTTPError as error:
-        raise ReadError(f"http-{error.code}") from None
-    except (urllib.error.URLError, TimeoutError, OSError):
-        raise ReadError("network-error") from None
     except (UnicodeError, json.JSONDecodeError):
         raise ReadError("invalid-json") from None
     except ReadError:

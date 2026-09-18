@@ -57,6 +57,9 @@ insufficient: recheck capacity before deciding to defer.
 Freeze the COMPLETE original public baseline point roster before attempts, using
 candidate.source.date, verified old-image producer IDs/SHAs and full recipe/workload/topology/
 concurrency/dataset identities. Use the reporting guide's prepare-baseline/report commands;
+candidate.json provides the planner-verified exact `baseline-model`; use that value unchanged.
+The planner's preflight proves that a full roster can be reconstructed but does not freeze or
+publish it. Prepare the candidate's own baseline after resolving the exact old/new image goal;
 the helper recovers original points from producer revisions. Supplement verified public
 eval/dataset evidence before freezing; never replace a failed lookup with a partial roster.
 Never reduce the baseline to overlapping points, displayed rows or a smaller current family. Never dispatch the old

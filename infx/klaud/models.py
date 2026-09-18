@@ -60,15 +60,19 @@ class CandidateReview(Contract):
     family: str | None = Field(pattern=r"^configs/[^/:]+-master\.yaml:[^\s:]+$")
     telemetry_clusters: list[Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._+-]{0,63}$")]]
     pull_requests: list[Annotated[int, Field(gt=0)]]
+    baseline_model: str | None = Field(default=None, min_length=1)
     reason: str = Field(min_length=1)
 
     @model_validator(mode="after")
     def consistent_decision(self) -> CandidateReview:
         if self.decision == "proceed" and (
-            not self.family or not self.telemetry_clusters or self.pull_requests
+            not self.family
+            or not self.telemetry_clusters
+            or self.pull_requests
+            or not self.baseline_model
         ):
             raise ValueError(
-                "proceed requires a resolved family, exact telemetry clusters and no overlapping PRs"
+                "proceed requires a resolved family, baseline model, exact telemetry clusters and no overlapping PRs"
             )
         if len(set(self.telemetry_clusters)) != len(self.telemetry_clusters):
             raise ValueError("telemetry clusters must be distinct")

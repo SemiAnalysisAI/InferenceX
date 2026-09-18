@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import contextlib
 import json
 import math
 import os
@@ -12,6 +11,7 @@ import re
 import shlex
 import subprocess
 from collections import Counter
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -153,11 +153,42 @@ def choose(
     return selected
 
 
-def plan(root: Path, directory: Path) -> None:
+def recent_candidate_ids(repository: str, base: str, cooldown_hours: int) -> set[str]:
+    """Return same-base candidates recently given an agent, as a soft ordering hint."""
+    try:
+        artifacts = github_read(repository, "actions/artifacts?per_page=100")["artifacts"]
+        if not isinstance(artifacts, list):
+            raise TypeError("invalid artifact inventory")
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        print("::warning::Klaud cooldown history unavailable; continuing without cooldown")
+        return set()
+    cutoff = datetime.now(UTC) - timedelta(hours=cooldown_hours)
+    result = set()
+    for artifact in artifacts:
+        try:
+            match = re.fullmatch(r"klaud-candidate-([0-9a-f]{16}-[0-9a-f]{16})", artifact["name"])
+            created = datetime.fromisoformat(artifact["created_at"].replace("Z", "+00:00"))
+            recent = created >= cutoff
+        except (AttributeError, KeyError, TypeError, ValueError):
+            continue
+        if (
+            match
+            and not artifact.get("expired", True)
+            and recent
+            and artifact.get("workflow_run", {}).get("head_sha") == base
+        ):
+            result.add(match[1])
+    return result
+
+
+def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: int) -> None:
     from . import claims
 
     policy = Policy()
     repository = os.environ["GITHUB_REPOSITORY"]
+    base = subprocess.check_output(
+        ["git", "-C", str(root), "rev-parse", "HEAD"], text=True, timeout=30
+    ).strip()
     items, issues = fetch_catalog(policy)
     if issues:
         raise ReadError("public-feed-invalid: " + ", ".join(issues))
@@ -183,9 +214,11 @@ def plan(root: Path, directory: Path) -> None:
     if recovery_file.exists():
         blocked.update(json.loads(recovery_file.read_text()))
     candidates = [candidate for candidate in candidates if candidate["family"] not in blocked]
-    base = subprocess.check_output(
-        ["git", "-C", str(root), "rev-parse", "HEAD"], text=True, timeout=30
-    ).strip()
+    recent = recent_candidate_ids(repository, base, cooldown_hours)
+    candidates = [candidate for candidate in candidates if candidate["id"] not in recent] + [
+        candidate for candidate in candidates if candidate["id"] in recent
+    ]
+    candidates = candidates[:review_batch_size]
     contexts = [
         {
             **candidate,
@@ -387,6 +420,8 @@ def save_diagnostics(
         "action-outcome": action_outcome,
         **execution_diagnostics(execution_file),
     }
+    failure = None
+    outcome = None
     try:
         from .lifecycle import current_session
 
@@ -405,6 +440,9 @@ def save_diagnostics(
             ],
         }
         receipt = session.report(pulls[0]) if pulls else None
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        failure = "session-state-unavailable"
+    else:
         if pulls and session.handed_off(pulls[0]):
             outcome = CandidateOutcome(
                 outcome="handoff",
@@ -415,15 +453,25 @@ def save_diagnostics(
             )
             diagnostics["outcome-source"] = "maintainer-handoff"
         elif receipt:
-            outcome = CandidateOutcome.model_validate(receipt["outcome"])
-            diagnostics["outcome-source"] = "verified-receipt"
+            try:
+                outcome = CandidateOutcome.model_validate(receipt["outcome"])
+            except (ValueError, KeyError, TypeError):
+                failure = "receipt-invalid"
+            else:
+                diagnostics["outcome-source"] = "verified-receipt"
         else:
-            # The durable lifecycle receipt is authoritative even when the SDK fails
-            # to return structured_output. A JSON response alone is never success.
-            outcome = CandidateOutcome.model_validate_json(outcome_file.read_text())
-            diagnostics["outcome-source"] = "structured-response"
-        session.verify(outcome)
-    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+            try:
+                outcome = CandidateOutcome.model_validate_json(outcome_file.read_text())
+            except (OSError, ValueError, TypeError):
+                failure = "structured-output-invalid"
+            else:
+                diagnostics["outcome-source"] = "structured-response"
+        if outcome is not None and failure is None:
+            try:
+                session.verify(outcome)
+            except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+                failure = "lifecycle-unverified"
+    if failure is not None:
         # Never echo invalid structured output, which could contain private data.
         observed = diagnostics.get("observed-session", {})
         outcome = CandidateOutcome(
@@ -433,6 +481,7 @@ def save_diagnostics(
             run_ids=[run["id"] for run in observed.get("runs", [])],
             repairs_used=None,
         )
+        diagnostics["outcome-error"] = failure
         diagnostics["outcome-report"] = "unavailable-or-invalid"
     else:
         diagnostics["outcome-report"] = "available"
@@ -462,6 +511,7 @@ def save_diagnostics(
 
 def select(directory: Path, max_candidates: int, execution_file: Path | None = None) -> None:
     from . import claims
+    from .reporting import Prose, resolve_baseline
 
     contexts = json.loads((directory / "candidates.json").read_text())
     review = PRReview(decisions=[])
@@ -496,6 +546,7 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
         except ReadError:
             deferred = "capacity-unavailable"
     capacity_deferred = []
+    baseline_deferred = []
     families = {decision.family for decision in review.decisions if decision.decision != "proceed"}
     for candidate in contexts:
         decision = decisions.get(candidate["id"])
@@ -507,11 +558,35 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
         owned = OwnedCandidate.model_validate(
             {key: candidate[key] for key in ("id", "family", "base")}
         )
+        try:
+            resolve_baseline(
+                os.environ["GITHUB_REPOSITORY"],
+                owned,
+                candidate,
+                decision.baseline_model,
+                Prose(
+                    en="Verify the complete published baseline before candidate dispatch.",
+                    zh="在调度候选任务前验证完整的已发布基线。",
+                ),
+            )
+        except VerificationError:
+            baseline_deferred.append(candidate["id"])
+            families.add(decision.family)
+            continue
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, ReadError):
+            deferred = "baseline-state-unavailable"
+            break
         if not claims.claim_family(
             os.environ["GITHUB_REPOSITORY"], owned, int(os.environ["GITHUB_RUN_ID"])
         ):
             continue
-        selected.append({**candidate, "pr-review": decision.model_dump(by_alias=True)})
+        selected.append(
+            {
+                **candidate,
+                "baseline-model": decision.baseline_model,
+                "pr-review": decision.model_dump(by_alias=True),
+            }
+        )
         families.add(decision.family)
         if len(selected) >= max_candidates:
             break
@@ -536,6 +611,7 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
                 "candidates": candidates,
                 "deferred-reason": deferred,
                 "capacity-deferred-candidates": capacity_deferred,
+                "baseline-deferred-candidates": baseline_deferred,
                 **review.model_dump(by_alias=True),
             },
             indent=2,
@@ -548,12 +624,14 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
         )
     summary = f"Klaud Cold: selected {len(candidates)} of {len(contexts)} eligible candidates."
     if deferred:
-        summary += f" Invocation deferred: {deferred}; no candidates launched."
+        summary += f" Selection stopped: {deferred}."
         print(f"::warning::{summary}")
     if capacity_deferred:
         summary += (
             f" {len(capacity_deferred)} reviewed candidates deferred by the latest capacity check."
         )
+    if baseline_deferred:
+        summary += f" {len(baseline_deferred)} candidates lacked a verifiable full baseline."
     if filename := os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(filename, "a") as output:
             output.write(
@@ -582,6 +660,18 @@ def main() -> int:
         type=Path,
         required=True,
         help="Output directory for candidate context",
+    )
+    prepare.add_argument(
+        "--review-batch-size",
+        type=int,
+        required=True,
+        help="Maximum shuffled candidates sent to one overlap review (1-256)",
+    )
+    prepare.add_argument(
+        "--cooldown-hours",
+        type=int,
+        required=True,
+        help="Soft same-base candidate cooldown before review (1-168)",
     )
     selection = commands.add_parser(
         "select", help="Validate KLAUD_PR_REVIEW and select nonoverlapping candidates"
@@ -705,11 +795,23 @@ def main() -> int:
             check_baseline_coverage(canonical, baseline_for(session, pull))
             return 0
         if args.command == "recover-current":
+            from . import claims
             from .lifecycle import PendingCleanup, current_session, reconcile
 
-            # Ownership persists; the next autosweep will revisit these children.
-            with contextlib.suppress(PendingCleanup):
-                reconcile(current_session())
+            session = current_session()
+            try:
+                reconcile(session)
+            except PendingCleanup:
+                # Healthy child work keeps its claim for the next recovery pass.
+                pass
+            else:
+                # This trusted step also releases no-PR/no-run sessions whose SDK
+                # response was missing or unverifiable.
+                claims.release_family(
+                    session.repository,
+                    session.candidate,
+                    session.parent["id"],
+                )
             return 0
         if args.command == "recover":
             from .lifecycle import recover
@@ -743,7 +845,11 @@ def main() -> int:
                 else 1
             )
         if args.command == "plan":
-            plan(args.root, args.directory)
+            if not 1 <= args.review_batch_size <= 256:
+                parser.error("--review-batch-size must be between 1 and 256")
+            if not 1 <= args.cooldown_hours <= 168:
+                parser.error("--cooldown-hours must be between 1 and 168")
+            plan(args.root, args.directory, args.review_batch_size, args.cooldown_hours)
             return 0
         if args.command == "select":
             if not 1 <= args.max_candidates_per_run <= 256:
