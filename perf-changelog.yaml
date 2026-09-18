@@ -8082,3 +8082,25 @@
     - "Capture only full decode CUDA graphs (VLLM_USE_BREAKABLE_CUDAGRAPH=0 with cudagraph_mode FULL_DECODE_ONLY, as the MiniMax-M3 gfx942 arm does) and restore --moe-backend aiter: on gfx942 every worker segfaulted during piecewise graph capture with both the Triton W4A16 MoE kernel (run 35305045778) and the auto-selected unfused Triton kernel (run 35306398350), so the capture mode rather than the MoE kernel is the failing piece; prefill runs eagerly"
     - "仅捕获完整的 decode CUDA graph（VLLM_USE_BREAKABLE_CUDAGRAPH=0 并设置 cudagraph_mode FULL_DECODE_ONLY，与 MiniMax-M3 gfx942 配方一致）并恢复 --moe-backend aiter：在 gfx942 上，无论使用 Triton W4A16 MoE 内核（运行 35305045778）还是自动选择的未融合 Triton 内核（运行 35306398350），所有 worker 都在 piecewise graph 捕获期间段错误，说明问题在于捕获模式而非 MoE 内核；prefill 以 eager 方式运行"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3247
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B200 Dynamo+SGLang AgentX TP8 aggregate HiCache recipes at concurrency 1, 4, and 8."
+    - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with bundled DSpark K=6, full-node CPU/DRAM allocation, and per-point request/CUDA-graph limits."
+    - "Preinstall uv with the pinned GitHub Action on NScale so benchmark startup does not depend on direct access to astral.sh."
+    - "Map the exact DeepSeek-V4-Pro-0813 recipe alias to the pre-staged NScale checkpoint."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B200 Dynamo+SGLang AgentX DEP8/DEP8 HiCache recipes for 1P1D at concurrency 64 and 128, plus 2P1D at concurrency 256."
+    - "Limit decode max-running-requests to 128, 256, and 512, respectively. Set decode swa-full-tokens-ratio to 0.01 for 1P1D and 0.005 for 2P1D c256, allocating more HBM to the full-attention KV pool after measured SWA utilization remained low."
+    - "Reuse the preinstalled uv binary in the NScale launcher, with the existing astral.sh installer retained as a fallback."
+    - "Map the exact DeepSeek-V4-Pro-0813 recipe alias to the pre-staged NScale checkpoint."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

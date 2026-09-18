@@ -37,7 +37,10 @@ if [[ "$FRAMEWORK" == "tilert" && "${IS_AGENTIC}" != "1" ]]; then
     run_compat_launcher
 fi
 
-if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $MODEL == "deepseek-ai/DeepSeek-V4-Pro-0813" ]]; then
+    export MODEL_PATH="$NSCALE_MODEL_ROOT/DeepSeek-V4-Pro-0813"
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-0813"
+elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     check_env_vars MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
@@ -104,8 +107,10 @@ setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" "$USES_DCGM_POWER" || exit 1
 
 echo "Installing srtctl..."
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
-curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$UV_INSTALL_DIR:$PATH"
+if ! command -v uv >/dev/null 2>&1; then
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+fi
 uv venv "$GITHUB_WORKSPACE/.venv"
 source "$GITHUB_WORKSPACE/.venv/bin/activate"
 uv pip install -e .
