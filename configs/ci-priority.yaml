@@ -11,7 +11,7 @@ adjustments:
   additional-node: -0.001
   event:
     push: 2.0
-  multi-node: 1.25
+  multi-node: 0.25
   agentic: 0.1
   eval-only: 0.0
   precision:
@@ -21,10 +21,10 @@ adjustments:
     eagle: 0.1
     eagle3: 0.1
   framework-prefix:
-    sglang: 0.5
-    vllm: 0.5
-    dynamo-sglang: 0.5
-    dynamo-vllm: 0.5
+    sglang: 1.5
+    vllm: 1.5
+    dynamo-sglang: 1.5
+    dynamo-vllm: 1.5
   model-prefix:
     dsv41flash: 0.5
     kimik3: 0.5
