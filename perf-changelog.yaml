@@ -8176,7 +8176,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
 
 - config-keys:
-  - qwen3.5-fp8-b200-sglang-agentic-mtp-latest
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
   scenario-type:
   - agentic-coding
   description:
@@ -8220,7 +8220,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
 
 - config-keys:
-  - qwen3.5-fp8-b200-sglang-agentic-mtp-latest
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
   scenario-type:
   - agentic-coding
   description:
@@ -8244,7 +8244,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
 
 - config-keys:
-  - qwen3.5-fp8-b200-sglang-agentic-mtp-latest
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
   scenario-type:
   - agentic-coding
   description:
@@ -8263,4 +8263,19 @@
     multinode launcher path. Keep the shared log-streaming helper's existing
     behavior for other callers so failed native jobs retain their diagnostics.
     Benchmark arguments, workload and selected recipes are unchanged.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Withdraw the provisional sparse aggregate publication scope and restore
+    the aggregate launcher/script to main. A regular latest-curve snapshot
+    replaces the prior aggregate scope; publishing only C4/C32/C64 would
+    discard existing frontier points. Keep aggregate experiments as comparison
+    evidence while qualifying only winning disaggregated additions alongside
+    the unchanged published aggregate curves. Earlier draft entries naming
+    the withdrawn aggregate key are retargeted to this final PR scope only;
+    all published changelog history remains byte-identical to main.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269

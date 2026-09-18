@@ -773,15 +773,6 @@ run_single_node() {
     # submitted to the Nscale batch_1 partition.
     check_env_vars SALLOC_TIME_LIMIT GPU_COUNT
 
-    if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "qwen3.5" &&
-          "$PRECISION" == "fp8" && "$FRAMEWORK" == "sglang" && "$SPEC_DECODING" == "mtp" ]]; then
-        check_env_vars IMAGE
-        export QWEN35_HICACHE_BUDGET_MODE=legacy
-        if [[ "$IMAGE" == "lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85" ]]; then
-            export QWEN35_HICACHE_BUDGET_MODE=combined
-        fi
-    fi
-
     SQUASH_FILE="/data/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" || "$SPEC_DECODING" == "draft_model" ]] && printf '_mtp' || printf '')
