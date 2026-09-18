@@ -1,8 +1,10 @@
-# SGLang recipe: https://github.com/sgl-project/sglang/blob/191172fa742f8837423ca4e4be4919ebb52f1b51/docs/cookbook/autoregressive/Qwen/Qwen3.5.mdx
-# Adapt the existing FP8 TP4 PD recipe and B200 AgentX serving flags.
-# GPU qualification pending; shared apply_srt_recipe selects golden AL for throughput only.
+# Based on the B200 FP8 aggregate AgentX recipe and SGLang Qwen3.5 PD recipe.
+# https://github.com/sgl-project/sglang/blob/191172fa742f8837423ca4e4be4919ebb52f1b51/docs/cookbook/autoregressive/Qwen/Qwen3.5.mdx
+# 8 active GPUs on one 8-GPU node: prefill GPU0-3, decode GPU4-7.
+# Request/graph limits match aggregate C; Dynamo owns frontend tokenization.
+# Shared apply_srt_recipe selects golden AL3.39 for throughput, real verification for evals.
 schema: 2
-name: qwen35-b200-fp8-agentx-1p1d-tp4-mtp
+name: qwen35-b200-fp8-agentx-1p1d-tp4-colocated-c32-mtp
 model:
   path: qwen3.5-fp8
   container: lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161
@@ -40,6 +42,10 @@ roles:
       SGLANG_ENABLE_SPEC_V2: '1'
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
       SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+      NCCL_NVLS_ENABLE: '1'
+      SGL_ENABLE_JIT_DEEPGEMM: 'false'
+      SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+      PYTHONNOUSERSITE: '1'
     args:
       served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
       trust-remote-code: true
@@ -57,7 +63,7 @@ roles:
       context-length: 262144
       chunked-prefill-size: 16384
       max-prefill-tokens: 16384
-      max-running-requests: 32
+      max-running-requests: 64
       reasoning-parser: qwen3
       tool-call-parser: qwen3_coder
       enable-metrics: true
@@ -65,8 +71,13 @@ roles:
       disaggregation-mode: prefill
       disaggregation-transfer-backend: mooncake
       disable-cuda-graph: true
+      enable-symm-mem: true
+      scheduler-recv-interval: 10
+      stream-interval: 50
+      mamba-scheduler-strategy: extra_buffer
+      mamba-track-interval: 2048
   decode:
-    nodes: 1
+    nodes: colocate
     workers: 1
     gpus: 4
     env:
@@ -75,6 +86,10 @@ roles:
       SGLANG_ENABLE_SPEC_V2: '1'
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
       SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+      NCCL_NVLS_ENABLE: '1'
+      SGL_ENABLE_JIT_DEEPGEMM: 'false'
+      SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+      PYTHONNOUSERSITE: '1'
     args:
       served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
       trust-remote-code: true
@@ -92,7 +107,7 @@ roles:
       context-length: 262144
       chunked-prefill-size: 16384
       max-prefill-tokens: 16384
-      max-running-requests: 32
+      max-running-requests: 64
       reasoning-parser: qwen3
       tool-call-parser: qwen3_coder
       enable-metrics: true
@@ -104,8 +119,12 @@ roles:
       speculative-num-steps: 3
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 4
-      cuda-graph-max-bs-decode: 16
+      cuda-graph-max-bs-decode: 32
       stream-interval: 50
+      enable-symm-mem: true
+      scheduler-recv-interval: 10
+      mamba-scheduler-strategy: no_buffer
+      mamba-track-interval: 128
 health_check:
   max_attempts: 720
   interval_seconds: 10
@@ -118,10 +137,7 @@ benchmark:
   type: custom
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   concurrencies:
-  - 1
-  - 4
-  - 8
-  - 16
+  - 32
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic

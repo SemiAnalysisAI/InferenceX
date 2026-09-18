@@ -8091,3 +8091,13 @@
   - 'Add Qwen3.5 397B FP8 B200 Dynamo + SGLang disaggregated AgentX: one TP4 prefill
     worker and one TP4 decode worker with NEXTN MTP, concurrency 1/4/8/16.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Align B200 Qwen3.5 FP8 1P1D AgentX with the aggregate serving baseline; colocate
+    TP4 prefill and TP4 decode on one eight-GPU node, match per-concurrency request/graph
+    limits, and extend the initial study to concurrency 32.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
