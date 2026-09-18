@@ -8320,3 +8320,15 @@
     comparator; retain C8 finally only if its own canonical result improves
     the measured frontier. No aggregate publication scope is added.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Enable required SRT DCGM power telemetry for the colocated C8/C16/C24/C32
+    Qwen3.5 FP8 AgentX recipes and validate each finalized measurement package
+    before publication. Preserve diagnostic aggregates, power audits and eval
+    artifacts when collection fails; eval-only jobs skip power collection.
+    Require fresh official qualification with measured power for these points.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
