@@ -1373,8 +1373,7 @@ printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
     assert "PYTHON_ARG=<dsv4>" in output
     assert "PYTHON_ARG=<--task-name>" in output
     assert "PYTHON_ARG=<kimi_tool_call_schema>" in output
-    assert "PYTHON_ARG=<--timeout-seconds>" in output
-    assert "PYTHON_ARG=<900>" in output
+    assert "PYTHON_ARG=<--timeout-seconds>" not in output
     assert "must-not-be-forwarded" not in output
     assert "SYSTEM_PYTHON_UNEXPECTED" not in output
     assert "EVAL_SUITE=kimi_tool_call_schema" in output
@@ -1384,7 +1383,7 @@ printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
     assert not python_dir.exists()
 
 
-def test_kimi_full_runner_installs_xdist_sets_timeout_and_cleans_runtimes(
+def test_kimi_full_runner_installs_xdist_without_deadline_and_cleans_runtimes(
     tmp_path: Path,
 ) -> None:
     results_dir = tmp_path / "results"
@@ -1443,8 +1442,7 @@ printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
     assert "PYTHON_ARG=<pytest-xdist==" in output
     assert "PYTHON_ARG=<--task-name>" in output
     assert "PYTHON_ARG=<kimi_tool_call_schema_full>" in output
-    assert "PYTHON_ARG=<--timeout-seconds>" in output
-    assert "PYTHON_ARG=<7200>" in output
+    assert "PYTHON_ARG=<--timeout-seconds>" not in output
     assert "EVAL_SUITE=kimi_tool_call_schema_full" in output
     assert f"EVAL_RESULT_DIR={results_dir}" in output
     assert not runtime_dir.exists()
