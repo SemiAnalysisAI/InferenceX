@@ -472,3 +472,23 @@ python -m pytest utils/matrix_logic/ -v
 遵循已合并的[上游配方 #968](https://github.com/vllm-project/recipes/pull/968) 中的 AMD 设置：`VLLM_ROCM_USE_AITER=1`、`VLLM_ROCM_USE_AITER_MOE=1` 和 `--moe-backend aiter`。通用 AITER 选择器允许 vLLM 选择 CK a8w4 专家内核，与 DSV4-Pro MI355X 配方一致。配方通过 `WEKA_LOADER_OVERRIDE` 固定使用完整语料 `semianalysis_cc_traces_weka_062126`。KV 驻留 GPU；Engram 沿用上游 AMD 默认设置。不要复制 NVIDIA 的 `--engram-config` 选项：上游目前在 ROCm 上拒绝该选项。MI355X launcher 使用共享 HF 缓存，并将此模型的仓库挂载至 `/ix`，同时导出 `INFMAX_CONTAINER_WORKSPACE=/ix`，确保 AgentX 依赖与输出路径位于该挂载中。
 
 **GPU 验证：** [运行 34710937012](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34710937012) 使用精确固定的镜像，通过了并发 1、2、4、8、16、32 的吞吐测试以及仅评测并发 32。配方使用 `vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657`（摘要 `sha256:960228cf…`，发布于 2026-09-12）。较早的 `deepseekv41-flash-0909` 标签早于 [vllm-project/vllm#56503](https://github.com/vllm-project/vllm/pull/56503)，该 PR 将 mHC delayed pre 块从 eager Torch 参考实现切换到 AITER；已合并的[上游配方 #968](https://github.com/vllm-project/recipes/pull/968) 固定使用同一 nightly，并记录了完整的 InferenceX 命令。后续运行时证据请遵循 [AgentX 流程](./eval-agentx-procedures_zh.md)；仅有本地矩阵生成和镜像元数据不能证明 GPU 验证完成。
+
+## MI300X 与 MI325X 上的 DeepSeek-V4.1-Flash
+
+`dsv41flash-fp4-mi300x-vllm-agentic-dspark` 与 `dsv41flash-fp4-mi325x-vllm-agentic-dspark`
+将已验证的 MI355X vLLM 配方复制到 gfx942，使用同一 ROCm nightly 与相同的 AMD 设置
+（`VLLM_ROCM_USE_AITER=1`、`VLLM_ROCM_USE_AITER_MOE=1`、`VLLM_USE_BREAKABLE_CUDAGRAPH=1`、
+`--moe-backend aiter`、关闭自适应验证）。gfx942 不在上游硬件表中，且没有 FP4 MFMA：通用的
+`aiter` MoE 后端允许 vLLM 选择器跳过仅 gfx950 可用的 CK a8w4 专家内核；若启动时所有候选均被
+拒绝，首选修复手段是固定 `aiter_triton_mxfp4_bf16`（Triton W4A16 内核）。
+
+两个配方均运行 **TP8** 而非 MI355X 的 TP4：192 GB（MI300X）或 256 GB（MI325X）显卡需容纳
+511 GB 检查点的分片以及常驻 GPU 的 Engram 表（上游 AMD 默认，不做 CPU offload），并仍留出
+1M 上下文 KV 池。MI300X 另将 `--max-num-batched-tokens` 上限设为 8192：稀疏注意力 indexer
+在启动时分配 `[batched-tokens, max-model-len]` 的 fp8 logits 缓冲区（8192 时 16 GiB，MI355X
+配方的 16384 时 32 GiB）。两者并发均为 1–32。
+
+`runners/launch_mi300x-amd.sh` 与 `runners/launch_mi325x-amds.sh` 与 MI355X launcher 一样，为该
+检查点将仓库挂载到 `/ix` 并重写 `RESULT_DIR`，使 AgentX 运行目录不落在 `/workspace` 下。MI300X
+launcher 还为该检查点将 Slurm 分配时长从 180 分钟提高到 480 分钟：那里的 HF 缓存为节点本地，
+每个节点上的首次运行需先下载 511 GB。在获得 GPU sweep 与 eval 证据之前，不得将任一配方视为已验证。
