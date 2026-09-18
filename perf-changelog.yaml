@@ -8061,3 +8061,12 @@
     - "AgentX ONLY at concurrency 1, 2, 4, 8, 16, 32, with c32 eval. No fixed-sequence or 8k1k benchmark. KV stays GPU-resident. AgentX throughput retains golden AL 3.51; eval uses real block rejection. Patch scope, upstream submission status, and removal plan are disclosed in docs/waiver/3217.md."
     - "仅覆盖 AgentX：MI355X TP2 Engram CPU 卸载使用固定 af1c014 ROCm 镜像及附带 pinned-host TP 补丁，模型加载前必须通过设备查找和图回放预检。并发为 1、2、4、8、16、32，c32 执行 eval；不运行固定序列或 8k1k。保留原有 TP4，KV 驻留 GPU，吞吐保留黄金 AL 3.51，eval 使用真实 block rejection。补丁说明见 docs/waiver/3217.md。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3217
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp2-engram-cpu
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the bundled ROCm Engram patch with the runtime hunks of upstream vllm-project/vllm#57491 (widen the two is_cuda() gates in vllm/config/engram.py and vllm/config/vllm.py to is_cuda_alike(), and import the shared Engram from nvidia/engram.py in amd/model.py) on the same pinned image vllm/vllm-openai-rocm:nightly-af1c01499b289be555c475669ba50a88e96d846e; the private amd/engram.py implementation is gone, the preflight now exercises the upstream ParallelEngramEmbedding and Engram classes, and the serving recipe, TP2 grid, golden AL 3.51 and c32 real-rejection eval are unchanged"
+    - "将附带的 ROCm Engram 补丁替换为上游 vllm-project/vllm#57491 的运行时 hunk（将 vllm/config/engram.py 与 vllm/config/vllm.py 中的两个 is_cuda() 门控放宽为 is_cuda_alike()，并在 amd/model.py 中从 nvidia/engram.py 导入共享 Engram），镜像仍固定为 vllm/vllm-openai-rocm:nightly-af1c01499b289be555c475669ba50a88e96d846e；私有的 amd/engram.py 实现已移除，预检改为验证上游 ParallelEngramEmbedding 与 Engram 类，服务配方、TP2 网格、黄金 AL 3.51 与 c32 真实拒绝采样 eval 不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3217

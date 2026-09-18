@@ -433,11 +433,15 @@ python -m pytest utils/matrix_logic/ -v
 再传入 `--engram-config '{"cpu_offload":true}'`。这是 Engram 权重卸载，
 不是 KV cache 卸载；KV 仍驻留 GPU。
 
-补丁通过现有设备视图 helper 为 AMD 添加 pinned-host TP 表。哈希、查找计算、
-TP 分片和图暂存逻辑保持不变，仍拒绝 Engram DP 分片及 DP 共享内存。
-模型加载前的 GPU 预检验证 host/HBM 查找一致性、TP2 分片重建、
-变更 ID 后的图回放及存储替换。AgentX 吞吐保留黄金 AL 3.51；
-eval 使用真实 block rejection。
+附带补丁即上游 [vllm-project/vllm#57491](https://github.com/vllm-project/vllm/pull/57491)
+（仅包含运行时 hunk，测试文件的 hunk 不随镜像发布）。它不新增 AMD 代码：
+将 `vllm/config/engram.py` 与 `vllm/config/vllm.py` 中的两个 `is_cuda()` 门控放宽为
+`is_cuda_alike()`，并让 `amd/model.py` 从 `nvidia/engram.py` 导入共享的 `Engram`，
+其 pinned-host 表本就通过支持 ROCm 的设备视图 helper 读取。哈希、查找计算、TP 分片
+和图暂存均为上游代码路径。由于上游默认开启 `cpu_offload`，打补丁后的 ROCm 服务即使
+不传 `--engram-config` 也会卸载 Engram；TP2 配方仍显式传入该参数。模型加载前的
+GPU 预检验证放宽后的门控、共享 `Engram` 导入、host/HBM 查找一致性、TP2 分片重建、
+变更 ID 后的图回放及存储替换。AgentX 吞吐保留黄金 AL 3.51；eval 使用真实 block rejection。
 只有 GPU 预检、完整 AgentX 扫描和 eval 全部通过后，才能将此实验视为已验证。
 原有 TP4 配置和镜像保持不变。
 

@@ -459,12 +459,19 @@ and applies the [ROCm Engram patch](../utils/patches/dsv41flash_rocm_engram/READ
 before passing `--engram-config '{"cpu_offload":true}'`. This is Engram weight
 offload, not KV-cache offload; KV remains on the GPU.
 
-The patch adds AMD pinned-host TP tables using the existing device-view helper.
-Hashing, lookup math, TP ownership, and graph staging remain unchanged. It
-rejects Engram DP sharding and DP shared memory. GPU preflight checks host/HBM
-lookup equivalence, TP2 shard reconstruction, changed-ID graph replay, and
-storage replacement before the model starts. AgentX throughput retains golden
-AL 3.51; the eval uses real block rejection.
+The bundled patch is upstream [vllm-project/vllm#57491](https://github.com/vllm-project/vllm/pull/57491)
+(runtime hunks only; its test-file hunk is not shipped in the image). It adds no
+AMD code: the two `is_cuda()` gates in `vllm/config/engram.py` and
+`vllm/config/vllm.py` widen to `is_cuda_alike()`, and `amd/model.py` imports the
+shared `Engram` from `nvidia/engram.py`, whose pinned-host tables already read
+through the ROCm-capable accelerator-view helper. Hashing, lookup math, TP
+ownership, and graph staging are the upstream code paths. Because upstream's
+default `cpu_offload` is on, a patched ROCm server offloads Engram even without
+`--engram-config`; the TP2 recipe still passes it explicitly. GPU preflight checks
+the widened gate, the shared `Engram` import, host/HBM lookup equivalence, TP2
+shard reconstruction, changed-ID graph replay, and storage replacement before the
+model starts. AgentX throughput retains golden AL 3.51; the eval uses real block
+rejection.
 GPU preflight, the full AgentX sweep, and eval are required before this experiment can
 be called validated. The stock TP4 entry and its image remain unchanged.
 
