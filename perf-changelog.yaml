@@ -8084,6 +8084,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3247
 
 - config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Disable SGLANG_OPT_USE_TOPK_V2 for the precompiled HIP Top-K path and update the SGLang ROCm 7.2.0 image from 20260913 to 20260916 for sgl-project/sglang#39155 and #39631; versus published run 34783501425, final run 35159075984 improves c8 P90 interactivity from 84.53 to 86.81 tok/s/user (+2.7%) and throughput per GPU from 10,389.25 to 12,695.57 tok/s (+22.2%)."
+    - "关闭 SGLANG_OPT_USE_TOPK_V2 以使用预编译 HIP Top-K 路径，并将 SGLang ROCm 7.2.0 镜像从 20260913 更新到 20260916，以包含 sgl-project/sglang#39155 和 #39631；相比已发布运行 34783501425，最终运行 35159075984 的并发 8 P90 interactivity 从 84.53 提升到 86.81 tok/s/user（+2.7%），单卡吞吐从 10,389.25 提升到 12,695.57 tok/s（+22.2%）。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3117
+
+- config-keys:
   - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
   scenario-type:
   - agentic-coding
