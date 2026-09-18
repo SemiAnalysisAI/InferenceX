@@ -5,6 +5,7 @@ set -eo pipefail
 # https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME RESULT_DIR
+check_env_vars INFMAX_CONTAINER_WORKSPACE
 check_env_vars DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE EVAL_ONLY VLLM_ENGINE_READY_TIMEOUT_S
 export GPU_COUNT="$TP"
 
@@ -69,7 +70,10 @@ else
         --input-len "$ISL" --output-len "$OSL" \
         --random-range-ratio "$RANDOM_RANGE_RATIO" \
         --num-prompts "$((CONC * 10))" --max-concurrency "$CONC" \
-        --result-filename "$RESULT_FILENAME" --result-dir "$RESULT_DIR" \
+        `# The workflow reads $RESULT_FILENAME.json from the repository root, which the` \
+        `# dsv41flash launchers mount at /ix rather than /workspace (run 35314631817` \
+        `# wrote it under RESULT_DIR and the canary reported the result missing).` \
+        --result-filename "$RESULT_FILENAME" --result-dir "$INFMAX_CONTAINER_WORKSPACE/" \
         --use-chat-template --tokenizer-mode deepseek_v41 \
         --server-pid "$SERVER_PID"
 fi

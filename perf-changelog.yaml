@@ -8100,3 +8100,10 @@
     - "TP2 only: cap --max-num-batched-tokens at 4096, bound --max-num-seqs to 2*CONC (max 256) and stop CUDA graph capture at 512 tokens in the shared AgentX script, after run 35180394796 served TP2 c1-c16 but c32, c64 and c128 died in memory profiling with -10.8 GiB of KV budget (145 GiB of weights per GPU plus the 32 GiB indexer buffer at 16384 batched tokens); TP4 and TP8 arms keep the upstream defaults"
     - "仅 TP2：在共享 AgentX 脚本中将 --max-num-batched-tokens 上限设为 4096，--max-num-seqs 限制为 2*CONC（最多 256），CUDA graph 捕获止于 512 token；运行 35180394796 中 TP2 c1-c16 可服务，但 c32、c64、c128 在显存分析阶段因 KV 预算为 -10.8 GiB 而失败（每 GPU 145 GiB 权重加 16384 批处理 token 时 32 GiB 的 indexer 缓冲区）；TP4 与 TP8 配方保持上游默认"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-dspark
+  description:
+    - "Write the fixed-sequence result JSON to the container repository root (INFMAX_CONTAINER_WORKSPACE, /ix on the dsv41flash launchers) instead of RESULT_DIR: in run 35314631817 the TP2 8k1k canary served all 10 requests but the workflow could not find $RESULT_FILENAME.json in the repository root; serving flags are unchanged"
+    - "将固定序列结果 JSON 写入容器内仓库根目录（INFMAX_CONTAINER_WORKSPACE，dsv41flash launcher 上为 /ix）而非 RESULT_DIR：运行 35314631817 中 TP2 8k1k canary 成功服务全部 10 个请求，但工作流在仓库根目录找不到 $RESULT_FILENAME.json；服务参数不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
