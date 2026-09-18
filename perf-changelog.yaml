@@ -8151,3 +8151,14 @@
     four real-verification short/long-input probes on B300; B200 validation and
     normalized performance qualification remain pending.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-sglang-agentic-mtp-latest
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add latest-nightly B200 Qwen3.5 FP8 aggregate AgentX candidates at TP4 C4
+    without offloading and TP4 C32 with HiCache, pending official sweep and
+    normalized performance qualification. Use the combined KV/Mamba host-pool
+    budget only for the pinned latest image, preserving legacy aggregate sizing.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269

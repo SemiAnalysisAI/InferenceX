@@ -8248,3 +8248,19 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
           tp: 4
           ep: 1
           dp-attn: false
+
+# Aggregate candidates pending canonical sweep and performance qualification.
+qwen3.5-fp8-b200-sglang-agentic-mtp-latest:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:b200-nscale
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.8
+      search-space:
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [4] }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32] }
