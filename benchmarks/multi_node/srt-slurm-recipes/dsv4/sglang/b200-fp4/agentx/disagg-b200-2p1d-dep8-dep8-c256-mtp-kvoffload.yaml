@@ -204,6 +204,11 @@ roles:
       # a DP rank's full-attention pool even at an effective reserve of 3.0;
       # keep an effective reserve of 10.0 so admission queues before retraction.
       schedule-conservativeness: 33.33
+      # Disaggregated transfer admission uses this dedicated reserve rather
+      # than schedule-conservativeness. Match the long AgentX output estimate
+      # so transferred requests queue before exhausting the full-attention KV
+      # pool and entering DSV4's unsupported SWA retraction-backup path.
+      num-reserved-decode-tokens: 65536
       mem-fraction-static: 0.9
       page-size: 256
       swa-full-tokens-ratio: 0.02
