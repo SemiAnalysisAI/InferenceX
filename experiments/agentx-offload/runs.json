@@ -132,17 +132,33 @@
       "attempt": 4,
       "retry_of": 35387609866,
       "head_sha": "259bf135af15635a2cd974451ee9026297607616",
-      "status": "in_progress",
-      "node": null,
-      "artifacts": [],
+      "status": "failure",
+      "node": "im-b200-c001",
+      "artifacts": [
+        {"id": 10571342071, "name": "server_logs_minimaxm3_tp4_conc16_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fal-d5c5d260d75f8854d1f4", "size_bytes": 14797},
+        {"id": 10571037042, "name": "agentic_minimaxm3_tp4_conc16_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fal-d5c5d260d75f8854d1f4", "size_bytes": 34179},
+        {"id": 10570813402, "name": "results_bmk", "size_bytes": 142}
+      ],
+      "failure_stage": "engine warmup",
+      "diagnosis": "The repaired storage proof, O_DIRECT probe, 1 TiB sparse disk cache creation, and owned cleanup all succeeded. The pinned replacement image then selected FA4 for the EAGLE3-GQA draft head on Blackwell and failed warmup because a broadcast descale tensor had stride 0 in its leading dimension. The pinned vLLM source documents selecting FA3 explicitly.",
       "performance_result": false,
       "workflow_name": "offload-v1-nvme-c16-r1-sysfsfix-20260918T222510Z",
       "job_id": 105782145897,
-      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35401459251/job/105782145897"
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35401459251/job/105782145897",
+      "runner": "b200-nscale-slurm_00",
+      "allocation_id": "16484",
+      "log_sha256": "6c1919b2f5f432f4375f36dcf9369e799bf054d299c7306baf79e696ada71776",
+      "evidence_sha256": {
+        "offload_config.json": "341835766b3e58abf224c79fce300d56cc87b0b13605251c2644b46920e65e00",
+        "offload-telemetry.jsonl": "04fd04f6cf5b50bb8fdb672e42765f5d3fa21d11a4461bcb0d8f512b94c8d798",
+        "offload_cleanup.json": "7236556792a8706bb14999544900052608594395ebe266b4af59679c32f24d7f",
+        "server.log": "db64b5f890dd460018760f1521c29d3286ee84a367b5d8a528a7ca988efd89ec"
+      },
+      "storage_evidence": "xfs /dev/md0 over eight non-rotating NVMe leaves; 17.76 TB free; O_DIRECT verified; four sparse cache files totaling 1,099,506,188,288 logical bytes and zero allocated bytes; exact task-owned scratch deleted after failure"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749,35154018672,35344315025,35387609866,35401459251",
-  "status": "NVMe c16 repeat 1 attempt 4 dispatched with the tested sysfs storage-proof repair after all capacity guards passed.",
+  "status": "NVMe c16 repeat 1 attempt 4 passed storage and cleanup validation but failed during EAGLE3-GQA warmup in the replacement image's default FA4 CuTe path. A matched FA3 compatibility selection is being validated before retry.",
   "last_capacity_check": {
     "checked_at": "2026-09-18T22:24:48.450Z",
     "cluster_observed_at": "2026-09-18T22:24:48.450Z",
@@ -161,6 +177,10 @@
     "reason": "Seven B200 nodes were idle, the B200 queue was empty, and no B200 reservations were active; one one-node retry leaves six idle nodes."
   },
   "next_dispatch": {
-    "requires": "Wait for run 35401459251 to complete or fail, retain evidence, then choose the next matched arm or corrective retry from the observed result."
+    "arm": "nvme",
+    "concurrency": 16,
+    "repeat": 1,
+    "retry_of": 35401459251,
+    "requires": "Validate and push the matched FA3 draft-head compatibility selection, then retry after a fresh scheduler capacity gate."
   }
 }

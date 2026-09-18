@@ -154,6 +154,10 @@ else
 fi
 
 { set +x; } 2>/dev/null
+ATTENTION_CONFIG='{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8"}'
+if [[ -n "${EXPERIMENT_ATTENTION_CONFIG-}" ]]; then
+    ATTENTION_CONFIG="$EXPERIMENT_ATTENTION_CONFIG"
+fi
 VLLM_CMD=(
     vllm serve "$MODEL_PATH"
     --served-model-name "$MODEL"
@@ -169,7 +173,7 @@ VLLM_CMD=(
     --tool-call-parser minimax_m3
     --enable-auto-tool-choice
     --default-chat-template-kwargs '{"thinking_mode":"enabled"}'
-    --attention-config '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8"}'
+    --attention-config "$ATTENTION_CONFIG"
     --kv-cache-dtype fp8
     --max-cudagraph-capture-size 512
     --max-num-batched-tokens 16384

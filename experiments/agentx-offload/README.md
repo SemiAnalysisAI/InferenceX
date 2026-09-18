@@ -58,6 +58,12 @@ same published replacement above; [image-provenance.json](image-provenance.json)
 records its registry and AMD64 digests, exact engine commit, and compatibility
 checks. The canonical heterogeneous-layout patch applies cleanly and is idempotent
 against this source. No performance measurement completed on the unavailable image.
+The replacement image defaults the EAGLE3-GQA draft head to FA4 on Blackwell;
+run `35401459251` reached engine warmup but FA4 rejected a broadcast descale
+tensor (`strides[1] == 0`). The study therefore uses vLLM's documented FA3
+selection for that FLASH_ATTN draft head while retaining FlashInfer for the main
+model. All four arms use the same setting. This is an engine-compatibility delta
+from fresh main, not an offload optimization.
 
 ## InferenceX infrastructure only
 

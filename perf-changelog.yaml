@@ -7985,3 +7985,12 @@
     - "Fix the branch-only AgentX NVMe storage proof after run 35387609866 reached the experiment runtime but failed before serving: findmnt reported /dev/md0 as the local ext4 source while that host device node is intentionally absent inside the container, so scoped lsblk exited 32. Resolve the mounted device and recursive backing leaves through container-visible /sys/class/block instead, while retaining the non-rotating NVMe leaf requirement, free-space reserve, and O_DIRECT write probe. Model, engine, four storage arms, budgets, AgentX settings and concurrency candidates are unchanged."
     - "修复分支内 AgentX NVMe 存储验证：运行 35387609866 已进入实验 runtime，但在服务启动前失败；findmnt 报告本地 ext4 来源为 /dev/md0，而容器按设计不暴露该宿主机设备节点，导致指定设备的 lsblk 以状态 32 退出。现改为通过容器可见的 /sys/class/block 递归解析挂载设备及底层叶设备，同时保留非旋转 NVMe 叶设备要求、空闲空间预留和 O_DIRECT 写入探针。模型、引擎、四种存储方案、容量预算、AgentX 设置及并发候选均保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Select FlashAttention 3 for the EAGLE3-GQA draft head in all four branch-only AgentX offload arms after run 35401459251 passed NVMe storage validation and reached engine warmup but the replacement image's default Blackwell FA4 CuTe path rejected a broadcast descale tensor with stride 0. The main MiniMax-M3 model remains on FlashInfer, and ordinary recipes retain the fresh-main attention config. This is a matched engine-compatibility setting across the four study arms; model, TP4, EAGLE3 acceptance, storage budgets, AgentX settings and concurrency candidates are unchanged."
+    - "运行 35401459251 已通过 NVMe 存储验证并进入引擎 warmup，但替代镜像默认的 Blackwell FA4 CuTe 路径拒绝了 stride 为 0 的广播 descale 张量；因此分支内四组 AgentX 卸载实验的 EAGLE3-GQA 草稿头统一选择 FlashAttention 3。MiniMax-M3 主模型仍使用 FlashInfer，普通配方继续保留 fresh main 的 attention config。这是四组实验一致的引擎兼容性设置；模型、TP4、EAGLE3 接受率、存储预算、AgentX 设置及并发候选均保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload

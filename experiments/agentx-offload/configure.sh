@@ -22,6 +22,11 @@ configure_offload_experiment() {
         python3 runners/patch_vllm_simple_kv_offload.py
         export VLLM_USE_SIMPLE_KV_OFFLOAD=1
     fi
+    # This image defaults the EAGLE3-GQA draft head to FA4 on Blackwell, whose
+    # CuTe path rejects a broadcast descale tensor during warmup. Keep the main
+    # model on FlashInfer and select the documented FA3 implementation for the
+    # explicitly FLASH_ATTN draft head. Every study arm uses this same setting.
+    EXPERIMENT_ATTENTION_CONFIG='{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8","flash_attn_version":3}'
     python3 experiments/agentx-offload/runtime.py monitor --parent "$$" &
     OFFLOAD_MONITOR_PID=$!
 }
