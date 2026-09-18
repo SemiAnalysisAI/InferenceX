@@ -139,12 +139,14 @@ SGLANG_CMD=(
     --trust-remote-code
     --tp "$TP" --ep-size "$EP_SIZE"
     --disable-radix-cache
-    # 0.75 rather than the cookbook's 0.8, and an 8192-token prefill chunk: the
-    # sparse-attention indexer and DSpark prefill buffers scale with the chunk
-    # times the 1M context, and the default 16384 chunk exhausted HBM on the
-    # first 66k-99k-token AgentX prompts.
+    # 0.75 rather than the cookbook's 0.8, and a 4096-token prefill chunk as on
+    # the CUDA arms: the sparse-attention indexer and DSpark prefill buffers
+    # scale with the chunk times the 1M context (the default 16384 exhausted
+    # HBM on the first 66k-99k-token prompts), and the per-chunk RCCL
+    # collectives shrink with it. With 8192 and the queue cap, c1-c16 served
+    # but c32 still lost a rank 27 warmup requests in (run 35374653446).
     --mem-fraction-static 0.75
-    --chunked-prefill-size 8192
+    --chunked-prefill-size 4096
     --speculative-algorithm DSPARK
     --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
     --max-running-requests "$MAX_RUNNING_REQUESTS"

@@ -8147,3 +8147,12 @@
     - "Also set HSA_NO_SCRATCH_RECLAIM=1 when the MEC firmware is below 177, as the Kimi-K3 MI355X arm does for its RCCL memory-reclaim issue: with GPU_MAX_HW_QUEUES=2 alone, run 35372886390 served c1, c2, c4, c16, c32 and the eval with no HSA errors (the first attempt to get past warmup on this SKU) but c8 still died once to the same RCCL HSA_STATUS_ERROR_OUT_OF_RESOURCES abort at six running requests"
     - "当 MEC 固件低于 177 时同时设置 HSA_NO_SCRATCH_RECLAIM=1，与 Kimi-K3 MI355X 配方针对其 RCCL 内存回收问题的做法一致：仅设置 GPU_MAX_HW_QUEUES=2 时，运行 35372886390 中 c1、c2、c4、c16、c32 与 eval 均无 HSA 错误地正常服务（该 SKU 首次通过 warmup），但 c8 在 6 个运行中请求时仍一次因相同的 RCCL HSA_STATUS_ERROR_OUT_OF_RESOURCES 中止"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Halve --chunked-prefill-size from 8192 to 4096, matching the H200, B200 and GB200 arms, and trim the conc-list from [1, 2, 4, 8, 16, 32] to [1, 2, 4, 8, 16] as the H200 arm did: with GPU_MAX_HW_QUEUES=2 and the scratch-reclaim guard, run 35374653446 served c1-c16 and the accuracy eval without HSA errors, but c32 (64 running requests, warmup prompts of 117k median and 315k p95 tokens) lost its server 27 warmup requests in; the smaller chunk shrinks the per-step RCCL collectives that every abort so far has hit, and the sweep stops at the AgentX grid's c16"
+    - "将 --chunked-prefill-size 从 8192 减半至 4096，与 H200、B200、GB200 配方一致，并如 H200 配方那样将 conc-list 从 [1, 2, 4, 8, 16, 32] 缩减为 [1, 2, 4, 8, 16]：在 GPU_MAX_HW_QUEUES=2 与 scratch 回收保护下，运行 35374653446 中 c1-c16 与精度评测均无 HSA 错误，但 c32（64 个运行中请求，warmup 提示中位数 117k、p95 315k token）在第 27 个 warmup 请求时服务崩溃；更小的分块缩小了迄今每次中止所涉及的每步 RCCL 集合通信，sweep 止于 AgentX 网格的 c16"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
