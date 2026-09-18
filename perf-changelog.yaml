@@ -8159,3 +8159,11 @@
   description:
   - Resolve aisimulate from the NVIDIA vendor wheel index in frontend and worker environments while retaining pip integrity validation. Preserve artifacts before returning failed or unverifiable Slurm allocation status from the B300 launcher.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Expand isolated B300 diagnostics across concurrency 8, 16, 24 and 48, and add equal-TP2 six-active-GPU 2P1D candidates with larger HiCache after real-verification probes passed. No new points are admitted to the final frontier by this experimental change.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
