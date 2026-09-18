@@ -8206,3 +8206,16 @@
     at 50.042 p90 interactivity with zero errors, extending the published
     throughput frontier at the cost of lower interactivity and higher TTFT.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Stage B200 Qwen3.5 FP8 2P1D C32 HiCache with verified 400 Gb/s RDMA
+    interfaces for expanded qualification. The short replay reaches 14511.73
+    logical tokens/s per all 12 active GPUs at 228.969 p90 interactivity and
+    0.851s p90 TTFT with zero errors, extending the published frontier.
+    Compare neighboring 1P1D candidates and require official sweep success
+    before final retention; the allocation contains 16 GPUs.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
