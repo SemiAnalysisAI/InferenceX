@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
-check_env_vars EVAL_ONLY IS_MULTINODE RUN_EVAL
+check_env_vars EVAL_ONLY IS_MULTINODE RUN_EVAL SALLOC_TIME_LIMIT
 set -e
 
 # shellcheck source=runners/slurm_utils.sh
@@ -203,7 +203,7 @@ else
 
     check_env_vars GPU_COUNT
 
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --time="${SALLOC_TIME_LIMIT}" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
     if [[ -z "$JOB_ID" ]]; then
         echo "ERROR: failed to resolve H100 Slurm allocation" >&2
