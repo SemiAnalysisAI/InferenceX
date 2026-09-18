@@ -8213,3 +8213,14 @@
     within its 865 GB GPU-proportional allowance; two colocated prefill
     workers use 1720 GB on their eight-GPU node. Decode remains device-only.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-1p1d-hicache-experiment
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-2p1d-hicache-experiment
+  scenario-type:
+  - agentic-coding
+  description:
+  - Verify terminal Slurm allocation status and preserve diagnostic artifacts
+    before returning failure, including when aborted replay leaves result files.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
