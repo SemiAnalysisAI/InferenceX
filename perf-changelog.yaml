@@ -8301,7 +8301,7 @@
   scenario-type:
   - agentic-coding
   description:
-  - Isolate prefill HiCache write policy in B200 Qwen3.5 FP8 1P1D C64:
+  - Isolate prefill HiCache write policy in B200 Qwen3.5 FP8 1P1D C64;
     change write_through_selective to write_through while retaining H215,
     decode static memory 0.88, request capacity 128 and all other settings.
     Live selective-policy observations show device KV eviction with spare
