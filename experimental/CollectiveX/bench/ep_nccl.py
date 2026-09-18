@@ -98,6 +98,7 @@ class NCCLEPBackend(EPBackend):
     kernel_generation = "nccl-ep-v02-ht-routed-zc"
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16",)
+    CUDA_GRAPH_MODES = ("normal", "low-latency")
     stage_device_work = False
     requires_fresh_pair = False
     receive_layout = "token-rank"
