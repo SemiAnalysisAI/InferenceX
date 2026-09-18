@@ -1057,7 +1057,7 @@ dsv4-fp4-b300-sglang-agentic-hicache-mtp:
   # max-running-requests 2*CONC.
 
 qwen3.5-fp8-b200-sglang:
-  image: lmsysorg/sglang:v0.5.19-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b200-nscale
@@ -1124,7 +1124,7 @@ qwen3.5-fp4-b200-sglang-mtp:
       - { tp: 2, ep: 2, conc-list: [16, 32, 64], spec-decoding: mtp }
 
 qwen3.5-fp8-b200-sglang-mtp:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260915-8874c51a
+  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b200-nscale
@@ -6531,13 +6531,13 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 16
           dp-attn: true
 qwen3.5-fp8-gb300-dynamo-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928
+  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: gb300
   precision: fp8
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "46520ca59afe992fb5ef61b3197b2316f8df9b2b" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260917" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
@@ -8061,8 +8061,35 @@ dsv41flash-fp4-h100-vllm-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       # Extend beyond the c1 full-context capacity estimate to measure the
-      # AgentX workload's practical saturation curve at c8 and c16.
-      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16] }
+      # AgentX workload's practical saturation curve; c20, c24 and c28 fill in
+      # the knee between c16 and the point where 1M-token trajectories preempt.
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 20, 24, 28] }
+
+# SGLang arm for DeepSeek-V4.1-Flash AgentX on H100, from the SGLang cookbook
+# (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
+# DSv4.1 Flash support has not shipped in an SGLang release; this uses the
+# preview build lmsysorg/sglang:dev-dsv41, digest
+# sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860 (2026-09-11, amd64 + arm64).
+# Native five-token DSpark (--speculative-algorithm DSPARK
+# --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
+# throughput, real verification for evals. The KV cache stays GPU-resident.
+# H100 is not in the cookbook's hardware table. The script moves the Engram
+# tables to one shared host copy (SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1) and
+# halves the prefill chunk so weights, indexer buffers and a KV pool fit 80 GB.
+# Concurrency stops at 8 until the KV ceiling is measured.
+dsv41flash-fp4-h100-sglang-agentic-dspark:
+  image: lmsysorg/sglang:dev-dsv41
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:h100-dgxc
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8] }
 
 dsv41flash-fp4-gb200-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3
@@ -8078,6 +8105,30 @@ dsv41flash-fp4-gb200-vllm-agentic-dspark:
       search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
+# SGLang arm for DeepSeek-V4.1-Flash AgentX on GB200, from the SGLang cookbook
+# (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
+# DSv4.1 Flash support has not shipped in an SGLang release; this uses the
+# preview build lmsysorg/sglang:dev-dsv41, digest
+# sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860 (2026-09-11, amd64 + arm64).
+# Native five-token DSpark (--speculative-algorithm DSPARK
+# --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
+# throughput, real verification for evals. The KV cache stays GPU-resident.
+# Follows the cookbook's verified Blackwell TP4/EP4 low-latency cell; backends
+# resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl).
+dsv41flash-fp4-gb200-sglang-agentic-dspark:
+  image: lmsysorg/sglang:dev-dsv41
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 dsv41flash-fp4-b300-vllm-agentic-dspark:
   image: vllm/vllm-openai:deepseekv41-flash-0909
@@ -8111,6 +8162,30 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
       search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
+# SGLang arm for DeepSeek-V4.1-Flash AgentX on B200, from the SGLang cookbook
+# (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
+# DSv4.1 Flash support has not shipped in an SGLang release; this uses the
+# preview build lmsysorg/sglang:dev-dsv41, digest
+# sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860 (2026-09-11, amd64 + arm64).
+# Native five-token DSpark (--speculative-algorithm DSPARK
+# --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
+# throughput, real verification for evals. The KV cache stays GPU-resident.
+# Follows the cookbook's verified Blackwell TP4/EP4 low-latency cell; backends
+# resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl).
+dsv41flash-fp4-b200-sglang-agentic-dspark:
+  image: lmsysorg/sglang:dev-dsv41
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 dsv41flash-fp4-gb300-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e
@@ -8150,3 +8225,27 @@ dsv41flash-fp4-h200-vllm-agentic-dspark:
       # 8x141 GB holds the 511 GB checkpoint minus the UVA-offloaded Engram
       # tables, so the KV cache stays GPU-resident across the full range.
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
+# SGLang arm for DeepSeek-V4.1-Flash AgentX on H200, from the SGLang cookbook
+# (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
+# DSv4.1 Flash support has not shipped in an SGLang release; this uses the
+# preview build lmsysorg/sglang:dev-dsv41, digest
+# sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860 (2026-09-11, amd64 + arm64).
+# Native five-token DSpark (--speculative-algorithm DSPARK
+# --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
+# throughput, real verification for evals. The KV cache stays GPU-resident.
+# Hopper follows the cookbook's verified H200 TP8/EP8 cell, which pins the dsv4
+# attention backend and the flashinfer_mxfp4 MoE runner.
+dsv41flash-fp4-h200-sglang-agentic-dspark:
+  image: lmsysorg/sglang:dev-dsv41
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:h200-dgxc
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16] }

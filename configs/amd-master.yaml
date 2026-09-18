@@ -1162,6 +1162,28 @@ minimaxm3-fp8-mi300x-vllm-agentic-mtp:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 4, 6, 8, 10] }
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.3" }, conc-list: [16] }
 
+# DeepSeek-V4.1-Flash AgentX on MI300X (gfx942), a copy of the validated MI355X vLLM
+# arm (run 34710937012) on the same ROCm nightly. gfx942 is not in the upstream
+# hardware table (h100, h200, b200, gb200, gb300, mi350x); TP8 rather than TP4
+# because a 192 GB card must hold its share of the 511 GB checkpoint, the
+# GPU-resident Engram tables and a 1M-context KV pool. Native five-token DSpark,
+# golden AL 3.51 for throughput, real block verification for evals, adaptive
+# verification off on ROCm.
+dsv41flash-fp4-mi300x-vllm-agentic-dspark:
+  image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:mi300x-amd
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      # Follow upstream AMD Engram defaults; omit the CUDA-only config flag.
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+
 # GLM-5.2 FP8 full-context AgentX refresh on MI325X. This preserves the TP8
 # GPU-resident-KV c1/c2/c3/c4/c5/c6/c8 curve from Actions run 29657732517
 # and enables EAGLE MTP with the committed thinking-on golden AL.
@@ -1348,7 +1370,7 @@ minimaxm3-fp4-mi355x-vllm-agentic-mtp:
 #     c6 and c8 removed after sweep validation: dominated by TP4/EP4 arm.
 # SA selects the Pareto-optimal arm per concurrency point.
 glm5.2-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260916
   model: amd/GLM-5.2-MXFP4
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
