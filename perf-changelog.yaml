@@ -8106,4 +8106,5 @@
     - "Set the SGLang scheduler watchdog to 1800 seconds on both roles of the high-throughput c227/c260 recipes; the c227 sweep reached long-context KV handoff on all prefill DP ranks and exceeded the default 300-second watchdog without an OOM or worker crash."
     - "Lower prefill mem-fraction-static to 0.75 for every disaggregate point after 1P2D c48 exhausted its 0.80 static allocation during a 10.71 GiB DSA-indexer workspace request; this leaves activation/workspace headroom while HiCache retains the long-context KV capacity."
     - "Cap the 5P1D c260 prefill chunk at 8192 tokens, matching max-prefill-tokens and the 4P1D c227 recipe, after a 65536-token chunk let one DEP4 worker's ranks diverge between request broadcast and DP-attention all-gather until the scheduler watchdog fired."
+    - "Use the HiCache kernel I/O backend for the c227 and c260 high-throughput prefill recipes after run 35294058942 exposed a write-back/direct eviction hang in c260; lower-throughput points remain unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3178
