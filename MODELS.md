@@ -128,6 +128,7 @@ The table also records both the agreed plan-of-record (PoR) draft-model mapping 
 | GLM-5.2 (`glm5.2`) | native/upstream SGLang engine | native MTP | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | Qwen3.5-397B-A17B (`qwen3.5`) | native/upstream SGLang engine | native MTP | None | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | Qwen3.8-Flash-Next (`qwen3.8next`) | native/upstream SGLang engine | TBD | native MTP (built-in 4B multi-step module; golden AL collector: [`qwen3.8next_fp4_b300_vllm.sh`](benchmarks/single_node/speedbench/qwen3.8next_fp4_b300_vllm.sh)) | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
+| Qwen3.8-27B (`qwen3.827b`) | native/upstream vLLM engine | TBD | `Doopeworld/Qwen3.8-27B-DSpark-vLLM` (RadixArk DSpark drafter, seven draft tokens) | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 
 ### KV cache offloading policy
 
@@ -154,6 +155,7 @@ Other offloading tiers, including NVMe KV cache offloading, are outside the init
 |---|---|---|---|---|
 | DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | Agentic coding (DSpark, Engram UVA offload; GPU validation pending) | |
 | Qwen3.8-Flash-Next | `qwen3.8next` | 2026-08-26 ([#2742](https://github.com/SemiAnalysisAI/InferenceX/pull/2742)) | Agentic coding | |
+| Qwen3.8-27B | `qwen3.827b` | 2026-09-18 | Single-turn 1k1k (bf16, vLLM TP1, DSpark; GPU validation pending) | |
 | Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | Agentic coding (DSpark may be disabled for better Pareto points) | Standalone non-DSpark A/B baseline (not required from day 0) |
 | GLM-5.2 | `glm5.2` | 2026-07-18 ([#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)) | Agentic coding (non-MTP points remain eligible under the Pareto policy; see Deprecation Notice) | |
 | MiniMax-M3 | `minimaxm3` | 2026-06-12 ([#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)) | Agentic coding | Single-turn 1k1k, Single-turn 8k1k (removed 2026-08-04, [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)) |

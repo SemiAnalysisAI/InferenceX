@@ -128,6 +128,7 @@ InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和
 | GLM-5.2（`glm5.2`） | 原生/上游 SGLang 引擎 | 原生 MTP | 无 | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
 | Qwen3.5-397B-A17B（`qwen3.5`） | 原生/上游 SGLang 引擎 | 原生 MTP | 无 | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
 | Qwen3.8-Flash-Next（`qwen3.8next`） | 原生/上游 SGLang 引擎 | 待定 | 原生 MTP（内置 4B 多步预测模块；黄金 AL 采集脚本：[`qwen3.8next_fp4_b300_vllm.sh`](benchmarks/single_node/speedbench/qwen3.8next_fp4_b300_vllm.sh)） | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
+| Qwen3.8-27B（`qwen3.827b`） | 原生/上游 vLLM 引擎 | 待定 | `Doopeworld/Qwen3.8-27B-DSpark-vLLM`（RadixArk DSpark 草稿模型，7 个草稿 token） | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
 
 ### KV 缓存卸载策略
 
@@ -154,6 +155,7 @@ InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和
 |---|---|---|---|---|
 | DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | 智能体编码（DSpark、Engram UVA 卸载；GPU 待验证） | |
 | Qwen3.8-Flash-Next | `qwen3.8next` | 2026-08-26（[#2742](https://github.com/SemiAnalysisAI/InferenceX/pull/2742)） | 智能体编码 | |
+| Qwen3.8-27B | `qwen3.827b` | 2026-09-18 | 单轮 1k1k（bf16，vLLM TP1，DSpark；GPU 待验证） | |
 | Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | 智能体编码（可关闭 DSpark 以获得更优帕累托点） | 独立非 DSpark A/B 基线（自第 0 天起即不要求） |
 | GLM-5.2 | `glm5.2` | 2026-07-18（[#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)） | 智能体编码（非 MTP 数据点仍可按帕累托策略参与发布；见弃用公告） | |
 | MiniMax-M3 | `minimaxm3` | 2026-06-12（[#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)） | 智能体编码 | 单轮 1k1k、单轮 8k1k（2026-08-04 移除，[#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)） |
