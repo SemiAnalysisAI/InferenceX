@@ -1,6 +1,6 @@
-# Measured fast C64 candidate from Slurm4088; full official qualification remains required.
+# Unqualified high-concurrency diagnostic; await measured frontier screening.
 schema: 2
-name: qwen35-b300-experiment-1p1d-p-tp4-d-tp4-colocated-c64-mtp-hicache
+name: qwen35-b300-experiment-1p1d-c96-h298
 model:
   path: qwen3.5-fp8
   container: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
@@ -94,7 +94,7 @@ roles:
       mamba-track-interval: 2048
       scheduler-recv-interval: 10
       stream-interval: 50
-      max-running-requests: 128
+      max-running-requests: 192
       enable-hierarchical-cache: true
       hicache-size: 298
       hicache-io-backend: kernel
@@ -156,7 +156,7 @@ roles:
       speculative-num-draft-tokens: 4
       scheduler-recv-interval: 10
       stream-interval: 50
-      max-running-requests: 128
+      max-running-requests: 192
       cuda-graph-max-bs-decode: 64
 sbatch_directives:
   mem: '0'
