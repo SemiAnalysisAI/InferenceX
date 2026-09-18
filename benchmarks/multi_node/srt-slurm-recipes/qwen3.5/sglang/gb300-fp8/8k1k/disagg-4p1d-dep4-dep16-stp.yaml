@@ -121,8 +121,7 @@ roles:
       expert-parallel-size: 16
       enable-dp-attention: true
       enable-dp-lm-head: true
-      prefill-round-robin-balance: true
-
+      load-balance-method: "follow_bootstrap_room"
       mamba-radix-cache-strategy: "no_buffer"
       mamba-track-interval: 128
       mamba-ssm-dtype: "bfloat16"

@@ -8098,3 +8098,10 @@
     - "Rename mamba-scheduler-strategy to mamba-radix-cache-strategy (value no_buffer unchanged) in the 2 srt-slurm recipes of this key that set it: SGLang nightly-dev-cu13-20260918-20518d85 rejects the old spelling as an unrecognized argument (run 35317753866, every prefill and decode worker exited at argument parsing), and its help lists --mamba-radix-cache-strategy {auto,no_buffer,extra_buffer,extra_buffer_lazy} as the replacement"
     - "在该 key 中设置了该参数的 2 个 srt-slurm 配方里，将 mamba-scheduler-strategy 改名为 mamba-radix-cache-strategy（取值 no_buffer 不变）：SGLang nightly-dev-cu13-20260918-20518d85 将旧写法视为未识别参数（运行 35317753866 中所有 prefill 与 decode worker 在参数解析阶段退出），其帮助信息列出 --mamba-radix-cache-strategy {auto,no_buffer,extra_buffer,extra_buffer_lazy} 为替代"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3254
+
+- config-keys:
+    - qwen3.5-fp8-gb300-dynamo-sglang
+  description:
+    - "Replace the decode-role prefill-round-robin-balance: true with load-balance-method: follow_bootstrap_room in the 2 srt-slurm recipes of this key that set it: SGLang nightly-dev-cu13-20260918-20518d85 no longer has --prefill-round-robin-balance (run 35319100186, every decode worker of the DEP16 arm exited at argument parsing) and its --load-balance-method choices are auto, round_robin, follow_bootstrap_room, total_requests and total_tokens; the prefill roles keep load-balance-method: round_robin"
+    - "在该 key 中设置了该参数的 2 个 srt-slurm 配方里，将 decode 角色的 prefill-round-robin-balance: true 替换为 load-balance-method: follow_bootstrap_room：SGLang nightly-dev-cu13-20260918-20518d85 已没有 --prefill-round-robin-balance（运行 35319100186 中 DEP16 分支的所有 decode worker 在参数解析阶段退出），其 --load-balance-method 可选值为 auto、round_robin、follow_bootstrap_room、total_requests 与 total_tokens；prefill 角色保持 load-balance-method: round_robin"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3254
