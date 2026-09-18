@@ -15,11 +15,11 @@ adjustments:
   agentic: 1.0
   eval-only: 0.0
   precision:
-    fp4: 0.75
+    fp4: 0.1
   spec-decoding:
-    mtp: 0.75
-    eagle: 0.75
-    eagle3: 0.75
+    mtp: 0.1
+    eagle: 0.1
+    eagle3: 0.1
   framework-prefix:
     sglang: 0.5
     vllm: 0.5
