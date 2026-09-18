@@ -5,7 +5,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validat
 check_env_vars RUNNER_NAME MODEL_PREFIX PRECISION FRAMEWORK IS_MULTINODE IS_AGENTIC
 
 case "${RUNNER_NAME%%_*}" in
-    b200-nscale-slurm|b200-nscale-compat)
+    b200-nscale-slurm)
         export SLURM_PARTITION=batch_1 SLURM_ACCOUNT=benchmark
         export B200_SQUASH_DIR=/data/home/sa-shared/containers B200_SQUASH_LOCK_TIMEOUT=600
         case "$MODEL_PREFIX" in
