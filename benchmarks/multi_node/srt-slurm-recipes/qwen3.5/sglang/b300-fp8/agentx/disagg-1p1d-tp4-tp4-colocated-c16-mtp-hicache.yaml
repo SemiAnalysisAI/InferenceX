@@ -170,6 +170,9 @@ benchmark:
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic
+    SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE: custom
+    SRT_MEASUREMENT_WINDOW_CONCURRENCIES: '16'
+    SRT_MEASUREMENT_WINDOW_RESULT_ROOT: /logs
     PORT: '8000'
     IS_MULTINODE: 'true'
     WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k

@@ -8231,3 +8231,11 @@
   description:
   - Add concurrency 96 with 298 GB HiCache per prefill rank and first-use write-through. Slurm 4105 measured 46358.88 logical tok/s/GPU at 94.75 p90 interactivity with 5048 profiled requests, zero errors and two grace cancellations, strictly dominating two published FP8 frontier points. The trace submission and duration coverage passed; this diagnostic still requires the fresh full official sweep, real accuracy evals and validated power telemetry.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Supply the explicit custom benchmark type, measured concurrency and result-root fields required by the AgentX formal power-window adapter. The pinned native SRT producer supplies only the window directory; required telemetry alone did not satisfy the full contract. Verify all six recipe environments through the real window writer before fresh runtime qualification.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
