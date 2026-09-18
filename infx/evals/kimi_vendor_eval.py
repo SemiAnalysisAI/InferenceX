@@ -22,7 +22,6 @@ EXPECTED_MODES = {"non-stream", "stream"}
 EXPECTED_TOTALS = {TASK_NAME: 2, FULL_TASK_NAME: 408}
 FULL_SELECTED_CASES = 204
 DEFAULT_TIMEOUT_SECONDS = 900
-FULL_TIMEOUT_SECONDS = 7200
 FULL_WORKERS = 8
 RESULT_FORMAT = "inferencex-eval-v1"
 ADAPTER_NAME = "kimi-vendor-verifier"
@@ -321,9 +320,11 @@ def run_evaluation(
     model_prefix: str = "",
     output_dir: Path,
     task_name: str = TASK_NAME,
-    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    timeout_seconds: int | None = None,
 ) -> bool:
-    """Run upstream pytest and always attempt to publish a compatibility result."""
+    """Run upstream pytest, bounding only smoke or explicitly timed invocations."""
+    if timeout_seconds is None and task_name == TASK_NAME:
+        timeout_seconds = DEFAULT_TIMEOUT_SECONDS
     output_dir.mkdir(parents=True, exist_ok=True)
     native_report = output_dir / NATIVE_REPORT_FILENAME
     compatibility_path = prepare_compatibility_path(output_dir)
@@ -438,7 +439,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         choices=SUPPORTED_TASK_NAMES,
         default=TASK_NAME,
     )
-    parser.add_argument("--timeout-seconds", type=_positive_int)
+    parser.add_argument(
+        "--timeout-seconds",
+        type=_positive_int,
+        help="Whole-suite deadline in seconds; defaults to 900 for smoke and none for full.",
+    )
     parser.add_argument("--integration-error")
     args = parser.parse_args(argv)
     if args.integration_error is None:
@@ -477,11 +482,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             ),
         )
         return 0
-    timeout_seconds = (
-        args.timeout_seconds
-        if args.timeout_seconds is not None
-        else (FULL_TIMEOUT_SECONDS if args.task_name == FULL_TASK_NAME else DEFAULT_TIMEOUT_SECONDS)
-    )
     passed = run_evaluation(
         verifier_dir=args.verifier_dir,
         base_url=args.base_url,
@@ -490,7 +490,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         model_prefix=args.model_prefix,
         output_dir=args.output_dir,
         task_name=args.task_name,
-        timeout_seconds=timeout_seconds,
+        timeout_seconds=args.timeout_seconds,
     )
     return 0 if passed else 1
 
