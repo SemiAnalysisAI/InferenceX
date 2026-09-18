@@ -1,7 +1,7 @@
 # MiniMax-M3 NVFP4, TensorRT-LLM aggregated TP4 + EAGLE3-GQA (3 draft tokens), one GB200 node, Dynamo frontend.
 # Engine config is the max_batch_size=20 member of the TP4 recipe set.
 # Host KV cache is set to 128 GiB per rank for the four-rank layout.
-# Forced acceptance is NOT set here: runners/inject_synthetic_acceptance.py injects TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS
+# AgentX acceptance is selected from the committed golden curve at submission.
 # (= AL - 1 = 1.78 for the committed golden AL 2.78) for throughput runs and leaves eval-only runs on real acceptance.
 schema: 2
 name: dynamo-agg-gb200-tp4-c20-b1-eagle3

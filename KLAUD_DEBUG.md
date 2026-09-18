@@ -46,6 +46,24 @@ authorization. This catches deleted history or malformed appended entries
 before reuse can skip setup. `utils/merge_with_reuse.sh <PR>` performs the push
 and waits for the PR checks automatically.
 
+### 1.2 Truncated NATS/etcd dependency archives
+
+**Symptom:** H200 `srt-slurm` setup fails while `dpkg-deb` reads the downloaded
+NATS package or while `tar` reads the downloaded etcd archive, with an error
+such as an unexpected end of file or truncated gzip stream.
+
+**Root cause:** a GitHub release download can leave an incomplete archive on
+disk. Transport-level retries do not help when the transfer itself reports
+success.
+
+**Fix:** preserve the first setup error and let the H200 launcher validate any
+NATS or etcd archive left by the failed attempt. It deletes and re-downloads
+only an archive that fails `dpkg-deb --contents` or `tar -tzf`, with at most five
+setup attempts. When no invalid archive is present, setup stops immediately so
+an unrelated failure is not hidden by repeated downloads. If all archive-aware
+attempts fail, classify the release-download path as infrastructure rather than
+changing the benchmark recipe.
+
 ---
 
 ## 2. vLLM v0.21.x / v0.20.x: GPU OOM at model-load

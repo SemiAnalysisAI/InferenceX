@@ -5,9 +5,9 @@ on:
     secrets:
       ANTHROPIC_API_KEY:
         required: true
-      CLAUDE_PAT:
+      AGENT_PAT:
         required: true
-      KLAUD_DASHBOARD_API_KEY:
+      DASH_API_KEY:
         required: true
     inputs:
       tooling-ref:
@@ -67,11 +67,11 @@ jobs:
         continue-on-error: true
         uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
         env:
-          GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
-          KLAUD_DASHBOARD_API_KEY: ${{ secrets.KLAUD_DASHBOARD_API_KEY }}
+          GH_TOKEN: ${{ secrets.AGENT_PAT }}
+          KLAUD_DASHBOARD_API_KEY: ${{ secrets.DASH_API_KEY }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.CLAUDE_PAT }}
+          github_token: ${{ secrets.AGENT_PAT }}
           settings: |
             {
               "fastMode": false,
@@ -95,7 +95,7 @@ jobs:
       - name: Recover an interrupted agent
         if: always() && steps.claude.outcome == 'failure'
         env:
-          GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
+          GH_TOKEN: ${{ secrets.AGENT_PAT }}
         run: uv run --project .infx-tooling --locked python -P -m infx.klaud recover-current
       - name: Save sanitized candidate diagnostics
         if: always()
