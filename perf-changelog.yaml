@@ -8162,3 +8162,13 @@
     normalized performance qualification. Use the combined KV/Mamba host-pool
     budget only for the pinned latest image, preserving legacy aggregate sizing.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Verify terminal Slurm allocation status for B200 Qwen3.5 FP8 disaggregated
+    runs and preserve diagnostic artifacts before returning benchmark failure.
+    Prevent aborted replay jobs from appearing successful after leaving squeue.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269

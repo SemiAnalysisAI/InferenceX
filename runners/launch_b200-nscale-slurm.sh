@@ -752,29 +752,8 @@ EOF
     LOGS_DIR="outputs/$JOB_ID/logs"
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
-    while ! ls "$LOG_FILE" &>/dev/null; do
-        if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
-            echo "ERROR: Job $JOB_ID failed before creating log file"
-            scontrol show job "$JOB_ID"
-            exit 1
-        fi
-        echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
-        sleep 5
-    done
-
-    (
-        while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
-            sleep 10
-        done
-    ) &
-    POLL_PID=$!
-
-    echo "Tailing LOG_FILE: $LOG_FILE"
-
-    # -F follows by name and polls; inotify does not work on NFS.
-    tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
-
-    wait $POLL_PID
+    local srt_job_rc=0
+    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || srt_job_rc=$?
 
     set -x
 
@@ -828,6 +807,8 @@ EOF
         sleep 10
     done
     find . -name '.nfs*' -delete 2>/dev/null || true
+    # Failed runs still provide the diagnostics and eval outputs above.
+    return "$srt_job_rc"
 }
 
 # ---------------------------------------------------------------------------
