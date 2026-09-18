@@ -8618,3 +8618,11 @@
   description:
   - 'Bump the NVIDIA srt-slurm submodule to v2.22.1 (3cbc5dd256af2bfd2fed09b724628c3f5456c85f) and use it for AMD ports instead of a separate fork pin. Reuse the shared Slurm log and completion helpers.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
+
+- config-keys:
+  - dsv4-fp4-mi355x-sglang-disagg
+  - dsv4-fp4-mi355x-sglang-disagg-mtp
+  description:
+  - 'Restack this port directly on #2542 and migrate its recipes to srt-slurm v2, preserving the existing port workload
+    settings. Keep this upstream-deprecated workload in the archived master config, outside active sweeps.'
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2630
