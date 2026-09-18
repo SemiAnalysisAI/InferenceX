@@ -21,6 +21,8 @@ roles:
       HOME: /trtllm-jit-cache
       MIMALLOC_PURGE_DELAY: '0'
       NCCL_GRAPH_MIXING_SUPPORT: '0'
+      NIXL_DISABLE_CUDA_ADDR_WA: '1'
+      OMP_NUM_THREADS: '1'
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
       TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: '0.10'
       TLLM_EXECUTOR_BATCH_RESP_IN_AWAIT: '1'
@@ -99,6 +101,8 @@ roles:
       HOME: /trtllm-jit-cache
       MIMALLOC_PURGE_DELAY: '0'
       NCCL_GRAPH_MIXING_SUPPORT: '0'
+      NIXL_DISABLE_CUDA_ADDR_WA: '1'
+      OMP_NUM_THREADS: '1'
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
       TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: '0.10'
       TLLM_EXECUTOR_BATCH_RESP_IN_AWAIT: '1'

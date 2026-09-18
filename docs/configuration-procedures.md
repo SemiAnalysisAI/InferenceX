@@ -160,6 +160,8 @@ Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchm
 
 Do not ship one side alone. `srtctl` reads the recipe, while matrix generation reads the master config. Recipe-only changes can mislabel results. Master-only changes do not alter the deployed recipe.
 
+The GLM-5.2 B300 compact Dynamo recipes prepare a writable virtual environment for workers and frontends. The helper makes up to three attempts to install the exact versioned Dynamo packages inside SRT's existing install lock, preserving package hash checks and the final failure status. Prefill and decode workers retain the `LIBFABRIC` NIXL backend and set `NIXL_DISABLE_CUDA_ADDR_WA=1`. They also set `OMP_NUM_THREADS=1` explicitly. For the single-frontend recipes selected for eval, `frontend.placement.node` and `benchmark.placement.node` are `head`, matching the pinned launcher's loopback eval endpoint.
+
 ## Register an llm-d recipe
 
 Sources: [`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md), [`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md), [`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes/), and the current [`llmd-vllm` benchmark wrapper](../benchmarks/multi_node/dsv4_fp4_gb200_llmd-vllm-disagg.sh).

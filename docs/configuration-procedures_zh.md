@@ -158,6 +158,8 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 
 不得只提交一侧：`srtctl` 读取配方，而矩阵生成读取主配置。仅改配方可能给结果贴错标签；仅改主配置不会改变实际部署的配方。
 
+GLM-5.2 B300 紧凑型 Dynamo 配方为工作进程和前端准备可写的虚拟环境。辅助脚本在 SRT 现有安装锁内，最多尝试三次安装相同的指定版本 Dynamo 软件包，并保留软件包哈希校验和最终失败状态。prefill 和 decode 工作进程继续使用 `LIBFABRIC` NIXL 后端，并设置 `NIXL_DISABLE_CUDA_ADDR_WA=1`，同时显式设置 `OMP_NUM_THREADS=1`。对于选中进行 eval 的单前端配方，`frontend.placement.node` 和 `benchmark.placement.node` 均设为 `head`，与固定版本启动脚本使用的本地回环 eval 端点保持一致。
+
 ## 注册 llm-d 配方
 
 来源：[`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md)、[`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md)、[`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes/) 和当前 [`llmd-vllm` 基准 wrapper](../benchmarks/multi_node/dsv4_fp4_gb200_llmd-vllm-disagg.sh)。

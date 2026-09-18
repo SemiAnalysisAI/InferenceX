@@ -8110,3 +8110,9 @@
     - "Set an explicit Slurm time limit for server startup, AgentX replay, and result collection."
     - "显式设置 Slurm 时限，为服务启动、AgentX 回放和结果收集预留时间。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
+  description:
+    - "Use the LIBFABRIC primary CUDA context, set worker OpenMP threads explicitly, colocate single-frontend evaluation endpoints, and retry verified Dynamo installs. / 使用 LIBFABRIC 主 CUDA 上下文，显式设置工作进程的 OpenMP 线程数，将单前端评估端点与评估进程放在同一节点，并重试保留校验的 Dynamo 安装。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993

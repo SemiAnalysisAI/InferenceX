@@ -21,6 +21,8 @@ roles:
       HOME: /trtllm-jit-cache
       MIMALLOC_PURGE_DELAY: '0'
       NCCL_GRAPH_MIXING_SUPPORT: '0'
+      NIXL_DISABLE_CUDA_ADDR_WA: '1'
+      OMP_NUM_THREADS: '1'
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
       TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: '0.10'
       TLLM_EXECUTOR_BATCH_RESP_IN_AWAIT: '1'
@@ -100,6 +102,8 @@ roles:
       HOME: /trtllm-jit-cache
       MIMALLOC_PURGE_DELAY: '0'
       NCCL_GRAPH_MIXING_SUPPORT: '0'
+      NIXL_DISABLE_CUDA_ADDR_WA: '1'
+      OMP_NUM_THREADS: '1'
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
       TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: '0.10'
       TLLM_EXECUTOR_BATCH_RESP_IN_AWAIT: '1'
@@ -197,7 +201,7 @@ benchmark:
     TQDM_DISABLE: '1'
     WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
   placement:
-    node: first_decode
+    node: head
 dynamo:
   install: true
   source:
@@ -223,7 +227,7 @@ frontend:
     ETCD_LEASE_TTL: '120'
   type: dynamo
   placement:
-    node: first_decode
+    node: head
 health_check:
   interval_seconds: 10
   max_attempts: 540

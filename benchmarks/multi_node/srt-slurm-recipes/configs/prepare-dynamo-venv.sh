@@ -29,3 +29,29 @@ PY
 export VIRTUAL_ENV="$INFX_DYNAMO_VENV"
 export PATH="$VIRTUAL_ENV/bin:$PATH"
 unset INFX_DYNAMO_VENV
+
+# Keep transient package download failures inside SRT's existing install lock.
+# Other pip invocations retain their original behavior.
+pip() {
+    if [[ $# -ne 7 || "$1" != install || "$2" != --break-system-packages ||
+          "$3" != --quiet || "$4" != --extra-index-url ||
+          "$5" != https://pypi.nvidia.com || "$6" != ai-dynamo-runtime==?* ||
+          "$7" != "ai-dynamo==${6#ai-dynamo-runtime==}" ]]; then
+        command pip "$@"
+        return $?
+    fi
+
+    local attempt install_status
+    for attempt in 1 2 3; do
+        if command pip "$@"; then
+            return 0
+        else
+            install_status=$?
+        fi
+        if [[ "$attempt" -lt 3 ]]; then
+            echo "Dynamo install attempt $attempt failed; retrying unchanged packages." >&2
+            sleep 5 || return $?
+        fi
+    done
+    return "$install_status"
+}
