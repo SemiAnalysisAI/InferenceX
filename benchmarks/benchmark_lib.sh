@@ -106,28 +106,6 @@ exit_after_background_process_cleanup() {
     exit "$final_status"
 }
 
-# Finish preflight on every allocated node before any server container starts its
-# peer-readiness deadline. A failed node prevents the entire serving step.
-run_amd_multinode_after_preflight() {
-    local nodelist="$1" node_count="$2" preflight_script="$3"
-    local container_filter="$4" skip_gpu_sanity="$5"
-    shift 5
-    local preflight_rc
-    if srun --nodelist="$nodelist" \
-        --nodes="$node_count" --ntasks="$node_count" --ntasks-per-node=1 \
-        --kill-on-bad-exit=1 --unbuffered \
-        bash "$preflight_script" "$container_filter" "$skip_gpu_sanity"; then
-        echo "[preflight] all nodes ready; launching server containers"
-    else
-        preflight_rc=$?
-        echo "[preflight][ERROR] node preflight failed; no server containers launched" >&2
-        return "$preflight_rc"
-    fi
-    srun --nodelist="$nodelist" \
-        --nodes="$node_count" --ntasks="$node_count" --ntasks-per-node=1 \
-        --kill-on-bad-exit=1 --signal=TERM@30 --unbuffered "$@"
-}
-
 # Launchers may load only input validation, without benchmark initialization.
 if [[ "${1-}" == "--validation-only" ]]; then
     return 0
@@ -2097,7 +2075,9 @@ run_lm_eval() {
         export INFERENCEX_LM_EVAL_RUNTIME_READY=true
     fi
 
-    local openai_server_base="http://0.0.0.0:${port}"
+    # A routed eval client may run on a different node from the API server.
+    local openai_server_host="${EVAL_SERVER_HOST:-0.0.0.0}"
+    local openai_server_base="http://${openai_server_host}:${port}"
     local openai_chat_base="${openai_server_base}/v1/chat/completions"
     export OPENAI_API_KEY=${OPENAI_API_KEY}
     MODEL_NAME=${MODEL_NAME:-$MODEL} # Prefer MODEL_NAME, else MODEL

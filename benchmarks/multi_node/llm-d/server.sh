@@ -517,7 +517,7 @@ PY
     # Benchmark sweep. BENCH_MAX_CONCURRENCY is 'x'-delimited from submit.sh (e.g. "1024x512").
     IFS='x' read -r -a CONCURRENCIES <<< "$BENCH_MAX_CONCURRENCY"
     # GPU counts are embedded in the result filename as _gpus_/_ctx_/_gen_ so the CI
-    # "Process result" step can parse them (same convention as amd_utils/bench.sh).
+    # "Process result" step can parse them.
     # ctx = prefill GPUs, gen = decode GPUs.
     _bench_prefill_gpus=$(( PREFILL_NODES * GPUS_PER_NODE ))
     _bench_decode_gpus=$(( DECODE_NODES * GPUS_PER_NODE ))
