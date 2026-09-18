@@ -393,6 +393,15 @@ disable BFCL; direct `run_eval` / `run_bfcl_eval` calls log an explicit skip
 without installing BFCL, sending requests, or producing evaluation scores.
 Vendor validators and other evaluation frameworks remain enabled.
 
+This is a temporary compatibility gate. To re-enable TRT BFCL after a stock
+image passes validation, remove `_skip_bfcl_for_trt` and its two calls in
+`benchmarks/benchmark_lib.sh`, then remove the corresponding `benchmark.if`
+and `RUN_EVAL` restrictions in `.github/workflows/benchmark-tmpl.yml` and
+`benchmark-multinode-tmpl.yml`. Update the TRT skip regression cases to expect
+normal dispatch. The BFCL adapters, suites, scoring and artifact format remain
+intact; no adapter rewrite or data migration is needed. Validate the candidate
+image on an experimental branch before enabling these production paths.
+
 MiniMax B200/B300 TRT recipes retain the original `1.3.0rc23.post1` image and
 its native configuration fields. Stock BFCL Chat Completions sends
 `store=false`, which that image rejects; its Responses path and newer images
