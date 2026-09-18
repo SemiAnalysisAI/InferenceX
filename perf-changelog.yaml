@@ -8116,6 +8116,189 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3254
 
 - config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the H200 SGLang AgentX arm for DeepSeek-V4.1-Flash from the SGLang cookbook: preview image lmsysorg/sglang:dev-dsv41 (digest sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860), native five-token DSpark (--speculative-algorithm DSPARK --speculative-dspark-block-size 5), thinking on with reasoning effort high, mem-fraction-static 0.8, GPU-resident KV cache, concurrency 1-128"
+    - "TP8/EP8 from the cookbook's verified H200 cell, which pins --attention-backend dsv4 and --moe-runner-backend flashinfer_mxfp4. Throughput uses the thinking-on golden synthetic AL 3.51 (SGLANG_SIMULATE_ACC_LEN, match-expected, real-draft-token); accuracy evals keep real DSpark verification."
+    - "新增 DeepSeek-V4.1-Flash 在 H200 上的 SGLang AgentX 配方，遵循 SGLang cookbook：预览镜像 lmsysorg/sglang:dev-dsv41（digest sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860），原生五 token DSpark（--speculative-algorithm DSPARK --speculative-dspark-block-size 5），thinking 开启、reasoning effort 为 high，mem-fraction-static 0.8，KV cache 常驻 GPU，并发 1-128"
+    - "采用 cookbook 已验证 H200 配置的 TP8/EP8，并显式指定 --attention-backend dsv4 与 --moe-runner-backend flashinfer_mxfp4。吞吐测试使用 thinking 开启的黄金合成 AL 3.51（SGLANG_SIMULATE_ACC_LEN、match-expected、real-draft-token）；准确率 eval 保留真实 DSpark 验证。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3239
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Cut HBM pressure during 1M-context AgentX prefill after the first sweep (run 35304458924: c128 died at startup with torch.OutOfMemoryError (12 GiB allocation, 5 GiB free of 139.8 GiB, 127.6 GiB already held by PyTorch)): move the Engram tables to one shared host copy (SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1, the SGLang analogue of the vLLM arm's Engram CPU offload, output bitwise unchanged), lower --mem-fraction-static from 0.8 to 0.75, bound --chunked-prefill-size at 8192 instead of the default 16384, fix the decode CUDA graph batch at the cookbook's 64, and cap --max-running-requests at 128"
+    - "首次 sweep 后（run 35304458924: c128 died at startup with torch.OutOfMemoryError (12 GiB allocation, 5 GiB free of 139.8 GiB, 127.6 GiB already held by PyTorch)）降低 1M 上下文 AgentX prefill 的 HBM 压力：将 Engram 表移至共享主机副本（SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1，对应 vLLM 配方的 Engram CPU offload，输出逐位一致），--mem-fraction-static 从 0.8 降至 0.75，--chunked-prefill-size 限制为 8192（默认 16384），decode CUDA graph batch 固定为 cookbook 的 64，--max-running-requests 上限设为 128"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3239
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Cap --max-running-requests at the 64-request decode graph batch and lower --mem-fraction-static from 0.75 to 0.70, after run 35306704553: the eval-only arm OOMed in the eager DSpark verify path once 128 GSM8K requests were running (6.4 GiB allocation with 2 GiB free of 139.8 GiB), while the throughput points at 64 running requests or fewer stayed up; a DSpark verify batch above the captured tier runs eagerly and allocates its attention workspace per step, so the pool now stays inside the graph tier"
+    - "将 --max-running-requests 上限设为 64（即 decode graph batch），并将 --mem-fraction-static 从 0.75 降至 0.70；依据：运行 35306704553：eval-only 配方在 128 个 GSM8K 请求同时运行时于 eager DSpark verify 路径 OOM（139.8 GiB 中仅剩 2 GiB 时申请 6.4 GiB），而运行请求不超过 64 的吞吐点保持正常。超出已捕获层级的 DSpark verify batch 会以 eager 方式运行并逐步分配 attention 工作区，因此请求池现保持在 graph 层级之内"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3239
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Halve --chunked-prefill-size from 8192 to 4096, matching the B200 and GB200 arms: in run 35308550355 c1 passed but c32 OOMed in the sparse indexer's prefill top-k (_low_ratio_index_topk_torch, 5 GiB allocation with 3.4 GiB free of 139.8 GiB) with 29 long AgentX prompts in flight at mem-fraction 0.70"
+    - "将 --chunked-prefill-size 从 8192 减半至 4096，与 B200、GB200 配方一致：运行 35308550355 中 c1 通过，但 c32 在 29 个长 AgentX 提示同时在途、mem-fraction 0.70 时于稀疏 indexer 的 prefill top-k（_low_ratio_index_topk_torch）OOM（139.8 GiB 中仅剩 3.4 GiB 时申请 5 GiB）"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3239
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Honor the workflow's SALLOC_TIME_LIMIT (480 minutes) in the H200 DGX Cloud launcher instead of its hardcoded 180-minute salloc, as the Blackwell launchers already do, and trim the conc-list from [1, 2, 4, 8, 16, 32, 64, 128] to [1, 2, 4, 8, 16]: in run 35312220802 c8 passed in 2h52m but c64 hit the 3-hour Slurm limit with 182 of its 707 warmup requests returned; the server log shows the arm prefill-bound (7689 chunks of 4096 tokens at a median 4.2k input tok/s, 63 running and 93 queued requests, KV pool of 34M tokens far from full), so AgentX's roughly 11 warmup sessions per unit of concurrency need about 10 hours at c64 and 5 hours at c32 before the 60-minute profile, while c16 fits the 8-hour budget; the vLLM H200 arm keeps its c64 and c128 points"
+    - "H200 DGX Cloud 启动器改为使用工作流的 SALLOC_TIME_LIMIT（480 分钟），而非硬编码的 180 分钟 salloc，与 Blackwell 启动器一致，并将 conc-list 从 [1, 2, 4, 8, 16, 32, 64, 128] 缩减为 [1, 2, 4, 8, 16]：运行 35312220802 中 c8 用 2 小时 52 分通过，但 c64 在 707 个 warmup 请求仅返回 182 个时触及 3 小时 Slurm 上限；服务日志显示该配方受 prefill 限制（7689 个 4096 token 分块，输入吞吐中位数约 4.2k tok/s，63 个运行中、93 个排队请求，34M token 的 KV 池远未占满），因此 AgentX 每单位并发约 11 个 warmup 会话在 c64 需约 10 小时、c32 需约 5 小时才能进入 60 分钟 profile，而 c16 可在 8 小时预算内完成；vLLM H200 配方保留 c64 与 c128 点"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3239
+
+- config-keys:
+    - dsv41flash-fp4-h100-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the H100 SGLang AgentX arm for DeepSeek-V4.1-Flash from the SGLang cookbook: preview image lmsysorg/sglang:dev-dsv41 (digest sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860), native five-token DSpark (--speculative-algorithm DSPARK --speculative-dspark-block-size 5), thinking on with reasoning effort high, mem-fraction-static 0.8, GPU-resident KV cache, concurrency 1-8"
+    - "TP8/EP8 with the Hopper backends from the cookbook's verified H200 cell; H100 is not in the cookbook's hardware table, so the script moves the Engram tables to one shared host copy (SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1) and caps --chunked-prefill-size at 4096 to fit 80 GB. Throughput uses the thinking-on golden synthetic AL 3.51 (SGLANG_SIMULATE_ACC_LEN, match-expected, real-draft-token); accuracy evals keep real DSpark verification."
+    - "新增 DeepSeek-V4.1-Flash 在 H100 上的 SGLang AgentX 配方，遵循 SGLang cookbook：预览镜像 lmsysorg/sglang:dev-dsv41（digest sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860），原生五 token DSpark（--speculative-algorithm DSPARK --speculative-dspark-block-size 5），thinking 开启、reasoning effort 为 high，mem-fraction-static 0.8，KV cache 常驻 GPU，并发 1-8"
+    - "采用 cookbook 已验证 H200 配置的 TP8/EP8 与 Hopper 后端；H100 不在 cookbook 硬件表中，脚本将 Engram 表移至共享主机副本（SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1）并将 --chunked-prefill-size 上限设为 4096 以适配 80 GB。吞吐测试使用 thinking 开启的黄金合成 AL 3.51（SGLANG_SIMULATE_ACC_LEN、match-expected、real-draft-token）；准确率 eval 保留真实 DSpark 验证。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3240
+
+- config-keys:
+    - dsv41flash-fp4-h100-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Lower --mem-fraction-static from 0.8 to 0.7 and --chunked-prefill-size from 4096 to 2048 after run 35304509605: c1-c4 served, but c8 OOMed in eager extend (1 GiB allocations with ~600 MB free of 80 GB) once five requests were live with a 570k-token prompt pending; the change leaves 24 GB of headroom instead of 16 GB and halves the per-chunk hyper-connection and indexer working set"
+    - "在运行 35304509605 后将 --mem-fraction-static 从 0.8 降至 0.7，--chunked-prefill-size 从 4096 降至 2048：c1-c4 可服务，但 c8 在五个请求同时在线、且有 570k token 提示待处理时于 eager extend 中 OOM（80 GB 中仅剩约 600 MB 时申请 1 GiB）；调整后余量从 16 GB 增至 24 GB，并将每分块的 hyper-connection 与 indexer 工作集减半"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3240
+
+- config-keys:
+    - dsv41flash-fp4-h100-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Raise --chunked-prefill-size back from 2048 to 4096 while keeping --mem-fraction-static 0.7: in run 35307250127 c1 and c2 passed but c4 failed AIPerf's 95% latency-coverage check (TTFT 87.6%, inter-token latency 88.4% over the 3600 s window) because prefill of the 100k-600k-token prompts ran near 1,000 tok/s at the smaller chunk; 0.7 leaves 24 GB of headroom for the doubled per-chunk working set, against the 16 GB that OOMed c8 at 0.8/4096"
+    - "将 --chunked-prefill-size 从 2048 恢复为 4096，--mem-fraction-static 保持 0.7：运行 35307250127 中 c1、c2 通过，但 c4 未达到 AIPerf 95% 的延迟覆盖率要求（3600 s 窗口内 TTFT 87.6%、token 间延迟 88.4%），原因是较小分块下 100k-600k token 提示的 prefill 仅约 1,000 tok/s；0.7 为翻倍的每分块工作集保留 24 GB 余量，而此前 0.8/4096 下 c8 仅有 16 GB 并发生 OOM"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3240
+
+- config-keys:
+    - dsv41flash-fp4-h100-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Honor the workflow's SALLOC_TIME_LIMIT (480 minutes) in the H100 DGX Cloud launcher instead of its hardcoded 180-minute salloc, as the B200, B300, GB200 and GB300 launchers already do: in run 35317886085 c8 finished its 87 warmup requests after 1h55m (the server log shows prefill-bound serving, median 2.8k input tok/s with 4096-token chunks and 210 tok/s decode at 6 running requests) and was 4 minutes from completing the 60-minute profiling phase when the Slurm step hit the 3-hour limit; the hpc-gpu-1 partition has no MaxTime"
+    - "H100 DGX Cloud 启动器改为使用工作流的 SALLOC_TIME_LIMIT（480 分钟），而非硬编码的 180 分钟 salloc，与 B200、B300、GB200、GB300 启动器一致：运行 35317886085 中 c8 在 1 小时 55 分后完成 87 个 warmup 请求（服务日志显示受 prefill 限制：4096 token 分块下输入吞吐中位数约 2.8k tok/s，6 个并发请求时解码 210 tok/s），距完成 60 分钟 profiling 阶段仅差 4 分钟时 Slurm step 触及 3 小时上限；hpc-gpu-1 分区无 MaxTime 限制"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3240
+
+- config-keys:
+    - dsv41flash-fp4-b200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the B200 SGLang AgentX arm for DeepSeek-V4.1-Flash from the SGLang cookbook: preview image lmsysorg/sglang:dev-dsv41 (digest sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860), native five-token DSpark (--speculative-algorithm DSPARK --speculative-dspark-block-size 5), thinking on with reasoning effort high, mem-fraction-static 0.8, GPU-resident KV cache, concurrency 1-128"
+    - "TP4/EP4 from the cookbook's verified Blackwell low-latency cell with automatically resolved backends. Throughput uses the thinking-on golden synthetic AL 3.51 (SGLANG_SIMULATE_ACC_LEN, match-expected, real-draft-token); accuracy evals keep real DSpark verification. The launcher runners/launch_b200-nscale-compat.sh now routes dsv41flash for framework sglang as well as vllm."
+    - "新增 DeepSeek-V4.1-Flash 在 B200 上的 SGLang AgentX 配方，遵循 SGLang cookbook：预览镜像 lmsysorg/sglang:dev-dsv41（digest sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860），原生五 token DSpark（--speculative-algorithm DSPARK --speculative-dspark-block-size 5），thinking 开启、reasoning effort 为 high，mem-fraction-static 0.8，KV cache 常驻 GPU，并发 1-128"
+    - "采用 cookbook 已验证 Blackwell 低延迟配置的 TP4/EP4，后端自动解析。吞吐测试使用 thinking 开启的黄金合成 AL 3.51（SGLANG_SIMULATE_ACC_LEN、match-expected、real-draft-token）；准确率 eval 保留真实 DSpark 验证。 launcher runners/launch_b200-nscale-compat.sh 现同时为 framework sglang 与 vllm 路由 dsv41flash。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3241
+
+- config-keys:
+    - dsv41flash-fp4-b200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Cut HBM pressure during 1M-context AgentX prefill after the first sweep (run 35304517453: c4 came up, then the server exited on the first two warmup prompts): move the Engram tables to one shared host copy (SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1, the SGLang analogue of the vLLM arm's Engram CPU offload, output bitwise unchanged), lower --mem-fraction-static from 0.8 to 0.75, bound --chunked-prefill-size at 8192 instead of the default 16384, fix the decode CUDA graph batch at the cookbook's 64, and cap --max-running-requests at 128"
+    - "首次 sweep 后（run 35304517453: c4 came up, then the server exited on the first two warmup prompts）降低 1M 上下文 AgentX prefill 的 HBM 压力：将 Engram 表移至共享主机副本（SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1，对应 vLLM 配方的 Engram CPU offload，输出逐位一致），--mem-fraction-static 从 0.8 降至 0.75，--chunked-prefill-size 限制为 8192（默认 16384），decode CUDA graph batch 固定为 cookbook 的 64，--max-running-requests 上限设为 128"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3241
+
+- config-keys:
+    - dsv41flash-fp4-b200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Cap --max-running-requests at the 64-request decode graph batch and lower --mem-fraction-static from 0.75 to 0.70 and halve --chunked-prefill-size to 4096 on this TP4 card, which holds 82 GiB of weights per GPU, after run 35306710037: c32 came up and the server exited with 27 warmup prompts in flight and 64 running requests allowed, after c1-c16 style points had been serving; a DSpark verify batch above the captured tier runs eagerly and allocates its attention workspace per step, so the pool now stays inside the graph tier"
+    - "将 --max-running-requests 上限设为 64（即 decode graph batch），并将 --mem-fraction-static 从 0.75 降至 0.70，并在这块每 GPU 承载 82 GiB 权重的 TP4 显卡上将 --chunked-prefill-size 减半至 4096；依据：运行 35306710037：c32 启动后，在 27 个 warmup 提示同时在途、允许 64 个运行请求时服务退出。超出已捕获层级的 DSpark verify batch 会以 eager 方式运行并逐步分配 attention 工作区，因此请求池现保持在 graph 层级之内"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3241
+
+- config-keys:
+    - dsv41flash-fp4-gb200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the GB200 SGLang AgentX arm for DeepSeek-V4.1-Flash from the SGLang cookbook: preview image lmsysorg/sglang:dev-dsv41 (digest sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860), native five-token DSpark (--speculative-algorithm DSPARK --speculative-dspark-block-size 5), thinking on with reasoning effort high, mem-fraction-static 0.8, GPU-resident KV cache, concurrency 1-128"
+    - "TP4/EP4 from the cookbook's verified Blackwell low-latency cell with automatically resolved backends. Throughput uses the thinking-on golden synthetic AL 3.51 (SGLANG_SIMULATE_ACC_LEN, match-expected, real-draft-token); accuracy evals keep real DSpark verification. The launcher runners/launch_gb200-nv.sh now routes dsv41flash for framework sglang as well as vllm."
+    - "新增 DeepSeek-V4.1-Flash 在 GB200 上的 SGLang AgentX 配方，遵循 SGLang cookbook：预览镜像 lmsysorg/sglang:dev-dsv41（digest sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860），原生五 token DSpark（--speculative-algorithm DSPARK --speculative-dspark-block-size 5），thinking 开启、reasoning effort 为 high，mem-fraction-static 0.8，KV cache 常驻 GPU，并发 1-128"
+    - "采用 cookbook 已验证 Blackwell 低延迟配置的 TP4/EP4，后端自动解析。吞吐测试使用 thinking 开启的黄金合成 AL 3.51（SGLANG_SIMULATE_ACC_LEN、match-expected、real-draft-token）；准确率 eval 保留真实 DSpark 验证。 launcher runners/launch_gb200-nv.sh 现同时为 framework sglang 与 vllm 路由 dsv41flash。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3243
+
+- config-keys:
+    - dsv41flash-fp4-gb200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Cut HBM pressure during 1M-context AgentX prefill after the first sweep (run 35304536578: c2 came up, then the server exited on the first warmup prompt): move the Engram tables to one shared host copy (SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1, the SGLang analogue of the vLLM arm's Engram CPU offload, output bitwise unchanged), lower --mem-fraction-static from 0.8 to 0.75, bound --chunked-prefill-size at 8192 instead of the default 16384, fix the decode CUDA graph batch at the cookbook's 64, and cap --max-running-requests at 128"
+    - "首次 sweep 后（run 35304536578: c2 came up, then the server exited on the first warmup prompt）降低 1M 上下文 AgentX prefill 的 HBM 压力：将 Engram 表移至共享主机副本（SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1，对应 vLLM 配方的 Engram CPU offload，输出逐位一致），--mem-fraction-static 从 0.8 降至 0.75，--chunked-prefill-size 限制为 8192（默认 16384），decode CUDA graph batch 固定为 cookbook 的 64，--max-running-requests 上限设为 128"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3243
+
+- config-keys:
+    - dsv41flash-fp4-gb200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Cap --max-running-requests at the 64-request decode graph batch and lower --mem-fraction-static from 0.75 to 0.70 and halve --chunked-prefill-size to 4096 on this TP4 card, which holds 73 GiB of weights per GPU, after run 35306711846: c16 OOMed in the sparse indexer prefill top-k (_low_ratio_index_topk_extend, 3.8-7 GiB allocations with 3 GiB free of 186 GiB) with 13 warmup prompts in flight at chunk 8192 and mem-fraction 0.75; a DSpark verify batch above the captured tier runs eagerly and allocates its attention workspace per step, so the pool now stays inside the graph tier"
+    - "将 --max-running-requests 上限设为 64（即 decode graph batch），并将 --mem-fraction-static 从 0.75 降至 0.70，并在这块每 GPU 承载 73 GiB 权重的 TP4 显卡上将 --chunked-prefill-size 减半至 4096；依据：运行 35306711846：c16 在 13 个 warmup 提示同时在途、分块 8192、mem-fraction 0.75 时于稀疏 indexer 的 prefill top-k（_low_ratio_index_topk_extend）OOM（186 GiB 中仅剩 3 GiB 时申请 3.8-7 GiB）。超出已捕获层级的 DSpark verify batch 会以 eager 方式运行并逐步分配 attention 工作区，因此请求池现保持在 graph 层级之内"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3243
+
+- config-keys:
+    - dsv41flash-fp4-mi300x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the MI300X (gfx942) vLLM AgentX arm for DeepSeek-V4.1-Flash as a copy of the validated MI355X recipe on vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657: TP8 rather than TP4 so a 192 GB card holds its share of the 511 GB checkpoint, the GPU-resident Engram tables and a 1M-context KV pool; native five-token DSpark with thinking-on golden AL 3.51 for throughput and real block verification (adaptive verification off on ROCm) for evals; VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, VLLM_USE_BREAKABLE_CUDAGRAPH=1, --moe-backend aiter, --max-num-batched-tokens 8192, --max-num-seqs 128, concurrency 1-32"
+    - "runners/launch_mi300x-amd.sh now mounts the checkout at /ix for this checkpoint and rewrites RESULT_DIR so AgentX runtime directories stay out of /workspace, and allocates 480 minutes instead of 180 for it so a cold checkpoint download plus a one-hour arm fits"
+    - "新增 DeepSeek-V4.1-Flash 在 MI300X（gfx942）上的 vLLM AgentX 配方，复制自已验证的 MI355X 配方并使用同一镜像 vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657：采用 TP8 而非 TP4，使 192 GB 显卡可容纳 511 GB 检查点的分片、常驻 GPU 的 Engram 表以及 1M 上下文 KV 池；原生五 token DSpark，吞吐使用 thinking 开启的黄金 AL 3.51，eval 保留真实块验证（ROCm 上关闭自适应验证）；VLLM_ROCM_USE_AITER=1、VLLM_ROCM_USE_AITER_MOE=1、VLLM_USE_BREAKABLE_CUDAGRAPH=1、--moe-backend aiter、--max-num-batched-tokens 8192、--max-num-seqs 128，并发 1-32"
+    - "runners/launch_mi300x-amd.sh 现为该检查点将仓库挂载到 /ix 并重写 RESULT_DIR，使 AgentX 运行目录不落在 /workspace 下，并为其分配 480 分钟（原 180 分钟），以容纳冷下载检查点加一小时的基准运行"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3246
+
+- config-keys:
+    - dsv41flash-fp4-mi300x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Drop --moe-backend aiter and let vLLM select the MXFP4 MoE kernel: on gfx942 the explicit aiter name resolved to the Triton W4A16 kernel (AITER_TRITON_MXFP4_BF16) and every worker segfaulted during breakable CUDA-graph capture on the MI325X sibling (run 35305045778); auto selection prefers the CK W4A16 kernel (AITER_MXFP4_BF16) that the retired DeepSeek-V4-Pro gfx942 arm ran on"
+    - "runners/launch_mi300x-amd.sh drains the allocated node and retries once on a fresh allocation that excludes it when pyxis cannot start the container (enroot-nsenter user-namespace denial on smci300x-ccs-aus-e06-40 and e07-22 in run 35305037528)"
+    - "去掉 --moe-backend aiter，改由 vLLM 自动选择 MXFP4 MoE 内核：在 gfx942 上显式指定 aiter 会解析为 Triton W4A16 内核（AITER_TRITON_MXFP4_BF16），MI325X 同级配方在 breakable CUDA graph 捕获期间所有 worker 段错误（运行 35305045778）；自动选择优先使用已退役的 DeepSeek-V4-Pro gfx942 配方所用的 CK W4A16 内核（AITER_MXFP4_BF16）"
+    - "当 pyxis 无法启动容器时（运行 35305037528 中 smci300x-ccs-aus-e06-40 与 e07-22 的 enroot-nsenter 用户命名空间被拒），runners/launch_mi300x-amd.sh 会 drain 所分配的节点，并在排除该节点的新分配上重试一次"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3246
+
+- config-keys:
+    - dsv41flash-fp4-mi300x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Capture only full decode CUDA graphs (VLLM_USE_BREAKABLE_CUDAGRAPH=0 with cudagraph_mode FULL_DECODE_ONLY, as the MiniMax-M3 gfx942 arm does) and restore --moe-backend aiter: on gfx942 every worker segfaulted during piecewise graph capture with both the Triton W4A16 MoE kernel (run 35305045778) and the auto-selected unfused Triton kernel (run 35306398350), so the capture mode rather than the MoE kernel is the failing piece; prefill runs eagerly"
+    - "仅捕获完整的 decode CUDA graph（VLLM_USE_BREAKABLE_CUDAGRAPH=0 并设置 cudagraph_mode FULL_DECODE_ONLY，与 MiniMax-M3 gfx942 配方一致）并恢复 --moe-backend aiter：在 gfx942 上，无论使用 Triton W4A16 MoE 内核（运行 35305045778）还是自动选择的未融合 Triton 内核（运行 35306398350），所有 worker 都在 piecewise graph 捕获期间段错误，说明问题在于捕获模式而非 MoE 内核；prefill 以 eager 方式运行"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3246
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add concurrency 20, 24 and 28 to the H100 TP8 AgentX arm to fill in the saturation curve between the existing c16 point and the range where 1M-token trajectories start to preempt; recipe script, image and DSpark settings are unchanged"
+    - "为 H100 TP8 AgentX 配方新增并发 20、24、28，以填补现有 c16 点与 1M token 轨迹开始抢占区间之间的饱和曲线；配方脚本、镜像与 DSpark 设置不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3248
+
+- config-keys:
   - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
   scenario-type:
   - agentic-coding
