@@ -63,7 +63,7 @@ roles:
       tensor-parallel-size: 8
       data-parallel-size: 1
       expert-parallel-size: 8
-      mamba-scheduler-strategy: "no_buffer"
+      mamba-radix-cache-strategy: "no_buffer"
       mamba-track-interval: 2048
       mamba-ssm-dtype: "bfloat16"
       moe-runner-backend: "flashinfer_trtllm"
@@ -122,7 +122,7 @@ roles:
       tensor-parallel-size: 8
       data-parallel-size: 1
       expert-parallel-size: 8
-      mamba-scheduler-strategy: "no_buffer"
+      mamba-radix-cache-strategy: "no_buffer"
       mamba-track-interval: 128
       mamba-ssm-dtype: "bfloat16"
       max-mamba-cache-size: 1024

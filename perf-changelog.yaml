@@ -8091,3 +8091,10 @@
     - "将 Qwen3.5 FP8 GB200 Dynamo-SGLang 8k1k MTP 的 SGLang 镜像从 lmsysorg/sglang:v0.5.14-cu130@sha256:5027e95bf6ec536856b1b52a91d1f35ff5c564ab83e8a94758a169ff09bb8df3 更新为 lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85（2026-09-18 上游 cu13 dev nightly，sgl-project/sglang@20518d85，amd64 + arm64）"
     - "在该 key 的 7 个 srt-slurm 配方中，将 model.container 设为同一镜像，出于同样原因将 cuda-graph-max-bs 改为 cuda-graph-max-bs-decode，并将 Dynamo 安装从源码提交 46520ca59afe992fb5ef61b3197b2316f8df9b2b 改为公开的 1.5.0.dev20260917 wheel（master 中的 router 版本随之更新），这是最新的 Dynamo nightly，因为 6 月的源码构建早于 Dynamo 1.5.0.dev20260910 及之后版本所包含的 SGLang ServerArgs 兼容性修复；配方拓扑、并发与服务参数保持不变"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3253
+
+- config-keys:
+    - qwen3.5-fp8-gb200-dynamo-sglang-mtp
+  description:
+    - "Rename mamba-scheduler-strategy to mamba-radix-cache-strategy (value no_buffer unchanged) in the 7 srt-slurm recipes of this key that set it: SGLang nightly-dev-cu13-20260918-20518d85 rejects the old spelling as an unrecognized argument (run 35317753866, every prefill and decode worker exited at argument parsing), and its help lists --mamba-radix-cache-strategy {auto,no_buffer,extra_buffer,extra_buffer_lazy} as the replacement"
+    - "在该 key 中设置了该参数的 7 个 srt-slurm 配方里，将 mamba-scheduler-strategy 改名为 mamba-radix-cache-strategy（取值 no_buffer 不变）：SGLang nightly-dev-cu13-20260918-20518d85 将旧写法视为未识别参数（运行 35317753866 中所有 prefill 与 decode worker 在参数解析阶段退出），其帮助信息列出 --mamba-radix-cache-strategy {auto,no_buffer,extra_buffer,extra_buffer_lazy} 为替代"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3253
