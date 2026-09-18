@@ -8090,4 +8090,4 @@
   description:
     - "Add concurrency 20, 24 and 28 to the H100 TP8 AgentX arm to fill in the saturation curve between the existing c16 point and the range where 1M-token trajectories start to preempt; recipe script, image and DSpark settings are unchanged"
     - "为 H100 TP8 AgentX 配方新增并发 20、24、28，以填补现有 c16 点与 1M token 轨迹开始抢占区间之间的饱和曲线；配方脚本、镜像与 DSpark 设置不变"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3248
