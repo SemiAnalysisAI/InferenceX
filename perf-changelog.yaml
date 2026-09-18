@@ -8195,3 +8195,14 @@
     and real-verification evals remain required. Remove unqualified starter
     points from the PR selection.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-sglang-agentic-mtp-latest
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add measured B200 Qwen3.5 FP8 TP4 aggregate C64 HiCache for canonical
+    qualification. Its short replay reaches 41896.93 logical tokens/s/GPU
+    at 50.042 p90 interactivity with zero errors, extending the published
+    throughput frontier at the cost of lower interactivity and higher TTFT.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
