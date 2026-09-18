@@ -1498,13 +1498,13 @@ dsv4-fp4-b300-vllm-agentic-mtp:
       # TP8 GPU-resident + DSpark6
       - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4] }
       # TP4 GPU-resident + DSpark6
-      - { tp: 4, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 6, 8] }
+      - { tp: 4, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 8] }
       # TP4 SimpleCPU + DSpark6
       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [16] }
       # DEP4 SimpleCPU + DSpark6
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [48, 64], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [64], router: { name: vllm-router, version: "0.1.14" } }
       # DEP8 SimpleCPU + DSpark6
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [128, 256, 384, 512, 576], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [128, 384, 576], router: { name: vllm-router, version: "0.1.14" } }
 
 qwen3.5-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.14-cu130

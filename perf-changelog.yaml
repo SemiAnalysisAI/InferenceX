@@ -8365,5 +8365,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Update B300 vLLM AgentX to DSpark6 and a new image."
+    - "Update B300 vLLM AgentX to DSpark6 and a new image with a sampled concurrency grid."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2302
