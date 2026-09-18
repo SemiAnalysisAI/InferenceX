@@ -8061,8 +8061,9 @@ dsv41flash-fp4-h100-vllm-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       # Extend beyond the c1 full-context capacity estimate to measure the
-      # AgentX workload's practical saturation curve at c8 and c16.
-      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16] }
+      # AgentX workload's practical saturation curve; c20, c24 and c28 fill in
+      # the knee between c16 and the point where 1M-token trajectories preempt.
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 20, 24, 28] }
 
 dsv41flash-fp4-gb200-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3

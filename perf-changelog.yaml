@@ -8082,3 +8082,12 @@
     - "Capture only full decode CUDA graphs (VLLM_USE_BREAKABLE_CUDAGRAPH=0 with cudagraph_mode FULL_DECODE_ONLY, as the MiniMax-M3 gfx942 arm does) and restore --moe-backend aiter: on gfx942 every worker segfaulted during piecewise graph capture with both the Triton W4A16 MoE kernel (run 35305045778) and the auto-selected unfused Triton kernel (run 35306398350), so the capture mode rather than the MoE kernel is the failing piece; prefill runs eagerly"
     - "仅捕获完整的 decode CUDA graph（VLLM_USE_BREAKABLE_CUDAGRAPH=0 并设置 cudagraph_mode FULL_DECODE_ONLY，与 MiniMax-M3 gfx942 配方一致）并恢复 --moe-backend aiter：在 gfx942 上，无论使用 Triton W4A16 MoE 内核（运行 35305045778）还是自动选择的未融合 Triton 内核（运行 35306398350），所有 worker 都在 piecewise graph 捕获期间段错误，说明问题在于捕获模式而非 MoE 内核；prefill 以 eager 方式运行"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3247
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add concurrency 20, 24 and 28 to the H100 TP8 AgentX arm to fill in the saturation curve between the existing c16 point and the range where 1M-token trajectories start to preempt; recipe script, image and DSpark settings are unchanged"
+    - "为 H100 TP8 AgentX 配方新增并发 20、24、28，以填补现有 c16 点与 1M token 轨迹开始抢占区间之间的饱和曲线；配方脚本、镜像与 DSpark 设置不变"
+  pr-link: TBD
