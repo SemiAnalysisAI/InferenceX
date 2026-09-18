@@ -8090,7 +8090,6 @@
   description:
     - "Add B200 Dynamo+SGLang AgentX TP8 aggregate HiCache recipes at concurrency 1, 4, and 8."
     - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with bundled DSpark K=6, full-node CPU/DRAM allocation, and per-point request/CUDA-graph limits."
-    - "Preinstall uv with the pinned GitHub Action on NScale so benchmark startup does not depend on direct access to astral.sh."
     - "Map the exact DeepSeek-V4-Pro-0813 recipe alias to the pre-staged NScale checkpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3257
 
@@ -8100,7 +8099,6 @@
     - agentic-coding
   description:
     - "Add B200 Dynamo+SGLang AgentX DEP8/DEP8 HiCache recipes for 1P1D at concurrency 64 and 128, plus 2P1D at concurrency 256."
-    - "Limit decode max-running-requests to 128, 256, and 512, respectively. Set decode swa-full-tokens-ratio to 0.01 for 1P1D and 0.005 for 2P1D c256, allocating more HBM to the full-attention KV pool after measured SWA utilization remained low."
-    - "Reuse the preinstalled uv binary in the NScale launcher, with the existing astral.sh installer retained as a fallback."
+    - "Limit decode max-running-requests to 128, 256, and 512, respectively. Set decode swa-full-tokens-ratio to 0.01 for 1P1D and 0.005 for 2P1D c256, and use a 0.91 decode memory fraction for c256 so both KV pools retain headroom under transient DP-rank imbalance."
     - "Map the exact DeepSeek-V4-Pro-0813 recipe alias to the pre-staged NScale checkpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3257

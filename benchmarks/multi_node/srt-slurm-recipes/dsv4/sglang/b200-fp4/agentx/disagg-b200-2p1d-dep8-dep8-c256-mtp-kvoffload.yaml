@@ -195,10 +195,12 @@ roles:
       disaggregation-ib-device: mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11
       disaggregation-mode: decode
       load-balance-method: total_tokens
-      mem-fraction-static: 0.9
+      # Leave enough decode activation headroom while expanding the KV pools
+      # for transient DP-rank imbalance at concurrency 256.
+      mem-fraction-static: 0.91
       page-size: 256
-      # Favor the full-attention pool: c256 exhausted its 2,983,424-token pool
-      # while using only 4,608 of 29,696 SWA tokens on the constrained DP rank.
+      # Favor the full-attention pool while retaining enough SWA capacity for
+      # the busiest decode rank.
       swa-full-tokens-ratio: 0.005
       max-running-requests: 512
       cuda-graph-max-bs-decode: 256
