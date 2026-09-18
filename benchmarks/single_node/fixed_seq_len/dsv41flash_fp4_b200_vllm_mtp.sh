@@ -52,6 +52,19 @@ EVAL_MEM_ARGS=()
 if [[ "${EVAL_ONLY}" == true ]] && (( TP == 2 )); then
     CAPTURE_SIZE=256
     EVAL_MEM_ARGS=(--gpu-memory-utilization 0.95)
+    # 256 captured tokens cover 42 requests at 1 + 5 draft tokens each. The c128
+    # eval kept ~125 GSM8K requests running, so every DSpark verify step ran
+    # above the graph tier through the untuned eager path (FlashInfer logged
+    # "No tuned config covers mxfp8_gemm" for each odd draft-head shape) and
+    # the draft lm_head GEMM died with cudaErrorIllegalAddress 70 s into the
+    # eval (run 35399984613). The TP4 eval at capture 1024 and the TP2 c1-c32
+    # throughput points, all inside their graph tiers, were clean. Keep the
+    # eval's request concurrency inside the tier; GSM8K is short enough that
+    # 32 concurrent requests finish the 1319 prompts within the job budget.
+    EVAL_CONC_CAP=32
+    if ! [[ "${EVAL_CONCURRENT_REQUESTS:-}" =~ ^[0-9]+$ ]] || (( EVAL_CONCURRENT_REQUESTS > EVAL_CONC_CAP )); then
+        export EVAL_CONCURRENT_REQUESTS="$EVAL_CONC_CAP"
+    fi
 fi
 select_available_server_port
 

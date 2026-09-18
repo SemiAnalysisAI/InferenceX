@@ -64,7 +64,7 @@ record() {
     command python3 -c 'import json,os,sys; json.dump(sys.argv[2:],open(os.environ["RESULT_DIR"]+"/"+sys.argv[1]+".json","w"))' "$@"
 }
 vllm() { record serve "$@"; }
-run_eval() { record workload eval "$@"; }
+run_eval() { record workload eval "$@" "eval_conc=${EVAL_CONCURRENT_REQUESTS:-}"; }
 append_lm_eval_summary() { record staged lm-eval; }
 run_benchmark_serving() { record workload fixed "$@"; }
 run_agentic_replay_and_write_outputs() { record workload agentic "$@"; }
@@ -112,10 +112,12 @@ builtin source "$1"
         if scenario == "fixed_seq_len":
             # Non-agentic evals pick lm-eval explicitly and must stage their
             # artifacts into the workspace root; the agentic eval path stages itself.
-            assert workload == ["eval", "--framework", "lm-eval", "--port", "18888"]
+            # The TP2 eval pins lm-eval concurrency inside the 256-token graph tier
+            # (run 35399984613 died in the eager DSpark draft head at ~125 requests).
+            assert workload == ["eval", "--framework", "lm-eval", "--port", "18888", "eval_conc=32"]
             assert json.loads((tmp_path / "staged.json").read_text()) == ["lm-eval"]
         else:
-            assert workload == ["eval", "--port", "18888"]
+            assert workload == ["eval", "--port", "18888", "eval_conc="]
     elif scenario == "agentic":
         assert workload == ["agentic", str(tmp_path)]
     else:
