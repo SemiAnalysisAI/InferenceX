@@ -8223,3 +8223,11 @@
   description:
   - Require native SRT DCGM power telemetry and measurement windows for B300 Qwen3.5 FP8 AgentX throughput runs. Collect and validate the producer contract before archiving artifacts, retain diagnostics when power validation fails, and skip throughput power validation for eval-only jobs. The initial canonical run lacked this contract and cannot qualify as a valid power result.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add concurrency 96 with 298 GB HiCache per prefill rank and first-use write-through. Slurm 4105 measured 46358.88 logical tok/s/GPU at 94.75 p90 interactivity with 5048 profiled requests, zero errors and two grace cancellations, strictly dominating two published FP8 frontier points. The trace submission and duration coverage passed; this diagnostic still requires the fresh full official sweep, real accuracy evals and validated power telemetry.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
