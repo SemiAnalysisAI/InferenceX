@@ -14,8 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
     "scenario,eval_only,concurrency,capture",
     [
         ("fixed_seq_len", False, 1, 64),
-        # TP2 fixed-seq capture is capped at 256 (run 35316389982 OOMed at 1024).
-        ("fixed_seq_len", True, 128, 256),
+        # TP2 fixed-seq capture is capped at 512 (run 35316389982 OOMed at 1024).
+        ("fixed_seq_len", True, 128, 512),
         ("agentic", False, 16, 128),
         ("agentic", True, 2, 64),
     ],
@@ -31,6 +31,8 @@ def test_b200_tp2_launch_and_workload(tmp_path, scenario, eval_only, concurrency
         "RANDOM_RANGE_RATIO": "1",
         "RESULT_FILENAME": "fixture-result",
         "RESULT_DIR": str(tmp_path),
+        "MAX_MODEL_LEN": "9472",
+        "EVAL_MAX_MODEL_LEN": "16384",
         "INFMAX_CONTAINER_WORKSPACE": str(tmp_path),
         "KV_OFFLOADING": "none",
         "TOTAL_CPU_DRAM_GB": "0",
@@ -81,6 +83,11 @@ builtin source "$1"
     assert json.loads(args[args.index("--engram-config") + 1]) == {"cpu_offload": True}
     assert args[args.index("--tokenizer-mode") + 1] == "deepseek_v41"
     assert int(args[args.index("--max-cudagraph-capture-size") + 1]) == capture
+    if scenario == "fixed_seq_len":
+        # The 8k1k arm serves the matrix context, and evals the eval context.
+        assert args[args.index("--max-model-len") + 1] == ("16384" if eval_only else "9472")
+    else:
+        assert args[args.index("--max-model-len") + 1] == "1048576"
     spec = json.loads(args[args.index("--speculative-config") + 1])
     assert spec["method"] == "dspark"
     assert spec["num_speculative_tokens"] == 5

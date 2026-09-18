@@ -4,7 +4,7 @@ set -eo pipefail
 # B200 fixed-sequence counterpart of the native DSpark AgentX recipe.
 # https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash
 source "$(dirname "$0")/../../benchmark_lib.sh"
-check_env_vars MODEL TP CONC ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME RESULT_DIR
+check_env_vars MODEL TP CONC ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME RESULT_DIR MAX_MODEL_LEN
 check_env_vars INFMAX_CONTAINER_WORKSPACE
 check_env_vars DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE EVAL_ONLY VLLM_ENGINE_READY_TIMEOUT_S
 export GPU_COUNT="$TP"
@@ -37,10 +37,11 @@ done
 # tables offloaded, and vLLM's memory profiling counts the captured graphs
 # against the KV budget: c1-c32 served, but c64 (capture 512) ended with
 # -2.65 GiB and c128 (capture 1024) with -10.8 GiB of KV memory in run
-# 35316389982. Stop capturing above 256 tokens on TP2; larger DSpark verify
-# batches decode eagerly. TP4 keeps the default.
-if (( TP == 2 && CAPTURE_SIZE > 256 )); then
-    CAPTURE_SIZE=256
+# 35316389982, while --max-model-len was still the 1M context. With the
+# matrix-supplied context below, stop capturing above 512 tokens on TP2;
+# larger DSpark verify batches decode eagerly. TP4 keeps the default.
+if (( TP == 2 && CAPTURE_SIZE > 512 )); then
+    CAPTURE_SIZE=512
 fi
 select_available_server_port
 
@@ -52,6 +53,16 @@ else
 fi
 
 start_gpu_monitor
+# Fixed-sequence runs serve the matrix-supplied context (isl + osl + slack),
+# not the checkpoint's 1M: the sparse-attention indexer allocates a
+# [batched-tokens, max-model-len] fp8 buffer and the profiler reserves KV for
+# one full-context request, which at 1M left 0.97 GiB of KV at TP2 c32 in run
+# 35316389982. Accuracy evals use the eval context instead.
+MODEL_LEN="$MAX_MODEL_LEN"
+if [[ "${EVAL_ONLY}" == true ]]; then
+    check_env_vars EVAL_MAX_MODEL_LEN
+    MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+fi
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0 --port "$PORT" --tensor-parallel-size "$TP"
@@ -61,7 +72,7 @@ VLLM_CMD=(
     --reasoning-parser deepseek_v41
     --engram-config '{"cpu_offload":true}'
     --speculative-config "$SPEC_CONFIG"
-    --max-model-len 1048576
+    --max-model-len "$MODEL_LEN"
     --max-cudagraph-capture-size "$CAPTURE_SIZE"
     --disable-uvicorn-access-log
     "${LOAD_ARGS[@]}"

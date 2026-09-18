@@ -8114,3 +8114,10 @@
     - "TP2 only: cap --max-cudagraph-capture-size at 256 in the fixed-sequence script after run 35316389982, where c1-c32 served but c64 (capture 512) and c128 (capture 1024) finished vLLM's memory profiling with -2.65 GiB and -10.8 GiB of KV budget next to 145 GiB of weights per GPU; larger DSpark verify batches decode eagerly, TP4 keeps the default"
     - "仅 TP2：在固定序列脚本中将 --max-cudagraph-capture-size 上限设为 256；运行 35316389982 中 c1-c32 可服务，但 c64（捕获 512）与 c128（捕获 1024）在 vLLM 显存分析结束时 KV 预算分别为 -2.65 GiB 与 -10.8 GiB（每 GPU 145 GiB 权重）；更大的 DSpark verify batch 以 eager 方式解码，TP4 保持默认"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-dspark
+  description:
+    - "Serve the matrix-supplied MAX_MODEL_LEN (9472 for 8k1k) instead of the hardcoded 1048576, and EVAL_MAX_MODEL_LEN for eval-only runs: at the 1M context the sparse-attention indexer buffer and the profiler's full-context KV reservation left TP2 c32 with 0.97 GiB of KV and c64/c128 negative in run 35316389982, and the same 1M context was behind the earlier c32-c128 failures; with the right context the TP2 graph-capture cap relaxes from 256 to 512 tokens"
+    - "改为服务矩阵提供的 MAX_MODEL_LEN（8k1k 为 9472）而非硬编码的 1048576，eval-only 运行使用 EVAL_MAX_MODEL_LEN：在 1M 上下文下，稀疏注意力 indexer 缓冲区与分析器为单个满上下文请求预留的 KV 使运行 35316389982 中 TP2 c32 仅剩 0.97 GiB KV、c64/c128 为负值，此前 c32-c128 的失败亦源于同一 1M 上下文；上下文正确后 TP2 的 graph 捕获上限从 256 放宽至 512 token"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
