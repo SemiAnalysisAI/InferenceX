@@ -8200,3 +8200,11 @@
   - "Prepare the expanded B300 FP8 qualification curve from measured fast candidates: colocated 1P1D TP4/TP4 at concurrency 16, 24, 32 and 64, plus TP4 aggregate concurrency 32. Use 72 GB HiCache per prefill rank at C16-C32 and 298 GB at C64; use the latest nightly combined HiCache budget for the aggregate candidate while retaining older-image budgeting. These short measurements require a fresh full official sweep and applicable accuracy evaluations before admission."
   - Select the explicit decode CUDA graph flag exposed by new SGLang versions, preserving the older flag for historical images. Scope terminal Slurm status verification to the B300 generic PD path and preserve artifacts before returning failure; run the updated launcher tests through the real runtime-profile renderer.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - "Add the measured colocated 1P1D concurrency-48 point with 298 GB HiCache per prefill rank. B300 Slurm 4093 completed 2683 profiled requests with zero errors or grace cancellations at 29720.62 logical tok/s/GPU and 181.40 p90 interactivity, extending the published FP8 frontier between the C32 and C64 candidates. This fast result remains subject to the fresh official full sweep and accuracy evaluations."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
