@@ -57,8 +57,14 @@ PYENV
     # Custom benchmarks inherit exported workflow settings through sbatch/srun;
     # native recipe environment and benchmark.env retain their override priority.
     local source="$INFERENCEX_SLURM_UTILS_DIR/../utils/srt-slurm"
-    if [[ "$framework" == "tilert" ]]; then
-        # Sole fork exception until NVIDIA supports the TileRT backend and router.
+    if [[ -n "${SRT_SLURM_REPOSITORY:-}" ]]; then
+        check_env_vars SRT_SLURM_COMMIT
+        git init "$destination" || return 1
+        git -C "$destination" remote add origin "$SRT_SLURM_REPOSITORY" || return 1
+        git -C "$destination" fetch --depth=1 origin "$SRT_SLURM_COMMIT" || return 1
+        git -C "$destination" checkout --detach "$SRT_SLURM_COMMIT" || return 1
+    elif [[ "$framework" == "tilert" ]]; then
+        # Fork exception until NVIDIA supports the TileRT backend and router.
         SRT_SLURM_COMMIT=6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde
         git init "$destination" || return 1
         git -C "$destination" remote add origin https://github.com/SemiAnalysisAI/srt-slurm.git || return 1

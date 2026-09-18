@@ -21,11 +21,11 @@ Use this page for benchmark configuration, recipe, image, and runner changes. It
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | Append-only benchmark trigger log |
 | [`AGENTS.md`](../AGENTS.md) | Repository-wide config, MTP, changelog, and sweep rules |
 
-Archive deprecated entries in [`configs/deprecated/amd-master.yaml`](../configs/deprecated/amd-master.yaml) or [`configs/deprecated/nvidia-master.yaml`](../configs/deprecated/nvidia-master.yaml). Use only these two vendor archives, not separate files per deprecation. Preserve historical settings and comments; disambiguate colliding keys with a descriptive suffix and an original-key comment. For partial retirements, move only the retired scenarios. Keep archives out of active sweep inputs. Retired AMD server-registry entries and model-specific setup belong in `benchmarks/multi_node/amd_utils/deprecated/`, outside the active server lookup. Preserve shared dependencies needed by retained SPEED-Bench collectors, including their scheduling scores. See the [deprecation rules](../AGENTS.md#deprecating-benchmark-configs).
+Archive deprecated entries in [`configs/deprecated/amd-master.yaml`](../configs/deprecated/amd-master.yaml) or [`configs/deprecated/nvidia-master.yaml`](../configs/deprecated/nvidia-master.yaml). Use only these two vendor archives, not separate files per deprecation. Preserve historical settings and comments; disambiguate colliding keys with a descriptive suffix and an original-key comment. For partial retirements, move only the retired scenarios. Keep archives out of active sweep inputs. Archived AMD srt-slurm ports use native recipes rather than the retired `amd_utils` server registry. Preserve shared dependencies needed by retained SPEED-Bench collectors, including their scheduling scores. See the [deprecation rules](../AGENTS.md#deprecating-benchmark-configs).
 
 ## Dependency submodules
 
-Git records the exact dependency commits. [`.gitmodules`](../.gitmodules) defines the repositories: AIPerf at `utils/aiperf`, NVIDIA srt-slurm at `utils/srt-slurm`. TileRT is a documented manual fork checkout in `setup_srt_slurm()`, not a separate submodule.
+Git records the exact dependency commits. [`.gitmodules`](../.gitmodules) defines the repositories: AIPerf at `utils/aiperf`, NVIDIA srt-slurm at `utils/srt-slurm`. TileRT and the MI355X AMD port use pinned fork checkouts in `setup_srt_slurm()`, not separate submodules. The MI355X fork and revision are selected in `runners/runtime_settings.sh`; other runners keep their existing runtime selection.
 
 Initialize them before running benchmarks locally:
 
@@ -55,6 +55,14 @@ parsed YAML scalars so quotes and punctuation remain data, not YAML or shell syn
 
 Keep model selection, cache preparation, and workload-dependent time limits in the
 launcher. Do not add profiles for non-srt-slurm launchers or change their routing here.
+
+The MI355X port uses the same cluster renderer through `infx.workflows.srt_slurm`.
+Its profile provides the ROCm visibility mask, fabric, Slurm directives, mounts,
+and host prerequisites. The adapter renders job-local paths and forwards workflow
+inputs; `srtctl` owns allocation, worker/router/service coordination, and completion.
+Recipes use schema 2 (`engine` and `roles`) and `apply_srt_recipe` selects measured
+AgentX acceptance from the golden curves. Fixed-sequence recipes consume the
+matrix's `CONC_LIST`, so the benchmark points and result collector agree.
 
 ## Procedure index
 

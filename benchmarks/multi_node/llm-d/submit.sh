@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Submit a multi-node llmd-vllm wide-EP P/D disagg benchmark job to SLURM.
-# Modeled after benchmarks/multi_node/amd_utils/submit.sh; prints JOB_ID on
+# Prints JOB_ID on
 # stdout so the runner can poll for completion.
 #
 # Topology (matches the llm-d wide-EP guide reference):
