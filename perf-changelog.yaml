@@ -8082,3 +8082,10 @@
     - "Capture only full decode CUDA graphs (VLLM_USE_BREAKABLE_CUDAGRAPH=0 with cudagraph_mode FULL_DECODE_ONLY, as the MiniMax-M3 gfx942 arm does) and restore --moe-backend aiter: on gfx942 every worker segfaulted during piecewise graph capture with both the Triton W4A16 MoE kernel (run 35305045778) and the auto-selected unfused Triton kernel (run 35306398350), so the capture mode rather than the MoE kernel is the failing piece; prefill runs eagerly"
     - "仅捕获完整的 decode CUDA graph（VLLM_USE_BREAKABLE_CUDAGRAPH=0 并设置 cudagraph_mode FULL_DECODE_ONLY，与 MiniMax-M3 gfx942 配方一致）并恢复 --moe-backend aiter：在 gfx942 上，无论使用 Triton W4A16 MoE 内核（运行 35305045778）还是自动选择的未融合 Triton 内核（运行 35306398350），所有 worker 都在 piecewise graph 捕获期间段错误，说明问题在于捕获模式而非 MoE 内核；prefill 以 eager 方式运行"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3247
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  description:
+    - "Update the MI325X DeepSeek-V4.1-Flash vLLM DSpark AgentX image from vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657 (2026-09-12) to vllm/vllm-openai-rocm:nightly-dee37d89115db4c94a820a79a78a7828e141c910 (2026-09-18, Docker Hub digest sha256:5550994c1874ef331c6aed3ea27ae1efb7f4cfd17a2f18f5466c2837b9bf5467, same base-nightly ROCm layer). v0.29.0 predates DeepSeek V4.1 support, so the family stays on the upstream nightly channel; recipe flags, TP8, five-token DSpark with golden AL 3.51, concurrency 1-32 and the gsm8k eval are unchanged."
+    - "将 MI325X DeepSeek-V4.1-Flash vLLM DSpark AgentX 镜像从 vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657（2026-09-12）更新为 vllm/vllm-openai-rocm:nightly-dee37d89115db4c94a820a79a78a7828e141c910（2026-09-18，Docker Hub 摘要 sha256:5550994c1874ef331c6aed3ea27ae1efb7f4cfd17a2f18f5466c2837b9bf5467，base-nightly ROCm 层相同）。v0.29.0 早于 DeepSeek V4.1 支持，因此该配置族继续使用上游 nightly 渠道；配方参数、TP8、五 token DSpark（黄金 AL 3.51）、并发 1-32 与 gsm8k eval 保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3258
