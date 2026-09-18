@@ -96,11 +96,11 @@ sparse_attention_config:
     implementation: msa
     indexer_kv_dtype: fp8
     sparse_disable_index_value: true
+    fuse_qkv_index_projection: true
 kv_cache_config:
     free_gpu_memory_fraction: 0.94
     enable_block_reuse: true
-    block_reuse_config:
-        policy: per_conversation
+    block_reuse_policy: per_conversation
     tokens_per_block: 128
     use_kv_cache_manager_v2: true
     dtype: fp8

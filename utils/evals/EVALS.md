@@ -386,23 +386,29 @@ support a normal no-tool answer for the irrelevance case. Starting a nominally
 OpenAI-compatible server is not sufficient if it cannot parse that model's
 native tool-call syntax.
 
-BFCL sends `store=false` in its stock chat requests. Stock TRT-LLM
-`1.3.0rc23.post1` rejects this field; InferenceX does not patch its request
-schema. Its native Responses endpoint accepts that field. Select
-`eval-framework: bfcl` and `eval-suite: bfcl_responses_smoke` to exercise
-BFCL's stock `OpenAIResponsesHandler` through `/v1/responses`, with the same
-four smoke case IDs and request budgets. Reports use a distinct task name and
-record `api_format`; do not combine these scores with Chat Completions results.
-BFCL's upstream handlers differ in request formatting, including system versus
-developer roles. No request or response rewriting is added by InferenceX.
+**BFCL is disabled for TensorRT-LLM (`trt` and `dynamo-trt`), including
+explicit BFCL suite overrides.** BFCL-only workflow jobs are skipped before
+allocating a GPU runner. Combined throughput/eval jobs retain throughput but
+disable BFCL; direct `run_eval` / `run_bfcl_eval` calls log an explicit skip
+without installing BFCL, sending requests, or producing evaluation scores.
+Vendor validators and other evaluation frameworks remain enabled.
 
-MiniMax TRT launchers explicitly select the stock `--tool_parser minimax_m3`;
-the pinned TRT CLI defaults to no tool parser.
+MiniMax B200/B300 TRT recipes retain the original `1.3.0rc23.post1` image and
+its native configuration fields. Stock BFCL Chat Completions sends
+`store=false`, which that image rejects; its Responses path and newer images
+have not passed the native BFCL validation. InferenceX does not patch request
+schemas or restore runtime framework-source patches. The experimental TRT
+nightly probe has been removed.
 
-The native Responses path is a compatibility candidate until validated on live
-hardware. A successful vendor smoke does not establish BFCL support. TRT now
-uses its native performance-metrics behavior as well; removing the executor
-rewrite can change timing overhead, so old throughput results need revalidation.
+The generic `bfcl_responses_smoke` adapter remains available for other serving
+frameworks. It uses BFCL's stock `OpenAIResponsesHandler`, four smoke case IDs,
+and distinct task / `api_format` metadata. Do not combine these scores with
+Chat Completions results or infer TRT support from the adapter's presence.
+
+MiniMax TRT launchers still select the native `--tool_parser minimax_m3` for
+vendor validation. They use native performance metrics; removing the executor
+metrics rewrite means historical throughput is not performance validation of
+this patch-free recipe.
 
 The same model/suite uses identical cases and scoring on AMD and NVIDIA.
 Vendor evals remain automatic; BFCL is an explicit additional diagnostic.

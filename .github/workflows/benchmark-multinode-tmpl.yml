@@ -150,7 +150,7 @@ env:
   DISAGG: ${{ fromJSON(inputs.config).disagg }}
   PREFILL_HARDWARE: ${{ fromJSON(inputs.config).prefill.hardware }}
   DECODE_HARDWARE: ${{ fromJSON(inputs.config).decode.hardware }}
-  RUN_EVAL: ${{ inputs.run-eval }}
+  RUN_EVAL: ${{ inputs.run-eval && !(inputs.eval-framework == 'bfcl' && (fromJSON(inputs.config).framework == 'trt' || fromJSON(inputs.config).framework == 'dynamo-trt')) }}
   EVAL_ONLY: ${{ inputs.eval-only }}
   EVAL_FRAMEWORK: ${{ inputs.eval-framework }}
   EVAL_SUITE: ${{ inputs.eval-suite }}
@@ -200,6 +200,8 @@ permissions:
 
 jobs:
   benchmark:
+    # BFCL is disabled for TRT; skip eval-only jobs before reserving a GPU runner.
+    if: ${{ !(inputs.eval-only && inputs.eval-framework == 'bfcl' && (fromJSON(inputs.config).framework == 'trt' || fromJSON(inputs.config).framework == 'dynamo-trt')) }}
     runs-on: >-
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
@@ -522,7 +524,7 @@ jobs:
           python3 utils/evals/validate_scores.py --expected-concs "${expected_concs}"
 
       - name: Cleanup eval outputs (post-upload)
-        if: ${{ always() && (inputs.run-eval || inputs.eval-only) }}
+        if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
         run: |
           rm -f meta_env.json || true
           rm -f results*.json || true
