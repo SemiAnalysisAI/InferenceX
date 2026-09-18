@@ -158,7 +158,7 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 
 不得只提交一侧：`srtctl` 读取配方，而矩阵生成读取主配置。仅改配方可能给结果贴错标签；仅改主配置不会改变实际部署的配方。
 
-GLM-5.2 B300 紧凑型 Dynamo 配方为工作进程和前端准备可写的虚拟环境。辅助脚本在 SRT 现有安装锁内，最多尝试三次安装相同的指定版本 Dynamo 软件包，并保留软件包哈希校验和最终失败状态。prefill 和 decode 工作进程继续使用 `LIBFABRIC` NIXL 后端，并设置 `NIXL_DISABLE_CUDA_ADDR_WA=1`，同时显式设置 `OMP_NUM_THREADS=1`。对于选中进行 eval 的单前端配方，`frontend.placement.node` 和 `benchmark.placement.node` 均设为 `head`，与固定版本启动脚本使用的本地回环 eval 端点保持一致。
+GLM-5.2 B300 紧凑型 Dynamo 配方为工作进程和前端准备可写的虚拟环境。辅助脚本在 SRT 现有安装锁内，最多尝试三次安装相同的指定版本 Dynamo 软件包，并保留软件包哈希校验和最终失败状态。prefill 和 decode 工作进程继续使用 `LIBFABRIC` NIXL 后端，并设置 `NIXL_DISABLE_CUDA_ADDR_WA=1`，两类工作进程均选择 `kv_cache_config.use_kv_cache_manager_v2: false` 并设置 `TRTLLM_KVCACHE_POOL_USE_FABRIC_MEMORY=0`，使用旧版 KV 管理器和标准 CUDA KV 内存分配。GLM-5.2 的 indexer 和 MTP 设置保持显式配置，同时设置 `OMP_NUM_THREADS=1` 和 `FI_LOG_LEVEL=warn`，让 LIBFABRIC 输出这两类工作进程的提供程序警告。对于选中进行 eval 的单前端配方，`frontend.placement.node` 和 `benchmark.placement.node` 均设为 `head`，与固定版本启动脚本使用的本地回环 eval 端点保持一致。
 
 ## 注册 llm-d 配方
 

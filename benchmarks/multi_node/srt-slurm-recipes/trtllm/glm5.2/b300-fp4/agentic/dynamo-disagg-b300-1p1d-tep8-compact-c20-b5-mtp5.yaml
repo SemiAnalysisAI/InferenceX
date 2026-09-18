@@ -22,6 +22,7 @@ roles:
       HOME: /trtllm-jit-cache
       MIMALLOC_PURGE_DELAY: '0'
       NCCL_GRAPH_MIXING_SUPPORT: '0'
+      FI_LOG_LEVEL: warn
       NIXL_DISABLE_CUDA_ADDR_WA: '1'
       OMP_NUM_THREADS: '1'
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
@@ -36,6 +37,7 @@ roles:
       TRTLLM_DSA_INDEXER_BF16: '1'
       TRTLLM_ENABLE_PDL: '1'
       TRTLLM_FUSED_DSA_METADATA: '1'
+      TRTLLM_KVCACHE_POOL_USE_FABRIC_MEMORY: '0'
       TRTLLM_KVCACHE_RECV_BUFFER_COUNT: '1'
       TRTLLM_KVCACHE_SEND_BUFFER_COUNT: '1'
       TRTLLM_KV_CACHE_TRANSFER_TIMEOUT_SEC: '600'
@@ -61,6 +63,7 @@ roles:
       enable_chunked_prefill: true
       gpus_per_node: 8
       kv_cache_config:
+        use_kv_cache_manager_v2: false
         dtype: fp8
         enable_block_reuse: true
         event_buffer_max_size: 0
@@ -103,6 +106,7 @@ roles:
       HOME: /trtllm-jit-cache
       MIMALLOC_PURGE_DELAY: '0'
       NCCL_GRAPH_MIXING_SUPPORT: '0'
+      FI_LOG_LEVEL: warn
       NIXL_DISABLE_CUDA_ADDR_WA: '1'
       OMP_NUM_THREADS: '1'
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
@@ -117,6 +121,7 @@ roles:
       TRTLLM_DSA_INDEXER_BF16: '1'
       TRTLLM_ENABLE_PDL: '1'
       TRTLLM_FUSED_DSA_METADATA: '1'
+      TRTLLM_KVCACHE_POOL_USE_FABRIC_MEMORY: '0'
       TRTLLM_KVCACHE_RECV_BUFFER_COUNT: '1'
       TRTLLM_KVCACHE_SEND_BUFFER_COUNT: '1'
       TRTLLM_KV_CACHE_TRANSFER_TIMEOUT_SEC: '600'
@@ -142,6 +147,7 @@ roles:
       enable_attention_dp: false
       gpus_per_node: 8
       kv_cache_config:
+        use_kv_cache_manager_v2: false
         dtype: fp8
         enable_block_reuse: false
         event_buffer_max_size: 0
