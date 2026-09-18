@@ -30,6 +30,7 @@ def test_b200_tp2_launch_and_workload(tmp_path, scenario, eval_only, concurrency
         "RANDOM_RANGE_RATIO": "1",
         "RESULT_FILENAME": "fixture-result",
         "RESULT_DIR": str(tmp_path),
+        "INFMAX_CONTAINER_WORKSPACE": str(tmp_path),
         "KV_OFFLOADING": "none",
         "TOTAL_CPU_DRAM_GB": "0",
         "DURATION": "3600",
@@ -100,4 +101,5 @@ builtin source "$1"
         assert workload[workload.index("--input-len") + 1] == "8192"
         assert workload[workload.index("--output-len") + 1] == "1024"
         assert workload[workload.index("--num-prompts") + 1] == "10"
-        assert workload[workload.index("--result-dir") + 1] == str(tmp_path)
+        # The result JSON goes to the container repository root, not RESULT_DIR.
+        assert workload[workload.index("--result-dir") + 1] == f"{tmp_path}/"
