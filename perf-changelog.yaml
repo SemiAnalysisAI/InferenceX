@@ -8120,3 +8120,15 @@
     nightly-dev-cu13-20260918-20518d85, and use the current mamba-radix-cache-strategy
     argument for prefill and decode.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-sglang-agentic-mtp-latest-control
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-1p1d-hicache-experiment
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-2p1d-hicache-experiment
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add experimental latest-nightly aggregate controls and prefill-only HiCache 1P1D/2P1D
+    at C1/32/64 for B200 Qwen3.5 FP8. These candidate points require measured frontier
+    improvement before promotion.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
