@@ -43,17 +43,25 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
+# One shared host copy of the two fp8 Engram tables instead of a row-sharded
+# copy per rank: the SGLang analogue of the vLLM arm's Engram CPU offload. It
+# frees ~46 GiB of HBM per GPU for the 1M-context prefill working set and the
+# KV pool, and output is bitwise unchanged (cookbook). The first sweep ran
+# with the tables on GPU and the server died on the first long AgentX prompts
+# (run 35304528907: c8 loaded weights, then the server produced no further output for 17 minutes and the step exited before /health ever became ready, with c1-c4 and c16-c128 cancelled).
+export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
+
 # AgentX concurrency counts live session trees, not individual requests.
-# Allow subagent fan-out to exceed CONC without clipping request bursts, and
-# keep decode graphs covering that fan-out: the cookbook captures 64 for its
-# low-latency cell, so never go below it; above 128 the DSpark verify block
-# (six tokens per request) makes capture cost more than it returns.
+# Allow subagent fan-out to exceed CONC without clipping request bursts, but
+# never let the pool exceed the decode graph batch: a DSpark verify step for a
+# batch above the captured 64 runs eagerly and allocates its attention
+# workspace on the fly, which OOMed the H200 eval at 128 running requests
+# (6.4 GiB allocation with 2 GiB free, run 35306704553). Batches within the
+# graph tier reuse the capture-time workspace instead.
+CUDA_GRAPH_MAX_BS=64
 MAX_RUNNING_REQUESTS=$((2 * CONC))
-CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
-if (( CUDA_GRAPH_MAX_BS < 64 )); then
-    CUDA_GRAPH_MAX_BS=64
-elif (( CUDA_GRAPH_MAX_BS > 128 )); then
-    CUDA_GRAPH_MAX_BS=128
+if (( MAX_RUNNING_REQUESTS > CUDA_GRAPH_MAX_BS )); then
+    MAX_RUNNING_REQUESTS=$CUDA_GRAPH_MAX_BS
 fi
 
 # Saturation arms carry a larger in-flight working set than the 30-minute
@@ -90,7 +98,12 @@ SGLANG_CMD=(
     --tp "$TP" --ep-size "$EP_SIZE"
     # Backends resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl
     # on Blackwell); the cookbook warns that overriding them costs decode speed.
-    --mem-fraction-static 0.8
+    # 0.70 rather than the cookbook's 0.8, and a bounded prefill chunk: the
+    # sparse-attention indexer and DSpark prefill buffers scale with the chunk
+    # times the 1M context, and the default 16384 chunk exhausted HBM on the
+    # first 66k-99k-token AgentX prompts.
+    --mem-fraction-static 0.70
+    --chunked-prefill-size 8192
     --speculative-algorithm DSPARK
     --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
