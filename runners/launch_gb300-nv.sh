@@ -224,7 +224,7 @@ setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" "$USES_DCGM_POWER" || exit 1
 # the change ships in the pinned image.
 if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-sglang" && "$MODEL_PREFIX" == "dsv4" ]]; then
     SGLANG_MOONCAKE_OPT_URL="https://github.com/weireweire/sglang.git"
-    SGLANG_MOONCAKE_OPT_PIN="d2cf19e69fe7f9d69a7504012c3617fe6669acbd"
+    SGLANG_MOONCAKE_OPT_PIN="0488f31582ca8b1a5c3a0ba2b1ed2a29e4fb890c"
     git init configs/sglang-mooncake-opt || exit 1
     git -C configs/sglang-mooncake-opt fetch --depth 1 \
         "$SGLANG_MOONCAKE_OPT_URL" "$SGLANG_MOONCAKE_OPT_PIN" || exit 1
