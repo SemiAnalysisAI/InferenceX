@@ -8093,6 +8093,29 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3117
 
 - config-keys:
+    - qwen3.5-fp8-gb300-dynamo-sglang
+  description:
+    - "Update the Qwen3.5 FP8 GB300 Dynamo-SGLang 8k1k STP SGLang image from lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928 to lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85 (2026-09-18 upstream cu13 dev nightly, sgl-project/sglang@20518d85, amd64 + arm64)"
+    - "In the 3 srt-slurm recipes of this key, set model.container to the same image, rename cuda-graph-max-bs to cuda-graph-max-bs-decode for the same reason, and move the Dynamo install from source commit 46520ca59afe992fb5ef61b3197b2316f8df9b2b to the public 1.5.0.dev20260917 wheel (the master router version follows), the newest Dynamo nightly, since the June source build predates the SGLang ServerArgs compatibility fixes that Dynamo 1.5.0.dev20260910 and later carry; recipe topologies, concurrencies and serving flags are otherwise unchanged"
+    - "将 Qwen3.5 FP8 GB300 Dynamo-SGLang 8k1k STP 的 SGLang 镜像从 lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928 更新为 lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85（2026-09-18 上游 cu13 dev nightly，sgl-project/sglang@20518d85，amd64 + arm64）"
+    - "在该 key 的 3 个 srt-slurm 配方中，将 model.container 设为同一镜像，出于同样原因将 cuda-graph-max-bs 改为 cuda-graph-max-bs-decode，并将 Dynamo 安装从源码提交 46520ca59afe992fb5ef61b3197b2316f8df9b2b 改为公开的 1.5.0.dev20260917 wheel（master 中的 router 版本随之更新），这是最新的 Dynamo nightly，因为 6 月的源码构建早于 Dynamo 1.5.0.dev20260910 及之后版本所包含的 SGLang ServerArgs 兼容性修复；配方拓扑、并发与服务参数保持不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3254
+
+- config-keys:
+    - qwen3.5-fp8-gb300-dynamo-sglang
+  description:
+    - "Rename mamba-scheduler-strategy to mamba-radix-cache-strategy (value no_buffer unchanged) in the 2 srt-slurm recipes of this key that set it: SGLang nightly-dev-cu13-20260918-20518d85 rejects the old spelling as an unrecognized argument (run 35317753866, every prefill and decode worker exited at argument parsing), and its help lists --mamba-radix-cache-strategy {auto,no_buffer,extra_buffer,extra_buffer_lazy} as the replacement"
+    - "在该 key 中设置了该参数的 2 个 srt-slurm 配方里，将 mamba-scheduler-strategy 改名为 mamba-radix-cache-strategy（取值 no_buffer 不变）：SGLang nightly-dev-cu13-20260918-20518d85 将旧写法视为未识别参数（运行 35317753866 中所有 prefill 与 decode worker 在参数解析阶段退出），其帮助信息列出 --mamba-radix-cache-strategy {auto,no_buffer,extra_buffer,extra_buffer_lazy} 为替代"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3254
+
+- config-keys:
+    - qwen3.5-fp8-gb300-dynamo-sglang
+  description:
+    - "Replace the decode-role prefill-round-robin-balance: true with load-balance-method: follow_bootstrap_room in the 2 srt-slurm recipes of this key that set it: SGLang nightly-dev-cu13-20260918-20518d85 no longer has --prefill-round-robin-balance (run 35319100186, every decode worker of the DEP16 arm exited at argument parsing) and its --load-balance-method choices are auto, round_robin, follow_bootstrap_room, total_requests and total_tokens; the prefill roles keep load-balance-method: round_robin"
+    - "在该 key 中设置了该参数的 2 个 srt-slurm 配方里，将 decode 角色的 prefill-round-robin-balance: true 替换为 load-balance-method: follow_bootstrap_room：SGLang nightly-dev-cu13-20260918-20518d85 已没有 --prefill-round-robin-balance（运行 35319100186 中 DEP16 分支的所有 decode worker 在参数解析阶段退出），其 --load-balance-method 可选值为 auto、round_robin、follow_bootstrap_room、total_requests 与 total_tokens；prefill 角色保持 load-balance-method: round_robin"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3254
+
+- config-keys:
     - dsv41flash-fp4-h200-sglang-agentic-dspark
   scenario-type:
     - agentic-coding

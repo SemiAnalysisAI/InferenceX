@@ -82,32 +82,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
     echo "Creating srtslurm.yaml configuration..."
-    cat > srtslurm.yaml <<EOF
-# SRT SLURM Configuration for H100
-
-# Default SLURM settings
-default_account: "${SLURM_ACCOUNT}"
-default_partition: "${SLURM_PARTITION}"
-default_time_limit: "6:00:00"
-# Resource defaults
-gpus_per_node: 8
-network_interface: ""
-# Path to srtctl repo root (where the configs live)
-srtctl_root: "${SRTCTL_ROOT}"
-# Model path aliases
-model_paths:
-  "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
-containers:
-  dynamo-trtllm: "${SQUASH_FILE}"
-  dynamo-sglang: "${SQUASH_FILE}"
-  nginx-sqsh: "${NGINX_SQUASH_FILE}"
-  latest: "${SQUASH_FILE}"
-  "${CONTAINER_KEY}": "${SQUASH_FILE}"
-# SLURM directive compatibility
-use_gpus_per_node_directive: true
-use_segment_sbatch_directive: false
-use_exclusive_sbatch_directive: false
-EOF
+    write_srt_cluster_config h100-dgxc-slurm srtslurm.yaml 0 \
+        --model "$SRT_SLURM_MODEL_PREFIX" "$MODEL_PATH" \
+        --var CONTAINER_KEY "$CONTAINER_KEY" || exit 1
 
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
