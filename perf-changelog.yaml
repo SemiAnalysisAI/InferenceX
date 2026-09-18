@@ -8215,3 +8215,11 @@
   description:
   - "Retain only the new measured disaggregated qualification scope. Keep latest-image aggregate controls as comparison evidence without publishing a sparse replacement for the existing aggregate curves; the dashboard selects the latest run per curve scope, so a lone new aggregate point would remove still-competitive published endpoints. Remove provisional aggregate configuration and its unused launcher, budget, and documentation changes. Preserve the existing aggregate FP8 scopes alongside the expanded PD curve."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Require native SRT DCGM power telemetry and measurement windows for B300 Qwen3.5 FP8 AgentX throughput runs. Collect and validate the producer contract before archiving artifacts, retain diagnostics when power validation fails, and skip throughput power validation for eval-only jobs. The initial canonical run lacked this contract and cannot qualify as a valid power result.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268

@@ -102,14 +102,15 @@ if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
 ' "$_RECIPE_SRC"; then
     USES_DCGM_POWER=1
 fi
-if [[ "$USES_DCGM_POWER" == "1" && (
-    "${IS_AGENTIC}" == "1" ||
-    "$MODEL_PREFIX" != "dsv4" ||
-    "$PRECISION" != "fp4" ||
-    ( "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" )
-) ]]; then
-    echo "Error: B300 dcgm-power is limited to fixed-sequence DSV4 FP4 dynamo-sglang/vllm" >&2
-    exit 1
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+        : # AgentX uses the native SRT measurement-window contract and adapter.
+    elif [[ "$IS_AGENTIC" != "1" && "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" && ( "$FRAMEWORK" == "dynamo-sglang" || "$FRAMEWORK" == "dynamo-vllm" ) ]]; then
+        : # Existing fixed-sequence telemetry path.
+    else
+        echo "Error: B300 dcgm-power supports fixed-sequence DSV4 FP4 and Qwen3.5 FP8 dynamo-sglang AgentX" >&2
+        exit 1
+    fi
 fi
 
 SRT_REPO_DIR="srt-slurm"
@@ -225,6 +226,13 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
     mkdir -p "$LOGS_DIR/power"
     cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
     cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
+fi
+
+if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" && "${EVAL_ONLY}" != "true" ]]; then
+    read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+    collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" "$GITHUB_WORKSPACE" \
+        "$GITHUB_WORKSPACE" "$RESULT_FILENAME" "$SRT_SLURM_COMMIT" \
+        "${POWER_CONCURRENCIES[@]}" || SRT_JOB_RC=$?
 fi
 
 cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
