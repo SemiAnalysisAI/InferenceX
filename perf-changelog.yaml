@@ -8168,3 +8168,15 @@
     Dynamo SGLang jobs. The checkpoint is present on compute-node NVMe but absent
     from the login node; retain worker-side model loading checks.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-1p1d-hicache-experiment
+  scenario-type:
+  - agentic-coding
+  description:
+  - Use Mooncake intra-node NVLink transport and compatible device allocations
+    for the colocated B200 Qwen3.5 FP8 1P1D AgentX recipes. This transport passed
+    four real-verification short/long-input probes on B300; B200 validation and
+    normalized performance qualification remain pending.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269

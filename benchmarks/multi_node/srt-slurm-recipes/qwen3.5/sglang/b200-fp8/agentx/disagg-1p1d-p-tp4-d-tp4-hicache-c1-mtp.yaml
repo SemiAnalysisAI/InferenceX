@@ -42,6 +42,8 @@ roles:
       SGL_ENABLE_JIT_DEEPGEMM: 'false'
       SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
       PYTHONNOUSERSITE: '1'
+      MC_INTRANODE_NVLINK: '1'
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: INTRA_NODE_NVLINK
     args:
       served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
       trust-remote-code: true
@@ -91,6 +93,8 @@ roles:
       SGL_ENABLE_JIT_DEEPGEMM: 'false'
       SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
       PYTHONNOUSERSITE: '1'
+      MC_INTRANODE_NVLINK: '1'
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: INTRA_NODE_NVLINK
     args:
       served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
       trust-remote-code: true
