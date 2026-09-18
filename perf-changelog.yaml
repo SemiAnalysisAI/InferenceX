@@ -8359,3 +8359,15 @@
     - "Replace the decode-role prefill-round-robin-balance: true with load-balance-method: follow_bootstrap_room in the 5 srt-slurm recipes of this key that set it: SGLang nightly-dev-cu13-20260918-20518d85 no longer has --prefill-round-robin-balance (run 35319100186, every decode worker of the DEP16 arm exited at argument parsing) and its --load-balance-method choices are auto, round_robin, follow_bootstrap_room, total_requests and total_tokens; the prefill roles keep load-balance-method: round_robin"
     - "在该 key 中设置了该参数的 5 个 srt-slurm 配方里，将 decode 角色的 prefill-round-robin-balance: true 替换为 load-balance-method: follow_bootstrap_room：SGLang nightly-dev-cu13-20260918-20518d85 已没有 --prefill-round-robin-balance（运行 35319100186 中 DEP16 分支的所有 decode worker 在参数解析阶段退出），其 --load-balance-method 可选值为 auto、round_robin、follow_bootstrap_room、total_requests 与 total_tokens；prefill 角色保持 load-balance-method: round_robin"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3253
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+    - glm5.2-fp8-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GLM-5.2 MI355X SGLang AgentX images to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917 (2026-09-17 ROCm 7.2.0 mi35x daily, digest sha256:21c1cc9a…, the newest rocm720-mi35x tag; the 2026-09-18 builds only ship rocm724/rocm10 flavors): glm5.2-fp4-mi355x-sglang-agentic-mtp from 20260916 and glm5.2-fp8-mi355x-sglang-agentic-mtp from 20260908"
+    - "In glm5.2_fp8_mi355x_sglang_mtp.sh pass the decode graph batch as --cuda-graph-max-bs-decode instead of the removed --cuda-graph-max-bs alias, matching the MXFP4 sibling; serve flags, search spaces and golden acceptance are otherwise unchanged"
+    - "将 GLM-5.2 MI355X SGLang AgentX 镜像更新至 lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917（2026-09-17 ROCm 7.2.0 mi35x 日构建，digest sha256:21c1cc9a…，rocm720-mi35x 系列最新 tag；2026-09-18 构建仅提供 rocm724/rocm10 版本）：glm5.2-fp4-mi355x-sglang-agentic-mtp 自 20260916，glm5.2-fp8-mi355x-sglang-agentic-mtp 自 20260908"
+    - "在 glm5.2_fp8_mi355x_sglang_mtp.sh 中改用 --cuda-graph-max-bs-decode 传递 decode graph batch，替换已移除的 --cuda-graph-max-bs 别名，与 MXFP4 姊妹配方一致；其余服务参数、搜索空间与 golden acceptance 不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3277
