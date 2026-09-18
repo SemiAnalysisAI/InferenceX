@@ -8183,3 +8183,11 @@
   description:
   - Stage the measured C64 H298-per-rank HiCache candidate after fast job 4088 completed 3422 requests with zero errors or cancellations, reaching 35078.01 logical tok/s/GPU at 127.52 p90 interactivity. Add an isolated C96 diagnostic with the same cache and a decode graph cap of 64; official full-sweep qualification remains required.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Keep shared Slurm log streaming behavior unchanged for other launchers. Explicitly verify terminal allocation status in the B300 generic PD launcher, preserving artifacts before returning failed or unverifiable status.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268

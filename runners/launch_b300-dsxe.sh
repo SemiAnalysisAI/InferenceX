@@ -257,6 +257,7 @@ LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
 SRT_JOB_RC=0
 stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
+verify_slurm_job_status "$JOB_ID" || SRT_JOB_RC=$?
 
 set -x
 
