@@ -8096,3 +8096,10 @@
     - "Set --max-num-seqs to the sweep point (floor 16; 256 for accuracy evals) and disable prefix caching (--no-enable-prefix-caching): in run 35357364404 the H100 canary died at engine start because vLLM's default max-num-seqs of 1024 exceeded the 472 GDN/Mamba cache blocks that fit next to the bf16 weights on the 80 GB card (each decode sequence needs one block), and prefix caching is off so every 1k1k request prefills its full random prompt"
     - "将 --max-num-seqs 设为并发点（下限 16；精度评测为 256）并关闭 prefix caching（--no-enable-prefix-caching）：运行 35357364404 中 H100 canary 在引擎启动时失败，因为 vLLM 默认的 max-num-seqs 1024 超过了 80 GB 显卡上 bf16 权重旁仅剩的 472 个 GDN/Mamba cache block（每个 decode 序列需要一个 block）；关闭 prefix caching 使每个 1k1k 请求完整 prefill 其随机提示词"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3262
+
+- config-keys:
+    - qwen3.827beager-bf16-h100-vllm-mtp
+  description:
+    - "Add enforce_eager: true to the speculative config as well, so the DSpark draft head runs eagerly like the target; vLLM's speculative config carries its own enforce_eager and --enforce-eager alone leaves the drafter on CUDA graphs"
+    - "在 speculative config 中同样加入 enforce_eager: true，使 DSpark draft head 与目标模型一样以 eager 方式运行；vLLM 的 speculative config 拥有独立的 enforce_eager，仅使用 --enforce-eager 时草稿模型仍会使用 CUDA graph"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3262
