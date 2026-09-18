@@ -23,7 +23,7 @@ Use this page for benchmark configuration, recipe, image, and runner changes. It
 
 ## Dependency submodules
 
-Git records the exact dependency commits. [`.gitmodules`](../.gitmodules) defines the repositories: AIPerf at `utils/aiperf`, NVIDIA srt-slurm at `utils/srt-slurm`. TileRT is a documented manual fork checkout in `setup_srt_slurm()`, not a separate submodule.
+Git records the exact dependency commits. [`.gitmodules`](../.gitmodules) defines the repositories: AIPerf at `utils/aiperf`, NVIDIA srt-slurm at `utils/srt-slurm`. TileRT and the MI355X AMD port use pinned fork checkouts in `setup_srt_slurm()`, not separate submodules. The MI355X fork and revision are selected in `runners/runtime_settings.sh`; other runners keep their existing runtime selection.
 
 Initialize them before running benchmarks locally:
 
@@ -53,6 +53,14 @@ parsed YAML scalars so quotes and punctuation remain data, not YAML or shell syn
 
 Keep model selection, cache preparation, and workload-dependent time limits in the
 launcher. Do not add profiles for non-srt-slurm launchers or change their routing here.
+
+The MI355X port uses the same cluster renderer through `infx.workflows.srt_slurm`.
+Its profile provides the ROCm visibility mask, fabric, Slurm directives, mounts,
+and host prerequisites. The adapter renders job-local paths and forwards workflow
+inputs; `srtctl` owns allocation, worker/router/service coordination, and completion.
+Recipes use schema 2 (`engine` and `roles`) and `apply_srt_recipe` selects measured
+AgentX acceptance from the golden curves. Fixed-sequence recipes consume the
+matrix's `CONC_LIST`, so the benchmark points and result collector agree.
 
 ## Procedure index
 
