@@ -159,6 +159,8 @@ roles:
       max-running-requests: 96
       cuda-graph-max-bs-decode: 48
 sbatch_directives:
+  # Prior node-local tmpfs pressure caused an H298 host OOM; clearance is unverified.
+  exclude: dsxe-sa-b300-prd0-gpu-16
   mem: '0'
   cpus-per-task: '144'
 srun_options:
