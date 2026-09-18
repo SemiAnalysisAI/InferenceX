@@ -74,6 +74,13 @@ export SGLANG_DSV41_REASONING_EFFORT=high
 # 8192-token chunk below instead.
 
 # Cookbook MI350X environment.
+# Cap the HIP hardware queues per rank, as the DeepSeek-V4 MI355X SGLang arm
+# does. In runs 35304555945 and 35362380897 the server died a few requests
+# into AgentX warmup when RCCL queues aborted with HSA_STATUS_ERROR_OUT_OF_
+# RESOURCES ("the runtime failed to allocate the necessary resources") with
+# 67 GB of HBM still free after the KV pool: the eager 1M-context prefill
+# path plus RCCL exhausted the device's hardware queues, not its memory.
+export GPU_MAX_HW_QUEUES=2
 export SGLANG_USE_AITER=1
 export SGLANG_MOE_PADDING=1
 export AITER_FLYDSL_FORCE_REDUCE=1

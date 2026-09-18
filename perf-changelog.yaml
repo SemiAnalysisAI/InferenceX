@@ -8120,3 +8120,12 @@
     - "Keep the Engram tables on the GPU (drop SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1): in run 35311289442 c8 died during decode CUDA graph capture on gfx950 with hipErrorIllegalAddress at the first batch (bs=16, 0/12 captured) with the shared host table enabled, while the first sweep (run 35304555945) captured graphs up to bs=32 with the tables resident; the 288 GB card holds the tables next to the weights and the prefill working set stays bounded by --mem-fraction-static 0.75 and the 8192-token chunk"
     - "将 Engram 表保留在 GPU 上（移除 SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1）：运行 35311289442 中 c8 在 gfx950 上于 decode CUDA graph 捕获的第一个 batch（bs=16，0/12 已捕获）因 hipErrorIllegalAddress 崩溃，当时启用了共享主机表；而首次 sweep（运行 35304555945）在表常驻 GPU 时可捕获至 bs=32 的 graph；288 GB 显卡可在权重旁容纳这些表，prefill 工作集仍由 --mem-fraction-static 0.75 与 8192 token 分块约束"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set GPU_MAX_HW_QUEUES=2 as the DeepSeek-V4 MI355X SGLang arm does: in run 35362380897 (and the first sweep, run 35304555945) c4 came up, captured its decode graphs, then died three warmup requests in when RCCL queues on three ranks aborted with HSA_STATUS_ERROR_OUT_OF_RESOURCES while 67 GB of HBM was still free after the KV pool, which points at hardware-queue exhaustion under eager 1M-context prefill rather than memory"
+    - "与 DeepSeek-V4 MI355X SGLang 配方一致，设置 GPU_MAX_HW_QUEUES=2：运行 35362380897（以及首次 sweep 运行 35304555945）中 c4 启动并完成 decode graph 捕获后，在第三个 warmup 请求时三个 rank 的 RCCL 队列因 HSA_STATUS_ERROR_OUT_OF_RESOURCES 中止，而 KV 池分配后仍有 67 GB HBM 空闲，说明是 eager 1M 上下文 prefill 下硬件队列耗尽而非显存不足"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
