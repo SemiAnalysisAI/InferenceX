@@ -8135,3 +8135,11 @@
   description:
   - Pin Dynamo 805a77f with compatibility handling for the latest SGLang argument and model configuration APIs.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Use the supported intra-node NVLink transport and allocator for colocated B300 prefill/decode; the equal-TP real-verification diagnostic passes four short and 16K-input probes after RDMA source-memory registration failed. Record verified model and runtime identities; performance qualification remains pending.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
