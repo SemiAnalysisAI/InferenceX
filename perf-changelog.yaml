@@ -8539,3 +8539,16 @@
     the window directory; the benchmark caller supplies the remaining contract fields.
     Require fresh power qualification and the complete official sweep.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add measured colocated 1P1D concurrency 48 with 215 GB per-rank prefill
+    HiCache write-through and decode static memory 0.88. Its short replay
+    reaches 28722.10 logical tokens/s per all eight GPUs at 172.553 p90
+    interactivity and 2.318s p90 TTFT, with 2643 profile requests, zero errors
+    and zero drain cancellations. The six-point matrix requires fresh full
+    official sweep, complete native power artifacts and real-verification evals.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
