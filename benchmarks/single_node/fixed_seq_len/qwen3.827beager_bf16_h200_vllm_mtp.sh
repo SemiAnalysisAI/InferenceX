@@ -43,6 +43,15 @@ if [[ "${EVAL_ONLY:-false}" == true ]]; then
     MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
 
+# vLLM's default max-num-seqs (1024) exceeds the GDN/Mamba cache blocks that fit
+# next to the bf16 weights (472 on an 80 GB H100, run 35357364404) and engine
+# start aborts before graph capture. Size the scheduler batch to the sweep point
+# instead; the accuracy eval serves up to 256 concurrent requests.
+MAX_NUM_SEQS=$(( CONC > 16 ? CONC : 16 ))
+if [[ "${EVAL_ONLY:-false}" == true ]]; then
+    MAX_NUM_SEQS=256
+fi
+
 # Pyxis shares the host network; port 8888 can already belong to a host service.
 select_available_server_port
 
@@ -62,6 +71,9 @@ VLLM_CMD=(
     --trust-remote-code
     --kv-cache-dtype fp8
     --max-model-len "$MODEL_LEN"
+    --max-num-seqs "$MAX_NUM_SEQS"
+    # Every 1k1k request prefills its full random prompt; no prefix-cache hits.
+    --no-enable-prefix-caching
     --reasoning-parser qwen3
     --enable-auto-tool-choice --tool-call-parser qwen3_xml
     --speculative-config "$SPEC_CONFIG"
