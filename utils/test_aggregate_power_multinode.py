@@ -906,32 +906,35 @@ class TestCpuSidePower:
         assert reason in cpu["reason_codes"]
         assert pkg.sidecar()["power_valid"] is True
 
-    def test_cpu_leg_survives_an_invalid_gpu_leg(self, tmp_path):
+    @pytest.mark.parametrize(
+        "gpu_gap, sha, gpu_reason",
+        [
+            (True, PRODUCER_SHA, "package_recompute_invalid"),
+            (False, "b" * 40, "producer_commit_mismatch"),
+            (False, None, "producer_pin_missing"),
+        ],
+    )
+    def test_cpu_leg_survives_an_invalid_gpu_leg(self, tmp_path, gpu_gap, sha, gpu_reason):
+        """No GPU verdict, the producer pin included, reaches cpu_power_valid."""
         pkg = build_package(tmp_path)
         add_cpu_package(pkg, _cpu_rows())
-        _rewrite_samples(
-            pkg,
-            lambda body: [
-                row
-                for row in body
-                if not (row[3] == "node-p" and row[4] == "0" and 20 <= int(row[2]) <= 24)
-            ],
-        )
-        assert pkg.run() == 0
+        if gpu_gap:
+            _rewrite_samples(
+                pkg,
+                lambda body: [
+                    row
+                    for row in body
+                    if not (row[3] == "node-p" and row[4] == "0" and 20 <= int(row[2]) <= 24)
+                ],
+            )
+        assert pkg.run(sha=sha) == 0
         agg = pkg.agg()
         assert agg["power_valid"] == 0
         assert "total_gpu_energy_j" not in agg
         assert_grace_keys(agg)
-
-    def test_unpinned_producer_withholds_cpu_energy_too(self, tmp_path):
-        pkg = build_package(tmp_path)
-        add_cpu_package(pkg, _cpu_rows())
-        assert pkg.run(sha="b" * 40) == 0
-        agg = pkg.agg()
-        assert agg["power_valid"] == 0
-        assert agg["cpu_power_valid"] == 0
-        assert set(apm.CPU_METRIC_KEYS).isdisjoint(agg)
-        assert "cpu_producer_unverified" in pkg.sidecar()["cpu"]["reason_codes"]
+        sidecar = pkg.sidecar()
+        assert gpu_reason in sidecar["reasons"]
+        assert sidecar["cpu"]["reason_codes"] == []
 
     def test_window_unavailable_when_result_binds_to_no_window(self, tmp_path):
         pkg = build_package(tmp_path)

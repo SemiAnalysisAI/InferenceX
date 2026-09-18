@@ -452,13 +452,16 @@ HBM、LPDDR5X 及稳压损耗）；`Grace Power Socket N` 或 `CPU<n>:cpuSidePow
 记录 `sensor_kind`（`module`、`grace_socket` 或 `dcgm_cpu_rail`）、`source`（`acpi` 或 `dcgm`）、
 预期与观测 socket 数、解析行数和原因码。`power_metric_schema_version` 保持为 `2`。
 
-该测量环节尽力而为，其结论与 `power_valid` 相互独立：任何失败都会记录 `cpu_power_valid: 0` 且不输出
-CPU 字段，所有 GPU 字段保持逐字节不变，也不会使 `REQUIRE_POWER=1` 失败。原因码包括
-`cpu_samples_missing`、`cpu_samples_header_mismatch`、`cpu_samples_malformed`、`cpu_manifest_invalid`、
-`cpu_socket_count_mismatch`、`cpu_sensor_kind_mixed`、`cpu_sample_gap_exceeded`、
-`cpu_window_not_bracketed`、`cpu_window_unavailable`（没有已完成的窗口与该结果绑定，或窗口自身的契约
-检查失败）以及 `cpu_producer_unverified`（srt-slurm producer 固定版本校验失败，CPU 能耗与 GPU 能耗一样
-不予发布）。在当前固定的 v2.2.1 版本中，exporter 尚不识别 Module 标签，因此现有产物包只会得到 Grace
+该测量环节尽力而为，其结论与 `power_valid` 相互独立：它只从 GPU 产物包借用已绑定的正式测量窗口和
+worker 主机拓扑，GPU 侧的任何结论都不会传导过来，因此 producer 固定版本校验失败或 GPU 覆盖不足只会
+使 GPU 能耗不予发布，`cpu_power_valid` 仍按 CPU 采样自身给出结论。CPU 侧的任何失败都会记录
+`cpu_power_valid: 0` 且不输出 CPU 字段，所有 GPU 字段保持逐字节不变，也不会使 `REQUIRE_POWER=1` 失败。
+原因码包括 `cpu_samples_missing`、`cpu_samples_header_mismatch`、`cpu_samples_malformed`、
+`cpu_manifest_invalid`、`cpu_socket_count_mismatch`、`cpu_sensor_kind_mixed`、
+`cpu_sample_gap_exceeded`、`cpu_window_not_bracketed` 以及 `cpu_window_unavailable`（没有已完成的窗口
+与该结果绑定，或窗口自身的契约检查失败）。CPU 积分溢出沿用 GPU 侧的 `non_finite_power_metric`；聚合
+结果本身无法写入时，`aggregate_result_missing` 或 `aggregate_result_unwritable` 会同时出现在两侧的审计
+中。在当前固定的 v2.2.1 版本中，exporter 尚不识别 Module 标签，因此现有产物包只会得到 Grace
 socket 总功耗；上游 exporter 支持该标签后才会出现模块字段。没有 `cpu/` 的产物包产生的聚合结果和
 sidecar 与现在完全一致。
 

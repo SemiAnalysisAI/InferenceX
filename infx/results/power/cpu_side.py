@@ -247,7 +247,6 @@ def validate_cpu_leg(
     *,
     window: tuple[float, float] | None,
     expected_hosts: Iterable[str],
-    blocking_reasons: Iterable[str] = (),
 ) -> CpuPowerAudit | None:
     """Validate and integrate the CPU sub-package; None when the run carried none."""
     if not cpu_dir.is_dir():
@@ -266,7 +265,6 @@ def validate_cpu_leg(
     }
     audit.expected_sockets = len(expected_keys)
     audit.observed_sockets = len(series)
-    audit.invalidate(*blocking_reasons)
     if window is None:
         audit.invalidate("cpu_window_unavailable")
     if audit.reason_codes:

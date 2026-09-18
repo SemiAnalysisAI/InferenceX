@@ -929,9 +929,9 @@ def validate_and_integrate(
     """Recompute package validity, cross-check verdicts, and integrate energy.
 
     The GPU leg runs first and binds the formal window; the CPU-side leg then
-    reuses that window and the manifest topology. Only the producer pin and
-    the window binding are shared gates: an unpinned producer withholds CPU
-    energy too, while every other GPU verdict leaves the CPU leg untouched.
+    reuses that window and the manifest topology as inputs. No GPU verdict
+    reaches it: an unpinned producer or failed GPU coverage withholds GPU
+    energy only, and ``cpu_power_valid`` judges the CPU samples on their own.
     """
     audit = _validate_gpu_leg(
         power_dir=power_dir,
@@ -943,8 +943,6 @@ def validate_and_integrate(
         aggregate_gpus=aggregate_gpus,
         expected_producer_sha=expected_producer_sha,
     )
-    pin_failed = {"producer_pin_missing", "producer_commit_mismatch"} & set(audit.reasons)
-    blocking = ["cpu_producer_unverified"] if pin_failed else []
     window = None
     if audit.window is not None and audit.formal_window_trusted:
         window = (audit.window["start_time_unix"], audit.window["end_time_unix"])
@@ -952,7 +950,6 @@ def validate_and_integrate(
         power_dir / CPU_DIRNAME,
         window=window,
         expected_hosts=audit.expected_worker_hosts,
-        blocking_reasons=blocking,
     )
     return audit
 

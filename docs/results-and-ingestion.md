@@ -469,14 +469,18 @@ The sidecar's `cpu` block and the aggregate's `power_audit.cpu` record `sensor_k
 `grace_socket`, or `dcgm_cpu_rail`), `source` (`acpi` or `dcgm`), expected and observed socket
 counts, the parsed row count, and reason codes. `power_metric_schema_version` stays `2`.
 
-The leg is best effort and its verdict is independent of `power_valid`: any failure records
-`cpu_power_valid: 0` with no CPU keys, leaves every GPU field byte-identical, and never fails
-`REQUIRE_POWER=1`. Reason codes: `cpu_samples_missing`, `cpu_samples_header_mismatch`,
-`cpu_samples_malformed`, `cpu_manifest_invalid`, `cpu_socket_count_mismatch`,
-`cpu_sensor_kind_mixed`, `cpu_sample_gap_exceeded`, `cpu_window_not_bracketed`,
-`cpu_window_unavailable` (no completed window binds to the result, or the window's own contract
-checks failed), and `cpu_producer_unverified` (the srt-slurm producer pin failed, so CPU energy is
-withheld like GPU energy). At the pinned v2.2.1 the exporter does not classify the Module label,
+The leg is best effort and its verdict is independent of `power_valid`: it borrows only the bound
+formal window and the worker-host topology from the GPU package, and no GPU verdict reaches it, so
+an unpinned producer or failed GPU coverage withholds GPU energy while `cpu_power_valid` still
+judges the CPU samples on their own. Any CPU-leg failure records `cpu_power_valid: 0` with no CPU
+keys, leaves every GPU field byte-identical, and never fails `REQUIRE_POWER=1`. Reason codes:
+`cpu_samples_missing`, `cpu_samples_header_mismatch`, `cpu_samples_malformed`,
+`cpu_manifest_invalid`, `cpu_socket_count_mismatch`, `cpu_sensor_kind_mixed`,
+`cpu_sample_gap_exceeded`, `cpu_window_not_bracketed`, and `cpu_window_unavailable` (no completed
+window binds to the result, or the window's own contract checks failed). An overflowed CPU
+integration reuses the GPU leg's `non_finite_power_metric`, and `aggregate_result_missing` or
+`aggregate_result_unwritable` appears in both audits when the aggregate itself cannot be patched.
+At the pinned v2.2.1 the exporter does not classify the Module label,
 so current packages yield the Grace socket total; module keys appear once the upstream exporter
 classifies it. A package without `cpu/` produces an aggregate and sidecar identical to today.
 
