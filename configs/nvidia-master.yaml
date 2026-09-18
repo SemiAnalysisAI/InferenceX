@@ -7821,13 +7821,13 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
           additional-settings:
           - "CONFIG_FILE=recipes/kimik3/vllm/b200-fp4/agentx/agg-tp8pp2-mooncake-c96.yaml"
 qwen3.5-fp8-gb300-dynamo-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.14-cu130@sha256:5027e95bf6ec536856b1b52a91d1f35ff5c564ab83e8a94758a169ff09bb8df3
+  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: gb300
   precision: fp8
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "46520ca59afe992fb5ef61b3197b2316f8df9b2b" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260917" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true

@@ -10,7 +10,7 @@ dynamo:
   install: true
 
   source:
-    rev: 46520ca59afe992fb5ef61b3197b2316f8df9b2b
+    wheel: "1.5.0.dev20260917"
 frontend:
   type: dynamo
   enable_multiple_frontends: true
@@ -19,7 +19,7 @@ frontend:
 
 model:
   path: "qwen3.5-fp8"
-  container: "lmsysorg/sglang:v0.5.14-cu130@sha256:5027e95bf6ec536856b1b52a91d1f35ff5c564ab83e8a94758a169ff09bb8df3"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85"
   precision: "fp8"
 
 resources:
@@ -70,7 +70,7 @@ roles:
       chunked-prefill-size: 16384
       max-prefill-tokens: 16384
       context-length: 16384
-      cuda-graph-max-bs: 1024
+      cuda-graph-max-bs-decode: 1024
       decode-log-interval: 1
       stream-interval: 50
       disaggregation-mode: "prefill"
@@ -130,7 +130,7 @@ roles:
       chunked-prefill-size: 16384
       max-prefill-tokens: 16384
       context-length: 16384
-      cuda-graph-max-bs: 1024
+      cuda-graph-max-bs-decode: 1024
       decode-log-interval: 1
       stream-interval: 50
       disaggregation-mode: "decode"
