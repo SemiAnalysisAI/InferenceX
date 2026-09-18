@@ -7967,3 +7967,12 @@
     - "Pin all four branch-only AgentX offload arms to published vLLM nightly-e962733e08d10f7ca65dac4df99e116460b8b174 after the original main image returned registry 404. Preserve the canonical MiniMax-M3 NVFP4 TP4 recipe and heterogeneous KV patch; record registry digests and source compatibility proof. No prior performance data exists to mix across engines."
     - "main 原镜像返回 registry 404 后，将分支内四组 AgentX 卸载实验统一固定到已发布的 vLLM nightly-e962733e08d10f7ca65dac4df99e116460b8b174；保留规范 MiniMax-M3 NVFP4 TP4 配方及异构 KV 补丁，记录镜像 digest 和源码兼容性证据。此前没有完成的性能数据，不混用引擎结果。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Repin all four branch-only AgentX offload arms to the immutable 2026-09-18 vLLM image nightly-dee37d89115db4c94a820a79a78a7828e141c910 (manifest sha256:dea7fa047caa114167efccdeb42321b12d2c11da1add8728aa2662cb8d6b8cd5) after Docker Hub removed both the main recipe pin and the first replacement, causing registry 404 failures in runs 35154018672 and 35344315025. The current worker natively handles heterogeneous per-layer SimpleCPU regions, so the branch compatibility patch now recognizes that implementation and no-ops. Model, TP4, EAGLE3, four storage arms, AgentX settings and concurrency candidates are unchanged."
+    - "Docker Hub 删除 main 配方镜像及首次替代镜像后，运行 35154018672 与 35344315025 均因 registry 404 失败；现将分支内四组 AgentX 卸载实验统一固定到 2026-09-18 的不可变 vLLM 镜像 nightly-dee37d89115db4c94a820a79a78a7828e141c910（manifest sha256:dea7fa047caa114167efccdeb42321b12d2c11da1add8728aa2662cb8d6b8cd5）。当前 worker 已原生处理异构逐层 SimpleCPU 区域，因此分支兼容补丁会识别该实现并跳过修改。模型、TP4、EAGLE3、四种存储方案、AgentX 设置及并发候选均保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload

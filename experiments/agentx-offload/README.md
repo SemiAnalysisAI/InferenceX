@@ -35,8 +35,8 @@ native DRAM control before attributing it solely to storage hardware.
 
 ## Full canonical runs
 
-Use fresh main's `nvidia/MiniMax-M3-NVFP4` TP4 recipe with the published vLLM
-`nightly-e962733e08d10f7ca65dac4df99e116460b8b174`, EAGLE3-GQA with the main recipe's
+Use fresh main's `nvidia/MiniMax-M3-NVFP4` TP4 recipe with the immutable vLLM
+`nightly-dee37d89115db4c94a820a79a78a7828e141c910`, EAGLE3-GQA with the main recipe's
 synthetic acceptance length 2.78. All four arms reuse that exact recipe and its
 pinned AIPerf submodule. Keep ten extra warmups per lane, all mandatory snapshot
 primers, seed 42, recorded assistant replay, the same corpus, idle-gap policy and

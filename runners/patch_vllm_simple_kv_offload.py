@@ -82,6 +82,12 @@ NEW_LOOP = """        unique_gpu_caches: dict[str, torch.Tensor] = {}
                 key_name = name if len(regions) == 1 else f"{name}.{idx}"
                 unique_gpu_caches[key_name] = region
 """
+NATIVE_SETUP = """        for kv_cache_tensor in self.kv_cache_config.kv_cache_tensors:
+            name = next((n for n in kv_cache_tensor.layers if n in kv_caches), None)
+"""
+NATIVE_REGIONS = """            regions = raw[start : start + span].view(-1, num_blocks, block_bytes)
+            groups_per_layer, remainder = divmod(len(regions), len(layer_names))
+"""
 
 
 def installed_worker_path() -> Path:
@@ -97,6 +103,8 @@ def patch_worker(worker_path: Path) -> bool:
     """Patch heterogeneous layer-region sizing and return whether source changed."""
     source = worker_path.read_text()
     if NEW_SETUP in source and NEW_LOOP in source:
+        return False
+    if NATIVE_SETUP in source and NATIVE_REGIONS in source:
         return False
     if NEW_SETUP in source or NEW_LOOP in source:
         raise RuntimeError(f"partially patched vLLM worker at {worker_path}")

@@ -10,10 +10,24 @@ from runtime import connector_config
 
 from infx.matrix.generate import generate_test_config_sweep
 from infx.matrix.validation import SingleNodeMasterConfigEntry
+from runners.patch_vllm_simple_kv_offload import (
+    NATIVE_REGIONS,
+    NATIVE_SETUP,
+    patch_worker,
+)
 
 
 def test_hbm_has_no_connector():
     assert connector_config("none", 4, 0, 0, Path("/cache")) is None
+
+
+def test_current_upstream_simple_cpu_layout_needs_no_patch(tmp_path):
+    worker = tmp_path / "worker.py"
+    source = NATIVE_SETUP + NATIVE_REGIONS
+    worker.write_text(source)
+
+    assert patch_worker(worker) is False
+    assert worker.read_text() == source
 
 
 def test_dram_uses_aggregate_decimal_bytes():

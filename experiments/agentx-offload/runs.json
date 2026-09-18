@@ -86,14 +86,21 @@
       "attempt": 2,
       "retry_of": 35154018672,
       "head_sha": "618a5d229cb13af1a9432895a1f17e000cf57967",
-      "status": "queued",
-      "node": null,
+      "status": "failure",
+      "node": "im-b200-c001",
       "artifacts": [],
-      "performance_result": false
+      "failure_stage": "container image import",
+      "diagnosis": "The previously verified e962733e Docker Hub tag had been removed and returned registry HTTP 404 at import time.",
+      "performance_result": false,
+      "job_id": 105597312033,
+      "runner": "b200-nscale-slurm_07",
+      "allocation_id": "16387",
+      "log_sha256": "47d33a18f93868be158adc0d39c73c858937ab5cdbd8c90ca462a4f1f4d27388",
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35344315025/job/105597312033"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749,35154018672,35344315025",
-  "status": "NVMe c16 image-fix retry dispatched after a fresh capacity gate; queued on the B200 runner fleet.",
+  "status": "NVMe c16 image-fix retry failed before serving because Docker Hub removed the pinned tag. A current immutable nightly is verified and queued for branch validation before retry.",
   "last_capacity_check": {
     "checked_at": "2026-09-18T12:22:15.463Z",
     "cluster_observed_at": "2026-09-18T12:21:53.000Z",
@@ -112,9 +119,10 @@
     "reason": "Three B200 nodes were idle, no competing B200 work or priority override was present, and one one-node dispatch left the required two-node reserve."
   },
   "next_dispatch": {
-    "arm": "none",
+    "arm": "nvme",
     "concurrency": 16,
     "repeat": 1,
-    "requires": "Do not dispatch until run 35344315025 proves startup with the published replacement image; then run the matched HBM-only control after a fresh capacity gate."
+    "retry_of": 35344315025,
+    "requires": "Validate and push the current immutable vLLM nightly, then retry after a fresh scheduler capacity gate."
   }
 }

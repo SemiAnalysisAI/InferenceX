@@ -30,8 +30,8 @@ DRAM 使用 fresh main 根据 B200、TP4 和 `dram-utilization: 0.683` 实际生
 
 ## 完整规范运行
 
-沿用 main 的 `nvidia/MiniMax-M3-NVFP4` TP4 配方，搭配已发布的 vLLM
-`nightly-e962733e08d10f7ca65dac4df99e116460b8b174`，以及 EAGLE3-GQA 和
+沿用 main 的 `nvidia/MiniMax-M3-NVFP4` TP4 配方，搭配不可变的 vLLM
+`nightly-dee37d89115db4c94a820a79a78a7828e141c910`，以及 EAGLE3-GQA 和
 2.78 合成接受长度。四组复用同一启动脚本和固定的 AIPerf 子模块。
 保留每条轨迹额外十次预热、全部必需快照预热、seed 42、录制助手响应回放、相同语料和空闲间隔策略，
 并运行 **3,600 秒 profiling**。禁止 `agentx-fast`、缩短时长、unsafe 模式、合成工作负载、
