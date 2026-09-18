@@ -8120,3 +8120,12 @@
     - "Halve --chunked-prefill-size from 8192 to 4096, matching the B200 and GB200 arms: in run 35308550355 c1 passed but c32 OOMed in the sparse indexer's prefill top-k (_low_ratio_index_topk_torch, 5 GiB allocation with 3.4 GiB free of 139.8 GiB) with 29 long AgentX prompts in flight at mem-fraction 0.70"
     - "将 --chunked-prefill-size 从 8192 减半至 4096，与 B200、GB200 配方一致：运行 35308550355 中 c1 通过，但 c32 在 29 个长 AgentX 提示同时在途、mem-fraction 0.70 时于稀疏 indexer 的 prefill top-k（_low_ratio_index_topk_torch）OOM（139.8 GiB 中仅剩 3.4 GiB 时申请 5 GiB）"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3239
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Honor the workflow's SALLOC_TIME_LIMIT (480 minutes) in the H200 DGX Cloud launcher instead of its hardcoded 180-minute salloc, as the Blackwell launchers already do, and trim the conc-list from [1, 2, 4, 8, 16, 32, 64, 128] to [1, 2, 4, 8, 16]: in run 35312220802 c8 passed in 2h52m but c64 hit the 3-hour Slurm limit with 182 of its 707 warmup requests returned; the server log shows the arm prefill-bound (7689 chunks of 4096 tokens at a median 4.2k input tok/s, 63 running and 93 queued requests, KV pool of 34M tokens far from full), so AgentX's roughly 11 warmup sessions per unit of concurrency need about 10 hours at c64 and 5 hours at c32 before the 60-minute profile, while c16 fits the 8-hour budget; the vLLM H200 arm keeps its c64 and c128 points"
+    - "H200 DGX Cloud 启动器改为使用工作流的 SALLOC_TIME_LIMIT（480 分钟），而非硬编码的 180 分钟 salloc，与 Blackwell 启动器一致，并将 conc-list 从 [1, 2, 4, 8, 16, 32, 64, 128] 缩减为 [1, 2, 4, 8, 16]：运行 35312220802 中 c8 用 2 小时 52 分通过，但 c64 在 707 个 warmup 请求仅返回 182 个时触及 3 小时 Slurm 上限；服务日志显示该配方受 prefill 限制（7689 个 4096 token 分块，输入吞吐中位数约 4.2k tok/s，63 个运行中、93 个排队请求，34M token 的 KV 池远未占满），因此 AgentX 每单位并发约 11 个 warmup 会话在 c64 需约 10 小时、c32 需约 5 小时才能进入 60 分钟 profile，而 c16 可在 8 小时预算内完成；vLLM H200 配方保留 c64 与 c128 点"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3239
