@@ -8072,3 +8072,12 @@
     - "Add a bounded 16-case Kimi BFCL diagnostic with native NaN-logit counters and archived metrics; preserve full-suite sampling and quality gates."
     - "新增 16 用例 Kimi BFCL 限时诊断，启用原生 NaN logits 计数并保留指标；完整套件的采样和质量门槛保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin the experimental B200 TRT BFCL Responses probe to official nightly 1.3.0rc28.dev202609180000 by image digest, containing upstream MiniMax-M3 EAGLE3 support. Production image pins are unchanged by this experiment; no runtime source patching."
+    - "B200 TRT BFCL Responses 实验配置按镜像摘要固定到官方 nightly 1.3.0rc28.dev202609180000，包含上游 MiniMax-M3 EAGLE3 支持。本次实验不修改正式配置的镜像版本，不应用运行时源码补丁。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
