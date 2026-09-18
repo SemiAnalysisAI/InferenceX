@@ -198,6 +198,7 @@ export AITER_FLYDSL_STAGE2_FP8=1
 # but reads back 2.8% of the time, against 85.2% for a prompt-end anchor, so it
 # costs more in evictions than its reuse is worth on these traces.
 export ATOM_STATE_CHECKPOINT_DEMAND=0
+export ATOM_GDN_SSM_DTYPE=fp16
 
 # https://github.com/SemiAnalysisAI/InferenceX/blob/main/golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
 #  7 draft tokens -> AL 3.84
