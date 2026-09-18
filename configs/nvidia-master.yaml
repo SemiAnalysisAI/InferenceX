@@ -9331,7 +9331,7 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp-agg:
           - CONFIG_FILE=recipes/sglang/glm5.2/gb200-fp4/agentic/agg-gb200-tp8-c8-mtp.yaml
 
 glm5.2-fp4-b300-dynamo-sglang-agentic-agg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260824-95f5ecd3
+  image: lmsysorg/sglang:nightly-dev-20260910-00840301
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:b300-dsxe
@@ -9372,7 +9372,7 @@ glm5.2-fp4-b300-dynamo-sglang-agentic-agg:
           - "CONFIG_FILE=recipes/sglang/glm5.2/b300-fp4/agentic/glm5.2-agentx-agg.yaml:zip_override_mtp_agentx_lowlat[1]"
 
 glm5.2-fp4-b300-dynamo-sglang-agentic-disagg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260824-95f5ecd3
+  image: lmsysorg/sglang:nightly-dev-20260910-00840301
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:b300-dsxe
