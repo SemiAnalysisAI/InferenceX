@@ -8332,3 +8332,13 @@
     artifacts when collection fails; eval-only jobs skip power collection.
     Require fresh official qualification with measured power for these points.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-1p1d-dmem88-write-through-c48-experiment
+  scenario-type:
+  - agentic-coding
+  description:
+  - Exercise required native SRT power telemetry and finalized AgentX power collection in the
+    C48 write-through diagnostic before the expanded official sweep. Preserve the serving configuration
+    and reject missing or invalid formal power artifacts.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
