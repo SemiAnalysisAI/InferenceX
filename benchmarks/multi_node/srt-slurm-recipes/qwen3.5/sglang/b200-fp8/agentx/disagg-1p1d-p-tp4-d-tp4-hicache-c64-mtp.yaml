@@ -24,6 +24,7 @@ frontend:
   num_additional_frontends: 1
   env:
     PIP_BREAK_SYSTEM_PACKAGES: '1'
+    PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
   args:
     router-mode: kv
     router-session-affinity-ttl-secs: '3600'
@@ -35,6 +36,7 @@ roles:
     env:
       PYTHONUNBUFFERED: '1'
       PIP_BREAK_SYSTEM_PACKAGES: '1'
+      PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
       SGLANG_ENABLE_SPEC_V2: '1'
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
       SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
@@ -87,6 +89,7 @@ roles:
     env:
       PYTHONUNBUFFERED: '1'
       PIP_BREAK_SYSTEM_PACKAGES: '1'
+      PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
       SGLANG_ENABLE_SPEC_V2: '1'
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
       SGLANG_TIMEOUT_KEEP_ALIVE: '1800'

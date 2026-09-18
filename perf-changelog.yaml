@@ -8224,3 +8224,14 @@
   - Verify terminal Slurm allocation status and preserve diagnostic artifacts
     before returning failure, including when aborted replay leaves result files.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-1p1d-hicache-experiment
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-2p1d-hicache-experiment
+  scenario-type:
+  - agentic-coding
+  description:
+  - Use the official NVIDIA wheel index for Dynamo dependencies, preserving
+    integrity checks and avoiding repeated truncated placeholder downloads.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
