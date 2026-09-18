@@ -32,7 +32,7 @@ mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
 
 export MODEL_PATH=$MODEL
 
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE}" != "true" ]]; then
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && ( "$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "sglang" ) && "${IS_MULTINODE}" != "true" ]]; then
     # Download the new checkpoint into the persistent shared HF cache.
     export MODEL_PATH="$MODEL"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
@@ -129,7 +129,7 @@ import_squash() {
 
 import_squash "$SQUASH_FILE" "$IMAGE"
 # Keep this branch before the nginx import and srtctl setup.
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE}" != "true" ]]; then
+if [[ "$MODEL_PREFIX" == "dsv41flash" && ( "$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "sglang" ) && "${IS_MULTINODE}" != "true" ]]; then
     BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb300_${FRAMEWORK}_mtp.sh"
     # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
     export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
