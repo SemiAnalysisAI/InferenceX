@@ -101,7 +101,7 @@ InferenceX-app treats routing fields as columns or config dimensions and stores 
 
 The serving client records `benchmark_outcome` before saving its raw result. It retains the existing maximum request-failure rate of 5%, including the requested/completed/failed counts. The processor verifies this record, copies it to the aggregate, and returns failure even when telemetry is valid. Zero successful requests retain a diagnostic aggregate without fabricated reciprocal latency. Invalid request counts retain a failed diagnostic outcome with the raw `requested`/`completed` values and an `error`, without a fabricated failed count or rate; the client saves the raw JSON before exiting and the processor still rejects it. Legacy results without outcome metadata remain distinguishable; power validity alone never establishes benchmark success or answer quality.
 
-`power_invalid_reasons` and `power_audit` carry a bounded summary alongside numeric metrics. The summary includes the available measurement window, expected/observed GPU counts, sampling diagnostics, observed device identifiers and producer pin. Its `source` names the retained `power_validation_*.json` sidecar. Device identifiers retain the collector's semantics; local SMI indices are not physical UUID proof.
+`power_invalid_reasons` and `power_audit` carry a bounded summary alongside numeric metrics. The summary includes the available measurement window, expected/observed GPU counts, sampling diagnostics, observed device identifiers and producer pin. Its `source` names the retained `power_validation_*.json` sidecar. Device identifiers retain the collector's semantics; local SMI indices are not physical UUID proof. When the package carries the Grace CPU-side leg, `power_audit.cpu` adds its sensor kind, source, socket counts, row count, and reason codes; see [Measured Grace CPU-side power (NVL72)](#measured-grace-cpu-side-power-nvl72).
 
 For multinode fixed-sequence jobs, `utils/process_result.py --all` processes every available result before returning failure. It accepts `_c<N>_gpus_...`, `_conc<N>_gpus_...`, and AMD `_concurrency_<N>_req_rate_<R>_gpus_...` filenames, including `inf` request rates. It compares result concurrencies with `CONC_LIST`, rejects duplicate or contradictory point identities, and records omissions/errors in `result_processing_<RESULT_FILENAME>.json`. Aggregate workers pass `AGGREGATE_GPUS` with zero role GPU counts to telemetry validation; separate prefill/decode energy remains absent. For a `DISAGG=true` group with zero decode workers, the aggregate row intentionally sets `disagg: false` and reports `num_aggregate_gpu`; the filename, artifact name, and workflow inputs retain the group identity. Downstream consumers should use the row topology to interpret the measurement.
 
@@ -434,6 +434,51 @@ It is not an individual GPU's percentile or the average of device percentiles.
 All four values are withheld when telemetry validation fails. Older results remain
 missing until their original raw traces can be replayed; average watts cannot
 supply P75 or P90. The validation sidecar records `power_percentile_method`.
+
+## Measured Grace CPU-side power (NVL72)
+
+GB200 and GB300 NVL72 recipes that enable srt-slurm's `telemetry.cpu_power_exporter` leg write
+`LOGS/power/cpu/samples.csv` and a non-authoritative `cpu_manifest.json` beside the GPU DCGM
+package. The multinode validator accepts the pinned v2.2.1 long format (one row per sensor
+reading, header `schema_version,timestamp_unix,hostname,source,sensor,socket_id,power_w,total_power_w`)
+and the later wide format (one row per scrape, host, and socket, with `cpu_rail_w`, `soc_w`, and
+`dram_w` reference columns). It classifies each row by its `sensor` cell: `Module Power Socket N`
+is the whole-module reading (Grace, both Blackwell GPUs, HBM, LPDDR5X, and regulator loss);
+`Grace Power Socket N` or `CPU<n>:cpuSidePowerUsageW` is the Grace-side socket total (CPU, SoC,
+and LPDDR5X); `CPU<n>:cpuPowerUsageW` is DCGM field 1130, the CPU rail only. Component rails
+(`CPU Power Socket N`, `SysIO Power Socket N`, DRAM) never feed a published metric.
+
+Per socket the headline series is chosen in the order module, Grace socket total, DCGM CPU rail,
+and one kind must be present for every socket. Every fed series is integrated over the same bound
+formal window as GPU energy with the same trapezoid, linear boundary interpolation, and 3.0 s
+maximum sample gap. Expected sockets are two per distinct worker host in the manifest topology
+(one compute tray per host). The additive keys, rounded like the GPU keys and stripped on re-run,
+are:
+
+| Key | Meaning |
+| --- | --- |
+| `cpu_power_valid` | `1` or `0` for the CPU-side leg; absent when the package has no `cpu/` |
+| `avg_cpu_socket_power_w` | Mean over sockets of each socket's window-mean Grace-side watts |
+| `avg_total_cpu_power_w` | Sum over sockets of window-mean Grace-side watts |
+| `total_cpu_energy_j` | Grace-side energy over the window, all sockets |
+| `avg_total_module_power_w`, `total_module_energy_j` | Module watts and energy; only when a module series exists for every socket |
+
+The Grace-side keys come from the Grace socket total (or, without ACPI, the DCGM CPU rail) even
+when the module sensor is preferred, so a module reading is never published as a Grace-side one.
+The sidecar's `cpu` block and the aggregate's `power_audit.cpu` record `sensor_kind` (`module`,
+`grace_socket`, or `dcgm_cpu_rail`), `source` (`acpi` or `dcgm`), expected and observed socket
+counts, the parsed row count, and reason codes. `power_metric_schema_version` stays `2`.
+
+The leg is best effort and its verdict is independent of `power_valid`: any failure records
+`cpu_power_valid: 0` with no CPU keys, leaves every GPU field byte-identical, and never fails
+`REQUIRE_POWER=1`. Reason codes: `cpu_samples_missing`, `cpu_samples_header_mismatch`,
+`cpu_samples_malformed`, `cpu_manifest_invalid`, `cpu_socket_count_mismatch`,
+`cpu_sensor_kind_mixed`, `cpu_sample_gap_exceeded`, `cpu_window_not_bracketed`,
+`cpu_window_unavailable` (no completed window binds to the result, or the window's own contract
+checks failed), and `cpu_producer_unverified` (the srt-slurm producer pin failed, so CPU energy is
+withheld like GPU energy). At the pinned v2.2.1 the exporter does not classify the Module label,
+so current packages yield the Grace socket total; module keys appear once the upstream exporter
+classifies it. A package without `cpu/` produces an aggregate and sidecar identical to today.
 
 ## Verification and stop conditions
 

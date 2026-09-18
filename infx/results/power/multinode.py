@@ -24,6 +24,12 @@ Ordinary benchmark runs are best-effort: invalid telemetry records
 ``power_valid=0`` (and no energy metrics) in the aggregate plus a validation
 sidecar, but never fails the benchmark. Power studies set ``REQUIRE_POWER=1``
 to fail after those audit artifacts exist.
+
+Grace CPU-side leg: when the package also carries ``power/cpu/`` (see
+:mod:`.cpu_side`), each socket's Grace-side (and, when exposed, whole-module)
+power is integrated over the same bound formal window and published under
+``cpu_power_valid``. That verdict is independent of ``power_valid`` and of
+``REQUIRE_POWER``; a package without ``cpu/`` produces identical output.
 """
 
 from __future__ import annotations
@@ -44,12 +50,14 @@ from typing import Any
 # import them through this module.
 from . import (
     ALL_POWER_METRIC_KEYS as _ALL_POWER_METRIC_KEYS,
+    CPU_METRIC_KEYS as CPU_METRIC_KEYS,
     ROLE_METRIC_KEYS as ROLE_METRIC_KEYS,
     WHOLE_METRIC_KEYS as WHOLE_METRIC_KEYS,
 )
 from .common import (
     BenchmarkData,
     _append_reason,
+    _bracketing_sequence,
     _integrate_device,
     _load_benchmark_data,
     _percentile_total_power,
@@ -58,6 +66,7 @@ from .common import (
     benchmark_window_payload,
     patch_power_metrics,
 )
+from .cpu_side import CPU_DIRNAME, CpuPowerAudit, validate_cpu_leg
 
 # --- srt-slurm dcgm-power v1 wire contract (mirrored constants) -------------
 
@@ -711,15 +720,6 @@ def _check_window_result(window: ParsedWindow, result_root: Path) -> list[str]:
     return []
 
 
-def _bracketing_sequence(times: tuple[float, ...], start: float, end: float) -> list[float] | None:
-    before = [value for value in times if value <= start]
-    after = [value for value in times if value >= end]
-    if not before or not after:
-        return None
-    inside = [value for value in times if start < value < end]
-    return [before[-1], *inside, after[0]]
-
-
 def _check_coverage(
     start: float,
     end: float,
@@ -896,6 +896,11 @@ class MultinodePowerAudit:
     observed_gpu_count: int = 0
     expected_gpu_count: int = 0
     metrics: dict[str, float] = field(default_factory=dict)
+    # Inputs the CPU-side leg borrows from the GPU package; not serialized.
+    expected_worker_hosts: tuple[str, ...] = ()
+    formal_window_trusted: bool = False
+    # None when the package carried no cpu/ sub-package.
+    cpu: CpuPowerAudit | None = None
 
 
 def _canonical_sha256(payload: dict) -> str:
@@ -921,7 +926,48 @@ def validate_and_integrate(
     aggregate_gpus: int,
     expected_producer_sha: str | None,
 ) -> MultinodePowerAudit:
-    """Recompute package validity, cross-check verdicts, and integrate energy."""
+    """Recompute package validity, cross-check verdicts, and integrate energy.
+
+    The GPU leg runs first and binds the formal window; the CPU-side leg then
+    reuses that window and the manifest topology. Only the producer pin and
+    the window binding are shared gates: an unpinned producer withholds CPU
+    energy too, while every other GPU verdict leaves the CPU leg untouched.
+    """
+    audit = _validate_gpu_leg(
+        power_dir=power_dir,
+        logs_root=logs_root,
+        bench_result_path=bench_result_path,
+        benchmark=benchmark,
+        prefill_gpus=prefill_gpus,
+        decode_gpus=decode_gpus,
+        aggregate_gpus=aggregate_gpus,
+        expected_producer_sha=expected_producer_sha,
+    )
+    pin_failed = {"producer_pin_missing", "producer_commit_mismatch"} & set(audit.reasons)
+    blocking = ["cpu_producer_unverified"] if pin_failed else []
+    window = None
+    if audit.window is not None and audit.formal_window_trusted:
+        window = (audit.window["start_time_unix"], audit.window["end_time_unix"])
+    audit.cpu = validate_cpu_leg(
+        power_dir / CPU_DIRNAME,
+        window=window,
+        expected_hosts=audit.expected_worker_hosts,
+        blocking_reasons=blocking,
+    )
+    return audit
+
+
+def _validate_gpu_leg(
+    *,
+    power_dir: Path,
+    logs_root: Path,
+    bench_result_path: Path,
+    benchmark: BenchmarkData | None,
+    prefill_gpus: int,
+    decode_gpus: int,
+    aggregate_gpus: int,
+    expected_producer_sha: str | None,
+) -> MultinodePowerAudit:
     audit = MultinodePowerAudit(
         expected_producer_git_commit=expected_producer_sha,
     )
@@ -972,6 +1018,7 @@ def validate_and_integrate(
         _add_reason(audit, "manifest_malformed", f"manifest malformed: {exc!r}")
         audit.recomputed_publication_valid = False
         return audit
+    audit.expected_worker_hosts = tuple(sorted({device.hostname for device in expected_devices}))
 
     rows, sample_reasons = read_samples(power_dir / SAMPLES_FILENAME)
     recompute_failures += [f"{reason} in {SAMPLES_FILENAME}" for reason in sample_reasons]
@@ -1078,6 +1125,8 @@ def validate_and_integrate(
     window = _select_window_for_result(
         audit, parsed_windows, logs_root, bench_result_path, benchmark
     )
+    if window is not None:
+        audit.formal_window_trusted = _window_contract_holds(window, validations)
 
     if audit.reasons or window is None or benchmark is None:
         return audit
@@ -1235,16 +1284,45 @@ def _select_window_for_result(
     return window
 
 
+# Per-window audit codes that describe GPU sample coverage rather than the
+# window's own contract; the CPU-side leg re-checks its own coverage.
+_GPU_COVERAGE_REASONS = frozenset(
+    {"measurement_window_not_bracketed", "sample_gap_exceeded", "gpu_uuid_changed"}
+)
+
+
+def _window_contract_holds(window: ParsedWindow, validations: list[dict]) -> bool:
+    """True when the bound window passed every check that is not GPU coverage."""
+    for validation in validations:
+        if (validation["benchmark_type"], validation["concurrency"]) == (
+            window.benchmark_type,
+            window.concurrency,
+        ):
+            return all(reason in _GPU_COVERAGE_REASONS for reason in validation["reason_codes"])
+    return False
+
+
 # --- aggregate patch + sidecar + entry point ---------------------------------
 
 
 def _patch_agg(agg_path: Path, audit: MultinodePowerAudit) -> None:
+    cpu = audit.cpu
     patch_power_metrics(
         agg_path,
         metric_keys=_ALL_POWER_METRIC_KEYS,
         power_valid=audit.power_valid,
         metrics=audit.metrics,
+        cpu_power_valid=None if cpu is None else cpu.valid,
+        cpu_metrics={} if cpu is None else cpu.metrics,
     )
+
+
+def _withhold_metrics(audit: MultinodePowerAudit, cpu_reason: str | None = None) -> None:
+    """Drop every publishable number; the CPU leg only when the failure is shared."""
+    audit.power_valid = False
+    audit.metrics = {}
+    if audit.cpu is not None and cpu_reason is not None:
+        audit.cpu.invalidate(cpu_reason)
 
 
 def _sidecar_payload(
@@ -1254,7 +1332,7 @@ def _sidecar_payload(
     bench_result: Path,
     benchmark: BenchmarkData | None,
 ) -> dict:
-    return {
+    payload = {
         "schema_version": 1,
         "power_valid": audit.power_valid,
         "reasons": list(audit.reasons),
@@ -1284,6 +1362,10 @@ def _sidecar_payload(
         },
         "metrics": audit_metrics(audit.metrics),
     }
+    # Only when the package carried cpu/: sidecars without it stay byte-identical.
+    if audit.cpu is not None:
+        payload["cpu"] = audit.cpu.to_payload()
+    return payload
 
 
 def run(
@@ -1322,20 +1404,17 @@ def run(
     for reason in benchmark_reasons:
         _add_reason(audit, reason)
     if benchmark is None or audit.reasons:
-        audit.power_valid = False
-        audit.metrics = {}
+        _withhold_metrics(audit)
 
     if not agg_result.is_file():
         _add_reason(audit, "aggregate_result_missing", f"aggregate missing: {agg_result}")
-        audit.power_valid = False
-        audit.metrics = {}
+        _withhold_metrics(audit, "aggregate_result_missing")
     else:
         try:
             _patch_agg(agg_result, audit)
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             _add_reason(audit, "aggregate_result_unwritable", str(exc))
-            audit.power_valid = False
-            audit.metrics = {}
+            _withhold_metrics(audit, "aggregate_result_unwritable")
             print(
                 f"[aggregate_power_multinode] Failed to patch {agg_result}: {exc}",
                 file=sys.stderr,
@@ -1358,6 +1437,16 @@ def run(
             file=sys.stderr,
         )
         return 1 if require_power else 0
+
+    if audit.cpu is not None:
+        cpu = audit.cpu
+        print(
+            f"[aggregate_power_multinode] cpu_power_valid={int(cpu.valid)} "
+            f"sensor_kind={cpu.sensor_kind} "
+            f"avg_total_cpu_power_w={cpu.metrics.get('avg_total_cpu_power_w', 0.0):.2f} "
+            f"total_cpu_energy_j={cpu.metrics.get('total_cpu_energy_j', 0.0):.2f} "
+            f"reasons={','.join(cpu.reason_codes) or '-'}"
+        )
 
     if not audit.power_valid:
         print(
