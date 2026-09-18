@@ -8253,3 +8253,14 @@
     already supplies legacy or combined explicitly; generated benchmark
     arguments and existing image-specific cache sizes remain unchanged.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Scope terminal Slurm accounting verification to the artifact-preserving
+    multinode launcher path. Keep the shared log-streaming helper's existing
+    behavior for other callers so failed native jobs retain their diagnostics.
+    Benchmark arguments, workload and selected recipes are unchanged.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269

@@ -704,6 +704,9 @@ run_multinode_srt() {
 
     local srt_job_rc=0
     stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || srt_job_rc=$?
+    if [[ "$srt_job_rc" -eq 0 ]]; then
+        verify_slurm_job_status "$JOB_ID" || srt_job_rc=$?
+    fi
 
     set -x
 
