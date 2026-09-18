@@ -216,6 +216,36 @@ copy_fixed_sequence_results() {
     echo "All result files processed"
 }
 
+# Check the allocation's final exit status, not a step or a partial result file.
+check_slurm_job_success() {
+    local job_id="$1" logs_dir="$2"
+    local attempt
+    for attempt in 1 2 3; do
+        echo "$attempt" > "$logs_dir/native-job-status-attempts.txt" || return 1
+        if sacct -X -n -P -j "$job_id" --format=JobIDRaw,State,ExitCode \
+            > "$logs_dir/native-job-status.txt" \
+            2>> "$logs_dir/native-job-status.stderr"; then
+            if awk -F'|' -v job="$job_id" '
+                $1 == job && $2 !~ /^(PENDING|RUNNING|COMPLETING)$/ { found = 1 }
+                END { exit !found }
+            ' "$logs_dir/native-job-status.txt"; then
+                if awk -F'|' -v job="$job_id" '
+                    $1 == job { found = 1; if ($2 != "COMPLETED" || $3 != "0:0") failed = 1 }
+                    END { exit (!found || failed) }
+                ' "$logs_dir/native-job-status.txt"; then
+                    return 0
+                fi
+                echo "ERROR: Slurm job $job_id did not complete successfully" >&2
+                return 1
+            fi
+        fi
+        # Accounting can lag squeue removal; keep the wait bounded.
+        if [[ "$attempt" != "3" ]]; then sleep 5; fi
+    done
+    echo "ERROR: no successful terminal accounting record for Slurm job $job_id" >&2
+    return 1
+}
+
 copy_agentic_results() {
     local source_dir="$1"
     local workspace="$2"
