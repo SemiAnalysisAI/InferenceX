@@ -8130,3 +8130,13 @@
     for compatibility with the latest SGLang nightly's relocated argument parser
     and encoder modules. Keep recipe and result router version pins aligned.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Apply the existing B200 node-local-weight preflight handling to Qwen3.5 FP8
+    Dynamo SGLang jobs. The checkpoint is present on compute-node NVMe but absent
+    from the login node; retain worker-side model loading checks.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
