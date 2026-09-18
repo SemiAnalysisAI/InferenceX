@@ -135,5 +135,9 @@ if [ "${EVAL_ONLY:-false}" = "true" ]; then
 else
     build_replay_cmd "$RESULT_DIR"
     REPLAY_CMD+=" --apply-chat-template"
+    # build_replay_cmd points aiperf's client-side --tokenizer at $MODEL (a
+    # gated HF id); redirect it to the pre-staged local checkpoint so no Hub
+    # access is needed. The server loads its tokenizer from the same path.
+    REPLAY_CMD="${REPLAY_CMD/--tokenizer $MODEL/--tokenizer $MODEL_PATH}"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 fi
