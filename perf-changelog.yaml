@@ -8368,3 +8368,10 @@
   - 'Refresh the shared AMD srt-slurm integration onto current InferenceX: v2 roles, native cluster profiles, golden
     AgentX acceptance, and the synchronized AMD/MoRI/ATOM/runtime stack; retire the replaced manual launcher.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
+
+- config-keys:
+  - qwen3.5-fp8-mi355x-sglang-disagg
+  description:
+  - 'Restack this port directly on #2542 and migrate its recipes to srt-slurm v2, preserving the existing port workload
+    settings.'
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2628
