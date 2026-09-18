@@ -33,6 +33,27 @@ git submodule update --init
 
 To upgrade, fetch and check out the desired commit inside the relevant submodule, then commit the updated submodule pointer in InferenceX. Benchmark workflows already initialize submodules. Slurm launchers make a local Git clone for each job so recipe staging and runtime writes do not modify the submodule, and record the actual commit for result provenance. NVIDIA setup clones locally; TileRT setup fetches its pinned fork commit over the network.
 
+### Cluster profiles
+
+Launchers that use srt-slurm keep their cluster configuration in
+[`runners/srt-slurm/<launcher>.yaml`](../runners/srt-slurm/). The native settings
+(GPU count, scheduling directives, aliases, and mounts) are separate from workload recipes.
+Only launchers with an existing srt-slurm path have a profile. Both B200 Nscale
+srt-slurm paths share one profile, with path-specific container aliases supplied by
+the launcher.
+
+Call `write_srt_cluster_config <profile> srtslurm.yaml <uses_power>` from
+[`runners/slurm_utils.sh`](../runners/slurm_utils.sh) after staging images and paths.
+It writes the job-local config before `make setup`. `${NAME}` placeholders receive
+explicit `--var NAME VALUE` inputs, never implicit process-environment substitution.
+Optional `--model ALIAS PATH`, `--container ALIAS PATH`, and `--mount HOST CONTAINER`
+arguments add or override mapping entries. Power jobs add the staged DCGM image through
+the same writer. Missing variables fail before writing; values are substituted into
+parsed YAML scalars so quotes and punctuation remain data, not YAML or shell syntax.
+
+Keep model selection, cache preparation, and workload-dependent time limits in the
+launcher. Do not add profiles for non-srt-slurm launchers or change their routing here.
+
 ## Procedure index
 
 1. [Prepare a worktree](#prepare-a-worktree)
@@ -159,6 +180,8 @@ Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchm
 7. Append the changelog entry.
 
 Do not ship one side alone. `srtctl` reads the recipe, while matrix generation reads the master config. Recipe-only changes can mislabel results. Master-only changes do not alter the deployed recipe.
+
+The B300 AgentX launcher forwards the workflow-owned `RESULT_FILENAME` through a native SRT override, and the GLM-5.2 compact recipes leave that name to the caller. It collects the resulting `_concN.json` files from the mounted workspace and requires the Slurm allocation to finish as `COMPLETED` with `ExitCode=0:0`; partial aggregates cannot hide a failed replay or request-error gate. Accounting checks retry briefly for delayed terminal records, and the launcher stages logs and results before returning a failure.
 
 The GLM-5.2 B300 compact Dynamo recipes prepare a writable virtual environment for workers and frontends. The helper makes up to three attempts to install the exact versioned Dynamo packages inside SRT's existing install lock, preserving package hash checks and the final failure status. Prefill and decode workers retain the `LIBFABRIC` NIXL backend and set `NIXL_DISABLE_CUDA_ADDR_WA=1`. Both roles select `kv_cache_config.use_kv_cache_manager_v2: false` and set `TRTLLM_KVCACHE_POOL_USE_FABRIC_MEMORY=0` to use the legacy KV manager with standard CUDA KV allocations. The GLM-5.2 indexer and MTP settings remain explicit. They also set `OMP_NUM_THREADS=1` and `FI_LOG_LEVEL=warn` so LIBFABRIC reports provider warnings for both worker roles. For the single-frontend recipes selected for eval, `frontend.placement.node` and `benchmark.placement.node` are `head`, matching the pinned launcher's loopback eval endpoint.
 

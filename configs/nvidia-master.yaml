@@ -6531,13 +6531,13 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 16
           dp-attn: true
 qwen3.5-fp8-gb300-dynamo-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928
+  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: gb300
   precision: fp8
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "46520ca59afe992fb5ef61b3197b2316f8df9b2b" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260917" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
@@ -8152,6 +8152,7 @@ dsv41flash-fp4-h200-vllm-agentic-dspark:
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact:
+  # Forward the workflow result identity and preserve the AgentX producer exit status.
   # Use legacy KV pools with standard CUDA allocations and emit LIBFABRIC warnings.
   # Use the LIBFABRIC primary CUDA context and colocate single-frontend eval endpoints.
   # Bound worker OpenMP threads and retry Dynamo installs with unchanged package verification.

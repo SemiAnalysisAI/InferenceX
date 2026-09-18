@@ -8,6 +8,29 @@ SRTCTL_EVAL_ARGS=(
     --set 'post_eval.command=["bash", "{infmax_workspace}/benchmarks/multi_node/srt_eval.sh", "{endpoint}", "{infmax_workspace}"]'
 )
 
+# Write a job-local cluster config; profiles contain only native srt-slurm settings.
+write_srt_cluster_config() {
+    if [[ $# -lt 3 || -z "$1" || -z "$2" || ( "$3" != 0 && "$3" != 1 ) ]]; then
+        echo "Usage: write_srt_cluster_config profile output uses_power (0 or 1) [overrides...]" >&2
+        return 1
+    fi
+    check_env_vars SLURM_ACCOUNT SLURM_PARTITION SRTCTL_ROOT SQUASH_FILE NGINX_SQUASH_FILE IMAGE
+    local profile="$1" output="$2" uses_power="$3"
+    shift 3
+    local power_args=()
+    if [[ "$uses_power" == 1 ]]; then
+        check_env_vars DCGM_EXPORTER_SQSH
+        power_args=(--container dcgm-exporter "$DCGM_EXPORTER_SQSH")
+    fi
+    PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" \
+        python3 -m infx.srt_slurm.cluster_config \
+        "$INFERENCEX_SLURM_UTILS_DIR/srt-slurm/${profile}.yaml" "$output" \
+        --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION" \
+        --var SRTCTL_ROOT "$SRTCTL_ROOT" --var SQUASH_FILE "$SQUASH_FILE" \
+        --var NGINX_SQUASH_FILE "$NGINX_SQUASH_FILE" --var IMAGE "$IMAGE" \
+        "$@" "${power_args[@]}"
+}
+
 # Leaves the caller in the checkout, matching the launchers' installation flow.
 # Every recipe is owned by InferenceX; srt-slurm 2 no longer ships recipes/.
 setup_srt_slurm() {
@@ -191,6 +214,36 @@ copy_fixed_sequence_results() {
     fi
 
     echo "All result files processed"
+}
+
+# Check the allocation's final exit status, not a step or a partial result file.
+check_slurm_job_success() {
+    local job_id="$1" logs_dir="$2"
+    local attempt
+    for attempt in 1 2 3; do
+        echo "$attempt" > "$logs_dir/native-job-status-attempts.txt" || return 1
+        if sacct -X -n -P -j "$job_id" --format=JobIDRaw,State,ExitCode \
+            > "$logs_dir/native-job-status.txt" \
+            2>> "$logs_dir/native-job-status.stderr"; then
+            if awk -F'|' -v job="$job_id" '
+                $1 == job && $2 !~ /^(PENDING|RUNNING|COMPLETING)$/ { found = 1 }
+                END { exit !found }
+            ' "$logs_dir/native-job-status.txt"; then
+                if awk -F'|' -v job="$job_id" '
+                    $1 == job { found = 1; if ($2 != "COMPLETED" || $3 != "0:0") failed = 1 }
+                    END { exit (!found || failed) }
+                ' "$logs_dir/native-job-status.txt"; then
+                    return 0
+                fi
+                echo "ERROR: Slurm job $job_id did not complete successfully" >&2
+                return 1
+            fi
+        fi
+        # Accounting can lag squeue removal; keep the wait bounded.
+        if [[ "$attempt" != "3" ]]; then sleep 5; fi
+    done
+    echo "ERROR: no successful terminal accounting record for Slurm job $job_id" >&2
+    return 1
 }
 
 copy_agentic_results() {

@@ -204,7 +204,6 @@ benchmark:
     PORT: '8000'
     PRECISION: fp4
     RESULT_DIR: /logs/agentic
-    RESULT_FILENAME: glm52_fp4_dynamo-trt_6p1d-compact_c227
     SERVED_MODEL_NAME: GLM-5.2-NVFP4
     TQDM_DISABLE: '1'
     WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
