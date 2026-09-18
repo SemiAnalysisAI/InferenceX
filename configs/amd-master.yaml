@@ -1254,7 +1254,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
+          - "DECODE_MTP_SIZE=6"
       - spec-decoding: "draft_model"
         conc-list: [ 16 ]
         kv-offloading: none
@@ -1273,7 +1273,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
+          - "DECODE_MTP_SIZE=6"
       - spec-decoding: "draft_model"
         conc-list: [ 32, 48 ]
         kv-offloading: dram
