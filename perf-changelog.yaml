@@ -8107,3 +8107,10 @@
     - "Write the fixed-sequence result JSON to the container repository root (INFMAX_CONTAINER_WORKSPACE, /ix on the dsv41flash launchers) instead of RESULT_DIR: in run 35314631817 the TP2 8k1k canary served all 10 requests but the workflow could not find $RESULT_FILENAME.json in the repository root; serving flags are unchanged"
     - "将固定序列结果 JSON 写入容器内仓库根目录（INFMAX_CONTAINER_WORKSPACE，dsv41flash launcher 上为 /ix）而非 RESULT_DIR：运行 35314631817 中 TP2 8k1k canary 成功服务全部 10 个请求，但工作流在仓库根目录找不到 $RESULT_FILENAME.json；服务参数不变"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-dspark
+  description:
+    - "TP2 only: cap --max-cudagraph-capture-size at 256 in the fixed-sequence script after run 35316389982, where c1-c32 served but c64 (capture 512) and c128 (capture 1024) finished vLLM's memory profiling with -2.65 GiB and -10.8 GiB of KV budget next to 145 GiB of weights per GPU; larger DSpark verify batches decode eagerly, TP4 keeps the default"
+    - "仅 TP2：在固定序列脚本中将 --max-cudagraph-capture-size 上限设为 256；运行 35316389982 中 c1-c32 可服务，但 c64（捕获 512）与 c128（捕获 1024）在 vLLM 显存分析结束时 KV 预算分别为 -2.65 GiB 与 -10.8 GiB（每 GPU 145 GiB 权重）；更大的 DSpark verify batch 以 eager 方式解码，TP4 保持默认"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216

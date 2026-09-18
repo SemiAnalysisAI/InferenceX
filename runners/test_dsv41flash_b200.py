@@ -14,7 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
     "scenario,eval_only,concurrency,capture",
     [
         ("fixed_seq_len", False, 1, 64),
-        ("fixed_seq_len", True, 128, 1024),
+        # TP2 fixed-seq capture is capped at 256 (run 35316389982 OOMed at 1024).
+        ("fixed_seq_len", True, 128, 256),
         ("agentic", False, 16, 128),
         ("agentic", True, 2, 64),
     ],

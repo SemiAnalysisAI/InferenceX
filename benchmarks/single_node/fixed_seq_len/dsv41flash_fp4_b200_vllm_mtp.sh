@@ -32,6 +32,16 @@ CAPTURE_SIZE="${DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE}"
 while (( CAPTURE_SIZE < CONC * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
     CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
 done
+
+# TP2 leaves ~145 GiB of weights on each 180 GB B200 even with the Engram
+# tables offloaded, and vLLM's memory profiling counts the captured graphs
+# against the KV budget: c1-c32 served, but c64 (capture 512) ended with
+# -2.65 GiB and c128 (capture 1024) with -10.8 GiB of KV memory in run
+# 35316389982. Stop capturing above 256 tokens on TP2; larger DSpark verify
+# batches decode eagerly. TP4 keeps the default.
+if (( TP == 2 && CAPTURE_SIZE > 256 )); then
+    CAPTURE_SIZE=256
+fi
 select_available_server_port
 
 # Match AgentX's golden AL 3.51; accuracy evals use real target verification.
