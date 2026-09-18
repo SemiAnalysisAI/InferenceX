@@ -1,7 +1,6 @@
-# Source: https://github.com/sgl-project/sglang/blob/191172fa742f8837423ca4e4be4919ebb52f1b51/docs/cookbook/autoregressive/Qwen/Qwen3.5.mdx
-# Separate TP4 GPU groups share one node. GPU qualification pending.
+# Fast AgentX candidate from Slurm 4060; full official sweep and accuracy gates remain required.
 schema: 2
-name: qwen3.5-b300-fp8-agentx-disagg-1p1d-tp4-tp4-colocated-c16
+name: qwen35-b300-disagg-1p1d-tp4-tp4-colocated-c32-mtp-hicache
 model:
   path: qwen3.5-fp8
   container: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
@@ -20,7 +19,7 @@ dynamo:
   source:
     rev: 805a77f053d807b0d8def5d27f674a6df0ed839e
 slurm:
-  time_limit: '8:00:00'
+  time_limit: '2:00:00'
 health_check:
   max_attempts: 1440
   interval_seconds: 10
@@ -32,6 +31,7 @@ frontend:
   nginx_session_affinity: true
   env:
     PIP_BREAK_SYSTEM_PACKAGES: '1'
+    PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
   args:
     router-mode: kv
     router-session-affinity-ttl-secs: '3600'
@@ -48,6 +48,7 @@ roles:
     env:
       PYTHONUNBUFFERED: '1'
       PIP_BREAK_SYSTEM_PACKAGES: '1'
+      PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
       NCCL_NVLS_ENABLE: '1'
       SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
       SGLANG_ENABLE_SPEC_V2: '1'
@@ -93,7 +94,12 @@ roles:
       mamba-track-interval: 2048
       scheduler-recv-interval: 10
       stream-interval: 50
-      max-running-requests: 32
+      max-running-requests: 64
+      enable-hierarchical-cache: true
+      hicache-size: 72
+      hicache-io-backend: kernel
+      hicache-mem-layout: page_first
+      hicache-write-policy: write_through_selective
   decode:
     nodes: colocate
     workers: 1
@@ -101,6 +107,7 @@ roles:
     env:
       PYTHONUNBUFFERED: '1'
       PIP_BREAK_SYSTEM_PACKAGES: '1'
+      PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
       NCCL_NVLS_ENABLE: '1'
       SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
       SGLANG_ENABLE_SPEC_V2: '1'
@@ -149,8 +156,8 @@ roles:
       speculative-num-draft-tokens: 4
       scheduler-recv-interval: 10
       stream-interval: 50
-      max-running-requests: 32
-      cuda-graph-max-bs-decode: 16
+      max-running-requests: 64
+      cuda-graph-max-bs-decode: 32
 sbatch_directives:
   mem: '0'
   cpus-per-task: '144'

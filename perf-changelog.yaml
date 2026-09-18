@@ -8143,3 +8143,19 @@
   description:
   - Use the supported intra-node NVLink transport and allocator for colocated B300 prefill/decode; the equal-TP real-verification diagnostic passes four short and 16K-input probes after RDMA source-memory registration failed. Record verified model and runtime identities; performance qualification remains pending.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Replace unmeasured starter points with the measured concurrency-32 1P1D TP4/TP4 HiCache candidate (72 GB per prefill rank). B300 Slurm 4060 completed 1986 profiled requests without errors at 21258.99 logical tok/s/GPU and 224.89 p90 interactivity, numerically extending the published FP8 frontier. This 1200-second fast diagnostic is not an official result; full sweep, applicable accuracy evals, and optimized same-image aggregate comparisons remain required.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add the NVIDIA vendor wheel index to the recipe frontend and worker environments so aisimulate can resolve a verified vendor wheel directly instead of its fragile placeholder downloader; retain normal pip hash and package validation.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
