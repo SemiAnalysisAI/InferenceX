@@ -73,26 +73,13 @@ fi
     )
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    for relative in (
-        "runners/launch_b300-dsxe.sh",
-        "runners/slurm_utils.sh",
-        "benchmarks/benchmark_lib.sh",
-    ):
-        destination = workspace / relative
-        destination.parent.mkdir(exist_ok=True)
-        shutil.copyfile(ROOT / relative, destination)
-    # macOS ships Bash 3, which cannot parse the cluster's associative model
-    # inventory. It is unrelated to completion/collection; use a fixture alias
-    # while leaving the executed launcher control flow unchanged.
-    bash_major = subprocess.check_output(
-        ["bash", "-c", "printf '%s' \"${BASH_VERSINFO[0]}\""], text=True
+    # Keep the real launcher-owned profiles and renderer in the fixture checkout.
+    shutil.copytree(ROOT / "runners", workspace / "runners")
+    (workspace / "benchmarks").mkdir()
+    shutil.copyfile(
+        ROOT / "benchmarks/benchmark_lib.sh", workspace / "benchmarks/benchmark_lib.sh"
     )
-    if int(bash_major) < 4:
-        launcher = workspace / "runners/launch_b300-dsxe.sh"
-        source = launcher.read_text()
-        start = source.index("declare -A MODEL_ALIASES=(")
-        end = source.index("\n)", start) + len("\n)")
-        launcher.write_text(source[:start] + "MODEL_ALIASES=(fixture)" + source[end:])
+    (workspace / "infx").symlink_to(ROOT / "infx", target_is_directory=True)
     # Stub remote checkout and submission after loading the real shared helpers.
     with (workspace / "runners/slurm_utils.sh").open("a") as helpers:
         helpers.write(r"""

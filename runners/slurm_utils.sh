@@ -155,7 +155,10 @@ stream_slurm_job_log() {
     echo "Tailing $log_file"
     tail -F -s 2 -n+1 "$log_file" --pid="$poll_pid" 2>/dev/null
     wait "$poll_pid"
+}
 
+verify_slurm_job_status() {
+    local job_id="$1"
     # Disappearing from squeue means terminal, not successful. Accounting can
     # lag briefly; inspect only the allocation, never successful service steps.
     local attempt accounting state exit_code

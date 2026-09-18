@@ -8190,3 +8190,13 @@
   description:
   - Verify the Slurm allocation terminal state and exit code after log streaming, preserve benchmark and eval artifacts, then fail the B300 launcher when the allocation failed or its final status cannot be verified. Prevent failed disaggregation runs from appearing successful solely because they left the queue.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  - qwen3.5-fp8-b300-sglang-agentic-latest
+  scenario-type:
+  - agentic-coding
+  description:
+  - "Prepare the expanded B300 FP8 qualification curve from measured fast candidates: colocated 1P1D TP4/TP4 at concurrency 16, 24, 32 and 64, plus TP4 aggregate concurrency 32. Use 72 GB HiCache per prefill rank at C16-C32 and 298 GB at C64; use the latest nightly combined HiCache budget for the aggregate candidate while retaining older-image budgeting. These short measurements require a fresh full official sweep and applicable accuracy evaluations before admission."
+  - Select the explicit decode CUDA graph flag exposed by new SGLang versions, preserving the older flag for historical images. Scope terminal Slurm status verification to the B300 generic PD path and preserve artifacts before returning failure; run the updated launcher tests through the real runtime-profile renderer.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
