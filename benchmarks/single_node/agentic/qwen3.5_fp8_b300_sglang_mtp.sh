@@ -14,7 +14,14 @@ export EVAL_FRAMEWORK="lm-eval"
 check_env_vars \
     MODEL TP CONC EP_SIZE KV_OFFLOADING \
     TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
-check_env_vars EVAL_ONLY
+check_env_vars EVAL_ONLY QWEN35_HICACHE_BUDGET_MODE
+case "$QWEN35_HICACHE_BUDGET_MODE" in
+    legacy|combined) ;;
+    *)
+        echo "Error: QWEN35_HICACHE_BUDGET_MODE must be legacy or combined" >&2
+        exit 1
+        ;;
+esac
 
 SCHEDULER_RECV_INTERVAL=10
 
@@ -41,27 +48,33 @@ mkdir -p "$RESULT_DIR"
 
 CACHE_ARGS=()
 if require_agentic_kv_offload_backend hicache; then
-    # SGLang applies --hicache-size independently to Qwen's target KV and
-    # Mamba pools. Native NEXTN also creates a draft KV pool with the same
-    # slot count; its one attention layer adds 1/15 of the target KV bytes.
-    # Reserve 1 GB/rank for page alignment and enforce H * 31/15 per rank.
+    # Preserve the existing budget unless the launcher selects the pinned
+    # nightly's combined KV/Mamba pool. Reserve 1 GB/rank for page alignment.
     HICACHE_ALIGNMENT_RESERVE_GB=$TP
     HICACHE_USABLE_TOTAL_GB=$((TOTAL_CPU_DRAM_GB - HICACHE_ALIGNMENT_RESERVE_GB))
     if [ "$HICACHE_USABLE_TOTAL_GB" -lt 1 ]; then
         echo "Error: insufficient DRAM after HiCache alignment reserve" >&2
         exit 1
     fi
-    HICACHE_SIZE_GB=$((HICACHE_USABLE_TOTAL_GB * 15 / TP / 31))
+    case "$QWEN35_HICACHE_BUDGET_MODE" in
+        legacy)
+            HICACHE_SIZE_GB=$((HICACHE_USABLE_TOTAL_GB * 15 / TP / 31))
+            PROJECTED_HICACHE_TOTAL_GB=$(((HICACHE_SIZE_GB * TP * 31 + 14) / 15 + HICACHE_ALIGNMENT_RESERVE_GB))
+            ;;
+        combined)
+            HICACHE_SIZE_GB=$((HICACHE_USABLE_TOTAL_GB / TP))
+            PROJECTED_HICACHE_TOTAL_GB=$((HICACHE_SIZE_GB * TP + HICACHE_ALIGNMENT_RESERVE_GB))
+            ;;
+    esac
     if [ "$HICACHE_SIZE_GB" -lt 1 ]; then
         echo "Error: computed HICACHE_SIZE_GB=$HICACHE_SIZE_GB must be positive" >&2
         exit 1
     fi
-    PROJECTED_HICACHE_TOTAL_GB=$(((HICACHE_SIZE_GB * TP * 31 + 14) / 15 + HICACHE_ALIGNMENT_RESERVE_GB))
     if [ "$PROJECTED_HICACHE_TOTAL_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
         echo "Error: projected HiCache use ${PROJECTED_HICACHE_TOTAL_GB} GB exceeds configured capacity ${TOTAL_CPU_DRAM_GB} GB" >&2
         exit 1
     fi
-    echo "HiCache CPU pools: ${HICACHE_SIZE_GB} GB target + Mamba + 1/15 draft per rank across TP=${TP}; projected node total ${PROJECTED_HICACHE_TOTAL_GB} GB <= ${TOTAL_CPU_DRAM_GB} GB"
+    echo "HiCache CPU pools: ${HICACHE_SIZE_GB} GB per rank with ${QWEN35_HICACHE_BUDGET_MODE} budgeting across TP=${TP}; projected node total ${PROJECTED_HICACHE_TOTAL_GB} GB <= ${TOTAL_CPU_DRAM_GB} GB"
     CACHE_ARGS=(
         --page-size 64
         --enable-hierarchical-cache

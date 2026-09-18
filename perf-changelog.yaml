@@ -8167,3 +8167,11 @@
   description:
   - Expand isolated B300 diagnostics across concurrency 8, 16, 24 and 48, and add equal-TP2 six-active-GPU 2P1D candidates with larger HiCache after real-verification probes passed. No new points are admitted to the final frontier by this experimental change.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-sglang-agentic-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Stage the measured TP4 C32 aggregate HiCache candidate for canonical qualification. The B300 caller explicitly selects combined KV/Mamba host budgeting for the exact latest nightly while preserving legacy budgeting for older images; the receiving script validates the mode without a fallback. Fast job 4086 reached 36999.75 logical tok/s/GPU at 96.66 p90 interactivity with 1782 profiled requests and zero errors/cancellations.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268

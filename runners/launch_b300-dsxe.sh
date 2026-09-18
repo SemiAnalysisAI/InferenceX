@@ -314,6 +314,15 @@ find . -name '.nfs*' -delete 2>/dev/null || true
 exit "$SRT_JOB_RC"
 
 else
+    if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "qwen3.5" &&
+          "$PRECISION" == "fp8" && "$FRAMEWORK" == "sglang" && "$SPEC_DECODING" == "mtp" ]]; then
+        check_env_vars IMAGE
+        export QWEN35_HICACHE_BUDGET_MODE=legacy
+        if [[ "$IMAGE" == "lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85" ]]; then
+            export QWEN35_HICACHE_BUDGET_MODE=combined
+        fi
+    fi
+
     # AgentX trace datasets need a writable persistent cache. Keep the host and
     # container paths separate so the cache remains valid with
     # --no-container-mount-home.
