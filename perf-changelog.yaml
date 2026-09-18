@@ -8120,3 +8120,13 @@
     nightly-dev-cu13-20260918-20518d85, and use the current mamba-radix-cache-strategy
     argument for prefill and decode.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Update B200 Qwen3.5 FP8 AgentX to Dynamo 805a77f053d807b0d8def5d27f674a6df0ed839e
+    for compatibility with the latest SGLang nightly's relocated argument parser
+    and encoder modules. Keep recipe and result router version pins aligned.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
