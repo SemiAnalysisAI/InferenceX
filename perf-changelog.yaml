@@ -8258,3 +8258,16 @@
     decode static KV budget and full prefill HiCache. Require measured
     normalized Pareto improvements before promotion and official sweeps.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-1p1d-admission32-mamba-budget-experiment
+  scenario-type:
+  - agentic-coding
+  description:
+  - Test B200 Qwen3.5 FP8 1P1D C64 with decode admission capped at 32
+    requests, no extra transfer slots, and decode graphs through batch 32.
+    Keep prefill HiCache at 215 GB per rank and decode static memory at 0.8.
+    Lower request capacity also reduces Mamba and speculative buffers, making
+    this an admission and Mamba-budget optimization, not an admission-only
+    comparison. Device KV remains uncapped; require measured normalized gains.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
