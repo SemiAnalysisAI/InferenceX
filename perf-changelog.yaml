@@ -8156,3 +8156,15 @@
     draft layers. Reserve 1 GB per rank for alignment; this uses 215 GB per
     rank for the existing TP4 and TP8 DRAM budgets instead of 104 GB.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-1p1d-hicache-experiment
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-2p1d-hicache-experiment
+  scenario-type:
+  - agentic-coding
+  description:
+  - Apply the existing B200 node-local-weight preflight handling to Qwen3.5 FP8
+    Dynamo SGLang jobs. The checkpoint is present on compute-node NVMe but absent
+    from the login node; retain worker-side model loading checks.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269

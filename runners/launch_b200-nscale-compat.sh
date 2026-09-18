@@ -326,8 +326,10 @@ EOF
     sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "${CONFIG_FILE%%:*}"
 
     SRTCTL_PREFLIGHT_ARGS=()
-    # Kimi K2.6 weights are staged on the Slurm compute nodes, not the login node.
-    if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
+    # These weights are staged on the Slurm compute nodes, not the login node.
+    # SRT still checks the resolved model path when the worker starts.
+    if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]] ||
+       [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
         SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
     fi
 
