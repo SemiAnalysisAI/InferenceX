@@ -64,6 +64,14 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
+# One shared host copy of the two fp8 Engram tables instead of a row-sharded
+# copy per rank: the SGLang analogue of the vLLM arm's Engram CPU offload. It
+# frees ~46 GiB of HBM per GPU for the 1M-context prefill working set and the
+# KV pool, and output is bitwise unchanged (cookbook). The first sweep ran
+# with the tables on GPU and the server died on the first long AgentX prompts
+# (run 35304555945: c16 came up, then eager prefill of the first 66k-99k-token prompts aborted with HSA_STATUS_ERROR_OUT_OF_RESOURCES (0 MB free) inside the DSpark target prefill).
+export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
+
 # Cookbook MI350X environment.
 export SGLANG_USE_AITER=1
 export SGLANG_MOE_PADDING=1
@@ -71,15 +79,15 @@ export AITER_FLYDSL_FORCE_REDUCE=1
 export ROCM_QUICK_REDUCE_QUANTIZATION=NONE
 
 # AgentX concurrency counts live session trees, not individual requests.
-# Allow subagent fan-out to exceed CONC without clipping request bursts, and
-# keep decode graphs covering that fan-out down to the cookbook's 64.
+# Allow subagent fan-out to exceed CONC without clipping request bursts, but
+# cap the pool at 128: DSpark verify buffers scale with it, and 256 at c128
+# did not fit next to the graphs on H200. Decode graphs stay at the cookbook's
+# 64; larger batches decode eagerly, as the cookbook's high-throughput cell does.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
-CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
-if (( CUDA_GRAPH_MAX_BS < 64 )); then
-    CUDA_GRAPH_MAX_BS=64
-elif (( CUDA_GRAPH_MAX_BS > 128 )); then
-    CUDA_GRAPH_MAX_BS=128
+if (( MAX_RUNNING_REQUESTS > 128 )); then
+    MAX_RUNNING_REQUESTS=128
 fi
+CUDA_GRAPH_MAX_BS=64
 
 # Saturation arms carry a larger in-flight working set than the 30-minute
 # default warmup drain allows.
@@ -115,13 +123,18 @@ SGLANG_CMD=(
     --trust-remote-code
     --tp "$TP" --ep-size "$EP_SIZE"
     --disable-radix-cache
-    --mem-fraction-static 0.8
+    # 0.75 rather than the cookbook's 0.8, and an 8192-token prefill chunk: the
+    # sparse-attention indexer and DSpark prefill buffers scale with the chunk
+    # times the 1M context, and the default 16384 chunk exhausted HBM on the
+    # first 66k-99k-token AgentX prompts.
+    --mem-fraction-static 0.75
+    --chunked-prefill-size 8192
     --speculative-algorithm DSPARK
     --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --cuda-graph-backend-prefill breakable
-    --cuda-graph-max-bs-prefill 4096
+    --cuda-graph-max-bs-prefill 2048
     --reasoning-parser auto
     --tool-call-parser auto
     # Draft-token forward passes under long-context agentic load block the
