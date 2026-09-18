@@ -8,9 +8,9 @@ set -x
 # apply_k3_container_patches.sh is not sourced: it targets a patched vLLM container.
 #
 # Serving bands, one fresh server per concurrency point:
-#   interactive (1, 2, 4)                 DCP1, DSpark 7, no LMCache
-#   mid         (8, 16)                   DCP8, DSpark 3, LMCache 128 GB/rank
-#   throughput  (32, 40, 48, 56, 64, 72)  DCP8, no draft, LMCache 128 or 192 GB/rank
+#   interactive (1, 4)        DCP1, DSpark 7, no LMCache
+#   mid         (14, 16)      DCP8, DSpark 3, LMCache 128 GB/rank
+#   throughput  (48, 56, 72)  DCP8, no draft, LMCache 128 or 192 GB/rank
 #
 # Required env vars:
 #   MODEL, MODEL_PATH, TP, DCP_SIZE, CONC, KV_OFFLOADING, KV_OFFLOAD_BACKEND,
@@ -99,24 +99,24 @@ MAX_NUM_BATCHED_TOKENS=8192
 GPU_MEM_UTIL=0.90
 AITER_REUSE_IDENTICAL_COMM_GROUPS=0
 case "$CONC" in
-    1|2|4)
+    1|4)
         MAX_NUM_SEQS=32
         ATOM_ENABLE_REPLAYSSM=0
         NUM_SPEC_TOKENS=7
         SPEC_DECODE_AL=3.84
         ;;
-    8|16)
+    14|16)
         MAX_NUM_SEQS=32
         ATOM_ENABLE_REPLAYSSM=1
         NUM_SPEC_TOKENS=3
         SPEC_DECODE_AL=3.00
         ;;
-    32|40|48|56|64|72)
+    48|56|72)
         MAX_NUM_SEQS=$((2 * CONC))
         ATOM_ENABLE_REPLAYSSM=0
         NUM_SPEC_TOKENS=0
         SPEC_DECODE_AL=0
-        # Only the three widest points reuse identical AITER communicator groups.
+        # Only the two widest points reuse identical AITER communicator groups.
         if [ "$CONC" -ge 56 ]; then
             AITER_REUSE_IDENTICAL_COMM_GROUPS=1
         fi
