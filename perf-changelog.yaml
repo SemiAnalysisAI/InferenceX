@@ -8135,3 +8135,11 @@
   description:
   - Use current Dynamo compatibility handling for the latest SGLang nightly in isolated B300 HiCache experiments.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Select intra-node NVLink transport and matching allocator for colocated B300 PD after the real-verification 1P1D diagnostic passed; apply the same transport candidate to separate 2P1D experiments and record runtime identities. No performance improvement is claimed.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
