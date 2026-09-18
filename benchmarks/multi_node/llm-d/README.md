@@ -25,6 +25,17 @@ the coordinator (EPP + Envoy + bench), exactly like the AMD path's
 | `xP` | decode leader + pd-sidecar + EPP + Envoy + benchmark client |
 | `xP+1 .. xP+yD-1` | decode workers |
 
+### Aggregated mode (`yD = 0`)
+
+`DECODE_NODES=0` runs one engine for prefill and decode. Rank 0 runs EPP,
+Envoy, and the client; no P/D sidecar is started. Only the Mooncake variant
+uses a KV connector. The master config uses `disagg: false`, `worker`, and
+`num-nodes`; discovery labels its serving endpoints `prefill`.
+
+The GB200 AgentX recipes live under `llm-d-recipes/agentic/`. TP8/DEP8 uses
+2 nodes (8 GPUs); 1P-DEP8/1D-DEP8 uses 4 nodes (16 GPUs). Pure TP publishes
+only its leader's API endpoint; DEP publishes an endpoint on every node.
+
 Each instance (prefill or decode) is one vLLM engine spanning multiple
 nodes via `--data-parallel-hybrid-lb`. With `xP=2, yD=2,
 GPUS_PER_NODE=8` you get DP=16 prefill + DP=16 decode (the wide-EP

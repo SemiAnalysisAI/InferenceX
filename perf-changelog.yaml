@@ -8359,3 +8359,53 @@
     - "Replace the decode-role prefill-round-robin-balance: true with load-balance-method: follow_bootstrap_room in the 5 srt-slurm recipes of this key that set it: SGLang nightly-dev-cu13-20260918-20518d85 no longer has --prefill-round-robin-balance (run 35319100186, every decode worker of the DEP16 arm exited at argument parsing) and its --load-balance-method choices are auto, round_robin, follow_bootstrap_room, total_requests and total_tokens; the prefill roles keep load-balance-method: round_robin"
     - "在该 key 中设置了该参数的 5 个 srt-slurm 配方里，将 decode 角色的 prefill-round-robin-balance: true 替换为 load-balance-method: follow_bootstrap_room：SGLang nightly-dev-cu13-20260918-20518d85 已没有 --prefill-round-robin-balance（运行 35319100186 中 DEP16 分支的所有 decode worker 在参数解析阶段退出），其 --load-balance-method 可选值为 auto、round_robin、follow_bootstrap_room、total_requests 与 total_tokens；prefill 角色保持 load-balance-method: round_robin"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3253
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+    - dsv4-fp4-gb200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro-0813 FP4/FP8-KV on GB200: 8-GPU TP8/DEP8 aggregation, 16-GPU NIXL DEP8 1P/1D, and llm-d 0.10.0 prefix/token-load routing. GPU-memory budgets: TP8 0.85, DEP8 0.88. P/D KV leases last 1800s to cover long-context decode stalls."
+    - "Use fixed-K DSpark golden AL: K=5/AL=3.61 for aggregated/decode; K=1/AL=1.84 for P/D prefill. Adaptive verification is disabled."
+    - "Mooncake variants use DRAM offload at 0.60 utilization, one job-local master, and IB HCAs mlx5_0,1,3,4; no SSD offload. Plain TP8/DEP8 has no offload. Scrape vLLM nodes directly without duplicate frontend counters."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+    - dsv4-fp4-gb200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Switch DEP8 llm-d wide-EP from hybrid LB to multi-port external LB: register one EPP endpoint per DP rank, open multi-port pd-sidecar on decode, probe DP supervisor /health on 8100, use Nixl-only decode KV, and scrape per-rank vLLM metrics in AgentX."
+    - "将 DEP8 llm-d 宽 EP 从 hybrid LB 切换为多端口外部 LB：按 DP rank 注册 EPP 端点，decode 侧启用多端口 pd-sidecar，在 8100 探测 DP supervisor /health，decode 仅保留 Nixl KV，并在 AgentX 中按 rank 抓取 vLLM 指标。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-remove archived dsv4-fp4-gb200-llmd-vllm 8k1k master key reintroduced by the upstream merge and restore the thin GB200 llmd-vllm disagg wrapper for AgentX P/D launches."
+    - "重新移除 upstream 合并误带回的已归档 dsv4-fp4-gb200-llmd-vllm 8k1k 主配置项，并恢复供 AgentX P/D 启动使用的 GB200 llmd-vllm disagg 精简 wrapper。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+    - dsv4-fp4-gb200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Raise llm-d vLLM logging to DEBUG on GB200 DSpark AgentX recipes to capture worker-death diagnostics during external-LB DEP8 bring-up."
+    - "将 GB200 DSpark AgentX llm-d 配方的 vLLM 日志级别提升至 DEBUG，以便在外部 LB DEP8 启动阶段捕获 worker 异常退出诊断信息。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+    - dsv4-fp4-gb200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Lower GB200 DSpark AgentX Mooncake embedded segment budget from 60% to 45% node DRAM utilization and restore default vLLM INFO logging after unhelpful DEBUG bring-up."
+    - "将 GB200 DSpark AgentX Mooncake 嵌入式段预算从节点 DRAM 利用率的 60% 降至 45%，并在 DEBUG 启动诊断无效后恢复默认 vLLM INFO 日志级别。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
