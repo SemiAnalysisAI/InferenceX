@@ -129,12 +129,12 @@ esac
 export ATOM_ENABLE_REPLAYSSM
 export AITER_REUSE_IDENTICAL_COMM_GROUPS
 
-# Full CUDA graphs over [2 .. window * (1 + draft tokens)]: the verify step
+# Full CUDA graphs over [1 .. window * (1 + draft tokens)]: the verify step
 # submits one row per draft token on top of the accepted token, so capturing
 # only up to the window would send every speculative decode down the eager path.
 CUDAGRAPH_MAX_NUM_SEQS="$((2 * CONC))"
 GRAPH_MAX=$((CUDAGRAPH_MAX_NUM_SEQS * (1 + NUM_SPEC_TOKENS)))
-CUDAGRAPH_CAPTURE_SIZES="[$(seq -s, 2 "$GRAPH_MAX")]"
+CUDAGRAPH_CAPTURE_SIZES="[$(seq -s, 1 "$GRAPH_MAX")]"
 echo "CUDAGRAPH_MAX_NUM_SEQS=$CUDAGRAPH_MAX_NUM_SEQS GRAPH_MAX=$GRAPH_MAX"
 
 # The paged KV rides the LMCache CPU tier from concurrency 8 up; KDA recurrent
