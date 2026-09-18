@@ -8069,7 +8069,7 @@
     - agentic-coding
   description:
     - "Add B200 Dynamo+SGLang AgentX DEP8/DEP8 HiCache recipes for 1P1D at concurrency 64 and 128, plus 2P1D at concurrency 256."
-    - "Limit decode max-running-requests to 128, 256, and 512, respectively, and reserve long-output KV admission across all disaggregated traces so DSV4's specialized SWA pool never needs the unsupported KV-retraction backup path; use a stronger effective scheduler reserve plus a 65,536-token disaggregated-transfer reserve for the single-decode-node c256 trace."
+    - "Limit decode max-running-requests to 128, 256, and 512, respectively, and use a 65,536-token disaggregated-transfer reserve for the single-decode-node c256 trace so incoming requests queue before DSV4's specialized SWA pool reaches the unsupported KV-retraction backup path."
     - "Reuse the preinstalled uv binary in the NScale launcher, with the existing astral.sh installer retained as a fallback."
     - "Map the exact DeepSeek-V4-Pro-0813 recipe alias to the pre-staged NScale checkpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3211

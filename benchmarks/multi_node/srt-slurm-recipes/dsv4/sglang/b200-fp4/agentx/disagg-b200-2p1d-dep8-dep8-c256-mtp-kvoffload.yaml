@@ -166,11 +166,6 @@ roles:
       NCCL_TIMEOUT: '100000'
       NCCL_MNNVL_UUID_QUERY_TIMEOUT: '100000'
       SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
-    # AgentX prompts can consume most of the full-attention KV pool. Keep a
-    # stable decode reserve so admission queues work before retraction is
-    # needed (DSV4's specialized SWA pool cannot back up retracted KV).
-      SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '65536'
-      SGLANG_MIN_NEW_TOKEN_RATIO_FACTOR: '1'
       DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
       DYN_LOG: info,dynamo_runtime::pipeline::network::ingress::push_handler=warn
       SGLANG_LOG_FORWARD_ITERS: '1'
@@ -200,14 +195,9 @@ roles:
       disaggregation-ib-device: mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11
       disaggregation-mode: decode
       load-balance-method: total_tokens
-      # DP attention multiplies this by 0.3. The c256 trace can otherwise fill
-      # a DP rank's full-attention pool even at an effective reserve of 3.0;
-      # keep an effective reserve of 10.0 so admission queues before retraction.
-      schedule-conservativeness: 33.33
-      # Disaggregated transfer admission uses this dedicated reserve rather
-      # than schedule-conservativeness. Match the long AgentX output estimate
-      # so transferred requests queue before exhausting the full-attention KV
-      # pool and entering DSV4's unsupported SWA retraction-backup path.
+      # Reserve transfer headroom directly so incoming requests queue before
+      # exhausting the full-attention KV pool and entering DSV4's unsupported
+      # SWA retraction-backup path.
       num-reserved-decode-tokens: 65536
       mem-fraction-static: 0.9
       page-size: 256
