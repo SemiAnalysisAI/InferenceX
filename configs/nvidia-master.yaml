@@ -8127,6 +8127,30 @@ dsv41flash-fp4-gb300-vllm-agentic-dspark:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
+# SGLang arm for DeepSeek-V4.1-Flash AgentX on GB300, from the SGLang cookbook
+# (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
+# DSv4.1 Flash support has not shipped in an SGLang release; this uses the
+# preview build lmsysorg/sglang:dev-dsv41, digest
+# sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860 (2026-09-11, amd64 + arm64).
+# Native five-token DSpark (--speculative-algorithm DSPARK
+# --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
+# throughput, real verification for evals. The KV cache stays GPU-resident.
+# Follows the cookbook's verified Blackwell TP4/EP4 low-latency cell; backends
+# resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl).
+dsv41flash-fp4-gb300-sglang-agentic-dspark:
+  image: lmsysorg/sglang:dev-dsv41
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
 # H200 AgentX arm for DeepSeek-V4.1-Flash. Upstream marks h200 verified and says
 # the GB200 NVL4 TP4 layout becomes TP8 on 8-GPU nodes, so this is TP8.
 # `precision: fp4` labels the checkpoint's MXFP4 routed experts, as on the
