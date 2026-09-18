@@ -8111,3 +8111,11 @@
     GPU groups; add concurrency 32 and match aggregate per-concurrency request limits,
     decode graph sizing, scheduler interval, and streaming cadence.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-sglang-agentic-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add isolated same-image B300 aggregate controls in configs/experiments-qwen35-b300.yaml for the disaggregation investigation; experimental branch only.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
