@@ -108,7 +108,10 @@ roles:
       NCCL_MNNVL_ENABLE: '1'
       NCCL_CUMEM_ENABLE: '1'
       SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
-      MC_FORCE_MNNVL: '1'
+      # The Mooncake store's warmup put comes from an unregistered host
+    # buffer, which the NVLink transport cannot resolve when peers share
+    # an NVLink domain. Keep KV transfers on RDMA while the store is on.
+    MC_FORCE_MNNVL: '0'
       NCCL_TIMEOUT: '100000'
       NCCL_MNNVL_UUID_QUERY_TIMEOUT: '100000'
       SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
@@ -192,7 +195,10 @@ roles:
       NCCL_MNNVL_ENABLE: '1'
       NCCL_CUMEM_ENABLE: '1'
       SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
-      MC_FORCE_MNNVL: '1'
+      # The Mooncake store's warmup put comes from an unregistered host
+    # buffer, which the NVLink transport cannot resolve when peers share
+    # an NVLink domain. Keep KV transfers on RDMA while the store is on.
+    MC_FORCE_MNNVL: '0'
       NCCL_TIMEOUT: '100000'
       NCCL_MNNVL_UUID_QUERY_TIMEOUT: '100000'
       SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
