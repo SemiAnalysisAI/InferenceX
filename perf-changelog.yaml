@@ -8061,4 +8061,4 @@
     - "TP8/EP8 from the cookbook's verified H200 cell, which pins --attention-backend dsv4 and --moe-runner-backend flashinfer_mxfp4. Throughput uses the thinking-on golden synthetic AL 3.51 (SGLANG_SIMULATE_ACC_LEN, match-expected, real-draft-token); accuracy evals keep real DSpark verification."
     - "新增 DeepSeek-V4.1-Flash 在 H200 上的 SGLang AgentX 配方，遵循 SGLang cookbook：预览镜像 lmsysorg/sglang:dev-dsv41（digest sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860），原生五 token DSpark（--speculative-algorithm DSPARK --speculative-dspark-block-size 5），thinking 开启、reasoning effort 为 high，mem-fraction-static 0.8，KV cache 常驻 GPU，并发 1-128"
     - "采用 cookbook 已验证 H200 配置的 TP8/EP8，并显式指定 --attention-backend dsv4 与 --moe-runner-backend flashinfer_mxfp4。吞吐测试使用 thinking 开启的黄金合成 AL 3.51（SGLANG_SIMULATE_ACC_LEN、match-expected、real-draft-token）；准确率 eval 保留真实 DSpark 验证。"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3239
