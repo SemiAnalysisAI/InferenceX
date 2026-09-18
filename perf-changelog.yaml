@@ -8365,3 +8365,13 @@
     C48 write-through diagnostic before the expanded official sweep. Preserve the serving configuration
     and reject missing or invalid formal power artifacts.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-1p1d-dmem88-write-through-c48-experiment
+  scenario-type:
+  - agentic-coding
+  description:
+  - Supply explicit custom measurement type, exact concurrency and result root
+    for the native AgentX power-window consumer; qualify the complete power
+    artifact path with a fresh bounded diagnostic before the official sweep.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
