@@ -8430,7 +8430,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
 
 - config-keys:
-    - dsv41flash-fp4-b200-vllm-mtp
+    - dsv41flash-fp4-b200-vllm-dspark
   description:
     - "Pin the TP2 accuracy eval's lm-eval request concurrency to 32 (EVAL_CONCURRENT_REQUESTS) so the DSpark verify batch stays inside the 256-token CUDA-graph tier: in run 35399984613 the c128 eval kept ~125 GSM8K requests running, every verify step took the untuned eager path above the tier (FlashInfer fell back for each odd mxfp8_gemm draft-head shape), and the draft lm_head GEMM died with cudaErrorIllegalAddress after 70 s; the TP4 eval at capture 1024 and the TP2 c1-c32 throughput points, all inside their graph tiers, completed cleanly. Throughput points and the TP4 arm are unchanged"
     - "将 TP2 精度评测的 lm-eval 请求并发固定为 32（EVAL_CONCURRENT_REQUESTS），使 DSpark verify batch 留在 256 token 的 CUDA graph 层级内：运行 35399984613 中 c128 评测同时运行约 125 个 GSM8K 请求，每次 verify 都走到层级之上未调优的 eager 路径（FlashInfer 对每个非常规 mxfp8_gemm draft-head 形状回退），draft lm_head GEMM 在 70 秒后因 cudaErrorIllegalAddress 崩溃；而 capture 1024 的 TP4 评测与 TP2 c1-c32 吞吐点均在各自 graph 层级内并顺利完成。吞吐点与 TP4 配方不变"
