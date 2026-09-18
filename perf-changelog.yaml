@@ -8081,3 +8081,12 @@
     - "Pin the experimental B200 TRT BFCL Responses probe to official nightly 1.3.0rc28.dev202609180000 by image digest, containing upstream MiniMax-M3 EAGLE3 support. Production image pins are unchanged by this experiment; no runtime source patching."
     - "B200 TRT BFCL Responses 实验配置按镜像摘要固定到官方 nightly 1.3.0rc28.dev202609180000，包含上游 MiniMax-M3 EAGLE3 支持。本次实验不修改正式配置的镜像版本，不应用运行时源码补丁。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Correct the experimental B200 TRT nightly probe image reference for Enroot 3.x while preserving the exact manifest digest; no runtime patching."
+    - "修正 B200 TRT nightly 实验配置的镜像引用格式，兼容 Enroot 3.x 并保留相同的 manifest 摘要；不应用运行时补丁。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
