@@ -77,11 +77,11 @@ VLLM_CMD=(
     --tokenizer-mode deepseek_v41
     --tool-call-parser deepseek_v41 --enable-auto-tool-choice
     --reasoning-parser deepseek_v41
-    # aiter, not aiter_triton_mxfp4_bf16: the plain name opens vLLM's full
-    # priority list so the selector can skip the gfx950-only CK a8w4 experts
-    # on gfx942. If startup rejects every candidate here, pin the Triton
-    # W4A16 _moe_gemm_a16w4 kernel with aiter_triton_mxfp4_bf16.
-    --moe-backend aiter
+    # No --moe-backend: gfx942 has no FP4 MFMA, and naming aiter resolved to the
+    # Triton W4A16 kernel (AITER_TRITON_MXFP4_BF16), whose workers segfaulted
+    # during breakable graph capture on MI325X (run 35305045778). Auto selection
+    # takes vLLM's ROCm DeepSeek-V4 branch and prefers the CK W4A16 kernel
+    # (AITER_MXFP4_BF16), which the retired DeepSeek-V4-Pro gfx942 arm ran on.
     --gpu-memory-utilization 0.9
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576

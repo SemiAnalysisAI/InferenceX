@@ -8062,3 +8062,14 @@
     - "新增 DeepSeek-V4.1-Flash 在 MI300X（gfx942）上的 vLLM AgentX 配方，复制自已验证的 MI355X 配方并使用同一镜像 vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657：采用 TP8 而非 TP4，使 192 GB 显卡可容纳 511 GB 检查点的分片、常驻 GPU 的 Engram 表以及 1M 上下文 KV 池；原生五 token DSpark，吞吐使用 thinking 开启的黄金 AL 3.51，eval 保留真实块验证（ROCm 上关闭自适应验证）；VLLM_ROCM_USE_AITER=1、VLLM_ROCM_USE_AITER_MOE=1、VLLM_USE_BREAKABLE_CUDAGRAPH=1、--moe-backend aiter、--max-num-batched-tokens 8192、--max-num-seqs 128，并发 1-32"
     - "runners/launch_mi300x-amd.sh 现为该检查点将仓库挂载到 /ix 并重写 RESULT_DIR，使 AgentX 运行目录不落在 /workspace 下，并为其分配 480 分钟（原 180 分钟），以容纳冷下载检查点加一小时的基准运行"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3246
+
+- config-keys:
+    - dsv41flash-fp4-mi300x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Drop --moe-backend aiter and let vLLM select the MXFP4 MoE kernel: on gfx942 the explicit aiter name resolved to the Triton W4A16 kernel (AITER_TRITON_MXFP4_BF16) and every worker segfaulted during breakable CUDA-graph capture on the MI325X sibling (run 35305045778); auto selection prefers the CK W4A16 kernel (AITER_MXFP4_BF16) that the retired DeepSeek-V4-Pro gfx942 arm ran on"
+    - "runners/launch_mi300x-amd.sh drains the allocated node and retries once on a fresh allocation that excludes it when pyxis cannot start the container (enroot-nsenter user-namespace denial on smci300x-ccs-aus-e06-40 and e07-22 in run 35305037528)"
+    - "去掉 --moe-backend aiter，改由 vLLM 自动选择 MXFP4 MoE 内核：在 gfx942 上显式指定 aiter 会解析为 Triton W4A16 内核（AITER_TRITON_MXFP4_BF16），MI325X 同级配方在 breakable CUDA graph 捕获期间所有 worker 段错误（运行 35305045778）；自动选择优先使用已退役的 DeepSeek-V4-Pro gfx942 配方所用的 CK W4A16 内核（AITER_MXFP4_BF16）"
+    - "当 pyxis 无法启动容器时（运行 35305037528 中 smci300x-ccs-aus-e06-40 与 e07-22 的 enroot-nsenter 用户命名空间被拒），runners/launch_mi300x-amd.sh 会 drain 所分配的节点，并在排除该节点的新分配上重试一次"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3246

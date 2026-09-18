@@ -31,50 +31,95 @@ fi
 SALLOC_TIME=180
 [[ "$CONTAINER_REPO" == /ix ]] && SALLOC_TIME=480
 
+# Pyxis/enroot could not start the container on the allocated node, for example
+# enroot-nsenter denied a user namespace after the node was reprovisioned with
+# kernel.apparmor_restrict_unprivileged_userns=1 (seen on smci300x-ccs-aus-e06-40
+# and e07-22 in run 35305037528). Drain that node so later jobs avoid it, then
+# retry once on a fresh allocation that excludes it. Draining needs Slurm
+# operator rights; without them the exclusion still protects the retry.
+container_start_failed() {
+    grep -qE "pyxis: (couldn't start container|container start failed)|enroot-nsenter: failed to create user namespace" "$1"
+}
+drain_broken_node() {
+    local node="$1" reason="$2"
+    if scontrol update NodeName="$node" State=DRAIN Reason="$reason"; then
+        echo "Drained $node: $reason" >&2
+    else
+        echo "WARNING: could not drain $node (Slurm operator rights required); excluding it for the retry only" >&2
+    fi
+}
+
 check_env_vars GPU_COUNT
 
 set -x
 
-JOB_ID=$(set +o pipefail; salloc \
-    --partition="$PARTITION" \
-    --gres="gpu:$GPU_COUNT" \
-    --cpus-per-task=128 \
-    --time="$SALLOC_TIME" \
-    --no-shell \
-    --job-name="$RUNNER_NAME" 2>&1 \
-    | tee /dev/stderr \
-    | grep -oP 'Granted job allocation \K[0-9]+')
-
-if [[ -z "$JOB_ID" ]]; then
-    echo "ERROR: salloc failed to allocate a job" >&2
-    exit 1
-fi
-
-export PORT=$((40000 + (JOB_ID % 10000)))
+BENCH_SCRIPT="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_mi300x${SPEC_SUFFIX}.sh"
+EXCLUDE_NODES=""
+JOB_ID=""
 trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
-
-# Concurrent jobs import to the same node-local squash file; serialize them.
-srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c "
-    set -eo pipefail
-    exec 9>\"$LOCK_FILE\"
-    flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE' >&2; exit 1; }
-    if unsquashfs -l \"$SQUASH_FILE\" >/dev/null 2>&1; then
-        echo 'Squash file already exists and is valid, skipping import'
-    else
-        rm -f \"$SQUASH_FILE\"
-        enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+for attempt in 1 2; do
+    SALLOC_EXCLUDE_ARGS=()
+    if [[ -n "$EXCLUDE_NODES" ]]; then
+        SALLOC_EXCLUDE_ARGS=(--exclude="$EXCLUDE_NODES")
     fi
-"
+    JOB_ID=$(set +o pipefail; salloc \
+        --partition="$PARTITION" \
+        --gres="gpu:$GPU_COUNT" \
+        --cpus-per-task=128 \
+        --time="$SALLOC_TIME" \
+        --no-shell \
+        "${SALLOC_EXCLUDE_ARGS[@]}" \
+        --job-name="$RUNNER_NAME" 2>&1 \
+        | tee /dev/stderr \
+        | grep -oP 'Granted job allocation \K[0-9]+')
 
-srun --jobid="$JOB_ID" \
-    --job-name="$RUNNER_NAME" \
-    --container-image="$SQUASH_FILE" \
-    --container-mounts="$GITHUB_WORKSPACE:$CONTAINER_REPO/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_MOUNT:/aiperf_mmap_cache,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
-    --container-writable \
-    --container-remap-root \
-    --container-workdir="$CONTAINER_REPO/" \
-    --no-container-entrypoint \
-    --export=ALL \
-    bash "benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_mi300x${SPEC_SUFFIX}.sh"
+    if [[ -z "$JOB_ID" ]]; then
+        echo "ERROR: salloc failed to allocate a job" >&2
+        exit 1
+    fi
+
+    export PORT=$((40000 + (JOB_ID % 10000)))
+    NODE=$(scontrol show job "$JOB_ID" -o | grep -oP ' NodeList=\K\S+' || true)
+
+    # Concurrent jobs import to the same node-local squash file; serialize them.
+    srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c "
+        set -eo pipefail
+        exec 9>\"$LOCK_FILE\"
+        flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE' >&2; exit 1; }
+        if unsquashfs -l \"$SQUASH_FILE\" >/dev/null 2>&1; then
+            echo 'Squash file already exists and is valid, skipping import'
+        else
+            rm -f \"$SQUASH_FILE\"
+            enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+        fi
+    "
+
+    SRUN_STDERR="$(mktemp)"
+    set +e
+    srun --jobid="$JOB_ID" \
+        --job-name="$RUNNER_NAME" \
+        --container-image="$SQUASH_FILE" \
+        --container-mounts="$GITHUB_WORKSPACE:$CONTAINER_REPO/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_MOUNT:/aiperf_mmap_cache,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
+        --container-writable \
+        --container-remap-root \
+        --container-workdir="$CONTAINER_REPO/" \
+        --no-container-entrypoint \
+        --export=ALL \
+        bash "$BENCH_SCRIPT" 2> >(tee "$SRUN_STDERR" >&2)
+    benchmark_rc=$?
+    set -e
+    if (( benchmark_rc == 0 )); then
+        break
+    fi
+    if (( attempt == 1 )) && [[ -n "$NODE" ]] && container_start_failed "$SRUN_STDERR"; then
+        drain_broken_node "$NODE" "inferencex: pyxis container start failed (enroot user namespace)"
+        scancel "$JOB_ID"
+        JOB_ID=""
+        EXCLUDE_NODES="$NODE"
+        echo "Retrying on a fresh allocation that excludes $NODE" >&2
+        continue
+    fi
+    exit "$benchmark_rc"
+done
 
 scancel "$JOB_ID"
