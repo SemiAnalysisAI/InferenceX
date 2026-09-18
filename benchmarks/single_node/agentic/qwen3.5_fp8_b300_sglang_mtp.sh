@@ -92,6 +92,13 @@ MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS="$CONC"
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
 
+# New nightlies split graph sizing by phase; keep older published images valid.
+SGLANG_SERVER_HELP=$(python3 -m sglang.launch_server --help 2>&1)
+CUDA_GRAPH_SIZE_FLAG=--cuda-graph-max-bs
+if [[ "$SGLANG_SERVER_HELP" == *--cuda-graph-max-bs-decode* ]]; then
+    CUDA_GRAPH_SIZE_FLAG=--cuda-graph-max-bs-decode
+fi
+
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
 export NCCL_NVLS_ENABLE=1
@@ -121,7 +128,7 @@ SGLANG_CMD=(
     --mamba-ssm-dtype bfloat16
     --attention-backend trtllm_mha
     --moe-runner-backend flashinfer_trtllm
-    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    "$CUDA_GRAPH_SIZE_FLAG" "$CUDA_GRAPH_MAX_BS"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --max-prefill-tokens 16384
     --chunked-prefill-size 16384
