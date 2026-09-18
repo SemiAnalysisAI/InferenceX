@@ -8090,4 +8090,4 @@
   description:
   - 'Add Qwen3.5 397B FP8 B200 Dynamo + SGLang disaggregated AgentX: one TP4 prefill
     worker and one TP4 decode worker with NEXTN MTP, concurrency 1/4/8/16.'
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
