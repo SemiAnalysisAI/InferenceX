@@ -104,7 +104,9 @@ SGLANG_CMD=(
     # times the 1M context, and the default 16384 chunk exhausted HBM on the
     # first 66k-99k-token AgentX prompts.
     --mem-fraction-static 0.70
-    --chunked-prefill-size 8192
+    # 4096, as on B200/GB200: at 8192 the indexer's prefill top-k allocated 5 GiB
+    # with 29 requests in flight and OOMed c32 (run 35308550355).
+    --chunked-prefill-size 4096
     --speculative-algorithm DSPARK
     --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
     --max-running-requests "$MAX_RUNNING_REQUESTS"

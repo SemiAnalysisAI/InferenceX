@@ -8080,3 +8080,12 @@
     - "Cap --max-running-requests at the 64-request decode graph batch and lower --mem-fraction-static from 0.75 to 0.70, after run 35306704553: the eval-only arm OOMed in the eager DSpark verify path once 128 GSM8K requests were running (6.4 GiB allocation with 2 GiB free of 139.8 GiB), while the throughput points at 64 running requests or fewer stayed up; a DSpark verify batch above the captured tier runs eagerly and allocates its attention workspace per step, so the pool now stays inside the graph tier"
     - "将 --max-running-requests 上限设为 64（即 decode graph batch），并将 --mem-fraction-static 从 0.75 降至 0.70；依据：运行 35306704553：eval-only 配方在 128 个 GSM8K 请求同时运行时于 eager DSpark verify 路径 OOM（139.8 GiB 中仅剩 2 GiB 时申请 6.4 GiB），而运行请求不超过 64 的吞吐点保持正常。超出已捕获层级的 DSpark verify batch 会以 eager 方式运行并逐步分配 attention 工作区，因此请求池现保持在 graph 层级之内"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3239
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Halve --chunked-prefill-size from 8192 to 4096, matching the B200 and GB200 arms: in run 35308550355 c1 passed but c32 OOMed in the sparse indexer's prefill top-k (_low_ratio_index_topk_torch, 5 GiB allocation with 3.4 GiB free of 139.8 GiB) with 29 long AgentX prompts in flight at mem-fraction 0.70"
+    - "将 --chunked-prefill-size 从 8192 减半至 4096，与 B200、GB200 配方一致：运行 35308550355 中 c1 通过，但 c32 在 29 个长 AgentX 提示同时在途、mem-fraction 0.70 时于稀疏 indexer 的 prefill top-k（_low_ratio_index_topk_torch）OOM（139.8 GiB 中仅剩 3.4 GiB 时申请 5 GiB）"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3239
