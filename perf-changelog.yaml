@@ -8144,3 +8144,15 @@
     for compatibility with the latest SGLang nightly's relocated argument parser
     and encoder modules. Keep recipe and result router version pins aligned.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-sglang-agentic-mtp
+  - qwen3.5-fp8-b200-sglang-agentic-mtp-latest-control
+  scenario-type:
+  - agentic-coding
+  description:
+  - Size the experimental B200 Qwen3.5 FP8 aggregate HiCache using the pinned
+    nightly's combined KV and Mamba host-pool budget, including packed NEXTN
+    draft layers. Reserve 1 GB per rank for alignment; this uses 215 GB per
+    rank for the existing TP4 and TP8 DRAM budgets instead of 104 GB.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
