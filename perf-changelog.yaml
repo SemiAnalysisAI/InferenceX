@@ -8090,4 +8090,4 @@
     - "Rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode: nightlies since 2026-09-15 split the flag into decode/prefill variants and reject the old spelling as ambiguous; the value (CONC) and every other serving flag are unchanged"
     - "将 Qwen3.5 FP8 B200 SGLang 8k1k STP 的 SGLang 镜像从 lmsysorg/sglang:v0.5.19-cu130 更新为 lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85（2026-09-18 上游 cu13 dev nightly，sgl-project/sglang@20518d85，amd64 + arm64）"
     - "将 --cuda-graph-max-bs 改为 --cuda-graph-max-bs-decode：自 2026-09-15 起的 nightly 将该参数拆分为 decode/prefill 两个变体并拒绝旧写法；取值（CONC）与其余服务参数不变"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3250
