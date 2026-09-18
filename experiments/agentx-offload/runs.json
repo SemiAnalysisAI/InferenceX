@@ -76,38 +76,45 @@
       "allocation_id": "15923",
       "log_sha256": "1655290209ce7c18ed287042427dbe25c0ecc03fd409dc2ea2bae439498006ba",
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35154018672/job/104989094819"
+    },
+    {
+      "run_id": 35344315025,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35344315025",
+      "arm": "nvme",
+      "concurrency": 16,
+      "repeat": 1,
+      "attempt": 2,
+      "retry_of": 35154018672,
+      "head_sha": "618a5d229cb13af1a9432895a1f17e000cf57967",
+      "status": "queued",
+      "node": null,
+      "artifacts": [],
+      "performance_result": false
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749,35154018672",
-  "status": "Checkout fallback verified; published compatible image pushed. Image-fix retry not dispatched because capacity check closed.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749,35154018672,35344315025",
+  "status": "NVMe c16 image-fix retry dispatched after a fresh capacity gate; queued on the B200 runner fleet.",
   "last_capacity_check": {
-    "checked_at": "2026-09-17T16:31:37.242943+00:00",
-    "cluster_observed_at": "2026-09-17T16:31:21.000Z",
+    "checked_at": "2026-09-18T12:22:15.463Z",
+    "cluster_observed_at": "2026-09-18T12:21:53.000Z",
     "cluster_stale": false,
-    "idle_nodes": 2,
+    "idle_nodes": 3,
     "total_nodes": 11,
     "legacy_task_nodes": 0,
     "legacy_job_ids": [],
-    "scheduler_snapshot_at": "2026-09-17T16:31:00.000Z",
+    "scheduler_snapshot_at": "2026-09-18T12:23:00.000Z",
     "scheduler_available": true,
-    "b200_queued_jobs": 27,
-    "competing_run_ids": [
-      35157470870,
-      35205093411,
-      35207457378,
-      35227409600,
-      35244609202
-    ],
-    "active_reservations_global": 3,
-    "reserved_nodes_global": 5,
-    "dispatch_allowed": false,
-    "reason": "Legacy allocations no longer present. Two idle B200 nodes remain reserved by our launch policy, and competing queued work blocks dispatch."
+    "b200_queued_jobs_before_dispatch": 0,
+    "competing_run_ids": [],
+    "active_reservations_global": 4,
+    "reserved_nodes_global": 10,
+    "dispatch_allowed": true,
+    "reason": "Three B200 nodes were idle, no competing B200 work or priority override was present, and one one-node dispatch left the required two-node reserve."
   },
   "next_dispatch": {
-    "arm": "nvme",
+    "arm": "none",
     "concurrency": 16,
     "repeat": 1,
-    "retry_of": 35154018672,
-    "requires": "Fresh scheduler capacity; validate startup with the published replacement image before controls."
+    "requires": "Do not dispatch until run 35344315025 proves startup with the published replacement image; then run the matched HBM-only control after a fresh capacity gate."
   }
 }
