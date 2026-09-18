@@ -7,7 +7,7 @@ schema: 2
 name: qwen35-b200-fp8-agentx-1p1d-tp4-colocated-c8-mtp
 model:
   path: qwen3.5-fp8
-  container: lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161
+  container: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   precision: fp8
 engine: sglang
 dynamo:
@@ -74,7 +74,7 @@ roles:
       enable-symm-mem: true
       scheduler-recv-interval: 10
       stream-interval: 50
-      mamba-scheduler-strategy: extra_buffer
+      mamba-radix-cache-strategy: extra_buffer
       mamba-track-interval: 2048
   decode:
     nodes: colocate
@@ -123,7 +123,7 @@ roles:
       stream-interval: 50
       enable-symm-mem: true
       scheduler-recv-interval: 10
-      mamba-scheduler-strategy: no_buffer
+      mamba-radix-cache-strategy: no_buffer
       mamba-track-interval: 128
 health_check:
   max_attempts: 720

@@ -8101,3 +8101,13 @@
     TP4 prefill and TP4 decode on one eight-GPU node, match per-concurrency request/graph
     limits, and extend the initial study to concurrency 32.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Pin B200 Qwen3.5 FP8 disaggregated AgentX to the latest CUDA 13 amd64 nightly,
+    nightly-dev-cu13-20260918-20518d85, and use the current mamba-radix-cache-strategy
+    argument for prefill and decode.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
