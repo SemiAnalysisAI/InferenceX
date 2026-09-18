@@ -12,6 +12,18 @@ LOCK_FILE="${SQUASH_FILE}.lock"
 
 SPEC_SUFFIX=$([[ "${SPEC_DECODING:-}" == "mtp" ]] && printf '_mtp' || printf '')
 
+# DSv4.1 Flash AgentX creates runtime directories next to the repository, which
+# must not land under /workspace; mount the checkout at /ix like the other
+# dsv41flash launchers and rewrite the caller's RESULT_DIR to match.
+CONTAINER_REPO=/workspace
+if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4.1-Flash" ]]; then
+    CONTAINER_REPO=/ix
+    export INFMAX_CONTAINER_WORKSPACE="$CONTAINER_REPO"
+    case "${RESULT_DIR:-}" in
+        /workspace/*) export RESULT_DIR="/ix/${RESULT_DIR#/workspace/}" ;;
+    esac
+fi
+
 check_env_vars GPU_COUNT
 
 set -x
@@ -43,11 +55,11 @@ srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c "
 "
 srun --jobid="$JOB_ID" \
 --container-image="$SQUASH_FILE" \
---container-mounts="$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
+--container-mounts="$GITHUB_WORKSPACE:$CONTAINER_REPO/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
 --container-mount-home \
 --container-writable \
 --container-remap-root \
---container-workdir=/workspace/ \
+--container-workdir="$CONTAINER_REPO/" \
 --no-container-entrypoint --export=ALL \
 bash benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_mi325x${SPEC_SUFFIX}.sh
 
