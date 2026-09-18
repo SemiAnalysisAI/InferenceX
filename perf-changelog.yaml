@@ -8092,3 +8092,13 @@
     and SGLang through srt-slurm: 1P1D TP4, NEXTN MTP, and concurrencies 1, 4, 8,
     16.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Place the 1P1D TP4/TP4 B300 AgentX starter on one eight-GPU node with disjoint
+    GPU groups; add concurrency 32 and match aggregate per-concurrency request limits,
+    decode graph sizing, scheduler interval, and streaming cadence.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268

@@ -1,8 +1,7 @@
-# Starter adaptation of the SGLang Qwen3.5 cookbook and existing GB300 AgentX PD recipe.
 # Source: https://github.com/sgl-project/sglang/blob/191172fa742f8837423ca4e4be4919ebb52f1b51/docs/cookbook/autoregressive/Qwen/Qwen3.5.mdx
-# B300 runtime qualification and tuning are pending.
+# Separate TP4 GPU groups share one node. GPU qualification pending.
 schema: 2
-name: qwen3.5-b300-fp8-agentx-disagg-1p1d-tp4-tp4-mtp
+name: qwen3.5-b300-fp8-agentx-disagg-1p1d-tp4-tp4-colocated-c4
 model:
   path: qwen3.5-fp8
   container: lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161
@@ -48,6 +47,10 @@ roles:
       SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
       SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
       SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+      TORCH_CUDA_ARCH_LIST: '10.0'
+      PYTHONNOUSERSITE: '1'
+      SGL_ENABLE_JIT_DEEPGEMM: 'false'
+      SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
     args:
       served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
       model-path: /model/
@@ -69,7 +72,6 @@ roles:
       mem-fraction-static: 0.8
       chunked-prefill-size: 16384
       max-prefill-tokens: 16384
-      max-running-requests: 64
       page-size: 64
       reasoning-parser: qwen3
       tool-call-parser: qwen3_coder
@@ -79,8 +81,11 @@ roles:
       disable-cuda-graph: true
       mamba-scheduler-strategy: extra_buffer
       mamba-track-interval: 2048
+      scheduler-recv-interval: 10
+      stream-interval: 50
+      max-running-requests: 8
   decode:
-    nodes: 1
+    nodes: colocate
     workers: 1
     gpus: 4
     env:
@@ -94,6 +99,10 @@ roles:
       SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
       SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
       SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+      TORCH_CUDA_ARCH_LIST: '10.0'
+      PYTHONNOUSERSITE: '1'
+      SGL_ENABLE_JIT_DEEPGEMM: 'false'
+      SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
     args:
       served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
       model-path: /model/
@@ -115,7 +124,6 @@ roles:
       mem-fraction-static: 0.8
       chunked-prefill-size: 16384
       max-prefill-tokens: 16384
-      max-running-requests: 64
       page-size: 64
       reasoning-parser: qwen3
       tool-call-parser: qwen3_coder
@@ -124,11 +132,14 @@ roles:
       watchdog-timeout: 3600
       mamba-scheduler-strategy: no_buffer
       disable-radix-cache: true
-      cuda-graph-max-bs: 64
       speculative-algorithm: NEXTN
       speculative-num-steps: 3
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 4
+      scheduler-recv-interval: 10
+      stream-interval: 50
+      max-running-requests: 8
+      cuda-graph-max-bs-decode: 4
 sbatch_directives:
   mem: '0'
   cpus-per-task: '144'
