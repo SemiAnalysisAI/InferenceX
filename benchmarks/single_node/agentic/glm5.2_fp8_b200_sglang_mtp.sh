@@ -39,7 +39,7 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
-# B200: runners/launch_b200-nscale-compat.sh resolves the checkpoint to a
+# B200: runners/launch_b200-nscale-slurm.sh resolves the checkpoint to a
 # cluster-local path and then rewrites MODEL to that path, so `hf download
 # "$MODEL"` cannot work on this runner. Keep the HF repo id separate for the
 # day-zero case where GLM-5.2-FP8 has not been staged yet.
