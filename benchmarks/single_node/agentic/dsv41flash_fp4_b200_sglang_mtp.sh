@@ -53,14 +53,16 @@ export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
 
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts, but
-# cap the pool at 128: DSpark verify buffers scale with it, and 256 at c128
-# did not fit next to the graphs on H200. Decode graphs stay at the cookbook's
-# 64; larger batches decode eagerly, as the cookbook's high-throughput cell does.
-MAX_RUNNING_REQUESTS=$((2 * CONC))
-if (( MAX_RUNNING_REQUESTS > 128 )); then
-    MAX_RUNNING_REQUESTS=128
-fi
+# never let the pool exceed the decode graph batch: a DSpark verify step for a
+# batch above the captured 64 runs eagerly and allocates its attention
+# workspace on the fly, which OOMed the H200 eval at 128 running requests
+# (6.4 GiB allocation with 2 GiB free, run 35306704553). Batches within the
+# graph tier reuse the capture-time workspace instead.
 CUDA_GRAPH_MAX_BS=64
+MAX_RUNNING_REQUESTS=$((2 * CONC))
+if (( MAX_RUNNING_REQUESTS > CUDA_GRAPH_MAX_BS )); then
+    MAX_RUNNING_REQUESTS=$CUDA_GRAPH_MAX_BS
+fi
 
 # Saturation arms carry a larger in-flight working set than the 30-minute
 # default warmup drain allows.
@@ -96,12 +98,12 @@ SGLANG_CMD=(
     --tp "$TP" --ep-size "$EP_SIZE"
     # Backends resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl
     # on Blackwell); the cookbook warns that overriding them costs decode speed.
-    # 0.75 rather than the cookbook's 0.8, and an 8192-token prefill chunk: the
+    # 0.70 rather than the cookbook's 0.8, and a bounded prefill chunk: the
     # sparse-attention indexer and DSpark prefill buffers scale with the chunk
     # times the 1M context, and the default 16384 chunk exhausted HBM on the
     # first 66k-99k-token AgentX prompts.
-    --mem-fraction-static 0.75
-    --chunked-prefill-size 8192
+    --mem-fraction-static 0.70
+    --chunked-prefill-size 4096
     --speculative-algorithm DSPARK
     --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
