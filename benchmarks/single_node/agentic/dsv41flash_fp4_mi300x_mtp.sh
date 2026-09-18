@@ -30,10 +30,14 @@ export VLLM_ROCM_USE_AITER_MOE=1
 # unavailable; on gfx950 that was 98% of the server log. Set back to WARNING
 # when diagnosing new AITER startup or runtime failures on gfx942.
 export AITER_TRITON_LOG_LEVEL=ERROR
-# DeepseekV41ForCausalLM is not torch-compiled upstream, so the default
-# cudagraph_mode=FULL_AND_PIECEWISE aborts at engine init ("piecewise CUDA
-# graphs unavailable"); amd/attention.py uses eager_break_during_capture.
-export VLLM_USE_BREAKABLE_CUDAGRAPH=1
+# DeepseekV41ForCausalLM is not torch-compiled upstream. On gfx950 the MI355X
+# arm runs breakable piecewise graphs (VLLM_USE_BREAKABLE_CUDAGRAPH=1); on
+# gfx942 every worker segfaulted during "Capturing CUDA graphs (PIECEWISE)"
+# with both the Triton W4A16 and the unfused MoE kernels (runs 35305045778,
+# 35306398350), so capture only full decode graphs, the uniform-batch shape
+# the ROCm sparse SWA backend supports, and run prefill eagerly as the
+# MiniMax-M3 gfx942 arm does.
+export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export OMP_NUM_THREADS=1
 # Pin the full-context corpus for this 1M-context recipe.
 export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_062126
@@ -77,11 +81,11 @@ VLLM_CMD=(
     --tokenizer-mode deepseek_v41
     --tool-call-parser deepseek_v41 --enable-auto-tool-choice
     --reasoning-parser deepseek_v41
-    # No --moe-backend: gfx942 has no FP4 MFMA, and naming aiter resolved to the
-    # Triton W4A16 kernel (AITER_TRITON_MXFP4_BF16), whose workers segfaulted
-    # during breakable graph capture on MI325X (run 35305045778). Auto selection
-    # takes vLLM's ROCm DeepSeek-V4 branch and prefers the CK W4A16 kernel
-    # (AITER_MXFP4_BF16), which the retired DeepSeek-V4-Pro gfx942 arm ran on.
+    # aiter: auto selection picked the unfused Triton MoE (TRITON_UNFUSED) on
+    # gfx942 in run 35306398350 and still segfaulted at piecewise capture, so
+    # the MoE kernel was not the culprit; keep the upstream recipe's name,
+    # which resolves to the dedicated Triton MXFP4 W4A16 kernel here.
+    --moe-backend aiter
     --gpu-memory-utilization 0.9
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576
@@ -90,6 +94,7 @@ VLLM_CMD=(
     # The sparse-attention indexer allocates a [batched-tokens, 1M] fp8 logits
     # buffer at startup (16 GiB at 8192); 16384 would cost 32 GiB of a 192 GB card.
     --max-num-batched-tokens 8192
+    --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
     --disable-uvicorn-access-log
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
