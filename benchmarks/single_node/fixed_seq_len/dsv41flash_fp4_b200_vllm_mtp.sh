@@ -43,6 +43,16 @@ done
 if (( TP == 2 && CAPTURE_SIZE > 512 )); then
     CAPTURE_SIZE=512
 fi
+# Real DSpark verification (block rejection with adaptive verification) profiles
+# roughly 10 GiB more than the synthetic-acceptance throughput points: on TP2 the
+# c128 throughput point still had 8.13 GiB for KV at capture 512, while the
+# c64 and c128 evals ended at -2.22 GiB and never started (run 35355746550).
+# Halve the graph tier and let the eval use 0.95 of HBM; GSM8K prompts are short.
+EVAL_MEM_ARGS=()
+if [[ "${EVAL_ONLY}" == true ]] && (( TP == 2 )); then
+    CAPTURE_SIZE=256
+    EVAL_MEM_ARGS=(--gpu-memory-utilization 0.95)
+fi
 select_available_server_port
 
 # Match AgentX's golden AL 3.51; accuracy evals use real target verification.
@@ -77,6 +87,7 @@ VLLM_CMD=(
     --speculative-config "$SPEC_CONFIG"
     --max-model-len "$MODEL_LEN"
     --max-cudagraph-capture-size "$CAPTURE_SIZE"
+    "${EVAL_MEM_ARGS[@]}"
     --disable-uvicorn-access-log
     "${LOAD_ARGS[@]}"
 )

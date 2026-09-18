@@ -14,8 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
     "scenario,eval_only,concurrency,capture",
     [
         ("fixed_seq_len", False, 1, 64),
-        # TP2 fixed-seq capture is capped at 512 (run 35316389982 OOMed at 1024).
-        ("fixed_seq_len", True, 128, 512),
+        # TP2 fixed-seq capture is capped at 512 (run 35316389982 OOMed at 1024);
+        # the eval halves it to 256 and raises the memory fraction (run 35355746550).
+        ("fixed_seq_len", True, 128, 256),
         ("agentic", False, 16, 128),
         ("agentic", True, 2, 64),
     ],
@@ -86,6 +87,11 @@ builtin source "$1"
     if scenario == "fixed_seq_len":
         # The 8k1k arm serves the matrix context, and evals the eval context.
         assert args[args.index("--max-model-len") + 1] == ("16384" if eval_only else "9472")
+        # Only the TP2 eval raises the memory fraction; throughput points keep the default.
+        if eval_only:
+            assert args[args.index("--gpu-memory-utilization") + 1] == "0.95"
+        else:
+            assert "--gpu-memory-utilization" not in args
     else:
         assert args[args.index("--max-model-len") + 1] == "1048576"
         # TP2 bounds the scheduler batch to the AgentX fan-out, floored at 16
