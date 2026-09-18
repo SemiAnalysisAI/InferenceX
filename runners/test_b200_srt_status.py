@@ -1,5 +1,6 @@
 """A completed Slurm allocation must not hide a failed benchmark."""
 
+import json
 import os
 import shutil
 import subprocess
@@ -18,18 +19,20 @@ def _stub(directory: Path, name: str, body: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "accounting,expected_status",
+    "accounting,expected_status,power_mode",
     [
-        ("COMPLETED|0:0", 0),
-        ("FAILED|1:0", 1),
-        ("COMPLETED|0:9", 1),
-        ("CANCELLED by 123|0:15", 1),
-        ("DELAYED", 0),
-        ("", 1),
+        ("COMPLETED|0:0", 0, "off"),
+        ("FAILED|1:0", 1, "off"),
+        ("COMPLETED|0:9", 1, "off"),
+        ("CANCELLED by 123|0:15", 1, "off"),
+        ("DELAYED", 0, "off"),
+        ("", 1, "off"),
+        ("COMPLETED|0:0", 1, "missing"),
+        ("COMPLETED|0:0", 0, "eval"),
     ],
 )
 def test_b200_collects_artifacts_before_returning_slurm_status(
-    tmp_path: Path, accounting: str, expected_status: int
+    tmp_path: Path, accounting: str, expected_status: int, power_mode: str
 ) -> None:
     """Run the actual Qwen launcher path with only external services stubbed."""
     binaries = tmp_path / "bin"
@@ -40,11 +43,11 @@ def test_b200_collects_artifacts_before_returning_slurm_status(
         "make",
         "srtctl",
         "flock",
-        "unsquashfs",
         "squeue",
         "sleep",
     ):
         _stub(binaries, name, "exit 0")
+    _stub(binaries, "unsquashfs", 'touch "$2"; exit 0')
     _stub(
         binaries,
         "sacct",
@@ -54,6 +57,10 @@ count=0
 [[ -f "$MOCK_SACCT_COUNT" ]] && read -r count < "$MOCK_SACCT_COUNT"
 count=$((count + 1))
 printf '%s\n' "$count" > "$MOCK_SACCT_COUNT"
+if [[ "$*" == *JobIDRaw* ]]; then
+    printf '42|%s\n' "$MOCK_ACCOUNTING"
+    exit 0
+fi
 if [[ "$MOCK_ACCOUNTING" == DELAYED ]]; then
     case "$count" in
         1) exit 0 ;;
@@ -71,16 +78,28 @@ fi
         "tail",
         'for arg in "$@"; do [[ -f "$arg" ]] && cat "$arg"; done; exit 0',
     )
+    # Shared-cluster cache paths are external to this local launcher test.
+    _stub(
+        binaries,
+        "mkdir",
+        'for arg in "$@"; do [[ "$arg" == /data/* ]] && exit 0; done; exec /bin/mkdir "$@"',
+    )
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    for relative in (
-        "runners/launch_b200-nscale-slurm.sh",
-        "runners/slurm_utils.sh",
-        "benchmarks/benchmark_lib.sh",
-    ):
-        destination = workspace / relative
-        destination.parent.mkdir(exist_ok=True)
-        shutil.copyfile(ROOT / relative, destination)
+    # Keep launcher-owned runtime inputs with the real launcher and helpers.
+    shutil.copytree(ROOT / "runners", workspace / "runners")
+    (workspace / "benchmarks").mkdir()
+    if power_mode != "off":
+        recipe = workspace / "benchmarks/multi_node/srt-slurm-recipes/test.yaml"
+        recipe.parent.mkdir(parents=True)
+        recipe.write_text(
+            "telemetry:\n  enabled: true\n  dcgm_exporter:\n    container_image: dcgm-exporter\n"
+        )
+    shutil.copyfile(
+        ROOT / "benchmarks/benchmark_lib.sh", workspace / "benchmarks/benchmark_lib.sh"
+    )
+    # Run the real configuration renderer regardless of editable-install state.
+    (workspace / "infx").symlink_to(ROOT / "infx", target_is_directory=True)
     # Stub remote checkout and submission after loading the real shared helpers.
     with (workspace / "runners/slurm_utils.sh").open("a") as helpers:
         helpers.write(r"""
@@ -88,11 +107,13 @@ setup_srt_slurm() {
     mkdir -p "$1/recipes"
     cd "$1" || return 1
     printf 'name: fixture\n' > recipes/test.yaml
+    SRT_SLURM_COMMIT=1111111111111111111111111111111111111111
+    printf '%s\n' "$SRT_SLURM_COMMIT" > "$GITHUB_WORKSPACE/power-producer-sha.txt"
 }
 apply_srt_recipe() {
     mkdir -p outputs/42/logs
     cp -R "$MOCK_FIXTURE/." outputs/42/logs/
-    printf '{"diagnostic":"retained"}\n' > "$GITHUB_WORKSPACE/aggregate_conc1.json"
+    printf '{"diagnostic":"retained","disagg":true,"num_prefill_gpu":4,"num_decode_gpu":4}\n' > "$GITHUB_WORKSPACE/aggregate_conc1.json"
     printf '✅ Job 42\n'
 }
 """)
@@ -114,8 +135,9 @@ apply_srt_recipe() {
         "MOCK_SACCT_COUNT": str(tmp_path / "sacct-count"),
         "MOCK_FIXTURE": str(fixture),
         "GITHUB_WORKSPACE": str(workspace),
-        "EVAL_ONLY": "false",
-        "IS_AGENTIC": "0",
+        "EVAL_ONLY": "true" if power_mode == "eval" else "false",
+        "IS_AGENTIC": "1" if power_mode != "off" else "0",
+        "CONC_LIST": "1",
         "IS_MULTINODE": "true",
         "RUN_EVAL": "true",
         "SLURM_PARTITION": "batch_1",
@@ -164,9 +186,16 @@ builtin source "$1/runners/launch_b200-nscale-slurm.sh"
         timeout=15,
     )
     assert result.returncode == expected_status, result.stdout + result.stderr
-    assert (
-        workspace / "aggregate_conc1.json"
-    ).read_text() == '{"diagnostic":"retained"}\n'
+    aggregate = json.loads((workspace / "aggregate_conc1.json").read_text())
+    assert aggregate["diagnostic"] == "retained"
+    if power_mode == "missing":
+        validation = json.loads(
+            (workspace / "LOGS/agentic/conc_1/power_validation.json").read_text()
+        )
+        assert validation["power_valid"] is False
+        assert validation["reasons"] == ["formal_benchmark_result_missing"]
+    else:
+        assert not (workspace / "LOGS/agentic/conc_1/power_validation.json").exists()
     assert (workspace / "results_eval.json").read_text() == '{"eval":"retained"}\n'
     assert (workspace / "LOGS/sweep_42.log").read_text() == "benchmark diagnostics\n"
     with tarfile.open(workspace / "multinode_server_logs.tar.gz") as archive:
@@ -175,5 +204,13 @@ builtin source "$1/runners/launch_b200-nscale-slurm.sh"
             in archive.getnames()
         )
     assert not (workspace / "srt-slurm/outputs").exists()
-    expected_queries = 3 if accounting == "DELAYED" else 10 if accounting == "" else 1
+    expected_queries = (
+        2
+        if power_mode == "missing"
+        else 3
+        if accounting == "DELAYED"
+        else 10
+        if accounting == ""
+        else 1
+    )
     assert int((tmp_path / "sacct-count").read_text()) == expected_queries
