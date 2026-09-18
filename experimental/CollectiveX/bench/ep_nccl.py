@@ -56,6 +56,7 @@ try:
         Layout,
         LayoutInfo,
         Tensor,
+        ZeroCopyMode,
     )
 except Exception as exc:  # pragma: no cover - requires the benchmark image
     print(f"ERROR: NCCL EP import failed: {exc!r}", file=sys.stderr)
@@ -96,13 +97,14 @@ class NCCLEPBackend(EPBackend):
     # per-row discriminator that change lacked. "v02" marks the nccl-extensions v0.2 mover
     # (new kernels: LL combine fence, B200 EP16 fix, HT gains) so pre-upgrade rows never
     # pool with post-upgrade rows.
-    kernel_generation = "nccl-ep-v02-ht-routed"
+    kernel_generation = "nccl-ep-v02-ht-routed-zc"
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16",)
     stage_device_work = False
     requires_fresh_pair = False
     receive_layout = "token-rank"
     combine_weight_semantics = "unweighted-rank-sum"
+    zero_copy = True
 
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)
@@ -118,6 +120,9 @@ class NCCLEPBackend(EPBackend):
         self.num_local_experts = self.experts_per_rank
         self._internode = world_size > int(args.scale_up_domain)
         self._ll = self.mode == "low-latency"
+        # NCCL EP v0.2 supports a direct registered FLAT receive for HT. LL keeps
+        # its expert-major staged path until it moves to the rank-major contract.
+        self.zero_copy = not self._ll
         if self._ll:
             # LL decode kernels apply the top-k gate at the source (weighted), not an
             # unweighted rank sum — the benchmark stages the UNWEIGHTED per-expert transform
@@ -159,6 +164,14 @@ class NCCLEPBackend(EPBackend):
         """Wrap a torch tensor as an ``nccl.ep.Tensor`` (torch passthrough; the library reads
         the device pointer/shape/dtype internally and anchors the torch buffer's lifetime)."""
         return Tensor(x)
+
+    def _window_t(self, x):
+        """Wrap a view into the active NCCL-registered receive window."""
+        return Tensor(
+            x,
+            window=self._recv_window,
+            window_offset=x.data_ptr() - self._recv_x.data_ptr(),
+        )
 
     def _stream(self):
         """Raw handle of torch's current CUDA stream — NCCL EP runs on the same stream torch
@@ -226,6 +239,7 @@ class NCCLEPBackend(EPBackend):
             max_dispatch_tokens_per_rank=self.max_dispatch,
             max_recv_tokens_per_rank=max_recv,
             max_token_bytes=hidden * 2,  # bfloat16 payload
+            zero_copy=ZeroCopyMode.ON if self.zero_copy else ZeroCopyMode.OFF,
         )
         self._ep_group = nccl_ep.Group.create(self._comm, config)
 
@@ -254,10 +268,11 @@ class NCCLEPBackend(EPBackend):
             # num_local_experts==n_ranks) overflows that buffer with cudaErrorInvalidValue.
             rows = self.max_dispatch * self.world_size
             self._recv_rows = rows
-            self._recv_x = torch.empty((rows, hidden), dtype=torch.bfloat16, device=dev)
+            self._recv_x = nccl_core.torch.empty(
+                (rows, hidden), dtype=torch.bfloat16, device=dev
+            )
             self._recv_w = torch.empty((rows, self.args.topk), dtype=torch.float32, device=dev)
             self._recv_idx = torch.empty((rows, self.args.topk), dtype=torch.int64, device=dev)
-            self._recv_x_t = self._t(self._recv_x)
             self._recv_w_t = self._t(self._recv_w)
             self._recv_idx_t = self._t(self._recv_idx)
             # HT FLAT dispatch writes per-local-expert received counts (unpadded int32) here via
@@ -268,6 +283,18 @@ class NCCLEPBackend(EPBackend):
                 (self.num_local_experts,), dtype=torch.int32, device=dev
             )
             self._ht_disp_counts_t = self._t(self._ht_disp_counts)
+
+        if self.zero_copy:
+            self._recv_window = self._comm.register_window(
+                self._recv_x, flags=nccl_core.WindowFlag.COLL_SYMMETRIC
+            )
+            if not self._recv_window.is_valid:
+                self._ep_group.destroy()
+                self._ep_group = None
+                raise RuntimeError("NCCL-EP zero-copy receive window registration failed")
+            self._recv_x_t = self._window_t(self._recv_x)
+        else:
+            self._recv_window = None
 
     def _ensure_handle(self, p):
         """Bind the group's single handle to p's routing, creating it on first use.
@@ -361,7 +388,7 @@ class NCCLEPBackend(EPBackend):
         h.count = int(h.recv_total.item())
         # A rank that received nothing still needs a non-empty tensor for the shape checks; the
         # routing map decides what combine reads, so the extra row cannot reach the output.
-        h.combine_in_t = self._t(self._recv_x[: max(h.count, 1)])
+        h.combine_in_t = self._window_t(self._recv_x[: max(h.count, 1)])
 
     def _rebind(self, h):
         """Point the single handle at h's routing (collective; untimed callers only).
@@ -564,6 +591,9 @@ class NCCLEPBackend(EPBackend):
         try:
             dist.barrier()
             self._destroy_handles()
+            if self._recv_window is not None:
+                self._recv_window.close()
+                self._recv_window = None
             if self._ep_group is not None:
                 self._ep_group.destroy()
             if self._comm is not None:

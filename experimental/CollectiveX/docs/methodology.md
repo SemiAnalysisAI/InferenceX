@@ -403,11 +403,10 @@ it (as NVIDIA's own `ep_bench` does: CUDA events around dispatch and combine onl
 outside the loop) on the argument that its capacity-proportional cost would import a ladder-max
 term into dispatch; that argument describes exactly what production pays, since engines size the
 handle to their max token capacity and update it per step. The timed window now includes the
-update; rows carry `kernel_generation` `nccl-ep-v02-ht-routed` (`nccl-ep-v02-ll` in low-latency
+update; rows carry `kernel_generation` `nccl-ep-v02-ht-routed-zc` (`nccl-ep-v02-ll` in low-latency
 mode) — the `v02` component discriminates the `nccl-extensions` v0.2 mover from earlier wheels, and
 pre-change `nccl-ep-ht`/`nccl-ep-ht-routed` rows are a different measurement contract or mover —
-the per-row discriminator the earliest NCCL changes lacked. Low-latency
-mode has nothing to include: `ncclEpUpdateHandle` returns immediately there and the kernel reads
+the per-row discriminator the earliest NCCL changes lacked. HT uses a registered zero-copy receive plane. Low-latency mode has nothing to include: `ncclEpUpdateHandle` returns immediately there and the kernel reads
 the cached routing inside the timed dispatch. The other backends already carried this cost --
 uccl-ep calls `get_dispatch_layout` inside dispatch, while deepep-v2, MoRI and FlashInfer pass
 routing on every call.

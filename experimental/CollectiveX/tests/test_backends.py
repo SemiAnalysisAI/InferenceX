@@ -208,11 +208,25 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
         """A backend far enough along to run create_buffer against the stubs."""
         backend = module.NCCLEPBackend.__new__(module.NCCLEPBackend)
         backend._ll = low_latency
+        backend.zero_copy = not low_latency
         backend.world_size, backend.num_local_experts, backend.device = 8, 4, "cuda:0"
         backend.args = types.SimpleNamespace(hidden=7168, experts=256, topk=8)
         backend._algorithm = "LL" if low_latency else "HT"
         backend._bootstrap_comm = lambda: None
-        backend._comm = object()
+        backend._recv_window_for_test = types.SimpleNamespace(
+            is_valid=True, close=lambda: None
+        )
+        backend._comm = types.SimpleNamespace(
+            register_window=mock.Mock(return_value=backend._recv_window_for_test)
+        )
+        backend.created_configs = []
+
+        def group_config(**kwargs):
+            config = types.SimpleNamespace(**kwargs)
+            backend.created_configs.append(config)
+            return config
+
+        module.GroupConfig = group_config
         module.nccl_ep.Group = types.SimpleNamespace(create=lambda *a, **k: object())
         return backend
 
@@ -242,6 +256,18 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
         throughput = self._backend(module, low_latency=False)
         throughput.create_buffer(spec)
         self.assertEqual(throughput.max_dispatch, 99)
+
+    def test_ht_registers_a_symmetric_zero_copy_receive_window(self):
+        module = self._module()
+        backend = self._backend(module, low_latency=False)
+        backend.create_buffer(types.SimpleNamespace(max_tokens_per_rank=99))
+
+        self.assertEqual(backend.created_configs[0].zero_copy, module.ZeroCopyMode.ON)
+        backend._comm.register_window.assert_called_once_with(
+            backend._recv_x, flags=module.nccl_core.WindowFlag.COLL_SYMMETRIC
+        )
+        self.assertIs(backend._recv_x_t.window, backend._recv_window_for_test)
+        self.assertEqual(backend._recv_x_t.window_offset, 0)
 
 
 class RoundtripStagingGate(unittest.TestCase):
@@ -302,13 +328,26 @@ class WarmStaging(unittest.TestCase):
 # ---- from test_ep_nccl_handle.py --------------------------------------------------
 def _stub_modules():
     """Fake torch / nccl modules so `import ep_nccl` succeeds without the benchmark image."""
+    class StubTorchTensor:
+        def __init__(self, shape=()):
+            self.shape = shape
+
+        def data_ptr(self):
+            return 0x1000
+
+    class StubEpTensor:
+        def __init__(self, buffer, *, window=None, window_offset=0):
+            self.buffer = buffer
+            self.window = window
+            self.window_offset = window_offset
+
     torch = types.ModuleType("torch")
     torch.bfloat16 = "bfloat16"
     torch.int32 = "int32"
     torch.float32 = "float32"
     torch.int64 = "int64"
-    torch.empty = lambda *a, **k: types.SimpleNamespace(shape=a[0] if a else ())
-    torch.empty_like = lambda *a, **k: types.SimpleNamespace()
+    torch.empty = lambda *a, **k: StubTorchTensor(a[0] if a else ())
+    torch.empty_like = lambda x, *a, **k: StubTorchTensor(getattr(x, "shape", ()))
     torch.zeros = lambda *a, **k: types.SimpleNamespace(item=lambda: 7)
     torch.cuda = types.SimpleNamespace(synchronize=lambda: None)
     dist = types.ModuleType("torch.distributed")
@@ -318,12 +357,16 @@ def _stub_modules():
     for name in (
         "Algorithm", "CombineConfig", "CombineInputs", "CombineOutputs", "DispatchConfig",
         "DispatchInputs", "DispatchOutputs", "GroupConfig", "HandleConfig", "Layout",
-        "LayoutInfo", "Tensor",
+        "LayoutInfo", "Tensor", "ZeroCopyMode",
     ):
         setattr(ep, name, type(name, (), {"__init__": lambda self, *a, **k: None}))
     ep.Algorithm = types.SimpleNamespace(LOW_LATENCY="LL", HIGH_THROUGHPUT="HT")
     ep.Layout = types.SimpleNamespace(EXPERT_MAJOR="EM", FLAT="FLAT")
+    ep.Tensor = StubEpTensor
+    ep.ZeroCopyMode = types.SimpleNamespace(ON="ON", OFF="OFF")
     core = types.ModuleType("nccl.core")
+    core.torch = types.SimpleNamespace(empty=torch.empty)
+    core.WindowFlag = types.SimpleNamespace(COLL_SYMMETRIC="symmetric")
     pkg = types.ModuleType("nccl")
     pkg.ep, pkg.core = ep, core
     return {
@@ -378,6 +421,7 @@ def backend(ll=True):
     b.num_local_experts = 4
     b.args = types.SimpleNamespace(hidden=16)
     b._t = lambda x: x
+    b._window_t = lambda x: x
     b._stream = lambda: 0
     # create_buffer always runs before the first _ensure_handle, so the HT receive plane exists
     # by then; a list stands in for the tensor because `_t` is identity here.
