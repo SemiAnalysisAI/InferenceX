@@ -8062,3 +8062,12 @@
     - "新增 DeepSeek-V4.1-Flash 在 H100 上的 SGLang AgentX 配方，遵循 SGLang cookbook：预览镜像 lmsysorg/sglang:dev-dsv41（digest sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860），原生五 token DSpark（--speculative-algorithm DSPARK --speculative-dspark-block-size 5），thinking 开启、reasoning effort 为 high，mem-fraction-static 0.8，KV cache 常驻 GPU，并发 1-8"
     - "采用 cookbook 已验证 H200 配置的 TP8/EP8 与 Hopper 后端；H100 不在 cookbook 硬件表中，脚本将 Engram 表移至共享主机副本（SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1）并将 --chunked-prefill-size 上限设为 4096 以适配 80 GB。吞吐测试使用 thinking 开启的黄金合成 AL 3.51（SGLANG_SIMULATE_ACC_LEN、match-expected、real-draft-token）；准确率 eval 保留真实 DSpark 验证。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3240
+
+- config-keys:
+    - dsv41flash-fp4-h100-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Lower --mem-fraction-static from 0.8 to 0.7 and --chunked-prefill-size from 4096 to 2048 after run 35304509605: c1-c4 served, but c8 OOMed in eager extend (1 GiB allocations with ~600 MB free of 80 GB) once five requests were live with a 570k-token prompt pending; the change leaves 24 GB of headroom instead of 16 GB and halves the per-chunk hyper-connection and indexer working set"
+    - "在运行 35304509605 后将 --mem-fraction-static 从 0.8 降至 0.7，--chunked-prefill-size 从 4096 降至 2048：c1-c4 可服务，但 c8 在五个请求同时在线、且有 570k token 提示待处理时于 eager extend 中 OOM（80 GB 中仅剩约 600 MB 时申请 1 GiB）；调整后余量从 16 GB 增至 24 GB，并将每分块的 hyper-connection 与 indexer 工作集减半"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3240

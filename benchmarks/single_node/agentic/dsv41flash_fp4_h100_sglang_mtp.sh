@@ -66,10 +66,12 @@ elif (( CUDA_GRAPH_MAX_BS > 128 )); then
     CUDA_GRAPH_MAX_BS=128
 fi
 
-# The indexer's scoring buffer scales with the prefill chunk times the 1M
-# context; 4096 halves it against SGLang's 8192 default, matching the batched
-# token cap the vLLM H100 arm needed on this card.
-CHUNKED_PREFILL_SIZE=4096
+# The indexer's scoring buffer and the hyper-connection activations scale with
+# the prefill chunk times the 1M context. 4096 at mem-fraction 0.8 left 16 GB
+# of headroom on the 80 GB card and c8 OOMed in eager extend once five
+# requests were live with a 570k-token prompt pending (run 35304509605); 2048
+# with 0.7 leaves 24 GB and halves the per-chunk working set.
+CHUNKED_PREFILL_SIZE=2048
 
 # Saturation arms carry a larger in-flight working set than the 30-minute
 # default warmup drain allows.
@@ -105,7 +107,7 @@ SGLANG_CMD=(
     --tp "$TP" --ep-size "$EP_SIZE"
     # The cookbook's verified Hopper (H200) cell pins these two backends.
     --attention-backend dsv4 --moe-runner-backend flashinfer_mxfp4
-    --mem-fraction-static 0.8
+    --mem-fraction-static 0.7
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --speculative-algorithm DSPARK
     --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
