@@ -86,7 +86,11 @@ Benchmarks may take three hours. Do not cancel healthy work to fit the agent job
 
 After smoke benchmarks AND selected evals pass, append one exact-family perf-changelog.yaml
 entry at the physical tail with this PR URL, preserving every prior byte. Omit scenario,
-append-only and eval-selection modifiers. Commit/push, generate the final matrix with
+append-only and eval-selection modifiers. Its description must be one plain-English sentence
+of at most 120 characters: state the engine image version change and, only when necessary,
+one essential compatibility adjustment. Do not include evidence, benchmark results, upstream
+release summaries, rationale or limitations there; those belong in attempt comments.
+Commit/push, generate the final matrix with
 utils/process_changelog.py and run `check-final --matrix-file FILE` before dispatch.
 Recheck capacity, keep DRAFT and apply full-sweep-fail-fast as the SOLE sweep-related label.
 Only use full-sweep-enabled for a documented infrastructure exception where healthy jobs
