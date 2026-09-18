@@ -8119,3 +8119,11 @@
   description:
   - Use the Mamba radix-cache strategy argument declared by the pinned SGLang nightly for prefill and decode roles.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Test B300 Qwen3.5 FP8 disaggregation on the latest amd64 CUDA 13 SGLang nightly, 20260918-20518d85.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
