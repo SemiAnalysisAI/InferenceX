@@ -8,6 +8,29 @@ SRTCTL_EVAL_ARGS=(
     --set 'post_eval.command=["bash", "{infmax_workspace}/benchmarks/multi_node/srt_eval.sh", "{endpoint}", "{infmax_workspace}"]'
 )
 
+# Write a job-local cluster config; profiles contain only native srt-slurm settings.
+write_srt_cluster_config() {
+    if [[ $# -lt 3 || -z "$1" || -z "$2" || ( "$3" != 0 && "$3" != 1 ) ]]; then
+        echo "Usage: write_srt_cluster_config profile output uses_power (0 or 1) [overrides...]" >&2
+        return 1
+    fi
+    check_env_vars SLURM_ACCOUNT SLURM_PARTITION SRTCTL_ROOT SQUASH_FILE NGINX_SQUASH_FILE IMAGE
+    local profile="$1" output="$2" uses_power="$3"
+    shift 3
+    local power_args=()
+    if [[ "$uses_power" == 1 ]]; then
+        check_env_vars DCGM_EXPORTER_SQSH
+        power_args=(--container dcgm-exporter "$DCGM_EXPORTER_SQSH")
+    fi
+    PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" \
+        python3 -m infx.srt_slurm.cluster_config \
+        "$INFERENCEX_SLURM_UTILS_DIR/srt-slurm/${profile}.yaml" "$output" \
+        --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION" \
+        --var SRTCTL_ROOT "$SRTCTL_ROOT" --var SQUASH_FILE "$SQUASH_FILE" \
+        --var NGINX_SQUASH_FILE "$NGINX_SQUASH_FILE" --var IMAGE "$IMAGE" \
+        "$@" "${power_args[@]}"
+}
+
 # Leaves the caller in the checkout, matching the launchers' installation flow.
 # Every recipe is owned by InferenceX; srt-slurm 2 no longer ships recipes/.
 setup_srt_slurm() {
@@ -87,15 +110,21 @@ check_staged_srt_assets() {
     fi
 }
 
-# Injects synthetic acceptance when SYNTHETIC_ACCEPTANCE=true, no-op otherwise.
-# Call after the job-name override and before `srtctl apply`; propagate a
-# non-zero return so an unrewritten recipe never reaches srtctl.
-inject_synthetic_acceptance() {
-    local config_path="$1"
-    local framework="$2"
-
-    python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-        "$config_path" "$framework"
+# AgentX acceptance comes from the committed golden curve; evals use real verification.
+apply_srt_recipe() {
+    if [[ $# -lt 2 || -z "$1" || -z "$2" ]]; then
+        echo "Usage: apply_srt_recipe config framework [srtctl arguments...]" >&2
+        return 1
+    fi
+    check_env_vars MODEL_PREFIX IS_AGENTIC EVAL_ONLY SPEC_DECODING
+    if [[ "$IS_AGENTIC" == 1 || "$IS_AGENTIC" == true ]] && [[ "$EVAL_ONLY" != true && "$SPEC_DECODING" != none ]]; then
+        check_env_vars THINKING_MODE
+    fi
+    local config="$1" framework="$2"
+    shift 2
+    PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" \
+        python3 -m infx.srt_slurm.synthetic_acceptance \
+        "$config" "$framework" -- "$@"
 }
 
 slurm_job_is_active() {
