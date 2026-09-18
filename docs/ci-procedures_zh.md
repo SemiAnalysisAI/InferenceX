@@ -44,7 +44,7 @@
 | Changelog 字节、Diff 与矩阵 Gate | [`infx/workflows/validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py)、[`infx.matrix.plan`](../infx/matrix/plan.py) |
 | 复用授权与源 Run 选择 | [`infx/workflows/reuse.py`](../infx/workflows/reuse.py) |
 | 受支持的复用合并与冲突准备 | [`utils/merge_with_reuse.sh`](../utils/merge_with_reuse.sh)、[`infx/workflows/prepare_perf_changelog_merge.py`](../infx/workflows/prepare_perf_changelog_merge.py) |
-| 预发布请求与回调 | [`infx/workflows/stage_results.py`](../infx/workflows/stage_results.py)、[`.github/workflows/stage-results.yml`](../.github/workflows/stage-results.yml)、[`.github/workflows/stage-results-callback.yml`](../.github/workflows/stage-results-callback.yml) |
+| 预发布请求与回调 | [`.github/workflows/stage-results.yml`](../.github/workflows/stage-results.yml)、[`.github/workflows/stage-results-callback.yml`](../.github/workflows/stage-results-callback.yml) |
 | 复用 Agentic 入库的重新派发 | [`.github/workflows/recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) |
 | 合并后责任提醒 | [`.github/workflows/pr-recipe-reminder.yml`](../.github/workflows/pr-recipe-reminder.yml) |
 
@@ -240,8 +240,6 @@ RUN_ID=$(gh run list \
 
 修改被识别的主标签或修饰标签会共享活动扫描的 Concurrency Group，通常会取消并重启当前 Run。`skip_queue`、Patchwork、Waiver 与 Checklist 标签是 Gate/优先级输入，不是主扫描模式。Head Commit 含 `[skip-sweep]` 只会跳过 PR 基准 Setup；Changelog/复用检查仍会运行，推送到 `main` 时则忽略该标记。
 
-PR 优先级分类会收到确切的 Base/Head 版本和一条可直接执行的 `git diff` 命令，最多使用 16 轮检查 Diff 并返回结构化分类。补充读取本地文件时使用 Read/Glob/Grep；Bash 只允许单条 `git diff` 命令。缺少结构化输出时会回退为 `patchwork`。`ci-patchwork-waived` 标签可以解除强制零分，但不能补回分类器失败时遗漏的加分项；应同时核对 Setup 日志中的 `Priority criteria` 和生成任务的实际优先级分数。
-
 ## Canary 与 Fail-fast 语义
 
 Canary 和 Fail-fast 解决不同问题：
@@ -279,11 +277,13 @@ gh api "/repos/SemiAnalysisAI/InferenceX/actions/runs/$RUN_ID" \
 
 ### 安全重跑
 
-CODEOWNER 验证会在合格的人类用户为打开且非草稿的 PR 提交或编辑清单时触发，也可通过 `pr-number` 和该清单的 `comment_url` 手动分发。它仅适用于可信目标分支 CODEOWNERS 中存在非管理员、非 core owner 的改动；其他改动跳过验证。归属、重命名及权限规则见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
+CODEOWNER 验证仅适用于可信基础版本 CODEOWNERS 中存在非管理员、非 core owner 的改动。其他改动会获得成功的“不适用”状态。归属、重命名及权限规则见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
 
-验证使用可信默认分支代码，并按 PR 串行执行。启动 Claude 要求触发者的基础 `permission` 为 `write` 或 `admin`，且 `role_name` 为 `write`、`maintain` 或 `admin`。未知或自定义角色、字段缺失、机器人触发和查询失败均不能启动验证。手动分发的 `pr-number` 和 `comment_url` 必须指向同一 PR。
+首次 PASS 前，CODEOWNER 验证会在 Head 更新、PR 重新打开或退出草稿状态后，补查最新的合格签署。它在当前 Head 上验证已有清单，无需在解决合并冲突后重复发布清单。验证使用可信默认分支代码；在 Claude 开始前发布 pending 状态。
 
-验证器只更新一条供审阅参考的评论，注明实际评估的 SHA，不再发布提交状态。后续推送不会延续该评估，也不会触发新运行。需要重新评估时，请编辑已有清单或手动分发；合并冲突期间遗漏的 Review 事件也按此方式重试。GitHub 单独设置的人工批准要求仍然适用。
+已有 PASS 的延续遵循[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)：经认证的仓库管理员从已覆盖 head 推送更新时，保留签署且不调用 Claude。非管理员更新会使签署失效，但不会自动调用 Claude；可编辑已有检查清单或手动分发验证来批准这些改动。非管理员改动尚未审阅时，随后由管理员推送也不能恢复接受状态。缺少更新来源信息时默认拒绝。可信裁定记录已验证和已覆盖的 SHA，重新评估被拒绝时会撤销接受状态。验证器只写入本地裁定文件，可信工作流负责发布评论和状态。
+
+首次验证或重新评估时，Gate 要求触发者的基础 `permission` 为 `write` 或 `admin`，且 `role_name` 为 `write`、`maintain` 或 `admin`。未知或自定义角色、字段缺失、机器人触发和查询失败均不能启动 Claude；自动补查也按相同规则检查签署者。无写权限用户或未获允许的机器人更新 Head 后，可由具有写权限的协作者使用已有签署 URL 发起验证。归属检查、验证与 PASS 延续作为同一任务中的步骤执行，并按 PR 串行运行。手动分发需提供同一 PR 的 `pr-number` 和 `comment_url`。必需的 `CODEOWNER sign-off` 状态独立于工作流任务是否完成，记录 PR head 上的签核结论。
 
 不要盲目重跑仍在执行的 Run。已结束的失败 Run 可以只重跑失败 Job 及其依赖项：
 
@@ -326,8 +326,8 @@ Checkout Ref、凭据和审阅
 
 ## 基于仓库角色的授权
 
-结果暂存和可信外部扫描派发均使用 `GITHUB_TOKEN` 检查仓库权限。暂存通过
-`infx.workflows.stage_results` 执行，外部派发使用 `actions/github-script`。两项操作都要求 Write、Maintain 或
+结果暂存和可信外部扫描派发直接通过 `actions/github-script` 检查仓库权限，
+使用其已通过 `GITHUB_TOKEN` 认证的客户端。两项操作都要求 Write、Maintain 或
 Admin 权限；Read、Triage 以及没有仓库访问权限的用户不能执行这些操作。
 
 授权要求原有基础 `permission` 和有效 `role_name` 均为 `admin`、`maintain` 或
@@ -338,17 +338,10 @@ Admin 权限；Read、Triage 以及没有仓库访问权限的用户不能执行
 `author_association` 不会通过这些检查赋予访问权限，也无需查询团队成员身份的额外 Token。
 
 结果暂存检查评论作者；外部批准检查原始 `github.actor`，重跑时也不改用重跑者
-身份。暂存检出评论事件记录的默认分支提交，并运行依赖已锁定的 `infx` 包，
-绝不加载 PR 代码；外部派发保留内联授权检查。现有 PR、SHA、标签历史、Source Run、Artifact 和 CODEOWNER 检查
+身份。授权检查保留在各自的可信 Workflow 中，无需仓库 Checkout 或 Python
+辅助程序。现有 PR、SHA、标签历史、Source Run、Artifact 和 CODEOWNER 检查
 保持不变。其他 Workflow（包括恢复流程）保留原有的授权和派发行为。
 执行凭据和 GitHub 保护措施仍在 Workflow 中明确配置。
-
-Python 工作流、Klaud 和恢复工具通过 `infx.github` 调用 `gh api`。
-运行环境必须安装 GitHub CLI；GitHub 托管 Runner 已预装。工作流 Token 仅通过该子进程的
-`GH_TOKEN` 传入，并固定访问 `github.com`；显式传入空 Token 会失败，不会回退到本地凭据。
-Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页链接；页面格式错误、
-计数无效或列表不完整时会停止操作。Klaud 的公开错误继续过滤敏感数据。
-每次请求（包括全部分页）的超时为 60 秒。
 
 ## 暂存结果
 
@@ -379,12 +372,12 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 
 ### 资格与授权
 
-`infx.github` 提供仓库范围的 REST 调用、分页及评论表态基础操作，不包含扫描策略。`infx.workflows.sweep_runs` 为暂存和复用共享 PR 提交查询、已完成 Run 列表及未过期结果工件查找；各调用方保留自身的资格规则。`infx.workflows.reuse` 负责命令解析、授权查找及源 Run 的选择和验证。`infx.workflows.reuse_comment` 使用相同规则提供表态反馈。工作流通过 `python3 -m` 调用这些模块；现有 `utils/find_reusable_sweep_run.py` 命令和导入路径保持兼容。这些辅助程序使用 Python 标准库和 GitHub CLI；从检出目录运行时无需安装 Python 包。
+`infx.github` 提供仓库范围的 REST 调用、分页及评论表态基础操作，不包含扫描策略。`infx.workflows.reuse` 负责命令解析、授权查找及源 Run 的选择和验证。`infx.workflows.reuse_comment` 使用相同规则提供表态反馈。工作流通过 `python3 -m` 调用这些模块；现有 `utils/find_reusable_sweep_run.py` 命令和导入路径保持兼容。包仅使用标准库，从检出目录运行时无需安装。
 
 1. 复用不要求扫描标签。标签用于选择新的 GPU 工作；移除主标签不会使已有源 Run 失效。Changelog 验证和合并辅助脚本仍会拒绝冲突的主标签。
 2. `evals-only` 与 `agentx-fast` 会令 Run 不可复用。默认完整扫描以及带 `all-evals` 的完整扫描仍可复用。
 3. 源 Run 必须是已结束的 PR `run-sweep.yml` Run，其 Head SHA 仍在 PR Commit 列表中，并拥有未过期的 `results_bmk`、`eval_results_all` 或 `bmk_agentic_*` 结果产物。
-4. `OWNER`、`MEMBER` 或 `COLLABORATOR` 通过 `/use <run_id>` 授权复用。必须提供 Run ID，并与命令放在同一行。原有的 `/reuse-sweep-run <run_id>` 仍然等效；不带 ID 的 `/reuse-sweep-run` 会自动选择源 Run。两种命令使用相同的授权、验证和表态规则，并以两者中最新的合格授权命令为准。
+4. `OWNER`、`MEMBER` 或 `COLLABORATOR` 通过 `/reuse-sweep-run` 或 `/reuse-sweep-run <run_id>` 授权复用。命令和可选的 Run ID 必须放在同一行。最新的合格授权命令决定自动选择还是固定源 Run。
 5. 不指定 ID 时，自动选择要求最新的合格源 Run 成功。指定 Run 是维护者的明确决定，允许结论为 `success`、`failure` 或 `cancelled`；下游入库只保留存在且有效的行，因此应将其报告为部分数据，而不是绿色 Run。
 
 复用验证检查源 Run 的身份和可用产物，不检查完整矩阵覆盖范围。成功的 `sweep-enabled`（裁剪扫描）源 Run 也可复用，包括自动选择；在 `main` 上只会发布该 Run 已记录的数据点。请求被接受不代表已通过完整扫描，也不能代替评审中的完整扫描要求。如需复用某次完整扫描，请先确认其覆盖范围，再固定该 Run ID。
@@ -546,12 +539,3 @@ jq -r 'to_entries[] | [.key, .value.n_success, .value.total] | @tsv' \
 当源 Run、Merge Run、Artifact 覆盖、Changelog Metadata 或下游 Event 含糊不清时，应停止并升级处理。绝不能替换成方便的 Run ID，也不能仅凭 Actions Dispatch 就宣称发布成功。
 
 原 `kimik3-fp4-h200-vllm-agentic` key 拆为 `-latency`、`-balanced` 和 `-simple` 三个 key，合计保留原来的全部 35 个点（10/12/13）、配方指纹及图表序列。每个 key 选择一份完整配方及其默认评估；功耗启用范围由该配方的 `telemetry.enabled` 决定。使用 `kimik3-fp4-h200-vllm-agentic-*` 可选择三份配方。局部配方运行不能证明其他 key 已通过资格验证。
-
-## OperatorX 微基准
-
-OperatorX 手动工作流支持 H100、H200、B200、B300、GB200、GB300、MI300X、MI325X
-和 MI355X，每个分片使用一个物理 Slurm 节点。GB200/GB300 使用四卡 Arm 节点，其余
-运行器池使用八卡 x86 节点。GEMM 和 attention 每次测量只使用一张 GPU；AMD
-attention 支持 torch 和 AITER。
-触发方式、覆盖范围、产物、取消及验证说明见
-[OperatorX GitHub Actions](../experimental/operatorx/CI_zh.md)。
