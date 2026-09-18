@@ -64,7 +64,7 @@ roles:
       enable-dp-attention: true
       enable-dp-lm-head: true
 
-      mamba-scheduler-strategy: "no_buffer"
+      mamba-radix-cache-strategy: "no_buffer"
       mamba-track-interval: 2048
       mamba-ssm-dtype: "bfloat16"
       disaggregation-mode: "prefill"
@@ -124,7 +124,7 @@ roles:
       enable-dp-lm-head: true
       prefill-round-robin-balance: true
 
-      mamba-scheduler-strategy: "no_buffer"
+      mamba-radix-cache-strategy: "no_buffer"
       mamba-track-interval: 128
       mamba-ssm-dtype: "bfloat16"
 
