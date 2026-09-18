@@ -8305,3 +8305,18 @@
     retain it as experimental evidence, not a final publication point.
     Require fresh expanded official qualification for C16/C24/C32.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Restore 1P1D C8 H104 as a provisional full-sweep qualification point
+    after the completed canonical aggregate C4 control measures only
+    309.423 p90 interactivity, below its short-run 367.116. The C8 short
+    replay reaches 4953.76 logical tokens/s/GPU at 362.572 p90 interactivity
+    with zero errors or cancellations, extending the actual published
+    endpoint. Its earlier rejection was only against a short-run aggregate
+    comparator; retain C8 finally only if its own canonical result improves
+    the measured frontier. No aggregate publication scope is added.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
