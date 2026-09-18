@@ -8279,3 +8279,15 @@
     the withdrawn aggregate key are retargeted to this final PR scope only;
     all published changelog history remains byte-identical to main.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add measured B200 Qwen3.5 FP8 1P1D C16 H104 for expanded official
+    qualification. The short replay reaches 9493.56 logical tokens/s per
+    all eight active GPUs at 294.095 p90 interactivity and 0.908s p90 TTFT
+    with zero errors, extending the published frontier. The C8 diagnostic
+    is excluded because the same-image aggregate C4 control dominates it.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
