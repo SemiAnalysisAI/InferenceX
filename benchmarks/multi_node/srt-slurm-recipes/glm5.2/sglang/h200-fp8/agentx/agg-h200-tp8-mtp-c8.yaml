@@ -6,7 +6,7 @@ name: agg-h200-tp8-mtp-c8
 
 model:
   path: hf:zai-org/GLM-5.2-FP8
-  container: lmsysorg/sglang:nightly-dev-20260914-4358a161
+  container: lmsysorg/sglang:v0.5.20-cu130@sha256:06e4f2ed21afde4ff513cda65070124e727ba23ccaeff7712b8c40e1097d611f
   precision: fp8
 
 identity:
@@ -14,14 +14,15 @@ identity:
     repo: zai-org/GLM-5.2-FP8
     revision: f33c6dc501ee5a2c7e35155653b1b1abbc320951
   container:
-    image: lmsysorg/sglang:nightly-dev-20260914-4358a161
+    image: lmsysorg/sglang:v0.5.20-cu130@sha256:06e4f2ed21afde4ff513cda65070124e727ba23ccaeff7712b8c40e1097d611f
   frameworks:
-    dynamo: 1.5.0.dev20260913
-    sglang: 4358a1617cad734fc37bf53d9e5c2092bd43d075
+    dynamo: 1.5.0.dev20260917
+    # SGLang v0.5.20 release tag, commit 94602c9c2b7cbdb8efd5c52802dac6a1c180089e.
+    sglang: 0.5.20
 
 dynamo:
-  # This nightly includes the matching Dynamo adapter. Reinstalling an older
-  # wheel removes compatibility with this SGLang commit.
+  # The v0.5.20 release image bundles ai-dynamo 1.5.0.dev20260917. Reinstalling
+  # an older wheel removes compatibility with this SGLang release.
   install: false
 
 resources:

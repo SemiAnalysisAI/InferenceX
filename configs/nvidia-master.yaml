@@ -6733,7 +6733,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache:
 # concurrency uses an individual recipe so max-running-requests and CUDA graph
 # capture are capped at twice the trajectory concurrency.
 glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
-  image: lmsysorg/sglang:nightly-dev-20260914-4358a161
+  image: lmsysorg/sglang:v0.5.20-cu130@sha256:06e4f2ed21afde4ff513cda65070124e727ba23ccaeff7712b8c40e1097d611f
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:h200-dgxc
