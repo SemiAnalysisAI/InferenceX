@@ -8957,4 +8957,5 @@
   description:
     - "Refresh DeepSeek-V4-Pro-0813 AgentX on GB300 with TP8 concurrency 1 and TP4 concurrency 4 aggregate points plus DEP8/DEP16 disaggregated points at concurrency 64-1920."
     - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9, Dynamo 1.5.0.dev20260914, and the current SGLang CUDA graph flag names."
+    - "Use DSpark K=6 for both prefill and decode in the concurrency-64 disaggregated recipe, matching the other new disaggregated recipe in this PR."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3218
