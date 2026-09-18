@@ -642,6 +642,28 @@ class TopkSlotTreeReductionTests(unittest.TestCase):
         self.assertEqual(self._tree([1.0] + [2.0**-9] * 7), 1.0078125)
 
 
+@unittest.skipUnless(_torch is not None, "combine-oracle math checks require torch")
+class RankFp32ReductionTests(unittest.TestCase):
+    """Rank-major combine keeps its unique-rank accumulator in FP32."""
+
+    def test_accumulates_unique_ranks_in_topk_order(self):
+        torch = _torch
+        values = [1.0] + [2.0**-9] * 7
+        messages = torch.tensor(values, dtype=torch.float32).reshape(8, 1, 1)
+        destination = torch.arange(8).unsqueeze(0)
+        valid = torch.ones_like(destination, dtype=torch.bool)
+        result = ep_harness._topk_rank_fp32_combine(
+            torch, destination, valid, messages
+        )
+        self.assertEqual(result.item(), 1.0 + 7 * 2.0**-9)
+
+        duplicate = torch.tensor([[0, 0, 1]])
+        result = ep_harness._topk_rank_fp32_combine(
+            torch, duplicate, torch.ones_like(duplicate, dtype=torch.bool), messages
+        )
+        self.assertEqual(result.item(), 1.0 + 2.0**-9)
+
+
 @unittest.skipUnless(_torch is not None, "quantize-identity checks require torch")
 class FusedQuantizeGate(unittest.TestCase):
     """The oracle's payload gate compares the sender's [T, hidden] quantize against the oracle's

@@ -214,8 +214,10 @@ EP8 on MI300X/MI325X/MI355X, and UCCL-EP EP8 on H100/H200/B200 only (the legacy
 because the adapter passes `is_intranode` and UCCL then never starts its proxies. The AMD SKUs drop
 LL: upstream raised `kNumMaxTopK` 9 -> 16 six days before our pin, and the resulting host assert
 cannot hold on AMD's 16 warp groups), and NCCL EP at EP8 on H100/H200/B300 and at EP8 and EP16 on
-B200/GB200/GB300. NCCL EP's `LOW_LATENCY` algorithm is the DeepEP-derived decode path, EXPERT_MAJOR
-receive with a source-side weighted-kernel-sum combine. These rows were held while v0.1's combine
+B200/GB200/GB300. NCCL EP's `LOW_LATENCY` algorithm uses rank-major receive with caller-side
+weighted expert pre-reduction and an unweighted rank-sum combine, as used by inference frameworks.
+Its direct zero-copy receive is enabled within one LSA/MNNVL domain and staged for scale-out.
+These rows were held while v0.1's combine
 recv pipeline — a port of DeepEP's PRE-FIX code, missing the `fence.proxy.async.shared::cta` DeepEP
 added in #642 — raced on every rung (observed 1-in-5 bimodal corruption at T=256 on gb300 EP8,
 error 0.47 vs 0.0039; the interim T<=128 ladder clamp reduced exposure but was never a safety
@@ -403,10 +405,15 @@ it (as NVIDIA's own `ep_bench` does: CUDA events around dispatch and combine onl
 outside the loop) on the argument that its capacity-proportional cost would import a ladder-max
 term into dispatch; that argument describes exactly what production pays, since engines size the
 handle to their max token capacity and update it per step. The timed window now includes the
-update; rows carry `kernel_generation` `nccl-ep-v02-ht-routed-zc` (`nccl-ep-v02-ll` in low-latency
-mode) — the `v02` component discriminates the `nccl-extensions` v0.2 mover from earlier wheels, and
+update; rows carry `kernel_generation` `nccl-ep-v02-ht-routed-zc`
+(`nccl-ep-v02-ll-rm-zc` for scale-up low-latency and `nccl-ep-v02-ll-rm` for scale-out).
+The `v02` component discriminates the `nccl-extensions` v0.2 mover from earlier wheels, and
 pre-change `nccl-ep-ht`/`nccl-ep-ht-routed` rows are a different measurement contract or mover —
-the per-row discriminator the earliest NCCL changes lacked. HT uses a registered zero-copy receive plane. Low-latency mode has nothing to include: `ncclEpUpdateHandle` returns immediately there and the kernel reads
+the per-row discriminator the earliest NCCL changes lacked. HT uses zero-copy. LL uses the
+rank-major, pre-reduced inference-framework contract; zero-copy applies only within one LSA/MNNVL
+domain.
+Low-latency mode has nothing to include: `ncclEpUpdateHandle` returns immediately there and the
+kernel reads
 the cached routing inside the timed dispatch. The other backends already carried this cost --
 uccl-ep calls `get_dispatch_layout` inside dispatch, while deepep-v2, MoRI and FlashInfer pass
 routing on every call.

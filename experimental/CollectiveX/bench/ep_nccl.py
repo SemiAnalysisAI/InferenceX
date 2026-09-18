@@ -7,11 +7,9 @@ GIN (GPU-Initiated Networking) inter-node — with two algorithms selected per c
   normal      -> HIGH_THROUGHPUT (HT), the Hybrid-EP-derived prefill/train path. FLAT recv
                  layout ``[N, hidden]`` (one row per received token, no expert structure) with
                  an unweighted rank-sum combine — identical semantics to deepep-v2 normal.
-  low-latency -> LOW_LATENCY (LL), the DeepEP-derived decode path. EXPERT_MAJOR recv layout
-                 ``[num_local_experts, max_dispatch*num_ranks, hidden]`` with a source-side
-                 weighted-kernel-sum combine — identical semantics to deepep-v2 low-latency.
-Because both map exactly onto the two combine contracts CollectiveX already models, the
-scale_up_domain two-level combine oracle in ep_harness applies unchanged.
+  low-latency -> LOW_LATENCY (LL), the rank-major decode path. This uses the pre-reduced
+                 contract used by inference frameworks, followed by an unweighted rank-sum combine.
+Both modes use the existing CollectiveX combine oracle.
 
 BF16 only for now: v0.2 grows a real quantization surface (DispatchQuantizationRecipe.FWD /
 DS_FP8E3M4 for FP8 dispatch, experimental CombineQuantizationRecipe.NVFP4), but wiring it into
@@ -90,7 +88,7 @@ class NCCLEPBackend(EPBackend):
     # One library, two algorithms selected by args.mode. kernel_generation and the combine
     # semantics are switched to their LL values in __init__ (mirrors ep_deepep_v2).
     #   normal      -> HT / FLAT layout / unweighted-rank-sum combine.
-    #   low-latency -> LL / EXPERT_MAJOR layout / source-side weighted-kernel-sum combine.
+    #   low-latency -> LL / RANK_MAJOR layout / inference-framework contract.
     # "-routed" marks the generation whose timed HT dispatch charges the per-step
     # ncclEpUpdateHandle (see dispatch()); earlier "nccl-ep-ht" rows excluded it and the
     # docs record that those cannot be separated by any other field — this suffix is the
@@ -120,22 +118,23 @@ class NCCLEPBackend(EPBackend):
         self.num_local_experts = self.experts_per_rank
         self._internode = world_size > int(args.scale_up_domain)
         self._ll = self.mode == "low-latency"
-        # NCCL EP v0.2 supports a direct registered FLAT receive for HT. LL keeps
-        # its expert-major staged path until it moves to the rank-major contract.
-        self.zero_copy = not self._ll
+        # LL rank-major follows the inference-framework contract. Direct windows are scale-up only.
+        self.zero_copy = not self._ll or not self._internode
         if self._ll:
-            # LL decode kernels apply the top-k gate at the source (weighted), not an
-            # unweighted rank sum — the benchmark stages the UNWEIGHTED per-expert transform
-            # and the kernel multiplies by the gate. Same contract as deepep-v2 low-latency.
-            self.kernel_generation = "nccl-ep-v02-ll"
-            self.receive_layout = "token-expert"
-            self.combine_weight_semantics = "weighted-kernel-sum"
+            self.kernel_generation = (
+                "nccl-ep-v02-ll-rm-zc" if self.zero_copy else "nccl-ep-v02-ll-rm"
+            )
+            self.receive_layout = "token-rank"
+            self.combine_weight_semantics = "unweighted-rank-sum"
+            # NCCL LL rank-major suppresses duplicate ranks in top-k order, accumulates the
+            # returned BF16 rank rows in FP32, and narrows only at the final output.
+            self.combine_reduction = "rank-fp32"
         # NCCL EP's handle is explicitly reusable across dispatch/combine cycles (ep_test.py
         # cached mode redispatches and recombines on one handle), so — unlike DeepEP's legacy
         # low-latency Buffer — no timed component needs a fresh dispatch or a draining combine;
         # both modes keep requires_fresh_pair False.
         self._algorithm = Algorithm.LOW_LATENCY if self._ll else Algorithm.HIGH_THROUGHPUT
-        self._layout = Layout.EXPERT_MAJOR if self._ll else Layout.FLAT
+        self._layout = Layout.RANK_MAJOR if self._ll else Layout.FLAT
         # send_only=0 on every dispatch/combine (no staged execution). Handle.complete() is
         # still required after each call — the HT combine only stages the local send and
         # finishes the cross-rank gather in complete() (see _finish, verified on h100 EP8).
@@ -245,19 +244,25 @@ class NCCLEPBackend(EPBackend):
 
         dev = self.device
         if self._ll:
-            # EXPERT_MAJOR recv: [num_local_experts, max_dispatch*num_ranks, hidden].
-            slots = self.max_dispatch * self.world_size
-            self._recv_x = torch.empty(
-                (self.num_local_experts, slots, hidden), dtype=torch.bfloat16, device=dev
+            # RANK_MAJOR receive: [source rank, source slot, hidden].
+            self._recv_x = nccl_core.torch.empty(
+                (self.world_size, self.max_dispatch, hidden), dtype=torch.bfloat16, device=dev
             )
-            # Per-local-expert received-token counts, written by NCCL EP during dispatch.
+            # Per-source-rank received-token counts, written during dispatch.
             self._recv_count = torch.empty(
-                (self.num_local_experts,), dtype=torch.int32, device=dev
+                (self.world_size,), dtype=torch.int32, device=dev
             )
-            # Zeroed scratch the combine oracle scatters the transformed rows into.
-            self._combine_scratch = torch.empty_like(self._recv_x)
-            self._recv_x_t = self._t(self._recv_x)
+            self._recv_w = torch.empty(
+                (self.world_size, self.max_dispatch, self.args.topk),
+                dtype=torch.float32, device=dev,
+            )
+            self._recv_idx = torch.empty(
+                (self.world_size, self.max_dispatch, self.args.topk),
+                dtype=torch.int32, device=dev,
+            )
             self._recv_count_t = self._t(self._recv_count)
+            self._recv_w_t = self._t(self._recv_w)
+            self._recv_idx_t = self._t(self._recv_idx)
         else:
             # FLAT recv sized to the group's recv-slot budget max_recv_tokens_per_rank =
             # world_size * max_dispatch — the max unique tokens this rank can receive (every peer
@@ -295,6 +300,7 @@ class NCCLEPBackend(EPBackend):
             self._recv_x_t = self._window_t(self._recv_x)
         else:
             self._recv_window = None
+            self._recv_x_t = self._t(self._recv_x)
 
     def _ensure_handle(self, p):
         """Bind the group's single handle to p's routing, creating it on first use.
@@ -335,10 +341,8 @@ class NCCLEPBackend(EPBackend):
         if not self._ll:
             h.in_weights_t = self._t(p.topk_weights)
         else:
-            # LL applies the gate in its combine kernel, not on dispatch. Wrap the weights once
-            # per handle rather than per timed combine: the wrapper costs a torch resolve, an
-            # np.asarray and a cybind allocation, and `time_us` charges host work to the window.
-            h.combine_weights_t = self._t(p.topk_weights)
+            # LL rank-major transports weights with dispatch.
+            h.in_weights_t = self._t(p.topk_weights)
         # combined output is restored to original token order: [num_tokens, hidden].
         h.out = torch.empty((p.T, self.args.hidden), dtype=torch.bfloat16, device=self.device)
         h.out_t = self._t(h.out)
@@ -425,18 +429,22 @@ class NCCLEPBackend(EPBackend):
             # (_bind_ht_recv_count) in the untimed rebind.
             h.handle.update(h.topk_idx_t, layout_info=h.layout_info, stream=stream)
         if self._ll:
-            # LL EXPERT_MAJOR: tokens in, 3D per-expert padded tokens out, per-expert recv
-            # counts written into expert_counters. No weights on the dispatch (the gate is
-            # applied by the combine kernel at the source).
+            # LL RANK_MAJOR returns one plane per source rank.
             h.handle.dispatch(
-                DispatchInputs(tokens=h.in_tokens_t),
-                DispatchOutputs(tokens=self._recv_x_t),
-                layout_info=LayoutInfo(expert_counters=self._recv_count_t),
+                DispatchInputs(tokens=h.in_tokens_t, topk_weights=h.in_weights_t),
+                DispatchOutputs(
+                    tokens=self._recv_x_t,
+                    topk_weights=self._recv_w_t,
+                    topk_idx=self._recv_idx_t,
+                ),
+                layout_info=LayoutInfo(src_rank_counters=self._recv_count_t),
                 config=self._dispatch_cfg,
                 stream=stream,
             )
             h.recv_x = self._recv_x
             h.recv_count = self._recv_count
+            h.recv_w = self._recv_w
+            h.recv_idx = self._recv_idx
         else:
             # HT FLAT: tokens + top-k weights in (FWD requires weights); received tokens,
             # received top-k weights and GLOBAL top-k expert ids out.
@@ -458,32 +466,19 @@ class NCCLEPBackend(EPBackend):
         return h
 
     def stage(self, p, h):
-        # BF16 combine input is the received buffer itself; no device work (value correctness
-        # is exercised only through the oracle's combine_transformed path). LL needs the full
-        # padded plane, HT only the received rows (see `_bind_ht_recv_count`).
+        # BF16 combine input is the received buffer itself; HT needs received rows only.
         # Still an nccl.ep tensor wrapper, not a torch tensor; shared code passes it through.
         h.combine_input = self._recv_x_t if self._ll else h.combine_in_t
 
     def combine(self, p, h):
         stream = self._stream()
-        if self._ll:
-            # Weighted LL combine: the kernel multiplies each expert contribution by the
-            # source token's gate (CombineOutputs.topk_weights) before the FP32 accumulation.
-            h.handle.combine(
-                CombineInputs(tokens=h.combine_input),
-                CombineOutputs(tokens=h.out_t, topk_weights=h.combine_weights_t),
-                config=self._combine_cfg,
-                stream=stream,
-            )
-        else:
-            # Unweighted HT combine (FWD forbids input weights): sums the per-token expert
-            # aggregates back to each token's home rank, restored to original order.
-            h.handle.combine(
-                CombineInputs(tokens=h.combine_input),
-                CombineOutputs(tokens=h.out_t),
-                config=self._combine_cfg,
-                stream=stream,
-            )
+        # Both layouts use an unweighted rank-sum combine.
+        h.handle.combine(
+            CombineInputs(tokens=h.combine_input),
+            CombineOutputs(tokens=h.out_t),
+            config=self._combine_cfg,
+            stream=stream,
+        )
         self._finish(h, stream)
         return h.out
 
@@ -495,24 +490,27 @@ class NCCLEPBackend(EPBackend):
     # ---- correctness-oracle views ------------------------------------------------------------
 
     def _ll_inspect_dispatch(self, p, h):
-        """Flat per-slot view over the EXPERT_MAJOR padded receive (mirror of
-        ep_deepep_v2._ll_inspect_dispatch): each local expert's valid tokens are packed at the
-        front [0:recv_count[e]] of its slot dimension. Flatten to the oracle's compact
-        (expert, slot) row-major contract and keep the coordinates for the combine scatter."""
-        recv_bf16 = h.recv_x  # [E, S, hidden] BF16
-        num_slots = recv_bf16.shape[1]
-        counts = h.recv_count.to(torch.int64)  # [E]
-        slot_valid = (
-            torch.arange(num_slots, device=recv_bf16.device).unsqueeze(0) < counts.unsqueeze(1)
+        """Flat valid-slot view over the RANK_MAJOR inference-framework receive model."""
+        recv_bf16 = h.recv_x  # [source rank, source slot, hidden] BF16
+        slots = recv_bf16.shape[1]
+        counts = h.recv_count.to(torch.int64)
+        valid = torch.arange(slots, device=recv_bf16.device).unsqueeze(0) < counts.unsqueeze(1)
+        source_rank, source_slot = valid.nonzero(as_tuple=True)
+        h.source_rank = source_rank
+        h.source_slot = source_slot
+        local_idx = h.recv_idx[source_rank, source_slot].to(torch.int64)
+        valid_idx = local_idx >= 0
+        expert_ids = torch.where(
+            valid_idx, local_idx + self.rank * self.num_local_experts, local_idx
         )
-        slot_expert, slot_j = slot_valid.nonzero(as_tuple=True)
-        h.slot_expert = slot_expert
-        h.slot_j = slot_j
-        local_lo = self.rank * self.num_local_experts
+        weights = h.recv_w[source_rank, source_slot].to(torch.float32).masked_fill(~valid_idx, 0)
         return types.SimpleNamespace(
-            payload=recv_bf16[slot_expert, slot_j],
-            expert_ids=local_lo + slot_expert.to(torch.int64),
-            local_expert_counts=counts,
+            payload=recv_bf16[source_rank, source_slot],
+            expert_ids=expert_ids,
+            weights=weights,
+            local_expert_counts=torch.bincount(
+                local_idx[valid_idx], minlength=self.num_local_experts
+            ),
         )
 
     def inspect_dispatch(self, p, h):
@@ -544,18 +542,16 @@ class NCCLEPBackend(EPBackend):
         )
 
     def _ll_combine_transformed(self, p, h, transformed):
-        """Scatter the oracle-transformed rows back into a zeroed EXPERT_MAJOR combine buffer
-        at the exact (expert, slot) coordinates inspect read them from, then run the weighted
-        LL combine (mirror of ep_deepep_v2._ll_combine_transformed). `transformed` is
-        [N, hidden] in that slot order; the kernel applies p.topk_weights, so the staged
-        transform is unweighted."""
-        combine_buf = self._combine_scratch
+        """Scatter pre-reduced oracle rows into the LL combine plane."""
+        combine_buf = self._recv_x
         combine_buf.zero_()
-        combine_buf[h.slot_expert, h.slot_j] = transformed.to(combine_buf.dtype)
+        combine_buf[h.source_rank, h.source_slot] = transformed.to(combine_buf.dtype)
         stream = self._stream()
         h.handle.combine(
-            CombineInputs(tokens=self._t(combine_buf)),
-            CombineOutputs(tokens=h.out_t, topk_weights=h.combine_weights_t),
+            CombineInputs(
+                tokens=self._window_t(combine_buf) if self.zero_copy else self._t(combine_buf)
+            ),
+            CombineOutputs(tokens=h.out_t),
             config=self._combine_cfg,
             stream=stream,
         )

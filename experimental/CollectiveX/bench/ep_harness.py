@@ -476,6 +476,20 @@ def _topk_slot_tree_combine(torch, destination, valid, messages, dtype):
     return slots[0]
 
 
+def _topk_rank_fp32_combine(torch, destination, valid, messages):
+    """Model NCCL-EP LL rank-major: unique-rank BF16 rows summed in FP32 top-k order."""
+    tokens = torch.arange(destination.shape[0], device=destination.device)
+    combined = torch.zeros_like(messages[0])
+    zero = torch.zeros_like(combined)
+    for slot in range(destination.shape[1]):
+        rank_id = destination[:, slot]
+        claimed = valid[:, slot].clone()
+        for earlier in range(slot):
+            claimed &= ~(valid[:, earlier] & (destination[:, earlier] == rank_id))
+        combined += torch.where(claimed.unsqueeze(1), messages[rank_id, tokens], zero)
+    return combined
+
+
 def _expected_transformed_combine(
     torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics,
     combine_reduction="domain-fp32",
@@ -483,7 +497,7 @@ def _expected_transformed_combine(
     """Reproduce the reduction combine actually performs so the expectation carries the
     same BF16 rounding a correct backend does rather than hiding it in a wide tolerance.
 
-    Two reduction shapes, one per combine contract:
+    The weighting contract and reduction topology are independent:
 
     ``weighted-kernel-sum`` (low-latency decode): every routed expert returns its own
     BF16 message and the source rank multiplies each by that assignment's gate weight
@@ -492,14 +506,18 @@ def _expected_transformed_combine(
     sum. There is no per-domain intermediate — the low-latency kernels reduce at the
     source, so scale-up vs scale-out topology does not change the model.
 
-    ``unweighted-rank-sum`` (normal mode): each destination rank casts its FP32 local
-    aggregate to the payload dtype. Ranks sharing a scale-up domain (NVLink/MNNVL) reduce
-    in FP32, and each domain casts its aggregate to the payload dtype for the scale-out
+    Under the default ``domain-fp32`` reduction used by normal-mode backends, each
+    destination rank casts its FP32 local aggregate to the payload dtype. Ranks sharing
+    a scale-up domain (NVLink/MNNVL) reduce in FP32, and each domain casts its aggregate
+    to the payload dtype for the scale-out
     send before those communicated BF16 partials are summed. When the whole EP group fits
     in one scale-up domain (ep_size <= scale_up_domain — every EP8 case and the MNNVL EP16
     cases) there is a single domain and no scale-out rounding; a multi-node RoCE EP16 group
     has one BF16 partial per node, and omitting that cast is what left the scale-out
     combine ~0.048 off a single-domain reference.
+
+    NCCL-EP LL rank-major declares ``rank-fp32``: one BF16 row per unique destination
+    rank is accumulated in FP32 in original top-k order, without a per-domain cast.
 
     A backend whose accumulator is the payload dtype rather than FP32 declares
     ``combine_reduction = "topk-slot-tree"`` and takes the model in
@@ -546,6 +564,14 @@ def _expected_transformed_combine(
         ).to(dtype).float()
 
     present = sorted(destination[valid].unique().tolist())
+    if combine_reduction == "rank-fp32":
+        messages = torch.zeros(
+            (max(present, default=0) + 1,) + semantic_x.shape,
+            dtype=torch.float32, device=semantic_x.device,
+        )
+        for rank_id in present:
+            messages[rank_id] = rank_message(rank_id)
+        return _topk_rank_fp32_combine(torch, destination, valid, messages)
     if combine_reduction == "topk-slot-tree":
         messages = torch.zeros(
             (max(present, default=0) + 1,) + semantic_x.shape,
