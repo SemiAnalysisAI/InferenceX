@@ -1,6 +1,6 @@
-# Provisional fast frontier extension; compare neighboring 1P1D points and qualify officially.
+# Experimental; retain only measured improvements over the current Pareto frontier.
 schema: 2
-name: qwen35-b200-fp8-agentx-disagg-2p1d-p-tp4-d-tp4-hicache-c32-mtp
+name: qwen35-b200-fp8-agentx-disagg-1p1d-p-tp4-d-tp4-hicache-c24-mtp
 model:
   path: qwen3.5-fp8
   container: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
@@ -31,11 +31,9 @@ frontend:
 roles:
   prefill:
     nodes: 1
-    workers: 2
+    workers: 1
     gpus: 4
     env:
-      # Use the eight GPU-associated 400 Gb/s NDR rails on this pool.
-      MC_TE_FILTERS: mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11
       PYTHONUNBUFFERED: '1'
       PIP_BREAK_SYSTEM_PACKAGES: '1'
       PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
@@ -46,6 +44,8 @@ roles:
       SGL_ENABLE_JIT_DEEPGEMM: 'false'
       SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
       PYTHONNOUSERSITE: '1'
+      MC_INTRANODE_NVLINK: '1'
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: INTRA_NODE_NVLINK
     args:
       served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
       trust-remote-code: true
@@ -63,7 +63,7 @@ roles:
       context-length: 262144
       chunked-prefill-size: 16384
       max-prefill-tokens: 16384
-      max-running-requests: 64
+      max-running-requests: 48
       reasoning-parser: qwen3
       tool-call-parser: qwen3_coder
       enable-metrics: true
@@ -82,12 +82,10 @@ roles:
       hicache-mem-layout: page_first
       hicache-write-policy: write_through_selective
   decode:
-    nodes: 1
+    nodes: colocate
     workers: 1
     gpus: 4
     env:
-      # Exclude secondary 100 Gb/s HDR functions and the Ethernet bond.
-      MC_TE_FILTERS: mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11
       PYTHONUNBUFFERED: '1'
       PIP_BREAK_SYSTEM_PACKAGES: '1'
       PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
@@ -98,6 +96,8 @@ roles:
       SGL_ENABLE_JIT_DEEPGEMM: 'false'
       SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
       PYTHONNOUSERSITE: '1'
+      MC_INTRANODE_NVLINK: '1'
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: INTRA_NODE_NVLINK
     args:
       served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
       trust-remote-code: true
@@ -115,7 +115,7 @@ roles:
       context-length: 262144
       chunked-prefill-size: 16384
       max-prefill-tokens: 16384
-      max-running-requests: 64
+      max-running-requests: 48
       reasoning-parser: qwen3
       tool-call-parser: qwen3_coder
       enable-metrics: true
@@ -127,7 +127,7 @@ roles:
       speculative-num-steps: 3
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 4
-      cuda-graph-max-bs-decode: 32
+      cuda-graph-max-bs-decode: 24
       stream-interval: 50
       enable-symm-mem: true
       scheduler-recv-interval: 10
@@ -145,7 +145,7 @@ benchmark:
   type: custom
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   concurrencies:
-  - 32
+  - 24
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic

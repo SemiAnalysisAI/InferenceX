@@ -8291,3 +8291,17 @@
     with zero errors, extending the published frontier. The C8 diagnostic
     is excluded because the same-image aggregate C4 control dominates it.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Replace the provisional 2P1D C32 point with measured 1P1D C24 H104.
+    Its short replay reaches 15784.02 logical tokens/s per eight active GPUs
+    at 231.403 p90 interactivity with zero errors or drain cancellations,
+    exceeding 2P1D C32 at 14511.73 per twelve active GPUs and 228.969.
+    The 2P layout has better TTFT but loses the requested primary frontier;
+    retain it as experimental evidence, not a final publication point.
+    Require fresh expanded official qualification for C16/C24/C32.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
