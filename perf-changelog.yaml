@@ -8071,3 +8071,12 @@
     - "Cut HBM pressure during 1M-context AgentX prefill after the first sweep (run 35304458924: c128 died at startup with torch.OutOfMemoryError (12 GiB allocation, 5 GiB free of 139.8 GiB, 127.6 GiB already held by PyTorch)): move the Engram tables to one shared host copy (SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1, the SGLang analogue of the vLLM arm's Engram CPU offload, output bitwise unchanged), lower --mem-fraction-static from 0.8 to 0.75, bound --chunked-prefill-size at 8192 instead of the default 16384, fix the decode CUDA graph batch at the cookbook's 64, and cap --max-running-requests at 128"
     - "首次 sweep 后（run 35304458924: c128 died at startup with torch.OutOfMemoryError (12 GiB allocation, 5 GiB free of 139.8 GiB, 127.6 GiB already held by PyTorch)）降低 1M 上下文 AgentX prefill 的 HBM 压力：将 Engram 表移至共享主机副本（SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1，对应 vLLM 配方的 Engram CPU offload，输出逐位一致），--mem-fraction-static 从 0.8 降至 0.75，--chunked-prefill-size 限制为 8192（默认 16384），decode CUDA graph batch 固定为 cookbook 的 64，--max-running-requests 上限设为 128"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3239
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Cap --max-running-requests at the 64-request decode graph batch and lower --mem-fraction-static from 0.75 to 0.70, after run 35306704553: the eval-only arm OOMed in the eager DSpark verify path once 128 GSM8K requests were running (6.4 GiB allocation with 2 GiB free of 139.8 GiB), while the throughput points at 64 running requests or fewer stayed up; a DSpark verify batch above the captured tier runs eagerly and allocates its attention workspace per step, so the pool now stays inside the graph tier"
+    - "将 --max-running-requests 上限设为 64（即 decode graph batch），并将 --mem-fraction-static 从 0.75 降至 0.70；依据：运行 35306704553：eval-only 配方在 128 个 GSM8K 请求同时运行时于 eager DSpark verify 路径 OOM（139.8 GiB 中仅剩 2 GiB 时申请 6.4 GiB），而运行请求不超过 64 的吞吐点保持正常。超出已捕获层级的 DSpark verify batch 会以 eager 方式运行并逐步分配 attention 工作区，因此请求池现保持在 graph 层级之内"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3239
