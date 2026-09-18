@@ -32,7 +32,6 @@ def test_b200_tp2_launch_and_workload(tmp_path, scenario, eval_only, concurrency
         "RESULT_FILENAME": "fixture-result",
         "RESULT_DIR": str(tmp_path),
         "MAX_MODEL_LEN": "9472",
-        "EVAL_MAX_MODEL_LEN": "16384",
         "INFMAX_CONTAINER_WORKSPACE": str(tmp_path),
         "KV_OFFLOADING": "none",
         "TOTAL_CPU_DRAM_GB": "0",
@@ -57,6 +56,7 @@ resolve_trace_source() { :; }
 install_agentic_deps() { :; }
 select_available_server_port() { :; }
 start_gpu_monitor() { :; }
+setup_eval_context() { export EVAL_MAX_MODEL_LEN=16384; }
 wait_for_server_ready() { wait "$SERVER_PID"; }
 build_replay_cmd() { :; }
 record() {
@@ -88,6 +88,9 @@ builtin source "$1"
         assert args[args.index("--max-model-len") + 1] == ("16384" if eval_only else "9472")
     else:
         assert args[args.index("--max-model-len") + 1] == "1048576"
+        # TP2 bounds the scheduler batch to the AgentX fan-out, floored at 16
+        # (run 35320655804: smaller values broke FlashInfer autotune).
+        assert args[args.index("--max-num-seqs") + 1] == str(max(16, 2 * concurrency))
     spec = json.loads(args[args.index("--speculative-config") + 1])
     assert spec["method"] == "dspark"
     assert spec["num_speculative_tokens"] == 5

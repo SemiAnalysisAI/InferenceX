@@ -60,7 +60,10 @@ start_gpu_monitor
 # 35316389982. Accuracy evals use the eval context instead.
 MODEL_LEN="$MAX_MODEL_LEN"
 if [[ "${EVAL_ONLY}" == true ]]; then
-    check_env_vars EVAL_MAX_MODEL_LEN
+    # benchmark_lib derives EVAL_MAX_MODEL_LEN (isl + osl + 256, capped at the
+    # checkpoint's context) as the other fixed-seq arms do; the workflow does
+    # not export it (run 35320655804: both eval jobs exited at check_env_vars).
+    setup_eval_context
     MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
 VLLM_CMD=(

@@ -8121,3 +8121,19 @@
     - "Serve the matrix-supplied MAX_MODEL_LEN (9472 for 8k1k) instead of the hardcoded 1048576, and EVAL_MAX_MODEL_LEN for eval-only runs: at the 1M context the sparse-attention indexer buffer and the profiler's full-context KV reservation left TP2 c32 with 0.97 GiB of KV and c64/c128 negative in run 35316389982, and the same 1M context was behind the earlier c32-c128 failures; with the right context the TP2 graph-capture cap relaxes from 256 to 512 tokens"
     - "改为服务矩阵提供的 MAX_MODEL_LEN（8k1k 为 9472）而非硬编码的 1048576，eval-only 运行使用 EVAL_MAX_MODEL_LEN：在 1M 上下文下，稀疏注意力 indexer 缓冲区与分析器为单个满上下文请求预留的 KV 使运行 35316389982 中 TP2 c32 仅剩 0.97 GiB KV、c64/c128 为负值，此前 c32-c128 的失败亦源于同一 1M 上下文；上下文正确后 TP2 的 graph 捕获上限从 256 放宽至 512 token"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Floor the TP2 --max-num-seqs at 16 (it stays 2x the concurrency above that, capped at 256): in run 35320655804 c1, c2 and c4 never started because FlashInfer's autotune dummy run batches max-num-seqs requests through the DSpark draft head and with 2-8 requests selected an invalid MXFP8 split-K tactic ((128, 8), (1, 1), True, False, 4), while c8 with 16 seqs and every larger point served"
+    - "将 TP2 的 --max-num-seqs 下限设为 16（高于该值时仍为并发数的 2 倍，上限 256）：运行 35320655804 中 c1、c2、c4 未能启动，原因是 FlashInfer 的 autotune dummy run 会让 max-num-seqs 个请求经过 DSpark draft head，在 2-8 个请求时选中了无效的 MXFP8 split-K tactic ((128, 8), (1, 1), True, False, 4)，而 c8（16 seqs）及更大的点均正常服务"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-dspark
+  description:
+    - "Derive the accuracy-eval context with benchmark_lib's setup_eval_context (isl + osl + 256, capped at the checkpoint's context) instead of requiring an EVAL_MAX_MODEL_LEN variable the workflow does not export: in run 35320655804 both eval jobs exited at check_env_vars before serving"
+    - "使用 benchmark_lib 的 setup_eval_context 推导精度评测上下文（isl + osl + 256，上限为 checkpoint 的上下文长度），不再要求工作流并未导出的 EVAL_MAX_MODEL_LEN 变量：运行 35320655804 中两个 eval 任务均在 check_env_vars 处退出、未能启动服务"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216

@@ -59,6 +59,14 @@ if (( TP == 2 )); then
     if (( MAX_NUM_SEQS > 256 )); then
         MAX_NUM_SEQS=256
     fi
+    # FlashInfer's autotune dummy run batches max-num-seqs requests through
+    # the DSpark draft head; with 2-8 requests on TP2 it selected an invalid
+    # MXFP8 split-K tactic ((128, 8), (1, 1), True, False, 4) and the engine
+    # never started (run 35320655804: c1/c2/c4 failed, c8 with 16 seqs and
+    # every larger point served). 16 is the smallest value that has passed.
+    if (( MAX_NUM_SEQS < 16 )); then
+        MAX_NUM_SEQS=16
+    fi
     if (( CAPTURE_SIZE > 512 )); then
         CAPTURE_SIZE=512
     fi
