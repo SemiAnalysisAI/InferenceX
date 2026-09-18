@@ -8088,4 +8088,4 @@
   description:
     - "Update the Qwen3.5 FP8 B200 SGLang 8k1k MTP SGLang image from lmsysorg/sglang:nightly-dev-cu13-20260915-8874c51a to lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85 (2026-09-18 upstream cu13 dev nightly, sgl-project/sglang@20518d85, amd64 + arm64)"
     - "将 Qwen3.5 FP8 B200 SGLang 8k1k MTP 的 SGLang 镜像从 lmsysorg/sglang:nightly-dev-cu13-20260915-8874c51a 更新为 lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85（2026-09-18 上游 cu13 dev nightly，sgl-project/sglang@20518d85，amd64 + arm64）"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3251
