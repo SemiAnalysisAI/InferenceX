@@ -98,7 +98,12 @@ SERVER_PID=$!
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 if [[ "${EVAL_ONLY}" == true ]]; then
-    run_eval --port "$PORT"
+    run_eval --framework lm-eval --port "$PORT"
+    # run_eval leaves lm-eval output in its temp directory for non-agentic
+    # scenarios; staging into the workspace root, where the workflow looks for
+    # results*.json, is the recipe's job (run 35387151990: GSM8K scored 0.97 and
+    # the job still failed with "no results*.json files found").
+    append_lm_eval_summary
 else
     run_benchmark_serving \
         --model "$MODEL" --port "$PORT" --backend vllm \

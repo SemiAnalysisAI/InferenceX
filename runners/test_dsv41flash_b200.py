@@ -65,6 +65,7 @@ record() {
 }
 vllm() { record serve "$@"; }
 run_eval() { record workload eval "$@"; }
+append_lm_eval_summary() { record staged lm-eval; }
 run_benchmark_serving() { record workload fixed "$@"; }
 run_agentic_replay_and_write_outputs() { record workload agentic "$@"; }
 builtin source "$1"
@@ -108,7 +109,13 @@ builtin source "$1"
         assert spec["synthetic_acceptance_length"] == 3.51
     workload = json.loads((tmp_path / "workload.json").read_text())
     if eval_only:
-        assert workload == ["eval", "--port", "18888"]
+        if scenario == "fixed_seq_len":
+            # Non-agentic evals pick lm-eval explicitly and must stage their
+            # artifacts into the workspace root; the agentic eval path stages itself.
+            assert workload == ["eval", "--framework", "lm-eval", "--port", "18888"]
+            assert json.loads((tmp_path / "staged.json").read_text()) == ["lm-eval"]
+        else:
+            assert workload == ["eval", "--port", "18888"]
     elif scenario == "agentic":
         assert workload == ["agentic", str(tmp_path)]
     else:

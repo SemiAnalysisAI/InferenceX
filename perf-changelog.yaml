@@ -8176,3 +8176,10 @@
     - "Give the TP2 accuracy evals room to start: cap --max-cudagraph-capture-size at 256 and set --gpu-memory-utilization 0.95 for eval-only runs on TP2; in run 35355746550 every TP2 throughput point passed (c128 still had 8.13 GiB for KV at capture 512) but the c64 and c128 evals, which run real DSpark block rejection with adaptive verification instead of synthetic acceptance, profiled to -2.22 GiB of KV and failed at engine start"
     - "为 TP2 精度评测留出启动空间：eval-only 的 TP2 运行将 --max-cudagraph-capture-size 上限设为 256，并设置 --gpu-memory-utilization 0.95；运行 35355746550 中所有 TP2 吞吐点均通过（c128 在 capture 512 下仍有 8.13 GiB KV），但使用真实 DSpark block 拒绝采样与自适应验证（而非合成接受率）的 c64、c128 评测 KV 剖析为 -2.22 GiB，引擎启动即失败"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-dspark
+  description:
+    - "Stage the accuracy-eval artifacts with append_lm_eval_summary after run_eval, as every other fixed-seq recipe does: in run 35387151990 the TP2 c64 and c128 evals served and scored GSM8K 0.97 exact match, but the results stayed in lm-eval's temp output directory and the job failed on the workflow's results*.json check"
+    - "与其他 fixed-seq 配方一致，在 run_eval 之后用 append_lm_eval_summary 归档精度评测产物：运行 35387151990 中 TP2 c64、c128 评测正常服务并取得 GSM8K 0.97 exact match，但结果留在 lm-eval 的临时输出目录，任务在工作流的 results*.json 检查处失败"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
