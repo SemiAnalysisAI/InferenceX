@@ -365,6 +365,53 @@ created under `/workspace`.
 
 Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml).
 
+### DeepSeek-V4.1-Flash DSpark on SGLang
+
+`dsv41flash-fp4-<sku>-sglang-agentic-dspark` are the SGLang counterparts of the vLLM
+arms, one PR per SKU across h100, h200, b200, b300, gb200, gb300 and mi355x. They follow the
+[SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1),
+which has no released SGLang version for this model yet: every NVIDIA arm uses the
+multi-arch preview build `lmsysorg/sglang:dev-dsv41` and MI355X uses
+`lmsysorg/sglang:dev-dsv41-mi35x`. Both tags are mutable, so the master configs and the
+changelog record the digests they were validated against.
+
+DSpark is the checkpoint's own bundled draft. SGLang exposes no EAGLE or MTP path and no
+`--speculative-num-steps` knob for it; the recipes pass `--speculative-algorithm DSPARK
+--speculative-dspark-block-size 5`. Throughput uses the same
+[committed golden AL](../golden_al_distribution/dsv41flash_dspark.yaml) of 3.51 for thinking
+on and five draft tokens through `SGLANG_SIMULATE_ACC_LEN` with `match-expected` and
+`real-draft-token`; accuracy evals keep real verification. Thinking is off by default in
+SGLang for this model, so the scripts set `SGLANG_DEFAULT_THINKING=1` and
+`SGLANG_DSV41_REASONING_EFFORT=high` to measure the thinking-on regime the golden AL was
+collected in.
+
+Parallelism follows the verified cookbook cells: TP4/EP4 on Blackwell and MI355X, TP8/EP8 on
+Hopper. The cookbook resolves the attention, MoE and FP8 GEMM backends automatically and
+warns that overriding them falls back to the slow Triton block-FP8 matmul; the one exception
+is its H200 cell, which pins `--attention-backend dsv4 --moe-runner-backend flashinfer_mxfp4`,
+so the Hopper arms do the same. `--mem-fraction-static 0.8` is the cookbook's low-latency
+setting. `--max-running-requests` is `2 * CONC` for AgentX subagent fan-out and the decode
+graph batch covers it, floored at the cookbook's 64 and capped at 128.
+
+Each SKU ships its own `dsv41flash_fp4_<sku>_sglang_mtp.sh` in its own PR. H100 is not in
+the cookbook's hardware table, so its script differs: the Engram tables move to a single shared host copy
+(`SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1`, the SGLang analogue of the vLLM arm's Engram
+CPU offload) and the prefill chunk is capped at 4096, the same batched-token cap the vLLM
+H100 arm needed for the sparse-attention indexer buffer on an 80 GB card. Concurrency
+stops at 8 there until the KV ceiling is measured. MI355X has its own script with the
+cookbook's ROCm environment (`SGLANG_USE_AITER=1`, `SGLANG_MOE_PADDING=1`,
+`AITER_FLYDSL_FORCE_REDUCE=1`, `ROCM_QUICK_REDUCE_QUANTIZATION=NONE`),
+`--disable-radix-cache`, and breakable prefill graphs capped at 4096 tokens.
+
+The KV cache is GPU-resident on every arm, so `kv-offloading: none`. The launchers route
+`dsv41flash` for `framework: sglang` the same way as for vLLM: the repository is mounted at
+`/ix`, and the checkpoint resolves through each cluster's persistent HF cache (the writable
+Lustre models directory on b300). `runners/launch_b200-nscale-compat.sh`,
+`launch_b300-dsxe.sh`, `launch_gb200-nv.sh` and `launch_gb300-nv.sh` previously gated
+those paths on `vllm` only.
+
+GPU sweep and eval evidence is required before calling any of these arms validated.
+
 ## Validate
 
 Run the smallest checks that cover the edited layers.

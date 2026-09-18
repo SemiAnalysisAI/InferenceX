@@ -318,6 +318,46 @@ Maximum concurrency for 1,048,576 tokens per request: 6.70x
 
 来源：[上游配方](https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml)。
 
+### SGLang 上的 DeepSeek-V4.1-Flash DSpark
+
+`dsv41flash-fp4-<sku>-sglang-agentic-dspark` 是 vLLM 配方在 h100、h200、b200、b300、gb200、gb300
+与 mi355x 上的 SGLang 对应版本（每个 SKU 一个 PR），遵循
+[SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1)。
+该模型尚无正式发布的 SGLang 版本：所有 NVIDIA 配方使用多架构预览镜像
+`lmsysorg/sglang:dev-dsv41`，MI355X 使用 `lmsysorg/sglang:dev-dsv41-mi35x`。两个标签均可变，
+因此 master 配置与 changelog 记录了验证时的 digest。
+
+DSpark 是检查点自带的草稿模型。SGLang 对它不提供 EAGLE 或 MTP 路径，也没有
+`--speculative-num-steps` 参数；配方传入 `--speculative-algorithm DSPARK
+--speculative-dspark-block-size 5`。吞吐测试通过 `SGLANG_SIMULATE_ACC_LEN`（`match-expected`、
+`real-draft-token`）使用同一[已提交的黄金 AL](../golden_al_distribution/dsv41flash_dspark.yaml)：
+thinking 开启、五个草稿 token 对应 3.51；准确率 eval 保留真实验证。SGLang 对该模型默认关闭
+thinking，因此脚本设置 `SGLANG_DEFAULT_THINKING=1` 与 `SGLANG_DSV41_REASONING_EFFORT=high`，
+以测量黄金 AL 所采集的 thinking 开启状态。
+
+并行方式遵循 cookbook 已验证的配置：Blackwell 与 MI355X 为 TP4/EP4，Hopper 为 TP8/EP8。
+cookbook 会自动解析 attention、MoE 与 FP8 GEMM 后端，并警告手动覆盖会退回到较慢的 Triton
+块 FP8 matmul；唯一例外是其 H200 配置显式指定 `--attention-backend dsv4
+--moe-runner-backend flashinfer_mxfp4`，Hopper 配方与之保持一致。`--mem-fraction-static 0.8`
+为 cookbook 的低延迟设置。`--max-running-requests` 为 `2 * CONC` 以容纳 AgentX 子代理扇出，
+decode 图的 batch 覆盖该值，下限为 cookbook 的 64，上限为 128。
+
+每个 SKU 在各自的 PR 中提供独立的 `dsv41flash_fp4_<sku>_sglang_mtp.sh`。H100 不在 cookbook 的
+硬件表中，其脚本有所不同：Engram 表移至
+单一共享主机副本（`SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1`，对应 vLLM 配方的 Engram CPU
+offload），prefill 分块上限设为 4096，即 vLLM H100 配方在 80 GB 显卡上为稀疏注意力 indexer
+缓冲区所需的相同批处理 token 上限。在测得 KV 上限之前，该配方并发止于 8。MI355X 也有独立
+脚本，包含 cookbook 的 ROCm 环境变量（`SGLANG_USE_AITER=1`、`SGLANG_MOE_PADDING=1`、
+`AITER_FLYDSL_FORCE_REDUCE=1`、`ROCM_QUICK_REDUCE_QUANTIZATION=NONE`）、
+`--disable-radix-cache`，以及上限 4096 token 的 breakable prefill 图。
+
+所有配方的 KV cache 均常驻 GPU，因此 `kv-offloading: none`。launcher 对 `framework: sglang`
+的 `dsv41flash` 路由方式与 vLLM 相同：仓库挂载到 `/ix`，检查点通过各集群的持久 HF 缓存解析
+（b300 上为可写的 Lustre 模型目录）。`runners/launch_b200-nscale-compat.sh`、
+`launch_b300-dsxe.sh`、`launch_gb200-nv.sh` 与 `launch_gb300-nv.sh` 此前仅对 `vllm` 开放这些路径。
+
+在获得 GPU sweep 与 eval 证据之前，不得将这些配方视为已验证。
+
 ## 验证
 
 运行覆盖被修改层的最小检查。
