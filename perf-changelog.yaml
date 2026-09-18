@@ -8019,6 +8019,30 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2863
 
 - config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the GB300 DeepSeek-V4-Pro AgentX disaggregated ladder from hierarchical cache to the Mooncake unified-cache external linker, let decode ranks contribute host DRAM to the store, and keep only a sparse SWA checkpoint per 32768-token interval so the same DRAM holds about twice as many prefixes."
+    - "Prefill now splits a request into 2048-token chunks and defers intermediate chunk KV transfer. Image bumped to lmsysorg/sglang:nightly-dev-cu13-20260916-c9a8fba9, the first pinned image whose sglang-kernel satisfies the minimum the reviewed branch asserts."
+    - "Measured against the previous configuration at the same golden acceptance length: total tok/s/GPU +13.2% at 1P1D, +18.4% at 2P1D, +17.5% at 4P1D, with mean TTFT -21.6%, -30.7%, -37.3%. Steady-state prefix cache hit rate is 96.0-96.2% across all three points."
+    - "The runner also pins this cluster's RDMA devices for the Mooncake store: without an explicit device list the client routes store transfers over NVLink for same-domain peers, whose address lookup fails and aborts every worker during the store warmup put. Temporary: the serving change is still in review as sgl-project/sglang#39694, so the runner clones that branch into the srt-slurm configs directory and the servers import it through PYTHONPATH while using the container's compiled kernels. A setup script aborts the job when that tree is missing or is the wrong revision, so a run cannot silently fall back to the container's SGLang. Remove the clone, the setup script, and the recipes' PYTHONPATH once the change ships in the pinned image."
+    - "将 GB300 DeepSeek-V4-Pro AgentX 分离式配置从 hierarchical cache 切换到 Mooncake unified-cache external linker，让 decode rank 也贡献主机 DRAM 容量，并按 32768 token 间隔只保留稀疏 SWA checkpoint，使同样的 DRAM 可容纳约两倍前缀。"
+    - "Prefill 改为按 2048 token 切分单个请求并延迟中间 chunk 的 KV 传输，镜像升级到 lmsysorg/sglang:nightly-dev-cu13-20260916-c9a8fba9，这是首个 sglang-kernel 版本满足该分支最低要求的固定镜像。"
+    - "在相同 golden acceptance length 下相比原配置实测：1P1D、2P1D、4P1D 的单卡总吞吐分别提升 13.2%、18.4%、17.5%，平均 TTFT 分别下降 21.6%、30.7%、37.3%，三个点的稳态前缀命中率均为 96.0%-96.2%。"
+    - "runner 同时为 Mooncake store 指定该集群的 RDMA 设备：缺少显式设备列表时，store 的传输会对同 NVLink 域的对端走 NVLink，地址查找失败并在 warmup put 阶段让所有 worker 退出。临时方案：服务端改动仍在 sgl-project/sglang#39694 评审中，因此 runner 将该分支克隆到 srt-slurm 的 configs 目录，服务进程通过 PYTHONPATH 导入，同时继续使用容器内编译好的 kernel。配套 setup 脚本在该源码树缺失或版本不符时直接让任务失败，避免静默回退到容器自带的 SGLang。待改动进入固定镜像后应移除克隆、setup 脚本和 recipe 中的 PYTHONPATH。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3187
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the removed cuda-graph-max-bs recipe key with cuda-graph-max-bs-decode in every prefill and decode role across the GB300 DSV4 AgentX Mooncake C480-C1920 ladder, preserving each role's existing graph batch-size value. Run 35101789051 failed before server readiness because the reviewed SGLang branch split the option into decode/prefill variants and rejected the legacy spelling as ambiguous."
+    - "在 GB300 DSV4 AgentX Mooncake C480-C1920 阶梯的所有 prefill 与 decode role 中，将已移除的 cuda-graph-max-bs 配方键替换为 cuda-graph-max-bs-decode，并保留各 role 现有的 CUDA graph batch-size 数值。运行 35101789051 在服务就绪前失败，因为评审中的 SGLang 分支已将该选项拆分为 decode/prefill 两个变体，并因歧义拒绝旧写法。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3187
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
   scenario-type:
     - agentic-coding
@@ -8082,3 +8106,11 @@
     - "Capture only full decode CUDA graphs (VLLM_USE_BREAKABLE_CUDAGRAPH=0 with cudagraph_mode FULL_DECODE_ONLY, as the MiniMax-M3 gfx942 arm does) and restore --moe-backend aiter: on gfx942 every worker segfaulted during piecewise graph capture with both the Triton W4A16 MoE kernel (run 35305045778) and the auto-selected unfused Triton kernel (run 35306398350), so the capture mode rather than the MoE kernel is the failing piece; prefill runs eagerly"
     - "仅捕获完整的 decode CUDA graph（VLLM_USE_BREAKABLE_CUDAGRAPH=0 并设置 cudagraph_mode FULL_DECODE_ONLY，与 MiniMax-M3 gfx942 配方一致）并恢复 --moe-backend aiter：在 gfx942 上，无论使用 Triton W4A16 MoE 内核（运行 35305045778）还是自动选择的未融合 Triton 内核（运行 35306398350），所有 worker 都在 piecewise graph 捕获期间段错误，说明问题在于捕获模式而非 MoE 内核；prefill 以 eager 方式运行"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3247
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Drive the decode ranks' passive Mooncake capacity contribution from the server flag --mooncake-store-contributor instead of the SGLANG_MOONCAKE_STORE_CONTRIBUTOR environment variable, and repin the reviewed SGLang branch to the revision that builds the contributor where the KV pools are built. The environment variable was read by the Mooncake transfer manager, so the contribution silently disappeared whenever KV transfer used another backend, and setting it on a prefill rank did nothing without an error; the flag is rejected on non-decode roles and when combined with the external linker. Recipe behaviour at every ladder point is unchanged."
+    - "将 decode rank 向 Mooncake store 贡献主机 DRAM 的开关从环境变量 SGLANG_MOONCAKE_STORE_CONTRIBUTOR 改为服务端参数 --mooncake-store-contributor，并把评审中的 SGLang 分支重新固定到在构建 KV pool 处创建该 contributor 的版本。原环境变量由 Mooncake 传输管理器读取，因此只要 KV 传输改用其他后端，容量贡献就会静默消失；把它设在 prefill rank 上则毫无作用且不报错。新参数在非 decode 角色或与 external linker 同时开启时会直接报错。各并发点的配方行为不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3187
