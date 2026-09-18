@@ -58,7 +58,9 @@ select_available_server_port
 # Probabilistic draft sampling measured ~23% faster than greedy on the drafter's
 # card. Adaptive verification is rejected by vLLM's GDN attention backend for
 # this hybrid architecture, so it stays at its default (off).
-SPEC_CONFIG=$(printf '{"method":"dspark","model":"%s","num_speculative_tokens":%d,"draft_sample_method":"probabilistic"}' "$DRAFT_MODEL" "$NUM_SPEC_TOKENS")
+# The drafter runs eagerly too: vLLM's speculative config carries its own
+# enforce_eager, so --enforce-eager alone would leave the draft head on graphs.
+SPEC_CONFIG=$(printf '{"method":"dspark","model":"%s","num_speculative_tokens":%d,"draft_sample_method":"probabilistic","enforce_eager":true}' "$DRAFT_MODEL" "$NUM_SPEC_TOKENS")
 
 start_gpu_monitor
 
