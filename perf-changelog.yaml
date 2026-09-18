@@ -8082,3 +8082,19 @@
     - "Capture only full decode CUDA graphs (VLLM_USE_BREAKABLE_CUDAGRAPH=0 with cudagraph_mode FULL_DECODE_ONLY, as the MiniMax-M3 gfx942 arm does) and restore --moe-backend aiter: on gfx942 every worker segfaulted during piecewise graph capture with both the Triton W4A16 MoE kernel (run 35305045778) and the auto-selected unfused Triton kernel (run 35306398350), so the capture mode rather than the MoE kernel is the failing piece; prefill runs eagerly"
     - "仅捕获完整的 decode CUDA graph（VLLM_USE_BREAKABLE_CUDAGRAPH=0 并设置 cudagraph_mode FULL_DECODE_ONLY，与 MiniMax-M3 gfx942 配方一致）并恢复 --moe-backend aiter：在 gfx942 上，无论使用 Triton W4A16 MoE 内核（运行 35305045778）还是自动选择的未融合 Triton 内核（运行 35306398350），所有 worker 都在 piecewise graph 捕获期间段错误，说明问题在于捕获模式而非 MoE 内核；prefill 以 eager 方式运行"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3247
+
+- config-keys:
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg-mooncake
+  description:
+    - "Add GB300 MiniMax-M3 Dynamo-vLLM AgentX aggregate and disaggregated recipes with EAGLE3-GQA"
+    - "Use srt-slurm v2.11.0 for process-local Mooncake store configuration"
+    - "新增采用 EAGLE3-GQA 的 GB300 MiniMax-M3 Dynamo-vLLM AgentX 聚合与分离式部署配置；采用 srt-slurm v2.11.0 为各工作进程配置 Mooncake 存储"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3232
+
+- config-keys:
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg-mooncake
+  description:
+    - "Isolate the checksum-pinned Mooncake wheel install from unrelated image package overrides"
+    - "将固定校验和的 Mooncake wheel 安装与镜像中无关的软件包版本覆盖项隔离"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3232
