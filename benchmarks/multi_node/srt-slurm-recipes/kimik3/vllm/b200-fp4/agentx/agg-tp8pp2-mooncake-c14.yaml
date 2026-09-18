@@ -3,14 +3,14 @@ name: "kimik3-vllm-agg-b200-tp8pp2-mooncake-c14-agentic"
 
 model:
   path: "kimik3"
-  container: "vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-728d3ad"
+  container: "vllm/vllm-openai:nightly-2671fedfc7ae604761990603fc736c0c4f21de57"
   precision: "fp4"
 
 identity:
   model:
     repo: "moonshotai/Kimi-K3"
   container:
-    image: "vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-728d3ad"
+    image: "vllm/vllm-openai:nightly-2671fedfc7ae604761990603fc736c0c4f21de57"
 
 dynamo:
   install: false
@@ -79,6 +79,7 @@ roles:
       no-enable-flashinfer-autotune: true
       max-model-len: 1048576
       kv-cache-dtype: fp8
+      mamba-ssm-cache-dtype: bfloat16
       kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
       attention-backend: TOKENSPEED_MLA
       attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
@@ -118,7 +119,7 @@ telemetry:
   storage_subdir: power
   required: true
   startup_timeout_seconds: 120
-  request_timeout_seconds: 2
+  request_timeout_seconds: 1
   collector_join_timeout_seconds: 12
   dcgm_exporter:
     container_image: dcgm-exporter
@@ -136,6 +137,12 @@ benchmark:
     RESULT_DIR: "/logs/agentic"
     PORT: "8000"
     IS_MULTINODE: "true"
+    # srt-slurm v2.2.1 dropped _get_custom_measurement_window_env, so the
+    # custom-benchmark half of the measurement-window contract is no longer
+    # exported. power_adapter requires all four or it writes no window file.
+    SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE: "custom"
+    SRT_MEASUREMENT_WINDOW_CONCURRENCIES: "14"
+    SRT_MEASUREMENT_WINDOW_RESULT_ROOT: "/logs"
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
