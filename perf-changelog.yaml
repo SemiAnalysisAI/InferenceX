@@ -8201,3 +8201,15 @@
     secondary 100 Gb/s HDR functions seen in transfer retries; retain RDMA
     transport and require runtime validation before promoting any point.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-1p1d-hicache-experiment
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-2p1d-hicache-experiment
+  scenario-type:
+  - agentic-coding
+  description:
+  - Test C64 prefill HiCache at 215 GB per rank under the latest combined
+    KV/Mamba host-budget semantics. Each TP4 prefill worker uses 860 GB
+    within its 865 GB GPU-proportional allowance; two colocated prefill
+    workers use 1720 GB on their eight-GPU node. Decode remains device-only.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269

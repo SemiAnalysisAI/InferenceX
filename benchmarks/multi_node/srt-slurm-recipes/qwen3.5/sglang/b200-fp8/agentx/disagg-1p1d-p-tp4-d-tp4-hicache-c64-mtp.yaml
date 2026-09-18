@@ -75,7 +75,8 @@ roles:
       mamba-radix-cache-strategy: extra_buffer
       mamba-track-interval: 2048
       enable-hierarchical-cache: true
-      hicache-size: 104
+      # Combined KV/Mamba budget: 860 GB per TP4 prefill worker.
+      hicache-size: 215
       hicache-io-backend: kernel
       hicache-mem-layout: page_first
       hicache-write-policy: write_through_selective
