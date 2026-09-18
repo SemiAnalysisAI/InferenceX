@@ -1,10 +1,6 @@
-# Based on the B200 FP8 aggregate AgentX recipe and SGLang Qwen3.5 PD recipe.
-# https://github.com/sgl-project/sglang/blob/191172fa742f8837423ca4e4be4919ebb52f1b51/docs/cookbook/autoregressive/Qwen/Qwen3.5.mdx
-# 8 active GPUs on one 8-GPU node: prefill GPU0-3, decode GPU4-7.
-# Request/graph limits match aggregate C; Dynamo owns frontend tokenization.
-# Shared apply_srt_recipe selects golden AL3.39 for throughput, real verification for evals.
+# Fast replay improves the published frontier; canonical sweep qualification is pending.
 schema: 2
-name: qwen35-b200-fp8-agentx-1p1d-tp4-colocated-c8-mtp
+name: qwen35-b200-fp8-agentx-disagg-1p1d-p-tp4-d-tp4-hicache-c32-mtp
 model:
   path: qwen3.5-fp8
   container: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
@@ -67,7 +63,7 @@ roles:
       context-length: 262144
       chunked-prefill-size: 16384
       max-prefill-tokens: 16384
-      max-running-requests: 16
+      max-running-requests: 64
       reasoning-parser: qwen3
       tool-call-parser: qwen3_coder
       enable-metrics: true
@@ -80,6 +76,11 @@ roles:
       stream-interval: 50
       mamba-radix-cache-strategy: extra_buffer
       mamba-track-interval: 2048
+      enable-hierarchical-cache: true
+      hicache-size: 104
+      hicache-io-backend: kernel
+      hicache-mem-layout: page_first
+      hicache-write-policy: write_through_selective
   decode:
     nodes: colocate
     workers: 1
@@ -114,7 +115,7 @@ roles:
       context-length: 262144
       chunked-prefill-size: 16384
       max-prefill-tokens: 16384
-      max-running-requests: 16
+      max-running-requests: 64
       reasoning-parser: qwen3
       tool-call-parser: qwen3_coder
       enable-metrics: true
@@ -126,7 +127,7 @@ roles:
       speculative-num-steps: 3
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 4
-      cuda-graph-max-bs-decode: 8
+      cuda-graph-max-bs-decode: 32
       stream-interval: 50
       enable-symm-mem: true
       scheduler-recv-interval: 10
@@ -144,7 +145,7 @@ benchmark:
   type: custom
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   concurrencies:
-  - 8
+  - 32
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic

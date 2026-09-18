@@ -8182,3 +8182,16 @@
     wheel index. Retain pip integrity verification while avoiding the PyPI
     placeholder downloader that repeatedly truncated aisimulate wheels.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Select the measured B200 Qwen3.5 FP8 colocated TP4 prefill plus TP4 decode
+    C32 candidate with prefill HiCache at 104 GB per rank. The short replay
+    reaches 20645.73 logical tokens/s/GPU at 211.219 p90 interactivity with
+    zero request errors, improving the published frontier; canonical sweep
+    and real-verification evals remain required. Remove unqualified starter
+    points from the PR selection.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
