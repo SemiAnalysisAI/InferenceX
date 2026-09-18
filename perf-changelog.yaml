@@ -8091,4 +8091,4 @@
   - 'Add a starter Qwen3.5-397B FP8 B300 disaggregated AgentX recipe using Dynamo
     and SGLang through srt-slurm: 1P1D TP4, NEXTN MTP, and concurrencies 1, 4, 8,
     16.'
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
