@@ -8091,3 +8091,12 @@
     - "Keep DSpark5, golden AL 3.51 for throughput, real block rejection with adaptive verification for evals, and GPU-resident KV. Add deepseek_v41 tokenizer support to the fixed-sequence client."
     - "新增 B200 TP2 DeepSeek-V4.1-Flash AgentX 和固定 8K/1K 配方，启用 Engram CPU 卸载，并发为 1、2、4、8、16、32、64、128；保留现有 TP4 AgentX 分支和固定 vLLM 镜像。吞吐使用 DSpark5 和黄金 AL 3.51，eval 使用真实块拒绝采样和自适应验证，KV 保留在 GPU 上；固定序列客户端新增 deepseek_v41 tokenizer 支持。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "TP2 only: cap --max-num-batched-tokens at 4096, bound --max-num-seqs to 2*CONC (max 256) and stop CUDA graph capture at 512 tokens in the shared AgentX script, after run 35180394796 served TP2 c1-c16 but c32, c64 and c128 died in memory profiling with -10.8 GiB of KV budget (145 GiB of weights per GPU plus the 32 GiB indexer buffer at 16384 batched tokens); TP4 and TP8 arms keep the upstream defaults"
+    - "仅 TP2：在共享 AgentX 脚本中将 --max-num-batched-tokens 上限设为 4096，--max-num-seqs 限制为 2*CONC（最多 256），CUDA graph 捕获止于 512 token；运行 35180394796 中 TP2 c1-c16 可服务，但 c32、c64、c128 在显存分析阶段因 KV 预算为 -10.8 GiB 而失败（每 GPU 145 GiB 权重加 16384 批处理 token 时 32 GiB 的 indexer 缓冲区）；TP4 与 TP8 配方保持上游默认"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
