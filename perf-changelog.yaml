@@ -8271,3 +8271,15 @@
     this an admission and Mamba-budget optimization, not an admission-only
     comparison. Device KV remains uncapped; require measured normalized gains.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-1p1d-c32-full-host-experiment
+  scenario-type:
+  - agentic-coding
+  description:
+  - Isolate host-cache capacity in B200 Qwen3.5 FP8 1P1D C32 by increasing
+    only prefill HiCache from 104 to 215 GB per rank. The measured H104
+    host pool saturated while two-prefill workers each stayed below that
+    capacity. Keep decode static memory at 0.8, request limit 64 and graph
+    limit 32. This is an unqualified diagnostic pending normalized results.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
