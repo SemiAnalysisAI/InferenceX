@@ -8065,3 +8065,34 @@
     - "Use SGLang nightly-dev-20260914-4358a161 with Dynamo 1.5.0.dev20260913 and retry truncated srt-slurm setup dependency downloads."
     - "Update telemetry to the current srt-slurm schema, preserving the one-second collection interval and using a schema-compliant 12-second collector join timeout."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3112
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the MI325X (gfx942) vLLM AgentX arm for DeepSeek-V4.1-Flash as a copy of the validated MI355X recipe on vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657: TP8 rather than TP4 so a 256 GB card holds its share of the 511 GB checkpoint, the GPU-resident Engram tables and a 1M-context KV pool; native five-token DSpark with thinking-on golden AL 3.51 for throughput and real block verification (adaptive verification off on ROCm) for evals; VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, VLLM_USE_BREAKABLE_CUDAGRAPH=1, --moe-backend aiter, --max-num-batched-tokens 16384, --max-num-seqs 128, concurrency 1-32"
+    - "runners/launch_mi325x-amds.sh now mounts the checkout at /ix for this checkpoint and rewrites RESULT_DIR so AgentX runtime directories stay out of /workspace"
+    - "新增 DeepSeek-V4.1-Flash 在 MI325X（gfx942）上的 vLLM AgentX 配方，复制自已验证的 MI355X 配方并使用同一镜像 vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657：采用 TP8 而非 TP4，使 256 GB 显卡可容纳 511 GB 检查点的分片、常驻 GPU 的 Engram 表以及 1M 上下文 KV 池；原生五 token DSpark，吞吐使用 thinking 开启的黄金 AL 3.51，eval 保留真实块验证（ROCm 上关闭自适应验证）；VLLM_ROCM_USE_AITER=1、VLLM_ROCM_USE_AITER_MOE=1、VLLM_USE_BREAKABLE_CUDAGRAPH=1、--moe-backend aiter、--max-num-batched-tokens 16384、--max-num-seqs 128，并发 1-32"
+    - "runners/launch_mi325x-amds.sh 现为该检查点将仓库挂载到 /ix 并重写 RESULT_DIR，使 AgentX 运行目录不落在 /workspace 下"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3247
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Drop --moe-backend aiter and let vLLM select the MXFP4 MoE kernel: on gfx942 the explicit aiter name resolved to the Triton W4A16 kernel (AITER_TRITON_MXFP4_BF16) and every worker segfaulted during breakable CUDA-graph capture at concurrency 16 (run 35305045778); auto selection prefers the CK W4A16 kernel (AITER_MXFP4_BF16) that the retired DeepSeek-V4-Pro gfx942 arm ran on"
+    - "runners/launch_mi325x-amds.sh drains the allocated node and retries once on a fresh allocation that excludes it when pyxis cannot start the container (enroot-nsenter user-namespace denial, as on the MI300X fleet in run 35305037528)"
+    - "去掉 --moe-backend aiter，改由 vLLM 自动选择 MXFP4 MoE 内核：在 gfx942 上显式指定 aiter 会解析为 Triton W4A16 内核（AITER_TRITON_MXFP4_BF16），并发 16 时所有 worker 在 breakable CUDA graph 捕获期间段错误（运行 35305045778）；自动选择优先使用已退役的 DeepSeek-V4-Pro gfx942 配方所用的 CK W4A16 内核（AITER_MXFP4_BF16）"
+    - "当 pyxis 无法启动容器时（enroot-nsenter 用户命名空间被拒，如运行 35305037528 中的 MI300X 节点），runners/launch_mi325x-amds.sh 会 drain 所分配的节点，并在排除该节点的新分配上重试一次"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3247
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Capture only full decode CUDA graphs (VLLM_USE_BREAKABLE_CUDAGRAPH=0 with cudagraph_mode FULL_DECODE_ONLY, as the MiniMax-M3 gfx942 arm does) and restore --moe-backend aiter: on gfx942 every worker segfaulted during piecewise graph capture with both the Triton W4A16 MoE kernel (run 35305045778) and the auto-selected unfused Triton kernel (run 35306398350), so the capture mode rather than the MoE kernel is the failing piece; prefill runs eagerly"
+    - "仅捕获完整的 decode CUDA graph（VLLM_USE_BREAKABLE_CUDAGRAPH=0 并设置 cudagraph_mode FULL_DECODE_ONLY，与 MiniMax-M3 gfx942 配方一致）并恢复 --moe-backend aiter：在 gfx942 上，无论使用 Triton W4A16 MoE 内核（运行 35305045778）还是自动选择的未融合 Triton 内核（运行 35306398350），所有 worker 都在 piecewise graph 捕获期间段错误，说明问题在于捕获模式而非 MoE 内核；prefill 以 eager 方式运行"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3247
