@@ -8359,3 +8359,15 @@
     - "Replace the decode-role prefill-round-robin-balance: true with load-balance-method: follow_bootstrap_room in the 5 srt-slurm recipes of this key that set it: SGLang nightly-dev-cu13-20260918-20518d85 no longer has --prefill-round-robin-balance (run 35319100186, every decode worker of the DEP16 arm exited at argument parsing) and its --load-balance-method choices are auto, round_robin, follow_bootstrap_room, total_requests and total_tokens; the prefill roles keep load-balance-method: round_robin"
     - "在该 key 中设置了该参数的 5 个 srt-slurm 配方里，将 decode 角色的 prefill-round-robin-balance: true 替换为 load-balance-method: follow_bootstrap_room：SGLang nightly-dev-cu13-20260918-20518d85 已没有 --prefill-round-robin-balance（运行 35319100186 中 DEP16 分支的所有 decode worker 在参数解析阶段退出），其 --load-balance-method 可选值为 auto、round_robin、follow_bootstrap_room、total_requests 与 total_tokens；prefill 角色保持 load-balance-method: round_robin"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3253
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic-mtp
+    - glm5.2-fp8-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GLM-5.2 B300 SGLang AgentX images to lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85 (2026-09-18 upstream cu13 dev nightly, sgl-project/sglang@20518d85, digest sha256:d46a59f4…, amd64 + arm64): glm5.2-fp4-b300-sglang-agentic-mtp from nightly-dev-cu13-20260901-07c8f729 and glm5.2-fp8-b300-sglang-agentic-mtp from nightly-dev-cu13-20260908-20ca564b"
+    - "In both B300 recipes pass the decode graph batch as --cuda-graph-max-bs-decode: on nightlies from 2026-09-15 onward the old --cuda-graph-max-bs spelling is an ambiguous prefix of --cuda-graph-max-bs-decode/--cuda-graph-max-bs-prefill and argparse rejects it (same fix as the Qwen3.5 bumps in #3250/#3251); serve flags, search spaces and golden acceptance are otherwise unchanged"
+    - "将 GLM-5.2 B300 SGLang AgentX 镜像更新至 lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85（2026-09-18 上游 cu13 dev nightly，sgl-project/sglang@20518d85，digest sha256:d46a59f4…，amd64 + arm64）：glm5.2-fp4-b300-sglang-agentic-mtp 自 nightly-dev-cu13-20260901-07c8f729，glm5.2-fp8-b300-sglang-agentic-mtp 自 nightly-dev-cu13-20260908-20ca564b"
+    - "两个 B300 配方均改用 --cuda-graph-max-bs-decode 传递 decode graph batch：自 2026-09-15 起的 nightly 中旧写法 --cuda-graph-max-bs 是 --cuda-graph-max-bs-decode/--cuda-graph-max-bs-prefill 的歧义前缀，argparse 会拒绝（与 #3250/#3251 中 Qwen3.5 的修复相同）；其余服务参数、搜索空间与 golden acceptance 不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3276
