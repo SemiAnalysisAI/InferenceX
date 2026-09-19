@@ -69,7 +69,17 @@ fi
 select_available_server_port
 
 # Match AgentX's golden AL 3.51; accuracy evals use real target verification.
-if [[ "${EVAL_ONLY}" == true ]]; then
+if [[ "${EVAL_ONLY}" == true ]] && (( TP == 2 )); then
+    # Real block-rejection verification, but adaptive verification off: on TP2
+    # the eval died twice with cudaErrorIllegalAddress, first in the eager
+    # DSpark draft lm_head GEMM at ~125 running requests (run 35399984613) and
+    # then, with lm-eval pinned to 32 requests inside the graph tier, at the
+    # adaptive verifier's record_confidences stream sync 16 minutes in (run
+    # 35403890075, c64 and c128 evals). The TP4 eval with the same config and
+    # the synthetic-acceptance TP2 points are clean. Block rejection alone is
+    # still exact target verification, so GSM8K accuracy is unaffected.
+    SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
+elif [[ "${EVAL_ONLY}" == true ]]; then
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":true}'
 else
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":3.51,"enable_adaptive_verification":false}'

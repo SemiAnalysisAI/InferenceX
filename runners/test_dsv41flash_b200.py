@@ -102,7 +102,9 @@ builtin source "$1"
     assert spec["method"] == "dspark"
     assert spec["num_speculative_tokens"] == 5
     assert spec["rejection_sample_method"] == ("block" if eval_only else "synthetic")
-    assert spec["enable_adaptive_verification"] is eval_only
+    # The TP2 fixed-seq eval turns adaptive verification off (cudaErrorIllegalAddress
+    # in record_confidences, run 35403890075); every other eval keeps it on.
+    assert spec["enable_adaptive_verification"] is (eval_only and scenario != "fixed_seq_len")
     if eval_only:
         assert "synthetic_acceptance_length" not in spec
     else:
