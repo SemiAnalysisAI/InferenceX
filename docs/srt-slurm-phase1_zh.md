@@ -69,6 +69,8 @@ flowchart TD
 
 先部署 app reader 与 `016_measurement_snapshots.sql` migration，再合入/部署受信任 collector。InferenceX 需配置 `INFX_H100_PHASE1_SITE_JSON`、`INFX_PHASE1_READER_REVISION`、`INFX_PHASE1_COLLECTOR_REVISION`。两个仓库均需配置 `INFX_RECEIPT_ISSUER_SHAS`、`INFX_RECEIPT_ISSUER_WORKFLOW`，workflow 路径为 `.github/workflows/phase1-receipt.yml`。检查时这些变量尚不存在。分支中有代码不等于 reader 已部署。
 
+GitHub 原生启动步骤使用 uv 管理的 Python 3.12，不依赖环境中已有的 `python` 命令。workflow 在准备或申请 Slurm 资源前校验这三个站点/部署变量。错误会列出缺失变量，指出站点 JSON 的无效字段而不回显字段值，并列出与站点配置不一致的 reader/collector revision 变量。该校验要求显式配置，不会准备资源或部署服务。
+
 ## 准备、执行与恢复
 
 独立适配器接收明确的文件参数：

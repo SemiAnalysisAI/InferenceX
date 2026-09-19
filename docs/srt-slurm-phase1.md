@@ -69,6 +69,8 @@ Preparation validates existing assets; it does not install packages, download mo
 
 Before enabling sweeps, deploy the app reader and migration `016_measurement_snapshots.sql`, then land/deploy the trusted collector. Configure `INFX_H100_PHASE1_SITE_JSON`, `INFX_PHASE1_READER_REVISION` and `INFX_PHASE1_COLLECTOR_REVISION` in InferenceX. Configure `INFX_RECEIPT_ISSUER_SHAS` and `INFX_RECEIPT_ISSUER_WORKFLOW` in both repositories; the workflow is `.github/workflows/phase1-receipt.yml`. These values are absent in the inspected repository configuration. A source branch containing the code alone is not a deployed reader.
 
+The GitHub native launch uses uv-managed Python 3.12 and does not require an ambient `python` command. The workflow checks the three site/deployment variables before preparation or Slurm allocation. Its error names missing variables, identifies invalid fields in the site JSON without echoing their values, and names reader/collector revision variables that disagree with the site configuration. This check requires explicit configuration and does not provision assets or deploy services.
+
 ## Preparation, execution and recovery
 
 The standalone adapter accepts explicit files:

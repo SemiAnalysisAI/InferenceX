@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
+
+from pydantic import ValidationError
 
 from infx.benchmarks.common import write_json
 from infx.srt_slurm.job import parse_job
@@ -13,7 +16,50 @@ from infx.srt_slurm.launch import execute, prepare
 from infx.srt_slurm.render import PilotSite
 
 
+def load_site(environment: Mapping[str, str]) -> PilotSite:
+    """Explain missing deployment configuration before touching preparation or Slurm."""
+    variables = {
+        "NATIVE_SITE_JSON": "INFX_H100_PHASE1_SITE_JSON",
+        "NATIVE_READER_REVISION": "INFX_PHASE1_READER_REVISION",
+        "NATIVE_COLLECTOR_REVISION": "INFX_PHASE1_COLLECTOR_REVISION",
+    }
+    missing = [
+        repository_name
+        for name, repository_name in variables.items()
+        if not environment.get(name, "").strip()
+    ]
+    if missing:
+        raise ValueError("Native H100 pilot requires repository variables: " + ", ".join(missing))
+    try:
+        site = PilotSite.model_validate_json(environment["NATIVE_SITE_JSON"])
+    except ValidationError as error:
+        problems = "; ".join(
+            f"{'.'.join(str(part) for part in item['loc']) or 'JSON'}: {item['msg']}"
+            for item in error.errors(include_input=False, include_context=False, include_url=False)
+        )
+        raise ValueError(
+            "Repository variable INFX_H100_PHASE1_SITE_JSON must contain valid PilotSite JSON: "
+            + problems
+        ) from None
+    mismatched = [
+        variables[name]
+        for name, expected in (
+            ("NATIVE_READER_REVISION", site.reader_revision),
+            ("NATIVE_COLLECTOR_REVISION", site.collector_revision),
+        )
+        if environment[name] != expected
+    ]
+    if mismatched:
+        raise ValueError(
+            "Repository variables "
+            + ", ".join(mismatched)
+            + " must match the deployed revisions recorded in INFX_H100_PHASE1_SITE_JSON"
+        )
+    return site
+
+
 def main() -> int:
+    site = load_site(os.environ)
     root = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
     raw = json.loads(os.environ["NATIVE_CONFIG_JSON"])
     if os.environ["NATIVE_AGENTX_FAST"] != "false" or os.environ["NATIVE_EVAL_LIMIT"] not in (
@@ -40,12 +86,6 @@ def main() -> int:
             "node-count": 1,
         },
     )
-    site = PilotSite.model_validate_json(os.environ["NATIVE_SITE_JSON"])
-    if (
-        os.environ["NATIVE_READER_REVISION"] != site.reader_revision
-        or os.environ["NATIVE_COLLECTOR_REVISION"] != site.collector_revision
-    ):
-        raise ValueError("reader-first deployment and trusted collector pins are not enabled")
     source = {
         "repository": os.environ["GITHUB_REPOSITORY"],
         "run_id": int(os.environ["GITHUB_RUN_ID"]),

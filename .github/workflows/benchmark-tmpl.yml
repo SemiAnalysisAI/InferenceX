@@ -301,10 +301,11 @@ jobs:
           NATIVE_SITE_JSON: ${{ vars.INFX_H100_PHASE1_SITE_JSON }}
           NATIVE_READER_REVISION: ${{ vars.INFX_PHASE1_READER_REVISION }}
           NATIVE_COLLECTOR_REVISION: ${{ vars.INFX_PHASE1_COLLECTOR_REVISION }}
-        shell: python
+        # H100 runners lack ambient python; uv supplies the explicit managed interpreter.
+        shell: uv run --locked --python 3.12 python {0} # zizmor: ignore[misfeature]
         run: |
-          import subprocess
-          subprocess.run(['uv', 'run', '--locked', '--python', '3.12', 'python', '-m', 'infx.srt_slurm.workflow'], check=True)
+          from infx.srt_slurm.workflow import main
+          raise SystemExit(main())
 
       - name: Upload native execution provenance
         if: ${{ always() && fromJSON(inputs.config).execution.runtime == 'srt-slurm' && env.NATIVE_POINT_ID != '' }}
