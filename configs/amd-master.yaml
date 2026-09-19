@@ -1472,3 +1472,27 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
       search-space:
       # Follow upstream AMD Engram defaults; omit the CUDA-only config flag.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+
+# SGLang arm for DeepSeek-V4.1-Flash AgentX on MI355X, from the SGLang cookbook
+# (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
+# DSv4.1 Flash support has not shipped in an SGLang release; this uses the
+# preview build lmsysorg/sglang:dev-dsv41-mi35x, digest
+# sha256:c609f74f01b206af9664fb66da8ebef47642a7328a2478eabeebb352e014661a (2026-09-10).
+# Native five-token DSpark (--speculative-algorithm DSPARK
+# --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
+# throughput, real verification for evals. The KV cache stays GPU-resident.
+# Follows the cookbook's verified MI350X low-latency cell: TP4/EP4, AITER
+# kernels, radix cache off, breakable prefill graphs.
+dsv41flash-fp4-mi355x-sglang-agentic-dspark:
+  image: lmsysorg/sglang:dev-dsv41-mi35x
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4] }

@@ -8447,3 +8447,86 @@
     - "将 GLM-5.2 MI355X SGLang AgentX 镜像更新至 lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917（2026-09-17 ROCm 7.2.0 mi35x 日构建，digest sha256:21c1cc9a…，rocm720-mi35x 系列最新 tag；2026-09-18 构建仅提供 rocm724/rocm10 版本）：glm5.2-fp4-mi355x-sglang-agentic-mtp 自 20260916，glm5.2-fp8-mi355x-sglang-agentic-mtp 自 20260908"
     - "在 glm5.2_fp8_mi355x_sglang_mtp.sh 中改用 --cuda-graph-max-bs-decode 传递 decode graph batch，替换已移除的 --cuda-graph-max-bs 别名，与 MXFP4 姊妹配方一致；其余服务参数、搜索空间与 golden acceptance 不变"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3277
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the MI355X SGLang AgentX arm for DeepSeek-V4.1-Flash from the SGLang cookbook: preview image lmsysorg/sglang:dev-dsv41-mi35x (digest sha256:c609f74f01b206af9664fb66da8ebef47642a7328a2478eabeebb352e014661a), native five-token DSpark (--speculative-algorithm DSPARK --speculative-dspark-block-size 5), thinking on with reasoning effort high, mem-fraction-static 0.8, GPU-resident KV cache, concurrency 1-32"
+    - "TP4/EP4 from the cookbook's verified MI350X low-latency cell with SGLANG_USE_AITER=1, SGLANG_MOE_PADDING=1, AITER_FLYDSL_FORCE_REDUCE=1, ROCM_QUICK_REDUCE_QUANTIZATION=NONE, --disable-radix-cache and breakable prefill graphs capped at 4096 tokens. Throughput uses the thinking-on golden synthetic AL 3.51 (SGLANG_SIMULATE_ACC_LEN, match-expected, real-draft-token); accuracy evals keep real DSpark verification."
+    - "新增 DeepSeek-V4.1-Flash 在 MI355X 上的 SGLang AgentX 配方，遵循 SGLang cookbook：预览镜像 lmsysorg/sglang:dev-dsv41-mi35x（digest sha256:c609f74f01b206af9664fb66da8ebef47642a7328a2478eabeebb352e014661a），原生五 token DSpark（--speculative-algorithm DSPARK --speculative-dspark-block-size 5），thinking 开启、reasoning effort 为 high，mem-fraction-static 0.8，KV cache 常驻 GPU，并发 1-32"
+    - "采用 cookbook 已验证 MI350X 低延迟配置的 TP4/EP4，并设置 SGLANG_USE_AITER=1、SGLANG_MOE_PADDING=1、AITER_FLYDSL_FORCE_REDUCE=1、ROCM_QUICK_REDUCE_QUANTIZATION=NONE、--disable-radix-cache 以及上限 4096 token 的 breakable prefill 图。吞吐测试使用 thinking 开启的黄金合成 AL 3.51（SGLANG_SIMULATE_ACC_LEN、match-expected、real-draft-token）；准确率 eval 保留真实 DSpark 验证。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Cut HBM pressure during 1M-context AgentX prefill after the first sweep (run 35304555945: c16 came up, then eager prefill of the first 66k-99k-token prompts aborted with HSA_STATUS_ERROR_OUT_OF_RESOURCES (0 MB free) inside the DSpark target prefill): move the Engram tables to one shared host copy (SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1, the SGLang analogue of the vLLM arm's Engram CPU offload, output bitwise unchanged), lower --mem-fraction-static from 0.8 to 0.75, bound --chunked-prefill-size at 8192 instead of the default 16384, fix the decode CUDA graph batch at the cookbook's 64, and cap --max-running-requests at 128 and the breakable prefill graph shrinks from 4096 to 2048 tokens"
+    - "首次 sweep 后（run 35304555945: c16 came up, then eager prefill of the first 66k-99k-token prompts aborted with HSA_STATUS_ERROR_OUT_OF_RESOURCES (0 MB free) inside the DSpark target prefill）降低 1M 上下文 AgentX prefill 的 HBM 压力：将 Engram 表移至共享主机副本（SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1，对应 vLLM 配方的 Engram CPU offload，输出逐位一致），--mem-fraction-static 从 0.8 降至 0.75，--chunked-prefill-size 限制为 8192（默认 16384），decode CUDA graph batch 固定为 cookbook 的 64，--max-running-requests 上限设为 128，breakable prefill 图从 4096 缩小到 2048 token"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Disable the prefill CUDA graph (--cuda-graph-backend-prefill disabled, dropping --cuda-graph-max-bs-prefill): with the Engram tables in pinned host memory, capturing the breakable 2048-token prefill graph raised hipErrorIllegalAddress on every rank at c1 in run 35306715045, while the previous sweep with GPU-resident tables captured it and then OOMed in eager prefill; prefill now runs eagerly and the 64-request decode graphs are unchanged"
+    - "禁用 prefill CUDA graph（--cuda-graph-backend-prefill disabled，并去掉 --cuda-graph-max-bs-prefill）：Engram 表位于 pinned 主机内存时，运行 35306715045 的 c1 在捕获 2048 token 的 breakable prefill graph 时所有 rank 报 hipErrorIllegalAddress，而上一次表常驻 GPU 的 sweep 可完成捕获但随后在 eager prefill 中 OOM；prefill 现以 eager 方式运行，64 请求的 decode graph 不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Keep the Engram tables on the GPU (drop SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1): in run 35311289442 c8 died during decode CUDA graph capture on gfx950 with hipErrorIllegalAddress at the first batch (bs=16, 0/12 captured) with the shared host table enabled, while the first sweep (run 35304555945) captured graphs up to bs=32 with the tables resident; the 288 GB card holds the tables next to the weights and the prefill working set stays bounded by --mem-fraction-static 0.75 and the 8192-token chunk"
+    - "将 Engram 表保留在 GPU 上（移除 SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1）：运行 35311289442 中 c8 在 gfx950 上于 decode CUDA graph 捕获的第一个 batch（bs=16，0/12 已捕获）因 hipErrorIllegalAddress 崩溃，当时启用了共享主机表；而首次 sweep（运行 35304555945）在表常驻 GPU 时可捕获至 bs=32 的 graph；288 GB 显卡可在权重旁容纳这些表，prefill 工作集仍由 --mem-fraction-static 0.75 与 8192 token 分块约束"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set GPU_MAX_HW_QUEUES=2 as the DeepSeek-V4 MI355X SGLang arm does: in run 35362380897 (and the first sweep, run 35304555945) c4 came up, captured its decode graphs, then died three warmup requests in when RCCL queues on three ranks aborted with HSA_STATUS_ERROR_OUT_OF_RESOURCES while 67 GB of HBM was still free after the KV pool, which points at hardware-queue exhaustion under eager 1M-context prefill rather than memory"
+    - "与 DeepSeek-V4 MI355X SGLang 配方一致，设置 GPU_MAX_HW_QUEUES=2：运行 35362380897（以及首次 sweep 运行 35304555945）中 c4 启动并完成 decode graph 捕获后，在第三个 warmup 请求时三个 rank 的 RCCL 队列因 HSA_STATUS_ERROR_OUT_OF_RESOURCES 中止，而 KV 池分配后仍有 67 GB HBM 空闲，说明是 eager 1M 上下文 prefill 下硬件队列耗尽而非显存不足"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Also set HSA_NO_SCRATCH_RECLAIM=1 when the MEC firmware is below 177, as the Kimi-K3 MI355X arm does for its RCCL memory-reclaim issue: with GPU_MAX_HW_QUEUES=2 alone, run 35372886390 served c1, c2, c4, c16, c32 and the eval with no HSA errors (the first attempt to get past warmup on this SKU) but c8 still died once to the same RCCL HSA_STATUS_ERROR_OUT_OF_RESOURCES abort at six running requests"
+    - "当 MEC 固件低于 177 时同时设置 HSA_NO_SCRATCH_RECLAIM=1，与 Kimi-K3 MI355X 配方针对其 RCCL 内存回收问题的做法一致：仅设置 GPU_MAX_HW_QUEUES=2 时，运行 35372886390 中 c1、c2、c4、c16、c32 与 eval 均无 HSA 错误地正常服务（该 SKU 首次通过 warmup），但 c8 在 6 个运行中请求时仍一次因相同的 RCCL HSA_STATUS_ERROR_OUT_OF_RESOURCES 中止"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Halve --chunked-prefill-size from 8192 to 4096, matching the H200, B200 and GB200 arms, and trim the conc-list from [1, 2, 4, 8, 16, 32] to [1, 2, 4, 8, 16] as the H200 arm did: with GPU_MAX_HW_QUEUES=2 and the scratch-reclaim guard, run 35374653446 served c1-c16 and the accuracy eval without HSA errors, but c32 (64 running requests, warmup prompts of 117k median and 315k p95 tokens) lost its server 27 warmup requests in; the smaller chunk shrinks the per-step RCCL collectives that every abort so far has hit, and the sweep stops at the AgentX grid's c16"
+    - "将 --chunked-prefill-size 从 8192 减半至 4096，与 H200、B200、GB200 配方一致，并如 H200 配方那样将 conc-list 从 [1, 2, 4, 8, 16, 32] 缩减为 [1, 2, 4, 8, 16]：在 GPU_MAX_HW_QUEUES=2 与 scratch 回收保护下，运行 35374653446 中 c1-c16 与精度评测均无 HSA 错误，但 c32（64 个运行中请求，warmup 提示中位数 117k、p95 315k token）在第 27 个 warmup 请求时服务崩溃；更小的分块缩小了迄今每次中止所涉及的每步 RCCL 集合通信，sweep 止于 AgentX 网格的 c16"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Lower --mem-fraction-static from 0.75 to 0.60: with the Engram tables resident on the GPU the weights occupy 128.8 GB of each 288 GB MI355X, so 0.75 left 72 GB outside the static pool and in run 35376928227 the c2 point aborted its RCCL queue with HSA_STATUS_ERROR_OUT_OF_RESOURCES (0 MB free) 20 chunks into the eager prefill of a 126k-token AgentX prompt, with c1, c4, c8 and c16 cancelled by fail-fast. DSv4.1 Flash's full-attention KV costs 1.67 KB per token, so 0.60 still reserves a ~25M-token pool (0.75 reserved 51M tokens, far beyond the 32-request cap at c16) while eager prefill gets 115 GB of headroom; chunk size, queue cap and scratch-reclaim guard are unchanged"
+    - "将 --mem-fraction-static 从 0.75 降至 0.60：Engram 表驻留 GPU 后，权重占用每块 288 GB MI355X 中的 128.8 GB，0.75 只在静态池之外留下 72 GB；运行 35376928227 中 c2 在一条 126k token AgentX 提示的 eager prefill 进行到第 20 个分块时，RCCL 队列因 HSA_STATUS_ERROR_OUT_OF_RESOURCES（剩余 0 MB）中止，c1、c4、c8、c16 被 fail-fast 取消。DSv4.1 Flash 的全注意力 KV 每 token 仅 1.67 KB，因此 0.60 仍可保留约 2500 万 token 的池（0.75 时为 5100 万，远超 c16 的 32 请求上限），同时 eager prefill 获得 115 GB 余量；分块大小、队列上限与 scratch 回收保护不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Trim the conc-list from [1, 2, 4, 8, 16] to [1, 2, 4]: at --mem-fraction-static 0.60 the c1 and c4 points and the eval completed (run 35412385714), but c16 aborted its RCCL queue with HSA_STATUS_ERROR_OUT_OF_RESOURCES at 0 MB free with 13 AgentX requests running and a 1.1M-token prompt in eager chunked prefill, after 107 GB of non-static HBM; the same abort hit c2 at 0.75 (72 GB) and c16/c32 in the first sweeps, so the ROCm preview build's eager 1M-context prefill does not fit 13 or more concurrent sessions on this SKU. Following the B300 HiCache precedent (#2661), publish the points that fit rather than hold the arm; c8 and c16 can return once the gfx950 build reclaims prefill memory"
+    - "将 conc-list 从 [1, 2, 4, 8, 16] 缩减为 [1, 2, 4]：在 --mem-fraction-static 0.60 下 c1、c4 与 eval 均完成（运行 35412385714），但 c16 在 13 个 AgentX 请求同时运行、一条 1.1M token 提示进行 eager 分块 prefill 时，耗尽 107 GB 非静态 HBM 后 RCCL 队列因 HSA_STATUS_ERROR_OUT_OF_RESOURCES（剩余 0 MB）中止；同样的中止在 0.75（72 GB）时出现于 c2，并在首轮 sweep 中出现于 c16/c32，说明 ROCm 预览版的 eager 1M 上下文 prefill 在该 SKU 上无法容纳 13 个及以上并发会话。参照 B300 HiCache 的先例（#2661），先发布可容纳的点而不阻塞该配方；待 gfx950 构建回收 prefill 内存后再恢复 c8 与 c16"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
