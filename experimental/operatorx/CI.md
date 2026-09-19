@@ -67,7 +67,7 @@ Do not infer that Blackwell-specific FP4 kernels work on Hopper.
   the password database, matching CollectiveX; an explicit `stage_dir` takes
   precedence. Results never depend on
   a submit-host `/tmp` mount being visible to compute nodes.
-- The planner resolves each image digest. Imports are locked and cached by image
+- Registry imports resolve each image digest. Imports are locked and cached by image
   plus digest and CPU architecture, with a second digest check after import. A moved or unresolvable
   tag fails rather than claiming the planned image was measured. Images must be
   anonymously readable from the planning and import hosts. Imports verify the host
@@ -181,8 +181,8 @@ the released Kimi K3 layer's SITU activation, 3584-wide latent expert path,
 latent projections or shared experts. Those need a separate native-layer profile.
 No model weights or Hugging Face credentials are required.
 
-NVIDIA uses `vllm/vllm-openai:v0.19.0` (amd64/arm64); AMD uses the existing ROCm
-image. Select `backends=vllm` explicitly. Unsupported precision, routing or shared
+NVIDIA uses `vllm/vllm-openai:v0.19.0` (amd64/arm64), except H100 uses the
+pre-staged `vllm/vllm-openai:v0.19.1`; AMD uses the existing ROCm image. Select `backends=vllm` explicitly. Unsupported precision, routing or shared
 expert requests produce unsupported rows; import and kernel failures fail CI.
 
 Useful routed matmul TFLOPS per GPU is
@@ -194,4 +194,21 @@ activation and routing FLOPs and are not full-model throughput.
 
 ### GPU validation status
 
-The complete eight-case BF16 profile passed on H200, MI300X and MI325X. H100 currently fails before kernel execution: its Enroot importer rejects OCI whiteout conversion for the vLLM image on both `/tmp` and `/var/tmp`. The same host limitation is recorded by CollectiveX swap-blocks. H100 requires a working image-import environment before performance can be reported; this change does not modify node configuration. B200, B300, GB200, GB300 and MI355X dispatches are awaiting shared GPU capacity. A registered pool is not runtime validation.
+The complete eight-case BF16 profile passed on H200, B300, GB300, MI300X and MI325X.
+B200, GB200 and MI355X dispatches are awaiting shared GPU capacity. A registered
+pool is not runtime validation.
+
+H100's Enroot importer rejects OCI whiteout conversion for the vLLM image on both
+`/tmp` and `/var/tmp`. Like CollectiveX swap-blocks, OperatorX can use a pre-staged
+container without changing node configuration. The H100 `vllm` backend explicitly
+selects v0.19.1 and a pinned SHA256 of the existing squashfs bytes in
+`platforms.json` (`image_overrides`). The importer copies it into its private cache,
+verifies the copied checksum and squashfs structure, and checks cached bytes before
+reuse. Missing or changed files fail; there is no registry fallback.
+
+Staged results record `OPERATORX_IMAGE_SOURCE=staged-squashfs` and an
+`OPERATORX_IMAGE_DIGEST` prefixed with `squashfs-sha256:`. This identifies the
+executed squashfs, not an OCI manifest digest. Registry results use `registry`
+and their OCI digest. The manifest and runtime software versions retain this
+provenance. H100 v0.19.1 is a different software configuration from v0.19.0 results;
+compare versions as well as hardware. Its new runtime validation is pending.
