@@ -8467,3 +8467,12 @@
     - "Cut HBM pressure during 1M-context AgentX prefill after the first sweep (run 35304547658: c8 came up, then the server exited on the first six warmup prompts): move the Engram tables to one shared host copy (SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1, the SGLang analogue of the vLLM arm's Engram CPU offload, output bitwise unchanged), lower --mem-fraction-static from 0.8 to 0.75, bound --chunked-prefill-size at 8192 instead of the default 16384, fix the decode CUDA graph batch at the cookbook's 64, and cap --max-running-requests at 128"
     - "首次 sweep 后（run 35304547658: c8 came up, then the server exited on the first six warmup prompts）降低 1M 上下文 AgentX prefill 的 HBM 压力：将 Engram 表移至共享主机副本（SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1，对应 vLLM 配方的 Engram CPU offload，输出逐位一致），--mem-fraction-static 从 0.8 降至 0.75，--chunked-prefill-size 限制为 8192（默认 16384），decode CUDA graph batch 固定为 cookbook 的 64，--max-running-requests 上限设为 128"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3244
+
+- config-keys:
+    - dsv41flash-fp4-gb300-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bring the GB300 arm in line with the other Blackwell DSpark arms: cap --max-running-requests at the 64-request decode graph batch, lower --mem-fraction-static from 0.75 to 0.70, and halve --chunked-prefill-size from 8192 to 4096. In run 35307635202 the c128 point OOMed 82 minutes into AgentX warmup (778 of 1422 warmup requests returned, 2 running and 120 queued, 22M pending prompt tokens) when the TVM sparse-attention prefill kernel asked for 20.14 GiB with 12.51 GiB of the 276.6 GiB free; the c1-c64 points were cancelled by fail-fast. The smaller chunk halves that per-step buffer and 0.70 frees a further 14 GiB outside the static pool, the settings under which B300 completed c1-c128 and the eval"
+    - "使 GB300 配方与其他 Blackwell DSpark 配方一致：将 --max-running-requests 上限设为 64（即 decode graph batch），--mem-fraction-static 从 0.75 降至 0.70，--chunked-prefill-size 从 8192 减半至 4096。运行 35307635202 中 c128 在 AgentX warmup 进行 82 分钟后 OOM（1422 个 warmup 请求已返回 778 个，2 个运行、120 个排队，待处理提示 token 达 2200 万），TVM 稀疏注意力 prefill 内核申请 20.14 GiB 而 276.6 GiB 中仅剩 12.51 GiB；c1-c64 被 fail-fast 取消。更小的分块将该逐步缓冲减半，0.70 在静态池之外再释放 14 GiB，B300 正是在这组设置下完成了 c1-c128 与 eval"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3244
