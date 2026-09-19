@@ -43,7 +43,7 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 --linear-attn-prefill-backend flashinfer \
 --attention-backend trtllm_mha \
 --moe-runner-backend flashinfer_trtllm \
---cuda-graph-max-bs $CONC \
+--cuda-graph-max-bs-decode $CONC \
 --max-prefill-tokens 32768 \
 --chunked-prefill-size 32768 \
 --mem-fraction-static 0.86 \

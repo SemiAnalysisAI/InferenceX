@@ -110,7 +110,9 @@ def test_multinode_node_count_reads_schema_two_roles(tmp_path, monkeypatch, role
     recipe.parent.mkdir(parents=True)
     recipe.write_text(yaml.safe_dump({"schema": 2, "roles": roles}))
     import infx.matrix.generate as generate
-    monkeypatch.setattr(generate, "__file__", str(tmp_path / "infx/matrix/generate.py"))
+    import infx.config
+    (tmp_path / "configs").mkdir()
+    monkeypatch.setattr(infx.config, "__file__", str(tmp_path / "infx/config.py"))
     prefill = {"additional-settings": ["CONFIG_FILE=recipes/test.yaml"]}
     if expected is None:
         with pytest.raises(ValueError, match="role 'decode' must specify nodes"):
@@ -168,9 +170,11 @@ def test_multinode_node_count_prefers_recipe_roles(
     recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/test.yaml"
     recipe.parent.mkdir(parents=True)
     recipe.write_text(yaml.safe_dump({"schema": 2, "roles": roles}))
+    import infx.config
+    (tmp_path / "configs").mkdir()
     monkeypatch.setattr(
-        generate_sweep_configs, "__file__",
-        str(tmp_path / "infx/matrix/generate.py"),
+        infx.config, "__file__",
+        str(tmp_path / "infx/config.py"),
     )
     prefill = {
         "num-worker": 1, "tp": 8,
@@ -466,13 +470,15 @@ class TestMarkEvalEntries:
             f"Expected 0 agentic entries marked run-eval in default mode, got {len(marked)}"
         )
 
-    def test_default_marks_every_supported_vendor_point(self):
+    @pytest.mark.parametrize("all_evals", [False, True])
+    @pytest.mark.parametrize("runner", ["mi355x", "b300"])
+    def test_marks_every_supported_vendor_point(self, all_evals, runner):
         matrix_values = [
             {
                 "scenario-type": "agentic-coding",
                 "model-prefix": model_prefix,
                 "model": model_prefix,
-                "runner": "b300",
+                "runner": runner,
                 "framework": "vllm",
                 "precision": "fp4",
                 "tp": 8,
@@ -493,10 +499,12 @@ class TestMarkEvalEntries:
         })
 
         result = mark_eval_entries(matrix_values)
+        if all_evals:
+            result = mark_all_eval_entries(result)
 
         expected = {
-            "kimik3": ("kimi-vendor", "kimi_tool_call_schema"),
-            "minimaxm3": ("minimax-vendor", "minimax_m3_smoke"),
+            "kimik3": ("kimi-vendor", "kimi_tool_call_schema_full"),
+            "minimaxm3": ("minimax-vendor", "minimax_m3_full"),
         }
         for model_prefix, eval_spec in expected.items():
             rows = [row for row in result if row["model-prefix"] == model_prefix]
@@ -507,8 +515,12 @@ class TestMarkEvalEntries:
             } == {eval_spec}
 
         unsupported = result[-1]
-        assert unsupported["run-eval"] is False
-        assert "eval-framework" not in unsupported
+        assert unsupported["run-eval"] is all_evals
+        if all_evals:
+            assert unsupported["eval-framework"] == "lm-eval"
+            assert unsupported["eval-suite"] == ""
+        else:
+            assert "eval-framework" not in unsupported
         assert all(row.get("eval-framework") != "bfcl" for row in result)
 
     def test_default_marks_every_multinode_vendor_point(self):
@@ -536,7 +548,7 @@ class TestMarkEvalEntries:
         assert [row["eval-conc"] for row in result] == [2, 32]
         assert all(row["eval-framework"] == "kimi-vendor" for row in result)
         assert all(
-            row["eval-suite"] == "kimi_tool_call_schema" for row in result
+            row["eval-suite"] == "kimi_tool_call_schema_full" for row in result
         )
 
     def test_fixed_sequence_eval_uses_lm_eval_metadata(self):
@@ -991,11 +1003,20 @@ class TestMarkAllEvalEntries:
         assert result[0]['eval-conc'] == 32
         assert 'eval-all-concs' not in result[0]
 
-    def test_keeps_every_multinode_vendor_point_separate(self):
+    @pytest.mark.parametrize(
+        ("model_prefix", "eval_framework", "eval_suite"),
+        [
+            ("kimik3", "kimi-vendor", "kimi_tool_call_schema_full"),
+            ("minimaxm3", "minimax-vendor", "minimax_m3_full"),
+        ],
+    )
+    def test_keeps_every_multinode_vendor_point_separate(
+        self, model_prefix, eval_framework, eval_suite
+    ):
         common = {
             "scenario-type": "agentic-coding",
-            "model-prefix": "minimaxm3",
-            "model": "minimax",
+            "model-prefix": model_prefix,
+            "model": "served-model",
             "runner": "gb200",
             "framework": "sglang-disagg",
             "precision": "fp4",
@@ -1005,8 +1026,8 @@ class TestMarkAllEvalEntries:
             "decode": {"num-worker": 1, "tp": 8},
         }
         entries = [
-            {**common, "conc": [2], "exp-name": "minimax-conc2"},
-            {**common, "conc": [32], "exp-name": "minimax-conc32"},
+            {**common, "conc": [2], "exp-name": "model-conc2"},
+            {**common, "conc": [32], "exp-name": "model-conc32"},
         ]
 
         result = mark_all_eval_entries(mark_eval_entries(entries))
@@ -1014,8 +1035,8 @@ class TestMarkAllEvalEntries:
         assert len(result) == 2
         assert [row["conc"] for row in result] == [[2], [32]]
         assert [row["eval-conc"] for row in result] == [2, 32]
-        assert all(row["eval-framework"] == "minimax-vendor" for row in result)
-        assert all(row["eval-suite"] == "minimax_m3_smoke" for row in result)
+        assert all(row["eval-framework"] == eval_framework for row in result)
+        assert all(row["eval-suite"] == eval_suite for row in result)
 
 
 # =============================================================================

@@ -5,10 +5,16 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths: &python-paths
       - '**/*.py'
+      - '.github/scripts/**'
       - '.github/workflows/ci.yml'
-      - '.claude/requirements-mcp.txt'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.python-version'
+      - '.mcp.json'
+      - '.github/mcp-ci.json'
       - 'infx/ruff.toml'
       - '**/pytest.ini'
+      - 'utils/srt-slurm'
   push:
     branches: [main]
     paths: *python-paths
@@ -39,6 +45,8 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          cache-suffix: ${{ matrix.check }}
 
       - name: Lint and format
         if: matrix.check == 'Lint'
@@ -49,13 +57,9 @@ jobs:
       - name: Prepare test environment
         if: matrix.check == 'Tests'
         run: |
-          uv venv --python 3.12 "$RUNNER_TEMP/test-venv"
-          uv pip install --python "$RUNNER_TEMP/test-venv/bin/python" \
-            --exclude-newer PT12H --torch-backend cpu \
-            -r .claude/requirements-mcp.txt \
-            pytest pytest-xdist pydantic tabulate codeowners \
-            numpy aiohttp transformers matplotlib torch packaging
-          echo "$RUNNER_TEMP/test-venv/bin" >> "$GITHUB_PATH"
+          git submodule update --init utils/srt-slurm
+          uv sync --locked --all-extras --group test --no-editable
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Verify MCP server compatibility
         if: matrix.check == 'Tests'
@@ -76,4 +80,5 @@ jobs:
         if: matrix.check == 'Tests'
         run: |
           python -c "import torch; assert torch.version.cuda is None and torch.version.hip is None"
-          python -m pytest utils/ runners/ experimental/CollectiveX/tests/ -n 4
+          # SRT is initialized for our connector tests; its upstream suite runs in its own CI.
+          python -m pytest utils/ runners/ experimental/CollectiveX/tests/ experimental/operatorx/tests/ --ignore=utils/srt-slurm -n 4

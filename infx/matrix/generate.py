@@ -6,10 +6,11 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import Decimal
-from pathlib import Path
 from typing import Any, Literal
 
 import yaml
+
+from infx.config import repository_root
 
 from .validation import (
     DEFAULT_AGENTIC_DURATION_SECONDS,
@@ -25,8 +26,8 @@ seq_len_stoi = {"1k1k": (1024, 1024), "8k1k": (8192, 1024)}
 MIN_EVAL_CONC = 16
 DEFAULT_EVAL_FRAMEWORK = "lm-eval"
 AUTOMATIC_AGENTIC_VENDOR_EVALS = {
-    "kimik3": ("kimi-vendor", "kimi_tool_call_schema"),
-    "minimaxm3": ("minimax-vendor", "minimax_m3_smoke"),
+    "kimik3": ("kimi-vendor", "kimi_tool_call_schema_full"),
+    "minimaxm3": ("minimax-vendor", "minimax_m3_full"),
 }
 # Bound how many multinode agentic conc points share one server allocation.
 # 1 = one task/SLURM allocation per concurrency (matches single-node agentic).
@@ -236,7 +237,7 @@ def recipe_node_count(prefill: dict, decode: dict) -> int | None:
         raise ValueError(f"Conflicting CONFIG_FILE settings: {sorted(config_files)}")
 
     config_file = config_files.pop()
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = repository_root()
     recipe_root = repo_root / "benchmarks" / "multi_node" / "srt-slurm-recipes"
     if config_file.startswith("benchmarks/multi_node/srt-slurm-recipes/"):
         recipe_path = repo_root / config_file
@@ -540,7 +541,7 @@ def automatic_agentic_vendor_eval(entry: dict) -> tuple[str, str] | None:
 def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) -> list[dict]:
     """Apply the default eval selection policy.
 
-    Kimi K3 and MiniMax M3 agentic rows use their vendor validators at every
+    Kimi K3 and MiniMax M3 agentic rows use their full vendor suites at every
     generated concurrency. Other agentic rows remain opt-in and use GSM8K at
     the highest concurrency in each deployment group.
 

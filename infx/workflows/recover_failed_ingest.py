@@ -14,6 +14,8 @@ from typing import Any
 
 import yaml
 
+from infx import github
+
 from .validate_perf_changelog import (
     CANONICAL_PR_LINK,
     ChangelogValidationError,
@@ -86,31 +88,26 @@ def parse_target_url(url: str) -> tuple[str, int, int | None]:
     )
 
 
-def gh_api(repo: str, endpoint: str) -> Any:
+def gh_api(repo: str, endpoint: str, *, item_key: str | None = None) -> Any:
     """Call GitHub through the authenticated gh CLI."""
-    result = run_command(["gh", "api", f"repos/{repo}/{endpoint}"])
     try:
-        return json.loads(result.stdout)
+        if item_key is None:
+            return github.api(repo, endpoint)
+        return github.paginate(repo, endpoint, item_key=item_key)
+    except subprocess.CalledProcessError as exc:
+        detail = exc.stderr.strip() or exc.stdout.strip()
+        raise RecoveryError(f"{' '.join(exc.cmd)} failed: {detail}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RecoveryError("GitHub API request timed out") from exc
     except json.JSONDecodeError as exc:
         raise RecoveryError(f"GitHub API returned invalid JSON for {endpoint}: {exc}") from exc
+    except github.ListingError as exc:
+        raise RecoveryError(str(exc)) from exc
 
 
 def list_run_jobs(repo: str, run_id: int) -> list[dict[str, Any]]:
     """Fetch all jobs for a workflow run."""
-    jobs: list[dict[str, Any]] = []
-    page = 1
-    while True:
-        payload = gh_api(
-            repo,
-            f"actions/runs/{run_id}/jobs?filter=all&per_page=100&page={page}",
-        )
-        page_jobs = payload.get("jobs", []) if isinstance(payload, dict) else []
-        if not isinstance(page_jobs, list):
-            raise RecoveryError("workflow jobs API returned an unexpected shape")
-        jobs.extend(job for job in page_jobs if isinstance(job, dict))
-        if len(page_jobs) < 100:
-            return jobs
-        page += 1
+    return gh_api(repo, f"actions/runs/{run_id}/jobs?filter=all&per_page=100", item_key="jobs")
 
 
 def select_failed_job(

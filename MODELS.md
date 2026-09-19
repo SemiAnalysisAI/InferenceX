@@ -6,11 +6,11 @@ This document tracks every model benchmarked by InferenceX-e2e: when it was adde
 
 ## Deprecation Notice
 
-InferenceX-e2e runs on a fixed, limited pool of GPUs and is maintained by a small team. Every scenario, precision, and recipe variant we keep alive consumes cluster hours and maintainer attention that would otherwise go to new frontier models. The deprecations below free that capacity. Where a deprecation removes one arm of an A/B pair, we keep and publish the arm that wins on the Pareto frontier.
+InferenceX-e2e runs on a fixed, limited pool of GPUs and is maintained by a small team. Every scenario, precision, and recipe variant we keep alive consumes cluster hours and maintainer attention that would otherwise go to new frontier models. The deprecations below free that capacity. When retiring redundant A/B baselines, we retain configurations that contribute to the Pareto frontier, whether speculative decoding is enabled or disabled.
 
 ### Monday, August 3, 2026
 
-**Monday, August 3, 2026** is the last day for the scenarios, precisions, and recipe variants listed below. They are deprecated after that date.
+**Monday, August 3, 2026** is the last day for the scenarios and precisions in the first table below. They are deprecated after that date. The separate A/B baseline retirement is described below that table.
 
 **Partially enacted on 2026-08-04** in [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493): the scenario and precision retirements in the first table were carried out. This removed 54 config keys from the active master configs and archived them under [`configs/deprecated/`](configs/deprecated/), with their benchmark scripts moved to the sibling `deprecated/` directories. The speculative-decoding A/B retirements in the second table are **not yet enacted**. See the note under that table.
 
@@ -22,19 +22,21 @@ Scenario and precision retirements:
 | Kimi-K2.5/2.6/2.7-Code (`kimik2.5`) | Agentic coding | Nothing. Single-turn 8k1k ran until August 6, 2026 and was retired on 2026-08-07 (see below) |
 | Qwen3.5-397B-A17B (`qwen3.5`) | All **bf16** recipes, in every scenario, on NVIDIA and AMD | fp8 and fp4 recipes |
 
-Speculative-decoding A/B retirements apply to each pair below. The spec-decode arm is the better Pareto frontier, so we stop running the non-spec-decode arm and publish only the spec-decode arm:
+The A/B retirements below concern standalone non-spec-decode baselines maintained solely for comparison with speculative decoding. They do not exclude non-spec-decode configurations that contribute to the Pareto frontier:
 
-| Model | Deprecated arm | Published arm |
+| Model | Standalone A/B baseline to retire | Spec-decode counterpart |
 |---|---|---|
 | DeepSeek-V4-Pro 1.6T (`dsv4`) | Agentic coding, non-MTP | Agentic coding, MTP |
 | Qwen3.5-397B-A17B (`qwen3.5`) | Agentic coding, non-MTP | Agentic coding, MTP |
 | MiniMax-M3 (`minimaxm3`) | Agentic coding, non-EAGLE3 | Agentic coding, EAGLE3 |
 | GLM-5.2 (`glm5.2`) | Agentic coding, non-MTP | Agentic coding, MTP |
-| Kimi-K3 (`kimik3`) | Agentic coding, non-DSpark (deprecated from day 0) | Agentic coding, DSpark |
+| Kimi-K3 (`kimik3`) | Agentic coding, standalone non-DSpark baseline (not required from day 0) | Agentic coding, DSpark |
 
-**Status: not yet enacted.** Every non-spec-decode agentic arm above still runs. Removing them today would leave MiniMax-M3 and GLM-5.2 with no active config at all because their EAGLE3 and MTP agentic arms have not landed yet. It would also drop all AMD and all SGLang agentic coverage for DeepSeek-V4-Pro and Qwen3.5, neither of which has an MTP sibling on those platforms. This round runs once the replacement arms exist.
+**Status: baseline retirement is not yet enacted.** Retire a redundant baseline only once replacement coverage exists for the affected model, hardware, and engine. Keep non-spec-decode configurations that contribute to the Pareto frontier; the existence of a spec-decode counterpart alone is not a reason to remove them.
 
-**Going forward we no longer benchmark non-spec-decode versus spec-decode as an A/B.** The non-spec-decode arm existed as a neutral baseline back when acceptance length wasn't standardized. That is now solved. [`golden_al_distribution/`](golden_al_distribution/) commits one golden acceptance-length curve per model, thinking mode, and draft length, measured on the SPEED-Bench `coding` category. AgentX pins every submission to that curve through synthetic acceptance (vLLM `synthetic_acceptance_length`, SGLang `SGLANG_SIMULATE_ACC_LEN`, TensorRT-LLM `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`, etc). With a fair, engine-independent acceptance target in place, spec-decode results are directly comparable on their own and a separate non-spec-decode track is redundant. Agentic coding recipes are therefore run and published with speculative decoding enabled only, using MTP, EAGLE/EAGLE3, DSpark, or whatever draft method the model ships. The non-spec-decode arm is neither run nor published. New models are onboarded that way from day 0, as Kimi-K3 is.
+**Going forward we no longer maintain separate non-spec-decode and spec-decode tracks solely as an A/B comparison.** The non-spec-decode arm existed as a neutral baseline back when acceptance length wasn't standardized. That is now solved. [`golden_al_distribution/`](golden_al_distribution/) commits one golden acceptance-length curve per model, thinking mode, and draft length, measured on the SPEED-Bench `coding` category. When speculative decoding is enabled, AgentX pins submissions to that curve through synthetic acceptance (vLLM `synthetic_acceptance_length`, SGLang `SGLANG_SIMULATE_ACC_LEN`, TensorRT-LLM `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`, etc). With a fair, engine-independent acceptance target in place, spec-decode results are directly comparable on their own and a dedicated non-spec-decode baseline is redundant. New models, including Kimi-K3, do not require that separate baseline from day 0.
+
+**Publish the best Pareto points, whether speculative decoding is enabled or disabled.** Recipes may disable MTP, EAGLE/EAGLE3, DSpark, or another draft method when doing so produces a better operating point, for example at high throughput. Valid non-spec-decode results remain eligible for publication under the same [North-star Pareto policy](#north-star-pareto-policy). A frontier may therefore contain both spec-decode and non-spec-decode points.
 
 ### Thursday, August 6, 2026
 
@@ -58,7 +60,7 @@ Rationale: `dsv4` carries the largest single-turn footprint in the repository. 4
 
 | Scenario | ISL/OSL | Status |
 |---|---|---|
-| Agentic coding | Long Context, Multi Turn Realistic traffic trace replay with sub agents | Active. This is the trace-replay agentic-coding benchmark (see [`benchmarks/single_node/agentic/`](benchmarks/single_node/agentic/)). Going forward, new models will likely be onboarded with agentic coding only, and **with speculative decoding enabled only**. The non-spec-decode arm is not run or published (see [Deprecation Notice](#deprecation-notice)). |
+| Agentic coding | Long Context, Multi Turn Realistic traffic trace replay with sub agents | Active. This is the trace-replay agentic-coding benchmark (see [`benchmarks/single_node/agentic/`](benchmarks/single_node/agentic/)). Going forward, new models will likely be onboarded with agentic coding only. Speculative decoding may be enabled or disabled to produce the best Pareto points; a separate non-spec-decode A/B baseline is not required (see [Deprecation Notice](#deprecation-notice)). |
 | Single-turn 8k1k | 8192 / 1024 | Active. This is the primary fixed-sequence-length scenario. |
 | Single-turn 1k1k | 1024 / 1024 | Deprecated since 2026-07-17 ([#2263](https://github.com/SemiAnalysisAI/InferenceX/pull/2263)), to save GPU cluster time for higher-priority real-world agentic-coding benchmarks and new frontier models. Archived configs live in [`configs/deprecated/`](configs/deprecated/). The GLM-5.1 B200 TileRT point added later in [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533) remains active. |
 | Single-turn 1k8k | 1024 / 8192 | **Deprecated for all models** since 2026-03-27 ([#911](https://github.com/SemiAnalysisAI/InferenceX/pull/911)), to save GPU cluster time for higher-priority real-world agentic-coding benchmarks and new frontier models. Configs were removed, not archived. |
@@ -150,13 +152,13 @@ Other offloading tiers, including NVMe KV cache offloading, are outside the init
 
 | Model architecture class | Prefix | Date added | Active scenarios | Deprecated scenarios |
 |---|---|---|---|---|
-| DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | Agentic coding (DSpark, Engram UVA offload; GPU validation pending) | |
+| DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | Agentic coding (vLLM: DSpark, Engram UVA offload; SGLang: DSpark arms added per SKU from 2026-09-17; GPU validation pending) | |
 | Qwen3.8-Flash-Next | `qwen3.8next` | 2026-08-26 ([#2742](https://github.com/SemiAnalysisAI/InferenceX/pull/2742)) | Agentic coding | |
-| Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | Agentic coding (DSpark only) | Agentic coding non-DSpark arm (deprecated from day 0) |
-| GLM-5.2 | `glm5.2` | 2026-07-18 ([#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)) | Agentic coding (the non-MTP arm still runs while the MTP-only transition remains pending, as explained in the Deprecation Notice) | |
+| Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | Agentic coding (DSpark may be disabled for better Pareto points) | Standalone non-DSpark A/B baseline (not required from day 0) |
+| GLM-5.2 | `glm5.2` | 2026-07-18 ([#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)) | Agentic coding (non-MTP points remain eligible under the Pareto policy; see Deprecation Notice) | |
 | MiniMax-M3 | `minimaxm3` | 2026-06-12 ([#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)) | Agentic coding | Single-turn 1k1k, Single-turn 8k1k (removed 2026-08-04, [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)) |
 | DeepSeek-V4.1-Flash | `dsv41flash` | Pending | Agentic coding on MI355X (draft; GPU validation pending) | — |
-| DeepSeek-V4-Pro | `dsv4` | 2026-04-24 ([#1130](https://github.com/SemiAnalysisAI/InferenceX/pull/1130)) | Agentic coding (the non-MTP arm still runs while the MTP-only transition remains pending, as explained in the Deprecation Notice) | Single-turn 1k1k, Single-turn 8k1k (removed 2026-09-09, [#2921](https://github.com/SemiAnalysisAI/InferenceX/pull/2921)) |
+| DeepSeek-V4-Pro | `dsv4` | 2026-04-24 ([#1130](https://github.com/SemiAnalysisAI/InferenceX/pull/1130)) | Agentic coding (non-spec-decode points remain eligible under the Pareto policy) | Single-turn 1k1k, Single-turn 8k1k (removed 2026-09-09, [#2921](https://github.com/SemiAnalysisAI/InferenceX/pull/2921)) |
 | GLM-5 / GLM-5.1 | `glm5`, `glm5.1` | 2026-03-06 ([#762](https://github.com/SemiAnalysisAI/InferenceX/pull/762)), with GLM-5.1 added 2026-04-21 ([#1098](https://github.com/SemiAnalysisAI/InferenceX/pull/1098)) | GLM-5.1 B200 TileRT only: 1k1k and 8k1k added 2026-08-09 ([#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533)); Agentic coding added in [#2650](https://github.com/SemiAnalysisAI/InferenceX/pull/2650) | The earlier GLM-5 / GLM-5.1 recipes were retired 2026-07-18 ([#2276](https://github.com/SemiAnalysisAI/InferenceX/pull/2276)) |
 | MiniMax-M2.5/2.7 | `minimaxm2.5` | 2026-02-18 ([#755](https://github.com/SemiAnalysisAI/InferenceX/pull/755)) | None (retired 2026-06-20, [#1874](https://github.com/SemiAnalysisAI/InferenceX/pull/1874)) | Single-turn 1k1k, Single-turn 1k8k, Single-turn 8k1k |
 | Kimi-K2.5/2.6/2.7-Code | `kimik2.5` | 2026-02-17 ([#734](https://github.com/SemiAnalysisAI/InferenceX/pull/734)) | None (fully retired 2026-08-07, [#2527](https://github.com/SemiAnalysisAI/InferenceX/pull/2527)) | Single-turn 1k1k, Single-turn 1k8k, Agentic coding (removed 2026-08-04, [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)), Single-turn 8k1k (removed 2026-08-07, [#2527](https://github.com/SemiAnalysisAI/InferenceX/pull/2527)) |
