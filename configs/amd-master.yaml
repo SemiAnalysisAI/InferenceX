@@ -1472,3 +1472,18 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
       search-space:
       # Follow upstream AMD Engram defaults; omit the CUDA-only config flag.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+
+qwen3.827b-fp8-mi325x-vllm-mtp:
+  image: vllm/vllm-openai-rocm:nightly-a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b
+  model: Qwen/Qwen3.8-27B-FP8
+  model-prefix: qwen3.827b
+  runner: cluster:mi325x-amds
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 1, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
