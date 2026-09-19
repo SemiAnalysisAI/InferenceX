@@ -7925,6 +7925,22 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3118
 
 - config-keys:
+    - kimik3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the MI355X Kimi-K3 FP4 ATOM AgentX submission to image rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0911, tracking recipes/Agentic-Kimi-K3.md at ROCm/ATOM#2131 as retuned by ROCm/ATOM#2208."
+    - "Publish the concurrency set [1, 4, 14, 16, 48, 56, 72], replacing [1, 2, 4, 8, 12, 14, 16, 32, 40, 56, 64]."
+    - "Set gpu-memory-utilization to 0.90 and max-num-batched-tokens to 8192 on every point."
+    - "Set max-num-seqs to 32 through concurrency 16 and to 2 x concurrency above it, giving 96, 112, and 144 at concurrency 48, 56, and 72."
+    - "Set AITER_REUSE_IDENTICAL_COMM_GROUPS=1 at concurrency 56 and 72, and 0 from concurrency 1 through 48."
+    - "Set ATOM_GDN_SSM_DTYPE=fp16, which recipes/Agentic-Kimi-K3.md at ROCm/ATOM#2131 carries and this recipe had never ported. The ATOM default fp32 doubles the SSM half of the per-sequence state-checkpoint image, from 29039616 to 56171520 bytes at zero draft tokens, and that reservation comes out of the KV pool: up to 2209 fewer KV blocks, 7.8 percent, at concurrency 72."
+    - "Start the CUDA-graph capture ladder at batch size 1 instead of 2. ATOM rounds a decode batch up to the smallest captured size, so a single-sequence step previously replayed the batch-size-2 graph and forwarded twice the rows it needed. Batch size 1 is 92 percent of decode steps at concurrency 1 and 55 percent at concurrency 4, and under 2 percent from concurrency 14 up."
+    - "Carry the two paged-KV dram-utilization blocks onto the new concurrency set: 0.343 lands 128 GB per rank for concurrency 14 through 48, and 0.513 lands 192 GB per rank for concurrency 56 and 72."
+    - "Draft depth and synthetic acceptance (7 draft tokens at AL 3.84 for concurrency 1 and 4, 3 at AL 3.00 for concurrency 14 and 16, no draft from 48 up), ReplaySSM placement, dcp-size 8 from concurrency 14 up, the FP8 KV cache, the 128-token page, --state-checkpoint-interval-tokens -1 with anchor-only state checkpointing, ptpc_fp8 online quantization, LMCACHE_CHUNK_SIZE 1024, the NUMA pinning, the draft pre-staging retry, --served-model-name $MODEL, and the AgentX client are unchanged from #2852."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3207
+
+- config-keys:
     - glm5.2-fp4-mi355x-atom-agentic-mtp
   scenario-type:
     - agentic-coding

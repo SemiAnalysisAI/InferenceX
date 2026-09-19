@@ -8,9 +8,9 @@ set -x
 # apply_k3_container_patches.sh is not sourced: it targets a patched vLLM container.
 #
 # Serving bands, one fresh server per concurrency point:
-#   interactive (1, 2, 4)         DCP1, DSpark 7, no LMCache
-#   mid         (8, 12, 14, 16)   DCP8, DSpark 3, LMCache 128 GB/rank
-#   throughput  (32, 40, 56, 64)  DCP8, no draft model, LMCache 128 or 192 GB/rank
+#   interactive (1, 4)        DCP1, DSpark 7, no LMCache
+#   mid         (14, 16)      DCP8, DSpark 3, LMCache 128 GB/rank
+#   throughput  (48, 56, 72)  DCP8, no draft, LMCache 128 or 192 GB/rank
 #
 # Required env vars:
 #   MODEL, MODEL_PATH, TP, DCP_SIZE, CONC, KV_OFFLOADING, KV_OFFLOAD_BACKEND,
@@ -95,90 +95,31 @@ trap 'exit 143' TERM
 # so DCP8 (from dcp-size in configs/amd-master.yaml), LMCache DRAM tier, and
 # ReplaySSM rebuilding KDA state from the checkpoint ring. Throughput band:
 # past the knee the draft forward no longer pays for itself, so no draft.
-# CUDAGRAPH_MAX_NUM_SEQS defaults to 2 * CONC; only concurrency 14 pins it
-# because it runs the concurrency 16 server verbatim.
+MAX_NUM_BATCHED_TOKENS=8192
+GPU_MEM_UTIL=0.90
 AITER_REUSE_IDENTICAL_COMM_GROUPS=0
-CUDAGRAPH_MAX_NUM_SEQS=""
 case "$CONC" in
-    1|2|4)
+    1|4)
         MAX_NUM_SEQS=32
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.88
         ATOM_ENABLE_REPLAYSSM=0
         NUM_SPEC_TOKENS=7
         SPEC_DECODE_AL=3.84
         ;;
-    8)
+    14|16)
         MAX_NUM_SEQS=32
-        MAX_NUM_BATCHED_TOKENS=4096
-        GPU_MEM_UTIL=0.88
         ATOM_ENABLE_REPLAYSSM=1
         NUM_SPEC_TOKENS=3
         SPEC_DECODE_AL=3.00
         ;;
-    12)
-        MAX_NUM_SEQS=24
-        MAX_NUM_BATCHED_TOKENS=4096
-        GPU_MEM_UTIL=0.88
-        ATOM_ENABLE_REPLAYSSM=1
-        NUM_SPEC_TOKENS=3
-        SPEC_DECODE_AL=3.00
-        ;;
-    14)
-        # The concurrency 16 server verbatim; only the client concurrency is 14.
-        # Deriving the graph width from 2 * CONC (28) dies during graph warmup.
-        MAX_NUM_SEQS=32
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.86
-        ATOM_ENABLE_REPLAYSSM=1
-        NUM_SPEC_TOKENS=3
-        SPEC_DECODE_AL=3.00
-        CUDAGRAPH_MAX_NUM_SEQS=32
-        ;;
-    16)
-        MAX_NUM_SEQS=32
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.86
-        ATOM_ENABLE_REPLAYSSM=1
-        NUM_SPEC_TOKENS=3
-        SPEC_DECODE_AL=3.00
-        ;;
-    32)
-        MAX_NUM_SEQS=64
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.86
+    48|56|72)
+        MAX_NUM_SEQS=$((2 * CONC))
         ATOM_ENABLE_REPLAYSSM=0
         NUM_SPEC_TOKENS=0
         SPEC_DECODE_AL=0
-        ;;
-    40)
-        MAX_NUM_SEQS=80
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.86
-        ATOM_ENABLE_REPLAYSSM=0
-        NUM_SPEC_TOKENS=0
-        SPEC_DECODE_AL=0
-        ;;
-    # The two widest points are the only ones that reuse identical AITER
-    # communicator groups, and the only ones given the 192 GB/rank LMCache
-    # budget rather than 128.
-    56)
-        MAX_NUM_SEQS=112
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.86
-        ATOM_ENABLE_REPLAYSSM=0
-        NUM_SPEC_TOKENS=0
-        SPEC_DECODE_AL=0
-        AITER_REUSE_IDENTICAL_COMM_GROUPS=1
-        ;;
-    64)
-        MAX_NUM_SEQS=128
-        MAX_NUM_BATCHED_TOKENS=8192
-        GPU_MEM_UTIL=0.86
-        ATOM_ENABLE_REPLAYSSM=0
-        NUM_SPEC_TOKENS=0
-        SPEC_DECODE_AL=0
-        AITER_REUSE_IDENTICAL_COMM_GROUPS=1
+        # Only the two widest points reuse identical AITER communicator groups.
+        if [ "$CONC" -ge 56 ]; then
+            AITER_REUSE_IDENTICAL_COMM_GROUPS=1
+        fi
         ;;
     *)
         echo "Unsupported CONC=$CONC" >&2
@@ -188,12 +129,12 @@ esac
 export ATOM_ENABLE_REPLAYSSM
 export AITER_REUSE_IDENTICAL_COMM_GROUPS
 
-# Full CUDA graphs over [2 .. window * (1 + draft tokens)]: the verify step
+# Full CUDA graphs over [1 .. window * (1 + draft tokens)]: the verify step
 # submits one row per draft token on top of the accepted token, so capturing
 # only up to the window would send every speculative decode down the eager path.
 CUDAGRAPH_MAX_NUM_SEQS="$((2 * CONC))"
 GRAPH_MAX=$((CUDAGRAPH_MAX_NUM_SEQS * (1 + NUM_SPEC_TOKENS)))
-CUDAGRAPH_CAPTURE_SIZES="[$(seq -s, 2 "$GRAPH_MAX")]"
+CUDAGRAPH_CAPTURE_SIZES="[$(seq -s, 1 "$GRAPH_MAX")]"
 echo "CUDAGRAPH_MAX_NUM_SEQS=$CUDAGRAPH_MAX_NUM_SEQS GRAPH_MAX=$GRAPH_MAX"
 
 # The paged KV rides the LMCache CPU tier from concurrency 8 up; KDA recurrent
@@ -257,6 +198,7 @@ export AITER_FLYDSL_STAGE2_FP8=1
 # but reads back 2.8% of the time, against 85.2% for a prompt-end anchor, so it
 # costs more in evictions than its reuse is worth on these traces.
 export ATOM_STATE_CHECKPOINT_DEMAND=0
+export ATOM_GDN_SSM_DTYPE=fp16
 
 # https://github.com/SemiAnalysisAI/InferenceX/blob/main/golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
 #  7 draft tokens -> AL 3.84
@@ -299,6 +241,19 @@ ATOM_CMD=(
     --host 0.0.0.0
     --server-port "$PORT"
     --trust-remote-code
+    # ATOM reads the tool-call wire format off the chat template at startup
+    # ("auto", the default), and this image already resolves it correctly --
+    # the server log says `Tool-call format: kimi_k3 (from the chat template)`.
+    # Pinning it is for the day the template stops rendering a tools payload:
+    # auto then falls back to delivering tool calls as plain text, which the
+    # vendor verifier reads as a model that cannot call tools. An explicit name
+    # fails closed instead, and the log line changes to `(from
+    # --tool-call-parser)` so which path ran is visible.
+    #
+    # This is ATOM's own flag. It has no --enable-auto-tool-choice, and
+    # --reasoning-parser belongs to the mesh router, not this server; argparse
+    # here is strict, so either one would fail the launch.
+    --tool-call-parser kimi_k3
     --tensor-parallel-size "$TP"
     --decode-context-parallel-size "${DCP_SIZE}"
     --kv_cache_dtype fp8
