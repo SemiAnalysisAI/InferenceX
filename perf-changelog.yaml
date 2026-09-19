@@ -8416,6 +8416,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3206
 
 - config-keys:
+    - kimik3-fp4-h200-vllm-agentic-balanced
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required measured power for the complete H200 Kimi-K3 balanced recipe through the shared recipe-gated launcher."
+    - "为 H200 Kimi-K3 balanced 完整配方启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3053
+
+- config-keys:
     - kimik3-fp4-gb200-dynamo-vllm-agentic
   scenario-type:
     - agentic-coding
