@@ -8630,3 +8630,15 @@
     and2h allocation. Select with final request, drain and power evidence; require subsequent full
     official performance and real accuracy qualification.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp4-ep4-tp4-ep1-c32-h72-dmax32
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add the authorized C32 prefill-only EP4 screen after its real32 GSM8K gate passed31/32 with native
+    original-BF16 draft verification. Clone the C32 H72/D32/graph32 TP4 EP1 control and change only
+    prefill expert parallelism to4. Keep decode EP1, canonical1200s/10warmup,2h allocation and exact
+    eight-GPU telemetry; any selected point still requires full official performance and full real
+    accuracy.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
