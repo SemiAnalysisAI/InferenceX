@@ -2,11 +2,8 @@ schema: 2
 name: "gb200-fp4-8k1k-low-latency"
 
 dynamo:
-  request_plane: "nats"
-
   source:
-    pypi: 0.8.1
-  # Use NATS for a recipe prior to Dynamo commit 39d2a68.
+    wheel: "1.5.0.dev20260917"
 frontend:
   type: dynamo
   enable_multiple_frontends: true
@@ -58,7 +55,7 @@ roles:
       mem-fraction-static: 0.95
       max-total-tokens: 32768
       chunked-prefill-size: 24576
-      cuda-graph-max-bs: 256
+      cuda-graph-max-bs-decode: 256
       max-running-requests: 512
       scheduler-recv-interval: 10
       enable-symm-mem: true
@@ -93,7 +90,6 @@ roles:
     args:
       disaggregation-mode: "decode"
       served-model-name: "deepseek-ai/DeepSeek-R1"
-      prefill-round-robin-balance: true
       trust-remote-code: true
       disable-radix-cache: true
       kv-cache-dtype: "fp8_e4m3"
@@ -106,7 +102,7 @@ roles:
       context-length: 9600
       mem-fraction-static: 0.95
       chunked-prefill-size: 8192
-      cuda-graph-max-bs: 256
+      cuda-graph-max-bs-decode: 256
       scheduler-recv-interval: 10
       enable-symm-mem: true
       disaggregation-transfer-backend: nixl
