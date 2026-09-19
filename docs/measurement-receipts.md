@@ -19,6 +19,8 @@ Maintainers review `qualification/phase1/*.json` inputs on trusted `main` before
 
 The [receipt validator](../infx/results/publication_receipt.py) checks exact GitHub artifact IDs and ownership, API and ZIP digests, contained members, expected execution identities, physical topology, canonical configuration, required metrics, dataset metadata, and complete evaluation sample/filter coverage. Per-job raw lm-eval results and metadata remain valid inputs; aggregate deployments retain explicit zero split-worker counts. The compact version-1 receipt preserves original measurements when staging later becomes production.
 
+Archive member digests are computed with 1 MiB reads, so a large AgentX trace is not loaded into memory at once. The validator reads each member to EOF to verify its CRC and measured size, while retaining the 10 GiB per-member and 20 GiB per-artifact limits and existing path checks. Evaluation JSONL is decoded one line at a time; its memory use depends on the largest sample line and the tracked document/filter identities, with the same coverage and score checks. Summary and execution JSON remain structured validation inputs.
+
 ## Staging, publication, and recovery
 
 The [transport resolver](../infx/workflows/receipt_transport.py) uses read-only APIs to locate a unique accepted receipt from a successful `workflow_dispatch` issuer on `main` at an allowed revision. It verifies the original source attempt rather than substituting the latest rerun. An API inventory containing `native-execution-*` requires a receipt; missing or invalid evidence never enters legacy native ingestion. Ordinary legacy inventories retain their existing path.

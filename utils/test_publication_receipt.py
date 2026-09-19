@@ -3,7 +3,9 @@
 import hashlib
 import json
 import stat
+import struct
 import tempfile
+import tracemalloc
 import unittest
 import zipfile
 from pathlib import Path
@@ -150,6 +152,62 @@ class ReceiptTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "link"):
             inspect_archive(self.root / "link.zip")
 
+    def test_hashes_large_compressed_member_with_bounded_memory(self):
+        archive_path = self.root / "large.zip"
+        with zipfile.ZipFile(
+            archive_path, "w", compression=zipfile.ZIP_DEFLATED
+        ) as archive:
+            with archive.open("trace.jsonl", "w") as trace:
+                for _ in range(64):
+                    trace.write(b"x" * 1024**2)
+            archive.writestr("empty", b"")
+        tracemalloc.start()
+        try:
+            members = inspect_archive(archive_path)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertEqual(
+            [member.model_dump() for member in members],
+            [
+                {
+                    "path": "empty",
+                    "size": 0,
+                    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                },
+                {
+                    "path": "trace.jsonl",
+                    "size": 64 * 1024**2,
+                    "sha256": "e20a69eca39368572e90b9135738a613838f954987a0b44b6220889c171cbb76",
+                },
+            ],
+        )
+        self.assertLess(peak, 8 * 1024**2)
+
+    def test_streamed_member_rejects_crc_corruption_at_end(self):
+        archive_path = self.root / "bad-crc.zip"
+        with zipfile.ZipFile(archive_path, "w") as archive:
+            archive.writestr("trace.jsonl", b"x" * (1024**2 + 3))
+            item = archive.getinfo("trace.jsonl")
+            payload_offset = item.header_offset + 30 + len(item.filename.encode())
+        with archive_path.open("r+b") as source:
+            source.seek(payload_offset + item.file_size - 1)
+            source.write(b"y")
+        with self.assertRaisesRegex(zipfile.BadZipFile, "CRC"):
+            inspect_archive(archive_path)
+
+    def test_streamed_member_rejects_incomplete_declared_size(self):
+        archive_path = self.root / "bad-size.zip"
+        with zipfile.ZipFile(archive_path, "w") as archive:
+            archive.writestr("trace.jsonl", b"abc")
+        data = bytearray(archive_path.read_bytes())
+        central_header = data.index(b"PK\x01\x02")
+        # ZIP central-directory uncompressed size; payload and its CRC remain intact.
+        struct.pack_into("<I", data, central_header + 24, 4)
+        archive_path.write_bytes(data)
+        with self.assertRaisesRegex(ValueError, "declared size"):
+            inspect_archive(archive_path)
+
     def test_semantic_failure_is_not_repaired_by_a_fresh_api_digest(self):
         with zipfile.ZipFile(self.root / "101.zip") as archive:
             execution = archive.read("execution.json")
@@ -225,7 +283,9 @@ class ReceiptTests(unittest.TestCase):
             for name in point.filters
         ]
         for summary, succeeds in [(0.5, True), (1.0, False)]:
-            with zipfile.ZipFile(self.root / "101.zip", "w") as archive:
+            with zipfile.ZipFile(
+                self.root / "101.zip", "w", compression=zipfile.ZIP_DEFLATED
+            ) as archive:
                 archive.writestr(
                     "result.json",
                     json.dumps(
@@ -245,11 +305,22 @@ class ReceiptTests(unittest.TestCase):
                     ),
                 )
                 archive.writestr("meta_env.json", json.dumps(meta))
-                archive.writestr(
-                    "samples.jsonl", "\n".join(json.dumps(sample) for sample in samples)
-                )
+                with archive.open("samples.jsonl", "w") as output:
+                    if succeeds:
+                        blank_lines = (b" " * 4095 + b"\n") * 256
+                        for _ in range(32):
+                            output.write(blank_lines)
+                    output.write(
+                        "\r\n".join(json.dumps(sample) for sample in samples).encode()
+                    )
             if succeeds:
-                validate_point_content(point, self.root)
+                tracemalloc.start()
+                try:
+                    validate_point_content(point, self.root)
+                    _, peak = tracemalloc.get_traced_memory()
+                finally:
+                    tracemalloc.stop()
+                self.assertLess(peak, 8 * 1024**2)
             else:
                 with self.assertRaisesRegex(ValueError, "strict summary"):
                     validate_point_content(point, self.root)
