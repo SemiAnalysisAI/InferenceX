@@ -114,4 +114,6 @@ The merge helper preserves the latest explicit authorized `/use RUN_ID` (or `/re
 | Power | Explicit temporary parity exception; measured power not claimed |
 | Retirement | Legacy H100 script retained pending all exit evidence |
 
+GitHub [CI run 35476764022](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476764022) verified commit `4e44348ee1bc46b23297f88e1343137597cb011d`: 1,871 Python tests and 2,458 native Linux tests passed, together with the installed-runtime check covering all nine points. [Sweep 35476764181](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476764181) reached the H100 runners using managed Python 3.12, then stopped before Slurm submission because `INFX_H100_PHASE1_SITE_JSON`, `INFX_PHASE1_READER_REVISION` and `INFX_PHASE1_COLLECTOR_REVISION` were unset. This is a verified provisioning/deployment prerequisite failure, not H100 throughput or eval qualification.
+
 Record actual InferenceX/native/collector/app commits, source run/attempt, prepared expectation, nine artifact bindings, source receipt, publication record and app verification report in this ledger when available. No fabricated IDs or placeholder success entries may close a gate.

@@ -114,4 +114,6 @@ Merge helper 保留最近明确授权的 `/use RUN_ID` 或 `/reuse-sweep-run RUN
 | 功耗 | 明确临时一致性例外；不声称实测功耗 |
 | 退休 | 保留旧 H100 script，等待全部出口证据 |
 
+GitHub [CI run 35476764022](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476764022) 已验证提交 `4e44348ee1bc46b23297f88e1343137597cb011d`：1,871 项 Python 测试、2,458 项原生 Linux 测试以及覆盖全部九点的已安装运行时检查均通过。[Sweep 35476764181](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476764181) 使用受管理的 Python 3.12 到达 H100 runner，但因 `INFX_H100_PHASE1_SITE_JSON`、`INFX_PHASE1_READER_REVISION` 和 `INFX_PHASE1_COLLECTOR_REVISION` 未设置，在提交 Slurm 任务前停止。这是已验证的资源准备/部署前置条件失败，不代表 H100 吞吐或 eval 已完成验收。
+
 证据就绪后记录实际 InferenceX/native/collector/app 提交、source run/attempt、准备期预期、九点 artifact 绑定、源回执、发布记录与 app 验证报告。不得用编造 ID 或占位成功条目关闭 gate。
