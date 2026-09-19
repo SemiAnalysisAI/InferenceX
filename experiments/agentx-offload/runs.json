@@ -999,6 +999,13 @@
     "reason": "Pre-dispatch views showed 9 allocated B200 nodes and no queued B200 jobs: 9/11 nodes (81.82%). The validated matched c16384 four-arm set was dispatched. Two jobs entered progress on the two idle nodes and two remained queued, producing intended allocated-plus-pending demand of 13/11 nodes (118.18%), within the 125% ceiling."
   },
   "next_dispatch": {
-    "requires": "Monitor and validate the twelve active/queued probes. Current intended demand is 13/11 nodes; do not dispatch another one-node job because 14/11 would exceed the 125% guard. Refresh B200 capacity after a completion, retain result evidence, update the comparison URL, and delete exact workflow-owned scratch after each run."
+    "requires": "Monitor and validate the twelve active/queued probes. Two c16384 jobs were already queued before the one-queued-job policy took effect, so launch nothing until the cluster-wide pending B200 count falls below one. For future batches, use idle eligible nodes but leave at most one B200 job queued. Retain result evidence, update the comparison URL, and delete exact workflow-owned scratch after each run."
+  },
+  "dispatch_policy": {
+    "updated_at": "2026-09-19T23:34:00Z",
+    "max_pending_b200_jobs_after_dispatch": 1,
+    "scope": "All pending B200 jobs across the cluster, including this study, legacy jobs, and other users' work.",
+    "rule": "Use idle eligible nodes when useful, but dispatch no batch that would leave more than one B200 job queued. If one or more B200 jobs are already pending, launch nothing.",
+    "supersedes": "The previous 125% allocated-plus-pending demand ceiling."
   }
 }

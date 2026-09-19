@@ -96,11 +96,11 @@ workflow ID, arm, concurrency, repeat number, node, status and artifact links in
 [runs.json](runs.json). A run is not a result until its workflow and result
 validation finish. Preserve failures and retries with their own attempt IDs.
 
-Before each dispatch batch, compute B200 demand as allocated nodes plus the
-requested node counts of every pending B200 job, including this study, legacy
-jobs and other users' work. Divide demand by the current eligible B200 node
-count. If it is above 125%, launch nothing until it falls to 125% or below.
-Otherwise use all eligible nodes as necessary, while deferring to explicit
+Before each dispatch batch, query current B200 allocations and every pending
+B200 job, including this study, legacy jobs and other users' work. Use idle
+eligible nodes as necessary, but leave at most one B200 job queued across the
+cluster after the batch. If one or more B200 jobs are already pending, launch
+nothing until the pending count falls below one. Continue to defer to explicit
 priority reservations and workflow or scheduler safety limits. Use workflow
 logs, artifacts and InferenceX status APIs; no operator SSH, `salloc`, `sbatch`,
 `srun` or `scancel`. The existing InferenceX runner itself may use Slurm
