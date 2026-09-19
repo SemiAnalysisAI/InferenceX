@@ -8588,3 +8588,16 @@
     automatic golden acceptance only for throughput and real32-example verification for the
     new EP layout. Short1200-second/10-warmup screens require subsequent full official qualification.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-2p1d-tp2-ep2-tp4-ep1-c32-real-transfer-gate
+  scenario-type:
+  - agentic-coding
+  description:
+  - 'Add an isolated real-verification cross-TP correctness gate: two TP2 EP2 prefill
+    workers plus one TP4 EP1 decoder, original unquantized BF16 draft and draft KV,
+    matched FP8 target KV and BF16 Mamba state. Run GSM8K32 then concurrent mixed
+    long-input transfer probes without changing serving settings. Eight active GPUs,
+    two-hour allocation; eval-only produces no formal power measurement or performance
+    qualification.'
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
