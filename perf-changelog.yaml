@@ -8515,6 +8515,7 @@
 
 - config-keys:
   - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp4-ep1-tp4-ep1-c48-h298-dmax32-wt
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp4-ep1-tp4-ep1-c48-h298-dmax64-wt
   scenario-type:
   - agentic-coding
   description:
@@ -8523,4 +8524,8 @@
     Preserve explicit unquant, BF16 draft KV, all serving/workload settings and canonical
     short-screen protocol. This tests first-use prefix preservation before considering
     chunking or routing changes.
+  - Add an isolated decoder admission64 follow-up after repeated C48 runtime snapshots
+    found all 32 Mamba slots occupied while target KV remained about 21 percent used.
+    Change only decode max-running-requests from 32 to 64; preserve write_through,
+    H298, static memory 0.8, zero extra slots, graph 48 and canonical workload.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
