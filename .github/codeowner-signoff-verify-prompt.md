@@ -426,6 +426,28 @@ its separate speculative-algorithm/configuration requirements.
   resolve variables and inherited defaults, and determine whether the effective path
   changes draft precision. A draft path or explicit disabled quantization setting alone
   is not a violation; an omitted flag alone is not proof of compliance.
+- Inspect generic online-quantization configs too, even when their flag names do not
+  mention draft models. For ATOM's `--online_quant_config` (space or `=` form),
+  resolve the supplied JSON and variables, then inspect `global_quant_config` and
+  every `exclude_layer` pattern against the actual draft module names using the
+  pinned framework's matching semantics.
+  Concrete example from [InferenceX PR #3205](https://github.com/SemiAnalysisAI/InferenceX/pull/3205),
+  `benchmarks/single_node/agentic/glm5.2_fp4_mi355x_atom_mtp.sh` at
+  `e35574e3c1b01c59644debd69409c91a71daecc8`:
+  ```bash
+  --online_quant_config '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*.mlp.gate","model.layers.[0-9].mlp.*expert*","model.layers.[1-6][0-9].mlp.*expert*","model.layers.7[0-7].mlp.*expert*","model.layers.78.*"]}'
+  ```
+  In this recipe, `model.layers.78.*` is the stated MTP-head exclusion; the expert
+  patterns for layers 0-77 do not cover layer 78. Verify that mapping against the
+  checkpoint and pinned implementation. If the MTP block is layer 78 and that
+  exclusion is removed without equivalent coverage, `ptpc_fp8` reaches the BF16
+  draft and FAILs this check. Excluding only target experts, a gate, or some draft
+  submodules does not preserve the entire draft head.
+  With complete draft exclusions, target-only online quantization is not itself a
+  violation, but PASS still requires proving unchanged effective draft precision.
+  Do not treat layer 78 as a universal MTP index or this literal JSON as an allowlist;
+  derive the draft modules for each model. Inspect the pinned recipe rather than
+  trusting a PR description or changelog that may still describe an older exclude list.
 - Require evidence in the sign-off's additional detail section identifying the
   draft checkpoint/revision or embedded head, native/effective precision, and
   supporting metadata or pinned implementation. Independently verify that evidence.
