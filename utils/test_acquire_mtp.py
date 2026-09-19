@@ -117,7 +117,9 @@ def test_failed_download_never_publishes(tmp_path, monkeypatch, failure):
     assert not list(tmp_path.glob(".draft.staging-*"))
 
 
-@pytest.mark.parametrize("kind", ["incomplete", "corrupt", "identity", "index"])
+@pytest.mark.parametrize(
+    "kind", ["incomplete", "corrupt", "identity", "index", "provenance", "unexpected"]
+)
 def test_rejects_existing_destination_without_repair(tmp_path, monkeypatch, kind):
     manifest, files = fixture_asset()
     install_download(monkeypatch, files)
@@ -129,8 +131,14 @@ def test_rejects_existing_destination_without_repair(tmp_path, monkeypatch, kind
         (dest / "part.safetensors").write_bytes(b"broken")
     elif kind == "identity":
         manifest = manifest.model_copy(update={"revision": "b" * 40})
-    else:
+    elif kind == "index":
         (dest / "model.safetensors.index.json").write_text("{}")
+    elif kind == "provenance":
+        provenance = json.loads((dest / "subset-provenance.json").read_bytes())
+        provenance["tensor_conversion"] = True
+        (dest / "subset-provenance.json").write_text(json.dumps(provenance))
+    else:
+        (dest / "unexpected.safetensors").write_bytes(b"not part of the verified asset")
     before = {p.name: p.read_bytes() for p in dest.iterdir()}
     with pytest.raises(ValueError):
         acquisition.acquire(manifest, dest, lock_timeout=1)
