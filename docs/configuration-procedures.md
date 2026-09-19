@@ -8,6 +8,8 @@
 
 Use this page for benchmark configuration, recipe, image, and runner changes. It is a procedure, not a field catalog: the linked implementation and schema remain authoritative.
 
+The Phase 1 H100 aggregate pilot uses an explicit versioned `execution` reference and an isolated native runtime pin. See [Phase 1](./srt-slurm-phase1.md) for preparation, same-path mounts, the reader-first release gate and rollback. Its legacy script remains until hardware qualification.
+
 ## Source map
 
 | Source of truth | What it controls |

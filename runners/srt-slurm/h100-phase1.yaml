@@ -1,0 +1,11 @@
+cluster: h100-dgxc
+default_account: customer
+default_partition: hpc-gpu-1
+default_time_limit: '08:00:00'
+gpus_per_node: 8
+default_gpu_type: h100
+use_gpus_per_node_directive: true
+use_segment_sbatch_directive: false
+use_exclusive_sbatch_directive: true
+use_het_jobs: false
+preflight: true

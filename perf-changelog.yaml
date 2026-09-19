@@ -8447,3 +8447,12 @@
     - "将 GLM-5.2 MI355X SGLang AgentX 镜像更新至 lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917（2026-09-17 ROCm 7.2.0 mi35x 日构建，digest sha256:21c1cc9a…，rocm720-mi35x 系列最新 tag；2026-09-18 构建仅提供 rocm724/rocm10 版本）：glm5.2-fp4-mi355x-sglang-agentic-mtp 自 20260916，glm5.2-fp8-mi355x-sglang-agentic-mtp 自 20260908"
     - "在 glm5.2_fp8_mi355x_sglang_mtp.sh 中改用 --cuda-graph-max-bs-decode 传递 decode graph batch，替换已移除的 --cuda-graph-max-bs 别名，与 MXFP4 姊妹配方一致；其余服务参数、搜索空间与 golden acceptance 不变"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3277
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Migrate the H100 aggregate TP8 vLLM DSV4.1-Flash AgentX lane to an isolated pinned native srt-slurm runtime with prepared Python clients, immutable measurement receipts and a separate real c28 GSM8K evaluation; preserve the image, eight concurrency points and 480-minute exclusive allocation. Power telemetry remains an explicit temporary parity exception."
+    - "将 H100 聚合 TP8 vLLM DSV4.1-Flash AgentX 路径迁移至独立固定的原生 srt-slurm 运行时，使用预备式 Python 客户端、不可变测量回执及独立真实 c28 GSM8K eval；保留镜像、八个并发点及 480 分钟独占分配。功耗遥测保留明确临时一致性例外。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

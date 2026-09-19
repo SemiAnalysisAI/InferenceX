@@ -165,7 +165,7 @@ jobs:
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
-          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
+          (vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' || fromJSON(inputs.config).execution.runtime == 'srt-slurm') &&
           (
             inputs.skip-queue-pr != '' &&
             format(
@@ -220,6 +220,7 @@ jobs:
           fi
 
       - name: Resource cleanup (pre-run)
+        if: ${{ fromJSON(inputs.config).execution.runtime != 'srt-slurm' }}
         run: &resource-cleanup |
           # Cleanup Docker resources
           if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
@@ -243,6 +244,7 @@ jobs:
           fi
 
       - name: Repair stale git state (pre-run)
+        if: ${{ fromJSON(inputs.config).execution.runtime != 'srt-slurm' }}
         run: |
           # Interrupted runs leave index.lock files and corrupt submodule git
           # dirs behind in the persistent self-hosted workspace, and both make
@@ -275,7 +277,45 @@ jobs:
           submodules: true
           persist-credentials: false
 
+      - name: Set up uv for native pilot preparation
+        if: ${{ fromJSON(inputs.config).execution.runtime == 'srt-slurm' }}
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - name: Launch prepared native pilot
+        if: ${{ fromJSON(inputs.config).execution.runtime == 'srt-slurm' }}
+        env:
+          # Prepared native clients and serving assets are offline; retain no legacy download/scoring credentials.
+          HF_TOKEN: ''
+          MODAL_TOKEN_ID: ''
+          MODAL_TOKEN_SECRET: ''
+          NATIVE_CONFIG_JSON: ${{ inputs.config }}
+          NATIVE_PRIORITY: ${{ inputs.priority }}
+          NATIVE_QUEUE_TOKEN: ${{ inputs.queue-token }}
+          NATIVE_RUN_EVAL: ${{ toJSON(inputs.run-eval) }}
+          NATIVE_EVAL_ONLY: ${{ toJSON(inputs.eval-only) }}
+          NATIVE_EVAL_FRAMEWORK: ${{ inputs.eval-framework }}
+          NATIVE_EVAL_SUITE: ${{ inputs.eval-suite }}
+          NATIVE_AGENTX_FAST: ${{ toJSON(inputs.agentx-fast) }}
+          NATIVE_EVAL_LIMIT: ${{ inputs.eval-limit }}
+          NATIVE_REQUIRE_POWER: ${{ toJSON(inputs.require-power) }}
+          NATIVE_SITE_JSON: ${{ vars.INFX_H100_PHASE1_SITE_JSON }}
+          NATIVE_READER_REVISION: ${{ vars.INFX_PHASE1_READER_REVISION }}
+          NATIVE_COLLECTOR_REVISION: ${{ vars.INFX_PHASE1_COLLECTOR_REVISION }}
+        shell: python
+        run: |
+          import subprocess
+          subprocess.run(['uv', 'run', '--locked', '--python', '3.12', 'python', '-m', 'infx.srt_slurm.workflow'], check=True)
+
+      - name: Upload native execution provenance
+        if: ${{ always() && fromJSON(inputs.config).execution.runtime == 'srt-slurm' && env.NATIVE_POINT_ID != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-execution-${{ env.NATIVE_POINT_ID }}
+          path: native-execution/**
+          if-no-files-found: error
+
       - name: Launch job script
+        if: ${{ fromJSON(inputs.config).execution.runtime != 'srt-slurm' }}
         env:
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
@@ -383,6 +423,9 @@ jobs:
             server.log
             results/*.log
             results/*_config.json
+            results/native/**/*.log
+            results/native/**/*.json
+            results/native/**/*.yaml
           if-no-files-found: ignore
 
       - name: Upload GPU metrics
@@ -444,11 +487,11 @@ jobs:
           if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
 
       - name: Verify eval scores
-        if: ${{ (success() || failure()) && inputs.eval-only }}
+        if: ${{ (success() || failure()) && inputs.eval-only && fromJSON(inputs.config).execution.runtime != 'srt-slurm' }}
         run: python3 utils/evals/validate_scores.py
 
       - name: Cleanup eval outputs (post-upload)
-        if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
+        if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) && fromJSON(inputs.config).execution.runtime != 'srt-slurm' }}
         run: |
           rm -f meta_env.json || true
           # Remove any eval results JSONs that were moved into workspace
@@ -467,5 +510,5 @@ jobs:
           fi
 
       - name: Resource cleanup (post-run)
-        if: always()
+        if: ${{ always() && fromJSON(inputs.config).execution.runtime != 'srt-slurm' }}
         run: *resource-cleanup

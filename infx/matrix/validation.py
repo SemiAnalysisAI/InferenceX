@@ -12,6 +12,8 @@ from pydantic import (
     model_validator,
 )
 
+from infx.srt_slurm.contracts import ExecutionReference
+
 CLUSTER_LABEL_PREFIX = "cluster:"
 DEFAULT_AGENTIC_DURATION_SECONDS = 3600
 
@@ -305,6 +307,8 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     """Pydantic model for validating single-node agentic coding matrix entries."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    execution: ExecutionReference | None = None
 
     image: str
     model: str
@@ -874,6 +878,8 @@ class SingleNodeMasterConfigEntry(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
+    execution: ExecutionReference | None = None
+
     image: str
     model: str
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
@@ -884,6 +890,21 @@ class SingleNodeMasterConfigEntry(BaseModel):
     disagg: Literal[False] = Field(default=False)
     router: ComponentMetadata | None = None
     scenarios: SingleNodeScenarios
+
+    @model_validator(mode="after")
+    def validate_native_execution_scope(self) -> Self:
+        if self.execution is not None and (
+            self.model_prefix != "dsv41flash"
+            or self.framework != "vllm"
+            or self.precision != "fp4"
+            or self.runner != "cluster:h100-dgxc"
+            or self.scenarios.fixed_seq_len
+            or not self.scenarios.agentic_coding
+        ):
+            raise ValueError(
+                "native execution is currently restricted to the H100 DSV4.1-Flash AgentX pilot"
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_agentic_runner(self) -> Self:

@@ -1,0 +1,54 @@
+schema: 2
+name: inferencex-h100-dsv41flash-agentx
+slurm:
+  account: customer
+  partition: hpc-gpu-1
+  time_limit: '08:00:00'
+model:
+  path: deepseek-ai/DeepSeek-V4.1-Flash
+  container: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3
+  precision: fp4
+resources:
+  gpu_type: h100
+  gpus_per_node: 8
+engine: vllm
+frontend:
+  type: vllm
+  enable_multiple_frontends: false
+roles:
+  agg:
+    nodes: 1
+    workers: 1
+    gpus: 8
+    env:
+      VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+      VLLM_USE_RUST_FRONTEND: '1'
+      VLLM_USE_V2_MODEL_RUNNER: '1'
+      PYTHONUNBUFFERED: '1'
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      HF_HUB_OFFLINE: '1'
+      HF_DATASETS_OFFLINE: '1'
+    args:
+      served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+      tensor-parallel-size: 8
+      language-model-only: true
+      tokenizer-mode: deepseek_v41
+      tool-call-parser: deepseek_v41
+      enable-auto-tool-choice: true
+      reasoning-parser: deepseek_v41
+      engram-config: {cpu_offload: true}
+      speculative-config:
+        method: dspark
+        num_speculative_tokens: 5
+        draft_sample_method: probabilistic
+        rejection_sample_method: block
+        enable_adaptive_verification: true
+      max-model-len: 1048576
+      max-num-batched-tokens: 4096
+      gpu-memory-utilization: 0.92
+      disable-uvicorn-access-log: true
+health_check:
+  max_attempts: 360
+  interval_seconds: 10
+benchmark:
+  type: custom

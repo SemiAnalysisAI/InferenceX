@@ -42,12 +42,14 @@ elif args[:2] == ["pr", "comment"]:
     sys.exit(73)  # Preflight reached the first write; do not perform it.
 elif args[0] == "api":
     path = args[1]
-    if path.endswith("/commits"):
-        print("tested-sha")
+    if "/comments?" in path:
+        print("[[]]")
+    elif "/commits?" in path:
+        print(json.dumps([[{"sha": "tested-sha"}]]))
     elif "/workflows/run-sweep.yml/runs?" in path:
-        print("123\\ttested-sha")
+        print(json.dumps([{"workflow_runs": [{"id": 123, "head_sha": "tested-sha", "event": "pull_request", "status": "completed", "conclusion": "success", "path": ".github/workflows/run-sweep.yml"}]}]))
     elif "/runs/123/artifacts?" in path:
-        print(os.environ["TEST_REUSE_ARTIFACTS"])
+        print(json.dumps([{"artifacts": [{"name": os.environ["TEST_REUSE_ARTIFACTS"], "expired": False}]}]))
     else:
         raise AssertionError(args)
 else:

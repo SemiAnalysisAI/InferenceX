@@ -8056,6 +8056,13 @@ dsv41flash-fp4-h100-vllm-agentic-dspark:
   precision: fp4
   framework: vllm
   multinode: false
+  execution:
+    runtime: srt-slurm
+    contract-version: 1
+    recipe: benchmarks/srt-slurm/phase1/h100-dsv41flash.yaml
+    profile: runners/srt-slurm/h100-phase1.yaml
+    runtime-lock: benchmarks/srt-slurm/phase1/runtime-lock.json
+    client-policy: benchmarks/srt-slurm/phase1/client-policy.json
   scenarios:
     agentic-coding:
     - dram-utilization: 0.80

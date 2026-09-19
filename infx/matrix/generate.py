@@ -11,6 +11,7 @@ from typing import Any, Literal
 import yaml
 
 from infx.config import repository_root
+from infx.srt_slurm.contracts import resolve_reference
 
 from .validation import (
     DEFAULT_AGENTIC_DURATION_SECONDS,
@@ -675,7 +676,8 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
     Kimi K3 and MiniMax M3 agentic rows remain one eval job per generated
     concurrency, using the model's vendor validator. Other agentic entries use
     GSM8K through lm-eval. Their multi-node rows are merged by topology and
-    select the highest resulting concurrency.
+    select the highest resulting concurrency. The version-one native Phase 1
+    execution contract permits only its representative c28 eval.
 
     Fixed-sequence evals only run at 8k1k. Multi-node rows with the same engine
     topology are merged into one eval row that runs every concurrency
@@ -688,6 +690,12 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
     target_isl, target_osl = seq_len_stoi["8k1k"]
 
     for entry in matrix_values:
+        execution = entry.get("execution") or {}
+        if execution.get("runtime") == "srt-slurm" and execution.get("contract-version") == 1:
+            entry[Fields.RUN_EVAL.value] = entry[Fields.CONC.value] == 28
+            expanded_entries.append(entry)
+            continue
+
         automatic_eval = automatic_agentic_vendor_eval(entry)
         if automatic_eval is not None:
             eval_framework, eval_suite = automatic_eval
@@ -982,6 +990,10 @@ def _agentic_entries(
         if is_multinode:
             entry[Fields.DISAGG.value] = disagg
         entry[Fields.SCENARIO_TYPE.value] = "agentic-coding"
+        if config.get("execution") is not None:
+            if is_multinode:
+                raise ValueError("The native pilot execution contract requires one physical node")
+            entry["execution"] = resolve_reference(config["execution"], repository_root())
         if kv_offload_backend is not None:
             entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
         entry.update(component_metadata(benchmark, config))

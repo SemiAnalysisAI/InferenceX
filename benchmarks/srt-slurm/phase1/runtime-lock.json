@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/SemiAnalysisAI/srt-slurm.git",
+  "revision": "8e459d10d217cec7636a4d257e1e0f69d2a45a81",
+  "uv_lock_sha256": "f7c3ef25605ebe27bac9c6a54aa2acef7332210321fff918c3fa72b7049d4dea",
+  "capabilities": [
+    "prepared-v1",
+    "durable-intent-v1",
+    "custom-argv-v1",
+    "controller-observation-v1",
+    "bounded-cleanup-v1"
+  ]
+}
