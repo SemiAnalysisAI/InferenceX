@@ -632,19 +632,19 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748",
-  "status": "HBM-only, HBM + DRAM, and HBM + NVMe c16 are valid. The first HBM + DRAM + NVMe c16 profile completed with zero request errors but is invalid for comparison because its native filesystem tier reached 1.414 TB, 28.59% above the 1 TiB stop guard. Its diagnostic coordinates are retained but excluded from the comparison URL. New launches are held because B200 demand is above 125%.",
+  "status": "HBM-only, HBM + DRAM, and HBM + NVMe c16 are valid. The first HBM + DRAM + NVMe c16 profile completed with zero request errors but is invalid for comparison because its native filesystem tier exceeded the former 1 TiB stop guard. A separate 2 TiB combined-tier stop guard is validated and pushed at b2d189d94. New launches remain held because B200 demand is above 125%.",
   "last_capacity_check": {
-    "checked_at": "2026-09-19T18:46:36Z",
-    "cluster_observed_at": "2026-09-19T18:46:07Z",
+    "checked_at": "2026-09-19T19:10:07Z",
+    "cluster_observed_at": "2026-09-19T19:09:24Z",
     "cluster_stale": false,
     "eligible_nodes": 11,
     "idle_nodes": 0,
     "total_nodes": 11,
     "allocated_nodes": 11,
-    "pending_b200_jobs": 26,
-    "pending_requested_nodes": 26,
-    "demand_nodes": 37,
-    "demand_percent": 336.36,
+    "pending_b200_jobs": 24,
+    "pending_requested_nodes": 24,
+    "demand_nodes": 35,
+    "demand_percent": 318.18,
     "scheduler_snapshot_at": null,
     "scheduler_available": true,
     "active_study_run_ids": [],
@@ -652,9 +652,9 @@
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": false,
-    "reason": "Fresh cluster status showed all 11 B200 nodes allocated, while the priority-scheduler queue contained 26 one-node B200 jobs. Total demand was 37/11 nodes (336.36%), above the 125% hold threshold."
+    "reason": "Fresh dashboard data showed all 11 B200 nodes allocated and 24 eligible one-node B200 jobs queued. Total demand was 35/11 nodes (318.18%), above the 125% hold threshold."
   },
   "next_dispatch": {
-    "requires": "Hold all launches until fresh B200 allocated plus pending requested nodes fall to 125% or below. Before retrying the combined arm, revise its explicit filesystem stop guard based on the observed 1.414 TB footprint without misrepresenting it as a bounded LRU quota; validate and push that configuration change first."
+    "requires": "Hold all launches until fresh B200 allocated plus pending requested nodes fall to 125% or below, then retry HBM + DRAM + NVMe c16 from pushed commit b2d189d94 before starting curves."
   }
 }
