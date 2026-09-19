@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
-check_env_vars EVAL_ONLY IS_MULTINODE RUN_EVAL
+check_env_vars EVAL_ONLY IS_MULTINODE RUN_EVAL SALLOC_TIME_LIMIT
 set -e
 
 # shellcheck source=runners/slurm_utils.sh
@@ -82,32 +82,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
     echo "Creating srtslurm.yaml configuration..."
-    cat > srtslurm.yaml <<EOF
-# SRT SLURM Configuration for H100
-
-# Default SLURM settings
-default_account: "${SLURM_ACCOUNT}"
-default_partition: "${SLURM_PARTITION}"
-default_time_limit: "6:00:00"
-# Resource defaults
-gpus_per_node: 8
-network_interface: ""
-# Path to srtctl repo root (where the configs live)
-srtctl_root: "${SRTCTL_ROOT}"
-# Model path aliases
-model_paths:
-  "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
-containers:
-  dynamo-trtllm: "${SQUASH_FILE}"
-  dynamo-sglang: "${SQUASH_FILE}"
-  nginx-sqsh: "${NGINX_SQUASH_FILE}"
-  latest: "${SQUASH_FILE}"
-  "${CONTAINER_KEY}": "${SQUASH_FILE}"
-# SLURM directive compatibility
-use_gpus_per_node_directive: true
-use_segment_sbatch_directive: false
-use_exclusive_sbatch_directive: false
-EOF
+    write_srt_cluster_config h100-dgxc-slurm srtslurm.yaml 0 \
+        --model "$SRT_SLURM_MODEL_PREFIX" "$MODEL_PATH" \
+        --var CONTAINER_KEY "$CONTAINER_KEY" || exit 1
 
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
@@ -129,11 +106,7 @@ EOF
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
     # sglang's torch-distributed TCPStore defaults to gloo's 600s, too short for large loads.
     sed -i '/^      watchdog-timeout:/a\      dist-timeout: 1800' "${CONFIG_FILE%%:*}"
-    if [[ "${EVAL_ONLY}" == "true" ]]; then
-        python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-            "${CONFIG_FILE%%:*}" "$FRAMEWORK" || exit 1
-    fi
-    SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
     JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
@@ -230,7 +203,7 @@ else
 
     check_env_vars GPU_COUNT
 
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --time="${SALLOC_TIME_LIMIT}" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
     if [[ -z "$JOB_ID" ]]; then
         echo "ERROR: failed to resolve H100 Slurm allocation" >&2

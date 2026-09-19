@@ -860,7 +860,7 @@ dsr1-fp8-b300-dynamo-trt:
           ep: 8
           dp-attn: true
 dsr1-fp4-b200-sglang:
-  image: lmsysorg/sglang:v0.5.16-cu130
+  image: lmsysorg/sglang:v0.5.19-cu130
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
   runner: cluster:b200-nscale
@@ -900,7 +900,7 @@ dsr1-fp4-b200-sglang-mtp:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
 
 dsv4-fp4-b200-sglang-agentic-hicache-mtp:
-  image: lmsysorg/sglang:nightly-dev-20260827-20621aa1
+  image: lmsysorg/sglang:v0.5.19-cu130
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:b200-nscale
@@ -1057,7 +1057,7 @@ dsv4-fp4-b300-sglang-agentic-hicache-mtp:
   # max-running-requests 2*CONC.
 
 qwen3.5-fp8-b200-sglang:
-  image: lmsysorg/sglang:v0.5.19-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b200-nscale
@@ -1074,7 +1074,7 @@ qwen3.5-fp8-b200-sglang:
       - { tp: 4, ep: 1, conc-list: [320, 384, 448, 640] }
 
 qwen3.5-fp8-b200-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.16-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b200-nscale
@@ -1124,7 +1124,7 @@ qwen3.5-fp4-b200-sglang-mtp:
       - { tp: 2, ep: 2, conc-list: [16, 32, 64], spec-decoding: mtp }
 
 qwen3.5-fp8-b200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.14-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b200-nscale
@@ -3874,109 +3874,14 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           ep: 8
           dp-attn: true
 
-kimik2.6-fp4-b200-dynamo-vllm:
-  image: vllm/vllm-openai:v0.25.1
-  model: nvidia/Kimi-K2.6-NVFP4
-  model-prefix: kimik2.6
-  runner: cluster:b200-nscale
-  precision: fp4
-  framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.3.0.dev20260721" }
-  kv-p2p-transfer: nixl
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - conc-list: [1]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/kimik2.6/vllm/b200-fp4/8k1k/disagg-1p1d-dep8-tp8-c1-stp.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-      - conc-list: [32]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/kimik2.6/vllm/b200-fp4/8k1k/disagg-1p8d-dep4-tp4-c32-stp.yaml"
-        decode:
-          num-worker: 8
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [128]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/kimik2.6/vllm/b200-fp4/8k1k/disagg-1p8d-dep4-tp4-c128-stp.yaml"
-        decode:
-          num-worker: 8
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [512]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/kimik2.6/vllm/b200-fp4/8k1k/disagg-1p4d-dep4-tp4-c512-stp.yaml"
-        decode:
-          num-worker: 4
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [2048]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/kimik2.6/vllm/b200-fp4/8k1k/disagg-1p1d-dep8-dep8-c2048-stp.yaml"
-        decode:
-          num-worker: 1
-          tp: 1
-          ep: 8
-          dp-attn: true
-      - conc-list: [8192]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/kimik2.6/vllm/b200-fp4/8k1k/disagg-2p1d-dep8-dep8-c8192-stp.yaml"
-        decode:
-          num-worker: 1
-          tp: 1
-          ep: 8
-          dp-attn: true
-
 qwen3.5-fp8-gb200-dynamo-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260608-303757cc
+  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: gb200
   precision: fp8
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "46520ca59afe992fb5ef61b3197b2316f8df9b2b" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260917" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
@@ -4853,8 +4758,6 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=4.41"
           - "CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp4/agentx/disagg-3p2d-pp4-dep4-c704-mtp-hicache-nightly-c20260831.yaml"
         decode:
           num-worker: 2
@@ -4873,8 +4776,6 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.97"
           - "CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp4/agentx/disagg-3p4d-pp4-dep4-c565-mtp-hicache-nightly-c20260831.yaml"
         decode:
           num-worker: 4
@@ -4908,8 +4809,6 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=4.8"
           - "CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp4/agentx/agg-tp2-c44-b2-mtp-hicache-nightly-c20260831.yaml"
       - spec-decoding: mtp
         kv-offloading: dram
@@ -4923,8 +4822,6 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=4.8"
           - "CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp4/agentx/agg-tp2-c44-b1-mtp-hicache-nightly-c20260831.yaml"
       - spec-decoding: mtp
         kv-offloading: dram
@@ -4938,8 +4835,6 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=4.8"
           - "CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp4/agentx/agg-tp8-c7-b1-mtp-hicache-nightly-c20260831.yaml"
 
     # ---------- 1k1k high-throughput (wide-EP decode, EAGLE MTP) ----------
@@ -5130,7 +5025,7 @@ qwen3.5-fp8-h100-sglang-agentic:
 # fixed-seq-len H200 MTP entry already runs conc 4-128 at TP8/EP8 versus H100's
 # 4-32, so the GPU-resident arm extends to 24 and HiCache to 48.
 qwen3.5-fp8-h200-sglang-agentic-mtp:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161
+  image: lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:h200-dgxc
@@ -5179,7 +5074,7 @@ qwen3.5-fp8-h200-sglang-agentic-hicache-mtp:
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [2, 4, 8, 10, 12, 16, 20, 24] }
 
 qwen3.5-fp8-h100-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.16-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:h100-dgxc
@@ -5340,8 +5235,6 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=4.41"
           - "CONFIG_FILE=recipes/qwen3.5/sglang/gb200-fp4/agentx/agg-tp4-mtp.yaml"
       - spec-decoding: mtp
         kv-offloading: none
@@ -5353,8 +5246,6 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=4.41"
           - "CONFIG_FILE=recipes/qwen3.5/sglang/gb200-fp4/agentx/agg-tp4-mtp-no-symm.yaml"
       - spec-decoding: mtp
         kv-offloading: none
@@ -5366,8 +5257,6 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=4.41"
           - "CONFIG_FILE=recipes/qwen3.5/sglang/gb200-fp4/agentx/agg-tp4-mtp-parity.yaml"
       # Keep only the reproducible TP2/EP2 HiCache K5 transition point; C28
       # was dominated by the published C28 result in the official PR sweep.
@@ -5382,8 +5271,6 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
           ep: 2
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=4.41"
           - "CONFIG_FILE=recipes/qwen3.5/sglang/gb200-fp4/agentx/agg-tp2ep2-mtp-hicache.yaml"
       # Keep the published C32 interactivity anchor. The tighter capacity
       # layout becomes Pareto-relevant at C40 and remains deployable at C48.
@@ -5398,8 +5285,6 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
           ep: 2
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.39"
           - "CONFIG_FILE=recipes/qwen3.5/sglang/gb200-fp4/agentx/agg-tp2ep2-mtp-hicache-k3-baseline.yaml"
       - spec-decoding: mtp
         kv-offloading: dram
@@ -5412,8 +5297,6 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
           ep: 2
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.39"
           - "CONFIG_FILE=recipes/qwen3.5/sglang/gb200-fp4/agentx/agg-tp2ep2-mtp-hicache-cap48.yaml"
 minimaxm3-fp4-b300-vllm-agentic-mtp:
   image: vllm/vllm-openai:nightly-1dc464d42681d22f38caf1fdc1eb632dc4421c45
@@ -5632,8 +5515,6 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/minimaxm3/vllm/gb200-fp4/agentx/agg-tp4-nightly-native.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
@@ -5646,8 +5527,6 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/minimaxm3/vllm/gb200-fp4/agentx/agg-tp4-vllm-simple-nightly-native.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [1]
@@ -5659,8 +5538,6 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/minimaxm3/vllm/gb200-fp4/agentx/agg-tp8-nightly-native.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
 
 minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp:
   image: vllm/vllm-openai@sha256:b9104b7ef3048e42f79fba9ab5da06e5aff8164aca9968692ec2f569aaaf34c6
@@ -5689,8 +5566,6 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/minimaxm3/vllm/gb200-fp4/agentx/disagg-1p1d-tp4-tp8-c1.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
         decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: dram
@@ -5703,8 +5578,6 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/minimaxm3/vllm/gb200-fp4/agentx/disagg-1p2d-tp4-tp4-c8-c16.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
         decode: { num-worker: 2, tp: 4, ep: 4, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: dram
@@ -5717,8 +5590,6 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/minimaxm3/vllm/gb200-fp4/agentx/disagg-1p1d-tp4-tp4-c24.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
         decode: { num-worker: 1, tp: 4, ep: 4, dp-attn: false }
 
 minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp:
@@ -5747,8 +5618,6 @@ minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/minimaxm3/trtllm/gb200-fp4/agentx/agg-tp4-c5-b5-eagle3.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: native }
@@ -5761,8 +5630,6 @@ minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/minimaxm3/trtllm/gb200-fp4/agentx/agg-tp4-c10-b10-eagle3.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: native }
@@ -5775,8 +5642,6 @@ minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/minimaxm3/trtllm/gb200-fp4/agentx/agg-tp4-c15-b15-eagle3.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: native }
@@ -5789,8 +5654,6 @@ minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/minimaxm3/trtllm/gb200-fp4/agentx/agg-tp4-c20-b20-eagle3.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: native }
@@ -5803,8 +5666,6 @@ minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/minimaxm3/trtllm/gb200-fp4/agentx/agg-tp4-c25-b25-eagle3.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: native }
@@ -5817,8 +5678,6 @@ minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/minimaxm3/trtllm/gb200-fp4/agentx/agg-tp4-c30-b30-eagle3.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: native }
@@ -5831,8 +5690,6 @@ minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/minimaxm3/trtllm/gb200-fp4/agentx/agg-tp4-c40-b40-eagle3.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.78"
 
 dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg:
   image: vllm/vllm-openai:nightly-3ee2df30337a301164c46ae444b76ee67e71c106
@@ -5858,8 +5715,6 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/agg-tp8-mtp.yaml"
       - spec-decoding: mtp
         conc-list: [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80]
@@ -5870,8 +5725,6 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/agg-dep8-mtp.yaml"
 dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-disagg:
   image: vllm/vllm-openai:nightly-3ee2df30337a301164c46ae444b76ee67e71c106
@@ -5896,8 +5749,6 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep8-dep8-mtp.yaml"
         decode:
           num-worker: 1
@@ -5913,8 +5764,6 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-2p1d-dep8-dep8-mtp.yaml"
         decode:
           num-worker: 1
@@ -5946,8 +5795,6 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb300-fp4/agentx/agg-tp8-mtp.yaml"
       - spec-decoding: mtp
         conc-list: [4]
@@ -5958,8 +5805,6 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb300-fp4/agentx/agg-tp8-mtp.yaml"
       - spec-decoding: mtp
         conc-list: [1, 2, 4, 6, 8]
@@ -5970,8 +5815,6 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb300-fp4/agentx/agg-tp4-mtp.yaml"
 dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
   image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f
@@ -6001,8 +5844,6 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb300-fp4/agentx/disagg-2p1d-dep8-dep12-c1152-mtp.yaml"
         decode:
           num-worker: 1
@@ -6020,8 +5861,6 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb300-fp4/agentx/disagg-2p1d-dep8-dep16-c1024-mtp.yaml"
         decode:
           num-worker: 1
@@ -6039,8 +5878,6 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb300-fp4/agentx/disagg-1p1d-dep4-dep8-c256-mtp.yaml"
         decode:
           num-worker: 1
@@ -6058,8 +5895,6 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb300-fp4/agentx/disagg-1p1d-dep8-dep16-c512-mtp.yaml"
         decode:
           num-worker: 1
@@ -6075,8 +5910,6 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb300-fp4/agentx/disagg-1p4d-dep4-tp8-c4-mtp.yaml"
         decode:
           num-worker: 4
@@ -6094,8 +5927,6 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb300-fp4/agentx/disagg-1p1d-dep4-dep16-c128-mtp.yaml"
         decode:
           num-worker: 1
@@ -6113,8 +5944,6 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb300-fp4/agentx/disagg-1p1d-dep4-dep16-c256-mtp.yaml"
         decode:
           num-worker: 1
@@ -6151,8 +5980,6 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/agg-tp8-c4-mtp3.yaml"
       - spec-decoding: mtp
         conc-list: [4]
@@ -6163,8 +5990,6 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/agg-tp8-c4-mtp3.yaml"
       - spec-decoding: mtp
         conc-list: [8]
@@ -6175,8 +6000,6 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-agg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/agg-tp8-c8-mtp3.yaml"
 dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg:
   image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f
@@ -6206,8 +6029,6 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-2p1d-dep8-dep12-c576-mtp3.yaml"
         decode:
           num-worker: 1
@@ -6225,8 +6046,6 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-2p1d-dep8-dep16-c512-mtp3.yaml"
         decode:
           num-worker: 1
@@ -6244,8 +6063,6 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep8-dep8-c256-mtp3.yaml"
         decode:
           num-worker: 1
@@ -6263,8 +6080,6 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
           - "CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep8-dep8-c128-mtp3.yaml"
         decode:
           num-worker: 1
@@ -6375,8 +6190,6 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.36"
           - "CONFIG_FILE=recipes/kimik3/vllm/gb200-fp4/agentx/agg-dcp16-dspark4-maxseq2-mooncake.yaml"
 
 kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg:
@@ -6551,8 +6364,6 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/kimik3/vllm/gb200-fp4/agentx/agg-tp8pp2-mooncake-c16.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.84"
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
@@ -6567,8 +6378,6 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/kimik3/vllm/gb200-fp4/agentx/agg-tp8pp2-mooncake-c32.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.84"
       - kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         conc-list: [48]
@@ -6630,8 +6439,6 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/gb300-fp4/agentx/agg-tp8-mtp.yaml"
     - search-space:
       - spec-decoding: draft_model
@@ -6643,8 +6450,6 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/gb300-fp4/agentx/agg-tp4-mtp.yaml"
 dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
   image: lmsysorg/sglang:nightly-dev-cu13-20260829-89816a21
@@ -6671,8 +6476,6 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/gb300-fp4/agentx/disagg-1p1d-dep8-dep16-c480-mtp-kvoffload.yaml"
         decode:
           num-worker: 1
@@ -6689,8 +6492,6 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/gb300-fp4/agentx/disagg-2p1d-dep8-dep16-c960-mtp-kvoffload.yaml"
         decode:
           num-worker: 1
@@ -6707,8 +6508,6 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/gb300-fp4/agentx/disagg-3p1d-dep8-dep16-c1440-mtp-kvoffload.yaml"
         decode:
           num-worker: 1
@@ -6725,8 +6524,6 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/gb300-fp4/agentx/disagg-4p1d-dep8-dep16-c1920-mtp-kvoffload.yaml"
         decode:
           num-worker: 1
@@ -6734,13 +6531,13 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 16
           dp-attn: true
 qwen3.5-fp8-gb300-dynamo-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928
+  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: gb300
   precision: fp8
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "46520ca59afe992fb5ef61b3197b2316f8df9b2b" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260917" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
@@ -6932,6 +6729,84 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache:
           ep: 1
           dp-attn: true
 
+# GLM-5.2 FP8 full-context AgentX with aggregate TP8 and EAGLE MTP. Each
+# concurrency uses an individual recipe so max-running-requests and CUDA graph
+# capture are capped at twice the trajectory concurrency.
+glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
+  image: lmsysorg/sglang:nightly-dev-20260914-4358a161
+  model: zai-org/GLM-5.2-FP8
+  model-prefix: glm5.2
+  runner: cluster:h200-dgxc
+  precision: fp8
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.5.0.dev20260913" }
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: mtp
+        conc-list: [2]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/glm5.2/sglang/h200-fp8/agentx/agg-h200-tp8-mtp-c2.yaml"
+      - spec-decoding: mtp
+        conc-list: [4]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/glm5.2/sglang/h200-fp8/agentx/agg-h200-tp8-mtp-c4.yaml"
+      - spec-decoding: mtp
+        conc-list: [8]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/glm5.2/sglang/h200-fp8/agentx/agg-h200-tp8-mtp-c8.yaml"
+      - spec-decoding: mtp
+        conc-list: [12]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/glm5.2/sglang/h200-fp8/agentx/agg-h200-tp8-mtp-c12.yaml"
+      - spec-decoding: mtp
+        conc-list: [16]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/glm5.2/sglang/h200-fp8/agentx/agg-h200-tp8-mtp-c16.yaml"
+
 # GLM-5.2 B300 NVFP4 AgentX with EAGLE/MTP speculative decoding, following the
 # AgentX speculative-decoding policy in MODELS.md. SGLang EAGLE runs off
 # GLM-5.2's built-in nextn head (num-steps 3,
@@ -7011,6 +6886,36 @@ glm5.2-fp4-b200-sglang-agentic-mtp:
   model-prefix: glm5.2
   runner: cluster:b200-nscale
   precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16] }
+
+# First GLM-5.2 FP8 AgentX recipe on B200, the FP8 precision sibling of
+# glm5.2-fp4-b200-sglang-agentic-mtp. Same spec-decode-only shape per the AgentX
+# policy (MODELS.md): SGLang EAGLE off GLM-5.2's built-in nextn head (num-steps
+# 3, eagle-topk 1, 4 draft tokens = 3 speculative tokens) with acceptance pinned
+# to the golden AL 2.99 (golden_al_distribution/glm5.2_mtp.yaml, thinking_on,
+# K=3) through SGLANG_SIMULATE_ACC_*. That curve was measured on glm-5.2-fp8,
+# i.e. on this checkpoint. Pinned to the 2026-09-08 cu13 dev nightly (the first that carries sgl-project/sglang#38318, the guard for the EAGLE DSA fp8 read-door crash seen on the 2026-09-07 build), the same
+# tag the B200 Qwen3.5 FP8/FP4 SGLang AgentX recipes moved to that day.
+#
+# Same single arm and concurrency grid as the NVFP4 B200 and B300 siblings:
+# cookbook low-latency TP8 with HiCache host-DRAM offload, conc
+# [1, 4, 8, 12, 16] (steps of at least 2, hard stop at 16). TP8-only for
+# memory as well as comparability -- the ~756 GB block-FP8 checkpoint needs
+# ~94.5 GB/GPU across 8 B200s and does not fit below 8; the fp8 KV pool that
+# remains inside --mem-fraction-static 0.83 is ~55 GB/GPU against ~91 GB/GPU
+# on NVFP4, which HiCache absorbs as host spill.
+glm5.2-fp8-b200-sglang-agentic-mtp:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260908-20ca564b
+  model: zai-org/GLM-5.2-FP8
+  model-prefix: glm5.2
+  runner: cluster:b200-nscale
+  precision: fp8
   framework: sglang
   multinode: false
   scenarios:
@@ -7565,13 +7470,13 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
           dp-attn: true
 
 qwen3.5-fp8-gb200-dynamo-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.14-cu130@sha256:5027e95bf6ec536856b1b52a91d1f35ff5c564ab83e8a94758a169ff09bb8df3
+  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: gb200
   precision: fp8
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "46520ca59afe992fb5ef61b3197b2316f8df9b2b" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260917" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
@@ -7716,8 +7621,6 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.36"
           - "CONFIG_FILE=recipes/kimik3/vllm/gb300-fp4/agentx/disagg-1p1d-dcp8-dcp8-dspark4-mooncake.yaml"
         decode: { num-worker: 1, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
       - spec-decoding: mtp
@@ -7731,8 +7634,6 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.36"
           - "CONFIG_FILE=recipes/kimik3/vllm/gb300-fp4/agentx/disagg-1p2d-dcp8-dcp8-dspark4-mooncake.yaml"
         decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
       - spec-decoding: mtp
@@ -7746,8 +7647,6 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.84"
           - "CONFIG_FILE=recipes/kimik3/vllm/gb300-fp4/agentx/disagg-1p3d-dcp8-dcp8-dspark7-mooncake.yaml"
         decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
       - spec-decoding: mtp
@@ -7761,8 +7660,6 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.36"
           - "CONFIG_FILE=recipes/kimik3/vllm/gb300-fp4/agentx/disagg-1p3d-dcp8-dcp8-dspark4-mooncake.yaml"
         decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
 
@@ -7791,8 +7688,6 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.84"
           - "CONFIG_FILE=recipes/kimik3/vllm/gb300-fp4/agentx/agg-dcp8-dspark7-maxseq2-mooncake.yaml"
       - spec-decoding: mtp
         kv-offloading: dram
@@ -7806,8 +7701,6 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.36"
           - "CONFIG_FILE=recipes/kimik3/vllm/gb300-fp4/agentx/agg-dcp8-dspark4-mooncake.yaml"
 
 # Kimi-K3 MXFP4 B200 aggregated vLLM (TP8 x PP2, 2 nodes / 16 GPUs), agentic
@@ -7850,8 +7743,6 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/kimik3/vllm/b200-fp4/agentx/agg-tp8pp2-mooncake-c1.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.84"
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [4]
@@ -7865,8 +7756,6 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/kimik3/vllm/b200-fp4/agentx/agg-tp8pp2-mooncake-c4.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.84"
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [8]
@@ -7880,8 +7769,6 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/kimik3/vllm/b200-fp4/agentx/agg-tp8pp2-mooncake-c8.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.84"
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [14]
@@ -7895,8 +7782,6 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/kimik3/vllm/b200-fp4/agentx/agg-tp8pp2-mooncake-c14.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.84"
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [24]
@@ -7910,8 +7795,6 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/kimik3/vllm/b200-fp4/agentx/agg-tp8pp2-mooncake-c24.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.36"
       - spec-decoding: mtp
         kv-offloading: none
         conc-list: [48]
@@ -7925,8 +7808,6 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/kimik3/vllm/b200-fp4/agentx/agg-tp8pp2-mooncake-c48.yaml"
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.36"
       - kv-offloading: none
         conc-list: [96]
         num-nodes: 2
@@ -8180,8 +8061,35 @@ dsv41flash-fp4-h100-vllm-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       # Extend beyond the c1 full-context capacity estimate to measure the
-      # AgentX workload's practical saturation curve at c8 and c16.
-      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16] }
+      # AgentX workload's practical saturation curve; c20, c24 and c28 fill in
+      # the knee between c16 and the point where 1M-token trajectories preempt.
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 20, 24, 28] }
+
+# SGLang arm for DeepSeek-V4.1-Flash AgentX on H100, from the SGLang cookbook
+# (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
+# DSv4.1 Flash support has not shipped in an SGLang release; this uses the
+# preview build lmsysorg/sglang:dev-dsv41, digest
+# sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860 (2026-09-11, amd64 + arm64).
+# Native five-token DSpark (--speculative-algorithm DSPARK
+# --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
+# throughput, real verification for evals. The KV cache stays GPU-resident.
+# H100 is not in the cookbook's hardware table. The script moves the Engram
+# tables to one shared host copy (SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1) and
+# halves the prefill chunk so weights, indexer buffers and a KV pool fit 80 GB.
+# Concurrency stops at 8 until the KV ceiling is measured.
+dsv41flash-fp4-h100-sglang-agentic-dspark:
+  image: lmsysorg/sglang:dev-dsv41
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:h100-dgxc
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8] }
 
 dsv41flash-fp4-gb200-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3
@@ -8198,6 +8106,30 @@ dsv41flash-fp4-gb200-vllm-agentic-dspark:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
+# SGLang arm for DeepSeek-V4.1-Flash AgentX on GB200, from the SGLang cookbook
+# (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
+# DSv4.1 Flash support has not shipped in an SGLang release; this uses the
+# preview build lmsysorg/sglang:dev-dsv41, digest
+# sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860 (2026-09-11, amd64 + arm64).
+# Native five-token DSpark (--speculative-algorithm DSPARK
+# --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
+# throughput, real verification for evals. The KV cache stays GPU-resident.
+# Follows the cookbook's verified Blackwell TP4/EP4 low-latency cell; backends
+# resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl).
+dsv41flash-fp4-gb200-sglang-agentic-dspark:
+  image: lmsysorg/sglang:dev-dsv41
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
 dsv41flash-fp4-b300-vllm-agentic-dspark:
   image: vllm/vllm-openai:deepseekv41-flash-0909
   model: deepseek-ai/DeepSeek-V4.1-Flash
@@ -8210,8 +8142,11 @@ dsv41flash-fp4-b300-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
+      # Engram weights use UVA DRAM; the KV cache stays GPU-resident. The B300
+      # script uses explicit piecewise CUDA graph capture tiers.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      # Run the same B300 recipe on two GPUs.
+      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [2, 4, 8, 16, 32, 64, 128] }
 
 dsv41flash-fp4-b200-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3
@@ -8227,6 +8162,30 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
       search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
+# SGLang arm for DeepSeek-V4.1-Flash AgentX on B200, from the SGLang cookbook
+# (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
+# DSv4.1 Flash support has not shipped in an SGLang release; this uses the
+# preview build lmsysorg/sglang:dev-dsv41, digest
+# sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860 (2026-09-11, amd64 + arm64).
+# Native five-token DSpark (--speculative-algorithm DSPARK
+# --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
+# throughput, real verification for evals. The KV cache stays GPU-resident.
+# Follows the cookbook's verified Blackwell TP4/EP4 low-latency cell; backends
+# resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl).
+dsv41flash-fp4-b200-sglang-agentic-dspark:
+  image: lmsysorg/sglang:dev-dsv41
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 dsv41flash-fp4-gb300-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e
@@ -8266,3 +8225,27 @@ dsv41flash-fp4-h200-vllm-agentic-dspark:
       # 8x141 GB holds the 511 GB checkpoint minus the UVA-offloaded Engram
       # tables, so the KV cache stays GPU-resident across the full range.
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
+# SGLang arm for DeepSeek-V4.1-Flash AgentX on H200, from the SGLang cookbook
+# (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
+# DSv4.1 Flash support has not shipped in an SGLang release; this uses the
+# preview build lmsysorg/sglang:dev-dsv41, digest
+# sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860 (2026-09-11, amd64 + arm64).
+# Native five-token DSpark (--speculative-algorithm DSPARK
+# --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
+# throughput, real verification for evals. The KV cache stays GPU-resident.
+# Hopper follows the cookbook's verified H200 TP8/EP8 cell, which pins the dsv4
+# attention backend and the flashinfer_mxfp4 MoE runner.
+dsv41flash-fp4-h200-sglang-agentic-dspark:
+  image: lmsysorg/sglang:dev-dsv41
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:h200-dgxc
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16] }

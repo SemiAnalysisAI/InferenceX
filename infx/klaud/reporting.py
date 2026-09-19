@@ -1,14 +1,16 @@
 """Public, typed progress records and the single PR/comment renderer.
 
 The agent supplies short observations; this module owns formatting and arithmetic.
-Records are persisted in the same owned comment before waiting, so recovery does
-not depend on an SDK transcript or final structured response.
+The baseline is persisted in the PR body and attempts in owned comments before
+waiting, so recovery does not depend on an SDK transcript or final response.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import re
+import zlib
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Literal, Self
 
@@ -454,17 +456,15 @@ def baseline_table(points: list[Point], *, context: bool = True) -> str:
 
 
 def render_body(baseline: Baseline) -> str:
-    _, _, settings = point_layout(baseline.points[:12])
+    _, _, settings = point_layout(baseline.points)
     sources = ", ".join(f"[API {i + 1}]({url})" for i, url in enumerate(baseline.sources)) or "N/A"
     meta = " · ".join(part for part in (settings, f"Sources: {sources}") if part)
     english = (
         f"**Goal:** {baseline.goal.en}  \n**Baseline:** {baseline.date} · `{baseline.image}`  \n{meta}\n\n"
-        + baseline_table(baseline.points[:12], context=False)
+        + baseline_table(baseline.points, context=False)
         + "\n\n"
         + (eval_table(baseline.evals, None, compare=False) if baseline.evals else "**Eval:** N/A")
     )
-    if len(baseline.points) > 12:
-        english += f"\n\n12/{len(baseline.points)} points shown; remaining rows are in the baseline report."
     chinese = (
         f"**目标：**{baseline.goal.zh}  \n**基线：**{baseline.date} · `{baseline.image}`  \n"
         + meta.replace("Mean latency", "平均延迟")
@@ -556,8 +556,35 @@ def decode[Record: Contract](
 
 
 def baseline_for(session: Session, pull: dict) -> Baseline | None:
+    current = session.refresh(pull)
+    embedded = baseline_from_body(current.get("body") or "")
+    if embedded:
+        return embedded
+    # Existing Klaud PRs stored their frozen baseline in a comment. Keep reading
+    # that format so retries and recovery remain compatible.
     comment = stored(session, pull, "baseline")
     return decode(comment, Baseline, session, pull) if comment else None
+
+
+def baseline_marker(record: Baseline) -> str:
+    packed = zlib.compress(record.model_dump_json(by_alias=True).encode(), level=9)
+    encoded = base64.urlsafe_b64encode(packed).decode()
+    return f"<!-- klaud-baseline-record:v1:{encoded} -->"
+
+
+def baseline_from_body(body: str) -> Baseline | None:
+    prefix = "<!-- klaud-baseline-record:v1:"
+    matches = [line for line in body.splitlines() if line.startswith(prefix)]
+    if not matches:
+        return None
+    if len(matches) != 1 or not matches[0].endswith(" -->"):
+        raise VerificationError("Ambiguous PR-body baseline record")
+    encoded = matches[0][len(prefix) : -4]
+    try:
+        payload = zlib.decompress(base64.b64decode(encoded, altchars=b"-_", validate=True))
+        return Baseline.model_validate_json(payload)
+    except (ValueError, zlib.error) as error:
+        raise VerificationError("Invalid PR-body baseline record") from error
 
 
 def initialize_body(session: Session, pull: dict, record: Baseline) -> None:
@@ -565,6 +592,11 @@ def initialize_body(session: Session, pull: dict, record: Baseline) -> None:
     body = current.get("body") or ""
     completed = "<!-- klaud-baseline-body -->"
     placeholder = "<!-- klaud-baseline -->"
+    embedded = baseline_from_body(body)
+    if embedded:
+        if embedded != record:
+            raise VerificationError("Baseline is frozen; do not silently replace it")
+        return
     if completed in body:
         return
     if body.count(placeholder) != 1:
@@ -573,8 +605,10 @@ def initialize_body(session: Session, pull: dict, record: Baseline) -> None:
         )
     body = body.replace(
         placeholder,
-        completed + "\n" + render_body(record) + "\n<!-- /klaud-baseline-body -->",
+        baseline_marker(record) + "\n" + render_body(record) + "\n<!-- /klaud-baseline-body -->",
     )
+    if len(body.encode()) > 60000:
+        raise VerificationError("PR body exceeds GitHub size after embedding the baseline")
     github.write(session.repository, f"pulls/{pull['number']}", "PATCH", {"body": body})
 
 
@@ -584,33 +618,27 @@ def publish(session: Session, record: Baseline | Attempt) -> None:
     if isinstance(record, Baseline):
         if record.family != session.candidate.family:
             raise VerificationError("Baseline belongs to another family")
-        name = "baseline"
-        previous = stored(session, pull, name)
-        if previous:
-            if decode(previous, Baseline, session, pull) != record:
-                raise VerificationError("Baseline is frozen; do not silently replace it")
-            initialize_body(session, pull, record)
-            return
-        text = f"**Baseline:** {record.date} · `{record.image}`"
-    else:
-        runs = [run for run in session.runs() if run["id"] == record.run_id]
-        if (
-            len(runs) != 1
-            or runs[0]["head_sha"] != record.head
-            or runs[0]["run_attempt"] != record.run_attempt
-        ):
-            raise VerificationError(
-                "Report does not describe an owned run at this head and attempt"
-            )
-        if record.status == "passed" and (
-            runs[0]["status"] != "completed" or runs[0]["conclusion"] != "success"
-        ):
-            raise VerificationError(
-                "Cannot publish a passing attempt before the entire owned run passes"
-            )
-        name = f"run-{record.run_id}-{record.run_attempt}"
-        previous = stored(session, pull, name)
-        text = render_attempt(record, baseline_for(session, pull), session.repository)
+        previous = baseline_for(session, pull)
+        if previous and previous != record:
+            raise VerificationError("Baseline is frozen; do not silently replace it")
+        initialize_body(session, pull, record)
+        return
+    runs = [run for run in session.runs() if run["id"] == record.run_id]
+    if (
+        len(runs) != 1
+        or runs[0]["head_sha"] != record.head
+        or runs[0]["run_attempt"] != record.run_attempt
+    ):
+        raise VerificationError("Report does not describe an owned run at this head and attempt")
+    if record.status == "passed" and (
+        runs[0]["status"] != "completed" or runs[0]["conclusion"] != "success"
+    ):
+        raise VerificationError(
+            "Cannot publish a passing attempt before the entire owned run passes"
+        )
+    name = f"run-{record.run_id}-{record.run_attempt}"
+    previous = stored(session, pull, name)
+    text = render_attempt(record, baseline_for(session, pull), session.repository)
     # Bounded comment chunks preserve every point without imposing a family-size cap.
     # Write the index last: interrupted publication is retried idempotently.
     packed = record.model_dump(by_alias=True)
@@ -624,44 +652,30 @@ def publish(session: Session, record: Baseline | Attempt) -> None:
             # Immutable content-addressed parts keep an existing index consistent
             # until the replacement index is published, even across interruptions.
             part_name = f"{name}-part-{offset // 20 + 1}-{identity(part)[:16]}"
-            part_text = (
-                baseline_table(record.points[offset : offset + 20])
-                if isinstance(record, Baseline)
-                else point_table(record.points[offset : offset + 20], baseline_for(session, pull))
+            part_text = point_table(
+                record.points[offset : offset + 20], baseline_for(session, pull)
             )
             if part["evals"]:
                 part_text += "\n\n" + eval_table(
                     record.evals[offset : offset + 20],
                     baseline_for(session, pull),
-                    compare=not isinstance(record, Baseline),
                 )
             upsert(session, pull, part_name, json.dumps(part), part_text)
             chunks.append(part_name)
         packed.update(points=[], evals=[])
         packed = {"record": packed, "chunks": chunks}
-        if isinstance(record, Attempt):
-            text = render_attempt(
-                record.model_copy(update={"points": [], "evals": []}),
-                baseline_for(session, pull),
-                session.repository,
-            )
+        text = render_attempt(
+            record.model_copy(update={"points": [], "evals": []}),
+            baseline_for(session, pull),
+            session.repository,
+        )
         note = "\n\nResults continue in numbered report comments."
         text = (
             text.replace("\n\n<details>", note + "\n\n<details>", 1)
             if "<details>" in text
             else text + note
         )
-    elif isinstance(record, Baseline):
-        text += "\n\n" + baseline_table(record.points)
-        if record.evals:
-            text += "\n\n" + eval_table(record.evals, None, compare=False)
-    if isinstance(record, Baseline):
-        text = translated(
-            text, f"**基线：**{record.date} · `{record.image}`；数值及异常说明见表格。"
-        )
     upsert(session, pull, name, json.dumps(packed), text)
-    if isinstance(record, Baseline):
-        initialize_body(session, pull, record)
 
 
 def upsert(session: Session, pull: dict, name: str, data: str, text: str) -> None:
@@ -681,7 +695,7 @@ def publish_final(
     session: Session, run: dict, evidence: tuple[dict, list[dict], list[dict]]
 ) -> None:
     """Normal finish and recovery publish the same artifact-derived final report."""
-    from infx.workflows import validate_reusable_sweep_artifacts as reuse
+    from infx.results.eval_artifacts import eval_key
 
     from .validation import benchmark_entries, expected_evals
 
@@ -709,7 +723,7 @@ def publish_final(
         )
     evaluations = [
         Evaluation(
-            key=identity(reuse.eval_key(row)),
+            key=identity(eval_key(row)),
             suite=row.get("eval_suite") or "gsm8k",
             label=f"c{row['conc']}",
             metric=row.get("score_name") or "em_strict",

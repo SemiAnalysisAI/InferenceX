@@ -20,11 +20,17 @@ mcp = ["gitpython>=3.1.40,<4", "mcp>=1.30,<2"]
 test = [
     { include-group = "mcp" },
     "aiohttp>=3,<4",
+    "jinja2>=3.1,<4",
+    "marshmallow>=3.20,<5",
+    "marshmallow-dataclass>=8.6,<9",
     "matplotlib>=3,<4",
     "numpy>=2,<3",
     "packaging>=26,<27",
     "pytest>=9,<10",
     "pytest-xdist>=3,<4",
+    "requests>=2.31,<3",
+    "rich>=13,<16",
+    "ruamel.yaml>=0.18,<0.20",
     "torch>=2,<3",
     "transformers>=5,<6",
 ]

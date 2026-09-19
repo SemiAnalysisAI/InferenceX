@@ -31,7 +31,7 @@ These sources outrank this guide when behavior changes. Update the English page 
 
 ## Testing layers
 
-[`CI`](../.github/workflows/ci.yml) runs **Lint** and **Tests** in parallel for PRs (including forks) and pushes to `main` that change Python files, `ci.yml`, `pyproject.toml`, `uv.lock`, `.python-version`, MCP configuration, Ruff configuration, or `pytest.ini`. [`Workflow security`](../.github/workflows/zizmor.yml) runs **Zizmor** for changes to workflows, action definitions, Dependabot, pre-commit, or zizmor configuration. Python-only changes do not trigger Zizmor; other workflow-only changes do not trigger Lint or Tests. Editing `ci.yml` triggers all three jobs. Each workflow can be dispatched manually. Changes only to other docs, shell scripts, or benchmark YAML do not trigger either workflow; run the applicable checks locally or dispatch them manually.
+[`CI`](../.github/workflows/ci.yml) runs **Lint** and **Tests** in parallel for PRs (including forks) and pushes to `main` that change Python files, `.github/scripts/` helpers, `ci.yml`, `pyproject.toml`, `uv.lock`, `.python-version`, MCP configuration, Ruff configuration, or `pytest.ini`. [`Workflow security`](../.github/workflows/zizmor.yml) runs **Zizmor** for changes to workflows, action definitions, Dependabot, pre-commit, or zizmor configuration. Python-only changes do not trigger Zizmor; other workflow-only changes do not trigger Lint or Tests. Editing `ci.yml` triggers all three jobs. Each workflow can be dispatched manually. Changes only to other docs, shell scripts, or benchmark YAML do not trigger either workflow; run the applicable checks locally or dispatch them manually.
 
 Tests runs every suite under `utils/`, `runners/`, and `experimental/CollectiveX/tests/` with four pytest workers, plus MCP compatibility. New tests in those directories are discovered automatically. CI installs `infx` as a wheel with `uv sync --locked --all-extras --group test --no-editable`, using Python 3.12 and CPU-only PyTorch. A failing job does not cancel the other; a newer PR update cancels the superseded CI run. Branch pushes without a PR no longer start a separate changelog-test run.
 
@@ -100,7 +100,7 @@ All third-party actions remain pinned to commit SHAs. Same-repository workflow c
 Auditor mode also reports deliberate architecture choices. Exceptions are attached to the exact affected YAML line with a reason, never disabled globally:
 
 - Independent GPU dispatches, comment requests, and Klaud waves must not supersede one another. The priority scheduler and candidate ownership claims handle their resource limits.
-- Fork sign-off and trusted external dispatch require `pull_request_target`; they execute trusted control code and enforce authorization before privileged operations.
+- Trusted external dispatch uses `pull_request_target`; it executes trusted control code and enforces authorization before privileged operations.
 - Existing repository-scoped integration credentials are retained. Moving them into protected GitHub Environments requires migrating the actual stored secrets; adding an empty `environment:` field is not a fix.
 - The profiling storage checkout retains its scoped SSH deploy key only because the next step pushes a trace commit to that separate repository. Benchmark checkouts do not retain credentials.
 
@@ -220,7 +220,7 @@ Record enough information for another reviewer to reproduce the claim without gu
 3. **Before CODEOWNER sign-off:** follow [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md), including its code-quality, architecture, image provenance, upstream recipe, patch/waiver, chat-template, and AgentX requirements where applicable.
 4. **For sweep/eval acceptance:** at least one commit currently in the PR has successful, non-skipped executed `single-node */` and `eval /` checks. A successful `collect-evals` alone is insufficient. Download the corresponding eval artifacts and confirm non-empty, passing accuracy and the same inference image. These are the executable rules in [verifier Checks 1 and 2](../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr).
 5. **For reuse at merge:** an authorized `OWNER`, `MEMBER`, or `COLLABORATOR` posts `/use <run_id>` on its own line to select the eligible source run (the legacy `/reuse-sweep-run` command remains supported) before the supported merge path. The verifier treats a missing or unauthorized command as a failure. See [verifier Check 4](../.github/codeowner-signoff-verify-prompt.md#check-4--reuse-sweep-command-explicitly-posted) and [the reuse procedure](../.github/workflows/README.md#reusing-an-approved-pr-full-sweep).
-6. **At merge:** the current head needs the CODEOWNER sign-off status defined in [the contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off). That guide owns verification, admin-update retention, revocation, and recovery rules.
+6. **At merge:** satisfy GitHub's Core-team and CODEOWNER approval requirements, or use an authorized maintainer bypass. Automated checklist verification posts an advisory comment; see [the contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off).
 7. **After merge:** the author confirms the main-branch jobs pass, as required by [`CONTRIBUTING.md`](../CONTRIBUTING.md#after-merging).
 
 ## Stop conditions
