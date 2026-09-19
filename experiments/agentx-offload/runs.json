@@ -325,27 +325,32 @@
       "job_id": 105914214900,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35449533638/job/105914214900",
       "runner": "b200-nscale-slurm_00",
-      "started_at": "2026-09-19T14:42:54Z"
+      "started_at": "2026-09-19T14:42:54Z",
+      "allocation_id": "16605"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749,35154018672,35344315025,35387609866,35401459251,35442679581,35444664736,35449533638",
   "status": "NVMe c16 repeat 1 completed successfully and produced the study's first valid performance point. The matched HBM-only c16 control is now in progress.",
   "last_capacity_check": {
-    "checked_at": "2026-09-19T14:40:12Z",
-    "cluster_observed_at": "2026-09-19T14:39:47Z",
+    "checked_at": "2026-09-19T15:15:08Z",
+    "cluster_observed_at": "2026-09-19T15:14:41Z",
     "cluster_stale": false,
-    "idle_nodes": 11,
+    "idle_nodes": 10,
     "total_nodes": 11,
     "legacy_task_nodes": 0,
     "legacy_job_ids": [],
-    "scheduler_snapshot_at": "2026-09-19T14:40:09Z",
+    "active_study_nodes": 1,
+    "active_study_job_ids": [
+      "16605"
+    ],
+    "scheduler_snapshot_at": "2026-09-19T15:15:00Z",
     "scheduler_available": true,
     "b200_queued_jobs": 0,
     "competing_run_ids": [],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": true,
-    "reason": "All 11 B200 nodes were idle, the B200 queue was empty, and no B200 reservations or priority overrides were active; one one-node matched control remains below the 50% ceiling and leaves ten idle nodes."
+    "reason": "The matched HBM-only control holds one of 11 B200 nodes and leaves ten idle nodes, below the 50% ceiling. No additional point is launched until this run finishes and its artifacts are validated."
   },
   "next_dispatch": {
     "requires": "Wait for run 35449533638 to finish, validate its retained artifacts, and compare it directly with NVMe run 35444664736 before selecting the next arm."
