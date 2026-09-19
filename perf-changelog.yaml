@@ -8529,3 +8529,15 @@
     Change only decode max-running-requests from 32 to 64; preserve write_through,
     H298, static memory 0.8, zero extra slots, graph 48 and canonical workload.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp2-ep2-tp2-ep2-c8-h298
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp2-ep2-tp2-ep2-c16-h298
+  scenario-type:
+  - agentic-coding
+  description:
+  - 'Add isolated TP2 EP2 1P1D C8 and C16 canonical short screens, preserving the proven C32
+    serving configuration: H298 prefill HiCache, decoder static memory 0.88, 64 Mamba slots,
+    graph32, original BF16 unquantized MTP and BF16 draft KV. Count four active GPUs and eight
+    allocated; use measured results before any official promotion.'
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
