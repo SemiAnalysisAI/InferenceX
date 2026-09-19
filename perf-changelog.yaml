@@ -8560,3 +8560,16 @@
     \ existing measurements as power-ineligible diagnostics; require fresh filtered telemetry\
     \ for qualification. Serving, workload and precision settings are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp2-ep2-tp2-ep2-c32-h298-wt
+  scenario-type:
+  - agentic-coding
+  description:
+  - "Add a controlled TP2 EP2 1P1D C32 H298 write-through screen after selective/WT TP4 measurements\
+    \ exposed severe prefill/decode supply delays. Change only prefill HiCache write policy\
+    \ from the existing TP2 selective baseline; preserve D64/static0.88/graph32, original BF16\
+    \ draft and canonical1200-second profile with10 warmup requests per lane. Explicitly collect\
+    \ only active GPUs0\u20133; allocate eight and normalize by all four serving GPUs. Require\
+    \ fresh full qualification for any selected winner."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
