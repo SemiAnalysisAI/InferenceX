@@ -2951,13 +2951,13 @@ dsr1-fp4-gb300-dynamo-trt:
           ep: 16
           dp-attn: true
 dsr1-fp4-gb300-dynamo-sglang:
-  image: "lmsysorg/sglang:v0.5.8.post1-cu130-runtime"
+  image: "lmsysorg/sglang:v0.5.20-cu130-runtime@sha256:00b02004501e402332827ffd5343a225a8960d99adc990b37d6f31085b8f6800"
   model: nvidia/DeepSeek-R1-0528-NVFP4-v2
   model-prefix: dsr1
   runner: gb300
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "0.8.1" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260917" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true

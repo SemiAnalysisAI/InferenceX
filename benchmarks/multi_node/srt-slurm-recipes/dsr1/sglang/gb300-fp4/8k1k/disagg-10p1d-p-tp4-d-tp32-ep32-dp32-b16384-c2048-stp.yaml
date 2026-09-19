@@ -2,10 +2,8 @@ schema: 2
 name: "gb300-fp4-8k1k-max-tpt"
 
 dynamo:
-  request_plane: "nats"
   source:
-    pypi: 0.8.1
-  # Use NATS for a recipe prior to Dynamo commit 39d2a68.
+    wheel: "1.5.0.dev20260917"
 frontend:
   type: dynamo
   enable_multiple_frontends: true
@@ -14,7 +12,7 @@ frontend:
 
 model:
   path: "dsr1"
-  container: "dynamo-sglang"
+  container: "lmsysorg/sglang:v0.5.20-cu130-runtime@sha256:00b02004501e402332827ffd5343a225a8960d99adc990b37d6f31085b8f6800"
   precision: "fp4"
 
 resources:
@@ -158,13 +156,12 @@ roles:
       ep-dispatch-algorithm: "static"
       ep-num-redundant-experts: 32
 
-      cuda-graph-max-bs: 512
+      cuda-graph-max-bs-decode: 512
       num-reserved-decode-tokens: 112
 
       # Additional decode optimizations
       moe-dense-tp-size: 1
       enable-dp-lm-head: true
-      prefill-round-robin-balance: true
       enable-dp-attention: true
       fp4-gemm-backend: "flashinfer_cutlass"
       disaggregation-transfer-backend: nixl
