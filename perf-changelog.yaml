@@ -8369,6 +8369,33 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3253
 
 - config-keys:
+    - kimik3-fp4-h200-vllm-agentic-simple
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required measured power for the complete H200 Kimi-K3 simple recipe through the shared recipe-gated launcher."
+    - "为 H200 Kimi-K3 simple 完整配方启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3054
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required telemetry on the four GB300 disaggregated recipes using the launcher and collector introduced below this draft in the stack. Preserve the original bilingual backfill and validation guidance."
+    - "为 GB300 Kimi-K3 分离部署启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3047
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the GB300 disaggregated DCGM exporter to port 19401 to avoid the system listener on 9401. Preserve prefill/decode telemetry grouping; full disaggregated hardware qualification remains pending."
+    - "GB300 分离部署的 DCGM exporter 改用 19401，避免与 9401 系统服务冲突；保留 prefill/decode 分组，完整硬件验证仍待完成。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3047
+
+- config-keys:
     - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
     - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
     - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
