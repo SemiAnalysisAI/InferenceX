@@ -421,7 +421,11 @@
       "artifacts": [],
       "performance_result": false,
       "workflow_name": "offload-v1-dram-c16-r1-20260919T162046Z",
-      "dispatched_at": "2026-09-19T16:20:48Z"
+      "dispatched_at": "2026-09-19T16:20:48Z",
+      "job_id": 105927752532,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35454656748/job/105927752532",
+      "runner": "b200-nscale-slurm_00",
+      "started_at": "2026-09-19T16:21:19Z"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749,35154018672,35344315025,35387609866,35401459251,35442679581,35444664736,35449533638,35454656748",
