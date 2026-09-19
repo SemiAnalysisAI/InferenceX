@@ -439,10 +439,12 @@ complete; a subsequent attempt downloads into a new staging directory. Verificat
 requires reading the full 33.7 GB on warm reuse too. The helper requires POSIX locking
 and atomic directory rename on the caller's shared filesystem.
 
-When integrating a qualified recipe, its existing pool launcher should acquire the
-asset before submission, pass `--mount HOST_PATH /draft-model` through
-`write_srt_cluster_config`, and preserve `subset-provenance.json` plus the resolved
-host/container paths in benchmark artifacts. Do not put personal paths in recipes.
+The B300 DSXE launcher acquires this asset before submitting Qwen3.5 FP8
+Dynamo/SGLang AgentX jobs. It uses a manifest-hash directory under its existing
+`WRITABLE_MODELS_DIR`, mounts it at `/draft-model` through `write_srt_cluster_config`,
+and includes the manifest, provenance and resolved host/container paths in
+`draft-model-provenance/` inside the server-log archive. Recipes do not depend on
+personal directories.
 For SGLang `20518d85`, the supported separate-draft arguments are:
 `speculative-draft-model-path: /draft-model`, the exact revision above,
 `speculative-draft-model-quantization: unquant`,
@@ -450,8 +452,8 @@ For SGLang `20518d85`, the supported separate-draft arguments are:
 `speculative-moe-runner-backend: flashinfer_trtllm`.
 Omitting `unquant` can inherit the FP8 target's quantization. Separate draft KV dtype
 does not guarantee mixed-dtype HiCache compatibility; retain the recipe's independently
-validated cache/retraction configuration. This helper alone does not change any launcher
-or qualify a serving recipe; real accuracy and performance tests remain required.
+validated cache/retraction configuration. Acquisition does not qualify a serving recipe;
+real accuracy and performance tests remain required.
 
 ## Validate
 

@@ -382,9 +382,11 @@ BF16 embedding/head。完整上游索引保存在 `model.safetensors.index.json.
 不视为完整资源；重试使用新的暂存目录下载。复用也需要读取全部约 33.7 GB。
 共享文件系统必须支持 POSIX 锁和原子目录重命名。
 
-后续集成已验证配方时，应由现有集群启动器在提交前获取资源，通过
-`write_srt_cluster_config` 传入 `--mount HOST_PATH /draft-model`，并在测试产物中
-保留 `subset-provenance.json` 及实际宿主机/容器路径。配方不得依赖个人目录。
+B300 DSXE 启动器在提交 Qwen3.5 FP8 Dynamo/SGLang AgentX 任务前获取该资源，
+使用现有 `WRITABLE_MODELS_DIR` 下以清单哈希命名的目录，通过
+`write_srt_cluster_config` 挂载到 `/draft-model`，并在服务端日志归档的
+`draft-model-provenance/` 中保存清单、来源记录及实际宿主机/容器路径。
+配方不依赖个人目录。
 SGLang `20518d85` 的独立 draft 参数为
 `speculative-draft-model-path: /draft-model`、上述固定 revision、
 `speculative-draft-model-quantization: unquant`、
@@ -392,7 +394,7 @@ SGLang `20518d85` 的独立 draft 参数为
 `speculative-moe-runner-backend: flashinfer_trtllm`。
 省略 `unquant` 可能继承 FP8 目标模型的量化配置。独立 draft KV 类型并不保证
 混合类型 HiCache 兼容；必须保留配方已独立验证的缓存和回退配置。
-本工具本身不修改任何启动器，也不构成配方验证；仍需真实准确率和性能测试。
+资源获取本身不构成配方验证；仍需真实准确率和性能测试。
 
 ## 验证
 

@@ -151,9 +151,27 @@ export ISL="$ISL"
 export OSL="$OSL"
 
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
+SRT_MODEL_MOUNTS=()
+DRAFT_PROVENANCE_DIR=""
+if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+    DRAFT_MANIFEST="$GITHUB_WORKSPACE/configs/models/qwen3.5-397b-mtp-bf16.json"
+    DRAFT_MANIFEST_SHA=$(sha256sum "$DRAFT_MANIFEST") || exit 1
+    DRAFT_CACHE_DIR="$WRITABLE_MODELS_DIR/qwen3.5-original-mtp-${DRAFT_MANIFEST_SHA%% *}"
+    PYTHONPATH="$GITHUB_WORKSPACE" python -m infx.models.acquire_mtp \
+        --manifest "$DRAFT_MANIFEST" --destination "$DRAFT_CACHE_DIR" \
+        --lock-timeout 3600 || exit 1
+    SRT_MODEL_MOUNTS+=(--mount "$DRAFT_CACHE_DIR" /draft-model)
+    DRAFT_PROVENANCE_DIR="$GITHUB_WORKSPACE/draft-model-provenance"
+    mkdir -p "$DRAFT_PROVENANCE_DIR" || exit 1
+    cp "$DRAFT_MANIFEST" "$DRAFT_PROVENANCE_DIR/manifest.json" || exit 1
+    cp "$DRAFT_CACHE_DIR/subset-provenance.json" "$DRAFT_PROVENANCE_DIR/" || exit 1
+    printf '%s\n' "$DRAFT_CACHE_DIR" > "$DRAFT_PROVENANCE_DIR/host-path.txt"
+    printf '%s\n' /draft-model > "$DRAFT_PROVENANCE_DIR/container-path.txt"
+fi
+
 echo "Creating srtslurm.yaml configuration..."
 write_srt_cluster_config b300-dsxe srtslurm.yaml "$USES_DCGM_POWER" \
-    --var MODEL_ROOT "$MODEL_ROOT" || exit 1
+    --var MODEL_ROOT "$MODEL_ROOT" "${SRT_MODEL_MOUNTS[@]}" || exit 1
 
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
@@ -241,6 +259,9 @@ if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" && "${EVAL_ONLY}" != "tr
         "${POWER_CONCURRENCIES[@]}" || SRT_JOB_RC=$?
 fi
 
+if [[ -n "$DRAFT_PROVENANCE_DIR" ]]; then
+    cp -r "$DRAFT_PROVENANCE_DIR" "$LOGS_DIR/draft-model-provenance" || exit 1
+fi
 cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
 tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 

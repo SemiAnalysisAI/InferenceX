@@ -8456,5 +8456,5 @@
   - Add B300 Qwen3.5-397B-A17B FP8 AgentX disaggregation with colocated TP4 prefill
     and TP4 decode on eight GPUs at concurrency 16, 24 and 32.
   - Use Dynamo/SGLang nightly 20260918-20518d85 with NEXTN MTP and Mooncake NVLink transfers.
-  - Enable 72 GB per-rank prefill HiCache.
+  - Enable 72 GB per-rank prefill HiCache and use original BF16 MTP draft weights and draft KV.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268

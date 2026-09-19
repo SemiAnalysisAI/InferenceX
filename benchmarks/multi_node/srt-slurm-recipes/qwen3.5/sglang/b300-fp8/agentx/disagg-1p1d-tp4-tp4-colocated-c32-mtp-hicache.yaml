@@ -154,6 +154,13 @@ roles:
       speculative-num-steps: 3
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 4
+      speculative-draft-model-path: /draft-model
+      speculative-draft-model-revision: 8472618112abcbd45acbcdc58436aff4233c23f7
+      speculative-draft-model-quantization: unquant
+      speculative-draft-kv-cache-dtype: bf16
+      speculative-moe-runner-backend: flashinfer_trtllm
+      disaggregation-decode-retraction-backup: cpu_tensor
+      disaggregation-decode-extra-slots: 0
       scheduler-recv-interval: 10
       stream-interval: 50
       max-running-requests: 64
@@ -167,6 +174,7 @@ srun_options:
   container-remap-root: ''
 benchmark:
   type: custom
+  concurrencies: [32]
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace

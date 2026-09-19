@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tarfile
 from pathlib import Path
 
@@ -51,6 +52,25 @@ def test_b300_collects_artifacts_before_returning_slurm_status(
     _stub(binaries, "unsquashfs", "exit 0")
     _stub(
         binaries,
+        "python",
+        r"""
+if [[ "$1" == -m && "$2" == infx.models.acquire_mtp ]]; then
+    shift 2
+    while [[ "$#" -gt 0 ]]; do
+        case "$1" in
+            --destination) destination="$2"; shift 2 ;;
+            *) shift 2 ;;
+        esac
+    done
+    mkdir -p "$destination"
+    printf '{"artifact_type":"fixture-original-draft"}\n' > "$destination/subset-provenance.json"
+    exit 0
+fi
+exec "$MOCK_REAL_PYTHON" "$@"
+""",
+    )
+    _stub(
+        binaries,
         "sacct",
         r"""
 [[ " $* " == *" -X "* ]] || exit 2
@@ -85,6 +105,10 @@ fi
     # Keep the real launcher-owned profiles and renderer in the fixture checkout.
     shutil.copytree(ROOT / "runners", workspace / "runners")
     (workspace / "benchmarks").mkdir()
+    (workspace / "configs/models").mkdir(parents=True)
+    (workspace / "configs/models/qwen3.5-397b-mtp-bf16.json").write_text(
+        '{"source":"fixture-original-draft"}\n'
+    )
     if power_mode != "off":
         recipe = workspace / "benchmarks/multi_node/srt-slurm-recipes/test.yaml"
         recipe.parent.mkdir(parents=True)
@@ -99,6 +123,7 @@ fi
     with (workspace / "runners/slurm_utils.sh").open("a") as helpers:
         helpers.write(r"""
 setup_srt_slurm() {
+    WRITABLE_MODELS_DIR="$MOCK_DRAFT_CACHE"
     mkdir -p "$1/recipes"
     cd "$1" || return 1
     printf 'name: fixture\nbenchmark:\n  type: custom\n' > recipes/test.yaml
@@ -126,6 +151,8 @@ apply_srt_recipe() {
     env = {
         **os.environ,
         "PATH": f"{binaries}:{os.environ['PATH']}",
+        "MOCK_REAL_PYTHON": sys.executable,
+        "MOCK_DRAFT_CACHE": str(tmp_path / "models"),
         "MOCK_ACCOUNTING": accounting,
         "MOCK_SACCT_COUNT": str(tmp_path / "sacct-count"),
         "MOCK_FIXTURE": str(fixture),
@@ -196,6 +223,15 @@ builtin source "$1/runners/launch_b300-dsxe.sh"
             (workspace / "srt-slurm/recipes/test.yaml").read_text()
         )
         assert emitted["benchmark"]["concurrencies"] == [1]
+        profile = yaml.safe_load((workspace / "srt-slurm/srtslurm.yaml").read_text())
+        cache = tmp_path / "models" / ("qwen3.5-original-mtp-" + "0" * 64)
+        assert profile["default_mounts"][str(cache)] == "/draft-model"
+        draft_artifact = workspace / "LOGS/draft-model-provenance"
+        assert json.loads((draft_artifact / "subset-provenance.json").read_text()) == {
+            "artifact_type": "fixture-original-draft"
+        }
+        assert (draft_artifact / "host-path.txt").read_text().strip() == str(cache)
+        assert (draft_artifact / "container-path.txt").read_text().strip() == "/draft-model"
     aggregate = json.loads((workspace / "aggregate_conc1.json").read_text())
     assert aggregate["diagnostic"] == "retained"
     if power_mode == "missing":
