@@ -8373,3 +8373,10 @@
     - "Diagnostic rerun: pin srt-slurm 7a56e6e81a4e0a7b557053b206550c4e5e7f807b to show the streaming startup message during the 20-minute H200 AgentX c2 run"
   no-evals: true
   pr-link: https://github.com/SemiAnalysisAI/srt-slurm/pull/20
+
+- config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg
+  description:
+    - "Diagnostic rerun: pin srt-slurm 409c85200393d9c10d73ecd431aa5195b265e286 to show both start and end markers around streamed benchmark output during the 20-minute H200 AgentX c2 run"
+  no-evals: true
+  pr-link: https://github.com/SemiAnalysisAI/srt-slurm/pull/20
