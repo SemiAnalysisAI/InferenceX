@@ -8615,3 +8615,18 @@
     to four active GPUs, report eight allocated, and require native memory/graph verification plus
     fresh full real accuracy if selected.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp4-ep1-tp4-ep1-c32-h298-dmax64-wt
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp4-ep1-tp4-ep1-c40-h298-dmax64-wt
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp4-ep1-tp4-ep1-c56-h298-dmax64-wt
+  scenario-type:
+  - agentic-coding
+  description:
+  - Expand the measured TP4 C48 H298 write-through D64 candidate to canonical C32/C40/C56 short screens
+    after it recovered31,195.82 logical tokens/s/GPU at153.168 interactivity with strict power passing.
+    Preserve all serving arguments from the successful C48 candidate for C32/C40, including graph48;
+    only C56 raises graph ceiling to64. Keep eight active/allocated GPUs with explicit exporter scope,1200s/10-warmup
+    and2h allocation. Select with final request, drain and power evidence; require subsequent full
+    official performance and real accuracy qualification.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
