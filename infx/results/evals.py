@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -17,9 +18,25 @@ _TIMESTAMP_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:\.\d+)?")
 def is_eval_result(data: object) -> bool:
     """Recognize an eval format marker without validating its metrics."""
     return isinstance(data, dict) and (
-        "lm_eval_version" in data
-        or data.get("result_format") == EVAL_RESULT_FORMAT
+        "lm_eval_version" in data or data.get("result_format") == EVAL_RESULT_FORMAT
     )
+
+
+def read_eval_results(
+    paths: Iterable[Path],
+    *,
+    skip_errors: tuple[type[Exception], ...] = (OSError, UnicodeDecodeError, json.JSONDecodeError),
+) -> dict[Path, dict[str, Any]]:
+    results = {}
+    for path in paths:
+        try:
+            with open(path) as handle:
+                data = json.load(handle)
+        except skip_errors:
+            continue
+        if is_eval_result(data):
+            results[path] = data
+    return results
 
 
 def result_concurrency(name: str) -> int | None:
@@ -38,15 +55,11 @@ def result_order(path: Path) -> tuple[int, str]:
     if match:
         try:
             base, separator, fraction = match.group(0).partition(".")
-            parsed = datetime.strptime(base, "%Y-%m-%dT%H-%M-%S").replace(
-                tzinfo=timezone.utc
-            )
-            delta = parsed - datetime(1970, 1, 1, tzinfo=timezone.utc)
+            parsed = datetime.strptime(base, "%Y-%m-%dT%H-%M-%S").replace(tzinfo=UTC)
+            delta = parsed - datetime(1970, 1, 1, tzinfo=UTC)
             fractional_ns = int((fraction + "000000000")[:9]) if separator else 0
             return (
-                delta.days * 86_400_000_000_000
-                + delta.seconds * 1_000_000_000
-                + fractional_ns,
+                delta.days * 86_400_000_000_000 + delta.seconds * 1_000_000_000 + fractional_ns,
                 path.name,
             )
         except ValueError:
@@ -55,7 +68,9 @@ def result_order(path: Path) -> tuple[int, str]:
 
 
 def select_latest_result(
-    paths: Iterable[Path], *, concurrency: int | None = None,
+    paths: Iterable[Path],
+    *,
+    concurrency: int | None = None,
 ) -> Path | None:
     """Select from recognized candidates, optionally for one concurrency.
 
@@ -63,7 +78,8 @@ def select_latest_result(
     validation belong to the caller; legacy ordering may read file mtimes.
     """
     candidates = (
-        path for path in paths
+        path
+        for path in paths
         if concurrency is None or result_concurrency(path.name) == concurrency
     )
     return max(candidates, key=result_order, default=None)
@@ -129,8 +145,8 @@ def extract_metrics(data: dict[str, Any], *, source: str) -> list[dict[str, Any]
     remain supported; invalid counts and integration failures produce failed
     metrics. Malformed metric/filter configurations retain their existing errors.
     """
-    results = data.get('results', {})
-    raw_configs = data.get('configs', {})
+    results = data.get("results", {})
+    raw_configs = data.get("configs", {})
     configs = raw_configs if isinstance(raw_configs, dict) else {}
     if not isinstance(results, dict) or not results:
         return []
@@ -139,63 +155,64 @@ def extract_metrics(data: dict[str, Any], *, source: str) -> list[dict[str, Any]
     for task, task_results in results.items():
         raw_task_config = configs.get(task, {})
         task_config = raw_task_config if isinstance(raw_task_config, dict) else {}
-        raw_metadata = task_config.get('metadata', {})
+        raw_metadata = task_config.get("metadata", {})
         metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
-        model = data.get('model_name') or metadata.get('model')
-        sample_counts = data.get('n-samples')
+        model = data.get("model_name") or metadata.get("model")
+        sample_counts = data.get("n-samples")
         task_samples = sample_counts.get(task) if isinstance(sample_counts, dict) else None
-        n_eff = task_samples.get('effective') if isinstance(task_samples, dict) else None
+        n_eff = task_samples.get("effective") if isinstance(task_samples, dict) else None
 
-        invalid_count = 'n-samples' in data and not is_valid_effective_count(n_eff)
-        integration_error = data.get('integration_error')
+        invalid_count = "n-samples" in data and not is_valid_effective_count(n_eff)
+        integration_error = data.get("integration_error")
         if integration_error is None and invalid_count:
             integration_error = {
-                'type': 'InvalidEffectiveSampleCount',
-                'message': f'invalid effective sample count: {n_eff!r}',
+                "type": "InvalidEffectiveSampleCount",
+                "message": f"invalid effective sample count: {n_eff!r}",
             }
         if integration_error is None and not isinstance(task_results, dict):
             integration_error = {
-                'type': 'InvalidTaskResults',
-                'message': f'invalid task results for {task!r}',
+                "type": "InvalidTaskResults",
+                "message": f"invalid task results for {task!r}",
             }
         metrics = {
-            'task': task,
-            'strict': None,
-            'strict_se': None,
-            'flex': None,
-            'flex_se': None,
-            'accuracy': None,
-            'accuracy_se': None,
-            'n_eff': n_eff,
-            'model': model,
-            'source': source,
-            'infrastructure_success': integration_error is None,
-            'integration_error': integration_error,
+            "task": task,
+            "strict": None,
+            "strict_se": None,
+            "flex": None,
+            "flex_se": None,
+            "accuracy": None,
+            "accuracy_se": None,
+            "n_eff": n_eff,
+            "model": model,
+            "source": source,
+            "infrastructure_success": integration_error is None,
+            "integration_error": integration_error,
         }
         if integration_error is not None:
             if not isinstance(integration_error, dict):
-                metrics['integration_error'] = {
-                    'type': 'IntegrationError', 'message': str(integration_error),
+                metrics["integration_error"] = {
+                    "type": "IntegrationError",
+                    "message": str(integration_error),
                 }
-            metrics['n_eff'] = 0
+            metrics["n_eff"] = 0
         else:
-            metric_list = task_config.get('metric_list', [])
-            base_metric = metric_list[0]['metric'] if metric_list else 'exact_match'
-            filter_list = task_config.get('filter_list', [])
+            metric_list = task_config.get("metric_list", [])
+            base_metric = metric_list[0]["metric"] if metric_list else "exact_match"
+            filter_list = task_config.get("filter_list", [])
             if not filter_list:
-                metric = 'acc' if 'acc' in task_results else base_metric
-                family = 'accuracy' if 'acc' in task_results else 'strict'
+                metric = "acc" if "acc" in task_results else base_metric
+                family = "accuracy" if "acc" in task_results else "strict"
                 metrics[family] = task_results.get(metric)
-                metrics[f'{family}_se'] = task_results.get(f'{metric}_stderr')
+                metrics[f"{family}_se"] = task_results.get(f"{metric}_stderr")
             else:
                 for filter_config in filter_list:
-                    name = filter_config['name']
+                    name = filter_config["name"]
                     family = metric_family(name)
-                    if base_metric == 'acc' and name == 'none':
-                        family = 'accuracy'
+                    if base_metric == "acc" and name == "none":
+                        family = "accuracy"
                     if family is not None:
-                        metrics[family] = task_results.get(f'{base_metric},{name}')
-                        metrics[f'{family}_se'] = task_results.get(f'{base_metric}_stderr,{name}')
+                        metrics[family] = task_results.get(f"{base_metric},{name}")
+                        metrics[f"{family}_se"] = task_results.get(f"{base_metric}_stderr,{name}")
         extracted.append(metrics)
     return extracted
 
@@ -204,7 +221,7 @@ def as_int(x: Any, default: int = 0) -> int:
     """Convert a metadata field to int with a fallback."""
     try:
         return int(x)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return default
 
 
@@ -214,21 +231,21 @@ def as_bool(x: Any, default: bool = False) -> bool:
         return x
     if x is None:
         return default
-    return str(x).lower() == 'true'
+    return str(x).lower() == "true"
 
 
 def build_row(meta: dict[str, Any], m: dict[str, Any]) -> dict[str, Any]:
     """Build a result row from metadata and extracted metrics."""
-    is_multinode = as_bool(meta.get('is_multinode'), False)
-    prefill_tp = as_int(meta.get('prefill_tp', meta.get('tp', 1)), 1)
-    prefill_ep = as_int(meta.get('prefill_ep', meta.get('ep', 1)), 1)
-    prefill_num_workers = as_int(meta.get('prefill_num_workers', 1), 1)
-    decode_tp = as_int(meta.get('decode_tp', meta.get('tp', 1)), 1)
-    decode_ep = as_int(meta.get('decode_ep', meta.get('ep', 1)), 1)
-    decode_num_workers = as_int(meta.get('decode_num_workers', 1), 1)
-    prefill_dp_attention = meta.get('prefill_dp_attention')
-    decode_dp_attention = meta.get('decode_dp_attention')
-    dp_attention = meta.get('dp_attention', 'none')
+    is_multinode = as_bool(meta.get("is_multinode"), False)
+    prefill_tp = as_int(meta.get("prefill_tp", meta.get("tp", 1)), 1)
+    prefill_ep = as_int(meta.get("prefill_ep", meta.get("ep", 1)), 1)
+    prefill_num_workers = as_int(meta.get("prefill_num_workers", 1), 1)
+    decode_tp = as_int(meta.get("decode_tp", meta.get("tp", 1)), 1)
+    decode_ep = as_int(meta.get("decode_ep", meta.get("ep", 1)), 1)
+    decode_num_workers = as_int(meta.get("decode_num_workers", 1), 1)
+    prefill_dp_attention = meta.get("prefill_dp_attention")
+    decode_dp_attention = meta.get("decode_dp_attention")
+    dp_attention = meta.get("dp_attention", "none")
 
     if prefill_dp_attention is None:
         prefill_dp_attention = dp_attention
@@ -242,51 +259,54 @@ def build_row(meta: dict[str, Any], m: dict[str, Any]) -> dict[str, Any]:
             dp_attention = f"prefill={str(prefill_dp_attention).lower()},decode={str(decode_dp_attention).lower()}"
 
     row = {
-        'is_multinode': is_multinode,
-        'model_prefix': meta.get('infmax_model_prefix', 'unknown'),
-        'model': m.get('model') or meta.get('model', 'unknown'),
-        'hw': meta.get('hw', 'unknown').upper(),
-        'framework': meta.get('framework', 'unknown').lower(),
-        'precision': meta.get('precision', 'unknown').lower(),
-        'spec_decoding': meta.get('spec_decoding', 'unknown'),
-        'isl': as_int(meta.get('isl', 0), 0),
-        'osl': as_int(meta.get('osl', 0), 0),
-        'tp': as_int(meta.get('tp', prefill_tp), prefill_tp),
-        'ep': as_int(meta.get('ep', prefill_ep), prefill_ep),
-        'prefill_tp': prefill_tp,
-        'prefill_ep': prefill_ep,
-        'prefill_num_workers': prefill_num_workers,
-        'decode_tp': decode_tp,
-        'decode_ep': decode_ep,
-        'decode_num_workers': decode_num_workers,
-        'conc': as_int(meta.get('conc', 0), 0),
-        'dp_attention': str(dp_attention).lower(),
-        'prefill_dp_attention': str(prefill_dp_attention).lower(),
-        'decode_dp_attention': str(decode_dp_attention).lower(),
-        'task': m.get('task', 'unknown'),
-        'em_strict': m.get('strict'),
-        'em_strict_se': m.get('strict_se'),
-        'em_flexible': m.get('flex'),
-        'em_flexible_se': m.get('flex_se'),
-        'n_eff': m.get('n_eff'),
-        'source': m.get('source'),
-        'infrastructure_success': m.get('infrastructure_success', True),
-        'integration_error': m.get('integration_error'),
+        "is_multinode": is_multinode,
+        "model_prefix": meta.get("infmax_model_prefix", "unknown"),
+        "model": m.get("model") or meta.get("model", "unknown"),
+        "hw": meta.get("hw", "unknown").upper(),
+        "framework": meta.get("framework", "unknown").lower(),
+        "precision": meta.get("precision", "unknown").lower(),
+        "spec_decoding": meta.get("spec_decoding", "unknown"),
+        "isl": as_int(meta.get("isl", 0), 0),
+        "osl": as_int(meta.get("osl", 0), 0),
+        "tp": as_int(meta.get("tp", prefill_tp), prefill_tp),
+        "ep": as_int(meta.get("ep", prefill_ep), prefill_ep),
+        "prefill_tp": prefill_tp,
+        "prefill_ep": prefill_ep,
+        "prefill_num_workers": prefill_num_workers,
+        "decode_tp": decode_tp,
+        "decode_ep": decode_ep,
+        "decode_num_workers": decode_num_workers,
+        "conc": as_int(meta.get("conc", 0), 0),
+        "dp_attention": str(dp_attention).lower(),
+        "prefill_dp_attention": str(prefill_dp_attention).lower(),
+        "decode_dp_attention": str(decode_dp_attention).lower(),
+        "task": m.get("task", "unknown"),
+        "em_strict": m.get("strict"),
+        "em_strict_se": m.get("strict_se"),
+        "em_flexible": m.get("flex"),
+        "em_flexible_se": m.get("flex_se"),
+        "n_eff": m.get("n_eff"),
+        "source": m.get("source"),
+        "infrastructure_success": m.get("infrastructure_success", True),
+        "integration_error": m.get("integration_error"),
     }
 
-    if 'eval_suite' in meta:
-        row['eval_suite'] = meta['eval_suite']
+    if "eval_suite" in meta:
+        row["eval_suite"] = meta["eval_suite"]
 
     primary = _primary_metric(m)
-    row['score'] = m[primary] if primary is not None else None
-    row['score_name'] = _SCORE_NAMES.get(primary)
-    row['score_se'] = m.get(f'{primary}_se') if primary is not None else None
+    row["score"] = m[primary] if primary is not None else None
+    row["score_name"] = _SCORE_NAMES.get(primary)
+    row["score_se"] = m.get(f"{primary}_se") if primary is not None else None
 
     return row
 
 
 def build_rows(
-    data: dict[str, Any], meta: dict[str, Any], *, source: str,
+    data: dict[str, Any],
+    meta: dict[str, Any],
+    *,
+    source: str,
 ) -> list[dict[str, Any]]:
     """Build collector rows from loaded result/metadata mappings without I/O.
 
@@ -297,15 +317,89 @@ def build_rows(
     """
     rows = []
     for metrics in extract_metrics(data, source=source):
-        if metrics['infrastructure_success'] is not False:
+        if metrics["infrastructure_success"] is not False:
             score = metrics.get(_primary_metric(metrics))
             if not is_valid_score(score):
                 for name in _SCORE_NAMES:
-                    metrics[name] = metrics[f'{name}_se'] = None
-                metrics['infrastructure_success'] = False
-                metrics['integration_error'] = {
-                    'type': 'InvalidPrimaryScore',
-                    'message': f'invalid primary score: {score!r}',
+                    metrics[name] = metrics[f"{name}_se"] = None
+                metrics["infrastructure_success"] = False
+                metrics["integration_error"] = {
+                    "type": "InvalidPrimaryScore",
+                    "message": f"invalid primary score: {score!r}",
                 }
         rows.append(build_row(meta, metrics))
     return rows
+
+
+def result_error(data: Any) -> str | None:
+    """Return a structural error for a raw result, or None when reusable."""
+    if not isinstance(data, dict):
+        return "is not an object"
+    if "integration_error" in data:
+        return "reports an integration error"
+    if not is_eval_result(data):
+        return "has no recognized eval result format"
+
+    results = data.get("results")
+    if not isinstance(results, dict) or not results:
+        return "has empty or malformed results"
+    configs = data.get("configs", {})
+    if not isinstance(configs, dict):
+        return "has malformed configs"
+
+    sample_counts = data.get("n-samples")
+    if "n-samples" in data and not isinstance(sample_counts, dict):
+        return "has malformed effective sample counts"
+
+    for task, metrics in results.items():
+        if not isinstance(task, str) or not task:
+            return "has an invalid task name"
+        if not isinstance(metrics, dict) or not metrics:
+            return f"has empty or malformed results for task {task!r}"
+        task_config = configs.get(task, {})
+        if not isinstance(task_config, dict):
+            return f"has malformed config for task {task!r}"
+        metric_list = task_config.get("metric_list", [])
+        filter_list = task_config.get("filter_list", [])
+        if not isinstance(metric_list, list) or not isinstance(filter_list, list):
+            return f"has malformed config for task {task!r}"
+        if metric_list:
+            first_metric = metric_list[0]
+            if (
+                not isinstance(first_metric, dict)
+                or not isinstance(first_metric.get("metric"), str)
+                or not first_metric["metric"]
+            ):
+                return f"has malformed metric config for task {task!r}"
+            base_metric = first_metric["metric"]
+        else:
+            base_metric = "exact_match"
+        if filter_list:
+            if any(
+                not isinstance(item, dict)
+                or not isinstance(item.get("name"), str)
+                or not item["name"]
+                for item in filter_list
+            ):
+                return f"has malformed filter config for task {task!r}"
+            configured_names = [f"{base_metric},{item['name']}" for item in filter_list]
+            strict_names = [name for name in configured_names if metric_family(name) == "strict"]
+            fallback_names = [name for name in configured_names if metric_family(name) == "flex"]
+            primary_names = strict_names or fallback_names or configured_names
+        else:
+            primary_names = ["acc" if "acc" in metrics else base_metric]
+        if not primary_names or any(name not in metrics for name in primary_names):
+            return f"has no score for task {task!r}"
+
+        for name in primary_names:
+            score = metrics[name]
+            if not is_valid_score(score):
+                return f"has invalid score {name!r} for task {task!r}: {score!r}"
+        if sample_counts is not None:
+            task_counts = sample_counts.get(task)
+            if not isinstance(task_counts, dict) or "effective" not in task_counts:
+                return f"has malformed effective sample count for task {task!r}"
+            effective = task_counts["effective"]
+            if not is_valid_effective_count(effective):
+                return f"has invalid effective sample count for task {task!r}: {effective!r}"
+    return None

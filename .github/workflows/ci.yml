@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: &python-paths
+      - '**/*.py'
+      - '.github/scripts/**'
+      - '.github/workflows/ci.yml'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.python-version'
+      - '.mcp.json'
+      - '.github/mcp-ci.json'
+      - 'infx/ruff.toml'
+      - '**/pytest.ini'
+      - 'utils/srt-slurm'
+  push:
+    branches: [main]
+    paths: *python-paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: ${{ matrix.check }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [Lint, Tests]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          cache-suffix: ${{ matrix.check }}
+
+      - name: Lint and format
+        if: matrix.check == 'Lint'
+        run: |
+          uvx --exclude-newer PT12H ruff@latest check --output-format=github infx
+          uvx --exclude-newer PT12H ruff@latest format --check --diff infx
+
+      - name: Prepare test environment
+        if: matrix.check == 'Tests'
+        run: |
+          git submodule update --init utils/srt-slurm
+          uv sync --locked --all-extras --group test --no-editable
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Verify MCP server compatibility
+        if: matrix.check == 'Tests'
+        run: |
+          python - <<'PY'
+          import asyncio
+          import runpy
+
+          module = runpy.run_path(".claude/mcp/server.py")
+          server = module["InferenceXMCPServer"]()
+          tools = asyncio.run(server.list_tools())
+          assert any(tool.name == "list_versions" for tool in tools)
+          assert asyncio.run(server.list_resources()) == []
+          print("MCP server construction and discovery passed.")
+          PY
+
+      - name: Run tests
+        if: matrix.check == 'Tests'
+        run: |
+          python -c "import torch; assert torch.version.cuda is None and torch.version.hip is None"
+          # SRT is initialized for our connector tests; its upstream suite runs in its own CI.
+          python -m pytest utils/ runners/ experimental/CollectiveX/tests/ experimental/operatorx/tests/ --ignore=utils/srt-slurm -n 4

@@ -23,14 +23,12 @@ if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 SERVER_LOG=/workspace/server.log
 
-# MTP (Multi-Token Prediction) Config - EAGLE speculative decoding
 SPECULATIVE_NUM_STEPS=3
 SPECULATIVE_DRAFT_TOKENS=4
 SPECULATIVE_EAGLE_TOPK=1
 
 echo "CONC: $CONC, ISL: $ISL, OSL: $OSL, MAX_MODEL_LEN: $MAX_MODEL_LEN"
 
-# Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
@@ -64,7 +62,6 @@ SGLANG_ENABLE_SPEC_V2=1 python3 -m sglang.launch_server \
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 pip install -q datasets pandas
@@ -82,13 +79,11 @@ run_benchmark_serving \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
-    export EVAL_CONCURRENT_REQUESTS="${EVAL_CONCURRENT_REQUESTS:-$CONC}"
+    export EVAL_CONCURRENT_REQUESTS="$CONC"
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
 set +x

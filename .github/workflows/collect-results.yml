@@ -3,6 +3,9 @@ name: Template - Collect Results
 on:
   workflow_call:
     inputs:
+      tooling-ref:
+        required: true
+        type: string
       result-prefix:
         required: false
         type: string
@@ -13,14 +16,15 @@ permissions:
 
 jobs:
   collect-results:
+    name: collect-results
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          token: ${{ secrets.REPO_PAT }}
-          fetch-depth: 0
+          ref: ${{ inputs.tooling-ref }}
+          persist-credentials: false
 
       - name: Download JSON artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -28,8 +32,14 @@ jobs:
           path: results/
           pattern: ${{ inputs.result-prefix && format('{0}_*', inputs.result-prefix) || '*' }}
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
       - name: Aggregate results
-        run: python3 -m infx.results.collect_results results/ ${{ inputs.result-prefix || 'all' }}
+        env:
+          RESULT_PREFIX: ${{ inputs.result-prefix || 'all' }}
+        run: |
+          uv run --locked python -m infx.results.collect_results results/ "${RESULT_PREFIX}"
 
       - name: Upload aggregated results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

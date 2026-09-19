@@ -1,25 +1,40 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
+check_env_vars \
+    PREFILL_NODES DECODE_NODES PREFILL_TP DECODE_TP B200_SQUASH_DIR \
+    SALLOC_TIME_LIMIT REQUIRE_POWER IS_AGENTIC EVAL_ONLY BENCHMARK_LOGS_DIR \
+    TILERT_DECODE_DRAIN MODEL_PREFIX PRECISION PORT GITHUB_WORKSPACE \
+    IMAGE PREFILL_IMAGE SLURM_PARTITION SLURM_ACCOUNT RUNNER_NAME \
+    MODEL_PATH ISL OSL TILERT_WEIGHTS_DIR
 set -x
-NODES=$(( ${PREFILL_NODES:-1} + ${DECODE_NODES:-1} ))
-if [[ "${PREFILL_NODES:-1}" != 1 || "${DECODE_NODES:-1}" != 1 ]]; then
+NODES=$(( ${PREFILL_NODES} + ${DECODE_NODES} ))
+if [[ "${PREFILL_NODES}" != 1 || "${DECODE_NODES}" != 1 ]]; then
     echo "TileRT native launcher requires one physical node per role" >&2
     exit 1
 fi
-GPUS_PER_NODE="${GPUS_PER_NODE:-${GPU_COUNT:-$(( ${PREFILL_TP:-8} > ${DECODE_TP:-8} ? ${PREFILL_TP:-8} : ${DECODE_TP:-8} ))}}"
+if [[ -z "${GPUS_PER_NODE:-}" ]]; then
+    if [[ -n "${GPU_COUNT:-}" ]]; then
+        GPUS_PER_NODE="$GPU_COUNT"
+    else
+        GPUS_PER_NODE=$(( PREFILL_TP > DECODE_TP ? PREFILL_TP : DECODE_TP ))
+    fi
+fi
 
-SQUASH_DIR="${B200_SQUASH_DIR:-/home/sa-shared/containers}"
+SQUASH_DIR="${B200_SQUASH_DIR}"
 { mkdir -p "$SQUASH_DIR" 2>/dev/null && [[ -w "$SQUASH_DIR" ]]; } || SQUASH_DIR="$GITHUB_WORKSPACE/.container-squash"
 mkdir -p "$SQUASH_DIR"
 chmod a+rx "$SQUASH_DIR" || true
 
-DECODE_IMAGE="${DECODE_IMAGE:-$IMAGE}"
-: "${PREFILL_IMAGE:?PREFILL_IMAGE is unset -- it must come from prefill.additional-settings in the master config, e.g. PREFILL_IMAGE=vllm/vllm-openai:v0.26.0}"
+if [[ -z "${DECODE_IMAGE:-}" ]]; then
+    DECODE_IMAGE="$IMAGE"
+fi
 
 squash_path() { echo "$SQUASH_DIR/$(echo "$1" | sed 's/[\/:@#]/_/g').sqsh"; }
 DECODE_SQUASH="$(squash_path "$DECODE_IMAGE")"
 PREFILL_SQUASH="$(squash_path "$PREFILL_IMAGE")"
 MODEL_MOUNTS="$MODEL_PATH:$MODEL_PATH"
+CONTAINER_BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR/#$GITHUB_WORKSPACE//workspace}"
 if [[ -n "${HF_HUB_CACHE_HOST_PATH:-}" ]]; then
     # HF snapshots link to sibling blobs outside the snapshot directory.
     MODEL_MOUNTS="$HF_HUB_CACHE_HOST_PATH:$HF_HUB_CACHE_HOST_PATH,$MODEL_MOUNTS"
@@ -31,7 +46,7 @@ if [[ "${TILERT_IN_ALLOCATION:-0}" != 1 ]]; then
     export TILERT_IN_ALLOCATION=1
     exec salloc --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT" \
         --nodes="$NODES" --gres=gpu:"$GPUS_PER_NODE" --exclusive --mem=0 \
-        --time="${SALLOC_TIME_LIMIT:-480}" --job-name="$RUNNER_NAME" \
+        --time="${SALLOC_TIME_LIMIT}" --job-name="$RUNNER_NAME" \
         "$BASH" "$0" "$@"
 fi
 JOB_ID="${SLURM_JOB_ID:?salloc did not provide its allocation ID}"
@@ -39,7 +54,7 @@ mapfile -t HOSTS < <(scontrol show hostnames "${SLURM_JOB_NODELIST:?salloc did n
 [[ "${#HOSTS[@]}" -eq 2 ]] || { echo "expected 2 nodes, got: ${HOSTS[*]}"; exit 1; }
 export DECODE_HOST="${HOSTS[0]}" PREFILL_HOST="${HOSTS[1]}"
 export POWERX_NATIVE_ENABLED=0
-if [[ "${REQUIRE_POWER:-0}" =~ ^(1|true|TRUE|yes|YES)$ && "$ISL" == 8192 && "$OSL" == 1024 && "${IS_AGENTIC:-0}" != 1 && "${SCENARIO_TYPE:-}" != agentic-coding && "${EVAL_ONLY:-false}" != true ]]; then
+if [[ "${REQUIRE_POWER}" =~ ^(1|true|TRUE|yes|YES)$ && "$ISL" == 8192 && "$OSL" == 1024 && "${IS_AGENTIC}" != 1 && "${SCENARIO_TYPE:-}" != agentic-coding && "${EVAL_ONLY}" != true ]]; then
     export POWERX_NATIVE_ENABLED=1
 fi
 export SLURM_JOB_ID="$JOB_ID"
@@ -48,7 +63,10 @@ POWERX_ENV="POWERX_NATIVE_ENABLED"
 if [[ "$POWERX_NATIVE_ENABLED" == 1 ]]; then
     export POWERX_HOST_UID="$(id -u)" POWERX_HOST_GID="$(id -g)"
     export POWERX_COLLECTOR_REVISION="$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)"
-    export POWERX_RAW_ROOT="${POWERX_RAW_ROOT:-/tmp/inferencex-native-$JOB_ID}"
+    if [[ -z "${POWERX_RAW_ROOT:-}" ]]; then
+        POWERX_RAW_ROOT="/tmp/inferencex-native-$JOB_ID"
+    fi
+    export POWERX_RAW_ROOT
     export POWERX_CONTROL_ROOT="$GITHUB_WORKSPACE/LOGS/power_control-$JOB_ID"
     mkdir -p "$POWERX_CONTROL_ROOT" "$GITHUB_WORKSPACE/LOGS/native_power"
     chmod 777 "$POWERX_CONTROL_ROOT"
@@ -57,11 +75,11 @@ if [[ "$POWERX_NATIVE_ENABLED" == 1 ]]; then
     POWERX_MOUNTS=",$POWERX_RAW_ROOT:/powerx_native,$POWERX_CONTROL_ROOT:/powerx_control"
     POWERX_ENV+=",CUDA_VISIBLE_DEVICES,POWERX_HOST_UID,POWERX_HOST_GID,POWERX_COLLECTOR_REVISION,POWERX_NODE_NAME,POWERX_CLOCK_SYNCHRONIZED,POWERX_RANK,POWERX_GPU_COUNT"
 fi
-rm -f "${BENCHMARK_LOGS_DIR:-$GITHUB_WORKSPACE}/.tilert_done.$JOB_ID"
+rm -f "${BENCHMARK_LOGS_DIR}/.tilert_done.$JOB_ID"
 # Keep node-local receipts inside the allocation until both serving steps drain.
 # A caught cancellation exits through the same staging path as normal completion.
 wait_owned_step() {
-    local pid="$1" deadline=$((SECONDS + ${TILERT_DECODE_DRAIN:-60})) rc=0
+    local pid="$1" deadline=$((SECONDS + ${TILERT_DECODE_DRAIN})) rc=0
     while kill -0 "$pid" 2>/dev/null; do
         if (( SECONDS >= deadline )); then
             echo "[submit] step $pid did not drain before timeout" >&2
@@ -135,13 +153,13 @@ import_image() {
 import_image "$DECODE_IMAGE"  "$DECODE_SQUASH"  "$DECODE_HOST"  || exit 1
 import_image "$PREFILL_IMAGE" "$PREFILL_SQUASH" "$PREFILL_HOST" || exit 1
 
-export TILERT_WEIGHTS_DIR="${TILERT_WEIGHTS_DIR:-$HOME/.cache/tilert/${MODEL_PREFIX:-model}-${PRECISION:-fp8}-tilert-8shard}"
+export TILERT_WEIGHTS_DIR
 mkdir -p "$TILERT_WEIGHTS_DIR"
 
 run_role() {
     local role="$1" host="$2" squash_file="$3"
-    local rank=0 gpu_count="${DECODE_TP:-8}"
-    if [[ "$role" == prefill ]]; then rank=1; gpu_count="${PREFILL_TP:-8}"; fi
+    local rank=0 gpu_count="${DECODE_TP}"
+    if [[ "$role" == prefill ]]; then rank=1; gpu_count="${PREFILL_TP}"; fi
     if [[ "$POWERX_NATIVE_ENABLED" == 1 ]]; then
         export POWERX_RANK="$rank" POWERX_GPU_COUNT="$gpu_count" POWERX_NODE_NAME="$host"
         export CUDA_VISIBLE_DEVICES="$(seq -s, 0 "$((gpu_count - 1))")"
@@ -161,7 +179,7 @@ run_role() {
         --container-mounts="$GITHUB_WORKSPACE:/workspace,$MODEL_MOUNTS,$TILERT_WEIGHTS_DIR:$TILERT_WEIGHTS_DIR$POWERX_MOUNTS" \
         --container-workdir=/workspace --no-container-entrypoint \
         --container-env="$POWERX_ENV" \
-        --export=ALL,TILERT_ROLE="$role",DECODE_HOST="$DECODE_HOST",PREFILL_HOST="$PREFILL_HOST",PORT="${PORT:-8888}" \
+        --export=ALL,TILERT_ROLE="$role",DECODE_HOST="$DECODE_HOST",PREFILL_HOST="$PREFILL_HOST",PORT="${PORT}",BENCHMARK_LOGS_DIR="$CONTAINER_BENCHMARK_LOGS_DIR" \
         bash "/workspace/benchmarks/multi_node/tilert_utils/run_node.sh"
 }
 

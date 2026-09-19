@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "inferencemax-repos": {
-      "command": "python",
-      "args": [".claude/mcp/server.py"],
+      "command": "uv",
+      "args": ["run", "--locked", "--group", "mcp", "python", ".claude/mcp/server.py"],
       "env": {
         "PYTHONPATH": "."
       }
