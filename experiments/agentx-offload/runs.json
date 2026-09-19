@@ -316,21 +316,101 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "f61f83353fd49403a97644fa0818b69d70ece1fa",
-      "status": "in_progress",
-      "node": null,
-      "artifacts": [],
-      "performance_result": false,
+      "status": "success",
+      "node": "im-b200-c001",
+      "artifacts": [
+        {
+          "id": 10587911045,
+          "name": "server_logs_minimaxm3_tp4_conc16_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp_-ae078bdd7deea492ef3e",
+          "size_bytes": 82798
+        },
+        {
+          "id": 10587906099,
+          "name": "run-stats",
+          "size_bytes": 284
+        },
+        {
+          "id": 10587399308,
+          "name": "gpu_metrics_minimaxm3_tp4_conc16_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp_-ae078bdd7deea492ef3e",
+          "size_bytes": 159131
+        },
+        {
+          "id": 10587303808,
+          "name": "bmk_agentic_minimaxm3_tp4_conc16_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp_-ae078bdd7deea492ef3e",
+          "size_bytes": 2212
+        },
+        {
+          "id": 10587269049,
+          "name": "agentic_minimaxm3_tp4_conc16_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp_-ae078bdd7deea492ef3e",
+          "size_bytes": 15004041
+        },
+        {
+          "id": 10587263884,
+          "name": "power_audit_minimaxm3_tp4_conc16_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp_-ae078bdd7deea492ef3e",
+          "size_bytes": 162677
+        },
+        {
+          "id": 10586854462,
+          "name": "results_bmk",
+          "size_bytes": 2011
+        }
+      ],
+      "performance_result": true,
       "workflow_name": "offload-v1-none-c16-r1-20260919T144156Z",
       "dispatched_at": "2026-09-19T14:41:58Z",
       "job_id": 105914214900,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35449533638/job/105914214900",
       "runner": "b200-nscale-slurm_00",
       "started_at": "2026-09-19T14:42:54Z",
-      "allocation_id": "16605"
+      "completed_at": "2026-09-19T16:02:32Z",
+      "allocation_id": "16605",
+      "log_sha256": "129f06dc6d07ce90e8c6d7c4f6d46acd4a7be3bf821a3210bdfaadb7e63d8030",
+      "performance": {
+        "num_requests_total": 2311,
+        "num_requests_successful": 2134,
+        "num_requests_warmup_dropped": 177,
+        "num_requests_error_dropped": 0,
+        "duration_seconds": 3618.78948,
+        "output_tokens_per_second": 559.77586,
+        "output_tokens_per_second_per_gpu": 139.94397,
+        "input_tokens_per_second": 75895.61185,
+        "total_tokens_per_second": 76455.38771,
+        "p90_e2e_latency_seconds": 26.9896,
+        "p90_ttft_seconds": 1.93155,
+        "p90_tpot_seconds": 0.01588,
+        "p90_interactivity_tokens_per_second_per_user": 62.97699,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 44.06335,
+        "mean_e2e_latency_seconds": 10.9872,
+        "avg_power_w_per_gpu": 586.369
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.88056,
+        "external_cache_hit_rate": 0.0,
+        "overall_cache_hit_rate": 0.88056,
+        "gpu_cache_hit_tokens": 276231296,
+        "external_transfer_tokens": 0.0,
+        "computed_tokens": 37466688,
+        "prompt_tokens_total": 313697984,
+        "generation_tokens_total": 2025888,
+        "gpu_cache_usage_pct": 0.79196,
+        "theoretical_cache_hit_rate": 0.97
+      },
+      "evidence_sha256": {
+        "offload_config.json": "b159ae7938b90d68f32930522282c64663c2a8f21a895e62ef27e47846c2c36b",
+        "offload-telemetry.jsonl": "29ffca25222324910da669b3b897238512c573d0a6ade7e4cda2d5623ab04c03",
+        "offload_cleanup.json": "fda3fa8e08577f3af795851383e9aee89f0b24e9133a25289ba76c4a2b907d9a",
+        "vllm_command.txt": "f5c5aca54dbbc45ebb3b4aab39bbd34bd6e60e503249facf340e5248adb425c8",
+        "server.log": "8ccc85bdd6ca2ab922a46b70a7224b05e1f8a216a5672c55717599a362165a0f",
+        "bmk_result.json": "5a7a69b6c723fa0d0efe1f214b68fdc54ec1d27d0c700ae7d5b8f0861cf9fcb6",
+        "agg_bmk.json": "4e61413420eb2f4549dae1048c1112c1aa1d2d816adc93484a0ed7ac7e6b4752",
+        "profile_export.jsonl": "920e32aad849ffee05a83c57427711e83b3f6f6ae16140e596b285bf1b077715"
+      },
+      "storage_evidence": "HBM-only control configured zero DRAM and zero NVMe capacity with no connector. Its empty workflow-owned scratch contained zero files and zero bytes; cleanup exit code 0 and deleted true.",
+      "runtime_evidence": "The EAGLE3-GQA draft model used FlashAttention 2 with kv_cache_dtype auto; the main model used FlashInfer with FP8 KV. External cache activity remained zero, confirming the intended HBM-only control."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749,35154018672,35344315025,35387609866,35401459251,35442679581,35444664736,35449533638",
-  "status": "NVMe c16 repeat 1 completed successfully and produced the study's first valid performance point. The matched HBM-only c16 control is now in progress.",
+  "status": "The first matched c16 pair is complete. NVMe was 5.44% higher in output throughput per GPU and 27.50% higher in P90 E2E-normalized interactivity than HBM-only, with 28.03% lower P90 E2E latency. This is one preliminary pair and requires the DRAM and combined arms plus repeats before establishing a crossover.",
   "last_capacity_check": {
     "checked_at": "2026-09-19T15:15:08Z",
     "cluster_observed_at": "2026-09-19T15:14:41Z",
@@ -339,10 +419,8 @@
     "total_nodes": 11,
     "legacy_task_nodes": 0,
     "legacy_job_ids": [],
-    "active_study_nodes": 1,
-    "active_study_job_ids": [
-      "16605"
-    ],
+    "active_study_nodes": 0,
+    "active_study_job_ids": [],
     "scheduler_snapshot_at": "2026-09-19T15:15:00Z",
     "scheduler_available": true,
     "b200_queued_jobs": 0,
@@ -353,6 +431,6 @@
     "reason": "The matched HBM-only control holds one of 11 B200 nodes and leaves ten idle nodes, below the 50% ceiling. No additional point is launched until this run finishes and its artifacts are validated."
   },
   "next_dispatch": {
-    "requires": "Wait for run 35449533638 to finish, validate its retained artifacts, and compare it directly with NVMe run 35444664736 before selecting the next arm."
+    "requires": "Dispatch the matched HBM + DRAM c16 arm after fresh cluster and scheduler capacity checks, then validate it before launching the combined arm."
   }
 }
