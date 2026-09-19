@@ -8455,4 +8455,4 @@
   description:
     - "Migrate the H100 aggregate TP8 vLLM DSV4.1-Flash AgentX lane to an isolated pinned native srt-slurm runtime with prepared Python clients, immutable measurement receipts and a separate real c28 GSM8K evaluation; preserve the image, eight concurrency points and 480-minute exclusive allocation. Power telemetry remains an explicit temporary parity exception."
     - "将 H100 聚合 TP8 vLLM DSV4.1-Flash AgentX 路径迁移至独立固定的原生 srt-slurm 运行时，使用预备式 Python 客户端、不可变测量回执及独立真实 c28 GSM8K eval；保留镜像、八个并发点及 480 分钟独占分配。功耗遥测保留明确临时一致性例外。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3299
