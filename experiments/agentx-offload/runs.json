@@ -155,32 +155,44 @@
         "server.log": "db64b5f890dd460018760f1521c29d3286ee84a367b5d8a528a7ca988efd89ec"
       },
       "storage_evidence": "xfs /dev/md0 over eight non-rotating NVMe leaves; 17.76 TB free; O_DIRECT verified; four sparse cache files totaling 1,099,506,188,288 logical bytes and zero allocated bytes; exact task-owned scratch deleted after failure"
+    },
+    {
+      "run_id": 35442679581,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35442679581",
+      "arm": "nvme",
+      "concurrency": 16,
+      "repeat": 1,
+      "attempt": 5,
+      "retry_of": 35401459251,
+      "head_sha": "50e46c22f27df31842e9351679b3e1bbc9654456",
+      "status": "queued",
+      "node": null,
+      "artifacts": [],
+      "performance_result": false,
+      "workflow_name": "offload-v1-nvme-c16-r1-fa3fix-20260919T1223Z",
+      "dispatched_at": "2026-09-19T12:22:37Z"
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749,35154018672,35344315025,35387609866,35401459251",
-  "status": "NVMe c16 repeat 1 attempt 4 passed storage and cleanup validation but failed during EAGLE3-GQA warmup in the replacement image's default FA4 CuTe path. A matched FA3 compatibility selection is being validated before retry.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749,35154018672,35344315025,35387609866,35401459251,35442679581",
+  "status": "NVMe c16 repeat 1 attempt 5 was dispatched with the matched FA3 draft-head compatibility selection after the capacity and source guards passed.",
   "last_capacity_check": {
-    "checked_at": "2026-09-18T22:24:48.450Z",
-    "cluster_observed_at": "2026-09-18T22:24:48.450Z",
+    "checked_at": "2026-09-19T12:21:38.082Z",
+    "cluster_observed_at": "2026-09-19T12:21:38.082Z",
     "cluster_stale": false,
-    "idle_nodes": 7,
+    "idle_nodes": 4,
     "total_nodes": 11,
     "legacy_task_nodes": 0,
     "legacy_job_ids": [],
-    "scheduler_snapshot_at": "2026-09-18T22:24:48.450Z",
+    "scheduler_snapshot_at": "2026-09-19T12:21:38.082Z",
     "scheduler_available": true,
     "b200_queued_jobs": 0,
     "competing_run_ids": [],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": true,
-    "reason": "Seven B200 nodes were idle, the B200 queue was empty, and no B200 reservations were active; one one-node retry leaves six idle nodes."
+    "reason": "Four B200 nodes were idle, the B200 queue was empty, and no B200 reservations were active; one one-node retry leaves three idle nodes."
   },
   "next_dispatch": {
-    "arm": "nvme",
-    "concurrency": 16,
-    "repeat": 1,
-    "retry_of": 35401459251,
-    "requires": "Validate and push the matched FA3 draft-head compatibility selection, then retry after a fresh scheduler capacity gate."
+    "requires": "Wait for run 35442679581 to finish, validate retained artifacts and actual offload behavior, then select the next matched arm or corrective retry from the evidence."
   }
 }
