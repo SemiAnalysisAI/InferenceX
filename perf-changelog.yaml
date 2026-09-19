@@ -8642,3 +8642,18 @@
     eight-GPU telemetry; any selected point still requires full official performance and full real
     accuracy.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp4-ep1-tp4-ep1-c8-h72-dmax32
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp2-ep1-tp2-ep1-c8-h298
+  scenario-type:
+  - agentic-coding
+  description:
+  - 'Add exactly two low-concurrency diagnostic screens: TP4 C8 preserves all serving
+    settings of the C16 H72/D32/graph16 control to test the high-interactivity endpoint;
+    pure TP2 EP1 C8 changes only prefill and decode expert parallelism from the EP2
+    C8 control. Preserve original BF16 draft, native golden acceptance, canonical
+    1200s/10-warmup and two-hour allocations. Explicitly scope power to eight or four
+    active GPUs and retain eight allocated GPUs; any selected point requires full
+    official performance and real accuracy qualification.'
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
