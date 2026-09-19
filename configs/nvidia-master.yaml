@@ -8250,6 +8250,8 @@ dsv41flash-fp4-h200-sglang-agentic-dspark:
       search-space:
       - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16] }
 
+# Recipes allow four hours for canonical warmup, one-hour profiling and artifact processing.
+# Temporary node exclusions cover observed startup/resource failures, not measured performance.
 qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg:
   image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8

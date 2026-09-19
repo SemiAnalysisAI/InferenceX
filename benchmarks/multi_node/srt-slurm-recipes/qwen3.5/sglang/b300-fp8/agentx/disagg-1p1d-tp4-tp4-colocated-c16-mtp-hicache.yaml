@@ -19,7 +19,7 @@ dynamo:
   source:
     rev: 805a77f053d807b0d8def5d27f674a6df0ed839e
 slurm:
-  time_limit: '2:00:00'
+  time_limit: '4:00:00'
 health_check:
   max_attempts: 1440
   interval_seconds: 10
@@ -159,6 +159,7 @@ roles:
       max-running-requests: 32
       cuda-graph-max-bs-decode: 16
 sbatch_directives:
+  exclude: dsxe-sa-b300-prd0-gpu-11
   mem: '0'
   cpus-per-task: '144'
 srun_options:
