@@ -46,9 +46,11 @@ main 原镜像标签从 registry 返回 404，因此四组统一使用上述已�
 [image-provenance.json](image-provenance.json) 记录 registry 和 AMD64 digest、准确引擎提交及兼容性检查。
 规范异构 KV 布局补丁可干净地应用，并通过幂等性验证。原镜像未产生任何完成的性能测量。
 替代镜像在 Blackwell 上默认让 EAGLE3-GQA 草稿头使用 FA4；运行 `35401459251`
-已进入引擎 warmup，但 FA4 拒绝了广播后的 descale 张量（`strides[1] == 0`）。
-因此本实验按 vLLM 文档为该 FLASH_ATTN 草稿头选择 FA3，同时主模型继续使用 FlashInfer。
-四组方案使用完全相同的设置。这是相对 fresh main 的引擎兼容性差异，不是卸载优化。
+和 `35442679581` 均已进入引擎 warmup，但 FA4 拒绝了广播后的 descale 张量
+（`strides[1] == 0`）。后一次运行确认固定版本的引擎会在 Blackwell 上将请求的
+FA3 明确重定向回 FA4。因此本实验为该 FLASH_ATTN 草稿头选择 FA2 和未量化的草稿
+KV 缓存，同时主模型继续使用 FlashInfer 和 FP8 KV。四组方案使用完全相同的设置。
+这是相对 fresh main 的引擎兼容性差异，不是卸载优化。
 
 ## 仅使用 InferenceX 基础设施
 

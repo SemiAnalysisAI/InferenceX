@@ -7994,3 +7994,12 @@
     - "Select FlashAttention 3 for the EAGLE3-GQA draft head in all four branch-only AgentX offload arms after run 35401459251 passed NVMe storage validation and reached engine warmup but the replacement image's default Blackwell FA4 CuTe path rejected a broadcast descale tensor with stride 0. The main MiniMax-M3 model remains on FlashInfer, and ordinary recipes retain the fresh-main attention config. This is a matched engine-compatibility setting across the four study arms; model, TP4, EAGLE3 acceptance, storage budgets, AgentX settings and concurrency candidates are unchanged."
     - "运行 35401459251 已通过 NVMe 存储验证并进入引擎 warmup，但替代镜像默认的 Blackwell FA4 CuTe 路径拒绝了 stride 为 0 的广播 descale 张量；因此分支内四组 AgentX 卸载实验的 EAGLE3-GQA 草稿头统一选择 FlashAttention 3。MiniMax-M3 主模型仍使用 FlashInfer，普通配方继续保留 fresh main 的 attention config。这是四组实验一致的引擎兼容性设置；模型、TP4、EAGLE3 接受率、存储预算、AgentX 设置及并发候选均保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Correct the branch-only AgentX offload draft compatibility setting after run 35442679581 proved that pinned vLLM explicitly redirects requested FA3 back to FA4 on Blackwell, reproducing the EAGLE3-GQA broadcast-descale stride-0 warmup failure. Select FA2 and an unquantized draft KV cache for the FLASH_ATTN drafter while retaining FlashInfer and FP8 KV for the main MiniMax-M3 model. Apply the same setting to all four study arms; model, TP4, EAGLE3 acceptance, storage budgets, AgentX settings and concurrency candidates are unchanged."
+    - "运行 35442679581 证明固定版本的 vLLM 会在 Blackwell 上将请求的 FA3 明确重定向回 FA4，并再次触发 EAGLE3-GQA 广播 descale 张量 stride 为 0 的 warmup 失败；因此修正分支内 AgentX 卸载实验的草稿兼容设置：FLASH_ATTN 草稿头使用 FA2 和未量化的草稿 KV 缓存，MiniMax-M3 主模型继续使用 FlashInfer 和 FP8 KV。四组实验统一应用该设置；模型、TP4、EAGLE3 接受率、存储预算、AgentX 设置及并发候选均保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload

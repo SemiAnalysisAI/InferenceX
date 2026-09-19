@@ -145,12 +145,12 @@ trap 'exit 143' TERM
 
 if [ "${EVAL_ONLY:-}" = "true" ]; then
     SPEC_CONFIG=$(printf \
-        '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"FLASH_ATTN"}' \
-        "$DRAFT_MODEL_PATH" "$NUM_SPEC_TOKENS")
+        '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"FLASH_ATTN"%s}' \
+        "$DRAFT_MODEL_PATH" "$NUM_SPEC_TOKENS" "${EXPERIMENT_SPECULATIVE_CONFIG_EXTRA-}")
 else
     SPEC_CONFIG=$(printf \
-        '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"FLASH_ATTN","rejection_sample_method":"synthetic","synthetic_acceptance_length":%.2f}' \
-        "$DRAFT_MODEL_PATH" "$NUM_SPEC_TOKENS" "$SYNTHETIC_ACCEPT_LEN")
+        '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"FLASH_ATTN","rejection_sample_method":"synthetic","synthetic_acceptance_length":%.2f%s}' \
+        "$DRAFT_MODEL_PATH" "$NUM_SPEC_TOKENS" "$SYNTHETIC_ACCEPT_LEN" "${EXPERIMENT_SPECULATIVE_CONFIG_EXTRA-}")
 fi
 
 { set +x; } 2>/dev/null

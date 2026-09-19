@@ -165,16 +165,52 @@
       "attempt": 5,
       "retry_of": 35401459251,
       "head_sha": "50e46c22f27df31842e9351679b3e1bbc9654456",
-      "status": "queued",
-      "node": null,
-      "artifacts": [],
+      "status": "failure",
+      "node": "im-b200-c002",
+      "artifacts": [
+        {
+          "id": 10585060257,
+          "name": "server_logs_minimaxm3_tp4_conc16_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fal-d5c5d260d75f8854d1f4",
+          "size_bytes": 15715
+        },
+        {
+          "id": 10584214719,
+          "name": "agentic_minimaxm3_tp4_conc16_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fal-d5c5d260d75f8854d1f4",
+          "size_bytes": 34632
+        },
+        {
+          "id": 10584875510,
+          "name": "results_bmk",
+          "size_bytes": 142
+        },
+        {
+          "id": 10584721021,
+          "name": "run-stats",
+          "size_bytes": 280
+        }
+      ],
+      "failure_stage": "engine warmup",
+      "diagnosis": "The requested FA3 setting reached the pinned engine, but its Blackwell resolver explicitly redirected FA3 back to FA4. The EAGLE3-GQA draft head then reproduced the FA4 CuTe broadcast-descale stride-0 failure. The source-backed correction is FA2 plus an unquantized draft KV cache; the main model remains FlashInfer with FP8 KV.",
       "performance_result": false,
       "workflow_name": "offload-v1-nvme-c16-r1-fa3fix-20260919T1223Z",
-      "dispatched_at": "2026-09-19T12:22:37Z"
+      "dispatched_at": "2026-09-19T12:22:37Z",
+      "job_id": 105896168777,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35442679581/job/105896168777",
+      "runner": "b200-nscale-slurm_02",
+      "allocation_id": "16603",
+      "log_sha256": "6992a4adf6f5058387f0f3f3522cf0dec649a7fa33c0381a0e736d4f0ac98fe3",
+      "evidence_sha256": {
+        "offload_config.json": "c6839e4a2f7f5a2c93a082dd2df13f7fcbe9e68f7ee94deccb6ff2dda226b2b5",
+        "offload-telemetry.jsonl": "de92408d32873380c36aac3738fb6f2e7aea307af176231080392b93f1394451",
+        "offload_cleanup.json": "188ebf073c2258e62b975cd87af15de0bf2b5cac06604c2a3834d79873cade92",
+        "vllm_command.txt": "66ff6cd0bc62504d754a7910f8ababf3f8f2ee38779a95047344b9e3f3121bec",
+        "server.log": "4433a3bd11d813827302b9274c3395b39e2077941b0186fb3bec87bf738772c0"
+      },
+      "storage_evidence": "xfs /dev/md0 over eight non-rotating NVMe leaves; 16,808,772,685,824 bytes free; O_DIRECT verified; four sparse cache files totaling 1,099,506,188,288 logical bytes and zero allocated bytes; exact task-owned scratch deleted after failure"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749,35154018672,35344315025,35387609866,35401459251,35442679581",
-  "status": "NVMe c16 repeat 1 attempt 5 was dispatched with the matched FA3 draft-head compatibility selection after the capacity and source guards passed.",
+  "status": "NVMe c16 repeat 1 attempt 5 confirmed that pinned vLLM redirects FA3 to FA4 on Blackwell and reproduced the FA4 warmup failure. A matched FA2 plus unquantized draft-KV correction is being validated.",
   "last_capacity_check": {
     "checked_at": "2026-09-19T12:21:38.082Z",
     "cluster_observed_at": "2026-09-19T12:21:38.082Z",
@@ -193,6 +229,10 @@
     "reason": "Four B200 nodes were idle, the B200 queue was empty, and no B200 reservations were active; one one-node retry leaves three idle nodes."
   },
   "next_dispatch": {
-    "requires": "Wait for run 35442679581 to finish, validate retained artifacts and actual offload behavior, then select the next matched arm or corrective retry from the evidence."
+    "arm": "nvme",
+    "concurrency": 16,
+    "repeat": 1,
+    "retry_of": 35442679581,
+    "requires": "Validate and push the matched FA2 plus unquantized draft-KV correction, then retry after a fresh scheduler capacity gate."
   }
 }
