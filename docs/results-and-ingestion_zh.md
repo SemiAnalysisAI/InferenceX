@@ -184,7 +184,8 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 正式测量窗口、时区偏移和校验结果。多节点运行在同一审计工件中保留
 `LOGS/power/` 下的部署遥测，以及 `LOGS/agentic/` 下各并发的窗口和校验文件。
 即使基准测试失败，已有的审计文件和 AgentX 聚合结果仍会上传。
-文件缺失不代表路径支持功耗采集：多节点配方还需要兼容的 producer 和 launcher 适配器。
+文件缺失不代表路径支持功耗采集：多节点配方还需启用 `telemetry`，让固定版本的 srt-slurm
+向自定义基准命令导出 `SRT_MEASUREMENT_WINDOW_DIR`；InferenceX 据此目录和回放本身推导结果根目录与并发数。
 缺少测量窗口接口时，聚合结果记录 `power_valid: 0`，审计原因标记为
 `multinode_power_contract_missing`；设置 `REQUIRE_POWER=1` 还会在保留已有结果后使任务失败。
 

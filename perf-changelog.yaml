@@ -8407,6 +8407,24 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3045
 
 - config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Restore multinode AgentX power on the pinned upstream srt-slurm: the launcher window adapter now needs only SRT_MEASUREMENT_WINDOW_DIR, which srt-slurm exports to custom benchmark commands, and derives the result root and concurrency locally instead of reading three fork-only variables. Applies to every srt-slurm AgentX recipe with telemetry enabled; recipes, images and grids are unchanged."
+    - "在固定的上游 srt-slurm 上恢复多节点 AgentX 功耗采集：启动器窗口适配器只需 srt-slurm 导出给自定义基准命令的 SRT_MEASUREMENT_WINDOW_DIR，并在本地推导结果根目录与并发数，不再读取三个仅分支提供的变量。适用于所有启用遥测的 srt-slurm AgentX 配方；配方、镜像与网格保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3206
+
+- config-keys:
+    - kimik3-fp4-h200-vllm-agentic-balanced
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required measured power for the complete H200 Kimi-K3 balanced recipe through the shared recipe-gated launcher."
+    - "为 H200 Kimi-K3 balanced 完整配方启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3053
+
+- config-keys:
   - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
   scenario-type:
   - agentic-coding
