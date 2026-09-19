@@ -59,7 +59,7 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL \
 --ep-size $EP_SIZE \
 --disable-radix-cache \
 --max-running-requests $MAX_RUNNING_REQUESTS \
---cuda-graph-max-bs $CUDA_GRAPH_MAX_BS \
+--cuda-graph-max-bs-decode $CUDA_GRAPH_MAX_BS \
 --chunked-prefill-size 32768 --max-prefill-tokens 32768 --mem-fraction-static 0.82 \
 --attention-backend flashinfer --stream-interval 10 \
 --decode-log-interval 1 \
