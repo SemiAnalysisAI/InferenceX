@@ -8601,3 +8601,17 @@
     routing and transfer at runtime and require fresh full official accuracy/performance qualification
     before promotion.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp2-ep2-tp2-ep2-c8-h298-steps2
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp2-ep2-tp2-ep2-c8-h298-steps5
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add isolated TP2 EP2 C8 NEXTN steps2 and steps5 diagnostic arms against the existing steps3 baseline.
+    Change only speculative steps and draft-token count (steps plus one), preserving H298/selective,
+    D64/static0.88/graph32, canonical1200s/10-warmup, and original BF16 draft precision. InferenceX
+    selects the committed golden acceptance automatically; no manual acceptance override. Scope telemetry
+    to four active GPUs, report eight allocated, and require native memory/graph verification plus
+    fresh full real accuracy if selected.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
