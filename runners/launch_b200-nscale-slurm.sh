@@ -85,7 +85,7 @@ if [[ "$LAUNCH_PATH" == "native-srt" ]]; then
             export SRT_SLURM_MODEL_PREFIX="glm5.1-fp8"
             ;;
     esac
-elif [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "$IS_MULTINODE" != "true" ]]; then
+elif [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && ( "$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "sglang" ) && "$IS_MULTINODE" != "true" ]]; then
     export MODEL_PATH="$MODEL"
     export HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
     mkdir -p "$HF_HUB_CACHE_HOST_PATH"
