@@ -71,7 +71,7 @@ export SGLANG_DSV41_REASONING_EFFORT=high
 # graphs up to bs=32 with the tables resident (run 35304555945). The 288 GB
 # card holds the ~46 GiB of tables next to the weights; the 1M-context
 # prefill working set is bounded by --mem-fraction-static 0.60 and the
-# 8192-token chunk below instead.
+# 4096-token chunk below instead.
 
 # Cookbook MI350X environment.
 # Cap the HIP hardware queues per rank, as the DeepSeek-V4 MI355X SGLang arm

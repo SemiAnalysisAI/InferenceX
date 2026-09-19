@@ -8521,3 +8521,12 @@
     - "Lower --mem-fraction-static from 0.75 to 0.60: with the Engram tables resident on the GPU the weights occupy 128.8 GB of each 288 GB MI355X, so 0.75 left 72 GB outside the static pool and in run 35376928227 the c2 point aborted its RCCL queue with HSA_STATUS_ERROR_OUT_OF_RESOURCES (0 MB free) 20 chunks into the eager prefill of a 126k-token AgentX prompt, with c1, c4, c8 and c16 cancelled by fail-fast. DSv4.1 Flash's full-attention KV costs 1.67 KB per token, so 0.60 still reserves a ~25M-token pool (0.75 reserved 51M tokens, far beyond the 32-request cap at c16) while eager prefill gets 115 GB of headroom; chunk size, queue cap and scratch-reclaim guard are unchanged"
     - "将 --mem-fraction-static 从 0.75 降至 0.60：Engram 表驻留 GPU 后，权重占用每块 288 GB MI355X 中的 128.8 GB，0.75 只在静态池之外留下 72 GB；运行 35376928227 中 c2 在一条 126k token AgentX 提示的 eager prefill 进行到第 20 个分块时，RCCL 队列因 HSA_STATUS_ERROR_OUT_OF_RESOURCES（剩余 0 MB）中止，c1、c4、c8、c16 被 fail-fast 取消。DSv4.1 Flash 的全注意力 KV 每 token 仅 1.67 KB，因此 0.60 仍可保留约 2500 万 token 的池（0.75 时为 5100 万，远超 c16 的 32 请求上限），同时 eager prefill 获得 115 GB 余量；分块大小、队列上限与 scratch 回收保护不变"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Trim the conc-list from [1, 2, 4, 8, 16] to [1, 2, 4]: at --mem-fraction-static 0.60 the c1 and c4 points and the eval completed (run 35412385714), but c16 aborted its RCCL queue with HSA_STATUS_ERROR_OUT_OF_RESOURCES at 0 MB free with 13 AgentX requests running and a 1.1M-token prompt in eager chunked prefill, after 107 GB of non-static HBM; the same abort hit c2 at 0.75 (72 GB) and c16/c32 in the first sweeps, so the ROCm preview build's eager 1M-context prefill does not fit 13 or more concurrent sessions on this SKU. Following the B300 HiCache precedent (#2661), publish the points that fit rather than hold the arm; c8 and c16 can return once the gfx950 build reclaims prefill memory"
+    - "将 conc-list 从 [1, 2, 4, 8, 16] 缩减为 [1, 2, 4]：在 --mem-fraction-static 0.60 下 c1、c4 与 eval 均完成（运行 35412385714），但 c16 在 13 个 AgentX 请求同时运行、一条 1.1M token 提示进行 eager 分块 prefill 时，耗尽 107 GB 非静态 HBM 后 RCCL 队列因 HSA_STATUS_ERROR_OUT_OF_RESOURCES（剩余 0 MB）中止；同样的中止在 0.75（72 GB）时出现于 c2，并在首轮 sweep 中出现于 c16/c32，说明 ROCm 预览版的 eager 1M 上下文 prefill 在该 SKU 上无法容纳 13 个及以上并发会话。参照 B300 HiCache 的先例（#2661），先发布可容纳的点而不阻塞该配方；待 gfx950 构建回收 prefill 内存后再恢复 c8 与 c16"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
