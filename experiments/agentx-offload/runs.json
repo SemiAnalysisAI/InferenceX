@@ -110,8 +110,16 @@
       "status": "failure",
       "node": "im-b200-c001",
       "artifacts": [
-        {"id": 10565111803, "name": "results_bmk", "size_bytes": 142},
-        {"id": 10564238811, "name": "run-stats", "size_bytes": 280}
+        {
+          "id": 10565111803,
+          "name": "results_bmk",
+          "size_bytes": 142
+        },
+        {
+          "id": 10564238811,
+          "name": "run-stats",
+          "size_bytes": 280
+        }
       ],
       "failure_stage": "offload storage proof",
       "diagnosis": "The container mount source is /dev/md0, but that host block-device node is intentionally absent inside the container. The scoped lsblk call therefore failed before server launch; sysfs still exposes the backing-device topology and is the correct non-mutating proof path.",
@@ -135,9 +143,21 @@
       "status": "failure",
       "node": "im-b200-c001",
       "artifacts": [
-        {"id": 10571342071, "name": "server_logs_minimaxm3_tp4_conc16_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fal-d5c5d260d75f8854d1f4", "size_bytes": 14797},
-        {"id": 10571037042, "name": "agentic_minimaxm3_tp4_conc16_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fal-d5c5d260d75f8854d1f4", "size_bytes": 34179},
-        {"id": 10570813402, "name": "results_bmk", "size_bytes": 142}
+        {
+          "id": 10571342071,
+          "name": "server_logs_minimaxm3_tp4_conc16_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fal-d5c5d260d75f8854d1f4",
+          "size_bytes": 14797
+        },
+        {
+          "id": 10571037042,
+          "name": "agentic_minimaxm3_tp4_conc16_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fal-d5c5d260d75f8854d1f4",
+          "size_bytes": 34179
+        },
+        {
+          "id": 10570813402,
+          "name": "results_bmk",
+          "size_bytes": 142
+        }
       ],
       "failure_stage": "engine warmup",
       "diagnosis": "The repaired storage proof, O_DIRECT probe, 1 TiB sparse disk cache creation, and owned cleanup all succeeded. The pinned replacement image then selected FA4 for the EAGLE3-GQA draft head on Blackwell and failed warmup because a broadcast descale tensor had stride 0 in its leading dimension. The pinned vLLM source documents selecting FA3 explicitly.",
@@ -426,30 +446,58 @@
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35454656748/job/105927752532",
       "runner": "b200-nscale-slurm_00",
       "started_at": "2026-09-19T16:21:19Z"
+    },
+    {
+      "run_id": 35456989669,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35456989669",
+      "arm": "dram-nvme",
+      "concurrency": 16,
+      "repeat": 1,
+      "attempt": 1,
+      "head_sha": "8b0a20d5e26fb0ee88d5a272dacfe644b5bb74b9",
+      "status": "in_progress",
+      "node": null,
+      "artifacts": [],
+      "performance_result": false,
+      "workflow_name": "offload-v1-dram-nvme-c16-r1-20260919T1705Z",
+      "dispatched_at": "2026-09-19T17:05:30Z",
+      "job_id": 105933996687,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35456989669/job/105933996687",
+      "runner": "b200-nscale-slurm_01",
+      "started_at": "2026-09-19T17:06:09Z",
+      "allocation_id": "16607"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638",
-  "status": "The first matched c16 pair is complete. NVMe was 5.44% higher in output throughput per GPU and 27.50% higher in P90 E2E-normalized interactivity than HBM-only, with 28.03% lower P90 E2E latency. The matched HBM + DRAM c16 arm is now in progress; the pair remains preliminary until the other arms and repeats complete.",
+  "status": "The first matched c16 HBM-only and HBM + NVMe results are complete. HBM + DRAM remains in progress, and the validated HBM + DRAM + NVMe c16 arm has been dispatched. The initial NVMe advantage remains preliminary until all four arms and repeats complete.",
   "last_capacity_check": {
-    "checked_at": "2026-09-19T16:20:25Z",
-    "cluster_observed_at": "2026-09-19T16:19:55Z",
+    "checked_at": "2026-09-19T17:08:19Z",
+    "cluster_observed_at": "2026-09-19T17:07:59Z",
     "cluster_stale": false,
-    "idle_nodes": 11,
+    "eligible_nodes": 11,
+    "idle_nodes": 9,
     "total_nodes": 11,
-    "legacy_task_nodes": 0,
-    "legacy_job_ids": [],
-    "active_study_nodes": 0,
-    "active_study_job_ids": [],
-    "scheduler_snapshot_at": "2026-09-19T16:20:00Z",
+    "allocated_nodes": 2,
+    "pending_b200_jobs": 0,
+    "pending_requested_nodes": 0,
+    "demand_nodes": 2,
+    "demand_percent": 18.18,
+    "scheduler_snapshot_at": "2026-09-19T17:08:17Z",
     "scheduler_available": true,
-    "b200_queued_jobs": 0,
-    "competing_run_ids": [],
+    "active_study_run_ids": [
+      35454656748,
+      35456989669
+    ],
+    "active_study_job_ids": [
+      "16606",
+      "16607"
+    ],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": true,
-    "reason": "All 11 B200 nodes were idle, the B200 queue was empty, and no B200 reservations or priority overrides were active; one one-node matched DRAM run remains below the 50% ceiling and leaves ten idle nodes."
+    "reason": "Fresh cluster and priority-scheduler snapshots showed 2 allocated B200 nodes plus 0 pending requested B200 nodes across 11 eligible nodes (18.18% demand), below the 125% hold threshold. The DRAM and combined c16 arms are both running."
   },
   "next_dispatch": {
-    "requires": "Wait for run 35454656748 to finish, validate its retained artifacts and actual 739 GB DRAM cache behavior, then launch the combined c16 arm if capacity guards pass."
+    "requires": "Monitor runs 35454656748 and 35456989669. Validate retained artifacts and actual tier activity when each finishes; add only successful completed runs to the comparison URL. After the four-arm c16 probe is complete, begin widely spaced full-curve points subject to the 125% demand guard."
   }
 }
