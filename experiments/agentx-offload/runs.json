@@ -436,16 +436,96 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "1fcd454002a7fa0d07588402dbe14296b2e0f75e",
-      "status": "in_progress",
-      "node": null,
-      "artifacts": [],
-      "performance_result": false,
+      "status": "success",
+      "node": "im-b200-c001",
+      "artifacts": [
+        {
+          "id": 10589676069,
+          "name": "run-stats",
+          "size_bytes": 284
+        },
+        {
+          "id": 10589665967,
+          "name": "bmk_agentic_minimaxm3_tp4_conc16_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fal-f00e3ebac48c04d8a3a6",
+          "size_bytes": 2239
+        },
+        {
+          "id": 10589596163,
+          "name": "results_bmk",
+          "size_bytes": 2042
+        },
+        {
+          "id": 10589436250,
+          "name": "agentic_minimaxm3_tp4_conc16_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fal-f00e3ebac48c04d8a3a6",
+          "size_bytes": 15468341
+        },
+        {
+          "id": 10589391254,
+          "name": "server_logs_minimaxm3_tp4_conc16_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fal-f00e3ebac48c04d8a3a6",
+          "size_bytes": 82883
+        },
+        {
+          "id": 10589142020,
+          "name": "power_audit_minimaxm3_tp4_conc16_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fal-f00e3ebac48c04d8a3a6",
+          "size_bytes": 154681
+        },
+        {
+          "id": 10588752910,
+          "name": "gpu_metrics_minimaxm3_tp4_conc16_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fal-f00e3ebac48c04d8a3a6",
+          "size_bytes": 151111
+        }
+      ],
+      "performance_result": true,
       "workflow_name": "offload-v1-dram-c16-r1-20260919T162046Z",
       "dispatched_at": "2026-09-19T16:20:48Z",
       "job_id": 105927752532,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35454656748/job/105927752532",
       "runner": "b200-nscale-slurm_00",
-      "started_at": "2026-09-19T16:21:19Z"
+      "started_at": "2026-09-19T16:21:19Z",
+      "completed_at": "2026-09-19T17:40:40Z",
+      "allocation_id": "16606",
+      "log_sha256": "3389deb2d1059bc70028cca1664e11f733278f9f4dbeb91a3d409bdea8a83331",
+      "performance": {
+        "num_requests_total": 2392,
+        "num_requests_successful": 2215,
+        "num_requests_warmup_dropped": 177,
+        "num_requests_error_dropped": 0,
+        "duration_seconds": 3616.35414,
+        "output_tokens_per_second": 588.74157,
+        "output_tokens_per_second_per_gpu": 147.18539,
+        "input_tokens_per_second": 80204.56313,
+        "total_tokens_per_second": 80793.30469,
+        "p90_e2e_latency_seconds": 21.66795,
+        "p90_ttft_seconds": 1.29612,
+        "p90_tpot_seconds": 0.01495,
+        "p90_interactivity_tokens_per_second_per_user": 66.87753,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 51.87071,
+        "mean_e2e_latency_seconds": 9.51468,
+        "avg_power_w_per_gpu": 539.864
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.87988,
+        "external_cache_hit_rate": 0.05607,
+        "overall_cache_hit_rate": 0.93595,
+        "gpu_cache_hit_tokens": 289575040,
+        "external_transfer_tokens": 18452736,
+        "computed_tokens": 21080662,
+        "prompt_tokens_total": 329108438,
+        "generation_tokens_total": 2129275,
+        "gpu_cache_usage_pct": 0.76703,
+        "theoretical_cache_hit_rate": 0.97088
+      },
+      "evidence_sha256": {
+        "offload_config.json": "1e1b8ce0b7affc8ec7e6091380631c16052bf5e582fbeca4939e3f929bb2654a",
+        "offload-telemetry.jsonl": "df7176decacebbe312a2934f52eb17badf934a67dbaf70270c97180f2fe4a05d",
+        "offload_cleanup.json": "43b354c10f0f28bb57e5118916c3c7637658a68252e42b3eafaee2823bfd44f2",
+        "vllm_command.txt": "57d1a9f281533702acccbd88e35ae66df14c8fedbc3391d768d0f0634cd03f4e",
+        "server.log": "592618634e54a318d0680a8bd4980a6a0850b29c36c00482e1344d03085c0878",
+        "agg_bmk.json": "346e721e01a07e5a8a8a4017dd86fa29cee6eba28596f6174db9d2a5e30d3ae9",
+        "profile_export.jsonl": "21ae7d72357b6fbc7f23b5bb67c9b727f884638c52dba863ce0ff2ed8ed00a7a"
+      },
+      "storage_evidence": "DRAM-only configured zero NVMe capacity. Its workflow-owned scratch remained empty (zero files and bytes); cleanup exit code 0 and deleted true.",
+      "runtime_evidence": "SimpleCPUOffloadConnector used the matched 739 GB host budget. External CPU cache served 18,452,736 prompt tokens (5.607%), proving active DRAM offload; no profiling requests were dropped for errors."
     },
     {
       "run_id": 35456989669,
@@ -468,36 +548,34 @@
       "allocation_id": "16607"
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638",
-  "status": "The first matched c16 HBM-only and HBM + NVMe results are complete. HBM + DRAM remains in progress, and the validated HBM + DRAM + NVMe c16 arm has been dispatched. The initial NVMe advantage remains preliminary until all four arms and repeats complete.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748",
+  "status": "Three matched c16 arms are complete. HBM + DRAM delivered 147.18539 output tok/s/GPU and 51.87071 P90 E2E-normalized tok/s/user: 5.17% and 17.72% above HBM-only, with 19.72% lower P90 E2E latency. It was within 0.25% of HBM + NVMe throughput but had 7.67% lower P90 E2E-normalized interactivity. HBM + DRAM + NVMe remains in progress; all c16 comparisons remain preliminary until repeats complete.",
   "last_capacity_check": {
-    "checked_at": "2026-09-19T17:08:19Z",
-    "cluster_observed_at": "2026-09-19T17:07:59Z",
+    "checked_at": "2026-09-19T17:43:16Z",
+    "cluster_observed_at": "2026-09-19T17:42:53Z",
     "cluster_stale": false,
     "eligible_nodes": 11,
-    "idle_nodes": 9,
+    "idle_nodes": 10,
     "total_nodes": 11,
-    "allocated_nodes": 2,
+    "allocated_nodes": 1,
     "pending_b200_jobs": 0,
     "pending_requested_nodes": 0,
-    "demand_nodes": 2,
-    "demand_percent": 18.18,
-    "scheduler_snapshot_at": "2026-09-19T17:08:17Z",
+    "demand_nodes": 1,
+    "demand_percent": 9.09,
+    "scheduler_snapshot_at": "2026-09-19T17:43:02Z",
     "scheduler_available": true,
     "active_study_run_ids": [
-      35454656748,
       35456989669
     ],
     "active_study_job_ids": [
-      "16606",
       "16607"
     ],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": true,
-    "reason": "Fresh cluster and priority-scheduler snapshots showed 2 allocated B200 nodes plus 0 pending requested B200 nodes across 11 eligible nodes (18.18% demand), below the 125% hold threshold. The DRAM and combined c16 arms are both running."
+    "reason": "Fresh cluster and priority-scheduler snapshots showed 1 allocated B200 node plus 0 pending requested B200 nodes across 11 eligible nodes (9.09% demand), below the 125% hold threshold. Only the combined c16 arm remains active."
   },
   "next_dispatch": {
-    "requires": "Monitor runs 35454656748 and 35456989669. Validate retained artifacts and actual tier activity when each finishes; add only successful completed runs to the comparison URL. After the four-arm c16 probe is complete, begin widely spaced full-curve points subject to the 125% demand guard."
+    "requires": "Wait for run 35456989669 to finish and validate native tiered DRAM + filesystem activity. After the four-arm c16 probe is complete, begin widely spaced full-curve points subject to the 125% demand guard."
   }
 }
