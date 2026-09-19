@@ -92,7 +92,7 @@ roles:
       scheduler-recv-interval: 10
       stream-interval: 50
       max-running-requests: 32
-      cuda-graph-max-bs: 16
+      cuda-graph-max-bs-decode: 16
       tokenizer-worker-num: 6
 sbatch_directives:
   exclude: dsxe-sa-b300-prd0-gpu-11

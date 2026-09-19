@@ -94,7 +94,7 @@ roles:
       scheduler-recv-interval: 10
       stream-interval: 50
       max-running-requests: 64
-      cuda-graph-max-bs: 32
+      cuda-graph-max-bs-decode: 32
       tokenizer-worker-num: 6
       page-size: 64
       enable-hierarchical-cache: true
