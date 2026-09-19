@@ -14,7 +14,7 @@ identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
   container:
-    image: "lmsysorg/sglang:nightly-dev-20260914-4358a161"
+    image: "lmsysorg/sglang:v0.5.20-cu130"
 
 dynamo:
   install: true
