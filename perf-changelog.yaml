@@ -8672,3 +8672,17 @@
     allocated GPU accounting and exact four-device exporter. Full official performance
     and real accuracy remain required before promotion.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp4-ep1-tp4-ep1-c80-h298-dmax128-wt
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add one TP4 C80 H298 write-through utilization-scaling screen after C56 passed
+    native BF16 graphs with36.91GiB free and measured low decoder occupancy. Raise
+    D state capacity64 to128 and graph ceiling64 to96, preserving P96, static0.8,
+    steps3 and all other serving settings. This explores higher utilization, not a
+    demonstrated C56 capacity failure. Keep canonical1200s/10-warmup, two-hour allocation
+    and strict eight-device power; verify actual state/KV allocations, graph headroom
+    and queues before selecting any full official qualification.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
