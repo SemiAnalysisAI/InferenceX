@@ -8003,3 +8003,12 @@
     - "Correct the branch-only AgentX offload draft compatibility setting after run 35442679581 proved that pinned vLLM explicitly redirects requested FA3 back to FA4 on Blackwell, reproducing the EAGLE3-GQA broadcast-descale stride-0 warmup failure. Select FA2 and an unquantized draft KV cache for the FLASH_ATTN drafter while retaining FlashInfer and FP8 KV for the main MiniMax-M3 model. Apply the same setting to all four study arms; model, TP4, EAGLE3 acceptance, storage budgets, AgentX settings and concurrency candidates are unchanged."
     - "运行 35442679581 证明固定版本的 vLLM 会在 Blackwell 上将请求的 FA3 明确重定向回 FA4，并再次触发 EAGLE3-GQA 广播 descale 张量 stride 为 0 的 warmup 失败；因此修正分支内 AgentX 卸载实验的草稿兼容设置：FLASH_ATTN 草稿头使用 FA2 和未量化的草稿 KV 缓存，MiniMax-M3 主模型继续使用 FlashInfer 和 FP8 KV。四组实验统一应用该设置；模型、TP4、EAGLE3 接受率、存储预算、AgentX 设置及并发候选均保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Raise only the branch-only native HBM+DRAM+NVMe filesystem stop guard from 1 TiB to 2 TiB after c16 run 35456989669 completed canonical profiling with zero request errors but reached 1,413,881,142,831 logical bytes and was correctly invalidated. The NVMe-only arm remains bounded at 1 TiB; model, engine, TP4, HBM and DRAM budgets, and AgentX settings are unchanged. The 2 TiB value remains an abort guard, not an LRU quota or capacity-boundary claim."
+    - "分支内 c16 运行 35456989669 以零请求错误完成规范 profiling，但文件系统逻辑占用达到 1,413,881,142,831 字节并被正确判为无效；因此仅将原生 HBM+DRAM+NVMe 文件系统停止保护阈值从 1 TiB 提高到 2 TiB。NVMe-only 方案仍限制为 1 TiB；模型、引擎、TP4、HBM 与 DRAM 容量以及 AgentX 设置均保持不变。2 TiB 仍只是中止保护阈值，不是 LRU 配额或容量边界结论。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload

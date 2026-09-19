@@ -18,7 +18,7 @@ refine it; do not manufacture a smooth curve or call an isolated noisy win a thr
 | `none` | 80 GiB/GPU | 0 | 0 | HBM prefix cache |
 | `dram` | 80 GiB/GPU | 739 GB/node | 0 | SimpleCPU, lazy |
 | `nvme` | 80 GiB/GPU | No resident KV cache; transfer buffers remain | 1 TiB/node | SimpleCPU disk, lazy, direct I/O |
-| `dram-nvme` | 80 GiB/GPU | 739 GB/node | 1 TiB stop guard | Native tiered CPU + filesystem |
+| `dram-nvme` | 80 GiB/GPU | 739 GB/node | 2 TiB stop guard | Native tiered CPU + filesystem |
 
 The host budget is the actual fresh-main generator output at `dram-utilization:
 0.683` and TP4 for B200, interpreted as decimal GB. The study checks it before
@@ -27,9 +27,12 @@ allocation layouts cannot silently change the common budget. All thresholds are
 conditional on these budgets; this is not a universal concurrency threshold.
 
 The combined tier uses a different connector and storage policy. The pinned FS
-tier has no bounded LRU capacity setting: the 1 TiB value is an abort guard, not an
-eviction quota. Only runs remaining below the guard can support a comparison.
-A guard hit is a failed measurement. Confirm backend activity and actual cache
+tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an
+eviction quota. It was raised independently of the NVMe-only 1 TiB capacity after
+run `35456989669` completed canonical profiling with zero request errors but reached
+1,413,881,142,831 logical filesystem bytes and was correctly invalidated. Only runs
+remaining below the guard can support a comparison. A guard hit is a failed
+measurement. Confirm backend activity and actual cache
 sizes from logs/metrics, and validate a suspected combined-tier win against a
 native DRAM control before attributing it solely to storage hardware.
 

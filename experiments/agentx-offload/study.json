@@ -6,6 +6,7 @@
   "hbm_bytes_per_gpu": 85899345920,
   "dram_bytes_per_node": 739000000000,
   "nvme_bytes_per_node": 1099511627776,
+  "tiered_fs_stop_guard_bytes_per_node": 2199023255552,
   "profile_seconds": 3600,
   "warmup_requests_per_lane": 10,
   "seed": 42,

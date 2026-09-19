@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 import runtime
-from runtime import connector_config, sysfs_backing_devices, verify_nvme_backing
+from runtime import (
+    connector_config,
+    nvme_limit,
+    sysfs_backing_devices,
+    verify_nvme_backing,
+)
 
 from infx.matrix.generate import generate_test_config_sweep
 from infx.matrix.validation import SingleNodeMasterConfigEntry
@@ -65,6 +70,18 @@ def test_combined_keeps_dram_and_secondary_fs():
             "locality": "LOCAL",
         }
     ]
+
+
+def test_nvme_capacity_and_tiered_stop_guard_are_independent():
+    study = {
+        "nvme_bytes_per_node": 1024,
+        "tiered_fs_stop_guard_bytes_per_node": 2048,
+    }
+
+    assert nvme_limit(study, "none") == 0
+    assert nvme_limit(study, "dram") == 0
+    assert nvme_limit(study, "nvme") == 1024
+    assert nvme_limit(study, "dram-nvme") == 2048
 
 
 def test_sysfs_storage_proof_resolves_raid_without_device_node(tmp_path):

@@ -93,6 +93,15 @@ def read_config() -> tuple[Path, dict[str, Any]]:
     return result, json.loads((result / "offload_config.json").read_text())
 
 
+def nvme_limit(study: dict[str, Any], arm: str) -> int:
+    """Return the bounded NVMe capacity or native-tier filesystem stop guard."""
+    if arm == "nvme":
+        return int(study["nvme_bytes_per_node"])
+    if arm == "dram-nvme":
+        return int(study["tiered_fs_stop_guard_bytes_per_node"])
+    return 0
+
+
 def sysfs_backing_devices(
     source: str, sys_block_root: Path = SYS_BLOCK_ROOT
 ) -> dict[str, Any]:
@@ -171,7 +180,7 @@ def prepare() -> None:
         raise ValueError(
             f"Matrix DRAM budget differs from study: {dram} != {expected_dram}"
         )
-    nvme = study["nvme_bytes_per_node"] if arm in {"nvme", "dram-nvme"} else 0
+    nvme = nvme_limit(study, arm)
     job, run, attempt = (
         os.environ[k] for k in ("SLURM_JOB_ID", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT")
     )
@@ -282,7 +291,8 @@ def monitor(parent: int) -> None:
                 + "\n"
             )
             # Tiered files include headers. A 1% metadata margin does not extend
-            # the declared payload capacity. Raw bytes are retained for review.
+            # the declared NVMe capacity or filesystem stop guard. Raw bytes are
+            # retained for review.
             if cfg["nvme_bytes"] and usage["logical_bytes"] > cfg["nvme_bytes"] * 1.01:
                 write_json(
                     result / "offload-guard.json",
