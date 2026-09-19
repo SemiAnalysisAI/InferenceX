@@ -8405,3 +8405,12 @@
     - "Enable required telemetry on seven GB200 aggregate recipes, preserve failed-job artifacts, and reserve CUDA Graph memory in the five TP8/PP2 recipes."
     - "为七个 GB200 Kimi-K3 聚合配方启用必需实测功耗并保留失败产物；五个 TP8/PP2 配方为 CUDA Graph 预留显存。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3045
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required measured power on the four remaining GB200 Kimi-K3 aggregate recipes (tp16-latency, tep16-balanced, dep16, dep16-vllm-simple-offload), matching the seven already collecting power."
+    - "为 GB200 Kimi-K3 剩余四个聚合配方（tp16-latency、tep16-balanced、dep16、dep16-vllm-simple-offload）启用必需实测功耗，与已采集功耗的七个配方保持一致。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
