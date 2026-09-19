@@ -181,6 +181,9 @@ fi
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 [ "$MAX_RUNNING_REQUESTS" -gt 256 ] && MAX_RUNNING_REQUESTS=256
 # SGLang interpolates a bs list [1..max_bs] automatically; cap at 64 to
+# keep graph-capture memory bounded. Passed as --cuda-graph-max-bs-decode:
+# the old --cuda-graph-max-bs alias is gone from the 2026-09 ROCm builds
+# (the MXFP4 sibling already made this switch).
 # keep graph-capture memory bounded without giving up coverage.
 CUDA_GRAPH_MAX_BS=$(( MAX_RUNNING_REQUESTS < 64 ? MAX_RUNNING_REQUESTS : 64 ))
 
@@ -225,7 +228,7 @@ SGLANG_CMD=(
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     --speculative-algorithm EAGLE
     --speculative-num-steps 5
     --speculative-eagle-topk 1
