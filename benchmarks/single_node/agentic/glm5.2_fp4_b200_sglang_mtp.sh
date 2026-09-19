@@ -192,11 +192,13 @@ fi
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 GRAPH_ARGS=()
 if [ "$DP_ATTENTION" != "true" ]; then
-    # --cuda-graph-max-bs counts requests, not verification tokens; SGLang's
+    # --cuda-graph-max-bs-decode (the old --cuda-graph-max-bs alias is ambiguous
+    # against --cuda-graph-max-bs-prefill on current SGLang builds) counts
+    # requests, not verification tokens; SGLang's
     # spec-decode graph runner scales by --speculative-num-draft-tokens itself.
     CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
     [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
-    GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
+    GRAPH_ARGS=(--cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS")
 fi
 
 # B200: 180 GB HBM3e vs B300's 288 GB. B300's 0.85 leaves 43 GB headroom
