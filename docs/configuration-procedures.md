@@ -155,6 +155,16 @@ Concurrent cells serialize draft staging with a per-model lock. Each cell lets
 `hf download` validate or resume the existing cache before serving; a nonempty
 directory is not a completion signal.
 
+## Native PowerX collection for fixed-sequence multinode runs
+
+The AMD SGLang/ATOM/vLLM launchers enable native SMI collection for 8192-input/1024-output runs. Every serving node starts `benchmarks/native_power_collect.sh`; the client waits for all `ready-<rank>` receipts, then requests `stop` and waits for all `done-<rank>` receipts before tearing down servers. The shared collector also accepts NVIDIA SMI for launchers that do not use the srt-slurm/DCGM contract.
+
+The selected active multi-node qualification uses SGLang. Inactive ATOM/vLLM multi-node exit changes are deferred; single-node ATOM/vLLM checks do not qualify those server paths. Native multi-node AgentX collection remains disabled.
+
+Keep `native_power/node-<rank>/gpu_metrics.csv`, the start/end device identity snapshots and `manifest.json` together. Select the actual serving GPU indices, preserve physical node counts when workers span nodes, and stage node-local files as the host runner user into `LOGS/native_power`. The result processor uses each client's formal window, validates all node/role counts and UUID membership, and reuses the shared integration/percentile math. Aggregate deployments emit whole-deployment metrics; role metrics require real separate prefill/decode pools.
+
+Host `timedatectl NTPSynchronized` is recorded as clock context. The shared collector accepts `yes` or `true` as synchronized; other or missing values remain unsynchronized. It does not measure the offset between nodes; common-window trace coverage is still required, and runtime clock alignment remains part of fleet qualification. Missing clock context, a replaced UUID, a missing node or an incomplete collector lifecycle makes power unavailable. Local fixtures prove the format and failure behavior, not GPU runtime or dashboard publication.
+
 ## Native TileRT power
 
 TileRT's shared importer preserves Docker Hub image names and converts explicit registries such as `ghcr.io/team/image:tag` to Enroot's `docker://ghcr.io#team/image:tag` syntax. Existing `#` references are preserved. Valid cached squash images are reused without importing; a cache hit does not validate the registry import path. Invalid cached images are removed under the import lock before retrying the import.
