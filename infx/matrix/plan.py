@@ -3,19 +3,23 @@
 import argparse
 import copy
 import hashlib
+import io
 import json
+import os
 import re
 import subprocess
 import tempfile
 import traceback
 from collections import defaultdict
+from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
-from ..config import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS, RUNNER_CONFIG
+from infx.config import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS, RUNNER_CONFIG
+
 from .generate import (
     EvalMode,
     freeze_config_value,
@@ -43,6 +47,7 @@ class GenerationInputs:
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
     result = subprocess.run(
         ["git", "diff", base_ref, head_ref, "--", filepath],
+        check=False,
         capture_output=True,
         text=True,
     )
@@ -67,9 +72,7 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
     return "\n".join(added_lines)
 
 
-def filter_eval_rows_by_prefill_ep(
-    eval_rows: list[dict], min_prefill_ep: int | None
-) -> list[dict]:
+def filter_eval_rows_by_prefill_ep(eval_rows: list[dict], min_prefill_ep: int | None) -> list[dict]:
     """Drop multinode eval rows below a prefill EP threshold."""
     if min_prefill_ep is None:
         return eval_rows
@@ -87,9 +90,7 @@ def filter_eval_rows_by_prefill_ep(
     return kept
 
 
-def get_config_keys_from_master(
-    config_keys: list[str], master_config: dict
-) -> list[str]:
+def get_config_keys_from_master(config_keys: list[str], master_config: dict) -> list[str]:
     resolved_keys = {}
     for key in config_keys:
         if "*" in key:
@@ -109,7 +110,7 @@ def get_config_keys_from_master(
 
 
 @contextmanager
-def generation_inputs_at_ref(ref: str):
+def generation_inputs_at_ref(ref: str) -> Iterator[GenerationInputs]:
     """Materialize config and generator inputs from one repository revision."""
     with tempfile.TemporaryDirectory(prefix="inferencex-append-only-") as temp_dir:
         files_result = subprocess.run(
@@ -117,7 +118,7 @@ def generation_inputs_at_ref(ref: str):
                 "git",
                 "ls-tree",
                 "-r",
-                "--name-only",
+                "-z",
                 ref,
                 "--",
                 "utils/matrix_logic",
@@ -127,30 +128,39 @@ def generation_inputs_at_ref(ref: str):
             ],
             capture_output=True,
             check=True,
-            text=True,
         )
-        repo_paths = files_result.stdout.splitlines()
+        repo_files = {}
+        for entry in files_result.stdout.split(b"\0")[:-1]:
+            metadata, path = entry.split(b"\t", 1)
+            repo_files[os.fsdecode(path)] = metadata.split()[2]
         required_paths = {
             *MASTER_CONFIGS,
             "configs/runners.yaml",
             GENERATE_SWEEPS_PY_SCRIPT,
         }
-        missing_paths = required_paths - set(repo_paths)
+        missing_paths = required_paths - repo_files.keys()
         if missing_paths:
             raise ValueError(
-                f"append-only base revision is missing generation inputs: "
-                f"{sorted(missing_paths)}"
+                f"append-only base revision is missing generation inputs: {sorted(missing_paths)}"
             )
 
-        for repo_path in repo_paths:
-            result = subprocess.run(
-                ["git", "show", f"{ref}:{repo_path}"],
-                capture_output=True,
-                check=True,
-            )
+        result = subprocess.run(
+            ["git", "cat-file", "--batch"],
+            input=b"\n".join(repo_files.values()) + b"\n",
+            capture_output=True,
+            check=True,
+        )
+        blobs = io.BytesIO(result.stdout)
+        for repo_path in repo_files:
+            header = blobs.readline().split()
+            if len(header) != 3 or header[1] != b"blob":
+                raise ValueError(f"Could not read {repo_path!r} at {ref!r}: {header!r}")
+            content = blobs.read(int(header[2]))
+            if blobs.read(1) != b"\n":
+                raise ValueError(f"Incomplete Git blob for {repo_path!r} at {ref!r}")
             destination = Path(temp_dir) / repo_path
             destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(result.stdout)
+            destination.write_bytes(content)
 
         yield GenerationInputs(
             config_files=[str(Path(temp_dir) / path) for path in MASTER_CONFIGS],
@@ -239,16 +249,13 @@ def append_only_delta(base_entries: list[dict], head_entries: list[dict]) -> lis
 
     removed_curves = base_groups.keys() - head_groups.keys()
     if removed_curves:
-        raise ValueError(
-            "append-only may not remove or modify existing generated recipes"
-        )
+        raise ValueError("append-only may not remove or modify existing generated recipes")
 
     for key, base_concurrencies in base_groups.items():
         removed_points = base_concurrencies - head_groups[key]
         if removed_points:
             raise ValueError(
-                "append-only may not remove existing concurrency points: "
-                f"{sorted(removed_points)}"
+                f"append-only may not remove existing concurrency points: {sorted(removed_points)}"
             )
 
     delta: list[dict] = []
@@ -277,9 +284,7 @@ def append_only_delta(base_entries: list[dict], head_entries: list[dict]) -> lis
 
     base_images_by_series: dict[tuple, set[str | None]] = defaultdict(set)
     for entry in base_entries:
-        base_images_by_series[_matrix_visual_series_key(entry)].add(
-            entry.get("image")
-        )
+        base_images_by_series[_matrix_visual_series_key(entry)].add(entry.get("image"))
     for entry in delta:
         series_key = _matrix_visual_series_key(entry)
         base_images = base_images_by_series.get(series_key, set())
@@ -323,17 +328,11 @@ def validate_append_only_scope(
         base_scenarios = base_config.get("scenarios", {})
         head_scenarios = head_config.get("scenarios", {})
         if base_scenarios.keys() != head_scenarios.keys():
-            raise ValueError(
-                f"append-only added or removed a scenario in config {config!r}"
-            )
+            raise ValueError(f"append-only added or removed a scenario in config {config!r}")
 
         unselected_scenarios = base_scenarios.keys() - allowed_scenarios
-        base_top_level = {
-            key: value for key, value in base_config.items() if key != "scenarios"
-        }
-        head_top_level = {
-            key: value for key, value in head_config.items() if key != "scenarios"
-        }
+        base_top_level = {key: value for key, value in base_config.items() if key != "scenarios"}
+        head_top_level = {key: value for key, value in head_config.items() if key != "scenarios"}
         if unselected_scenarios and base_top_level != head_top_level:
             raise ValueError(
                 "append-only changed config-wide fields that can affect scenarios "
@@ -363,7 +362,8 @@ def group_unseen_scenarios(
     groups: dict[tuple[str, ...], list[str]] = defaultdict(list)
     for config in config_keys:
         unseen = tuple(
-            scenario for scenario in SCENARIO_TYPES
+            scenario
+            for scenario in SCENARIO_TYPES
             if scenario in scenarios and scenario not in seen[config]
         )
         if unseen:
@@ -395,17 +395,26 @@ class MatrixGenerationError(ValueError):
     """A current-revision generation failure, with its CLI diagnostic context."""
 
     def __init__(
-        self, keys: list[str], flags: list[str],
-        inputs: GenerationInputs | None, cause: Exception,
+        self,
+        keys: list[str],
+        flags: list[str],
+        inputs: GenerationInputs | None,
+        cause: Exception,
     ) -> None:
         super().__init__(str(cause))
         self.keys, self.flags, self.inputs, self.cause = keys, flags, inputs, cause
 
 
 def build_plan(
-    changelog_data: list[dict], *, base_ref: str, head_ref: str,
-    config_files: list[str] | None = None, runner_config: str = RUNNER_CONFIG,
-    trim: bool = False, all_evals: bool = False, evals_only: bool = False,
+    changelog_data: list[dict],
+    *,
+    base_ref: str,
+    head_ref: str,
+    config_files: list[str] | None = None,
+    runner_config: str = RUNNER_CONFIG,
+    trim: bool = False,
+    all_evals: bool = False,
+    evals_only: bool = False,
 ) -> ChangelogMatrixEntry:
     """Build the complete sweep from changelog entries and configuration paths.
 
@@ -418,9 +427,7 @@ def build_plan(
 
     with ExitStack() as stack:
         parsed_entries = [ChangelogEntry.model_validate(entry) for entry in changelog_data]
-        if any(entry.no_evals for entry in parsed_entries) and (
-            all_evals or evals_only
-        ):
+        if any(entry.no_evals for entry in parsed_entries) and (all_evals or evals_only):
             raise ValueError("no-evals entries cannot use all-evals or evals-only modifiers")
         has_append_only = any(entry.append_only for entry in parsed_entries)
         if has_append_only and not all(entry.append_only for entry in parsed_entries):
@@ -428,9 +435,7 @@ def build_plan(
                 "append-only entries cannot share a sweep with regular changelog entries"
             )
         if has_append_only and (all_evals or evals_only):
-            raise ValueError(
-                "append-only sweeps cannot use all-evals or evals-only modifiers"
-            )
+            raise ValueError("append-only sweeps cannot use all-evals or evals-only modifiers")
 
         final_results = {
             "single_node": defaultdict(list),
@@ -459,27 +464,32 @@ def build_plan(
         runner_data = None
 
         def generate_current(
-            keys: list[str], mode: EvalMode, scenarios: tuple[str, ...] | None,
+            keys: list[str],
+            mode: EvalMode,
+            scenarios: tuple[str, ...] | None,
         ) -> list[dict]:
             nonlocal runner_data
             try:
                 if runner_data is None:
                     runner_data = load_runner_file(runner_config)
                 return generate_config_matrix(
-                    keys, master_config, runner_data,
-                    scenario_types=scenarios, eval_mode=mode,
+                    keys,
+                    master_config,
+                    runner_data,
+                    scenario_types=scenarios,
+                    eval_mode=mode,
                 )
             except Exception as error:
                 raise MatrixGenerationError(
-                    keys, _generation_flags(mode, scenarios),
-                    head_inputs if mode == "none" else None, error,
+                    keys,
+                    _generation_flags(mode, scenarios),
+                    head_inputs if mode == "none" else None,
+                    error,
                 ) from error
 
         resolved_entries = []
         for entry in parsed_entries:
-            all_configs = get_config_keys_from_master(
-                entry.config_keys, master_config
-            )
+            all_configs = get_config_keys_from_master(entry.config_keys, master_config)
             resolved_entries.append((entry, all_configs))
 
         base_inputs = None
@@ -489,9 +499,7 @@ def build_plan(
             selected_config_scenarios: dict[str, set[str]] = defaultdict(set)
             for entry, configs in resolved_entries:
                 for config in configs:
-                    selected_config_scenarios[config].update(
-                        entry.scenario_type or SCENARIO_TYPES
-                    )
+                    selected_config_scenarios[config].update(entry.scenario_type or SCENARIO_TYPES)
             selected_configs = selected_config_scenarios.keys()
             missing_from_base = selected_configs - base_master.keys()
             if missing_from_base:
@@ -512,22 +520,21 @@ def build_plan(
         for entry, all_configs in resolved_entries:
             entry_scenarios = tuple(entry.scenario_type or SCENARIO_TYPES)
             expand_all_evals = all_evals or entry.all_evals
-            suppress_throughput = (
-                evals_only
-                or entry.evals_only
-                or entry.all_evals
-            )
+            suppress_throughput = evals_only or entry.evals_only or entry.all_evals
 
             if not suppress_throughput:
                 benchmark_groups = group_unseen_scenarios(
-                    all_configs, entry_scenarios, benchmark_scenarios_seen)
+                    all_configs, entry_scenarios, benchmark_scenarios_seen
+                )
                 for scenarios, benchmark_configs in benchmark_groups.items():
                     selection = scenarios if scenarios != SCENARIO_TYPES else None
                     head_results = generate_current(benchmark_configs, "none", selection)
                     if entry.append_only:
-                        assert base_inputs is not None
+                        assert base_inputs is not None  # noqa: S101
                         base_results = generate_matrix(
-                            benchmark_configs, _generation_flags("none", selection), base_inputs,
+                            benchmark_configs,
+                            _generation_flags("none", selection),
+                            base_inputs,
                         )
                         head_results = append_only_delta(base_results, head_results)
                     all_benchmark_results.extend(head_results)
@@ -535,11 +542,12 @@ def build_plan(
             if entry.append_only or entry.no_evals:
                 continue
 
-            eval_groups = group_unseen_scenarios(
-                all_configs, entry_scenarios, eval_scenarios_seen)
+            eval_groups = group_unseen_scenarios(all_configs, entry_scenarios, eval_scenarios_seen)
             for scenarios, eval_configs in eval_groups.items():
                 entry_eval_results = generate_current(
-                    eval_configs, "all" if expand_all_evals else "subset", scenarios,
+                    eval_configs,
+                    "all" if expand_all_evals else "subset",
+                    scenarios,
                 )
                 entry_eval_results = filter_eval_rows_by_prefill_ep(
                     entry_eval_results, entry.eval_min_prefill_ep
@@ -553,7 +561,8 @@ def build_plan(
             result["recipe-fingerprint"] = recipe_fingerprint(result)
             node_type = "multi_node" if result.get("prefill") is not None else "single_node"
             scenario = (
-                "agentic" if result.get("scenario-type") == "agentic-coding"
+                "agentic"
+                if result.get("scenario-type") == "agentic-coding"
                 else seq_len_to_str(result["isl"], result["osl"])
             )
             final_results[node_type][scenario].append(result)
@@ -595,15 +604,21 @@ def main() -> None:
 
     try:
         result = build_plan(
-            changelog_data, base_ref=args.base_ref, head_ref=args.head_ref,
-            trim=args.trim_conc, all_evals=args.all_evals, evals_only=args.evals_only,
+            changelog_data,
+            base_ref=args.base_ref,
+            head_ref=args.head_ref,
+            trim=args.trim_conc,
+            all_evals=args.all_evals,
+            evals_only=args.evals_only,
         )
     except MatrixGenerationError as error:
         # Preserve the legacy child diagnostics and failure status at the CLI.
         stderr = "".join(traceback.format_exception(error.cause))
         print(stderr)
         raise subprocess.CalledProcessError(
-            1, _matrix_command(error.keys, error.flags, error.inputs), stderr=stderr,
+            1,
+            _matrix_command(error.keys, error.flags, error.inputs),
+            stderr=stderr,
         ) from None
     print(result.model_dump_json(by_alias=True, exclude_none=True))
 
@@ -618,7 +633,9 @@ def _generation_flags(mode: EvalMode, scenarios: tuple[str, ...] | None) -> list
     return flags
 
 
-def _matrix_command(config_keys: list[str], flags: list[str], inputs: GenerationInputs | None) -> list[str]:
+def _matrix_command(
+    config_keys: list[str], flags: list[str], inputs: GenerationInputs | None
+) -> list[str]:
     command = [
         "python3",
         inputs.generator_script if inputs else GENERATE_SWEEPS_PY_SCRIPT,

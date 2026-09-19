@@ -1,5 +1,5 @@
-import sys
 import json
+import sys
 from pathlib import Path
 
 
@@ -8,12 +8,12 @@ def main() -> None:
     exp_name = sys.argv[2]
 
     agg_results = []
-    for result_path in results_dir.rglob(f'*.json'):
+    for result_path in results_dir.rglob("*.json"):
         with open(result_path) as f:
             result = json.load(f)
         agg_results.append(result)
 
-    with open(f'agg_{exp_name}.json', 'w') as f:
+    with open(f"agg_{exp_name}.json", "w") as f:
         json.dump(agg_results, f, indent=2)
 
 

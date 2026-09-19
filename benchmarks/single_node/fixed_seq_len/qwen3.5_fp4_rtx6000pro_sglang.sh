@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 
-# Qwen3.5-397B-A17B NVFP4 on four RTX PRO 6000 Blackwell GPUs.
-# SM120 has no trtllm-gen kernels, so the routed experts and the NVFP4 GEMMs
-# run on FlashInfer CUTLASS and attention runs on FlashInfer. The node is
-# PCIe-only, so collectives use plain NCCL rather than the custom all-reduce.
+# SM120 has no trtllm-gen kernels, so MoE and NVFP4 GEMMs run on FlashInfer CUTLASS and attention on FlashInfer.
+# The node is PCIe-only, so collectives use plain NCCL instead of the custom all-reduce.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -17,9 +15,6 @@ check_env_vars \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
-# `hf download` creates the target dir if missing and is itself idempotent.
-# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
-# copy. Either way, SERVE_MODEL is what the server is launched with.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -41,19 +36,15 @@ export PYTHONUNBUFFERED=1
 
 SERVER_LOG=/workspace/server.log
 
-# 96 GiB per GPU leaves far less headroom than the B300 recipe assumes. The
-# weights take ~56 GiB per rank and the prefill/decode CUDA graphs another
-# ~7 GiB, so the static fraction has to stay low enough that a prefill chunk's
-# activations still fit: at 0.8 the KV pool grew to 2.2M tokens (30x what
-# concurrency 64 needs) and the first 8k prefill OOM'd. 0.7 still leaves ~1M
-# KV tokens, and a 2-request prefill chunk keeps the activation peak bounded.
-MEM_FRAC_STATIC="${MEM_FRAC_STATIC:-0.7}"
+# 96 GiB per GPU: weights take ~56 GiB per rank and CUDA graphs ~7 GiB. At 0.8 the KV pool
+# grew to 2.2M tokens and the first 8k prefill OOM'd on activations; 0.7 still leaves ~1M KV
+# tokens, and a 2-request prefill chunk bounds the activation peak.
+MEM_FRAC_STATIC="0.7"
 CHUNKED_PREFILL_SIZE=$((ISL * 2))
 MAX_PREFILL_TOKENS=$((ISL * 2))
 MAX_RUNNING_REQUESTS=128
 CONTEXT_LENGTH=$((ISL + OSL + 20))
 
-# Default: recv every ~10 requests; if CONC >= 16, relax to ~30 requests between scheduler recv polls.
 if [[ $CONC -ge 16 ]]; then
     SCHEDULER_RECV_INTERVAL=30
 else

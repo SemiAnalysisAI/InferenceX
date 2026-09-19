@@ -14,17 +14,13 @@
 # via --data-parallel-hybrid-lb; the leader accepts traffic, workers serve their
 # local DP ranks.
 
-set -euo pipefail
+set -eo pipefail
 
 source /workspace/benchmarks/benchmark_lib.sh
 
-# ----------------------------------------------------------------
-# Config + service ports
-# ----------------------------------------------------------------
-NODE_RANK="${NODE_RANK:-${SLURM_PROCID:-0}}"
-PREFILL_NODES="${PREFILL_NODES:-1}"
-DECODE_NODES="${DECODE_NODES:-1}"
-GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
+check_env_vars \
+    NODE_RANK PREFILL_NODES DECODE_NODES GPUS_PER_NODE PREFILL_WORKERS \
+    DECODE_WORKERS EVAL_ONLY RUN_EVAL
 VLLM_PORT=8200
 SIDECAR_PORT=8000
 ENVOY_PORT=8080
@@ -36,9 +32,6 @@ EPP_METRICS_PORT=9090
 # the served-model-name, not a filesystem path.
 MODEL="${MODEL_DIR}"
 
-# ----------------------------------------------------------------
-# Host IP + default interface
-# ----------------------------------------------------------------
 # Resolved without iproute2 (`ip` is absent on the arm64 vLLM base); python3's
 # socket layer exposes the kernel's source-IP / iface choice.
 _HOST_INFO=$(python3 -c '
@@ -72,15 +65,10 @@ ENVOY_LOG="/benchmark_logs/envoy.log"
 
 echo "=== rank=$NODE_RANK host=$HOST_IP model=$MODEL ==="
 
-# ----------------------------------------------------------------
-# Role + topology (Option B engine grouping)
-# ----------------------------------------------------------------
 # A role's nodes split into PREFILL_WORKERS / DECODE_WORKERS independent DP/EP
 # engines, each spanning (role_nodes / role_workers) nodes with its own DP
 # coordinator (leader IP) and rank range. workers=1 => one engine over all role
 # nodes (1P+1D / mid-curve); >1 => high-tpt (e.g. 2 prefill : 1 decode, DEP8 each).
-PREFILL_WORKERS="${PREFILL_WORKERS:-1}"
-DECODE_WORKERS="${DECODE_WORKERS:-1}"
 IFS=',' read -r -a _ALL_IPS <<< "${ALL_IPS:-}"
 
 if [[ "$NODE_RANK" -lt "$PREFILL_NODES" ]]; then
@@ -123,9 +111,6 @@ ROLE_ENABLE_EP=true
 
 echo "ROLE=$ROLE DP_SIZE=$DP_SIZE DP_ADDR=$DP_ADDR LWS_WORKER_INDEX=$LWS_WORKER_INDEX START_RANK=$START_RANK"
 
-# ----------------------------------------------------------------
-# Recipe: per-role serve args + env (/etc/llmd-recipes/$CONFIG_FILE)
-# ----------------------------------------------------------------
 # Per-role keys: tp (int -> --tensor-parallel-size), enable-expert-parallel
 # (bool -> --enable-expert-parallel + DP/wide-EP knobs), extra-args (appended
 # verbatim), env (map, exported before vllm serve). Absent keys keep the
@@ -157,21 +142,21 @@ PY
 fi
 echo "Resolved $ROLE TP_SIZE=$TP_SIZE ROLE_ENABLE_EP=$ROLE_ENABLE_EP"
 
-# ----------------------------------------------------------------
-# Transport env (NCCL / UCX / NIXL), recipe-overridable
-# ----------------------------------------------------------------
 export GLOO_SOCKET_IFNAME=${GLOO_SOCKET_IFNAME:-$DEFAULT_IFACE}
 export NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-$DEFAULT_IFACE}
+check_env_vars \
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS VLLM_ENGINE_READY_TIMEOUT_S VLLM_LOGGING_LEVEL UCX_TLS NVSHMEM_REMOTE_TRANSPORT \
+    NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_SYMMETRIC_SIZE LLMD_API_SERVER_COUNT
 export VLLM_SKIP_P2P_CHECK=1
 # Randomized DP dummy inputs make idle DP ranks fan their lockstep dummy passes
 # across all experts (full MoE all-to-all), wasting prefill bandwidth; a recipe
 # may set this to 0.
-export VLLM_RANDOMIZE_DP_DUMMY_INPUTS=${VLLM_RANDOMIZE_DP_DUMMY_INPUTS:-1}
+export VLLM_RANDOMIZE_DP_DUMMY_INPUTS
 export VLLM_USE_DEEP_GEMM=1
 # Cold-start budget for engine-core readiness. DSV4-Pro on GB200 cold-starts in
 # ~9-11 min (weight load + DeepGEMM JIT warmup + cudagraph capture + NIXL/UCX
 # handshake); the 600s vLLM default is too tight, so allow 30 min.
-export VLLM_ENGINE_READY_TIMEOUT_S=${VLLM_ENGINE_READY_TIMEOUT_S:-1800}
+export VLLM_ENGINE_READY_TIMEOUT_S
 # DeepGEMM JIT links -l:libcuda.so.1 at warmup; the compat dir is on
 # LD_LIBRARY_PATH (runtime) but not LIBRARY_PATH (link time). Prepend it, plus
 # the arch-specific toolkit lib dir resolved from `uname -m`.
@@ -181,24 +166,21 @@ case "$(uname -m)" in
 esac
 export LIBRARY_PATH=/usr/local/cuda/compat:${_NCT_LIB}:${LIBRARY_PATH:-}
 export VLLM_NIXL_SIDE_CHANNEL_HOST="$HOST_IP"
-export VLLM_LOGGING_LEVEL=${VLLM_LOGGING_LEVEL:-INFO}
+export VLLM_LOGGING_LEVEL
 
 # Pin NIXL/UCX to IB verbs (rc) so cross-node KV rides the IB HCAs (job.slurm
 # exposes /dev/infiniband + IPC_LOCK); cuda_copy/cuda_ipc cover intra-node.
-export UCX_TLS=${UCX_TLS:-cuda_copy,cuda_ipc,rc}
+export UCX_TLS
 
-# ----------------------------------------------------------------
-# Wide-EP NVSHMEM / ibgda env (only when an engine spans >1 node)
-# ----------------------------------------------------------------
 # Single-node-per-role recipes avoid DeepEP / NVSHMEM ibgda, so leave these off
 # there to avoid triggering ibgda code paths that are not needed.
 if [[ "$LWS_GROUP_SIZE" -gt 1 ]]; then
     export NVIDIA_GDRCOPY=enabled
     # ibgda default kept for future DeepEP/wide-EP recipes; a recipe may override
     # NVSHMEM_REMOTE_TRANSPORT to none.
-    export NVSHMEM_REMOTE_TRANSPORT=${NVSHMEM_REMOTE_TRANSPORT:-ibgda}
-    export NVSHMEM_IB_ENABLE_IBGDA=${NVSHMEM_IB_ENABLE_IBGDA:-true}
-    export NVSHMEM_SYMMETRIC_SIZE=${NVSHMEM_SYMMETRIC_SIZE:-16G}
+    export NVSHMEM_REMOTE_TRANSPORT
+    export NVSHMEM_IB_ENABLE_IBGDA
+    export NVSHMEM_SYMMETRIC_SIZE
     export NVSHMEM_BOOTSTRAP_UID_SOCK_IFNAME=${NVSHMEM_BOOTSTRAP_UID_SOCK_IFNAME:-$DEFAULT_IFACE}
     # NVSHMEM ignores NVSHMEM_HCA_PE_MAPPING when NVSHMEM_HCA_LIST is set, so
     # clear the latter when the recipe provides an explicit PE mapping.
@@ -207,10 +189,6 @@ if [[ "$LWS_GROUP_SIZE" -gt 1 ]]; then
     fi
 fi
 
-# ----------------------------------------------------------------
-# Bring up vLLM engine (every node)
-# ----------------------------------------------------------------
-# KV role: prefill=producer, decode=consumer (override via KV_ROLE_OVERRIDE).
 if [[ -n "${KV_ROLE_OVERRIDE:-}" ]]; then
     KV_ROLE="$KV_ROLE_OVERRIDE"
 elif [[ "$ROLE" == "prefill" ]]; then
@@ -228,19 +206,15 @@ COMMON_ARGS=(
     --tensor-parallel-size "$TP_SIZE"
     --kv_transfer_config "$KV_TRANSFER_CONFIG"
 )
-# A single frontend (HTTP + tokenize + DP load-balance) is CPU-bound and caps
-# throughput, so run several. Incompatible with --headless, so it is the one
-# flag the headless-worker branch below drops. Overridable via LLMD_API_SERVER_COUNT.
-# LB is hybrid: --data-parallel-hybrid-lb; one api-server per node internally
-# load-balances its local DP ranks -> ONE serving port (VLLM_PORT) per node, so
-# the local rank-0 health port is always VLLM_PORT.
+# One frontend (HTTP + tokenize + DP load-balance) is CPU-bound and caps throughput,
+# so run several (LLMD_API_SERVER_COUNT). Incompatible with --headless, so the
+# headless-worker branch below drops it. With --data-parallel-hybrid-lb each node's
+# api-server balances its local DP ranks, so VLLM_PORT is also the health port.
 HEALTH_PORT="$VLLM_PORT"
-API_SERVER_COUNT="${LLMD_API_SERVER_COUNT:-4}"
-# Multiple frontends only help the DP (wide-EP) path, where they load-balance
-# across the node's local DP ranks. A pure-TP engine has a single core with one
-# frontend, so it keeps the default count (also avoids --api-server-count
-# interacting with the --headless multi-node TP launch below). Every DEP8 node
-# gets it; pure-TP nodes get none.
+API_SERVER_COUNT="${LLMD_API_SERVER_COUNT}"
+# Multiple frontends only help the DP (wide-EP) path. A pure-TP engine has a single
+# core with one frontend, so it keeps the default (and avoids --api-server-count
+# interacting with the --headless multi-node TP launch below).
 if [[ "$ROLE_ENABLE_EP" == "true" ]]; then
     COMMON_ARGS+=(--api-server-count "$API_SERVER_COUNT")
 fi
@@ -299,9 +273,6 @@ else
     echo "vLLM ready on rank $NODE_RANK ($ROLE worker_index=$LWS_WORKER_INDEX, health port $HEALTH_PORT)"
 fi
 
-# ----------------------------------------------------------------
-# Bring up pd-sidecar (every decode node)
-# ----------------------------------------------------------------
 # The sidecar forwards a prefill request, reads kv_transfer_params from vLLM's
 # response, then hits its local decode vLLM, whose NIXLv2 connector pulls KV
 # directly from prefill vLLM.
@@ -324,16 +295,13 @@ if [[ "$ROLE" == "decode" && ( "$ROLE_ENABLE_EP" == "true" || "$LWS_WORKER_INDEX
     echo "pd-sidecar ready on $HOST_IP:$SIDECAR_HEALTH_PORT"
 fi
 
-# ================================================================
 # Coordinator (decode leader): endpoints, EPP, Envoy, bench, eval
-# ================================================================
 if [[ "$ROLE" == "decode" && "$LWS_WORKER_INDEX" -eq 0 ]]; then
 
     # Release the allocation whenever the coordinator exits.
     BENCH_DONE_MARKER="$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
     trap 'touch "$BENCH_DONE_MARKER" 2>/dev/null || true' EXIT
 
-    # ---- Write endpoints.yaml (file-discovery) ----
     # namespace must match EPP's --pool-namespace (file-discovery filters by it;
     # the schema default 'default' would drop every entry). See README.md.
     python3 - <<PY
@@ -375,7 +343,7 @@ print(f'endpoints.yaml ({len(endpoints)} endpoints):')
 print(open('/tmp/endpoints.yaml').read())
 PY
 
-    # ---- Bring up EPP ----
+    # EPP
     # Config: when a recipe is set, project it down to the keys EPP's strict
     # decoder accepts (it rejects the per-role vLLM / slurm keys); else use the
     # default mounted at /etc/epp/config.yaml.
@@ -423,7 +391,7 @@ PY
     done
     echo "EPP listening on $EPP_GRPC_PORT"
 
-    # ---- Bring up Envoy ----
+    # Envoy
     envoy -c /etc/envoy/envoy.yaml > "$ENVOY_LOG" 2>&1 &
     ENVOY_PID=$!
 
@@ -447,14 +415,11 @@ PY
     done
     echo "Envoy admin ready; listener should be on $ENVOY_PORT"
 
-    # ---- Gate on ALL prefill vLLM /health endpoints (cross-node) ----
-    # Prefill ranks wait on their own local /health; wait_for_server_ready only
-    # probes localhost, so the decode leader polls the prefill nodes here.
-    # endpoints.yaml lists one prefill endpoint per node, so with PREFILL_WORKERS>1
-    # (multiple independent DP engines) EVERY prefill node must be probed, not just
-    # IPS[0]. curl gets an explicit connect/max timeout so a blackholed endpoint
-    # trips the deadline instead of hanging the whole run (a single timeout-less
-    # curl once wedged a 2P run for 7h before it was cancelled).
+    # Gate on ALL prefill vLLM /health endpoints. Prefill ranks only wait on their own
+    # local /health, and with PREFILL_WORKERS>1 every prefill node must be probed, not
+    # just IPS[0]. curl gets explicit connect/max timeouts so a blackholed endpoint
+    # trips the deadline instead of hanging the run (a timeout-less curl once wedged
+    # a 2P run for 7h).
     _prefill_ips=( "${_ALL_IPS[@]:0:${PREFILL_NODES}}" )
     [[ ${#_prefill_ips[@]} -gt 0 ]] || _prefill_ips=( "$PREFILL_LEADER_IP" )
 
@@ -518,11 +483,9 @@ PY
             else
                 echo "[diag] TCP connect ${ip}:${port} FAILED/timed out -> closed, filtered, or unreachable (LIKELY network/subnet/firewall issue)"
             fi
-            # L3: ICMP reachability, if ping is present.
             if command -v ping >/dev/null 2>&1; then
                 ping -c 2 -W 2 "$ip" 2>&1 || echo "[diag] ping ${ip} failed (ICMP blocked or host down)"
             fi
-            # Verbose HTTP connect detail (DNS/connect/TLS timing, HTTP status).
             curl -v --connect-timeout 5 --max-time 8 "http://${ip}:${port}/health" 2>&1 || true
             echo "=== END NET DIAG ${ip}:${port} ==="
         } >&2
@@ -551,18 +514,15 @@ PY
     done
     echo "All ${#_prefill_ips[@]} prefill vLLM endpoint(s) ready"
 
-    # ---- Benchmark sweep (one run per concurrency level) ----
-    # BENCH_MAX_CONCURRENCY is an 'x'-delimited list from submit.sh (e.g. "1024x512").
+    # Benchmark sweep. BENCH_MAX_CONCURRENCY is 'x'-delimited from submit.sh (e.g. "1024x512").
     IFS='x' read -r -a CONCURRENCIES <<< "$BENCH_MAX_CONCURRENCY"
-    # GPU counts embedded in the result filename as _gpus_/_ctx_/_gen_ tokens so the
-    # CI "Process result" step (benchmark-multinode-tmpl.yml) can parse them and run
-    # process_result.py for llm-d -- same filename convention as amd_utils/bench.sh.
-    # ctx = prefill GPUs, gen = decode GPUs; nodes*GPUS_PER_NODE is correct for any
-    # PREFILL_WORKERS/DECODE_WORKERS split (e.g. high-tpt 2P -> 16 prefill GPUs).
+    # GPU counts are embedded in the result filename as _gpus_/_ctx_/_gen_ so the CI
+    # "Process result" step can parse them (same convention as amd_utils/bench.sh).
+    # ctx = prefill GPUs, gen = decode GPUs.
     _bench_prefill_gpus=$(( PREFILL_NODES * GPUS_PER_NODE ))
     _bench_decode_gpus=$(( DECODE_NODES * GPUS_PER_NODE ))
     _bench_total_gpus=$(( _bench_prefill_gpus + _bench_decode_gpus ))
-    if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+    if [[ "${EVAL_ONLY}" != "true" ]]; then
     for max_concurrency in "${CONCURRENCIES[@]}"; do
         num_prompts=$(( max_concurrency * BENCH_NUM_PROMPTS_MULTIPLIER ))
         [[ "$num_prompts" -lt 16 ]] && num_prompts=16
@@ -582,10 +542,8 @@ PY
             )
         fi
 
-        # Non-fatal: a failed or timed-out conc point must not abort the sweep
-        # or (under set -e) skip the allocation release below. The EXIT trap
-        # releases the allocation regardless, but continuing here lets a
-        # multi-conc sweep record every point it can.
+        # Non-fatal: a failed or timed-out conc point must not abort the sweep or (under
+        # set -e) skip the allocation release below.
         run_benchmark_serving \
             --bench-serving-dir /workspace \
             --tokenizer /models \
@@ -604,18 +562,12 @@ PY
     done
     fi
 
-    # ---- Eval (optional) ----
-    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
-        # Concurrency for the eval and, crucially, for the concurrency stamped
-        # into meta_env.json. run_eval/append_lm_eval_summary read
-        # EVAL_CONCURRENT_REQUESTS and CONC (not EVAL_CONC), so mirror the AMD
-        # multi-node servers: use the workflow-provided EVAL_CONC when set, else
-        # fall back to the max of the (x-delimited) BENCH_MAX_CONCURRENCY list.
-        # Exporting CONC makes meta_env.json's "conc" match what
-        # utils/evals/validate_scores.py --expected-concs verifies; without it
-        # CONC is empty, the metadata records conc=1, and score verification
-        # fails ("eval metadata concurrency does not match workflow request")
-        # even when accuracy passes.
+    # Eval (optional)
+    if [[ "${RUN_EVAL}" == "true" ]]; then
+        # run_eval/append_lm_eval_summary read EVAL_CONCURRENT_REQUESTS and CONC (not
+        # EVAL_CONC). Exporting CONC makes meta_env.json's "conc" match what
+        # utils/evals/validate_scores.py --expected-concs verifies; without it the
+        # metadata records conc=1 and score verification fails even when accuracy passes.
         if [[ -n "${EVAL_CONC:-}" ]]; then
             export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
         else

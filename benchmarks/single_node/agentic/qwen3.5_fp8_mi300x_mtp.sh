@@ -11,10 +11,11 @@ export EVAL_FRAMEWORK="lm-eval"
 check_env_vars \
     MODEL TP CONC EP_SIZE KV_OFFLOADING \
     RESULT_DIR DURATION
+check_env_vars EVAL_ONLY
 
 require_agentic_kv_offload_none
 
-SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-30}
+SCHEDULER_RECV_INTERVAL=30
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -57,7 +58,7 @@ export PYTHONNOUSERSITE=1
 export SGLANG_ENABLE_SPEC_V2=1
 export SGLANG_TIMEOUT_KEEP_ALIVE=1800
 
-if [ "${EVAL_ONLY:-false}" != "true" ]; then
+if [ "${EVAL_ONLY}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=3.39
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
     export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
@@ -97,7 +98,7 @@ SERVER_PID=$!
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
+if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
     # Aggregate serving exposes one logical SGLang Prometheus target.
