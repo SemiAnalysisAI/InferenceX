@@ -8657,3 +8657,18 @@
     active GPUs and retain eight allocated GPUs; any selected point requires full
     official performance and real accuracy qualification.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp2-ep2-tp2-ep2-c24-h298-wt
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp2-ep2-tp2-ep2-c40-h298-wt
+  scenario-type:
+  - agentic-coding
+  description:
+  - Expand the measured original-BF16 TP2 EP2 C32 write-through candidate to C24 and
+    C40 after its canonical short screen reached 45,297.35 logical tokens/s/active
+    GPU at129.399 interactivity with strict four-GPU power passing. Preserve P/D64,
+    Dstatic0.88, H298, steps3 and all serving settings for C24; C40 only raises decode
+    graph ceiling32 to48. Keep1200s/10-warmup, two-hour allocations, four active/eight
+    allocated GPU accounting and exact four-device exporter. Full official performance
+    and real accuracy remain required before promotion.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
