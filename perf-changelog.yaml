@@ -8512,3 +8512,15 @@
     draft KV, native BF16 MoE backend and all serving settings; direct real-verification
     retry is required after the observed inherited-FP8 draft scale assertion.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp4-ep1-tp4-ep1-c48-h298-dmax32-wt
+  scenario-type:
+  - agentic-coding
+  description:
+  - Prepare a controlled original-BF16-draft C48 TP4 prefill/decode H298 admission32
+    comparison changing only prefill HiCache from selective backup to write_through.
+    Preserve explicit unquant, BF16 draft KV, all serving/workload settings and canonical
+    short-screen protocol. This tests first-use prefix preservation before considering
+    chunking or routing changes.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
