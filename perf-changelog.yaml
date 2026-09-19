@@ -8411,19 +8411,9 @@
   scenario-type:
   - agentic-coding
   description:
-  - Add Qwen3.5-397B-A17B FP8 AgentX recipes for B200 with one TP4 prefill worker
-    and one TP4 decode worker colocated on eight GPUs, at concurrency 8, 16, 24,
-    32, 48 and 64. Use lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85,
-    Dynamo source 805a77f053d807b0d8def5d27f674a6df0ed839e and native srt-slurm
-    984180e5b8755aef85e9995048b5a16cb5336bce with Mooncake intra-node NVLink.
-    Use 104 GB per-rank prefill HiCache at C8-C32; C48/C64 use 215 GB per rank
-    with first-use write-through and decode static memory 0.88. Preserve native
-    NEXTN MTP, automatic measured acceptance for throughput and real verification
-    for evals. Require native eight-GPU power telemetry and explicit formal-window
-    metadata; propagate failed Slurm/power status after preserving artifacts.
-    Retain compute-node checkpoint loading checks and official NVIDIA wheel integrity.
-    Short-run candidates improve the published throughput-per-GPU versus p90
-    interactivity frontier; require a fresh full official sweep and all applicable
-    evals before qualification. Aggregate and rejected 2P1D experiments remain
-    comparison evidence; existing aggregate publication scopes are unchanged.
+  - Add B200 Qwen3.5-397B-A17B FP8 AgentX disaggregation with colocated TP4 prefill
+    and TP4 decode on eight GPUs at concurrency 8, 16, 24, 32, 48 and 64.
+  - Use Dynamo/SGLang nightly 20260918-20518d85 with NEXTN MTP and Mooncake NVLink transfers.
+  - Enable 104 GB per-rank prefill HiCache at C8-C32; use 215 GB with first-use
+    write-through and decode static memory 0.88 at C48/C64.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
