@@ -8424,3 +8424,12 @@
     - "Halve --chunked-prefill-size from 8192 to 4096, matching the H200, B200 and GB200 arms, and trim the conc-list from [1, 2, 4, 8, 16, 32] to [1, 2, 4, 8, 16] as the H200 arm did: with GPU_MAX_HW_QUEUES=2 and the scratch-reclaim guard, run 35374653446 served c1-c16 and the accuracy eval without HSA errors, but c32 (64 running requests, warmup prompts of 117k median and 315k p95 tokens) lost its server 27 warmup requests in; the smaller chunk shrinks the per-step RCCL collectives that every abort so far has hit, and the sweep stops at the AgentX grid's c16"
     - "将 --chunked-prefill-size 从 8192 减半至 4096，与 H200、B200、GB200 配方一致，并如 H200 配方那样将 conc-list 从 [1, 2, 4, 8, 16, 32] 缩减为 [1, 2, 4, 8, 16]：在 GPU_MAX_HW_QUEUES=2 与 scratch 回收保护下，运行 35374653446 中 c1-c16 与精度评测均无 HSA 错误，但 c32（64 个运行中请求，warmup 提示中位数 117k、p95 315k token）在第 27 个 warmup 请求时服务崩溃；更小的分块缩小了迄今每次中止所涉及的每步 RCCL 集合通信，sweep 止于 AgentX 网格的 c16"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Lower --mem-fraction-static from 0.75 to 0.60: with the Engram tables resident on the GPU the weights occupy 128.8 GB of each 288 GB MI355X, so 0.75 left 72 GB outside the static pool and in run 35376928227 the c2 point aborted its RCCL queue with HSA_STATUS_ERROR_OUT_OF_RESOURCES (0 MB free) 20 chunks into the eager prefill of a 126k-token AgentX prompt, with c1, c4, c8 and c16 cancelled by fail-fast. DSv4.1 Flash's full-attention KV costs 1.67 KB per token, so 0.60 still reserves a ~25M-token pool (0.75 reserved 51M tokens, far beyond the 32-request cap at c16) while eager prefill gets 115 GB of headroom; chunk size, queue cap and scratch-reclaim guard are unchanged"
+    - "将 --mem-fraction-static 从 0.75 降至 0.60：Engram 表驻留 GPU 后，权重占用每块 288 GB MI355X 中的 128.8 GB，0.75 只在静态池之外留下 72 GB；运行 35376928227 中 c2 在一条 126k token AgentX 提示的 eager prefill 进行到第 20 个分块时，RCCL 队列因 HSA_STATUS_ERROR_OUT_OF_RESOURCES（剩余 0 MB）中止，c1、c4、c8、c16 被 fail-fast 取消。DSv4.1 Flash 的全注意力 KV 每 token 仅 1.67 KB，因此 0.60 仍可保留约 2500 万 token 的池（0.75 时为 5100 万，远超 c16 的 32 请求上限），同时 eager prefill 获得 115 GB 余量；分块大小、队列上限与 scratch 回收保护不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3245
