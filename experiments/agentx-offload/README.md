@@ -45,10 +45,10 @@ unsafe mode, synthetic workloads, custom clients, or direct Slurm submissions.
 Inspect recorded corpus identity, full commands and actual allocated KV capacity
 before declaring a pair matched.
 
-Start with a matched four-arm probe at concurrency 16. Candidates are
-1, 4, 8, 16, 32, 64, 128, 256, 1,024, 4,096 and 16,384. These are options, not an
-immediate exhaustive sweep. Add intermediate positive integers near observed
-changes, and repeat both sides of a candidate crossover on different nodes.
+Start with a matched four-arm probe at concurrency 16. Then build full curves for
+all four arms. Initial curve points are 1, 4, 8, 16, 32, 64, 128, 256, 1,024,
+4,096 and 16,384. Add intermediate positive integers near observed changes, and
+repeat both sides of a candidate crossover on different nodes.
 Keep the maximum at 16,384. Failure or insufficient completed samples is a
 feasibility result, never a zero-throughput point. Canonical warmup that exceeds
 workflow execution limits needs an explicit new execution budget, not truncation.
@@ -93,12 +93,15 @@ workflow ID, arm, concurrency, repeat number, node, status and artifact links in
 [runs.json](runs.json). A run is not a result until its workflow and result
 validation finish. Preserve failures and retries with their own attempt IDs.
 
-Count all task allocations, including any legacy jobs still alive. Use at most
-50% of eligible nodes, rounded down, leave two eligible idle nodes, and defer to
-competing priority work/reservations. Do not queue a dense sweep that could exceed
-this ceiling. Use workflow logs, artifacts and InferenceX status APIs; no operator
-SSH, `salloc`, `sbatch`, `srun` or `scancel`. The existing InferenceX runner itself
-may use Slurm internally. The standard job requests `nodes:1`.
+Before each dispatch batch, compute B200 demand as allocated nodes plus the
+requested node counts of every pending B200 job, including this study, legacy
+jobs and other users' work. Divide demand by the current eligible B200 node
+count. If it is above 125%, launch nothing until it falls to 125% or below.
+Otherwise use all eligible nodes as necessary, while deferring to explicit
+priority reservations and workflow or scheduler safety limits. Use workflow
+logs, artifacts and InferenceX status APIs; no operator SSH, `salloc`, `sbatch`,
+`srun` or `scancel`. The existing InferenceX runner itself may use Slurm
+internally. The standard job requests `nodes:1`.
 
 Fresh main's `$/` self-repository workflow references are retained. They require
 Actions runner 2.336.0 or newer; actionlint 1.7.12 does not recognize this syntax.
@@ -144,9 +147,11 @@ The app supports comma-separated workflow IDs:
 - Chart: `https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=ID1,ID2,ID3,ID4`
 - API: `https://inferencex.semianalysis.com/api/unofficial-run?runId=ID1,ID2,ID3,ID4`
 
-Append each new workflow ID to the same open comparison tab and save its URL in
-`runs.json`. Refresh when new artifacts appear. These must be actual new GitHub
-workflow IDs, not Slurm IDs. Keep all four runs
+Keep every workflow ID in `runs.json`, but append only successful completed runs
+to the same open comparison tab and save that URL in the ledger. Refresh after a
+new successful result appears, wait for the unofficial overlay to load, disable
+`Optimal Only`, and verify that the points are visible. These must be actual new
+GitHub workflow IDs, not Slurm IDs. Keep all four runs
 individually identifiable even though the app currently reduces offload metadata
 to on/off. Its current E2E-normalized chart explicitly suppresses unofficial
 overlays because they lack persisted per-request traces. Standard AgentX overlays

@@ -37,8 +37,9 @@ DRAM 使用 fresh main 根据 B200、TP4 和 `dram-utilization: 0.683` 实际生
 并运行 **3,600 秒 profiling**。禁止 `agentx-fast`、缩短时长、unsafe 模式、合成工作负载、
 自定义客户端或直接提交 Slurm 作业。确认真实语料版本、完整命令及实际 KV 分配后，才能认定对照匹配。
 
-先运行并发 16 的四组对照。候选并发为 1、4、8、16、32、64、128、256、1,024、4,096、16,384，
-不是立即全量扫描。根据观测结果在变化区间补任意正整数并发，并跨节点重复区间两侧。
+先运行并发 16 的四组对照，然后为四个方案构建完整曲线。首批曲线点为
+1、4、8、16、32、64、128、256、1,024、4,096、16,384。
+根据观测结果在变化区间补任意正整数并发，并跨节点重复区间两侧。
 上限保持 16,384。失败或有效完成样本不足只能记录为可运行性结果，不能伪造零吞吐量点。
 若规范预热超过工作流时限，需要明确调整执行预算，不能截断预热。
 
@@ -77,8 +78,10 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX \
 方案、并发、重复编号、节点、状态和产物链接。工作流及结果校验完成前，不能称为完成结果。
 失败和重试应保留各自 attempt ID。
 
-资源核算包含仍存活的旧作业。最多使用符合条件节点的 50%（向下取整），至少保留两个空闲节点，
-遇到其他优先级任务或预约时等待。不得一次排入可能超过上限的密集扫描。
+每批提交前，将当前已分配的 B200 节点数与所有待处理 B200 作业申请的节点数相加；
+统计范围包括本研究、旧作业及其他用户的作业。用该需求除以当前符合条件的 B200 节点数。
+若需求超过 125%，暂停新提交，直到回落至 125% 或以下；否则可按需要使用所有符合条件节点，
+但仍需服从明确的优先级预约及工作流或调度器安全限制。
 只使用工作流日志、产物及 InferenceX 状态 API，不由操作代理直接执行 SSH、`salloc`、
 `sbatch`、`srun` 或 `scancel`。现有 InferenceX runner 内部仍可使用 Slurm。
 标准作业申请 `nodes:1`。
@@ -117,8 +120,9 @@ actionlint 1.7.12 尚不识别该语法。
 - 图表：`https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=ID1,ID2,ID3,ID4`
 - API：`https://inferencex.semianalysis.com/api/unofficial-run?runId=ID1,ID2,ID3,ID4`
 
-每次提交后，将真实 workflow ID 加入同一个已打开的图表标签页，并将 URL 保存到 `runs.json`。
-新产物上传后刷新。必须使用本次新实验的真实 GitHub ID，不能使用 Slurm ID。应用当前把 offload 元数据简化为 on/off，
+在 `runs.json` 中保留每个 workflow ID，但只将成功完成的运行加入同一个已打开的图表标签页，
+并将 URL 保存到台账。新成功结果出现后刷新，等待 unofficial overlay 加载完成，关闭 `Optimal Only`，
+并确认图表中可以看到数据点。必须使用本次新实验的真实 GitHub ID，不能使用 Slurm ID。应用当前把 offload 元数据简化为 on/off，
 因此还应保持各方案的运行身份可追溯。当前 E2E-normalized 图表明确禁用 unofficial overlay，
 原因是缺少持久化的逐请求轨迹。标准 AgentX overlay 可在产物上传后使用；原始 E2E-normalized
 对比需要增加应用支持，或单独分析本次保留的新轨迹。不能声称现有 API 已支持该视图。
