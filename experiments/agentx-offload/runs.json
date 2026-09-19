@@ -639,15 +639,15 @@
       "attempt": 1,
       "retry_of": 35456989669,
       "head_sha": "1c11a492ec373320de5bdeeea9305fb7865dbf23",
-      "status": "in_progress",
+      "status": "queued",
       "node": null,
       "artifacts": [],
       "performance_result": false,
       "workflow_name": "offload-v1-dram-nvme-c16-r2-20260919T2114Z",
       "dispatched_at": "2026-09-19T21:14:18Z",
-      "job_id": 105968568988,
-      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35469801850/job/105968568988",
-      "runner": "GitHub-hosted get-jobs; B200 benchmark job not assigned yet",
+      "job_id": 105968619037,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35469801850/job/105968619037",
+      "runner": null,
       "diagnosis": "Retry uses the validated, separate 2 TiB native filesystem stop guard; NVMe-only remains bounded at 1 TiB."
     }
   ],
@@ -670,7 +670,9 @@
     "active_study_run_ids": [
       35469801850
     ],
-    "active_study_job_ids": [],
+    "active_study_job_ids": [
+      105968619037
+    ],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": true,
