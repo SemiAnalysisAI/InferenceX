@@ -4,17 +4,12 @@
 #
 # EP8/EP16 use one Slurm task per GPU across two or four trays in the same
 # MNNVL scale-up domain.
-#
-# Flow:
-#   identity -> setup -> repository-stage -> backend-setup -> scheduler-allocation
-#   -> container-import -> container-launch -> artifact-collection
-set -euo pipefail
+set -eo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COLLX_DIR="$(cd "$HERE/.." && pwd)"; REPO_ROOT="$(cd "$COLLX_DIR/../.." && pwd)"
 # shellcheck source=../runtime/common.sh
 source "$HERE/../runtime/common.sh"
 
-# ---- identity: resolve SKU, backend, platform -------------------------------
 PRODUCT="${COLLX_SHARD_SKU:-}"
 case "$PRODUCT" in
   gb200|gb300) ;;
@@ -23,7 +18,6 @@ esac
 RUNNER="$PRODUCT"
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-deepep-v2}"
 export COLLX_VENDOR=nvidia
-# ---- setup: operator config, canonical env, topology, network profile -------
 collx_launcher_prologue "$RUNNER"
 NODES="${COLLX_NODES:-2}"; GPN="${COLLX_GPUS_PER_NODE:-4}"
 SCALE_UP_DOMAIN="${COLLX_SCALE_UP_DOMAIN:-72}"
@@ -49,11 +43,9 @@ collx_apply_network_profile "$NODES" "$COLLX_TRANSPORT"
 collx_log "$PRODUCT nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$COLLX_BENCH"
 collx_select_image "$IMAGE"
 
-# ---- repository-stage: compute-visible copy of the checkout -----------------
 MOUNT_SRC="$(collx_stage_path "$REPO_ROOT" "$COLLX_STAGE_DIR")"
 collx_stage_repo "$REPO_ROOT" "$MOUNT_SRC"
 CONTAINER_MOUNTS="$MOUNT_SRC:/ix"
-# ---- backend-setup: pinned source (deepep-v2 only) + isolated build cache ----
 # nccl-ep is pip-only (nccl4py wheel; no source stage); deepep-v2 needs its pinned tree.
 if [ "$COLLX_BENCH" = deepep-v2 ]; then
   collx_prepare_deepep_source "$MOUNT_SRC" \
@@ -65,7 +57,6 @@ collx_prepare_backend_cache "$COLLX_SQUASH_DIR" \
 CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$COLLX_PREPARED_BACKEND_CACHE:/cx-cache"
 export COLLX_BACKEND_CACHE_ROOT=/cx-cache
 
-# ---- scheduler-allocation: salloc the trays ---------------------------------
 command -v salloc >/dev/null || collx_die "salloc not found"
 allocation=(--partition="$PARTITION" --account="$ACCOUNT" --nodes="$NODES"
   --gres=gpu:"$GPN" --ntasks-per-node="$GPN" --exclusive --mem=0 --cpus-per-task=35
@@ -76,10 +67,8 @@ allocation=(--partition="$PARTITION" --account="$ACCOUNT" --nodes="$NODES"
 collx_salloc_jobid "${allocation[@]}"
 [ -n "$JOB_ID" ] || collx_die "no JOB_ID from salloc"
 
-# ---- container-import: squash file resolved on the allocation ---------------
 SQUASH_FILE="$(collx_ensure_squash_on_job "$JOB_ID" "$SQUASH_DIR" "$IMAGE")"
 
-# ---- container-launch -> artifact-collection (shared tail) ------------------
 COLLX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)
 collx_execute_and_collect "$MOUNT_SRC" "$REPO_ROOT"
 exit "$FINAL_RC"
