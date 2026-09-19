@@ -8447,3 +8447,10 @@
     - "将 GLM-5.2 MI355X SGLang AgentX 镜像更新至 lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917（2026-09-17 ROCm 7.2.0 mi35x 日构建，digest sha256:21c1cc9a…，rocm720-mi35x 系列最新 tag；2026-09-18 构建仅提供 rocm724/rocm10 版本）：glm5.2-fp4-mi355x-sglang-agentic-mtp 自 20260916，glm5.2-fp8-mi355x-sglang-agentic-mtp 自 20260908"
     - "在 glm5.2_fp8_mi355x_sglang_mtp.sh 中改用 --cuda-graph-max-bs-decode 传递 decode graph batch，替换已移除的 --cuda-graph-max-bs 别名，与 MXFP4 姊妹配方一致；其余服务参数、搜索空间与 golden acceptance 不变"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3277
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Discover active Mellanox RDMA devices by driver on DSXE, select the link-layer GID, and load the host mlx5 provider so Mooncake sees the rail"
+    - "Backport vLLM #55297 for request-local recompute after failed asynchronous Mooncake loads on B300; see docs/waiver/3088.md"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
