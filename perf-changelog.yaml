@@ -8377,3 +8377,9 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2555
   scenario-type:
   - agentic-coding
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
+  description:
+    - "Validate AMD SMI power artifacts with srt-slurm PR #19 on the PR #2555 workload"
+  pr-link: https://github.com/SemiAnalysisAI/srt-slurm/pull/19

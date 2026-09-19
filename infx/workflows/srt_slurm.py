@@ -148,6 +148,16 @@ def prepare_recipe(
         if value:
             benchmark_env[key] = value
 
+    if recipe.get("telemetry", {}).get("enabled"):
+        recipe["benchmark"]["concurrencies"] = [
+            int(value) for value in environment["CONC_LIST"].split()
+        ]
+        benchmark_env.update(
+            SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE=recipe["benchmark"]["type"],
+            SRT_MEASUREMENT_WINDOW_CONCURRENCIES=environment["CONC_LIST"],
+            SRT_MEASUREMENT_WINDOW_RESULT_ROOT="/logs",
+        )
+
     _configure_sglang_contract(recipe, environment)
     _configure_evaluation(recipe, environment)
     return recipe, profile
@@ -276,6 +286,10 @@ def collect_results(
             archive.add(log_dir, arcname=".")
     if result_dir.is_dir():
         shutil.copytree(result_dir, workspace / "LOGS", dirs_exist_ok=True)
+    for name in ("agentic", "power"):
+        source = log_dir / name
+        if source.is_dir():
+            shutil.copytree(source, workspace / "LOGS" / name, dirs_exist_ok=True)
 
     filename = environment["RESULT_FILENAME"]
     eval_only = environment.get("EVAL_ONLY", "false").lower() == "true"

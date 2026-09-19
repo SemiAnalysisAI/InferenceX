@@ -8,7 +8,14 @@ import pytest
 from infx.workflows.srt_slurm import collect_results, prepare_recipe
 
 
-def prepare(tmp_path: Path, *, dp: bool, concurrency: str, eval_only: bool = False):
+def prepare(
+    tmp_path: Path,
+    *,
+    dp: bool,
+    concurrency: str,
+    eval_only: bool = False,
+    telemetry_enabled: bool = False,
+):
     role = {"tp-size": 8, "enable-dp-attention": dp}
     recipe = {
         "model": {"container": "engine:image"},
@@ -28,6 +35,7 @@ def prepare(tmp_path: Path, *, dp: bool, concurrency: str, eval_only: bool = Fal
             },
         },
         "benchmark": {"type": "custom", "command": "benchmark", "env": {}},
+        "telemetry": {"enabled": telemetry_enabled},
     }
     env = {
         "IMAGE": "engine:image",
@@ -82,6 +90,20 @@ def test_eval_removes_synthetic_acceptance_but_keeps_other_engine_environment(tm
     result = prepare(tmp_path, dp=False, concurrency="4", eval_only=True)
     assert result["roles"]["decode"]["env"] == {"ENGINE_OTHER_SETTING": "keep"}
     assert result["benchmark"]["env"]["DECODE_TP"] == "8"
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_power_windows_follow_selected_concurrencies(tmp_path, enabled):
+    result = prepare(tmp_path, dp=False, concurrency="8 16", telemetry_enabled=enabled)
+    benchmark = result["benchmark"]
+    if enabled:
+        assert benchmark["concurrencies"] == [8, 16]
+        assert benchmark["env"]["SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE"] == "custom"
+        assert benchmark["env"]["SRT_MEASUREMENT_WINDOW_CONCURRENCIES"] == "8 16"
+        assert benchmark["env"]["SRT_MEASUREMENT_WINDOW_RESULT_ROOT"] == "/logs"
+    else:
+        assert "concurrencies" not in benchmark
+        assert "SRT_MEASUREMENT_WINDOW_RESULT_ROOT" not in benchmark["env"]
 
 
 def test_rejects_dp_concurrency_that_cannot_capture_one_decode_batch(tmp_path):
@@ -159,3 +181,28 @@ def test_collect_eval_from_native_job_logs(tmp_path, has_metadata):
     assert json.loads((workspace / "meta_env.json").read_text()) == {
         "eval_concurrency": 48
     }
+
+
+def test_collect_agentx_and_power_from_native_job_logs(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "example_conc16.json").write_text('{"concurrency": 16}')
+    log_dir = tmp_path / "job-42" / "logs"
+    (log_dir / "agentic" / "conc_16").mkdir(parents=True)
+    (log_dir / "power").mkdir()
+    (log_dir / "agentic" / "conc_16" / "benchmark.log").write_text("replay completed\n")
+    (log_dir / "power" / "samples.csv").write_text("gpu_index,power_w\n0,650\n")
+
+    collect_results(
+        {"slurm_job_id": "42", "output_dir": str(tmp_path / "job-42")},
+        {"RESULT_FILENAME": "example", "IS_AGENTIC": "1", "EVAL_ONLY": "false"},
+        workspace=workspace,
+        results_root=tmp_path / "results",
+    )
+
+    assert (
+        workspace / "LOGS/agentic/conc_16/benchmark.log"
+    ).read_text() == "replay completed\n"
+    assert (
+        workspace / "LOGS/power/samples.csv"
+    ).read_text() == "gpu_index,power_w\n0,650\n"

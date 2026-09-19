@@ -9,7 +9,19 @@ output_dir: /it-share/gharunners2/srt-slurm/outputs
 
 gpus_per_node: 8
 visible_devices_env: ROCR_VISIBLE_DEVICES
-default_gpu_exporter: null
+default_gpu_exporter:
+  container_image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913
+  port: 9401
+  command: python3 /srtctl-runtime/amd_smi_exporter.py --port {port} --command-timeout 1
+  power_profile:
+    name: amd-smi-socket
+    power_metric: amd_smi_socket_power_watts
+    gpu_index_label: gpu
+    gpu_uuid_label: uuid
+    power_scope: gpu_socket_as_reported_by_amd_smi
+    utilization_sources:
+      - [gpu_util_pct, amd_smi_gfx_activity_percent]
+    partition_label: partition_id
 network_interface: eno0
 
 use_gpus_per_node_directive: false

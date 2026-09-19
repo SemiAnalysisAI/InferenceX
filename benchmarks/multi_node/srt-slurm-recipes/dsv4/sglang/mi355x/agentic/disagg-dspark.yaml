@@ -162,6 +162,23 @@ base:
       TRANSFORMERS_VERBOSITY: error
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
 
+override_power:
+  slurm:
+    time_limit: "02:00:00"
+  telemetry:
+    enabled: true
+    provider: dcgm-power
+    required: true
+    collect_interval_ms: 1000
+    request_timeout_seconds: 3
+  benchmark:
+    command: |
+      set -eo pipefail
+      mkdir -p /logs/agentic
+      export RESULT_DIR=/logs/agentic
+      export AGENTIC_OUTPUT_DIR=/infmax-workspace
+      exec bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+
 override_tp4:
   resources: {}
   roles:
