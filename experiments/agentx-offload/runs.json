@@ -428,7 +428,7 @@
       "started_at": "2026-09-19T16:21:19Z"
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749,35154018672,35344315025,35387609866,35401459251,35442679581,35444664736,35449533638,35454656748",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638",
   "status": "The first matched c16 pair is complete. NVMe was 5.44% higher in output throughput per GPU and 27.50% higher in P90 E2E-normalized interactivity than HBM-only, with 28.03% lower P90 E2E latency. The matched HBM + DRAM c16 arm is now in progress; the pair remains preliminary until the other arms and repeats complete.",
   "last_capacity_check": {
     "checked_at": "2026-09-19T16:20:25Z",
