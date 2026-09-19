@@ -8435,3 +8435,17 @@
   - The initial full sweep qualified concurrency 32 at 20629 total tokens/s/GPU and p90 interactivity 200.58, strictly improving a published aggregate frontier point. Short-run gains at higher concurrency did not establish canonical qualification. Require a fresh complete sweep of the retained three canonical 3600-second profiles and all three applicable full accuracy evals; initial C16/C24 attempts failed before measurement.
   - Temporarily exclude gpu-11 after three official jobs repeatedly failed during prefill TP3 model loading there; the underlying cause remains unproven, and a later eval on that node succeeded. Allow four hours for canonical warmup, unchanged one-hour profiling and artifact processing. No shared files, node settings or other users' jobs were changed.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-c48-h298-baseline
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-c48-h298-admission32
+  scenario-type:
+  - agentic-coding
+  description:
+  - Isolate the B300 Qwen3.5 FP8 C48 H298 transfer-backlog hypothesis using a canonical-warmup
+    baseline and decoder max-running 96 versus 32; preserve graph48, explicit zero
+    extra slots, identical serving pins, HiCache, workload and eight active GPUs.
+    Dispatch only short 1200-second diagnostics, not publication or qualification.
+    Retain prior resource/startup exclusions for gpu11 and gpu16 and a four-hour allocation
+    envelope.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
