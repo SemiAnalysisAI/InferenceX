@@ -8453,11 +8453,12 @@
     and pinned Dynamo plus SGLang nightly 20518d85. The Dynamo frontend is an experimental difference from the published
     plain-SGLang aggregate baseline.
   - Use verified original BF16 NEXTN weights at revision 8472618112abcbd45acbcdc58436aff4233c23f7 and BF16 draft
-    KV without draft quantization. Keep FP8 target KV in no-offload controls; explicitly use BF16 target KV for
+    KV with explicit unquantized draft selection to prevent inheritance of target FP8 quantization.
+    Keep FP8 target KV in no-offload controls; explicitly use BF16 target KV for
     HiCache controls because the pinned aggregate NEXTN packed cache requires matching target and draft KV dtypes.
     Target model weights remain FP8 in every arm.
   - Use 298 GB combined HiCache budget per rank for offload controls. Reserve one exclusive eight-GPU node while
     reporting two or four active GPUs and strict native power for exactly those active GPUs; report allocated-GPU
     normalization separately. Preserve canonical warmup and duration; short diagnostic runs require explicit workflow
-    overrides and are not official frontier qualification.
+    overrides and are not official frontier qualification. Use the nightly engine's explicit decode CUDA graph maximum batch argument.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
