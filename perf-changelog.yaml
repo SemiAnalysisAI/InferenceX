@@ -8423,3 +8423,11 @@
     - "Enable required measured power for the complete H200 Kimi-K3 balanced recipe through the shared recipe-gated launcher."
     - "为 H200 Kimi-K3 balanced 完整配方启用必需实测功耗。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3053
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B200 vLLM AgentX to DSpark6 and a new image with TP8 and DEP8 configurations."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
