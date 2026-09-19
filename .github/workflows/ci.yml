@@ -15,7 +15,9 @@ on:
       - 'infx/ruff.toml'
       - '**/pytest.ini'
       - 'utils/srt-slurm'
-      - 'benchmarks/srt-slurm/phase1/**'
+      - 'benchmarks/multi_node/srt-slurm-recipes/dsv41flash/vllm/h100-fp4/**'
+      - 'benchmarks/multi_node/srt-slurm-recipes/configs/prepared-runtime-lock.json'
+      - 'benchmarks/multi_node/srt-slurm-recipes/configs/dsv41flash-agentx-client-policy.json'
       - 'runners/srt-slurm/h100-phase1.yaml'
       - 'utils/fixtures/native_pilot/**'
   push:
@@ -106,7 +108,7 @@ jobs:
           import re
           from pathlib import Path
 
-          lock = json.loads(Path("benchmarks/srt-slurm/phase1/runtime-lock.json").read_text())
+          lock = json.loads(Path("benchmarks/multi_node/srt-slurm-recipes/configs/prepared-runtime-lock.json").read_text())
           if type(lock.get("schema_version")) is not int or lock["schema_version"] != 1:
               raise ValueError("Unsupported native runtime lock schema")
           if lock.get("repository") != "https://github.com/SemiAnalysisAI/srt-slurm.git":
@@ -137,7 +139,7 @@ jobs:
           from pathlib import Path
 
           source = Path(".native-phase1").resolve()
-          lock = json.loads(Path("benchmarks/srt-slurm/phase1/runtime-lock.json").read_text())
+          lock = json.loads(Path("benchmarks/multi_node/srt-slurm-recipes/configs/prepared-runtime-lock.json").read_text())
           def git(*args):
               return subprocess.run(
                   ["git", "-C", str(source), *args], check=True,

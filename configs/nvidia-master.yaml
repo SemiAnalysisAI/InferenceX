@@ -8042,10 +8042,10 @@ glm5.1-fp8-b200-tilert-agentic:
           - "DECODE_NODES=1"
 
 # H100 AgentX arm for DeepSeek-V4.1-Flash. H100 is not in the upstream hardware
-# table (h200, gb200, gb300, mi350x are). It needs its own script, not the
-# shared symlink: the sparse attention indexer's
+# table (h200, gb200, gb300, mi350x are). Its own serving recipe accounts
+# for the sparse attention indexer's
 # [max-num-batched-tokens, max-model-len] buffer is 16 GiB at the shared flags'
-# 8192 batched tokens and OOMs an 80 GB card at concurrency 1, so the script
+# 8192 batched tokens and OOMs an 80 GB card at concurrency 1, so the recipe
 # caps batched tokens at 4096. Concurrency is bounded by the measured KV
 # ceiling rather than a guess; see the search-space comment.
 dsv41flash-fp4-h100-vllm-agentic-dspark:
@@ -8059,10 +8059,10 @@ dsv41flash-fp4-h100-vllm-agentic-dspark:
   execution:
     runtime: srt-slurm
     contract-version: 1
-    recipe: benchmarks/srt-slurm/phase1/h100-dsv41flash.yaml
+    recipe: benchmarks/multi_node/srt-slurm-recipes/dsv41flash/vllm/h100-fp4/agentx/agg-tp8-dspark5.yaml
     profile: runners/srt-slurm/h100-phase1.yaml
-    runtime-lock: benchmarks/srt-slurm/phase1/runtime-lock.json
-    client-policy: benchmarks/srt-slurm/phase1/client-policy.json
+    runtime-lock: benchmarks/multi_node/srt-slurm-recipes/configs/prepared-runtime-lock.json
+    client-policy: benchmarks/multi_node/srt-slurm-recipes/configs/dsv41flash-agentx-client-policy.json
   scenarios:
     agentic-coding:
     - dram-utilization: 0.80

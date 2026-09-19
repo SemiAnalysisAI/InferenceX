@@ -22,9 +22,9 @@ def inputs(tmp_path):
     tmp_path = tmp_path.resolve()
     root = tmp_path / "checkout"
     paths = (
-        "benchmarks/srt-slurm/phase1/h100-dsv41flash.yaml",
+        "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/vllm/h100-fp4/agentx/agg-tp8-dspark5.yaml",
         "runners/srt-slurm/h100-phase1.yaml",
-        "benchmarks/srt-slurm/phase1/client-policy.json",
+        "benchmarks/multi_node/srt-slurm-recipes/configs/dsv41flash-agentx-client-policy.json",
         "golden_al_distribution/dsv41flash_dspark.yaml",
     )
     fixture_names = ("recipe.yaml", "profile.yaml", "client-policy.json", "golden.yaml")

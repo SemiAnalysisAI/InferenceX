@@ -27,6 +27,8 @@ flowchart LR
   U --> I
 ```
 
+The recipe follows the existing YAML hierarchy at [`agg-tp8-dspark5.yaml`](../benchmarks/multi_node/srt-slurm-recipes/dsv41flash/vllm/h100-fp4/agentx/agg-tp8-dspark5.yaml). Its runtime pin and client policy live in the same tree’s `configs/` directory: [`prepared-runtime-lock.json`](../benchmarks/multi_node/srt-slurm-recipes/configs/prepared-runtime-lock.json) and [`dsv41flash-agentx-client-policy.json`](../benchmarks/multi_node/srt-slurm-recipes/configs/dsv41flash-agentx-client-policy.json). The retained Bash recipe remains at `benchmarks/single_node/agentic/dsv41flash_fp4_h100_vllm_mtp.sh`.
+
 ## Call and file map
 
 ```mermaid
@@ -36,7 +38,7 @@ flowchart TD
   F --> P[infx.srt_slurm.launch.prepare]
   P --> CP[infx.benchmarks.prepare.prepare]
   P --> R[infx.srt_slurm.render.render_recipe]
-  R --> Y[benchmarks/srt-slurm/phase1/h100-dsv41flash.yaml]
+  R --> Y["dsv41flash/vllm/h100-fp4/agentx/<br/>agg-tp8-dspark5.yaml"]
   R --> H[runners/srt-slurm/h100-phase1.yaml]
   P --> NP[srtctl prepare]
   F --> X[infx.srt_slurm.launch.execute]
