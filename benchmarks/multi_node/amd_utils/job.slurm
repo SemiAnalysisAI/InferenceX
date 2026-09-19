@@ -583,11 +583,10 @@ if [[ -n "${CLIENT_IMAGE:-}" ]]; then
     srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD pull '"$CLIENT_IMAGE"' >/dev/null 2>&1 || true' 2>/dev/null || true
 fi
 
-srun \
-  --nodelist="$SELECTED_NODELIST_SRUN" \
-  --kill-on-bad-exit=1 \
-  --signal=TERM@30 \
-  --unbuffered \
+run_amd_multinode_after_preflight \
+  "$SELECTED_NODELIST_SRUN" "$NUM_NODES" \
+  "$DI_REPO_DIR/benchmarks/multi_node/amd_utils/preflight_node.sh" \
+  "$CONT_FILTER" "$SKIP_GPU_SANITY" \
   bash -lc "
 set -eo pipefail
 
@@ -675,23 +674,6 @@ else
 fi
 fi  # end: if ENGINE == atom-disagg
 
-# Pre-clean (idempotent): stop then force-remove so GPU VRAM is released
-# before the drain gate. stop-only left containers in Created/Exited state
-# on some nodes.
-\$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
-\$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop -t 15 || true
-\$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD rm -f || true
-sleep 2
-
-# GPU drain gate: fail fast on leftover VRAM use instead of OOMing in model
-# load ~15 min later. Reuses wait_for_amd_gpu_clean from benchmark_lib.sh.
-if [[ \"${SKIP_GPU_SANITY}\" == \"1\" ]]; then
-    echo \"[INFO] SKIP_GPU_SANITY=1 set; skipping GPU pre-flight drain check\"
-else
-    # Unset so benchmark_lib.sh's unrelated agentic KV_OFFLOADING check doesn't exit 1 here.
-    bash -c \"unset IS_AGENTIC SCENARIO_TYPE; source $DI_REPO_DIR/benchmarks/benchmark_lib.sh && wait_for_amd_gpu_clean\"
-fi
-
 # Start vLLM external router container on node 0
 if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
     \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
@@ -775,6 +757,7 @@ echo \"[rank 0] Main container exited (rc=\$DOCKER_EXIT_CODE). Stopping vllm-rou
 \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
 exit \$DOCKER_EXIT_CODE
 "
+SERVER_SRUN_RC=$?
 
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
     srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' '"$CLIENT_CONT_NAME"' 2>/dev/null || true'
@@ -786,3 +769,29 @@ if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
         '
     fi
 fi
+
+# /run_logs is backed by each compute node's local /tmp, so the node-0 copy
+# performed by the engine launcher cannot see prefill/decode logs written on
+# other nodes. Collect after the server step and container cleanup so failed
+# runs also include shutdown output. KEEP_CONTAINERS=1 retains a snapshot of
+# any containers left running for debugging.
+# Use sudo because the container-created source and the existing node-0
+# destination can be root-owned. Restore ownership after the fan-in so a
+# subsequent runner job can clean the workspace normally.
+SHARED_JOB_LOGS="${BENCHMARK_LOGS_DIR}/logs/slurm_job-${SLURM_JOB_ID}"
+if ! srun --nodelist="$SELECTED_NODELIST_SRUN" \
+    --nodes="$NUM_NODES" --ntasks="$NUM_NODES" --ntasks-per-node=1 \
+    bash "$DI_REPO_DIR/benchmarks/multi_node/amd_utils/stage_node_logs.sh" \
+    "/tmp/slurm_job-${SLURM_JOB_ID}" "$SHARED_JOB_LOGS"; then
+    echo "[logs][ERROR] failed to stage logs from one or more Slurm nodes" >&2
+    if [[ "$SERVER_SRUN_RC" -eq 0 ]]; then
+        SERVER_SRUN_RC=1
+    fi
+fi
+
+if [[ -d "$SHARED_JOB_LOGS" ]]; then
+    sudo chown -R "$(id -u):$(id -g)" "$SHARED_JOB_LOGS" 2>/dev/null || true
+    chmod -R a+rwX "$SHARED_JOB_LOGS" 2>/dev/null || true
+fi
+
+exit "$SERVER_SRUN_RC"

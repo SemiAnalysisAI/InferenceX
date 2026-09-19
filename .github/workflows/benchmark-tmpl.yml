@@ -2,8 +2,6 @@ name: Template - Benchmark
 on:
   workflow_call:
     secrets:
-      REPO_PAT:
-        required: true
       INFERENCEX_OFFICIAL_RO_HF_TOKEN:
         required: true
       MODAL_TOKEN_ID:
@@ -113,6 +111,7 @@ env:
   EXP_NAME: ${{ fromJSON(inputs.config).exp-name }}
   RECIPE_FINGERPRINT: ${{ fromJSON(inputs.config).recipe-fingerprint || '' }}
   MODEL: ${{ fromJSON(inputs.config).model }}
+  THINKING_MODE: thinking_on
   MODEL_PREFIX: ${{ fromJSON(inputs.config).model-prefix }}
   ISL: ${{ inputs.scenario-type == 'agentic-coding' && '0' || fromJSON(inputs.config).isl }}
   OSL: ${{ inputs.scenario-type == 'agentic-coding' && '0' || fromJSON(inputs.config).osl }}
@@ -270,7 +269,6 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
           ref: ${{ inputs.ref || github.sha }}
           clean: true

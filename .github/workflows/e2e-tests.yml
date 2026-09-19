@@ -103,8 +103,6 @@ on: # zizmor: ignore[concurrency-limits]
                 default: "[]"
     workflow_call:
         secrets:
-          REPO_PAT:
-            required: true
           INFERENCEX_OFFICIAL_RO_HF_TOKEN:
             required: true
           MODAL_TOKEN_ID:
@@ -361,7 +359,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-config) }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -388,7 +385,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-eval-config) }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -419,7 +415,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-config) }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -447,7 +442,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-eval-config) }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -479,7 +473,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-config) }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -510,7 +503,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-eval-config) }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -544,7 +536,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.single-node-config) }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -569,7 +560,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.eval-config) }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -610,16 +600,18 @@ jobs:
         needs: [get-jobs, collect-results, collect-evals]
         if: ${{ always() && needs.get-jobs.outputs.tooling-ref != '' }}
         runs-on: ubuntu-latest
+        permissions:
+            actions: read # Read job timings for run statistics.
+            contents: read
 
         env:
             RESULTS_DIR: "results/"
             STATS_FILENAME: "run_stats"
-            GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
+            GITHUB_TOKEN: ${{ github.token }}
 
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                  token: ${{ secrets.REPO_PAT }}
                   ref: ${{ needs.get-jobs.outputs.tooling-ref }}
                   fetch-depth: 0
                   persist-credentials: false

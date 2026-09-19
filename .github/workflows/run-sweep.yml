@@ -458,7 +458,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.canary-select.outputs.canary-config) }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -491,7 +490,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k'] }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -524,7 +522,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k'] }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -548,7 +545,6 @@ jobs:
             matrix:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k'] }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -581,7 +577,6 @@ jobs:
             matrix:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k'] }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -604,7 +599,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).single_node['agentic'] }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -639,7 +633,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['agentic'] }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -678,7 +671,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).evals }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -716,7 +708,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).agentic_evals }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -753,7 +744,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_evals }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -796,7 +786,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -967,18 +956,18 @@ jobs:
         needs: [setup, collect-results]
         if: ${{ always() && needs.collect-results.result != 'skipped'}}
         runs-on: ubuntu-latest
+        permissions:
+            actions: read # Read job timings for run statistics.
+            contents: read
 
         env:
             RESULTS_DIR: "results/"
             STATS_FILENAME: "run_stats"
-            # Repository integration credential for the scoped sweep/ingest job.
-            GITHUB_TOKEN: ${{ secrets.REPO_PAT }} # zizmor: ignore[secrets-outside-env]
+            GITHUB_TOKEN: ${{ github.token }}
 
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                  # Repository integration credential for the scoped sweep/ingest job.
-                  token: ${{ secrets.REPO_PAT }} # zizmor: ignore[secrets-outside-env]
                   ref: ${{ needs.setup.outputs.tooling-ref }}
                   fetch-depth: 0
                   persist-credentials: false
@@ -1017,7 +1006,7 @@ jobs:
 
         env:
             # Repository integration credential for the scoped sweep/ingest job.
-            DATABASE_URL: ${{ secrets.NEON_PROD_RO_URL }} # zizmor: ignore[secrets-outside-env]
+            DATABASE_URL: ${{ secrets.DB_RO_URL }} # zizmor: ignore[secrets-outside-env]
 
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1080,7 +1069,7 @@ jobs:
                 REQUIRE_POWER: ${{ needs.upload-changelog-metadata.outputs.has-required-power }}
               with:
                 # Repository integration credential for the scoped sweep/ingest job.
-                github-token: ${{ secrets.INFX_FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
+                github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
                 script: |
                   await github.rest.repos.createDispatchEvent({
                     owner: "SemiAnalysisAI",
@@ -1148,7 +1137,7 @@ jobs:
                 REQUIRE_POWER: ${{ needs.upload-changelog-metadata.outputs.has-required-power }}
               with:
                 # Repository integration credential for the scoped sweep/ingest job.
-                github-token: ${{ secrets.INFX_FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
+                github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
                 script: |
                   await github.rest.repos.createDispatchEvent({
                     owner: "SemiAnalysisAI",

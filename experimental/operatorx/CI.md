@@ -161,3 +161,37 @@ It accepts uniform BF16/FP16, contiguous KV, and head dimensions divisible by ei
 up to 256; other requests remain unsupported rather than fall back to torch.
 Experimental operator changes are recorded in the adjacent `perf-changelog.yaml`,
 separately from the root inference-recipe changelog's config-key schema.
+
+
+## Kimi K3 routed MoE benchmark profile
+
+`testlists=kimi_k3_moe_perf`, `backends=vllm`, `world_sizes=1` runs eight BF16
+routed-expert cases: 1, 16, 128 and 1024 local tokens, each with EP8 or TP8 shapes.
+The generic profile follows [vLLM #50082](https://github.com/vllm-project/vllm/pull/50082):
+896 experts, top-16, hidden 7168 and intermediate 3072. EP8 allocates 112 experts
+with intermediate 3072; TP8 allocates 896 experts with intermediate 384.
+Both execute on **one GPU**, with no live distributed groups or communication.
+
+This is explicitly **Kimi K3 (vLLM benchmark profile)**. It measures vLLM's generic
+SiLU routed expert kernel with synthetic, uniform-random local routing prepared
+before timing. The timer includes the fused expert implementation's token sorting,
+gate/up GEMM, SiLU-and-multiply, down GEMM and weighted reduction; it excludes
+router/top-k calculation, shared experts and communication. It does not measure
+the released Kimi K3 layer's SITU activation, 3584-wide latent expert path,
+latent projections or shared experts. Those need a separate native-layer profile.
+No model weights or Hugging Face credentials are required.
+
+NVIDIA uses `vllm/vllm-openai:v0.19.0` (amd64/arm64); AMD uses the existing ROCm
+image. Select `backends=vllm` explicitly. Unsupported precision, routing or shared
+expert requests produce unsupported rows; import and kernel failures fail CI.
+
+Useful routed matmul TFLOPS per GPU is
+`6*num_tokens*top_k*hidden*(intermediate/routed_tensor_parallel_size)/(latency_us*1e6)`.
+The local top-k routes all target the local expert table, matching the generic
+benchmark's EP emulation. Do not divide the measured work by EP again or multiply
+by the number of GPUs in the allocation. These kernel measurements exclude
+activation and routing FLOPs and are not full-model throughput.
+
+### GPU validation status
+
+The complete eight-case BF16 profile passed on H200, MI300X and MI325X. H100 currently fails before kernel execution: its Enroot importer rejects OCI whiteout conversion for the vLLM image on both `/tmp` and `/var/tmp`. The same host limitation is recorded by CollectiveX swap-blocks. H100 requires a working image-import environment before performance can be reported; this change does not modify node configuration. B200, B300, GB200, GB300 and MI355X dispatches are awaiting shared GPU capacity. A registered pool is not runtime validation.

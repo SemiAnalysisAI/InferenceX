@@ -10,6 +10,8 @@
 
 ## PR 审阅流程
 
+每个 PR 描述都必须包含 **AI model disclosure（AI 模型使用说明）** 部分，列出准备该 PR 时实际使用的完整模型名称/版本及各自的工作内容，包括委派给其他 agent 的工作。不能只写 Claude Code、Cursor 或 Perplexity Computer 等工具名。模型标识应以运行环境提供的信息为准，不得猜测；如果运行环境未提供确切模型，须明确说明无法确认。完全未使用 AI 的 PR 须填写 `No AI used`。后续修改使用其他模型时，须同步更新说明。
+
 1. 打开你的 PR 并通过 PR 验证。添加 `full-sweep-fail-fast` 标签，强烈推荐使用此标签，因为变更有问题时每个矩阵最多浪费一个任务，而不是整个扇出。仅当需要任务在失败后继续运行时才使用 `full-sweep-enabled`。让基准测试 sweep 运行，并在 PR 的某个 commit 上获得全绿的完整 sweep，包括 evals。
 2. 若修改的文件归属于仓库管理员及 `@SemiAnalysisAI/core` 之外的 CODEOWNER，请联系一位有资格的 [CODEOWNER](.github/CODEOWNERS) 审阅，并在批准评论中填写 **PR Review Checklist** 签署（见下文）。
 3. 在 Slack 上联系核心维护者进行最终批准；若要求清单签署，请先完成签署。

@@ -73,16 +73,16 @@ def plan(
     if not backends or set(backends) - images.keys():
         raise ValueError("select at least one registered backend for this GPU platform")
     if pool in AMD_POOLS and (
-        set(backends) - {"torch", "aiter"}
+        set(backends) - {"torch", "aiter", "vllm"}
         or world_sizes != [1]
         or any(
-            shape["type"] not in {"gemm", "attention_mha", "attention_mla"}
+            shape["type"] not in {"gemm", "attention_mha", "attention_mla", "moe_gemm"}
             for shapes in testlists.values()
             for shape in shapes
         )
     ):
         raise ValueError(
-            "AMD CI supports single-GPU torch GEMM and torch/aiter attention"
+            "AMD CI supports single-GPU torch GEMM, torch/aiter attention and vllm MoE"
         )
     if not world_sizes or set(world_sizes) - {1, 2, 4, 8}:
         raise ValueError("world sizes must be selected from 1,2,4,8 (single node)")
