@@ -8429,6 +8429,6 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Enable required measured power on the four remaining GB200 Kimi-K3 aggregate recipes (tp16-latency, tep16-balanced, dep16, dep16-vllm-simple-offload), matching the seven already collecting power."
-    - "为 GB200 Kimi-K3 剩余四个聚合配方（tp16-latency、tep16-balanced、dep16、dep16-vllm-simple-offload）启用必需实测功耗，与已采集功耗的七个配方保持一致。"
+    - "Enable required measured power on the four remaining GB200 Kimi-K3 aggregate recipes (tp16-latency, tep16-balanced, dep16, dep16-vllm-simple-offload), matching the seven already collecting power. Also restores the srt-slurm power staging that has been failing to import on the runner interpreter since #3153."
+    - "为 GB200 Kimi-K3 剩余四个聚合配方（tp16-latency、tep16-balanced、dep16、dep16-vllm-simple-offload）启用必需实测功耗，与已采集功耗的七个配方保持一致；同时修复 #3153 之后 srt-slurm 功耗暂存在 runner 解释器上无法导入的问题。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3287
