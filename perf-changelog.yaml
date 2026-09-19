@@ -8425,13 +8425,36 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3053
 
 - config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add B200 Qwen3.5-397B-A17B FP8 AgentX disaggregation with colocated TP4 prefill
+    and TP4 decode on eight GPUs at concurrency 8, 16, 24, 32, 48 and 64.
+  - Use Dynamo/SGLang nightly 20260918-20518d85 with NEXTN MTP and Mooncake NVLink transfers.
+  - Enable 104 GB per-rank prefill HiCache at C8-C32; use 215 GB with first-use
+    write-through and decode static memory 0.88 at C48/C64.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+    - glm5.2-fp8-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GLM-5.2 MI355X SGLang AgentX images to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917 (2026-09-17 ROCm 7.2.0 mi35x daily, digest sha256:21c1cc9a…, the newest rocm720-mi35x tag; the 2026-09-18 builds only ship rocm724/rocm10 flavors): glm5.2-fp4-mi355x-sglang-agentic-mtp from 20260916 and glm5.2-fp8-mi355x-sglang-agentic-mtp from 20260908"
+    - "In glm5.2_fp8_mi355x_sglang_mtp.sh pass the decode graph batch as --cuda-graph-max-bs-decode instead of the removed --cuda-graph-max-bs alias, matching the MXFP4 sibling; serve flags, search spaces and golden acceptance are otherwise unchanged"
+    - "将 GLM-5.2 MI355X SGLang AgentX 镜像更新至 lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917（2026-09-17 ROCm 7.2.0 mi35x 日构建，digest sha256:21c1cc9a…，rocm720-mi35x 系列最新 tag；2026-09-18 构建仅提供 rocm724/rocm10 版本）：glm5.2-fp4-mi355x-sglang-agentic-mtp 自 20260916，glm5.2-fp8-mi355x-sglang-agentic-mtp 自 20260908"
+    - "在 glm5.2_fp8_mi355x_sglang_mtp.sh 中改用 --cuda-graph-max-bs-decode 传递 decode graph batch，替换已移除的 --cuda-graph-max-bs 别名，与 MXFP4 姊妹配方一致；其余服务参数、搜索空间与 golden acceptance 不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3277
+
+- config-keys:
   - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
   scenario-type:
   - agentic-coding
   description:
-  - Add B300 Qwen3.5-397B-A17B FP8 AgentX recipes at concurrency 16, 24 and 32 using colocated 1P1D TP4/TP4 Dynamo plus SGLang through srt-slurm, with all eight allocated GPUs active and 72 GB HiCache per prefill rank. Preserve the published aggregate curves. Exclude losing 2P1D experiments and high-concurrency candidates that did not qualify under canonical measurement.
-  - Pin SGLang nightly-dev-cu13-20260918-20518d85 and Dynamo 805a77f053d807b0d8def5d27f674a6df0ed839e, use the supported Mamba cache flags and colocated Mooncake intra-node NVLink transport, and resolve verified NVIDIA vendor wheels through the vendor index. Keep HiCache on prefill only and use NEXTN with repository golden acceptance for throughput and real verification for accuracy evals.
-  - Require native DCGM power telemetry, explicit custom-benchmark measurement-window fields and exact matrix concurrency injection. Verify terminal Slurm accounting and the complete producer power contract, preserve diagnostics before returning failures, and skip throughput power validation for eval-only jobs. Skip login-host model preflight for node-local weights; retain runtime loading and health checks.
-  - The initial full sweep qualified concurrency 32 at 20629 total tokens/s/GPU and p90 interactivity 200.58, strictly improving a published aggregate frontier point. Short-run gains at higher concurrency did not establish canonical qualification. Require a fresh complete sweep of the retained three canonical 3600-second profiles and all three applicable full accuracy evals; initial C16/C24 attempts failed before measurement.
-  - Temporarily exclude gpu-11 after three official jobs repeatedly failed during prefill TP3 model loading there; the underlying cause remains unproven, and a later eval on that node succeeded. Allow four hours for canonical warmup, unchanged one-hour profiling and artifact processing. No shared files, node settings or other users' jobs were changed.
+  - Add B300 Qwen3.5-397B-A17B FP8 AgentX disaggregation with colocated TP4 prefill
+    and TP4 decode on eight GPUs at concurrency 16, 24 and 32.
+  - Use Dynamo/SGLang nightly 20260918-20518d85 with NEXTN MTP and Mooncake NVLink transfers.
+  - Enable 72 GB per-rank prefill HiCache.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268

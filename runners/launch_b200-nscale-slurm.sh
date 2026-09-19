@@ -545,6 +545,7 @@ run_multinode_srt() {
     fi
 
     USES_DCGM_POWER=0
+    USES_AGENTX_POWER=0
     _POWER_CONFIG_FILE="${CONFIG_FILE:-}"
     if [[ "${EVAL_ONLY}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
         _POWER_CONFIG_FILE="$EVAL_CONFIG_FILE"
@@ -560,13 +561,16 @@ run_multinode_srt() {
     ' "$_RECIPE_SRC"; then
         USES_DCGM_POWER=1
     fi
-    if [[ "$USES_DCGM_POWER" == "1" && (
+    if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
+        "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+        USES_AGENTX_POWER=1
+    elif [[ "$USES_DCGM_POWER" == "1" && (
         "${IS_AGENTIC}" == "1" ||
         "$MODEL_PREFIX" != "dsv4" ||
         "$PRECISION" != "fp4" ||
         "$FRAMEWORK" != "dynamo-vllm"
     ) ]]; then
-        echo "Error: B200 Nscale dcgm-power is limited to fixed-sequence DSV4 FP4 dynamo-vllm" >&2
+        echo "Error: B200 Nscale dcgm-power requires fixed-sequence DSV4 FP4 dynamo-vllm or Qwen3.5 FP8 AgentX dynamo-sglang" >&2
         exit 1
     fi
 
@@ -678,8 +682,10 @@ run_multinode_srt() {
     sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "${CONFIG_FILE%%:*}"
 
     SRTCTL_PREFLIGHT_ARGS=()
-    # Kimi K2.6 weights are staged on the Slurm compute nodes, not the login node.
-    if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
+    # These weights are staged on the Slurm compute nodes, not the login node.
+    # SRT still checks the resolved model path when the worker starts.
+    if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]] ||
+       [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
         SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
     fi
 
@@ -700,29 +706,11 @@ run_multinode_srt() {
     LOGS_DIR="outputs/$JOB_ID/logs"
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
-    while ! ls "$LOG_FILE" &>/dev/null; do
-        if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
-            echo "ERROR: Job $JOB_ID failed before creating log file"
-            scontrol show job "$JOB_ID"
-            exit 1
-        fi
-        echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
-        sleep 5
-    done
-
-    (
-        while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
-            sleep 10
-        done
-    ) &
-    POLL_PID=$!
-
-    echo "Tailing LOG_FILE: $LOG_FILE"
-
-    # -F follows by name and polls; inotify does not work on NFS.
-    tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
-
-    wait $POLL_PID
+    local srt_job_rc=0
+    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || srt_job_rc=$?
+    if [[ "$srt_job_rc" -eq 0 ]]; then
+        verify_slurm_job_status "$JOB_ID" || srt_job_rc=$?
+    fi
 
     set -x
 
@@ -735,6 +723,15 @@ run_multinode_srt() {
     fi
 
     echo "Found logs directory: $LOGS_DIR"
+
+    if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY}" != "true" ]]; then
+        check_env_vars CONC_LIST
+        local -a power_concurrencies
+        read -r -a power_concurrencies <<< "$CONC_LIST"
+        collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" \
+            "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" \
+            "$SRT_SLURM_COMMIT" "${power_concurrencies[@]}" || srt_job_rc=$?
+    fi
 
     if [[ "$USES_DCGM_POWER" == "1" ]]; then
         mkdir -p "$LOGS_DIR/power"
@@ -776,6 +773,8 @@ run_multinode_srt() {
         sleep 10
     done
     find . -name '.nfs*' -delete 2>/dev/null || true
+    # Failed runs still provide the diagnostics and eval outputs above.
+    return "$srt_job_rc"
 }
 
 # ---------------------------------------------------------------------------
