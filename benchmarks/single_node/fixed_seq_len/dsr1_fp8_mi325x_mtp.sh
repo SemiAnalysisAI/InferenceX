@@ -1,8 +1,5 @@
 #!/usr/bin/bash
 
-# DeepSeek-R1-0528 FP8 on MI325X with EAGLE/MTP speculative decoding.
-# Mirrors dsr1_fp8_mi325x.sh and adds the speculative-* flags.
-
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars \

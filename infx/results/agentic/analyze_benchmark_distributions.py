@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Analyze ISL/OSL distributions from AIPerf benchmark results.
 
 Reads profile_export.jsonl and produces mean/median/p75/p90/p95 summary stats
@@ -95,9 +94,9 @@ def _generate_plots(
     osl_stats: dict[str, float],
     output_dir: Path,
 ) -> None:
-    import matplotlib
+    import matplotlib as mpl
 
-    matplotlib.use("Agg")
+    mpl.use("Agg")
     import matplotlib.pyplot as plt
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
@@ -114,10 +113,30 @@ def _generate_plots(
         alpha=0.7,
         color="steelblue",
     )
-    ax.axvline(isl_stats["median"], color="red", linestyle="--", label=f"Median: {isl_stats['median']:,}")
-    ax.axvline(isl_stats["mean"], color="orange", linestyle="--", label=f"Mean: {isl_stats['mean']:,.0f}")
-    ax.axvline(isl_stats["p90"], color="green", linestyle=":", label=f"P90: {isl_stats['p90']:,}")
-    ax.axvline(isl_stats["p95"], color="purple", linestyle=":", label=f"P95: {isl_stats['p95']:,}")
+    ax.axvline(
+        isl_stats["median"],
+        color="red",
+        linestyle="--",
+        label=f"Median: {isl_stats['median']:,}",
+    )
+    ax.axvline(
+        isl_stats["mean"],
+        color="orange",
+        linestyle="--",
+        label=f"Mean: {isl_stats['mean']:,.0f}",
+    )
+    ax.axvline(
+        isl_stats["p90"],
+        color="green",
+        linestyle=":",
+        label=f"P90: {isl_stats['p90']:,}",
+    )
+    ax.axvline(
+        isl_stats["p95"],
+        color="purple",
+        linestyle=":",
+        label=f"P95: {isl_stats['p95']:,}",
+    )
     ax.set_xlabel("Input Sequence Length (tokens)")
     ax.set_ylabel("Count")
     ax.set_title(f"All Requests ISL (n={isl_stats['n']:,})")
@@ -135,10 +154,30 @@ def _generate_plots(
         alpha=0.7,
         color="coral",
     )
-    ax.axvline(osl_stats["median"], color="red", linestyle="--", label=f"Median: {osl_stats['median']:,}")
-    ax.axvline(osl_stats["mean"], color="orange", linestyle="--", label=f"Mean: {osl_stats['mean']:,.0f}")
-    ax.axvline(osl_stats["p90"], color="green", linestyle=":", label=f"P90: {osl_stats['p90']:,}")
-    ax.axvline(osl_stats["p95"], color="purple", linestyle=":", label=f"P95: {osl_stats['p95']:,}")
+    ax.axvline(
+        osl_stats["median"],
+        color="red",
+        linestyle="--",
+        label=f"Median: {osl_stats['median']:,}",
+    )
+    ax.axvline(
+        osl_stats["mean"],
+        color="orange",
+        linestyle="--",
+        label=f"Mean: {osl_stats['mean']:,.0f}",
+    )
+    ax.axvline(
+        osl_stats["p90"],
+        color="green",
+        linestyle=":",
+        label=f"P90: {osl_stats['p90']:,}",
+    )
+    ax.axvline(
+        osl_stats["p95"],
+        color="purple",
+        linestyle=":",
+        label=f"P95: {osl_stats['p95']:,}",
+    )
     ax.set_xlabel("Output Sequence Length (tokens)")
     ax.set_ylabel("Count")
     ax.set_title(f"All Requests OSL (n={osl_stats['n']:,})")

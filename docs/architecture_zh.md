@@ -186,7 +186,11 @@ flowchart LR
 6. 基准测试、评测和智能体数据行使用独立的扇出作业，因为它们所需的输入形态不同。
 7. 收集过程会等待相关作业。只有在所需的收集工作和变更日志元数据工作达到允许状态后，主分支运行才会分派摄取任务。
 
-可复用工作流在矩阵键与运行时环境变量之间构成显式适配器。例如，矩阵中的 `model-prefix`、`dcp-size`、`spec-decoding` 和 `run-eval` 会变为 `MODEL_PREFIX`、`DCP_SIZE`、`SPEC_DECODING` 和 `RUN_EVAL`。这种映射至关重要。新的主配置字段只有在生成器将其发出、调用工作流将其转发、模板将其公开且运行时代码使用它之后，才会产生运行时效果。
+可复用工作流在矩阵键与运行时环境变量之间构成显式适配器。单节点和多节点调用方通过一个 JSON `config` 输入传递已验证的 `infx.matrix` 数据行；`benchmark-tmpl.yml` 和 `benchmark-multinode-tmpl.yml` 负责将其映射为 `MODEL_PREFIX`、`DCP_SIZE`、`SPEC_DECODING` 等变量。因此，新增配方字段时，只需修改模式/生成器及使用该字段的模板/运行时代码，无需在每个调用方重复添加转发字段。模板显式读取已知字段，不会将任意 JSON 键导出为环境变量。
+
+[`infx/workflows/benchmark_schema.py`](../infx/workflows/benchmark_schema.py) 通过扩展已有矩阵模型定义单节点和多节点工作流模式。Sweep 和手动运行的准备作业在添加优先级信息和发布作业输出之前验证数据行，因此非法输入会在 GPU 扇出前失败。验证会拒绝缺失的必填字段、未知键、错误的 JSON 类型、无效的元数据或拓扑、空并发批次或非正并发值，以及计划分组中的场景或拓扑错配。计划中的基准分组使用 `agentic`，数据行仍使用 `scenario-type: agentic-coding`；验证以工作流实际读取的分组为准。合法 JSON 原样通过。作业输出仅包含每条配方数据行的一份副本；模板在使用时生成名称和环境变量，不扩大矩阵载荷。仅用于验证的默认值允许旧数据行省略 `pp`、`dcp-size` 和 `pcp-size`，不会将这些默认值写入工作流输入。即使被测 checkout 较旧，手动运行也使用工作流工具 checkout 中的验证器。新增调用方也必须执行此预检；可复用模板本身只负责解析 JSON。
+
+调度、checkout 选择和执行覆盖选项仍使用显式工作流输入。单节点 `dp-attn` 也保留为布尔输入，以维持 GitHub 的类型检查。AgentX 的序列长度仍为零，旧版本缺失字段仍保留原有的空字符串行为。JSON 由 GitHub Actions 在 checkout 前解析，因此被测旧提交无需新增辅助程序。多节点保留显式的 `node-count`、并发批次/评测覆盖和 CPU DRAM 覆盖输入；手动 AgentX 运行保留原有的内存默认值。性能分析工作流继续使用现有接口。
 
 矩阵中的 `runner` 值也会驱动 `runs-on`。分配自托管运行器后，模板会获取其具体的 `${{ runner.name }}` 并启动：
 
@@ -273,7 +277,7 @@ rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
 
 智能体吞吐量作业采用不同的契约。它们使用 [`infx/results/agentic/validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py) 验证 AIPerf 输出，上传聚合的 `bmk_agentic_<suffix>` 工件，并上传包含追踪重放材料的原始 `agentic_<suffix>` 同级工件。InferenceX-app 通过它们共享的后缀对这些同级工件进行配对。智能体仅评测作业改为遵循评测输出契约，不要求吞吐量结果。
 
-服务器日志和 GPU 指标是诊断辅助工件。它们通过 `always()` 上传，因此失败的运行仍可供调查。它们的存在不会将失败的基准测试转变为有效结果。
+服务器日志和 GPU 指标是诊断辅助工件。它们通过 `always()` 上传，因此失败的运行仍可供调查。它们的存在不会将失败的基准测试转变为有效结果。在 AMD Slurm 机群上，`/run_logs` 是节点本地目录；服务器步骤结束后，`job.slurm` 会把每个已分配节点上已经关闭的日志树合并到共享存储中，使诊断工件包含整个部署的 Prefill 和 Decode 日志。
 
 ## 阶段 6：工件收集与交接
 

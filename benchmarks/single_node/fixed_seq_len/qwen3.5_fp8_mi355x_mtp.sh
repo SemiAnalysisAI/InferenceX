@@ -30,7 +30,6 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
 else EVAL_CONTEXT_ARGS="--context-length $CONTEXT_LENGTH"
 fi
-# Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 python3 -m sglang.launch_server \
@@ -59,7 +58,6 @@ python3 -m sglang.launch_server \
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 run_benchmark_serving \
@@ -75,12 +73,10 @@ run_benchmark_serving \
     --result-dir /workspace/ \
     --use-chat-template
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
 set +x

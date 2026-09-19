@@ -1,110 +1,63 @@
 #!/usr/bin/env bash
 
-# Kimi-K3 B300 vLLM SPEED-Bench AL matrix collector for DSpark speculative
-# decoding.
+# Kimi-K3 B300 vLLM SPEED-Bench AL matrix collector for DSpark speculative decoding.
 #
-# VARIANT of kimik3_fp4_b300_vllm.sh (kept intact as the baseline): the
-# speculative-config additionally sets draft_sample_method=probabilistic and
-# rejection_sample_method=block, mirroring PR #2366's acceptance-rate
-# optimization as a separate collector so baseline and variant AL curves can
-# be measured side by side.
+# For each DSpark speculative-token count, measure the REAL acceptance length (AL) on
+# one SPEED-Bench category and emit a YAML matrix in the golden_al_distribution shape.
+# The Inferact/Kimi-K3-DSpark draft head is downloaded to a writable workspace dir;
+# the target (moonshotai/Kimi-K3, FP4) is pre-staged at /scratch/models/Kimi-K3.
+# K3 is a thinking model (kimi_k3 reasoning parser defaults enable_thinking=True),
+# so the golden curve is collected for thinking_on only.
 #
-# Produces the golden acceptance-length (AL) reference matrix consumed by the
-# synthetic-acceptance framework: for each DSpark speculative-token count,
-# measure the REAL AL on a single SPEED-Bench category (default: coding) and
-# emit a YAML matrix identical in shape to the other golden_al_distribution
-# curves.
-#
-# Kimi-K3 uses the Inferact/Kimi-K3-DSpark draft head. The draft model is
-# downloaded to a writable workspace dir before the sweep begins; the target
-# checkpoint (moonshotai/Kimi-K3, FP4) is pre-staged on the B300 cluster at
-# /scratch/models/Kimi-K3, so the launcher resolves MODEL_PATH there and no
-# target download happens.
-#
-# Differences vs the Kimi-K2.5 EAGLE3 template (kimik2.5_fp4_b300_vllm.sh):
-#   - speculative-config     dspark + attention_backend FLASHINFER_MLA (not eagle3)
-#   - reasoning/tool parser  kimi_k3        (was kimi_k2)
-#   - thinking modes         "on" only — K3 is a thinking model; the parser
-#                            (vllm/reasoning/kimi_k3_reasoning_parser.py)
-#                            defaults enable_thinking=True
-#   - prefix caching         ENABLED (production recipe) — was disabled
-#   - serve flags            --load-format fastsafetensors, --moe-backend auto,
-#                            --max-num-seqs, --max-cudagraph-capture-size,
-#                            --attention-config, per the K3 production recipe
-#   - NO --language-model-only (text-only checkpoint)
+# VARIANT of kimik3_fp4_b300_vllm.sh (the baseline): the speculative-config also sets
+# draft_sample_method=probabilistic and rejection_sample_method=block so baseline and
+# variant AL curves can be measured side by side.
 #
 # Usage (inside the Kimi-K3 vLLM container, on a B300 node):
 #   export MODEL=moonshotai/Kimi-K3
 #   bash benchmarks/single_node/speedbench/kimik3_fp4_b300_vllm_probabilistic_sample_method_block_rejection_sample_method.sh
 #
-# Tunables (env):
-#   MTP_LIST          space-separated DSpark spec-token counts (default "1 2 3 4 5 6 7 8")
-#   THINKING_MODES    space-separated: off|on       (default "on")
-#   CATEGORY          SPEED-Bench category          (default coding)
-#   SPEEDBENCH_OUTPUT_LEN  per-request output len   (default 4096)
-#   OUT_YAML          output matrix path            (default $RESULTS_DIR/speedbench-reference-al.yaml)
+# Required collection settings come from speedbench-al.yml.
 
-set -uo pipefail
+set -o pipefail
 source "$(dirname "$0")/../../benchmark_lib.sh"
+check_env_vars \
+    CATEGORY CHAT_TEMPLATE_KWARGS_ON DP_ATTENTION EP_SIZE MODEL MODEL_PATH \
+    MTP_LIST OUT_YAML PORT SPEEDBENCH_OUTPUT_LEN THINKING_MODES TP
 
-MODEL="${MODEL:?MODEL env var required (e.g. moonshotai/Kimi-K3)}"
-SERVE_MODEL="${MODEL_PATH:-$MODEL}"
-TP="${TP:-8}"
-DP_ATTENTION="${DP_ATTENTION:-false}"
-EP_SIZE="${EP_SIZE:-1}"
-PORT="${PORT:-8888}"
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
-MAX_MODEL_LEN="${MAX_MODEL_LEN:-16384}"
-MAX_NUM_SEQS="${MAX_NUM_SEQS:-512}"
+SERVE_MODEL="${MODEL_PATH}"
+GPU_MEM_UTIL="0.90"
+MAX_MODEL_LEN="16384"
+MAX_NUM_SEQS="512"
 
-DRAFT_MODEL="${DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
+DRAFT_MODEL="Inferact/Kimi-K3-DSpark"
 
-MTP_LIST="${MTP_LIST:-1 2 3 4 5 6 7 8}"
-# K3 is a thinking model (kimi_k3 reasoning parser defaults enable_thinking=True),
-# so the golden curve is collected for thinking_on only.
-THINKING_MODES="${THINKING_MODES:-on}"
-CATEGORY="${CATEGORY:-coding}"
-MODEL_KEY="${MODEL_KEY:-$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')}"
-SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
-# AL is concurrency-independent (per-token accept/reject; no spec-disable-by-batch
-# is set below), so batch the SPEED-Bench pass to keep wall-time under the CI
-# limit. Inherited from the Kimi-K2.5 collector, where conc=1 blew the 8h budget.
-CONCURRENCY="${CONCURRENCY:-64}"
-TOP_P="${TOP_P:-0.95}"
-# Kimi thinking toggles via the thinking chat_template key. K3 defaults to
-# thinking ON, so the on-cell kwargs are stated explicitly and the off-cell
-# kwargs disable it. NOTE: speedbench-al.yml's thinking-kwargs input defaults to
-# the DSV4 value ({"thinking": true, "reasoning_effort": "high"}) and is exported
-# as CHAT_TEMPLATE_KWARGS_ON — dispatch K3 with -f 'thinking-kwargs={"thinking": true}'.
-DEFAULT_CHAT_TEMPLATE_KWARGS_ON='{"thinking": true}'
-DEFAULT_CHAT_TEMPLATE_KWARGS_OFF='{"thinking": false}'
-CHAT_TEMPLATE_KWARGS_ON="${CHAT_TEMPLATE_KWARGS_ON:-$DEFAULT_CHAT_TEMPLATE_KWARGS_ON}"
-CHAT_TEMPLATE_KWARGS_OFF="${CHAT_TEMPLATE_KWARGS_OFF:-$DEFAULT_CHAT_TEMPLATE_KWARGS_OFF}"
+MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
+# AL is concurrency-independent (per-token accept/reject; no spec-disable-by-batch is
+# set), so batch the SPEED-Bench pass to stay under the CI wall-time limit; conc=1
+# blew the 8h budget on Kimi-K2.5.
+CONCURRENCY="64"
+TOP_P="0.95"
+# K3 defaults to thinking ON, so the on-cell kwargs are explicit and the off-cell
+# kwargs disable it. speedbench-al.yml's thinking-kwargs input defaults to the DSV4
+# value and is exported as CHAT_TEMPLATE_KWARGS_ON; dispatch K3 with
+# -f 'thinking-kwargs={"thinking": true}'.
+CHAT_TEMPLATE_KWARGS_OFF='{"thinking": false}'
 
-SPEEDBENCH_DIR="${SPEEDBENCH_DIR:-/workspace/speed_bench_data}"
-RESULTS_DIR="${RESULTS_DIR:-/workspace/speedbench_results}"
-OUT_YAML="${OUT_YAML:-$RESULTS_DIR/speedbench-reference-al.yaml}"
+SPEEDBENCH_DIR="/workspace/speed_bench_data"
+RESULTS_DIR="/workspace/speedbench_results"
 
-# Kimi-K3 production serving environment.
-export NCCL_DMABUF_ENABLE="${NCCL_DMABUF_ENABLE:-0}"
-export VLLM_ALLREDUCE_USE_FLASHINFER="${VLLM_ALLREDUCE_USE_FLASHINFER:-1}"
-export VLLM_USE_RUST_FRONTEND="${VLLM_USE_RUST_FRONTEND:-1}"
+export NCCL_DMABUF_ENABLE="0"
+export VLLM_ALLREDUCE_USE_FLASHINFER="1"
+export VLLM_USE_RUST_FRONTEND="1"
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
-# `vllm bench serve` delegates the CLIENT to the Rust binary: the kimi-k3 branch's
-# vllm/entrypoints/cli/benchmark/serve.py runs _maybe_exec_rust_bench(), which
-# os.execv's into vllm-rs whenever the dataset (speed_bench qualifies) and backend
-# are supported and the binary exists. There is no env var and no CLI flag to opt
-# out, and the Rust flag surface is a subset of the Python one (no
-# --speed-bench-output-len — only --speed-bench-max-input-len — no --save-detailed,
-# no --chat-template-kwargs), so every cell dies at argument parsing and the whole
-# matrix comes back N/A.
-#
-# Call the Python benchmark entrypoint directly instead, exactly as the CLI's own
-# Python fallback does (vllm.benchmarks.serve.main with a parser built by
-# add_cli_args), which never reaches the execv. The SERVER keeps the Rust frontend
-# per the production recipe; AL is read from the server's /metrics, so the client
-# choice does not affect the measurement.
+# `vllm bench serve` os.execv's the CLIENT into the Rust vllm-rs binary whenever the
+# dataset (speed_bench qualifies) and backend are supported, with no opt-out. The
+# Rust flag surface lacks --speed-bench-output-len, --save-detailed and
+# --chat-template-kwargs, so every cell would die at argument parsing. Call the
+# Python entrypoint directly (vllm.benchmarks.serve.main), as the CLI's own Python
+# fallback does. The SERVER keeps the Rust frontend; AL is read from /metrics.
 BENCH_DRIVER="$RESULTS_DIR/bench_serve_python.py"
 mkdir -p "$RESULTS_DIR"
 cat > "$BENCH_DRIVER" <<'PYEOF'
@@ -123,8 +76,8 @@ parser = FlexibleArgumentParser(
 add_cli_args(parser)
 main(parser.parse_args())
 PYEOF
-# This script runs without `set -e`, so a failed redirect would otherwise only
-# surface later as a confusing "No such file" from the preflight.
+# No `set -e` here, so a failed redirect would otherwise only surface later as a
+# confusing "No such file" from the preflight.
 if [[ ! -s "$BENCH_DRIVER" ]]; then
     echo "CRITICAL: could not write the benchmark driver to $BENCH_DRIVER — aborting."
     exit 1
@@ -132,10 +85,8 @@ fi
 
 nvidia-smi
 
-# ---- Download target if it is not pre-staged ----
-# Kimi-K3 is in the launcher's STAGED_MODELS, so MODEL_PATH resolves to the
-# read-only /scratch/models/Kimi-K3 and this block is a no-op. It still covers a
-# standalone run where the weights are not staged.
+# Kimi-K3 is in the launcher's STAGED_MODELS (read-only /scratch/models/Kimi-K3),
+# so this is a no-op in CI; it covers a standalone run with unstaged weights.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -144,18 +95,15 @@ else
     if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
 fi
 
-# ---- Download DSpark draft model to a WRITABLE dir ----
-# The draft must NOT go next to a pre-staged target: dirname(MODEL_PATH) can be
-# the read-only staged mount (/scratch/models), so writing the draft there fails
-# with PermissionError. Use a writable workspace dir regardless of staging.
-DRAFT_DIR="${DRAFT_MODEL_DIR:-/workspace/draft_models}"
+# dirname(MODEL_PATH) can be the read-only staged mount (/scratch/models), so the
+# draft must go to a writable workspace dir, not next to the target.
+DRAFT_DIR="/workspace/draft_models"
 mkdir -p "$DRAFT_DIR"
 DRAFT_MODEL_PATH="$DRAFT_DIR/${DRAFT_MODEL##*/}"
 if [[ ! -d "$DRAFT_MODEL_PATH" || -z "$(ls -A "$DRAFT_MODEL_PATH" 2>/dev/null)" ]]; then
     hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
 fi
 
-# ---- Download SPEED-Bench dataset ----
 echo "=== Downloading SPEED-Bench dataset ==="
 pip install -q datasets tiktoken
 curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/refs/heads/main/nemo_skills/dataset/speed-bench/prepare.py \
@@ -166,102 +114,6 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# ---- Conditional shim: ensure --chat-template-kwargs reaches the chat template ----
-# speed_bench/CustomDataset pre-renders the chat template client-side and posts to
-# /v1/completions, so thinking mode cannot be enabled via --extra-body or
-# --default-chat-template-kwargs — the kwargs must reach apply_chat_template.
-# vllm-project/vllm#44244 added this natively (serve.py declares the CLI option,
-# the speed_bench dispatch forwards it, CustomDataset.sample unpacks it), and the
-# kimi-k3 image already carries it. So: probe for native support first and no-op
-# when present; only patch the pieces an older image is missing. Idempotent.
-apply_chat_template_kwargs_shim() {
-    echo "=== Checking vLLM benchmark --chat-template-kwargs support ==="
-    python3 - <<'PYEOF'
-import sys
-import vllm.benchmarks.serve as S
-import vllm.benchmarks.datasets.datasets as D
-
-def read(mod):
-    with open(mod.__file__) as fh:
-        return fh.read()
-
-s_src, d_src = read(S), read(D)
-
-# Native (post-#44244) spellings, plus the ones this shim itself writes.
-have_cli = '"--chat-template-kwargs"' in s_src
-have_forward = ('chat_template_kwargs=getattr(args' in d_src
-                or 'chat_template_kwargs=args.chat_template_kwargs' in d_src)
-have_unpack = ('**(chat_template_kwargs or {})' in d_src
-               or '**_ctk' in d_src)
-
-if have_cli and have_forward and have_unpack:
-    print("native --chat-template-kwargs support present; no patching needed")
-    sys.exit(0)
-
-print(f"patching (cli={have_cli} forward={have_forward} unpack={have_unpack})")
-
-def apply(mod, src, edits):
-    for old, new in edits:
-        n = src.count(old)
-        assert n == 1, (
-            f"anchor matched {n} times in {mod.__file__}, aborting. This image's "
-            f"benchmark source differs from both the pre-#44244 and post-#44244 "
-            f"layouts; update the shim.\n{old[:120]}..."
-        )
-        src = src.replace(old, new, 1)
-    with open(mod.__file__, "w") as fh:
-        fh.write(src)
-    print("patched OK ->", mod.__file__)
-
-if not have_cli:
-    # serve.py -- declare the --chat-template-kwargs argument before --extra-body
-    apply(S, s_src, [('''    parser.add_argument(
-        "--extra-body",''', '''    parser.add_argument(
-        "--chat-template-kwargs",
-        type=json.loads,
-        default=None,
-        help="JSON dict forwarded to apply_chat_template during "
-        "client-side prompt rendering, e.g. to enable reasoning mode.",
-    )
-    parser.add_argument(
-        "--extra-body",''')])
-
-d_edits = []
-if not have_forward:
-    # datasets.py -- forward args.chat_template_kwargs into the speed_bench .sample() call
-    d_edits.append(('''                output_len=args.speed_bench_output_len,
-                enable_multimodal_chat=args.enable_multimodal_chat,''',
-                    '''                output_len=args.speed_bench_output_len,
-                chat_template_kwargs=args.chat_template_kwargs,
-                enable_multimodal_chat=args.enable_multimodal_chat,'''))
-if not have_unpack:
-    # datasets.py -- forward chat_template_kwargs into CustomDataset.sample's template call
-    d_edits.append(('''                # apply template
-                if not skip_chat_template:
-                    prompt = tokenizer.apply_chat_template(
-                        [{"role": "user", "content": prompt}],
-                        add_generation_prompt=True,
-                        tokenize=False,
-                    )
-
-                prompt_len = len(tokenizer(prompt).input_ids)''',
-                    '''                # apply template
-                if not skip_chat_template:
-                    _ctk = kwargs.get("chat_template_kwargs") or {}
-                    prompt = tokenizer.apply_chat_template(
-                        [{"role": "user", "content": prompt}],
-                        add_generation_prompt=True,
-                        tokenize=False,
-                        **_ctk,
-                    )
-
-                prompt_len = len(tokenizer(prompt).input_ids)'''))
-if d_edits:
-    apply(D, d_src, d_edits)
-PYEOF
-}
-
-# Apply the shim once if any cell will pass chat_template_kwargs.
 NEED_SHIM=0
 if [[ " $THINKING_MODES " == *" on "*  && -n "$CHAT_TEMPLATE_KWARGS_ON"  ]]; then NEED_SHIM=1; fi
 if [[ " $THINKING_MODES " == *" off "* && -n "$CHAT_TEMPLATE_KWARGS_OFF" ]]; then NEED_SHIM=1; fi
@@ -272,12 +124,10 @@ if [[ "$NEED_SHIM" == "1" ]]; then
     fi
 fi
 
-# ---- Preflight: the benchmark client must support the flags every cell uses ----
-# Cheap up front; without it a CLI mismatch is only visible as an all-N/A matrix
-# after eight full server starts (~1h of runner time).
-# NOTE: probe the driver, not `vllm bench serve` — the CLI's help exits inside
-# argparse before the Rust execv, so its help says nothing about what actually
-# runs. Plain --help prints only a group summary, so ask for --help=all.
+# Preflight the client flags every cell uses; otherwise a CLI mismatch only shows up
+# as an all-N/A matrix after eight full server starts (~1h). Probe the driver, not
+# `vllm bench serve` (its help exits before the Rust execv), and ask for --help=all
+# since plain --help prints only a group summary.
 BENCH_HELP="$(python3 "$BENCH_DRIVER" --help=all 2>&1)"
 for flag in --speed-bench-category --speed-bench-output-len --chat-template-kwargs --save-detailed; do
     if [[ "$BENCH_HELP" != *"$flag"* ]]; then
@@ -294,7 +144,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
 fi
 EP_ARGS=()
-if [ "${EP_SIZE:-1}" -gt 1 ]; then
+if [ "${EP_SIZE}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
@@ -442,7 +292,6 @@ done
 
 stop_gpu_monitor
 
-# ---- Emit the YAML matrix ----
 emit_mode_block() {
     local mode="$1"
     for mtp in $MTP_LIST; do

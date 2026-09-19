@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
 import os
 import re
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -19,26 +20,20 @@ from infx.results.power import (
     POWER_METRIC_SCHEMA_VERSION,
     with_power_metrics,
 )
-
+from infx.results.power.multinode import WINDOWS_DIRNAME, run as run_multinode_power
 from infx.results.power.single_node import (
     _patch_power_result,
     _write_json_atomic,
     invalid_validation_payload,
+    run as run_power,
 )
-from infx.results.power.single_node import run as run_power
-from infx.results.power.multinode import run as run_multinode_power
 
 from .artifacts import load_aggregate, load_records, resolve_artifact_dir
 
 _UTC_OFFSET_RE = re.compile(r"^([+-])(\d{2}):?(\d{2})$")
 _COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _MULTINODE_WINDOW_STEM_RE = re.compile(r"^agentic_power_concurrency_([1-9][0-9]*)$")
-_FORMAL_WINDOW_ENV = (
-    "SRT_MEASUREMENT_WINDOW_DIR",
-    "SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE",
-    "SRT_MEASUREMENT_WINDOW_CONCURRENCIES",
-    "SRT_MEASUREMENT_WINDOW_RESULT_ROOT",
-)
+_WINDOW_DIR_ENV = "SRT_MEASUREMENT_WINDOW_DIR"
 
 
 def _captured_timezone(result_dir: Path) -> tuple[timezone | None, str | None]:
@@ -77,10 +72,12 @@ def _parse_profile_timestamp(value: Any, *, fallback_tz: timezone | None) -> flo
         if fallback_tz is None:
             return None
         parsed = parsed.replace(tzinfo=fallback_tz)
-    return parsed.astimezone(timezone.utc).timestamp()
+    return parsed.astimezone(UTC).timestamp()
 
 
-def build_power_window(result_dir: Path) -> tuple[dict[str, int | float] | None, list[str]]:
+def build_power_window(
+    result_dir: Path,
+) -> tuple[dict[str, int | float] | None, list[str]]:
     """Build a strict benchmark window from successful profiling requests."""
     artifact_dir = resolve_artifact_dir(result_dir)
     aggregate_path = artifact_dir / "profile_export_aiperf.json"
@@ -101,12 +98,10 @@ def build_power_window(result_dir: Path) -> tuple[dict[str, int | float] | None,
     parsed_datetimes: list[datetime] = []
     for value in (raw_start, raw_end):
         if isinstance(value, str):
-            try:
+            with contextlib.suppress(ValueError):
                 parsed_datetimes.append(
                     datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
                 )
-            except ValueError:
-                pass
     needs_captured_timezone = any(value.tzinfo is None for value in parsed_datetimes)
     fallback_tz = None
     if needs_captured_timezone:
@@ -234,48 +229,34 @@ def _fail_multinode_adapter(message: str, *, require_power: bool) -> int:
     return 1 if require_power else 0
 
 
-def _positive_concurrencies(raw: str) -> list[int] | None:
-    tokens = raw.split()
-    if not tokens or any(not token.isdecimal() for token in tokens):
-        return None
-    values = [int(token) for token in tokens]
-    if any(value <= 0 for value in values) or len(set(values)) != len(values):
-        return None
-    return values
-
-
 def _multinode_window_contract(
     *,
     result_dir: Path,
     concurrency: int,
 ) -> tuple[Path, Path, Path] | None:
-    """Resolve and validate the formal custom-benchmark window contract."""
+    """Resolve the custom-benchmark window contract from the producer's window directory.
+
+    srt-slurm exports only ``SRT_MEASUREMENT_WINDOW_DIR`` (``<log dir>/<storage_subdir>/windows``)
+    to a ``benchmark.type: custom`` command and resolves each window's ``result_path`` against
+    the run log directory, the parent of the power directory. Derive that root here rather
+    than requiring producer variables the pinned release never sets.
+    """
     if isinstance(concurrency, bool) or not isinstance(concurrency, int) or concurrency <= 0:
         return None
-    values = {name: os.environ.get(name, "") for name in _FORMAL_WINDOW_ENV}
-    if any(not value for value in values.values()):
+    raw_window_dir = os.environ.get(_WINDOW_DIR_ENV, "")
+    if not raw_window_dir:
         return None
-    if values["SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE"] != "custom":
-        return None
-    measured = _positive_concurrencies(
-        values["SRT_MEASUREMENT_WINDOW_CONCURRENCIES"]
-    )
-    if measured is None or concurrency not in measured:
-        return None
-
-    window_dir = Path(values["SRT_MEASUREMENT_WINDOW_DIR"])
-    result_root = Path(values["SRT_MEASUREMENT_WINDOW_RESULT_ROOT"])
+    window_dir = Path(raw_window_dir)
     if (
-        not window_dir.is_absolute()
-        or not result_root.is_absolute()
+        window_dir.name != WINDOWS_DIRNAME
+        or not window_dir.is_absolute()
         or not result_dir.is_absolute()
-        or not window_dir.is_dir()
-        or not result_root.is_dir()
-        or not result_dir.is_dir()
     ):
         return None
+    result_root = window_dir.parent.parent
+    if result_root == result_root.parent or not window_dir.is_dir() or not result_dir.is_dir():
+        return None
     try:
-        window_dir.resolve().relative_to(result_root.resolve())
         relative_result_dir = result_dir.resolve().relative_to(result_root.resolve())
     except (OSError, ValueError):
         return None
@@ -356,8 +337,7 @@ def write_multinode_power_window(
     boundary, reasons = build_power_window(result_dir)
     if boundary is None:
         return _fail_multinode_adapter(
-            "Failed to complete formal measurement-window contract: "
-            + ", ".join(reasons),
+            "Failed to complete formal measurement-window contract: " + ", ".join(reasons),
             require_power=require_power,
         )
     formal_result_payload = {"max_concurrency": concurrency, **boundary}
@@ -394,9 +374,11 @@ def _record_multinode_adapter_failure(
         if not isinstance(aggregate, dict):
             raise ValueError("AgentX aggregate must be a JSON object")
         aggregate = with_power_metrics(
-            aggregate, metric_keys=_ALL_POWER_METRIC_KEYS,
+            aggregate,
+            metric_keys=_ALL_POWER_METRIC_KEYS,
             schema_version=POWER_METRIC_SCHEMA_VERSION,
-            power_valid=False, metrics={},
+            power_valid=False,
+            metrics={},
         )
         _write_json_atomic(agg_result, aggregate)
     finally:
@@ -489,10 +471,10 @@ def run_multinode_agentic_power(
             require_power=require_power,
         )
 
-    assert prefill_gpus is not None
-    assert decode_gpus is not None
-    assert isinstance(disagg, bool)
-    assert bench_result is not None
+    assert prefill_gpus is not None  # noqa: S101
+    assert decode_gpus is not None  # noqa: S101
+    assert isinstance(disagg, bool)  # noqa: S101
+    assert bench_result is not None  # noqa: S101
     aggregate_gpus = 0
     if not disagg:
         aggregate_gpus = prefill_gpus + decode_gpus

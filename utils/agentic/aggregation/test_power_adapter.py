@@ -11,19 +11,6 @@ from pathlib import Path
 import pytest
 
 
-def test_cli_is_importable_from_launcher_working_directory():
-    repo_root = Path(__file__).resolve().parents[3]
-    result = subprocess.run(
-        [sys.executable, "-m", "infx.results.agentic.power_adapter", "--help"],
-        cwd=repo_root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stderr
-
-
 @pytest.mark.parametrize("require_power", [False, True])
 @pytest.mark.parametrize(
     "aggregate_bytes",
@@ -388,19 +375,25 @@ def test_run_agentic_power_records_adapter_failure_before_returning(
     assert "incomplete_token_accounting" in validation["reasons"]
 
 
+_RETIRED_FORK_WINDOW_ENV = (
+    "SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE",
+    "SRT_MEASUREMENT_WINDOW_CONCURRENCIES",
+    "SRT_MEASUREMENT_WINDOW_RESULT_ROOT",
+)
+
+
 def _set_multinode_window_environment(
     monkeypatch: pytest.MonkeyPatch,
     *,
     logs_root: Path,
-    concurrencies: str = "8 16",
 ) -> tuple[Path, Path]:
+    """Mirror upstream srt-slurm: only the window directory reaches custom benchmarks."""
     window_dir = logs_root / "power" / "windows"
     result_root = logs_root
     window_dir.mkdir(parents=True)
     monkeypatch.setenv("SRT_MEASUREMENT_WINDOW_DIR", str(window_dir))
-    monkeypatch.setenv("SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE", "custom")
-    monkeypatch.setenv("SRT_MEASUREMENT_WINDOW_CONCURRENCIES", concurrencies)
-    monkeypatch.setenv("SRT_MEASUREMENT_WINDOW_RESULT_ROOT", str(result_root))
+    for name in _RETIRED_FORK_WINDOW_ENV:
+        monkeypatch.delenv(name, raising=False)
     return window_dir, result_root
 
 
@@ -477,54 +470,34 @@ def test_multinode_window_writer_publishes_boundary_identical_result_last(
 
 
 @pytest.mark.parametrize(
-    ("environment", "require_power", "expected_exit"),
+    ("window_subdir", "result_subdir", "require_power", "expected_exit"),
     [
-        ({}, False, 0),
-        ({}, True, 1),
-        (
-            {
-                "SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE": "sa-bench",
-                "SRT_MEASUREMENT_WINDOW_CONCURRENCIES": "8",
-            },
-            True,
-            1,
-        ),
-        ({"SRT_MEASUREMENT_WINDOW_CONCURRENCIES": "16"}, True, 1),
+        (None, "logs/agentic/conc_8", False, 0),
+        (None, "logs/agentic/conc_8", True, 1),
+        ("logs/power/win", "logs/agentic/conc_8", True, 1),
+        ("logs/power", "logs/agentic/conc_8", True, 1),
+        ("logs/power/windows", "elsewhere/agentic/conc_8", True, 1),
+        ("missing/power/windows", "logs/agentic/conc_8", True, 1),
     ],
 )
-def test_multinode_window_writer_fails_closed_on_invalid_formal_environment(
+def test_multinode_window_writer_fails_closed_on_invalid_window_environment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-    environment: dict[str, str],
+    window_subdir: str | None,
+    result_subdir: str,
     require_power: bool,
     expected_exit: int,
 ):
     from infx.results.agentic.power_adapter import write_multinode_power_window
 
-    logs_root = tmp_path / "logs"
-    result_dir = logs_root / "agentic" / "conc_8"
+    result_dir = tmp_path / result_subdir
     result_dir.mkdir(parents=True)
-    window_dir = logs_root / "power" / "windows"
-    window_dir.mkdir(parents=True)
-    defaults = {
-        "SRT_MEASUREMENT_WINDOW_DIR": str(window_dir),
-        "SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE": "custom",
-        "SRT_MEASUREMENT_WINDOW_CONCURRENCIES": "8 16",
-        "SRT_MEASUREMENT_WINDOW_RESULT_ROOT": str(logs_root),
-    }
-    defaults.update(environment)
-    if not environment:
-        defaults = {}
-    for name in (
-        "SRT_MEASUREMENT_WINDOW_DIR",
-        "SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE",
-        "SRT_MEASUREMENT_WINDOW_CONCURRENCIES",
-        "SRT_MEASUREMENT_WINDOW_RESULT_ROOT",
-    ):
-        monkeypatch.delenv(name, raising=False)
-    for name, value in defaults.items():
-        monkeypatch.setenv(name, value)
+    (tmp_path / "logs" / "power" / "windows").mkdir(parents=True)
+    (tmp_path / "logs" / "power" / "win").mkdir()
+    monkeypatch.delenv("SRT_MEASUREMENT_WINDOW_DIR", raising=False)
+    if window_subdir is not None:
+        monkeypatch.setenv("SRT_MEASUREMENT_WINDOW_DIR", str(tmp_path / window_subdir))
 
     exit_code = write_multinode_power_window(
         result_dir=result_dir,

@@ -2,8 +2,7 @@
 set -eo pipefail
 set -x
 
-# Agentic trace replay benchmark for MiniMax-M3 FP4 on MI355X using vLLM
-# and EAGLE3 speculative decoding.
+# MiniMax-M3 FP4 on MI355X with vLLM EAGLE3 speculative decoding.
 #
 # Required env vars:
 #   MODEL, MODEL_PATH, TP, CONC, KV_OFFLOADING, KV_OFFLOAD_BACKEND,
@@ -18,8 +17,7 @@ echo "MODEL=$MODEL TP=$TP CONC=$CONC KV_OFFLOADING=$KV_OFFLOADING TOTAL_CPU_DRAM
 
 DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3-GQA"
 NUM_SPEC_TOKENS=3
-# golden_al_distribution/minimaxm3_eagle3_gqa.yaml:
-# minimax-m3.thinking_on[3]
+# golden_al_distribution/minimaxm3_eagle3_gqa.yaml: minimax-m3.thinking_on[3]
 SYNTHETIC_ACCEPT_LEN=2.78
 
 if [[ -v SLURM_JOB_ID ]]; then
@@ -48,12 +46,10 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
-# Require the vLLM Prometheus stream in every official result. AIPerf
-# deduplicates this endpoint against its automatic localhost discovery.
+# Require the vLLM Prometheus stream in every official result.
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 
-# ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 mkdir -p "$RESULT_DIR"
@@ -84,8 +80,7 @@ case "$KV_OFFLOAD_BACKEND" in
     lmcache)
         require_agentic_kv_offload_backend lmcache
 
-        # Keep the image's tested torch/ROCm stack and install only LMCache's
-        # missing pure-Python runtime dependencies.
+        # Keep the image's torch/ROCm stack; install only LMCache's missing pure-Python deps.
         LMCACHE_VERSION="0.5.3"
         LMCACHE_ROCM_INDEX="https://github.com/LMCache/LMCache/releases/expanded_assets/v${LMCACHE_VERSION}-rocm"
         agentic_pip_install --quiet --no-cache-dir --no-deps \
@@ -163,7 +158,6 @@ case "$KV_OFFLOAD_BACKEND" in
         ;;
 esac
 
-# ---- LLM server config ----------------------------------------------------------
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 if [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--enable-expert-parallel)
@@ -226,7 +220,6 @@ echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-# ---- Run benchmark ----------------------------------------------------------
 if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
