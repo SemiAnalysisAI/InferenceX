@@ -16,6 +16,13 @@ ignore = [
 
 allowed-confusables = ["×", "，", "：", "；"]
 
+[lint.per-file-ignores]
+# The GB200/GB300 srt-slurm runners execute these modules with the runner's
+# system python3, which unsets VIRTUAL_ENV and can predate 3.11, so UP017's
+# datetime.UTC would make them fail to import before they do any work.
+"**/results/agentic/power_adapter.py" = ["UP017"]
+"**/results/power/single_node.py" = ["UP017"]
+
 [lint.isort]
 known-first-party = ["infx"]
 combine-as-imports = true
