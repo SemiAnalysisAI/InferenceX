@@ -639,7 +639,7 @@
       "attempt": 1,
       "retry_of": 35456989669,
       "head_sha": "1c11a492ec373320de5bdeeea9305fb7865dbf23",
-      "status": "queued",
+      "status": "in_progress",
       "node": null,
       "artifacts": [],
       "performance_result": false,
@@ -647,7 +647,9 @@
       "dispatched_at": "2026-09-19T21:14:18Z",
       "job_id": 105968619037,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35469801850/job/105968619037",
-      "runner": null,
+      "runner": "b200-nscale-slurm_08",
+      "started_at": "2026-09-19T21:20:18Z",
+      "allocation_id": "16647",
       "diagnosis": "Retry uses the validated, separate 2 TiB native filesystem stop guard; NVMe-only remains bounded at 1 TiB."
     }
   ],
