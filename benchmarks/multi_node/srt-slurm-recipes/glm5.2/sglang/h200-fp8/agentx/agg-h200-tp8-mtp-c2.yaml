@@ -117,10 +117,12 @@ telemetry:
 
 benchmark:
   type: custom
+  stream_output: true
   use_chat_template: true
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    PYTHONUNBUFFERED: "1"
     RESULT_DIR: /logs/agentic
     PORT: "8000"
     IS_MULTINODE: "true"
