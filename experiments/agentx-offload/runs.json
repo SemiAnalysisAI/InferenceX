@@ -639,10 +639,46 @@
       "attempt": 1,
       "retry_of": 35456989669,
       "head_sha": "1c11a492ec373320de5bdeeea9305fb7865dbf23",
-      "status": "in_progress",
+      "status": "success",
       "node": null,
-      "artifacts": [],
-      "performance_result": false,
+      "artifacts": [
+        {
+          "id": 10593987928,
+          "name": "bmk_agentic_minimaxm3_tp4_conc16_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disag-9feaf01f3064cc363c38",
+          "size_bytes": 2259
+        },
+        {
+          "id": 10593878159,
+          "name": "gpu_metrics_minimaxm3_tp4_conc16_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disag-9feaf01f3064cc363c38",
+          "size_bytes": 147405
+        },
+        {
+          "id": 10593803184,
+          "name": "power_audit_minimaxm3_tp4_conc16_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disag-9feaf01f3064cc363c38",
+          "size_bytes": 150993
+        },
+        {
+          "id": 10593778200,
+          "name": "results_bmk",
+          "size_bytes": 2066
+        },
+        {
+          "id": 10593568536,
+          "name": "server_logs_minimaxm3_tp4_conc16_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disag-9feaf01f3064cc363c38",
+          "size_bytes": 155110
+        },
+        {
+          "id": 10593458635,
+          "name": "agentic_minimaxm3_tp4_conc16_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disag-9feaf01f3064cc363c38",
+          "size_bytes": 17256159
+        },
+        {
+          "id": 10593157743,
+          "name": "run-stats",
+          "size_bytes": 284
+        }
+      ],
+      "performance_result": true,
       "workflow_name": "offload-v1-dram-nvme-c16-r2-20260919T2114Z",
       "dispatched_at": "2026-09-19T21:14:18Z",
       "job_id": 105968619037,
@@ -650,11 +686,53 @@
       "runner": "b200-nscale-slurm_08",
       "started_at": "2026-09-19T21:20:18Z",
       "allocation_id": "16647",
-      "diagnosis": "Retry uses the validated, separate 2 TiB native filesystem stop guard; NVMe-only remains bounded at 1 TiB."
+      "completed_at": "2026-09-19T22:50:46Z",
+      "log_sha256": "7e566135c309ac5e59df6afa764ad0c4e26600cc3ece03660aa1331e776aeed9",
+      "performance": {
+        "num_requests_total": 2424,
+        "num_requests_successful": 2247,
+        "num_requests_warmup_dropped": 177,
+        "num_requests_error_dropped": 1,
+        "duration_seconds": 3622.41003,
+        "output_tokens_per_second": 602.79316,
+        "output_tokens_per_second_per_gpu": 150.69829,
+        "input_tokens_per_second": 82229.70678,
+        "total_tokens_per_second": 82832.49994,
+        "p90_e2e_latency_seconds": 20.31696,
+        "p90_ttft_seconds": 1.40778,
+        "p90_tpot_seconds": 0.01363,
+        "p90_interactivity_tokens_per_second_per_user": 73.37639,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 54.08389,
+        "mean_e2e_latency_seconds": 8.97239,
+        "avg_power_w_per_gpu": 525.587
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.89311,
+        "external_cache_hit_rate": 0.06109,
+        "overall_cache_hit_rate": 0.95419,
+        "gpu_cache_hit_tokens": 300881408,
+        "external_transfer_tokens": 20579584,
+        "computed_tokens": 15432561,
+        "prompt_tokens_total": 336893553,
+        "generation_tokens_total": 2183741,
+        "gpu_cache_usage_pct": 0.78547,
+        "theoretical_cache_hit_rate": 0.97135
+      },
+      "evidence_sha256": {
+        "offload_config.json": "85aeb6e4c954b8798df6894adf6ca1997bc7781c32bb35138639d02df3d2f80d",
+        "offload-telemetry.jsonl": "80ade286c6d6f7ddd28e2a921d2df36aca5ec3228868a1dbef54fe7b2e45733e",
+        "offload_cleanup.json": "d0aa6f292c7e2ddd63626f55e26277fc4e4dfbe9d882dbe2c15aadd89dc6715a",
+        "vllm_command.txt": "f919d27bd1fb55fccee7c94ac79a66698acbbb5f4ba605b2be955167838276e3",
+        "server.log": "09be4f0aca4da43f315fd3d353cacb0dcf032710de69525069e33876a314b045",
+        "agg_bmk.json": "f4a107ddb8fb320db0a676faf35a247cb663f2a4afb4b92dfb241ccc4344545d",
+        "profile_export.jsonl": "e213c9ea1a563e43041e6be29e5d71b8a3c0403f95c4d496ef91f33e9e5bf89f"
+      },
+      "storage_evidence": "xfs /dev/md0 over eight non-rotating NVMe leaves; 17,111,213,064,192 bytes free at setup; O_DIRECT verified. The native filesystem tier created 119,334 files totaling 1,415,529,963,055 logical bytes and 1,415,529,963,520 allocated bytes, 64.37% of the 2 TiB stop guard. Cleanup exit code 0 and deleted the exact workflow-owned scratch.",
+      "runtime_evidence": "Native TieringOffloadingSpec used the matched 739 GB CPU tier and local filesystem secondary tier. External cache served 20,579,584 prompt tokens (6.109%), proving active offload. Raw warmup and profiling phase logs report zero errors; the aggregate request-accounting classifier additionally tags one InvalidInferenceResultError outside the 2,247-request profiled cohort."
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748",
-  "status": "HBM-only, HBM + DRAM, and HBM + NVMe c16 are valid. HBM + DRAM + NVMe c16 retry 35469801850 is active from pushed commit 1c11a492e with the separate 2 TiB filesystem stop guard.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850",
+  "status": "All four matched c16 arms are valid. HBM + DRAM + NVMe has the highest c16 output throughput at 150.69829 tok/s/GPU; full curves and crossover brackets remain outstanding.",
   "last_capacity_check": {
     "checked_at": "2026-09-19T21:14:18Z",
     "cluster_observed_at": "2026-09-19T21:13:56Z",
@@ -669,18 +747,14 @@
     "demand_percent": 118.18,
     "scheduler_snapshot_at": null,
     "scheduler_available": true,
-    "active_study_run_ids": [
-      35469801850
-    ],
-    "active_study_job_ids": [
-      105968619037
-    ],
+    "active_study_run_ids": [],
+    "active_study_job_ids": [],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": true,
     "reason": "Fresh cluster and scheduler views showed 11 allocated B200 nodes plus two one-node pending jobs: 13/11 nodes (118.18%), within the 125% launch ceiling."
   },
   "next_dispatch": {
-    "requires": "Monitor and validate combined c16 retry 35469801850. Before any additional launch, refresh cluster and scheduler demand; the newly dispatched run may put demand above 125%."
+    "requires": "Refresh B200 cluster and scheduler demand. If at or below 125%, start widely spaced full-curve probes for all four arms; prioritize high concurrency while keeping matched settings."
   }
 }
