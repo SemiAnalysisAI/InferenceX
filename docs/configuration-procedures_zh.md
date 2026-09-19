@@ -354,6 +354,46 @@ offload），prefill 分块上限设为 4096，即 vLLM H100 配方在 80 GB 显
 
 在获得 GPU sweep 与 eval 证据之前，不得将这些配方视为已验证。
 
+### 获取 Qwen3.5 原始 BF16 MTP 子集
+
+[`infx.models.acquire_mtp`](../infx/models/acquire_mtp.py) 根据固定的
+[清单](../configs/models/qwen3.5-397b-mtp-bf16.json) 准备原始权重 MTP 资源。
+它从 `Qwen/Qwen3.5-397B-A17B` 的提交
+`8472618112abcbd45acbcdc58436aff4233c23f7` 下载未经修改的第 91–94 个分片
+（约 33.7 GB）及配套元数据。清单使用不可变 HF 提交的摘要：大文件采用上游
+LFS SHA256，元数据采用已验证原始字节的 SHA256。工具不会转换、重新打包或
+反量化张量。该目录是 MTP 子集，**不是完整的目标模型**。
+
+调用方必须明确指定共享目录和锁等待时间：
+
+```bash
+python -m infx.models.acquire_mtp \
+  --manifest configs/models/qwen3.5-397b-mtp-bf16.json \
+  --destination /shared/models/Qwen3.5-397B-MTP-BF16-8472618 \
+  --lock-timeout 3600
+```
+
+工具使用目标目录专属的 POSIX 锁串行处理调用方，检查每个原始文件的大小和
+SHA256、所选分片的头部与索引条目、全部 1,553 个原始 BF16 MTP 张量，以及
+BF16 embedding/head。完整上游索引保存在 `model.safetensors.index.json.original`；
+过滤索引的 `total_size` 根据张量偏移量计算。验证完成后，工具将目录及
+`subset-provenance.json` 原子发布。复用时仍验证全部文件摘要与清单身份。
+已有但不完整或冲突的目录会直接报错，不会修复或覆盖。中断留下的临时目录
+不视为完整资源；重试使用新的暂存目录下载。复用也需要读取全部约 33.7 GB。
+共享文件系统必须支持 POSIX 锁和原子目录重命名。
+
+后续集成已验证配方时，应由现有集群启动器在提交前获取资源，通过
+`write_srt_cluster_config` 传入 `--mount HOST_PATH /draft-model`，并在测试产物中
+保留 `subset-provenance.json` 及实际宿主机/容器路径。配方不得依赖个人目录。
+SGLang `20518d85` 的独立 draft 参数为
+`speculative-draft-model-path: /draft-model`、上述固定 revision、
+`speculative-draft-model-quantization: unquant`、
+`speculative-draft-kv-cache-dtype: bf16` 和
+`speculative-moe-runner-backend: flashinfer_trtllm`。
+省略 `unquant` 可能继承 FP8 目标模型的量化配置。独立 draft KV 类型并不保证
+混合类型 HiCache 兼容；必须保留配方已独立验证的缓存和回退配置。
+本工具本身不修改任何启动器，也不构成配方验证；仍需真实准确率和性能测试。
+
 ## 验证
 
 运行覆盖被修改层的最小检查。
