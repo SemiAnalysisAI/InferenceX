@@ -8573,3 +8573,18 @@
     \ only active GPUs0\u20133; allocate eight and normalize by all four serving GPUs. Require\
     \ fresh full qualification for any selected winner."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp4-ep1-tp4-ep1-c24-h72-dmax32
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp4-ep1-tp4-ep1-c32-h72-dmax32
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp4-ep4-tp4-ep1-c16-h72-dmax32
+  scenario-type:
+  - agentic-coding
+  description:
+  - Prepare corrected original-BF16 TP4 C24/C32 H72 midcurve screens from the C16 max32 baseline,
+    preserving both role admissions, memory/cache/write policy and other serving settings; use
+    graph32 for both higher-concurrency points. Separately gate prefill-only EP4 atC16 while
+    decode remains EP1. Keep eight active/allocated GPUs, explicit all-eight exporter scope,
+    automatic golden acceptance only for throughput and real32-example verification for the
+    new EP layout. Short1200-second/10-warmup screens require subsequent full official qualification.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
