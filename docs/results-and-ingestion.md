@@ -187,7 +187,9 @@ from `results/`. Multinode runs retain the deployment telemetry under
 `LOGS/power/` and per-concurrency window/validation files under `LOGS/agentic/`
 in the same audit artifact. Available audits and AgentX aggregates upload even
 when a benchmark fails. Missing files do not establish power support: a
-multinode recipe also needs a compatible producer and launcher adapter.
+multinode recipe also needs `telemetry` enabled so the pinned srt-slurm exports
+`SRT_MEASUREMENT_WINDOW_DIR` to its custom benchmark command; InferenceX derives
+the result root and concurrency from that directory and the replay itself.
 When that measurement-window contract is absent, the aggregate records
 `power_valid: 0` and the audit names `multinode_power_contract_missing`;
 `REQUIRE_POWER=1` also fails the job after preserving available results.
