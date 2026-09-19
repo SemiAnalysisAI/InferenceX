@@ -8416,6 +8416,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3206
 
 - config-keys:
+    - kimik3-fp4-h200-vllm-agentic-balanced
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required measured power for the complete H200 Kimi-K3 balanced recipe through the shared recipe-gated launcher."
+    - "为 H200 Kimi-K3 balanced 完整配方启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3053
+
+- config-keys:
   - qwen3.5-fp8-mi300x-sglang
   - glm5.2-fp8-mi325x-sglang-agentic-mtp
   - dsr1-fp4-mi355x-sglang-mtp
@@ -8424,7 +8433,7 @@
   - kimik3-fp4-mi355x-atom-agentic-mtp
   - qwen3.5-fp8-mi355x-sglang-disagg
   - dsr1-fp8-mi355x-sglang-disagg-mtp
-  - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp
+  - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
   scenario-type:
   - fixed-seq-len
   - agentic-coding
