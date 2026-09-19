@@ -19,6 +19,8 @@
 
 [回执验证器](../infx/results/publication_receipt.py) 检查准确的 GitHub 产物 ID 及归属、API 与 ZIP digest、安全成员路径、预期执行身份、物理拓扑、规范化配置、必需指标、数据集元数据，以及完整的评估样本和过滤器覆盖。输入支持每个任务的原始 lm-eval 结果与元数据；聚合部署保留明确为零的拆分 worker 计数。紧凑的 version 1 回执在结果从 staging 进入生产时保留原始测量身份。
 
+归档成员的 digest 通过每次读取 1 MiB 数据计算，避免将大型 AgentX trace 一次性载入内存。验证器将每个成员读取到 EOF，以校验 CRC 和实际字节数，同时保留单成员 10 GiB、单产物 20 GiB 的限制及原有路径检查。评估 JSONL 逐行解码，内存占用取决于最大的样本行和已记录的文档/过滤器身份；覆盖率和分数检查保持不变。摘要及执行 JSON 仍作为结构化输入进行验证。
+
 ## Staging、发布与恢复
 
 [传输解析器](../infx/workflows/receipt_transport.py) 使用只读 API，从允许版本在 `main` 上成功完成的 `workflow_dispatch` 签发运行中查找唯一的已接受回执。它验证源运行原始 attempt，不用最近一次 rerun 替换。只要 API 清单包含 `native-execution-*`，就必须提供回执；证据缺失或无效时，不能回退到旧 native 导入方式。普通旧产物清单继续使用现有路径。

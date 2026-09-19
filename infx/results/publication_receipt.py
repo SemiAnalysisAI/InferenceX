@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import math
 import re
@@ -195,10 +196,17 @@ def inspect_archive(archive: Path) -> list[Member]:
             total += item.file_size
             if total > 20 * 1024**3 or item.file_size > 10 * 1024**3:
                 raise ValueError("Artifact exceeds extraction budget")
-            payload = source.read(item)
-            members.append(
-                Member(path=name, size=len(payload), sha256=hashlib.sha256(payload).hexdigest())
-            )
+            digest = hashlib.sha256()
+            size = 0
+            with source.open(item) as payload:
+                while chunk := payload.read(1024**2):
+                    size += len(chunk)
+                    if size > item.file_size:
+                        raise ValueError(f"Archive member exceeds declared size: {name}")
+                    digest.update(chunk)
+            if size != item.file_size:
+                raise ValueError(f"Archive member differs from declared size: {name}")
+            members.append(Member(path=name, size=size, sha256=digest.hexdigest()))
             files.add(name)
     for name in files:
         if any(str(parent) in files for parent in PurePosixPath(name).parents):
@@ -306,8 +314,6 @@ def validate_point_content(point: Point, archives: Path) -> None:
     if point.dataset and row.get("dataset") != point.dataset:
         raise ValueError("Dataset identity differs from independent expectation")
     if point.kind == "eval":
-        with zipfile.ZipFile(archives / f"{point.samples_artifact_id}.zip") as archive:
-            text = archive.read(safe_member(point.samples_path or "")).decode()
         identities = None
         if point.task == "gsm8k" and point.sample_count == 1319:
             identities = decode_json(
@@ -317,38 +323,46 @@ def validate_point_content(point: Point, archives: Path) -> None:
             )
         observed: set[tuple[int, str]] = set()
         strict_passed = 0
-        for line in text.splitlines():
-            if not line.strip():
-                continue
-            sample = decode_json(line)
-            require_finite(sample)
-            doc_id, filter_name = sample.get("doc_id"), sample.get("filter")
-            if (
-                type(doc_id) is not int
-                or doc_id < 0
-                or filter_name not in point.filters
-                or sample.get("task_name", point.task) != point.task
-                or (doc_id, filter_name) in observed
-            ):
-                raise ValueError("Invalid/duplicate evaluation sample identity")
-            if identities is not None:
-                document_hash = hashlib.sha256(
-                    json.dumps(sample.get("doc"), indent=2, ensure_ascii=False).encode()
-                ).hexdigest()
-                target = sample.get("target")
+        with (
+            zipfile.ZipFile(archives / f"{point.samples_artifact_id}.zip") as archive,
+            archive.open(safe_member(point.samples_path or "")) as source,
+            io.TextIOWrapper(source, encoding="utf-8") as samples,
+        ):
+            for line in samples:
+                if not line.strip():
+                    continue
+                sample = decode_json(line)
+                require_finite(sample)
+                doc_id, filter_name = sample.get("doc_id"), sample.get("filter")
                 if (
-                    identities.get(str(doc_id)) != document_hash
-                    or sample.get("doc_hash") != document_hash
-                    or target != sample.get("doc", {}).get("answer")
-                    or sample.get("target_hash") != hashlib.sha256(str(target).encode()).hexdigest()
+                    type(doc_id) is not int
+                    or doc_id < 0
+                    or filter_name not in point.filters
+                    or sample.get("task_name", point.task) != point.task
+                    or (doc_id, filter_name) in observed
                 ):
-                    raise ValueError("Pilot eval document/target differs from prepared full split")
-            observed.add((doc_id, filter_name))
-            if filter_name == "strict-match":
-                score = sample.get("exact_match,strict-match", sample.get("exact_match"))
-                if type(score) not in (int, float) or score not in (0, 1):
-                    raise ValueError("GSM8K strict sample requires a binary score")
-                strict_passed += int(score)
+                    raise ValueError("Invalid/duplicate evaluation sample identity")
+                if identities is not None:
+                    document_hash = hashlib.sha256(
+                        json.dumps(sample.get("doc"), indent=2, ensure_ascii=False).encode()
+                    ).hexdigest()
+                    target = sample.get("target")
+                    if (
+                        identities.get(str(doc_id)) != document_hash
+                        or sample.get("doc_hash") != document_hash
+                        or target != sample.get("doc", {}).get("answer")
+                        or sample.get("target_hash")
+                        != hashlib.sha256(str(target).encode()).hexdigest()
+                    ):
+                        raise ValueError(
+                            "Pilot eval document/target differs from prepared full split"
+                        )
+                observed.add((doc_id, filter_name))
+                if filter_name == "strict-match":
+                    score = sample.get("exact_match,strict-match", sample.get("exact_match"))
+                    if type(score) not in (int, float) or score not in (0, 1):
+                        raise ValueError("GSM8K strict sample requires a binary score")
+                    strict_passed += int(score)
         documents = {doc for doc, _ in observed}
         if (
             documents != set(range(point.sample_count))
