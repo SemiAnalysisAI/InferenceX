@@ -40,7 +40,7 @@ python3 -m sglang.launch_server \
     --trust-remote-code \
     --tokenizer-worker-num 6 \
     --enable-aiter-allreduce-fusion \
-    --cuda-graph-max-bs $CONC \
+    --cuda-graph-max-bs-decode $CONC \
     --disable-radix-cache \
     --max-prefill-tokens $MAX_PREFILL_TOKENS \
     --scheduler-recv-interval 30 \
