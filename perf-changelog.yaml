@@ -8435,3 +8435,29 @@
   - The initial full sweep qualified concurrency 32 at 20629 total tokens/s/GPU and p90 interactivity 200.58, strictly improving a published aggregate frontier point. Short-run gains at higher concurrency did not establish canonical qualification. Require a fresh complete sweep of the retained three canonical 3600-second profiles and all three applicable full accuracy evals; initial C16/C24 attempts failed before measurement.
   - Temporarily exclude gpu-11 after three official jobs repeatedly failed during prefill TP3 model loading there; the underlying cause remains unproven, and a later eval on that node succeeded. Allow four hours for canonical warmup, unchanged one-hour profiling and artifact processing. No shared files, node settings or other users' jobs were changed.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp4-ep1-c8-mtp-bf16-draft-fp8-kv-nooffload
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp4-ep1-c16-mtp-bf16-draft-fp8-kv-nooffload
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep1-c16-mtp-bf16-draft-fp8-kv-nooffload
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep1-c32-mtp-bf16-draft-fp8-kv-nooffload
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp4-ep1-c32-mtp-bf16-draft-bf16-kv-h298
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp4-ep1-c64-mtp-bf16-draft-bf16-kv-h298
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep2-c32-mtp-bf16-draft-bf16-kv-h298
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep2-c48-mtp-bf16-draft-bf16-kv-h298
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep1-c32-mtp-bf16-draft-bf16-kv-h298
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add isolated B300 Qwen3.5 FP8 aggregate controls with TP4/EP1, TP2/EP2 and pure TP2/EP1 through native srt-slurm
+    and pinned Dynamo plus SGLang nightly 20518d85. The Dynamo frontend is an experimental difference from the published
+    plain-SGLang aggregate baseline.
+  - Use verified original BF16 NEXTN weights at revision 8472618112abcbd45acbcdc58436aff4233c23f7 and BF16 draft
+    KV without draft quantization. Keep FP8 target KV in no-offload controls; explicitly use BF16 target KV for
+    HiCache controls because the pinned aggregate NEXTN packed cache requires matching target and draft KV dtypes.
+    Target model weights remain FP8 in every arm.
+  - Use 298 GB combined HiCache budget per rank for offload controls. Reserve one exclusive eight-GPU node while
+    reporting two or four active GPUs and strict native power for exactly those active GPUs; report allocated-GPU
+    normalization separately. Preserve canonical warmup and duration; short diagnostic runs require explicit workflow
+    overrides and are not official frontier qualification.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
