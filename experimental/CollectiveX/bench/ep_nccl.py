@@ -136,9 +136,7 @@ class NCCLEPBackend(EPBackend):
         # both modes keep requires_fresh_pair False.
         self._algorithm = Algorithm.LOW_LATENCY if self._ll else Algorithm.HIGH_THROUGHPUT
         self._layout = Layout.RANK_MAJOR if self._ll else Layout.FLAT
-        # send_only=0 on every dispatch/combine (no staged execution). Handle.complete() is
-        # still required after each call — the HT combine only stages the local send and
-        # finishes the cross-rank gather in complete() (see _finish, verified on h100 EP8).
+        # send_only=0 runs each dispatch/combine as a complete SEND|RECV operation.
         # FWD pass carries top-k weights on dispatch (HT) and forbids them on the HT combine
         # input (the combine is a plain rank sum).
         self._dispatch_cfg = DispatchConfig(send_only=0, round_scales=0)
@@ -177,14 +175,6 @@ class NCCLEPBackend(EPBackend):
         """Raw handle of torch's current CUDA stream — NCCL EP runs on the same stream torch
         times, so its work is captured by the harness's CUDA-event timing."""
         return torch.cuda.current_stream().cuda_stream
-
-    def _finish(self, h, stream):
-        """Complete a dispatch/combine on the handle. Upstream ep_test.py calls this after
-        every dispatch and combine unconditionally: with send_only=0 the LL path self-completes
-        (combine runs SEND|RECV in one call), but the HT path only stages the local send in the
-        combine call and finishes the cross-rank gather in complete() — without it HT combine
-        returns just the source rank's own local-expert contribution (verified on h100 EP8)."""
-        h.handle.complete(stream=stream)
 
     def _bootstrap_comm(self):
         """Form NCCL EP's own communicator, broadcasting the unique id over the torch PG.
@@ -463,7 +453,6 @@ class NCCLEPBackend(EPBackend):
             h.recv_x = self._recv_x
             h.recv_w = self._recv_w
             h.recv_idx = self._recv_idx
-        self._finish(h, stream)
         return h
 
     def stage(self, p, h):
@@ -480,7 +469,6 @@ class NCCLEPBackend(EPBackend):
             config=self._combine_cfg,
             stream=stream,
         )
-        self._finish(h, stream)
         return h.out
 
     def recv_tokens(self, h):
@@ -556,7 +544,6 @@ class NCCLEPBackend(EPBackend):
             config=self._combine_cfg,
             stream=stream,
         )
-        self._finish(h, stream)
         return h.out[: p.T]
 
     def combine_transformed(self, p, h, transformed):
@@ -578,7 +565,6 @@ class NCCLEPBackend(EPBackend):
             config=self._combine_cfg,
             stream=stream,
         )
-        self._finish(h, stream)
         return h.out
 
     def finalize(self, rc):
