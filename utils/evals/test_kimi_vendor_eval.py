@@ -202,7 +202,7 @@ def test_projects_upstream_outcomes(
     invocation: dict[str, Any] = {}
 
     def fake_run(
-        command: list[str], *, cwd: Path, check: bool, timeout: int
+        command: list[str], *, cwd: Path, check: bool, timeout: int | None
     ) -> SimpleNamespace:
         invocation.update(command=command, cwd=cwd, check=check, timeout=timeout)
         Path(command[command.index("--tool-json-report") + 1]).write_bytes(native_bytes)
@@ -251,7 +251,7 @@ def test_full_report_projects_all_mode_records_and_defers_quality_gating(
     invocation: dict[str, Any] = {}
 
     def fake_run(
-        command: list[str], *, cwd: Path, check: bool, timeout: int
+        command: list[str], *, cwd: Path, check: bool, timeout: int | None
     ) -> SimpleNamespace:
         invocation.update(command=command, cwd=cwd, check=check, timeout=timeout)
         Path(command[command.index("--tool-json-report") + 1]).write_bytes(native_bytes)
@@ -266,10 +266,9 @@ def test_full_report_projects_all_mode_records_and_defers_quality_gating(
         model="model-a",
         output_dir=output_dir,
         task_name=kve.FULL_TASK_NAME,
-        timeout_seconds=kve.FULL_TIMEOUT_SECONDS,
     )
     projected = _result(output_dir)
-    assert invocation["timeout"] == 7200
+    assert invocation["timeout"] is None
     assert set(projected["results"]) == {kve.FULL_TASK_NAME}
     assert _score(output_dir, kve.FULL_TASK_NAME) == 407 / 408
     assert projected["n-samples"][kve.FULL_TASK_NAME] == {
@@ -292,7 +291,7 @@ def test_full_report_classifies_endpoint_failures_as_integration_errors(
     native_bytes = json.dumps(report).encode()
 
     def fake_run(
-        command: list[str], *, cwd: Path, check: bool, timeout: int
+        command: list[str], *, cwd: Path, check: bool, timeout: int | None
     ) -> SimpleNamespace:
         Path(command[command.index("--tool-json-report") + 1]).write_bytes(native_bytes)
         return SimpleNamespace(returncode=1)
@@ -307,7 +306,6 @@ def test_full_report_classifies_endpoint_failures_as_integration_errors(
         model="model-a",
         output_dir=output_dir,
         task_name=kve.FULL_TASK_NAME,
-        timeout_seconds=kve.FULL_TIMEOUT_SECONDS,
     )
     projected = _result(output_dir)
     assert _score(output_dir, kve.FULL_TASK_NAME) == 0.0
@@ -320,20 +318,66 @@ def test_full_report_classifies_endpoint_failures_as_integration_errors(
     assert (output_dir / kve.NATIVE_REPORT_FILENAME).read_bytes() == native_bytes
 
 
-def test_full_report_rejects_incomplete_modes(
+@pytest.mark.parametrize(
+    ("task_name", "timeout_args", "expected_timeout", "expected_samples"),
+    [
+        ("kimi_tool_call_schema", [], 900, 2),
+        ("kimi_tool_call_schema_full", [], None, 408),
+        ("kimi_tool_call_schema_full", ["--timeout-seconds", "37"], 37, 408),
+    ],
+)
+def test_cli_applies_suite_timeout_policy(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    task_name: str,
+    timeout_args: list[str],
+    expected_timeout: int | None,
+    expected_samples: int,
 ) -> None:
-    report = _full_report()
-    report["results"][-1]["mode"] = "non-stream"
+    timeouts = []
+    report = _full_report() if task_name == kve.FULL_TASK_NAME else _report()
 
     def fake_run(
-        command: list[str], *, cwd: Path, check: bool, timeout: int
+        command: list[str], *, cwd: Path, check: bool, timeout: int | None
+    ) -> SimpleNamespace:
+        timeouts.append(timeout)
+        Path(command[command.index("--tool-json-report") + 1]).write_text(
+            json.dumps(report)
+        )
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(kve.subprocess, "run", fake_run)
+    output_dir = tmp_path / "output"
+    assert kve.main([
+        "--verifier-dir", str(tmp_path),
+        "--base-url", "http://localhost/v1",
+        "--model", "model-a",
+        "--output-dir", str(output_dir),
+        "--task-name", task_name,
+        *timeout_args,
+    ]) == 0
+    assert timeouts == [expected_timeout]
+    assert _score(output_dir, task_name) == 1.0
+    assert _n_eff(output_dir, task_name) == expected_samples
+
+
+@pytest.mark.parametrize("smoke_report", [False, True])
+def test_full_report_rejects_incomplete_coverage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    smoke_report: bool,
+) -> None:
+    report = _report() if smoke_report else _full_report()
+    if not smoke_report:
+        report["results"][-1]["mode"] = "non-stream"
+
+    def fake_run(
+        command: list[str], *, cwd: Path, check: bool, timeout: int | None
     ) -> SimpleNamespace:
         Path(command[command.index("--tool-json-report") + 1]).write_text(
             json.dumps(report)
         )
-        return SimpleNamespace(returncode=1)
+        return SimpleNamespace(returncode=0 if smoke_report else 1)
 
     monkeypatch.setattr(kve.subprocess, "run", fake_run)
     output_dir = tmp_path / "output"
@@ -345,7 +389,6 @@ def test_full_report_rejects_incomplete_modes(
         model="model-a",
         output_dir=output_dir,
         task_name=kve.FULL_TASK_NAME,
-        timeout_seconds=kve.FULL_TIMEOUT_SECONDS,
     )
     projected = _result(output_dir)
     assert _score(output_dir, kve.FULL_TASK_NAME) == 0.0
@@ -374,7 +417,7 @@ def test_collection_failures_write_zero_score(
     error_type: str,
 ) -> None:
     def fake_run(
-        command: list[str], *, cwd: Path, check: bool, timeout: int
+        command: list[str], *, cwd: Path, check: bool, timeout: int | None
     ) -> SimpleNamespace:
         if isinstance(failure, BaseException):
             raise failure

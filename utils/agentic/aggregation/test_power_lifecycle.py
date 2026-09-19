@@ -32,9 +32,6 @@ def _run_lifecycle(
     result_dir.mkdir()
     event_log = tmp_path / "events.log"
     formal_window_dir = str(tmp_path / "power/windows") if formal_multinode_power else ""
-    formal_benchmark_type = "custom" if formal_multinode_power else ""
-    formal_concurrencies = "8 16" if formal_multinode_power else ""
-    formal_result_root = str(tmp_path) if formal_multinode_power else ""
     script = f"""
 source {str(BENCHMARK_LIB)!r}
 start_gpu_monitor() {{
@@ -87,9 +84,6 @@ ENABLE_AGENTX_POWER={'1' if enable_power else '0'}
 REQUIRE_POWER={'1' if require_power else '0'}
 CONC=8
 SRT_MEASUREMENT_WINDOW_DIR={formal_window_dir!r}
-SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE={formal_benchmark_type!r}
-SRT_MEASUREMENT_WINDOW_CONCURRENCIES={formal_concurrencies!r}
-SRT_MEASUREMENT_WINDOW_RESULT_ROOT={formal_result_root!r}
 set +e
 run_agentic_replay_and_write_outputs {str(result_dir)!r}
 rc=$?
@@ -296,6 +290,7 @@ trap 'printf "parent-int\\n" >> {str(event_log)!r}; exit 130' INT
 trap 'printf "parent-term\\n" >> {str(event_log)!r}; exit 143' TERM
 REPLAY_CMD=fake_replay
 ENABLE_AGENTX_POWER=1
+REQUIRE_POWER=0
 IS_MULTINODE=false
 run_agentic_replay_and_write_outputs {str(result_dir)!r}
 """
@@ -324,7 +319,8 @@ run_agentic_replay_and_write_outputs {str(result_dir)!r}
     finally:
         try:
             os.killpg(proc.pid, signal.SIGKILL)
-        except ProcessLookupError:
+        except (ProcessLookupError, PermissionError):
+            # Already gone; macOS reports EPERM rather than ESRCH for a reaped group.
             pass
         proc.communicate()
 
@@ -369,6 +365,7 @@ fake_replay() {{ :; }}
 trap 'printf "parent-exit\\n" >> {str(event_log)!r}' EXIT
 REPLAY_CMD=fake_replay
 ENABLE_AGENTX_POWER=1
+REQUIRE_POWER=0
 IS_MULTINODE=false
 AMD_MONITOR_STOP_TIMEOUT_S=30
 run_agentic_replay_and_write_outputs {str(result_dir)!r}
@@ -404,7 +401,8 @@ exit $?
     finally:
         try:
             os.killpg(proc.pid, signal.SIGKILL)
-        except ProcessLookupError:
+        except (ProcessLookupError, PermissionError):
+            # Already gone; macOS reports EPERM rather than ESRCH for a reaped group.
             pass
         proc.communicate()
 

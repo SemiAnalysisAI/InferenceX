@@ -1,0 +1,221 @@
+name: OperatorX Sweep
+
+on:
+  workflow_dispatch:
+    inputs:
+      pool:
+        description: GPU runner pool (one physical node per shard)
+        type: choice
+        default: h100-dgxc
+        options: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300, mi300x, mi325x, mi355x]
+      backends:
+        description: Comma-separated backends (torch GEMM/attention, AMD aiter attention, vllm routed MoE)
+        type: string
+        default: torch
+      testlists:
+        description: Comma-separated testlist stems
+        type: string
+        default: gemm
+      world_sizes:
+        description: Comma-separated world sizes (1,2,4; also 8 on eight-GPU pools)
+        type: string
+        default: '1'
+      chunk_size:
+        description: Maximum shapes per shard (1-500)
+        type: number
+        default: 500
+      recovery_run_id:
+        description: Optional recent OperatorX run on this pool whose failed cleanup should be retried
+        type: string
+        default: ''
+  pull_request:
+    paths:
+      - experimental/operatorx/**
+      - .github/workflows/operatorx-sweep.yml
+
+permissions:
+  contents: read
+  actions: read # Download artifacts from a selected prior run for cleanup recovery.
+
+concurrency:
+  group: operatorx-${{ github.event_name }}-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  setup:
+    name: Plan OperatorX coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      priority: ${{ steps.plan.outputs.priority }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Plan requested coverage
+        id: plan
+        env:
+          OPERATORX_POOL: ${{ inputs.pool || 'h100-dgxc' }}
+          OPERATORX_BACKENDS: ${{ inputs.backends || 'torch' }}
+          OPERATORX_TESTLISTS: ${{ inputs.testlists || 'gemm' }}
+          OPERATORX_WORLD_SIZES: ${{ inputs.world_sizes || '1' }}
+          OPERATORX_RECOVERY_RUN: ${{ inputs.recovery_run_id }}
+          OPERATORX_CHUNK_SIZE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.chunk_size) || '500' }}
+          PYTHONPATH: experimental
+        run: |
+          set -eo pipefail
+          source benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars OPERATORX_POOL OPERATORX_BACKENDS OPERATORX_TESTLISTS OPERATORX_WORLD_SIZES OPERATORX_CHUNK_SIZE GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_SHA GITHUB_OUTPUT
+          python3 -m operatorx.ci plan \
+            --platform-config experimental/operatorx/platforms.json \
+            --pool "$OPERATORX_POOL" --backends "$OPERATORX_BACKENDS" \
+            --testlists "$OPERATORX_TESTLISTS" --world-sizes "$OPERATORX_WORLD_SIZES" \
+            --chunk-size "$OPERATORX_CHUNK_SIZE" --run-id "$GITHUB_RUN_ID" \
+            --attempt "$GITHUB_RUN_ATTEMPT" --source-sha "$GITHUB_SHA" \
+            --out operatorx-manifest.json > operatorx-matrix.json
+          if [ -n "$OPERATORX_RECOVERY_RUN" ]; then
+            [[ "$OPERATORX_RECOVERY_RUN" =~ ^[1-9][0-9]*$ ]] && [ "$(jq '.include | length' operatorx-matrix.json)" = 1 ] \
+              || { echo 'Recovery requires a numeric run ID and a single-shard selection' >&2; exit 1; }
+          fi
+          echo "matrix=$(cat operatorx-matrix.json)" >> "$GITHUB_OUTPUT"
+          scored=$(printf '%s' '[{"runner":"operatorx","framework":"operatorx"}]' |
+            uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml python -m infx.workflows.ci_priority)
+          echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: operatorx-manifest-${{ github.run_id }}
+          path: operatorx-manifest.json
+          overwrite: true
+          if-no-files-found: error
+          retention-days: 14
+
+  sweep:
+    if: github.event_name == 'workflow_dispatch'
+    needs: setup
+    timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      # Keep every shard eligible: a second matrix cap can strand priority labels
+      # on GitHub-held jobs. Runner/node admission is owned by the scheduler.
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    runs-on: >-
+      ${{ fromJSON(vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
+        format('["self-hosted",{0},"nodes:1",{1},{2}]',
+          toJSON(matrix.pool),
+          toJSON(format('ci-job-{0}-{1}', needs.setup.outputs.priority, matrix.queue-token)),
+          toJSON(format('ci-attempt-{0}', github.run_attempt))) ||
+        format('["self-hosted",{0}]', toJSON(matrix.pool))) }}
+    name: p${{ needs.setup.outputs.priority }} | OperatorX ${{ matrix.id }}
+    env:
+      OPERATORX_SHARD: ${{ matrix.id }}
+      OPERATORX_OUTPUT: ${{ github.workspace }}/operatorx-output-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}
+      PYTHONPATH: experimental
+      PYTHONDONTWRITEBYTECODE: '1'
+      OPERATORX_CLEANUP_SECONDS: '180'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: operatorx-manifest-${{ github.run_id }}
+          path: operatorx-control
+      - name: Download prior execution for recovery
+        if: inputs.recovery_run_id != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.recovery_run_id }}
+          pattern: operatorx-shard-${{ inputs.recovery_run_id }}-*
+          path: operatorx-recovery
+      - name: Retry cleanup of the selected prior run
+        if: inputs.recovery_run_id != ''
+        env:
+          OPERATORX_RECOVERY_RUN: ${{ inputs.recovery_run_id }}
+          OPERATORX_POOL: ${{ matrix.pool }}
+        run: |
+          set -eo pipefail
+          source benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars RUNNER_TEMP OPERATORX_RECOVERY_RUN OPERATORX_POOL OPERATORX_CLEANUP_SECONDS
+          python3 -m operatorx.ci recover --artifacts operatorx-recovery \
+            --run-id "$OPERATORX_RECOVERY_RUN" --pool "$OPERATORX_POOL" \
+            --cleanup-seconds "$OPERATORX_CLEANUP_SECONDS" \
+            --platform-config experimental/operatorx/platforms.json
+      - name: Run one Slurm allocation
+        run: |
+          set -eo pipefail
+          source benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars RUNNER_TEMP OPERATORX_SHARD OPERATORX_OUTPUT OPERATORX_CLEANUP_SECONDS GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_SHA RUNNER_NAME
+          python3 -m operatorx.ci execute \
+            --platform-config experimental/operatorx/platforms.json \
+            --manifest operatorx-control/operatorx-manifest.json --shard "$OPERATORX_SHARD" \
+            --output "$OPERATORX_OUTPUT" --run-id "$GITHUB_RUN_ID" \
+            --attempt "$GITHUB_RUN_ATTEMPT" --source-sha "$GITHUB_SHA" \
+            --runner-name "$RUNNER_NAME" --time-minutes 45 \
+            --cleanup-seconds "$OPERATORX_CLEANUP_SECONDS"
+      - name: Recover allocation and partial results
+        if: always()
+        run: |
+          set -eo pipefail
+          source benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars OPERATORX_OUTPUT OPERATORX_CLEANUP_SECONDS
+          python3 -m operatorx.ci finalize --output "$OPERATORX_OUTPUT" \
+            --cleanup-seconds "$OPERATORX_CLEANUP_SECONDS"
+      - name: Capture scheduler diagnostics on failure
+        if: failure()
+        run: |
+          set -eo pipefail
+          source benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars OPERATORX_OUTPUT
+          if [ -d "$OPERATORX_OUTPUT" ]; then
+            timeout 15 sinfo --Node --noheader --format='%N|%P|%t' \
+              > "$OPERATORX_OUTPUT/slurm-nodes.log" 2>&1 || true
+          fi
+      - name: Upload results and diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: operatorx-shard-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}
+          path: ${{ env.OPERATORX_OUTPUT }}
+          if-no-files-found: error
+          retention-days: 14
+
+  summarize:
+    name: Summarize OperatorX coverage
+    if: always() && github.event_name == 'workflow_dispatch' && needs.setup.result == 'success'
+    needs: [setup, sweep]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: operatorx-manifest-${{ github.run_id }}
+          path: operatorx-control
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: operatorx-shard-${{ github.run_id }}-*
+          path: operatorx-artifacts
+      - name: Report latest attempt for every requested shard
+        env:
+          PYTHONPATH: experimental
+        run: |
+          set -eo pipefail
+          source benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars GITHUB_STEP_SUMMARY
+          python3 -m operatorx.ci summarize \
+            --manifest operatorx-control/operatorx-manifest.json \
+            --artifacts operatorx-artifacts --out operatorx-summary.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: operatorx-summary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: operatorx-summary.json
+          if-no-files-found: error
+          retention-days: 14

@@ -46,7 +46,10 @@ def test_amd_collector_failure_respects_requirement(tmp_path, phase, required, s
     scripts.mkdir(parents=True)
     for name in ['bench.sh', 'power.sh']:
         shutil.copyfile(ROOT / 'benchmarks/multi_node/amd_utils' / name, scripts / name)
-    (benchmark_root / 'benchmark_lib.sh').write_text('''run_benchmark_serving() {
+    # bench.sh sources the library twice: once with --validation-only for
+    # check_env_vars, then again for the serving entrypoint.
+    (benchmark_root / 'benchmark_lib.sh').write_text('''check_env_vars() { :; }
+run_benchmark_serving() {
         printf 'called\\n' > "$CALL_RECEIPT"
         printf '1\\n' > "$POWERX_CONTROL_DIR/done-0"
         return "$SERVING_RC"
@@ -59,11 +62,14 @@ def test_amd_collector_failure_respects_requirement(tmp_path, phase, required, s
         (control / 'done-0').write_text('1\n')
     receipt = tmp_path / 'called'
     result = subprocess.run(['bash', str(scripts / 'bench.sh'), '1', '1', '1', '1',
-                             '/model', 'test', str(tmp_path / 'logs'), '8192', '1024', '1'],
+                             '/model', 'test', str(tmp_path / 'logs'), '8192', '1024', '1',
+                             '1', '0', '1'],
                             env={**os.environ, 'POWERX_CONTROL_DIR': str(control), 'NNODES': '1',
                                  'REQUIRE_POWER': required, 'SERVING_RC': str(serving_rc),
                                  'CALL_RECEIPT': str(receipt), 'POWERX_HOST_UID': str(os.getuid()),
-                                 'POWERX_HOST_GID': str(os.getgid())}, capture_output=True, text=True, timeout=10)
+                                 'POWERX_HOST_GID': str(os.getgid()), 'ENGINE': 'sglang-disagg',
+                                 'MODEL_PATH': '/model', 'MODEL_NAME': 'test', 'ROUTER_PORT': '8000',
+                                 'IS_MTP': 'false'}, capture_output=True, text=True, timeout=10)
     assert result.returncode == expected_rc, result.stderr
     assert receipt.exists() is benchmark_runs
 
@@ -116,9 +122,17 @@ exit "$SERVING_RC"
 def test_amd_staging_failure_preserves_serving_outcome(tmp_path, required, serving_rc, staging_rc, expected_rc):
     tail = (ROOT / 'benchmarks/multi_node/amd_utils/job.slurm').read_text().split(
         'BENCHMARK_STEP_RC=$?', 1)[1]
-    script = 'BENCHMARK_STEP_RC=$SERVING_RC\nstage_native_power() { return "$STAGING_RC"; }\n' + tail
+    # The tail also fans node logs in over srun; stub the scheduler commands and
+    # supply the job scaffolding they expand so this test still isolates how a
+    # staging failure interacts with the serving outcome.
+    script = ('BENCHMARK_STEP_RC=$SERVING_RC\n'
+              'stage_native_power() { return "$STAGING_RC"; }\n'
+              'srun() { return 0; }\nsudo() { return 0; }\n') + tail
     result = subprocess.run(['bash', '-euo', 'pipefail', '-c', script],
                             env={**os.environ, 'REQUIRE_POWER': required, 'SERVING_RC': str(serving_rc),
-                                 'STAGING_RC': str(staging_rc), 'KEEP_CONTAINERS': '1'},
+                                 'STAGING_RC': str(staging_rc), 'KEEP_CONTAINERS': '1',
+                                 'BENCHMARK_LOGS_DIR': str(tmp_path), 'SLURM_JOB_ID': 'test-job',
+                                 'NUM_NODES': '1', 'SELECTED_NODELIST_SRUN': 'node-0',
+                                 'DI_REPO_DIR': str(ROOT)},
                             capture_output=True, text=True, timeout=5)
     assert result.returncode == expected_rc, result.stderr
