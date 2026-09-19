@@ -8453,10 +8453,10 @@
   scenario-type:
   - agentic-coding
   description:
-  - Add B300 Qwen3.5-397B-A17B FP8 AgentX disaggregation with colocated TP4 prefill/decode
-    at C16/C24/C32/C48 and TP2+EP2 prefill/decode at C32.
+  - Add B300 Qwen3.5-397B-A17B FP8 AgentX disaggregation at C8/C24/C32/C40/C48 with
+    colocated TP2/TP4 prefill and decode, including expert-parallel variants.
   - Use Dynamo/SGLang nightly 20260918-20518d85, NEXTN with original BF16 draft weights/KV,
     and Mooncake NVLink transfers.
-  - Use prefill HiCache, including 298 GB/rank write-through and 64 decode slots for
-    TP4 C48 and TP2+EP2 C32.
+  - Use 72 or 298 GB/rank prefill HiCache, write-through at TP4 C40/C48 and TP2+EP2 C24/C32/C40,
+    and 32 or 64 decode slots.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
