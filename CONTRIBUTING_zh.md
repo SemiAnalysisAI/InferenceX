@@ -19,6 +19,18 @@
 
 **性能变更日志要求：** 凡是可能影响基准测试性能的变更，以及任何配方（recipe）的新增或修改，都**必须**在 `perf-changelog.yaml` 文件的物理末尾追加一个新条目。历史条目**严禁**编辑。
 
+## Draft 模型精度
+
+投机解码提交必须使用原始、未量化的 draft 权重，并保留其原生精度。此规则适用于内嵌的 MTP/NextN/EAGLE draft head 及独立 draft 模型（包括 DSpark），覆盖所有硬件厂商和框架。相对于参考实现，不得对 draft 精度进行任何更改，包括量化、降精度、升精度、同位宽 dtype 转换（如 BF16 转 FP16）或混合精度覆盖设置。此要求涵盖 draft 权重、激活、计算及 draft KV cache，无论更改发生在离线、加载时还是服务运行时；同样不得替换为经过精度转换的 draft checkpoint。
+
+审阅者必须核实 draft 的实际运行精度，不能只看启动参数。检查 checkpoint 元数据、量化排除项、环境变量、锁定镜像中的框架默认行为，以及从 target 模型继承的量化设置。Target/verifier 模型仍可在满足现有 eval 要求的前提下量化，但其量化不能同时作用于 draft 组件。不得仅凭 target checkpoint 的名称或精度标签推断 draft 精度。
+
+此规则涵盖 `--speculative-draft-model-quantization quark_mxfp4`、`SGLANG_GLM_NEXTN_MOE_PTPC=1` 等会量化 draft 计算的设置。上游配方、通过 evals、声称接受长度（AL）未变，或重新测得的 AL 曲线，都不能作为豁免理由。AgentX 的合成接受也不能证明 draft 精度保持不变。
+
+涉及投机解码的改动，CODEOWNER 必须在 Additional detail section 中注明 draft checkpoint 及其 revision（或内嵌 head）、原生精度和实际运行精度，并提供用于确认 draft 权重和精度均未改变的元数据或锁定版本实现。无法核实精度时，该条目不满足要求。参见[审阅清单](docs/PR_REVIEW_CHECKLIST_zh.md)及[验证器检查 13](.github/codeowner-signoff-verify-prompt.md#check-13--draft-weights-and-precision-are-unchanged)。
+
+此要求与 [MLPerf Inference Rules 附录 C：Speculative Decoding](https://github.com/mlcommons/inference_policies/blob/ff7edba545fded369e7e7e3d5a2f0bab4a95eece/inference_rules.adoc#appendix-c-speculative-decoding) 保持参考 head 精度的原则相似。该规则要求参考 MTP head 使用提供时的相同精度（"at the same precision as provided"），并禁止参考 head 权重量化及其他人为操纵接受率的行为。所引用的 MLPerf 版本对特定量化边缘工作负载设有例外，InferenceX 不采用该例外。此处仅比较保留 draft 权重和精度的原则，不引入 MLPerf 的允许模型列表、投机解码配置或接受率测试方法。
+
 ## PR Review Checklist（CODEOWNER 签署）
 
 CODEOWNER 自动验证目前仅供审阅参考。工作流会核验提交的清单并更新同一条裁定评论，不再发布提交状态。GitHub 单独设置的 Core 团队和 CODEOWNER 批准要求仍然有效，除非有权限的维护者使用绕过权限。
@@ -42,7 +54,7 @@ CODEOWNER 自动验证目前仅供审阅参考。工作流会核验提交的清�
 - 启动 Claude 要求触发者为具有合格仓库写权限的人类用户。
 - 请在 "Additional detail section" 中填写清单要求的链接（验证/评测工作流运行、对应的 [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR，以及任何例外理由）。
 
-签署发布后，CI 会独立复核审阅清单中的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、复用命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack，以及投机解码是否使用 chat template。随后，CI 会为整个 PR 创建或更新同一条裁定评论，并注明实际评估的 SHA。未通过的条目直接显示；已通过和不适用（N/A）的条目统一放入折叠区域。旧版按提交生成的裁定评论会被复用；如果评论已删除，下次验证会创建替代评论。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
+签署发布后，CI 会独立复核审阅清单中的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、复用命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack、投机解码是否使用 chat template，以及 draft 模型和 draft head 的权重与精度是否保持不变。随后，CI 会为整个 PR 创建或更新同一条裁定评论，并注明实际评估的 SHA。未通过的条目直接显示；已通过和不适用（N/A）的条目统一放入折叠区域。旧版按提交生成的裁定评论会被复用；如果评论已删除，下次验证会创建替代评论。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
 
 裁定只记录实际评估的提交，不会将批准延续到后续提交。需要重新评估时，由原审阅者编辑已有清单，或由有权限的协作者传入 `pr-number` 及其 `comment_url`（两者必须指向同一 PR）手动分发 `codeowner-signoff-verify.yml`。流程会更新同一条裁定评论。
 

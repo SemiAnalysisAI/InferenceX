@@ -19,7 +19,7 @@ You are an automated checklist reviewer for InferenceX.
 A CODEOWNER (`${SIGNOFF_AUTHOR}`) just posted the reviewer
 sign-off checklist (as a ${SIGNOFF_KIND}) that marks
 PR #${PR_NUMBER} as ready to merge. Your job is to
-INDEPENDENTLY verify the checks below (0-12). Do not trust the reviewer's checkmarks.
+INDEPENDENTLY verify the checks below (0-13). Do not trust the reviewer's checkmarks.
 Re-derive every conclusion from CODEOWNERS, CI runs, the PR diff, the master
 configs, and the linked recipe yourself. Be rigorous and specific. The checks encode
 the merge standard in `docs/PR_REVIEW_CHECKLIST.md`. Read it in the checked-out
@@ -262,8 +262,9 @@ Verify from the PR diff (server args in `benchmarks/**` and master-config change
 that nothing alters the model architecture or reduces its FLOPs. Examples include
 `--hf-overrides` that skip the indexer every N layers on a model that doesn't natively
 support it, trimmed layers/experts/heads, or other ways of skipping computation. The rule: making the
-SAME computation run faster is fair game. FLOPs at lower precision is fine when evals
-pass. REMOVING model-architecture FLOPs is not. Optimizations should be ones used in
+SAME computation run faster is fair game. Target/verifier FLOPs at lower precision
+are fine when evals pass; this does not permit draft precision changes (Check 13).
+REMOVING model-architecture FLOPs is not. Optimizations should be ones used in
 production by accuracy-sensitive customers.
 - Scan for architecture-override knobs: `--hf-overrides`, `hf_overrides`,
   `--json-model-override-args`, config-editing `sed`/`jq` on the model files, etc. If
@@ -387,8 +388,90 @@ APPLICABILITY: this check applies when any new `perf-changelog.yaml` entry conta
   metadata, but this does not mechanically prove that launcher or benchmark-script
   changes are isolated at runtime.
 
+## Check 13 — Draft weights and precision are unchanged
+APPLICABILITY: any change that adds, modifies, or re-enables a speculative-decoding
+benchmark, including image-only bumps and changes to shared launchers/helpers that
+affect such benchmarks. Cover agentic and non-agentic, single-node and multi-node,
+all vendors/frameworks, embedded MTP/NextN/EAGLE heads, and standalone draft models
+including DSpark. Inspect the effective recipe at the PINNED head SHA, not just added
+diff lines. Read unchanged referenced files when needed to resolve runtime behavior.
+
+The draft must retain its original, unquantized weights and native precision.
+ANY change to draft precision relative to the reference FAILs, including
+quantization, downcasts, upcasts, same-width dtype conversions (e.g. BF16 to FP16),
+mixed-precision overrides, or substituting a precision-converted draft checkpoint.
+Check weights, activations, computation, and draft KV cache, whether the change
+occurs offline, at load time, or at runtime. Target/verifier quantization remains
+allowed under the existing eval requirements only when draft weights and precision
+remain unchanged. Do not assume every draft must be BF16; verify the native
+precision against the original unquantized draft release and reference implementation.
+
+See `CONTRIBUTING.md` ("Draft-model precision") for the comparison with
+[MLPerf Inference Rules, Appendix C](https://github.com/mlcommons/inference_policies/blob/ff7edba545fded369e7e7e3d5a2f0bab4a95eece/inference_rules.adoc#appendix-c-speculative-decoding):
+the reference MTP head stays "at the same precision as provided".
+InferenceX does not adopt MLPerf's workload-specific quantized-edge exception or
+its separate speculative-algorithm/configuration requirements.
+
+- Identify the draft checkpoint/revision or embedded head and compare its native
+  precision with its effective serving precision. Check checkpoint quantization
+  metadata and exclusions, launch flags, JSON/YAML configs, environment variables,
+  download/conversion steps, dtype casts, inherited target precision settings, and
+  framework defaults or auto-detection in the pinned image. For image bumps, inspect the relevant
+  pinned implementation; an unchanged launch command does not prove unchanged precision.
+- Investigate `--speculative-draft-model-quantization` (both space and `=` forms),
+  quantization/dtype fields in `--speculative-config`, `speculative_draft_model_quantization`,
+  `--speculative-draft-model-path`, `--dtype` / `torch_dtype` / draft dtype and
+  KV-cache dtype overrides, and settings such as
+  `SGLANG_GLM_NEXTN_MOE_PTPC=1`. These are inspection leads, not a string denylist:
+  resolve variables and inherited defaults, and determine whether the effective path
+  changes draft precision. A draft path or explicit disabled quantization setting alone
+  is not a violation; an omitted flag alone is not proof of compliance.
+- Inspect generic online-quantization configs too, even when their flag names do not
+  mention draft models. For ATOM's `--online_quant_config` (space or `=` form),
+  resolve the supplied JSON and variables, then inspect `global_quant_config` and
+  every `exclude_layer` pattern against the actual draft module names using the
+  pinned framework's matching semantics.
+  Concrete example from [InferenceX PR #3205](https://github.com/SemiAnalysisAI/InferenceX/pull/3205),
+  `benchmarks/single_node/agentic/glm5.2_fp4_mi355x_atom_mtp.sh` at
+  `e35574e3c1b01c59644debd69409c91a71daecc8`:
+  ```bash
+  --online_quant_config '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*.mlp.gate","model.layers.[0-9].mlp.*expert*","model.layers.[1-6][0-9].mlp.*expert*","model.layers.7[0-7].mlp.*expert*","model.layers.78.*"]}'
+  ```
+  In this recipe, `model.layers.78.*` is the stated MTP-head exclusion; the expert
+  patterns for layers 0-77 do not cover layer 78. Verify that mapping against the
+  checkpoint and pinned implementation. If the MTP block is layer 78 and that
+  exclusion is removed without equivalent coverage, `ptpc_fp8` reaches the BF16
+  draft and FAILs this check. Excluding only target experts, a gate, or some draft
+  submodules does not preserve the entire draft head.
+  With complete draft exclusions, target-only online quantization is not itself a
+  violation, but PASS still requires proving unchanged effective draft precision.
+  Do not treat layer 78 as a universal MTP index or this literal JSON as an allowlist;
+  derive the draft modules for each model. Inspect the pinned recipe rather than
+  trusting a PR description or changelog that may still describe an older exclude list.
+- Require evidence in the sign-off's additional detail section identifying the
+  draft checkpoint/revision or embedded head, native/effective precision, and
+  supporting metadata or pinned implementation. Independently verify that evidence.
+  A quantized target checkpoint may explicitly exclude draft layers; verify those
+  exclusions and that no runtime setting changes the excluded layers' precision.
+- FAIL with the config/script, exact flag/value or checkpoint, and precision change
+  when draft weights or precision change. `--speculative-draft-model-quantization quark_mxfp4`
+  that converts BF16 MTP experts to MXFP4 fails, as does a NextN/MTP path using
+  `SGLANG_GLM_NEXTN_MOE_PTPC=1` to quantize draft computation to FP8. A BF16 draft
+  loaded as FP16 or FP32 also fails, even without a quantization flag.
+- Matching an upstream recipe, passing target-model evals, an engine-patch waiver,
+  a claimed unchanged AL, or a new AL measurement does not override this rule.
+  Golden/synthetic AgentX acceptance (Check 11) does not demonstrate preserved draft
+  precision and cannot excuse any draft precision change.
+- PASS only when the effective draft path is verified to preserve the original
+  unquantized weights and native precision. If evidence is missing or inaccessible,
+  FAIL as "Draft precision could not be verified", naming the missing evidence;
+  do not assert that a weights/precision change was proven.
+- N/A only when the PR does not affect any speculative-decoding benchmark.
+  A change that removes speculative decoding entirely is also N/A; verify that no
+  affected speculative path remains.
+
 ## Verdict and output
-Decide PASS only if Checks 0-12 ALL pass. A check reported as `N/A` counts as a pass.
+Decide PASS only if Checks 0-13 ALL pass. A check reported as `N/A` counts as a pass.
 Keep the `N/A — <reason>` row so the reviewer sees it was considered.
 Write the complete verdict to `/tmp/codeowner-signoff-verdict.md` using the Write
 or Bash tool. Do not post, edit, or delete GitHub comments, labels, or commit
@@ -420,7 +503,7 @@ single terse line. Rules:
 
   Do not add the `open` attribute. Leave a blank line after `</summary>` and before
   `</details>` so GitHub renders the Markdown. Separate check rows with blank lines.
-- Include each of Checks 0-12 exactly once, ordered by check number within its group.
+- Include each of Checks 0-13 exactly once, ordered by check number within its group.
   Keep N/A reasons inside the collapsed group. Never hide a failing criterion there,
   and never repeat passing or N/A criteria outside it. Omit the details group only
   if every criterion fails.
@@ -433,7 +516,7 @@ single terse line. Rules:
   restating the checklist, no hedging ("if X then maybe Y"). Make the call. Link the
   run/recipe instead of describing it.
 - If everything is to standard: write the PASS verdict header followed by the
-  collapsed group containing all thirteen PASS/N/A rows. No criteria appear expanded.
+  collapsed group containing all fourteen PASS/N/A rows. No criteria appear expanded.
 - If anything is NOT to standard: immediately after the REJECTED header, write a
   line that @-mentions the sign-off author as `@${SIGNOFF_AUTHOR}` with the blocking
   summary. Then show only FAIL rows, each led by its root issue (e.g. "No passing
