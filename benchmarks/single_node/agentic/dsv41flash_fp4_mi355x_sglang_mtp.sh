@@ -71,7 +71,7 @@ export SGLANG_DSV41_REASONING_EFFORT=high
 # graphs up to bs=32 with the tables resident (run 35304555945). The 288 GB
 # card holds the ~46 GiB of tables next to the weights; the 1M-context
 # prefill working set is bounded by --mem-fraction-static 0.60 and the
-# 4096-token chunk below instead.
+# 2048-token chunk below instead.
 
 # Cookbook MI350X environment.
 # Cap the HIP hardware queues per rank, as the DeepSeek-V4 MI355X SGLang arm
@@ -89,6 +89,16 @@ mec_version=$(rocm-smi --showfw 2>/dev/null | grep MEC | head -n 1 | awk '{print
 if [[ "$mec_version" == "" || ${mec_version:-0} -lt 177 ]]; then
     export HSA_NO_SCRATCH_RECLAIM=1
 fi
+# The ROCm image runs the torch caching allocator with fixed segments (aiter
+# logs expandable_segments=False). Eager chunked prefill of one 126k-token
+# AgentX prompt then hoards every non-static byte in differently sized cached
+# blocks: at --mem-fraction-static 0.60 a single running request exhausted the
+# 112 GB outside the static pool 14 chunks in, and the next RCCL kernel launch
+# aborted with HSA_STATUS_ERROR_OUT_OF_RESOURCES at 0 MB free (run
+# 35460273555, c2; the same abort with 72 GB at c2 and 107 GB at c16 earlier).
+# Expandable segments let the allocator grow and reuse one arena instead, as
+# SGLang already does on CUDA; aiter's custom all-reduce supports the mode.
+export PYTORCH_HIP_ALLOC_CONF=expandable_segments:True
 export SGLANG_USE_AITER=1
 export SGLANG_MOE_PADDING=1
 export AITER_FLYDSL_FORCE_REDUCE=1
@@ -139,8 +149,8 @@ SGLANG_CMD=(
     --trust-remote-code
     --tp "$TP" --ep-size "$EP_SIZE"
     --disable-radix-cache
-    # 0.60 rather than the cookbook's 0.8, and a 4096-token prefill chunk as on
-    # the CUDA arms: the sparse-attention indexer and DSpark prefill buffers
+    # 0.60 rather than the cookbook's 0.8, and a 2048-token prefill chunk (half
+    # the CUDA arms' 4096, halving each chunk's transient indexer buffers): the sparse-attention indexer and DSpark prefill buffers
     # scale with the chunk times the 1M context (the default 16384 exhausted
     # HBM on the first 66k-99k-token prompts), and the per-chunk RCCL
     # collectives shrink with it. With 8192 and the queue cap, c1-c16 served
@@ -152,7 +162,7 @@ SGLANG_CMD=(
     # full-attention KV costs 1.67 KB per token, so 0.60 still reserves a
     # ~25M-token pool (0.75 reserved 51M) while eager prefill gets 115 GB.
     --mem-fraction-static 0.60
-    --chunked-prefill-size 4096
+    --chunked-prefill-size 2048
     --speculative-algorithm DSPARK
     --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
