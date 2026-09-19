@@ -1000,12 +1000,33 @@ jobs:
               needs.setup.outputs.reuse-enabled == 'true'
             )
         runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            actions: read # Verify issuer workflow attempts and download accepted receipt artifacts.
         steps:
+            - name: Checkout trusted receipt resolver
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                ref: ${{ needs.setup.outputs.tooling-ref }}
+                persist-credentials: false
+            - name: Set up uv
+              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+            - name: Resolve accepted immutable publication
+              id: receipt
+              env:
+                GH_TOKEN: ${{ github.token }}
+                SOURCE_RUN_ID: ${{ needs.setup.outputs.reuse-enabled == 'true' && needs.setup.outputs.reuse-source-run-id || github.run_id }}
+                MERGE_RUN_ID: ${{ github.run_id }}
+                INFX_RECEIPT_ISSUER_SHAS: ${{ vars.INFX_RECEIPT_ISSUER_SHAS }}
+                INFX_RECEIPT_ISSUER_WORKFLOW: ${{ vars.INFX_RECEIPT_ISSUER_WORKFLOW }}
+              run: uv run --locked python -m infx.workflows.receipt_transport --publication-required --defer-unsealed
             - name: Trigger database ingest
+              if: steps.receipt.outputs.ready == 'true'
               uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
               env:
                 SOURCE_RUN_ID: ${{ needs.setup.outputs.reuse-enabled == 'true' && needs.setup.outputs.reuse-source-run-id || github.run_id }}
                 MERGE_RUN_ID: ${{ github.run_id }}
+                RECEIPT_TRANSPORT: ${{ steps.receipt.outputs.payload }}
               with:
                 # Repository integration credential for the scoped sweep/ingest job.
                 github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
@@ -1015,6 +1036,7 @@ jobs:
                     repo: "InferenceX-app",
                     event_type: "ingest-results",
                     client_payload: {
+                      ...JSON.parse(process.env.RECEIPT_TRANSPORT),
                       "source-run-id": process.env.SOURCE_RUN_ID,
                       "merge-run-id": process.env.MERGE_RUN_ID
                     }
@@ -1065,12 +1087,33 @@ jobs:
               )
             )
         runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            actions: read # Verify issuer workflow attempts and download accepted receipt artifacts.
         steps:
+            - name: Checkout trusted receipt resolver
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                ref: ${{ needs.setup.outputs.tooling-ref }}
+                persist-credentials: false
+            - name: Set up uv
+              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+            - name: Resolve accepted immutable publication
+              id: receipt
+              env:
+                GH_TOKEN: ${{ github.token }}
+                SOURCE_RUN_ID: ${{ needs.setup.outputs.reuse-enabled == 'true' && needs.setup.outputs.reuse-source-run-id || github.run_id }}
+                MERGE_RUN_ID: ${{ github.run_id }}
+                INFX_RECEIPT_ISSUER_SHAS: ${{ vars.INFX_RECEIPT_ISSUER_SHAS }}
+                INFX_RECEIPT_ISSUER_WORKFLOW: ${{ vars.INFX_RECEIPT_ISSUER_WORKFLOW }}
+              run: uv run --locked python -m infx.workflows.receipt_transport --publication-required --defer-unsealed
             - name: Trigger agentic database ingest
+              if: steps.receipt.outputs.ready == 'true'
               uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
               env:
                 SOURCE_RUN_ID: ${{ needs.setup.outputs.reuse-enabled == 'true' && needs.setup.outputs.reuse-source-run-id || github.run_id }}
                 MERGE_RUN_ID: ${{ github.run_id }}
+                RECEIPT_TRANSPORT: ${{ steps.receipt.outputs.payload }}
               with:
                 # Repository integration credential for the scoped sweep/ingest job.
                 github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
@@ -1080,6 +1123,7 @@ jobs:
                     repo: "InferenceX-app",
                     event_type: "ingest-agentic-results",
                     client_payload: {
+                      ...JSON.parse(process.env.RECEIPT_TRANSPORT),
                       "source-run-id": process.env.SOURCE_RUN_ID,
                       "merge-run-id": process.env.MERGE_RUN_ID,
                       "database-target": "production"

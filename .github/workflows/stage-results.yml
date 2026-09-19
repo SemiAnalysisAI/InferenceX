@@ -40,6 +40,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: uv run --locked python -m infx.workflows.stage_results
 
+      - name: Resolve accepted immutable source receipt
+        id: receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ steps.request.outputs.run-id }}
+          MERGE_RUN_ID: ${{ steps.request.outputs.run-id }}
+          INFX_RECEIPT_ISSUER_SHAS: ${{ vars.INFX_RECEIPT_ISSUER_SHAS }}
+          INFX_RECEIPT_ISSUER_WORKFLOW: ${{ vars.INFX_RECEIPT_ISSUER_WORKFLOW }}
+        run: uv run --locked python -m infx.workflows.receipt_transport
+
       - name: Acknowledge staging request
         id: acknowledge
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -67,6 +77,7 @@ jobs:
           RUN_DATE: ${{ steps.request.outputs.run-date }}
           REQUESTED_BY: ${{ steps.request.outputs.requested-by }}
           COMMENT_ID: ${{ steps.acknowledge.outputs.comment-id }}
+          RECEIPT_TRANSPORT: ${{ steps.receipt.outputs.payload }}
         with:
           # Cross-repository dispatch credential; trusted control code validates maintainer authorization.
           github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
@@ -76,6 +87,7 @@ jobs:
               repo: 'InferenceX-app',
               event_type: 'stage-results',
               client_payload: {
+                ...JSON.parse(process.env.RECEIPT_TRANSPORT),
                 'source-repository': `${context.repo.owner}/${context.repo.repo}`,
                 'pr-number': String(context.issue.number),
                 'run-id': process.env.RUN_ID,

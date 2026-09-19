@@ -291,6 +291,17 @@ def build_row(meta: dict[str, Any], m: dict[str, Any]) -> dict[str, Any]:
         "integration_error": m.get("integration_error"),
     }
 
+    for field in (
+        "disagg",
+        "num_gpus",
+        "deployment",
+        "recipe_fingerprint",
+        "point_id",
+        "execution_id",
+    ):
+        if field in meta:
+            row[field] = meta[field]
+
     if "eval_suite" in meta:
         row["eval_suite"] = meta["eval_suite"]
 
