@@ -8686,3 +8686,19 @@
     and strict eight-device power; verify actual state/KV allocations, graph headroom
     and queues before selecting any full official qualification.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p2d-tp2-ep2-tp2-ep2-c48-h298-wt
+  scenario-type:
+  - agentic-coding
+  description:
+  - Test one 1P2D TP2 EP2 C48 write-through diagnostic after the corrected original-BF16
+    1P1D WT family showed sustained high decoder utilization with spare prefill capacity.
+    Preserve every P/D serving argument from the successful C32 control, including
+    graph32, P/D64, P static0.8, D static0.88, H298 and native golden steps3; only
+    add a second decoder and raise client concurrency to48. Scope native power to
+    the six active GPUs on one eight-GPU node. Keep canonical1200s/10-warmup and a
+    two-hour caller limit; compare the full throughput/interactivity frontier with
+    all six GPUs counted. Full official performance and full real accuracy remain
+    required.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
