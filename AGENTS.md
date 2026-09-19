@@ -49,6 +49,13 @@ Then validate it in the receiving script after sourcing the shared helper:
 check_env_vars IS_MULTINODE MODEL_NAME PRECISION
 ```
 
+## Runner launchers (one file per pool)
+
+- The reusable workflows run `bash ./runners/launch_${RUNNER_NAME%%_*}.sh`. The runner-name prefix before the first underscore is the only routing key, so each self-hosted pool maps to exactly one `runners/launch_<pool>.sh`, and every `runners/launch_*.sh` must be the launcher of a pool listed in [`configs/runners.yaml`](configs/runners.yaml). For example, runner `b200-nscale-slurm_03` runs `runners/launch_b200-nscale-slurm.sh`. See [Stage 4 in `docs/architecture.md`](docs/architecture.md#stage-4-launcher-and-runtime-execution).
+- Do not add a second launcher for a pool and `exec` into it for some jobs. Different execution paths for one pool (single-node `salloc`, srt-slurm recipes, cluster-maintained lanes) branch inside that pool's one file. Select the path once near the top and name it, so the routing for a pool reads in one place.
+- Do not add launcher-name aliases to `runners/runtime_settings.sh` or elsewhere for scripts that no runner resolves to. A launcher without a pool is dead code; a pool without a launcher fails at job start.
+- When a pool is retired, delete its launcher in the same PR rather than keeping it as a fallback for another pool.
+
 ## SRT Slurm synthetic acceptance
 
 - **Do not hard-code synthetic acceptance lengths in SRT recipes, master configs, or launchers.** InferenceX automatically selects the measured value from [`golden_al_distribution/`](golden_al_distribution/) for speculative AgentX throughput runs. Do not add manual `SYNTHETIC_ACCEPTANCE_LENGTH`, vLLM `synthetic_acceptance_length`, SGLang `SGLANG_SIMULATE_ACC_LEN`, or TRT-LLM `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` settings.

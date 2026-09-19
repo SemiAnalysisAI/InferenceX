@@ -254,51 +254,12 @@ SRT_DEFAULT_TIME_LIMIT="4:00:00"
 if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && ( "$FRAMEWORK" == "dynamo-sglang" || "$FRAMEWORK" == "dynamo-trt" ) ]]; then
     SRT_DEFAULT_TIME_LIMIT="8:00:00"
 fi
-cat > srtslurm.yaml <<EOF
-# SRT SLURM Configuration for GB300
-
-# Default SLURM settings
-default_account: "${SLURM_ACCOUNT}"
-default_partition: "${SLURM_PARTITION}"
-default_time_limit: "${SRT_DEFAULT_TIME_LIMIT}"
-
-# Resource defaults
-gpus_per_node: 4
-network_interface: ""
-
-# Path to srtctl repo root (where the configs live)
-srtctl_root: "${SRTCTL_ROOT}"
-
-# Cluster-level bind mounts applied to every worker container
-# (see srtctl/core/runtime.py — get_srtslurm_setting("default_mounts")).
-# Used here for aiperf's persistent mmap cache so the dataset isn't
-# re-tokenized + re-written every job.
-default_mounts:
-  "${AIPERF_MMAP_CACHE_HOST_PATH}": "/aiperf_mmap_cache"
-  "${HF_HUB_CACHE_HOST_PATH}": "/hf_hub_cache"
-  # Warm dynamo source-build cache (nested over the auto /configs mount) so the
-  # hash-pinned install is a cache hit (pip-only, no apt/root) on every job.
-  "${DYNAMO_WHEELS_CACHE_HOST_PATH}": "/configs/dynamo-wheels"
-
-# Model path aliases
-model_paths:
-  "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
-containers:
-  dynamo-trtllm: ${SQUASH_FILE}
-  dynamo-sglang: ${SQUASH_FILE}
-  v0.5.11: ${SQUASH_FILE}
-  v0.5.13.post1: ${SQUASH_FILE}
-  "${IMAGE}": ${SQUASH_FILE}
-  nginx-sqsh: ${NGINX_SQUASH_FILE}
-use_segment_sbatch_directive: false
-EOF
-
-# Appended via sed so non-power lanes' generated yaml stays byte-identical.
-if [[ "$USES_DCGM_POWER" == "1" ]]; then
-    sed -i "/^  nginx-sqsh:/a\\  dcgm-exporter: ${DCGM_EXPORTER_SQSH}" srtslurm.yaml
-    # sed's append is a silent no-op if the anchor drifts.
-    grep -q "^  dcgm-exporter: " srtslurm.yaml || { echo "Error: dcgm-exporter injection failed: nginx-sqsh anchor not found in srtslurm.yaml" >&2; exit 1; }
-fi
+write_srt_cluster_config gb300-nv srtslurm.yaml "$USES_DCGM_POWER" \
+    --model "$SRT_SLURM_MODEL_PREFIX" "$MODEL_PATH" \
+    --var SRT_DEFAULT_TIME_LIMIT "$SRT_DEFAULT_TIME_LIMIT" \
+    --var AIPERF_MMAP_CACHE_HOST_PATH "$AIPERF_MMAP_CACHE_HOST_PATH" \
+    --var HF_HUB_CACHE_HOST_PATH "$HF_HUB_CACHE_HOST_PATH" \
+    --var DYNAMO_WHEELS_CACHE_HOST_PATH "$DYNAMO_WHEELS_CACHE_HOST_PATH" || exit 1
 
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
