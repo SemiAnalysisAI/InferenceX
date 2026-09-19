@@ -3,10 +3,33 @@
 import json
 from argparse import Namespace
 from unittest.mock import AsyncMock
+from types import ModuleType
+import sys
 
 import pytest
 
 from infx.bench_serving import benchmark_serving as client
+
+
+@pytest.mark.parametrize("mode", ["deepseek_v4", "deepseek_v41"])
+def test_deepseek_tokenizer_uses_vllm_loader(monkeypatch, mode):
+    tokenizers = ModuleType("vllm.tokenizers")
+
+    def load(model, *, tokenizer_mode, trust_remote_code):
+        if model != "fixture" or tokenizer_mode != mode or trust_remote_code:
+            raise ValueError("wrong tokenizer request")
+        return Namespace(encode=lambda text: [41, len(text)])
+
+    tokenizers.get_tokenizer = load
+    monkeypatch.setitem(sys.modules, "vllm", ModuleType("vllm"))
+    monkeypatch.setitem(sys.modules, "vllm.tokenizers", tokenizers)
+
+    def reject_generic_loader(*args, **kwargs):
+        raise AssertionError("DeepSeek mode must not use the generic HF loader")
+
+    monkeypatch.setattr(client, "get_tokenizer", reject_generic_loader)
+    tokenizer = client._load_tokenizer("fixture", mode, False)
+    assert tokenizer.encode("hello") == [41, 5]
 
 
 @pytest.mark.parametrize('requested,completed,status', [

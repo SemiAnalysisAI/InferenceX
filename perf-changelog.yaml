@@ -8447,3 +8447,86 @@
     - "将 GLM-5.2 MI355X SGLang AgentX 镜像更新至 lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917（2026-09-17 ROCm 7.2.0 mi35x 日构建，digest sha256:21c1cc9a…，rocm720-mi35x 系列最新 tag；2026-09-18 构建仅提供 rocm724/rocm10 版本）：glm5.2-fp4-mi355x-sglang-agentic-mtp 自 20260916，glm5.2-fp8-mi355x-sglang-agentic-mtp 自 20260908"
     - "在 glm5.2_fp8_mi355x_sglang_mtp.sh 中改用 --cuda-graph-max-bs-decode 传递 decode graph batch，替换已移除的 --cuda-graph-max-bs 别名，与 MXFP4 姊妹配方一致；其余服务参数、搜索空间与 golden acceptance 不变"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3277
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+    - dsv41flash-fp4-b200-vllm-dspark
+  description:
+    - "Add B200 TP2 DeepSeek-V4.1-Flash with --engram-config '{\"cpu_offload\":true}' for AgentX and fixed 8K/1K, at concurrency 1, 2, 4, 8, 16, 32, 64, 128; retain the existing TP4 AgentX arm and pinned vLLM image."
+    - "Keep DSpark5, golden AL 3.51 for throughput, real block rejection with adaptive verification for evals, and GPU-resident KV. Add deepseek_v41 tokenizer support to the fixed-sequence client."
+    - "新增 B200 TP2 DeepSeek-V4.1-Flash AgentX 和固定 8K/1K 配方，启用 Engram CPU 卸载，并发为 1、2、4、8、16、32、64、128；保留现有 TP4 AgentX 分支和固定 vLLM 镜像。吞吐使用 DSpark5 和黄金 AL 3.51，eval 使用真实块拒绝采样和自适应验证，KV 保留在 GPU 上；固定序列客户端新增 deepseek_v41 tokenizer 支持。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "TP2 only: cap --max-num-batched-tokens at 4096, bound --max-num-seqs to 2*CONC (max 256) and stop CUDA graph capture at 512 tokens in the shared AgentX script, after run 35180394796 served TP2 c1-c16 but c32, c64 and c128 died in memory profiling with -10.8 GiB of KV budget (145 GiB of weights per GPU plus the 32 GiB indexer buffer at 16384 batched tokens); TP4 and TP8 arms keep the upstream defaults"
+    - "仅 TP2：在共享 AgentX 脚本中将 --max-num-batched-tokens 上限设为 4096，--max-num-seqs 限制为 2*CONC（最多 256），CUDA graph 捕获止于 512 token；运行 35180394796 中 TP2 c1-c16 可服务，但 c32、c64、c128 在显存分析阶段因 KV 预算为 -10.8 GiB 而失败（每 GPU 145 GiB 权重加 16384 批处理 token 时 32 GiB 的 indexer 缓冲区）；TP4 与 TP8 配方保持上游默认"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-dspark
+  description:
+    - "Write the fixed-sequence result JSON to the container repository root (INFMAX_CONTAINER_WORKSPACE, /ix on the dsv41flash launchers) instead of RESULT_DIR: in run 35314631817 the TP2 8k1k canary served all 10 requests but the workflow could not find $RESULT_FILENAME.json in the repository root; serving flags are unchanged"
+    - "将固定序列结果 JSON 写入容器内仓库根目录（INFMAX_CONTAINER_WORKSPACE，dsv41flash launcher 上为 /ix）而非 RESULT_DIR：运行 35314631817 中 TP2 8k1k canary 成功服务全部 10 个请求，但工作流在仓库根目录找不到 $RESULT_FILENAME.json；服务参数不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-dspark
+  description:
+    - "TP2 only: cap --max-cudagraph-capture-size at 256 in the fixed-sequence script after run 35316389982, where c1-c32 served but c64 (capture 512) and c128 (capture 1024) finished vLLM's memory profiling with -2.65 GiB and -10.8 GiB of KV budget next to 145 GiB of weights per GPU; larger DSpark verify batches decode eagerly, TP4 keeps the default"
+    - "仅 TP2：在固定序列脚本中将 --max-cudagraph-capture-size 上限设为 256；运行 35316389982 中 c1-c32 可服务，但 c64（捕获 512）与 c128（捕获 1024）在 vLLM 显存分析结束时 KV 预算分别为 -2.65 GiB 与 -10.8 GiB（每 GPU 145 GiB 权重）；更大的 DSpark verify batch 以 eager 方式解码，TP4 保持默认"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-dspark
+  description:
+    - "Serve the matrix-supplied MAX_MODEL_LEN (9472 for 8k1k) instead of the hardcoded 1048576, and EVAL_MAX_MODEL_LEN for eval-only runs: at the 1M context the sparse-attention indexer buffer and the profiler's full-context KV reservation left TP2 c32 with 0.97 GiB of KV and c64/c128 negative in run 35316389982, and the same 1M context was behind the earlier c32-c128 failures; with the right context the TP2 graph-capture cap relaxes from 256 to 512 tokens"
+    - "改为服务矩阵提供的 MAX_MODEL_LEN（8k1k 为 9472）而非硬编码的 1048576，eval-only 运行使用 EVAL_MAX_MODEL_LEN：在 1M 上下文下，稀疏注意力 indexer 缓冲区与分析器为单个满上下文请求预留的 KV 使运行 35316389982 中 TP2 c32 仅剩 0.97 GiB KV、c64/c128 为负值，此前 c32-c128 的失败亦源于同一 1M 上下文；上下文正确后 TP2 的 graph 捕获上限从 256 放宽至 512 token"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Floor the TP2 --max-num-seqs at 16 (it stays 2x the concurrency above that, capped at 256): in run 35320655804 c1, c2 and c4 never started because FlashInfer's autotune dummy run batches max-num-seqs requests through the DSpark draft head and with 2-8 requests selected an invalid MXFP8 split-K tactic ((128, 8), (1, 1), True, False, 4), while c8 with 16 seqs and every larger point served"
+    - "将 TP2 的 --max-num-seqs 下限设为 16（高于该值时仍为并发数的 2 倍，上限 256）：运行 35320655804 中 c1、c2、c4 未能启动，原因是 FlashInfer 的 autotune dummy run 会让 max-num-seqs 个请求经过 DSpark draft head，在 2-8 个请求时选中了无效的 MXFP8 split-K tactic ((128, 8), (1, 1), True, False, 4)，而 c8（16 seqs）及更大的点均正常服务"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-dspark
+  description:
+    - "Derive the accuracy-eval context with benchmark_lib's setup_eval_context (isl + osl + 256, capped at the checkpoint's context) instead of requiring an EVAL_MAX_MODEL_LEN variable the workflow does not export: in run 35320655804 both eval jobs exited at check_env_vars before serving"
+    - "使用 benchmark_lib 的 setup_eval_context 推导精度评测上下文（isl + osl + 256，上限为 checkpoint 的上下文长度），不再要求工作流并未导出的 EVAL_MAX_MODEL_LEN 变量：运行 35320655804 中两个 eval 任务均在 check_env_vars 处退出、未能启动服务"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-dspark
+  description:
+    - "Give the TP2 accuracy evals room to start: cap --max-cudagraph-capture-size at 256 and set --gpu-memory-utilization 0.95 for eval-only runs on TP2; in run 35355746550 every TP2 throughput point passed (c128 still had 8.13 GiB for KV at capture 512) but the c64 and c128 evals, which run real DSpark block rejection with adaptive verification instead of synthetic acceptance, profiled to -2.22 GiB of KV and failed at engine start"
+    - "为 TP2 精度评测留出启动空间：eval-only 的 TP2 运行将 --max-cudagraph-capture-size 上限设为 256，并设置 --gpu-memory-utilization 0.95；运行 35355746550 中所有 TP2 吞吐点均通过（c128 在 capture 512 下仍有 8.13 GiB KV），但使用真实 DSpark block 拒绝采样与自适应验证（而非合成接受率）的 c64、c128 评测 KV 剖析为 -2.22 GiB，引擎启动即失败"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-dspark
+  description:
+    - "Stage the accuracy-eval artifacts with append_lm_eval_summary after run_eval, as every other fixed-seq recipe does: in run 35387151990 the TP2 c64 and c128 evals served and scored GSM8K 0.97 exact match, but the results stayed in lm-eval's temp output directory and the job failed on the workflow's results*.json check"
+    - "与其他 fixed-seq 配方一致，在 run_eval 之后用 append_lm_eval_summary 归档精度评测产物：运行 35387151990 中 TP2 c64、c128 评测正常服务并取得 GSM8K 0.97 exact match，但结果留在 lm-eval 的临时输出目录，任务在工作流的 results*.json 检查处失败"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-dspark
+  description:
+    - "Pin the TP2 accuracy eval's lm-eval request concurrency to 32 (EVAL_CONCURRENT_REQUESTS) so the DSpark verify batch stays inside the 256-token CUDA-graph tier: in run 35399984613 the c128 eval kept ~125 GSM8K requests running, every verify step took the untuned eager path above the tier (FlashInfer fell back for each odd mxfp8_gemm draft-head shape), and the draft lm_head GEMM died with cudaErrorIllegalAddress after 70 s; the TP4 eval at capture 1024 and the TP2 c1-c32 throughput points, all inside their graph tiers, completed cleanly. Throughput points and the TP4 arm are unchanged"
+    - "将 TP2 精度评测的 lm-eval 请求并发固定为 32（EVAL_CONCURRENT_REQUESTS），使 DSpark verify batch 留在 256 token 的 CUDA graph 层级内：运行 35399984613 中 c128 评测同时运行约 125 个 GSM8K 请求，每次 verify 都走到层级之上未调优的 eager 路径（FlashInfer 对每个非常规 mxfp8_gemm draft-head 形状回退），draft lm_head GEMM 在 70 秒后因 cudaErrorIllegalAddress 崩溃；而 capture 1024 的 TP4 评测与 TP2 c1-c32 吞吐点均在各自 graph 层级内并顺利完成。吞吐点与 TP4 配方不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-dspark
+  description:
+    - "Disable DSpark adaptive verification (enable_adaptive_verification=false, block rejection kept) for the TP2 accuracy eval: with lm-eval already pinned to 32 requests inside the 256-token graph tier, both TP2 evals in run 35403890075 (c64 and c128) still died with cudaErrorIllegalAddress after 16 minutes, this time surfacing at the adaptive verifier's record_confidences stream synchronize while 32 requests were running, whereas the TP4 eval with the identical speculative config and every synthetic-acceptance TP2 throughput point completed. Block rejection alone is exact target verification, so GSM8K accuracy is unaffected; the TP4 eval and all throughput points are unchanged"
+    - "为 TP2 精度评测关闭 DSpark 自适应验证（enable_adaptive_verification=false，保留 block rejection）：在 lm-eval 已固定为 256 token graph 层级内的 32 个请求后，运行 35403890075 中两个 TP2 评测（c64 与 c128）仍在 16 分钟后因 cudaErrorIllegalAddress 崩溃，这次出现在 32 个请求运行时自适应验证器 record_confidences 的 stream synchronize 处；而使用相同 speculative 配置的 TP4 评测与所有合成接受率的 TP2 吞吐点均正常完成。仅 block rejection 本身即为精确的目标验证，GSM8K 精度不受影响；TP4 评测与所有吞吐点不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
