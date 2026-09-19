@@ -307,10 +307,25 @@
       },
       "storage_evidence": "xfs /dev/md0 over eight non-rotating NVMe leaves; 17,763,552,583,680 bytes free; O_DIRECT verified; exact task-owned scratch /offload-scratch/inferencex-offload-35444664736-1-16604-5b7399a71137 contained four cache files totaling 1,099,502,125,056 logical bytes and 1,099,490,566,144 allocated bytes, proving physical NVMe writes; cleanup exit code 0 and deleted true",
       "runtime_evidence": "The EAGLE3-GQA draft model used FlashAttention 2 with kv_cache_dtype auto; the main model used FlashInfer with FP8 KV. External cache served 18,294,528 prompt tokens (5.479%), proving active NVMe offload."
+    },
+    {
+      "run_id": 35449533638,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35449533638",
+      "arm": "none",
+      "concurrency": 16,
+      "repeat": 1,
+      "attempt": 1,
+      "head_sha": "f61f83353fd49403a97644fa0818b69d70ece1fa",
+      "status": "in_progress",
+      "node": null,
+      "artifacts": [],
+      "performance_result": false,
+      "workflow_name": "offload-v1-none-c16-r1-20260919T144156Z",
+      "dispatched_at": "2026-09-19T14:41:58Z"
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749,35154018672,35344315025,35387609866,35401459251,35442679581,35444664736",
-  "status": "NVMe c16 repeat 1 completed successfully and produced the study's first valid performance point. The next matched point is the HBM-only c16 control.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35150085918,35150281066,35150286749,35154018672,35344315025,35387609866,35401459251,35442679581,35444664736,35449533638",
+  "status": "NVMe c16 repeat 1 completed successfully and produced the study's first valid performance point. The matched HBM-only c16 control is now in progress.",
   "last_capacity_check": {
     "checked_at": "2026-09-19T14:40:12Z",
     "cluster_observed_at": "2026-09-19T14:39:47Z",
@@ -329,6 +344,6 @@
     "reason": "All 11 B200 nodes were idle, the B200 queue was empty, and no B200 reservations or priority overrides were active; one one-node matched control remains below the 50% ceiling and leaves ten idle nodes."
   },
   "next_dispatch": {
-    "requires": "Dispatch the matched HBM-only c16 control, then validate its artifacts before launching the next arm."
+    "requires": "Wait for run 35449533638 to finish, validate its retained artifacts, and compare it directly with NVMe run 35444664736 before selecting the next arm."
   }
 }
