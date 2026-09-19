@@ -864,6 +864,10 @@ class TestPowerAggregationIntegration:
 
         assert result.returncode != 0
         assert "Power validation failed" in result.stderr
+        agg = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
+        assert agg["power_valid"] == 0
+        assert "p75_power_w" not in agg
+        assert "p90_power_w" not in agg
         validation = json.loads(
             (tmp_path / "power_validation_benchmark_result.json").read_text()
         )
@@ -907,6 +911,11 @@ class TestPowerAggregationIntegration:
         assert agg["power_metric_schema_version"] == 2
         assert agg["power_valid"] == 1
         assert agg["total_gpu_energy_j"] == pytest.approx(40_000.0)
+        assert agg["avg_power_w"] == pytest.approx(500.0)
+        assert agg["p75_power_w"] == pytest.approx(500.0)
+        assert agg["p90_power_w"] == pytest.approx(500.0)
+        assert agg["p75_total_gpu_power_w"] == pytest.approx(4_000.0)
+        assert agg["p90_total_gpu_power_w"] == pytest.approx(4_000.0)
         validation = json.loads(
             (tmp_path / "power_validation_benchmark_result.json").read_text()
         )
