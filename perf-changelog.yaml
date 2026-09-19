@@ -8716,3 +8716,18 @@
     Compare against the full measured frontier; full official performance and full
     real accuracy remain required.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p2d-tp2-ep2-tp2-ep2-c32-h298-wt
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p2d-tp2-ep2-tp2-ep2-c64-h298-wt
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add bounded load-only C32 and C64 neighbors of the measured original-BF16 1P2D TP2 EP2 C48
+    write-through screen, which reached 39,352.39 logical tokens/s per active GPU at 157.333
+    interactivity with strict six-GPU power. Preserve every serving setting, including P configured64/effective54,
+    both D64/graph32, H298, static fractions and automatic golden steps3. Use canonical1200s/10-warmup,
+    two-hour caller limits, six active/eight allocated GPUs and exact six-device exporter. Freeze
+    this optimization round after these and the existing C48 peak screen; selected points require
+    full official performance and real accuracy.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
