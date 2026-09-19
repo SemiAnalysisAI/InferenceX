@@ -1,7 +1,7 @@
 # Diagnostic aggregate control: 2 active GPUs; one exclusive eight-GPU node allocated.
 # Strict native power covers active GPU indices 0-1; eight-GPU allocation is recorded separately.
 # Adds the pinned Dynamo frontend to the published plain-SGLang aggregate baseline.
-# Original BF16 NEXTN weights and draft KV; no draft quantization or manual synthetic acceptance.
+# Original BF16 NEXTN weights and draft KV; explicitly unquantized draft; no manual synthetic acceptance.
 schema: 2
 name: qwen35-b300-agg-tp2-ep1-c16-mtp-bf16-draft-fp8-kv-nooffload
 model:
@@ -88,6 +88,7 @@ roles:
       speculative-draft-model-path: /draft-model
       speculative-draft-model-revision: 8472618112abcbd45acbcdc58436aff4233c23f7
       speculative-draft-kv-cache-dtype: bf16
+      speculative-draft-model-quantization: unquant
       speculative-moe-runner-backend: flashinfer_trtllm
       scheduler-recv-interval: 10
       stream-interval: 50

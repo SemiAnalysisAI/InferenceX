@@ -1,7 +1,7 @@
 # Diagnostic aggregate control: 4 active GPUs; one exclusive eight-GPU node allocated.
 # Strict native power covers active GPU indices 0-3; eight-GPU allocation is recorded separately.
 # Adds the pinned Dynamo frontend to the published plain-SGLang aggregate baseline.
-# Original BF16 NEXTN weights and draft KV; no draft quantization or manual synthetic acceptance.
+# Original BF16 NEXTN weights and draft KV; explicitly unquantized draft; no manual synthetic acceptance.
 # Equal BF16 target/draft KV is required by this pinned NEXTN packed HiCache implementation.
 # HiCache 298 GB/rank is the combined host budget, including packed draft KV and Mamba.
 schema: 2
@@ -90,6 +90,7 @@ roles:
       speculative-draft-model-path: /draft-model
       speculative-draft-model-revision: 8472618112abcbd45acbcdc58436aff4233c23f7
       speculative-draft-kv-cache-dtype: bf16
+      speculative-draft-model-quantization: unquant
       speculative-moe-runner-backend: flashinfer_trtllm
       scheduler-recv-interval: 10
       stream-interval: 50
