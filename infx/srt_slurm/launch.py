@@ -16,7 +16,12 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
-from infx.benchmarks.common import child_failed, verify_file, write_json
+from infx.benchmarks.common import (
+    child_failed,
+    verify_file,
+    verify_model_snapshot_assets,
+    write_json,
+)
 from infx.benchmarks.identity import capture_identity, verify_runtime
 from infx.benchmarks.spec import RuntimeSpec
 from infx.srt_slurm.contracts import digest, load_mapping
@@ -203,6 +208,12 @@ def prepare(
             raise ValueError("serving and client model snapshots disagree")
         prepare_client(client_site, kind=kind, output=directory / "client")
         runtime = RuntimeSpec.model_validate(read_json(directory / "client" / "runtime.json"))
+        verify_model_snapshot_assets(
+            runtime,
+            job.row.model,
+            expected_revision=site.model_revision,
+            expected_snapshot=Path(site.model_snapshot),
+        )
         site.require_interpreter(
             read_json(Path(runtime.identity.path)),
             python_minor="3.11" if kind == "agentx" else None,

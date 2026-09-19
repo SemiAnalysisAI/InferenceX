@@ -31,9 +31,11 @@
 
 ## 测试层级
 
-[`CI`](../.github/workflows/ci.yml) 在 PR（包括 fork）或向 `main` 的推送修改 Python 文件、`.github/scripts/` 辅助脚本、`ci.yml`、`pyproject.toml`、`uv.lock`、`.python-version`、MCP 配置、Ruff 配置或 `pytest.ini` 时，并行运行 **Lint** 和 **Tests**。[`Workflow security`](../.github/workflows/zizmor.yml) 在工作流、action 定义、Dependabot、pre-commit 或 zizmor 配置变更时运行 **Zizmor**。仅修改 Python 文件不会触发 Zizmor；仅修改其他工作流不会触发 Lint 或 Tests。修改 `ci.yml` 会触发全部三项任务。两个工作流均可手动分发。仅修改其他文档、Shell 脚本或基准测试 YAML 不会触发这两个工作流；请在本地执行相应检查，或手动分发。
+[`CI`](../.github/workflows/ci.yml) 在 PR（包括 fork）或向 `main` 的推送修改 Python 文件、`.github/scripts/` 辅助脚本、`ci.yml`、`pyproject.toml`、`uv.lock`、`.python-version`、MCP 配置、Ruff 配置或 `pytest.ini` 时，并行运行 **Lint**、**Tests** 和 **Native pilot contract**。阶段 1 的 runtime、recipe、profile 与 fixture 变更也会触发 CI。[`Workflow security`](../.github/workflows/zizmor.yml) 在工作流、action 定义、Dependabot、pre-commit 或 zizmor 配置变更时运行 **Zizmor**。仅修改 Python 文件不会触发 Zizmor；仅修改其他工作流不会触发 Lint 或 Tests。修改 `ci.yml` 会触发 CI 与 Workflow security 两个工作流。两个工作流均可手动分发。仅修改其他文档、Shell 脚本或其他基准测试 YAML 不会触发这两个工作流；请在本地执行相应检查，或手动分发。
 
-Tests 使用四个 pytest worker 运行 `utils/`、`runners/` 和 `experimental/CollectiveX/tests/` 下的全部测试，并检查 MCP 兼容性。这些目录中的新增测试会自动发现。CI 通过 `uv sync --locked --all-extras --group test --no-editable` 将 `infx` 安装为 wheel，使用 Python 3.12 和仅支持 CPU 的 PyTorch。一项任务失败不会取消另一项；PR 更新会取消旧提交的 CI。尚未创建 PR 的分支推送不再单独触发变更日志测试。
+Tests 使用四个 pytest worker 运行 `utils/`、`runners/` 、`experimental/CollectiveX/tests/` 和 `experimental/operatorx/tests/` 下的全部测试，并检查 MCP 兼容性。这些目录中的新增测试会自动发现。CI 通过 `uv sync --locked --all-extras --group test --no-editable` 将 `infx` 安装为 wheel，使用 Python 3.12 和仅支持 CPU 的 PyTorch。一项任务失败不会取消另一项；PR 更新会取消旧提交的 CI。尚未创建 PR 的分支推送不再单独触发变更日志测试。
+
+Native pilot contract 验证阶段 1 的运行时仓库、提交、依赖锁摘要与 NVIDIA 版本谱系，然后准备独立的非 editable Python 3.12 环境。该任务运行固定原生版本的 Linux 单元测试，以及覆盖八个吞吐点和 c28 eval 的已安装运行时边界测试。后者实际执行准备、命令构建与挂载解析，但不分配 Slurm 资源或启动模型。硬件验收仍须完成完整 PR sweep 与真实 eval。
 
 | 层级 | 能够证明 | 不能证明 |
 | --- | --- | --- |

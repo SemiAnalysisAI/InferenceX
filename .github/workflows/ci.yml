@@ -15,6 +15,9 @@ on:
       - 'infx/ruff.toml'
       - '**/pytest.ini'
       - 'utils/srt-slurm'
+      - 'benchmarks/srt-slurm/phase1/**'
+      - 'runners/srt-slurm/h100-phase1.yaml'
+      - 'utils/fixtures/native_pilot/**'
   push:
     branches: [main]
     paths: *python-paths
@@ -82,3 +85,140 @@ jobs:
           python -c "import torch; assert torch.version.cuda is None and torch.version.hip is None"
           # SRT is initialized for our connector tests; its upstream suite runs in its own CI.
           python -m pytest utils/ runners/ experimental/CollectiveX/tests/ experimental/operatorx/tests/ --ignore=utils/srt-slurm -n 4
+
+  native-pilot:
+    name: Native pilot contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate native runtime lock
+        id: native-lock
+        shell: python
+        run: |
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          lock = json.loads(Path("benchmarks/srt-slurm/phase1/runtime-lock.json").read_text())
+          if type(lock.get("schema_version")) is not int or lock["schema_version"] != 1:
+              raise ValueError("Unsupported native runtime lock schema")
+          if lock.get("repository") != "https://github.com/SemiAnalysisAI/srt-slurm.git":
+              raise ValueError("Native runtime repository is not allowlisted")
+          for field, length in (("revision", 40), ("uv_lock_sha256", 64)):
+              value = lock.get(field)
+              if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{%d}" % length, value) is None:
+                  raise ValueError(f"Invalid native runtime {field}")
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+              output.write("repository=SemiAnalysisAI/srt-slurm\n")
+              output.write(f"revision={lock['revision']}\n")
+
+      - name: Checkout pinned native runtime
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ steps.native-lock.outputs.repository }}
+          ref: ${{ steps.native-lock.outputs.revision }}
+          path: .native-phase1
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify native source and version lineage
+        shell: python
+        run: |
+          import hashlib
+          import json
+          import subprocess
+          from pathlib import Path
+
+          source = Path(".native-phase1").resolve()
+          lock = json.loads(Path("benchmarks/srt-slurm/phase1/runtime-lock.json").read_text())
+          def git(*args):
+              return subprocess.run(
+                  ["git", "-C", str(source), *args], check=True,
+                  capture_output=True, text=True, timeout=120,
+              ).stdout.strip()
+          if git("rev-parse", "HEAD") != lock["revision"]:
+              raise ValueError("Native checkout differs from its pinned revision")
+          if hashlib.sha256((source / "uv.lock").read_bytes()).hexdigest() != lock["uv_lock_sha256"]:
+              raise ValueError("Native dependency lock differs from its pinned digest")
+          # hatch-vcs needs the original NVIDIA release tag, which the fork may not carry.
+          git("fetch", "--no-tags", "--force", "https://github.com/NVIDIA/srt-slurm.git",
+              "refs/tags/v2.2.1:refs/tags/v2.2.1")
+          upstream = "984180e5b8755aef85e9995048b5a16cb5336bce"
+          if git("rev-parse", "refs/tags/v2.2.1^{commit}") != upstream:
+              raise ValueError("NVIDIA v2.2.1 tag no longer matches the reviewed lineage")
+          git("merge-base", "--is-ancestor", upstream, "HEAD")
+          if git("describe", "--tags", "--match", "v[0-9]*", "--abbrev=0") != "v2.2.1":
+              raise ValueError("Unexpected native hatch-vcs release lineage")
+          if git("status", "--porcelain", "--untracked-files=all"):
+              raise ValueError("Native source checkout must remain clean")
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          cache-suffix: Native-pilot-contract
+          cache-dependency-glob: |
+            uv.lock
+            .native-phase1/uv.lock
+
+      - name: Prepare independent locked test environments
+        shell: python
+        run: |
+          import os
+          import subprocess
+          from pathlib import Path
+
+          workspace = Path(os.environ["GITHUB_WORKSPACE"])
+          native_env = Path(os.environ["RUNNER_TEMP"]) / "native-phase1-venv"
+          subprocess.run(
+              ["uv", "sync", "--locked", "--all-extras", "--group", "test",
+               "--no-editable", "--python", "3.12"],
+              cwd=workspace, check=True, timeout=600,
+              env={**os.environ, "UV_PROJECT_ENVIRONMENT": str(workspace / ".venv")},
+          )
+          subprocess.run(
+              ["uv", "sync", "--frozen", "--dev", "--no-editable", "--python", "3.12"],
+              cwd=workspace / ".native-phase1", check=True, timeout=600,
+              env={**os.environ, "UV_PROJECT_ENVIRONMENT": str(native_env)},
+          )
+
+      - name: Run pinned native Linux tests
+        shell: python
+        run: |
+          import os
+          import subprocess
+          from pathlib import Path
+
+          python = Path(os.environ["RUNNER_TEMP"]) / "native-phase1-venv/bin/python"
+          source = Path(os.environ["GITHUB_WORKSPACE"]) / ".native-phase1"
+          subprocess.run(
+              [str(python), "-m", "pytest", "tests/", "-m", "not integration", "-q"],
+              cwd=source, check=True, timeout=600,
+              env={**os.environ, "PYTHONPATH": str(source / "src"),
+                   "PATH": str(python.parent) + os.pathsep + os.environ["PATH"]},
+          )
+
+      - name: Run nine-point installed native boundary test
+        shell: python
+        run: |
+          import os
+          import subprocess
+          from pathlib import Path
+
+          workspace = Path(os.environ["GITHUB_WORKSPACE"])
+          native_env = Path(os.environ["RUNNER_TEMP"]) / "native-phase1-venv"
+          subprocess.run(
+              [str(workspace / ".venv/bin/python"), "-I", "-m", "pytest", "-q",
+               "utils/test_native_pilot.py::test_installed_native_runtime_prepares_and_renders_the_entire_pilot"],
+              cwd=workspace, check=True, timeout=180,
+              env={**os.environ,
+                   "PATH": str(workspace / ".venv/bin") + os.pathsep + os.environ["PATH"],
+                   "INFX_NATIVE_PHASE1_PYTHON": str(native_env / "bin/python"),
+                   "INFX_NATIVE_PHASE1_SOURCE": str(workspace / ".native-phase1")},
+          )

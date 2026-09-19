@@ -12,7 +12,7 @@ import subprocess
 import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 from .spec import PreparedFile, RuntimeSpec, secret_environment_key
@@ -31,31 +31,58 @@ def verify_file(file: PreparedFile) -> Path:
 
 
 def verify_snapshot_assets(
-    runtime: RuntimeSpec, repository: str, *, expected_revision: str | None, only_snapshot: bool
+    runtime: RuntimeSpec,
+    repository: str,
+    *,
+    expected_revision: str | None,
+    only_snapshot: bool,
+    repo_type: Literal["dataset", "model"] = "dataset",
 ) -> str:
-    dataset = Path(runtime.env["HF_HUB_CACHE"]) / ("datasets--" + repository.replace("/", "--"))
-    reference = dataset / "refs" / "main"
+    cache = Path(runtime.env["HF_HUB_CACHE"]) / (f"{repo_type}s--" + repository.replace("/", "--"))
+    reference = cache / "refs" / "main"
     revision = reference.read_text().strip()
     if re.fullmatch(r"[0-9a-f]{40}", revision) is None:
-        raise ValueError("prepared dataset revision must be an immutable snapshot SHA")
+        raise ValueError(f"prepared {repo_type} revision must be an immutable snapshot SHA")
     if expected_revision is not None and revision != expected_revision:
-        raise ValueError("offline dataset main ref does not match the prepared snapshot")
-    snapshot = dataset / "snapshots" / revision
+        raise ValueError(f"offline {repo_type} main ref does not match the prepared snapshot")
+    snapshot = cache / "snapshots" / revision
     if not snapshot.is_dir():
-        raise ValueError("prepared dataset snapshot is unavailable")
+        raise ValueError(f"prepared {repo_type} snapshot is unavailable")
     files = [path for path in snapshot.rglob("*") if path.is_file()]
     if not files:
-        raise ValueError("prepared dataset snapshot is empty")
+        raise ValueError(f"prepared {repo_type} snapshot is empty")
     bound = {Path(asset.path).resolve() for asset in runtime.assets}
     if any(path.resolve() not in bound for path in (reference, *files)):
         raise ValueError(
-            "dataset snapshot/ref contains content absent from the prepared asset list"
+            f"{repo_type} snapshot/ref contains content absent from the prepared asset list"
         )
     if only_snapshot and [path for path in snapshot.parent.iterdir() if path.is_dir()] != [
         snapshot
     ]:
-        raise ValueError("pilot dataset cache must contain only the prepared snapshot")
+        raise ValueError(f"pilot {repo_type} cache must contain only the prepared snapshot")
     return revision
+
+
+def verify_model_snapshot_assets(
+    runtime: RuntimeSpec,
+    repository: str,
+    *,
+    expected_revision: str,
+    expected_snapshot: Path,
+) -> Path:
+    """Bind nominal tokenizer lookup to the exact canonical serving snapshot."""
+    revision = verify_snapshot_assets(
+        runtime,
+        repository,
+        expected_revision=expected_revision,
+        only_snapshot=False,
+        repo_type="model",
+    )
+    cache = Path(runtime.env["HF_HUB_CACHE"]) / ("models--" + repository.replace("/", "--"))
+    snapshot = (cache / "snapshots" / revision).resolve(strict=True)
+    if snapshot != expected_snapshot.resolve(strict=True):
+        raise ValueError("offline model cache snapshot differs from the serving model snapshot")
+    return snapshot
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
