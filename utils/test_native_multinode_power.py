@@ -61,6 +61,7 @@ def test_native_whole_fleet_and_role_energy_use_only_serving_devices(tmp_path, v
     audit = json.loads((tmp_path / "power_validation_result.json").read_text())
     assert audit["observed_gpu_count"] == 2
     assert audit["per_gpu_role"] == {"uuid-0": "prefill", "uuid-1": "decode"}
+    assert audit["per_gpu_energy_j"] == {"uuid-0": 200, "uuid-1": 600}
     assert len(audit["nodes"][0]["telemetry_sha256"]) == 64
     from infx.results.power.audit import audit_summary
     summary = audit_summary(audit, "power_validation_result.json")["power_audit"]

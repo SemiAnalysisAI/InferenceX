@@ -477,3 +477,11 @@ Stop the ingest or recovery investigation when any of these holds:
 - app ingestion reports database errors, missing required sidecars, an override mismatch, or failed database verification.
 
 Do not repair these conditions by editing downloaded JSON, changing IDs, suppressing skips, or manually inserting rows. Fix the producer, mapping, provenance, or artifact selection at its source, then rerun the idempotent ingest.
+
+## Required-power publication contract
+
+Ordinary single-node AgentX matrix rows require measured power unless the scenario explicitly opts out; multinode and P/D scenarios retain explicit `require-power: true` rollout. The metadata job waits for those benchmark jobs, downloads their evidence, and builds the [version 2 golden contract](fixtures/powerx-manifest-v2/README.md) with `python3 -m infx.results.power.publication`. Every declared recipe/concurrency must have one valid aggregate, an exact measurement window, physical node/GPU identities, positive device energy, and retained artifacts with SHA-256 hashes. AMD physical identity comes from `amd-smi list --json`, independently of its static device metadata.
+
+Invalid or missing evidence fails the metadata job before ingest dispatch. Both dispatch paths require metadata success and carry `require-power` separately so a missing manifest cannot silently become optional ingestion. Benchmark failures keep their original exit status when subsequent aggregate or telemetry processing also fails. Reused measurements retain their source run/attempt/SHA; the consumer must validate that source's manifest rather than reinterpret a merge-run manifest as measured evidence.
+
+Normal producer output declares `publication.mode: incremental`. InferenceX-app must reject a partial set that would hide any existing recipe or point. Destructive replacement requires an explicitly reviewed policy naming the exact previous snapshot and removed stable point identities; a complete-looking new sweep is not replacement authorization. Local golden-fixture checks prove only the producer/consumer contract, not GPU qualification or production acceptance.

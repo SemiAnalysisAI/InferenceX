@@ -1,0 +1,2 @@
+index, uuid, pci.bus_id, name, driver_version
+0, GPU-golden, 00000000:01:00.0, NVIDIA H100, 000.00
