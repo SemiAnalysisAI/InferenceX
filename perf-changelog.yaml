@@ -8588,3 +8588,16 @@
     automatic golden acceptance only for throughput and real32-example verification for the
     new EP layout. Short1200-second/10-warmup screens require subsequent full official qualification.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-2p2d-tp2-ep2-tp2-ep2-c48-h298
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add an isolated equal-eight-GPU 2P2D TP2 EP2 C48 screen after two actual-profile 3P1D samples
+    showed 96.35% and 99.36% decode KV occupancy, nonempty preallocation queues, and empty prefill
+    queues. Preserve H298 per prefill worker, D64/static0.88/graph48 per decoder, original BF16 draft,
+    and canonical 1200s/10-warmup protocol. Explicitly collect all eight active GPUs; validate multi-decoder
+    routing and transfer at runtime and require fresh full official accuracy/performance qualification
+    before promotion.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
