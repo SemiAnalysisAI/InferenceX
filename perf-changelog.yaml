@@ -8702,3 +8702,17 @@
     all six GPUs counted. Full official performance and full real accuracy remain
     required.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp2-ep2-tp2-ep2-c48-h298-wt
+  scenario-type:
+  - agentic-coding
+  description:
+  - Test one load-only C48 neighbor of the successful original-BF16 TP2 EP2 C40 write-through
+    control, which reached50,473.60 logical tokens/s/active GPU at122.823 interactivity.
+    Preserve every serving argument including P/D64, graph48, P static0.8, D static0.88,
+    H298 and native golden steps3; only raise client concurrency40 to48. Keep canonical1200s/10-warmup,
+    two-hour caller limit and exact four-device power on an eight-GPU allocation.
+    Compare against the full measured frontier; full official performance and full
+    real accuracy remain required.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
