@@ -8078,7 +8078,7 @@ dsv41flash-fp4-h100-vllm-agentic-dspark:
 # halves the prefill chunk so weights, indexer buffers and a KV pool fit 80 GB.
 # Concurrency stops at 8 until the KV ceiling is measured.
 dsv41flash-fp4-h100-sglang-agentic-dspark:
-  image: lmsysorg/sglang:dev-dsv41
+  image: lmsysorg/sglang:v0.5.20@sha256:06e4f2ed21afde4ff513cda65070124e727ba23ccaeff7712b8c40e1097d611f
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:h100-dgxc
