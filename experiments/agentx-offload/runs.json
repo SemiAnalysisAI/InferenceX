@@ -629,32 +629,54 @@
       },
       "storage_evidence": "xfs /dev/md0 over eight non-rotating NVMe leaves; 16,809,073,483,776 bytes free at setup; O_DIRECT verified. The native filesystem tier created 119,195 files totaling 1,413,881,142,831 logical bytes and 1,413,881,143,296 allocated bytes, exceeding the 1 TiB stop guard. Cleanup deleted the exact workflow-owned scratch despite returning guard exit code 1.",
       "runtime_evidence": "Native TieringOffloadingSpec used the matched 739 GB CPU tier and local filesystem secondary tier. External cache served 18,718,464 prompt tokens (5.579%), and profiling completed with zero request errors, but the storage guard makes its performance coordinates diagnostic only."
+    },
+    {
+      "run_id": 35469801850,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35469801850",
+      "arm": "dram-nvme",
+      "concurrency": 16,
+      "repeat": 2,
+      "attempt": 1,
+      "retry_of": 35456989669,
+      "head_sha": "1c11a492ec373320de5bdeeea9305fb7865dbf23",
+      "status": "in_progress",
+      "node": null,
+      "artifacts": [],
+      "performance_result": false,
+      "workflow_name": "offload-v1-dram-nvme-c16-r2-20260919T2114Z",
+      "dispatched_at": "2026-09-19T21:14:18Z",
+      "job_id": 105968568988,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35469801850/job/105968568988",
+      "runner": "GitHub-hosted get-jobs; B200 benchmark job not assigned yet",
+      "diagnosis": "Retry uses the validated, separate 2 TiB native filesystem stop guard; NVMe-only remains bounded at 1 TiB."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748",
-  "status": "HBM-only, HBM + DRAM, and HBM + NVMe c16 are valid. The first HBM + DRAM + NVMe c16 profile completed with zero request errors but is invalid for comparison because its native filesystem tier exceeded the former 1 TiB stop guard. A separate 2 TiB combined-tier stop guard is validated and pushed at b2d189d94. New launches remain held because B200 demand is above 125%.",
+  "status": "HBM-only, HBM + DRAM, and HBM + NVMe c16 are valid. HBM + DRAM + NVMe c16 retry 35469801850 is active from pushed commit 1c11a492e with the separate 2 TiB filesystem stop guard.",
   "last_capacity_check": {
-    "checked_at": "2026-09-19T19:10:07Z",
-    "cluster_observed_at": "2026-09-19T19:09:24Z",
+    "checked_at": "2026-09-19T21:14:18Z",
+    "cluster_observed_at": "2026-09-19T21:13:56Z",
     "cluster_stale": false,
     "eligible_nodes": 11,
     "idle_nodes": 0,
     "total_nodes": 11,
     "allocated_nodes": 11,
-    "pending_b200_jobs": 24,
-    "pending_requested_nodes": 24,
-    "demand_nodes": 35,
-    "demand_percent": 318.18,
+    "pending_b200_jobs": 2,
+    "pending_requested_nodes": 2,
+    "demand_nodes": 13,
+    "demand_percent": 118.18,
     "scheduler_snapshot_at": null,
     "scheduler_available": true,
-    "active_study_run_ids": [],
+    "active_study_run_ids": [
+      35469801850
+    ],
     "active_study_job_ids": [],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
-    "dispatch_allowed": false,
-    "reason": "Fresh dashboard data showed all 11 B200 nodes allocated and 24 eligible one-node B200 jobs queued. Total demand was 35/11 nodes (318.18%), above the 125% hold threshold."
+    "dispatch_allowed": true,
+    "reason": "Fresh cluster and scheduler views showed 11 allocated B200 nodes plus two one-node pending jobs: 13/11 nodes (118.18%), within the 125% launch ceiling."
   },
   "next_dispatch": {
-    "requires": "Hold all launches until fresh B200 allocated plus pending requested nodes fall to 125% or below, then retry HBM + DRAM + NVMe c16 from pushed commit b2d189d94 before starting curves."
+    "requires": "Monitor and validate combined c16 retry 35469801850. Before any additional launch, refresh cluster and scheduler demand; the newly dispatched run may put demand above 125%."
   }
 }
