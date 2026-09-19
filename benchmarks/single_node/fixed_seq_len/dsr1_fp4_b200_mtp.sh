@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
 
-# DeepSeek-R1-0528 FP4 on B200 with EAGLE/MTP speculative decoding.
-# Mirrors dsr1_fp4_b200.sh and adds the speculative-* flags from
-# dsr1_fp8_b200_mtp.sh (the production B200 sglang MTP template).
-
 source "$(dirname "$0")/../../benchmark_lib.sh"
-
-DP_ATTENTION="${DP_ATTENTION:-false}"
 
 check_env_vars \
     MODEL \
@@ -66,7 +60,6 @@ fi
 echo "TP: $TP, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CHUNKED_PREFILL_SIZE: $CHUNKED_PREFILL_SIZE"
 
-# MTP (Multi-Token Prediction) Config - EAGLE speculative decoding
 SPECULATIVE_NUM_STEPS=2
 SPECULATIVE_DRAFT_TOKENS=3
 SPECULATIVE_EAGLE_TOPK=1

@@ -223,7 +223,7 @@ Create an empty recovery PR from current `main`, give it exactly one full-sweep 
 gh pr edit "$RECOVERY_PR" --repo SemiAnalysisAI/InferenceX \
   --add-label full-sweep-fail-fast
 gh pr comment "$RECOVERY_PR" --repo SemiAnalysisAI/InferenceX \
-  --body "/reuse-sweep-run $SOURCE_RUN_ID"
+  --body "/use $SOURCE_RUN_ID"
 ```
 
 Append recovery entries to the end of `perf-changelog.yaml`. Never modify historical bytes. Preserve the original `config-keys`, `description`, `evals-only`, and `scenario-type`, but use the recovery PR URL. Validate both the changelog and generated scope:
@@ -425,3 +425,28 @@ Remaining durable fix:
 ```
 
 This evidence is the completion gate. “Workflow green” without artifact identity, source/merge identity, and ingest counts is not a verified result recovery.
+
+### AMD multi-node SGLang teardown
+
+On exit, including a failed startup/readiness check, the AMD SGLang launcher sends
+TERM only to its recorded `setsid` process groups. Normal completion stages results
+before this cleanup. It allows 30 seconds for graceful
+exit, then sends KILL to surviving groups and checks for exit for another five
+seconds. This handles orphaned or TERM-resistant workers that otherwise hold log
+pipes open. These cleanup deadlines do not change profiling, evaluation, or server
+readiness deadlines. A failed client retains its exit status; unresolved cleanup
+fails an otherwise successful node. Kernel-blocked processes may still require
+separately authorized node repair. Do not change or discard completed metrics to
+work around teardown failures. A single EXIT handler owns group cleanup and the
+existing UMBP standalone PID cleanup; the latter still runs if group cleanup fails.
+
+### AMD multi-node GPU preflight coordination
+
+The Slurm launcher completes Docker pre-clean and the existing GPU VRAM drain
+check on every selected node in a separate Slurm step before launching any server
+container. A failed preflight prevents the serving step; it does not consume a
+healthy peer's container-readiness deadline. Node-local `preflight_<hostname>.log`
+files are included in the normal log fan-in, including failures. The VRAM threshold,
+15-minute GPU guard, and container/server readiness deadlines remain unchanged.
+This coordination prevents a peer-barrier race; it does not repair a GPU driver
+that fails to reclaim memory. The existing Docker pre-clean scope is unchanged.
