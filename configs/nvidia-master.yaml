@@ -8324,17 +8324,14 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg:
           ep: 1
           dp-attn: false
 
-# Isolated experimental controls; canonical qualification is still required.
-qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp4-ep1-c8-mtp-bf16-draft-fp8-kv-nooffload:
+# Direct experimental controls; native plain-SGLang GHA routing is not enabled.
+qwen3.5-fp8-b300-sglang-native-agentic-agg-tp4-ep1-c8-mtp-bf16-draft-fp8-kv-nooffload:
   image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b300-dsxe
   precision: fp8
-  framework: dynamo-sglang
-  router:
-    name: dynamo-router
-    version: 805a77f053d807b0d8def5d27f674a6df0ed839e
+  framework: sglang
   multinode: true
   disagg: false
   scenarios:
@@ -8353,16 +8350,13 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp4-ep1-c8-mtp-bf16-draft-fp8-kv-noof
           dp-attn: false
           additional-settings:
           - CONFIG_FILE=recipes/qwen3.5/sglang/b300-fp8/agentx/agg-tp4-ep1-c8-mtp-bf16-draft-fp8-kv-nooffload.yaml
-qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp4-ep1-c16-mtp-bf16-draft-fp8-kv-nooffload:
+qwen3.5-fp8-b300-sglang-native-agentic-agg-tp4-ep1-c16-mtp-bf16-draft-fp8-kv-nooffload:
   image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b300-dsxe
   precision: fp8
-  framework: dynamo-sglang
-  router:
-    name: dynamo-router
-    version: 805a77f053d807b0d8def5d27f674a6df0ed839e
+  framework: sglang
   multinode: true
   disagg: false
   scenarios:
@@ -8381,16 +8375,13 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp4-ep1-c16-mtp-bf16-draft-fp8-kv-noo
           dp-attn: false
           additional-settings:
           - CONFIG_FILE=recipes/qwen3.5/sglang/b300-fp8/agentx/agg-tp4-ep1-c16-mtp-bf16-draft-fp8-kv-nooffload.yaml
-qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep1-c16-mtp-bf16-draft-fp8-kv-nooffload:
+qwen3.5-fp8-b300-sglang-native-agentic-agg-tp2-ep1-c16-mtp-bf16-draft-fp8-kv-nooffload:
   image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b300-dsxe
   precision: fp8
-  framework: dynamo-sglang
-  router:
-    name: dynamo-router
-    version: 805a77f053d807b0d8def5d27f674a6df0ed839e
+  framework: sglang
   multinode: true
   disagg: false
   scenarios:
@@ -8409,16 +8400,13 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep1-c16-mtp-bf16-draft-fp8-kv-noo
           dp-attn: false
           additional-settings:
           - CONFIG_FILE=recipes/qwen3.5/sglang/b300-fp8/agentx/agg-tp2-ep1-c16-mtp-bf16-draft-fp8-kv-nooffload.yaml
-qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep1-c32-mtp-bf16-draft-fp8-kv-nooffload:
+qwen3.5-fp8-b300-sglang-native-agentic-agg-tp2-ep1-c32-mtp-bf16-draft-fp8-kv-nooffload:
   image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b300-dsxe
   precision: fp8
-  framework: dynamo-sglang
-  router:
-    name: dynamo-router
-    version: 805a77f053d807b0d8def5d27f674a6df0ed839e
+  framework: sglang
   multinode: true
   disagg: false
   scenarios:
@@ -8437,16 +8425,13 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep1-c32-mtp-bf16-draft-fp8-kv-noo
           dp-attn: false
           additional-settings:
           - CONFIG_FILE=recipes/qwen3.5/sglang/b300-fp8/agentx/agg-tp2-ep1-c32-mtp-bf16-draft-fp8-kv-nooffload.yaml
-qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp4-ep1-c32-mtp-bf16-draft-bf16-kv-h298:
+qwen3.5-fp8-b300-sglang-native-agentic-agg-tp4-ep1-c32-mtp-bf16-draft-bf16-kv-h298:
   image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b300-dsxe
   precision: fp8
-  framework: dynamo-sglang
-  router:
-    name: dynamo-router
-    version: 805a77f053d807b0d8def5d27f674a6df0ed839e
+  framework: sglang
   multinode: true
   disagg: false
   scenarios:
@@ -8467,16 +8452,13 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp4-ep1-c32-mtp-bf16-draft-bf16-kv-h2
           - CONFIG_FILE=recipes/qwen3.5/sglang/b300-fp8/agentx/agg-tp4-ep1-c32-mtp-bf16-draft-bf16-kv-h298.yaml
         kv-offload-backend:
           name: hicache
-qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp4-ep1-c64-mtp-bf16-draft-bf16-kv-h298:
+qwen3.5-fp8-b300-sglang-native-agentic-agg-tp4-ep1-c64-mtp-bf16-draft-bf16-kv-h298:
   image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b300-dsxe
   precision: fp8
-  framework: dynamo-sglang
-  router:
-    name: dynamo-router
-    version: 805a77f053d807b0d8def5d27f674a6df0ed839e
+  framework: sglang
   multinode: true
   disagg: false
   scenarios:
@@ -8497,16 +8479,13 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp4-ep1-c64-mtp-bf16-draft-bf16-kv-h2
           - CONFIG_FILE=recipes/qwen3.5/sglang/b300-fp8/agentx/agg-tp4-ep1-c64-mtp-bf16-draft-bf16-kv-h298.yaml
         kv-offload-backend:
           name: hicache
-qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep2-c32-mtp-bf16-draft-bf16-kv-h298:
+qwen3.5-fp8-b300-sglang-native-agentic-agg-tp2-ep2-c32-mtp-bf16-draft-bf16-kv-h298:
   image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b300-dsxe
   precision: fp8
-  framework: dynamo-sglang
-  router:
-    name: dynamo-router
-    version: 805a77f053d807b0d8def5d27f674a6df0ed839e
+  framework: sglang
   multinode: true
   disagg: false
   scenarios:
@@ -8527,16 +8506,13 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep2-c32-mtp-bf16-draft-bf16-kv-h2
           - CONFIG_FILE=recipes/qwen3.5/sglang/b300-fp8/agentx/agg-tp2-ep2-c32-mtp-bf16-draft-bf16-kv-h298.yaml
         kv-offload-backend:
           name: hicache
-qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep2-c48-mtp-bf16-draft-bf16-kv-h298:
+qwen3.5-fp8-b300-sglang-native-agentic-agg-tp2-ep2-c48-mtp-bf16-draft-bf16-kv-h298:
   image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b300-dsxe
   precision: fp8
-  framework: dynamo-sglang
-  router:
-    name: dynamo-router
-    version: 805a77f053d807b0d8def5d27f674a6df0ed839e
+  framework: sglang
   multinode: true
   disagg: false
   scenarios:
@@ -8557,16 +8533,13 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep2-c48-mtp-bf16-draft-bf16-kv-h2
           - CONFIG_FILE=recipes/qwen3.5/sglang/b300-fp8/agentx/agg-tp2-ep2-c48-mtp-bf16-draft-bf16-kv-h298.yaml
         kv-offload-backend:
           name: hicache
-qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep1-c32-mtp-bf16-draft-bf16-kv-h298:
+qwen3.5-fp8-b300-sglang-native-agentic-agg-tp2-ep1-c32-mtp-bf16-draft-bf16-kv-h298:
   image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b300-dsxe
   precision: fp8
-  framework: dynamo-sglang
-  router:
-    name: dynamo-router
-    version: 805a77f053d807b0d8def5d27f674a6df0ed839e
+  framework: sglang
   multinode: true
   disagg: false
   scenarios:

@@ -8437,28 +8437,29 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
 
 - config-keys:
-  - qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp4-ep1-c8-mtp-bf16-draft-fp8-kv-nooffload
-  - qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp4-ep1-c16-mtp-bf16-draft-fp8-kv-nooffload
-  - qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep1-c16-mtp-bf16-draft-fp8-kv-nooffload
-  - qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep1-c32-mtp-bf16-draft-fp8-kv-nooffload
-  - qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp4-ep1-c32-mtp-bf16-draft-bf16-kv-h298
-  - qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp4-ep1-c64-mtp-bf16-draft-bf16-kv-h298
-  - qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep2-c32-mtp-bf16-draft-bf16-kv-h298
-  - qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep2-c48-mtp-bf16-draft-bf16-kv-h298
-  - qwen3.5-fp8-b300-dynamo-sglang-agentic-agg-tp2-ep1-c32-mtp-bf16-draft-bf16-kv-h298
+  - qwen3.5-fp8-b300-sglang-native-agentic-agg-tp4-ep1-c8-mtp-bf16-draft-fp8-kv-nooffload
+  - qwen3.5-fp8-b300-sglang-native-agentic-agg-tp4-ep1-c16-mtp-bf16-draft-fp8-kv-nooffload
+  - qwen3.5-fp8-b300-sglang-native-agentic-agg-tp2-ep1-c16-mtp-bf16-draft-fp8-kv-nooffload
+  - qwen3.5-fp8-b300-sglang-native-agentic-agg-tp2-ep1-c32-mtp-bf16-draft-fp8-kv-nooffload
+  - qwen3.5-fp8-b300-sglang-native-agentic-agg-tp4-ep1-c32-mtp-bf16-draft-bf16-kv-h298
+  - qwen3.5-fp8-b300-sglang-native-agentic-agg-tp4-ep1-c64-mtp-bf16-draft-bf16-kv-h298
+  - qwen3.5-fp8-b300-sglang-native-agentic-agg-tp2-ep2-c32-mtp-bf16-draft-bf16-kv-h298
+  - qwen3.5-fp8-b300-sglang-native-agentic-agg-tp2-ep2-c48-mtp-bf16-draft-bf16-kv-h298
+  - qwen3.5-fp8-b300-sglang-native-agentic-agg-tp2-ep1-c32-mtp-bf16-draft-bf16-kv-h298
   scenario-type:
   - agentic-coding
   description:
-  - Add isolated B300 Qwen3.5 FP8 aggregate controls with TP4/EP1, TP2/EP2 and pure TP2/EP1 through native srt-slurm
-    and pinned Dynamo plus SGLang nightly 20518d85. The Dynamo frontend is an experimental difference from the published
-    plain-SGLang aggregate baseline.
-  - Use verified original BF16 NEXTN weights at revision 8472618112abcbd45acbcdc58436aff4233c23f7 and BF16 draft
-    KV with explicit unquantized draft selection to prevent inheritance of target FP8 quantization.
-    Keep FP8 target KV in no-offload controls; explicitly use BF16 target KV for
-    HiCache controls because the pinned aggregate NEXTN packed cache requires matching target and draft KV dtypes.
-    Target model weights remain FP8 in every arm.
-  - Use 298 GB combined HiCache budget per rank for offload controls. Reserve one exclusive eight-GPU node while
-    reporting two or four active GPUs and strict native power for exactly those active GPUs; report allocated-GPU
-    normalization separately. Preserve canonical warmup and duration; short diagnostic runs require explicit workflow
-    overrides and are not official frontier qualification. Use the nightly engine's explicit decode CUDA graph maximum batch argument.
+  - Add isolated direct B300 Qwen3.5 FP8 aggregate controls with TP4/EP1, TP2/EP2 and pure TP2/EP1 through native
+    srt-slurm and plain SGLang nightly 20518d85. Preserve the published single-node baseline tokenizer settings.
+    Current native GHA routing does not support plain SGLang; these are direct experimental controls, not official
+    sweep selections.
+  - Use verified original BF16 NEXTN weights at revision 8472618112abcbd45acbcdc58436aff4233c23f7, explicit unquantized
+    draft selection and BF16 draft KV. Keep FP8 target KV without offload; HiCache controls explicitly use BF16
+    target KV because pinned NEXTN packed storage requires equal target and draft KV dtypes. Target weights remain
+    FP8. Use the nightly decode CUDA graph batch argument.
+  - Use 298 GB combined HiCache budget per rank. Reserve one eight-GPU node and report two or four active GPUs;
+    native strict power covers active GPUs and allocation normalization is separate. Canonical matrices retain 3600
+    seconds and warmup10; short runs require explicit diagnostic overrides and cannot qualify an official frontier.
+    The internal dynamo-sglang connector selector only selects SGLang golden acceptance transformation; it must
+    not alter the plain frontend or FRAMEWORK=sglang result identity.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
