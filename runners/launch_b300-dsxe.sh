@@ -102,14 +102,15 @@ if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
 ' "$_RECIPE_SRC"; then
     USES_DCGM_POWER=1
 fi
-if [[ "$USES_DCGM_POWER" == "1" && (
-    "${IS_AGENTIC}" == "1" ||
-    "$MODEL_PREFIX" != "dsv4" ||
-    "$PRECISION" != "fp4" ||
-    ( "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" )
-) ]]; then
-    echo "Error: B300 dcgm-power is limited to fixed-sequence DSV4 FP4 dynamo-sglang/vllm" >&2
-    exit 1
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+        : # AgentX uses the native SRT measurement-window contract and adapter.
+    elif [[ "$IS_AGENTIC" != "1" && "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" && ( "$FRAMEWORK" == "dynamo-sglang" || "$FRAMEWORK" == "dynamo-vllm" ) ]]; then
+        : # Existing fixed-sequence telemetry path.
+    else
+        echo "Error: B300 dcgm-power supports fixed-sequence DSV4 FP4 and Qwen3.5 FP8 dynamo-sglang AgentX" >&2
+        exit 1
+    fi
 fi
 
 SRT_REPO_DIR="srt-slurm"
@@ -180,6 +181,12 @@ fi
 
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+    python "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
+        "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
+fi
+
 # Weights live on node-local MODEL_ROOT, which this login host cannot stat, so
 # srtctl's preflight model.path check is always skipped. Runtime loading still
 # validates the path on the compute nodes.
@@ -205,29 +212,9 @@ echo "Extracted JOB_ID: $JOB_ID"
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
-while ! ls "$LOG_FILE" &>/dev/null; do
-    if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
-        echo "ERROR: Job $JOB_ID failed before creating log file"
-        scontrol show job "$JOB_ID"
-        exit 1
-    fi
-    echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
-    sleep 5
-done
-
-(
-    while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
-        sleep 10
-    done
-) &
-POLL_PID=$!
-
-echo "Tailing LOG_FILE: $LOG_FILE"
-
-# -F follows by name and polls; inotify does not work on NFS.
-tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
-
-wait $POLL_PID
+SRT_JOB_RC=0
+stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
+verify_slurm_job_status "$JOB_ID" || SRT_JOB_RC=$?
 
 set -x
 
@@ -245,6 +232,13 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
     mkdir -p "$LOGS_DIR/power"
     cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
     cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
+fi
+
+if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" && "${EVAL_ONLY}" != "true" ]]; then
+    read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+    collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" "$GITHUB_WORKSPACE" \
+        "$GITHUB_WORKSPACE" "$RESULT_FILENAME" "$SRT_SLURM_COMMIT" \
+        "${POWER_CONCURRENCIES[@]}" || SRT_JOB_RC=$?
 fi
 
 cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
@@ -281,6 +275,8 @@ for i in 1 2 3 4 5; do
     sleep 10
 done
 find . -name '.nfs*' -delete 2>/dev/null || true
+# Preserve diagnostics and eval outputs before propagating a failed allocation.
+exit "$SRT_JOB_RC"
 
 else
     # AgentX trace datasets need a writable persistent cache. Keep the host and

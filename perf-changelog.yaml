@@ -8423,3 +8423,15 @@
     - "Enable required measured power for the complete H200 Kimi-K3 balanced recipe through the shared recipe-gated launcher."
     - "为 H200 Kimi-K3 balanced 完整配方启用必需实测功耗。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3053
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add B300 Qwen3.5-397B-A17B FP8 AgentX recipes at concurrency 16, 24 and 32 using colocated 1P1D TP4/TP4 Dynamo plus SGLang through srt-slurm, with all eight allocated GPUs active and 72 GB HiCache per prefill rank. Preserve the published aggregate curves. Exclude losing 2P1D experiments and high-concurrency candidates that did not qualify under canonical measurement.
+  - Pin SGLang nightly-dev-cu13-20260918-20518d85 and Dynamo 805a77f053d807b0d8def5d27f674a6df0ed839e, use the supported Mamba cache flags and colocated Mooncake intra-node NVLink transport, and resolve verified NVIDIA vendor wheels through the vendor index. Keep HiCache on prefill only and use NEXTN with repository golden acceptance for throughput and real verification for accuracy evals.
+  - Require native DCGM power telemetry, explicit custom-benchmark measurement-window fields and exact matrix concurrency injection. Verify terminal Slurm accounting and the complete producer power contract, preserve diagnostics before returning failures, and skip throughput power validation for eval-only jobs. Skip login-host model preflight for node-local weights; retain runtime loading and health checks.
+  - The initial full sweep qualified concurrency 32 at 20629 total tokens/s/GPU and p90 interactivity 200.58, strictly improving a published aggregate frontier point. Short-run gains at higher concurrency did not establish canonical qualification. Require a fresh complete sweep of the retained three canonical 3600-second profiles and all three applicable full accuracy evals; initial C16/C24 attempts failed before measurement.
+  - Temporarily exclude gpu-11 after three official jobs repeatedly failed during prefill TP3 model loading there; the underlying cause remains unproven, and a later eval on that node succeeded. Allow four hours for canonical warmup, unchanged one-hour profiling and artifact processing. No shared files, node settings or other users' jobs were changed.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
