@@ -201,5 +201,6 @@ telemetry:
   dcgm_exporter:
     container_image: dcgm-exporter
     port: 9401
+    command: dcgm-exporter --collect-interval=100 --address :{port} --devices g:0,1,2,3
 container_mounts:
   /data/home/cjquilici/qwen35-bf16-draft-8472618: /draft-model

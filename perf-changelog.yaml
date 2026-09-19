@@ -8541,3 +8541,22 @@
     graph32, original BF16 unquantized MTP and BF16 draft KV. Count four active GPUs and eight
     allocated; use measured results before any official promotion.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-2p1d-tp2-ep2-tp2-ep1-c32-h298
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-2p1d-tp2-ep2-tp2-ep2-c32-h298
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp2-ep2-tp2-ep2-c32-h298
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp2-ep2-tp2-ep2-c8-h298
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-2p1d-tp2-ep1-tp2-ep2-c32-h298
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-2p1d-tp2-ep1-tp2-ep1-c32-h298
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp2-ep2-tp2-ep2-c16-h298
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-bf16draft-1p1d-tp2-ep1-tp2-ep1-c32-h298
+  scenario-type:
+  - agentic-coding
+  description:
+  - "Scope the supported DCGM exporter command to the exact contiguous active GPU devices for\
+    \ partial-node PD layouts:0\u20133 for1P1D TP2 and0\u20135 for2P1D TP2. The pinned producer\
+    \ persists every observed device and rejects idle extras against its native manifest. Preserve\
+    \ existing measurements as power-ineligible diagnostics; require fresh filtered telemetry\
+    \ for qualification. Serving, workload and precision settings are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
