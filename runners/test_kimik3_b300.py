@@ -30,6 +30,11 @@ def test_b300_staged_target_keeps_kimi_draft_in_persistent_mount(
         export SPEC_DECODING=mtp TP=8 RUNNER_NAME=b300-test IS_AGENTIC=1
         export SCENARIO_SUBDIR=agentic/ EXP_NAME="${MODEL_PREFIX}_tp8_conc1"
         export IMAGE=vllm/test:fixture GITHUB_WORKSPACE="$1" SRUN_LOG="$2"
+        export ENROOT_IMPORT_TIME_LIMIT=10 SALLOC_TIME_LIMIT=10 EVAL_ONLY=false RUN_EVAL=false
+        # runtime_settings.sh exports these per real runner name; this fixture uses a
+        # fake one, so give the launcher a scratch cache instead of the runner's.
+        export B300_HF_CACHE_HOST_DIR="$1/.cache" B300_HF_CACHE_CONTAINER_DIR=/hf_hub_cache
+        export GPU_COUNT=8
         cd "$GITHUB_WORKSPACE"
         source runners/launch_b300-dsxe.sh
         ''', "bash", str(REPO_ROOT), str(log), model_prefix],
@@ -99,6 +104,8 @@ with open(sys.argv[3], "a") as handle:
         "KV_OFFLOADING": "dram", "KV_OFFLOAD_BACKEND": "mooncake", "TOTAL_CPU_DRAM_GB": "1024", "DURATION": "1",
         "RESULT_DIR": str(tmp_path / "result"), "MODEL_PATH": str(target),
         "WRITABLE_MODELS_DIR": str(cache), "DRAFT_MODEL": "Inferact/Kimi-K3-DSpark",
+        "DCP_SIZE": "8", "EVAL_ONLY": "false", "SPEC_DECODING": "mtp",
+        "MODEL_DOWNLOAD_LOCK_TIMEOUT": "10",
     }
     command = ["bash", str(REPO_ROOT / "benchmarks/single_node/agentic/kimik3_fp4_b300_vllm_mtp.sh")]
     processes = []
