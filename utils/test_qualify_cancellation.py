@@ -81,6 +81,16 @@ if command == "prepare":
     output({"state": "prepared", "prepared_dir": state["prepared_dir"], "resources": resources,
             "output_root": state["output_root"], "manifest_sha256": "a" * 64})
 if command == "intent-path":
+    if control["scenario"] == "intent-error":
+        output({"schema": 1, "state": "error", "error": "native rejected the intent"}, 2)
+    if control["scenario"] == "missing-intent-path":
+        output({"schema": 1, "state": "intent"})
+    if control.get("native_intent_python"):
+        result = subprocess.run([control["native_intent_python"], *args],
+                                capture_output=True, text=True, timeout=15)
+        payload = json.loads(result.stdout)
+        if payload.get("receipt_path"): state["receipt"] = payload["receipt_path"]
+        output(payload, result.returncode)
     path = Path(value("--journal-dir")) / "owned-intent/receipt.json"
     if control["scenario"] == "escaping-intent": path = control_path.parent / "foreign-receipt.json"
     state["receipt"] = str(path)
@@ -375,6 +385,81 @@ def test_native_preflight_rejects_wrong_demand_or_unowned_journal_before_submit(
         json.loads((root / "artifacts/qualification.json").read_text())["state"]
         == "failed"
     )
+
+
+@pytest.mark.parametrize(
+    "scenario, error_type, message, payload",
+    [
+        (
+            "intent-error",
+            "NativeCommandError",
+            "native rejected the intent",
+            {"schema": 1, "state": "error", "error": "native rejected the intent"},
+        ),
+        (
+            "missing-intent-path",
+            "ValueError",
+            "did not return an ownership path",
+            {"schema": 1, "state": "intent"},
+        ),
+    ],
+)
+def test_native_intent_failure_retains_original_payload_without_submission(
+    pilot, scenario, error_type, message, payload
+):
+    root, _, _ = pilot
+    with pytest.raises(RuntimeError, match="inspect"):
+        run_probe(pilot, scenario=scenario)
+    report = json.loads((root / "artifacts/qualification.json").read_text())
+    assert report["error_type"] == error_type
+    assert message in report["error"]
+    assert report["lifecycle_qualified"] is False
+    assert (
+        json.loads(
+            (root / "artifacts/evidence/commands/0003-intent-path.json").read_text()
+        )
+        == payload
+    )
+    state = json.loads((root / "state.json").read_text())
+    assert "submit-prepared" not in state["calls"]
+    assert "cancel-known" not in state["calls"]
+
+
+def test_installed_native_intent_accepts_maximum_cancellation_namespace(pilot):
+    native_python = os.environ.get("INFX_NATIVE_PHASE1_PYTHON")
+    if not native_python:
+        pytest.skip(
+            "set INFX_NATIVE_PHASE1_PYTHON to exercise installed native intent-path"
+        )
+    root, _, draft = pilot
+    control = json.loads((root / "control.json").read_text())
+    store(root / "control.json", {**control, "native_intent_python": native_python})
+    namespace = "n" * 96
+    report = run_probe(pilot, namespace=namespace)
+    assert report["state"] == "passed"
+    assert report["cleanup"]["closure"]["terminal"] is True
+    location = json.loads(
+        (root / "artifacts/evidence/commands/0003-intent-path.json").read_text()
+    )
+    assert location["state"] == "intent"
+    receipt = Path(location["receipt_path"])
+    assert receipt == Path(report["receipt_path"])
+    journal = (
+        Path(draft["shared_root"])
+        / "cancellation-qualification"
+        / namespace
+        / "journal"
+    )
+    assert receipt.is_relative_to(journal / draft["cluster"])
+    assert json.loads(receipt.read_text())["accepted_ids"] == ["71"]
+
+
+def test_oversized_namespace_fails_before_native_preparation(pilot):
+    root, _, _ = pilot
+    with pytest.raises(ValueError, match="safe path component"):
+        run_probe(pilot, namespace="n" * 97)
+    assert not (root / "state.json").exists()
+    assert not (root / "artifacts").exists()
 
 
 def test_unqualified_pin_and_deployment_pins_fail_before_native_submission(pilot):

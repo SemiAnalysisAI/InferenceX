@@ -144,6 +144,8 @@ class Native:
             write_json(path, {"state": "interrupted", "error_type": type(error).__name__})
             raise
         write_json(path, result)
+        if result.get("state") == "error":
+            raise NativeCommandError(result, f"native {name} failed: {result}")
         return result
 
 
@@ -535,7 +537,7 @@ def qualify(
         ) != str(directory / "native-output"):
             raise ValueError("native prepared paths escaped the owned qualification generation")
         report["prepared"] = prepared
-        intent = "cancellation-qualification:" + namespace
+        intent = "cancellation-qualification-" + namespace
         location = native.run(
             "intent-path",
             "--intent",
@@ -545,6 +547,8 @@ def qualify(
             "--journal-dir",
             str(directory / "journal"),
         )
+        if location.get("state") != "intent" or not isinstance(location.get("receipt_path"), str):
+            raise ValueError(f"native intent-path did not return an ownership path: {location}")
         receipt_path = Path(location["receipt_path"])
         if receipt_path.resolve() != receipt_path or not receipt_path.is_relative_to(
             directory / "journal"
