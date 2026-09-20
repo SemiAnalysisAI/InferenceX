@@ -804,15 +804,15 @@
       "repeat": 1,
       "attempt": 2,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "queued",
-      "node": null,
+      "status": "in_progress",
+      "node": "b200-nscale-slurm_08",
       "artifacts": [],
       "performance_result": false,
       "workflow_name": "offload-v1-nvme-c1024-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:24:41Z",
       "job_id": 106000864877,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476050409/job/106000864877",
-      "started_at": "2026-09-20T01:36:10Z",
+      "started_at": "2026-09-20T05:34:01Z",
       "attempt_history": [
         {
           "attempt": 1,
@@ -826,7 +826,8 @@
           "note": "No performance result; cancelled before workflow completion. Attempt 2 was triggered by inferencex-dash[bot]."
         }
       ],
-      "rerun_triggering_actor": "inferencex-dash[bot]"
+      "rerun_triggering_actor": "inferencex-dash[bot]",
+      "queued_at": "2026-09-20T01:36:10Z"
     },
     {
       "run_id": 35476053573,
@@ -1189,23 +1190,41 @@
       "failure_stage": "offload_prepare",
       "failure_evidence": "The runner allocated four B200 GPUs on im-b200-c008, then the experiment preflight failed before model startup with RuntimeError: Insufficient node-local NVMe space for budget plus reserve. The draft-model download warned that only 5,712.68 MB was free. The retained aggregate artifact is an empty JSON array and run-stats reports zero successes, so this is an infrastructure storage-capacity failure, not an AgentX performance or concurrency result.",
       "log_sha256": "0626dc87d7328700bf003913cb32dd7cfbe084dd0423da7ac5e671b378ab3063"
+    },
+    {
+      "run_id": 35492330557,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492330557",
+      "arm": "dram",
+      "concurrency": 8192,
+      "repeat": 1,
+      "attempt": 1,
+      "head_sha": "18d0c54b22fc98bca65d35b33d0fdc0b4f5c8f3a",
+      "status": "queued",
+      "node": null,
+      "artifacts": [],
+      "performance_result": false,
+      "workflow_name": "offload-v1-dram-c8192-r1-20260920T0541Z",
+      "dispatched_at": "2026-09-20T05:41:49Z",
+      "job_id": 106029329353,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492330557/job/106029329353",
+      "started_at": "2026-09-20T05:42:11Z"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850",
-  "status": "All four matched c16 arms are valid. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. Nine study jobs are in progress: three c1024 arms, all four c4096 arms, and the c8192 HBM and HBM+NVMe arms. The c1024 HBM+NVMe retry remains queued. The c8192 HBM+DRAM+NVMe retry failed its node-local NVMe capacity preflight before model startup and produced no performance result. The c8192 HBM+DRAM arm remains deferred.",
+  "status": "All four matched c16 arms are valid. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. Ten study jobs are in progress: all four c1024 arms, all four c4096 arms, and the c8192 HBM and HBM+NVMe arms. The missing c8192 HBM+DRAM arm is queued as the sole B200 waiting job. The c8192 HBM+DRAM+NVMe retry failed its node-local NVMe capacity preflight before model startup and produced no performance result.",
   "last_capacity_check": {
-    "checked_at": "2026-09-20T01:58:26Z",
-    "cluster_observed_at": "2026-09-20T01:55:57Z",
+    "checked_at": "2026-09-20T05:42:20Z",
+    "cluster_observed_at": "2026-09-20T05:40:52Z",
     "cluster_stale": false,
     "eligible_nodes": 11,
     "idle_nodes": 0,
     "total_nodes": 11,
     "allocated_nodes": 11,
-    "pending_b200_jobs": 17,
-    "pending_requested_nodes": 17,
-    "demand_nodes": 28,
-    "demand_percent": 254.55,
-    "scheduler_snapshot_at": "2026-09-20T01:55:57Z",
+    "pending_b200_jobs": 1,
+    "pending_requested_nodes": 1,
+    "demand_nodes": 12,
+    "demand_percent": 109.09,
+    "scheduler_snapshot_at": "2026-09-20T05:41:49Z",
     "scheduler_available": true,
     "active_study_run_ids": [
       35476043213,
@@ -1218,7 +1237,7 @@
       35476075885,
       35478297080,
       35478298744,
-      35478300305
+      35492330557
     ],
     "active_study_job_ids": [
       106000847437,
@@ -1231,15 +1250,15 @@
       106000840866,
       106000856643,
       105991361707,
-      106000842781
+      106029329353
     ],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": false,
-    "reason": "All 11 B200 nodes were allocated and 17 B200 jobs were queued: seven external DeepSeek-V4.1-Flash jobs with admin priority and ten attempt-2 offload jobs automatically rerun by inferencex-dash[bot]. Only the c8192 HBM+NVMe arm remains active on its original attempt. No new study job was dispatched."
+    "reason": "Fresh dashboard snapshots showed all 11 B200 nodes allocated and zero B200 jobs queued. The missing c8192 HBM+DRAM arm was therefore dispatched into the single permitted queue slot; it is now the sole queued B200 job."
   },
   "next_dispatch": {
-    "requires": "Launch nothing while any B200 job is queued. Monitor the nine in-progress study jobs and the queued c1024 HBM+NVMe retry, validating only completed runs with usable profiling results. Once the cluster-wide pending count is zero and capacity permits, retry c8192 HBM+DRAM+NVMe on a node satisfying the NVMe preflight and dispatch the deferred HBM+DRAM c8192 arm."
+    "requires": "Launch nothing while the c8192 HBM+DRAM job or any other B200 job remains queued. Monitor the ten in-progress study jobs and validate only completed runs with usable profiling results. Once the cluster-wide pending count returns to zero and capacity permits, retry c8192 HBM+DRAM+NVMe on a node satisfying the NVMe preflight."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-19T23:34:00Z",
