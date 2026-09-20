@@ -29,6 +29,7 @@ jobs:
           source benchmarks/benchmark_lib.sh --validation-only
           check_env_vars OBSERVE_RUNNER_NAMES
           for target in $OBSERVE_RUNNER_NAMES; do
+            echo "ALLOCATION $target $(squeue --name="$target" --noheader --format='%T %M')"
             job_id=$(squeue --name="$target" --noheader --format='%i')
             if [[ ! "$job_id" =~ ^[0-9]+$ ]]; then
               echo "$target: no unique active allocation"
