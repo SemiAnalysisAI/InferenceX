@@ -1,6 +1,6 @@
-# EP4 prefill variant; identical TP4 decode and capacity to the measured C40 baseline.
+# Colocated prefill and decode with prefill HiCache.
 schema: 2
-name: qwen35-b300-disagg-1p1d-tp4ep4-tp4-colocated-c40-wt-dmax64-mtp-hicache
+name: qwen35-b300-disagg-1p1d-tp4-tp4-colocated-c4-mtp-hicache
 model:
   path: qwen3.5-fp8
   container: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
@@ -69,7 +69,7 @@ roles:
       quantization: fp8
       kv-cache-dtype: fp8_e4m3
       tensor-parallel-size: 4
-      expert-parallel-size: 4
+      expert-parallel-size: 1
       data-parallel-size: 1
       mamba-ssm-dtype: bfloat16
       attention-backend: trtllm_mha
@@ -94,12 +94,12 @@ roles:
       mamba-track-interval: 2048
       scheduler-recv-interval: 10
       stream-interval: 50
-      max-running-requests: 96
+      max-running-requests: 32
       enable-hierarchical-cache: true
-      hicache-size: 298
+      hicache-size: 72
       hicache-io-backend: kernel
       hicache-mem-layout: page_first
-      hicache-write-policy: write_through
+      hicache-write-policy: write_through_selective
   decode:
     nodes: colocate
     workers: 1
@@ -156,8 +156,8 @@ roles:
       speculative-num-draft-tokens: 4
       scheduler-recv-interval: 10
       stream-interval: 50
-      max-running-requests: 64
-      cuda-graph-max-bs-decode: 48
+      max-running-requests: 32
+      cuda-graph-max-bs-decode: 16
       disaggregation-decode-extra-slots: 0
       speculative-draft-model-path: /draft-model
       speculative-draft-model-revision: 8472618112abcbd45acbcdc58436aff4233c23f7
@@ -179,7 +179,7 @@ benchmark:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic
     SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE: custom
-    SRT_MEASUREMENT_WINDOW_CONCURRENCIES: '40'
+    SRT_MEASUREMENT_WINDOW_CONCURRENCIES: '4'
     SRT_MEASUREMENT_WINDOW_RESULT_ROOT: /logs
     PORT: '8000'
     IS_MULTINODE: 'true'
@@ -190,7 +190,7 @@ benchmark:
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
   concurrencies:
-  - 40
+    - 4
 telemetry:
   enabled: true
   collect_interval_ms: 1000
