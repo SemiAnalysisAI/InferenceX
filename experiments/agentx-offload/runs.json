@@ -736,17 +736,31 @@
       "arm": "none",
       "concurrency": 1024,
       "repeat": 1,
-      "attempt": 1,
+      "attempt": 2,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "in_progress",
+      "status": "queued",
       "node": null,
       "artifacts": [],
       "performance_result": false,
       "workflow_name": "offload-v1-none-c1024-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:24:32Z",
-      "job_id": 105985396145,
-      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476043213/job/105985396145",
-      "started_at": "2026-09-19T23:25:04Z"
+      "job_id": 106000847437,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476043213/job/106000847437",
+      "started_at": "2026-09-20T01:36:00Z",
+      "attempt_history": [
+        {
+          "attempt": 1,
+          "status": "cancelled",
+          "job_id": 105985396145,
+          "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476043213/job/105985396145",
+          "started_at": "2026-09-19T23:25:04Z",
+          "completed_at": "2026-09-20T01:35:15Z",
+          "runner": "b200-nscale-slurm_00",
+          "performance_result": false,
+          "note": "No performance result; cancelled before workflow completion. Attempt 2 was triggered by inferencex-dash[bot]."
+        }
+      ],
+      "rerun_triggering_actor": "inferencex-dash[bot]"
     },
     {
       "run_id": 35476047627,
@@ -754,17 +768,31 @@
       "arm": "dram",
       "concurrency": 1024,
       "repeat": 1,
-      "attempt": 1,
+      "attempt": 2,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "in_progress",
+      "status": "queued",
       "node": null,
       "artifacts": [],
       "performance_result": false,
       "workflow_name": "offload-v1-dram-c1024-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:24:37Z",
-      "job_id": 105985398863,
-      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476047627/job/105985398863",
-      "started_at": "2026-09-19T23:25:08Z"
+      "job_id": 106000832058,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476047627/job/106000832058",
+      "started_at": "2026-09-20T01:35:52Z",
+      "attempt_history": [
+        {
+          "attempt": 1,
+          "status": "cancelled",
+          "job_id": 105985398863,
+          "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476047627/job/105985398863",
+          "started_at": "2026-09-19T23:25:08Z",
+          "completed_at": "2026-09-20T01:35:07Z",
+          "runner": "b200-nscale-slurm_01",
+          "performance_result": false,
+          "note": "No performance result; cancelled before workflow completion. Attempt 2 was triggered by inferencex-dash[bot]."
+        }
+      ],
+      "rerun_triggering_actor": "inferencex-dash[bot]"
     },
     {
       "run_id": 35476050409,
@@ -772,17 +800,31 @@
       "arm": "nvme",
       "concurrency": 1024,
       "repeat": 1,
-      "attempt": 1,
+      "attempt": 2,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "in_progress",
+      "status": "queued",
       "node": null,
       "artifacts": [],
       "performance_result": false,
       "workflow_name": "offload-v1-nvme-c1024-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:24:41Z",
-      "job_id": 105985480491,
-      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476050409/job/105985480491",
-      "started_at": "2026-09-19T23:25:51Z"
+      "job_id": 106000864877,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476050409/job/106000864877",
+      "started_at": "2026-09-20T01:36:10Z",
+      "attempt_history": [
+        {
+          "attempt": 1,
+          "status": "cancelled",
+          "job_id": 105985480491,
+          "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476050409/job/105985480491",
+          "started_at": "2026-09-19T23:25:51Z",
+          "completed_at": "2026-09-20T01:35:21Z",
+          "runner": "b200-nscale-slurm_06",
+          "performance_result": false,
+          "note": "No performance result; cancelled before workflow completion. Attempt 2 was triggered by inferencex-dash[bot]."
+        }
+      ],
+      "rerun_triggering_actor": "inferencex-dash[bot]"
     },
     {
       "run_id": 35476053573,
@@ -790,17 +832,31 @@
       "arm": "dram-nvme",
       "concurrency": 1024,
       "repeat": 1,
-      "attempt": 1,
+      "attempt": 2,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "in_progress",
+      "status": "queued",
       "node": null,
       "artifacts": [],
       "performance_result": false,
       "workflow_name": "offload-v1-dram-nvme-c1024-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:24:46Z",
-      "job_id": 105985419909,
-      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476053573/job/105985419909",
-      "started_at": "2026-09-19T23:25:16Z"
+      "job_id": 106000840977,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476053573/job/106000840977",
+      "started_at": "2026-09-20T01:35:57Z",
+      "attempt_history": [
+        {
+          "attempt": 1,
+          "status": "cancelled",
+          "job_id": 105985419909,
+          "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476053573/job/105985419909",
+          "started_at": "2026-09-19T23:25:16Z",
+          "completed_at": "2026-09-20T01:35:11Z",
+          "runner": "b200-nscale-slurm_02",
+          "performance_result": false,
+          "note": "No performance result; cancelled before workflow completion. Attempt 2 was triggered by inferencex-dash[bot]."
+        }
+      ],
+      "rerun_triggering_actor": "inferencex-dash[bot]"
     },
     {
       "run_id": 35476061809,
@@ -808,17 +864,31 @@
       "arm": "none",
       "concurrency": 4096,
       "repeat": 1,
-      "attempt": 1,
+      "attempt": 2,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "in_progress",
+      "status": "queued",
       "node": null,
       "artifacts": [],
       "performance_result": false,
       "workflow_name": "offload-v1-none-c4096-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:24:57Z",
-      "job_id": 105985437739,
-      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476061809/job/105985437739",
-      "started_at": "2026-09-19T23:25:28Z"
+      "job_id": 106000846579,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476061809/job/106000846579",
+      "started_at": "2026-09-20T01:36:00Z",
+      "attempt_history": [
+        {
+          "attempt": 1,
+          "status": "cancelled",
+          "job_id": 105985437739,
+          "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476061809/job/105985437739",
+          "started_at": "2026-09-19T23:25:28Z",
+          "completed_at": "2026-09-20T01:35:18Z",
+          "runner": "b200-nscale-slurm_03",
+          "performance_result": false,
+          "note": "No performance result; cancelled before workflow completion. Attempt 2 was triggered by inferencex-dash[bot]."
+        }
+      ],
+      "rerun_triggering_actor": "inferencex-dash[bot]"
     },
     {
       "run_id": 35476067005,
@@ -826,17 +896,31 @@
       "arm": "dram",
       "concurrency": 4096,
       "repeat": 1,
-      "attempt": 1,
+      "attempt": 2,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "in_progress",
+      "status": "queued",
       "node": null,
       "artifacts": [],
       "performance_result": false,
       "workflow_name": "offload-v1-dram-c4096-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:25:04Z",
-      "job_id": 105985460384,
-      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476067005/job/105985460384",
-      "started_at": "2026-09-19T23:25:46Z"
+      "job_id": 106000845170,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476067005/job/106000845170",
+      "started_at": "2026-09-20T01:35:59Z",
+      "attempt_history": [
+        {
+          "attempt": 1,
+          "status": "cancelled",
+          "job_id": 105985460384,
+          "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476067005/job/105985460384",
+          "started_at": "2026-09-19T23:25:46Z",
+          "completed_at": "2026-09-20T01:35:08Z",
+          "runner": "b200-nscale-slurm_04",
+          "performance_result": false,
+          "note": "No performance result; cancelled before workflow completion. Attempt 2 was triggered by inferencex-dash[bot]."
+        }
+      ],
+      "rerun_triggering_actor": "inferencex-dash[bot]"
     },
     {
       "run_id": 35476072143,
@@ -844,17 +928,31 @@
       "arm": "nvme",
       "concurrency": 4096,
       "repeat": 1,
-      "attempt": 1,
+      "attempt": 2,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "in_progress",
+      "status": "queued",
       "node": null,
       "artifacts": [],
       "performance_result": false,
       "workflow_name": "offload-v1-nvme-c4096-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:25:10Z",
-      "job_id": 105985461225,
-      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476072143/job/105985461225",
-      "started_at": "2026-09-19T23:25:43Z"
+      "job_id": 106000859670,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476072143/job/106000859670",
+      "started_at": "2026-09-20T01:36:07Z",
+      "attempt_history": [
+        {
+          "attempt": 1,
+          "status": "cancelled",
+          "job_id": 105985461225,
+          "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476072143/job/105985461225",
+          "started_at": "2026-09-19T23:25:43Z",
+          "completed_at": "2026-09-20T01:35:23Z",
+          "runner": "b200-nscale-slurm_05",
+          "performance_result": false,
+          "note": "No performance result; cancelled before workflow completion. Attempt 2 was triggered by inferencex-dash[bot]."
+        }
+      ],
+      "rerun_triggering_actor": "inferencex-dash[bot]"
     },
     {
       "run_id": 35476075885,
@@ -862,17 +960,31 @@
       "arm": "dram-nvme",
       "concurrency": 4096,
       "repeat": 1,
-      "attempt": 1,
+      "attempt": 2,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "in_progress",
+      "status": "queued",
       "node": null,
       "artifacts": [],
       "performance_result": false,
       "workflow_name": "offload-v1-dram-nvme-c4096-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:25:14Z",
-      "job_id": 105985481999,
-      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476075885/job/105985481999",
-      "started_at": "2026-09-19T23:25:51Z"
+      "job_id": 106000840866,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476075885/job/106000840866",
+      "started_at": "2026-09-20T01:35:57Z",
+      "attempt_history": [
+        {
+          "attempt": 1,
+          "status": "cancelled",
+          "job_id": 105985481999,
+          "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476075885/job/105985481999",
+          "started_at": "2026-09-19T23:25:51Z",
+          "completed_at": "2026-09-20T01:35:13Z",
+          "runner": "b200-nscale-slurm_08",
+          "performance_result": false,
+          "note": "No performance result; cancelled before workflow completion. Attempt 2 was triggered by inferencex-dash[bot]."
+        }
+      ],
+      "rerun_triggering_actor": "inferencex-dash[bot]"
     },
     {
       "run_id": 35476332029,
@@ -976,17 +1088,31 @@
       "arm": "none",
       "concurrency": 8192,
       "repeat": 1,
-      "attempt": 1,
+      "attempt": 2,
       "head_sha": "e85e1fbb8ad172a43c15cab68e43039bb0ff8a16",
-      "status": "in_progress",
+      "status": "queued",
       "node": null,
       "artifacts": [],
       "performance_result": false,
       "workflow_name": "offload-v1-none-c8192-r1-20260920T0015Z",
       "dispatched_at": "2026-09-20T00:15:39Z",
-      "job_id": 105991368799,
-      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35478297080/job/105991368799",
-      "started_at": "2026-09-20T00:16:13Z"
+      "job_id": 106000856643,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35478297080/job/106000856643",
+      "started_at": "2026-09-20T01:36:06Z",
+      "attempt_history": [
+        {
+          "attempt": 1,
+          "status": "cancelled",
+          "job_id": 105991368799,
+          "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35478297080/job/105991368799",
+          "started_at": "2026-09-20T00:16:13Z",
+          "completed_at": "2026-09-20T01:35:20Z",
+          "runner": "b200-nscale-slurm_10",
+          "performance_result": false,
+          "note": "No performance result; cancelled before workflow completion. Attempt 2 was triggered by inferencex-dash[bot]."
+        }
+      ],
+      "rerun_triggering_actor": "inferencex-dash[bot]"
     },
     {
       "run_id": 35478298744,
@@ -1012,24 +1138,38 @@
       "arm": "dram-nvme",
       "concurrency": 8192,
       "repeat": 1,
-      "attempt": 1,
+      "attempt": 2,
       "head_sha": "e85e1fbb8ad172a43c15cab68e43039bb0ff8a16",
-      "status": "in_progress",
+      "status": "queued",
       "node": null,
       "artifacts": [],
       "performance_result": false,
       "workflow_name": "offload-v1-dram-nvme-c8192-r1-20260920T0015Z",
       "dispatched_at": "2026-09-20T00:15:43Z",
-      "job_id": 105991438521,
-      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35478300305/job/105991438521",
-      "started_at": "2026-09-20T01:00:28Z"
+      "job_id": 106000842781,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35478300305/job/106000842781",
+      "started_at": "2026-09-20T01:35:58Z",
+      "attempt_history": [
+        {
+          "attempt": 1,
+          "status": "cancelled",
+          "job_id": 105991438521,
+          "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35478300305/job/105991438521",
+          "started_at": "2026-09-20T01:00:28Z",
+          "completed_at": "2026-09-20T01:35:13Z",
+          "runner": "b200-nscale-slurm_07",
+          "performance_result": false,
+          "note": "No performance result; cancelled before workflow completion. Attempt 2 was triggered by inferencex-dash[bot]."
+        }
+      ],
+      "rerun_triggering_actor": "inferencex-dash[bot]"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850",
-  "status": "All four matched c16 arms are valid. The c1024 and c4096 four-arm sets remain in progress. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. The c8192 HBM, HBM+NVMe, and HBM+DRAM+NVMe arms are in progress; HBM+DRAM remains deferred because the cluster-wide B200 queue now contains 17 other jobs.",
+  "status": "All four matched c16 arms are valid. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. The c8192 HBM+NVMe arm remains in progress on attempt 1. The c1024 and c4096 four-arm sets plus the c8192 HBM and HBM+DRAM+NVMe arms were cancelled by infrastructure before completion and automatically rerun by inferencex-dash[bot] as queued attempt 2 jobs; those cancelled attempts produced no performance results. The c8192 HBM+DRAM arm remains deferred.",
   "last_capacity_check": {
-    "checked_at": "2026-09-20T01:22:19Z",
-    "cluster_observed_at": "2026-09-20T01:22:02Z",
+    "checked_at": "2026-09-20T01:58:26Z",
+    "cluster_observed_at": "2026-09-20T01:55:57Z",
     "cluster_stale": false,
     "eligible_nodes": 11,
     "idle_nodes": 0,
@@ -1039,7 +1179,7 @@
     "pending_requested_nodes": 17,
     "demand_nodes": 28,
     "demand_percent": 254.55,
-    "scheduler_snapshot_at": "2026-09-20T01:21:40Z",
+    "scheduler_snapshot_at": "2026-09-20T01:55:57Z",
     "scheduler_available": true,
     "active_study_run_ids": [
       35476043213,
@@ -1055,25 +1195,25 @@
       35478300305
     ],
     "active_study_job_ids": [
-      105985396145,
-      105985398863,
-      105985480491,
-      105985419909,
-      105985437739,
-      105985460384,
-      105985461225,
-      105985481999,
-      105991368799,
+      106000847437,
+      106000832058,
+      106000864877,
+      106000840977,
+      106000846579,
+      106000845170,
+      106000859670,
+      106000840866,
+      106000856643,
       105991361707,
-      105991438521
+      106000842781
     ],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": false,
-    "reason": "Fresh cluster and priority views showed all 11 B200 nodes allocated and 17 queued B200 jobs, all from another DeepSeek-V4.1-Flash sweep. The previously queued c8192 HBM+DRAM+NVMe job started at 01:00:28Z. The global one-queued-job policy requires holding the deferred c8192 HBM+DRAM arm."
+    "reason": "All 11 B200 nodes were allocated and 17 B200 jobs were queued: seven external DeepSeek-V4.1-Flash jobs with admin priority and ten attempt-2 offload jobs automatically rerun by inferencex-dash[bot]. Only the c8192 HBM+NVMe arm remains active on its original attempt. No new study job was dispatched."
   },
   "next_dispatch": {
-    "requires": "Launch nothing while any B200 job is queued. Monitor and validate the active c1024, c4096, and c8192 probes. When the cluster-wide pending B200 count returns to zero, dispatch the deferred HBM+DRAM c8192 arm if capacity permits, then continue filling the feasibility and crossover gaps."
+    "requires": "Launch nothing while any B200 job is queued. Monitor the c8192 HBM+NVMe attempt-1 job and the ten queued attempt-2 retries, validating only completed runs with usable profiling results. Dispatch the deferred HBM+DRAM c8192 arm only after the cluster-wide pending B200 count returns to zero and capacity permits."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-19T23:34:00Z",
