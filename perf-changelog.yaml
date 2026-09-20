@@ -8455,3 +8455,14 @@
   description:
     - "Update B200 vLLM AgentX to DSpark6 and a new image with TP8 and DEP8 configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
+
+- config-keys:
+    - kimik3-fp4-h200-vllm-agentic-latency
+    - kimik3-fp4-h200-vllm-agentic-balanced
+    - kimik3-fp4-h200-vllm-agentic-simple
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the complete H200 Kimi-K3 AgentX curve so every published point carries measured power. 25 of the 35 published points come from the 2026-08-07 sweep, which predates power collection on this hardware, and AgentX resolves one curve per hardware, so only a sweep selecting all three config keys can replace them together."
+    - "重测 H200 Kimi-K3 AgentX 整条曲线，使每个已发布的点都带实测功耗。已发布的 35 个点中有 25 个来自 2026-08-07 的 sweep，早于该硬件开启功耗采集；而 AgentX 每个硬件只解析出一条曲线，因此只有同时选中三个 config key 的 sweep 才能整体替换它们。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3309
