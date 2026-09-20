@@ -1820,15 +1820,99 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "34ac5b905b946b8d433965d4cd0b1f30533d42ee",
-      "status": "in_progress",
-      "node": "b200-nscale-slurm_00",
-      "artifacts": [],
-      "performance_result": false,
+      "status": "success",
+      "node": "im-b200-c001",
+      "artifacts": [
+        {
+          "id": 10614256080,
+          "name": "bmk_agentic_minimaxm3_tp4_conc256_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-b9bdff05ceedeeb320ea",
+          "size_bytes": 2248
+        },
+        {
+          "id": 10613915882,
+          "name": "gpu_metrics_minimaxm3_tp4_conc256_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-b9bdff05ceedeeb320ea",
+          "size_bytes": 660290
+        },
+        {
+          "id": 10613882212,
+          "name": "run-stats",
+          "size_bytes": 284
+        },
+        {
+          "id": 10613847091,
+          "name": "results_bmk",
+          "size_bytes": 2052
+        },
+        {
+          "id": 10613159269,
+          "name": "agentic_minimaxm3_tp4_conc256_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-b9bdff05ceedeeb320ea",
+          "size_bytes": 23209638
+        },
+        {
+          "id": 10613044357,
+          "name": "server_logs_minimaxm3_tp4_conc256_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-b9bdff05ceedeeb320ea",
+          "size_bytes": 159284
+        },
+        {
+          "id": 10612984499,
+          "name": "power_audit_minimaxm3_tp4_conc256_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-b9bdff05ceedeeb320ea",
+          "size_bytes": 663870
+        }
+      ],
+      "performance_result": true,
       "workflow_name": "offload-v1-nvme-c256-r1-20260920T1651Z",
       "dispatched_at": "2026-09-20T16:51:23Z",
       "job_id": 106112961565,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35524019140/job/106112961565",
-      "started_at": "2026-09-20T16:51:57Z"
+      "started_at": "2026-09-20T16:51:57Z",
+      "completed_at": "2026-09-20T21:32:02Z",
+      "runner": "b200-nscale-slurm_00",
+      "allocation_id": "16694",
+      "log_sha256": "2ccbe7daf30911fbf71e94f60096bdc8917335e612440797f1d5d4e89c25192b",
+      "performance": {
+        "num_requests_total": 3917,
+        "num_requests_successful": 1072,
+        "num_requests_warmup_dropped": 2845,
+        "num_requests_error_dropped": 3,
+        "duration_seconds": 3619.52226,
+        "output_tokens_per_second": 312.81587,
+        "output_tokens_per_second_per_gpu": 78.20397,
+        "input_tokens_per_second": 33102.40948,
+        "total_tokens_per_second": 33415.22535,
+        "total_tokens_per_second_per_gpu": 8353.80634,
+        "p90_e2e_latency_seconds": 1595.04364,
+        "p90_ttft_seconds": 1550.43201,
+        "p90_tpot_seconds": 0.11582,
+        "p90_interactivity_tokens_per_second_per_user": 8.63401,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.11484,
+        "mean_e2e_latency_seconds": 937.02767,
+        "avg_power_w_per_gpu": 891.145
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.01875,
+        "external_cache_hit_rate": 0.015,
+        "overall_cache_hit_rate": 0.03376,
+        "gpu_cache_hit_tokens": 11539712,
+        "external_transfer_tokens": 9233024,
+        "computed_tokens": 594617611,
+        "prompt_tokens_total": 615390347,
+        "generation_tokens_total": 1194119,
+        "gpu_cache_usage_pct": 1,
+        "gpu_cache_pool_tokens": 3707648,
+        "theoretical_cache_hit_rate": 0.95265
+      },
+      "evidence_sha256": {
+        "offload_config.json": "38743f9a7e37696d718c6ebbf6f81bc5bddebbe894fbcb6435c7e6e215bd8a6b",
+        "offload-telemetry.jsonl": "35b70f0864de6995ee6bd2afeea0526d0be0b61ffd43db1842e1982789e3f9d9",
+        "offload_cleanup.json": "b454374572cdc39c536ac39867b71ed2aab7efdc8300f9f53e7446efd762c943",
+        "vllm_command.txt": "b2d5b218629b33230c77b241f1e8987b43fc65642582d476f838a31b14254166",
+        "server.log": "b10b9226d44a737b1c8db560cb4a3d19260a3007548e75617a7ec2394d3e29a6",
+        "bmk_result.json": "641e95ab935a03291cb3cbae6c8cbdfb3b4e7fc2ac9149fd7f704302cb081c80",
+        "agg_bmk.json": "375d8b4b36f4c6b8ec2c4604efa77f4ab5975154409d3819d9a75d50815d0b9b",
+        "profile_export.jsonl": "bc34e03073e3d67e4db928ea7bdb6d9f99078fca3e30d7ea681c4a2b5679523c"
+      },
+      "storage_evidence": "xfs /dev/md0 over eight non-rotating NVMe leaves; 17,763,847,192,576 bytes free; O_DIRECT verified. Exact task-owned scratch /offload-scratch/inferencex-offload-35524019140-1-16694-5f203ff14259 contained 4 cache files totaling 1,099,502,125,056 logical bytes and 1,099,490,836,480 allocated bytes; cleanup exit code 0 and deleted true.",
+      "runtime_evidence": "SimpleCPUOffloadConnector disk backend used the matched 1 TiB budget with page cache disabled. External NVMe cache served 9,233,024 prompt tokens (1.500%), proving active NVMe offload. Profiling completed 1,072 responses with zero phase errors; the aggregate classifier tags 3 InvalidInferenceResultError records outside the accepted cohort."
     },
     {
       "run_id": 35524083518,
@@ -1838,16 +1922,100 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "34ac5b905b946b8d433965d4cd0b1f30533d42ee",
-      "status": "in_progress",
-      "node": "b200-nscale-slurm_01",
-      "artifacts": [],
-      "performance_result": false,
+      "status": "success",
+      "node": "im-b200-c002",
+      "artifacts": [
+        {
+          "id": 10614505370,
+          "name": "server_logs_minimaxm3_tp4_conc256_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-696bbfe8e57643681501",
+          "size_bytes": 161482
+        },
+        {
+          "id": 10614500386,
+          "name": "gpu_metrics_minimaxm3_tp4_conc256_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-696bbfe8e57643681501",
+          "size_bytes": 681504
+        },
+        {
+          "id": 10614480498,
+          "name": "agentic_minimaxm3_tp4_conc256_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-696bbfe8e57643681501",
+          "size_bytes": 23331314
+        },
+        {
+          "id": 10614127162,
+          "name": "run-stats",
+          "size_bytes": 284
+        },
+        {
+          "id": 10614002378,
+          "name": "results_bmk",
+          "size_bytes": 2058
+        },
+        {
+          "id": 10613099815,
+          "name": "bmk_agentic_minimaxm3_tp4_conc256_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-696bbfe8e57643681501",
+          "size_bytes": 2254
+        },
+        {
+          "id": 10613044951,
+          "name": "power_audit_minimaxm3_tp4_conc256_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-696bbfe8e57643681501",
+          "size_bytes": 685088
+        }
+      ],
+      "performance_result": true,
       "workflow_name": "offload-v1-dram-c256-r1-20260920T1652Z",
       "dispatched_at": "2026-09-20T16:52:38Z",
       "job_id": 106113129196,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35524083518/job/106113129196",
       "queued_at": "2026-09-20T16:53:01Z",
-      "started_at": "2026-09-20T16:55:06Z"
+      "started_at": "2026-09-20T16:55:06Z",
+      "completed_at": "2026-09-20T21:41:27Z",
+      "runner": "b200-nscale-slurm_01",
+      "allocation_id": "16695",
+      "log_sha256": "fd090012c92962804cc74209d76713e35d9eb94591fc1e05a284e813bab40a63",
+      "performance": {
+        "num_requests_total": 3873,
+        "num_requests_successful": 1028,
+        "num_requests_warmup_dropped": 2845,
+        "num_requests_error_dropped": 4,
+        "duration_seconds": 3627.26387,
+        "output_tokens_per_second": 283.13049,
+        "output_tokens_per_second_per_gpu": 70.78262,
+        "input_tokens_per_second": 31986.22655,
+        "total_tokens_per_second": 32269.35704,
+        "total_tokens_per_second_per_gpu": 8067.33926,
+        "p90_e2e_latency_seconds": 1599.42404,
+        "p90_ttft_seconds": 1550.13381,
+        "p90_tpot_seconds": 0.1252,
+        "p90_interactivity_tokens_per_second_per_user": 7.98735,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.11539,
+        "mean_e2e_latency_seconds": 998.34927,
+        "avg_power_w_per_gpu": 889.658
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.01853,
+        "external_cache_hit_rate": 0.01019,
+        "overall_cache_hit_rate": 0.02871,
+        "gpu_cache_hit_tokens": 11345664,
+        "external_transfer_tokens": 6238720,
+        "computed_tokens": 594865072,
+        "prompt_tokens_total": 612449456,
+        "generation_tokens_total": 1133548,
+        "gpu_cache_usage_pct": 1,
+        "gpu_cache_pool_tokens": 3707648,
+        "theoretical_cache_hit_rate": 0.95428
+      },
+      "evidence_sha256": {
+        "offload_config.json": "eebb5b399221f4d5ba168d3e565c205ab4a0f3ad665ea904333011012c7c86a4",
+        "offload-telemetry.jsonl": "179f6a12996b091a05ecde35a09cca7a9982c078699742fa5de7f2fc9e730eb7",
+        "offload_cleanup.json": "13c0bda53b404038b3751af092561a34e302c9b37f51e19f89e5e2aedf390b4e",
+        "vllm_command.txt": "57d1a9f281533702acccbd88e35ae66df14c8fedbc3391d768d0f0634cd03f4e",
+        "server.log": "ea663ac8768c1ffd04ad107912a262410431632fdcf6f3d29aa44fa934fd5326",
+        "bmk_result.json": "7fcede8003b3027d043bd00856692adc8540afe9a9d38ac73b92e5b1f29b8aa2",
+        "agg_bmk.json": "526e360b58ee3bbbf5c5a4249f158dea74b817a2d514b336f5ebadf69356cce2",
+        "profile_export.jsonl": "9b66674004b48009cf99e31270fde23e131c95df644d2542f532985ed19e1706"
+      },
+      "storage_evidence": "DRAM-only configured zero NVMe capacity. Its workflow-owned scratch remained empty (0 files, 0 bytes); cleanup exit code 0 and deleted true.",
+      "runtime_evidence": "SimpleCPUOffloadConnector used the matched 739 GB host budget. External CPU cache served 6,238,720 prompt tokens (1.019%), proving active DRAM offload. Profiling completed 1,028 responses with zero phase errors; the aggregate classifier tags 4 InvalidInferenceResultError records outside the accepted cohort."
     },
     {
       "run_id": 35524297747,
@@ -1945,8 +2113,8 @@
       "log_archive_sha256": "e882eb6db027430626836771b61e17009b9e09d9d53063df1d943ff6014447e5"
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918",
-  "status": "All four matched c16 arms and the c256 HBM control are valid. Fresh c256 HBM+NVMe and HBM+DRAM runs remain active. The c256 combined arm failed the node-local NVMe capacity preflight twice on im-b200-c003 and will not be retried unchanged. Both c1024 HBM and HBM+NVMe reached the 480-minute allocation limit during canonical warmup with zero profiled responses and will not be retried unchanged.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518",
+  "status": "All four matched c16 arms are valid. At c256, HBM, HBM+NVMe, and HBM+DRAM are valid; the combined arm remains blocked by repeated node-local storage preflight failure on im-b200-c003. NVMe leads the c256 matched set so far in total throughput per GPU and P90 interactivity, but the combined arm and repeats are still required before declaring a crossover.",
   "last_capacity_check": {
     "checked_at": "2026-09-20T17:30:23Z",
     "cluster_observed_at": "2026-09-20T17:29:47Z",
@@ -1961,22 +2129,16 @@
     "demand_percent": 27.27,
     "scheduler_snapshot_at": "2026-09-20T17:30:08Z",
     "scheduler_available": true,
-    "active_study_run_ids": [
-      35524019140,
-      35524083518
-    ],
-    "active_study_job_ids": [
-      106112961565,
-      106113129196
-    ],
+    "active_study_run_ids": [],
+    "active_study_job_ids": [],
     "active_reservations_global": 1,
     "reserved_nodes_global": 1,
     "dispatch_allowed": false,
-    "reason": "The prior capacity snapshot is stale after the combined retry completed. The c256 HBM+NVMe and HBM+DRAM runs remain active; do not dispatch until a fresh global B200 queue check is available.",
-    "stale_after": "2026-09-20T17:33:27Z"
+    "reason": "The prior cluster snapshot is stale after both c256 offload runs completed. Obtain a fresh cluster and scheduler status before any new dispatch.",
+    "stale_after": "2026-09-20T21:42:09Z"
   },
   "next_dispatch": {
-    "requires": "Wait for validated c256 HBM+NVMe and HBM+DRAM results. Retry the c256 combined arm only after InferenceX infrastructure verifies sufficient node-local NVMe capacity or remediates im-b200-c003; do not issue another unchanged GitHub retry. Then choose lower-concurrency probes from the observed c16-to-c256 change. Never dispatch while any B200 job is queued."
+    "requires": "Obtain a fresh cluster and scheduler status. Retry c256 HBM+DRAM+NVMe only with verified sufficient node-local capacity or after infrastructure remediation; do not use a same-node workflow rerun. Then add widely spaced lower-concurrency matched probes or repeats around the observed c16-to-c256 transition, never dispatching while any B200 job is queued."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-19T23:34:00Z",
