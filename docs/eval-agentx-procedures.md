@@ -397,12 +397,17 @@ patched Hugging Face, and patched ModelScope. Each runs the complete GSM8K split
 twice at concurrency 32 and 64. All servers share BF16, TP1, a batch ceiling of
 64, and a 9,472-token context. Generation remains greedy with a 5,376-token limit.
 
-Before serving, the driver compares SHA256 hashes of weights, tokenizer, and
-config assets from both hubs. Remote model IDs then resolve using offline caches;
-the hashes are checked again after all runs. All dependencies are installed before
-the stock arm. The patch is applied after that arm, and the four PR download tests
-run against the real installed package. GPU evidence covers the release-compatible
-backport to 1.3.0rc27, not a build of the newer TensorRT-LLM PR branch.
+Hugging Face arms resolve the pinned snapshot from their cache. The ModelScope
+server starts with a new, verified-empty ModelScope cache and a separate empty
+Hugging Face home/cache. No ModelScope predownload occurs: `trtllm-serve` must
+fetch the remote model itself. After readiness and before scoring, the driver
+checks the fresh weight/tokenizer/config SHA256 hashes against the HF baseline,
+requires the snapshot to reside inside the new ModelScope cache, and rejects HF
+fallback files. Hashes and absence of HF fallback are checked again afterward.
+All dependencies are installed before the stock arm. The patch is applied after
+that arm, and the four PR download tests run against the real installed package.
+GPU evidence covers the release-compatible backport to 1.3.0rc27, not a build of
+the newer TensorRT-LLM PR branch.
 
 The `modelscope_parity_artifacts.tar.gz` upload is authoritative: it preserves
 all twelve labelled result/sample sets, server/client logs, source snapshots,

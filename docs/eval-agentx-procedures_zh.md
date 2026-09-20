@@ -386,10 +386,13 @@ gh run cancel <RUN_ID> --repo SemiAnalysisAI/InferenceX
 并发 32 和 64 下各执行两次完整 GSM8K。所有服务统一使用 BF16、TP1、批量上限
 64 和 9,472-token 上下文；生成保持贪心解码，输出上限为 5,376 tokens。
 
-启动服务前，驱动程序比较两个模型仓库的权重、分词器和配置文件 SHA256。随后远程
-模型 ID 从离线缓存解析，全部评测后再次核对哈希。所有依赖在原始服务启动前安装。
-该组完成后应用补丁，并在实际安装的软件包上运行 PR 中四个下载测试。GPU 证据覆盖
-1.3.0rc27 的兼容回移补丁，并不代表构建运行了较新 TensorRT-LLM PR 分支。
+Hugging Face 两组从缓存解析已固定的快照。ModelScope 服务使用新建且确认完全为空的
+ModelScope 缓存，以及独立的空 Hugging Face home/cache。不会预下载 ModelScope
+模型，必须由 `trtllm-serve` 根据远程 ID 自行下载。服务就绪后、评分前，驱动程序将
+新下载的权重、分词器和配置 SHA256 与 HF 基线比较，要求快照位于新 ModelScope
+缓存内部，并拒绝任何 HF 回退下载文件。全部评测后再次核对哈希及 HF 回退情况。
+所有依赖在原始组启动前安装；该组完成后应用补丁，并在实际软件包上运行 PR 中四个
+下载测试。GPU 证据覆盖 1.3.0rc27 兼容回移补丁，不代表构建了较新 PR 分支。
 
 `modelscope_parity_artifacts.tar.gz` 是完整证据，保留全部十二组带标签的结果和
 样本、服务及客户端日志、源码快照、哈希、设置和测试输出。标准 InferenceX 收集器

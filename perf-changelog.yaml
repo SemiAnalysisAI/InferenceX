@@ -8469,3 +8469,10 @@
     - "Isolated diagnostic branch: compare stock HF, patched HF, and patched ModelScope in one H100 allocation with repeated full-split GSM8K and snapshot hashes."
     - "独立诊断分支：在同一个 H100 分配中，对原始 HF、补丁 HF 与补丁 ModelScope 执行重复完整 GSM8K 评测并核对模型文件哈希。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3323
+
+- config-keys:
+    - qwen3-0.6b-bf16-h100-trt-modelscope
+  description:
+    - "Require a true ModelScope cold start: empty ModelScope and HF caches, server-triggered download, matching asset hashes, and no HF fallback before accuracy scoring."
+    - "要求真正的 ModelScope 冷启动：ModelScope 与 HF 缓存均为空，由服务触发下载，准确率评分前核对文件哈希且禁止 HF 回退。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3323

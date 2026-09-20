@@ -57,7 +57,6 @@ def manifest(root: Path) -> dict:
 
 def prepare(out: Path) -> None:
     from huggingface_hub import HfApi, snapshot_download
-    from modelscope.hub.snapshot_download import snapshot_download as ms_download
 
     if importlib.metadata.version("tensorrt_llm") != "1.3.0rc27":
         raise ValueError("The experiment requires the source-matched 1.3.0rc27 image")
@@ -69,12 +68,7 @@ def prepare(out: Path) -> None:
     )
     if hf_path.name != revision:
         raise ValueError("HF main changed while staging; retry with a stable snapshot")
-    ms_path = Path(
-        ms_download(
-            model_id=model, revision="master", ignore_patterns=["original/**/*"]
-        )
-    )
-    hf, ms = manifest(hf_path), manifest(ms_path)
+    hf = manifest(hf_path)
     write_json(
         out / "snapshots.json",
         {
@@ -82,15 +76,9 @@ def prepare(out: Path) -> None:
             "hf_revision": revision,
             "ms_revision": "master",
             "hf": hf,
-            "modelscope": ms,
         },
     )
-    if hf["files"] != ms["files"]:
-        raise ValueError(
-            "Hub snapshots differ; inspect snapshots.json before comparing accuracy"
-        )
     (out / "hf_path").write_text(str(hf_path))
-    (out / "modelscope_path").write_text(str(ms_path))
     write_json(
         out / "environment.json",
         {
@@ -143,7 +131,56 @@ def prepare(out: Path) -> None:
         "from tensorrt_llm.llmapi.utils import download_hf_model, download_hf_partial\n\n"
     )
     (out / "test_pr_downloads.py").write_text(imports + tests)
-    print(f"Verified identical inference assets: {len(hf['files'])} files", flush=True)
+    print("HF snapshot recorded; ModelScope will start with an empty cache", flush=True)
+
+
+def cold_start(out: Path) -> None:
+    cache = Path(os.environ["MODELSCOPE_CACHE"])
+    hf_home = Path(os.environ["PARITY_COLD_HF_HOME"])
+    for root in (cache, hf_home):
+        if not root.is_dir() or any(root.iterdir()):
+            raise ValueError(f"Cold-start cache is not empty: {root}")
+    write_json(
+        out / "cold_start.json",
+        {
+            "modelscope_cache": str(cache),
+            "hf_home": str(hf_home),
+            "modelscope_initial_entries": [],
+            "hf_initial_entries": [],
+            "download_trigger": "trtllm-serve remote model ID; no predownload",
+        },
+    )
+    print(f"Verified empty ModelScope cache: {cache}", flush=True)
+    print(f"Verified empty isolated HF home: {hf_home}", flush=True)
+
+
+def verify_cold(out: Path) -> None:
+    from tensorrt_llm.llmapi.utils import download_hf_model
+
+    cold = json.loads((out / "cold_start.json").read_text())
+    snapshot = download_hf_model(os.environ["MODEL"])
+    if not snapshot.resolve().is_relative_to(Path(cold["modelscope_cache"]).resolve()):
+        raise ValueError(f"ModelScope reused an external cache: {snapshot}")
+    before = json.loads((out / "snapshots.json").read_text())
+    before["modelscope"] = manifest(snapshot)
+    write_json(out / "snapshots.json", before)
+    if before["hf"]["files"] != before["modelscope"]["files"]:
+        raise ValueError("Fresh ModelScope assets differ from the HF baseline")
+    hf_files = [
+        str(f.relative_to(cold["hf_home"]))
+        for f in Path(cold["hf_home"]).rglob("*")
+        if f.is_file()
+    ]
+    cold["hf_files_after_server_start"] = hf_files
+    write_json(out / "cold_start.json", cold)
+    # Some Transformers versions create a cache-version marker on import.
+    if any(Path(name).name != "version.txt" for name in hf_files):
+        raise ValueError(f"Unexpected HF fallback/cache files: {hf_files}")
+    (out / "modelscope_path").write_text(str(snapshot))
+    print(
+        "Fresh ModelScope download matches all HF inference assets; no HF model cache used",
+        flush=True,
+    )
 
 
 def runtime(out: Path, label: str) -> None:
@@ -196,7 +233,10 @@ def verify(out: Path) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["prepare", "runtime", "record", "verify"])
+    parser.add_argument(
+        "action",
+        choices=["prepare", "runtime", "record", "verify", "cold-start", "verify-cold"],
+    )
     parser.add_argument("out", type=Path)
     parser.add_argument("--label")
     parser.add_argument("--repeat", type=int)
@@ -204,6 +244,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.action == "prepare":
         prepare(args.out)
+    elif args.action == "cold-start":
+        cold_start(args.out)
+    elif args.action == "verify-cold":
+        verify_cold(args.out)
     elif args.action == "runtime":
         runtime(args.out, args.label)
     elif args.action == "record":
