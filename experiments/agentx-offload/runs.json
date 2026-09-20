@@ -792,9 +792,40 @@
       "repeat": 1,
       "attempt": 2,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "in_progress",
+      "status": "failure",
       "node": "b200-nscale-slurm_10",
-      "artifacts": [],
+      "artifacts": [
+        {
+          "id": 10604840511,
+          "name": "run-stats",
+          "size_bytes": 280
+        },
+        {
+          "id": 10604441133,
+          "name": "results_bmk",
+          "size_bytes": 142
+        },
+        {
+          "id": 10604221157,
+          "name": "server_logs_minimaxm3_tp4_conc1024_kvdram-vllm-simple",
+          "size_bytes": 208887
+        },
+        {
+          "id": 10604176454,
+          "name": "gpu_metrics_minimaxm3_tp4_conc1024_kvdram-vllm-simple",
+          "size_bytes": 1167699
+        },
+        {
+          "id": 10604111607,
+          "name": "agentic_minimaxm3_tp4_conc1024_kvdram-vllm-simple",
+          "size_bytes": 3334443
+        },
+        {
+          "id": 10604051682,
+          "name": "power_audit_minimaxm3_tp4_conc1024_kvdram-vllm-simple",
+          "size_bytes": 1167881
+        }
+      ],
       "performance_result": false,
       "workflow_name": "offload-v1-dram-c1024-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:24:37Z",
@@ -815,7 +846,12 @@
         }
       ],
       "rerun_triggering_actor": "inferencex-dash[bot]",
-      "queued_at": "2026-09-20T01:35:52Z"
+      "queued_at": "2026-09-20T01:35:52Z",
+      "completed_at": "2026-09-20T11:09:11Z",
+      "allocation_id": "16681",
+      "failure_stage": "workflow_time_limit_during_agentx_warmup",
+      "failure_evidence": "The canonical c1024 HBM+DRAM run remained in warmup until Slurm cancelled allocation 16681 at the eight-hour workflow time limit. Its last progress sample returned 6,573 of 11,339 planned warmup requests, with 956 still in flight and no recorded errors; profiling never started and no benchmark result was produced. This point needs an explicit larger execution budget rather than an unchanged retry or truncated warmup.",
+      "log_archive_sha256": "a8ef5c7a4da892c9d5e82cb6bffad0f8de1143b778504e5a55a033ecc68997d6"
     },
     {
       "run_id": 35476050409,
@@ -1086,9 +1122,45 @@
       "repeat": 1,
       "attempt": 2,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "in_progress",
+      "status": "failure",
       "node": "b200-nscale-slurm_00",
-      "artifacts": [],
+      "artifacts": [
+        {
+          "id": 10604740412,
+          "name": "results_bmk",
+          "size_bytes": 1124
+        },
+        {
+          "id": 10604220917,
+          "name": "gpu_metrics_minimaxm3_tp4_conc4096_kvnvme-vllm-simple",
+          "size_bytes": 886498
+        },
+        {
+          "id": 10604091489,
+          "name": "bmk_agentic_minimaxm3_tp4_conc4096_kvnvme-vllm-simple",
+          "size_bytes": 1336
+        },
+        {
+          "id": 10604031529,
+          "name": "power_audit_minimaxm3_tp4_conc4096_kvnvme-vllm-simple",
+          "size_bytes": 888511
+        },
+        {
+          "id": 10604026516,
+          "name": "server_logs_minimaxm3_tp4_conc4096_kvnvme-vllm-simple",
+          "size_bytes": 274044
+        },
+        {
+          "id": 10603996672,
+          "name": "run-stats",
+          "size_bytes": 280
+        },
+        {
+          "id": 10603831870,
+          "name": "agentic_minimaxm3_tp4_conc4096_kvnvme-vllm-simple",
+          "size_bytes": 3279981
+        }
+      ],
       "performance_result": false,
       "workflow_name": "offload-v1-nvme-c4096-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:25:10Z",
@@ -1109,7 +1181,17 @@
         }
       ],
       "rerun_triggering_actor": "inferencex-dash[bot]",
-      "queued_at": "2026-09-20T01:36:07Z"
+      "queued_at": "2026-09-20T01:36:07Z",
+      "completed_at": "2026-09-20T11:04:05Z",
+      "allocation_id": "16689",
+      "failure_stage": "agentx_warmup",
+      "failure_evidence": "Canonical c4096 HBM+NVMe warmup exhausted the six-hour phase budget before profiling. It returned 4,356 of 45,376 planned warmup requests, with 60 still in flight and 64 error-dropped requests; AIPerf recorded zero successful profiled requests and ProfileAborted. No EngineDead, connection-refused, storage, or node-local failure signature was present, so this is a deterministic feasibility failure and will not be retried unchanged.",
+      "log_archive_sha256": "06a1afbe977f66caa17b2d779035f4194c9365f593580699334a48512c69666b",
+      "storage_evidence": "Cleanup receipt verified deleted=true for exact workflow-owned scratch /offload-scratch/inferencex-offload-35476072143-2-16689-4ebab5959f88. Before deletion it contained four cache files totaling 1,099,502,125,056 logical bytes and 1,099,490,332,672 allocated bytes.",
+      "evidence_sha256": {
+        "offload_cleanup.json": "7c48f67f4f9d7d61106b4d4943d69e6280a94f8e1bb149217005c8f835ae5978",
+        "offload_config.json": "834c2bcea0ced977ce586cb4334d34a3cae1e9200c9f5a2b4008c8e9a2a472b8"
+      }
     },
     {
       "run_id": 35476075885,
@@ -1524,7 +1606,7 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850",
-  "status": "All four matched c16 arms are valid. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. Six study jobs remain in progress across c256, c1024, c4096, and c8192. The c4096 HBM and HBM+DRAM arms and the c8192 HBM arm each exhausted the six-hour canonical warmup budget with zero profiled responses; these are deterministic feasibility failures and will not be retried unchanged. The c4096 combined arm also exceeded its 2 TiB storage guard and was cleaned up.",
+  "status": "All four matched c16 arms are valid. Four study jobs remain in progress: c1024 HBM, c1024 HBM+NVMe, c8192 HBM+DRAM, and c256 HBM. The c1024 HBM+DRAM run hit the eight-hour workflow limit while still in canonical warmup; it needs an explicit larger execution budget. All c4096 arms have now failed before profiling, and the c4096 HBM+NVMe scratch was verified deleted. These points will not be retried unchanged.",
   "last_capacity_check": {
     "checked_at": "2026-09-20T08:21:25Z",
     "cluster_observed_at": "2026-09-20T08:20:58Z",
@@ -1541,27 +1623,23 @@
     "scheduler_available": true,
     "active_study_run_ids": [
       35476043213,
-      35476047627,
       35476050409,
-      35476072143,
       35492330557,
       35497846918
     ],
     "active_study_job_ids": [
       106035807426,
-      106000832058,
       106000864877,
-      106000859670,
       106029329353,
       106044138671
     ],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": false,
-    "reason": "Three additional high-concurrency runs reached deterministic canonical warmup feasibility failures, freeing nodes. New dispatch remains blocked by the previously reported automation approval review until the user explicitly authorizes the c256 HBM+NVMe dispatch."
+    "reason": "Two additional runs failed before profiling, freeing nodes. New dispatch remains blocked by the previously reported automation approval review until the user explicitly authorizes the c256 HBM+NVMe dispatch."
   },
   "next_dispatch": {
-    "requires": "After explicit user authorization resolves the dispatch approval blocker and a fresh scheduler check confirms zero pending B200 jobs, dispatch the already validated c256 HBM+NVMe probe, then HBM+DRAM+NVMe and HBM+DRAM as capacity permits. Do not retry the deterministic c4096 HBM, HBM+DRAM, or combined failures, nor c8192 HBM, unchanged."
+    "requires": "After explicit user authorization resolves the dispatch approval blocker and a fresh scheduler check confirms zero pending B200 jobs, dispatch the already validated c256 HBM+NVMe probe, then HBM+DRAM+NVMe and HBM+DRAM as capacity permits. Do not retry c4096 points unchanged. Revisit c1024 HBM+DRAM only with an explicit larger execution budget."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-19T23:34:00Z",
