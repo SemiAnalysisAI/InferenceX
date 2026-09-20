@@ -8455,3 +8455,9 @@
   description:
     - "Update B200 vLLM AgentX to DSpark6 and a new image with TP8 and DEP8 configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
+
+- config-keys:
+    - dsr1-fp8-mi325x-sglang
+  description:
+    - "Update SGLang image from v0.5.19-rocm700-mi30x to v0.5.20-rocm720-mi30x and rename --cuda-graph-max-bs to its decode flag."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3318
