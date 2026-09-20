@@ -176,3 +176,5 @@ Other offloading tiers, including NVMe KV cache offloading, are outside the init
 - Deprecating a precision (e.g. Qwen3.5 bf16) or one arm of an A/B pair (e.g. non-MTP) narrows a model's recipe coverage without retiring the model. The model stays listed as active as long as one scenario still runs.
 - `dsr1` began as the DeepSeek-V3 workflow templates in the initial repo import and was switched to DeepSeek-R1 benchmarking on 2025-08-13 (renamed `dsv3` → `dsr1` on 2025-08-20).
 - Adding a model? Follow [Add a model + hardware recipe](docs/configuration-procedures.md#add-a-model--hardware-recipe) and add a row here (and in [`MODELS_zh.md`](MODELS_zh.md)) in the same PR.
+
+<!-- CODEOWNER sign-off verifier smoke test (post-#3300); this PR is not meant to merge. -->
