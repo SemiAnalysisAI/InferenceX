@@ -83,9 +83,11 @@ flowchart TD
 1. 使用原生源代码提交中的 `uv.lock` 安装非 editable 环境：`uv sync --frozen --no-editable --no-dev --python 3.12`。保持该源码 checkout 干净。保留带哈希的 Linux wheel 及构建工具约束：`uv.lock` 固定运行依赖，但未固定上游 Hatch 构建依赖。重新构建时，获取并核实 NVIDIA 的 `v2.2.1` tag 指向 `984180e5b8755aef85e9995048b5a16cb5336bce`，保留相同 hatch-vcs 版本谱系。
 2. 从实际测量 checkout 构建并安装非 editable InferenceX wheel，使用共享 Python 3.12 环境。分配前逐文件比较已安装包与 checkout。
 3. 准备独立客户端环境并保留实际解析的包产物与锁。AgentX 必须来自 `754356e9a39acc6cc6afb242d123bb57c3fb6f75`；lm-eval 必须来自 `b315ef3b05176acc9732bb7fdec116abe1ecc476`。拒绝 editable 或错误来源。准备阶段记录所有已安装 distribution，而非仅入口包。
-4. 完整准备模型/tokenizer snapshot、准确的 `semianalysisai/cc-traces-weka-062126` snapshot 与 GSM8K 缓存。记录真实 revision，不编造或替换。准备原样服务镜像的已校验 squash 文件，记录来源和哈希。客户端离线模型的 `refs/main` 与 snapshot 文件必须纳入资源绑定，解析后的模型 snapshot 必须与服务端的规范路径完全一致，保留 tokenizer 的模型名称同时禁止解析到其他缓存版本。
+4. 完整准备模型/tokenizer snapshot、准确的 `semianalysisai/cc-traces-weka-062126` snapshot 与 GSM8K 缓存。记录真实 revision，不编造或替换。准备原样服务镜像的已校验 squash 文件，记录来源和哈希。客户端离线模型的 `refs/main` 与 snapshot 文件必须纳入资源绑定，解析后的模型 snapshot 必须与服务端的规范路径完全一致，保留 tokenizer 的模型名称同时禁止解析到其他缓存版本。私有 Hugging Face `refs/main` 文件只包含 revision 字节，不带尾部换行，符合实际缓存 reader 的要求。
 5. 分别编写 AgentX、eval 的 `ClientSite` JSON：解释器、distribution、离线缓存环境、移除变量、资源根目录/文件、模型 snapshot、超时与终止宽限。`RuntimeSpec` 拒绝凭证；执行时移除继承凭证及未验收的 AIPerf 覆盖项。wheel 包含 eval task 与 1,319 个独立文档哈希。
 6. 保留生成的 `PreparedSite` JSON，包含两个客户端配置路径、源码/解释器/模型/镜像路径及挂载。发布时再添加实际部署的 reader/collector revision，形成 `PilotSite`。准确 schema 见 [`render.py`](../infx/srt_slurm/render.py) 与 [`prepare.py`](../infx/benchmarks/prepare.py)。
+
+仅有下载好的 trace snapshot，无法满足 AgentX 离线调用 `datasets.load_dataset` 的要求。准备时须用数据集的标准仓库名称及明确 revision，在该 generation 的私有 `HF_DATASETS_CACHE` 中生成缓存；随后启动新的离线进程，通过标准仓库名称加载，并按顺序逐行与固定 snapshot 比较。生成的缓存也须纳入资源绑定。通过本地目录加载生成的缓存具有不同身份，不能替代上述检查。eval 行为探测也会执行与正式 benchmark 相同的、随包分发的 lm-eval 兼容补丁。
 
 准备阶段校验已有资源，不在计算节点安装包、下载模型或修复不完整 snapshot。派生 mmap 缓存使用独立所属 namespace、文件完整性回执、独立校验副本及损坏隔离；锁竞争时的冷准备有明确界限。
 

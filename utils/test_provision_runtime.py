@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from huggingface_hub import hf_hub_download, snapshot_download
 
 from infx.benchmarks.common import (
     read_json,
@@ -19,12 +20,13 @@ from infx.benchmarks.prepare import bind_file, collect_assets
 from infx.benchmarks.spec import RuntimeSpec
 from infx.srt_slurm.provision import ProvisionConfig, snapshot
 from infx.srt_slurm.provision_runtime import (
+    _GSM_SCRIPT,
     Commands,
     ProvisionStepError,
-    _GSM_SCRIPT,
     _offline_env,
     _sites,
     installer_environment,
+    materialize_trace,
     owned_generation,
     publish_evidence,
     require_clean_checkout,
@@ -90,6 +92,27 @@ def test_private_views_bind_original_snapshot_without_mutating_legacy_refs(asset
             terminate_grace_seconds=1,
         )
         original_model = snapshot(assets, dataset=False)
+        resolved_model = Path(
+            snapshot_download(
+                assets.model_repository,
+                revision="main",
+                cache_dir=env["HF_HUB_CACHE"],
+                local_files_only=True,
+            )
+        ).resolve()
+        assert resolved_model == original_model
+        assert (resolved_model / "one.safetensors").read_bytes() == b"weight"
+        resolved_trace = Path(
+            snapshot_download(
+                assets.dataset_repository,
+                repo_type="dataset",
+                revision="main",
+                cache_dir=env["HF_HUB_CACHE"],
+                local_files_only=True,
+            )
+        ).resolve()
+        assert resolved_trace == snapshot(assets, dataset=True)
+        assert (resolved_trace / "train.parquet").read_bytes() == b"trace"
         assert (
             verify_model_snapshot_assets(
                 runtime,
@@ -125,30 +148,35 @@ def test_private_views_bind_original_snapshot_without_mutating_legacy_refs(asset
 
 def test_owned_generation_rejects_overlap_and_reuse_and_retains_failure(tmp_path):
     root = tmp_path.resolve() / "prepared"
-    with pytest.raises(RuntimeError, match="controlled failure"):
-        with owned_generation(root, "attempt-1") as generation:
-            (generation / "evidence/progress.txt").write_text("completed stage")
-            with pytest.raises(ValueError, match="another provisioning"):
-                with owned_generation(root, "attempt-2"):
-                    pytest.fail("lock was bypassed")
-            raise RuntimeError("controlled failure")
+    with (
+        pytest.raises(RuntimeError, match="controlled failure"),
+        owned_generation(root, "attempt-1") as generation,
+    ):
+        (generation / "evidence/progress.txt").write_text("completed stage")
+        with (
+            pytest.raises(ValueError, match="another provisioning"),
+            owned_generation(root, "attempt-2"),
+        ):
+            pytest.fail("lock was bypassed")
+        raise RuntimeError("controlled failure")
     assert read_json(generation / "state.json") == {
         "state": "failed",
         "error_type": "RuntimeError",
         "qualification_complete": False,
     }
     assert (generation / "evidence/progress.txt").read_text() == "completed stage"
-    with pytest.raises(FileExistsError):
-        with owned_generation(root, "attempt-1"):
-            pytest.fail("failed generation was silently reused")
+    with pytest.raises(FileExistsError), owned_generation(root, "attempt-1"):
+        pytest.fail("failed generation was silently reused")
     assert not (root / "generations/attempt-2").exists()
 
 
 @pytest.mark.parametrize("namespace", ["../escape", "", "/absolute"])
 def test_namespace_cannot_escape_owned_root(tmp_path, namespace):
-    with pytest.raises(ValueError, match="namespace"):
-        with owned_generation(tmp_path.resolve() / "prepared", namespace):
-            pytest.fail("unsafe namespace accepted")
+    with (
+        pytest.raises(ValueError, match="namespace"),
+        owned_generation(tmp_path.resolve() / "prepared", namespace),
+    ):
+        pytest.fail("unsafe namespace accepted")
 
 
 def test_child_gets_no_ambient_credentials_and_failure_logs_are_publishable(tmp_path):
@@ -279,7 +307,7 @@ def test_installed_client_probes_retain_behavior_and_reject_invalid_tokenization
         "def snapshot_download(repository, *, revision, local_files_only):\n"
         "    assert revision == 'main' and local_files_only\n"
         "    root=pathlib.Path(os.environ['HF_HUB_CACHE'])/('models--'+repository.replace('/','--'))\n"
-        "    return str(root/'snapshots'/(root/'refs/main').read_text().strip())\n"
+        "    return str(root/'snapshots'/(root/'refs/main').read_text())\n"
     )
     (purelib / "aiperf/common/tokenizer.py").write_text(
         "import os\n"
@@ -288,19 +316,35 @@ def test_installed_client_probes_retain_behavior_and_reject_invalid_tokenization
         "    def from_pretrained(cls, repository, *, trust_remote_code):\n"
         "        assert repository == 'fixture/model' and trust_remote_code\n"
         "        assert os.environ['HF_HUB_OFFLINE'] == '1'\n"
+        "        if 'FIXTURE_INVALID_TOKENIZER' in os.environ:\n"
+        "            raise ValueError('controlled tokenizer construction failure')\n"
         "        return cls()\n"
         "    def encode(self, text): return [17,19]\n"
         "    def decode(self, tokens): return 'decoded text'\n"
         "    def encode_lengths_batch(self, texts):\n"
         "        return [2,2] if 'FIXTURE_INVALID_LENGTHS' not in os.environ else [1,2]\n"
     )
+    (purelib / "lm_eval/models/api_models.py").write_text(
+        "class JsonChatStr:\n"
+        "    def __init__(self, prompt): self.prompt=prompt\n"
+        "class TemplateAPI:\n"
+        "    def apply_chat_template(self, messages):\n"
+        "        raise ValueError('packaged compatibility patch was not applied')\n"
+    )
     (purelib / "lm_eval/models/openai_completions.py").write_text(
-        "class LocalChatCompletion:\n"
+        "import json\n"
+        "from lm_eval.models.api_models import TemplateAPI\n"
+        "class LocalChatCompletion(TemplateAPI):\n"
         "    def __init__(self, **kwargs):\n"
         "        assert kwargs['tokenized_requests'] is False\n"
         "        self.tokenizer_backend=None\n"
-        "    def apply_chat_template(self, messages): return messages\n"
-        "    def create_message(self, batch): return batch[0]\n"
+        "        self.model=kwargs['model']\n"
+        "    def create_message(self, batch): return json.loads(batch[0].prompt)\n"
+        "    def _create_payload(self, messages, *, generate, gen_kwargs, eos):\n"
+        "        assert generate and eos == '</s>'\n"
+        "        assert gen_kwargs.pop('do_sample') is False\n"
+        "        return dict(messages=messages, model=self.model, seed=1234,\n"
+        "                    stop=gen_kwargs.pop('until'), **gen_kwargs)\n"
     )
     with owned_generation(Path(assets.shared_root), "client-probes") as generation:
         env = _offline_env(generation)
@@ -318,6 +362,16 @@ def test_installed_client_probes_retain_behavior_and_reject_invalid_tokenization
             {"role": "user", "content": "InferenceX client preparation."}
         ]
         assert evaluation["tokenizer_backend"] is None
+        assert evaluation["payload"] == {
+            "messages": [{"role": "user", "content": "InferenceX client preparation."}],
+            "model": "fixture/model",
+            "max_tokens": 12288,
+            "temperature": 0,
+            "top_p": 1,
+            "stop": ["</s>", "<|im_end|>"],
+            "seed": 1234,
+        }
+        assert evaluation["parsed_generations"] == ["final answer", "reasoning answer"]
         with pytest.raises(ProvisionStepError, match="offline-agentx-behavior"):
             verify_clients(
                 commands, assets, clients, {**env, "FIXTURE_INVALID_LENGTHS": "1"}
@@ -325,6 +379,21 @@ def test_installed_client_probes_retain_behavior_and_reject_invalid_tokenization
         assert (
             "batch lengths differ"
             in (generation / "logs/03-offline-agentx-behavior.log").read_text()
+        )
+        configuration_path = generation / "evidence/agentx-behavior.configuration.json"
+        configuration_path.unlink()
+        with pytest.raises(ProvisionStepError, match="offline-agentx-behavior"):
+            verify_clients(
+                commands, assets, clients, {**env, "FIXTURE_INVALID_TOKENIZER": "1"}
+            )
+        assert read_json(configuration_path) == {
+            "repository": "fixture/model",
+            "snapshot": str(snapshot(assets, dataset=False)),
+            "configuration": {"config.json": {"model_type": "fixture"}},
+        }
+        assert (
+            "controlled tokenizer construction failure"
+            in (generation / "logs/04-offline-agentx-behavior.log").read_text()
         )
 
 
@@ -392,6 +461,15 @@ def test_gsm_materialization_pins_online_revision_then_checks_nominal_offline_lo
         "train_documents": 5,
         "offline": True,
     }
+    assert Path(
+        snapshot_download(
+            "openai/gsm8k",
+            repo_type="dataset",
+            revision="main",
+            cache_dir=tmp_path / "hub",
+            local_files_only=True,
+        )
+    ) == tmp_path / "hub/datasets--openai--gsm8k/snapshots" / ("e" * 40)
     data = read_json(payload)
     data["test"][0]["answer"] = "changed document"
     payload.write_text(json.dumps(data))
@@ -409,3 +487,106 @@ def test_gsm_materialization_pins_online_revision_then_checks_nominal_offline_lo
     )
     assert failed.returncode != 0
     assert "GSM8K document differs" in failed.stderr
+
+
+def test_trace_materialization_proves_nominal_rows_and_keeps_online_writes_private(
+    assets, isolated_python
+):
+    python, purelib = isolated_python
+    source = snapshot(assets, dataset=True)
+    payload = {
+        "schema": {"id": "string", "turns": "int64"},
+        "rows": [{"id": "first", "turns": 2}, {"id": "second", "turns": 3}],
+    }
+    (source / "fixture.json").write_text(json.dumps(payload))
+    (purelib / "datasets.py").write_text(
+        "import json, os, pathlib, types\n"
+        "class Features(dict):\n"
+        "    def to_dict(self): return dict(self)\n"
+        "class Schema:\n"
+        "    def __init__(self, fields): self.fields=list(fields.items())\n"
+        "    def equals(self, other, *, check_metadata): return self.fields == other.fields\n"
+        "class Dataset:\n"
+        "    def __init__(self, payload, cache):\n"
+        "        self.rows=payload['rows']\n"
+        "        self.column_names=list(payload['schema'])\n"
+        "        self.features=Features(payload['schema'])\n"
+        "        self.data=types.SimpleNamespace(schema=Schema(payload['schema']))\n"
+        "        self.cache_files=[{'filename':str(cache)}]\n"
+        "    def __len__(self): return len(self.rows)\n"
+        "    def __iter__(self): return iter(self.rows)\n"
+        "def load_dataset(target, *, name, split, trust_remote_code, streaming, **kwargs):\n"
+        "    assert name is None and split == 'train' and not trust_remote_code and not streaming\n"
+        "    cache=pathlib.Path(os.environ['HF_DATASETS_CACHE'])/'trace.json'\n"
+        "    if target.startswith('/'):\n"
+        "        data=json.loads((pathlib.Path(target)/'fixture.json').read_text())\n"
+        "    elif os.environ['HF_HUB_OFFLINE'] == '0':\n"
+        "        assert kwargs['revision'] == 'b'*40\n"
+        "        seeded=pathlib.Path(os.environ['HF_HUB_CACHE'])/('datasets--'+target.replace('/','--'))/'snapshots'/kwargs['revision']\n"
+        "        (seeded/'new-metadata.json').write_text('{}')\n"
+        "        data=json.loads((seeded/'fixture.json').read_text())\n"
+        "        cache.write_text(json.dumps(data))\n"
+        "    else:\n"
+        "        assert not kwargs\n"
+        "        data=json.loads(cache.read_text())\n"
+        "    return Dataset(data, cache)\n"
+    )
+    with owned_generation(Path(assets.shared_root), "trace-cache") as generation:
+        env = _offline_env(generation)
+        _sites(assets, {"agentx": python, "eval": python}, env)
+        commands = Commands(generation, installer_environment(generation, os.environ))
+        materialize_trace(commands, assets, python, env)
+        receipt = read_json(generation / "evidence/trace-offline.json")
+        assert receipt["rows"] == 2
+        assert receipt["columns"] == ["id", "turns"]
+        assert receipt["features"] == {"id": "string", "turns": "int64"}
+        assert receipt["offline"] is True
+        assert not (source / "new-metadata.json").exists()
+        assert (source.parent.parent / "refs/main").read_text() == "c" * 40
+        cached_file = Path(
+            hf_hub_download(
+                assets.dataset_repository,
+                "fixture.json",
+                repo_type="dataset",
+                revision="b" * 40,
+                cache_dir=generation / "hf/trace-preparation-hub",
+                local_files_only=True,
+            )
+        )
+        assert json.loads(cached_file.read_text()) == payload
+        assert cached_file.is_symlink()
+        assert not cached_file.parent.is_symlink()
+        cache = Path(env["HF_DATASETS_CACHE"]) / "trace.json"
+        script = generation / "materialize-trace.py"
+        for changed, message in (
+            ({**payload, "rows": list(reversed(payload["rows"]))}, "row 0 differs"),
+            ({**payload, "rows": payload["rows"][:1]}, "row count differs"),
+            (
+                {**payload, "schema": {"id": "string", "turns": "float64"}},
+                "schema differs",
+            ),
+        ):
+            cache.write_text(json.dumps(changed))
+            with pytest.raises(ProvisionStepError, match="trace-recheck"):
+                commands.run(
+                    "trace-recheck",
+                    [
+                        str(python),
+                        "-I",
+                        str(script),
+                        "offline",
+                        assets.dataset_repository,
+                        assets.dataset_revision,
+                        str(source),
+                        str(generation / "recheck.json"),
+                    ],
+                    cwd=generation,
+                    timeout=10,
+                    environment=env,
+                )
+            assert (
+                message
+                in (
+                    generation / "logs" / f"{commands.number:02d}-trace-recheck.log"
+                ).read_text()
+            )

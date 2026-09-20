@@ -164,7 +164,7 @@ def private_snapshot(
     (base / "refs").mkdir()
     reference = base / "refs/main"
     with reference.open("x") as stream:
-        stream.write(revision + "\n")
+        stream.write(revision)
     reference.chmod(0o444)
     return target
 
@@ -174,7 +174,7 @@ def _project(path: Path, dependencies: list[str], python: str, *, cpu_torch: boo
     content = (
         '[project]\nname = "infx-prepared-environment"\nversion = "0.0.0"\n'
         f'requires-python = "=={python}.*"\ndependencies = {json.dumps(dependencies)}\n'
-        "[tool.uv]\npackage = false\n"
+        '[tool.uv]\npackage = false\nexclude-newer = "PT12H"\n'
     )
     if cpu_torch:
         content += (
@@ -320,7 +320,7 @@ if mode == "online":
     snapshot = pathlib.Path(snapshot_download("openai/gsm8k", repo_type="dataset", revision="main", cache_dir=str(hub)))
     if not re.fullmatch("[0-9a-f]{40}", snapshot.name): raise ValueError("GSM8K revision is not immutable")
     (base / "refs").mkdir(exist_ok=True)
-    (base / "refs/main").write_text(snapshot.name + "\\n")
+    (base / "refs/main").write_text(snapshot.name)
 revision = (base / "refs/main").read_text().strip()
 dataset = load_dataset("openai/gsm8k", "main", cache_dir=os.environ["HF_DATASETS_CACHE"], **({"revision": revision} if mode == "online" else {}))
 expected = json.loads(pathlib.Path(expected_path).read_text())
@@ -332,6 +332,86 @@ for index, document in enumerate(dataset["test"]):
 if len(dataset["train"]) < 5: raise ValueError("GSM8K five-shot training split is incomplete")
 pathlib.Path(output).write_text(json.dumps({"revision": revision, "test_documents": len(dataset["test"]), "train_documents": len(dataset["train"]), "offline": mode == "offline"}) + "\\n")
 """
+
+
+_TRACE_SCRIPT = """import hashlib, json, pathlib, sys
+from datasets import load_dataset
+mode, repository, revision, source, output = sys.argv[1:]
+snapshot = pathlib.Path(source)
+if snapshot.resolve() != snapshot or snapshot.name != revision:
+    raise ValueError("trace source is not the canonical pinned snapshot")
+if mode not in ("online", "offline"):
+    raise ValueError("unknown trace preparation mode")
+options = {"name": None, "split": "train", "trust_remote_code": False, "streaming": False}
+dataset = load_dataset(repository, **options, **({"revision": revision} if mode == "online" else {}))
+if len(dataset) == 0:
+    raise ValueError("trace dataset is empty")
+result = {"repository": repository, "revision": revision, "offline": mode == "offline", "rows": len(dataset), "columns": dataset.column_names, "features": dataset.features.to_dict(), "cache_files": dataset.cache_files}
+if mode == "offline":
+    expected = load_dataset(str(snapshot), **options)
+    if dataset.column_names != expected.column_names or not dataset.data.schema.equals(expected.data.schema, check_metadata=False):
+        raise ValueError("offline nominal trace schema differs from pinned snapshot")
+    if len(dataset) != len(expected):
+        raise ValueError("offline nominal trace row count differs from pinned snapshot")
+    digest = hashlib.sha256()
+    for index, (actual_row, expected_row) in enumerate(zip(dataset, expected, strict=True)):
+        actual = json.dumps(actual_row, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
+        original = json.dumps(expected_row, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
+        if actual != original:
+            raise ValueError(f"offline nominal trace row {index} differs from pinned snapshot")
+        digest.update(len(actual).to_bytes(8, "big"))
+        digest.update(actual)
+    result["ordered_rows_sha256"] = digest.hexdigest()
+pathlib.Path(output).write_text(json.dumps(result, ensure_ascii=False) + "\\n")
+"""
+
+
+def materialize_trace(
+    commands: Commands, config: ProvisionConfig, python: Path, env: dict[str, str]
+) -> None:
+    """Seed nominal Arrow identity without writing through the canonical snapshot view."""
+    source = snapshot(config, dataset=True)
+    hub = commands.generation / "hf/trace-preparation-hub"
+    seeded = (
+        hub
+        / ("datasets--" + config.dataset_repository.replace("/", "--"))
+        / "snapshots"
+        / config.dataset_revision
+    )
+    seeded.mkdir(parents=True)
+    for original in source.rglob("*"):
+        target = seeded / original.relative_to(source)
+        if original.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        elif original.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.symlink_to(original.resolve(strict=True))
+        else:
+            raise ValueError("trace snapshot contains an unsupported filesystem entry")
+    script = commands.generation / "materialize-trace.py"
+    script.write_text(_TRACE_SCRIPT)
+    for mode in ("online", "offline"):
+        commands.run(
+            f"trace-{mode}",
+            [
+                str(python),
+                "-I",
+                str(script),
+                mode,
+                config.dataset_repository,
+                config.dataset_revision,
+                str(source),
+                str(commands.generation / "evidence" / f"trace-{mode}.json"),
+            ],
+            cwd=commands.generation,
+            timeout=1200 if mode == "online" else 600,
+            environment={
+                **env,
+                "HF_HUB_CACHE": str(hub) if mode == "online" else env["HF_HUB_CACHE"],
+                "HF_HUB_OFFLINE": "0" if mode == "online" else "1",
+                "HF_DATASETS_OFFLINE": "0" if mode == "online" else "1",
+            },
+        )
 
 
 def _clients(commands: Commands, uv: str, build_constraints: Path) -> dict[str, Path]:
@@ -356,14 +436,21 @@ def _clients(commands: Commands, uv: str, build_constraints: Path) -> dict[str, 
     return result
 
 
-_CLIENT_PROBE_SCRIPT = """import importlib.metadata, json, pathlib, sys
-kind, repository, snapshot, output = sys.argv[1:]
+_CLIENT_PROBE_SCRIPT = """import importlib.metadata, json, pathlib, runpy, sys
+kind, repository, snapshot, output, compatibility_patch = sys.argv[1:]
 if kind == "agentx":
     from huggingface_hub import snapshot_download
-    from aiperf.common.tokenizer import Tokenizer
     resolved = pathlib.Path(snapshot_download(repository, revision="main", local_files_only=True)).resolve()
     if resolved != pathlib.Path(snapshot).resolve():
         raise ValueError("nominal tokenizer cache resolves a different serving snapshot")
+    configuration = {}
+    for filename in ("config.json", "tokenizer_config.json"):
+        path = resolved / filename
+        if path.is_file():
+            raw = json.loads(path.read_text())
+            configuration[filename] = {key: raw[key] for key in ("model_type", "tokenizer_class", "auto_map", "transformers_version") if key in raw}
+    pathlib.Path(output).with_suffix(".configuration.json").write_text(json.dumps({"repository": repository, "snapshot": str(resolved), "configuration": configuration}, ensure_ascii=False) + "\\n")
+    from aiperf.common.tokenizer import Tokenizer
     tokenizer = Tokenizer.from_pretrained(repository, trust_remote_code=True)
     samples = ["InferenceX tokenizer preparation.", "你好，世界。"]
     tokens = [tokenizer.encode(sample) for sample in samples]
@@ -375,21 +462,23 @@ if kind == "agentx":
     lengths = tokenizer.encode_lengths_batch(samples)
     if lengths != [len(row) for row in tokens]:
         raise ValueError("prepared tokenizer batch lengths differ from individual encoding")
-    configuration = {}
-    for filename in ("config.json", "tokenizer_config.json"):
-        path = resolved / filename
-        if path.is_file():
-            raw = json.loads(path.read_text())
-            configuration[filename] = {key: raw[key] for key in ("model_type", "tokenizer_class", "auto_map", "transformers_version") if key in raw}
     result = {"repository": repository, "snapshot": str(resolved), "tokens": tokens, "decoded": decoded, "batch_lengths": lengths, "configuration": configuration}
 elif kind == "eval":
+    runpy.run_path(compatibility_patch)
     from lm_eval.models.openai_completions import LocalChatCompletion
-    model = LocalChatCompletion(model=repository, base_url="http://127.0.0.1:1/v1/chat/completions", tokenized_requests=False, max_length=16384, eos_string="</s>")
+    model = LocalChatCompletion(model=repository, base_url="http://127.0.0.1:1/v1/chat/completions", api_key="EMPTY", eos_string="</s>", max_retries=5, num_concurrent=28, timeout=1800, tokenized_requests=False, max_length=16384)
     messages = [{"role": "user", "content": "InferenceX client preparation."}]
     formatted = model.create_message([model.apply_chat_template(messages)])
     if formatted != messages:
         raise ValueError("prepared eval backend changed chat messages")
-    result = {"backend": type(model).__name__, "messages": formatted, "tokenizer_backend": model.tokenizer_backend}
+    payload = model._create_payload(formatted, generate=True, gen_kwargs={"max_tokens": 12288, "temperature": 0, "top_p": 1, "until": ["</s>", "<|im_end|>"], "do_sample": False}, eos="</s>")
+    expected_payload = {"messages": messages, "model": repository, "max_tokens": 12288, "temperature": 0, "top_p": 1, "stop": ["</s>", "<|im_end|>"], "seed": 1234}
+    if payload != expected_payload:
+        raise ValueError("prepared eval backend changed generation payload")
+    parsed = model.parse_generations({"choices": [{"index": 0, "message": {"content": "final answer"}}, {"index": 1, "message": {"content": "", "reasoning_content": "reasoning answer"}}]})
+    if parsed != ["final answer", "reasoning answer"]:
+        raise ValueError("prepared eval backend changed response parsing")
+    result = {"backend": type(model).__name__, "messages": formatted, "tokenizer_backend": model.tokenizer_backend, "payload": payload, "parsed_generations": parsed}
 else:
     raise ValueError("unknown prepared client")
 result["transformers_version"] = importlib.metadata.version("transformers")
@@ -403,6 +492,8 @@ def verify_clients(
     """Exercise the installed tokenizer and API chat backend offline before hashing assets."""
     script = commands.generation / "verify-client-behavior.py"
     script.write_text(_CLIENT_PROBE_SCRIPT)
+    patch = commands.generation / "evidence/lm_eval_sitecustomize.py"
+    patch.write_bytes(files("infx.evals.patches").joinpath("lm_eval_sitecustomize.py").read_bytes())
     for kind, python in clients.items():
         commands.run(
             f"offline-{kind}-behavior",
@@ -414,6 +505,7 @@ def verify_clients(
                 config.model_repository,
                 str(snapshot(config, dataset=False)),
                 str(commands.generation / "evidence" / f"{kind}-behavior.json"),
+                str(patch),
             ],
             cwd=commands.generation,
             timeout=600,
@@ -649,6 +741,7 @@ def provision(
             env = _offline_env(generation)
             sites = _sites(config, clients, env)
             verify_clients(commands, config, clients, env)
+            materialize_trace(commands, config, clients["agentx"], env)
             script = generation / "materialize-gsm8k.py"
             script.write_text(_GSM_SCRIPT)
             expected = generation / "evidence/gsm8k-test-doc-hashes.json"

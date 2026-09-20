@@ -396,7 +396,7 @@ jobs:
               id: qualification
               env:
                   SWEEP_MATRIX: ${{ steps.setup.outputs.search-space-config }}
-              run: uv run --no-project --python 3.12 --with pydantic --with pyyaml python -m infx.srt_slurm.qualification plan
+              run: uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml python -m infx.srt_slurm.qualification plan
 
             - name: Retain nonpublication intent
               if: steps.qualification.outputs.native-qualification == 'true'
