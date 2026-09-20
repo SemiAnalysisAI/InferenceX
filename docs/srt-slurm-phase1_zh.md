@@ -151,9 +151,15 @@ Merge helper 保留最近明确授权的 `/use RUN_ID` 或 `/reuse-sweep-run RUN
 
 [客户端运行 35483590787](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35483590787) 接受任务 `18325`；其 vLLM worker 在 DSpark 初始化期间出现 CUDA 索引越界/device-assert 错误并失败。原生观察确认终态 `FAILED` 且清理完成；取消操作发现 allocation 已经终止。诊断 writer 未启动，因此没有预期客户端中断或 writer 关闭证据。两次运行均保留 `lifecycle_qualified: false`。c28 服务参数对齐和原生 step 发现修正需要新的硬件验证；这两次失败运行均不能关闭生命周期验收门禁，也不能证明 sweep 的最终结果。
 
+[候选 CI 35484873112](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35484873112) 在 InferenceX `17423228f1f4ad225233364ba53b3f36f90a818b` 和原生 `62beb5ec4f8c33abc26851ba0adaded29957ca5b` 上通过：1,925 项 producer 测试通过、三项跳过；2,507 项原生 Linux 测试通过、两项跳过，另有六项实际 GPU 集成测试未选择执行。源代码/锁文件/版本沿袭校验、覆盖全部九个准备点的已安装运行时契约、lint 及 MCP 构造/发现检查均通过。[严格 Zizmor 35484875668](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35484875668) 也在该候选提交上通过。这些检查不能证明 H100 或生命周期验收完成。
+
+[旧完整 sweep 35483266492](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35483266492) 使用 producer `065cb56de373dc89343f17307e56851cd0a4df24` 和原生 `50c3dacc37def01606ee9e4e0ed873646d4f7cc5`。由于它无法验收最终修正后的原生 pin 与 wrapper，已在观察到的资源准备阶段主动取消。唯一的 sweep 启用标签已移除，九个 GitHub 测试点任务均以 `cancelled` 结束，没有测试点通过验收。九个启动日志均显示在最初的 `collect_assets` 哈希阶段中断，此时尚未创建 bundle 或进行原生提交。[取消后观察运行 35485241189](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35485241189) 于 `2026-09-20T02:56:21Z` 成功：九个准确路径均没有客户端 runtime、可执行 bundle 或原生 receipt，有界进程扫描未发现匹配的 workflow 进程。结合终止日志和提交顺序，可确认被取消的 sweep 未提交任何 Slurm allocation，也未运行 GPU benchmark。
+
+[替代环境准备运行 35484558552](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35484558552) 正在进行，实际使用候选分支 SHA `17423228f1f4ad225233364ba53b3f36f90a818b`，并非最终 PR merge SHA。采用该 generation 时，必须保留其记录的准备源提交，并针对实际最终 PR merge checkout 验证已安装 wrapper 字节与运行时输入是否等价。如果不等价，须从该精确 merge SHA 重新准备独立 generation。环境准备成功、最终源代码等价性、两项生命周期门禁和完整 H100 sweep 均仍待验证。
+
 | Gate | 状态 / 所需证据 |
 | --- | --- |
-| 原生及客户端行为 | CPU 测试、已安装 wheel 检查；不声称 GPU 验收 |
+| 原生及客户端行为 | 候选 `17423228` / 原生 `62beb5ec` 的 Linux CI、已安装九点契约及严格 workflow 审计通过；不声称 GPU 验收 |
 | 回执、app、恢复 | reader 已回滚，revision 变量已删除；新增 schema 保留；原生回执导入与发布仍受门禁限制 |
 | H100 吞吐 | 原镜像 c1、2、4、8、16、20、24、28 待运行 |
 | 真实 eval | 新 c28 待运行；历史完整原始 eval 通过新 validator |
