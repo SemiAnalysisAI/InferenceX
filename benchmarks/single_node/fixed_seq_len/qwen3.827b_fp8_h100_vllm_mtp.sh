@@ -80,6 +80,8 @@ VLLM_CMD=(
     vllm serve "$MODEL" --served-model-name "$MODEL"
     --revision "$TARGET_REVISION" --dtype bfloat16
     --hf-overrides "$HF_OVERRIDES"
+    # Avoid the pinned autotuner's FA3 scheduler-metadata error in MTP dummy prefill.
+    --no-enable-flashinfer-autotune
     --host 0.0.0.0 --port "$PORT"
     --tensor-parallel-size 1
     # Text-only serving: skip the vision tower of Qwen3_5ForConditionalGeneration.

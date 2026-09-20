@@ -503,3 +503,8 @@ H100、H200、MI300X 和 MI325X 的固定序列长度 FP8 配方使用三个原�
 保持原生 BF16。显式排除 MTP 模块，防止 vLLM 将目标模型的 FP8 量化应用到草稿头。
 日志保留运行时模型检查和服务命令。这些固定序列长度配方显式使用实测的合成
 吞吐接受长度；SRT connector 的非 AgentX 选择策略另行生效。
+
+CUDA 配方通过 `--no-enable-flashinfer-autotune` 关闭可选的 FlashInfer autotuning。
+固定镜像中的 MTP dummy prefill 会在低并发时触发 FlashAttention scheduler metadata
+形状检查失败（[H100 证据](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35495730774)）。
+这是引擎支持的选项，草稿原生精度保持不变。
