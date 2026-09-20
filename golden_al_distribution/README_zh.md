@@ -128,7 +128,8 @@ gh workflow run speedbench-al.yml \
 时，可选择 `runner=b300` 或 `runner=cluster:h200-dgxc`（H200 池同样支持显式
 指定收集器）。将 `collector-script` 设为该路径，并显式传入 `precision`、`tp=1`、固定的
 `model-revision` 和 `speculative-config`（由收集器逐点填入
-`num_speculative_tokens`）。Qwen 使用
+`num_speculative_tokens`）。传入 `mtp-list=1 2 3 4`；收集器会在下载模型或启动服务前
+拒绝超出 1–4 范围的草稿长度。Qwen 使用
 `thinking-kwargs={"enable_thinking":true}`。采样遵循模型卡：thinking 开启时，
 temperature 为 1.0、top-p 为 0.95、presence penalty 为 0；关闭时分别为
 0.7、0.8 和 1.5；两种模式的 top-k 均为 20。
@@ -172,7 +173,7 @@ AL 为 `1 + accepted / drafts`；AR 为 `accepted / proposed_tokens`，使用实
 | Qwen3.8-27B BF16 | 原生 MTP（原始 BF16 头） | [`qwen3.827b_bf16_mtp.yaml`](qwen3.827b_bf16_mtp.yaml) | [35490571863](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35490571863) |
 | Qwen3.8-27B FP8 | 原生 MTP（原始 BF16 头） | [`qwen3.827b_fp8_mtp.yaml`](qwen3.827b_fp8_mtp.yaml) | [35491616007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35491616007) |
 
-Qwen3.8-27B 目前包含两种目标精度下已验证的三个草稿 token、thinking 开启的测量点。完整的 1–8 个草稿 token、thinking 关闭/开启收集正在进行。
+Qwen3.8-27B 目前包含两种目标精度下已验证的三个草稿 token、thinking 开启的测量点。完整的 1–4 个草稿 token、thinking 关闭/开启收集正在进行。
 
 
 ## 主要参考资料

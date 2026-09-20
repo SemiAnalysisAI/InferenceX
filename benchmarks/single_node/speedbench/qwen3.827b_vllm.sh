@@ -8,6 +8,13 @@ check_env_vars MODEL MODEL_PATH MODEL_REVISION PRECISION TP IMAGE PORT MTP_LIST 
     SPEEDBENCH_GPU_MEMORY_UTILIZATION SPEEDBENCH_SEED SPEEDBENCH_PREPARE_REVISION \
     INFMAX_CONTAINER_WORKSPACE
 
+for mtp in $MTP_LIST; do
+    if [[ ! "$mtp" =~ ^[1-4]$ ]]; then
+        echo "Qwen3.8-27B collection requires draft lengths 1-4; got $mtp" >&2
+        exit 1
+    fi
+done
+
 # Runtime directories stay outside /workspace; only final files are staged there.
 SPEEDBENCH_SCRATCH=$(mktemp -d /tmp/inferencex-speedbench.XXXXXX)
 export SPEEDBENCH_SCRATCH
@@ -89,7 +96,6 @@ for mode in $THINKING_MODES; do
         *) echo "Invalid thinking mode: $mode" >&2; exit 1 ;;
     esac
     for mtp in $MTP_LIST; do
-        [[ "$mtp" =~ ^[1-9][0-9]*$ ]] || { echo "Invalid draft length: $mtp" >&2; exit 1; }
         SPEC_CONFIG=$(python3 - "$SPEEDBENCH_SPECULATIVE_CONFIG" "$mtp" <<'PY'
 import json, sys
 config = json.loads(sys.argv[1])
