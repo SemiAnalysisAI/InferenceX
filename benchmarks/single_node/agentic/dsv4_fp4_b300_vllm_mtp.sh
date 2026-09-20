@@ -2,20 +2,24 @@
 set -eo pipefail
 set -x
 
-# DeepSeek-V4-Pro FP4 on B300 with vLLM MTP (num_speculative_tokens=3).
-# Throughput fixes synthetic acceptance to AL 2.49; EVAL_ONLY keeps real
+# DeepSeek-V4-Pro-0813 FP4 on B300 with vLLM DSpark (num_speculative_tokens=6).
+# Throughput fixes synthetic acceptance to AL 3.77; EVAL_ONLY keeps real
 # verification. Cudagraph capture sizes are in tokens (see the capture block).
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# TP8 and TP4 c8 are GPU-resident. TP4 c16, DEP4, and DEP8 use DRAM offload
-# with KV_OFFLOAD_BACKEND=vllm-simple or mooncake.
+# TP points are GPU-resident. DEP8 uses DRAM offload with
+# KV_OFFLOAD_BACKEND=vllm-simple or mooncake.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
-check_env_vars DCP_SIZE EVAL_ONLY PCP_SIZE
+check_env_vars DCP_SIZE EVAL_ONLY PCP_SIZE HF_HOME
+
+# Reuse the launcher's persistent HF mount for AIPerf's dataset mmap cache.
+export AIPERF_DATASET_MMAP_CACHE_DIR="$HF_HOME/aiperf_mmap_cache"
+mkdir -p "$AIPERF_DATASET_MMAP_CACHE_DIR"
 
 VLLM_CP_ARGS=()
 if [ "$DCP_SIZE" -gt 1 ]; then
@@ -39,8 +43,8 @@ if [ "$DP_ATTENTION" = "true" ] && [ $((2 * CONC % TP)) -ne 0 ]; then
     exit 1
 fi
 
-# DEP8 (TP8 + DP-attention) gets a larger prefill token budget and lower
-# GPU-memory headroom than DEP4.
+# DEP8 (TP8 + DP-attention) pins KV cache bytes per concurrency tier and
+# keeps extra GPU-memory headroom.
 IS_DEP8=false
 if [ "$DP_ATTENTION" = "true" ] && [ "$TP" -eq 8 ]; then
     IS_DEP8=true
@@ -85,7 +89,7 @@ export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 
 # Match the environment used by v4pro-b300.yaml.
 export VLLM_USE_V2_MODEL_RUNNER=1
-export VLLM_ENGINE_READY_TIMEOUT_S=3600
+export VLLM_ENGINE_READY_TIMEOUT_S=7200
 export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
 export VLLM_DSV4_MEGA_FP8_COMBINE=1
 export NCCL_NVLS_ENABLE=1
@@ -110,20 +114,14 @@ case "$KV_OFFLOAD_BACKEND" in
         CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / GPU_COUNT ))
         # Identical prefixes must hash to identical block keys across DP ranks.
         export PYTHONHASHSEED=42
-        # DEP keeps eager offload for cross-rank block-hash stability; plain TP
-        # uses lazy offload.
-        SIMPLE_LAZY_OFFLOAD=false
-        if [ "$DP_ATTENTION" != "true" ]; then
-            SIMPLE_LAZY_OFFLOAD=true
-        fi
         OFFLOAD_CONFIG=$(cat <<EOF
 {
   "kv_connector": "SimpleCPUOffloadConnector",
   "kv_role": "kv_both",
   "kv_connector_extra_config": {
-    "cpu_bytes_to_use": ${CPU_BYTES_PER_RANK},
+    "cpu_bytes_to_use_per_rank": ${CPU_BYTES_PER_RANK},
     "enable_cross_layers_blocks": "true",
-    "lazy_offload": ${SIMPLE_LAZY_OFFLOAD}
+    "lazy_offload": false
   }
 }
 EOF
@@ -217,11 +215,16 @@ if [ "$EP_SIZE" -gt 1 ]; then
 fi
 if [ "$DP_ATTENTION" = "true" ]; then
     MODE_ARGS+=(
-        --prefill-schedule-interval 8
+        --prefill-schedule-interval 16
         --long-prefill-token-threshold 512
     )
     if [ "$IS_DEP8" = "true" ]; then
-        MODE_ARGS+=(--max-num-batched-tokens 16384)
+        if [ "$CONC" -le 128 ]; then
+            DEP8_KV_CACHE_BYTES=107000000000
+        else
+            DEP8_KV_CACHE_BYTES=105000000000
+        fi
+        MODE_ARGS+=(--kv-cache-memory-bytes "$DEP8_KV_CACHE_BYTES")
     else
         MODE_ARGS+=(--max-num-batched-tokens 8192)
     fi
@@ -231,31 +234,43 @@ if [ "$DP_ATTENTION" = "true" ]; then
     # The DEP source recipe enforces 2*CONC = DP_WORLD_SIZE*MAX_NUM_SEQS.
     MAX_NUM_SEQS=$((2 * CONC / TP))
 else
-    # Headroom for AgentX subagent fan-out.
-    MAX_NUM_SEQS=$((2 * CONC))
+    MAX_NUM_SEQS=$CONC
 fi
-# Cudagraph capture sizes are in tokens: a decode batch of S seqs verifies
-# S*(1+N) tokens, so capture the multiples (1+N)..MAX_NUM_SEQS*(1+N). vLLM
-# rounds sizes up to multiples of (1+N) and dedups, so a plain 1..MAX_NUM_SEQS
-# list would cover only MAX_NUM_SEQS/(1+N) sequences.
-NUM_SPEC_TOKENS=3
+# Target verification uses N+1 tokens per sequence; DSpark drafting uses N.
+# Capture both shapes so the draft also has a graph at max-num-seqs=1.
+NUM_SPEC_TOKENS=6
 TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
-# Golden AL: golden_al_distribution/dsv4_mtp.yaml, thinking_on, 3 draft tokens.
+if [ "$IS_DEP8" = "true" ]; then
+    DEP8_PREFILL_TOKEN_BUDGET=8192
+    UNALIGNED_MAX_NUM_BATCHED_TOKENS=$((
+        DEP8_PREFILL_TOKEN_BUDGET + MAX_NUM_SEQS * TOKENS_PER_SEQ
+    ))
+    # Preserve the full prefill budget and keep odd per-rank sequence counts
+    # from producing a token budget that is not aligned to eight.
+    MAX_NUM_BATCHED_TOKENS=$(((UNALIGNED_MAX_NUM_BATCHED_TOKENS + 7) / 8 * 8))
+    MODE_ARGS+=(--max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS")
+fi
+# Golden AL: golden_al_distribution/dsv4-pro-0813-dspark.yaml, thinking_on,
+# probabilistic drafting, 6 draft tokens.
 # EVAL_ONLY keeps real verification; synthetic acceptance bypasses it and
 # zeroes the SWE-bench score.
 if [ "${EVAL_ONLY}" = "true" ]; then
-    SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}"
+    SPEC_CONFIG="{\"method\": \"dspark\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"draft_sample_method\": \"probabilistic\"}"
 else
-    SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": 2.49}"
+    SPEC_CONFIG="{\"method\": \"dspark\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": 3.77}"
 fi
-CUDA_GRAPH_CAPTURE_SIZES=""
+CAPTURE_SIZE_LIST=()
 for ((num_seqs = 1; num_seqs <= MAX_NUM_SEQS; num_seqs++)); do
-    if [ -n "$CUDA_GRAPH_CAPTURE_SIZES" ]; then
-        CUDA_GRAPH_CAPTURE_SIZES+=","
-    fi
-    CUDA_GRAPH_CAPTURE_SIZES+="$((num_seqs * TOKENS_PER_SEQ))"
+    CAPTURE_SIZE_LIST+=("$((num_seqs * NUM_SPEC_TOKENS))")
+    CAPTURE_SIZE_LIST+=("$((num_seqs * TOKENS_PER_SEQ))")
 done
-COMPILATION_CONFIG="{\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"cudagraph_capture_sizes\":[${CUDA_GRAPH_CAPTURE_SIZES}],\"mode\":0}"
+# TP also adds larger piecewise shapes for mixed prefill/decode batches. DEP's
+# token-strided list already covers every sequence count through its batch cap.
+if [ "$DP_ATTENTION" != "true" ]; then
+    CAPTURE_SIZE_LIST+=(100 200 300 400 500)
+fi
+CUDA_GRAPH_CAPTURE_SIZES=$(printf '%s\n' "${CAPTURE_SIZE_LIST[@]}" | sort -n -u | paste -sd, -)
+COMPILATION_CONFIG="{\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"cudagraph_capture_sizes\":[${CUDA_GRAPH_CAPTURE_SIZES}]}"
 
 echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
@@ -274,6 +289,7 @@ VLLM_CMD=(
     --host 0.0.0.0
     --port "$VLLM_BACKEND_PORT"
     --gpu-memory-utilization "$GPU_MEM_UTIL"
+    --numa-bind
     --trust-remote-code
     --no-enable-flashinfer-autotune
     --no-disable-hybrid-kv-cache-manager
@@ -281,7 +297,7 @@ VLLM_CMD=(
     --kv-cache-dtype fp8
     --block-size 256
     --max-model-len 1048576
-    --attention-config '{"use_fp4_indexer_cache":true,"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true}'
+    --attention-config '{"indexer_kv_dtype":"mxfp4","backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true}'
     --speculative-config "$SPEC_CONFIG"
     --disable-uvicorn-access-log
     --tokenizer-mode deepseek_v4

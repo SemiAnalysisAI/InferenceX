@@ -27,7 +27,7 @@ if [[ "$IS_MULTINODE" != true && "${MODEL_PREFIX:-}" == dsv41flash &&
         printf '%q\n' "$GITHUB_WORKSPACE/runners/launch_b300-dsxe.sh"
     } > "$BATCH_SCRIPT"
     BATCH_ARGS=(--parsable --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT"
-        --nodes=1 --ntasks=1 --gres="gpu:$GPU_COUNT" --exclusive --mem=0
+        --nodes=1 --ntasks=1 --cpus-per-task=192 --gres="gpu:$GPU_COUNT" --exclusive --mem=0
         --time="$SALLOC_TIME_LIMIT" --job-name="$RUNNER_NAME" --export=ALL
         --chdir="$GITHUB_WORKSPACE" --output="$BATCH_LOG")
     if [[ -n "${SALLOC_EXCLUDE:-}" ]]; then
@@ -340,7 +340,7 @@ else
     # weights. Only the root holding MODEL_PATH is mounted -- mounting both roots
     # makes pyxis fail whenever the unused one is absent on the node.
     MODEL_BASENAME="${MODEL##*/}"
-    if [[ "$MODEL_BASENAME" == "DeepSeek-V4-Pro-0813" ]]; then
+    if [[ "$MODEL_BASENAME" == "DeepSeek-V4-Pro-0813" && "$FRAMEWORK" != "vllm" ]]; then
         MODEL_MOUNT_DIR="$SHARED_MODEL_ROOT"
     elif [[ " ${STAGED_MODELS[*]} " == *" ${MODEL_BASENAME} "* ]]; then
         MODEL_MOUNT_DIR="$MODEL_ROOT"
@@ -389,10 +389,12 @@ else
 
     check_env_vars GPU_COUNT
 
+    export SLURM_CPUS_PER_TASK=192
     SALLOC_ARGS=(
         --partition="$SLURM_PARTITION"
         --account="$SLURM_ACCOUNT"
         -N 1
+        --cpus-per-task="$SLURM_CPUS_PER_TASK"
         --gres="gpu:$GPU_COUNT"
         --exclusive
         --mem=0
