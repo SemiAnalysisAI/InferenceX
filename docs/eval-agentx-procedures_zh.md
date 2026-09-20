@@ -378,3 +378,17 @@ gh run cancel <RUN_ID> --repo SemiAnalysisAI/InferenceX
 - 每个 backend/frontend 与 metrics source 都在实时证据中有所体现。
 - Fast/smoke 结果明确标为诊断用途；只有 canonical candidate 用于最终比较。
 - 在报告成功前，工作流与 artifact collection 均已得出 green 结论。
+
+### Qwen3-0.6B ModelScope 冷缓存覆盖
+
+H100 ModelScope 配方在每个任务中使用远程模型 ID 和新建、确认为空的 ModelScope
+缓存启动 `trtllm-serve`，并为服务提供独立的空 Hugging Face home/cache。模型由
+服务自行下载，配方不会预下载权重或分词器。服务就绪后，离线解析器必须返回新
+ModelScope 缓存内部的快照，且其中包含权重和必需的分词器、配置文件。检测到非预期
+Hugging Face 缓存文件时任务失败；允许缓存版本标记，以及 Transformers 创建的空文件
+`modules/__init__.py` 和 `modules/hf_remote_code.lock`。基准客户端使用同一快照中的分词器。
+
+`modelscope_snapshot_report.json` 记录初始空缓存、最终快照路径、文件大小和 SHA256。
+评测任务将该报告与原始结果一起上传，任务日志中也包含报告。矩阵在启动前提供模型
+上下文上限，避免另行查询模型仓库。本配方使用 engine-patch 豁免中记录的、与源码
+匹配的 TensorRT-LLM 1.3.0rc27 回移补丁，并不构建较新 TensorRT-LLM PR 分支。

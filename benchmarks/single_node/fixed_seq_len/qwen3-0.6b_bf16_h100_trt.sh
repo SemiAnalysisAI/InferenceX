@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -eo pipefail
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -36,31 +37,14 @@ python3 -m pip install --quiet --disable-pip-version-check \
 python3 "$(dirname "$0")/../../../runners/patch_trtllm_modelscope.py"
 
 export TRTLLM_USE_MODELSCOPE=true
-export MODELSCOPE_CACHE="$HF_HUB_CACHE/modelscope"
+MODELSCOPE_CACHE=$(mktemp -d /tmp/modelscope-cold.XXXXXX)
+COLD_HF_HOME=$(mktemp -d /tmp/modelscope-hf-empty.XXXXXX)
+export MODELSCOPE_CACHE
+SNAPSHOT_HELPER="$(dirname "$0")/../../../runners/modelscope_snapshot.py"
+SNAPSHOT_REPORT=/workspace/modelscope_snapshot_report.json
+python3 "$SNAPSHOT_HELPER" before --model "$MODEL" --cache "$MODELSCOPE_CACHE" \
+    --hf-home "$COLD_HF_HOME" --report "$SNAPSHOT_REPORT"
 
-# Resolve through TensorRT-LLM's patched hub boundary on the H100 node. Keep
-# serving the remote model ID below so model loading, config, and tokenizer
-# paths all exercise the ModelScope integration.
-MODEL_PATH_FILE=$(mktemp)
-python3 - "$MODEL" "$MODEL_PATH_FILE" <<'PY'
-import sys
-from pathlib import Path
-
-from tensorrt_llm.llmapi.utils import download_hf_model
-
-model_path = download_hf_model(sys.argv[1])
-Path(sys.argv[2]).write_text(str(model_path), encoding="utf-8")
-PY
-MODEL_PATH=$(<"$MODEL_PATH_FILE")
-rm -f "$MODEL_PATH_FILE"
-export MODEL_PATH
-
-if [[ ! -f "$MODEL_PATH/config.json" ]]; then
-    echo "ModelScope snapshot is missing config.json: $MODEL_PATH" >&2
-    exit 1
-fi
-
-echo "ModelScope snapshot: $MODEL_PATH"
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 nvidia-smi
 
@@ -82,15 +66,18 @@ cuda_graph_config:
 EOF
 
 if [[ "$EVAL_ONLY" == "true" ]]; then
-    setup_eval_context
-    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+    # The caller supplies the model-specific context ceiling. Avoid a hub
+    # lookup before the server performs its cold ModelScope download.
+    export EVAL_MAX_MODEL_LEN="$MAX_MODEL_LEN"
     MAX_NUM_TOKENS="$EVAL_MAX_MODEL_LEN"
 fi
 
 start_gpu_monitor
 
 set -x
-PYTHONNOUSERSITE=1 mpirun -n 1 --oversubscribe --allow-run-as-root \
+PYTHONNOUSERSITE=1 HF_HUB_OFFLINE=0 HF_HOME="$COLD_HF_HOME" \
+    HF_HUB_CACHE="$COLD_HF_HOME/hub" HUGGINGFACE_HUB_CACHE="$COLD_HF_HOME/hub" \
+    TRANSFORMERS_CACHE="$COLD_HF_HOME/hub" mpirun -n 1 --oversubscribe --allow-run-as-root \
     trtllm-serve "$MODEL" --port="$PORT" \
     --backend=pytorch \
     --max_batch_size="$MAX_BATCH_SIZE" \
@@ -103,6 +90,18 @@ PYTHONNOUSERSITE=1 mpirun -n 1 --oversubscribe --allow-run-as-root \
 SERVER_PID=$!
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+# Resolve only after readiness; this must reuse the fresh server download.
+HF_HUB_OFFLINE=1 python3 "$SNAPSHOT_HELPER" after --model "$MODEL" --cache "$MODELSCOPE_CACHE" \
+    --hf-home "$COLD_HF_HOME" --report "$SNAPSHOT_REPORT"
+MODEL_PATH=$(python3 - "$SNAPSHOT_REPORT" <<'PYCODE'
+import json
+import sys
+from pathlib import Path
+print(json.loads(Path(sys.argv[1]).read_text())["snapshot"])
+PYCODE
+)
+export MODEL_PATH
 
 run_benchmark_serving \
     --model "$MODEL" \

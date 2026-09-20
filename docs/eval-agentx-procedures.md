@@ -388,3 +388,22 @@ Use `scancel` or process termination only with explicit approval and a concrete 
 - Every backend/frontend and metrics source is represented in live evidence.
 - Fast/smoke results are labeled diagnostic. Only the canonical candidate is used for final comparison.
 - Workflow and artifact collection conclude green before success is reported.
+
+### Qwen3-0.6B ModelScope cold-cache coverage
+
+The H100 ModelScope recipe starts `trtllm-serve` with the remote model ID and a
+new, verified-empty ModelScope cache for every job. Its Hugging Face home/cache
+is independently empty. The server performs the download; the recipe does not
+predownload the weights or tokenizer. After readiness, the offline resolver must
+return a snapshot within the new ModelScope cache, containing weights and the
+required tokenizer/config assets. Unexpected Hugging Face cache files fail the
+job; a cache version marker and the empty Transformers scaffolding files
+`modules/__init__.py` and `modules/hf_remote_code.lock` are allowed. The benchmark
+client uses the same resolved tokenizer path.
+
+`modelscope_snapshot_report.json` records the initial empty caches, resolved
+snapshot path, file sizes and SHA256 hashes. Eval jobs upload this report with
+their raw results; job logs also contain the report. The matrix supplies the
+model-specific context ceiling before startup, avoiding a separate hub lookup.
+This uses the source-matched TensorRT-LLM 1.3.0rc27 backport documented in the
+engine-patch waiver. It does not build the newer TensorRT-LLM PR branch.
