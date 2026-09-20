@@ -1,0 +1,207 @@
+# Diagnostic: TP2/EP2/DP2 splits attention to TP1 inside each two-GPU role.
+# SGLang resolves chunked-prefill 16384 to 8192 per DP lane; other settings match C32.
+schema: 2
+name: qwen35-b300-disagg-1p1d-tp2ep2dp2-tp2ep2dp2-colocated-c32-dmem092-mtp-hicache
+model:
+  path: qwen3.5-fp8
+  container: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+  precision: fp8
+identity:
+  model:
+    repo: Qwen/Qwen3.5-397B-A17B-FP8
+    revision: ea5b4f81096f3901c91dea97f81324302495781d
+  container:
+    image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+  frameworks:
+    dynamo: 1.6.0
+    sglang: 0.0.0.dev1+g20518d851
+dynamo:
+  install: true
+  source:
+    rev: 805a77f053d807b0d8def5d27f674a6df0ed839e
+slurm:
+  time_limit: '4:00:00'
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+resources:
+  gpu_type: b300
+  gpus_per_node: 8
+frontend:
+  type: dynamo
+  nginx_session_affinity: true
+  env:
+    PIP_BREAK_SYSTEM_PACKAGES: '1'
+    PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
+  args:
+    router-mode: kv
+    router-session-affinity-ttl-secs: '3600'
+    active-decode-blocks-threshold: None
+    active-prefill-tokens-threshold: None
+    active-prefill-tokens-threshold-frac: None
+  nginx_session_affinity_header: X-Dynamo-Session-ID
+engine: sglang
+roles:
+  prefill:
+    nodes: 1
+    workers: 1
+    gpus: 2
+    env:
+      PYTHONUNBUFFERED: '1'
+      PIP_BREAK_SYSTEM_PACKAGES: '1'
+      PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
+      NCCL_NVLS_ENABLE: '1'
+      SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+      SGLANG_ENABLE_SPEC_V2: '1'
+      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+      SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+      MC_INTRANODE_NVLINK: '1'
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: INTRA_NODE_NVLINK
+      SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+      TORCH_CUDA_ARCH_LIST: '10.0'
+      PYTHONNOUSERSITE: '1'
+      SGL_ENABLE_JIT_DEEPGEMM: 'false'
+      SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+    args:
+      served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
+      model-path: /model/
+      trust-remote-code: true
+      quantization: fp8
+      kv-cache-dtype: fp8_e4m3
+      tensor-parallel-size: 2
+      expert-parallel-size: 2
+      data-parallel-size: 2
+      enable-dp-attention: true
+      mamba-ssm-dtype: bfloat16
+      attention-backend: trtllm_mha
+      moe-runner-backend: flashinfer_trtllm
+      linear-attn-prefill-backend: flashinfer
+      linear-attn-decode-backend: flashinfer
+      enable-symm-mem: true
+      enable-cache-report: true
+      enable-metrics: true
+      context-length: 262144
+      mem-fraction-static: 0.8
+      chunked-prefill-size: 16384
+      max-prefill-tokens: 16384
+      page-size: 64
+      reasoning-parser: qwen3
+      tool-call-parser: qwen3_coder
+      disaggregation-mode: prefill
+      disaggregation-transfer-backend: mooncake
+      watchdog-timeout: 3600
+      disable-cuda-graph: true
+      mamba-radix-cache-strategy: extra_buffer
+      mamba-track-interval: 2048
+      scheduler-recv-interval: 10
+      stream-interval: 50
+      max-running-requests: 64
+      enable-hierarchical-cache: true
+      hicache-size: 298
+      hicache-io-backend: kernel
+      hicache-mem-layout: page_first
+      hicache-write-policy: write_through
+  decode:
+    nodes: colocate
+    workers: 1
+    gpus: 2
+    env:
+      PYTHONUNBUFFERED: '1'
+      PIP_BREAK_SYSTEM_PACKAGES: '1'
+      PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
+      NCCL_NVLS_ENABLE: '1'
+      SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+      SGLANG_ENABLE_SPEC_V2: '1'
+      SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+      SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+      SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+      MC_INTRANODE_NVLINK: '1'
+      SGLANG_MOONCAKE_CUSTOM_MEM_POOL: INTRA_NODE_NVLINK
+      SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+      TORCH_CUDA_ARCH_LIST: '10.0'
+      PYTHONNOUSERSITE: '1'
+      SGL_ENABLE_JIT_DEEPGEMM: 'false'
+      SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+    args:
+      served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
+      model-path: /model/
+      trust-remote-code: true
+      quantization: fp8
+      kv-cache-dtype: fp8_e4m3
+      tensor-parallel-size: 2
+      expert-parallel-size: 2
+      data-parallel-size: 2
+      enable-dp-attention: true
+      mamba-ssm-dtype: bfloat16
+      attention-backend: trtllm_mha
+      moe-runner-backend: flashinfer_trtllm
+      linear-attn-prefill-backend: flashinfer
+      linear-attn-decode-backend: flashinfer
+      enable-symm-mem: true
+      enable-cache-report: true
+      enable-metrics: true
+      context-length: 262144
+      mem-fraction-static: 0.92
+      chunked-prefill-size: 16384
+      max-prefill-tokens: 16384
+      page-size: 64
+      reasoning-parser: qwen3
+      tool-call-parser: qwen3_coder
+      disaggregation-mode: decode
+      disaggregation-transfer-backend: mooncake
+      watchdog-timeout: 3600
+      mamba-radix-cache-strategy: no_buffer
+      disable-radix-cache: true
+      speculative-algorithm: NEXTN
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
+      scheduler-recv-interval: 10
+      stream-interval: 50
+      max-running-requests: 64
+      cuda-graph-max-bs-decode: 32
+      disaggregation-decode-extra-slots: 0
+      speculative-draft-model-path: /draft-model
+      speculative-draft-model-revision: 8472618112abcbd45acbcdc58436aff4233c23f7
+      speculative-draft-kv-cache-dtype: bf16
+      speculative-draft-model-quantization: unquant
+      speculative-moe-runner-backend: flashinfer_trtllm
+      disaggregation-decode-retraction-backup: cpu_tensor
+sbatch_directives:
+  exclude: dsxe-sa-b300-prd0-gpu-[11,16]
+  mem: '0'
+  cpus-per-task: '144'
+srun_options:
+  mem: '0'
+  container-remap-root: ''
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    RESULT_DIR: /logs/agentic
+    SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE: custom
+    SRT_MEASUREMENT_WINDOW_CONCURRENCIES: '32'
+    SRT_MEASUREMENT_WINDOW_RESULT_ROOT: /logs
+    PORT: '8000'
+    IS_MULTINODE: 'true'
+    WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
+    AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
+    HF_HUB_CACHE: /hf_hub_cache
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+  concurrencies:
+  - 32
+telemetry:
+  enabled: true
+  collect_interval_ms: 1000
+  storage_subdir: power
+  required: true
+  startup_timeout_seconds: 120
+  request_timeout_seconds: 2
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    port: 9401
+    command: dcgm-exporter --collect-interval=100 --address :{port} --devices g:0,1,2,3

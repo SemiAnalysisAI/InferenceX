@@ -8466,3 +8466,14 @@
   - Tune prefill HiCache and decode KV capacity across the throughput/interactivity curve.
   - Use SGLang nightly 20260918-20518d85, Dynamo/SRT Slurm and original BF16 NEXTN.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-dpa-memory-diagnostic
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add diagnostic B300 Qwen3.5 FP8 DP-attention C24/C32 recipes with decode static
+    memory increased from 0.88 to 0.92.
+  - Preserve original BF16 NEXTN, HiCache, pins and four-active-GPU power; require
+    separate full real accuracy.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
