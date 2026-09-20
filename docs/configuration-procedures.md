@@ -222,6 +222,19 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 7. Add script + master entry + launcher routing + changelog together.
 8. Run Bash syntax and generation checks. Inspect `spec-decoding`, draft/native method, token count, chat-template use, capture range, and resolved script.
 
+### Qwen3.8-27B BF16 native MTP
+
+The MI300X recipe supports 1k/1k and 8k/1k at TP1, with concurrency 1–128.
+
+The BF16 vLLM recipes use thinking on with three native MTP draft tokens. Throughput
+uses `rejection_sample_method: synthetic` and `synthetic_acceptance_length: 2.51`,
+from the BF16 `thinking_on[3]` measurement in [#3304](https://github.com/SemiAnalysisAI/InferenceX/pull/3304).
+The server explicitly enables thinking in its default chat-template kwargs; the
+fixed-sequence client uses the checkpoint's thinking-on default via `--use-chat-template`.
+The recipes require `THINKING_MODE=thinking_on` so another mode cannot reuse this AL.
+Runs requesting accuracy through either `EVAL_ONLY` or `RUN_EVAL` use real MTP
+verification. Target weights, native MTP weights and KV cache retain BF16.
+
 ### DeepSeek-V4.1-Flash DSpark
 
 The GB200 DSpark recipe uses a minimum CUDA graph capture size of 64 tokens to cover concurrent AgentX subagents. This raises c1/c2/c4 from 8/16/32 to 64; c8 and above retain their existing sizes. The full trace, AL 3.51, and Engram UVA settings are preserved; low-concurrency tail latency improvements require CI confirmation.
