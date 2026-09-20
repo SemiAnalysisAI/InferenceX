@@ -8466,3 +8466,12 @@
   - Tune prefill HiCache and decode KV capacity across the throughput/interactivity curve.
   - Use SGLang nightly 20260918-20518d85, Dynamo/SRT Slurm and original BF16 NEXTN.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-tp4-gap-diagnostic
+  scenario-type:
+  - agentic-coding
+  description:
+  - Qualify screened B300 Qwen3.5 FP8 TP4 C40/C48 disaggregation with larger HiCache and decode admission.
+  - Preserve original BF16 NEXTN and require full-hour performance plus full real accuracy.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
