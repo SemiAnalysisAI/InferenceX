@@ -8092,15 +8092,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3247
 
 - config-keys:
-    - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Raise the DSpark draft length (DECODE_MTP_SIZE) from 3 to 6 on the two low-concurrency arms only (conc-list [4] and conc-list [16]); the conc-list [32, 48] HiCache arm and the conc-list [128, 192, 256] UMBP-linker arm are unchanged at 3."
-    - "Wire a DeepSeek-V4-Pro-0813:6 case into server_sglang.sh's golden-AL table (DSV4_GOLDEN_AL=3.77, from golden_al_distribution/dsv4-pro-0813-dspark.yaml thinking_on); without it the agentic (non-eval) decode node hits the DeepSeek-V4-Pro-0813:* catch-all and exits 1 before sglang.launch_server ever runs."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3256
-  
-- config-keys:
     - glm5.2-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -8464,3 +8455,12 @@
   description:
     - "Update B200 vLLM AgentX to DSpark6 and a new image with TP8 and DEP8 configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Raise the DSpark draft length (DECODE_MTP_SIZE) from 3 to 6 on the two low-concurrency arms only (conc-list [4] and conc-list [16]); the conc-list [32, 48] HiCache arm and the conc-list [128, 192, 256] UMBP-linker arm are unchanged at 3."
+    - "Wire a DeepSeek-V4-Pro-0813:6 case into server_sglang.sh's golden-AL table (DSV4_GOLDEN_AL=3.77, from golden_al_distribution/dsv4-pro-0813-dspark.yaml thinking_on); without it the agentic (non-eval) decode node hits the DeepSeek-V4-Pro-0813:* catch-all and exits 1 before sglang.launch_server ever runs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3256
