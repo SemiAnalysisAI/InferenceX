@@ -136,6 +136,12 @@ temperature 为 1.0、top-p 为 0.95、presence penalty 为 0；关闭时分别�
 官方 FP8 checkpoint 同时量化了内嵌 MTP 头。为保持原始草稿精度，收集原生 MTP
 时必须在 `speculative-config` 中显式指定 `model=Qwen/Qwen3.8-27B` 及其固定的
 BF16 revision，并设置 `kv_cache_dtype=auto`。两种目标精度均使用同一原始 MTP 头。
+固定版本的 vLLM MTP loader 还会继承目标模型的量化配置。因此，收集 FP8 时，
+收集器通过 `--hf-overrides` 将原始 `mtp.*` 权重对应的所有模块加入量化排除列表，
+并保留目标模型的其他设置和已有排除项。如果缺少这些排除项，仅指定 BF16 草稿
+checkpoint 仍可能把权重转换到 FP8 模块中，同时使用无效的缩放因子。
+证据中包含完整覆盖配置和 vLLM 模型检查输出，接受曲线前可以据此确认 MTP
+线性模块未量化。
 这些测量不能
 作为量化草稿头或让草稿继承目标模型 FP8 KV cache 的配方的有效性证明。
 

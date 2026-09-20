@@ -1,6 +1,31 @@
 import pytest
 
-from infx.bench_serving.speedbench_acceptance import acceptance, collect_cell, read_counters
+from infx.bench_serving.speedbench_acceptance import (
+    acceptance, collect_cell, mtp_quantization_overrides, read_counters,
+)
+
+
+@pytest.mark.parametrize("key", ["modules_to_not_convert", "ignored_layers"])
+def test_native_mtp_exclusions_preserve_target_quantization(key):
+    target = {"quantization_config": {"quant_method": "fp8", key: ["lm_head"], "fmt": "e4m3"}}
+    result = mtp_quantization_overrides(target, {
+        "mtp.layers.0.mlp.down_proj.weight": "shard", "mtp.fc.weight": "shard",
+        "model.layers.0.mlp.down_proj.weight": "other",
+    })
+    assert result == {"quantization_config": {
+        "quant_method": "fp8", "fmt": "e4m3",
+        key: ["lm_head", "mtp.fc", "mtp.layers.0.mlp.down_proj"],
+    }}
+    assert target["quantization_config"][key] == ["lm_head"]
+
+
+def test_bf16_target_needs_no_quantization_override():
+    assert mtp_quantization_overrides({"text_config": {"dtype": "bfloat16"}}, {}) == {}
+
+
+def test_quantized_target_without_native_head_fails():
+    with pytest.raises(ValueError, match="no MTP weights"):
+        mtp_quantization_overrides({"quantization_config": {"quant_method": "fp8"}}, {})
 
 
 def counters(drafts, proposed, accepted):

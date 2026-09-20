@@ -6,7 +6,28 @@ import argparse
 import json
 import math
 import re
+from copy import deepcopy
 from pathlib import Path
+
+
+def mtp_quantization_overrides(target: dict, draft_weights: dict[str, str]) -> dict:
+    """Preserve native MTP modules when vLLM inherits target FP8 configuration."""
+    quantization = target.get("quantization_config")
+    if not quantization:
+        return {}
+    if quantization.get("quant_method") != "fp8":
+        raise ValueError("Only FP8 target quantization is supported by this collector")
+    modules = sorted(
+        name.removesuffix(".weight")
+        for name in draft_weights
+        if name.startswith("mtp.") and name.endswith(".weight")
+    )
+    if not modules:
+        raise ValueError("The original draft checkpoint contains no MTP weights")
+    override = deepcopy(quantization)
+    key = "ignored_layers" if override.get("ignored_layers") else "modules_to_not_convert"
+    override[key] = list(dict.fromkeys([*override.get(key, []), *modules]))
+    return {"quantization_config": override}
 
 
 def read_counters(text: str) -> dict[str, float]:

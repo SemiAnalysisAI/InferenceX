@@ -38,6 +38,7 @@ python3 - <<'PY'
 import json, os
 from pathlib import Path
 from huggingface_hub import snapshot_download
+from infx.bench_serving.speedbench_acceptance import mtp_quantization_overrides
 spec = json.loads(os.environ['SPEEDBENCH_SPECULATIVE_CONFIG'])
 if spec['method'] != 'mtp' or spec.get('rejection_sample_method') == 'synthetic':
     raise ValueError('Collection requires real native MTP verification')
@@ -52,6 +53,10 @@ if config.get('quantization_config') or text.get('dtype', text.get('torch_dtype'
     raise ValueError('Draft must be the original unquantized BF16 checkpoint')
 out = Path(os.environ['SPEEDBENCH_SCRATCH']) / 'results'
 (out / 'draft-config.json').write_text(json.dumps(config, indent=2))
+draft_index = json.loads((Path(draft) / 'model.safetensors.index.json').read_text())
+target_config = json.loads((out / 'target-config.json').read_text())
+overrides = mtp_quantization_overrides(target_config, draft_index['weight_map'])
+(out / 'hf-overrides.json').write_text(json.dumps(overrides, indent=2))
 metadata = {key: os.environ[key] for key in (
     'MODEL', 'MODEL_REVISION', 'PRECISION', 'IMAGE', 'TP', 'MTP_LIST', 'THINKING_MODES',
     'CATEGORY', 'SPEEDBENCH_OUTPUT_LEN', 'CHAT_TEMPLATE_KWARGS_ON',
@@ -106,10 +111,13 @@ PY
             --reasoning-parser qwen3 --tool-call-parser qwen3_xml --enable-auto-tool-choice
             --seed "$SPEEDBENCH_SEED" --speculative-config "$SPEC_CONFIG"
             --disable-uvicorn-access-log)
+        if [[ "$PRECISION" == "fp8" ]]; then
+            SERVER_COMMAND+=(--hf-overrides "$(cat "$RESULTS_DIR/hf-overrides.json")")
+        fi
         printf '%q ' "${SERVER_COMMAND[@]}" > "$CELL/server-command.txt"
         printf '\n' >> "$CELL/server-command.txt"
         echo "Starting thinking=$mode draft_length=$mtp precision=$PRECISION"
-        setsid "${SERVER_COMMAND[@]}" > "$SERVER_LOG" 2>&1 &
+        VLLM_LOG_MODEL_INSPECTION=1 setsid "${SERVER_COMMAND[@]}" > "$SERVER_LOG" 2>&1 &
         SERVER_PID=$!
         wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
         curl -fsS "http://localhost:$PORT/metrics" > "$CELL/before.prom"

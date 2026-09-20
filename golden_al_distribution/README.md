@@ -138,6 +138,13 @@ The official FP8 checkpoint also quantizes its embedded MTP head. To preserve
 the original draft precision, native MTP collection must explicitly select
 `model=Qwen/Qwen3.8-27B` and its pinned BF16 revision inside `speculative-config`,
 with `kv_cache_dtype=auto`. Both target precisions use this same original MTP head.
+The pinned vLLM MTP loader also inherits the target quantization configuration.
+For FP8, the collector adds every original `mtp.*` weight module to that
+configuration's exclusion list through `--hf-overrides`, preserving all target
+settings and existing exclusions. Without these exclusions, selecting the BF16
+draft checkpoint alone can cast its weights into FP8 modules with invalid scales.
+The evidence includes the exact overrides and vLLM model inspection output, so
+the MTP linear modules can be verified as unquantized before accepting a curve.
 These measurements do not validate recipes that quantize
 the draft head or inherit the target's FP8 KV cache for the draft.
 
