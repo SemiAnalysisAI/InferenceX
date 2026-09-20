@@ -738,9 +738,40 @@
       "repeat": 1,
       "attempt": 3,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "in_progress",
-      "node": "b200-nscale-slurm_02",
-      "artifacts": [],
+      "status": "failure",
+      "node": "im-b200-c008",
+      "artifacts": [
+        {
+          "id": 10607495998,
+          "name": "results_bmk",
+          "size_bytes": 142
+        },
+        {
+          "id": 10607311802,
+          "name": "agentic_minimaxm3_tp4_conc1024_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mt-69c8b4c310c306ab0572",
+          "size_bytes": 3358100
+        },
+        {
+          "id": 10607137214,
+          "name": "power_audit_minimaxm3_tp4_conc1024_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mt-69c8b4c310c306ab0572",
+          "size_bytes": 1169796
+        },
+        {
+          "id": 10607037225,
+          "name": "server_logs_minimaxm3_tp4_conc1024_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mt-69c8b4c310c306ab0572",
+          "size_bytes": 206333
+        },
+        {
+          "id": 10607032236,
+          "name": "run-stats",
+          "size_bytes": 280
+        },
+        {
+          "id": 10606753295,
+          "name": "gpu_metrics_minimaxm3_tp4_conc1024_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mt-69c8b4c310c306ab0572",
+          "size_bytes": 1169614
+        }
+      ],
       "performance_result": false,
       "workflow_name": "offload-v1-none-c1024-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:24:32Z",
@@ -782,7 +813,22 @@
         }
       ],
       "rerun_triggering_actor": "alec",
-      "queued_at": "2026-09-20T06:39:57Z"
+      "queued_at": "2026-09-20T06:39:57Z",
+      "runner": "b200-nscale-slurm_02",
+      "completed_at": "2026-09-20T14:45:18Z",
+      "allocation_id": "16692",
+      "failure_stage": "agentx_warmup_allocation_time_limit",
+      "failure_evidence": "Canonical c1024 HBM remained in warmup until the 480-minute Slurm allocation limit. At the last progress report it had returned 6,668 of 11,339 planned warmup requests, with 952 still in flight and zero reported phase errors after 28,415.6 seconds. All 6,671 retained request records are warmup; profiling never started and no performance result exists. The retained server and benchmark logs contain no EngineDead, CUDA out-of-memory, or traceback signature, so this is a deterministic feasibility failure under the current canonical execution budget and will not be retried unchanged.",
+      "log_archive_sha256": "1b377c3a0f891f37b0eab8a4e8ec2241e270133eff3a696f640da259c899ef62",
+      "storage_evidence": "HBM-only configured no external cache. The final retained telemetry sample showed zero files and zero bytes in /offload-scratch/inferencex-offload-35476043213-3-16692-bbaface6dcdc. The hard Slurm time limit killed the step before runtime.finish produced offload_cleanup.json, so deletion of the empty task-owned directory is not verified.",
+      "cleanup_verified": false,
+      "evidence_sha256": {
+        "offload_config.json": "e585510ba4ff67ca36e5c384708796e7d998648b240a01a2f8efb7d504cc2897",
+        "offload-telemetry.jsonl": "ccdeb5c5957e0c898b9a873eac7de55d3921784a30aa704fbfb4a7b0b37d19bf",
+        "benchmark.log": "f1e26fcc2c15b44fcfcded17c97f2d6a1e7f5e7a22d98a35ac124135ce41755e",
+        "server.log": "41f44cf891d1624fef88349334b6aa004edeec7750a73b120e54d35f28ae5e78",
+        "profile_export.jsonl": "2017e5deb6a9c5f715b0d8d368c13a5f5697b00fe638997d66dff5d3f52ddb22"
+      }
     },
     {
       "run_id": 35476047627,
@@ -1768,7 +1814,7 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918",
-  "status": "All four matched c16 arms and the c256 HBM control are valid. The c1024 HBM run remains in progress. The c1024 HBM+NVMe run hit the 480-minute allocation limit during canonical warmup with zero profiled responses and will not be retried unchanged. Both c8192 HBM and HBM+DRAM and all c4096 arms also failed before profiling.",
+  "status": "All four matched c16 arms and the c256 HBM control are valid. Both c1024 HBM and HBM+NVMe reached the 480-minute allocation limit during canonical warmup with zero profiled responses and will not be retried unchanged. Both c8192 HBM and HBM+DRAM and all c4096 arms also failed before profiling. No study jobs remain active.",
   "last_capacity_check": {
     "checked_at": "2026-09-20T08:21:25Z",
     "cluster_observed_at": "2026-09-20T08:20:58Z",
@@ -1783,16 +1829,12 @@
     "demand_percent": 90.91,
     "scheduler_snapshot_at": "2026-09-20T08:21:25Z",
     "scheduler_available": true,
-    "active_study_run_ids": [
-      35476043213
-    ],
-    "active_study_job_ids": [
-      106035807426
-    ],
+    "active_study_run_ids": [],
+    "active_study_job_ids": [],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": false,
-    "reason": "The c1024 HBM+NVMe run reached a deterministic allocation-time-limit feasibility failure, freeing its node. New dispatch remains blocked by the previously reported automation approval review until the user explicitly authorizes the c256 HBM+NVMe dispatch."
+    "reason": "The c1024 HBM run reached the same deterministic allocation-time-limit feasibility failure, leaving no study jobs active. New dispatch remains blocked by the previously reported automation approval review until the user explicitly authorizes the c256 HBM+NVMe dispatch."
   },
   "next_dispatch": {
     "requires": "After explicit user authorization resolves the dispatch approval blocker and a fresh scheduler check confirms zero pending B200 jobs, dispatch the already validated c256 HBM+NVMe probe, then HBM+DRAM+NVMe and HBM+DRAM as capacity permits. Do not retry c4096 or c8192 feasibility failures unchanged."
@@ -1812,6 +1854,14 @@
       "last_observed_logical_bytes": 1099502125056,
       "last_observed_allocated_bytes": 1099492540416,
       "reason": "The allocation time limit killed the container step before offload_cleanup.json was written. Delete only this exact task-owned scratch through approved InferenceX infrastructure, then record proof and remove this entry."
+    },
+    {
+      "run_id": 35476043213,
+      "node": "im-b200-c008",
+      "scratch": "/offload-scratch/inferencex-offload-35476043213-3-16692-bbaface6dcdc",
+      "last_observed_logical_bytes": 0,
+      "last_observed_allocated_bytes": 0,
+      "reason": "The allocation time limit killed the container step before offload_cleanup.json was written. The directory was empty at the final telemetry sample; delete only this exact task-owned directory through approved InferenceX infrastructure, then record proof and remove this entry."
     }
   ]
 }
