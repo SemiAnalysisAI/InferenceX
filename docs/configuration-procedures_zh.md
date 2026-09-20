@@ -488,3 +488,18 @@ python -m pytest utils/matrix_logic/ -v
 检查点将仓库挂载到 `/ix` 并重写 `RESULT_DIR`，使 AgentX 运行目录不落在 `/workspace` 下。MI300X
 launcher 还为该检查点将 Slurm 分配时长从 180 分钟提高到 480 分钟：那里的 HF 缓存为节点本地，
 每个节点上的首次运行需先下载 511 GB。在获得 GPU sweep 与 eval 证据之前，不得将任一配方视为已验证。
+
+## Qwen3.8-27B FP8 原生 MTP 黄金接受长度
+
+H100、H200、MI300X 和 MI325X 的固定序列长度 FP8 配方使用三个原生 MTP 草稿 token，
+以及 [#3304](https://github.com/SemiAnalysisAI/InferenceX/pull/3304) 测量的 `thinking_on` 曲线。
+仅吞吐运行从 [`qwen3.827b_fp8_mtp.yaml`](../golden_al_distribution/qwen3.827b_fp8_mtp.yaml)
+读取黄金 AL **2.52**。固定版本的 Qwen chat template 默认开启 thinking；这些配方会
+拒绝其他 `THINKING_MODE`，避免模板与曲线不一致。配置辅助程序只接受已测量的
+1–4 个草稿 token。
+
+仅精度评测以及吞吐后紧接精度评测的运行均使用真实的标准验证。目标模型保持 FP8；
+原生 MTP 头来自固定版本的原始 BF16 `Qwen/Qwen3.8-27B` checkpoint，草稿 KV cache
+保持原生 BF16。显式排除 MTP 模块，防止 vLLM 将目标模型的 FP8 量化应用到草稿头。
+日志保留运行时模型检查和服务命令。这些固定序列长度配方显式使用实测的合成
+吞吐接受长度；SRT connector 的非 AgentX 选择策略另行生效。
