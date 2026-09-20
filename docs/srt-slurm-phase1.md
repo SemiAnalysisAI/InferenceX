@@ -40,6 +40,10 @@ flowchart TD
   SP --> SI[inspect_assets: observed shared files]
   SP --> SR[infx.srt_slurm.provision_runtime.provision]
   E --> CQ[infx.srt_slurm.qualify_cancellation.qualify]
+  CQ --> CR[infx.srt_slurm.qualify_cancellation.render_probe]
+  CR --> AS[infx.srt_slurm.render.apply_serving_point]
+  CR --> Y
+  CR --> H
   CQ --> NI
   SR --> SD[Private runtimes, offline cache and site draft]
   SD --> PQ[PreparedSite: same-repository PR qualification]
@@ -51,6 +55,7 @@ flowchart TD
   F --> P[infx.srt_slurm.launch.prepare]
   P --> CP[infx.benchmarks.prepare.prepare]
   P --> R[infx.srt_slurm.render.render_recipe]
+  R --> AS
   R --> Y["dsv41flash/vllm/h100-fp4/agentx/<br/>agg-tp8-dspark5.yaml"]
   R --> H[runners/srt-slurm/h100-phase1.yaml]
   P --> NP[srtctl prepare]
