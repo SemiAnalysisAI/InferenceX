@@ -221,7 +221,7 @@ jobs:
             timeout 45 srun --overlap --jobid="$job_id" --nodes=1 --ntasks=1 --exact bash -s <<'REMOTE'
           set -eo pipefail
           ps -eo pid,ppid,etime,args | grep -E 'vllm|hf download|prepare.py|qwen3.827b_vllm' | head -40 || true
-          for pid in $(pgrep -f '^bash benchmarks/single_node/speedbench/qwen3.827b_vllm.sh$' || true); do
+          for pid in $(pgrep -f '(^|/)bash benchmarks/single_node/speedbench/qwen3.827b_vllm.sh$' || true); do
             proc_root="/proc/$pid/root"
             for log in "$proc_root"/tmp/inferencex-speedbench.*/results/*/server.log "$proc_root"/tmp/inferencex-speedbench.*/results/*/benchmark.log; do
               if [[ -f "$log" ]]; then
