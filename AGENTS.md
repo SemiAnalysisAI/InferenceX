@@ -9,6 +9,35 @@ Guidance for AI agents working with InferenceX.
 3. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening or reviewing a PR or changing review, sweep, or merge policy.
 4. Read [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md) before debugging a Klaud-Cold or `claude/*` image-bump PR.
 
+## Cross-repository Pareto synchronization
+
+The Pareto calculation is a shared contract between `SemiAnalysisAI/InferenceX`
+and `SemiAnalysisAI/InferenceX-app`. Any change to the Pareto implementation in
+either repository MUST include the corresponding update in the other repository
+in the same workstream. Do not change one side and leave the other for later.
+
+- App implementation: `packages/app/src/lib/chart-utils.ts` and its callers,
+  including `components/inference/metric-registry.ts` and
+  `components/inference/utils/{powerCurves,canonicalFrontier}.ts` under
+  `packages/app/src/`.
+- Sign-off implementation: `.github/scripts/pareto-coverage.cjs` in InferenceX,
+  with `.github/codeowner-signoff-verify-prompt.md` and the coverage policy in
+  `CONTRIBUTING.md`.
+- Synchronize direction, metric/percentile selection, eligibility, series
+  grouping, tie/duplicate handling and conditional canonical-frontier
+  intersection whenever they change which points are counted. Preserve explicit
+  review-policy differences, such as invalid-evidence warnings, rather than
+  silently changing chart behavior to match them.
+- Add or update regression tests in both repositories and verify agreement on
+  the same measured-point fixtures, including ties, duplicates, invalid metrics
+  and canonical intersection. Update pinned source references and affected
+  review instructions/documentation, including required Chinese counterparts.
+- Open cross-linked companion PRs in both repositories and record the parity
+  checks and merge dependency in each description. Do not mark the work complete
+  or merge the first side without the counterpart change ready for coordinated
+  review. Use branches and normal review; this rule does not authorize a merge
+  or an admin bypass.
+
 ## Agent-specific policy
 
 - Every PR description must include an **AI model disclosure** section naming the exact model/version used to prepare the PR. List each contributing model and its role, including delegated agents. Tool names such as Claude Code, Cursor, or Perplexity Computer are not model identities. Copy the model identifier exposed by the runtime; do not guess an unavailable identifier. If the runtime does not expose the exact model, explicitly state that it could not be verified. Human-only PRs must state `No AI used`. Keep the disclosure current when later edits use another model.
