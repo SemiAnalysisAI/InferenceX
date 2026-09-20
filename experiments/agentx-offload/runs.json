@@ -1634,20 +1634,95 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "4c805321518708e8d581639e4cb37c12d152b79f",
-      "status": "in_progress",
+      "status": "success",
       "node": "b200-nscale-slurm_05",
-      "artifacts": [],
-      "performance_result": false,
+      "artifacts": [
+        {
+          "id": 10605920200,
+          "name": "run-stats",
+          "size_bytes": 284
+        },
+        {
+          "id": 10605920158,
+          "name": "power_audit_minimaxm3_tp4_conc256_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-6e2c955f945806462013",
+          "size_bytes": 650246
+        },
+        {
+          "id": 10605740257,
+          "name": "agentic_minimaxm3_tp4_conc256_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-6e2c955f945806462013",
+          "size_bytes": 22779255
+        },
+        {
+          "id": 10605236256,
+          "name": "results_bmk",
+          "size_bytes": 2017
+        },
+        {
+          "id": 10605150651,
+          "name": "gpu_metrics_minimaxm3_tp4_conc256_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-6e2c955f945806462013",
+          "size_bytes": 646707
+        },
+        {
+          "id": 10605125696,
+          "name": "server_logs_minimaxm3_tp4_conc256_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-6e2c955f945806462013",
+          "size_bytes": 156596
+        },
+        {
+          "id": 10605055727,
+          "name": "bmk_agentic_minimaxm3_tp4_conc256_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-6e2c955f945806462013",
+          "size_bytes": 2212
+        }
+      ],
+      "performance_result": true,
       "workflow_name": "offload-v1-none-c256-r1-20260920T074810Z",
       "dispatched_at": "2026-09-20T07:48:12Z",
       "job_id": 106044138671,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35497846918/job/106044138671",
       "queued_at": "2026-09-20T07:48:32Z",
-      "started_at": "2026-09-20T07:48:41Z"
+      "started_at": "2026-09-20T07:48:41Z",
+      "completed_at": "2026-09-20T12:28:14Z",
+      "performance": {
+        "num_requests_total": 3866,
+        "num_requests_successful": 1021,
+        "num_requests_warmup_dropped": 2845,
+        "num_requests_error_dropped": 4,
+        "duration_seconds": 3627.87675,
+        "output_tokens_per_second": 285.52128,
+        "output_tokens_per_second_per_gpu": 71.38032,
+        "input_tokens_per_second": 31962.84441,
+        "total_tokens_per_second": 32248.36569,
+        "total_tokens_per_second_per_gpu": 8062.09142,
+        "p90_e2e_latency_seconds": 1598.06049,
+        "p90_ttft_seconds": 1556.07107,
+        "p90_tpot_seconds": 0.12969,
+        "p90_interactivity_tokens_per_second_per_user": 7.71057,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.11386,
+        "mean_e2e_latency_seconds": 1023.46301,
+        "avg_power_w_per_gpu": 882.59
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.01952,
+        "external_cache_hit_rate": 0.0,
+        "overall_cache_hit_rate": 0.01952,
+        "gpu_cache_hit_tokens": 11952768,
+        "external_transfer_tokens": 0.0,
+        "computed_tokens": 600343518,
+        "prompt_tokens_total": 612296286,
+        "generation_tokens_total": 1125330,
+        "gpu_cache_usage_pct": 1.0,
+        "gpu_cache_pool_tokens": 3707648,
+        "theoretical_cache_hit_rate": 0.95368
+      },
+      "evidence_sha256": {
+        "bmk_result.json": "694ddb840011b18dd62aa31a8aed1d93c9839000c868ddf8b35f08feff763da7",
+        "agg_bmk.json": "ba363e307ec821c2888a9df90f3d87e06ad226730f6ac1e425800dda39ec8297"
+      },
+      "storage_evidence": "HBM-only control configured zero DRAM and zero NVMe capacity. No offload cache files were created.",
+      "runtime_evidence": "Canonical AgentX completed 1,021 profiled responses at c256. GPU KV usage reached 100%; external cache activity remained zero, confirming the intended HBM-only control."
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850",
-  "status": "All four matched c16 arms are valid. Three study jobs remain in progress: c1024 HBM, c1024 HBM+NVMe, and c256 HBM. Both completed c8192 HBM and HBM+DRAM arms exhausted the six-hour canonical warmup budget with zero profiled responses. All c4096 arms also failed before profiling. These high-concurrency points will not be retried unchanged.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918",
+  "status": "All four matched c16 arms and the c256 HBM control are valid. Two study jobs remain in progress: c1024 HBM and c1024 HBM+NVMe. Both completed c8192 HBM and HBM+DRAM arms exhausted the six-hour canonical warmup budget with zero profiled responses. All c4096 arms also failed before profiling. These high-concurrency points will not be retried unchanged.",
   "last_capacity_check": {
     "checked_at": "2026-09-20T08:21:25Z",
     "cluster_observed_at": "2026-09-20T08:20:58Z",
@@ -1664,18 +1739,16 @@
     "scheduler_available": true,
     "active_study_run_ids": [
       35476043213,
-      35476050409,
-      35497846918
+      35476050409
     ],
     "active_study_job_ids": [
       106035807426,
-      106000864877,
-      106044138671
+      106000864877
     ],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": false,
-    "reason": "The c8192 HBM+DRAM run reached a deterministic canonical warmup feasibility failure, freeing another node. New dispatch remains blocked by the previously reported automation approval review until the user explicitly authorizes the c256 HBM+NVMe dispatch."
+    "reason": "The c256 HBM control completed successfully, freeing its node. New dispatch remains blocked by the previously reported automation approval review until the user explicitly authorizes the c256 HBM+NVMe dispatch."
   },
   "next_dispatch": {
     "requires": "After explicit user authorization resolves the dispatch approval blocker and a fresh scheduler check confirms zero pending B200 jobs, dispatch the already validated c256 HBM+NVMe probe, then HBM+DRAM+NVMe and HBM+DRAM as capacity permits. Do not retry c4096 or c8192 feasibility failures unchanged."
