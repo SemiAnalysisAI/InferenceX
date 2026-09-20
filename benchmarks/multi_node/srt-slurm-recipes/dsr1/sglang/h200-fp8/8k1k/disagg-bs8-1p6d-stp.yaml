@@ -3,7 +3,7 @@ name: "bs8-1p6d-h200-fp8"
 
 model:
   path: "dsr1"
-  container: "lmsysorg/sglang:v0.5.8.post1-cu130"
+  container: "lmsysorg/sglang:v0.5.20-cu130"
   precision: "fp8"
 
 frontend:
@@ -14,12 +14,14 @@ resources:
   gpus_per_node: 8
 
 dynamo:
-  # Dynamo 0.8.0 was the default when this recipe was written; pin it explicitly.
-  # Use NATS for a recipe prior to Dynamo commit 39d2a68.
+  # ai-dynamo 0.8.0 imports sglang.srt.server_args_config_parser, which SGLang
+  # v0.5.19+ moved under sglang.srt.utils, so it cannot start on v0.5.20-cu130.
+  # Pin the staged 1.5.0.dev20260917 wheel (the ai-dynamo prerelease line the
+  # v0.5.20-cu130 image was built with). The NATS request plane is unchanged.
   request_plane: "nats"
 
   source:
-    pypi: "0.8.0"
+    wheel: "1.5.0.dev20260917"
 engine: sglang
 roles:
   prefill:
@@ -106,7 +108,7 @@ roles:
       # Memory and token limits
       mem-fraction-static: 0.82
       max-running-requests: 16
-      cuda-graph-max-bs: 16
+      cuda-graph-max-bs-decode: 16
 
 benchmark:
   type: "sa-bench"
