@@ -49,6 +49,8 @@ jobs:
               lines = text.splitlines()
               metrics = [line for line in lines if 'SpecDecoding metrics:' in line]
               print('\n'.join(metrics[-2:] if metrics else lines[-5:]))
+              throughput = [line for line in lines if 'Avg prompt throughput:' in line]
+              print('\n'.join(throughput[-2:]))
               errors = [line for line in lines if 'Traceback (most recent' in line or 'ERROR' in line]
               print('ERROR LINES', '\n'.join(errors[-5:]))
           PY
