@@ -8449,6 +8449,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3277
 
 - config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B200 vLLM AgentX to DSpark6 and a new image with TP8 and DEP8 configurations."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
+
+- config-keys:
     - kimik3-fp4-b300-vllm-agentic-dspark
   description:
     - "Discover active Mellanox RDMA devices by driver on DSXE, select the link-layer GID, and load the host mlx5 provider so Mooncake sees the rail"

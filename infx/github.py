@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from collections.abc import Collection
 from typing import Any
@@ -12,6 +13,15 @@ from urllib.parse import parse_qsl, urlencode
 
 class ListingError(RuntimeError):
     """A fixed failure reason that contains no API response data."""
+
+
+class APIError(RuntimeError):
+    """Authenticated gh failure, with an HTTP status when gh reports one."""
+
+    def __init__(self, path: str, stderr: str) -> None:
+        match = re.search(r"\(HTTP ([1-5][0-9]{2})\)\s*$", stderr)
+        self.status = int(match[1]) if match else None
+        super().__init__(f"GitHub API {path} failed: {stderr.strip()}")
 
 
 def api(
@@ -59,7 +69,7 @@ def api(
     except subprocess.CalledProcessError as exc:
         if token is None:
             raise
-        raise RuntimeError(f"GitHub API {path} failed: {exc.stderr.strip()}") from exc
+        raise APIError(path, exc.stderr or "") from exc
     if method != "GET" and not result.stdout.strip() and token is None:
         return {}
     if method == "DELETE" and not result.stdout and token is not None:

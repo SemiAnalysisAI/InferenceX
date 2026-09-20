@@ -10,6 +10,26 @@ import pytest
 from infx import github
 
 
+@pytest.mark.parametrize("stderr,status", [
+    ("gh: Not Found (HTTP 404)\n", 404),
+    ("gh: Forbidden (HTTP 403)", 403),
+    ("gh: Bad Gateway (HTTP 502)", 502),
+    ("network timeout mentioning 404 without HTTP status", None),
+])
+def test_authenticated_api_errors_expose_status_without_guessing(monkeypatch, stderr, status):
+    def run(args, **kwargs):
+        raise subprocess.CalledProcessError(1, args, stderr=stderr)
+
+    monkeypatch.setattr(github.subprocess, "run", run)
+    with pytest.raises(github.APIError) as error:
+        github.api("example/project", "/issues/comments/1", "token", method="PATCH",
+                   data={"body": "verdict"})
+    assert error.value.status == status
+    assert isinstance(error.value.__cause__, subprocess.CalledProcessError)
+    with pytest.raises(subprocess.CalledProcessError):
+        github.api("example/project", "/issues/comments/1")
+
+
 @pytest.mark.parametrize("token,expected", [(None, "admin"), ("workflow-token", "write")])
 def test_explicit_credentials_override_inherited_auth_without_changing_it(monkeypatch, token, expected):
     monkeypatch.setenv("GH_TOKEN", "local-token")
