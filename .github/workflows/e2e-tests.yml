@@ -260,14 +260,14 @@ jobs:
                 ref: ${{ inputs.ref || github.workflow_sha }}
                 path: phase1-site-${{ github.run_id }}-${{ github.run_attempt }}
                 persist-credentials: false
-            - name: Observe fixed Phase 1 client cancellation progress
+            - name: Observe fixed Phase 1 sweep progress
               working-directory: phase1-site-${{ github.run_id }}-${{ github.run_attempt }}
               env:
                 SITE_OPERATION: ${{ inputs.phase1-site-operation }}
               # No installs, Slurm writes, or modifications to the observed generation.
               shell: /mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/envs/wrapper/bin/python -I -S -B {0} # zizmor: ignore[misfeature]
               run: |
-                """Bounded read-only observation of one fixed client cancellation lifecycle."""
+                """Bounded read-only observation of the nine actually admitted Phase 1 sweep points."""
                 import datetime
                 import itertools
                 import json
@@ -279,18 +279,205 @@ jobs:
                 import subprocess
                 import time
 
-                GENERATION = Path("/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1")
-                RUN_ID = 35486685532
+                RUN_ID = 35487222760
                 ATTEMPT = 1
                 SOURCE_SHA = "19a0d648932ec5f668fecb26f0c377bdd229cf49"
-                NAMESPACE = "35486685532-1-client"
-                INTENT = "cancellation-qualification-35486685532-1-client"
-                TOKEN = "850ba9951d5b6d2a2c2a40f512bef69f03013465ff4b48661ab1febc95e2139c"
-                DIRECTORY = GENERATION / "cancellation-qualification" / NAMESPACE
-                JOURNAL = DIRECTORY / "journal" / "h100-dgxc" / TOKEN
+                NATIVE_REVISION = "62beb5ec4f8c33abc26851ba0adaded29957ca5b"
+                GENERATION = Path("/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1")
+                HUB = Path("/mnt/nfs/sa-shared/gharunners/hf-hub-cache")
+                IMAGE = Path("/mnt/nfs/lustre/containers/vllm_vllm-openai_nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3.sqsh")
+                SCRIPT = b"from infx.srt_slurm.workflow import main\nraise SystemExit(main())\n"
+                # Frozen from actual setup matrix, dispatched job labels and native62 intent-path output.
+                EXPECTED = [{'mode': 'throughput', 'concurrency': 1, 'point_id': '24abf7ab27f7dba0e96561fb7c849f308070a4f70f8fa614360bed45aad41a9d', 'execution_id': '9b74b2513730e85e92e4bc4d59690b1767b1e6375c3515bb41b3738346802474', 'journal_token': 'd1401e5e053c76505bbe558d9e393bbf339bc81c53652e4d9552834e747a581f', 'receipt_path': '/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/journal/h100-dgxc/d1401e5e053c76505bbe558d9e393bbf339bc81c53652e4d9552834e747a581f/receipt.json', 'run_directory': '/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/runs/9b74b2513730e85e92e4bc4d59690b1767b1e6375c3515bb41b3738346802474', 'queue_token': '436a096079dcc2ebc9323145eddc006c', 'checkout_name': 'native-candidate-35487222760-1-436a096079dcc2ebc9323145eddc006c', 'github_job_id': 106016057920}, {'mode': 'throughput', 'concurrency': 2, 'point_id': '7519b1a1e2173ac93bdd453fe243a4b81a46f313870e952cf86e4e3091b4f563', 'execution_id': '977cdf3e03b7fc6659a124d916c300f4d1fe7339dc2c38c6353ada614cf989dd', 'journal_token': 'e31bc20d7525092d3579c6ea394217e4f7ec82411e4ee00811ba39254d0f1ed8', 'receipt_path': '/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/journal/h100-dgxc/e31bc20d7525092d3579c6ea394217e4f7ec82411e4ee00811ba39254d0f1ed8/receipt.json', 'run_directory': '/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/runs/977cdf3e03b7fc6659a124d916c300f4d1fe7339dc2c38c6353ada614cf989dd', 'queue_token': '8adb11679cd0e02fb74056e97dff2d01', 'checkout_name': 'native-candidate-35487222760-1-8adb11679cd0e02fb74056e97dff2d01', 'github_job_id': 106016057875}, {'mode': 'throughput', 'concurrency': 4, 'point_id': '379d47079c6854da0b4d87b97649d6910c2ee9a2662f4407fc35a6b524596ec8', 'execution_id': 'fb11b02909fb1e821815c64b2167a0e40139bbea86395345136cb5af8efaa61f', 'journal_token': 'd10ccd86dae9c52a10fa6b177582ad75678e2a10b2337add93e6bc0c4d2239a0', 'receipt_path': '/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/journal/h100-dgxc/d10ccd86dae9c52a10fa6b177582ad75678e2a10b2337add93e6bc0c4d2239a0/receipt.json', 'run_directory': '/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/runs/fb11b02909fb1e821815c64b2167a0e40139bbea86395345136cb5af8efaa61f', 'queue_token': 'f271fde79bebf33dfcf30e0053831585', 'checkout_name': 'native-candidate-35487222760-1-f271fde79bebf33dfcf30e0053831585', 'github_job_id': 106016058019}, {'mode': 'throughput', 'concurrency': 8, 'point_id': '07f479b5f9fb113dad6df5b9211b4e9a05286e5c18c1115c4012296e08033313', 'execution_id': '5511689189cb1577fb13a6fe6f52b7a5a23167ea92bfd1b2a74d10100fefa12c', 'journal_token': '8ff351a757b20c9404cfed154a261ceb8c3e88946e54cb111059ce446c7d04c4', 'receipt_path': '/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/journal/h100-dgxc/8ff351a757b20c9404cfed154a261ceb8c3e88946e54cb111059ce446c7d04c4/receipt.json', 'run_directory': '/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/runs/5511689189cb1577fb13a6fe6f52b7a5a23167ea92bfd1b2a74d10100fefa12c', 'queue_token': '97deff2b62412fc3569978d9aa18cba4', 'checkout_name': 'native-candidate-35487222760-1-97deff2b62412fc3569978d9aa18cba4', 'github_job_id': 106016057963}, {'mode': 'throughput', 'concurrency': 16, 'point_id': 'abec9a1ec529d0637a400b8ea1575478d1714423aa13c72bbd3ec1ed889137f7', 'execution_id': '9cb5af37de0ad900ee9f1d0bbe9abc95a4e73e9db9059a91dd81a23d67c37c7d', 'journal_token': 'de10b023752c8450984fd83754fd57d615c4317cf4b7a493b764bff0dc981cde', 'receipt_path': '/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/journal/h100-dgxc/de10b023752c8450984fd83754fd57d615c4317cf4b7a493b764bff0dc981cde/receipt.json', 'run_directory': '/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/runs/9cb5af37de0ad900ee9f1d0bbe9abc95a4e73e9db9059a91dd81a23d67c37c7d', 'queue_token': '5f5adb158db58ee4165328c1a27b003a', 'checkout_name': 'native-candidate-35487222760-1-5f5adb158db58ee4165328c1a27b003a', 'github_job_id': 106016057996}, {'mode': 'throughput', 'concurrency': 20, 'point_id': 'ee7a06825f82076ba1f2901a4f987b521b56dc8874afa2d1627a75a8971754a6', 'execution_id': 'c477b215eaf92573540fa77bce045f6f7789a5ec36536c1c320b13606abeb744', 'journal_token': 'fc3c1785dc8c39ad4d657f0a0260f78807059121a1fd20c18a4da87c999c9ff3', 'receipt_path': '/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/journal/h100-dgxc/fc3c1785dc8c39ad4d657f0a0260f78807059121a1fd20c18a4da87c999c9ff3/receipt.json', 'run_directory': '/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/runs/c477b215eaf92573540fa77bce045f6f7789a5ec36536c1c320b13606abeb744', 'queue_token': '36e8bc6d6cfcee3e2c1b00b8771bbb3a', 'checkout_name': 'native-candidate-35487222760-1-36e8bc6d6cfcee3e2c1b00b8771bbb3a', 'github_job_id': 106016058006}, {'mode': 'throughput', 'concurrency': 24, 'point_id': 'e5ef1861fb9bc0ea5ca5cb6503058c2d78cc2e9fa8e55941b6c8b800182055a2', 'execution_id': '170ee0ad95b8e6cb36b7d327685182668fc065145ab17808f8de67603ae53304', 'journal_token': 'cdf15883f41d1a1a1b26bb024ff5d851eb41d35b82c7bc63c50eb4c3e27e8b56', 'receipt_path': '/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/journal/h100-dgxc/cdf15883f41d1a1a1b26bb024ff5d851eb41d35b82c7bc63c50eb4c3e27e8b56/receipt.json', 'run_directory': '/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/runs/170ee0ad95b8e6cb36b7d327685182668fc065145ab17808f8de67603ae53304', 'queue_token': 'fae9614bc4525eca4b954e7a19d7556c', 'checkout_name': 'native-candidate-35487222760-1-fae9614bc4525eca4b954e7a19d7556c', 'github_job_id': 106016057857}, {'mode': 'throughput', 'concurrency': 28, 'point_id': '6a440d9d7e636b6560323a6e368b19ad90e4baca39ee55ed019e1cb373c3ce5a', 'execution_id': '368f9ee733a20435067a583ae2b98e2ab8674053a44409bfea790082f9bac4b4', 'journal_token': 'ac6c2397a9aff1167f95db5fdf74ecaa773f15d3f461cd2df5351da67d61843b', 'receipt_path': '/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/journal/h100-dgxc/ac6c2397a9aff1167f95db5fdf74ecaa773f15d3f461cd2df5351da67d61843b/receipt.json', 'run_directory': '/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/runs/368f9ee733a20435067a583ae2b98e2ab8674053a44409bfea790082f9bac4b4', 'queue_token': '1a983aaebc811278001adcc6a6b25bc4', 'checkout_name': 'native-candidate-35487222760-1-1a983aaebc811278001adcc6a6b25bc4', 'github_job_id': 106016057854}, {'mode': 'eval', 'concurrency': 28, 'point_id': 'ab881134f9a859662a5086ba1b770da3e4a183e86d6044103a2600fb5f8f86b8', 'execution_id': '6f0c4724cc14b525fcb950d3d41f2728bb1e78370287ce9e680167d536e9de28', 'journal_token': '7113a07723f8cfc5eb53b268d1e877c982b8188dff87ed5353fb0bd7d3f33d91', 'receipt_path': '/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/journal/h100-dgxc/7113a07723f8cfc5eb53b268d1e877c982b8188dff87ed5353fb0bd7d3f33d91/receipt.json', 'run_directory': '/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1/runs/6f0c4724cc14b525fcb950d3d41f2728bb1e78370287ce9e680167d536e9de28', 'queue_token': 'b994716f919d0d0ce56ddc0b1590b582', 'checkout_name': 'native-candidate-35487222760-1-b994716f919d0d0ce56ddc0b1590b582', 'github_job_id': 106016057871}]
+                CHECKOUTS = {point["checkout_name"]: (point["mode"], point["concurrency"], point["point_id"]) for point in EXPECTED}
 
 
-                def read_fixed(path, parent, limit=65536, *, tail=False):
+                def bounded_read(path, limit):
+                    """Adapted from the audited 345fb32b9 observer; never open a symlink or device."""
+                    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                    with os.fdopen(descriptor, "rb") as stream:
+                        info = os.fstat(stream.fileno())
+                        if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
+                            raise ValueError("nonregular or oversized input")
+                        data = stream.read(limit + 1)
+                        if len(data) > limit:
+                            raise ValueError("input exceeds its read bound")
+                        return data
+
+
+                def owned_file(path, limit):
+                    if path.resolve(strict=True) != path or path.stat().st_uid != os.getuid():
+                        raise ValueError("input must be canonical and owned")
+                    return bounded_read(path, limit)
+
+
+                def process_identity(pid_path):
+                    """Filter cwd before reading argv; return no unrestricted process data."""
+                    info = pid_path.lstat()
+                    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+                        return None
+                    cwd = Path(os.readlink(pid_path / "cwd"))
+                    if not cwd.is_absolute() or cwd.name not in CHECKOUTS or cwd.resolve(strict=True) != cwd:
+                        return None
+                    if cwd.parent.name != "InferenceX" or cwd.parent.parent.name != "InferenceX":
+                        return None
+                    mode, concurrency, point_id = CHECKOUTS[cwd.name]
+                    raw = bounded_read(pid_path / "cmdline", 16384)
+                    if not raw.endswith(b"\0"):
+                        return None
+                    argv = [os.fsdecode(value) for value in raw[:-1].split(b"\0")]
+                    if len(argv) == 7 and Path(argv[0]).name == "uv" and argv[1:6] == ["run", "--locked", "--python", "3.12", "python"]:
+                        kind = "uv-workflow-shell"
+                    elif len(argv) == 2 and argv[0] in {str(cwd / ".venv/bin" / name) for name in ("python", "python3", "python3.12")}:
+                        kind = "python-workflow"
+                        if Path(os.readlink(pid_path / "exe")) != Path(argv[0]).resolve(strict=True):
+                            return None
+                    else:
+                        return None
+                    script = Path(argv[-1])
+                    # GitHub custom uv shells use a UUID filename without an extension.
+                    if (script.parent != cwd.parents[2] / "_temp"
+                            or not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", script.name)
+                            or owned_file(script, 1024) != SCRIPT):
+                        return None
+                    request = json.loads(owned_file(cwd / "native-qualification/preparation-request.json", 8192))
+                    if not isinstance(request, dict) or request.get("requested_point_id") != point_id:
+                        return None
+                    source = request.get("source")
+                    if not isinstance(source, dict) or any(source.get(key) != expected for key, expected in {
+                        "repository": "SemiAnalysisAI/InferenceX", "run_id": RUN_ID, "attempt": ATTEMPT,
+                        "head_sha": SOURCE_SHA, "purpose": "pr-qualification", "event": "pull_request",
+                    }.items()):
+                        return None
+                    fields = bounded_read(pid_path / "stat", 4096).rsplit(b")", 1)[1].split()
+                    return {"cwd": cwd, "cmdline": raw, "start_ticks": int(fields[19]),
+                            "kind": kind, "mode": mode, "concurrency": concurrency, "point_id": point_id,
+                            "cpu_ticks": int(fields[11]) + int(fields[12])}
+
+
+                def sample_process(pid_path, proc_root, deadline):
+                    identity = process_identity(pid_path)
+                    if identity is None:
+                        return None
+                    ticks = os.sysconf("SC_CLK_TCK")
+                    result = {"pid": int(pid_path.name), "start_ticks": identity["start_ticks"],
+                              "kind": identity["kind"], "mode": identity["mode"], "concurrency": identity["concurrency"],
+                              "requested_point_id": identity["point_id"], "checkout_basename": identity["cwd"].name,
+                              "cpu_seconds": identity["cpu_ticks"] / ticks, "sample_monotonic": time.monotonic(), "open_assets": []}
+                    try:
+                        uptime = float(bounded_read(proc_root / "uptime", 256).split()[0])
+                        result["elapsed_seconds"] = max(0, uptime - identity["start_ticks"] / ticks)
+                    except (OSError, ValueError, IndexError):
+                        result["elapsed_seconds"] = None
+                    try:
+                        counters = {}
+                        for line in bounded_read(pid_path / "io", 4096).splitlines():
+                            key, value = line.split(b":", 1)
+                            if key in (b"rchar", b"read_bytes"):
+                                counters[key.decode()] = int(value)
+                        if set(counters) != {"rchar", "read_bytes"} or any(value < 0 for value in counters.values()):
+                            raise ValueError("invalid read counters")
+                        result["io"] = counters
+                    except (OSError, ValueError):
+                        result["io"] = {"state": "unavailable"}
+                    try:
+                        with os.scandir(pid_path / "fd") as descriptors:
+                            for index, entry in enumerate(itertools.islice(descriptors, 128)):
+                                if time.monotonic() >= deadline:
+                                    result["fd_scan_truncated"] = True
+                                    break
+                                if index == 127:
+                                    result["fd_scan_truncated"] = True
+                                if not entry.name.isdecimal():
+                                    continue
+                                descriptor = Path(entry.path)
+                                try:
+                                    raw_target = os.readlink(descriptor)
+                                    target = Path(raw_target)
+                                    if not target.is_absolute() or not (target.is_relative_to(HUB) or target == IMAGE):
+                                        continue
+                                    resolved = target.resolve(strict=True)
+                                    if not (resolved.is_relative_to(HUB) or resolved == IMAGE):
+                                        continue
+                                    info = descriptor.stat()
+                                    if not stat.S_ISREG(info.st_mode):
+                                        continue
+                                    position = None
+                                    for line in bounded_read(pid_path / "fdinfo" / entry.name, 4096).splitlines():
+                                        if line.startswith(b"pos:"):
+                                            position = int(line.split(b":", 1)[1])
+                                    after = descriptor.stat()
+                                    if (position is None or position < 0 or os.readlink(descriptor) != raw_target
+                                            or (info.st_dev, info.st_ino) != (after.st_dev, after.st_ino)):
+                                        continue
+                                    result["open_assets"].append({"fd": int(entry.name), "path": str(resolved),
+                                                                  "position_bytes": position, "size_bytes": info.st_size})
+                                    if len(result["open_assets"]) >= 8:
+                                        result["fd_scan_truncated"] = True
+                                        break
+                                except (OSError, ValueError):
+                                    continue
+                    except OSError:
+                        result["fd_state"] = "unavailable"
+                    # Reject PID reuse, changed command/cwd, and changed ownership after the FD scan.
+                    after = process_identity(pid_path)
+                    if after is None or any(after[key] != identity[key] for key in ("cwd", "cmdline", "start_ticks")):
+                        return None
+                    return result
+
+
+                def observe_fixed_sweep_processes(proc_root=Path("/proc")):
+                    result = {"purpose": "operational-diagnostic", "qualification_evidence": False,
+                              "run_id": RUN_ID, "attempt": ATTEMPT, "state": "not-local-or-unavailable", "matches": [],
+                              "note": "Missing data does not establish a stall. rchar is process read activity; read_bytes is kernel I/O accounting. Neither is unique completed hashing bytes or a completion percentage; do not sum parent and child counters."}
+                    if not proc_root.is_dir():
+                        return result
+                    try:
+                        if HUB.resolve(strict=True) != HUB or IMAGE.resolve(strict=True) != IMAGE:
+                            raise ValueError("asset roots must remain canonical")
+                        deadline = time.monotonic() + 5
+                        with os.scandir(proc_root) as candidates:
+                            for index, entry in enumerate(itertools.islice(candidates, 8192)):
+                                if time.monotonic() >= deadline:
+                                    result["pid_scan_truncated"] = True
+                                    break
+                                if index == 8191:
+                                    result["pid_scan_truncated"] = True
+                                if not entry.name.isdecimal():
+                                    continue
+                                try:
+                                    sample = sample_process(Path(entry.path), proc_root, deadline)
+                                except (OSError, ValueError, IndexError):
+                                    continue
+                                if sample is not None:
+                                    result["matches"].append(sample)
+                                    if len(result["matches"]) >= 18:  # One uv shell and Python child for each of nine jobs.
+                                        result["pid_scan_truncated"] = True
+                                        break
+                    except (OSError, ValueError):
+                        result["scan_state"] = "unavailable"
+                    if result["matches"]:
+                        result["state"] = "matched-local-process"
+                        time.sleep(2)
+                        deadline = time.monotonic() + 5
+                        for first in result["matches"]:
+                            try:
+                                if time.monotonic() >= deadline:
+                                    raise ValueError("followup deadline exceeded")
+                                second = sample_process(proc_root / str(first["pid"]), proc_root, deadline)
+                                if second is None or second["start_ticks"] != first["start_ticks"]:
+                                    raise ValueError("matched process changed or exited")
+                                elapsed = second["sample_monotonic"] - first["sample_monotonic"]
+                                observation = {"interval_seconds": elapsed, "sample": second}
+                                if elapsed > 0 and all(key in first["io"] and key in second["io"] and second["io"][key] >= first["io"][key] for key in ("rchar", "read_bytes")):
+                                    observation["read_activity_bytes_per_second"] = {key: (second["io"][key] - first["io"][key]) / elapsed for key in ("rchar", "read_bytes")}
+                                first["followup"] = observation
+                            except (OSError, ValueError, IndexError):
+                                first["followup"] = {"state": "unavailable-or-exited"}
+                    return result
+
+
+                def read_fixed(path, parent, limit=4 * 1024 * 1024, *, tail=False):
                     if parent.resolve(strict=True) != parent or path.parent != parent:
                         raise ValueError("source escapes its canonical fixed parent")
                     if path.resolve(strict=True) != path:
@@ -313,11 +500,100 @@ jobs:
 
 
                 def read_object(path, parent):
-                    raw, info = read_fixed(path, parent)
+                    raw, _ = read_fixed(path, parent)
                     value = json.loads(raw)
                     if not isinstance(value, dict):
                         raise ValueError("expected a JSON object")
-                    return value, info
+                    return value
+
+
+                def capture_tail(path, report, label):
+                    try:
+                        raw, info = read_fixed(path, path.parent, 32768, tail=True)
+                        lines = raw.splitlines()
+                        (report / label).write_bytes(b"\n".join(lines[-100:]) + b"\n")
+                        return {**info, "artifact": label, "line_limit": 100, "line_truncated": len(lines) > 100}
+                    except (OSError, ValueError) as error:
+                        return {"error_type": type(error).__name__}
+
+
+                def capture_selected(path, names):
+                    try:
+                        value = read_object(path, path.parent)
+                        return {key: value[key] for key in names if key in value}
+                    except (OSError, ValueError) as error:
+                        return {"error_type": type(error).__name__}
+
+
+                def observe(point, report):
+                    result = dict(point)
+                    directory = Path(point["run_directory"])
+                    if directory != GENERATION / "runs" / point["execution_id"]:
+                        raise ValueError("fixed run directory differs from admission")
+                    result["directory_exists"] = directory.is_dir() and directory.resolve() == directory
+                    if not result["directory_exists"]:
+                        return result
+                    for relative in ("prepare.lock", "bundle.json", "client/runtime.json", "client/prepared-resources.json", "client-output/diagnostics/client-audit.json"):
+                        path = directory / relative
+                        try:
+                            if path.parent.resolve(strict=True) != path.parent or path.is_symlink():
+                                raise ValueError("metadata path is not canonical")
+                            info = path.lstat()
+                            result[relative] = {"regular": stat.S_ISREG(info.st_mode), "bytes": info.st_size, "mtime_ns": info.st_mtime_ns}
+                        except FileNotFoundError:
+                            result[relative] = {"state": "not-present"}
+                        except (OSError, ValueError) as error:
+                            result[relative] = {"state": "not-readable", "error_type": type(error).__name__}
+                    try:
+                        bundle = read_object(directory / "bundle.json", directory)
+                        if (bundle["execution_id"] != point["execution_id"] or bundle["requested_point_id"] != point["point_id"]
+                                or bundle["source"].get("run_id") != RUN_ID or bundle["source"].get("attempt") != ATTEMPT
+                                or bundle["source"].get("head_sha") != SOURCE_SHA or bundle["source"].get("purpose") != "pr-qualification"
+                                or bundle["source"].get("repository") != "SemiAnalysisAI/InferenceX"
+                                or bundle["source"].get("event") != "pull_request"
+                                or bundle["identity"]["runtime_lock"].get("revision") != NATIVE_REVISION):
+                            raise ValueError("bundle is not the fixed admitted run/point/runtime")
+                        result["prepared"] = {"effective_point_id": bundle["point_id"], "resources": bundle["prepared"]["resources"]}
+                    except (OSError, ValueError, KeyError, TypeError) as error:
+                        result["bundle_state"] = {"state": "not-readable", "error_type": type(error).__name__}
+                        return result
+                    prefix = f"{point['mode']}-c{point['concurrency']}-"
+                    result["client_audit"] = capture_selected(directory / "client-output/diagnostics/client-audit.json", (
+                        "schema_version", "client", "status", "errors", "endpoint", "expected_documents", "max_length", "max_tokens"))
+                    client_log = "eval.log" if point["mode"] == "eval" else "benchmark.log"
+                    result["client_log"] = capture_tail(directory / "client-output" / client_log, report, prefix + client_log)
+                    journal = GENERATION / "journal" / "h100-dgxc" / point["journal_token"]
+                    if Path(point["receipt_path"]) != journal / "receipt.json":
+                        raise ValueError("fixed receipt path differs from admission")
+                    try:
+                        receipt = read_object(journal / "receipt.json", journal)
+                        if receipt.get("intent_id") != point["execution_id"] or receipt.get("scheduler_comment") != "srtctl:" + point["journal_token"]:
+                            raise ValueError("receipt does not own the fixed point")
+                        job_id = str(receipt.get("job_id", ""))
+                        result["receipt"] = {key: receipt.get(key) for key in ("state", "job_id", "accepted_ids", "created_at", "scheduler_comment")}
+                        output = directory / "native-output" / job_id
+                        if (receipt.get("state") != "accepted" or not re.fullmatch(r"[1-9][0-9]*", job_id)
+                                or receipt.get("output_dir") != str(output) or receipt.get("accepted_ids") != [job_id]):
+                            return result
+                        result["owned_job_id"] = job_id
+                        result["completion"] = capture_selected(output / "completion.json", (
+                            "schema", "job_id", "manifest_sha256", "execution_success", "exit_code", "cleanup_complete", "restoration_success"))
+                        result["orchestrator_log"] = capture_tail(directory / "native-output/native-logs" / (job_id + ".log"),
+                                                                  report, prefix + "orchestrator.log")
+                        logs = output / "logs"
+                        result["worker_identity"] = capture_selected(logs / "direct-vllm-worker.json", (
+                            "pid", "start_ticks", "pid_namespace", "net_namespace"))
+                        result["logs"] = {"benchmark.out": capture_tail(logs / "benchmark.out", report, prefix + "benchmark.out")}
+                        if logs.is_dir() and logs.resolve() == logs:
+                            with os.scandir(logs) as entries:
+                                candidates = [Path(entry.path) for entry in itertools.islice(entries, 32)]
+                            for path in sorted(candidates):
+                                if re.fullmatch(r"[A-Za-z0-9_.-]{1,100}_agg_w0\.(?:out|err)", path.name):
+                                    result["logs"][path.name] = capture_tail(path, report, prefix + path.name)
+                            result["worker_log_scan_limit"] = 32
+                    except (OSError, ValueError, KeyError) as error:
+                        result["receipt_state"] = {"state": "not-readable", "error_type": type(error).__name__}
+                    return result
 
 
                 def scheduler_read(argv):
@@ -358,142 +634,36 @@ jobs:
                     return {"state": status, "exit_code": process.returncode, "output": bytes(output[:limit]).decode(errors="replace")}
 
 
-                def failure(error):
-                    return {"state": "not-readable", "error_type": type(error).__name__}
-
-
-                def select_fields(value, fields):
-                    return {name: value[name] for name in fields if name in value}
-
-
-                def capture_object(path, fields):
-                    try:
-                        value, info = read_object(path, path.parent)
-                        return {**info, "value": select_fields(value, fields)}
-                    except (OSError, ValueError, KeyError) as error:
-                        return failure(error)
-
-
-                def capture_tail(path, report, name, limit=32768):
-                    try:
-                        raw, info = read_fixed(path, path.parent, limit, tail=True)
-                        lines = raw.splitlines()
-                        (report / name).write_bytes(b"\n".join(lines[-100:]) + b"\n")
-                        return {**info, "artifact": name, "line_limit": 100, "line_truncated": len(lines) > 100}
-                    except (OSError, ValueError) as error:
-                        return failure(error)
-
-
-                def writer_snapshot(job_id, report, suffix):
-                    result = {"observed_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}
-                    for name in ("started.json", "closed.json"):
+                def observe_run(report):
+                    status = {"purpose": "operational-diagnostic", "qualification_evidence": False, "run_id": RUN_ID,
+                              "attempt": ATTEMPT, "source_sha": SOURCE_SHA, "native_revision": NATIVE_REVISION,
+                              "observed_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "points": []}
+                    for point in EXPECTED:
                         try:
-                            value, info = read_object(DIRECTORY / "writer" / name, DIRECTORY / "writer")
-                            if (value.get("token") != NAMESPACE or value.get("job_id") != job_id
-                                    or value.get("cwd") != str(DIRECTORY)
-                                    or type(value.get("pid")) is not int or value["pid"] <= 0
-                                    or not isinstance(value.get("endpoint"), str)
-                                    or not value["endpoint"].startswith("http://")):
-                                raise ValueError("writer does not match the fixed lifecycle")
-                            result[name] = {**info, "value": select_fields(value, (
-                                "token", "job_id", "pid", "endpoint", "cwd", "signal", "records", "bytes", "writer_closed"))}
+                            status["points"].append(observe(point, report))
                         except (OSError, ValueError, KeyError) as error:
-                            result[name] = failure(error)
-                    result["heartbeat"] = capture_tail(DIRECTORY / "writer/heartbeat.jsonl", report,
-                                                       "writer-heartbeat-" + suffix + ".jsonl", 4096)
-                    return result
-
-
-                def observe_scheduler(job_id):
-                    result = {}
-                    job = scheduler_read(["scontrol", "--oneliner", "show", "job", job_id])
-                    fields = dict(re.findall(r"(\w+)=([^\s]+)", job["output"]))
-                    result["job"] = {"state": job["state"], "exit_code": job["exit_code"], "fields": select_fields(fields, (
-                        "JobId", "JobState", "Comment", "Restarts", "RestartCnt", "ExitCode", "BatchHost", "NodeList",
-                        "StartTime", "EndTime", "RunTime", "TimeLimit", "StepMgrEnabled", "StepMgr"))}
-                    if job["state"] != "closed":
-                        return result
-                    if job["exit_code"] == 0:
-                        if fields.get("JobId") != job_id or fields.get("Comment") != "srtctl:" + TOKEN:
-                            result["identity_mismatch"] = True
-                            return result
-                        steps = scheduler_read(["scontrol", "--oneliner", "show", "steps", job_id])
-                        result["steps"] = {"state": steps["state"], "exit_code": steps["exit_code"], "records": []}
-                        for line in steps["output"].splitlines():
-                            row = dict(re.findall(r"(\w+)=([^\s]+)", line))
-                            if re.fullmatch(re.escape(job_id) + r"\.(?:[0-9]+|batch|extern)", row.get("StepId", "")):
-                                result["steps"]["records"].append(select_fields(row, (
-                                    "StepId", "Name", "State", "StartTime", "TimeLimit", "NodeList", "ExitCode")))
-                            elif row:
-                                result["steps"]["unmatched_record"] = True
-                    elif "invalid job id" not in job["output"].lower():
-                        return result
-                    accounting = scheduler_read(["sacct", "--allocations", "--jobs", job_id, "--noheader", "--parsable2",
-                                                 "--format=JobIDRaw,State,ExitCode,Elapsed,Start,End,NodeList,Comment"])
-                    result["accounting"] = {"state": accounting["state"], "exit_code": accounting["exit_code"], "records": []}
-                    for line in accounting["output"].splitlines():
-                        parts = line.split("|")
-                        if len(parts) >= 8 and parts[0] == job_id and parts[7] == "srtctl:" + TOKEN:
-                            result["accounting"]["records"].append(dict(zip(
-                                ("job_id", "state", "exit_code", "elapsed", "start", "end", "nodes", "comment"), parts[:8])))
-                    return result
-
-
-                def observe(report):
-                    result = {"purpose": "operational-diagnostic", "qualification_evidence": False,
-                              "run_id": RUN_ID, "attempt": ATTEMPT, "expected_dispatch_source_sha": SOURCE_SHA,
-                              "source_verification": "Dispatch context supplied externally; not independently attested by this observer.",
-                              "generation": str(GENERATION), "namespace": NAMESPACE,
-                              "observed_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                              "note": "Read-only snapshot. Missing or truncated evidence is not proof of absence, readiness, closure, or event causality."}
-                    try:
-                        if DIRECTORY.resolve(strict=True) != DIRECTORY or not DIRECTORY.is_dir():
-                            raise ValueError("fixed lifecycle directory is not canonical")
-                        receipt, info = read_object(JOURNAL / "receipt.json", JOURNAL)
-                        job_id = receipt.get("job_id", "")
-                        if (receipt.get("state") != "accepted" or not isinstance(job_id, str)
-                                or not re.fullmatch(r"[1-9][0-9]*", job_id)
-                                or receipt.get("intent_id") != INTENT or receipt.get("scheduler_comment") != "srtctl:" + TOKEN
-                                or receipt.get("accepted_ids") != [job_id]
-                                or receipt.get("output_dir") != str(DIRECTORY / "native-output" / job_id)):
-                            raise ValueError("receipt does not own the fixed lifecycle")
-                        result["receipt"] = {**info, "value": select_fields(receipt, (
-                            "state", "job_id", "accepted_ids", "intent_id", "scheduler_comment", "output_dir", "manifest_sha256"))}
-                    except (OSError, ValueError, KeyError) as error:
-                        result["receipt"] = failure(error)
-                        return result
-                    result["writer_before_scheduler"] = writer_snapshot(job_id, report, "before")
-                    try:
-                        result["scheduler"] = observe_scheduler(job_id)
-                    except (OSError, subprocess.TimeoutExpired) as error:
-                        result["scheduler"] = failure(error)
-                    output = DIRECTORY / "native-output" / job_id
-                    result["completion"] = capture_object(output / "completion.json", (
-                        "schema", "job_id", "manifest_sha256", "execution_success", "exit_code", "cleanup_complete", "restoration_success"))
-                    result["qualification"] = capture_object(DIRECTORY / "qualification.json", (
-                        "state", "mode", "namespace", "native_revision", "serving_point", "lifecycle_qualified",
-                        "qualification_complete", "accepted_benchmark", "trigger", "cleanup", "writer_closure",
-                        "error_type", "error", "cleanup_error_type", "cleanup_error"))
-                    logs = output / "logs"
-                    result["worker_identity"] = capture_object(logs / "direct-vllm-worker.json", (
-                        "pid", "start_ticks", "pid_namespace", "net_namespace"))
-                    result["logs"] = {"orchestrator": capture_tail(DIRECTORY / "native-output/native-logs" / (job_id + ".log"),
-                                                                   report, "native-orchestrator.log"),
-                                      "client": capture_tail(logs / "benchmark.out", report, "benchmark.out")}
-                    try:
-                        if logs.resolve(strict=True) != logs:
-                            raise ValueError("worker logs directory is not canonical")
-                        with os.scandir(logs) as entries:
-                            candidates = [Path(entry.path) for entry in itertools.islice(entries, 32)]
-                        for path in sorted(candidates):
-                            if re.fullmatch(r"[A-Za-z0-9_.-]{1,100}_agg_w0\.(?:out|err)", path.name):
-                                result["logs"][path.name] = capture_tail(path, report, "worker-" + path.name)
-                        result["worker_log_directory_scan_limit"] = 32
-                    except (OSError, ValueError) as error:
-                        result["worker_logs"] = failure(error)
-                    result["writer_after_scheduler"] = writer_snapshot(job_id, report, "after")
-                    result["completed_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
-                    return result
+                            status["points"].append({**point, "observation_error_type": type(error).__name__})
+                    owned = {point["owned_job_id"]: "srtctl:" + point["journal_token"] for point in status["points"] if "owned_job_id" in point}
+                    if owned:
+                        job_ids = ",".join(owned)
+                        for name, argv in (
+                            ("squeue", ["squeue", "--jobs", job_ids, "--noheader", "--format=%i|%T|%R|%M|%N|%k"]),
+                            ("sacct", ["sacct", "--allocations", "--jobs", job_ids, "--noheader", "--parsable2", "--format=JobIDRaw,State,ExitCode,Elapsed,NodeList,Comment"]),
+                        ):
+                            try:
+                                result = scheduler_read(argv)
+                                # Keep only records whose scheduler comment still binds our exact intent.
+                                rows = []
+                                for line in result["output"].splitlines():
+                                    fields = line.split("|")
+                                    if len(fields) == 6 and fields[0] in owned and fields[5] == owned[fields[0]]:
+                                        rows.append(fields)
+                                status[name] = {"state": result["state"], "exit_code": result["exit_code"], "records": rows}
+                            except (OSError, subprocess.TimeoutExpired) as error:
+                                status[name] = {"error_type": type(error).__name__}
+                    status["preparation_processes"] = observe_fixed_sweep_processes()
+                    status["completed_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                    return status
 
 
                 if __name__ == "__main__":
@@ -501,8 +671,8 @@ jobs:
                         raise ValueError("This diagnostic branch supports inspect only")
                     report = Path.cwd() / "phase1-provision-report"
                     report.mkdir(exist_ok=False)
-                    (report / "diagnostic.json").write_text(json.dumps(observe(report), indent=2) + "\n")
-                    print("Fixed client lifecycle observation retained; this is not qualification evidence.")
+                    (report / "diagnostic.json").write_text(json.dumps(observe_run(report), indent=2) + "\n")
+                    print("Fixed-run read-only observation retained; this is not qualification evidence.")
             - name: Preserve provisioning evidence
               if: ${{ always() }}
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
