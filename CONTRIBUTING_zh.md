@@ -19,6 +19,74 @@
 
 **性能变更日志要求：** 凡是可能影响基准测试性能的变更，以及任何配方（recipe）的新增或修改，都**必须**在 `perf-changelog.yaml` 文件的物理末尾追加一个新条目。历史条目**严禁**编辑。
 
+## Pareto 覆盖度
+
+性能提交合并前，**强烈建议每条受影响的吞吐量与 E2EL Pareto 前沿至少有
+5 个实测点**。这不是不可豁免的最低门槛：点数不足时，可以在进一步审阅后，
+由管理员明确记录绕过决定再合并。缺少证据或无法核实覆盖度时也适用同一流程。
+警告不能视为普通签核通过。
+
+CODEOWNER 必须在清单的 Additional detail section 中记录每条受影响曲线的
+点数和证据。点数不足会显示 `⚠️` 警告，并提醒 @functionstackx（Oren）、
+@cquil11（Cam）和 @Oseltamivir（Bryan）。管理员需在 PR 中写明理由、受影响
+曲线及已评估 SHA；验证器需核实评论作者的仓库 `permission: admin` 和
+`role_name: admin`。普通批准、`/use`、Core 团队成员身份或机器人评论都不等于
+本项例外授权。即使已获授权，裁定仍保留 WARN 并链接该决定。
+
+这是审阅政策，不会新增 GitHub 必需状态检查。现有签核工作流仍只更新参考评论，
+不能阻止 GitHub 合并，也不会授予绕过权限。分支规则、sweep 和 eval 要求均不变。
+代理不得自行使用管理员绕过权限。
+
+### 统计仪表板前沿，而非 sweep 矩阵大小
+
+- 使用每芯片总 token 吞吐量（`tput_per_gpu`，图表 `y_tpPerGpu`）与以秒计的
+  E2EL。固定序列使用 `median_e2el`；AgentX 使用本次审阅的百分位，默认为 P90。
+  若提交 P75，须单独报告。不得替换为 TTFT、交互性、仅输出吞吐量或集群吞吐量。
+- 按模型、场景、硬件、框架、精度及已评估镜像和 run/date 分别统计。
+  固定序列的不同投机解码方法属于独立曲线；AgentX 同一曲线内可包含不同拓扑、
+  投机方法和 KV offload 配置。不得跨曲线或历史结果凑足点数。
+- 统计实测前沿顶点，不统计配置的并发数、成功任务总数、重复坐标、插值线段或
+  失败测量。E2EL 与吞吐量必须为有限正值；数据无效或缺失时应警告。
+- append-only 提交统计最终整条曲线，包括有可复用 artifact 证据、配方未变且
+  使用同一镜像的已有点。不要求本次新增 5 个点，也不得混入不兼容旧镜像的点。
+- 提供 sweep run/attempt、原始 artifact、源 SHA、镜像、场景、百分位、指标及
+  逐曲线点数。不影响基准测试曲线的文档或工具改动可记录 N/A，并说明原因。
+
+实现依据为 InferenceX-app 提交
+[`d507f3689274c82972709abb531bdedcb2e77946`](https://github.com/SemiAnalysisAI/InferenceX-app/commit/d507f3689274c82972709abb531bdedcb2e77946)：
+
+- [`metric-registry.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/components/inference/metric-registry.ts)
+  为吞吐量与 E2EL 图选择 `upper_right`。
+- [`paretoFrontUpperRight`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/lib/chart-utils.ts)
+  按延迟升序、同延迟时吞吐量降序排序，保留吞吐量递增点，以及延迟不同但吞吐量
+  相等的平台点。完全相同的坐标只计一次。平台点规则是当前应用行为，不等同于
+  严格的数学非支配关系，不应在计数时悄悄更改。
+- [`chartFrontier`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/components/inference/utils/powerCurves.ts)
+  仅在存在 canonical 标记时调用
+  [`canonicalParetoIntersection`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/components/inference/utils/canonicalFrontier.ts)。
+  应先对所有有效点计算 E2EL 前沿，再与已核实的标记取交集；提前过滤可能使原本
+  被支配的点进入前沿。当前
+  [`ChartDisplay`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/components/inference/ui/ChartDisplay.tsx)
+  不会给普通官方 E2EL 点添加这些标记。不能仅凭未被调用的 canonical-ID helper，
+  就认定所有 AgentX 曲线都必须取交集。
+
+可信审阅工具接收已按曲线分组的实测坐标：
+
+```bash
+node .github/scripts/pareto-coverage.cjs < /tmp/pareto-curves.json
+```
+
+输入示例（只有一个实测点，因此返回 WARN）：
+
+```json
+[{"key":"model/scenario/hwKey/precision/run/percentile/image","points":[{"x":1.0,"y":100.0}]}]
+```
+
+须包含所有受影响曲线，包括空曲线。若本次评估的应用路径提供
+`isOnNormalizedInteractivityFrontier` 标记，须保留已核实的标记。工具本身不会
+下载 artifact、验证来源、发现遗漏曲线或批准例外，这些工作仍由验证器独立完成。
+若应用前沿语义已偏离上述锁定版本，应报告 WARN 并解决差异，不能声称点数等价。
+
 ## Draft 模型精度
 
 投机解码提交必须使用原始、未量化的 draft 权重，并保留其原生精度。此规则适用于内嵌的 MTP/NextN/EAGLE draft head 及独立 draft 模型（包括 DSpark），覆盖所有硬件厂商和框架。相对于参考实现，不得对 draft 精度进行任何更改，包括量化、降精度、升精度、同位宽 dtype 转换（如 BF16 转 FP16）或混合精度覆盖设置。此要求涵盖 draft 权重、激活、计算及 draft KV cache，无论更改发生在离线、加载时还是服务运行时；同样不得替换为经过精度转换的 draft checkpoint。
@@ -54,7 +122,7 @@ CODEOWNER 自动验证目前仅供审阅参考。工作流会核验提交的清�
 - 启动 Claude 要求触发者为具有合格仓库写权限的人类用户。
 - 请在 "Additional detail section" 中填写清单要求的链接（验证/评测工作流运行、对应的 [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR，以及任何例外理由）。
 
-签署发布后，CI 会独立复核审阅清单中的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、复用命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack、投机解码是否使用 chat template，以及 draft 模型和 draft head 的权重与精度是否保持不变。随后，CI 会为整个 PR 创建或更新同一条裁定评论，并注明实际评估的 SHA。未通过的条目直接显示；已通过和不适用（N/A）的条目统一放入折叠区域。旧版按提交生成的裁定评论会被复用；如果评论已删除，下次验证会创建替代评论。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
+签署发布后，CI 会独立复核审阅清单中的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、复用命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack、投机解码是否使用 chat template、draft 模型和 draft head 的权重与精度是否保持不变，以及 Pareto 覆盖度。随后，CI 会为整个 PR 创建或更新同一条裁定评论，并注明实际评估的 SHA。未通过的条目及 Pareto 警告直接显示；已通过和不适用（N/A）的条目统一放入折叠区域。旧版按提交生成的裁定评论会被复用；如果评论已删除，下次验证会创建替代评论。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
 
 裁定只记录实际评估的提交，不会将批准延续到后续提交。需要重新评估时，由原审阅者编辑已有清单，或由有权限的协作者传入 `pr-number` 及其 `comment_url`（两者必须指向同一 PR）手动分发 `codeowner-signoff-verify.yml`。流程会更新同一条裁定评论。
 

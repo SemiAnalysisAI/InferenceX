@@ -4,6 +4,12 @@ const MARKER = '<!-- codeowner-signoff-verify -->';
 const AUTHORS = new Set(['Klaud-Cold', 'github-actions[bot]']);
 const PASS = /^## ✅✅✅ \*\*Verdict: PASS\*\* ✅✅✅$/m;
 const REJECT = /^## ❌❌❌ \*\*REJECTED\*\* ❌❌❌$/m;
+const WARN = /^## ⚠️ \*\*Verdict: WARN\*\* ⚠️$/m;
+const COVERAGE_WARNING = /^⚠️ Check 14 \(Pareto coverage\): WARN\b/m;
+const ESCALATION = '⚠️ Pareto coverage needs additional review: @functionstackx @cquil11 @Oseltamivir. ' +
+  'At least 5 points per affected throughput-versus-E2EL frontier are highly recommended. ' +
+  'Below 5, or when coverage cannot be verified, merge only with an explicit, recorded admin bypass ' +
+  'for the assessed commit; this advisory comment does not grant or enforce a bypass.';
 
 function isVerdict(comment) {
   return AUTHORS.has(comment.user?.login) &&
@@ -35,16 +41,23 @@ async function publish({ github, context, core, prNumber, headSha, verdictPath, 
   if (verificationSucceeded && fs.existsSync(verdictPath)) {
     verdict = fs.readFileSync(verdictPath, 'utf8').trim();
   }
-  const valid = (PASS.test(verdict) !== REJECT.test(verdict)) &&
+  const warning = COVERAGE_WARNING.test(verdict);
+  const valid = [PASS, REJECT, WARN].filter(pattern => pattern.test(verdict)).length === 1 &&
+    (!WARN.test(verdict) || warning) && (!PASS.test(verdict) || !warning) &&
     (verdict.startsWith('## ✅✅✅ **Verdict: PASS** ✅✅✅') ||
-     verdict.startsWith('## ❌❌❌ **REJECTED** ❌❌❌'));
+     verdict.startsWith('## ❌❌❌ **REJECTED** ❌❌❌') ||
+     verdict.startsWith('## ⚠️ **Verdict: WARN** ⚠️'));
   if (!valid) {
     verdict = '## ❌❌❌ **REJECTED** ❌❌❌\n\nThe verifier did not produce a valid verdict. Retry the sign-off verification.';
   }
-  const passed = PASS.test(verdict);
+  if (valid && warning) {
+    const newline = verdict.indexOf('\n');
+    verdict = `${verdict.slice(0, newline)}\n\n${ESCALATION}\n${verdict.slice(newline)}`;
+  }
+  const status = PASS.test(verdict) ? 'success' : WARN.test(verdict) ? 'warning' : 'failure';
   await upsert(github, context, prNumber, current,
     `${MARKER}\n${verdict}\n\nAssessed commit: \`${headSha}\`.\n`);
-  core.info(`CODEOWNER sign-off=${passed ? 'success' : 'failure'} for assessed commit ${headSha}`);
+  core.info(`CODEOWNER sign-off=${status} for assessed commit ${headSha}`);
 }
 
 module.exports = { publish };

@@ -19,6 +19,86 @@ Every PR description must include an **AI model disclosure** section. Name the e
 
 **Performance changelog requirement:** Every change that can affect benchmark performance and every recipe addition or modification **MUST** append a new entry to the physical end of `perf-changelog.yaml`. Historical entries **MUST NOT** be edited.
 
+## Pareto coverage
+
+At least **5 measured points on each affected throughput-versus-E2EL Pareto
+frontier are highly recommended** before merging a performance submission.
+Five is not an unconditional minimum: a smaller frontier may merge with an
+explicit, recorded admin bypass after additional review. Missing or unverifiable
+coverage follows the same exception path. Do not treat a warning as ordinary
+sign-off approval.
+
+The CODEOWNER must report each affected curve's count and evidence in the
+checklist's additional detail section. A shortfall produces a visible `⚠️`
+warning and tags @functionstackx (Oren), @cquil11 (Cam), and @Oseltamivir (Bryan).
+Record the admin's rationale, affected curves and assessed SHA in the PR; verify
+the author's repository `permission: admin` and `role_name: admin`. Ordinary
+approval, `/use`, membership in Core, or a bot's comment is not this exception.
+An exception remains visible as WARN, even after it is authorized.
+
+This is a review policy, not a new required GitHub status. The existing sign-off
+workflow remains advisory and updates one comment; it does not prevent GitHub
+from merging or grant bypass authority. Existing branch rules and sweep/eval
+requirements remain unchanged. An agent must not exercise admin bypass itself.
+
+### Count the dashboard frontier, not the sweep matrix
+
+- Use total token throughput per chip (`tput_per_gpu`, chart `y_tpPerGpu`) versus
+  E2EL in seconds. Fixed-sequence uses `median_e2el`; AgentX uses the reviewed
+  percentile, P90 by default. Report P75 separately if submitted. Do not substitute
+  TTFT, interactivity, output-only throughput or cluster throughput.
+- Count each affected model/scenario and hardware/framework/precision curve
+  separately, at the assessed image and run/date. Fixed-sequence speculative
+  methods are separate series; AgentX permits topology, speculative methods and
+  KV offload to vary within a curve. Do not add counts across curves or history.
+- Count measured frontier vertices, not configured concurrencies, raw successful
+  jobs, repeated coordinates, interpolated line segments or failed measurements.
+  E2EL and throughput must be finite and positive. Invalid/missing evidence warns.
+- For append-only changes, count the resulting whole curve, including verified
+  unchanged same-image points with reusable artifact provenance. Five newly added
+  points are not required. Do not import points from an incompatible old image.
+- Link the sweep run/attempt and raw artifacts, source SHA, image, selected
+  scenario, percentile, metric and per-curve counts. For docs/tooling-only changes
+  that cannot affect benchmark curves, record N/A with a reason.
+
+The implementation was traced at InferenceX-app commit
+[`d507f3689274c82972709abb531bdedcb2e77946`](https://github.com/SemiAnalysisAI/InferenceX-app/commit/d507f3689274c82972709abb531bdedcb2e77946):
+
+- [`metric-registry.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/components/inference/metric-registry.ts)
+  selects `upper_right` for throughput versus E2EL.
+- [`paretoFrontUpperRight`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/lib/chart-utils.ts)
+  sorts latency ascending and throughput descending on ties, then retains
+  increasing throughput and equal-throughput plateaus at distinct latencies.
+  Exact coordinate duplicates count once. The plateau rule is the app's current
+  behavior, not strict mathematical non-dominance; do not silently replace it.
+- [`chartFrontier`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/components/inference/utils/powerCurves.ts)
+  uses [`canonicalParetoIntersection`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/components/inference/utils/canonicalFrontier.ts)
+  only when canonical flags are present. Compute the E2EL frontier first, then
+  intersect with verified flags; filtering beforehand can promote dominated
+  points. The current
+  [`ChartDisplay`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/components/inference/ui/ChartDisplay.tsx)
+  does not stamp those flags on ordinary official E2EL points. Do not infer an
+  unconditional AgentX intersection from the unused canonical-ID helper.
+
+The trusted review helper accepts already scoped measured coordinates:
+
+```bash
+node .github/scripts/pareto-coverage.cjs < /tmp/pareto-curves.json
+```
+
+Example input shape (one measured point, therefore WARN):
+
+```json
+[{"key":"model/scenario/hwKey/precision/run/percentile/image","points":[{"x":1.0,"y":100.0}]}]
+```
+
+Include every affected curve, including empty ones. Preserve verified
+`isOnNormalizedInteractivityFrontier` flags if the assessed app path supplies
+them. The helper does not fetch artifacts, prove provenance, discover omitted
+curves, or approve exceptions; the verifier must do those checks independently.
+If the app has changed its frontier semantics since the pinned implementation,
+report WARN and resolve the discrepancy rather than claim equivalent counts.
+
 ## Draft-model precision
 
 Speculative-decoding submissions must use the original, unquantized draft weights
@@ -82,7 +162,7 @@ A friendly reminder. Please follow the latest checklist template **correctly**:
 - Starting Claude requires an eligible human actor with repository write access.
 - Fill in the "Additional detail section" with the links the checklist asks for (validation/eval workflow runs, the corresponding [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR, and any exception reasoning).
 
-Once the sign-off is posted, CI independently re-verifies the review checklist claims, including CODEOWNER status, a green sweep and evals on a commit in the PR, the linked recipe, the reuse command, use of the latest checklist template, upstream [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) images, no architecture-changing benchmark hacks, chat-template usage for speculative decoding, and unchanged draft-model/head weights and precision. It then creates or updates one verdict comment for the PR, including the SHA actually assessed. Failing criteria stay visible; passing and N/A criteria appear together in a collapsed section. An existing verdict comment from the older per-commit format is reused; if the comment was deleted, the next verification creates a replacement. Checkmarks are not taken on trust, so please only check items you have actually verified.
+Once the sign-off is posted, CI independently re-verifies the review checklist claims, including CODEOWNER status, a green sweep and evals on a commit in the PR, the linked recipe, the reuse command, use of the latest checklist template, upstream [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) images, no architecture-changing benchmark hacks, chat-template usage for speculative decoding, unchanged draft-model/head weights and precision, and Pareto coverage. It then creates or updates one verdict comment for the PR, including the SHA actually assessed. Failing criteria and Pareto warnings stay visible; passing and N/A criteria appear together in a collapsed section. An existing verdict comment from the older per-commit format is reused; if the comment was deleted, the next verification creates a replacement. Checkmarks are not taken on trust, so please only check items you have actually verified.
 
 The verdict records only the commit actually assessed; it does not carry approval forward to later commits. To request a new assessment, the original reviewer edits their existing checklist, or an authorized collaborator dispatches `codeowner-signoff-verify.yml` with `pr-number` and its `comment_url` (both must identify the same PR). This updates the same verdict comment.
 

@@ -122,3 +122,47 @@ def test_comment_update_errors_are_not_silently_replaced_with_duplicate_comments
             {"id": 1, "user": {"login": "github-actions[bot]"},
              "body": "<!-- codeowner-signoff-verify -->\nOld verdict"},
         ], update_error=403)
+
+
+@pytest.mark.parametrize("header", [
+    "## ⚠️ **Verdict: WARN** ⚠️",
+    "## ❌❌❌ **REJECTED** ❌❌❌",
+])
+def test_coverage_warning_escalates_once_without_masking_other_failures(publish, header):
+    result = publish(
+        header + "\n\n⚠️ Check 14 (Pareto coverage): WARN — curve-a: 3/5; admin bypass not verified.",
+        repeats=2,
+    )
+    body = result["comments"][0]["body"]
+    assert body.startswith("<!-- codeowner-signoff-verify -->\n" + header)
+    assert body.count("@functionstackx") == 1
+    assert body.count("@cquil11") == 1
+    assert body.count("@Oseltamivir") == 1
+    assert "does not grant or enforce a bypass" in body
+    assert "Assessed commit: `abcdef1234567890abcdef1234567890abcdef1234`" in body
+    assert result["writes"] == 1
+
+
+@pytest.mark.parametrize("verdict", [
+    "## ⚠️ **Verdict: WARN** ⚠️",  # warning must explain the coverage check
+    "## ✅✅✅ **Verdict: PASS** ✅✅✅\n\n⚠️ Check 14 (Pareto coverage): WARN — 3/5",
+    "## ✅✅✅ **Verdict: PASS** ✅✅✅\n## ⚠️ **Verdict: WARN** ⚠️",
+    "## ❌❌❌ **REJECTED** ❌❌❌\n## ⚠️ **Verdict: WARN** ⚠️",
+])
+def test_inconsistent_warning_verdict_is_rejected(publish, verdict):
+    body = publish(verdict)["comments"][0]["body"]
+    assert "The verifier did not produce a valid verdict" in body
+    assert "**REJECTED**" in body
+    assert "@functionstackx" not in body
+
+
+def test_successful_reassessment_removes_stale_warning_and_tags(publish):
+    comments = publish(
+        "## ⚠️ **Verdict: WARN** ⚠️\n\n"
+        "⚠️ Check 14 (Pareto coverage): WARN — coverage unverifiable; admin bypass not verified."
+    )["comments"]
+    result = publish("## ✅✅✅ **Verdict: PASS** ✅✅✅\n\nAll checks passed.", comments)
+    assert len(result["comments"]) == 1
+    assert "**Verdict: PASS**" in result["comments"][0]["body"]
+    assert "@functionstackx" not in result["comments"][0]["body"]
+    assert "coverage unverifiable" not in result["comments"][0]["body"]
