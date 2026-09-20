@@ -916,8 +916,8 @@ dsv4-fp4-b200-sglang-agentic-hicache-mtp:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [64, 96, 128, 160], router: { name: sglang-router, version: "0.3.2" } }
 
 dsv4-fp4-b200-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-426e59f
-  model: deepseek-ai/DeepSeek-V4-Pro
+  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-591bb95
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:b200-nscale
   precision: fp4
@@ -925,12 +925,12 @@ dsv4-fp4-b200-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.95
+    - dram-utilization: 0.90
       search-space:
-      # TP8 SimpleCPU + MTP
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [1, 4, 8, 14] }
-      # DEP8 SimpleCPU + MTP
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [32, 64, 96, 128, 160, 196], router: { name: vllm-router, version: "0.1.14" } }
+      # TP8 resident KV + DSpark6
+      - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 6, 10, 14, 16] }
+      # DEP8 SimpleCPU + DSpark6
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [32, 64, 96, 128, 160, 192], router: { name: vllm-router, version: "0.1.14" } }
 
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
