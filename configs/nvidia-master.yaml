@@ -8294,8 +8294,8 @@ glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact:
           ep: 4
           dp-attn: true
           additional-settings:
-          # This recipe records bounded PMIx worker startup diagnostics.
-          - "CONFIG_FILE=recipes/trtllm/glm5.2/b300-fp4/agentic/dynamo-disagg-b300-1p1d-tep8-compact-c20-b5-mtp5.yaml"
+          # This diagnostic recipe records prefill worker stacks and rank iteration logs.
+          - "CONFIG_FILE=recipes/trtllm/glm5.2/b300-fp4/agentic/dynamo-disagg-b300-1p1d-tep8-compact-c20-b5-mtp5-stacks.yaml"
         decode:
           num-worker: 1
           tp: 8

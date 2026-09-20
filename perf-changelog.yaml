@@ -7925,6 +7925,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3118
 
 - config-keys:
+    - glm5.2-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Retune the GLM-5.2 FP4 MI355X ATOM AgentX recipe to the validated standalone recipe (ROCm/ATOM PR 2247). Image -> rocm/atom-dev:nightly_202609151450 (ATOM e03b7f17 / AITER 797cce25). Per-concurrency MTP draft depth with the golden acceptance length via --spec-decode-acceptance-length: K5/3.61 for C1-C8, K4/3.33 for C10-C40, K3/2.99 for C48. Add a TP4+DCP4 arm (dcp-size 4) at conc [16, 24, 32, 40, 48] to shard the decode KV. online-quant is global ptpc_fp8 with a 7-module exclude that keeps every MoE expert (layers 0-77, native MXFP4) and the whole MTP head (layer 78, native BF16) out of online quant, so only the dense attention/MLP Linears are re-quantized to ptpc_fp8. Add --gpu-memory-utilization 0.95, --enable_prefix_caching, ATOM_USE_FLYDSL_GATHER_KV_B_PROJ=0, and LMCACHE_NUMA_MODE=auto. dram-utilization 0.14 -> 0.171 yields 256 GiB/rank LMCache (min(3095781,2861022)MiB*0.171*4/8). TP8 GPU-only arm unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3205
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -8361,6 +8369,94 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3253
 
 - config-keys:
+    - kimik3-fp4-h200-vllm-agentic-simple
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required measured power for the complete H200 Kimi-K3 simple recipe through the shared recipe-gated launcher."
+    - "为 H200 Kimi-K3 simple 完整配方启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3054
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required telemetry on the four GB300 disaggregated recipes using the launcher and collector introduced below this draft in the stack. Preserve the original bilingual backfill and validation guidance."
+    - "为 GB300 Kimi-K3 分离部署启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3047
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the GB300 disaggregated DCGM exporter to port 19401 to avoid the system listener on 9401. Preserve prefill/decode telemetry grouping; full disaggregated hardware qualification remains pending."
+    - "GB300 分离部署的 DCGM exporter 改用 19401，避免与 9401 系统服务冲突；保留 prefill/decode 分组，完整硬件验证仍待完成。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3047
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required telemetry on seven GB200 aggregate recipes, preserve failed-job artifacts, and reserve CUDA Graph memory in the five TP8/PP2 recipes."
+    - "为七个 GB200 Kimi-K3 聚合配方启用必需实测功耗并保留失败产物；五个 TP8/PP2 配方为 CUDA Graph 预留显存。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3045
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Restore multinode AgentX power on the pinned upstream srt-slurm: the launcher window adapter now needs only SRT_MEASUREMENT_WINDOW_DIR, which srt-slurm exports to custom benchmark commands, and derives the result root and concurrency locally instead of reading three fork-only variables. Applies to every srt-slurm AgentX recipe with telemetry enabled; recipes, images and grids are unchanged."
+    - "在固定的上游 srt-slurm 上恢复多节点 AgentX 功耗采集：启动器窗口适配器只需 srt-slurm 导出给自定义基准命令的 SRT_MEASUREMENT_WINDOW_DIR，并在本地推导结果根目录与并发数，不再读取三个仅分支提供的变量。适用于所有启用遥测的 srt-slurm AgentX 配方；配方、镜像与网格保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3206
+
+- config-keys:
+    - kimik3-fp4-h200-vllm-agentic-balanced
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required measured power for the complete H200 Kimi-K3 balanced recipe through the shared recipe-gated launcher."
+    - "为 H200 Kimi-K3 balanced 完整配方启用必需实测功耗。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3053
+
+- config-keys:
+  - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add B200 Qwen3.5-397B-A17B FP8 AgentX disaggregation with colocated TP4 prefill
+    and TP4 decode on eight GPUs at concurrency 8, 16, 24, 32, 48 and 64.
+  - Use Dynamo/SGLang nightly 20260918-20518d85 with NEXTN MTP and Mooncake NVLink transfers.
+  - Enable 104 GB per-rank prefill HiCache at C8-C32; use 215 GB with first-use
+    write-through and decode static memory 0.88 at C48/C64.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3269
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+    - glm5.2-fp8-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GLM-5.2 MI355X SGLang AgentX images to lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917 (2026-09-17 ROCm 7.2.0 mi35x daily, digest sha256:21c1cc9a…, the newest rocm720-mi35x tag; the 2026-09-18 builds only ship rocm724/rocm10 flavors): glm5.2-fp4-mi355x-sglang-agentic-mtp from 20260916 and glm5.2-fp8-mi355x-sglang-agentic-mtp from 20260908"
+    - "In glm5.2_fp8_mi355x_sglang_mtp.sh pass the decode graph batch as --cuda-graph-max-bs-decode instead of the removed --cuda-graph-max-bs alias, matching the MXFP4 sibling; serve flags, search spaces and golden acceptance are otherwise unchanged"
+    - "将 GLM-5.2 MI355X SGLang AgentX 镜像更新至 lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917（2026-09-17 ROCm 7.2.0 mi35x 日构建，digest sha256:21c1cc9a…，rocm720-mi35x 系列最新 tag；2026-09-18 构建仅提供 rocm724/rocm10 版本）：glm5.2-fp4-mi355x-sglang-agentic-mtp 自 20260916，glm5.2-fp8-mi355x-sglang-agentic-mtp 自 20260908"
+    - "在 glm5.2_fp8_mi355x_sglang_mtp.sh 中改用 --cuda-graph-max-bs-decode 传递 decode graph batch，替换已移除的 --cuda-graph-max-bs 别名，与 MXFP4 姊妹配方一致；其余服务参数、搜索空间与 golden acceptance 不变"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3277
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B200 vLLM AgentX to DSpark6 and a new image with TP8 and DEP8 configurations."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
+
+- config-keys:
     - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
   description:
     - "Add six compact GLM-5.2 NVFP4 AgentX recipes on B300 with Dynamo and TensorRT-LLM disaggregated serving."
@@ -8406,4 +8502,11 @@
   description:
     - "Forward the workflow result filename into B300 AgentX recipes, collect per-concurrency aggregates from the mounted workspace, and preserve the Slurm producer failure status after staging artifacts."
     - "将工作流结果文件名传递给 B300 AgentX 配方，从挂载的工作区收集各并发度的聚合结果，并在保留产物后传递 Slurm 生产作业的失败状态。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
+  description:
+    - "Add a dedicated c20 diagnostic recipe with periodic prefill worker stacks and rank iteration logs"
+    - "新增专用 c20 诊断配方，记录预填充工作进程的周期性调用栈和各 rank 的迭代日志"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
