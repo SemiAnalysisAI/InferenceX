@@ -8449,6 +8449,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3277
 
 - config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B200 vLLM AgentX to DSpark6 and a new image with TP8 and DEP8 configurations."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
+
+- config-keys:
     - qwen3.827b-fp8-mi300x-vllm-mtp
   description:
     - "Add the MI300X Qwen3.8-27B-FP8 recipe: vLLM nightly-a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b on one GPU (TP1), 1k1k only, with the checkpoint's native MTP head (mtp_num_hidden_layers=1, --speculative-config method mtp) drafting three tokens as the vLLM recipe page prescribes, Triton attention with a bf16 KV cache (gfx942 has no calibrated fp8 attention scales), --max-num-seqs sized to the sweep point (floor 16; 256 for accuracy evals), prefix caching disabled, the matrix context as --max-model-len, --language-model-only, and chat-templated prompts; concurrency 1-128"
