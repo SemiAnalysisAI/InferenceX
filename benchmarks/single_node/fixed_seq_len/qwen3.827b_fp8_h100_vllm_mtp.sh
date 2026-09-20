@@ -90,7 +90,7 @@ VLLM_CMD=(
     --kv-cache-dtype fp8
     --max-model-len "$MODEL_LEN"
     --max-num-seqs "$MAX_NUM_SEQS"
-    # Every 1k1k request prefills its full random prompt; no prefix-cache hits.
+    # Every throughput request prefills its full random prompt; no prefix-cache hits.
     --no-enable-prefix-caching
     --reasoning-parser qwen3
     --enable-auto-tool-choice --tool-call-parser qwen3_xml

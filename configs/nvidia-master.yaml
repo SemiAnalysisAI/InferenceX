@@ -8390,3 +8390,7 @@ qwen3.827b-fp8-h100-vllm-mtp:
       osl: 1024
       search-space:
       - { tp: 1, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 1, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
