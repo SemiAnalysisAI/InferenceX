@@ -1857,9 +1857,20 @@
       "repeat": 1,
       "attempt": 2,
       "head_sha": "283950b1471d52406c5a2af419dfa49f9d2c7b10",
-      "status": "queued",
-      "node": null,
-      "artifacts": [],
+      "status": "failure",
+      "node": "im-b200-c003",
+      "artifacts": [
+        {
+          "id": 10610131774,
+          "name": "results_bmk",
+          "size_bytes": 142
+        },
+        {
+          "id": 10610345796,
+          "name": "run-stats",
+          "size_bytes": 280
+        }
+      ],
       "performance_result": false,
       "workflow_name": "offload-v1-dram-nvme-c256-r1-20260920T1656Z",
       "dispatched_at": "2026-09-20T16:56:58Z",
@@ -1894,13 +1905,48 @@
             }
           ],
           "note": "Infrastructure-only retry attempt 2 was dispatched immediately after a fresh zero-queue capacity check under the user standing authorization."
+        },
+        {
+          "attempt": 2,
+          "status": "failure",
+          "job_id": 106118323709,
+          "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35524297747/job/106118323709",
+          "started_at": "2026-09-20T17:31:59Z",
+          "completed_at": "2026-09-20T17:33:27Z",
+          "runner": "b200-nscale-slurm_02",
+          "node": "im-b200-c003",
+          "allocation_id": "16697",
+          "performance_result": false,
+          "failure_stage": "offload_prepare",
+          "failure_evidence": "Attempt 2 was scheduled back onto im-b200-c003 and failed before model startup with the same RuntimeError: Insufficient node-local NVMe space for budget plus reserve. The node still had only about 5.72 GB free; the draft-model and AgentX dataset downloads also reported insufficient space. No profiling started and no performance result was produced.",
+          "log_archive_sha256": "e882eb6db027430626836771b61e17009b9e09d9d53063df1d943ff6014447e5",
+          "artifacts": [
+            {
+              "id": 10610131774,
+              "name": "results_bmk",
+              "size_bytes": 142
+            },
+            {
+              "id": 10610345796,
+              "name": "run-stats",
+              "size_bytes": 280
+            }
+          ],
+          "note": "The retry reproduced the same node-local storage-capacity failure on the same compute node. No further unchanged retry will be dispatched; a future attempt requires verified sufficient node-local capacity or infrastructure remediation."
         }
       ],
-      "rerun_triggering_actor": "alec"
+      "rerun_triggering_actor": "alec",
+      "runner": "b200-nscale-slurm_02",
+      "allocation_id": "16697",
+      "started_at": "2026-09-20T17:31:59Z",
+      "completed_at": "2026-09-20T17:33:27Z",
+      "failure_stage": "offload_prepare",
+      "failure_evidence": "Attempt 2 was scheduled back onto im-b200-c003 and failed before model startup with the same RuntimeError: Insufficient node-local NVMe space for budget plus reserve. The node still had only about 5.72 GB free; the draft-model and AgentX dataset downloads also reported insufficient space. No profiling started and no performance result was produced.",
+      "log_archive_sha256": "e882eb6db027430626836771b61e17009b9e09d9d53063df1d943ff6014447e5"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918",
-  "status": "All four matched c16 arms and the c256 HBM control are valid. Fresh c256 HBM+NVMe and HBM+DRAM runs are active. The c256 combined arm failed preflight on a low-space node and its infrastructure-only retry is the sole queued B200 job. Both c1024 HBM and HBM+NVMe reached the 480-minute allocation limit during canonical warmup with zero profiled responses and will not be retried unchanged.",
+  "status": "All four matched c16 arms and the c256 HBM control are valid. Fresh c256 HBM+NVMe and HBM+DRAM runs remain active. The c256 combined arm failed the node-local NVMe capacity preflight twice on im-b200-c003 and will not be retried unchanged. Both c1024 HBM and HBM+NVMe reached the 480-minute allocation limit during canonical warmup with zero profiled responses and will not be retried unchanged.",
   "last_capacity_check": {
     "checked_at": "2026-09-20T17:30:23Z",
     "cluster_observed_at": "2026-09-20T17:29:47Z",
@@ -1917,21 +1963,20 @@
     "scheduler_available": true,
     "active_study_run_ids": [
       35524019140,
-      35524083518,
-      35524297747
+      35524083518
     ],
     "active_study_job_ids": [
       106112961565,
-      106113129196,
-      106118323709
+      106113129196
     ],
     "active_reservations_global": 1,
     "reserved_nodes_global": 1,
     "dispatch_allowed": false,
-    "reason": "The c256 combined infrastructure-only retry is the sole queued B200 job. No additional dispatch is allowed until it starts and a fresh status check confirms zero queued jobs."
+    "reason": "The prior capacity snapshot is stale after the combined retry completed. The c256 HBM+NVMe and HBM+DRAM runs remain active; do not dispatch until a fresh global B200 queue check is available.",
+    "stale_after": "2026-09-20T17:33:27Z"
   },
   "next_dispatch": {
-    "requires": "After the c256 matched offload arms produce validated results, choose the next lower-concurrency probes from the observed c16-to-c256 change. Do not add any job while one B200 job remains queued, and do not retry c1024, c4096, or c8192 feasibility failures unchanged."
+    "requires": "Wait for validated c256 HBM+NVMe and HBM+DRAM results. Retry the c256 combined arm only after InferenceX infrastructure verifies sufficient node-local NVMe capacity or remediates im-b200-c003; do not issue another unchanged GitHub retry. Then choose lower-concurrency probes from the observed c16-to-c256 change. Never dispatch while any B200 job is queued."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-19T23:34:00Z",
