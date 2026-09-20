@@ -23,6 +23,10 @@ if [[ -v ROCR_VISIBLE_DEVICES ]]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
+# DCP is enabled for large-concurrency points (C16+) via dcp-size in
+# configs/amd-master.yaml; default 1 keeps the small-concurrency TP-only path.
+DCP_SIZE="${DCP_SIZE:-1}"
+
 if [[ -n "$MODEL_PATH" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -79,6 +83,7 @@ case "$KV_OFFLOAD_BACKEND" in
         export LMCACHE_MAX_LOCAL_CPU_SIZE="$TOTAL_CPU_DRAM_GB"
         export LMCACHE_CHUNK_SIZE=256
         export OFFLOAD_MIN_LOAD_TOKENS=8192
+        export LMCACHE_NUMA_MODE=auto
 
         OFFLOAD_ARGS=(
             --kv-transfer-config
@@ -96,20 +101,32 @@ export PYTHONNOUSERSITE=1
 
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 export AITER_USE_FLYDSL_MOE_SORTING=1
+# GLM-5.2 MLA is nope=192/v=256; FlyDSL gather_kv_b_proj only supports 128/128,
+# so force the Triton gather (needed on the DCP prefill-context and MTP verify
+# paths).
+export ATOM_USE_FLYDSL_GATHER_KV_B_PROJ=0
 
-case "$CONC" in
-  1)  CUDAGRAPH_CAPTURE_SIZES='[1,2]' ;;
-  2)  CUDAGRAPH_CAPTURE_SIZES='[1,2,4]' ;;
-  4)  CUDAGRAPH_CAPTURE_SIZES='[1,2,4,8]' ;;
-  8)  CUDAGRAPH_CAPTURE_SIZES='[1,2,4,8,12,16]' ;;
-  10) CUDAGRAPH_CAPTURE_SIZES='[1,2,4,8,12,16,20]' ;;
-  12) CUDAGRAPH_CAPTURE_SIZES='[1,2,4,8,12,16,20,24]' ;;
-  16) CUDAGRAPH_CAPTURE_SIZES='[1,2,4,8,12,16,20,24,28,32]' ;;
-  *)
-    echo "Unsupported CONC=$CONC" >&2
-    exit 2
-    ;;
-esac
+if (( DCP_SIZE > 1 )); then
+    # TP+DCP large-concurrency path: [1,2,4,8] then 12..(2*CONC) step 4.
+    CUDAGRAPH_CAPTURE_SIZES='[1,2,4,8'
+    for ((size = 12; size <= CONC * 2; size += 4)); do
+        CUDAGRAPH_CAPTURE_SIZES+=",${size}"
+    done
+    CUDAGRAPH_CAPTURE_SIZES+=']'
+else
+    case "$CONC" in
+      1)  CUDAGRAPH_CAPTURE_SIZES='[1,2]' ;;
+      2)  CUDAGRAPH_CAPTURE_SIZES='[1,2,4]' ;;
+      4)  CUDAGRAPH_CAPTURE_SIZES='[1,2,4,8]' ;;
+      8)  CUDAGRAPH_CAPTURE_SIZES='[1,2,4,8,12,16]' ;;
+      10) CUDAGRAPH_CAPTURE_SIZES='[1,2,4,8,12,16,20]' ;;
+      12) CUDAGRAPH_CAPTURE_SIZES='[1,2,4,8,12,16,20,24]' ;;
+      *)
+        echo "Unsupported CONC=$CONC for TP-only path" >&2
+        exit 2
+        ;;
+    esac
+fi
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP") #TP
 if [ "$DP_ATTENTION" = "true" ]; then
@@ -119,24 +136,38 @@ if [ "$DP_ATTENTION" = "true" ]; then
         PARALLEL_ARGS=(--tensor-parallel-size "$TP" --enable-dp-attention )
     fi
 fi
-
-# https://github.com/SemiAnalysisAI/InferenceX/blob/main/golden_al_distribution/glm5.2_mtp.yaml
-SIMULATE_ACC_LEN=2.99
-NUM_SPEC_TOKENS=3
-SPEC_ACCEPTANCE_RATE=$(awk "BEGIN{print ($SIMULATE_ACC_LEN-1)/$NUM_SPEC_TOKENS}")
-if [ "${EVAL_ONLY}" = "true" ]; then
-    SPEC_ARGS=(
-        --method mtp
-        --num-speculative-tokens "$NUM_SPEC_TOKENS"
-    )
-else
-    SPEC_ARGS=(
-        --method mtp
-        --num-speculative-tokens "$NUM_SPEC_TOKENS"
-        --spec-decode-acceptance-rate "$SPEC_ACCEPTANCE_RATE"
-    )
+if (( DCP_SIZE > 1 )); then
+    PARALLEL_ARGS+=(--decode-context-parallel-size "$DCP_SIZE")
 fi
-echo "SIMULATE_ACC_LEN=$SIMULATE_ACC_LEN NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS SPEC_ACCEPTANCE_RATE=$SPEC_ACCEPTANCE_RATE"
+
+# Draft depth per concurrency; forced acceptance length is the golden value for
+# that depth from
+# https://github.com/SemiAnalysisAI/InferenceX/blob/main/golden_al_distribution/glm5.2_mtp.yaml
+# (glm-5.2-fp8, thinking_on): K5 -> 3.61, K4 -> 3.33, K3 -> 2.99.
+if (( DCP_SIZE > 1 )); then
+    if (( CONC >= 48 )); then
+        NUM_SPEC_TOKENS=3; SIMULATE_ACC_LEN=2.99
+    else
+        NUM_SPEC_TOKENS=4; SIMULATE_ACC_LEN=3.33
+    fi
+else
+    case "$CONC" in
+      1|2|4|8) NUM_SPEC_TOKENS=5; SIMULATE_ACC_LEN=3.61 ;;
+      10|12)   NUM_SPEC_TOKENS=4; SIMULATE_ACC_LEN=3.33 ;;
+      *)
+        echo "Unsupported CONC=$CONC for TP-only MTP path" >&2
+        exit 2
+        ;;
+    esac
+fi
+SPEC_ARGS=(
+    --method mtp
+    --num-speculative-tokens "$NUM_SPEC_TOKENS"
+)
+if [ "${EVAL_ONLY}" != "true" ]; then
+    SPEC_ARGS+=(--spec-decode-acceptance-length "$SIMULATE_ACC_LEN")
+fi
+echo "DCP_SIZE=$DCP_SIZE NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS SIMULATE_ACC_LEN=$SIMULATE_ACC_LEN"
 
 ATOM_CMD=(
     python -m atom.entrypoints.openai_server
@@ -144,7 +175,14 @@ ATOM_CMD=(
     --host 0.0.0.0
     --server-port "$PORT"
     "${PARALLEL_ARGS[@]}"
-    --online_quant_config '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*.mlp.gate","*expert*"]}'
+    --gpu-memory-utilization 0.95
+    --enable_prefix_caching
+    # "model.layers.78.*" excludes the MTP head from online quantization,
+    # keeping layer 78 in native BF16: it ships unquantized in amd/GLM-5.2-MXFP4,
+    # and the expert excludes only reach layers 0-77, so without this the whole
+    # MTP block would be online-quantized to ptpc_fp8 while the target's experts
+    # stay MXFP4.
+    --online_quant_config '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*.mlp.gate","model.layers.[0-9].mlp.*expert*","model.layers.[1-6][0-9].mlp.*expert*","model.layers.7[0-7].mlp.*expert*","model.layers.78.*"]}'
     --max-num-seqs "$((2 * CONC))"
     --cudagraph-capture-sizes "$CUDAGRAPH_CAPTURE_SIZES"
     --max-num-batched-tokens 16384
