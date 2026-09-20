@@ -27,8 +27,10 @@
 警告不能视为普通签核通过。
 
 CODEOWNER 必须在清单的 Additional detail section 中记录每条受影响曲线的
-点数和证据。点数不足会显示 `⚠️` 警告，并提醒 @functionstackx、
-@cquil11、@Oseltamivir 和 @adibarra。管理员需在 PR 中写明理由、受影响
+点数和证据。点数不足或无法核实时，提醒一位核心维护者审阅。可复制的清单中
+不要写入具体审阅者的用户名。只有 AI 签核发布器检测到 Pareto 警告时，才添加
+`⚠️` 并提醒 @functionstackx、@cquil11、@Oseltamivir 和 @adibarra；
+覆盖度通过或为 N/A 时不触发这些升级提醒。管理员需在 PR 中写明理由、受影响
 曲线及已评估 SHA；验证器需核实评论作者的仓库 `permission: admin` 和
 `role_name: admin`。普通批准、`/use`、Core 团队成员身份或机器人评论都不等于
 本项例外授权。即使已获授权，裁定仍保留 WARN 并链接该决定。

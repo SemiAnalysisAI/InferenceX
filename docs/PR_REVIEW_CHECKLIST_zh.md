@@ -35,7 +35,7 @@ As a PR reviewer and CODEOWNER, I have reviewed this and have:
 - [ ] Verified that this PR does not patch the inference engine or serving stack — the pinned image must run as shipped. This covers .patch files / git apply / patch, inline patches embedded in benchmark scripts (e.g. a python3/sed heredoc that rewrites installed engine sources before serving), in-place edits of site-packages, monkey-patching, overwriting container files, and installing forked/rebuilt engine wheels on top of the pinned image. The only exception is a patch covered by a filled-out waiver at [docs/waiver/](https://github.com/SemiAnalysisAI/InferenceX/tree/main/docs/waiver)`<PR_NUMBER>.md` — named after the PR that introduces the patch and filed in that same PR, stating what is patched, why the unmodified upstream image cannot run this benchmark, the upstream PR/issue link, and the removal plan — which I have linked below in the additional detail section.
 - [ ] If this PR uses `append-only: true`, verified that it only adds generated points or recipe variants inside a selected existing config/scenario and existing same-image visual curve: every previously generated point remains present with the same recipe, no prior point is removed or rerun, and every benchmark-affecting change in the complete diff can affect only the corresponding newly appended points (never an existing point), regardless of which file contains it.
 - [ ] If any of the above criteria cannot reasonably be satisfied, I have provided additional reasoning below.
-- [ ] Reported measured throughput/E2EL Pareto counts and evidence per affected curve (≥5 points strongly recommended). Below 5 or unverifiable: ⚠️ tag @functionstackx @cquil11 @Oseltamivir @adibarra for review; recorded admin bypass required before merge. N/A if no curves are affected. [Policy](https://github.com/SemiAnalysisAI/InferenceX/blob/main/CONTRIBUTING.md#pareto-coverage).
+- [ ] Reported measured throughput/E2EL Pareto counts and evidence per affected curve (≥5 points strongly recommended). Below 5 or unverifiable: tag a core maintainer for review; recorded admin bypass required before merge. N/A if no curves are affected. [Policy](https://github.com/SemiAnalysisAI/InferenceX/blob/main/CONTRIBUTING.md#pareto-coverage).
 
 ### Additional detail section:
 - insert any additional info here
@@ -59,7 +59,7 @@ Signed: `FILL_IN_GITHUB_USERNAME`
 13. 已确认该 PR 未对推理引擎或 serving 技术栈打补丁，锁定的镜像必须原样运行。涵盖：.patch 文件 / `git apply` / `patch`、内嵌在基准测试脚本中的行内补丁（例如在启动服务前用 python3/sed heredoc 改写已安装的引擎源码）、就地编辑 site-packages、monkey-patch、覆盖容器文件、以及在锁定镜像之上安装 fork 或重新构建的引擎 wheel。唯一例外：该补丁已由 [docs/waiver/](https://github.com/SemiAnalysisAI/InferenceX/tree/main/docs/waiver)`<PR_NUMBER>.md`（以引入补丁的 PR 编号命名，并在同一 PR 中提交）中填写完整的豁免覆盖，写明补丁内容、为何未修改的上游镜像无法运行该基准测试、上游 PR/issue 链接及移除计划，并已在下方 Additional detail section 中给出链接。
 14. 如果 PR 使用 `append-only: true`，已确认它只在所选现有配置/场景和同镜像的现有可视化曲线内新增生成点或配方变体。所有已有点及其配方均保留，不删除或重跑旧点；完整 diff 中所有影响基准测试的改动，无论位于哪个文件，都只会作用于对应新增点，不能影响已有点。
 15. 如果上述任何条目无法合理满足，已在下方提供额外说明。
-16. 已报告每条受影响曲线的吞吐量/E2EL Pareto 实测点数及证据，强烈建议 ≥5 个点。少于 5 个或无法核实：用 ⚠️ 提醒 @functionstackx @cquil11 @Oseltamivir @adibarra 审阅，合并前须记录管理员例外。无曲线受影响时可填 N/A。详见[政策](../CONTRIBUTING_zh.md#pareto-覆盖度)。
+16. 已报告每条受影响曲线的吞吐量/E2EL Pareto 实测点数及证据，强烈建议 ≥5 个点。少于 5 个或无法核实：提醒一位核心维护者审阅，合并前须记录管理员例外。无曲线受影响时可填 N/A。详见[政策](../CONTRIBUTING_zh.md#pareto-覆盖度)。
 
 ## 示例
 

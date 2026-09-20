@@ -29,8 +29,11 @@ coverage follows the same exception path. Do not treat a warning as ordinary
 sign-off approval.
 
 The CODEOWNER must report each affected curve's count and evidence in the
-checklist's additional detail section. A shortfall produces a visible `⚠️`
-warning and tags @functionstackx, @cquil11, @Oseltamivir, and @adibarra.
+checklist's additional detail section. For a shortfall or unverifiable coverage,
+tag a core maintainer for review. Keep explicit reviewer usernames out of the
+copyable checklist. Only the AI sign-off publisher's Pareto-warning path adds
+the `⚠️` warning and tags @functionstackx, @cquil11, @Oseltamivir, and @adibarra;
+passing or N/A coverage does not trigger these escalation mentions.
 Record the admin's rationale, affected curves and assessed SHA in the PR; verify
 the author's repository `permission: admin` and `role_name: admin`. Ordinary
 approval, `/use`, membership in Core, or a bot's comment is not this exception.

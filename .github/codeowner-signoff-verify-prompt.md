@@ -582,7 +582,11 @@ single terse line. Rules:
   Never hide Check 14 WARN inside the collapsed group. The publisher adds the
   warning and mentions @functionstackx, @cquil11, @Oseltamivir, and @adibarra
   above the findings. Use only @usernames, without personal names; do not
-  duplicate that escalation text yourself.
+  duplicate that escalation text yourself. Do not add these escalation mentions
+  for PASS/N/A coverage or to the copyable review checklist; the checklist should
+  only say to tag a core maintainer. The publisher alone inserts the explicit
+  escalation mentions when Check 14 is WARN, including an overall REJECTED
+  verdict with a Pareto warning.
   Spend words only on the checks that fail.
 - State conclusions, don't narrate your process. No multi-paragraph explanations, no
   restating the checklist, no hedging ("if X then maybe Y"). Make the call. Link the
