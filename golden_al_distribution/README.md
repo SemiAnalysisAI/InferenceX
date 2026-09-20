@@ -137,7 +137,12 @@ the original draft precision, native MTP collection must explicitly select
 `model=Qwen/Qwen3.8-27B` and its pinned BF16 revision inside `speculative-config`,
 with `kv_cache_dtype=auto`. DSpark likewise requires an original BF16 drafter,
 its revision, explicit draft sampling, and real rejection sampling with adaptive
-verification disabled. These measurements do not validate recipes that quantize
+verification disabled. The DSpark PRs use the v1 weights: Doopeworld revision
+`ebaa0919226a29408fa2c8f3efc493e98189c7ed` matches RadixArk revision
+`85ef153be924f17ce4bf62726954eeaa4a73e854` byte-for-byte (safetensors SHA256
+`9d26d5e637551c244d543c67c790bd0947f360e005c569e5851a185ffe692786`).
+RadixArk main now contains a different v2 drafter; its curve must be measured separately.
+These measurements do not validate recipes that quantize
 the draft head or inherit the target's FP8 KV cache for the draft.
 
 All selected coding prompts must complete before a cell is accepted. The collector
