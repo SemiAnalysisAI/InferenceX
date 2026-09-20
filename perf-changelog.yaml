@@ -8459,5 +8459,5 @@
 - config-keys:
     - dsr1-fp8-mi325x-sglang
   description:
-    - "Update SGLang image from v0.5.19-rocm700-mi30x to v0.5.20-rocm720-mi30x and rename --cuda-graph-max-bs to its decode flag."
+    - "Update SGLang image from v0.5.19-rocm700-mi30x to v0.5.20-rocm720-mi30x and rename the CUDA-graph max-bs flag."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3318
