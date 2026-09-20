@@ -14,6 +14,8 @@ We welcome InferenceX partners and the community to submit PRs that make reasona
 
 We also welcome InferenceX partners and the ML community to improve [codeowner-signoff-verify.yml](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml), the CI bot that independently verifies these sign-offs, and make it more rigorous too.
 
+The automated publisher rejects incomplete or inconsistent verifier output. Each check must appear once, and the overall verdict must agree with the check results; otherwise, retry verification.
+
 ## Template
 ```
 As a PR reviewer and CODEOWNER, I have reviewed this and have:
@@ -33,6 +35,7 @@ As a PR reviewer and CODEOWNER, I have reviewed this and have:
 - [ ] Verified that this PR does not patch the inference engine or serving stack — the pinned image must run as shipped. This covers .patch files / git apply / patch, inline patches embedded in benchmark scripts (e.g. a python3/sed heredoc that rewrites installed engine sources before serving), in-place edits of site-packages, monkey-patching, overwriting container files, and installing forked/rebuilt engine wheels on top of the pinned image. The only exception is a patch covered by a filled-out waiver at [docs/waiver/](https://github.com/SemiAnalysisAI/InferenceX/tree/main/docs/waiver)`<PR_NUMBER>.md` — named after the PR that introduces the patch and filed in that same PR, stating what is patched, why the unmodified upstream image cannot run this benchmark, the upstream PR/issue link, and the removal plan — which I have linked below in the additional detail section.
 - [ ] If this PR uses `append-only: true`, verified that it only adds generated points or recipe variants inside a selected existing config/scenario and existing same-image visual curve: every previously generated point remains present with the same recipe, no prior point is removed or rerun, and every benchmark-affecting change in the complete diff can affect only the corresponding newly appended points (never an existing point), regardless of which file contains it.
 - [ ] If any of the above criteria cannot reasonably be satisfied, I have provided additional reasoning below.
+- [ ] Reported measured throughput/E2EL Pareto counts and evidence per affected curve (≥5 points strongly recommended). Below 5 or unverifiable: tag a core maintainer for review; recorded admin bypass required before merge. N/A if no curves are affected. [Details](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/codeowner-signoff-verify-prompt.md#check-14--pareto-coverage-recommendation-with-admin-exception).
 
 ### Additional detail section:
 - insert any additional info here
