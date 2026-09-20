@@ -162,6 +162,32 @@ python3 -m infx.evals.validate_scores \
 
 手动的吞吐量+eval 组合 recipe 会上传 eval 输出，但模板的自动分数 gate 专用于 eval-only 作业。对手动或组合运行必须显式执行 validator。
 
+### Qwen3-0.6B 的 GSM8K 下限
+
+`models.qwen3-0.6b.gsm8k` 对 strict-match 和 flexible-extract 均使用 **0.60**。
+这是针对 0.6B 检查点的保守集成回归下限，不是排行榜预期分数；全局 0.90 下限保持不变。
+
+保留标准五样本聊天评测、完整的 1,319 道测试题、`temperature=0`、`top_p=1`
+和 5,376 个生成 token 的上限。
+[首次 H100 BF16 运行](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35534330261)
+在并发 64 下取得 strict 886/1,319（0.6717）、flexible 895/1,319（0.6785）。
+所有响应均非空；86 个响应缺少所需的数字 `####` 答案标记，87 个缺少 `</think>`
+结束标记，61 个将同一条至少 30 个字符的非空行重复了五次或更多。这些类别存在重叠。
+宽松提取仅多判对九题，无法解释大多数错误；抽查的错误答案也包含算术和推理错误。
+
+[Qwen3 技术报告表 8 和第 3.3 节](https://arxiv.org/html/2505.09388v1)
+报告 **Qwen3-0.6B-Base** 在四样本思维链设置下的 GSM8K 分数为 59.59%。
+该结果仅用于说明模型规模背景：检查点和提示不同，不能视为可比的五样本聊天基线。
+目前未找到直接可比的已发表基线。0.60 是结合该背景和完整测试集响应检查作出的保守策略选择；
+它比已观察到的 strict 分数低 7.17 个百分点（报告的标准误为 1.29 个百分点），
+并非将单次分数取整后作为门槛。应在并发 32 和 64 下独立验证同一个固定下限。
+
+[Qwen 模型指南](https://huggingface.co/Qwen/Qwen3-0.6B#best-practices)
+建议思考模式使用采样，并警告贪心解码可能产生重复。为保持可比性，本集成沿用
+InferenceX 的确定性协议；该下限不代表 Qwen 的最佳质量，也不豁免请求失败。
+改变思考模式、采样、提示或 token 预算，需要另行记录策略并提供新的完整测试集证据。
+保留失败和成功的产物，不应因为后续回归而继续降低此下限。
+
 ## 6. 收集并检查 eval artifact
 
 收集工作流会下载 `eval_*`，用 `infx/results/collect_eval_results.py` 聚合原始集合，上传 `eval_results_all/agg_eval_all.json`，并将表格写入 step summary（[`collect-evals.yml`](../.github/workflows/collect-evals.yml)）。
@@ -352,3 +378,17 @@ gh run cancel <RUN_ID> --repo SemiAnalysisAI/InferenceX
 - 每个 backend/frontend 与 metrics source 都在实时证据中有所体现。
 - Fast/smoke 结果明确标为诊断用途；只有 canonical candidate 用于最终比较。
 - 在报告成功前，工作流与 artifact collection 均已得出 green 结论。
+
+### Qwen3-0.6B ModelScope 冷缓存覆盖
+
+H100 ModelScope 配方在每个任务中使用远程模型 ID 和新建、确认为空的 ModelScope
+缓存启动 `trtllm-serve`，并为服务提供独立的空 Hugging Face home/cache。模型由
+服务自行下载，配方不会预下载权重或分词器。服务就绪后，离线解析器必须返回新
+ModelScope 缓存内部的快照，且其中包含权重和必需的分词器、配置文件。检测到非预期
+Hugging Face 缓存文件时任务失败；允许缓存版本标记，以及 Transformers 创建的空文件
+`modules/__init__.py` 和 `modules/hf_remote_code.lock`。基准客户端使用同一快照中的分词器。
+
+`modelscope_snapshot_report.json` 记录初始空缓存、最终快照路径、文件大小和 SHA256。
+评测任务将该报告与原始结果一起上传，任务日志中也包含报告。矩阵在启动前提供模型
+上下文上限，避免另行查询模型仓库。本配方使用 engine-patch 豁免中记录的、与源码
+匹配的 TensorRT-LLM 1.3.0rc27 回移补丁，并不构建较新 TensorRT-LLM PR 分支。
