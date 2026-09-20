@@ -210,12 +210,14 @@ GRAPH_ARGS=()
 if [ "$DP_ATTENTION" != "true" ]; then
     # Cookbook low-latency captures graphs up to its request cap; the
     # DP-attention cell leaves the CUDA-graph batch list at SGLang defaults.
-    # --cuda-graph-max-bs counts requests, not verification tokens: SGLang's
+    # --cuda-graph-max-bs-decode (the old --cuda-graph-max-bs alias is ambiguous
+    # against --cuda-graph-max-bs-prefill on current SGLang builds) counts
+    # requests, not verification tokens: SGLang's
     # spec-decode graph runner scales each captured batch by
     # --speculative-num-draft-tokens itself.
     CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
     [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
-    GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
+    GRAPH_ARGS=(--cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS")
 fi
 
 # B300: 288 GB HBM3e per GPU. The NVFP4 B300 sibling runs 0.85, leaving ~43 GB
