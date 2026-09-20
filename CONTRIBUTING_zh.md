@@ -28,7 +28,7 @@
 
 CODEOWNER 必须在清单的 Additional detail section 中记录每条受影响曲线的
 点数和证据。点数不足会显示 `⚠️` 警告，并提醒 @functionstackx（Oren）、
-@cquil11（Cam）和 @Oseltamivir（Bryan）。管理员需在 PR 中写明理由、受影响
+@cquil11（Cam）、@Oseltamivir（Bryan）和 @adibarra（Alec）。管理员需在 PR 中写明理由、受影响
 曲线及已评估 SHA；验证器需核实评论作者的仓库 `permission: admin` 和
 `role_name: admin`。普通批准、`/use`、Core 团队成员身份或机器人评论都不等于
 本项例外授权。即使已获授权，裁定仍保留 WARN 并链接该决定。

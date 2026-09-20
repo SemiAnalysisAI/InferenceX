@@ -6,7 +6,7 @@ const PASS = /^## ✅✅✅ \*\*Verdict: PASS\*\* ✅✅✅$/m;
 const REJECT = /^## ❌❌❌ \*\*REJECTED\*\* ❌❌❌$/m;
 const WARN = /^## ⚠️ \*\*Verdict: WARN\*\* ⚠️$/m;
 const COVERAGE_WARNING = /^⚠️ Check 14 \(Pareto coverage\): WARN\b/m;
-const ESCALATION = '⚠️ Pareto coverage needs additional review: @functionstackx @cquil11 @Oseltamivir. ' +
+const ESCALATION = '⚠️ Pareto coverage needs additional review: @functionstackx @cquil11 @Oseltamivir @adibarra. ' +
   'At least 5 points per affected throughput-versus-E2EL frontier are highly recommended. ' +
   'Below 5, or when coverage cannot be verified, merge only with an explicit, recorded admin bypass ' +
   'for the assessed commit; this advisory comment does not grant or enforce a bypass.';

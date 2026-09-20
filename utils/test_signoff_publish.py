@@ -138,6 +138,7 @@ def test_coverage_warning_escalates_once_without_masking_other_failures(publish,
     assert body.count("@functionstackx") == 1
     assert body.count("@cquil11") == 1
     assert body.count("@Oseltamivir") == 1
+    assert body.count("@adibarra") == 1
     assert "does not grant or enforce a bypass" in body
     assert "Assessed commit: `abcdef1234567890abcdef1234567890abcdef1234`" in body
     assert result["writes"] == 1
@@ -165,4 +166,5 @@ def test_successful_reassessment_removes_stale_warning_and_tags(publish):
     assert len(result["comments"]) == 1
     assert "**Verdict: PASS**" in result["comments"][0]["body"]
     assert "@functionstackx" not in result["comments"][0]["body"]
+    assert "@adibarra" not in result["comments"][0]["body"]
     assert "coverage unverifiable" not in result["comments"][0]["body"]
