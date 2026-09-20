@@ -2,16 +2,19 @@
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
+
+from infx.workflows.pareto_coverage import assess_coverage
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def assess(curves):
     result = subprocess.run(
-        ["node", ".github/scripts/pareto-coverage.cjs"],
+        [sys.executable, "-m", "infx.workflows.pareto_coverage"],
         input=json.dumps(curves),
         cwd=ROOT,
         capture_output=True,
@@ -68,6 +71,8 @@ def test_curves_are_not_pooled():
     {"x": 0, "y": 100}, {"x": -1, "y": 100}, {"x": None, "y": 100},
     {"x": "1", "y": 100}, {"x": 1, "y": None}, {"x": 1, "y": 0},
     {"x": 1, "y": -1}, {"x": 1, "y": "100"}, {}, None,
+    {"x": True, "y": 100}, {"x": 1, "y": False},
+    {"x": float("inf"), "y": 1}, {"x": 1, "y": float("nan")},
 ])
 def test_invalid_measurements_warn_even_when_five_good_points_exist(bad):
     points = [{"x": i, "y": i * 100} for i in range(1, 6)]
@@ -104,7 +109,19 @@ def test_unstamped_points_have_no_unconditional_agentic_restriction():
 
 @pytest.mark.parametrize("curves", [
     [], {}, [curve([], "")], [{"key": "a"}], [curve([], "a"), curve([], "a")],
+    [None], [curve([], [])],
 ])
 def test_malformed_or_empty_coverage_is_not_a_pass(curves):
     with pytest.raises(ValueError):
         assess(curves)
+
+
+def test_counter_does_not_reorder_input_and_requires_literal_canonical_true():
+    points = [
+        {"x": 3, "y": 300, "isOnNormalizedInteractivityFrontier": True},
+        {"x": 1, "y": 100, "isOnNormalizedInteractivityFrontier": 1},
+        {"x": 2, "y": 200, "isOnNormalizedInteractivityFrontier": None},
+    ]
+    result = assess_coverage([curve(points)])[0]
+    assert [point["x"] for point in points] == [3, 1, 2]
+    assert result["frontier"] == [points[0]]

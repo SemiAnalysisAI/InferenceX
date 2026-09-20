@@ -73,7 +73,7 @@ CODEOWNER 必须在清单的 Additional detail section 中记录每条受影响�
 可信审阅工具接收已按曲线分组的实测坐标：
 
 ```bash
-node .github/scripts/pareto-coverage.cjs < /tmp/pareto-curves.json
+uv run --locked python -m infx.workflows.pareto_coverage < /tmp/pareto-curves.json
 ```
 
 输入示例（只有一个实测点，因此返回 WARN）：

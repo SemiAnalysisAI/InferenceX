@@ -84,7 +84,7 @@ The implementation was traced at InferenceX-app commit
 The trusted review helper accepts already scoped measured coordinates:
 
 ```bash
-node .github/scripts/pareto-coverage.cjs < /tmp/pareto-curves.json
+uv run --locked python -m infx.workflows.pareto_coverage < /tmp/pareto-curves.json
 ```
 
 Example input shape (one measured point, therefore WARN):

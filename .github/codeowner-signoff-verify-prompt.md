@@ -505,8 +505,8 @@ not an unconditional five-point requirement or a new commit-status gate.
   are verified under Check 12; new points alone need not number five. Do not pool
   incompatible images, historical runs, or unrelated series to reach five.
 - Reproduce the calculation using trusted
-  `.github/scripts/pareto-coverage.cjs` from this workflow checkout:
-  `node .github/scripts/pareto-coverage.cjs < /tmp/pareto-curves.json`.
+  `infx/workflows/pareto_coverage.py` from this workflow checkout:
+  `uv run --locked python -m infx.workflows.pareto_coverage < /tmp/pareto-curves.json`.
   Input is a JSON array of `{ "key": "<model/scenario/hwKey/precision/run/percentile/image>",
   "points": [{ "x": 1.0, "y": 100.0 }] }`. Create inputs from inspected data, not
   numbers asserted in the PR. Include every affected curve, including empty ones.

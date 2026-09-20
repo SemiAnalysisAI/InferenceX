@@ -20,7 +20,7 @@ in the same workstream. Do not change one side and leave the other for later.
   including `components/inference/metric-registry.ts` and
   `components/inference/utils/{powerCurves,canonicalFrontier}.ts` under
   `packages/app/src/`.
-- Sign-off implementation: `.github/scripts/pareto-coverage.cjs` in InferenceX,
+- Sign-off implementation: `infx/workflows/pareto_coverage.py` in InferenceX,
   with `.github/codeowner-signoff-verify-prompt.md` and the coverage policy in
   `CONTRIBUTING.md`.
 - Synchronize direction, metric/percentile selection, eligibility, series

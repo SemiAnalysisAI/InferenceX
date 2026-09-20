@@ -1,66 +1,57 @@
 import json
 import subprocess
-from pathlib import Path
+from copy import deepcopy
 
 import pytest
 
+from infx import github
+from infx.workflows import signoff_publish
+
 
 @pytest.fixture
-def publish(tmp_path):
+def publish(tmp_path, monkeypatch):
     def run(verdict, comments=(), *, succeeded=True, update_error=None, repeats=1):
         verdict_path = tmp_path / "verdict.md"
         if verdict is not None:
             verdict_path.write_text(verdict)
-        result = subprocess.run(
-            ["node", "-e", """
-const fs = require('node:fs');
-const { publish } = require('./.github/scripts/codeowner-signoff.cjs');
-const input = JSON.parse(fs.readFileSync(0, 'utf8'));
-const comments = input.comments;
-let writes = 0;
-const issues = {
-  listComments: Symbol('listComments'),
-  async updateComment({ comment_id, body }) {
-    if (input.update_error) {
-      if (input.update_error === 404) comments.splice(comments.findIndex(c => c.id === comment_id), 1);
-      throw Object.assign(new Error('GitHub write failed'), { status: input.update_error });
-    }
-    const comment = comments.find(c => c.id === comment_id);
-    comment.body = body;
-    writes++;
-    return { data: comment };
-  },
-  async createComment({ body }) {
-    const comment = { id: 100, user: { login: 'github-actions[bot]' }, body };
-    comments.push(comment);
-    writes++;
-    return { data: comment };
-  },
-};
-const github = {
-  rest: { issues },
-  async paginate(endpoint) {
-    if (endpoint !== issues.listComments) throw new Error('Unexpected API');
-    return comments;
-  },
-};
-(async () => {
-  for (let n = 0; n < input.repeats; n++) {
-    await publish({ github, context: { repo: { owner: 'example', repo: 'repo' } },
-      core: { info() {} }, prNumber: 7, headSha: 'abcdef1234567890abcdef1234567890abcdef1234',
-      verdictPath: input.path, verificationSucceeded: input.succeeded });
-  }
-  process.stdout.write(JSON.stringify({ comments, writes }));
-})().catch(error => { console.error(error.message); process.exitCode = 1; });
-"""],
-            input=json.dumps({"path": str(verdict_path), "comments": comments,
-                             "succeeded": succeeded, "update_error": update_error, "repeats": repeats}),
-            cwd=Path(__file__).resolve().parents[1],
-            capture_output=True, text=True, timeout=10,
-        )
-        if result.returncode:
-            raise RuntimeError(result.stderr.strip())
-        return json.loads(result.stdout)
+        else:
+            verdict_path.unlink(missing_ok=True)
+        comments = deepcopy(list(comments))
+        writes = 0
+
+        def gh(args, **kwargs):
+            nonlocal writes
+            method = args[args.index("--method") + 1]
+            endpoint = next(arg for arg in args if arg.startswith("repos/"))
+            if method == "GET":
+                return subprocess.CompletedProcess(args, 0, json.dumps([comments]), "")
+            body = json.loads(kwargs["input"])["body"]
+            if method == "PATCH":
+                comment_id = int(endpoint.rsplit("/", 1)[1])
+                if update_error:
+                    if update_error == 404:
+                        comments[:] = [c for c in comments if c["id"] != comment_id]
+                    raise subprocess.CalledProcessError(
+                        1, args, stderr=f"gh: GitHub write failed (HTTP {update_error})"
+                    )
+                comment = next(c for c in comments if c["id"] == comment_id)
+                comment["body"] = body
+            else:
+                comment = {"id": 100, "user": {"login": "github-actions[bot]"}, "body": body}
+                comments.append(comment)
+            writes += 1
+            return subprocess.CompletedProcess(args, 0, json.dumps(comment), "")
+
+        monkeypatch.setattr(github.subprocess, "run", gh)
+        for name, value in {
+            "GITHUB_REPOSITORY": "example/repo", "GH_TOKEN": "test-token", "PR_NUMBER": "7",
+            "HEAD_SHA": "abcdef1234567890abcdef1234567890abcdef1234",
+            "VERDICT_PATH": str(verdict_path), "VERIFICATION_SUCCEEDED": str(succeeded).lower(),
+        }.items():
+            monkeypatch.setenv(name, value)
+        for _ in range(repeats):
+            signoff_publish.main()
+        return {"comments": comments, "writes": writes}
     return run
 
 
