@@ -109,7 +109,6 @@ SGLANG_CMD=(
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --attention-backend aiter
-    --enable-aiter-allreduce-fusion
     --mem-fraction-static 0.80
     --model-loader-extra-config '{"enable_multithread_load": true}'
     --watchdog-timeout 1200
@@ -126,7 +125,6 @@ SGLANG_CMD=(
     --reasoning-parser qwen3
     --tool-call-parser qwen3_coder
     --speculative-algorithm EAGLE
-    --speculative-draft-model-quantization quark_mxfp4
     --speculative-num-steps 3
     --speculative-eagle-topk 1
     --speculative-num-draft-tokens 4

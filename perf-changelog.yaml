@@ -8029,3 +8029,12 @@
     - "Enable --enable-aiter-allreduce-fusion for every arm. A local 1,200-second AgentX A-B-A at TP4 concurrency 4 reduced token-weighted ITL by 1.96-2.18% versus two baselines whose weighted ITL differed by 0.15%; a matched GPU profile reduced the target-verify graph by 4.75%."
     - "Pass --speculative-draft-model-quantization quark_mxfp4 so the Quark checkpoint's BF16 MTP routed experts are quantized online to MXFP4; only the draft changes, while target verification retains the serialized Quark weights. SGLang #38748 reported TP2 concurrency-32 HiCache p50/p90 TPOT reductions of 10.3%/18% and throughput per GPU improving by 13.6%."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3227
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260920."
+    - "Remove --speculative-draft-model-quantization quark_mxfp4 and --enable-aiter-allreduce-fusion. Collectives fall back to INT4 ROCm quick all-reduce."
+    - "Drop the TP4 GPU-resident arm. Keep TP2 resident [1, 4, 8, 12] and TP2 HiCache [16, 20, 24, 28, 32, 36, 40]."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3227
