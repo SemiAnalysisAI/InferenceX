@@ -8466,3 +8466,11 @@
   - Use prefill HiCache and tune decode capacity across the throughput/interactivity curve.
   - Use SGLang nightly 20260918-20518d85, Dynamo/SRT Slurm and original BF16 NEXTN.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-c4-latency-probe
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-c44-admission-probe
+  description:
+  - Probe TP4 C4 latency and TP2EP2 C44 admission with unchanged serving capacity,
+    original BF16 draft, HiCache, and strict active-GPU power.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
