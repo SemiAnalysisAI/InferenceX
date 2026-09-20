@@ -1037,9 +1037,45 @@
       "repeat": 1,
       "attempt": 2,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "in_progress",
+      "status": "failure",
       "node": "b200-nscale-slurm_06",
-      "artifacts": [],
+      "artifacts": [
+        {
+          "id": 10603060037,
+          "name": "bmk_agentic_minimaxm3_tp4_conc4096_kvdram-nvme-vllm-native",
+          "size_bytes": 1346
+        },
+        {
+          "id": 10602981479,
+          "name": "power_audit_minimaxm3_tp4_conc4096_kvdram-nvme-vllm-native",
+          "size_bytes": 903505
+        },
+        {
+          "id": 10602881857,
+          "name": "run-stats",
+          "size_bytes": 280
+        },
+        {
+          "id": 10602737137,
+          "name": "gpu_metrics_minimaxm3_tp4_conc4096_kvdram-nvme-vllm-native",
+          "size_bytes": 901482
+        },
+        {
+          "id": 10602597368,
+          "name": "server_logs_minimaxm3_tp4_conc4096_kvdram-nvme-vllm-native",
+          "size_bytes": 2612668
+        },
+        {
+          "id": 10602448813,
+          "name": "agentic_minimaxm3_tp4_conc4096_kvdram-nvme-vllm-native",
+          "size_bytes": 5252324
+        },
+        {
+          "id": 10602119544,
+          "name": "results_bmk",
+          "size_bytes": 1135
+        }
+      ],
       "performance_result": false,
       "workflow_name": "offload-v1-dram-nvme-c4096-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:25:14Z",
@@ -1060,7 +1096,18 @@
         }
       ],
       "rerun_triggering_actor": "inferencex-dash[bot]",
-      "queued_at": "2026-09-20T01:35:57Z"
+      "queued_at": "2026-09-20T01:35:57Z",
+      "completed_at": "2026-09-20T09:29:24Z",
+      "allocation_id": "16682",
+      "failure_stage": "agentx_warmup_and_offload_capacity_guard",
+      "failure_evidence": "Canonical c4096 warmup never reached profiling. After roughly six hours it had returned 4,215 of 45,376 planned warmup requests, with 201 still in flight; a root request timed out, causing 138 error-dropped warmup requests and ProfileAborted. Independently, the native filesystem tier exceeded the deterministic 2 TiB stop guard at 2,294,149,488,175 logical bytes (2,294,149,488,640 allocated bytes across 193,404 files), so the run was invalidated. It is not a performance result and will not be retried unchanged.",
+      "log_archive_sha256": "d94081be679370b547d866a7160b1ab61c2e6cfe459eb65f46d09975a7f8ca67",
+      "storage_evidence": "Cleanup receipt verified deleted=true for exact workflow-owned scratch /offload-scratch/inferencex-offload-35476075885-2-16682-e5f393e68c08. Before deletion it contained 16,011,254,308,399 logical bytes and 16,011,282,399,232 allocated bytes across 1,349,793 files.",
+      "evidence_sha256": {
+        "offload_cleanup.json": "1e5a29ad82b10620bd6f2ea515f013570267334932cea3132e06fb4f78f63d70",
+        "offload-guard.json": "a9e1dfc1ff045989f519801d83f726400495d880ea3070f05199da89d23dfed4",
+        "offload_config.json": "d9ac654f7e452e9475c814d6e42a2044ec88a6c40afcbbcc99b6dbd286b5deda"
+      }
     },
     {
       "run_id": 35476332029,
@@ -1354,7 +1401,7 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850",
-  "status": "All four matched c16 arms are valid. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. Ten study jobs are in progress across c256, c1024, c4096, and c8192. The c1024 HBM+DRAM+NVMe arm deterministically exceeded its 2 TiB NVMe stop guard at 2.29 TB and its exact task-owned scratch was verified deleted; it will not be retried unchanged. The c256 HBM probe is running on b200-nscale-slurm_05.",
+  "status": "All four matched c16 arms are valid. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. Nine study jobs remain in progress across c256, c1024, c4096, and c8192. The c4096 HBM+DRAM+NVMe arm failed after about six hours in warmup and independently exceeded its 2 TiB NVMe stop guard at 2.29 TB; its exact task-owned scratch was verified deleted and it will not be retried unchanged. The c256 HBM probe remains active.",
   "last_capacity_check": {
     "checked_at": "2026-09-20T08:21:25Z",
     "cluster_observed_at": "2026-09-20T08:20:58Z",
@@ -1376,7 +1423,6 @@
       35476061809,
       35476067005,
       35476072143,
-      35476075885,
       35478297080,
       35492330557,
       35497846918
@@ -1388,18 +1434,17 @@
       106000846579,
       106000845170,
       106000859670,
-      106000840866,
       106000856643,
       106029329353,
       106044138671
     ],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
-    "dispatch_allowed": true,
-    "reason": "Fresh InferenceX cluster snapshot showed 10 of 11 B200 nodes allocated and one idle. The fresh priority view exposed no b200-nscale queue tab, indicating zero pending B200 jobs. The automation approval review nevertheless blocked dispatch because it did not accept the UI evidence as trusted proof of the one-queued-job limit."
+    "dispatch_allowed": false,
+    "reason": "The c4096 combined run completed with a deterministic warmup and storage-guard failure, freeing one node. A fresh dispatch still requires resolution of the previously reported automation approval blocker."
   },
   "next_dispatch": {
-    "requires": "Dispatch the already validated c256 HBM+NVMe probe after the dispatch approval blocker is resolved, then HBM+DRAM+NVMe and HBM+DRAM as capacity permits. Do not retry c1024 combined unchanged because its native filesystem tier exceeded the deterministic storage guard."
+    "requires": "After the dispatch approval blocker is resolved and a fresh scheduler check confirms zero pending B200 jobs, dispatch the already validated c256 HBM+NVMe probe, then HBM+DRAM+NVMe and HBM+DRAM as capacity permits. Do not retry c1024 or c4096 combined unchanged because both exceeded the deterministic storage guard."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-19T23:34:00Z",
