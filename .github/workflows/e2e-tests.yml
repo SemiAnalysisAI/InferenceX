@@ -447,6 +447,10 @@ jobs:
                         ("scontrol_steps", ["scontrol", "--oneliner", "show", "step", client_id]),
                     ):
                         client_status[name] = scheduler_read(argv)
+                    job_metadata = scheduler_read(["scontrol", "--oneliner", "show", "job", client_id])
+                    client_status["job_metadata"] = {"state": job_metadata["state"], "exit_code": job_metadata["exit_code"], "fields": [field for field in job_metadata["output"].split() if field.split("=", 1)[0] in {"JobId", "JobState", "BatchHost", "NodeList", "StepMgrEnabled", "StepMgr"}]}
+                    configuration = scheduler_read(["scontrol", "show", "config"])
+                    client_status["step_manager_configuration"] = {"state": configuration["state"], "exit_code": configuration["exit_code"], "fields": [line.strip() for line in configuration["output"].splitlines() if line.split("=", 1)[0].strip() in {"SlurmctldParameters", "SlurmdParameters", "SLURM_VERSION"}]}
                     for name in ("started.json", "closed.json"):
                         try:
                             client_status[name] = read_object(client_directory / name, client_directory)
