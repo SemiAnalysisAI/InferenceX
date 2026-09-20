@@ -120,7 +120,7 @@ Slurm 分配、claim、已接受 ID、调度器观察与取消均由原生运行
 
 两种探针通过与 benchmark 执行共用的 `apply_serving_point` 渲染逻辑，采用真实 c28 eval 的服务设置：`max-num-seqs: 56`、`max-cudagraph-capture-size: 512`，以及真实 block rejection 和 adaptive verification 的 DSpark。模型、镜像、TP8 拓扑、`max-model-len: 1048576` 与 `max-num-batched-tokens: 4096` 均保持不变。诊断客户端仍是以字面代码执行、可处理信号的 Python writer。`qualification.json` 记录该服务点；探针不运行或发布 eval。此设置对齐修正了此前依赖 vLLM 默认序列上限的问题，但不能证明已观察到的 CUDA 初始化失败已经修复。
 
-[H100 观察运行 35483966784](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35483966784) 确认 Slurm 版本为 `25.05.7`，所属任务 `18325` 的 `StepMgrEnabled=Yes`，且 controller 配置含 `enable_stepmgr`。此前的启动期探针中，实际聚合 step 正在运行，但 `squeue --steps` 仅返回 `batch` 和 `extern`。原生 step 发现正在改为查询 `scontrol --oneliner show steps <owned-job-id>`，并校验返回的任务、step 名及运行状态。这属于原生观察/清理修正，不放宽“实际聚合 step 加 worker 身份”的要求。观察运行发生在任务 `18325` 结束后，因此当时的空 step 列表不能证明活跃 worker 的发现行为。更新后的原生运行时仍须实际重跑验证。
+[H100 观察运行 35483966784](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35483966784) 确认 Slurm 版本为 `25.05.7`，所属任务 `18325` 的 `StepMgrEnabled=Yes`，且 controller 配置含 `enable_stepmgr`。此前的启动期探针中，实际聚合 step 正在运行，但 `squeue --steps` 仅返回 `batch` 和 `extern`。候选原生 pin `62beb5ec4f8c33abc26851ba0adaded29957ca5b` 查询 `scontrol --oneliner show steps <owned-job-id>`，并校验返回的任务、step 名及运行状态。这属于原生观察/清理修正，不放宽“实际聚合 step 加 worker 身份”的要求。观察运行发生在任务 `18325` 结束后，因此当时的空 step 列表不能证明活跃 worker 的发现行为。候选 pin 与 c28 探针设置仍须实际重跑验证。
 
 当前原生 pin 要求 `prepared-direct-listener-ownership-v1`。发送客户端流量前，它根据 PID 启动时间及 PID/network namespace 身份，验证监听套接字属于记录的 worker 进程树；客户端运行期间和接受退出码 0 之前也会重新验证。外部或替换监听器、PID 复用或无法读取的归属证据都会使任务失败并关闭客户端。实际 Pyxis 的 namespace/proc 可见性仍需集群验收。
 
