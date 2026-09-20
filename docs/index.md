@@ -42,7 +42,7 @@ This is the mandatory low-context router for InferenceX work. Pick the one page 
 | [`MODELS.md`](../MODELS.md) | Supported models, hardware coverage, and naming |
 | [`KLAUD_DEBUG.md`](../KLAUD_DEBUG.md) | Historical Klaud-Cold, CI, image, cluster, and GitHub CLI failure signatures |
 | [`klaud.md`](./klaud.md) / [`klaud_zh.md`](./klaud_zh.md) | Klaud Cold selection, ownership, validation and recovery |
-| [`klaud-reporting.md`](./klaud-reporting.md) / [`klaud-reporting_zh.md`](./klaud-reporting_zh.md) | Klaud PR body, progress comments, numeric comparisons and maintainer retry |
+| [`klaud-reporting.md`](./klaud-reporting.md) / [`klaud-reporting_zh.md`](./klaud-reporting_zh.md) | Klaud PR body, progress comments, numeric comparisons and final preflight |
 | [`benchmarks/single_node/agentic/README.md`](../benchmarks/single_node/agentic/README.md) | AgentX trace benchmark implementation |
 
 ## Context rules
