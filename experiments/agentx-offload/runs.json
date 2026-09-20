@@ -1014,7 +1014,7 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "e85e1fbb8ad172a43c15cab68e43039bb0ff8a16",
-      "status": "queued",
+      "status": "in_progress",
       "node": null,
       "artifacts": [],
       "performance_result": false,
@@ -1022,24 +1022,24 @@
       "dispatched_at": "2026-09-20T00:15:43Z",
       "job_id": 105991438521,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35478300305/job/105991438521",
-      "started_at": "2026-09-20T00:16:36Z"
+      "started_at": "2026-09-20T01:00:28Z"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850",
-  "status": "All four matched c16 arms are valid. The c1024 and c4096 four-arm sets remain in progress. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. At c8192, HBM and HBM+NVMe are in progress and HBM+DRAM+NVMe is the single queued B200 job; HBM+DRAM remains deferred.",
+  "status": "All four matched c16 arms are valid. The c1024 and c4096 four-arm sets remain in progress. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. The c8192 HBM, HBM+NVMe, and HBM+DRAM+NVMe arms are in progress; HBM+DRAM remains deferred because the cluster-wide B200 queue now contains 17 other jobs.",
   "last_capacity_check": {
-    "checked_at": "2026-09-20T00:50:19Z",
-    "cluster_observed_at": "2026-09-20T00:50:08Z",
+    "checked_at": "2026-09-20T01:22:19Z",
+    "cluster_observed_at": "2026-09-20T01:22:02Z",
     "cluster_stale": false,
     "eligible_nodes": 11,
     "idle_nodes": 0,
     "total_nodes": 11,
     "allocated_nodes": 11,
-    "pending_b200_jobs": 1,
-    "pending_requested_nodes": 1,
-    "demand_nodes": 12,
-    "demand_percent": 109.09,
-    "scheduler_snapshot_at": "2026-09-20T00:49:50Z",
+    "pending_b200_jobs": 17,
+    "pending_requested_nodes": 17,
+    "demand_nodes": 28,
+    "demand_percent": 254.55,
+    "scheduler_snapshot_at": "2026-09-20T01:21:40Z",
     "scheduler_available": true,
     "active_study_run_ids": [
       35476043213,
@@ -1070,10 +1070,10 @@
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": false,
-    "reason": "Fresh cluster and priority views showed all 11 B200 nodes allocated and exactly one queued B200 job: c8192 HBM+DRAM+NVMe run 35478300305. All other active study jobs remain in progress. The global one-queued-job limit is met, so no additional launch is allowed."
+    "reason": "Fresh cluster and priority views showed all 11 B200 nodes allocated and 17 queued B200 jobs, all from another DeepSeek-V4.1-Flash sweep. The previously queued c8192 HBM+DRAM+NVMe job started at 01:00:28Z. The global one-queued-job policy requires holding the deferred c8192 HBM+DRAM arm."
   },
   "next_dispatch": {
-    "requires": "Launch nothing while any B200 job is queued. Monitor and validate the active c1024, c4096, and c8192 probes. When the pending B200 count returns to zero, dispatch the deferred HBM+DRAM c8192 arm if capacity permits, then continue filling the feasibility and crossover gaps."
+    "requires": "Launch nothing while any B200 job is queued. Monitor and validate the active c1024, c4096, and c8192 probes. When the cluster-wide pending B200 count returns to zero, dispatch the deferred HBM+DRAM c8192 arm if capacity permits, then continue filling the feasibility and crossover gaps."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-19T23:34:00Z",
