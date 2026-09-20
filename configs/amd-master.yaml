@@ -1163,14 +1163,16 @@ minimaxm3-fp8-mi300x-vllm-agentic-mtp:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.3" }, conc-list: [16] }
 
 # DeepSeek-V4.1-Flash AgentX on MI300X (gfx942), a copy of the validated MI355X vLLM
-# arm (run 34710937012) on the same ROCm nightly. gfx942 is not in the upstream
+# arm (run 34710937012), first on the same ROCm nightly and now on the 2026-09-19
+# nightly (vllm-project/vllm@a8d1aa9c, digest sha256:336933f3b63f1e05...).
+# gfx942 is not in the upstream
 # hardware table (h100, h200, b200, gb200, gb300, mi350x); TP8 rather than TP4
 # because a 192 GB card must hold its share of the 511 GB checkpoint, the
 # GPU-resident Engram tables and a 1M-context KV pool. Native five-token DSpark,
 # golden AL 3.51 for throughput, real block verification for evals, adaptive
 # verification off on ROCm.
 dsv41flash-fp4-mi300x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
+  image: vllm/vllm-openai-rocm:nightly-a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi300x-amd
