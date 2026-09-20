@@ -86,6 +86,9 @@ export VLLM_USE_DIRECT_DCP_KV_GATHER=1
 # ~1.5 TB of MXFP4 shards loads well past the default readiness window.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_RPC_TIMEOUT=600000
+# A Mooncake load blocks inside execute_model, which VLLM_RPC_TIMEOUT does not
+# cover; its own cap defaults to 300s and the offload stall tail reaches 240s.
+export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800
 export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=0
 export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
 export PYTHONNOUSERSITE=1

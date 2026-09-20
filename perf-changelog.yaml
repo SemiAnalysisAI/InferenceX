@@ -8453,4 +8453,5 @@
   description:
     - "Discover active Mellanox RDMA devices by driver on DSXE, select the link-layer GID, and load the host mlx5 provider so Mooncake sees the rail"
     - "Backport vLLM #55297 for request-local recompute after failed asynchronous Mooncake loads on B300; see docs/waiver/3088.md"
+    - "Raise VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS to 1800 so an in-flight Mooncake load cannot trip vLLM's 300s execute_model cap, which killed concurrency 48 and 56"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
