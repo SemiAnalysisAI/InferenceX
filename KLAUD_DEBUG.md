@@ -389,6 +389,20 @@ claiming its family or launching an agent. This prevents known incomplete or amb
 baseline families from consuming a candidate slot. A bounded review batch and soft
 same-base cooldown reduce repeated work without removing candidates from the pool.
 
+### 7.7 Planner preflight must degrade per candidate
+
+The overlap reviewer reads untrusted PR content and private capacity hints together, so
+it has no unrestricted outbound fetch tool. Its read-only local and GitHub tools are
+enough for overlap classification.
+
+Cooldown history comes from the paginated `klaud-plan.yml` run inventory and each
+matching run's artifacts, rather than the first page of repository-wide artifacts.
+Malformed history remains a soft hint failure. Baseline rows with invalid image fields
+are skipped, and registry `/` and enroot `#` image spellings are normalized for both
+historical identity matching and point backfill. A transient or malformed baseline for
+one candidate defers that candidate and continues through the reviewed pool; it does
+not consume or block later candidate slots.
+
 ## 12. Qwen3.8-27B native MTP: FlashInfer autotune startup
 
 The pinned CUDA image can fail its optional MTP dummy-prefill autotune with
