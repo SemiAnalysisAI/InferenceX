@@ -10,7 +10,7 @@ import os
 import re
 import sys
 import time
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -72,7 +72,7 @@ def _parse_profile_timestamp(value: Any, *, fallback_tz: timezone | None) -> flo
         if fallback_tz is None:
             return None
         parsed = parsed.replace(tzinfo=fallback_tz)
-    return parsed.astimezone(UTC).timestamp()
+    return parsed.astimezone(timezone.utc).timestamp()
 
 
 def build_power_window(

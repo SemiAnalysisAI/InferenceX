@@ -8455,3 +8455,23 @@
   description:
     - "Update B200 vLLM AgentX to DSpark6 and a new image with TP8 and DEP8 configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
+
+- config-keys:
+  - qwen3.5-fp8-mi300x-sglang
+  - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  - dsr1-fp4-mi355x-sglang-mtp
+  - dsr1-fp4-mi355x-atom-mtp
+  - kimik3-fp4-mi355x-vllm-agentic-mtp
+  - kimik3-fp4-mi355x-atom-agentic-mtp
+  - qwen3.5-fp8-mi355x-sglang-disagg
+  - dsr1-fp8-mi355x-sglang-disagg-mtp
+  - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
+  scenario-type:
+  - fixed-seq-len
+  - agentic-coding
+  description:
+  - Collect native AMD 8K/1K worker power and retain monitor samples through the measurement end; qualify
+    shared runtime paths with complete selected curves across MI300X, MI325X and MI355X. Retired DSV4
+    8K/1K is excluded.
+  - 采集 AMD 8K/1K 工作节点功耗并保留测量终点样本；通过 MI300X、MI325X 和 MI355X 所选完整曲线验证共享运行路径，排除已退役 DSV4 8K/1K。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3055

@@ -57,6 +57,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         if [[ -n "${GITHUB_ACTIONS:-}" && -n "${JOB_ID:-}" ]]; then
             local art_dir="$GITHUB_WORKSPACE/benchmark_artifacts"
             mkdir -p "$art_dir"
+            if [[ -d "$BENCHMARK_LOGS_DIR/native_power" ]]; then
+                mkdir -p "$GITHUB_WORKSPACE/LOGS/native_power"
+                cp -r "$BENCHMARK_LOGS_DIR/native_power/". "$GITHUB_WORKSPACE/LOGS/native_power/" || true
+            fi
             cp -r "$BENCHMARK_LOGS_DIR"/slurm_job-${JOB_ID}.{out,err} "$art_dir/" 2>/dev/null || true
         fi
         local err_file="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID:-unknown}.err"
@@ -117,6 +121,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     set -x
 
 
+    # Preserve native power evidence before cleanup, even when result processing fails.
+    if [[ -d "$BENCHMARK_LOGS_DIR/native_power" ]]; then
+        mkdir -p "$GITHUB_WORKSPACE/LOGS/native_power"
+        cp -r "$BENCHMARK_LOGS_DIR/native_power/". "$GITHUB_WORKSPACE/LOGS/native_power/"
+        export POWERX_NATIVE_DIR="$GITHUB_WORKSPACE/LOGS/native_power"
+    fi
 
 
     if [[ "${EVAL_ONLY}" != "true" && "${IS_AGENTIC}" != "1" ]]; then

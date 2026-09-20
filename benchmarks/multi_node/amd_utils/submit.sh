@@ -48,6 +48,13 @@ Required environment variables (continued):
 USAGE
 }
 
+# Only agentic search-space entries declare kv-offloading, so the generated
+# fixed-sequence rows export KV_OFFLOADING empty. "none" is the sentinel the
+# AMD scripts already compare against, so default to it and let sbatch's
+# --export=ALL carry the resolved value into job.slurm and the container.
+: "${KV_OFFLOADING:=none}"
+export KV_OFFLOADING
+
 check_env_vars \
     SLURM_ACCOUNT SLURM_PARTITION TIME_LIMIT MODEL_PATH MODEL_NAME \
     CONTAINER_IMAGE RUNNER_NAME FRAMEWORK GPUS_PER_NODE PREFILL_EP \

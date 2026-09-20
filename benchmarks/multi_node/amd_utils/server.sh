@@ -15,6 +15,14 @@ if [[ -f /config/hicache_mc.env ]]; then
 fi
 export WS_PATH ENGINE
 
+source "$WS_PATH/power.sh"
+if ! start_amd_multinode_power; then
+    case "${REQUIRE_POWER:-0}" in
+        1|true|TRUE|yes|YES) exit 1 ;;
+    esac
+    echo 'PowerX: continuing without optional worker telemetry' >&2
+fi
+
 echo "[DISPATCHER] ENGINE=$ENGINE  WS_PATH=$WS_PATH"
 
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
