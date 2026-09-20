@@ -683,6 +683,24 @@ jobs:
                     status["cancellation_client"] = client_status
                 except (OSError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
                     status["cancellation_client"] = {"error_type": type(error).__name__}
+                candidate_generation = Path("/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35484558552-1")
+                candidate_status = {"generation": str(candidate_generation), "qualification_evidence": False}
+                for name in ("state.json", "progress.json"):
+                    try:
+                        candidate_status[name] = read_object(candidate_generation / name, candidate_generation)
+                    except (OSError, ValueError) as error:
+                        candidate_status[name] = {"error_type": type(error).__name__}
+                progress = candidate_status.get("progress.json", {})
+                try:
+                    current_log = Path(progress.get("log", ""))
+                    if current_log.parent != candidate_generation / "logs" or not re.fullmatch(r"[0-9]{2}-[a-z0-9-]+\.log", current_log.name):
+                        raise ValueError("candidate progress log is outside its fixed generation")
+                    raw, info = read_fixed(current_log, candidate_generation / "logs", 16384, tail=True)
+                    (report / "candidate-current-stage.log").write_bytes(raw)
+                    candidate_status["current-stage.log"] = info
+                except (OSError, ValueError) as error:
+                    candidate_status["current-stage.log"] = {"error_type": type(error).__name__}
+                status["candidate_provision"] = candidate_status
                 status["preparation_processes"] = observe_fixed_sweep_processes()
                 (report / "diagnostic.json").write_text(json.dumps(status, indent=2) + "\n")
                 print("Fixed-run read-only observation retained; this is not qualification evidence.")
