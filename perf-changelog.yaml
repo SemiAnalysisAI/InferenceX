@@ -8461,8 +8461,8 @@
   scenario-type:
   - agentic-coding
   description:
-  - Add B300 Qwen3.5 FP8 AgentX 1P1D/1P2D recipes at C8/C12/C24/C32/C40/C48
-    with TP4, TP2+EP2 and DP attention.
-  - Tune prefill HiCache and decode KV capacity across the throughput/interactivity curve.
+  - Add B300 Qwen3.5 FP8 AgentX 1P1D recipes with TP4 at C8/C24/C40/C48, TP2+EP2 at C32/C40, and prefill TP4+EP4
+    at C32.
+  - Use prefill HiCache and tune decode capacity across the throughput/interactivity curve.
   - Use SGLang nightly 20260918-20518d85, Dynamo/SRT Slurm and original BF16 NEXTN.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268

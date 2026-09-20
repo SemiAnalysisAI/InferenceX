@@ -1,6 +1,6 @@
-# Colocated TP2+EP2 prefill and decode with write-through HiCache.
+# Colocated TP4 with screened high-concurrency admission and prefill HiCache.
 schema: 2
-name: qwen35-b300-disagg-1p1d-tp2ep2-tp2ep2-colocated-c48-dmem092-mtp-hicache
+name: qwen35-b300-disagg-1p1d-tp4-tp4-colocated-c40-wt-dmax64-mtp-hicache
 model:
   path: qwen3.5-fp8
   container: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
@@ -44,7 +44,7 @@ roles:
   prefill:
     nodes: 1
     workers: 1
-    gpus: 2
+    gpus: 4
     env:
       PYTHONUNBUFFERED: '1'
       PIP_BREAK_SYSTEM_PACKAGES: '1'
@@ -68,8 +68,8 @@ roles:
       trust-remote-code: true
       quantization: fp8
       kv-cache-dtype: fp8_e4m3
-      tensor-parallel-size: 2
-      expert-parallel-size: 2
+      tensor-parallel-size: 4
+      expert-parallel-size: 1
       data-parallel-size: 1
       mamba-ssm-dtype: bfloat16
       attention-backend: trtllm_mha
@@ -94,7 +94,7 @@ roles:
       mamba-track-interval: 2048
       scheduler-recv-interval: 10
       stream-interval: 50
-      max-running-requests: 64
+      max-running-requests: 96
       enable-hierarchical-cache: true
       hicache-size: 298
       hicache-io-backend: kernel
@@ -103,7 +103,7 @@ roles:
   decode:
     nodes: colocate
     workers: 1
-    gpus: 2
+    gpus: 4
     env:
       PYTHONUNBUFFERED: '1'
       PIP_BREAK_SYSTEM_PACKAGES: '1'
@@ -127,8 +127,8 @@ roles:
       trust-remote-code: true
       quantization: fp8
       kv-cache-dtype: fp8_e4m3
-      tensor-parallel-size: 2
-      expert-parallel-size: 2
+      tensor-parallel-size: 4
+      expert-parallel-size: 1
       data-parallel-size: 1
       mamba-ssm-dtype: bfloat16
       attention-backend: trtllm_mha
@@ -139,7 +139,7 @@ roles:
       enable-cache-report: true
       enable-metrics: true
       context-length: 262144
-      mem-fraction-static: 0.92
+      mem-fraction-static: 0.8
       chunked-prefill-size: 16384
       max-prefill-tokens: 16384
       page-size: 64
@@ -179,7 +179,7 @@ benchmark:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic
     SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE: custom
-    SRT_MEASUREMENT_WINDOW_CONCURRENCIES: '48'
+    SRT_MEASUREMENT_WINDOW_CONCURRENCIES: '40'
     SRT_MEASUREMENT_WINDOW_RESULT_ROOT: /logs
     PORT: '8000'
     IS_MULTINODE: 'true'
@@ -190,7 +190,7 @@ benchmark:
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
   concurrencies:
-  - 48
+  - 40
 telemetry:
   enabled: true
   collect_interval_ms: 1000
@@ -201,4 +201,4 @@ telemetry:
   dcgm_exporter:
     container_image: dcgm-exporter
     port: 9401
-    command: dcgm-exporter --collect-interval=100 --address :{port} --devices g:0,1,2,3
+    command: dcgm-exporter --collect-interval=100 --address :{port} --devices g:0,1,2,3,4,5,6,7
