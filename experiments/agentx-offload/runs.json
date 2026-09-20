@@ -938,9 +938,45 @@
       "repeat": 1,
       "attempt": 2,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "in_progress",
+      "status": "failure",
       "node": "b200-nscale-slurm_01",
-      "artifacts": [],
+      "artifacts": [
+        {
+          "id": 10603726728,
+          "name": "run-stats",
+          "size_bytes": 280
+        },
+        {
+          "id": 10603682234,
+          "name": "server_logs_minimaxm3_tp4_conc4096_kvnone",
+          "size_bytes": 271361
+        },
+        {
+          "id": 10603627516,
+          "name": "bmk_agentic_minimaxm3_tp4_conc4096_kvnone",
+          "size_bytes": 1323
+        },
+        {
+          "id": 10603507774,
+          "name": "power_audit_minimaxm3_tp4_conc4096_kvnone",
+          "size_bytes": 877226
+        },
+        {
+          "id": 10603328131,
+          "name": "results_bmk",
+          "size_bytes": 1111
+        },
+        {
+          "id": 10603293108,
+          "name": "agentic_minimaxm3_tp4_conc4096_kvnone",
+          "size_bytes": 3072569
+        },
+        {
+          "id": 10603118613,
+          "name": "gpu_metrics_minimaxm3_tp4_conc4096_kvnone",
+          "size_bytes": 875226
+        }
+      ],
       "performance_result": false,
       "workflow_name": "offload-v1-none-c4096-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:24:57Z",
@@ -961,7 +997,12 @@
         }
       ],
       "rerun_triggering_actor": "inferencex-dash[bot]",
-      "queued_at": "2026-09-20T01:36:00Z"
+      "queued_at": "2026-09-20T01:36:00Z",
+      "completed_at": "2026-09-20T10:23:27Z",
+      "allocation_id": "16686",
+      "failure_stage": "agentx_warmup",
+      "failure_evidence": "Canonical c4096 HBM warmup exhausted the six-hour phase budget before profiling. It returned 4,409 of 45,376 planned warmup requests, with seven still in flight and 27 error-dropped requests; AIPerf recorded zero successful profiled requests and ProfileAborted. No EngineDead, connection-refused, storage, or node-local failure signature was present, so this is a deterministic feasibility failure and will not be retried unchanged.",
+      "log_archive_sha256": "719bc1f5dc324ea919b083654f43727e44f93bcc07969bbb9b7d6fb8604246f3"
     },
     {
       "run_id": 35476067005,
@@ -971,9 +1012,45 @@
       "repeat": 1,
       "attempt": 2,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "in_progress",
+      "status": "failure",
       "node": "b200-nscale-slurm_03",
-      "artifacts": [],
+      "artifacts": [
+        {
+          "id": 10603711792,
+          "name": "bmk_agentic_minimaxm3_tp4_conc4096_kvdram-vllm-simple",
+          "size_bytes": 1341
+        },
+        {
+          "id": 10603602521,
+          "name": "power_audit_minimaxm3_tp4_conc4096_kvdram-vllm-simple",
+          "size_bytes": 873317
+        },
+        {
+          "id": 10603552622,
+          "name": "agentic_minimaxm3_tp4_conc4096_kvdram-vllm-simple",
+          "size_bytes": 3058024
+        },
+        {
+          "id": 10603427881,
+          "name": "server_logs_minimaxm3_tp4_conc4096_kvdram-vllm-simple",
+          "size_bytes": 274698
+        },
+        {
+          "id": 10603353018,
+          "name": "gpu_metrics_minimaxm3_tp4_conc4096_kvdram-vllm-simple",
+          "size_bytes": 871299
+        },
+        {
+          "id": 10603313084,
+          "name": "run-stats",
+          "size_bytes": 280
+        },
+        {
+          "id": 10602699773,
+          "name": "results_bmk",
+          "size_bytes": 1129
+        }
+      ],
       "performance_result": false,
       "workflow_name": "offload-v1-dram-c4096-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:25:04Z",
@@ -994,7 +1071,12 @@
         }
       ],
       "rerun_triggering_actor": "inferencex-dash[bot]",
-      "queued_at": "2026-09-20T01:35:59Z"
+      "queued_at": "2026-09-20T01:35:59Z",
+      "completed_at": "2026-09-20T10:22:57Z",
+      "allocation_id": "16685",
+      "failure_stage": "agentx_warmup",
+      "failure_evidence": "Canonical c4096 HBM+DRAM warmup exhausted the six-hour phase budget before profiling. It returned 4,337 of 45,376 planned warmup requests, with 79 still in flight and 22 error-dropped requests; AIPerf recorded zero successful profiled requests and ProfileAborted. No EngineDead, connection-refused, storage, or node-local failure signature was present, so this is a deterministic feasibility failure and will not be retried unchanged.",
+      "log_archive_sha256": "82061e18b62613ee188ac291df4bb1b6f54e60d368c1271f9fc85969137352c4"
     },
     {
       "run_id": 35476072143,
@@ -1221,9 +1303,45 @@
       "repeat": 1,
       "attempt": 2,
       "head_sha": "e85e1fbb8ad172a43c15cab68e43039bb0ff8a16",
-      "status": "in_progress",
+      "status": "failure",
       "node": "b200-nscale-slurm_07",
-      "artifacts": [],
+      "artifacts": [
+        {
+          "id": 10603717115,
+          "name": "power_audit_minimaxm3_tp4_conc8192_kvnone",
+          "size_bytes": 890479
+        },
+        {
+          "id": 10603597875,
+          "name": "gpu_metrics_minimaxm3_tp4_conc8192_kvnone",
+          "size_bytes": 888477
+        },
+        {
+          "id": 10603583035,
+          "name": "results_bmk",
+          "size_bytes": 1112
+        },
+        {
+          "id": 10603503092,
+          "name": "bmk_agentic_minimaxm3_tp4_conc8192_kvnone",
+          "size_bytes": 1325
+        },
+        {
+          "id": 10603363222,
+          "name": "server_logs_minimaxm3_tp4_conc8192_kvnone",
+          "size_bytes": 435986
+        },
+        {
+          "id": 10603353339,
+          "name": "agentic_minimaxm3_tp4_conc8192_kvnone",
+          "size_bytes": 3417740
+        },
+        {
+          "id": 10603044215,
+          "name": "run-stats",
+          "size_bytes": 280
+        }
+      ],
       "performance_result": false,
       "workflow_name": "offload-v1-none-c8192-r1-20260920T0015Z",
       "dispatched_at": "2026-09-20T00:15:39Z",
@@ -1244,7 +1362,12 @@
         }
       ],
       "rerun_triggering_actor": "inferencex-dash[bot]",
-      "queued_at": "2026-09-20T01:36:06Z"
+      "queued_at": "2026-09-20T01:36:06Z",
+      "completed_at": "2026-09-20T10:27:34Z",
+      "allocation_id": "16688",
+      "failure_stage": "agentx_warmup",
+      "failure_evidence": "Canonical c8192 HBM warmup exhausted the six-hour phase budget before profiling. It returned 4,457 of 90,754 planned warmup requests, with 4,377 still in flight and 50 error-dropped requests; AIPerf recorded zero successful profiled requests and ProfileAborted. No EngineDead, connection-refused, storage, or node-local failure signature was present, so this is a deterministic feasibility failure and will not be retried unchanged.",
+      "log_archive_sha256": "7a58c31f2c3074c178f953331c340ed36fbaa33e82501a0a79e03ec8b2e95a24"
     },
     {
       "run_id": 35478298744,
@@ -1401,7 +1524,7 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850",
-  "status": "All four matched c16 arms are valid. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. Nine study jobs remain in progress across c256, c1024, c4096, and c8192. The c4096 HBM+DRAM+NVMe arm failed after about six hours in warmup and independently exceeded its 2 TiB NVMe stop guard at 2.29 TB; its exact task-owned scratch was verified deleted and it will not be retried unchanged. The c256 HBM probe remains active.",
+  "status": "All four matched c16 arms are valid. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. Six study jobs remain in progress across c256, c1024, c4096, and c8192. The c4096 HBM and HBM+DRAM arms and the c8192 HBM arm each exhausted the six-hour canonical warmup budget with zero profiled responses; these are deterministic feasibility failures and will not be retried unchanged. The c4096 combined arm also exceeded its 2 TiB storage guard and was cleaned up.",
   "last_capacity_check": {
     "checked_at": "2026-09-20T08:21:25Z",
     "cluster_observed_at": "2026-09-20T08:20:58Z",
@@ -1420,10 +1543,7 @@
       35476043213,
       35476047627,
       35476050409,
-      35476061809,
-      35476067005,
       35476072143,
-      35478297080,
       35492330557,
       35497846918
     ],
@@ -1431,20 +1551,17 @@
       106035807426,
       106000832058,
       106000864877,
-      106000846579,
-      106000845170,
       106000859670,
-      106000856643,
       106029329353,
       106044138671
     ],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": false,
-    "reason": "The c4096 combined run completed with a deterministic warmup and storage-guard failure, freeing one node. A fresh dispatch still requires resolution of the previously reported automation approval blocker."
+    "reason": "Three additional high-concurrency runs reached deterministic canonical warmup feasibility failures, freeing nodes. New dispatch remains blocked by the previously reported automation approval review until the user explicitly authorizes the c256 HBM+NVMe dispatch."
   },
   "next_dispatch": {
-    "requires": "After the dispatch approval blocker is resolved and a fresh scheduler check confirms zero pending B200 jobs, dispatch the already validated c256 HBM+NVMe probe, then HBM+DRAM+NVMe and HBM+DRAM as capacity permits. Do not retry c1024 or c4096 combined unchanged because both exceeded the deterministic storage guard."
+    "requires": "After explicit user authorization resolves the dispatch approval blocker and a fresh scheduler check confirms zero pending B200 jobs, dispatch the already validated c256 HBM+NVMe probe, then HBM+DRAM+NVMe and HBM+DRAM as capacity permits. Do not retry the deterministic c4096 HBM, HBM+DRAM, or combined failures, nor c8192 HBM, unchanged."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-19T23:34:00Z",
