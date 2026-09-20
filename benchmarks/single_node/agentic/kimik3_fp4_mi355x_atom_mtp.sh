@@ -269,7 +269,15 @@ ATOM_CMD=(
     --level 3
     --cudagraph-mode FULL
     --cudagraph-capture-sizes "$CUDAGRAPH_CAPTURE_SIZES"
-    --online_quant_config '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*self_attn.[qkv]_conv1d*","*block_sparse_moe.experts*","*block_sparse_moe.routed_expert_*","*vision_tower*","*mm_projector*"]}'
+    # ptpc_fp8 is a GLOBAL online-quant target, and model_loader/loader.py runs
+    # the streamer for speculative draft loads too, so without the trailing
+    # entries it re-quantises the BF16 draft checkpoint. The draft tree carries
+    # no root prefix -- its decoder layers are `layers.{0..4}` where the
+    # target's are `model.layers.{i}` -- and _matches_exclude globs match the
+    # whole name, so a pattern anchored on `layers.` cannot reach the target.
+    # `context_proj` sits outside `layers.` and needs its own entry: it is the
+    # aux-fusion linear, 35840x7168, larger than a whole draft decoder layer.
+    --online_quant_config '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*self_attn.[qkv]_conv1d*","*block_sparse_moe.experts*","*block_sparse_moe.routed_expert_*","*vision_tower*","*mm_projector*","layers.*.self_attn.fused_qkv_a_proj","layers.*.self_attn.q_b_proj","layers.*.self_attn.kv_b_proj","layers.*.self_attn.o_proj","layers.*.mlp.gate_up_proj","layers.*.mlp.down_proj","context_proj"]}'
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
