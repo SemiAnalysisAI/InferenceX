@@ -1207,19 +1207,20 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "18d0c54b22fc98bca65d35b33d0fdc0b4f5c8f3a",
-      "status": "queued",
-      "node": null,
+      "status": "in_progress",
+      "node": "b200-nscale-slurm_04",
       "artifacts": [],
       "performance_result": false,
       "workflow_name": "offload-v1-dram-c8192-r1-20260920T0541Z",
       "dispatched_at": "2026-09-20T05:41:49Z",
       "job_id": 106029329353,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492330557/job/106029329353",
-      "started_at": "2026-09-20T05:42:11Z"
+      "started_at": "2026-09-20T05:44:38Z",
+      "queued_at": "2026-09-20T05:42:11Z"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850",
-  "status": "All four matched c16 arms are valid. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. Ten study jobs are in progress: all four c1024 arms, all four c4096 arms, and the c8192 HBM and HBM+NVMe arms. The missing c8192 HBM+DRAM arm is queued as the sole B200 waiting job. The c8192 HBM+DRAM+NVMe retry failed its node-local NVMe capacity preflight before model startup and produced no performance result.",
+  "status": "All four matched c16 arms are valid. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. Eleven study jobs are in progress: all four c1024 arms, all four c4096 arms, and the c8192 HBM, HBM+DRAM, and HBM+NVMe arms. The c8192 HBM+DRAM+NVMe retry failed its node-local NVMe capacity preflight before model startup and produced no performance result.",
   "last_capacity_check": {
     "checked_at": "2026-09-20T05:42:20Z",
     "cluster_observed_at": "2026-09-20T05:40:52Z",
@@ -1266,7 +1267,7 @@
     "reason": "Fresh dashboard snapshots showed all 11 B200 nodes allocated and zero B200 jobs queued. The missing c8192 HBM+DRAM arm was therefore dispatched into the single permitted queue slot; it is now the sole queued B200 job."
   },
   "next_dispatch": {
-    "requires": "Launch nothing while the c8192 HBM+DRAM job or any other B200 job remains queued. Monitor the ten in-progress study jobs and validate only completed runs with usable profiling results. Once the cluster-wide pending count returns to zero and capacity permits, retry c8192 HBM+DRAM+NVMe on a node satisfying the NVMe preflight."
+    "requires": "Monitor the eleven in-progress study jobs and validate only completed runs with usable profiling results. Before any further dispatch, refresh cluster and scheduler state and launch nothing if any B200 job is queued. When the policy permits, retry c8192 HBM+DRAM+NVMe on a node satisfying the NVMe preflight."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-19T23:34:00Z",
