@@ -388,3 +388,26 @@ Use `scancel` or process termination only with explicit approval and a concrete 
 - Every backend/frontend and metrics source is represented in live evidence.
 - Fast/smoke results are labeled diagnostic. Only the canonical candidate is used for final comparison.
 - Workflow and artifact collection conclude green before success is reported.
+
+## Isolated ModelScope parity experiment
+
+The `diagnostic-modelscope-hub-parity` diagnostic branch uses the Qwen3-0.6B H100
+recipe to run three fresh server instances sequentially: stock Hugging Face,
+patched Hugging Face, and patched ModelScope. Each runs the complete GSM8K split
+twice at concurrency 32 and 64. All servers share BF16, TP1, a batch ceiling of
+64, and a 9,472-token context. Generation remains greedy with a 5,376-token limit.
+
+Before serving, the driver compares SHA256 hashes of weights, tokenizer, and
+config assets from both hubs. Remote model IDs then resolve using offline caches;
+the hashes are checked again after all runs. All dependencies are installed before
+the stock arm. The patch is applied after that arm, and the four PR download tests
+run against the real installed package. GPU evidence covers the release-compatible
+backport to 1.3.0rc27, not a build of the newer TensorRT-LLM PR branch.
+
+The `modelscope_parity_artifacts.tar.gz` upload is authoritative: it preserves
+all twelve labelled result/sample sets, server/client logs, source snapshots,
+hashes, settings, and test output. Standard InferenceX collection receives only
+the final ModelScope c64 repetition. The experiment's `progress.json` records
+each completed eval; compare raw per-question answers as well as scores, accounting
+for variation between repetitions. A passing regression floor is not proof of
+identical accuracy.

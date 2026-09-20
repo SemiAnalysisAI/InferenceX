@@ -378,3 +378,21 @@ gh run cancel <RUN_ID> --repo SemiAnalysisAI/InferenceX
 - 每个 backend/frontend 与 metrics source 都在实时证据中有所体现。
 - Fast/smoke 结果明确标为诊断用途；只有 canonical candidate 用于最终比较。
 - 在报告成功前，工作流与 artifact collection 均已得出 green 结论。
+
+## 独立 ModelScope 一致性实验
+
+`diagnostic-modelscope-hub-parity` 诊断分支使用 Qwen3-0.6B H100 配方，依次启动三个独立
+服务实例：原始 Hugging Face、补丁 Hugging Face 和补丁 ModelScope。每个实例在
+并发 32 和 64 下各执行两次完整 GSM8K。所有服务统一使用 BF16、TP1、批量上限
+64 和 9,472-token 上下文；生成保持贪心解码，输出上限为 5,376 tokens。
+
+启动服务前，驱动程序比较两个模型仓库的权重、分词器和配置文件 SHA256。随后远程
+模型 ID 从离线缓存解析，全部评测后再次核对哈希。所有依赖在原始服务启动前安装。
+该组完成后应用补丁，并在实际安装的软件包上运行 PR 中四个下载测试。GPU 证据覆盖
+1.3.0rc27 的兼容回移补丁，并不代表构建运行了较新 TensorRT-LLM PR 分支。
+
+`modelscope_parity_artifacts.tar.gz` 是完整证据，保留全部十二组带标签的结果和
+样本、服务及客户端日志、源码快照、哈希、设置和测试输出。标准 InferenceX 收集器
+仅接收最后一次 ModelScope c64 结果。实验的 `progress.json` 记录每次完成的评测。
+比较时应同时核对逐题答案和分数，并考虑重复运行的波动。通过回归分数下限不等于
+证明准确率完全相同。

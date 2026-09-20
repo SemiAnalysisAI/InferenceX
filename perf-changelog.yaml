@@ -8462,3 +8462,10 @@
     - "Add H100 TensorRT-LLM 1.3.0rc27 coverage for Qwen3-0.6B in BF16, resolving the model through ModelScope with a source-matched runtime backport of SemiAnalysisAI/TensorRT-LLM#2."
     - "为 Qwen3-0.6B BF16 添加 H100 TensorRT-LLM 1.3.0rc27 覆盖，通过 ModelScope 解析模型，并使用与镜像源码匹配的 SemiAnalysisAI/TensorRT-LLM#2 运行时回移补丁。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3323
+
+- config-keys:
+    - qwen3-0.6b-bf16-h100-trt-modelscope
+  description:
+    - "Isolated diagnostic branch: compare stock HF, patched HF, and patched ModelScope in one H100 allocation with repeated full-split GSM8K and snapshot hashes."
+    - "独立诊断分支：在同一个 H100 分配中，对原始 HF、补丁 HF 与补丁 ModelScope 执行重复完整 GSM8K 评测并核对模型文件哈希。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3323

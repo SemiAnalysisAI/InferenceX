@@ -53,3 +53,11 @@ case "${RUNNER_NAME%%_*}" in
         export NCCL_IB_DISABLE=1
         ;;
 esac
+
+# Isolated diagnostic branch: one allocation, three hub/runtime arms.
+if [[ "$MODEL_PREFIX" == qwen3-0.6b && "$FRAMEWORK" == trt ]]; then
+    export PARITY_MAX_BATCH_SIZE=64 PARITY_CONTEXT=9472
+    export PARITY_CONCURRENCIES="32 64" PARITY_REPEATS=2
+    export PARITY_PR_SHA=c5c002e64b898fdb9c524df04c07ca2c8e736cb5
+    export PARITY_TERM_GRACE=30 PARITY_KILL_GRACE=10
+fi
