@@ -28,7 +28,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from statistics import mean
 
@@ -117,7 +117,7 @@ def _parse_timestamp(value: str, *, naive_timezone: timezone | None = None) -> f
     if dt.tzinfo is None:
         # Treat naive timestamps as local time (matches nvidia-smi convention).
         return dt.replace(tzinfo=naive_timezone).timestamp()
-    return dt.astimezone(UTC).timestamp()
+    return dt.astimezone(timezone.utc).timestamp()
 
 
 def _parse_power(value: str) -> float | None:
@@ -161,7 +161,7 @@ def _telemetry_timezone(csv_path: Path) -> timezone | None:
     payload = json.loads(context.read_text())
     if not isinstance(payload, dict) or payload.get("timestamp_timezone") != "UTC":
         raise ValueError("unsupported_telemetry_timezone")
-    return UTC
+    return timezone.utc
 
 
 def aggregate_power(

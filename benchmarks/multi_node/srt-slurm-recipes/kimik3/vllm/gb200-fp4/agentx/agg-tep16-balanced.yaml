@@ -135,10 +135,30 @@ sbatch_directives:
 srun_options:
   container-remap-root: ""
 
+telemetry:
+  enabled: true
+  # The scraper sleeps collect_interval_ms *after* each scrape returns, so one
+  # scrape that hits request_timeout_seconds costs timeout + interval of the
+  # validator's 3s MAX_SAMPLE_GAP budget. At 1000/2 that is exactly 3.0s, so a
+  # single timed-out scrape in a multi-hour run fails the whole point. These
+  # 16-way expert-parallel lanes saturate the node enough to hit that; 500/1
+  # leaves 1.5s of headroom.
+  collect_interval_ms: 500
+  storage_subdir: power
+  required: true
+  startup_timeout_seconds: 120
+  request_timeout_seconds: 1
+  collector_join_timeout_seconds: 12
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    port: 9401
+
 benchmark:
   type: custom
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
+    ENABLE_AGENTX_POWER: "1"
+    REQUIRE_POWER: "1"
     INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
     AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: "300"
     RESULT_DIR: "/logs/agentic"
