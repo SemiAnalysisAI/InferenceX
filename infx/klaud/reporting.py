@@ -771,6 +771,8 @@ def public_point(entry: dict) -> dict:
     """Project generated settings onto the public BenchmarkRow identity (not metrics)."""
     from infx.matrix.generate import _hardware_family
 
+    from .models import normalized_image
+
     agentic = entry.get("scenario-type") == "agentic-coding"
     multi = entry.get("prefill") is not None
     point = {
@@ -786,7 +788,7 @@ def public_point(entry: dict) -> dict:
         "osl": None if agentic else entry["osl"],
         "offload_mode": "on" if entry.get("kv-offloading", "none") != "none" else "off",
         "conc": int(entry["conc"]),
-        "image": entry["image"],
+        "image": normalized_image(entry["image"]),
     }
     for role in ("prefill", "decode"):
         topology = entry[role] if multi else entry
@@ -799,6 +801,20 @@ def public_point(entry: dict) -> dict:
             }
         )
     return point
+
+
+def _matches_public_point(row: dict, point: dict) -> bool:
+    """Compare a public row with a generated identity using canonical image spelling."""
+    from .models import normalized_image
+
+    for key, value in point.items():
+        observed = row.get(key)
+        if key == "image":
+            if not isinstance(observed, str) or normalized_image(observed) != value:
+                return False
+        elif observed != value:
+            return False
+    return True
 
 
 def matrix_points(matrix: dict) -> list[dict]:
@@ -862,10 +878,12 @@ def resolve_baseline(
         if any(fnmatchcase(candidate.family.split(":", 1)[1], key) for key in change["config_keys"])
     }
     for row in feed.payload:
+        if not isinstance(row, dict) or not isinstance(row.get("image"), str):
+            continue
         # Do not filter ISL/OSL here: that would erase other curves in the original family.
         if any(
             (
-                normalized_image(row.get(key, "")) != normalized_image(context["source"][key])
+                normalized_image(row[key]) != normalized_image(context["source"][key])
                 if key == "image"
                 else row.get(key) != context["source"][key]
             )
@@ -903,9 +921,7 @@ def resolve_baseline(
                 canonical_matrix(repository, head, candidate.family, historical=True)
             )
         matches = [
-            entry
-            for entry in historical[head]
-            if all(row.get(key) == value for key, value in public_point(entry).items())
+            entry for entry in historical[head] if _matches_public_point(row, public_point(entry))
         ]
         if not matches:  # A distinct sibling workload/topology is not this family's baseline.
             continue
@@ -925,7 +941,9 @@ def resolve_baseline(
             raise VerificationError("Duplicate public baseline point")
         # Retain all original points, even if a current family or API response is smaller.
         entries.update(
-            (point_key(point), point) for point in historical[head] if point["image"] == old_image
+            (point_key(point), point)
+            for point in historical[head]
+            if normalized_image(point["image"]) == normalized_image(old_image)
         )
         published[key] = Point(
             key=key,
@@ -940,10 +958,7 @@ def resolve_baseline(
             run_attempt=run_attempt,
         )
     identities = [public_point(entry) for entry in entries.values()]
-    if any(
-        any(all(row.get(key) == value for key, value in point.items()) for point in identities)
-        for row in unverified
-    ):
+    if any(any(_matches_public_point(row, point) for point in identities) for row in unverified):
         raise VerificationError("Public baseline producer provenance is unavailable")
     if not published:
         raise VerificationError("No verified public baseline points for the selected family")

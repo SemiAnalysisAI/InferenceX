@@ -7,8 +7,8 @@ import sys
 import pytest
 
 from infx.klaud import __main__ as klaud
-from infx.klaud import claims, github, lifecycle
-from infx.klaud.models import CandidateOutcome
+from infx.klaud import api, claims, github, lifecycle, reporting, validation
+from infx.klaud.models import CandidateOutcome, Feed, OwnedCandidate
 
 
 @pytest.mark.parametrize("current_head,expected", [("ours", True), ("other", False)])
@@ -133,3 +133,213 @@ def test_diagnostics_prefers_verified_outcome_when_action_output_is_invalid(
         "run-ids": [],
         "repairs-used": 0,
     }
+
+
+def test_recent_candidates_use_all_current_base_workflow_artifacts(monkeypatch):
+    candidate_id = "1" * 16 + "-" + "2" * 16
+    base = "a" * 40
+    calls = []
+
+    def items(_repository, path, key):
+        calls.append((path, key))
+        if path.startswith("actions/workflows/klaud-plan.yml/runs?"):
+            return [
+                {"id": 42, "created_at": "9999-01-01T00:00:00Z", "head_sha": base},
+                {"id": 43, "created_at": "9999-01-01T00:00:00Z", "head_sha": "b" * 40},
+            ]
+        if path == "actions/runs/42/artifacts?per_page=100":
+            return [
+                {
+                    "name": f"klaud-candidate-{candidate_id}",
+                    "expired": False,
+                    "workflow_run": None,
+                },
+                {"name": "other-artifact", "expired": False},
+            ]
+        raise AssertionError(path)
+
+    monkeypatch.setattr(klaud, "github_items", items)
+
+    assert klaud.recent_candidate_ids("example/project", base, 24) == {candidate_id}
+    assert calls[-1] == ("actions/runs/42/artifacts?per_page=100", "artifacts")
+
+
+def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch):
+    first_id = "1" * 16 + "-" + "2" * 16
+    second_id = "3" * 16 + "-" + "4" * 16
+    base = "a" * 40
+    families = [
+        "configs/nvidia-master.yaml:first-family",
+        "configs/nvidia-master.yaml:second-family",
+    ]
+    contexts = [
+        {"id": candidate_id, "family": family, "base": base, "source": {}}
+        for candidate_id, family in zip((first_id, second_id), families, strict=True)
+    ]
+    (tmp_path / "candidates.json").write_text(json.dumps(contexts))
+    review = {
+        "decisions": [
+            {
+                "candidate-id": candidate_id,
+                "decision": "proceed",
+                "family": family,
+                "telemetry-clusters": ["cluster-a"],
+                "pull-requests": [],
+                "baseline-model": "Model",
+                "reason": "No overlap",
+            }
+            for candidate_id, family in zip(
+                (first_id, second_id), families, strict=True
+            )
+        ]
+    }
+
+    def resolve(_repository, candidate, _context, _model, _goal):
+        if candidate.id == first_id:
+            raise OSError("transient")
+        return object()
+
+    monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
+    monkeypatch.setenv("GITHUB_RUN_ID", "42")
+    monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps(review))
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a"})
+    monkeypatch.setattr(reporting, "resolve_baseline", resolve)
+    monkeypatch.setattr(claims, "claim_family", lambda *_args: True)
+
+    klaud.select(tmp_path, 5)
+
+    selection = json.loads((tmp_path / "selection.json").read_text())
+    assert selection["candidates"] == [second_id]
+    assert selection["baseline-deferred-candidates"] == [first_id]
+    assert selection["deferred-reason"] is None
+
+
+def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
+    monkeypatch,
+):
+    base = "a" * 40
+    historical_head = "b" * 40
+    raw_image = "nvcr.io#nvidia/trtllm:1"
+    public_image = "nvcr.io/nvidia/trtllm:1"
+    entry = {
+        "model-prefix": "Model",
+        "runner": "h200",
+        "framework": "trtllm",
+        "precision": "fp8",
+        "spec-decoding": "mtp",
+        "disagg": False,
+        "image": raw_image,
+        "conc": [1, 2],
+        "isl": 8000,
+        "osl": 1000,
+        "tp": 8,
+        "ep": 1,
+        "recipe-fingerprint": "fingerprint",
+    }
+    current = {"single_node": {"all": [{**entry, "conc": [1]}]}}
+    historical_matrix = {"single_node": {"all": [entry]}}
+    public_row = {
+        "model": "Model",
+        "hardware": "h200",
+        "framework": "trtllm",
+        "precision": "fp8",
+        "spec_method": "mtp",
+        "disagg": False,
+        "is_multinode": False,
+        "benchmark_type": "single_turn",
+        "isl": 8000,
+        "osl": 1000,
+        "offload_mode": "off",
+        "conc": 1,
+        "image": raw_image,
+        "prefill_tp": 8,
+        "prefill_ep": 1,
+        "prefill_dp_attention": False,
+        "prefill_num_workers": 0,
+        "decode_tp": 8,
+        "decode_ep": 1,
+        "decode_dp_attention": False,
+        "decode_num_workers": 0,
+        "recipe_fingerprint": "fingerprint",
+        "run_url": "https://github.com/example/project/actions/runs/42",
+        "tput_per_gpu": 10.0,
+        "output_tput_per_gpu": 8.0,
+        "mean_ttft": 0.1,
+        "mean_tpot": 0.02,
+        "errors": 0,
+    }
+    info = {
+        "runs": [{"github_run_id": "42", "run_attempt": 1}],
+        "runConfigs": [{"github_run_id": "42", "head_sha": historical_head}],
+        "changelogs": [{"workflow_run_id": "42", "config_keys": ["test-family"]}],
+    }
+
+    def canonical_matrix(_repository, head, _family, *, historical=False):
+        assert (head, historical) in ((base, False), (historical_head, True))
+        return historical_matrix if historical else current
+
+    feeds = {
+        "benchmarks": [
+            {**public_row, "image": None},
+            public_row,
+        ],
+        "workflow-info": info,
+    }
+
+    def fetch(resource, **_kwargs):
+        return Feed(
+            url=f"https://inferencex.semianalysis.com/api/v1/{resource}",
+            retrieved_at="2026-09-20T00:00:00Z",
+            sha256="0" * 64,
+            payload=feeds[resource],
+        )
+
+    monkeypatch.setattr(validation, "canonical_matrix", canonical_matrix)
+    monkeypatch.setattr(api, "fetch", fetch)
+    candidate = OwnedCandidate(
+        id="1" * 16 + "-" + "2" * 16,
+        family="configs/nvidia-master.yaml:test-family",
+        base=base,
+    )
+    context = {
+        "source": {
+            "date": "2026-09-19",
+            "image": public_image,
+            "model": "Model",
+            "hardware": "h200",
+            "framework": "trtllm",
+            "precision": "fp8",
+            "spec_method": "mtp",
+            "disagg": False,
+        }
+    }
+
+    baseline = reporting.resolve_baseline(
+        "example/project",
+        candidate,
+        context,
+        "Model",
+        reporting.Prose(en="Update the image.", zh="更新镜像。"),
+    )
+
+    assert [(point.conc, point.result) for point in baseline.points] == [
+        (1, "passed"),
+        (2, "unavailable"),
+    ]
+
+    feeds["benchmarks"] = [
+        {
+            **public_row,
+            "run_url": "https://github.com/example/project/actions/runs/999",
+        }
+    ]
+    with pytest.raises(
+        github.VerificationError, match="producer provenance is unavailable"
+    ):
+        reporting.resolve_baseline(
+            "example/project",
+            candidate,
+            context,
+            "Model",
+            reporting.Prose(en="Update the image.", zh="更新镜像。"),
+        )

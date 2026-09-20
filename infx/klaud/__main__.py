@@ -16,7 +16,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from .api import PUBLIC, ReadError, capacity_context, fetch_capacity, fetch_catalog
-from .github import VerificationError, read as github_read
+from .github import VerificationError, items as github_items, read as github_read
 from .models import (
     CandidateOutcome,
     OwnedCandidate,
@@ -155,29 +155,43 @@ def choose(
 
 def recent_candidate_ids(repository: str, base: str, cooldown_hours: int) -> set[str]:
     """Return same-base candidates recently given an agent, as a soft ordering hint."""
+    cutoff = datetime.now(UTC) - timedelta(hours=cooldown_hours)
     try:
-        artifacts = github_read(repository, "actions/artifacts?per_page=100")["artifacts"]
-        if not isinstance(artifacts, list):
-            raise TypeError("invalid artifact inventory")
+        runs = github_items(
+            repository,
+            "actions/workflows/klaud-plan.yml/runs?created=>=" + cutoff.date().isoformat(),
+            "workflow_runs",
+        )
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         print("::warning::Klaud cooldown history unavailable; continuing without cooldown")
         return set()
-    cutoff = datetime.now(UTC) - timedelta(hours=cooldown_hours)
     result = set()
-    for artifact in artifacts:
+    for run in runs:
         try:
-            match = re.fullmatch(r"klaud-candidate-([0-9a-f]{16}-[0-9a-f]{16})", artifact["name"])
-            created = datetime.fromisoformat(artifact["created_at"].replace("Z", "+00:00"))
-            recent = created >= cutoff
-        except (AttributeError, KeyError, TypeError, ValueError):
-            continue
-        if (
-            match
-            and not artifact.get("expired", True)
-            and recent
-            and artifact.get("workflow_run", {}).get("head_sha") == base
+            created = datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))
+            if created < cutoff or run.get("head_sha") != base:
+                continue
+            artifacts = github_items(
+                repository, f"actions/runs/{int(run['id'])}/artifacts?per_page=100", "artifacts"
+            )
+        except (
+            AttributeError,
+            KeyError,
+            OSError,
+            TypeError,
+            ValueError,
+            subprocess.SubprocessError,
         ):
-            result.add(match[1])
+            continue
+        for artifact in artifacts:
+            try:
+                match = re.fullmatch(
+                    r"klaud-candidate-([0-9a-f]{16}-[0-9a-f]{16})", artifact["name"]
+                )
+                if match and not artifact.get("expired", True):
+                    result.add(match[1])
+            except (AttributeError, KeyError, TypeError):
+                continue
     return result
 
 
@@ -585,8 +599,9 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
             families.add(decision.family)
             continue
         except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, ReadError):
-            deferred = "baseline-state-unavailable"
-            break
+            baseline_deferred.append(candidate["id"])
+            families.add(decision.family)
+            continue
         if not claims.claim_family(
             os.environ["GITHUB_REPOSITORY"], owned, int(os.environ["GITHUB_RUN_ID"])
         ):
