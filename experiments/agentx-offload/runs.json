@@ -1028,8 +1028,8 @@
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850",
   "status": "All four matched c16 arms are valid. The c1024 and c4096 four-arm sets remain in progress. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. At c8192, HBM and HBM+NVMe are in progress and HBM+DRAM+NVMe is the single queued B200 job; HBM+DRAM remains deferred.",
   "last_capacity_check": {
-    "checked_at": "2026-09-20T00:17:17Z",
-    "cluster_observed_at": "2026-09-20T00:16:43Z",
+    "checked_at": "2026-09-20T00:50:19Z",
+    "cluster_observed_at": "2026-09-20T00:50:08Z",
     "cluster_stale": false,
     "eligible_nodes": 11,
     "idle_nodes": 0,
@@ -1039,7 +1039,7 @@
     "pending_requested_nodes": 1,
     "demand_nodes": 12,
     "demand_percent": 109.09,
-    "scheduler_snapshot_at": "2026-09-20T00:17:17Z",
+    "scheduler_snapshot_at": "2026-09-20T00:49:50Z",
     "scheduler_available": true,
     "active_study_run_ids": [
       35476043213,
@@ -1070,7 +1070,7 @@
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": false,
-    "reason": "Post-dispatch priority view showed all 11 B200 nodes assigned and exactly one queued B200 job: c8192 HBM+DRAM+NVMe run 35478300305. The c8192 HBM and HBM+NVMe jobs are in progress. The global one-queued-job limit is met; no further launch is allowed."
+    "reason": "Fresh cluster and priority views showed all 11 B200 nodes allocated and exactly one queued B200 job: c8192 HBM+DRAM+NVMe run 35478300305. All other active study jobs remain in progress. The global one-queued-job limit is met, so no additional launch is allowed."
   },
   "next_dispatch": {
     "requires": "Launch nothing while any B200 job is queued. Monitor and validate the active c1024, c4096, and c8192 probes. When the pending B200 count returns to zero, dispatch the deferred HBM+DRAM c8192 arm if capacity permits, then continue filling the feasibility and crossover gaps."
