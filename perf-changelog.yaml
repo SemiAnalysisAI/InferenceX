@@ -8469,3 +8469,10 @@
     - "Apply SPEED-Bench thinking-on golden AL 2.52 to Qwen3.8-27B-FP8 native MTP3 throughput on h200; preserve the original BF16 MTP head, computation and draft KV cache with pinned revisions and quantization exclusions; accuracy paths retain real verification"
     - "在 h200 的 Qwen3.8-27B-FP8 原生 MTP3 吞吐测试中应用 SPEED-Bench thinking-on 黄金 AL 2.52；固定模型版本并排除草稿量化，保持原始 BF16 MTP 头、计算和草稿 KV cache；精度评测路径保留真实验证"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3293
+
+- config-keys:
+    - qwen3.827b-fp8-h200-vllm-mtp
+  description:
+    - "Disable optional FlashInfer autotuning for Qwen3.8-27B-FP8 native BF16 MTP: the pinned CUDA image's dummy prefill fails FA3 scheduler_metadata shape validation at low concurrency; retain synthetic AL 2.52"
+    - "关闭 Qwen3.8-27B-FP8 原生 BF16 MTP 的可选 FlashInfer autotuning：固定 CUDA 镜像的 dummy prefill 在低并发时触发 FA3 scheduler_metadata 形状检查失败；保留合成 AL 2.52"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3293

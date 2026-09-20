@@ -565,3 +565,9 @@ exclusions prevent vLLM from applying target FP8 quantization to that head.
 Runtime model inspection and the server command are retained in the logs. These
 fixed-sequence recipes explicitly use measured synthetic throughput acceptance;
 the SRT connector's non-AgentX selection policy is separate.
+
+The CUDA recipes disable optional FlashInfer autotuning with
+`--no-enable-flashinfer-autotune`. In the pinned image, its MTP dummy prefill can
+fail FlashAttention scheduler-metadata shape validation at low concurrency
+([H100 evidence](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35495730774)).
+This uses the supported engine option and preserves native draft precision.
