@@ -8468,4 +8468,4 @@
   description:
     - "Exercise ModelScope cold downloads in every H100 Qwen3-0.6B job using empty, isolated hub caches and record snapshot hashes before benchmarking or evaluation."
     - "每个 H100 Qwen3-0.6B 任务均使用独立空缓存测试 ModelScope 冷下载，并在基准或评测前记录模型文件哈希。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3323
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3324
