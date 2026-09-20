@@ -858,9 +858,45 @@
       "repeat": 1,
       "attempt": 2,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "in_progress",
+      "status": "failure",
       "node": "b200-nscale-slurm_05",
-      "artifacts": [],
+      "artifacts": [
+        {
+          "id": 10601670931,
+          "name": "power_audit_minimaxm3_tp4_conc1024_kvdram739-nvme-vllm-native",
+          "size_bytes": 601073
+        },
+        {
+          "id": 10601660875,
+          "name": "gpu_metrics_minimaxm3_tp4_conc1024_kvdram739-nvme-vllm-native",
+          "size_bytes": 598912
+        },
+        {
+          "id": 10601646002,
+          "name": "agentic_minimaxm3_tp4_conc1024_kvdram739-nvme-vllm-native",
+          "size_bytes": 5121741
+        },
+        {
+          "id": 10601630946,
+          "name": "server_logs_minimaxm3_tp4_conc1024_kvdram739-nvme-vllm-native",
+          "size_bytes": 1409191
+        },
+        {
+          "id": 10601221419,
+          "name": "bmk_agentic_minimaxm3_tp4_conc1024_kvdram739-nvme-vllm-native",
+          "size_bytes": 1484
+        },
+        {
+          "id": 10601171586,
+          "name": "run-stats",
+          "size_bytes": 280
+        },
+        {
+          "id": 10600936911,
+          "name": "results_bmk",
+          "size_bytes": 1274
+        }
+      ],
       "performance_result": false,
       "workflow_name": "offload-v1-dram-nvme-c1024-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:24:46Z",
@@ -881,7 +917,18 @@
         }
       ],
       "rerun_triggering_actor": "inferencex-dash[bot]",
-      "queued_at": "2026-09-20T01:35:57Z"
+      "queued_at": "2026-09-20T01:35:57Z",
+      "completed_at": "2026-09-20T07:31:15Z",
+      "allocation_id": "16683",
+      "failure_stage": "offload_capacity_guard",
+      "failure_evidence": "The native combined HBM+DRAM+NVMe tier exceeded the deterministic 2 TiB node-local NVMe stop guard during the c1024 AgentX run. The guard invalidated the run at 2,290,329,919,023 logical bytes (2,290,329,919,488 allocated bytes across 193,082 files); the engine then exited and only one profiled response completed, so this is not a performance result and will not be retried unchanged.",
+      "log_archive_sha256": "10b850b4e02a2382e59dc42d7391d113989b708b4abf8fac01c5f39eb67b850b",
+      "storage_evidence": "Cleanup receipt verified deleted=true for exact workflow-owned scratch /offload-scratch/inferencex-offload-35476053573-2-16683-df7c4ff08a51. Before deletion it contained 16,671,909,289,519 logical bytes and 16,671,910,502,400 allocated bytes across 1,405,488 files.",
+      "evidence_sha256": {
+        "offload_cleanup.json": "e69c8f28f5521e4777302a92779bb925c53cff668134a950a0e1be4c8e9b2258",
+        "offload-guard.json": "8adc9a4b32997f7f17b71913fb8933ec8e347b60bae93c1241694731e3194959",
+        "offload_config.json": "9d84baea41556ce25661fceb907b9d736b16fa919ca467929e5cd1c9695c902e"
+      }
     },
     {
       "run_id": 35476061809,
@@ -1285,57 +1332,73 @@
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492330557/job/106029329353",
       "started_at": "2026-09-20T05:44:38Z",
       "queued_at": "2026-09-20T05:42:11Z"
+    },
+    {
+      "run_id": 35497846918,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35497846918",
+      "arm": "none",
+      "concurrency": 256,
+      "repeat": 1,
+      "attempt": 1,
+      "head_sha": "4c805321518708e8d581639e4cb37c12d152b79f",
+      "status": "queued",
+      "node": null,
+      "artifacts": [],
+      "performance_result": false,
+      "workflow_name": "offload-v1-none-c256-r1-20260920T074810Z",
+      "dispatched_at": "2026-09-20T07:48:12Z",
+      "job_id": 106044138671,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35497846918/job/106044138671",
+      "queued_at": "2026-09-20T07:48:32Z"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850",
-  "status": "All four matched c16 arms are valid. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. Ten study jobs are in progress: all four c1024 arms, all four c4096 arms, and the c8192 HBM and HBM+DRAM arms. The retryable c1024 HBM warmup transport failure began attempt 3 on b200-nscale-slurm_02. The c8192 HBM+NVMe arm failed under sustained warmup overload before profiling; its 1.10 TB task-owned NVMe scratch was verified deleted, and it is not being retried unchanged. The c8192 HBM+DRAM+NVMe retry failed its node-local NVMe capacity preflight before model startup and produced no performance result.",
+  "status": "All four matched c16 arms are valid. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. Nine earlier study jobs remain active across c1024, c4096, and c8192. The c1024 HBM+DRAM+NVMe arm deterministically exceeded its 2 TiB NVMe stop guard at 2.29 TB and its exact task-owned scratch was verified deleted; it will not be retried unchanged. A sparse c256 HBM probe is queued as the single permitted pending B200 job.",
   "last_capacity_check": {
-    "checked_at": "2026-09-20T05:42:20Z",
-    "cluster_observed_at": "2026-09-20T05:40:52Z",
+    "checked_at": "2026-09-20T07:48:50Z",
+    "cluster_observed_at": "2026-09-20T07:47:33Z",
     "cluster_stale": false,
     "eligible_nodes": 11,
-    "idle_nodes": 0,
+    "idle_nodes": 2,
     "total_nodes": 11,
-    "allocated_nodes": 11,
+    "allocated_nodes": 9,
     "pending_b200_jobs": 1,
     "pending_requested_nodes": 1,
-    "demand_nodes": 12,
-    "demand_percent": 109.09,
-    "scheduler_snapshot_at": "2026-09-20T05:41:49Z",
+    "demand_nodes": 10,
+    "demand_percent": 90.91,
+    "scheduler_snapshot_at": "2026-09-20T07:48:50Z",
     "scheduler_available": true,
     "active_study_run_ids": [
       35476043213,
       35476047627,
       35476050409,
-      35476053573,
       35476061809,
       35476067005,
       35476072143,
       35476075885,
       35478297080,
-      35478298744,
-      35492330557
+      35492330557,
+      35497846918
     ],
     "active_study_job_ids": [
       106000847437,
       106000832058,
       106000864877,
-      106000840977,
       106000846579,
       106000845170,
       106000859670,
       106000840866,
       106000856643,
-      105991361707,
-      106029329353
+      106029329353,
+      106044138671
     ],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": false,
-    "reason": "Fresh dashboard snapshots showed all 11 B200 nodes allocated and zero B200 jobs queued. The missing c8192 HBM+DRAM arm was therefore dispatched into the single permitted queue slot; it is now the sole queued B200 job."
+    "reason": "Fresh cluster snapshot showed 2 idle B200 nodes and no labeled B200 queue. The validated c256 HBM probe was dispatched; its generated benchmark job is now queued, so the one-pending-job policy blocks further dispatch until it starts."
   },
   "next_dispatch": {
-    "requires": "Monitor the eleven in-progress study jobs and validate only completed runs with usable profiling results. Before any further dispatch, refresh cluster and scheduler state and launch nothing if any B200 job is queued. When the policy permits, retry c8192 HBM+DRAM+NVMe on a node satisfying the NVMe preflight."
+    "requires": "Monitor the queued c256 HBM probe and existing active runs. As soon as the B200 queue returns to zero, dispatch the validated c256 HBM+NVMe probe, then HBM+DRAM+NVMe and HBM+DRAM in that order as capacity permits. Do not retry c1024 combined unchanged because its native filesystem tier exceeded the deterministic storage guard."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-19T23:34:00Z",
