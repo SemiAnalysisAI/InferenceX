@@ -8375,3 +8375,22 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
           dp-attn: false
         kv-offload-backend:
           name: hicache
+
+qwen3.827b-fp8-h100-vllm-mtp:
+  image: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3
+  model: Qwen/Qwen3.8-27B-FP8
+  model-prefix: qwen3.827b
+  runner: cluster:h100-dgxc
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 1, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 1, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }

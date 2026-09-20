@@ -8455,3 +8455,31 @@
   description:
     - "Update B200 vLLM AgentX to DSpark6 and a new image with TP8 and DEP8 configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
+
+- config-keys:
+    - qwen3.827b-fp8-h100-vllm-mtp
+  description:
+    - "Add the H100 Qwen3.8-27B-FP8 recipe: vLLM nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 on one GPU (TP1), 1k1k only, with the checkpoint's native MTP head (mtp_num_hidden_layers=1, --speculative-config method mtp) drafting three tokens as the vLLM recipe page prescribes, fp8 KV cache, --max-num-seqs sized to the sweep point (floor 16; 256 for accuracy evals), prefix caching disabled, the matrix context as --max-model-len, --language-model-only, and chat-templated prompts; concurrency 1-128"
+    - "新增 H100 Qwen3.8-27B-FP8 配方：vLLM nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3 单卡（TP1），仅 1k1k，使用 checkpoint 自带的原生 MTP 头（mtp_num_hidden_layers=1，--speculative-config method mtp）按 vLLM recipe 页面建议预测 3 个 token，fp8 KV cache，--max-num-seqs 按并发点设定（下限 16；精度评测为 256），关闭 prefix caching，--max-model-len 使用矩阵上下文，--language-model-only，提示词经 chat template 处理；并发 1-128"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3292
+
+- config-keys:
+    - qwen3.827b-fp8-h100-vllm-mtp
+  description:
+    - "Apply SPEED-Bench thinking-on golden AL 2.52 to Qwen3.8-27B-FP8 native MTP3 throughput on h100; preserve the original BF16 MTP head, computation and draft KV cache with pinned revisions and quantization exclusions; accuracy paths retain real verification"
+    - "在 h100 的 Qwen3.8-27B-FP8 原生 MTP3 吞吐测试中应用 SPEED-Bench thinking-on 黄金 AL 2.52；固定模型版本并排除草稿量化，保持原始 BF16 MTP 头、计算和草稿 KV cache；精度评测路径保留真实验证"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3292
+
+- config-keys:
+    - qwen3.827b-fp8-h100-vllm-mtp
+  description:
+    - "Disable optional FlashInfer autotuning for Qwen3.8-27B-FP8 native BF16 MTP: the pinned CUDA image's dummy prefill fails FA3 scheduler_metadata shape validation at low concurrency; retain synthetic AL 2.52"
+    - "关闭 Qwen3.8-27B-FP8 原生 BF16 MTP 的可选 FlashInfer autotuning：固定 CUDA 镜像的 dummy prefill 在低并发时触发 FA3 scheduler_metadata 形状检查失败；保留合成 AL 2.52"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3292
+
+- config-keys:
+    - qwen3.827b-fp8-h100-vllm-mtp
+  description:
+    - "Add 8192/1024 coverage on H100 at TP1, concurrency 1-128, alongside 1024/1024; native MTP3 throughput uses thinking-on golden AL 2.52 and accuracy evals retain real verification"
+    - "在 H100 上新增 8192/1024，使用 TP1、并发 1-128，并保留 1024/1024；原生 MTP3 吞吐测试使用 thinking-on 黄金 AL 2.52，精度评测保留真实验证"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3292

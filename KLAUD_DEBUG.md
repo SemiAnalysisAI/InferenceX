@@ -402,3 +402,14 @@ are skipped, and registry `/` and enroot `#` image spellings are normalized for 
 historical identity matching and point backfill. A transient or malformed baseline for
 one candidate defers that candidate and continues through the reviewed pool; it does
 not consume or block later candidate slots.
+
+## 12. Qwen3.8-27B native MTP: FlashInfer autotune startup
+
+The pinned CUDA image can fail its optional MTP dummy-prefill autotune with
+`scheduler_metadata must have shape (metadata_size)` in FlashAttention on Hopper.
+Use the supported `--no-enable-flashinfer-autotune` recipe option. See the
+[English procedure](docs/configuration-procedures.md#qwen38-27b-fp8-native-mtp-golden-acceptance)
+and [中文说明](docs/configuration-procedures_zh.md#qwen38-27b-fp8-原生-mtp-黄金接受长度)
+for the preserved native draft precision and configuration.
+[Failure](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35495730774);
+[passing H100 concurrency-1 validation](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35496528224).
