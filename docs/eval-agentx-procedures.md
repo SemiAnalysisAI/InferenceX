@@ -162,6 +162,40 @@ python3 -m infx.evals.validate_scores \
 
 Validation resolves the threshold in this order: `models.<prefix>.<task>`, `default.<task>`, then `--min-score` (default `0.85`). By default it checks numeric, non-stderr metrics beginning with `exact_match,`. It fails when a score is below threshold, no metric matches, a requested concurrency is absent, metadata has duplicates/invalid values, any point is marked failed, or result suffixes do not match the manifest. Current floors are authoritative in [`thresholds.yaml`](../infx/evals/thresholds.yaml). See [threshold resolution](../infx/evals/validate_scores.py#L61-L69) and the [validation flow](../infx/evals/validate_scores.py#L174-L302).
 
+### Qwen3-0.6B GSM8K floor
+
+`models.qwen3-0.6b.gsm8k` is **0.60** for both strict-match and flexible-extract.
+This is a conservative integration regression floor for the 0.6B checkpoint, not
+an expected leaderboard score. The global 0.90 floor remains unchanged.
+
+Keep the standard five-shot chat evaluation, full 1,319-question test split,
+`temperature=0`, `top_p=1`, and 5,376 generated-token limit. The
+[initial H100 BF16 run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35534330261)
+at concurrency 64 scored 886/1,319 (0.6717) strict and 895/1,319 (0.6785)
+flexible. All responses were nonempty; 86 lacked the required numeric `####`
+answer marker, 87 lacked a closing `</think>`, and 61 repeated an identical
+nonempty line of at least 30 characters five or more times. These categories
+overlap. The nine-answer extraction gain does not explain most errors; inspected
+wrong answers also contained arithmetic and reasoning mistakes.
+
+The [Qwen3 technical report, Table 8 and Section 3.3](https://arxiv.org/html/2505.09388v1)
+reports 59.59% GSM8K for **Qwen3-0.6B-Base**, using four-shot chain of thought.
+That is scale context only: the checkpoint and prompt differ, and it must not be
+presented as a comparable five-shot chat baseline. No directly comparable
+published baseline was established. The 0.60 floor is an explicit conservative
+policy choice supported by that context and the inspected full-split result;
+it leaves 7.17 percentage points below the observed strict score (reported
+standard error 1.29 points), rather than rounding the observed score into a gate.
+Validate the same fixed floor independently at concurrency 32 and 64.
+
+[Qwen's model guidance](https://huggingface.co/Qwen/Qwen3-0.6B#best-practices)
+recommends sampling for thinking mode and warns that greedy decoding can repeat.
+This integration keeps InferenceX's deterministic protocol for comparability;
+the floor does not establish optimal Qwen quality or excuse request failures.
+Changing thinking mode, sampling, prompts, or token budget requires a separately
+documented policy and fresh full-split evidence. Preserve failed and passing
+artifacts, and do not lower this floor in response to a later regression.
+
 A manual combined throughput+eval recipe uploads eval output but the template's automatic score gate is specific to eval-only jobs. Run the validator explicitly for manual or combined runs.
 
 ## 6. Collect and inspect eval artifacts
