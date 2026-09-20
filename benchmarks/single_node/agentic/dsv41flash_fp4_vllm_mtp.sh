@@ -46,6 +46,29 @@ while (( CAPTURE_SIZE < CONC * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); 
     CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
 done
 
+# Sub-TP8 Hopper arms (H200 TP4: ~99 GiB of weights per 141 GB GPU with the
+# Engram tables offloaded) leave ~15 GiB of KV per rank. At the upstream 16384
+# batched tokens the sparse-attention indexer's [batched-tokens, 1M] fp8 logits
+# buffer alone is 32 GiB, so cap batched tokens at 4096 (8 GiB, as the H100 arm
+# does), bound the scheduler batch to the AgentX fan-out, and stop capturing
+# above 512 tokens. Gated on the GPU's memory so B200/GB200 TP4 (180+ GB) and
+# every TP8 arm keep the upstream defaults.
+GPU_MEM_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -n1 | tr -d ' ')
+HOPPER_TP_ARGS=()
+if (( TP < 8 && GPU_MEM_MIB < 150000 )); then
+    MAX_NUM_SEQS=$((2 * CONC))
+    if (( MAX_NUM_SEQS > 256 )); then
+        MAX_NUM_SEQS=256
+    fi
+    if (( MAX_NUM_SEQS < 16 )); then
+        MAX_NUM_SEQS=16
+    fi
+    if (( CAPTURE_SIZE > 512 )); then
+        CAPTURE_SIZE=512
+    fi
+    HOPPER_TP_ARGS=(--max-num-batched-tokens 4096 --max-num-seqs "$MAX_NUM_SEQS")
+fi
+
 # Pyxis shares the host network; port 8888 can already belong to a host service.
 select_available_server_port
 export AIPERF_SERVER_URL="http://localhost:${PORT}"
@@ -71,6 +94,7 @@ VLLM_CMD=(
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576
     --max-cudagraph-capture-size "$CAPTURE_SIZE"
+    "${HOPPER_TP_ARGS[@]}"
     --disable-uvicorn-access-log
     "${LOAD_ARGS[@]}"
 )
