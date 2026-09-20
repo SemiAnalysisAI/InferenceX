@@ -260,191 +260,176 @@ jobs:
                 ref: ${{ inputs.ref || github.workflow_sha }}
                 path: phase1-site-${{ github.run_id }}-${{ github.run_attempt }}
                 persist-credentials: false
-            - name: Read active provisioning progress
+            - name: Observe fixed Phase 1 sweep progress
               working-directory: phase1-site-${{ github.run_id }}-${{ github.run_attempt }}
               env:
                 SITE_OPERATION: ${{ inputs.phase1-site-operation }}
-                SITE_DRAFT: ${{ inputs.phase1-site-draft }}
-              # Reuse the fixed generation interpreter without resolving or installing packages.
+              # No installs, Slurm writes, or modifications to the observed generation.
               shell: /mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35481075834-1/envs/wrapper/bin/python -I -S -B {0} # zizmor: ignore[misfeature]
               run: |
-                import json, os, stat, time
+                """Bounded read-only observation of exactly the nine admitted Phase 1 points."""
+                import datetime
+                import json
+                import itertools
+                import selectors
+                import time
+                import os
                 from pathlib import Path
+                import re
+                import stat
+                import subprocess
 
-                if os.environ["SITE_OPERATION"] != "inspect":
-                    raise ValueError("This diagnostic branch only supports inspect")
-                generation = Path("/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35481075834-1")
-                report = Path.cwd() / "phase1-provision-report"
-                report.mkdir(exist_ok=False)
-                status = {"purpose": "operational-diagnostic", "qualification_evidence": False, "generation": str(generation), "files": {}}
+                GENERATION = Path("/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35481075834-1")
+                RUN_ID = 35483266492
+                SOURCE_SHA = "1985ace3f0be6f1fa167be06213295cd3e188a67"
+                EXPECTED = [{'mode': 'throughput', 'concurrency': 1, 'point_id': 'ff5522097b14978d917a0eadcd510a209a96bf8b3c26d131b3acc5146d5c6459', 'execution_id': 'cbc4e198b5bf153764c2c4d53c4a79b884c91a52976bffd162ef44c40ef83e9b', 'journal_token': '9429cac58c733b8d8cfd169f3a3a4a6cdf86167ef4f2a1e424190b4b988521e4'}, {'mode': 'throughput', 'concurrency': 2, 'point_id': 'ca63500fdf64f89f2ede5b499593511b59cf98ed82999618d0a9d28e4186dd14', 'execution_id': 'd83cff0f381d36280b97ae0d1b548b6e0b17bf767240b422747e233bf17387a2', 'journal_token': '998cca992cd1293ff8a759e35c62b0b19900a1e94888e7195446a6e6fc09d4bb'}, {'mode': 'throughput', 'concurrency': 4, 'point_id': '51a61c98eb0f3ae8a095242a7d8c2f59c1646f3b8502a162a6140c8599100dfa', 'execution_id': '11b54fc4c449a6c951c0503b45731787ae3634577eefe9ac225bdb2ba3ae8e58', 'journal_token': '16e3f4645959ad9de2b0094d13ce4daf7754eb6b7db4820e377da59592d953f4'}, {'mode': 'throughput', 'concurrency': 8, 'point_id': '1f44aa28a04e8837485b45c7f1dd6868f420da0882c754f3d85f8ca55d6c4d16', 'execution_id': 'fe18b63c5c3e12bac9e055196e6f43de1c05a952ccecd4817617d60caf45f203', 'journal_token': '0c242e3a74b5f8a879dd70a98b89f7171ff69e7adef11264ed9452ac413d13d6'}, {'mode': 'throughput', 'concurrency': 16, 'point_id': '228ac18c0b9422798fdefa8d656ad1d33a4cb8bd483e2cacd221d42b36a5788b', 'execution_id': '021d6080adb879874a442bccb31a3ae2a89f6f020a796aca5d4e108cdf6a3848', 'journal_token': '67e860af362ed5b9ac3164017267d2dd278beb74ebc91e5f8907fc63ac896650'}, {'mode': 'throughput', 'concurrency': 20, 'point_id': '312d8e3b29a14b79b9a1b3e2acec01312ec35b7614c0e4f15132c3c964e0cafa', 'execution_id': '2a1a9f14ce50ff2067957a7ac24bc01401d130385e6c1ce5be9bf4221074f2db', 'journal_token': '67f296ee7b793b8c86d495f428eec254d5f2e2cd2360d065a0ec661b0129f11e'}, {'mode': 'throughput', 'concurrency': 24, 'point_id': '7c4597d562b7b576f3ab92c428e7a87f23f1551f64cff5d0f0008811ea29f076', 'execution_id': '02231860d1afae241032a55b6c2a8781b2207c5205fc13aa7ff7a7035537a885', 'journal_token': '72931cf5845436889a8054746ff4376b060755585448fc5f819d813d3d924c1d'}, {'mode': 'throughput', 'concurrency': 28, 'point_id': '94c04c170449f616cf7e9048dc488a5345496782c492fabf7be7bfd55167d85b', 'execution_id': 'cdfda5ef638a44c5bef79b3c21ef5342a9669f0a46942bb0eedc9a06870d89cc', 'journal_token': 'e92f20f8a574e396907fc704d4c5de17491614142ca219867e6aedc280cd16dc'}, {'mode': 'eval', 'concurrency': 28, 'point_id': '451275f5d8bacf3aa9f84f808cfaf9fd371bff62a6603b696ff9b3ac171e85bd', 'execution_id': '5748b4756a7d72ff411117833a6e59cca21563a8d49b5dee6cadfa8d48c9029a', 'journal_token': 'cb279ab391524f432724cae3696f70ed2e51d9e2aafbb0ed3ce3d712957fc96d'}]
 
-                def read_owned(path, parent, limit, *, tail=False):
+
+                def read_fixed(path, parent, limit=4 * 1024 * 1024, *, tail=False):
                     if parent.resolve(strict=True) != parent or path.parent != parent:
-                        raise ValueError("diagnostic source escapes its fixed parent")
+                        raise ValueError("source escapes its canonical fixed parent")
                     if path.resolve(strict=True) != path:
-                        raise ValueError("diagnostic source must not be a symlink")
+                        raise ValueError("source is a symlink")
                     descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
                     with os.fdopen(descriptor, "rb") as stream:
                         info = os.fstat(stream.fileno())
                         if not stat.S_ISREG(info.st_mode):
-                            raise ValueError("diagnostic source is not a regular file")
+                            raise ValueError("source is not a regular file")
                         if not tail and info.st_size > limit:
-                            raise ValueError("diagnostic JSON exceeds the size bound")
+                            raise ValueError("source exceeds the read bound")
                         offset = max(0, info.st_size - limit) if tail else 0
                         stream.seek(offset)
                         data = stream.read(limit if tail else limit + 1)
                         if len(data) > limit:
-                            raise ValueError("diagnostic JSON grew beyond the size bound")
+                            raise ValueError("source grew beyond the read bound")
                         if offset and b"\n" in data:
                             data = data.split(b"\n", 1)[1]
-                        return data, offset > 0, info.st_mtime_ns
+                        return data, {"bytes": info.st_size, "mtime_ns": info.st_mtime_ns, "tail_truncated": bool(offset)}
 
-                progress = None
-                for name in ("progress.json", "state.json"):
-                    try:
-                        raw, _, mtime_ns = read_owned(generation / name, generation, 65536)
-                        (report / name).write_bytes(raw)
-                        value = json.loads(raw)
-                        if not isinstance(value, dict):
-                            raise ValueError("diagnostic JSON must be an object")
-                        if name == "progress.json":
-                            progress = value
-                        status["files"][name] = {"state": "copied", "bytes": len(raw), "mtime_unix_ns": mtime_ns, "age_seconds": max(0, time.time() - mtime_ns / 1e9)}
-                    except (OSError, ValueError) as error:
-                        status["files"][name] = {"state": "unavailable", "error_type": type(error).__name__}
 
-                if progress is not None and isinstance(progress.get("log"), str):
-                    try:
-                        raw, truncated, _ = read_owned(Path(progress["log"]), generation / "logs", 1048576, tail=True)
-                        tail = b"\n".join(raw.splitlines()[-200:]) + b"\n"
-                        (report / "current-stage.log").write_bytes(tail)
-                        status["files"]["current-stage.log"] = {"state": "copied", "bytes": len(tail), "source_tail_truncated": truncated}
-                    except (OSError, ValueError) as error:
-                        status["files"]["current-stage.log"] = {"state": "unavailable", "error_type": type(error).__name__}
-                else:
-                    status["files"]["current-stage.log"] = {"state": "unavailable", "reason": "no-current-log"}
-                def read_proc(path, limit):
-                    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-                    with os.fdopen(descriptor, "rb") as stream:
-                        info = os.fstat(stream.fileno())
-                        if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
-                            raise ValueError("proc entry exceeds the read bound")
-                        data = stream.read(limit + 1)
-                        if len(data) > limit:
-                            raise ValueError("proc entry grew beyond the read bound")
-                        return data
+                def read_object(path, parent):
+                    raw, _ = read_fixed(path, parent)
+                    value = json.loads(raw)
+                    if not isinstance(value, dict):
+                        raise ValueError("expected a JSON object")
+                    return value
 
-                def process_sample(pid_path, expected, hub, image, proc_root):
-                    if pid_path.is_symlink() or pid_path.stat().st_uid != os.getuid():
-                        return None
-                    if read_proc(pid_path / "cmdline", 16384) != expected:
-                        return None
-                    raw_stat = read_proc(pid_path / "stat", 4096)
-                    fields = raw_stat.rsplit(b")", 1)[1].split()
-                    start_ticks = int(fields[19])
-                    ticks = os.sysconf("SC_CLK_TCK")
-                    result = {"pid": int(pid_path.name), "start_ticks": start_ticks, "cpu_seconds": (int(fields[11]) + int(fields[12])) / ticks, "sample_monotonic": time.monotonic()}
+
+                def observe(point, report):
+                    result = dict(point)
+                    directory = GENERATION / "runs" / point["execution_id"]
+                    result["directory_exists"] = directory.is_dir() and directory.resolve() == directory
+                    if not result["directory_exists"]:
+                        return result
+                    for relative in ("prepare.lock", "bundle.json", "client/runtime.json", "client/prepared-resources.json", "client-output/diagnostics/client-audit.json"):
+                        path = directory / relative
+                        try:
+                            info = path.lstat()
+                            result[relative] = {"regular": stat.S_ISREG(info.st_mode), "bytes": info.st_size, "mtime_ns": info.st_mtime_ns}
+                        except FileNotFoundError:
+                            result[relative] = {"state": "not-present"}
+                    bundle_path = directory / "bundle.json"
                     try:
-                        uptime = float(read_proc(proc_root / "uptime", 256).split()[0])
-                        result["elapsed_seconds"] = max(0, uptime - start_ticks / ticks)
-                    except (OSError, ValueError, IndexError):
-                        result["elapsed_seconds"] = None
+                        bundle = read_object(bundle_path, directory)
+                        if (bundle["execution_id"] != point["execution_id"] or bundle["requested_point_id"] != point["point_id"]
+                                or bundle["source"].get("run_id") != RUN_ID or bundle["source"].get("attempt") != 1
+                                or bundle["source"].get("head_sha") != SOURCE_SHA or bundle["source"].get("purpose") != "pr-qualification"):
+                            raise ValueError("bundle is not the fixed admitted run/point")
+                        result["prepared"] = {"effective_point_id": bundle["point_id"], "resources": bundle["prepared"]["resources"]}
+                    except (OSError, ValueError, KeyError) as error:
+                        result["bundle_state"] = {"state": "not-readable", "error_type": type(error).__name__}
+                    journal = GENERATION / "journal" / "h100-dgxc" / point["journal_token"]
                     try:
-                        counters = {}
-                        for line in read_proc(pid_path / "io", 4096).splitlines():
-                            key, value = line.split(b":", 1)
-                            if key in (b"rchar", b"read_bytes"):
-                                counters[key.decode()] = int(value)
-                        if set(counters) != {"rchar", "read_bytes"}:
-                            raise ValueError("required I/O counters are unavailable")
-                        result["io"] = counters
-                    except (OSError, ValueError):
-                        result["io"] = {"state": "unavailable"}
-                    result["open_assets"] = []
-                    try:
-                        for index, descriptor in enumerate((pid_path / "fd").iterdir()):
-                            if index >= 128:
-                                result["fd_scan_truncated"] = True
-                                break
-                            if not descriptor.name.isdecimal():
-                                continue
-                            try:
-                                raw_target = os.readlink(descriptor)
-                                target = Path(raw_target)
-                                if not target.is_absolute() or not (target.is_relative_to(hub) or target == image):
+                        receipt = read_object(journal / "receipt.json", journal)
+                        if receipt.get("intent_id") != point["execution_id"] or receipt.get("scheduler_comment") != "srtctl:" + point["journal_token"]:
+                            raise ValueError("receipt does not own the fixed point")
+                        job_id = str(receipt.get("job_id", ""))
+                        result["receipt"] = {key: receipt.get(key) for key in ("state", "job_id", "accepted_ids", "created_at", "scheduler_comment")}
+                        output = directory / "native-output" / job_id
+                        if not re.fullmatch(r"[1-9][0-9]*", job_id) or receipt.get("output_dir") != str(output) or receipt.get("accepted_ids") != [job_id]:
+                            return result
+                        result["owned_job_id"] = job_id
+                        logs = output / "logs"
+                        result["logs"] = {}
+                        if logs.is_dir() and logs.resolve() == logs:
+                            with os.scandir(logs) as entries:
+                                candidates = [Path(entry.path) for entry in itertools.islice(entries, 32)]
+                            for path in sorted(candidates):
+                                if path.suffix not in (".out", ".err", ".json", ".log") or not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", path.name):
                                     continue
-                                resolved = target.resolve(strict=True)
-                                if not (resolved.is_relative_to(hub) or resolved == image):
-                                    continue
-                                info = descriptor.stat()
-                                if not stat.S_ISREG(info.st_mode):
-                                    continue
-                                position = None
-                                for line in read_proc(pid_path / "fdinfo" / descriptor.name, 4096).splitlines():
-                                    if line.startswith(b"pos:"):
-                                        position = int(line.split(b":", 1)[1])
-                                if position is None or position < 0 or os.readlink(descriptor) != raw_target:
-                                    continue
-                                result["open_assets"].append({"fd": int(descriptor.name), "path": str(target), "position_bytes": position, "size_bytes": info.st_size})
-                                if len(result["open_assets"]) >= 8:
-                                    result["fd_scan_truncated"] = True
-                                    break
-                            except (OSError, ValueError):
-                                continue
-                    except OSError:
-                        result["fd_state"] = "unavailable"
-                    # Reject PID reuse or a process whose command changed during the sample.
-                    if pid_path.stat().st_uid != os.getuid() or read_proc(pid_path / "cmdline", 16384) != expected:
-                        return None
-                    if int(read_proc(pid_path / "stat", 4096).rsplit(b")", 1)[1].split()[19]) != start_ticks:
-                        return None
+                                try:
+                                    raw, info = read_fixed(path, logs, 32768, tail=True)
+                                    label = f"{point['mode']}-c{point['concurrency']}-{path.name}"
+                                    (report / label).write_bytes(b"\n".join(raw.splitlines()[-100:]) + b"\n")
+                                    result["logs"][path.name] = info
+                                except (OSError, ValueError) as error:
+                                    result["logs"][path.name] = {"error_type": type(error).__name__}
+                    except (OSError, ValueError, KeyError) as error:
+                        result["receipt_state"] = {"state": "not-readable", "error_type": type(error).__name__}
                     return result
 
-                def local_hash_progress(proc_root, expected, hub, image):
-                    result = {"state": "not-local-or-unavailable", "matches": [], "note": "Missing local process data does not establish a stall. rchar counts process reads; read_bytes is kernel I/O accounting. Neither measures completed unique hashing bytes."}
-                    if not proc_root.is_dir():
-                        return result
-                    started = time.monotonic()
+
+                def scheduler_read(argv):
+                    limit = 69632
+                    output = bytearray()
+                    deadline = time.monotonic() + 15
+                    process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                    assert process.stdout is not None
+                    status = "closed"
                     try:
-                        for index, candidate in enumerate(proc_root.iterdir()):
-                            if index >= 8192 or time.monotonic() - started > 5:
-                                result["scan_truncated"] = True
-                                break
-                            if not candidate.name.isdecimal():
-                                continue
-                            try:
-                                sample = process_sample(candidate, expected, hub, image, proc_root)
-                            except (OSError, ValueError, IndexError):
-                                continue
-                            if sample is not None:
-                                result["matches"].append(sample)
-                                if len(result["matches"]) >= 4:
-                                    result["scan_truncated"] = True
+                        with selectors.DefaultSelector() as selector:
+                            selector.register(process.stdout, selectors.EVENT_READ)
+                            while True:
+                                remaining = deadline - time.monotonic()
+                                if remaining <= 0:
+                                    status = "timeout"
                                     break
-                    except OSError:
-                        return result
-                    if result["matches"]:
-                        result["state"] = "matched-local-process"
-                        time.sleep(2)
-                        for first in result["matches"]:
+                                if not selector.select(timeout=remaining):
+                                    status = "timeout"
+                                    break
+                                chunk = os.read(process.stdout.fileno(), min(4096, limit + 1 - len(output)))
+                                if not chunk:
+                                    break
+                                output.extend(chunk)
+                                if len(output) > limit:
+                                    status = "output-bound-exceeded"
+                                    break
+                    finally:
+                        process.stdout.close()
+                        if status == "closed":
                             try:
-                                second = process_sample(proc_root / str(first["pid"]), expected, hub, image, proc_root)
-                                if second is None or second["start_ticks"] != first["start_ticks"]:
-                                    raise ValueError("matched process changed or exited")
-                                elapsed = second["sample_monotonic"] - first["sample_monotonic"]
-                                observation = {"interval_seconds": elapsed, "sample": second}
-                                if elapsed > 0 and all(key in first["io"] and key in second["io"] and second["io"][key] >= first["io"][key] for key in ("rchar", "read_bytes")):
-                                    observation["bytes_per_second"] = {key: (second["io"][key] - first["io"][key]) / elapsed for key in ("rchar", "read_bytes")}
-                                first["followup"] = observation
-                            except (OSError, ValueError, IndexError):
-                                first["followup"] = {"state": "unavailable-or-exited"}
-                    return result
+                                process.wait(timeout=max(0.1, min(5, deadline - time.monotonic())))
+                            except subprocess.TimeoutExpired:
+                                status = "timeout"
+                        if process.poll() is None:
+                            process.kill()  # Only this newly spawned local read-only command.
+                        process.wait(timeout=5)
+                    return {"state": status, "exit_code": process.returncode, "output": bytes(output[:limit]).decode(errors="replace")}
 
-                expected = b"\0".join(os.fsencode(str(value)) for value in (generation / "envs/wrapper/bin/python", "-I", generation / "verify-assets.py", generation / "verify-input.json")) + b"\0"
-                status["hash_process"] = local_hash_progress(Path("/proc"), expected, Path("/mnt/nfs/sa-shared/gharunners/hf-hub-cache"), Path("/mnt/nfs/lustre/containers/vllm_vllm-openai_nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3.sqsh"))
 
+                if os.environ.get("SITE_OPERATION") != "inspect":
+                    raise ValueError("This diagnostic branch supports inspect only")
+                report = Path.cwd() / "phase1-provision-report"
+                report.mkdir(exist_ok=False)
+                status = {"purpose": "operational-diagnostic", "qualification_evidence": False, "run_id": RUN_ID,
+                          "observed_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "points": []}
+                for point in EXPECTED:
+                    try:
+                        status["points"].append(observe(point, report))
+                    except (OSError, ValueError, KeyError) as error:
+                        status["points"].append({**point, "observation_error_type": type(error).__name__})
+                job_ids = [point["owned_job_id"] for point in status["points"] if "owned_job_id" in point]
+                if job_ids:
+                    for name, argv in (
+                        ("squeue", ["squeue", "--jobs", ",".join(job_ids), "--noheader", "--format=%i|%T|%R|%M|%N|%k"]),
+                        ("sacct", ["sacct", "--allocations", "--jobs", ",".join(job_ids), "--noheader", "--parsable2", "--format=JobIDRaw,State,ExitCode,Elapsed,NodeList"]),
+                    ):
+                        try:
+                            status[name] = scheduler_read(argv)
+                        except (OSError, subprocess.TimeoutExpired) as error:
+                            status[name] = {"error_type": type(error).__name__}
                 (report / "diagnostic.json").write_text(json.dumps(status, indent=2) + "\n")
-                print("Read-only operational diagnostic retained in phase1-provision-report; not qualification evidence.")
+                print("Fixed-run read-only observation retained; this is not qualification evidence.")
             - name: Preserve provisioning evidence
               if: ${{ always() }}
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
