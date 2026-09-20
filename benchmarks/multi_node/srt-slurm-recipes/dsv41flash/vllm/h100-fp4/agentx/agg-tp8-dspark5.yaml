@@ -50,5 +50,8 @@ roles:
 health_check:
   max_attempts: 360
   interval_seconds: 10
+observability:
+  tachometer:
+    enabled: false
 benchmark:
   type: custom

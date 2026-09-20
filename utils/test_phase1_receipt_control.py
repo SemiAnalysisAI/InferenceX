@@ -111,6 +111,13 @@ class QualificationTests(unittest.TestCase):
             return [{"artifacts": self.inventory}]
         raise AssertionError(endpoint)
 
+    def test_qualification_is_rejected_even_with_all_approved_normal_artifacts(self):
+        self.inventory.append(
+            {"id": 9999, "name": "native-qualification-run", "expired": True}
+        )
+        with self.assertRaisesRegex(ValueError, "nonpublishing qualification"):
+            expected_contract(Approval.model_validate(self.approval))
+
     def download(self, argv, *, stdout, check):
         self.assertEqual(
             argv[-1], "repos/SemiAnalysisAI/InferenceX/actions/artifacts/1080/zip"
@@ -334,13 +341,22 @@ class PublicationTests(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
 
-    def api(self, endpoint):
+    def api(self, endpoint, **kwargs):
+        if endpoint.endswith("/runs/100/artifacts?per_page=100"):
+            return [{"artifacts": getattr(self, "source_artifacts", [])}]
         prefix = "repos/org/repo/actions/"
         if endpoint.startswith(prefix + "artifacts/"):
             return self.metadata[int(endpoint.rsplit("/", 1)[-1])]
         if endpoint.startswith(prefix + "runs/"):
             return self.runs[endpoint.removeprefix(prefix + "runs/")]
         raise AssertionError(endpoint)
+
+    def test_later_publication_cannot_accept_a_nonpublishing_source(self):
+        self.source_artifacts = [
+            {"id": 9999, "name": "native-qualification-run", "expired": True}
+        ]
+        with self.assertRaisesRegex(ValueError, "nonpublishing qualification"):
+            self.validate()
 
     def download(self, argv, **kwargs):
         return subprocess.CompletedProcess(

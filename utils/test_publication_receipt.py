@@ -111,6 +111,26 @@ class ReceiptTests(unittest.TestCase):
             }
         ]
 
+    def test_nonpublication_marker_and_source_purpose_cannot_be_sealed(self):
+        self.inventory[0]["name"] = "native-qualification-point"
+        with self.assertRaisesRegex(ValueError, "cannot be sealed"):
+            seal_receipt(self.expected, self.issuer, self.inventory, self.root)
+        self.inventory[0]["name"] = "bmk_result"
+        archive_path = self.root / "101.zip"
+        with zipfile.ZipFile(archive_path) as archive:
+            values = {name: archive.read(name) for name in archive.namelist()}
+        execution = json.loads(values["execution.json"])
+        execution["source"]["purpose"] = "pr-qualification"
+        values["execution.json"] = json.dumps(execution).encode()
+        with zipfile.ZipFile(archive_path, "w") as archive:
+            for name, value in values.items():
+                archive.writestr(name, value)
+        self.inventory[0]["digest"] = (
+            "sha256:" + hashlib.sha256(archive_path.read_bytes()).hexdigest()
+        )
+        with self.assertRaisesRegex(ValueError, "nonpublishing execution"):
+            seal_receipt(self.expected, self.issuer, self.inventory, self.root)
+
     def test_preserves_original_execution_and_exact_uploaded_member(self):
         receipt = seal_receipt(self.expected, self.issuer, self.inventory, self.root)
         self.assertEqual(receipt.points[0].source_attempt, 1)

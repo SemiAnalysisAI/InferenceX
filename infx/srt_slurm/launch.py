@@ -26,7 +26,7 @@ from infx.benchmarks.identity import capture_identity, verify_runtime
 from infx.benchmarks.spec import RuntimeSpec
 from infx.srt_slurm.contracts import digest, load_mapping
 from infx.srt_slurm.job import JobSpec, file_digest, intent_id, parse_job, read_json
-from infx.srt_slurm.render import ClientPolicy, PilotSite, client_spec, render_recipe
+from infx.srt_slurm.render import ClientPolicy, PilotSite, PreparedSite, client_spec, render_recipe
 
 
 class RuntimeLock(BaseModel):
@@ -43,6 +43,10 @@ class NativeCommandError(RuntimeError):
     def __init__(self, output: dict[str, Any], detail: str) -> None:
         self.output = output
         super().__init__(detail)
+
+
+class WorkflowCancelledError(RuntimeError):
+    """Unlike InterruptedError, this is not swallowed by selectors during communicate."""
 
 
 def checked_json(argv: list[str], *, timeout: int = 600) -> dict[str, Any]:
@@ -76,13 +80,13 @@ def checked_json(argv: list[str], *, timeout: int = 600) -> dict[str, Any]:
     return value
 
 
-def native(site: PilotSite, *args: str, timeout: int = 600) -> dict[str, Any]:
+def native(site: PreparedSite, *args: str, timeout: int = 600) -> dict[str, Any]:
     return checked_json(
         [site.native_python, "-I", "-m", "srtctl.cli.submit", *args, "--json"], timeout=timeout
     )
 
 
-def verify_site(job: JobSpec, site: PilotSite, root: Path) -> dict[str, Any]:
+def verify_site(job: JobSpec, site: PreparedSite, root: Path) -> dict[str, Any]:
     reference = job.row.execution
     if reference is None:
         raise ValueError("missing native execution reference")
@@ -149,16 +153,20 @@ def verify_wrapper_source(identity: dict[str, Any], root: Path) -> None:
 
 def effective_identity(
     job: JobSpec,
-    site: PilotSite,
+    site: PreparedSite,
     identity: dict[str, Any],
     runtime: RuntimeSpec,
     resources: dict[str, Any],
+    *,
+    client_identity: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
     semantics = job.semantic_inputs()
     inputs = {
         "requested": semantics,
         "installed": identity,
-        "client_identity": read_json(Path(runtime.identity.path)),
+        "client_identity": (
+            read_json(Path(runtime.identity.path)) if client_identity is None else client_identity
+        ),
         "client_assets": {asset.path: asset.sha256 for asset in runtime.assets},
         "client_env": runtime.env,
         "client_env_unset": sorted(runtime.env_unset),
@@ -175,12 +183,15 @@ def effective_identity(
 
 def prepare(
     job: JobSpec,
-    site: PilotSite,
+    site: PreparedSite,
     root: Path,
     source: dict[str, Any],
 ) -> dict[str, Any]:
     """A local preparation lock protects files; only native srtctl may claim/submit Slurm."""
     from infx.benchmarks.prepare import ClientSite, prepare as prepare_client
+
+    if source.get("purpose") != "pr-qualification" and not isinstance(site, PilotSite):
+        raise ValueError("publication preparation requires deployed reader/collector identities")
 
     execution = intent_id(
         source["repository"], str(source["run_id"]), str(source["attempt"]), job.point_id
@@ -319,7 +330,7 @@ def verify_bundle(bundle: dict[str, Any]) -> None:
             raise ValueError(f"prepared input changed: {name}")
 
 
-def verify_execution_clients(bundle: dict[str, Any], site: PilotSite) -> None:
+def verify_execution_clients(bundle: dict[str, Any], site: PreparedSite) -> None:
     verify_file(site.image)
     actual = capture_identity(site.wrapper_python, ["infx"], dataset_loader=None)
     if actual != bundle["identity"]["wrapper_identity"]:
@@ -400,7 +411,10 @@ def publish_outputs(bundle: dict[str, Any], receipt: dict[str, Any], workspace: 
 
 def execute(bundle: dict[str, Any], workspace: Path, *, reconcile_timeout: int = 120) -> None:
     verify_bundle(bundle)
-    site = PilotSite.model_validate(bundle["site"])
+    site_type = (
+        PreparedSite if bundle.get("source", {}).get("purpose") == "pr-qualification" else PilotSite
+    )
+    site = site_type.model_validate(bundle["site"])
     verify_execution_clients(bundle, site)
     journal = Path(site.shared_root) / "journal"
     receipt_path = Path(
@@ -420,7 +434,7 @@ def execute(bundle: dict[str, Any], workspace: Path, *, reconcile_timeout: int =
     previous = {}
 
     def interrupted(signum: int, _frame: Any) -> None:
-        raise InterruptedError(f"workflow interrupted by signal {signum}")
+        raise WorkflowCancelledError(f"workflow interrupted by signal {signum}")
 
     for signum in (signal.SIGINT, signal.SIGTERM):
         previous[signum] = signal.signal(signum, interrupted)
@@ -463,8 +477,9 @@ def execute(bundle: dict[str, Any], workspace: Path, *, reconcile_timeout: int =
         publish_outputs(bundle, receipt, workspace)
         completed = True
     finally:
-        for signum, handler in previous.items():
-            signal.signal(signum, handler)
+        # Repeated catchable cancellation must not interrupt owned allocation cleanup.
+        for signum in previous:
+            signal.signal(signum, signal.SIG_IGN)
         try:
             if not completed and receipt_path is not None and receipt_path.exists():
                 deadline = time.monotonic() + reconcile_timeout
@@ -503,7 +518,11 @@ def execute(bundle: dict[str, Any], workspace: Path, *, reconcile_timeout: int =
                         f"submission ownership remains unresolved; intent stays fenced: {receipt_path}"
                     )
         finally:
-            copy_diagnostics(bundle, workspace, complete=completed)
+            try:
+                copy_diagnostics(bundle, workspace, complete=completed)
+            finally:
+                for signum, handler in previous.items():
+                    signal.signal(signum, handler)
 
 
 def main() -> int:

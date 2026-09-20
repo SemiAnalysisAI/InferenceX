@@ -15,6 +15,7 @@ from typing import Any
 
 from infx.benchmarks.common import decode_json, read_json
 from infx.results.publication_receipt import PublicationRecord, inspect_archive, verify_receipt
+from infx.srt_slurm.qualification import qualification_artifacts
 from infx.workflows.phase1_publication import api
 
 
@@ -99,6 +100,12 @@ def validate_record(
         or source.get("conclusion") != "success"
     ):
         raise ValueError("source receipt does not match its completed original attempt")
+    pages = api(
+        f"repos/{repository}/actions/runs/{record.source_run_id}/artifacts?per_page=100",
+        paginate=True,
+    )
+    if qualification_artifacts(item["name"] for page in pages for item in page["artifacts"]):
+        raise ValueError("nonpublishing qualification cannot become a publication record")
     merge = api(f"repos/{repository}/actions/runs/{record.merge_run_id}")
     if (
         not isinstance(merge, dict)

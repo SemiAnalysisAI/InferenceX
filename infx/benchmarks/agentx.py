@@ -234,13 +234,13 @@ def normalize(spec: AgentXSpec, artifact_root: Path) -> Path:
     return output
 
 
-def _has_metric(value: Any, prefix: str) -> bool:
+def has_metric(value: Any, prefix: str) -> bool:
     if isinstance(value, dict):
         return any(
-            key.startswith(prefix) or _has_metric(item, prefix) for key, item in value.items()
+            key.startswith(prefix) or has_metric(item, prefix) for key, item in value.items()
         )
     if isinstance(value, list):
-        return any(_has_metric(item, prefix) for item in value)
+        return any(has_metric(item, prefix) for item in value)
     return False
 
 
@@ -261,7 +261,7 @@ def finalize(spec: AgentXSpec, endpoint: str, artifact_root: Path) -> list[str]:
         if (
             not csv.is_file()
             or csv.stat().st_size == 0
-            or not _has_metric(metrics, spec.required_server_metric_prefix)
+            or not has_metric(metrics, spec.required_server_metric_prefix)
         ):
             errors.append("required vLLM JSON/CSV server metrics are absent")
     except (OSError, ValueError, TypeError, KeyError) as exc:

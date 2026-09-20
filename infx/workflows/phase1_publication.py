@@ -28,6 +28,7 @@ from infx.results.publication_receipt import (
     inspect_archive,
 )
 from infx.srt_slurm.contracts import digest
+from infx.srt_slurm.qualification import qualification_artifacts
 
 Sha = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 GitSha = Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
@@ -93,6 +94,8 @@ def expected_contract(approval: Approval) -> ExpectedContract:
         paginate=True,
     )
     inventory = [item for page in pages for item in page["artifacts"] if not item["expired"]]
+    if qualification_artifacts(item["name"] for page in pages for item in page["artifacts"]):
+        raise ValueError("nonpublishing qualification cannot be approved for receipt issuance")
 
     def artifact(name: str) -> int:
         matching = [item for item in inventory if item["name"] == name]

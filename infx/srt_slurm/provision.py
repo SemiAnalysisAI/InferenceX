@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import platform
 import shutil
 import subprocess
@@ -85,6 +86,10 @@ def inspect_assets(config: ProvisionConfig) -> dict[str, Any]:
     ready = (
         all(value["exists"] for value in entries.values()) and bool(indexes) and not missing_shards
     )
+    slurm_tools = {
+        name: shutil.which(name)
+        for name in ("sbatch", "squeue", "sacct", "scancel", "srun", "scontrol")
+    }
     return {
         "schema_version": 1,
         "platform": platform.platform(),
@@ -92,9 +97,8 @@ def inspect_assets(config: ProvisionConfig) -> dict[str, Any]:
         "paths": entries,
         "model_indexes": [path.name for path in indexes],
         "missing_model_shards": sorted(missing_shards),
-        "slurm_tools": {
-            name: shutil.which(name) for name in ("sbatch", "squeue", "sacct", "scancel")
-        },
+        "slurm_tools": slurm_tools,
+        "missing_slurm_tools": [name for name, path in slurm_tools.items() if path is None],
         "qualification_complete": False,
     }
 
@@ -103,6 +107,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--operation", choices=("inspect", "provision"), required=True)
     args = parser.parse_args()
     config = ProvisionConfig.model_validate(read_json(args.config))
     report = inspect_assets(config)
@@ -111,7 +116,14 @@ def main() -> int:
     ).stdout.strip()
     write_json(args.output / "inventory.json", report)
     print(f"Prepared asset inventory written; assets_present={report['assets_present']}")
-    return 0 if report["assets_present"] else 1
+    if not report["assets_present"] or report["missing_slurm_tools"]:
+        return 1
+    if args.operation == "provision":
+        from infx.srt_slurm.provision_runtime import provision
+
+        namespace = f"{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
+        provision(config, Path.cwd(), args.output.resolve(), namespace)
+    return 0
 
 
 if __name__ == "__main__":

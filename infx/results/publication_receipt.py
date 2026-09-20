@@ -379,6 +379,10 @@ def validate_point_content(point: Point, archives: Path) -> None:
 def seal_receipt(
     expected: ExpectedContract, issuer: Issuer, inventory: list[dict[str, Any]], archives: Path
 ) -> SourceReceipt:
+    from infx.srt_slurm.qualification import qualification_artifacts
+
+    if qualification_artifacts(row["name"] for row in inventory):
+        raise ValueError("nonpublishing qualification artifacts cannot be sealed")
     required = {artifact_id for point in expected.points for artifact_id in point.artifact_ids}
     rows = {int(row["id"]): row for row in inventory}
     if len(rows) != len(inventory) or set(rows) != required:
@@ -417,6 +421,8 @@ def seal_receipt(
             raise ValueError("Execution evidence must be an object")
         native = execution.get("native_receipt", {})
         source = execution.get("source", {})
+        if isinstance(source, dict) and source.get("purpose", "publication") != "publication":
+            raise ValueError("nonpublishing execution cannot be sealed")
         if (
             not isinstance(native, dict)
             or not isinstance(source, dict)

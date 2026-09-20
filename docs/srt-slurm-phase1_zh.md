@@ -2,7 +2,7 @@
 
 [English](./srt-slurm-phase1.md) | **中文**
 
-阶段 1 实现首条原生 srt-slurm 路径。硬件验收、reader 部署与发布仍待完成；本地测试通过不代表阶段结束。下文重述已批准迁移计划中阶段 1 的验收要求。完整计划及研究资料仍保留在独立的规划 worktree。
+阶段 1 实现首条原生 srt-slurm 路径。硬件验收、reader 就绪、可信 collector 部署与发布仍待完成。app reader 曾完成部署，随后按用户要求回滚；新增数据库 schema 仍保留，详见下方账本。本地测试通过不代表阶段结束。下文重述已批准迁移计划中阶段 1 的验收要求。完整计划及研究资料仍保留在独立的规划 worktree。
 
 ## 范围与职责
 
@@ -21,7 +21,8 @@ flowchart LR
   S --> V[直连 vLLM TP8]
   V --> C[Python AgentX 或真实 eval]
   C --> A[原始及规范化产物]
-  A --> R[受信任源测量回执]
+  A --> D[PR 验收：完整九点诊断汇总]
+  A --> R[发布路径：受信任源测量回执]
   R --> I[App 校验后导入]
   R --> U[后续发布记录]
   U --> I
@@ -31,8 +32,20 @@ flowchart LR
 
 ## 调用与文件关系
 
+配方显式关闭原生 tachometer 遥测。即使通用 observability 关闭，原生默认设置仍会启动 DCGM、node/process exporter 和主机 scraper。这些未部署的服务不属于阶段 1 的临时功耗例外；AgentX 仍会采集必需的 vLLM 服务指标。
+
 ```mermaid
 flowchart TD
+  E[e2e-tests.yml / 站点操作] --> SP[infx.srt_slurm.provision.main]
+  SP --> SI[inspect_assets：实际共享文件]
+  SP --> SR[infx.srt_slurm.provision_runtime.provision]
+  E --> CQ[infx.srt_slurm.qualify_cancellation.qualify]
+  CQ --> NI
+  SR --> SD[专用运行环境、离线缓存与站点草稿]
+  SD --> PQ[PreparedSite：同仓库 PR 验收]
+  PQ --> F
+  SD --> DP[PilotSite：已验证的 reader 与 collector 部署 revision]
+  DP --> F
   W[benchmark-tmpl.yml / native step] --> F[infx.srt_slurm.workflow.main]
   F --> J[infx.srt_slurm.job.parse_job]
   F --> P[infx.srt_slurm.launch.prepare]
@@ -50,6 +63,7 @@ flowchart TD
   AX --> AIP[固定 Python 3.11 AIPerf 子进程]
   EV --> LM[固定 lm-eval 子进程]
   X --> O[写入者关闭后的产物整理与失败诊断]
+  O --> QV[infx.srt_slurm.qualification：完整九点校验]
 ```
 
 `ExecutionReference` 绑定配方、profile、runtime lock、client policy 以及 policy 指向的 golden YAML 字节。输入发生变化、YAML 重复键、超出范围或缺少明确排队节点需求，均在分配前失败。`priority` 与 `queue-token` 仅属于调度信息，不改变请求测量点。
@@ -58,7 +72,9 @@ flowchart TD
 
 ## 首次 GPU 运行前的部署
 
-现有 E2E 手动调度支持 `phase1-site-operation: inspect`，在 H100 登录 runner 上检查 `runners/srt-slurm/h100-phase1-provision.json` 显式提供的路径和 revision，并将 `inventory.json` 保存为绑定运行及 attempt 的 artifact。此操作以 `nodes:1` 进入现有优先级队列，不提交 Slurm allocation，也不修改共享模型或 trace 缓存。配置来自保留的 H100 基线；检查报告用于在安装运行环境之前确认实际存在的路径。镜像、快照或权重分片缺失会使检查失败。资源清单不代表硬件验收完成，也不代表 reader 已部署。
+现有 E2E 手动调度支持 `phase1-site-operation: inspect`，在 H100 登录 runner 上检查 `runners/srt-slurm/h100-phase1-provision.json` 显式提供的路径和 revision，并将 `inventory.json` 保存为绑定运行及 attempt 的 artifact。此操作以 `nodes:1` 进入现有优先级队列，不提交 Slurm allocation，也不修改共享模型或 trace 缓存。配置来自保留的 H100 基线；检查报告用于在安装运行环境之前确认实际存在的路径。镜像、快照或权重分片缺失会使检查失败。当前预检还要求 `sbatch`、`squeue`、`sacct`、`scancel`、`srun` 和 `scontrol` 全部可用。资源清单不代表硬件验收完成，也不代表 reader 已部署。
+
+`phase1-site-operation: provision` 通过同一入口，在配置的共享根目录下建立独立 generation。通过已有 `ref` 输入提供 sweep 实际使用的完整 PR merge SHA，使已安装 wrapper 与包含当前 base revision 的测量代码树一致。它以非 editable 方式安装原生运行时和当前 checkout 的 wrapper，保留构建及依赖身份，并为固定版本的 AgentX/eval 建立运行环境与专用离线缓存引用。现有模型、镜像和 trace 内容保持不变。输出是使用严格 `PreparedSite` schema 的**站点草稿**。准备成功后，将完整的实际 JSON 配置为 `INFX_H100_PHASE1_PREPARED_SITE_JSON`，即可执行 PR 验收。发布另需 `PilotSite`，其中的 reader/collector revision 必须来自已验证的实际部署，不能使用候选 PR 提交替代。准备过程还会在大型资源哈希计算前，使用实际离线模型快照检查已安装的 eval backend 及固定 AgentX tokenizer。
 
 渲染器还会在原生准备步骤之前，将引擎实际 TP/PP/上下文/数据并行参数与请求的拓扑绑定。下划线与连字符别名冲突、非整数并行度或启用专家并行都会被拒绝。
 
@@ -69,13 +85,15 @@ flowchart TD
 3. 准备独立客户端环境并保留实际解析的包产物与锁。AgentX 必须来自 `754356e9a39acc6cc6afb242d123bb57c3fb6f75`；lm-eval 必须来自 `b315ef3b05176acc9732bb7fdec116abe1ecc476`。拒绝 editable 或错误来源。准备阶段记录所有已安装 distribution，而非仅入口包。
 4. 完整准备模型/tokenizer snapshot、准确的 `semianalysisai/cc-traces-weka-062126` snapshot 与 GSM8K 缓存。记录真实 revision，不编造或替换。准备原样服务镜像的已校验 squash 文件，记录来源和哈希。客户端离线模型的 `refs/main` 与 snapshot 文件必须纳入资源绑定，解析后的模型 snapshot 必须与服务端的规范路径完全一致，保留 tokenizer 的模型名称同时禁止解析到其他缓存版本。
 5. 分别编写 AgentX、eval 的 `ClientSite` JSON：解释器、distribution、离线缓存环境、移除变量、资源根目录/文件、模型 snapshot、超时与终止宽限。`RuntimeSpec` 拒绝凭证；执行时移除继承凭证及未验收的 AIPerf 覆盖项。wheel 包含 eval task 与 1,319 个独立文档哈希。
-6. 编写 `PilotSite` JSON，包含两个客户端配置路径、源码/解释器/模型/镜像路径、挂载以及实际部署的 reader/collector revision。准确 schema 见 [`render.py`](../infx/srt_slurm/render.py) 与 [`prepare.py`](../infx/benchmarks/prepare.py)。
+6. 保留生成的 `PreparedSite` JSON，包含两个客户端配置路径、源码/解释器/模型/镜像路径及挂载。发布时再添加实际部署的 reader/collector revision，形成 `PilotSite`。准确 schema 见 [`render.py`](../infx/srt_slurm/render.py) 与 [`prepare.py`](../infx/benchmarks/prepare.py)。
 
 准备阶段校验已有资源，不在计算节点安装包、下载模型或修复不完整 snapshot。派生 mmap 缓存使用独立所属 namespace、文件完整性回执、独立校验副本及损坏隔离；锁竞争时的冷准备有明确界限。
 
-先部署 app reader 与 `016_measurement_snapshots.sql` migration，再合入/部署受信任 collector。InferenceX 需配置 `INFX_H100_PHASE1_SITE_JSON`、`INFX_PHASE1_READER_REVISION`、`INFX_PHASE1_COLLECTOR_REVISION`。两个仓库均需配置 `INFX_RECEIPT_ISSUER_SHAS`、`INFX_RECEIPT_ISSUER_WORKFLOW`，workflow 路径为 `.github/workflows/phase1-receipt.yml`。检查时这些变量尚不存在。分支中有代码不等于 reader 已部署。
+启用发布前，必须确认 app reader 当前部署已验证、`016_measurement_snapshots.sql` migration 已完成且受信任 collector 已部署。InferenceX 需配置 `INFX_H100_PHASE1_SITE_JSON`、`INFX_PHASE1_READER_REVISION`、`INFX_PHASE1_COLLECTOR_REVISION`。两个仓库均需配置 `INFX_RECEIPT_ISSUER_SHAS`、`INFX_RECEIPT_ISSUER_WORKFLOW`，workflow 路径为 `.github/workflows/phase1-receipt.yml`。app 回滚后已删除 `INFX_PHASE1_READER_REVISION`；站点、collector 与 issuer 设置仍待完成。当前 reader 无法用于原生回执导入，发布仍受门禁限制。保留的 schema 报告和源分支中的代码都不能证明当前 reader 已就绪。
 
-GitHub 原生启动步骤使用 uv 管理的 Python 3.12，不依赖环境中已有的 `python` 命令。workflow 在准备或申请 Slurm 资源前校验这三个站点/部署变量。错误会列出缺失变量，指出站点 JSON 的无效字段而不回显字段值，并列出与站点配置不一致的 reader/collector revision 变量。该校验要求显式配置，不会准备资源或部署服务。
+PR sweep 为同仓库 `pull_request` 事件的独立原生矩阵提供明确的验收路径。该路径读取 prepared-site 变量，在 source 与可执行 bundle 中记录 `purpose: pr-qualification`，保持原有八个吞吐点及完整真实 c28 eval 不变。它只产生 `native-qualification-run`、九个 `native-qualification-<point>` artifact 和 `native-qualification-summary`，不产生普通 benchmark/eval artifact 名称或 `RESULT_FILENAME`。汇总重新校验 bundle 与成员摘要、执行及 Slurm 身份、原生资源、AgentX 原始及规范化结果，以及完整评分的 GSM8K 语料。`complete: true` 表示本次诊断 sweep 通过，`publication_eligible` 仍为 false。Reuse、staging、回执和 publication validator 会拒绝含验收标记的来源，包括混合了普通 artifact 的清单。之后批准该源 run 也不能将这些结果提升为可发布测量。
+
+GitHub 原生启动步骤使用 uv 管理的 Python 3.12，并为每个 run、attempt 和 queue token 建立独立 checkout；不依赖环境中已有的 `python` 命令，也不修复共享 Git 状态。默认发布路径仍在准备或申请 Slurm 资源前校验三个站点/部署变量。错误会列出缺失变量，指出站点 JSON 的无效字段而不回显字段值，并列出与站点配置不一致的 reader/collector revision 变量。两条路径都不会在 benchmark 中安装资源或部署服务。
 
 ## 准备、执行与恢复
 
@@ -90,11 +108,15 @@ python -m infx.srt_slurm.launch --job job.json --site site.json --root CHECKOUT 
 
 原生准备必须解析为 `{nodes:1,gpus_per_node:8,serving_gpus:8,workers:1,cardinality:1}`。吞吐从已提交 golden 曲线渲染 synthetic rejection，关闭 adaptive verification；eval 使用真实 block rejection，开启 adaptive verification。直连端口 8000 采用明确的独占节点策略：端口冲突即失败，不能连接其他服务器。
 
-Slurm 分配、claim、已接受 ID、调度器观察与取消均由原生运行时负责。适配器在可中断 submit 前取得日志路径，不重试不明确的提交，也不按 runner 名批量取消。活跃 controller 状态优先于陈旧 accounting；失败但仍活跃的 requeue 不算关闭。取消所有已确认属于该 intent 的资源，并在有界等待内观察终止；未解决的 intent 保持 fenced，等待检查。
+Slurm 分配、claim、已接受 ID、调度器观察与取消均由原生运行时负责。适配器在可中断 submit 前取得日志路径，不重试不明确的提交，也不按 runner 名批量取消。活跃 controller 状态优先于陈旧 accounting；失败但仍活跃的 requeue 不算关闭。取消所有已确认属于该 intent 的资源，并在有界等待内观察终止。在这段有界清理期间忽略重复的可捕获信号，结束后恢复原处理器。强制终止进程或主机故障仍可能中断清理；持久化 journal 保留，供原生 reconcile 恢复。未解决的 intent 保持 fenced，等待检查。
 
 成功发布要求原生终止成功及客户端写入者关闭：无错误、超时、信号或孤儿 writer。失败诊断保留原始输出、client audit、冻结输入及原生日志，但不生成已接受 execution manifest。该路径跳过旧 runner 的宽泛前后清理。H100 旧 launcher/script 保留至硬件验收及退休差异审阅完成，以便回退。
 
 ## 测量回执与发布
+
+接受 sweep 前，先通过 E2E 的 `cancel-startup` 与 `cancel-client` 站点操作验证真实取消行为，并显式提供已准备的 `phase1-site-draft` 路径。它们使用独立诊断输出和 journal、固定镜像与 TP8 worker，以及原生归属校验和取消接口，不编造部署 pin，也不生成可接受的 benchmark manifest。启动期探针申请 300 秒 allocation，观察预算为 240 秒；客户端中断探针申请 3,600 秒 allocation，观察预算为 3,300 秒，以便模型完成就绪。两种模式的清理预算均为额外 180 秒。保留 `qualification.json` 及原生终态/writer 证据；仅有取消 RPC 或 `COMPLETING` 不足以通过验收。
+
+当前原生 pin 要求 `prepared-direct-listener-ownership-v1`。发送客户端流量前，它根据 PID 启动时间及 PID/network namespace 身份，验证监听套接字属于记录的 worker 进程树；客户端运行期间和接受退出码 0 之前也会重新验证。外部或替换监听器、PID 复用或无法读取的归属证据都会使任务失败并关闭客户端。实际 Pyxis 的 namespace/proc 可见性仍需集群验收。
 
 完整源契约为八个吞吐点加一个真实 c28 eval。GSM8K 必须包含全部 1,319 文档及两种 filter（2,638 个评分行），保留 16,384 上下文 / 12,288 生成预算，验证有限分数和完整样本身份。聚合 eval 元数据为 `disagg:false`、`is_multinode:false`、八个服务 GPU、prefill/decode worker 数均为零。
 
@@ -108,10 +130,16 @@ Merge helper 保留最近明确授权的 `/use RUN_ID` 或 `/reuse-sweep-run RUN
 
 ## 验收账本
 
+历史证据：app [PR1179](https://github.com/SemiAnalysisAI/InferenceX-app/pull/1179) 在 6,892 项单元测试、486 项组件测试、每个浏览器 1,033 项集成测试和 Bugbot 审查通过后，通过正常 squash 流程合入 `481a8622cc9bc27feae775850e241ec967bac1e3`。[Staging](https://github.com/SemiAnalysisAI/InferenceX-app/actions/runs/35478033492) 与 [production](https://github.com/SemiAnalysisAI/InferenceX-app/actions/runs/35478066182) 均完成 migration 016 及 schema 验证。该精确 SHA 的 Vercel Production 部署 `6547210249` 曾成功。这些报告仍可证明当时在该 revision 执行的 schema 操作。
+
+当前就绪状态：按用户要求，Vercel Instant Rollback 已将 production 恢复至 `9bb7b13eb4985217a6282f340459fd5948613276`（[部署](https://inferencemax-7ecuqzeqm-semianalysisai.vercel.app) `dpl_8H2dnpuKFDZhwe6pU7tb657pu5z3`），并已删除 `INFX_PHASE1_READER_REVISION`。精确代码回退 [PR1180](https://github.com/SemiAnalysisAI/InferenceX-app/pull/1180) 已获用户明确批准，并于 `2026-09-20T00:29:48Z` 合并；`master` 现为 `92fef485edd5ae61fe49d01f0e41b67492263bee`，其代码树与 PR1179 之前的 revision `9bb7b13eb4985217a6282f340459fd5948613276` 完全一致。用户随后报告已重新启用 production 自动提升；这不会恢复已回退的 reader 代码或已删除的就绪变量。当前用户指令仍禁止合并所有其他 PR。新增的 `measurement_snapshots` 表和 migration ledger 均保留。阶段 1 reader 当前不可用，因此原生回执导入和发布仍受门禁限制。尚未导入任何阶段 1 原生回执或测量。Collector [PR3298](https://github.com/SemiAnalysisAI/InferenceX/pull/3298) 也仍未合并，并须满足仓库的 Core/CODEOWNER 审批要求。
+
+[H100 资源检查运行 35477700047](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35477700047) 在实际登录 runner 上通过，提交为 `14d56f1bbf8f3c867ea79ae97a2f716f304aaaa2`。固定的两个快照及全部索引内模型分片均位于配置的规范共享路径，服务 squash 文件大小为 21,390,860,288 字节，四个必需的 Slurm 命令均可用。[CI 35477693002](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35477693002) 通过了更新后的拓扑、资源检查行为和原生 Linux 契约验证。这两次运行均未提交 GPU benchmark。
+
 | Gate | 状态 / 所需证据 |
 | --- | --- |
 | 原生及客户端行为 | CPU 测试、已安装 wheel 检查；不声称 GPU 验收 |
-| 回执、app、恢复 | 本地单元/数据库/浏览器 smoke 检查；待部署 |
+| 回执、app、恢复 | reader 已回滚，revision 变量已删除；新增 schema 保留；原生回执导入与发布仍受门禁限制 |
 | H100 吞吐 | 原镜像 c1、2、4、8、16、20、24、28 待运行 |
 | 真实 eval | 新 c28 待运行；历史完整原始 eval 通过新 validator |
 | 取消与清理 | 本地所属关系/race/closure 测试；实际 Slurm 信号验收待做 |

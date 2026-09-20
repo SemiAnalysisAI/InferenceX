@@ -9,11 +9,16 @@ on: # zizmor: ignore[concurrency-limits]
     workflow_dispatch:
         inputs:
             phase1-site-operation:
-                description: "Inspect H100 shared assets without submitting a benchmark"
+                description: "H100 site preparation or disposable native cancellation qualification"
                 required: false
                 type: choice
-                options: [none, inspect]
+                options: [none, inspect, provision, cancel-startup, cancel-client]
                 default: none
+            phase1-site-draft:
+                description: "Explicit shared site-draft.json path for cancellation qualification"
+                required: false
+                type: string
+                default: ""
             generate-cli-command:
                 description: "Command passed to generate matrix script"
                 required: false
@@ -117,10 +122,15 @@ on: # zizmor: ignore[concurrency-limits]
             required: false
         inputs:
             phase1-site-operation:
-                description: "Inspect H100 shared assets without submitting a benchmark"
+                description: "H100 site preparation or disposable native cancellation qualification"
                 required: false
                 type: string
                 default: none
+            phase1-site-draft:
+                description: "Explicit shared site-draft.json path for cancellation qualification"
+                required: false
+                type: string
+                default: ""
             generate-cli-command:
                 description: "Command passed to generate matrix script"
                 required: false
@@ -217,47 +227,71 @@ on: # zizmor: ignore[concurrency-limits]
 
 jobs:
     phase1-site-route:
-        name: Queue Phase 1 site inspection
-        if: ${{ inputs.phase1-site-operation == 'inspect' }}
+        name: Queue Phase 1 site preparation
+        if: ${{ inputs.phase1-site-operation && inputs.phase1-site-operation != 'none' }}
         runs-on: ubuntu-latest
         outputs:
             queue-token: ${{ steps.token.outputs.result }}
         steps:
             - id: token
               uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              env:
+                SITE_OPERATION: ${{ inputs.phase1-site-operation }}
               with:
                 result-encoding: string
                 script: |
+                    if (!['inspect', 'provision', 'cancel-startup', 'cancel-client'].includes(process.env.SITE_OPERATION)) {
+                      throw new Error('Unknown Phase 1 site operation');
+                    }
                     return require('crypto').createHash('sha256')
                       .update(`${context.runId}:${process.env.GITHUB_RUN_ATTEMPT}:phase1-site`)
                       .digest('hex').slice(0, 32);
     phase1-site:
-        if: ${{ inputs.phase1-site-operation == 'inspect' }}
+        if: ${{ inputs.phase1-site-operation && inputs.phase1-site-operation != 'none' }}
         needs: phase1-site-route
-        name: Phase 1 shared H100 asset inventory
+        name: Phase 1 H100 site and lifecycle qualification
         # The shared Linux paths can only be inspected from this cluster's login runners.
         runs-on: ${{ fromJSON(format('["self-hosted","cluster:h100-dgxc","nodes:1","ci-job-1.000-{0}","ci-attempt-{1}"]', needs.phase1-site-route.outputs.queue-token, github.run_attempt)) }}
-        timeout-minutes: 20
+        timeout-minutes: 120
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                ref: ${{ github.workflow_sha }}
+                # Provision the same immutable tree the sweep will measure (PR merge SHA).
+                ref: ${{ inputs.ref || github.workflow_sha }}
+                path: phase1-site-${{ github.run_id }}-${{ github.run_attempt }}
                 persist-credentials: false
             - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-            - name: Inspect explicit shared paths
+            - name: Prepare explicit shared paths
+              working-directory: phase1-site-${{ github.run_id }}-${{ github.run_attempt }}
+              env:
+                SITE_OPERATION: ${{ inputs.phase1-site-operation }}
+                SITE_DRAFT: ${{ inputs.phase1-site-draft }}
               # H100 login runners do not provide an ambient python executable.
               shell: uv run --locked --no-dev --python 3.12 python {0} # zizmor: ignore[misfeature]
               run: |
-                import sys
-                from infx.srt_slurm.provision import main
-                sys.argv = ["provision", "--config", "runners/srt-slurm/h100-phase1-provision.json", "--output", "phase1-provision-report"]
-                raise SystemExit(main())
+                import os, sys
+                from pathlib import Path
+                operation = os.environ["SITE_OPERATION"]
+                if operation in {"cancel-startup", "cancel-client"}:
+                    from infx.srt_slurm.qualify_cancellation import qualify
+                    if not os.environ["SITE_DRAFT"]:
+                        raise ValueError("Cancellation qualification requires phase1-site-draft")
+                    mode = operation.removeprefix("cancel-")
+                    walltime, observation = (300, 240) if mode == "startup" else (3600, 3300)
+                    qualify(Path.cwd(), Path(os.environ["SITE_DRAFT"]), Path("phase1-provision-report"),
+                            f"{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}-{mode}",
+                            mode=mode, walltime_seconds=walltime,
+                            observation_timeout_seconds=observation, cleanup_timeout_seconds=180)
+                else:
+                    from infx.srt_slurm.provision import main
+                    sys.argv = ["provision", "--config", "runners/srt-slurm/h100-phase1-provision.json", "--output", "phase1-provision-report", "--operation", operation]
+                    raise SystemExit(main())
             - name: Preserve provisioning evidence
               if: ${{ always() }}
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
-                name: phase1-provision-${{ github.run_id }}-${{ github.run_attempt }}
-                path: phase1-provision-report/
+                name: phase1-site-${{ inputs.phase1-site-operation }}-${{ github.run_id }}-${{ github.run_attempt }}
+                path: phase1-site-${{ github.run_id }}-${{ github.run_attempt }}/phase1-provision-report/
                 if-no-files-found: error
     get-jobs:
         if: ${{ !inputs.phase1-site-operation || inputs.phase1-site-operation == 'none' }}

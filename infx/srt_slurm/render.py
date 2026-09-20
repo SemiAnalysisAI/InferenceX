@@ -40,7 +40,7 @@ class ClientPolicy(BaseModel):
     telemetry: Literal["temporary-parity-exception-no-native-power"]
 
 
-class PilotSite(BaseModel):
+class PreparedSite(BaseModel):
     """Provisioned shared paths; no implicit host/environment fallback."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -57,9 +57,6 @@ class PilotSite(BaseModel):
     image_reference: str
     client_sites: dict[Literal["agentx", "eval"], str]
     mounts: dict[str, str]
-    # Receipt reader deployment is a release prerequisite, not inferred from code presence.
-    reader_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
-    collector_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
 
     @field_validator(
         "native_python", "native_source", "wrapper_python", "shared_root", "model_snapshot"
@@ -111,6 +108,13 @@ class PilotSite(BaseModel):
             python_minor + "."
         ):
             raise ValueError(f"pilot interpreter must use Python {python_minor}")
+
+
+class PilotSite(PreparedSite):
+    """Publication additionally requires independently deployed reader/collector pins."""
+
+    reader_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
+    collector_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
 
 
 def golden_acceptance(root: Path, policy: ClientPolicy, draft_tokens: int) -> float:
@@ -193,7 +197,7 @@ def client_spec(
 def render_recipe(
     job: JobSpec,
     root: Path,
-    site: PilotSite,
+    site: PreparedSite,
     policy: ClientPolicy,
     spec_path: Path,
     output: Path,

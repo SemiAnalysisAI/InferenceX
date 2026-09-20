@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from infx.srt_slurm.provision import ProvisionConfig, inspect_assets
+from infx.srt_slurm.provision import ProvisionConfig, inspect_assets, main
 
 
 def asset_config(tmp_path: Path) -> ProvisionConfig:
@@ -54,3 +54,33 @@ def test_inspection_rejects_shard_path_escape(tmp_path):
     )
     with pytest.raises(ValueError, match="unsafe shard path"):
         inspect_assets(config)
+
+
+def test_inspection_cli_requires_worker_and_controller_slurm_tools(
+    tmp_path, monkeypatch
+):
+    config = asset_config(tmp_path)
+    path = tmp_path / "site.json"
+    path.write_text(config.model_dump_json())
+    output = tmp_path / "report"
+    monkeypatch.setattr(
+        "infx.srt_slurm.provision.shutil.which",
+        lambda name: None if name in {"srun", "scontrol"} else "/usr/bin/" + name,
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "provision",
+            "--config",
+            str(path),
+            "--output",
+            str(output),
+            "--operation",
+            "inspect",
+        ],
+    )
+    assert main() == 1
+    report = json.loads((output / "inventory.json").read_text())
+    assert report["assets_present"] is True
+    assert report["missing_slurm_tools"] == ["srun", "scontrol"]
+    assert not Path(config.shared_root).exists()
