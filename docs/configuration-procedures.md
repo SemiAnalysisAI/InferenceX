@@ -155,6 +155,15 @@ Concurrent cells serialize draft staging with a per-model lock. Each cell lets
 `hf download` validate or resume the existing cache before serving; a nonempty
 directory is not a completion signal.
 
+
+Kimi-K3 selects one active Mellanox adapter by its sysfs driver, including
+DSXE `ibp*` names; EFA devices are excluded from this RDMA recipe. The embedded
+Mooncake ranks share that adapter. InfiniBand uses GID index 0 and RoCE retains
+index 3. If no compatible active adapter exists, startup fails before serving.
+On DSXE the container's libibverbs comes from the host through the enroot EFA
+hook, so the launcher mounts the host library directory at `/host-usr-lib`
+and the recipe loads its mlx5 provider through `RDMAV_DRIVERS`.
+
 ## Native TileRT power
 
 TileRT's shared importer preserves Docker Hub image names and converts explicit registries such as `ghcr.io/team/image:tag` to Enroot's `docker://ghcr.io#team/image:tag` syntax. Existing `#` references are preserved. Valid cached squash images are reused without importing; a cache hit does not validate the registry import path. Invalid cached images are removed under the import lock before retrying the import.
