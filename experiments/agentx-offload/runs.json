@@ -1574,16 +1574,57 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "18d0c54b22fc98bca65d35b33d0fdc0b4f5c8f3a",
-      "status": "in_progress",
+      "status": "failure",
       "node": "b200-nscale-slurm_04",
-      "artifacts": [],
+      "artifacts": [
+        {
+          "id": 10604975557,
+          "name": "power_audit_minimaxm3_tp4_conc8192_kvdram-vllm-simple",
+          "size_bytes": 894158
+        },
+        {
+          "id": 10604713821,
+          "name": "bmk_agentic_minimaxm3_tp4_conc8192_kvdram-vllm-simple",
+          "size_bytes": 1345
+        },
+        {
+          "id": 10604623771,
+          "name": "server_logs_minimaxm3_tp4_conc8192_kvdram-vllm-simple",
+          "size_bytes": 434772
+        },
+        {
+          "id": 10604324508,
+          "name": "gpu_metrics_minimaxm3_tp4_conc8192_kvdram-vllm-simple",
+          "size_bytes": 892136
+        },
+        {
+          "id": 10604299560,
+          "name": "agentic_minimaxm3_tp4_conc8192_kvdram-vllm-simple",
+          "size_bytes": 3430013
+        },
+        {
+          "id": 10604068900,
+          "name": "results_bmk",
+          "size_bytes": 1133
+        },
+        {
+          "id": 10603829290,
+          "name": "run-stats",
+          "size_bytes": 280
+        }
+      ],
       "performance_result": false,
       "workflow_name": "offload-v1-dram-c8192-r1-20260920T0541Z",
       "dispatched_at": "2026-09-20T05:41:49Z",
       "job_id": 106029329353,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492330557/job/106029329353",
       "started_at": "2026-09-20T05:44:38Z",
-      "queued_at": "2026-09-20T05:42:11Z"
+      "queued_at": "2026-09-20T05:42:11Z",
+      "completed_at": "2026-09-20T11:57:10Z",
+      "allocation_id": "16691",
+      "failure_stage": "agentx_warmup",
+      "failure_evidence": "Canonical c8192 HBM+DRAM warmup exhausted the six-hour phase budget before profiling. It returned 4,347 of 90,754 planned warmup requests, with 4,487 still in flight and 326 error-dropped requests; AIPerf recorded zero successful profiled requests and ProfileAborted. No EngineDead, connection-refused, storage, or node-local failure signature was present, so this is a deterministic feasibility failure and will not be retried unchanged.",
+      "log_archive_sha256": "053b83ac31747a8e73e3d6329b93a670f4a2e691f54cfd59a5d218f59ac9db73"
     },
     {
       "run_id": 35497846918,
@@ -1606,7 +1647,7 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850",
-  "status": "All four matched c16 arms are valid. Four study jobs remain in progress: c1024 HBM, c1024 HBM+NVMe, c8192 HBM+DRAM, and c256 HBM. The c1024 HBM+DRAM run hit the eight-hour workflow limit while still in canonical warmup; it needs an explicit larger execution budget. All c4096 arms have now failed before profiling, and the c4096 HBM+NVMe scratch was verified deleted. These points will not be retried unchanged.",
+  "status": "All four matched c16 arms are valid. Three study jobs remain in progress: c1024 HBM, c1024 HBM+NVMe, and c256 HBM. Both completed c8192 HBM and HBM+DRAM arms exhausted the six-hour canonical warmup budget with zero profiled responses. All c4096 arms also failed before profiling. These high-concurrency points will not be retried unchanged.",
   "last_capacity_check": {
     "checked_at": "2026-09-20T08:21:25Z",
     "cluster_observed_at": "2026-09-20T08:20:58Z",
@@ -1624,22 +1665,20 @@
     "active_study_run_ids": [
       35476043213,
       35476050409,
-      35492330557,
       35497846918
     ],
     "active_study_job_ids": [
       106035807426,
       106000864877,
-      106029329353,
       106044138671
     ],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": false,
-    "reason": "Two additional runs failed before profiling, freeing nodes. New dispatch remains blocked by the previously reported automation approval review until the user explicitly authorizes the c256 HBM+NVMe dispatch."
+    "reason": "The c8192 HBM+DRAM run reached a deterministic canonical warmup feasibility failure, freeing another node. New dispatch remains blocked by the previously reported automation approval review until the user explicitly authorizes the c256 HBM+NVMe dispatch."
   },
   "next_dispatch": {
-    "requires": "After explicit user authorization resolves the dispatch approval blocker and a fresh scheduler check confirms zero pending B200 jobs, dispatch the already validated c256 HBM+NVMe probe, then HBM+DRAM+NVMe and HBM+DRAM as capacity permits. Do not retry c4096 points unchanged. Revisit c1024 HBM+DRAM only with an explicit larger execution budget."
+    "requires": "After explicit user authorization resolves the dispatch approval blocker and a fresh scheduler check confirms zero pending B200 jobs, dispatch the already validated c256 HBM+NVMe probe, then HBM+DRAM+NVMe and HBM+DRAM as capacity permits. Do not retry c4096 or c8192 feasibility failures unchanged."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-19T23:34:00Z",
