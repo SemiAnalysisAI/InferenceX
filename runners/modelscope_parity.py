@@ -173,8 +173,17 @@ def verify_cold(out: Path) -> None:
     ]
     cold["hf_files_after_server_start"] = hf_files
     write_json(out / "cold_start.json", cold)
-    # Some Transformers versions create a cache-version marker on import.
-    if any(Path(name).name != "version.txt" for name in hf_files):
+    # Transformers creates empty import scaffolding even without HF downloads.
+    empty_scaffolding = {"modules/__init__.py", "modules/hf_remote_code.lock"}
+    if any(
+        Path(name).name != "version.txt"
+        and not (
+            name in empty_scaffolding
+            and not (Path(cold["hf_home"]) / name).is_symlink()
+            and (Path(cold["hf_home"]) / name).stat().st_size == 0
+        )
+        for name in hf_files
+    ):
         raise ValueError(f"Unexpected HF fallback/cache files: {hf_files}")
     (out / "modelscope_path").write_text(str(snapshot))
     print(
