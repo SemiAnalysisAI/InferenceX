@@ -22,6 +22,7 @@ from .models import Contract, identity
 
 if TYPE_CHECKING:
     from infx.klaud.lifecycle import Session
+    from infx.klaud.models import OwnedCandidate
 
 
 Number = Annotated[float, Field(ge=0, allow_inf_nan=False)]
@@ -770,6 +771,8 @@ def public_point(entry: dict) -> dict:
     """Project generated settings onto the public BenchmarkRow identity (not metrics)."""
     from infx.matrix.generate import _hardware_family
 
+    from .models import normalized_image
+
     agentic = entry.get("scenario-type") == "agentic-coding"
     multi = entry.get("prefill") is not None
     point = {
@@ -785,7 +788,7 @@ def public_point(entry: dict) -> dict:
         "osl": None if agentic else entry["osl"],
         "offload_mode": "on" if entry.get("kv-offloading", "none") != "none" else "off",
         "conc": int(entry["conc"]),
-        "image": entry["image"],
+        "image": normalized_image(entry["image"]),
     }
     for role in ("prefill", "decode"):
         topology = entry[role] if multi else entry
@@ -818,7 +821,13 @@ def check_baseline_coverage(matrix: dict, baseline: Baseline | None) -> None:
         raise VerificationError("Final matrix omits or changes frozen baseline points")
 
 
-def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -> Baseline:
+def resolve_baseline(
+    repository: str,
+    candidate: OwnedCandidate,
+    context: dict,
+    model: str,
+    goal: Prose,
+) -> Baseline:
     """Freeze source-date rows against their own producer's complete family.
 
     Legacy fingerprints may be absent, but exact producer provenance and a unique
@@ -827,9 +836,10 @@ def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -
     from fnmatch import fnmatchcase
 
     from .api import fetch
+    from .models import normalized_image
     from .validation import canonical_matrix
 
-    matrix = canonical_matrix(session.repository, session.candidate.base, session.candidate.family)
+    matrix = canonical_matrix(repository, candidate.base, candidate.family)
     feed = fetch("benchmarks", model=model, date=context["source"]["date"])
     info = fetch("workflow-info", date=context["source"]["date"])
     # Public database bigint IDs are serialized as strings; URLs use decimal IDs.
@@ -840,7 +850,10 @@ def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -
             heads.setdefault(int(row["github_run_id"]), set()).add(row["head_sha"])
     old_image = context["source"]["image"]
     entries = {point_key(entry): entry for entry in matrix_points(matrix)}
-    if not entries or any(entry["image"] != old_image for entry in entries.values()):
+    if not entries or any(
+        normalized_image(entry["image"]) != normalized_image(old_image)
+        for entry in entries.values()
+    ):
         raise VerificationError("Baseline source image no longer matches the selected base")
     historical: dict[str, list[dict]] = {}
     published: dict[str, Point] = {}
@@ -848,15 +861,18 @@ def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -
     family_runs = {
         int(change["workflow_run_id"])
         for change in info.payload["changelogs"]
-        if any(
-            fnmatchcase(session.candidate.family.split(":", 1)[1], key)
-            for key in change["config_keys"]
-        )
+        if any(fnmatchcase(candidate.family.split(":", 1)[1], key) for key in change["config_keys"])
     }
     for row in feed.payload:
+        if not isinstance(row, dict) or not isinstance(row.get("image"), str):
+            continue
         # Do not filter ISL/OSL here: that would erase other curves in the original family.
         if any(
-            row.get(key) != context["source"][key]
+            (
+                normalized_image(row[key]) != normalized_image(context["source"][key])
+                if key == "image"
+                else row.get(key) != context["source"][key]
+            )
             for key in (
                 "model",
                 "hardware",
@@ -870,7 +886,7 @@ def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -
             continue
         producer = re.fullmatch(
             r"https://github.com/"
-            + re.escape(session.repository)
+            + re.escape(repository)
             + r"/actions/runs/(\d+)(?:/attempts/(\d+))?",
             row.get("run_url") or "",
         )
@@ -888,9 +904,7 @@ def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -
         head = next(iter(heads[run_id]))
         if head not in historical:
             historical[head] = matrix_points(
-                canonical_matrix(
-                    session.repository, head, session.candidate.family, historical=True
-                )
+                canonical_matrix(repository, head, candidate.family, historical=True)
             )
         matches = [
             entry
@@ -915,7 +929,9 @@ def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -
             raise VerificationError("Duplicate public baseline point")
         # Retain all original points, even if a current family or API response is smaller.
         entries.update(
-            (point_key(point), point) for point in historical[head] if point["image"] == old_image
+            (point_key(point), point)
+            for point in historical[head]
+            if normalized_image(point["image"]) == normalized_image(old_image)
         )
         published[key] = Point(
             key=key,
@@ -950,7 +966,7 @@ def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -
         for key, entry in entries.items()
     ]
     return Baseline(
-        family=session.candidate.family,
+        family=candidate.family,
         date=context["source"]["date"],
         image=old_image,
         goal=goal,
@@ -958,4 +974,15 @@ def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -
         points=sorted(
             points, key=lambda point: (point.label.split(" c")[0], point.conc, point.label)
         ),
+    )
+
+
+def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -> Baseline:
+    """Resolve a baseline for the current owned session."""
+    return resolve_baseline(
+        session.repository,
+        session.candidate,
+        context,
+        model,
+        goal,
     )
