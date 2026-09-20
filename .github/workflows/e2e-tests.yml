@@ -268,7 +268,7 @@ jobs:
               # Reuse the fixed generation interpreter without resolving or installing packages.
               shell: /mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35481075834-1/envs/wrapper/bin/python -I -S -B {0} # zizmor: ignore[misfeature]
               run: |
-                import json, os, stat
+                import json, os, stat, time
                 from pathlib import Path
 
                 if os.environ["SITE_OPERATION"] != "inspect":
@@ -297,25 +297,25 @@ jobs:
                             raise ValueError("diagnostic JSON grew beyond the size bound")
                         if offset and b"\n" in data:
                             data = data.split(b"\n", 1)[1]
-                        return data, offset > 0
+                        return data, offset > 0, info.st_mtime_ns
 
                 progress = None
                 for name in ("progress.json", "state.json"):
                     try:
-                        raw, _ = read_owned(generation / name, generation, 65536)
+                        raw, _, mtime_ns = read_owned(generation / name, generation, 65536)
                         (report / name).write_bytes(raw)
                         value = json.loads(raw)
                         if not isinstance(value, dict):
                             raise ValueError("diagnostic JSON must be an object")
                         if name == "progress.json":
                             progress = value
-                        status["files"][name] = {"state": "copied", "bytes": len(raw)}
+                        status["files"][name] = {"state": "copied", "bytes": len(raw), "mtime_unix_ns": mtime_ns, "age_seconds": max(0, time.time() - mtime_ns / 1e9)}
                     except (OSError, ValueError) as error:
                         status["files"][name] = {"state": "unavailable", "error_type": type(error).__name__}
 
                 if progress is not None and isinstance(progress.get("log"), str):
                     try:
-                        raw, truncated = read_owned(Path(progress["log"]), generation / "logs", 1048576, tail=True)
+                        raw, truncated, _ = read_owned(Path(progress["log"]), generation / "logs", 1048576, tail=True)
                         tail = b"\n".join(raw.splitlines()[-200:]) + b"\n"
                         (report / "current-stage.log").write_bytes(tail)
                         status["files"]["current-stage.log"] = {"state": "copied", "bytes": len(tail), "source_tail_truncated": truncated}
@@ -323,6 +323,126 @@ jobs:
                         status["files"]["current-stage.log"] = {"state": "unavailable", "error_type": type(error).__name__}
                 else:
                     status["files"]["current-stage.log"] = {"state": "unavailable", "reason": "no-current-log"}
+                def read_proc(path, limit):
+                    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                    with os.fdopen(descriptor, "rb") as stream:
+                        info = os.fstat(stream.fileno())
+                        if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
+                            raise ValueError("proc entry exceeds the read bound")
+                        data = stream.read(limit + 1)
+                        if len(data) > limit:
+                            raise ValueError("proc entry grew beyond the read bound")
+                        return data
+
+                def process_sample(pid_path, expected, hub, image, proc_root):
+                    if pid_path.is_symlink() or pid_path.stat().st_uid != os.getuid():
+                        return None
+                    if read_proc(pid_path / "cmdline", 16384) != expected:
+                        return None
+                    raw_stat = read_proc(pid_path / "stat", 4096)
+                    fields = raw_stat.rsplit(b")", 1)[1].split()
+                    start_ticks = int(fields[19])
+                    ticks = os.sysconf("SC_CLK_TCK")
+                    result = {"pid": int(pid_path.name), "start_ticks": start_ticks, "cpu_seconds": (int(fields[11]) + int(fields[12])) / ticks, "sample_monotonic": time.monotonic()}
+                    try:
+                        uptime = float(read_proc(proc_root / "uptime", 256).split()[0])
+                        result["elapsed_seconds"] = max(0, uptime - start_ticks / ticks)
+                    except (OSError, ValueError, IndexError):
+                        result["elapsed_seconds"] = None
+                    try:
+                        counters = {}
+                        for line in read_proc(pid_path / "io", 4096).splitlines():
+                            key, value = line.split(b":", 1)
+                            if key in (b"rchar", b"read_bytes"):
+                                counters[key.decode()] = int(value)
+                        if set(counters) != {"rchar", "read_bytes"}:
+                            raise ValueError("required I/O counters are unavailable")
+                        result["io"] = counters
+                    except (OSError, ValueError):
+                        result["io"] = {"state": "unavailable"}
+                    result["open_assets"] = []
+                    try:
+                        for index, descriptor in enumerate((pid_path / "fd").iterdir()):
+                            if index >= 128:
+                                result["fd_scan_truncated"] = True
+                                break
+                            if not descriptor.name.isdecimal():
+                                continue
+                            try:
+                                raw_target = os.readlink(descriptor)
+                                target = Path(raw_target)
+                                if not target.is_absolute() or not (target.is_relative_to(hub) or target == image):
+                                    continue
+                                resolved = target.resolve(strict=True)
+                                if not (resolved.is_relative_to(hub) or resolved == image):
+                                    continue
+                                info = descriptor.stat()
+                                if not stat.S_ISREG(info.st_mode):
+                                    continue
+                                position = None
+                                for line in read_proc(pid_path / "fdinfo" / descriptor.name, 4096).splitlines():
+                                    if line.startswith(b"pos:"):
+                                        position = int(line.split(b":", 1)[1])
+                                if position is None or position < 0 or os.readlink(descriptor) != raw_target:
+                                    continue
+                                result["open_assets"].append({"fd": int(descriptor.name), "path": str(target), "position_bytes": position, "size_bytes": info.st_size})
+                                if len(result["open_assets"]) >= 8:
+                                    result["fd_scan_truncated"] = True
+                                    break
+                            except (OSError, ValueError):
+                                continue
+                    except OSError:
+                        result["fd_state"] = "unavailable"
+                    # Reject PID reuse or a process whose command changed during the sample.
+                    if pid_path.stat().st_uid != os.getuid() or read_proc(pid_path / "cmdline", 16384) != expected:
+                        return None
+                    if int(read_proc(pid_path / "stat", 4096).rsplit(b")", 1)[1].split()[19]) != start_ticks:
+                        return None
+                    return result
+
+                def local_hash_progress(proc_root, expected, hub, image):
+                    result = {"state": "not-local-or-unavailable", "matches": [], "note": "Missing local process data does not establish a stall. rchar counts process reads; read_bytes is kernel I/O accounting. Neither measures completed unique hashing bytes."}
+                    if not proc_root.is_dir():
+                        return result
+                    started = time.monotonic()
+                    try:
+                        for index, candidate in enumerate(proc_root.iterdir()):
+                            if index >= 8192 or time.monotonic() - started > 5:
+                                result["scan_truncated"] = True
+                                break
+                            if not candidate.name.isdecimal():
+                                continue
+                            try:
+                                sample = process_sample(candidate, expected, hub, image, proc_root)
+                            except (OSError, ValueError, IndexError):
+                                continue
+                            if sample is not None:
+                                result["matches"].append(sample)
+                                if len(result["matches"]) >= 4:
+                                    result["scan_truncated"] = True
+                                    break
+                    except OSError:
+                        return result
+                    if result["matches"]:
+                        result["state"] = "matched-local-process"
+                        time.sleep(2)
+                        for first in result["matches"]:
+                            try:
+                                second = process_sample(proc_root / str(first["pid"]), expected, hub, image, proc_root)
+                                if second is None or second["start_ticks"] != first["start_ticks"]:
+                                    raise ValueError("matched process changed or exited")
+                                elapsed = second["sample_monotonic"] - first["sample_monotonic"]
+                                observation = {"interval_seconds": elapsed, "sample": second}
+                                if elapsed > 0 and all(key in first["io"] and key in second["io"] and second["io"][key] >= first["io"][key] for key in ("rchar", "read_bytes")):
+                                    observation["bytes_per_second"] = {key: (second["io"][key] - first["io"][key]) / elapsed for key in ("rchar", "read_bytes")}
+                                first["followup"] = observation
+                            except (OSError, ValueError, IndexError):
+                                first["followup"] = {"state": "unavailable-or-exited"}
+                    return result
+
+                expected = b"\0".join(os.fsencode(str(value)) for value in (generation / "envs/wrapper/bin/python", "-I", generation / "verify-assets.py", generation / "verify-input.json")) + b"\0"
+                status["hash_process"] = local_hash_progress(Path("/proc"), expected, Path("/mnt/nfs/sa-shared/gharunners/hf-hub-cache"), Path("/mnt/nfs/lustre/containers/vllm_vllm-openai_nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3.sqsh"))
+
                 (report / "diagnostic.json").write_text(json.dumps(status, indent=2) + "\n")
                 print("Read-only operational diagnostic retained in phase1-provision-report; not qualification evidence.")
             - name: Preserve provisioning evidence
