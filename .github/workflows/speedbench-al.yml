@@ -11,6 +11,10 @@ run-name: "Read native MTP collection progress"
 on: # zizmor: ignore[concurrency-limits]
   workflow_dispatch:
     inputs:
+      observe-runner-names:
+        description: "Space-separated runner names owning the collection allocations"
+        type: string
+        default: 'h200-dgxc-slurm_00 h200-dgxc-slurm_01'
       runner:
         description: "Self-hosted GPU runner label (B300)"
         required: false
@@ -206,7 +210,7 @@ jobs:
         with: { persist-credentials: false }
       - name: Read current allocations and logs
         env:
-          OBSERVE_RUNNER_NAMES: 'h200-dgxc-slurm_00 h200-dgxc-slurm_02'
+          OBSERVE_RUNNER_NAMES: ${{ inputs.observe-runner-names }}
         run: |
           set -eo pipefail
           source benchmarks/benchmark_lib.sh --validation-only
