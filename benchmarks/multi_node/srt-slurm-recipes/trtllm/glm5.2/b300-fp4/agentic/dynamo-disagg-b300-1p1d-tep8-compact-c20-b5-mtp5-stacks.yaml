@@ -24,7 +24,11 @@ roles:
       NCCL_GRAPH_MIXING_SUPPORT: '0'
       FI_LOG_LEVEL: warn
       NIXL_DISABLE_CUDA_ADDR_WA: '1'
-      NIXL_LOG_LEVEL: DEBUG
+      NIXL_LOG_LEVEL: INFO
+      # Keep the prefill NIXL posting pool at one thread for this diagnostic.
+      # 此诊断将预填充侧的 NIXL 提交线程池固定为单线程。
+      TRTLLM_NIXL_NUM_THREADS: '1'
+      NIXL_LIBFABRIC_NUM_THREADS: '1'
       OMP_NUM_THREADS: '1'
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
       TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: '0.10'
@@ -112,7 +116,7 @@ roles:
       NCCL_GRAPH_MIXING_SUPPORT: '0'
       FI_LOG_LEVEL: warn
       NIXL_DISABLE_CUDA_ADDR_WA: '1'
-      NIXL_LOG_LEVEL: DEBUG
+      NIXL_LOG_LEVEL: INFO
       OMP_NUM_THREADS: '1'
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
       TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: '0.10'

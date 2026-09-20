@@ -8517,3 +8517,10 @@
     - "Extend c20 diagnostics with NIXL transfer logs on both roles and periodic decode worker stacks"
     - "扩展 c20 诊断，在预填充和解码两侧记录 NIXL 传输日志，并定期记录解码工作进程调用栈"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
+  description:
+    - "Use one prefill NIXL posting thread in the c20 diagnostic and set NIXL logging to INFO on both roles while retaining worker stack logs"
+    - "在 c20 诊断中使用单个预填充 NIXL 提交线程，将两侧 NIXL 日志级别设为 INFO，并保留工作进程调用栈日志"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993

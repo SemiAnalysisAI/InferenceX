@@ -8294,7 +8294,8 @@ glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact:
           ep: 4
           dp-attn: true
           additional-settings:
-          # This diagnostic recipe records worker stacks, prefill rank iterations, and NIXL transfer logs.
+          # This diagnostic recipe uses one prefill NIXL posting thread and retains worker stack logs.
+          # 此诊断配方使用单个预填充 NIXL 提交线程，并保留工作进程调用栈日志。
           - "CONFIG_FILE=recipes/trtllm/glm5.2/b300-fp4/agentic/dynamo-disagg-b300-1p1d-tep8-compact-c20-b5-mtp5-stacks.yaml"
         decode:
           num-worker: 1
