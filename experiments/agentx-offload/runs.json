@@ -736,17 +736,17 @@
       "arm": "none",
       "concurrency": 1024,
       "repeat": 1,
-      "attempt": 2,
+      "attempt": 3,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "in_progress",
-      "node": "b200-nscale-slurm_02",
+      "status": "queued",
+      "node": null,
       "artifacts": [],
       "performance_result": false,
       "workflow_name": "offload-v1-none-c1024-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:24:32Z",
-      "job_id": 106000847437,
-      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476043213/job/106000847437",
-      "started_at": "2026-09-20T04:13:25Z",
+      "job_id": 106035807426,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476043213/job/106035807426",
+      "started_at": null,
       "attempt_history": [
         {
           "attempt": 1,
@@ -758,10 +758,31 @@
           "runner": "b200-nscale-slurm_00",
           "performance_result": false,
           "note": "No performance result; cancelled before workflow completion. Attempt 2 was triggered by inferencex-dash[bot]."
+        },
+        {
+          "attempt": 2,
+          "status": "failure",
+          "job_id": 106000847437,
+          "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476043213/job/106000847437",
+          "started_at": "2026-09-20T04:13:25Z",
+          "completed_at": "2026-09-20T06:18:22Z",
+          "runner": "b200-nscale-slurm_02",
+          "node": "im-b200-c008",
+          "allocation_id": "16687",
+          "performance_result": false,
+          "failure_stage": "agentx_warmup",
+          "failure_evidence": "After 6,901 seconds of canonical warmup, a single root request failed with ClientOSError while the retained server log still showed healthy HTTP 200 responses and no EngineDead, CUDA out-of-memory, or server-crash signature. AIPerf aborted before profiling, so the partial warmup artifact is not a performance result.",
+          "log_archive_sha256": "98c9ff742662bcf9de5e0138fdde7c63a792d34c0e103f46f60d44a30dc2e1b1",
+          "evidence_sha256": {
+            "server.log": "872a518a416dfcf2858b92644026fe91f717ac16151b20949fdd9d20366b7e26",
+            "benchmark.log": "113ed9fbd8c80cbed3a0c1d51c156a16e05bb959852ab1357b7f9b4bd9fee860",
+            "offload_config.json": "46a6f3871cddcec672fee8a82f020ae75885da0ab599b1740851e13570f5bc63"
+          },
+          "note": "Retryable transport failure. Attempt 3 was started immediately under the zero-B200-queue/two-idle-node snapshot."
         }
       ],
-      "rerun_triggering_actor": "inferencex-dash[bot]",
-      "queued_at": "2026-09-20T01:36:00Z"
+      "rerun_triggering_actor": "alec",
+      "queued_at": "2026-09-20T06:39:57Z"
     },
     {
       "run_id": 35476047627,
@@ -1139,15 +1160,62 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "e85e1fbb8ad172a43c15cab68e43039bb0ff8a16",
-      "status": "in_progress",
-      "node": null,
-      "artifacts": [],
+      "status": "failure",
+      "node": "b200-nscale-slurm_09",
+      "artifacts": [
+        {
+          "id": 10600481648,
+          "name": "run-stats",
+          "size_bytes": 280
+        },
+        {
+          "id": 10600371815,
+          "name": "bmk_agentic_minimaxm3_tp4_conc8192_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-f-7d48d5bd8f49a02a5f3f",
+          "size_bytes": 1340
+        },
+        {
+          "id": 10600217134,
+          "name": "power_audit_minimaxm3_tp4_conc8192_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-f-7d48d5bd8f49a02a5f3f",
+          "size_bytes": 871217
+        },
+        {
+          "id": 10600212017,
+          "name": "agentic_minimaxm3_tp4_conc8192_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-f-7d48d5bd8f49a02a5f3f",
+          "size_bytes": 3638044
+        },
+        {
+          "id": 10600187085,
+          "name": "server_logs_minimaxm3_tp4_conc8192_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-f-7d48d5bd8f49a02a5f3f",
+          "size_bytes": 439099
+        },
+        {
+          "id": 10600102212,
+          "name": "gpu_metrics_minimaxm3_tp4_conc8192_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-f-7d48d5bd8f49a02a5f3f",
+          "size_bytes": 869200
+        },
+        {
+          "id": 10600082394,
+          "name": "results_bmk",
+          "size_bytes": 1128
+        }
+      ],
       "performance_result": false,
       "workflow_name": "offload-v1-nvme-c8192-r1-20260920T0015Z",
       "dispatched_at": "2026-09-20T00:15:41Z",
       "job_id": 105991361707,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35478298744/job/105991361707",
-      "started_at": "2026-09-20T00:16:07Z"
+      "started_at": "2026-09-20T00:16:07Z",
+      "completed_at": "2026-09-20T06:26:08Z",
+      "runner": "b200-nscale-slurm_09",
+      "allocation_id": "16661",
+      "failure_stage": "agentx_warmup",
+      "failure_evidence": "Canonical c8192 warmup reached 6,138 peak open session trees but accumulated 304 request timeouts and 19 invalid inference results. A root timeout aborted the run before profiling; the aggregate contains 0 successful profiled requests, so it is not a performance result. Because the failure followed sustained overload rather than a transient runner or startup fault, the same configuration is not being retried unchanged.",
+      "log_archive_sha256": "1b5395adc41c948faff6fd2a652bc1620a495b37d5aa8f8e2909a260defd4aa5",
+      "storage_evidence": "Failure cleanup receipt verified deleted=true for exact workflow-owned scratch /offload-scratch/inferencex-offload-35478298744-1-16661-90b5259b01bb. Before deletion it contained four cache files totaling 1,099,502,125,056 logical bytes and 1,099,492,212,736 allocated bytes.",
+      "evidence_sha256": {
+        "offload_cleanup.json": "f073879451c9b74cb282663b32c1417eb2385606ac41272ef3083fd57dda9c4e",
+        "bmk_result.json": "3e01b500c4215933f8ea4cd8cf444b0a0ae0ea5bd866f8d834fe7a7efdb5b031"
+      }
     },
     {
       "run_id": 35478300305,
@@ -1220,7 +1288,7 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850",
-  "status": "All four matched c16 arms are valid. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. Eleven study jobs are in progress: all four c1024 arms, all four c4096 arms, and the c8192 HBM, HBM+DRAM, and HBM+NVMe arms. The c8192 HBM+DRAM+NVMe retry failed its node-local NVMe capacity preflight before model startup and produced no performance result.",
+  "status": "All four matched c16 arms are valid. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. Nine study jobs are in progress: the c1024 HBM+DRAM, HBM+NVMe, and HBM+DRAM+NVMe arms; all four c4096 arms; and the c8192 HBM and HBM+DRAM arms. The retryable c1024 HBM warmup transport failure is queued as attempt 3, occupying the study's single allowed B200 queue slot. The c8192 HBM+NVMe arm failed under sustained warmup overload before profiling; its 1.10 TB task-owned NVMe scratch was verified deleted, and it is not being retried unchanged. The c8192 HBM+DRAM+NVMe retry failed its node-local NVMe capacity preflight before model startup and produced no performance result.",
   "last_capacity_check": {
     "checked_at": "2026-09-20T05:42:20Z",
     "cluster_observed_at": "2026-09-20T05:40:52Z",
