@@ -8469,3 +8469,10 @@
     - "Use thinking-on synthetic AL 2.51 with three native MTP draft tokens for H100 Qwen3.8-27B BF16 throughput, matching the BF16 SPEED-Bench curve in #3304; accuracy runs retain real verification"
     - "H100 Qwen3.8-27B BF16 吞吐测试使用 thinking 开启、3 个原生 MTP 草稿 token 和合成 AL 2.51，对应 #3304 的 BF16 SPEED-Bench 曲线；准确率评测保留真实验证"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3305
+
+- config-keys:
+    - qwen3.827b-bf16-h100-vllm-mtp
+  description:
+    - "Add 8k1k at concurrency 1-128 for H100 Qwen3.8-27B BF16 vLLM TP1 native MTP, retaining thinking-on synthetic AL 2.51 with three draft tokens and the existing image"
+    - "为 H100 Qwen3.8-27B BF16 vLLM TP1 原生 MTP 新增并发 1-128 的 8k1k 场景，保持 thinking 开启、合成 AL 2.51、3 个草稿 token 及原有镜像"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3305

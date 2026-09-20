@@ -81,7 +81,7 @@ VLLM_CMD=(
     --kv-cache-dtype auto
     --max-model-len "$MODEL_LEN"
     --max-num-seqs "$MAX_NUM_SEQS"
-    # Every 1k1k request prefills its full random prompt; no prefix-cache hits.
+    # Every fixed-sequence request prefills its full prompt; no prefix-cache hits.
     --no-enable-prefix-caching
     --reasoning-parser qwen3
     --default-chat-template-kwargs '{"enable_thinking":true}'

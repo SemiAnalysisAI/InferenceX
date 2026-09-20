@@ -201,6 +201,8 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 
 ### Qwen3.8-27B BF16 原生 MTP
 
+H100 配方支持 TP1 的 1k/1k 和 8k/1k，并发范围为 1–128。
+
 BF16 vLLM 配方启用 thinking，使用 3 个原生 MTP 草稿 token。吞吐测试设置
 `rejection_sample_method: synthetic` 和 `synthetic_acceptance_length: 2.51`，
 对应 [#3304](https://github.com/SemiAnalysisAI/InferenceX/pull/3304) 中 BF16 的 `thinking_on[3]` 测量值。
