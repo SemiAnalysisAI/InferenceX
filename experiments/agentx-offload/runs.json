@@ -1838,48 +1838,69 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "34ac5b905b946b8d433965d4cd0b1f30533d42ee",
-      "status": "queued",
-      "node": null,
+      "status": "in_progress",
+      "node": "b200-nscale-slurm_01",
       "artifacts": [],
       "performance_result": false,
       "workflow_name": "offload-v1-dram-c256-r1-20260920T1652Z",
       "dispatched_at": "2026-09-20T16:52:38Z",
       "job_id": 106113129196,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35524083518/job/106113129196",
-      "queued_at": "2026-09-20T16:53:01Z"
+      "queued_at": "2026-09-20T16:53:01Z",
+      "started_at": "2026-09-20T16:55:06Z"
+    },
+    {
+      "run_id": 35524297747,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35524297747",
+      "arm": "dram-nvme",
+      "concurrency": 256,
+      "repeat": 1,
+      "attempt": 1,
+      "head_sha": "283950b1471d52406c5a2af419dfa49f9d2c7b10",
+      "status": "queued",
+      "node": null,
+      "artifacts": [],
+      "performance_result": false,
+      "workflow_name": "offload-v1-dram-nvme-c256-r1-20260920T1656Z",
+      "dispatched_at": "2026-09-20T16:56:58Z",
+      "job_id": 106113702870,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35524297747/job/106113702870",
+      "queued_at": "2026-09-20T16:57:15Z"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918",
-  "status": "All four matched c16 arms and the c256 HBM control are valid. Fresh c256 HBM+NVMe is running and c256 HBM+DRAM is the sole queued B200 job. The c256 combined arm is validated and will dispatch when the queued count returns to zero. Both c1024 HBM and HBM+NVMe reached the 480-minute allocation limit during canonical warmup with zero profiled responses and will not be retried unchanged.",
+  "status": "All four matched c16 arms and the c256 HBM control are valid. Fresh c256 HBM+NVMe and HBM+DRAM runs are active; c256 HBM+DRAM+NVMe is the sole queued B200 job. Both c1024 HBM and HBM+NVMe reached the 480-minute allocation limit during canonical warmup with zero profiled responses and will not be retried unchanged.",
   "last_capacity_check": {
-    "checked_at": "2026-09-20T16:53:58Z",
-    "cluster_observed_at": "2026-09-20T16:53:51Z",
+    "checked_at": "2026-09-20T16:57:15Z",
+    "cluster_observed_at": "2026-09-20T16:56:23Z",
     "cluster_stale": false,
     "eligible_nodes": 11,
-    "idle_nodes": 10,
+    "idle_nodes": 9,
     "total_nodes": 11,
-    "allocated_nodes": 1,
+    "allocated_nodes": 2,
     "pending_b200_jobs": 1,
     "pending_requested_nodes": 1,
-    "demand_nodes": 2,
-    "demand_percent": 18.18,
-    "scheduler_snapshot_at": "2026-09-20T16:53:58Z",
+    "demand_nodes": 3,
+    "demand_percent": 27.27,
+    "scheduler_snapshot_at": "2026-09-20T16:56:39Z",
     "scheduler_available": true,
     "active_study_run_ids": [
       35524019140,
-      35524083518
+      35524083518,
+      35524297747
     ],
     "active_study_job_ids": [
       106112961565,
-      106113129196
+      106113129196,
+      106113702870
     ],
     "active_reservations_global": 1,
     "reserved_nodes_global": 1,
     "dispatch_allowed": false,
-    "reason": "The c256 HBM+DRAM job is the sole queued B200 job. The one-queued-job policy blocks the validated c256 combined dispatch until this job starts and a fresh status check confirms zero pending jobs."
+    "reason": "The validated c256 matched offload set is now fully dispatched. HBM+NVMe and HBM+DRAM are running; HBM+DRAM+NVMe is the sole queued B200 job, so no additional dispatch is allowed until the queued count returns to zero."
   },
   "next_dispatch": {
-    "requires": "When a fresh InferenceX status snapshot shows zero queued B200 jobs, dispatch the already validated c256 HBM+DRAM+NVMe arm. Then continue lower-concurrency curve probes around the c16-to-c256 transition. Do not retry c1024, c4096, or c8192 feasibility failures unchanged."
+    "requires": "After the c256 matched offload arms produce validated results, choose the next lower-concurrency probes from the observed c16-to-c256 change. Do not add any job while one B200 job remains queued, and do not retry c1024, c4096, or c8192 feasibility failures unchanged."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-19T23:34:00Z",
