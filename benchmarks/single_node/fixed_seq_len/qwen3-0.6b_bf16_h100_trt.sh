@@ -8,6 +8,7 @@ check_env_vars \
     CONC \
     ISL \
     OSL \
+    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME \
     EVAL_ONLY \
@@ -66,7 +67,6 @@ nvidia-smi
 SERVER_LOG=/workspace/server.log
 EXTRA_CONFIG_FILE=$(mktemp --suffix=.yaml)
 MAX_BATCH_SIZE=$((CONC > 16 ? CONC : 16))
-MAX_MODEL_LEN=$((ISL + OSL + 256))
 MAX_NUM_TOKENS=$((((ISL + CONC + 127) / 128) * 128))
 MAX_NUM_TOKENS=$((MAX_NUM_TOKENS > 8192 ? MAX_NUM_TOKENS : 8192))
 
@@ -106,6 +106,7 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 
 run_benchmark_serving \
     --model "$MODEL" \
+    --tokenizer "$MODEL_PATH" \
     --port "$PORT" \
     --backend openai \
     --input-len "$ISL" \
