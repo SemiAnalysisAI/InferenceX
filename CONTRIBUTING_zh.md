@@ -54,7 +54,7 @@ CODEOWNER 自动验证目前仅供审阅参考。工作流会核验提交的清�
 - 启动 Claude 要求触发者为具有合格仓库写权限的人类用户。
 - 请在 "Additional detail section" 中填写清单要求的链接（验证/评测工作流运行、对应的 [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR，以及任何例外理由）。
 
-签署发布后，CI 会独立复核审阅清单中的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、复用命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack、投机解码是否使用 chat template、draft 模型和 draft head 的权重与精度是否保持不变，以及 Pareto 覆盖度。随后，CI 会为整个 PR 创建或更新同一条裁定评论，并注明实际评估的 SHA。未通过的条目及 Pareto 警告直接显示；已通过和不适用（N/A）的条目统一放入折叠区域。旧版按提交生成的裁定评论会被复用；如果评论已删除，下次验证会创建替代评论。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
+签署发布后，CI 会独立复核审阅清单中的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、复用命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack、投机解码是否使用 chat template，以及 draft 模型和 draft head 的权重与精度是否保持不变。随后，CI 会为整个 PR 创建或更新同一条裁定评论，并注明实际评估的 SHA。未通过的条目直接显示；已通过和不适用（N/A）的条目统一放入折叠区域。旧版按提交生成的裁定评论会被复用；如果评论已删除，下次验证会创建替代评论。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
 
 裁定只记录实际评估的提交，不会将批准延续到后续提交。需要重新评估时，由原审阅者编辑已有清单，或由有权限的协作者传入 `pr-number` 及其 `comment_url`（两者必须指向同一 PR）手动分发 `codeowner-signoff-verify.yml`。流程会更新同一条裁定评论。
 
