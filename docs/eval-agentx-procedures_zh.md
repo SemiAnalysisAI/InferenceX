@@ -342,6 +342,45 @@ gh run cancel <RUN_ID> --repo SemiAnalysisAI/InferenceX
 
 只有在获得明确批准且有具体理由时才使用 `scancel` 或终止进程；否则可能绕过 cleanup 或使 runner 残留。修复 recipe 后，先分派一个目标 fast e2e 点并实时检查，只有通过检查的 candidate 才值得进行 canonical 运行/完整 sweep。
 
+## 11. 2026 年 9 月 DSpark 与 GLM-5.2 AgentX sweep 的经验教训
+
+以下规则来自 DeepSeek-V4.1-Flash DSpark 配方（#3239-#3247、#3216）与 GLM-5.2 nightly 升级（#3275-#3277）的实证，所引用的运行 id 均为本仓库的 GitHub Actions 运行。
+
+**Blackwell SGLang DSpark 配方的显存**
+
+- 让 `--max-running-requests` 不超过 decode CUDA graph batch（64）。超出已捕获层级的 DSpark verify 步骤会以 eager 方式运行并临时分配 attention 工作区；H200 eval 在 128 个运行请求、仅剩 2 GiB 时因此 OOM（运行 35306704553）。
+- 所有 Blackwell 配方使用 `--mem-fraction-static 0.70` 与 `--chunked-prefill-size 4096`。GB300 保留 0.75/8192/128 时，c128 在 warmup 82 分钟后因 TVM 稀疏注意力 prefill 内核申请 20 GiB 而仅剩 12.5 GiB 而 OOM（运行 35307635202）；B300 在 0.70/64 下完成了 c1-c128。
+- 逐请求的池上限随 DSpark block 缩放：indexer 与 verify 缓冲随“分块 × 上下文”增长，因此长提示 OOM 时首先调整 prefill 分块，而非静态比例。
+
+**MI355X（gfx950）SGLang 预览版**
+
+- Engram 表必须驻留 GPU。`SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1` 会在 decode graph 捕获时于所有 rank 触发 `hipErrorIllegalAddress`（运行 35306715045）。表驻留后权重占用每块 288 GB 显卡的 117-129 GB，静态比例必须下调（最终为 0.60）。
+- ROCm 镜像的 torch 缓存分配器使用固定段（aiter 日志显示 `expandable_segments=False`）。一条 126k token 提示的 eager 分块 prefill 会囤积全部非静态显存，即使只有一个请求，RCCL 也会因 `HSA_STATUS_ERROR_OUT_OF_RESOURCES`（剩余 0 MB）中止（运行 35376928227、35460273555）。`PYTORCH_HIP_ALLOC_CONF=expandable_segments:True` 加 2048 token 分块后 c1、c2、c4 与 eval 全部通过（运行 35468635539）。该 SKU 上其余 RCCL 手段为 `GPU_MAX_HW_QUEUES=2` 以及 MEC 固件低于 177 时的 `HSA_NO_SCRATCH_RECLAIM=1`。
+- 当某个并发点超出 eager 1M 上下文 prefill 的容量时，参照 #2661 对 B300 HiCache 的做法，只发布可容纳的点并裁剪 conc-list；13 个并发会话在任何静态比例下都放不下。
+
+**B200 TP2 上的 vLLM DSpark**
+
+- eval 路径（block rejection 加自适应验证）在 TP2 上两次因 `cudaErrorIllegalAddress` 崩溃：先在 eager 草稿 `lm_head` GEMM，随后即便 lm-eval 已固定为 graph 层级内的 32 个请求，仍在自适应验证器的 `record_confidences` 同步处崩溃（运行 35399984613、35403890075）。相同配置在 TP4 上通过。TP2 eval 应关闭自适应验证；仅 block rejection 即为精确验证。
+- AgentX warmup 若因 `ClientOSError: Can not write request body` 与 `ServerDisconnectedError` 中止，而 server 日志只有 `auto-aborting request due to dropped stream`，说明是服务端停顿（autotune、首个长 prefill）期间的客户端中止，而非崩溃。重跑该点；若复发则提高 `AIPERF_HTTP_TCP_USER_TIMEOUT`。
+
+**识别挂起的作业**
+
+- GitHub 作业可能在没有任何 Slurm allocation 的情况下“运行”数小时（B300 c4 跑了 5.5 小时而同级点 2 小时完成；GLM-5.2 B300 eval 跑了 4 小时而 B200 基线为 18 分钟）。先与同 SKU 或姊妹 SKU 上已完成同级点的时长对比，再用 runner 名称查 `squeue`。部分集群的 `PrivateData=jobs` 会隐藏其他用户的作业，队列为空不算证据，时长差距才是。取消运行并用 `gh run rerun --failed` 保留已通过的点。
+- 作业结束几分钟后 server 日志就会被下一个作业复用工作区时覆盖。在共享 jumpbox 上排查崩溃时，运行脱离终端的捕获循环（`nohup`、pid 文件），在 `results/server.log` 匹配崩溃特征时立即拷贝；随 SSH 连接存活的循环会随连接一起中断。
+
+**队列与 lease 机制**
+
+- lease controller 通过在已 lease 的 runner 上发布 `ci-job-*` 标签来准入作业。空闲 runner 带有 `ci-slurm-unavailable`，或池被多节点 `ci-lease-*` 令牌与 `ci-job-1.000` 高优先级作业占满时，priority 0 的单节点作业即使 runner 在线也永远不会派发。
+- GitHub 会取消排队满 24 小时的作业（GB300 运行 35307635202 第 1 次、B300 c4 第 2 次）。`gh run rerun <id> --failed` 只重新排队被取消的作业，并保留成功点与 reuse 授权。
+- 在上一个 head 的 sweep 仍在运行时 force-push，会让新运行卡在 pull-request 并发组后的 `pending` 状态；`gh run cancel` 可能滞后，旧运行迟迟不退时改用 `force-cancel` API。
+
+**仓库机制**
+
+- `check-changelog` 会校验新条目引用的每个 config key 都存在于 master 配置（运行 35403589805 拒绝了拼错的 key）。使用精确的 key。
+- reuse gate 只要求绿色运行的 head 提交仍在 PR 中。合并 `origin/main`（changelog 仅追加解析）以保持 reuse 有效；仅在需要新 sweep 时才 rebase 为单个新提交，并且要与 merge-base 而非 `origin/main` 做 diff，否则 rebase 会悄悄回退期间已合入 main 的改动。
+- launcher 重构会改变冲突形态：#3270 将 `launch_b200-nscale-compat.sh` 并入 `launch_b200-nscale-slurm.sh`，编辑旧文件的 PR 必须把 hunk 移植到合并后的 launcher 并接受删除。
+- 2026-09-15 起的 SGLang nightly 将 `--cuda-graph-max-bs` 视为歧义前缀而拒绝；改用 `--cuda-graph-max-bs-decode`。ROCm `vllm-openai-rocm` nightly tag 会在数天内从 Docker Hub 消失，务必在固定当天验证 tag，并预期合并前需要重新固定。
+
 ## 完成检查清单
 
 - 矩阵预览符合预期 scenario、topology、eval mode 与 concurrency。
