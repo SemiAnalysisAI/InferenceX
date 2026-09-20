@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -12,12 +13,15 @@ from pathlib import Path
 import pytest
 import yaml
 
+from infx.srt_slurm.contracts import load_mapping
+from infx.srt_slurm.job import parse_job
 from infx.srt_slurm.qualify_cancellation import (
     DraftSite,
     qualify,
     render_probe,
     verify_closed_writer,
 )
+from infx.srt_slurm.render import ClientPolicy, render_recipe
 
 # This executable replaces only the external native/Slurm boundary. Real
 # preparation, path validation, trigger selection, cleanup orchestration and
@@ -220,7 +224,7 @@ def pilot(tmp_path):
         "engine": "vllm",
         "slurm": {"time_limit": "08:00:00"},
         "model": {
-            "path": "controlled/model",
+            "path": "deepseek-ai/DeepSeek-V4.1-Flash",
             "container": "controlled/image:retained",
             "precision": "fp4",
         },
@@ -235,6 +239,13 @@ def pilot(tmp_path):
                     "tensor-parallel-size": 8,
                     "max-model-len": 8192,
                     "max-num-batched-tokens": 256,
+                    "speculative-config": {
+                        "method": "dspark",
+                        "num_speculative_tokens": 5,
+                        "draft_sample_method": "probabilistic",
+                        "rejection_sample_method": "block",
+                        "enable_adaptive_verification": True,
+                    },
                 },
             }
         },
@@ -299,7 +310,17 @@ def test_startup_cancels_the_entered_worker_and_preserves_diagnostic_evidence(pi
         "tensor-parallel-size": 8,
         "max-model-len": 8192,
         "max-num-batched-tokens": 256,
+        "max-num-seqs": 56,
+        "max-cudagraph-capture-size": 512,
+        "speculative-config": {
+            "method": "dspark",
+            "num_speculative_tokens": 5,
+            "draft_sample_method": "probabilistic",
+            "rejection_sample_method": "block",
+            "enable_adaptive_verification": True,
+        },
     }
+    assert report["serving_point"] == {"mode": "eval", "concurrency": 28}
     assert state["profile"]["default_account"] == "controlled-account"
     assert state["profile"]["default_partition"] == "controlled-partition"
     assert state["profile"]["default_time_limit"] == "00:05:00"
@@ -333,6 +354,71 @@ def test_client_cancellation_requires_a_real_signal_closed_writer(pilot):
     assert (
         len(heartbeat.read_text().splitlines()) == report["writer_closure"]["records"]
     )
+
+
+def test_probe_serving_arguments_match_the_real_c28_eval_renderer(pilot):
+    root, checkout, draft = pilot
+    fixtures = Path(__file__).parent / "fixtures/native_pilot"
+    policy_path = "benchmarks/multi_node/srt-slurm-recipes/configs/client-policy.json"
+    shutil.copyfile(fixtures / "client-policy.json", checkout / policy_path)
+    golden = checkout / "golden_al_distribution/dsv41flash_dspark.yaml"
+    golden.parent.mkdir()
+    shutil.copyfile(fixtures / "golden.yaml", golden)
+    row = {
+        "image": draft["image_reference"],
+        "model": "deepseek-ai/DeepSeek-V4.1-Flash",
+        "model-prefix": "dsv41flash",
+        "precision": "fp4",
+        "framework": "vllm",
+        "runner": "cluster:h100-dgxc",
+        "tp": 8,
+        "pp": 1,
+        "dcp-size": 1,
+        "pcp-size": 1,
+        "ep": 1,
+        "dp-attn": False,
+        "spec-decoding": "mtp",
+        "conc": 28,
+        "kv-offloading": "none",
+        "total-cpu-dram-gb": 0,
+        "duration": 3600,
+        "exp-name": "controlled-c28-eval",
+        "scenario-type": "agentic-coding",
+        "run-eval": True,
+        "eval-only": True,
+        "eval-framework": "lm-eval",
+        "execution": {
+            "runtime": "srt-slurm",
+            "contract-version": 1,
+            "recipe": "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/vllm/h100-fp4/agentx/agg-tp8-dspark5.yaml",
+            "profile": "runners/srt-slurm/h100-phase1.yaml",
+            "runtime-lock": "benchmarks/multi_node/srt-slurm-recipes/configs/prepared-runtime-lock.json",
+            "client-policy": policy_path,
+        },
+    }
+    job = parse_job(
+        row, checkout, {"priority": "0", "queue-token": "controlled", "node-count": 1}
+    )
+    site = DraftSite.model_validate(draft)
+    measured, _ = render_recipe(
+        job,
+        checkout,
+        site,
+        ClientPolicy.model_validate(load_mapping(checkout / policy_path)),
+        root / "client.json",
+        root / "client-output",
+    )
+    diagnostic, _ = render_probe(checkout, site, root / "probe", "parity", 3600)
+    assert diagnostic["roles"] == measured["roles"]
+    assert diagnostic["model"] == measured["model"]
+    assert diagnostic["frontend"] == measured["frontend"]
+    assert diagnostic["roles"]["agg"]["args"]["max-num-seqs"] == 56
+    assert diagnostic["roles"]["agg"]["args"]["max-cudagraph-capture-size"] == 512
+    assert diagnostic["roles"]["agg"]["args"]["max-model-len"] == 8192
+    assert diagnostic["roles"]["agg"]["args"]["max-num-batched-tokens"] == 256
+    assert diagnostic["roles"]["agg"]["env"] == {"UNCHANGED": "retained"}
+    assert diagnostic["benchmark"]["argv"][1:3] == ["-I", "-c"]
+    assert measured["benchmark"]["argv"][1:4] == ["-I", "-m", "infx.benchmarks.eval"]
 
 
 @pytest.mark.parametrize(

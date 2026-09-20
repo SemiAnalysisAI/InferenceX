@@ -20,7 +20,7 @@ from infx.srt_slurm.contracts import load_mapping
 from infx.srt_slurm.job import file_digest, read_json
 from infx.srt_slurm.launch import NativeCommandError, RuntimeLock, checked_json
 from infx.srt_slurm.provision_runtime import NATIVE_LOCK
-from infx.srt_slurm.render import PreparedSite
+from infx.srt_slurm.render import PreparedSite, apply_serving_point
 
 RECIPE = (
     "benchmarks/multi_node/srt-slurm-recipes/dsv41flash/vllm/h100-fp4/agentx/agg-tp8-dspark5.yaml"
@@ -197,6 +197,8 @@ def render_probe(
         or recipe["model"]["container"] != site.image_reference
     ):
         raise ValueError("qualification requires the selected exclusive H100 aggregate TP8 recipe")
+    # Exercise the actual c28 eval server before interrupting the harmless writer.
+    apply_serving_point(role["args"], concurrency=28, evaluation=True, root=root, policy=None)
     hours, remainder = divmod(walltime_seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     walltime = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
@@ -492,6 +494,7 @@ def qualify(
         "lifecycle_qualified": False,
         "directory": str(directory),
         "native_revision": lock.revision,
+        "serving_point": {"mode": "eval", "concurrency": 28},
         "walltime_seconds": walltime_seconds,
         "observation_timeout_seconds": observation_timeout_seconds,
         "cleanup_timeout_seconds": cleanup_timeout_seconds,

@@ -194,6 +194,30 @@ def client_spec(
     )
 
 
+def apply_serving_point(
+    args: dict[str, Any],
+    *,
+    concurrency: int,
+    evaluation: bool,
+    root: Path,
+    policy: ClientPolicy | None,
+) -> None:
+    """Apply the benchmark point's serving limits and DSpark verification mode."""
+    args["max-num-seqs"] = 2 * concurrency
+    args["max-cudagraph-capture-size"] = min(2048, 1 << (12 * concurrency - 1).bit_length())
+    spec = args["speculative-config"]
+    if spec.get("synthetic_acceptance_length") is not None:
+        raise ValueError("recipe must not hard-code a synthetic acceptance value")
+    spec["enable_adaptive_verification"] = evaluation
+    spec["rejection_sample_method"] = "block" if evaluation else "synthetic"
+    if not evaluation:
+        if policy is None:
+            raise ValueError("throughput serving requires the selected client policy")
+        spec["synthetic_acceptance_length"] = golden_acceptance(
+            root, policy, spec["num_speculative_tokens"]
+        )
+
+
 def render_recipe(
     job: JobSpec,
     root: Path,
@@ -232,17 +256,9 @@ def render_recipe(
             raise ValueError(f"engine {name} differs from the requested aggregate topology")
     if normalized.get("enable-expert-parallel", False) is not False:
         raise ValueError("aggregate pilot requires expert parallelism disabled")
-    args["max-num-seqs"] = 2 * job.row.conc
-    args["max-cudagraph-capture-size"] = min(2048, 1 << (12 * job.row.conc - 1).bit_length())
-    spec = args["speculative-config"]
-    if spec.get("synthetic_acceptance_length") is not None:
-        raise ValueError("recipe must not hard-code a synthetic acceptance value")
-    spec["enable_adaptive_verification"] = job.mode == "eval"
-    spec["rejection_sample_method"] = "block" if job.mode == "eval" else "synthetic"
-    if job.mode != "eval":
-        spec["synthetic_acceptance_length"] = golden_acceptance(
-            root, policy, spec["num_speculative_tokens"]
-        )
+    apply_serving_point(
+        args, concurrency=job.row.conc, evaluation=job.mode == "eval", root=root, policy=policy
+    )
     recipe["model"]["path"] = site.model_snapshot
     recipe["model"]["container"] = site.image.path
     recipe["identity"] = {

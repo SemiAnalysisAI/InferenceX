@@ -118,6 +118,10 @@ Slurm 分配、claim、已接受 ID、调度器观察与取消均由原生运行
 
 接受 sweep 前，先通过 E2E 的 `cancel-startup` 与 `cancel-client` 站点操作验证真实取消行为，并显式提供已准备的 `phase1-site-draft` 路径。它们使用独立诊断输出和 journal、固定镜像与 TP8 worker，以及原生归属校验和取消接口，不编造部署 pin，也不生成可接受的 benchmark manifest。启动期探针申请 300 秒 allocation，观察预算为 240 秒；客户端中断探针申请 3,600 秒 allocation，观察预算为 3,300 秒，以便模型完成就绪。两种模式的清理预算均为额外 180 秒。保留 `qualification.json` 及原生终态/writer 证据；仅有取消 RPC 或 `COMPLETING` 不足以通过验收。
 
+两种探针通过与 benchmark 执行共用的 `apply_serving_point` 渲染逻辑，采用真实 c28 eval 的服务设置：`max-num-seqs: 56`、`max-cudagraph-capture-size: 512`，以及真实 block rejection 和 adaptive verification 的 DSpark。模型、镜像、TP8 拓扑、`max-model-len: 1048576` 与 `max-num-batched-tokens: 4096` 均保持不变。诊断客户端仍是以字面代码执行、可处理信号的 Python writer。`qualification.json` 记录该服务点；探针不运行或发布 eval。此设置对齐修正了此前依赖 vLLM 默认序列上限的问题，但不能证明已观察到的 CUDA 初始化失败已经修复。
+
+[H100 观察运行 35483966784](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35483966784) 确认 Slurm 版本为 `25.05.7`，所属任务 `18325` 的 `StepMgrEnabled=Yes`，且 controller 配置含 `enable_stepmgr`。此前的启动期探针中，实际聚合 step 正在运行，但 `squeue --steps` 仅返回 `batch` 和 `extern`。原生 step 发现正在改为查询 `scontrol --oneliner show steps <owned-job-id>`，并校验返回的任务、step 名及运行状态。这属于原生观察/清理修正，不放宽“实际聚合 step 加 worker 身份”的要求。观察运行发生在任务 `18325` 结束后，因此当时的空 step 列表不能证明活跃 worker 的发现行为。更新后的原生运行时仍须实际重跑验证。
+
 当前原生 pin 要求 `prepared-direct-listener-ownership-v1`。发送客户端流量前，它根据 PID 启动时间及 PID/network namespace 身份，验证监听套接字属于记录的 worker 进程树；客户端运行期间和接受退出码 0 之前也会重新验证。外部或替换监听器、PID 复用或无法读取的归属证据都会使任务失败并关闭客户端。实际 Pyxis 的 namespace/proc 可见性仍需集群验收。
 
 完整源契约为八个吞吐点加一个真实 c28 eval。GSM8K 必须包含全部 1,319 文档及两种 filter（2,638 个评分行），保留 16,384 上下文 / 12,288 生成预算，验证有限分数和完整样本身份。聚合 eval 元数据为 `disagg:false`、`is_multinode:false`、八个服务 GPU、prefill/decode worker 数均为零。
@@ -138,13 +142,17 @@ Merge helper 保留最近明确授权的 `/use RUN_ID` 或 `/reuse-sweep-run RUN
 
 [H100 资源检查运行 35477700047](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35477700047) 在实际登录 runner 上通过，提交为 `14d56f1bbf8f3c867ea79ae97a2f716f304aaaa2`。固定的两个快照及全部索引内模型分片均位于配置的规范共享路径，服务 squash 文件大小为 21,390,860,288 字节，四个必需的 Slurm 命令均可用。[CI 35477693002](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35477693002) 通过了更新后的拓扑、资源检查行为和原生 Linux 契约验证。这两次运行均未提交 GPU benchmark。
 
+首次实际获得资源的生命周期探针使用 InferenceX `bc0710934f3ca2dbdd37940aa93c91a5002e5061` 和原生 `50c3dacc37def01606ee9e4e0ed873646d4f7cc5`。[启动期运行 35483589637](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35483589637) 接受任务 `18324`，其 TP8 worker 以 step `18324.5` 运行。探针因 step 发现未识别该 worker 而超时，随后准确取消所属 allocation。保留日志显示 SIGTERM，原生观察确认终态 `CANCELLED` 且清理完成。这证明了所属资源的取消和关闭，但指定的启动期触发条件未通过验收。
+
+[客户端运行 35483590787](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35483590787) 接受任务 `18325`；其 vLLM worker 在 DSpark 初始化期间出现 CUDA 索引越界/device-assert 错误并失败。原生观察确认终态 `FAILED` 且清理完成；取消操作发现 allocation 已经终止。诊断 writer 未启动，因此没有预期客户端中断或 writer 关闭证据。两次运行均保留 `lifecycle_qualified: false`。c28 服务参数对齐和原生 step 发现修正需要新的硬件验证；这两次失败运行均不能关闭生命周期验收门禁，也不能证明 sweep 的最终结果。
+
 | Gate | 状态 / 所需证据 |
 | --- | --- |
 | 原生及客户端行为 | CPU 测试、已安装 wheel 检查；不声称 GPU 验收 |
 | 回执、app、恢复 | reader 已回滚，revision 变量已删除；新增 schema 保留；原生回执导入与发布仍受门禁限制 |
 | H100 吞吐 | 原镜像 c1、2、4、8、16、20、24、28 待运行 |
 | 真实 eval | 新 c28 待运行；历史完整原始 eval 通过新 validator |
-| 取消与清理 | 本地所属关系/race/closure 测试；实际 Slurm 信号验收待做 |
+| 取消与清理 | 任务 `18324` 已确认所属资源以 `CANCELLED` 关闭，但未满足触发条件；任务 `18325` 在 writer 启动前初始化失败；两项生命周期验收仍待完成 |
 | 测量等价性 | 对照保留基线比较指标、失败、warmup/drain、服务设置及原始 schema |
 | 发布 | 受信任回执、后续发布记录及刷新后 app 证据待完成 |
 | 功耗 | 明确临时一致性例外；不声称实测功耗 |
