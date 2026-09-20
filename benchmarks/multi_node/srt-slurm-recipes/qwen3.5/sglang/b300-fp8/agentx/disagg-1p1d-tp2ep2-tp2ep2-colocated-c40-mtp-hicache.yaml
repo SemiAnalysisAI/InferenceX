@@ -201,4 +201,4 @@ telemetry:
   dcgm_exporter:
     container_image: dcgm-exporter
     port: 9401
-    command: dcgm-exporter --collect-interval=100 --address :{port} --devices g:0,1,2,3
+    command: dcgm-exporter --collect-interval=100 --address :{port} --devices g:0,1,2,3 --collectors /configs/qwen35-dcgm-basic.csv
