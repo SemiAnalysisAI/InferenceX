@@ -14,6 +14,8 @@ We welcome InferenceX partners and the community to submit PRs that make reasona
 
 We also welcome InferenceX partners and the ML community to improve [codeowner-signoff-verify.yml](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml), the CI bot that independently verifies these sign-offs, and make it more rigorous too.
 
+The automated publisher rejects incomplete or inconsistent verifier output. Each check must appear once, and the overall verdict must agree with the check results; otherwise, retry verification.
+
 ## Template
 ```
 As a PR reviewer and CODEOWNER, I have reviewed this and have:

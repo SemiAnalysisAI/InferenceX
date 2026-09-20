@@ -14,7 +14,11 @@ AUTHORS = {"Klaud-Cold", "github-actions[bot]"}
 SUCCESS_HEADER = "## ✅✅✅ **Verdict: PASS** ✅✅✅"
 REJECT = "## ❌❌❌ **REJECTED** ❌❌❌"
 WARN = "## ⚠️ **Verdict: WARN** ⚠️"
-COVERAGE_WARNING = re.compile(r"^⚠️ Check 14 \(Pareto coverage\): WARN\b", re.MULTILINE)
+CHECK_ROW = re.compile(
+    r"(?:[-*+] )?(✅|❌|➖|⚠️) Check ([0-9]+) \([^\r\n]+\): (PASS|FAIL|N/A|WARN) — \S.*"  # noqa: RUF001 - verifier's N/A emoji
+)
+CHECK_PREFIX = re.compile(r"(?:[-*+] )?(?:✅|❌|➖|⚠️)\s*Check\b")  # noqa: RUF001 - verifier's N/A emoji
+STATUS_EMOJI = {"PASS": "✅", "FAIL": "❌", "N/A": "➖", "WARN": "⚠️"}  # noqa: RUF001 - verifier's N/A emoji
 ESCALATION = (
     "⚠️ Pareto coverage needs additional review: @functionstackx @cquil11 @Oseltamivir @adibarra. "
     "At least 5 points per affected throughput-versus-E2EL frontier are highly recommended. "
@@ -35,17 +39,30 @@ def is_verdict(comment: dict[str, Any]) -> bool:
     )
 
 
+def check_statuses(lines: list[str]) -> dict[int, str]:
+    statuses = {}
+    for line in lines:
+        match = CHECK_ROW.fullmatch(line.strip())
+        if match is None:
+            if CHECK_PREFIX.match(line.strip()):
+                return {}
+            continue
+        emoji, number, status = match.groups()
+        check = int(number)
+        allowed = {"PASS", "N/A", "WARN"} if check == 14 else {"PASS", "N/A", "FAIL"}
+        if check in statuses or status not in allowed or emoji != STATUS_EMOJI[status]:
+            return {}
+        statuses[check] = status
+    return statuses if statuses.keys() == set(range(15)) else {}
+
+
 def verdict_body(verdict: str, head_sha: str) -> tuple[str, str]:
-    headers = [
-        header for header in (SUCCESS_HEADER, REJECT, WARN) if header in verdict.splitlines()
-    ]
-    warning = bool(COVERAGE_WARNING.search(verdict))
-    valid = (
-        len(headers) == 1
-        and verdict.splitlines()[0] == headers[0]
-        and (headers[0] != WARN or warning)
-        and (headers[0] != SUCCESS_HEADER or not warning)
-    )
+    lines = verdict.splitlines()
+    headers = [line for line in lines if line in (SUCCESS_HEADER, REJECT, WARN)]
+    checks = check_statuses(lines)
+    warning = checks.get(14) == "WARN"
+    expected = REJECT if "FAIL" in checks.values() else WARN if warning else SUCCESS_HEADER
+    valid = bool(checks) and headers == [expected] and lines[0] == expected
     if not valid:
         verdict = INVALID
     elif warning:

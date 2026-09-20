@@ -582,6 +582,8 @@ single terse line. Rules:
   Do not add the `open` attribute. Leave a blank line after `</summary>` and before
   `</details>` so GitHub renders the Markdown. Separate check rows with blank lines.
 - Include each of Checks 0-14 exactly once, ordered by check number within its group.
+  The publisher rejects missing, duplicate, or malformed check rows and headlines
+  that disagree with the check statuses.
   Keep N/A reasons inside the collapsed group. Never hide a failing or warning criterion there,
   and never repeat passing or N/A criteria outside it. Omit the details group only
   if every criterion fails.

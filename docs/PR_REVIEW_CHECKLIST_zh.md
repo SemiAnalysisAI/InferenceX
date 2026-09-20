@@ -14,6 +14,8 @@
 
 我们同样欢迎 InferenceX 合作伙伴与机器学习社区改进 [codeowner-signoff-verify.yml](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml)（独立复核这些签署的 CI 机器人），使其更加严谨。
 
+自动发布程序会拒绝不完整或前后矛盾的验证结果。每项检查必须且只能出现一次，总体裁定必须与各项检查结果一致；否则需要重试验证。
+
 > **重要：模板请保持英文原文，原样复制粘贴，不要翻译。** CI 签署验证工作流 [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml) 通过开头语句 "As a PR reviewer and CODEOWNER, I have reviewed this and have" 触发；模板被改写或翻译后，签署验证 CI 将不会触发。
 
 ## 模板（请复制英文原文）

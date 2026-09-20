@@ -8,6 +8,29 @@ from infx import github
 from infx.workflows import signoff_publish
 
 
+PASS = "## ✅✅✅ **Verdict: PASS** ✅✅✅"
+REJECT = "## ❌❌❌ **REJECTED** ❌❌❌"
+WARN = "## ⚠️ **Verdict: WARN** ⚠️"
+
+
+def verdict(header=PASS, *, failure=False, warning=False, prefix=""):
+    rows = [f"✅ Check {number} (Requirement): PASS — Verified." for number in range(14)]
+    rows[13] = "➖ Check 13 (Draft precision): N/A — No speculative changes."
+    expanded = []
+    if failure:
+        rows.pop(1)
+        expanded.append("❌ Check 1 (Sweep): FAIL — No passing sweep.")
+    if warning:
+        expanded.append(prefix + "⚠️ Check 14 (Pareto coverage): WARN — curve-a: 3/5; admin bypass not verified.")
+    else:
+        rows.append("✅ Check 14 (Pareto coverage): PASS — curve-a: 5/5.")
+    return (
+        header + "\n\n" + "\n".join(expanded)
+        + "\n\n<details>\n<summary>Passing checks</summary>\n\n"
+        + "\n".join(rows) + "\n</details>"
+    )
+
+
 @pytest.fixture
 def publish(tmp_path, monkeypatch):
     def run(verdict, comments=(), *, succeeded=True, update_error=None, repeats=1):
@@ -60,14 +83,15 @@ def publish(tmp_path, monkeypatch):
     ("Klaud-Cold", "<!-- codeowner-signoff-verify sha=1111111111111111111111111111111111111111 -->"),
 ])
 def test_verdict_reuses_bot_comment_and_records_only_assessed_commit(publish, author, marker):
-    result = publish("## ✅✅✅ **Verdict: PASS** ✅✅✅\n\nAll checks passed.", [
+    text = verdict()
+    result = publish(text, [
         {"id": 1, "user": {"login": "contributor"}, "body": "<!-- codeowner-signoff-verify -->\nKeep my comment"},
         {"id": 2, "user": {"login": author}, "body": marker + "\nOld verdict"},
     ], repeats=2)
     assert result == {"comments": [
         {"id": 1, "user": {"login": "contributor"}, "body": "<!-- codeowner-signoff-verify -->\nKeep my comment"},
         {"id": 2, "user": {"login": author}, "body":
-         "<!-- codeowner-signoff-verify -->\n## ✅✅✅ **Verdict: PASS** ✅✅✅\n\nAll checks passed."
+         "<!-- codeowner-signoff-verify -->\n" + text +
          "\n\nAssessed commit: `abcdef1234567890abcdef1234567890abcdef1234`.\n"},
     ], "writes": 1}
 
@@ -75,8 +99,21 @@ def test_verdict_reuses_bot_comment_and_records_only_assessed_commit(publish, au
 @pytest.mark.parametrize("verdict,succeeded", [
     (None, True),
     ("Incomplete response", True),
-    ("## ✅✅✅ **Verdict: PASS** ✅✅✅\n## ❌❌❌ **REJECTED** ❌❌❌", True),
-    ("## ✅✅✅ **Verdict: PASS** ✅✅✅", False),
+    (verdict() + "\n" + REJECT, True),
+    (verdict() + "\n" + PASS, True),
+    (verdict(), False),
+    (verdict(WARN, failure=True, warning=True), True),
+    (verdict(PASS, warning=True, prefix="- "), True),
+    (verdict(WARN), True),
+    (verdict(REJECT), True),
+    (verdict().replace("✅ Check 14 (Pareto coverage): PASS — curve-a: 5/5.\n", ""), True),
+    (verdict() + "\n✅ Check 14 (Pareto coverage): PASS — duplicate", True),
+    (verdict() + "\n✅ Check 15 (Unknown): PASS — extra", True),
+    (verdict().replace("✅ Check 1 (Requirement)", "❌ Check 1 (Requirement)"), True),
+    (verdict().replace("✅ Check 1 (Requirement): PASS", "⚠️ Check 1 (Requirement): WARN"), True),
+    (verdict().replace("✅ Check 14 (Pareto coverage): PASS", "❌ Check 14 (Pareto coverage): FAIL"), True),
+    (verdict() + "\n⚠️ Check 14 (Pareto coverage): UNKNOWN — malformed duplicate", True),
+    (verdict().replace("PASS — curve-a: 5/5.", "PASS — "), True),
 ])
 def test_invalid_or_failed_verification_replaces_previous_pass(publish, verdict, succeeded):
     result = publish(verdict, [{"id": 1, "user": {"login": "github-actions[bot]"},
@@ -97,31 +134,33 @@ def test_missing_or_deleted_verdict_is_created_without_editing_human_comment(pub
     if existing:
         comments.append({"id": 2, "user": {"login": "github-actions[bot]"},
                          "body": "<!-- codeowner-signoff-verify -->\nOld verdict"})
-    result = publish("## ❌❌❌ **REJECTED** ❌❌❌\n\nMissing sweep evidence.", comments,
+    text = verdict(REJECT, failure=True)
+    result = publish(text, comments,
                      update_error=update_error)
     assert len(result["comments"]) == 2
     assert result["comments"][0]["body"] == "<!-- codeowner-signoff-verify -->\nMy comment"
     assert result["comments"][1]["body"] == (
-        "<!-- codeowner-signoff-verify -->\n## ❌❌❌ **REJECTED** ❌❌❌\n\nMissing sweep evidence.\n\n"
+        "<!-- codeowner-signoff-verify -->\n" + text + "\n\n"
         "Assessed commit: `abcdef1234567890abcdef1234567890abcdef1234`.\n"
     )
 
 
 def test_comment_update_errors_are_not_silently_replaced_with_duplicate_comments(publish):
     with pytest.raises(RuntimeError, match="GitHub write failed"):
-        publish("## ✅✅✅ **Verdict: PASS** ✅✅✅", [
+        publish(verdict(), [
             {"id": 1, "user": {"login": "github-actions[bot]"},
              "body": "<!-- codeowner-signoff-verify -->\nOld verdict"},
         ], update_error=403)
 
 
-@pytest.mark.parametrize("header", [
-    "## ⚠️ **Verdict: WARN** ⚠️",
-    "## ❌❌❌ **REJECTED** ❌❌❌",
+@pytest.mark.parametrize("header,failure,prefix", [
+    (WARN, False, ""),
+    (REJECT, True, ""),
+    (WARN, False, "- "),
 ])
-def test_coverage_warning_escalates_once_without_masking_other_failures(publish, header):
+def test_coverage_warning_escalates_once_without_masking_other_failures(publish, header, failure, prefix):
     result = publish(
-        header + "\n\n⚠️ Check 14 (Pareto coverage): WARN — curve-a: 3/5; admin bypass not verified.",
+        verdict(header, failure=failure, warning=True, prefix=prefix),
         repeats=2,
     )
     body = result["comments"][0]["body"]
@@ -135,27 +174,11 @@ def test_coverage_warning_escalates_once_without_masking_other_failures(publish,
     assert result["writes"] == 1
 
 
-@pytest.mark.parametrize("verdict", [
-    "## ⚠️ **Verdict: WARN** ⚠️",  # warning must explain the coverage check
-    "## ✅✅✅ **Verdict: PASS** ✅✅✅\n\n⚠️ Check 14 (Pareto coverage): WARN — 3/5",
-    "## ✅✅✅ **Verdict: PASS** ✅✅✅\n## ⚠️ **Verdict: WARN** ⚠️",
-    "## ❌❌❌ **REJECTED** ❌❌❌\n## ⚠️ **Verdict: WARN** ⚠️",
-])
-def test_inconsistent_warning_verdict_is_rejected(publish, verdict):
-    body = publish(verdict)["comments"][0]["body"]
-    assert "The verifier did not produce a valid verdict" in body
-    assert "**REJECTED**" in body
-    assert "@functionstackx" not in body
-
-
 def test_successful_reassessment_removes_stale_warning_and_tags(publish):
-    comments = publish(
-        "## ⚠️ **Verdict: WARN** ⚠️\n\n"
-        "⚠️ Check 14 (Pareto coverage): WARN — coverage unverifiable; admin bypass not verified."
-    )["comments"]
-    result = publish("## ✅✅✅ **Verdict: PASS** ✅✅✅\n\nAll checks passed.", comments)
+    comments = publish(verdict(WARN, warning=True))["comments"]
+    result = publish(verdict(), comments)
     assert len(result["comments"]) == 1
     assert "**Verdict: PASS**" in result["comments"][0]["body"]
     assert "@functionstackx" not in result["comments"][0]["body"]
     assert "@adibarra" not in result["comments"][0]["body"]
-    assert "coverage unverifiable" not in result["comments"][0]["body"]
+    assert "curve-a: 3/5" not in result["comments"][0]["body"]
