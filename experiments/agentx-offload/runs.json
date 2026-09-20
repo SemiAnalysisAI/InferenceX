@@ -935,15 +935,15 @@
       "repeat": 1,
       "attempt": 2,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "queued",
-      "node": null,
+      "status": "in_progress",
+      "node": "b200-nscale-slurm_00",
       "artifacts": [],
       "performance_result": false,
       "workflow_name": "offload-v1-nvme-c4096-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:25:10Z",
       "job_id": 106000859670,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476072143/job/106000859670",
-      "started_at": "2026-09-20T01:36:07Z",
+      "started_at": "2026-09-20T04:53:18Z",
       "attempt_history": [
         {
           "attempt": 1,
@@ -957,7 +957,8 @@
           "note": "No performance result; cancelled before workflow completion. Attempt 2 was triggered by inferencex-dash[bot]."
         }
       ],
-      "rerun_triggering_actor": "inferencex-dash[bot]"
+      "rerun_triggering_actor": "inferencex-dash[bot]",
+      "queued_at": "2026-09-20T01:36:07Z"
     },
     {
       "run_id": 35476075885,
@@ -1191,7 +1192,7 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850",
-  "status": "All four matched c16 arms are valid. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. Eight study jobs are in progress: three c1024 arms, three c4096 arms, and the c8192 HBM and HBM+NVMe arms. The c1024 and c4096 HBM+NVMe retries remain queued. The c8192 HBM+DRAM+NVMe retry failed its node-local NVMe capacity preflight before model startup and produced no performance result. The c8192 HBM+DRAM arm remains deferred.",
+  "status": "All four matched c16 arms are valid. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. Nine study jobs are in progress: three c1024 arms, all four c4096 arms, and the c8192 HBM and HBM+NVMe arms. The c1024 HBM+NVMe retry remains queued. The c8192 HBM+DRAM+NVMe retry failed its node-local NVMe capacity preflight before model startup and produced no performance result. The c8192 HBM+DRAM arm remains deferred.",
   "last_capacity_check": {
     "checked_at": "2026-09-20T01:58:26Z",
     "cluster_observed_at": "2026-09-20T01:55:57Z",
@@ -1238,7 +1239,7 @@
     "reason": "All 11 B200 nodes were allocated and 17 B200 jobs were queued: seven external DeepSeek-V4.1-Flash jobs with admin priority and ten attempt-2 offload jobs automatically rerun by inferencex-dash[bot]. Only the c8192 HBM+NVMe arm remains active on its original attempt. No new study job was dispatched."
   },
   "next_dispatch": {
-    "requires": "Launch nothing while any B200 job is queued. Monitor the eight in-progress study jobs and two queued HBM+NVMe retries, validating only completed runs with usable profiling results. Once the cluster-wide pending count is zero and capacity permits, retry c8192 HBM+DRAM+NVMe on a node satisfying the NVMe preflight and dispatch the deferred HBM+DRAM c8192 arm."
+    "requires": "Launch nothing while any B200 job is queued. Monitor the nine in-progress study jobs and the queued c1024 HBM+NVMe retry, validating only completed runs with usable profiling results. Once the cluster-wide pending count is zero and capacity permits, retry c8192 HBM+DRAM+NVMe on a node satisfying the NVMe preflight and dispatch the deferred HBM+DRAM c8192 arm."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-19T23:34:00Z",
