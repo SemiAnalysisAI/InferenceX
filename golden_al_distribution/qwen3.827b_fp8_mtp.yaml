@@ -1,25 +1,23 @@
-# Source GitHub Actions run: https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35491616007
-# Native MTP, original BF16 head and draft KV cache; target KV cache FP8.
-# coding, 80 successful requests, 4096 maximum output tokens.
-# thinking_on k=3: AR=0.503951026964; accepted=133034; proposed=263982; drafts=87994.
-# All original MTP weight modules excluded from inherited target FP8 quantization.
-# {
-#   "MODEL": "Qwen/Qwen3.8-27B-FP8",
-#   "MODEL_REVISION": "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a",
-#   "PRECISION": "fp8",
-#   "IMAGE": "vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3",
-#   "TP": "1",
-#   "MTP_LIST": "3",
-#   "THINKING_MODES": "on",
-#   "CATEGORY": "coding",
-#   "SPEEDBENCH_OUTPUT_LEN": "4096",
-#   "CHAT_TEMPLATE_KWARGS_ON": "{\"enable_thinking\":true}",
-#   "SPEEDBENCH_SPECULATIVE_CONFIG": "{\"method\": \"mtp\", \"model\": \"Qwen/Qwen3.8-27B\", \"revision\": \"1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0\", \"kv_cache_dtype\": \"auto\"}",
-#   "SPEEDBENCH_CONCURRENCY": "64",
-#   "SPEEDBENCH_SEED": "0",
-#   "SPEEDBENCH_PREPARE_REVISION": "bcf059af55c20a89f797724598f9908d126153e6",
-#   "draft_snapshot": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
-# }
+# Source GitHub Actions runs: thinking_off https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492786441; thinking_on https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492787451
+# SPEED-Bench Qualitative coding; all 80 requests succeeded in every cell; maximum output length 4096.
+# Prepared dataset SHA256: e9bbbe998472b79501ed79ba2bf126e58b63e153a6deef70ce2b63ea7a4de845
+# Target: Qwen/Qwen3.8-27B-FP8 @ 017b9c7af6b5689d5dd426a76e0bc077eb5ca20a; target weights: fp8; target KV cache: fp8.
+# Image: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3; H200; TP=1; concurrency=64; context=16384; seed=0.
+# Native MTP head: Qwen/Qwen3.8-27B @ 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0; original BF16 weights, compute and KV cache.
+# FP8 collection excludes all original MTP weight modules from inherited target quantization through --hf-overrides.
+# thinking_on: temperature=1.0, top_p=0.95, top_k=20, presence_penalty=0.0, chat_template_kwargs={"enable_thinking":true}.
+# thinking_off: temperature=0.7, top_p=0.8, top_k=20, presence_penalty=1.5, chat_template_kwargs={"enable_thinking":false}.
+# AL includes the bonus token and is rounded to two decimals. AR comments are fractions, using actual proposed tokens.
+# Counter comments retain accepted draft tokens, proposed draft tokens, and verification drafts for exact recomputation.
+# Collector: benchmarks/single_node/speedbench/qwen3.827b_vllm.sh (speedbench-al.yml); draft lengths limited to 1-4.
 qwen3.8-27b-fp8:
+  thinking_off:
+    1: 1.90  # AR=0.900382608696; accepted=25886; proposed=28750; drafts=28750
+    2: 2.68  # AR=0.837843967342; accepted=33249; proposed=39684; drafts=19842
+    3: 3.28  # AR=0.759643860940; accepted=40271; proposed=53013; drafts=17671
+    4: 3.79  # AR=0.698515476943; accepted=39807; proposed=56988; drafts=14247
   thinking_on:
-    3: 2.51
+    1: 1.73  # AR=0.726705818716; accepted=94043; proposed=129410; drafts=129410
+    2: 2.21  # AR=0.604951065637; accepted=119669; proposed=197816; drafts=98908
+    3: 2.52  # AR=0.507043631751; accepted=134722; proposed=265701; drafts=88567
+    4: 2.72  # AR=0.430686744384; accepted=135513; proposed=314644; drafts=78661

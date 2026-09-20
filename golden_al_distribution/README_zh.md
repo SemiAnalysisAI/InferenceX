@@ -170,10 +170,10 @@ AL 为 `1 + accepted / drafts`；AR 为 `accepted / proposed_tokens`，使用实
 | MiniMax-M3 | EAGLE3（GQA） | [`minimaxm3_eagle3_gqa.yaml`](minimaxm3_eagle3_gqa.yaml) | [29784780049](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/29784780049) |
 | GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
-| Qwen3.8-27B BF16 | 原生 MTP（原始 BF16 头） | [`qwen3.827b_bf16_mtp.yaml`](qwen3.827b_bf16_mtp.yaml) | [35490571863](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35490571863) |
-| Qwen3.8-27B FP8 | 原生 MTP（原始 BF16 头） | [`qwen3.827b_fp8_mtp.yaml`](qwen3.827b_fp8_mtp.yaml) | [35491616007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35491616007) |
+| Qwen3.8-27B BF16 | 原生 MTP（原始 BF16 头） | [`qwen3.827b_bf16_mtp.yaml`](qwen3.827b_bf16_mtp.yaml) | [thinking 关闭](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492788796)、[thinking 开启](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492789880) |
+| Qwen3.8-27B FP8 | 原生 MTP（原始 BF16 头） | [`qwen3.827b_fp8_mtp.yaml`](qwen3.827b_fp8_mtp.yaml) | [thinking 关闭](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492786441)、[thinking 开启](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492787451) |
 
-Qwen3.8-27B 目前包含两种目标精度下已验证的三个草稿 token、thinking 开启的测量点。完整的 1–4 个草稿 token、thinking 关闭/开启收集正在进行。
+Qwen3.8-27B 的两条曲线均覆盖 1–4 个草稿 token，以及 thinking 关闭/开启两种模式。每个测量点均完成全部 80 个 coding 提示词，失败数为零。YAML 注释保留逐点 AR 比例和原始计数器；数值和模型检查结果已与工作流 artifact 核对。
 
 
 ## 主要参考资料

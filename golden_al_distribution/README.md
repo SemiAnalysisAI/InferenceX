@@ -130,7 +130,7 @@ explicit collector override),
 with `collector-script` set to that path, `precision`, `tp=1`, a pinned
 `model-revision`, and an explicit `speculative-config` (the collector supplies
 `num_speculative_tokens`). Pass `mtp-list=1 2 3 4`; this collector rejects draft
-lengths outside 1–4 before downloading models or allocating a server. Use the Qwen chat setting
+lengths outside 1–4 before downloading models or starting a server. Use the Qwen chat setting
 `thinking-kwargs={"enable_thinking":true}`. Sampling follows the model card:
 thinking on uses temperature 1.0, top-p 0.95 and presence penalty 0; thinking off
 uses 0.7, 0.8 and 1.5, respectively; both use top-k 20.
@@ -174,10 +174,10 @@ Failed or incomplete cells never produce a golden matrix.
 | MiniMax-M3 | EAGLE3 (GQA) | [`minimaxm3_eagle3_gqa.yaml`](minimaxm3_eagle3_gqa.yaml) | [29784780049](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/29784780049) |
 | GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
-| Qwen3.8-27B BF16 | Native MTP (original BF16 head) | [`qwen3.827b_bf16_mtp.yaml`](qwen3.827b_bf16_mtp.yaml) | [35490571863](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35490571863) |
-| Qwen3.8-27B FP8 | Native MTP (original BF16 head) | [`qwen3.827b_fp8_mtp.yaml`](qwen3.827b_fp8_mtp.yaml) | [35491616007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35491616007) |
+| Qwen3.8-27B BF16 | Native MTP (original BF16 head) | [`qwen3.827b_bf16_mtp.yaml`](qwen3.827b_bf16_mtp.yaml) | [thinking off](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492788796), [thinking on](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492789880) |
+| Qwen3.8-27B FP8 | Native MTP (original BF16 head) | [`qwen3.827b_fp8_mtp.yaml`](qwen3.827b_fp8_mtp.yaml) | [thinking off](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492786441), [thinking on](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35492787451) |
 
-Qwen3.8-27B currently contains the validated three-token, thinking-on point for both target precisions. Full 1–4-token, thinking-off/on collection is in progress.
+Both Qwen3.8-27B curves cover draft lengths 1–4 with thinking off/on. Every cell completed all 80 coding prompts with zero failures. The YAML comments retain per-point AR fractions and raw counters; the values and model inspection were checked against the workflow artifacts.
 
 
 ## Primary references
