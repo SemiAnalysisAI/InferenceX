@@ -233,6 +233,12 @@ jobs:
                 tail -35 "$log"
               fi
             done
+            for result in "$proc_root"/tmp/inferencex-speedbench.*/results/*/acceptance.json; do
+              if [[ -f "$result" ]]; then
+                echo "COMPLETED CELL $result"
+                cat "$result"
+              fi
+            done
             for model in "$proc_root"/mnt/hf_hub_cache/speedbench-qwen3.827b-*; do
               if [[ -d "$model" ]]; then du -sh "$model"; fi
             done
