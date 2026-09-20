@@ -8038,3 +8038,10 @@
     - "Remove --speculative-draft-model-quantization quark_mxfp4 and --enable-aiter-allreduce-fusion. Collectives fall back to INT4 ROCm quick all-reduce."
     - "Drop the TP4 GPU-resident arm. Keep TP2 resident [1, 4, 8, 12] and TP2 HiCache [16, 20, 24, 28, 32, 36, 40]."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3227
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Restore the TP4 GPU-resident arm at concurrency [1, 4, 8, 12, 16]. TP2 resident [1, 4, 8, 12] and TP2 HiCache [16, 20, 24, 28, 32, 36, 40] are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3227
