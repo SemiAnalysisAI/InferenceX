@@ -861,9 +861,40 @@
       "repeat": 1,
       "attempt": 2,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "in_progress",
-      "node": "b200-nscale-slurm_08",
-      "artifacts": [],
+      "status": "failure",
+      "node": "im-b200-c002",
+      "artifacts": [
+        {
+          "id": 10606620646,
+          "name": "results_bmk",
+          "size_bytes": 142
+        },
+        {
+          "id": 10606510802,
+          "name": "server_logs_minimaxm3_tp4_conc1024_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-f-a8881a41d4cf93946fe8",
+          "size_bytes": 214695
+        },
+        {
+          "id": 10606460864,
+          "name": "power_audit_minimaxm3_tp4_conc1024_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-f-a8881a41d4cf93946fe8",
+          "size_bytes": 1166552
+        },
+        {
+          "id": 10606460860,
+          "name": "gpu_metrics_minimaxm3_tp4_conc1024_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-f-a8881a41d4cf93946fe8",
+          "size_bytes": 1166370
+        },
+        {
+          "id": 10606281269,
+          "name": "run-stats",
+          "size_bytes": 280
+        },
+        {
+          "id": 10606251422,
+          "name": "agentic_minimaxm3_tp4_conc1024_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-f-a8881a41d4cf93946fe8",
+          "size_bytes": 3642894
+        }
+      ],
       "performance_result": false,
       "workflow_name": "offload-v1-nvme-c1024-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:24:41Z",
@@ -884,7 +915,22 @@
         }
       ],
       "rerun_triggering_actor": "inferencex-dash[bot]",
-      "queued_at": "2026-09-20T01:36:10Z"
+      "queued_at": "2026-09-20T01:36:10Z",
+      "runner": "b200-nscale-slurm_08",
+      "completed_at": "2026-09-20T13:38:08Z",
+      "allocation_id": "16690",
+      "failure_stage": "agentx_warmup_allocation_time_limit",
+      "failure_evidence": "Canonical c1024 HBM+NVMe remained in warmup until the 480-minute Slurm allocation limit. At termination it had returned 6,715 of 11,339 planned warmup requests, with 949 still in flight and zero reported phase errors after 28,415.5 seconds. All 6,715 retained request records are warmup; profiling never started and no performance result exists. The retained server and benchmark logs contain no EngineDead, CUDA out-of-memory, or traceback signature, so this is a deterministic feasibility failure under the current canonical execution budget and will not be retried unchanged.",
+      "log_archive_sha256": "a6527dfb63d1247c8a901867c1ff80ef368e8e0a316c98d5cdda74a4355c85d6",
+      "storage_evidence": "O_DIRECT NVMe was active on xfs /dev/md0 over eight NVMe leaves. The final retained telemetry sample showed four cache files totaling 1,099,502,125,056 logical bytes and 1,099,492,540,416 allocated bytes in /offload-scratch/inferencex-offload-35476050409-2-16690-ccf4bb49cf4d. The hard Slurm time limit killed the step before runtime.finish produced offload_cleanup.json, so deletion is not verified and infrastructure-only cleanup is required on im-b200-c002.",
+      "cleanup_verified": false,
+      "evidence_sha256": {
+        "offload_config.json": "c5ab8abcdfedbb8fed3e9ac18383cfd2bd416c1652252a1145a796d375792021",
+        "offload-telemetry.jsonl": "a48368a316f0a74d56915f6a62f2a062ede6bce8808c3bd1b7ea61cdc668deb7",
+        "benchmark.log": "b4cdc16cea6bf24cc16a915f7c23e0c74951ba0c42edf76eda1da40ed89827f7",
+        "server.log": "2503a983431d31aea0d1f80b44811105db220a45ea0a887c18ae47abd8ed0e28",
+        "profile_export.jsonl": "bbb5bdbec14bec6b954e086229d5e861622b85047c24736552a95be1cfa99d47"
+      }
     },
     {
       "run_id": 35476053573,
@@ -1722,7 +1768,7 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918",
-  "status": "All four matched c16 arms and the c256 HBM control are valid. Two study jobs remain in progress: c1024 HBM and c1024 HBM+NVMe. Both completed c8192 HBM and HBM+DRAM arms exhausted the six-hour canonical warmup budget with zero profiled responses. All c4096 arms also failed before profiling. These high-concurrency points will not be retried unchanged.",
+  "status": "All four matched c16 arms and the c256 HBM control are valid. The c1024 HBM run remains in progress. The c1024 HBM+NVMe run hit the 480-minute allocation limit during canonical warmup with zero profiled responses and will not be retried unchanged. Both c8192 HBM and HBM+DRAM and all c4096 arms also failed before profiling.",
   "last_capacity_check": {
     "checked_at": "2026-09-20T08:21:25Z",
     "cluster_observed_at": "2026-09-20T08:20:58Z",
@@ -1738,17 +1784,15 @@
     "scheduler_snapshot_at": "2026-09-20T08:21:25Z",
     "scheduler_available": true,
     "active_study_run_ids": [
-      35476043213,
-      35476050409
+      35476043213
     ],
     "active_study_job_ids": [
-      106035807426,
-      106000864877
+      106035807426
     ],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": false,
-    "reason": "The c256 HBM control completed successfully, freeing its node. New dispatch remains blocked by the previously reported automation approval review until the user explicitly authorizes the c256 HBM+NVMe dispatch."
+    "reason": "The c1024 HBM+NVMe run reached a deterministic allocation-time-limit feasibility failure, freeing its node. New dispatch remains blocked by the previously reported automation approval review until the user explicitly authorizes the c256 HBM+NVMe dispatch."
   },
   "next_dispatch": {
     "requires": "After explicit user authorization resolves the dispatch approval blocker and a fresh scheduler check confirms zero pending B200 jobs, dispatch the already validated c256 HBM+NVMe probe, then HBM+DRAM+NVMe and HBM+DRAM as capacity permits. Do not retry c4096 or c8192 feasibility failures unchanged."
@@ -1759,5 +1803,15 @@
     "scope": "All pending B200 jobs across the cluster, including this study, legacy jobs, and other users' work.",
     "rule": "Use idle eligible nodes when useful, but dispatch no batch that would leave more than one B200 job queued. If one or more B200 jobs are already pending, launch nothing.",
     "supersedes": "The previous 125% allocated-plus-pending demand ceiling."
-  }
+  },
+  "cleanup_required": [
+    {
+      "run_id": 35476050409,
+      "node": "im-b200-c002",
+      "scratch": "/offload-scratch/inferencex-offload-35476050409-2-16690-ccf4bb49cf4d",
+      "last_observed_logical_bytes": 1099502125056,
+      "last_observed_allocated_bytes": 1099492540416,
+      "reason": "The allocation time limit killed the container step before offload_cleanup.json was written. Delete only this exact task-owned scratch through approved InferenceX infrastructure, then record proof and remove this entry."
+    }
+  ]
 }
