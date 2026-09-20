@@ -109,23 +109,20 @@ For a failed-job retry, reuse the same run's surviving successful
 artifacts; do not redispatch a full sweep just because several manifests exist.
 Before a repair push, remove sweep labels and keep draft, then repeat within budget.
 
-Use the canonical reporting guide/renderer. Body only: `Goal: Update ENGINE image from OLD
-to NEW.` plus the complete dated public baseline; do not post a baseline comment. Comments:
-attempt/repair counter, status/run,
-compact image/SHA/settings, Change, benchmark/eval tables, then Next (only the next subgoal).
-Use en/zh prose: English visible, Chinese only inside `<details><summary>中文</summary>`;
-numeric tables once. Group metadata with line breaks; use exact 8k/1k-style lengths,
-shared settings once, and full point labels when concurrency alone is ambiguous.
-Cells show `110 (+10%)`, latency in ms, ↑/↓ headers; evals show `97% (+0.50 pp)` and samples.
-No Result column, Coverage/Finding paragraphs, legends, baseline-storage boilerplate,
-limitations section or redundant milestones. Keep failures/errors and N/A reasons in brief
-notes; preserve source links and provenance uncertainty. Report observations, not internal
-deliberation. Update on material changes or 30 minutes waiting; retain completed attempts.
-Use matched units/statistics; improvement is best effort with no regression rejection gate.
+Use the canonical reporting renderer. Body only: `Goal: Update ENGINE image from OLD to NEW.`
+plus the complete dated public baseline; no baseline comment. Attempt comments contain the
+counter, status/run, compact image/SHA/settings, Change, benchmark/eval tables and Next only.
+Keep English visible and Chinese prose in `<details><summary>中文</summary>`; numeric tables
+appear once. Use exact 8k/1k lengths, unambiguous point labels, `110 (+10%)`, latency in ms,
+↑/↓ headers and `97% (+0.50 pp)` evals with sample counts. Omit Result/Coverage/Finding,
+legends, boilerplate, limitations and redundant milestones. Briefly note failures and N/A
+reasons; preserve sources and uncertainty. Report observations on material changes or after
+30 minutes waiting. Improvement is best effort; there is no regression rejection gate.
 
-Finalize attempt records and write CandidateOutcome to $KLAUD_EVIDENCE/requested-outcome.json.
-Run `finish --outcome-file "$KLAUD_EVIDENCE/requested-outcome.json"`. Only finish may mark
-ready: it verifies complete artifacts and publishes the final report BEFORE reviews begin.
+On terminal resolve/baseline evidence, stop investigating. Finalize attempts, write
+CandidateOutcome to $KLAUD_EVIDENCE/requested-outcome.json and run `finish --outcome-file
+"$KLAUD_EVIDENCE/requested-outcome.json"`. Only finish may mark ready after verifying complete
+artifacts and publishing the final report BEFORE reviews begin.
 After finish returns a verified `validated` outcome, check for an existing exact `/use
 <verified-final-run-id>` comment, then post it once on this PR. Never post `/use` for any
 other outcome or any run except the verified final sweep.
@@ -135,7 +132,7 @@ the family claim so a later wave may retry it. Pending cleanup means wait and re
 Uncertainty is not incompatibility. Open PRs block the family until cleanup completes.
 Without an owned PR, report without a placeholder or deleting someone else's claim.
 
-Return verified $KLAUD_EVIDENCE/outcome.json unchanged as structured output. Never forge
-completion markers or disable the Stop hook. Agent completion is not validation. Recovery
-can preserve healthy children and finish their successful sweep if the SDK/job interrupts;
-persisted records make that possible, but do not voluntarily abandon an unfinished session.
+After finish succeeds, read verified $KLAUD_EVIDENCE/outcome.json and invoke StructuredOutput
+exactly once with that exact JSON object. Return no prose, Markdown, code fence, file path or
+JSON-encoded string. Never forge completion markers or disable the Stop hook. Recovery can
+preserve healthy children after SDK/job interruption; never abandon an unfinished session.

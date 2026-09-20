@@ -460,12 +460,23 @@ def save_diagnostics(
             else:
                 diagnostics["outcome-source"] = "verified-receipt"
         else:
-            try:
-                outcome = CandidateOutcome.model_validate_json(outcome_file.read_text())
-            except (OSError, ValueError, TypeError):
-                failure = "structured-output-invalid"
-            else:
-                diagnostics["outcome-source"] = "structured-response"
+            evidence = os.environ.get("KLAUD_EVIDENCE")
+            if evidence:
+                try:
+                    outcome = CandidateOutcome.model_validate_json(
+                        (Path(evidence) / "outcome.json").read_text()
+                    )
+                except (OSError, ValueError, TypeError):
+                    outcome = None
+                else:
+                    diagnostics["outcome-source"] = "verified-outcome"
+            if outcome is None:
+                try:
+                    outcome = CandidateOutcome.model_validate_json(outcome_file.read_text())
+                except (OSError, ValueError, TypeError):
+                    failure = "candidate-outcome-unavailable"
+                else:
+                    diagnostics["outcome-source"] = "structured-response"
         if outcome is not None and failure is None:
             try:
                 session.verify(outcome)
