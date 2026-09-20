@@ -738,15 +738,15 @@
       "repeat": 1,
       "attempt": 3,
       "head_sha": "ea6efdc63db41499deafe8745c41eaaf03b76235",
-      "status": "queued",
-      "node": null,
+      "status": "in_progress",
+      "node": "b200-nscale-slurm_02",
       "artifacts": [],
       "performance_result": false,
       "workflow_name": "offload-v1-none-c1024-r1-20260919T2324Z",
       "dispatched_at": "2026-09-19T23:24:32Z",
       "job_id": 106035807426,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476043213/job/106035807426",
-      "started_at": null,
+      "started_at": "2026-09-20T06:41:08Z",
       "attempt_history": [
         {
           "attempt": 1,
@@ -1288,7 +1288,7 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850",
-  "status": "All four matched c16 arms are valid. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. Nine study jobs are in progress: the c1024 HBM+DRAM, HBM+NVMe, and HBM+DRAM+NVMe arms; all four c4096 arms; and the c8192 HBM and HBM+DRAM arms. The retryable c1024 HBM warmup transport failure is queued as attempt 3, occupying the study's single allowed B200 queue slot. The c8192 HBM+NVMe arm failed under sustained warmup overload before profiling; its 1.10 TB task-owned NVMe scratch was verified deleted, and it is not being retried unchanged. The c8192 HBM+DRAM+NVMe retry failed its node-local NVMe capacity preflight before model startup and produced no performance result.",
+  "status": "All four matched c16 arms are valid. All four c16384 arms failed in canonical AgentX warmup before profiling, establishing a shared feasibility boundary. Ten study jobs are in progress: all four c1024 arms, all four c4096 arms, and the c8192 HBM and HBM+DRAM arms. The retryable c1024 HBM warmup transport failure began attempt 3 on b200-nscale-slurm_02. The c8192 HBM+NVMe arm failed under sustained warmup overload before profiling; its 1.10 TB task-owned NVMe scratch was verified deleted, and it is not being retried unchanged. The c8192 HBM+DRAM+NVMe retry failed its node-local NVMe capacity preflight before model startup and produced no performance result.",
   "last_capacity_check": {
     "checked_at": "2026-09-20T05:42:20Z",
     "cluster_observed_at": "2026-09-20T05:40:52Z",
