@@ -428,6 +428,41 @@ jobs:
                             status[name] = scheduler_read(argv)
                         except (OSError, subprocess.TimeoutExpired) as error:
                             status[name] = {"error_type": type(error).__name__}
+                # Read exactly the active client-cancellation allocation to diagnose live step discovery.
+                client_directory = GENERATION / "cancellation-qualification" / "35483590787-1-client"
+                client_journal = client_directory / "journal" / "h100-dgxc" / "3e8abe67ff7fb3a340b524079b307551a4ea71c5cb76410d86033adfab63ec04"
+                try:
+                    client_receipt = read_object(client_journal / "receipt.json", client_journal)
+                    client_id = str(client_receipt.get("job_id", ""))
+                    if (client_receipt.get("intent_id") != "cancellation-qualification-35483590787-1-client"
+                            or client_receipt.get("scheduler_comment") != "srtctl:3e8abe67ff7fb3a340b524079b307551a4ea71c5cb76410d86033adfab63ec04"
+                            or not re.fullmatch(r"[1-9][0-9]*", client_id)
+                            or client_receipt.get("accepted_ids") != [client_id]
+                            or client_receipt.get("output_dir") != str(client_directory / "native-output" / client_id)):
+                        raise ValueError("client cancellation receipt ownership differs")
+                    client_status = {"job_id": client_id, "intent_id": client_receipt["intent_id"]}
+                    for name, argv in (
+                        ("slurm_version", ["scontrol", "--version"]),
+                        ("squeue_steps", ["squeue", "--steps", "--jobs", client_id, "--noheader", "--format=%i|%j"]),
+                        ("scontrol_steps", ["scontrol", "--oneliner", "show", "step", client_id]),
+                    ):
+                        client_status[name] = scheduler_read(argv)
+                    for name in ("started.json", "closed.json"):
+                        try:
+                            client_status[name] = read_object(client_directory / name, client_directory)
+                        except (OSError, ValueError) as error:
+                            client_status[name] = {"error_type": type(error).__name__}
+                    client_logs = client_directory / "native-output" / client_id / "logs"
+                    for name in ("direct-vllm-worker.json", "benchmark.out"):
+                        try:
+                            raw, info = read_fixed(client_logs / name, client_logs, 32768, tail=True)
+                            (report / ("cancellation-client-" + name)).write_bytes(raw)
+                            client_status[name] = info
+                        except (OSError, ValueError) as error:
+                            client_status[name] = {"error_type": type(error).__name__}
+                    status["cancellation_client"] = client_status
+                except (OSError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
+                    status["cancellation_client"] = {"error_type": type(error).__name__}
                 (report / "diagnostic.json").write_text(json.dumps(status, indent=2) + "\n")
                 print("Fixed-run read-only observation retained; this is not qualification evidence.")
             - name: Preserve provisioning evidence
