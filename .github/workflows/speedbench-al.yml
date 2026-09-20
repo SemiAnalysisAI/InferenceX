@@ -1,5 +1,5 @@
 name: SpeedBench AL Collection
-run-name: "SPEED-Bench ${{ inputs.model }} | ${{ inputs.precision }} | k=[${{ inputs.mtp-list }}] | thinking=[${{ inputs.thinking-modes }}]"
+run-name: "Read native MTP collection progress"
 
 # Push-button (workflow_dispatch) collection of a SPEED-Bench acceptance-length
 # (AL) matrix: thinking_on/off x MTP levels, for the given model (defaults to
@@ -199,139 +199,39 @@ jobs:
         ) ||
         format('[{0}]', toJSON(inputs.runner))
       ) }}
-    timeout-minutes: 600
-    name: "p${{ needs.setup.outputs.priority }} | SpeedBench AL matrix | ${{ inputs.category }} | mtp=[${{ inputs.mtp-list }}] | thinking=[${{ inputs.thinking-modes }}]"
+    timeout-minutes: 10
+    name: Read collection progress
     steps:
-      - name: Resource cleanup (pre-run)
-        run: &resource-cleanup |
-          # Cleanup Docker resources
-          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-            echo "[Docker] Cleaning up resources ..."
-            docker ps -aq | xargs -r docker rm -f
-            docker network prune -f
-            while [ -n "$(docker ps -aq)" ]; do
-              docker ps -a
-              sleep 5
-            done
-          fi
-
-          # Cleanup SLURM resources
-          if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up jobs with name: ${RUNNER_NAME} ..."
-            scancel --name="${RUNNER_NAME}" || true
-            while [ -n "$(squeue --name="${RUNNER_NAME}" --noheader --format='%i')" ]; do
-              squeue --name="${RUNNER_NAME}"
-              sleep 5
-            done
-          fi
-
-          # Cleanup AL-matrix outputs from a prior job on this runner so a stale
-          # matrix from a previous run is never picked up as this job's output.
-          rm -rf "${GITHUB_WORKSPACE}/speedbench_results" 2>/dev/null || true
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          ref: ${{ inputs.ref || github.sha }}
-          clean: true
-          submodules: true
-          persist-credentials: false
-
-      - name: Cleanup stale outputs (pre-run)
-        run: |
-          rm -f speedbench-reference-al.yaml || true
-          rm -f speedbench-evidence.tar.gz || true
-          rm -f gpu_metrics.csv || true
-          rm -rf speed_bench_data || true
-
-      - name: Collect AL matrix
+        with: { persist-credentials: false }
+      - name: Read current allocations and logs
         env:
-          RUNNER_NAME: ${{ runner.name }}
+          OBSERVE_RUNNER_NAMES: 'h200-dgxc-slurm_00 h200-dgxc-slurm_02'
         run: |
           set -eo pipefail
-          export GPU_COUNT="$TP"
-          # Historical measured revisions own their configuration in the launchers.
-          if [[ -f benchmarks/runtime_settings.sh ]]; then
-            source benchmarks/runtime_settings.sh
-          fi
-          if [[ -f runners/runtime_settings.sh ]]; then
-            source runners/runtime_settings.sh
-          fi
-          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
-
-          if [ ! -f "speedbench-reference-al.yaml" ]; then
-            echo "AL collection failed: speedbench-reference-al.yaml not produced." >&2
-            exit 1
-          fi
-          echo "### SpeedBench AL matrix" >> "$GITHUB_STEP_SUMMARY"
-          echo '```yaml' >> "$GITHUB_STEP_SUMMARY"
-          cat speedbench-reference-al.yaml >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload AL matrix artifact
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: speedbench-reference-al-${{ inputs.model-prefix }}
-          path: speedbench-reference-al.yaml
-          if-no-files-found: warn
-
-      - name: Open PR updating reference yaml
-        if: ${{ inputs.open-pr && success() }}
-        env:
-          # Repository write credential for authorized reference-data collection.
-          GH_TOKEN: ${{ secrets.SPEEDBENCH_PAT }} # zizmor: ignore[secrets-outside-env]
-        run: |
+          source benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars OBSERVE_RUNNER_NAMES
+          for target in $OBSERVE_RUNNER_NAMES; do
+            job_id=$(squeue --name="$target" --noheader --format='%i')
+            if [[ ! "$job_id" =~ ^[0-9]+$ ]]; then
+              echo "No unique active allocation for $target"
+              continue
+            fi
+            echo "Reading $target allocation $job_id"
+            timeout 45 srun --overlap --jobid="$job_id" --nodes=1 --ntasks=1 --exact bash -s <<'REMOTE'
           set -eo pipefail
-          # NOTE: the reference yaml is keyed by model at the top level. This
-          # overwrites it with the current model's matrix; when more than one
-          # model is collected, replace this cp with a per-model-key YAML merge.
-          cp speedbench-reference-al.yaml benchmarks/speedbench-reference-al.yaml
-
-          BRANCH="speedbench-al/${MODEL_PREFIX}-auto-${GITHUB_RUN_ID}"
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git checkout -b "$BRANCH"
-          git add benchmarks/speedbench-reference-al.yaml
-          if git diff --cached --quiet; then
-            echo "No change in reference yaml; skipping PR."
-            exit 0
-          fi
-          git commit -m "Update SpeedBench AL reference matrix for ${MODEL} (auto, run ${GITHUB_RUN_ID})"
-          git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push -u origin "$BRANCH"
-          gh pr create \
-            --title "Update SpeedBench AL reference matrix for ${MODEL_PREFIX} (auto)" \
-            --body "Auto-generated by the SpeedBench AL Collection workflow (run ${GITHUB_RUN_ID}). Model: \`${MODEL}\`, category: \`${CATEGORY}\`, MTP: \`${MTP_LIST}\`, thinking: \`${THINKING_MODES}\`, output_len: \`${SPEEDBENCH_OUTPUT_LEN}\`. Please review the measured values before merging." \
-            --base main \
-            --head "$BRANCH"
-
-      - name: Upload revision-aware collector evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: speedbench-evidence-${{ inputs.model-prefix }}-${{ inputs.precision }}
-          path: speedbench-evidence.tar.gz
-          if-no-files-found: ignore
-
-      - name: Upload server logs
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: speedbench_server_logs-${{ inputs.model-prefix }}
-          path: speedbench_results/server_*.log
-          if-no-files-found: ignore
-
-      # Per-request benchmark detail (vllm bench serve --save-detailed): includes
-      # the model's response text per request, so the AL of each cell can be
-      # audited for output correctness (sensible text + correct thinking mode).
-      - name: Upload detailed benchmark results
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: speedbench_detailed_results-${{ inputs.model-prefix }}
-          path: speedbench_results/speedbench_*
-          if-no-files-found: ignore
-
-      - name: Resource cleanup (post-run)
-        if: always()
-        run: *resource-cleanup
+          ps -eo pid,ppid,etime,args | grep -E 'vllm|hf download|prepare.py|qwen3.827b_vllm' | head -40 || true
+          for pid in $(pgrep -f '^bash benchmarks/single_node/speedbench/qwen3.827b_vllm.sh$' || true); do
+            proc_root="/proc/$pid/root"
+            for log in "$proc_root"/tmp/inferencex-speedbench.*/results/*/server.log "$proc_root"/tmp/inferencex-speedbench.*/results/*/benchmark.log; do
+              if [[ -f "$log" ]]; then
+                echo "LOG $log"
+                tail -35 "$log"
+              fi
+            done
+            for model in "$proc_root"/mnt/hf_hub_cache/speedbench-qwen3.827b-*; do
+              if [[ -d "$model" ]]; then du -sh "$model"; fi
+            done
+          done
+          REMOTE
+          done
