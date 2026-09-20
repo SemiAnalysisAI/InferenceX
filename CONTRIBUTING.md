@@ -10,12 +10,54 @@ Thanks for contributing! PRs are welcome. This page covers the review process ev
 
 ## PR review flow
 
+Every PR description must include an **AI model disclosure** section. Name the exact model/version used to prepare the PR and each model's role, including delegated agents. Tool names such as Claude Code, Cursor, or Perplexity Computer alone are insufficient. Use the identifier exposed by the runtime; never guess an unavailable identifier. If the runtime does not expose the exact model, explicitly state that it could not be verified. Human-only PRs must state `No AI used`. Update the disclosure when later edits use another model.
+
 1. Open your PR and get it through PR validation. Add the `full-sweep-fail-fast` label (strongly recommended because a broken change wastes one job per matrix rather than the whole fan-out). Use `full-sweep-enabled` only if you need jobs to keep running past a failure. Let the benchmark sweep run and get a green full sweep, including evals, on a commit in your PR.
 2. For changes owned by a non-admin CODEOWNER other than `@SemiAnalysisAI/core`, ask one eligible [CODEOWNER](.github/CODEOWNERS) to review and post the **PR Review Checklist** sign-off (see below) in their approval comment.
 3. Ping a core maintainer on Slack for final approval, after obtaining the checklist sign-off when required.
 4. An authorized maintainer posts `/use <run_id>` (see below) and the PR is merged via the reuse path.
 
 **Performance changelog requirement:** Every change that can affect benchmark performance and every recipe addition or modification **MUST** append a new entry to the physical end of `perf-changelog.yaml`. Historical entries **MUST NOT** be edited.
+
+## Draft-model precision
+
+Speculative-decoding submissions must use the original, unquantized draft weights
+and their native precision. This applies to embedded MTP/NextN/EAGLE draft heads
+and standalone draft models, including DSpark, on every hardware vendor and
+framework. Do not change draft precision at all relative to the reference:
+no quantization, downcasts, upcasts, same-width dtype conversions (such as
+BF16 to FP16), or mixed-precision overrides. This covers draft weights,
+activations, computation, and draft KV cache, whether changed offline, at load
+time, or during serving. Do not substitute a precision-converted draft checkpoint.
+
+Reviewers must check the effective draft precision, not just the launch flags.
+Inspect checkpoint metadata and quantization exclusions, environment variables,
+framework defaults in the pinned image, and any inherited target-model
+quantization. A quantized target/verifier is allowed under the existing eval
+requirements, but its quantization must not also quantize the draft components.
+Do not infer draft precision from the target checkpoint's name or precision label.
+
+This includes settings such as `--speculative-draft-model-quantization quark_mxfp4`
+and `SGLANG_GLM_NEXTN_MOE_PTPC=1` when they quantize draft computation. An upstream
+recipe, passing evals, a claimed unchanged acceptance length (AL), or a newly
+measured AL curve does not exempt a submission from this rule. Synthetic AgentX
+acceptance is not evidence that draft precision was preserved.
+
+For speculative-decoding changes, the CODEOWNER's additional detail section must
+identify the draft checkpoint/revision (or embedded head), its native and effective
+precision, and the metadata or pinned implementation used to verify that no draft
+weights or precision were changed. If the precision cannot be verified, the
+criterion is not satisfied. See the [review checklist](docs/PR_REVIEW_CHECKLIST.md) and
+[verifier Check 13](.github/codeowner-signoff-verify-prompt.md#check-13--draft-weights-and-precision-are-unchanged).
+
+This follows the same reference-head precision principle as
+[MLPerf Inference Rules, Appendix C: Speculative Decoding](https://github.com/mlcommons/inference_policies/blob/ff7edba545fded369e7e7e3d5a2f0bab4a95eece/inference_rules.adoc#appendix-c-speculative-decoding),
+which requires the reference MTP head "at the same precision as provided" and
+prohibits reference-head weight quantization and other acceptance-rate manipulation.
+That MLPerf revision includes a workload-specific quantized-edge exception;
+InferenceX does not adopt that exception. This comparison concerns preserving
+draft weights and precision, not adopting MLPerf's allowed-model list,
+speculative-decoding configuration, or acceptance methodology.
 
 ## The PR Review Checklist (CODEOWNER sign-off)
 
@@ -40,7 +82,7 @@ A friendly reminder. Please follow the latest checklist template **correctly**:
 - Starting Claude requires an eligible human actor with repository write access.
 - Fill in the "Additional detail section" with the links the checklist asks for (validation/eval workflow runs, the corresponding [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR, and any exception reasoning).
 
-Once the sign-off is posted, CI independently re-verifies the review checklist claims, including CODEOWNER status, a green sweep and evals on a commit in the PR, the linked recipe, the reuse command, use of the latest checklist template, upstream [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) images, no architecture-changing benchmark hacks, and chat-template usage for speculative decoding. It then creates or updates one verdict comment for the PR, including the SHA actually assessed. Failing criteria stay visible; passing and N/A criteria appear together in a collapsed section. An existing verdict comment from the older per-commit format is reused; if the comment was deleted, the next verification creates a replacement. Checkmarks are not taken on trust, so please only check items you have actually verified.
+Once the sign-off is posted, CI independently re-verifies the review checklist claims, including CODEOWNER status, a green sweep and evals on a commit in the PR, the linked recipe, the reuse command, use of the latest checklist template, upstream [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) images, no architecture-changing benchmark hacks, chat-template usage for speculative decoding, and unchanged draft-model/head weights and precision. It then creates or updates one verdict comment for the PR, including the SHA actually assessed. Failing criteria stay visible; passing and N/A criteria appear together in a collapsed section. An existing verdict comment from the older per-commit format is reused; if the comment was deleted, the next verification creates a replacement. Checkmarks are not taken on trust, so please only check items you have actually verified.
 
 The verdict records only the commit actually assessed; it does not carry approval forward to later commits. To request a new assessment, the original reviewer edits their existing checklist, or an authorized collaborator dispatches `codeowner-signoff-verify.yml` with `pr-number` and its `comment_url` (both must identify the same PR). This updates the same verdict comment.
 
