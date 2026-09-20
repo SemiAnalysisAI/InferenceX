@@ -8455,3 +8455,13 @@
   description:
     - "Update B200 vLLM AgentX to DSpark6 and a new image with TP8 and DEP8 configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the complete GB300 Kimi-K3 AgentX curve so every published point carries measured power. The 6 published disaggregated points come from a 2026-09-14 sweep whose recipes did not yet declare the dcgm-power provider, so they carry no power values, and AgentX resolves one curve per hardware, so only a sweep selecting both config keys can replace them together."
+    - "重测 GB300 Kimi-K3 AgentX 整条曲线，使每个已发布的点都带实测功耗。已发布的 6 个分离部署点来自 2026-09-14 的 sweep，当时配方尚未声明 dcgm-power provider，因此没有功耗数值；而 AgentX 每个硬件只解析出一条曲线，因此只有同时选中两个 config key 的 sweep 才能整体替换它们。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3315
