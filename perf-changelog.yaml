@@ -8468,3 +8468,12 @@
   - Use 72 or 298 GB/rank prefill HiCache, first-use write-through for higher loads,
     and 32 or 64 decode slots.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-decode-memory-diagnostic
+  scenario-type:
+  - agentic-coding
+  description:
+  - Screen B300 Qwen3.5 FP8 TP2+EP2 1P1D at C40/C48 with decode static memory fraction 0.92,
+    write-through HiCache and original BF16 NEXTN draft.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
