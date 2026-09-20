@@ -491,6 +491,10 @@ launcher 还为该检查点将 Slurm 分配时长从 180 分钟提高到 480 分
 
 ## Qwen3.8-27B FP8 原生 MTP 黄金接受长度
 
+MI300X 同时覆盖 1024/1024 和 8192/1024，均使用 TP1，并发为
+1、2、4、8、16、32、64、128。8192/1024 场景同时参与标准精度评测选择；
+其吞吐测试使用相同的实测 AL **2.52**。
+
 H100、H200、MI300X 和 MI325X 的固定序列长度 FP8 配方使用三个原生 MTP 草稿 token，
 以及 [#3304](https://github.com/SemiAnalysisAI/InferenceX/pull/3304) 测量的 `thinking_on` 曲线。
 仅吞吐运行从 [`qwen3.827b_fp8_mtp.yaml`](../golden_al_distribution/qwen3.827b_fp8_mtp.yaml)

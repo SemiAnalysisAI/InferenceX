@@ -550,6 +550,10 @@ required before calling either arm validated.
 
 ## Qwen3.8-27B FP8 native MTP golden acceptance
 
+MI300X covers both 1024/1024 and 8192/1024 at TP1 and concurrency
+1, 2, 4, 8, 16, 32, 64 and 128. The 8192/1024 scenario also participates in
+standard eval selection; its throughput uses the same measured AL **2.52**.
+
 The H100, H200, MI300X and MI325X fixed-sequence FP8 recipes use three native MTP
 draft tokens and the `thinking_on` curve measured in [#3304](https://github.com/SemiAnalysisAI/InferenceX/pull/3304).
 Throughput-only runs load AL **2.52** from
