@@ -30,8 +30,7 @@ sign-off approval.
 
 The CODEOWNER must report each affected curve's count and evidence in the
 checklist's additional detail section. A shortfall produces a visible `⚠️`
-warning and tags @functionstackx (Oren), @cquil11 (Cam), @Oseltamivir (Bryan),
-and @adibarra (Alec).
+warning and tags @functionstackx, @cquil11, @Oseltamivir, and @adibarra.
 Record the admin's rationale, affected curves and assessed SHA in the PR; verify
 the author's repository `permission: admin` and `role_name: admin`. Ordinary
 approval, `/use`, membership in Core, or a bot's comment is not this exception.

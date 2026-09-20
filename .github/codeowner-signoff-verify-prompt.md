@@ -580,8 +580,9 @@ single terse line. Rules:
     `➖ Check N (<name>): N/A — <reason>`
     `⚠️ Check 14 (Pareto coverage): WARN — <curve, count or unverifiable reason; admin-exception state; evidence>`
   Never hide Check 14 WARN inside the collapsed group. The publisher adds the
-  warning and mentions @functionstackx (Oren), @cquil11 (Cam), @Oseltamivir
-  (Bryan), and @adibarra (Alec) above the findings; do not duplicate that escalation text yourself.
+  warning and mentions @functionstackx, @cquil11, @Oseltamivir, and @adibarra
+  above the findings. Use only @usernames, without personal names; do not
+  duplicate that escalation text yourself.
   Spend words only on the checks that fail.
 - State conclusions, don't narrate your process. No multi-paragraph explanations, no
   restating the checklist, no hedging ("if X then maybe Y"). Make the call. Link the
