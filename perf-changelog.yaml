@@ -8510,3 +8510,10 @@
     - "Add a dedicated c20 diagnostic recipe with periodic prefill worker stacks and rank iteration logs"
     - "新增专用 c20 诊断配方，记录预填充工作进程的周期性调用栈和各 rank 的迭代日志"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
+  description:
+    - "Extend c20 diagnostics with NIXL transfer logs on both roles and periodic decode worker stacks"
+    - "扩展 c20 诊断，在预填充和解码两侧记录 NIXL 传输日志，并定期记录解码工作进程调用栈"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
