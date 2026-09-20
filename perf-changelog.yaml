@@ -8464,5 +8464,7 @@
     - agentic-coding
   description:
     - "Refresh the complete H200 Kimi-K3 AgentX curve so every published point carries measured power. 25 of the 35 published points come from the 2026-08-07 sweep, which predates power collection on this hardware, and AgentX resolves one curve per hardware, so only a sweep selecting all three config keys can replace them together."
+    - "Migrate agg-tp8dp4ep32-balanced and agg-tp8dp4ep32-vllm-simple to the current srtctl telemetry schema: provider and default_frequency were retired for dcgm_exporter and collect_interval_ms when the submodule moved to the upstream pin, and srtctl rejected both recipes as Unknown field before submitting anything."
     - "重测 H200 Kimi-K3 AgentX 整条曲线，使每个已发布的点都带实测功耗。已发布的 35 个点中有 25 个来自 2026-08-07 的 sweep，早于该硬件开启功耗采集；而 AgentX 每个硬件只解析出一条曲线，因此只有同时选中三个 config key 的 sweep 才能整体替换它们。"
+    - "将 agg-tp8dp4ep32-balanced 与 agg-tp8dp4ep32-vllm-simple 迁移到当前的 srtctl telemetry schema：submodule 切到上游 pin 时，provider 与 default_frequency 已被 dcgm_exporter 和 collect_interval_ms 取代，srtctl 在提交作业前就以 Unknown field 拒绝了这两个配方。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3309
