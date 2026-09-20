@@ -100,7 +100,7 @@ KLAUD=(uv run --no-project --exclude-newer PT12H --python 3.12 \
 
 正常结束和中断恢复均由 `finish` 使用已验证产物和冻结基线生成最终报告，并在**标记就绪之前**发布。缺失的历史基线明确记为 N/A，不编造差值，也不另跑基线。成功 sweep 可以存在性能回归；就绪表示工作和验证结束，而非每项指标都提升。`finish` 返回 `validated` 后，Klaud 仅发布一次 `/use <verified-final-run-id>`，以便复用已完成的 sweep；其他结果不得发布 reuse 命令，也不得 stage 结果或合并 PR。
 
-## 最终预检与维护者重试
+## 最终预检
 
 添加 `full-sweep-fail-fast` 前，验证已推送精确 head 的完整矩阵：
 
@@ -114,13 +114,4 @@ uv run --no-project --python 3.12 --with 'pydantic>=2.10,<3' --with pyyaml \
 
 验证器使用受信任 helper 代码，从精确 head 的 YAML 独立生成未过滤配置族。它按工作流的矩阵 schema 比较完整 recipe 设置，正确处理生成 fingerprint 后添加的默认字段；修改设置后复用原指纹仍会失败。覆盖等价的 scenario filter 可以通过；缺失或改变的配置点、默认评测不能通过。不会执行下载的 PR 代码。旧运行遇到生成器策略变化时需要检查，不能静默降低验证标准。
 
-`check-final` 在调度前也会将**冻结基线中的每一个测试点**与规范最终配置族核对。`finish` 及中断恢复在验证完整产物覆盖后、标记就绪前执行同一检查。缺失基线，或遗漏、改变任一原始点时，即使较小的当前配置族 sweep 为绿色也无法通过。须报告受影响的点，并以 `outcome: failed` 调用 `finish`，清理自有运行并关闭 PR；不得标记 ready 或 validated。`N/A` 仅表示差值无法核实，不能用于豁免缺失的新镜像结果。定向 smoke 仍可只运行子集。现有维护者接管和分支保留规则仍然适用。
-
-已确认的阻塞原因修复后，仓库维护者可明确释放已关闭候选保留的分支：
-
-```bash
-"${KLAUD[@]}" release-candidate --parent-run-id PARENT_RUN_ID \
-  --candidate-file ORIGINAL_CANDIDATE_JSON --head REVIEWED_CLOSED_PR_SHA
-```
-
-该命令拒绝 Klaud 账号及非维护者，要求父运行已结束、清理记录已验证、PR 在精确 head 上关闭且未合并、所有自有子运行均已结束。它重新检查分支，记录批准，再仅删除该保留分支。不会重新调度、抹除历史结果或接管开放 PR。普通容量或就绪性延后已由 `finish` 释放分支。
+`check-final` 在调度前也会将**冻结基线中的每一个测试点**与规范最终配置族核对。`finish` 及中断恢复在验证完整产物覆盖后、标记就绪前执行同一检查。缺失基线，或遗漏、改变任一原始点时，即使较小的当前配置族 sweep 为绿色也无法通过。须报告受影响的点，并以 `outcome: failed` 调用 `finish`，清理自有运行、关闭 PR 并删除未移动的精确 head 分支；不得标记 ready 或 validated。`N/A` 仅表示差值无法核实，不能用于豁免缺失的新镜像结果。定向 smoke 仍可只运行子集。维护者明确接管时仍保留 PR 和分支。
