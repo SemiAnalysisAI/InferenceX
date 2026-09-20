@@ -1,7 +1,8 @@
 """Review-time frontier counts matching InferenceX-app d507f3689274c82972709abb531bdedcb2e77946.
 
 Inputs must already be scoped and provenance-checked by the reviewer.
-See CONTRIBUTING.md#pareto-coverage for the app contract and policy differences.
+See Check 14 in .github/codeowner-signoff-verify-prompt.md for the app contract
+and policy differences.
 """
 
 from __future__ import annotations

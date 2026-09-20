@@ -471,10 +471,38 @@ its separate speculative-algorithm/configuration requirements.
   affected speculative path remains.
 
 ## Check 14 — Pareto coverage (recommendation with admin exception)
-Read `CONTRIBUTING.md#pareto-coverage` and the current review checklist. At least
+Read the current `docs/PR_REVIEW_CHECKLIST.md`. At least
 5 measured points on each affected throughput-versus-E2EL frontier are highly
 recommended. This is an advisory recommendation with an admin-exception path,
 not an unconditional five-point requirement or a new commit-status gate.
+
+The checklist stays concise; the detailed Pareto rules live here, not in
+`CONTRIBUTING.md` or either repository's `AGENTS.md`.
+
+Cross-repository synchronization applies even when benchmark-curve coverage is
+N/A. Any Pareto implementation change in `SemiAnalysisAI/InferenceX` or
+`SemiAnalysisAI/InferenceX-app` must include the counterpart update in the same
+workstream. Check the app's `packages/app/src/lib/chart-utils.ts`,
+`components/inference/metric-registry.ts` and
+`components/inference/utils/{powerCurves,canonicalFrontier}.ts` under
+`packages/app/src/`, against `infx/workflows/pareto_coverage.py` in InferenceX.
+Synchronize direction, metric/percentile selection, eligibility, series grouping,
+tie/duplicate handling and conditional canonical intersection. Preserve deliberate
+review-policy differences such as invalid-evidence warnings. Require regression
+tests in both repositories against the same measured-point fixtures (including
+ties, duplicates, invalid metrics and canonical intersection), updated pinned
+references and affected bilingual docs, and cross-linked companion PRs recording
+parity results and merge dependencies. Do not mark synchronization complete
+without the counterpart ready for coordinated review. This does not authorize
+a merge or an admin bypass.
+
+Pinned app references at
+[`d507f3689274c82972709abb531bdedcb2e77946`](https://github.com/SemiAnalysisAI/InferenceX-app/commit/d507f3689274c82972709abb531bdedcb2e77946):
+
+- [`metric-registry.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/components/inference/metric-registry.ts): throughput/E2EL selects `upper_right`.
+- [`paretoFrontUpperRight`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/lib/chart-utils.ts): measured frontier, including equal-throughput plateaus rather than strict mathematical non-dominance.
+- [`chartFrontier`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/components/inference/utils/powerCurves.ts) and [`canonicalParetoIntersection`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/components/inference/utils/canonicalFrontier.ts): conditional intersection after the full selected-axis frontier.
+- [`ChartDisplay`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/components/inference/ui/ChartDisplay.tsx): ordinary official E2EL points are not stamped with canonical flags.
 
 - Apply to performance-affecting submissions, including recipe, image, topology,
   concurrency and append-only changes. N/A only for changes that cannot affect a
@@ -494,7 +522,7 @@ not an unconditional five-point requirement or a new commit-status gate.
   percentiles or scenarios. Respect the app's hardware/framework/precision series,
   run/date selection and fixed-sequence speculative-method separation. AgentX can
   mix topology, speculative methods and KV offload within one curve.
-- Inspect the pinned app sources linked in CONTRIBUTING plus the live app revision
+- Inspect the pinned app sources linked above plus the live app revision
   used by the evidence. Its E2EL direction is `upper_right`, despite the helper's
   geometric name: x asc, y desc on ties, retain increasing y and equal-y plateaus
   at distinct x. Deduplicate identical coordinates. Do not count interpolated,
