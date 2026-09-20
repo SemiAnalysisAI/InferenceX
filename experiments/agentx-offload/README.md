@@ -50,7 +50,7 @@ before declaring a pair matched.
 
 Start with a matched four-arm probe at concurrency 16. Then build full curves for
 all four arms. Initial curve points are 1, 4, 8, 16, 32, 64, 128, 256, 1,024,
-4,096 and 16,384. Add intermediate positive integers near observed changes, and
+4,096, 8,192 and 16,384. Add intermediate positive integers near observed changes, and
 repeat both sides of a candidate crossover on different nodes.
 Keep the maximum at 16,384. Failure or insufficient completed samples is a
 feasibility result, never a zero-throughput point. Canonical warmup that exceeds

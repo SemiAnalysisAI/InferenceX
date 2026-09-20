@@ -882,7 +882,7 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "ebeb7ec8cdf6d68c76e43b225ef1ea1cba256890",
-      "status": "queued",
+      "status": "failure",
       "node": null,
       "artifacts": [],
       "performance_result": false,
@@ -890,7 +890,13 @@
       "dispatched_at": "2026-09-19T23:31:01Z",
       "job_id": 105986145812,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476332029/job/105986145812",
-      "started_at": "2026-09-19T23:31:25Z"
+      "started_at": "2026-09-19T23:31:25Z",
+      "completed_at": "2026-09-20T00:00:44Z",
+      "runner": "b200-nscale-slurm_10",
+      "allocation_id": "16659",
+      "failure_stage": "agentx_warmup",
+      "failure_evidence": "Canonical AgentX warmup flooded approximately 17,635 requests at requested concurrency 16,384; a root warmup request failed after Connection reset by peer, followed by ServerDisconnectedError responses. AIPerf raised ProfileAborted before profiling began. Server initialization had completed and the retained logs contain no EngineDead or CUDA out-of-memory signature.",
+      "log_archive_sha256": "3671507d5a9619259dfb07cba2c64484e15aac6bf7a618d9bd6b3431d209dd94"
     },
     {
       "run_id": 35476334779,
@@ -900,7 +906,7 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "ebeb7ec8cdf6d68c76e43b225ef1ea1cba256890",
-      "status": "in_progress",
+      "status": "failure",
       "node": null,
       "artifacts": [],
       "performance_result": false,
@@ -908,7 +914,13 @@
       "dispatched_at": "2026-09-19T23:31:04Z",
       "job_id": 105986145297,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476334779/job/105986145297",
-      "started_at": "2026-09-19T23:31:33Z"
+      "started_at": "2026-09-19T23:31:33Z",
+      "completed_at": "2026-09-19T23:51:20Z",
+      "runner": "b200-nscale-slurm_09",
+      "allocation_id": "16657",
+      "failure_stage": "agentx_warmup",
+      "failure_evidence": "Canonical AgentX warmup flooded approximately 17,635 requests at requested concurrency 16,384; a root warmup request failed after Connection reset by peer, followed by ServerDisconnectedError responses. AIPerf raised ProfileAborted before profiling began. Server initialization had completed and the retained logs contain no EngineDead or CUDA out-of-memory signature.",
+      "log_archive_sha256": "4bc4cbdb857e1f1105955d5f74e424a96b6974af8c7c5ffb29d6a871256583e7"
     },
     {
       "run_id": 35476337411,
@@ -918,7 +930,7 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "ebeb7ec8cdf6d68c76e43b225ef1ea1cba256890",
-      "status": "in_progress",
+      "status": "failure",
       "node": null,
       "artifacts": [],
       "performance_result": false,
@@ -926,7 +938,13 @@
       "dispatched_at": "2026-09-19T23:31:08Z",
       "job_id": 105986145772,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476337411/job/105986145772",
-      "started_at": "2026-09-19T23:31:41Z"
+      "started_at": "2026-09-19T23:31:41Z",
+      "completed_at": "2026-09-19T23:50:24Z",
+      "runner": "b200-nscale-slurm_10",
+      "allocation_id": "16658",
+      "failure_stage": "agentx_warmup",
+      "failure_evidence": "Canonical AgentX warmup flooded approximately 17,635 requests at requested concurrency 16,384; a root warmup request failed after Connection reset by peer, followed by ServerDisconnectedError responses. AIPerf raised ProfileAborted before profiling began. Server initialization had completed and the retained logs contain no EngineDead or CUDA out-of-memory signature.",
+      "log_archive_sha256": "b3a3202fe9be14c686de4ffec79983483ff230403bbcac95197c6d806957f079"
     },
     {
       "run_id": 35476340310,
@@ -936,7 +954,7 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "ebeb7ec8cdf6d68c76e43b225ef1ea1cba256890",
-      "status": "queued",
+      "status": "failure",
       "node": null,
       "artifacts": [],
       "performance_result": false,
@@ -944,14 +962,20 @@
       "dispatched_at": "2026-09-19T23:31:12Z",
       "job_id": 105986168759,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35476340310/job/105986168759",
-      "started_at": "2026-09-19T23:31:36Z"
+      "started_at": "2026-09-19T23:31:36Z",
+      "completed_at": "2026-09-20T00:07:26Z",
+      "runner": "b200-nscale-slurm_09",
+      "allocation_id": "16660",
+      "failure_stage": "agentx_warmup",
+      "failure_evidence": "Canonical AgentX warmup flooded approximately 17,635 requests at requested concurrency 16,384; a root warmup request failed after Connection reset by peer, followed by ServerDisconnectedError responses. AIPerf raised ProfileAborted before profiling began. Server initialization had completed and the retained logs contain no EngineDead or CUDA out-of-memory signature.",
+      "log_archive_sha256": "b2ec6b8492d86b19e90e95b4d9f950fa8701144ba0e9b4e68e0119d682a8a5cf"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850",
-  "status": "All four matched c16 arms are valid. Twelve widely spaced curve probes are active or queued: all four arms at c1024, c4096, and c16384. HBM + DRAM + NVMe has the highest c16 output throughput at 150.69829 tok/s/GPU; broader curves and crossover brackets remain outstanding.",
+  "status": "All four matched c16 arms are valid. The c1024 and c4096 four-arm sets remain in progress. All four c16384 arms failed in canonical AgentX warmup after a connection-reset storm, before profiling began; c16384 is a shared feasibility boundary and produces no chart point. Concurrency 8192 is the next lower bracket.",
   "last_capacity_check": {
-    "checked_at": "2026-09-19T23:30:30Z",
-    "cluster_observed_at": "2026-09-19T23:30:07Z",
+    "checked_at": "2026-09-20T00:10:08Z",
+    "cluster_observed_at": "2026-09-20T00:10:08Z",
     "cluster_stale": false,
     "eligible_nodes": 11,
     "idle_nodes": 2,
@@ -961,7 +985,7 @@
     "pending_requested_nodes": 0,
     "demand_nodes": 9,
     "demand_percent": 81.82,
-    "scheduler_snapshot_at": "2026-09-19T23:30:30Z",
+    "scheduler_snapshot_at": "2026-09-20T00:10:08Z",
     "scheduler_available": true,
     "active_study_run_ids": [
       35476043213,
@@ -971,11 +995,7 @@
       35476061809,
       35476067005,
       35476072143,
-      35476075885,
-      35476332029,
-      35476334779,
-      35476337411,
-      35476340310
+      35476075885
     ],
     "active_study_job_ids": [
       105985396145,
@@ -985,21 +1005,15 @@
       105985437739,
       105985460384,
       105985461225,
-      105985481999,
-      105986145812,
-      105986145297,
-      105986145772,
-      105986168759
+      105985481999
     ],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": true,
-    "post_dispatch_demand_nodes": 13,
-    "post_dispatch_demand_percent": 118.18,
-    "reason": "Pre-dispatch views showed 9 allocated B200 nodes and no queued B200 jobs: 9/11 nodes (81.82%). The validated matched c16384 four-arm set was dispatched. Two jobs entered progress on the two idle nodes and two remained queued, producing intended allocated-plus-pending demand of 13/11 nodes (118.18%), within the 125% ceiling."
+    "reason": "Fresh dashboard views showed 9 of 11 B200 nodes allocated, 2 idle, and zero queued B200 jobs. The global one-queued-job limit permits at most three additional one-node dispatches: two can use idle nodes and one may queue."
   },
   "next_dispatch": {
-    "requires": "Monitor and validate the twelve active/queued probes. Two c16384 jobs were already queued before the one-queued-job policy took effect, so launch nothing until the cluster-wide pending B200 count falls below one. For future batches, use idle eligible nodes but leave at most one B200 job queued. Retain result evidence, update the comparison URL, and delete exact workflow-owned scratch after each run."
+    "requires": "Validate the new c8192 generator entries, dispatch HBM, HBM+NVMe, and HBM+DRAM+NVMe only, then stop while any B200 job is queued. Dispatch the HBM+DRAM c8192 arm after the queue returns to zero."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-19T23:34:00Z",

@@ -8012,3 +8012,12 @@
     - "Raise only the branch-only native HBM+DRAM+NVMe filesystem stop guard from 1 TiB to 2 TiB after c16 run 35456989669 completed canonical profiling with zero request errors but reached 1,413,881,142,831 logical bytes and was correctly invalidated. The NVMe-only arm remains bounded at 1 TiB; model, engine, TP4, HBM and DRAM budgets, and AgentX settings are unchanged. The 2 TiB value remains an abort guard, not an LRU quota or capacity-boundary claim."
     - "分支内 c16 运行 35456989669 以零请求错误完成规范 profiling，但文件系统逻辑占用达到 1,413,881,142,831 字节并被正确判为无效；因此仅将原生 HBM+DRAM+NVMe 文件系统停止保护阈值从 1 TiB 提高到 2 TiB。NVMe-only 方案仍限制为 1 TiB；模型、引擎、TP4、HBM 与 DRAM 容量以及 AgentX 设置均保持不变。2 TiB 仍只是中止保护阈值，不是 LRU 配额或容量边界结论。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add concurrency 8,192 to all four branch-only MiniMax-M3 AgentX offload arms after every concurrency-16,384 probe failed during canonical warmup with connection resets before profiling began. This brackets the shared high-concurrency feasibility boundary without changing the model, engine, TP4 layout, cache budgets, AgentX corpus, or 3,600-second profiling window."
+    - "四组分支内 MiniMax-M3 AgentX 卸载实验在并发 16,384 的规范 warmup 阶段均出现连接重置，并在 profiling 开始前失败；因此为全部四组新增并发 8,192，以夹定共同的高并发可运行性边界。模型、引擎、TP4 布局、缓存容量、AgentX 语料及 3,600 秒 profiling 窗口均不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
