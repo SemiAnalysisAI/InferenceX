@@ -510,16 +510,20 @@ def test_integrate_power_ignores_invalid_samples_far_outside_window(tmp_path: Pa
     ("malformed_row", "expected_reason"),
     [
         ("not-a-timestamp, 0, 500 W", "invalid_timestamp_sample"),
-        ("{timestamp}, 0, [N/A]", "invalid_power_sample"),
+        ("{timestamp}, 0, -500 W", "invalid_power_sample"),
     ],
-    ids=["timestamp", "power"],
+    ids=["timestamp", "corrupt_power"],
 )
 def test_run_rejects_malformed_telemetry_inside_window(
     tmp_path: Path,
     malformed_row: str,
     expected_reason: str,
 ):
-    """A rejected 1 Hz row must not be interpolated into valid energy metrics."""
+    """A rejected 1 Hz row must not be interpolated into valid energy metrics.
+
+    Both rows here carry a value that cannot be believed. A cell that is merely
+    unreadable is different and is covered by
+    ``test_run_publishes_metrics_for_stream_with_one_unreadable_cell``."""
     base = 1_700_000_000.0
     csv = tmp_path / "gpu_metrics.csv"
     rows = ["timestamp, index, power.draw [W]"]
@@ -570,6 +574,50 @@ def test_run_rejects_malformed_telemetry_inside_window(
     assert audit["reasons"] == [expected_reason]
 
 
+def test_run_publishes_metrics_for_stream_with_one_unreadable_cell(tmp_path: Path):
+    """End to end twin of the MI355X AgentX regression.
+
+    The whole point of skipping an unreadable cell is that the benchmark point
+    keeps its published energy numbers, so assert the aggregate is patched with
+    real metrics and that the sidecar still shows where the stream lost a row.
+    Under the old rule this aggregate came back with power_valid 0 and no
+    metrics at all."""
+    base = 1_700_000_000.0
+    csv = tmp_path / "gpu_metrics.csv"
+    rows = ["timestamp, index, power.draw [W]"]
+    for offset in range(-1, 12):
+        timestamp = _nvidia_ts(base + offset)
+        power = "[N/A]" if offset == 5 else "500 W"
+        rows.append(f"{timestamp}, 0, {power}")
+    csv.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+    bench = tmp_path / "bench.json"
+    agg = tmp_path / "agg.json"
+    validation = tmp_path / "power_validation.json"
+    _write_bench_result(
+        bench,
+        start=base,
+        end=base + 10,
+        duration=10.0,
+        completed=1,
+        total_input=1_000,
+        total_output=1_000,
+    )
+    agg.write_text(json.dumps({"hw": "h200"}), encoding="utf-8")
+
+    exit_code = run(csv, bench, agg, expected_num_gpus=1, validation_result=validation)
+
+    assert exit_code == 0
+    patched = json.loads(agg.read_text())
+    assert patched["power_valid"] == 1
+    assert patched["avg_power_w"] == pytest.approx(500.0)
+    assert patched["total_gpu_energy_j"] == pytest.approx(5_000.0)
+    audit = json.loads(validation.read_text())
+    assert audit["power_valid"] is True
+    assert audit["reasons"] == []
+    assert audit["window_degenerate_rows"] == {"0": 1}
+
+
 # AMDSMI 26.2.0 `metric -p -c -t -u -w 1 --csv` header (order-faithful subset,
 # measured on MI355X; see test_detect_columns_amd_watch_mode_real_header).
 _MI355X_WATCH_HEADER = (
@@ -614,6 +662,101 @@ def test_integrate_power_skips_na_power_rows_outside_window(tmp_path: Path):
     assert result.invalid_reasons == ()
     assert result.boundary_degenerate_rows == {"0": 1, "1": 1}
     assert result.total_gpu_energy_j == pytest.approx(10_000.0)
+
+
+def test_integrate_power_skips_isolated_na_power_row_inside_window(tmp_path: Path):
+    """MI355X Kimi-K3 AgentX regression from run 35157825655 (conc 10).
+
+    amd-smi blanks socket_power on a single device while it sits at its idle
+    clock floor, which an agentic replay hits constantly between requests. One
+    such cell used to void the whole hour: here GPU 5 loses the row at +6 s out
+    of 3441 and every coverage bound still holds, so the point must survive with
+    the loss recorded rather than be discarded."""
+    csv = tmp_path / "gpu_metrics.csv"
+    base = 1_700_000_000
+    lines = [_MI355X_WATCH_HEADER]
+    for offset in range(-1, 12):
+        for gpu in range(8):
+            power = "N/A" if (gpu == 5 and offset == 6) else "500"
+            lines.append(_mi355x_watch_row(base + offset, gpu, power))
+    csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    result = integrate_power(
+        csv,
+        start_unix=base,
+        end_unix=base + 10,
+        expected_num_gpus=8,
+    )
+
+    assert result.power_valid is True
+    assert result.invalid_reasons == ()
+    assert result.window_degenerate_rows == {"5": 1}
+    assert result.device_issues == {}
+    # The loss stays visible as coverage: GPU 5 spans the hole in one 2 s step.
+    assert result.per_gpu_max_sample_gap_s["5"] == pytest.approx(2.0)
+    assert result.per_gpu_max_sample_gap_s["0"] == pytest.approx(1.0)
+    assert result.total_gpu_energy_j == pytest.approx(40_000.0)
+
+
+def test_integrate_power_rejects_device_losing_too_many_power_cells(tmp_path: Path):
+    """Scattered unreadable cells still have an upper bound of their own.
+
+    Every hole here is isolated, so no sampling gap exceeds the 3 s bound and
+    that check alone would pass the stream. Losing 2.5% of one device's cells
+    is a collector fault rather than an idle-clock blip, and must be rejected
+    on its own evidence."""
+    csv = tmp_path / "gpu_metrics.csv"
+    base = 1_700_000_000
+    blanked = {20, 60, 100, 140, 180}
+    lines = [_MI355X_WATCH_HEADER]
+    for offset in range(-1, 202):
+        for gpu in range(2):
+            power = "N/A" if (gpu == 1 and offset in blanked) else "500"
+            lines.append(_mi355x_watch_row(base + offset, gpu, power))
+    csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    result = integrate_power(
+        csv,
+        start_unix=base,
+        end_unix=base + 200,
+        expected_num_gpus=2,
+    )
+
+    assert result.power_valid is False
+    assert result.invalid_reasons == ("degenerate_power_samples_exceeded",)
+    assert result.device_issues == {"1": ["degenerate_power_samples_exceeded"]}
+    assert result.window_degenerate_rows == {"1": 5}
+    # The independent bound did the work: no gap ever grew past the tolerance.
+    assert result.per_gpu_max_sample_gap_s["1"] == pytest.approx(2.0)
+
+
+def test_integrate_power_rejects_consecutive_na_power_cells(tmp_path: Path):
+    """Consecutive unreadable cells remain a sampling-gap failure.
+
+    Three in a row leave a 4 s hole, past the 3 s bound, even though 3 cells of
+    601 stay well inside the degenerate-fraction allowance. This is the shape
+    that voids run 35157825655 conc 14, and it must keep voiding it."""
+    csv = tmp_path / "gpu_metrics.csv"
+    base = 1_700_000_000
+    lines = [_MI355X_WATCH_HEADER]
+    for offset in range(-1, 602):
+        for gpu in range(2):
+            power = "N/A" if (gpu == 0 and offset in {300, 301, 302}) else "500"
+            lines.append(_mi355x_watch_row(base + offset, gpu, power))
+    csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    result = integrate_power(
+        csv,
+        start_unix=base,
+        end_unix=base + 600,
+        expected_num_gpus=2,
+    )
+
+    assert result.power_valid is False
+    assert result.invalid_reasons == ("sampling_gap_exceeded",)
+    assert result.device_issues == {"0": ["sampling_gap_exceeded"]}
+    assert result.window_degenerate_rows == {"0": 3}
+    assert result.per_gpu_max_sample_gap_s["0"] == pytest.approx(4.0)
 
 
 def test_integrate_power_does_not_bracket_with_zero_power_tail(tmp_path: Path):

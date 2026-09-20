@@ -103,6 +103,8 @@ InferenceX-app 将路由字段作为列或配置维度，并把数值测量存�
 
 `power_invalid_reasons` 和 `power_audit` 在数值指标旁携带有界摘要，包括可用的测量窗口、预期与观测 GPU 数、采样诊断、观测设备标识和生产者版本。`source` 指向保留的 `power_validation_*.json` 工件名称。设备标识保留采集器原有语义，本地 SMI 序号不是物理 UUID 的证明。
 
+读不出的功耗单元格属于覆盖缺失，不是被污染的测量值。设备停在 idle 时钟下限时 amd-smi 会把 `socket_power` 置为 N/A，而 agentic replay 在请求间隙反复进入该状态，因此这类行会被跳过并按 GPU 计入 `window_degenerate_rows`，而不是让整个点作废。剩下的数据由原有的覆盖上限判定，与采集器干脆不输出该行时完全一致：窗口两端的样本覆盖、3 秒采样间隔上限和预期 GPU 数。单台设备最多丢失两个单元格或其行数的 1%，超出即由 `degenerate_power_samples_exceeded` 判为无效。负值或非有限读数是不可信的取值，仍然触发 `invalid_power_sample`。
+
 对于多节点固定序列任务，`utils/process_result.py --all` 先处理所有已有结果，再返回失败。它接受 `_c<N>_gpus_...`、`_conc<N>_gpus_...` 和 AMD 的 `_concurrency_<N>_req_rate_<R>_gpus_...` 文件名，也支持 `inf` 请求速率。它将结果并发度与 `CONC_LIST` 比较，拒绝重复或矛盾的点身份，并将遗漏和错误记录到 `result_processing_<RESULT_FILENAME>.json`。共享工作池通过 `AGGREGATE_GPUS` 及零值角色 GPU 数进行遥测验证；独立的 prefill/decode 能耗保持缺失。当 `DISAGG=true` 的配置组中某个点没有 decode worker 时，聚合行会有意设置 `disagg: false` 并记录 `num_aggregate_gpu`；文件名、工件名和工作流输入仍保留配置组身份。下游应按聚合行的拓扑解释测量结果。
 
 PR changelog 选择具有代表性的 NVIDIA 和 AMD 覆盖，并非所有受影响配置的完整列表；共享处理逻辑的变更适用于所有固定序列配置。

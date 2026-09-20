@@ -14,6 +14,13 @@ the ingest band but outside the formal window whose power is missing,
 non-finite, or <= 0 are teardown noise: they are skipped and counted in the
 sidecar's ``boundary_degenerate_rows`` instead of poisoning validity or faking
 window bracketing.
+
+A row *inside* the window whose power cell is unreadable is likewise the
+absence of a reading rather than a corrupt measurement, and is treated the same
+way: skipped, counted in ``window_degenerate_rows``, and judged by the coverage
+bounds that already govern a stream which simply omits the row. This is what an
+SMI that reports nothing looks like from the aggregator's side, and the two
+vendors must not be scored differently for the same loss.
 """
 
 from __future__ import annotations
@@ -53,6 +60,19 @@ _NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
 
 _INTEGRATION_METHOD = "per_device_trapezoidal_with_linear_boundary_interpolation"
 _DEFAULT_MAX_SAMPLE_GAP_S = 3.0
+# How much of one device's stream may carry an unreadable power cell before it
+# stops being a measurement. amd-smi drops socket_power to N/A while a GPU sits
+# at its idle clock floor, so an agentic replay with long think gaps loses
+# isolated cells: over the nine MI355X Kimi-K3 points of run 35157825655 all
+# 199 blank cells landed on an idle-clock row and none on any of the 296436
+# boost-clock rows, the worst device losing 5 of 3451 rows (0.145%). 1% leaves
+# that room and still calls a heavier loss what it is, a collector fault rather
+# than a blip.
+# The flat allowance holds short windows to the same standard, and concedes no
+# more than the sampling-gap bound already does: two lost samples in a row is
+# exactly the largest hole that bound tolerates.
+_MAX_DEGENERATE_SAMPLE_FRACTION = 0.01
+_MIN_DEGENERATE_SAMPLE_ALLOWANCE = 2
 _ACCUMULATOR_TOLERANCE = 0.05
 _POWER_METRIC_KEYS = set(WHOLE_METRIC_KEYS)
 
@@ -73,6 +93,9 @@ class PowerIntegration:
     # missing/N-A/non-finite/<=0, skipped and counted per GPU; "unknown"
     # buckets rows without a GPU identity.
     boundary_degenerate_rows: dict[str, int] = field(default_factory=dict)
+    # The in-window twin, for unreadable cells only: missing coverage rather
+    # than corrupt values, so the bounds below judge whatever survives.
+    window_degenerate_rows: dict[str, int] = field(default_factory=dict)
     avg_power_w: float | None = None
     p75_power_w: float | None = None
     p75_total_gpu_power_w: float | None = None
@@ -257,6 +280,7 @@ def _empty_integration(
     expected_num_gpus: int | None,
     reasons: list[str],
     boundary_degenerate_rows: dict[str, int] | None = None,
+    window_degenerate_rows: dict[str, int] | None = None,
 ) -> PowerIntegration:
     """Build an invalid integration result when no device data is available."""
     return PowerIntegration(
@@ -269,6 +293,7 @@ def _empty_integration(
         per_gpu_energy_j={},
         device_issues={},
         boundary_degenerate_rows=boundary_degenerate_rows or {},
+        window_degenerate_rows=window_degenerate_rows or {},
     )
 
 
@@ -326,6 +351,7 @@ def integrate_power(
     # duplicate-timestamp readings are averaged rather than treated as corrupt.
     raw_samples: dict[str, dict[float, list[float]]] = {}
     boundary_degenerate: dict[str, int] = {}
+    window_degenerate: dict[str, int] = {}
     saw_missing_gpu_identity = False
     try:
         timestamp_timezone = _telemetry_timezone(csv_path)
@@ -379,14 +405,22 @@ def integrate_power(
                     key = gpu_id or "unknown"
                     boundary_degenerate[key] = boundary_degenerate.get(key, 0) + 1
                     continue
-                if power is None:
-                    _append_reason(reasons, "invalid_power_sample")
-                    continue
-                if not math.isfinite(power) or power < 0:
+                if power is not None and (not math.isfinite(power) or power < 0):
+                    # Negative or non-finite is not an unusable reading but an
+                    # impossible one: the stream itself is corrupt and no
+                    # coverage rule can make it safe.
                     _append_reason(reasons, "invalid_power_sample")
                     continue
                 if not gpu_id:
                     saw_missing_gpu_identity = True
+                    continue
+                if power is None:
+                    # amd-smi blanks socket_power while a device sits at its
+                    # idle clock floor, which a bursty agentic replay reaches
+                    # between requests. Unlike the boundary branch above, 0 W
+                    # is deliberately not routed here: in-window it keeps its
+                    # frozen legacy meaning and still integrates.
+                    window_degenerate[gpu_id] = window_degenerate.get(gpu_id, 0) + 1
                     continue
                 values = raw_samples.setdefault(gpu_id, {}).setdefault(timestamp, [])
                 values.append(power)
@@ -396,6 +430,7 @@ def integrate_power(
             expected_num_gpus=expected_num_gpus,
             reasons=reasons,
             boundary_degenerate_rows=boundary_degenerate,
+            window_degenerate_rows=window_degenerate,
         )
 
     if saw_missing_gpu_identity:
@@ -406,6 +441,7 @@ def integrate_power(
             expected_num_gpus=expected_num_gpus,
             reasons=reasons,
             boundary_degenerate_rows=boundary_degenerate,
+            window_degenerate_rows=window_degenerate,
         )
 
     observed_gpu_ids = tuple(sorted(raw_samples, key=_gpu_sort_key))
@@ -430,6 +466,18 @@ def integrate_power(
         device_samples.append(samples)
         per_gpu_sample_counts[gpu_id] = len(samples)
         issues: list[str] = []
+
+        degenerate = window_degenerate.get(gpu_id, 0)
+        allowance = max(
+            _MIN_DEGENERATE_SAMPLE_ALLOWANCE,
+            _MAX_DEGENERATE_SAMPLE_FRACTION * (len(samples) + degenerate),
+        )
+        if degenerate > allowance:
+            # Isolated unreadable cells are tolerated above, but a device that
+            # loses this much of its stream was not measured, however evenly
+            # the loss is spread across the window.
+            issues.append("degenerate_power_samples_exceeded")
+            _append_reason(reasons, "degenerate_power_samples_exceeded")
 
         if len(samples) < 2:
             issues.append("insufficient_power_samples")
@@ -490,6 +538,7 @@ def integrate_power(
         per_gpu_energy_j=per_gpu_energy_j,
         device_issues=device_issues,
         boundary_degenerate_rows=boundary_degenerate,
+        window_degenerate_rows=window_degenerate,
         avg_power_w=avg_power_w,
         p75_power_w=p75_total / len(observed_gpu_ids) if p75_total is not None else None,
         p75_total_gpu_power_w=p75_total,
@@ -720,6 +769,7 @@ def _validation_payload(
         "per_gpu_energy_j": integration.per_gpu_energy_j,
         "device_issues": integration.device_issues,
         "boundary_degenerate_rows": integration.boundary_degenerate_rows,
+        "window_degenerate_rows": integration.window_degenerate_rows,
         "accumulator_check": accumulator_check,
         "metrics": audit_metrics(metrics),
     }
