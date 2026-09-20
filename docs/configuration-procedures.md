@@ -224,6 +224,8 @@ Sources: [`AGENTS.md#non-negotiable-benchmark-invariants`](../AGENTS.md#non-nego
 
 ### Qwen3.8-27B BF16 native MTP
 
+The MI300X recipe supports 1k/1k and 8k/1k at TP1, with concurrency 1–128.
+
 The BF16 vLLM recipes use thinking on with three native MTP draft tokens. Throughput
 uses `rejection_sample_method: synthetic` and `synthetic_acceptance_length: 2.51`,
 from the BF16 `thinking_on[3]` measurement in [#3304](https://github.com/SemiAnalysisAI/InferenceX/pull/3304).
