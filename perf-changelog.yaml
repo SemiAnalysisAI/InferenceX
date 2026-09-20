@@ -8449,6 +8449,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3277
 
 - config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B200 vLLM AgentX to DSpark6 and a new image with TP8 and DEP8 configurations."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
+
+- config-keys:
   - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
   scenario-type:
   - agentic-coding
