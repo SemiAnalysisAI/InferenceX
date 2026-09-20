@@ -248,7 +248,9 @@ def run(
                         continue
                     if gpu not in selected_ids:
                         continue
-                    timestamp = _parse_timestamp((row.get(t_col) or ""), naive_timezone=timezone.utc)
+                    timestamp = _parse_timestamp(
+                        (row.get(t_col) or ""), naive_timezone=timezone.utc
+                    )
                     # Invalid rows are retained for the common validator to reject.
                     samples.append((timestamp, selected_ids[gpu], row.get(p_col) or ""))
             receipts.append(
