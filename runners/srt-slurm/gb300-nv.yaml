@@ -1,0 +1,18 @@
+default_account: ${SLURM_ACCOUNT}
+default_partition: ${SLURM_PARTITION}
+default_time_limit: ${SRT_DEFAULT_TIME_LIMIT}
+gpus_per_node: 4
+network_interface: ""
+srtctl_root: ${SRTCTL_ROOT}
+default_mounts:
+  "${AIPERF_MMAP_CACHE_HOST_PATH}": /aiperf_mmap_cache
+  "${HF_HUB_CACHE_HOST_PATH}": /hf_hub_cache
+  "${DYNAMO_WHEELS_CACHE_HOST_PATH}": /configs/dynamo-wheels
+containers:
+  dynamo-trtllm: ${SQUASH_FILE}
+  dynamo-sglang: ${SQUASH_FILE}
+  v0.5.11: ${SQUASH_FILE}
+  v0.5.13.post1: ${SQUASH_FILE}
+  "${IMAGE}": ${SQUASH_FILE}
+  nginx-sqsh: ${NGINX_SQUASH_FILE}
+use_segment_sbatch_directive: false

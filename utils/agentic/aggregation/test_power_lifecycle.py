@@ -31,9 +31,6 @@ def _run_lifecycle(
     result_dir.mkdir()
     event_log = tmp_path / "events.log"
     formal_window_dir = str(tmp_path / "power/windows") if formal_multinode_power else ""
-    formal_benchmark_type = "custom" if formal_multinode_power else ""
-    formal_concurrencies = "8 16" if formal_multinode_power else ""
-    formal_result_root = str(tmp_path) if formal_multinode_power else ""
     script = f"""
 source {str(BENCHMARK_LIB)!r}
 start_gpu_monitor() {{
@@ -86,9 +83,6 @@ ENABLE_AGENTX_POWER={'1' if enable_power else '0'}
 REQUIRE_POWER={'1' if require_power else '0'}
 CONC=8
 SRT_MEASUREMENT_WINDOW_DIR={formal_window_dir!r}
-SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE={formal_benchmark_type!r}
-SRT_MEASUREMENT_WINDOW_CONCURRENCIES={formal_concurrencies!r}
-SRT_MEASUREMENT_WINDOW_RESULT_ROOT={formal_result_root!r}
 set +e
 run_agentic_replay_and_write_outputs {str(result_dir)!r}
 rc=$?

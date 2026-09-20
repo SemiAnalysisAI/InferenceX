@@ -7,22 +7,31 @@ import sys
 import pytest
 
 from infx.klaud import __main__ as klaud
-from infx.klaud import claims, github
+from infx.klaud import claims, github, lifecycle
+from infx.klaud.models import CandidateOutcome
 
 
 @pytest.mark.parametrize("current_head,expected", [("ours", True), ("other", False)])
 def test_claim_conflict_checks_the_actual_owner(monkeypatch, current_head, expected):
     def run(args, **kwargs):
-        endpoint = next(arg for arg in args if arg.startswith("repos/")).partition("?")[0]
+        endpoint = next(arg for arg in args if arg.startswith("repos/")).partition("?")[
+            0
+        ]
         method = args[args.index("--method") + 1]
         if endpoint.endswith("git/commits/base") and method == "GET":
             response = {"tree": {"sha": "tree"}}
         elif endpoint.endswith("git/commits") and method == "POST":
             request = json.loads(kwargs["input"])
-            assert request == {"message": '{"owner": 42}', "tree": "tree", "parents": ["base"]}
+            assert request == {
+                "message": '{"owner": 42}',
+                "tree": "tree",
+                "parents": ["base"],
+            }
             response = {"sha": "ours"}
         elif endpoint.endswith("git/refs") and method == "POST":
-            raise subprocess.CalledProcessError(1, args, stderr="reference already exists")
+            raise subprocess.CalledProcessError(
+                1, args, stderr="reference already exists"
+            )
         elif endpoint.endswith("git/matching-refs/heads/claim") and method == "GET":
             response = [[{"ref": "refs/heads/claim", "object": {"sha": current_head}}]]
         else:
@@ -43,20 +52,28 @@ def test_delete_accepts_empty_response(monkeypatch):
     assert github.write("example/project", "git/refs/heads/claim", "DELETE") == {}
 
 
-@pytest.mark.parametrize("failure,reason", [
-    ("command", "State unavailable or invalid; inspect GitHub before retrying"),
-    ("json", "State unavailable or invalid; inspect GitHub before retrying"),
-    ("shape", "GitHub listing returned an unexpected shape"),
-    ("incomplete", "Incomplete GitHub listing"),
-])
-def test_recovery_errors_do_not_publish_raw_api_data(tmp_path, monkeypatch, capfd, failure, reason):
+@pytest.mark.parametrize(
+    "failure,reason",
+    [
+        ("command", "State unavailable or invalid; inspect GitHub before retrying"),
+        ("json", "State unavailable or invalid; inspect GitHub before retrying"),
+        ("shape", "GitHub listing returned an unexpected shape"),
+        ("incomplete", "Incomplete GitHub listing"),
+    ],
+)
+def test_recovery_errors_do_not_publish_raw_api_data(
+    tmp_path, monkeypatch, capfd, failure, reason
+):
     responses = {
         "json": "private",
         "shape": '[{"artifacts": ["private"], "total_count": 1}]',
         "incomplete": '[{"artifacts": [], "total_count": 1, "detail": "private"}]',
     }
-    command = ("printf '%s' private >&2\nexit 1" if failure == "command"
-               else f"printf '%s' {shlex.quote(responses[failure])}")
+    command = (
+        "printf '%s' private >&2\nexit 1"
+        if failure == "command"
+        else f"printf '%s' {shlex.quote(responses[failure])}"
+    )
     executable = tmp_path / "gh"
     executable.write_text(f"#!/bin/sh\n{command}\n")
     executable.chmod(0o755)
@@ -67,3 +84,52 @@ def test_recovery_errors_do_not_publish_raw_api_data(tmp_path, monkeypatch, capf
     captured = capfd.readouterr()
     assert captured.out == f"::error::Klaud: {reason}.\n"
     assert captured.err == ""
+
+
+def test_diagnostics_prefers_verified_outcome_when_action_output_is_invalid(
+    tmp_path, monkeypatch
+):
+    class Session:
+        def pulls(self):
+            return []
+
+        def runs(self):
+            return []
+
+        def report(self, _pull):
+            raise AssertionError("No PR should not request a report")
+
+        def verify(self, outcome):
+            assert outcome == CandidateOutcome(
+                outcome="failed",
+                phase="baseline",
+                pull_request=None,
+                run_ids=[],
+                repairs_used=0,
+            )
+
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    (evidence / "outcome.json").write_text(
+        '{"outcome":"failed","phase":"baseline","pull-request":null,'
+        '"run-ids":[],"repairs-used":0}\n'
+    )
+    execution = tmp_path / "execution.json"
+    execution.write_text("{}\n")
+    structured = tmp_path / "structured.json"
+    structured.write_text("not json\n")
+    output = tmp_path / "diagnostics.json"
+    monkeypatch.setenv("KLAUD_EVIDENCE", str(evidence))
+    monkeypatch.setattr(lifecycle, "current_session", Session)
+
+    assert klaud.save_diagnostics(execution, structured, "success", output)
+    diagnostics = json.loads(output.read_text())
+    assert diagnostics["outcome-source"] == "verified-outcome"
+    assert diagnostics["outcome-report"] == "available"
+    assert diagnostics["candidate-outcome"] == {
+        "outcome": "failed",
+        "phase": "baseline",
+        "pull-request": None,
+        "run-ids": [],
+        "repairs-used": 0,
+    }
