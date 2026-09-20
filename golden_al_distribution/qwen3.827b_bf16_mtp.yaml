@@ -1,0 +1,24 @@
+# Source GitHub Actions run: https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35490571863
+# Native MTP, original BF16 head and draft KV cache; target KV cache FP8.
+# coding, 80 successful requests, 4096 maximum output tokens.
+# thinking_on k=3: AR=0.505516010746; accepted=128899; proposed=254985; drafts=84995.
+# {
+#   "MODEL": "Qwen/Qwen3.8-27B",
+#   "MODEL_REVISION": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+#   "PRECISION": "bf16",
+#   "IMAGE": "vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3",
+#   "TP": "1",
+#   "MTP_LIST": "3",
+#   "THINKING_MODES": "on",
+#   "CATEGORY": "coding",
+#   "SPEEDBENCH_OUTPUT_LEN": "4096",
+#   "CHAT_TEMPLATE_KWARGS_ON": "{\"enable_thinking\":true}",
+#   "SPEEDBENCH_SPECULATIVE_CONFIG": "{\"method\": \"mtp\", \"model\": \"Qwen/Qwen3.8-27B\", \"revision\": \"1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0\", \"kv_cache_dtype\": \"auto\"}",
+#   "SPEEDBENCH_CONCURRENCY": "64",
+#   "SPEEDBENCH_SEED": "0",
+#   "SPEEDBENCH_PREPARE_REVISION": "bcf059af55c20a89f797724598f9908d126153e6",
+#   "draft_snapshot": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+# }
+qwen3.8-27b:
+  thinking_on:
+    3: 2.52

@@ -173,6 +173,11 @@ Failed or incomplete cells never produce a golden matrix.
 | MiniMax-M3 | EAGLE3 (GQA) | [`minimaxm3_eagle3_gqa.yaml`](minimaxm3_eagle3_gqa.yaml) | [29784780049](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/29784780049) |
 | GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
+| Qwen3.8-27B BF16 | Native MTP (original BF16 head) | [`qwen3.827b_bf16_mtp.yaml`](qwen3.827b_bf16_mtp.yaml) | [35490571863](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35490571863) |
+| Qwen3.8-27B FP8 | Native MTP (original BF16 head) | [`qwen3.827b_fp8_mtp.yaml`](qwen3.827b_fp8_mtp.yaml) | [35491616007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35491616007) |
+
+Qwen3.8-27B currently contains the validated three-token, thinking-on point for both target precisions. Full 1–8-token, thinking-off/on collection is in progress.
+
 
 ## Primary references
 
