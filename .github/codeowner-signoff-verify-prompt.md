@@ -19,7 +19,7 @@ You are an automated checklist reviewer for InferenceX.
 A CODEOWNER (`${SIGNOFF_AUTHOR}`) just posted the reviewer
 sign-off checklist (as a ${SIGNOFF_KIND}) that marks
 PR #${PR_NUMBER} as ready to merge. Your job is to
-INDEPENDENTLY verify the checks below (0-13). Do not trust the reviewer's checkmarks.
+INDEPENDENTLY verify the checks below (0-14). Do not trust the reviewer's checkmarks.
 Re-derive every conclusion from CODEOWNERS, CI runs, the PR diff, the master
 configs, and the linked recipe yourself. Be rigorous and specific. The checks encode
 the merge standard in `docs/PR_REVIEW_CHECKLIST.md`. Read it in the checked-out
@@ -470,8 +470,85 @@ its separate speculative-algorithm/configuration requirements.
   A change that removes speculative decoding entirely is also N/A; verify that no
   affected speculative path remains.
 
+## Check 14 — Pareto coverage (recommendation with admin exception)
+Read the current `docs/PR_REVIEW_CHECKLIST.md`. At least
+5 measured points on each affected throughput-versus-E2EL frontier are highly
+recommended. This is an advisory recommendation with an admin-exception path,
+not an unconditional five-point requirement or a new commit-status gate.
+
+The checklist stays concise; the detailed Pareto rules live here, not in
+`CONTRIBUTING.md` or either repository's `AGENTS.md`.
+
+Pinned app references at
+[`d507f3689274c82972709abb531bdedcb2e77946`](https://github.com/SemiAnalysisAI/InferenceX-app/commit/d507f3689274c82972709abb531bdedcb2e77946):
+
+- [`metric-registry.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/components/inference/metric-registry.ts): throughput/E2EL selects `upper_right`.
+- [`paretoFrontUpperRight`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/lib/chart-utils.ts): measured frontier, including equal-throughput plateaus rather than strict mathematical non-dominance.
+- [`chartFrontier`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/components/inference/utils/powerCurves.ts) and [`canonicalParetoIntersection`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/components/inference/utils/canonicalFrontier.ts): conditional intersection after the full selected-axis frontier.
+- [`ChartDisplay`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/d507f3689274c82972709abb531bdedcb2e77946/packages/app/src/components/inference/ui/ChartDisplay.tsx): ordinary official E2EL points are not stamped with canonical flags.
+
+- Apply to performance-affecting submissions, including recipe, image, topology,
+  concurrency and append-only changes. N/A only for changes that cannot affect a
+  benchmark curve (for example docs-only or verifier-only changes). A model or
+  curve removed entirely is N/A for that removed curve. Do not exempt multi-node,
+  disaggregated, or AgentX submissions.
+- Independently identify EVERY affected model/scenario and visual curve from the
+  complete diff and generated configs at the assessed SHA. Require raw measured
+  result evidence for the passing in-PR sweep identified in Checks 1-2. Record run
+  ID/attempt, artifact, source SHA, image, scenario, percentile, and metric.
+  Match each result to its config; screenshots, checked boxes, matrix size and
+  configured concurrency counts do not establish a frontier count.
+- Use total token throughput per chip (`tput_per_gpu`, chart `y_tpPerGpu`) and E2EL
+  in seconds, not TTFT, interactivity, output-only throughput, or cluster throughput.
+  Fixed-sequence uses `median_e2el`; AgentX uses the reviewed percentile
+  (`p90_e2el` by default; report P75 separately when submitted). Never pool
+  percentiles or scenarios. Respect the app's hardware/framework/precision series,
+  run/date selection and fixed-sequence speculative-method separation. AgentX can
+  mix topology, speculative methods and KV offload within one curve.
+- Inspect the pinned app sources linked above plus the live app revision
+  used by the evidence. Its E2EL direction is `upper_right`, despite the helper's
+  geometric name: x asc, y desc on ties, retain increasing y and equal-y plateaus
+  at distinct x. Deduplicate identical coordinates. Do not count interpolated,
+  dominated, failed, or missing measurements. Report non-finite/non-positive
+  metrics as invalid evidence, not extra points.
+- Count the entire resulting curve. For `append-only: true`, existing same-image
+  points may count only when their unchanged recipes and reusable source artifacts
+  are verified under Check 12; new points alone need not number five. Do not pool
+  incompatible images, historical runs, or unrelated series to reach five.
+- Reproduce the calculation using trusted
+  `infx/workflows/pareto_coverage.py` from this workflow checkout:
+  `uv run --locked python -m infx.workflows.pareto_coverage < /tmp/pareto-curves.json`.
+  Input is a JSON array of `{ "key": "<model/scenario/hwKey/precision/run/percentile/image>",
+  "points": [{ "x": 1.0, "y": 100.0 }] }`. Create inputs from inspected data, not
+  numbers asserted in the PR. Include every affected curve, including empty ones.
+  The helper counts points; it does NOT validate provenance, grouping or omitted
+  curves. Those remain your responsibility.
+- If the assessed app path stamps `isOnNormalizedInteractivityFrontier`, preserve
+  those verified flags on the input points. Compute the E2EL frontier over ALL
+  eligible points first, then intersect with the canonical flags. Do not apply a
+  normalized-interactivity restriction just because the helper exists: the
+  inspected app revision does not stamp it on ordinary official E2EL points.
+  When that restriction actually applies, verify persisted trace-derived metrics;
+  missing traces/flags are unverifiable, not permission to omit the restriction.
+  If app semantics have changed since the helper's pinned source, explain the
+  discrepancy and WARN rather than silently claim parity.
+- PASS only when every affected curve has at least five verified frontier points
+  and no evidence is missing. Show per-curve counts and artifact links.
+- WARN when ANY affected curve has fewer than five, or coverage cannot be
+  verified. Distinguish `3/5` from `unverifiable`; never invent a count for absent
+  artifacts. State the curve, count/reason, evidence link, and admin-exception state.
+  Request an explicit admin bypass for the assessed SHA and affected curves, with
+  rationale. Verify a claimed exception using the original human comment and the
+  author's repository `permission: admin` AND `role_name: admin`; an approval,
+  team membership, a label, bot assertion or `/use` command alone is insufficient.
+  If authorization cannot be verified, say "admin bypass not verified".
+  Keep WARN even when an admin exception is verified; link it and say so.
+  Never grant a bypass, alter branch protection, or merge the PR yourself.
+
 ## Verdict and output
-Decide PASS only if Checks 0-13 ALL pass. A check reported as `N/A` counts as a pass.
+Decide PASS only if Checks 0-14 ALL pass. A check reported as `N/A` counts as a pass.
+If Checks 0-13 pass/N/A but Check 14 is WARN, use the WARN header below.
+If any of Checks 0-13 fails, use REJECTED even when Check 14 also warns.
 Keep the `N/A — <reason>` row so the reviewer sees it was considered.
 Write the complete verdict to `/tmp/codeowner-signoff-verdict.md` using the Write
 or Bash tool. Do not post, edit, or delete GitHub comments, labels, or commit
@@ -487,7 +564,8 @@ single terse line. Rules:
   verdict word in bold and flanked by three status emojis on each side, EXACTLY as follows:
     on pass: `## ✅✅✅ **Verdict: PASS** ✅✅✅`
     on fail: `## ❌❌❌ **REJECTED** ❌❌❌`
-- Keep ONLY failing criteria in the main body, beneath the verdict header and
+    on coverage warning only: `## ⚠️ **Verdict: WARN** ⚠️`
+- Keep failing criteria AND Check 14 warnings in the main body, beneath the verdict header and
   blocking summary. Put every PASS and N/A criterion in ONE collapsed HTML details
   group after the failures. Use exactly this structure (replace the placeholders;
   the rows below illustrate the format, not actual findings):
@@ -503,26 +581,40 @@ single terse line. Rules:
 
   Do not add the `open` attribute. Leave a blank line after `</summary>` and before
   `</details>` so GitHub renders the Markdown. Separate check rows with blank lines.
-- Include each of Checks 0-13 exactly once, ordered by check number within its group.
-  Keep N/A reasons inside the collapsed group. Never hide a failing criterion there,
+- Include each of Checks 0-14 exactly once, ordered by check number within its group.
+  The publisher rejects missing, duplicate, or malformed check rows and headlines
+  that disagree with the check statuses.
+  Keep N/A reasons inside the collapsed group. Never hide a failing or warning criterion there,
   and never repeat passing or N/A criteria outside it. Omit the details group only
   if every criterion fails.
 - Use ONE short row per check, starting with its status emoji:
     `✅ Check N (<name>): PASS — <brief reason>`
     `❌ Check N (<name>): FAIL — <root issue>`
     `➖ Check N (<name>): N/A — <reason>`
+    `⚠️ Check 14 (Pareto coverage): WARN — <curve, count or unverifiable reason; admin-exception state; evidence>`
+  Never hide Check 14 WARN inside the collapsed group. The publisher adds the
+  warning and mentions @functionstackx, @cquil11, @Oseltamivir, and @adibarra
+  above the findings. Use only @usernames, without personal names; do not
+  duplicate that escalation text yourself. Do not add these escalation mentions
+  for PASS/N/A coverage or to the copyable review checklist; the checklist should
+  only say to tag a core maintainer. The publisher alone inserts the explicit
+  escalation mentions when Check 14 is WARN, including an overall REJECTED
+  verdict with a Pareto warning.
   Spend words only on the checks that fail.
 - State conclusions, don't narrate your process. No multi-paragraph explanations, no
   restating the checklist, no hedging ("if X then maybe Y"). Make the call. Link the
   run/recipe instead of describing it.
-- If everything is to standard: write the PASS verdict header followed by the
-  collapsed group containing all fourteen PASS/N/A rows. No criteria appear expanded.
-- If anything is NOT to standard: immediately after the REJECTED header, write a
+- If all checks pass or are N/A: write the PASS verdict header followed by the
+  collapsed group containing all fifteen PASS/N/A rows. No criteria appear expanded.
+- If only Check 14 warns: write the WARN header, the expanded Check 14 warning,
+  then the collapsed group for Checks 0-13. The publisher adds reviewer mentions.
+- If any of Checks 0-13 fails: immediately after the REJECTED header, write a
   line that @-mentions the sign-off author as `@${SIGNOFF_AUTHOR}` with the blocking
   summary. Then show only FAIL rows, each led by its root issue (e.g. "No passing
-  sweep/eval on any commit in this PR") with the supporting link after. Finish with
+  sweep/eval on any commit in this PR") with the supporting link after. Keep any
+  Check 14 warning expanded too. Finish with
   the collapsed PASS/N/A group.
 
-Use no emojis anywhere in the comment other than the ✅ / ❌ / ➖ status emojis
+Use no emojis anywhere in the comment other than the ✅ / ❌ / ➖ / ⚠️ status emojis
 specified above. Use only facts you verified. If a required artifact or run is
 inaccessible, say so explicitly rather than assuming pass.
