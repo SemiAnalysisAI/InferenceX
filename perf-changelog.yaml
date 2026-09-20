@@ -8461,7 +8461,7 @@
   scenario-type:
   - agentic-coding
   description:
-  - 'Add B300 Qwen3.5 FP8 AgentX 1P1D recipes: TP4 at C4/C8/C24, TP2+EP2 at C32/C40/C48, and prefill TP4+EP4
+  - 'Add B300 Qwen3.5 FP8 AgentX 1P1D recipes: TP4 at C4/C12/C24, TP2+EP2 at C32/C40/C44/C48, and prefill TP4+EP4
     at C32.'
   - Use prefill HiCache, tuned decode capacity and basic DCGM power counters.
   - Use SGLang nightly 20260918-20518d85, Dynamo/SRT Slurm and original BF16 NEXTN.
