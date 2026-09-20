@@ -8194,7 +8194,7 @@ minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-agg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - CONFIG_FILE=recipes/minimaxm3/vllm/gb300-fp4/agentx/agg-tp2-c20-mtp.yaml
+          - CONFIG_FILE=recipes/minimaxm3/vllm/gb300-fp4/agentx/agg-tp2-c20-mtp-trace.yaml
     - dram-utilization: 0.9523809523809523
       search-space:
       - spec-decoding: mtp
