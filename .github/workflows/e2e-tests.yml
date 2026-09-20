@@ -279,6 +279,222 @@ jobs:
                 import stat
                 import subprocess
 
+                """Read-only local process activity for the fixed old Phase 1 sweep; no qualification evidence."""
+
+                import itertools
+                import json
+                import os
+                from pathlib import Path
+                import re
+                import stat
+                import time
+
+                RUN_ID = 35483266492
+                ATTEMPT = 1
+                SOURCE_SHA = "1985ace3f0be6f1fa167be06213295cd3e188a67"
+                HUB = Path("/mnt/nfs/sa-shared/gharunners/hf-hub-cache")
+                IMAGE = Path("/mnt/nfs/lustre/containers/vllm_vllm-openai_nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3.sqsh")
+                SCRIPT = b"from infx.srt_slurm.workflow import main\nraise SystemExit(main())\n"
+                # Frozen from this run's nine ci-job labels, matched to its requested points.
+                POINTS = {
+                    "05578f2956e6dcff4dbd16b3b646e571": ("throughput", 28, "94c04c170449f616cf7e9048dc488a5345496782c492fabf7be7bfd55167d85b"),
+                    "3b0f4b1708d786cd12ef13aa07e030aa": ("throughput", 2, "ca63500fdf64f89f2ede5b499593511b59cf98ed82999618d0a9d28e4186dd14"),
+                    "ed8ea720cf4a58a5a8aa9c73826f099d": ("throughput", 24, "7c4597d562b7b576f3ab92c428e7a87f23f1551f64cff5d0f0008811ea29f076"),
+                    "6e0c74468c7065e522ce5b91c47ee761": ("throughput", 16, "228ac18c0b9422798fdefa8d656ad1d33a4cb8bd483e2cacd221d42b36a5788b"),
+                    "b6357313ddf98c7717695113f922a974": ("eval", 28, "451275f5d8bacf3aa9f84f808cfaf9fd371bff62a6603b696ff9b3ac171e85bd"),
+                    "13b0de666cf90e45b1284e77e6ee855f": ("throughput", 8, "1f44aa28a04e8837485b45c7f1dd6868f420da0882c754f3d85f8ca55d6c4d16"),
+                    "79253a91d8126b6400b77f934dc098d1": ("throughput", 1, "ff5522097b14978d917a0eadcd510a209a96bf8b3c26d131b3acc5146d5c6459"),
+                    "9a5b57035124365d84128cc258f4cb85": ("throughput", 20, "312d8e3b29a14b79b9a1b3e2acec01312ec35b7614c0e4f15132c3c964e0cafa"),
+                    "1f88da9a0dbbbd7b705a349bea111eca": ("throughput", 4, "51a61c98eb0f3ae8a095242a7d8c2f59c1646f3b8502a162a6140c8599100dfa"),
+                }
+                CHECKOUTS = {f"native-candidate-{RUN_ID}-{ATTEMPT}-{token}": point for token, point in POINTS.items()}
+
+
+                def bounded_read(path, limit):
+                    """Adapted from the audited 345fb32b9 observer; never open a symlink or device."""
+                    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                    with os.fdopen(descriptor, "rb") as stream:
+                        info = os.fstat(stream.fileno())
+                        if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
+                            raise ValueError("nonregular or oversized input")
+                        data = stream.read(limit + 1)
+                        if len(data) > limit:
+                            raise ValueError("input exceeds its read bound")
+                        return data
+
+
+                def owned_file(path, limit):
+                    if path.resolve(strict=True) != path or path.stat().st_uid != os.getuid():
+                        raise ValueError("input must be canonical and owned")
+                    return bounded_read(path, limit)
+
+
+                def process_identity(pid_path):
+                    """Filter cwd before reading argv; return no unrestricted process data."""
+                    info = pid_path.lstat()
+                    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+                        return None
+                    cwd = Path(os.readlink(pid_path / "cwd"))
+                    if not cwd.is_absolute() or cwd.name not in CHECKOUTS or cwd.resolve(strict=True) != cwd:
+                        return None
+                    if cwd.parent.name != "InferenceX" or cwd.parent.parent.name != "InferenceX":
+                        return None
+                    mode, concurrency, point_id = CHECKOUTS[cwd.name]
+                    raw = bounded_read(pid_path / "cmdline", 16384)
+                    if not raw.endswith(b"\0"):
+                        return None
+                    argv = [os.fsdecode(value) for value in raw[:-1].split(b"\0")]
+                    if len(argv) == 7 and Path(argv[0]).name == "uv" and argv[1:6] == ["run", "--locked", "--python", "3.12", "python"]:
+                        kind = "uv-workflow-shell"
+                    elif len(argv) == 2 and argv[0] in {str(cwd / ".venv/bin" / name) for name in ("python", "python3", "python3.12")}:
+                        kind = "python-workflow"
+                        if Path(os.readlink(pid_path / "exe")) != Path(argv[0]).resolve(strict=True):
+                            return None
+                    else:
+                        return None
+                    script = Path(argv[-1])
+                    # GitHub custom uv shells use a UUID filename without an extension.
+                    if (script.parent != cwd.parents[2] / "_temp"
+                            or not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", script.name)
+                            or owned_file(script, 1024) != SCRIPT):
+                        return None
+                    request = json.loads(owned_file(cwd / "native-qualification/preparation-request.json", 8192))
+                    if not isinstance(request, dict) or request.get("requested_point_id") != point_id:
+                        return None
+                    source = request.get("source")
+                    if not isinstance(source, dict) or any(source.get(key) != expected for key, expected in {
+                        "repository": "SemiAnalysisAI/InferenceX", "run_id": RUN_ID, "attempt": ATTEMPT,
+                        "head_sha": SOURCE_SHA, "purpose": "pr-qualification", "event": "pull_request",
+                    }.items()):
+                        return None
+                    fields = bounded_read(pid_path / "stat", 4096).rsplit(b")", 1)[1].split()
+                    return {"cwd": cwd, "cmdline": raw, "start_ticks": int(fields[19]),
+                            "kind": kind, "mode": mode, "concurrency": concurrency, "point_id": point_id,
+                            "cpu_ticks": int(fields[11]) + int(fields[12])}
+
+
+                def sample_process(pid_path, proc_root, deadline):
+                    identity = process_identity(pid_path)
+                    if identity is None:
+                        return None
+                    ticks = os.sysconf("SC_CLK_TCK")
+                    result = {"pid": int(pid_path.name), "start_ticks": identity["start_ticks"],
+                              "kind": identity["kind"], "mode": identity["mode"], "concurrency": identity["concurrency"],
+                              "requested_point_id": identity["point_id"], "checkout_basename": identity["cwd"].name,
+                              "cpu_seconds": identity["cpu_ticks"] / ticks, "sample_monotonic": time.monotonic(), "open_assets": []}
+                    try:
+                        uptime = float(bounded_read(proc_root / "uptime", 256).split()[0])
+                        result["elapsed_seconds"] = max(0, uptime - identity["start_ticks"] / ticks)
+                    except (OSError, ValueError, IndexError):
+                        result["elapsed_seconds"] = None
+                    try:
+                        counters = {}
+                        for line in bounded_read(pid_path / "io", 4096).splitlines():
+                            key, value = line.split(b":", 1)
+                            if key in (b"rchar", b"read_bytes"):
+                                counters[key.decode()] = int(value)
+                        if set(counters) != {"rchar", "read_bytes"} or any(value < 0 for value in counters.values()):
+                            raise ValueError("invalid read counters")
+                        result["io"] = counters
+                    except (OSError, ValueError):
+                        result["io"] = {"state": "unavailable"}
+                    try:
+                        with os.scandir(pid_path / "fd") as descriptors:
+                            for index, entry in enumerate(itertools.islice(descriptors, 128)):
+                                if time.monotonic() >= deadline:
+                                    result["fd_scan_truncated"] = True
+                                    break
+                                if index == 127:
+                                    result["fd_scan_truncated"] = True
+                                if not entry.name.isdecimal():
+                                    continue
+                                descriptor = Path(entry.path)
+                                try:
+                                    raw_target = os.readlink(descriptor)
+                                    target = Path(raw_target)
+                                    if not target.is_absolute() or not (target.is_relative_to(HUB) or target == IMAGE):
+                                        continue
+                                    resolved = target.resolve(strict=True)
+                                    if not (resolved.is_relative_to(HUB) or resolved == IMAGE):
+                                        continue
+                                    info = descriptor.stat()
+                                    if not stat.S_ISREG(info.st_mode):
+                                        continue
+                                    position = None
+                                    for line in bounded_read(pid_path / "fdinfo" / entry.name, 4096).splitlines():
+                                        if line.startswith(b"pos:"):
+                                            position = int(line.split(b":", 1)[1])
+                                    after = descriptor.stat()
+                                    if (position is None or position < 0 or os.readlink(descriptor) != raw_target
+                                            or (info.st_dev, info.st_ino) != (after.st_dev, after.st_ino)):
+                                        continue
+                                    result["open_assets"].append({"fd": int(entry.name), "path": str(resolved),
+                                                                  "position_bytes": position, "size_bytes": info.st_size})
+                                    if len(result["open_assets"]) >= 8:
+                                        result["fd_scan_truncated"] = True
+                                        break
+                                except (OSError, ValueError):
+                                    continue
+                    except OSError:
+                        result["fd_state"] = "unavailable"
+                    # Reject PID reuse, changed command/cwd, and changed ownership after the FD scan.
+                    after = process_identity(pid_path)
+                    if after is None or any(after[key] != identity[key] for key in ("cwd", "cmdline", "start_ticks")):
+                        return None
+                    return result
+
+
+                def observe_fixed_sweep_processes(proc_root=Path("/proc")):
+                    result = {"purpose": "operational-diagnostic", "qualification_evidence": False,
+                              "run_id": RUN_ID, "attempt": ATTEMPT, "state": "not-local-or-unavailable", "matches": [],
+                              "note": "Missing data does not establish a stall. rchar is process read activity; read_bytes is kernel I/O accounting. Neither is unique completed hashing bytes or a completion percentage; do not sum parent and child counters."}
+                    if not proc_root.is_dir():
+                        return result
+                    try:
+                        if HUB.resolve(strict=True) != HUB or IMAGE.resolve(strict=True) != IMAGE:
+                            raise ValueError("asset roots must remain canonical")
+                        deadline = time.monotonic() + 5
+                        with os.scandir(proc_root) as candidates:
+                            for index, entry in enumerate(itertools.islice(candidates, 8192)):
+                                if time.monotonic() >= deadline:
+                                    result["pid_scan_truncated"] = True
+                                    break
+                                if index == 8191:
+                                    result["pid_scan_truncated"] = True
+                                if not entry.name.isdecimal():
+                                    continue
+                                try:
+                                    sample = sample_process(Path(entry.path), proc_root, deadline)
+                                except (OSError, ValueError, IndexError):
+                                    continue
+                                if sample is not None:
+                                    result["matches"].append(sample)
+                                    if len(result["matches"]) >= 18:  # One uv shell and Python child for each of nine jobs.
+                                        result["pid_scan_truncated"] = True
+                                        break
+                    except (OSError, ValueError):
+                        result["scan_state"] = "unavailable"
+                    if result["matches"]:
+                        result["state"] = "matched-local-process"
+                        time.sleep(2)
+                        deadline = time.monotonic() + 5
+                        for first in result["matches"]:
+                            try:
+                                if time.monotonic() >= deadline:
+                                    raise ValueError("followup deadline exceeded")
+                                second = sample_process(proc_root / str(first["pid"]), proc_root, deadline)
+                                if second is None or second["start_ticks"] != first["start_ticks"]:
+                                    raise ValueError("matched process changed or exited")
+                                elapsed = second["sample_monotonic"] - first["sample_monotonic"]
+                                observation = {"interval_seconds": elapsed, "sample": second}
+                                if elapsed > 0 and all(key in first["io"] and key in second["io"] and second["io"][key] >= first["io"][key] for key in ("rchar", "read_bytes")):
+                                    observation["read_activity_bytes_per_second"] = {key: (second["io"][key] - first["io"][key]) / elapsed for key in ("rchar", "read_bytes")}
+                                first["followup"] = observation
+                            except (OSError, ValueError, IndexError):
+                                first["followup"] = {"state": "unavailable-or-exited"}
+                    return result
+
+
                 GENERATION = Path("/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35481075834-1")
                 RUN_ID = 35483266492
                 SOURCE_SHA = "1985ace3f0be6f1fa167be06213295cd3e188a67"
@@ -453,7 +669,7 @@ jobs:
                     client_status["step_manager_configuration"] = {"state": configuration["state"], "exit_code": configuration["exit_code"], "fields": [line.strip() for line in configuration["output"].splitlines() if line.split("=", 1)[0].strip() in {"SlurmctldParameters", "SlurmdParameters", "SLURM_VERSION"}]}
                     for name in ("started.json", "closed.json"):
                         try:
-                            client_status[name] = read_object(client_directory / name, client_directory)
+                            client_status[name] = read_object(client_directory / "writer" / name, client_directory / "writer")
                         except (OSError, ValueError) as error:
                             client_status[name] = {"error_type": type(error).__name__}
                     client_logs = client_directory / "native-output" / client_id / "logs"
@@ -467,6 +683,7 @@ jobs:
                     status["cancellation_client"] = client_status
                 except (OSError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
                     status["cancellation_client"] = {"error_type": type(error).__name__}
+                status["preparation_processes"] = observe_fixed_sweep_processes()
                 (report / "diagnostic.json").write_text(json.dumps(status, indent=2) + "\n")
                 print("Fixed-run read-only observation retained; this is not qualification evidence.")
             - name: Preserve provisioning evidence
