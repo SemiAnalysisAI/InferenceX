@@ -92,13 +92,15 @@ jobs:
             Read .github/klaud-candidate-prompt.md and follow it for the candidate in
             ${{ runner.temp }}/klaud/candidate.json. MAX_REPAIRS, KLAUD_BRANCH,
             KLAUD_TEST_NAME and KLAUD_EVIDENCE are provided in your environment.
-      - name: Recover an interrupted agent
-        if: always() && steps.claude.outcome == 'failure'
+      - name: Reconcile agent-owned state
+        if: always() && steps.claude.outcome != 'skipped'
         env:
           GH_TOKEN: ${{ secrets.AGENT_PAT }}
         run: uv run --project .infx-tooling --locked python -P -m infx.klaud recover-current
       - name: Save sanitized candidate diagnostics
+        id: diagnostics
         if: always()
+        continue-on-error: true
         env:
           KLAUD_EXECUTION: ${{ steps.claude.outputs.execution_file }}
           KLAUD_OUTCOME: ${{ steps.claude.outcome }}
@@ -117,3 +119,6 @@ jobs:
           # Never upload the execution transcript or private API/scratch data.
           path: ${{ runner.temp }}/candidate-diagnostics.json
           retention-days: 14
+      - name: Require a verified candidate outcome
+        if: always() && steps.diagnostics.outcome == 'failure'
+        run: exit 1
