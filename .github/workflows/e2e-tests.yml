@@ -8,6 +8,12 @@ permissions:
 on: # zizmor: ignore[concurrency-limits]
     workflow_dispatch:
         inputs:
+            phase1-site-operation:
+                description: "Inspect H100 shared assets without submitting a benchmark"
+                required: false
+                type: choice
+                options: [none, inspect]
+                default: none
             generate-cli-command:
                 description: "Command passed to generate matrix script"
                 required: false
@@ -110,6 +116,11 @@ on: # zizmor: ignore[concurrency-limits]
           MODAL_TOKEN_SECRET:
             required: false
         inputs:
+            phase1-site-operation:
+                description: "Inspect H100 shared assets without submitting a benchmark"
+                required: false
+                type: string
+                default: none
             generate-cli-command:
                 description: "Command passed to generate matrix script"
                 required: false
@@ -205,7 +216,51 @@ on: # zizmor: ignore[concurrency-limits]
                 default: "[]"
 
 jobs:
+    phase1-site-route:
+        name: Queue Phase 1 site inspection
+        if: ${{ inputs.phase1-site-operation == 'inspect' }}
+        runs-on: ubuntu-latest
+        outputs:
+            queue-token: ${{ steps.token.outputs.result }}
+        steps:
+            - id: token
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              with:
+                result-encoding: string
+                script: |
+                    return require('crypto').createHash('sha256')
+                      .update(`${context.runId}:${process.env.GITHUB_RUN_ATTEMPT}:phase1-site`)
+                      .digest('hex').slice(0, 32);
+    phase1-site:
+        if: ${{ inputs.phase1-site-operation == 'inspect' }}
+        needs: phase1-site-route
+        name: Phase 1 shared H100 asset inventory
+        # The shared Linux paths can only be inspected from this cluster's login runners.
+        runs-on: ${{ fromJSON(format('["self-hosted","cluster:h100-dgxc","nodes:1","ci-job-1.000-{0}","ci-attempt-{1}"]', needs.phase1-site-route.outputs.queue-token, github.run_attempt)) }}
+        timeout-minutes: 20
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                ref: ${{ github.workflow_sha }}
+                persist-credentials: false
+            - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+            - name: Inspect explicit shared paths
+              # H100 login runners do not provide an ambient python executable.
+              shell: uv run --locked --no-dev --python 3.12 python {0} # zizmor: ignore[misfeature]
+              run: |
+                import sys
+                from infx.srt_slurm.provision import main
+                sys.argv = ["provision", "--config", "runners/srt-slurm/h100-phase1-provision.json", "--output", "phase1-provision-report"]
+                raise SystemExit(main())
+            - name: Preserve provisioning evidence
+              if: ${{ always() }}
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                name: phase1-provision-${{ github.run_id }}-${{ github.run_attempt }}
+                path: phase1-provision-report/
+                if-no-files-found: error
     get-jobs:
+        if: ${{ !inputs.phase1-site-operation || inputs.phase1-site-operation == 'none' }}
         name: get-jobs
         runs-on: ubuntu-latest
         outputs:

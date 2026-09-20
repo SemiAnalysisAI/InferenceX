@@ -212,6 +212,22 @@ def render_recipe(
     if (role["nodes"], role["workers"], role["gpus"]) != (1, 1, 8):
         raise ValueError("pilot requires one physical node and one TP8 worker")
     args = role["args"]
+    topology = {
+        "tensor-parallel-size": job.row.tp,
+        "pipeline-parallel-size": job.row.pp,
+        "decode-context-parallel-size": job.row.dcp_size,
+        "prefill-context-parallel-size": job.row.pcp_size,
+        "data-parallel-size": 1,
+    }
+    normalized = {name.replace("_", "-"): value for name, value in args.items()}
+    if len(normalized) != len(args):
+        raise ValueError("conflicting engine argument aliases")
+    for name, expected in topology.items():
+        value = normalized.get(name, None if name == "tensor-parallel-size" else 1)
+        if type(value) is not int or value != expected:
+            raise ValueError(f"engine {name} differs from the requested aggregate topology")
+    if normalized.get("enable-expert-parallel", False) is not False:
+        raise ValueError("aggregate pilot requires expert parallelism disabled")
     args["max-num-seqs"] = 2 * job.row.conc
     args["max-cudagraph-capture-size"] = min(2048, 1 << (12 * job.row.conc - 1).bit_length())
     spec = args["speculative-config"]

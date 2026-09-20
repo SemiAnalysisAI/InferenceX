@@ -533,3 +533,47 @@ def test_installed_native_runtime_prepares_and_renders_the_entire_pilot(
     )
     assert tampered.returncode != 0
     assert "Prepared input changed: config.yaml" in tampered.stderr
+
+
+@pytest.mark.parametrize(
+    "flag,value",
+    [
+        ("tensor-parallel-size", 4),
+        ("pipeline-parallel-size", 2),
+        ("decode-context-parallel-size", 2),
+        ("prefill-context-parallel-size", 2),
+        ("data-parallel-size", 2),
+        ("enable-expert-parallel", True),
+        ("tensor-parallel-size", "8"),
+    ],
+)
+def test_allocation_does_not_authorize_mislabeled_engine_topology(inputs, flag, value):
+    import yaml
+
+    root, row, scheduling, site = inputs
+    path = root / row["execution"]["recipe"]
+    recipe = load_mapping(path)
+    recipe["roles"]["agg"]["args"][flag] = value
+    path.write_text(yaml.safe_dump(recipe))
+    job = parse_job(row, root, scheduling)
+    policy = ClientPolicy.model_validate(
+        load_mapping(root / row["execution"]["client-policy"])
+    )
+    with pytest.raises(ValueError, match="topology|expert parallelism"):
+        render_recipe(job, root, site, policy, root / "spec.json", root / "output")
+
+
+def test_conflicting_engine_argument_aliases_are_rejected(inputs):
+    import yaml
+
+    root, row, scheduling, site = inputs
+    path = root / row["execution"]["recipe"]
+    recipe = load_mapping(path)
+    recipe["roles"]["agg"]["args"]["tensor_parallel_size"] = 4
+    path.write_text(yaml.safe_dump(recipe))
+    job = parse_job(row, root, scheduling)
+    policy = ClientPolicy.model_validate(
+        load_mapping(root / row["execution"]["client-policy"])
+    )
+    with pytest.raises(ValueError, match="conflicting engine argument aliases"):
+        render_recipe(job, root, site, policy, root / "spec.json", root / "output")

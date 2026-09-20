@@ -58,6 +58,10 @@ flowchart TD
 
 ## 首次 GPU 运行前的部署
 
+现有 E2E 手动调度支持 `phase1-site-operation: inspect`，在 H100 登录 runner 上检查 `runners/srt-slurm/h100-phase1-provision.json` 显式提供的路径和 revision，并将 `inventory.json` 保存为绑定运行及 attempt 的 artifact。此操作以 `nodes:1` 进入现有优先级队列，不提交 Slurm allocation，也不修改共享模型或 trace 缓存。配置来自保留的 H100 基线；检查报告用于在安装运行环境之前确认实际存在的路径。镜像、快照或权重分片缺失会使检查失败。资源清单不代表硬件验收完成，也不代表 reader 已部署。
+
+渲染器还会在原生准备步骤之前，将引擎实际 TP/PP/上下文/数据并行参数与请求的拓扑绑定。下划线与连字符别名冲突、非整数并行度或启用专家并行都会被拒绝。
+
 在 H100 登录节点与计算容器均可访问的共享 Linux 存储上部署，不复用 macOS 测试环境。原生、wrapper 及所选客户端的 Python 解释器、标准库、已安装依赖、原生源代码、prepared bundle 与客户端缓存均需明确的同路径挂载。挂载根目录必须是规范路径，不接受符号链接别名。原生及 wrapper 使用 Python 3.12，固定的 AgentX 子进程使用 Python 3.11。输出与可写缓存不得放在 `/workspace` 下。HF 模型 snapshot 必须仍能访问相邻 blob 目录；原生模型参数会保留完整缓存路径。
 
 1. 使用原生源代码提交中的 `uv.lock` 安装非 editable 环境：`uv sync --frozen --no-editable --no-dev --python 3.12`。保持该源码 checkout 干净。保留带哈希的 Linux wheel 及构建工具约束：`uv.lock` 固定运行依赖，但未固定上游 Hatch 构建依赖。重新构建时，获取并核实 NVIDIA 的 `v2.2.1` tag 指向 `984180e5b8755aef85e9995048b5a16cb5336bce`，保留相同 hatch-vcs 版本谱系。
