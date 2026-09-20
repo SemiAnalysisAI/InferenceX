@@ -8455,3 +8455,17 @@
   description:
     - "Update B200 vLLM AgentX to DSpark6 and a new image with TP8 and DEP8 configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
+
+- config-keys:
+    - kimik3-fp4-mi355x-atom-agentic-mtp
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Stop voiding a benchmark point over an unreadable in-window power cell. amd-smi blanks socket_power while a device sits at its idle clock floor, which agentic replay reaches constantly between requests; across the nine vllm points of run 35157825655 all 199 blank cells landed on an idle-clock row and none on any of the 296436 boost-clock rows. The atom image ships an older amd-smi that never blanks the cell: run 34349642428 has none in 161382 rows."
+    - "Such a row is now skipped and counted per GPU in the sidecar's window_degenerate_rows, exactly as a row outside the window already was, and the surviving coverage is judged by the window-bracketing, 3 s sampling-gap and GPU-count bounds that already govern an SMI which simply omits the row. A device may lose at most two cells or 1% of its rows before degenerate_power_samples_exceeded rejects it. Negative or non-finite readings still raise invalid_power_sample."
+    - "Re-sweep both MI355X Kimi-K3 AgentX keys, which share one published hardware curve. No serving, recipe, image or launcher change: throughput and latency are unaffected. This recovers only the points voided by an isolated cell; the atom conc 1/12/40 and vllm conc 12/14/70 failures are end-of-window collector losses that still fail, correctly, until the collector is fixed."
+    - "不再因为窗口内一个读不出的功耗单元格作废整个基准点。设备停在 idle 时钟下限时 amd-smi 会把 socket_power 置为 N/A，而 agentic replay 在请求间隙反复进入该状态；run 35157825655 的九个 vllm 点中，199 个空单元格全部落在 idle 时钟的行上，296436 条 boost 时钟行中没有一个。atom 镜像的 amd-smi 版本较旧，从不置空该单元格：run 34349642428 的 161382 行中一个都没有。"
+    - "这类行现在会被跳过并按 GPU 计入 sidecar 的 window_degenerate_rows，与窗口外的行原有处理完全一致，剩余覆盖交由既有的窗口边界样本覆盖、3 秒采样间隔上限和 GPU 数上限判定，与采集器干脆不输出该行时同一标准。单台设备最多丢失两个单元格或其行数的 1%，超出即由 degenerate_power_samples_exceeded 判为无效。负值或非有限读数仍然触发 invalid_power_sample。"
+    - "重跑 MI355X Kimi-K3 AgentX 的两个 key，二者共用同一条已发布硬件曲线。服务参数、recipe、镜像与启动器均未改动：吞吐量与延迟不受影响。本次只能恢复因单个空单元格被作废的点；atom 并发 1/12/40 与 vllm 并发 12/14/70 属于窗口末端的采集缺失，在采集端修好之前仍会正确判为无效。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3316
