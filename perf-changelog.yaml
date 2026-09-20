@@ -8461,8 +8461,8 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add a TP2 arm to the GB200 vLLM DeepSeek-V4.1-Flash AgentX recipe alongside the existing TP4 arm, keeping the Engram tables in pinned host DRAM via --engram-config cpu_offload; weights rise to ~133 GiB on each 256 GiB GPU, leaving room for the sparse-attention indexer's 32 GiB logits buffer at the upstream batched-token default plus ~47 GiB of KV per GPU, so the arm keeps the upstream scheduler settings"
-    - "Unlike the 180 GB B200 TP2 arm the GB200 GPUs need no --max-num-batched-tokens or CUDA-graph capture caps, so no benchmark script changes accompany this entry"
-    - "为 GB200 vLLM DeepSeek-V4.1-Flash AgentX 配方在现有 TP4 臂旁新增 TP2 臂，Engram 表继续通过 --engram-config cpu_offload 放在固定页主机 DRAM；每张 256 GiB GPU 的权重升至约 133 GiB，仍可容纳 indexer 在上游 batched-token 默认值下的 32 GiB logits 缓冲区，并为每张 GPU 留出约 47 GiB KV，因此本臂沿用上游调度器设置"
-    - "与 180 GB 的 B200 TP2 臂不同，GB200 无需 --max-num-batched-tokens 或 CUDA graph 捕获上限，因此本条目不涉及 benchmark 脚本改动"
+    - "Add a TP2 arm to the GB200 vLLM DeepSeek-V4.1-Flash AgentX recipe alongside the existing TP4 arm, keeping the Engram tables in pinned host DRAM via --engram-config cpu_offload; weights rise to ~145 GiB on each 256 GiB GPU"
+    - "Apply the B200 TP2 caps in dsv41flash_fp4_vllm_mtp.sh to every TP2 arm: --max-num-batched-tokens 4096 (the sparse-attention indexer's [batched-tokens, 1M] fp8 buffer is 32 GiB at the upstream 16384), --max-num-seqs at twice the concurrency (16-256) and CUDA graph capture stopped at 512, which leaves ~49 GiB of KV per GPU; TP4 and TP8 arms keep the upstream defaults"
+    - "为 GB200 vLLM DeepSeek-V4.1-Flash AgentX 配方在现有 TP4 臂旁新增 TP2 臂，Engram 表继续通过 --engram-config cpu_offload 放在固定页主机 DRAM；每张 256 GiB GPU 的权重升至约 145 GiB"
+    - "在 dsv41flash_fp4_vllm_mtp.sh 中将 B200 TP2 的上限推广到所有 TP2 臂：--max-num-batched-tokens 4096（上游 16384 时 indexer 的 [batched-tokens, 1M] fp8 缓冲区达 32 GiB）、--max-num-seqs 为并发的两倍（16-256）、CUDA graph 捕获上限 512，为每张 GPU 留出约 49 GiB KV；TP4 与 TP8 臂沿用上游默认值"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3320
