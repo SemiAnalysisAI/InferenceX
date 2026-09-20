@@ -1,6 +1,7 @@
-# Colocated TP2+EP2 prefill and two decode workers with write-through HiCache.
+# Diagnostic: TP2/EP2/DP2 splits attention to TP1 inside each two-GPU role.
+# SGLang resolves chunked-prefill 16384 to 8192 per DP lane; other settings match C32.
 schema: 2
-name: qwen35-b300-disagg-1p2d-tp2ep2-tp2ep2-colocated-c48-mtp-hicache
+name: qwen35-b300-disagg-1p1d-tp2ep2dp2-tp2ep2dp2-colocated-c24-mtp-hicache
 model:
   path: qwen3.5-fp8
   container: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
@@ -70,7 +71,8 @@ roles:
       kv-cache-dtype: fp8_e4m3
       tensor-parallel-size: 2
       expert-parallel-size: 2
-      data-parallel-size: 1
+      data-parallel-size: 2
+      enable-dp-attention: true
       mamba-ssm-dtype: bfloat16
       attention-backend: trtllm_mha
       moe-runner-backend: flashinfer_trtllm
@@ -102,7 +104,7 @@ roles:
       hicache-write-policy: write_through
   decode:
     nodes: colocate
-    workers: 2
+    workers: 1
     gpus: 2
     env:
       PYTHONUNBUFFERED: '1'
@@ -129,7 +131,8 @@ roles:
       kv-cache-dtype: fp8_e4m3
       tensor-parallel-size: 2
       expert-parallel-size: 2
-      data-parallel-size: 1
+      data-parallel-size: 2
+      enable-dp-attention: true
       mamba-ssm-dtype: bfloat16
       attention-backend: trtllm_mha
       moe-runner-backend: flashinfer_trtllm
@@ -179,7 +182,7 @@ benchmark:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic
     SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE: custom
-    SRT_MEASUREMENT_WINDOW_CONCURRENCIES: '48'
+    SRT_MEASUREMENT_WINDOW_CONCURRENCIES: '24'
     SRT_MEASUREMENT_WINDOW_RESULT_ROOT: /logs
     PORT: '8000'
     IS_MULTINODE: 'true'
@@ -190,7 +193,7 @@ benchmark:
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
   concurrencies:
-  - 48
+  - 24
 telemetry:
   enabled: true
   collect_interval_ms: 1000
@@ -201,4 +204,4 @@ telemetry:
   dcgm_exporter:
     container_image: dcgm-exporter
     port: 9401
-    command: dcgm-exporter --collect-interval=100 --address :{port} --devices g:0,1,2,3,4,5
+    command: dcgm-exporter --collect-interval=100 --address :{port} --devices g:0,1,2,3
