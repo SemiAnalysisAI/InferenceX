@@ -288,7 +288,14 @@ def test_native_prefill_only_rejects_aggregate_role_devices(tmp_path):
 
 
 @pytest.mark.parametrize('tick', [2, 4])
-def test_native_audit_retains_boundary_noise_without_relaxing_in_window_errors(tmp_path, tick):
+def test_native_audit_counts_degenerate_rows_on_the_side_they_fall(tmp_path, tick):
+    """An unreadable cell is missing coverage wherever it lands.
+
+    The window is [1, 3], so tick 2 lands inside it and tick 4 lands in the
+    teardown skirt. Either way the N/A row is skipped and counted, never
+    condemned: one such cell per device leaves the remaining coverage intact.
+    The extra 0 W row keeps its frozen in-window meaning and still integrates,
+    which is why the inside case settles 50 J lower."""
     root, bench, agg = _package(tmp_path)
     for rank in [0, 1]:
         with (root / f'node-{rank}/gpu_metrics.csv').open('a') as stream:
@@ -296,8 +303,10 @@ def test_native_audit_retains_boundary_noise_without_relaxing_in_window_errors(t
             if rank == 0:
                 stream.write(f'{tick},0,0\n')
     assert run(root, bench, agg, expected_prefill_gpus=1, expected_decode_gpus=1,
-               require_power=True) == int(tick == 2)
+               require_power=True) == 0
     audit = json.loads((tmp_path / 'power_validation_result.json').read_text())
-    assert audit['boundary_degenerate_rows'] == ({'uuid-0': 2, 'uuid-1': 1} if tick == 4 else {})
-    if tick == 4:
-        assert json.loads(agg.read_text())['total_gpu_energy_j'] == 800
+    assert audit['reasons'] == []
+    inside = tick == 2
+    assert audit['boundary_degenerate_rows'] == ({} if inside else {'uuid-0': 2, 'uuid-1': 1})
+    assert audit['window_degenerate_rows'] == ({'uuid-0': 1, 'uuid-1': 1} if inside else {})
+    assert json.loads(agg.read_text())['total_gpu_energy_j'] == (750 if inside else 800)
