@@ -16,7 +16,6 @@ from .reporting import translated
 from .validation import verify_sweep
 
 BOT = "Klaud-Cold"
-RELEASE = {"capacity-deferred", "readiness-blocked"}
 SWEEP_LABELS = {
     "sweep-enabled",
     "full-sweep-enabled",
@@ -182,18 +181,15 @@ class Session:
         refs = github.items(self.repository, "git/matching-refs/heads/" + self.branch)
         return any(ref["ref"] == "refs/heads/" + self.branch for ref in refs)
 
-    def retry_released(self, pull: dict) -> bool:
-        marker = f"<!-- klaud-retry-release:{self.parent['id']}:{self.candidate.id}:{pull['head']['sha']} -->"
-        comments = github.items(self.repository, f"issues/{pull['number']}/comments?per_page=100")
-        for comment in comments:
-            actor = comment["user"]["login"]
-            if actor != BOT and comment["body"].startswith(marker):
-                permission = github.read(self.repository, f"collaborators/{actor}/permission")[
-                    "permission"
-                ]
-                if permission in ("admin", "maintain", "write"):
-                    return True
-        return False
+    def delete_branch(self, pull: dict) -> None:
+        """Delete only this session's unchanged exact-head candidate branch."""
+        if not self.branch_exists():
+            return
+        self.refresh(pull)
+        ref = github.read(self.repository, "git/ref/heads/" + self.branch)
+        if ref["object"]["sha"] != pull["head"]["sha"]:
+            raise VerificationError("Branch moved during cleanup")
+        github.write(self.repository, "git/refs/heads/" + self.branch, "DELETE")
 
     def verify(
         self,
@@ -201,6 +197,7 @@ class Session:
         *,
         require_report: bool = True,
         require_ready: bool = True,
+        require_branch_deleted: bool = True,
     ) -> None:
         pulls = self.pulls()
         pull = pulls[0] if pulls else None
@@ -258,11 +255,7 @@ class Session:
                 or any(label["name"] in SWEEP_LABELS for label in pull["labels"])
             ):
                 raise VerificationError("Failure/deferral PR cleanup is incomplete")
-            if (
-                pull
-                and self.branch_exists() != (outcome.outcome not in RELEASE)
-                and not (outcome.outcome not in RELEASE and self.retry_released(pull))
-            ):
+            if pull and require_branch_deleted and self.branch_exists():
                 raise VerificationError("Incorrect cleanup branch disposition")
         if pull and require_report:
             receipt = self.report(pull)
@@ -369,12 +362,7 @@ class Session:
                         "PATCH",
                         {"state": "closed"},
                     )
-                if outcome.outcome in RELEASE and self.branch_exists():
-                    self.refresh(pull)
-                    ref = github.read(self.repository, "git/ref/heads/" + self.branch)
-                    if ref["object"]["sha"] != pull["head"]["sha"]:
-                        raise VerificationError("Branch moved during cleanup")
-                    github.write(self.repository, "git/refs/heads/" + self.branch, "DELETE")
+                self.delete_branch(pull)
         # PR transitions can enqueue skipped runs. Wait for them before reporting completion.
         outcome = outcome.model_copy(update={"run_ids": sorted(run["id"] for run in self.runs())})
         self.verify(outcome, require_report=False)
@@ -421,16 +409,12 @@ class Session:
                             "Full sweep verified; ready for review."
                             if proof
                             else "PR closed; branch deleted for retry."
-                            if outcome.outcome in RELEASE
-                            else "PR closed; exact-candidate branch retained pending maintainer review."
                         ),
                         f"**{outcome.outcome}** · 修复次数：{repairs} · 运行：{links}  \n所有自有运行均已结束。"
                         + (
                             "完整 sweep 已验证；已就绪，等待审查。"
                             if proof
                             else "PR 已关闭；分支已删除，可重新尝试。"
-                            if outcome.outcome in RELEASE
-                            else "PR 已关闭；保留精确候选分支，等待维护者检查。"
                         ),
                     )
                 )
@@ -463,54 +447,6 @@ def current_session() -> Session:
     return Session(repository, parent, candidate)
 
 
-def release_candidate(session: Session, expected_head: str) -> None:
-    """Explicit maintainer retry after a verified closed session, never an agent action."""
-    actor = json.loads(subprocess.check_output(["gh", "api", "user"], text=True, timeout=60))[
-        "login"
-    ]
-    permission = github.read(session.repository, f"collaborators/{actor}/permission")["permission"]
-    if actor == BOT or permission not in ("admin", "maintain", "write"):
-        raise VerificationError("Only a repository maintainer can release a retained candidate")
-    session.check_parent()
-    pull = session.pulls()[0]
-    if pull["head"]["sha"] != expected_head or pull["state"] != "closed" or pull["merged_at"]:
-        raise VerificationError("Retry release requires the reviewed closed PR head")
-    receipt = session.report(pull)
-    if not receipt:
-        raise VerificationError("Finish session cleanup before releasing its retry claim")
-    outcome = CandidateOutcome.model_validate(receipt["outcome"])
-    if outcome.outcome in ("validated", "handoff") or outcome.outcome in RELEASE:
-        raise VerificationError("This outcome has no retained failure claim to release")
-    session.verify(outcome)
-    if not session.branch_exists() and session.retry_released(pull):
-        return  # A previous invocation already completed the approved deletion.
-    session.refresh(pull)
-    branch = github.read(session.repository, "git/ref/heads/" + session.branch)
-    if branch["object"]["sha"] != expected_head:
-        raise VerificationError("Retained branch changed; leave maintainer work intact")
-    # The outcome remains historically true. This explicit receipt records why the
-    # absence of its retained branch must no longer be treated as incomplete cleanup.
-    github.write(
-        session.repository,
-        f"issues/{pull['number']}/comments",
-        "POST",
-        {
-            "body": f"<!-- klaud-retry-release:{session.parent['id']}:{session.candidate.id}:{expected_head} -->\n"
-            + translated(
-                "Maintainer approved a fresh selection after reviewing the blocker; previous results remain historical.",
-                "维护者检查阻塞原因后已批准重新选择该候选；之前的结果保留为历史证据。",
-            )
-        },
-    )
-    session.refresh(pull)
-    if (
-        github.read(session.repository, "git/ref/heads/" + session.branch)["object"]["sha"]
-        != expected_head
-    ):
-        raise VerificationError("Retained branch changed; leave maintainer work intact")
-    github.write(session.repository, "git/refs/heads/" + session.branch, "DELETE")
-
-
 def reconcile(session: Session) -> bool:
     pulls = session.pulls()
     pull = pulls[0] if pulls else None
@@ -518,8 +454,14 @@ def reconcile(session: Session) -> bool:
         return False
     record = session.report(pull) if pull else None
     if record:
-        session.verify(CandidateOutcome.model_validate(record["outcome"]))
-        return False
+        outcome = CandidateOutcome.model_validate(record["outcome"])
+        session.verify(outcome, require_branch_deleted=False)
+        changed = False
+        if outcome.outcome not in ("validated", "handoff") and pull and session.branch_exists():
+            session.delete_branch(pull)
+            changed = True
+        session.verify(outcome)
+        return changed
     runs = session.runs()
     if not pull and not runs:
         return False
@@ -557,7 +499,8 @@ def reconcile(session: Session) -> bool:
         run_ids=[r["id"] for r in runs],
         repairs_used=None,
     )
-    # Unknown interruption retains the exact-candidate claim for manual review.
+    # Unknown interruption is terminal once owned work has ended; finish records
+    # the evidence, closes the PR, deletes the unchanged branch and releases the family.
     session.finish(outcome)
     return True
 
