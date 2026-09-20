@@ -29,7 +29,7 @@ from pathlib import Path
 root = Path(sys.argv[1]) / "python"
 required = {
     "SGLANG_EXTERNAL_LINKER_SWA_RETENTION_INTERVAL": "sglang/srt/environ.py",
-    "SGLANG_MOONCAKE_STORE_CONTRIBUTOR": "sglang/srt/environ.py",
+    "mooncake_store_contributor": "sglang/srt/arg_groups/fields/memory.py",
 }
 for token, relative in sorted(required.items()):
     path = root / relative
