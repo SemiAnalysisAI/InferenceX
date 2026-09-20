@@ -1064,7 +1064,11 @@
       "allocation_id": "16658",
       "failure_stage": "agentx_warmup",
       "failure_evidence": "Canonical AgentX warmup flooded approximately 17,635 requests at requested concurrency 16,384; a root warmup request failed after Connection reset by peer, followed by ServerDisconnectedError responses. AIPerf raised ProfileAborted before profiling began. Server initialization had completed and the retained logs contain no EngineDead or CUDA out-of-memory signature.",
-      "log_archive_sha256": "b3a3202fe9be14c686de4ffec79983483ff230403bbcac95197c6d806957f079"
+      "log_archive_sha256": "b3a3202fe9be14c686de4ffec79983483ff230403bbcac95197c6d806957f079",
+      "storage_evidence": "Failure cleanup receipt verified deleted=true for exact workflow-owned scratch /offload-scratch/inferencex-offload-35476337411-1-16658-4979b3ea8fb3. Before deletion it contained four sparse cache files totaling 1,099,502,125,056 logical bytes and zero allocated bytes.",
+      "evidence_sha256": {
+        "offload_cleanup.json": "4d52957a5d76c8aa98e6a837606f5eb31a939e76581ba47642115f1082b796f9"
+      }
     },
     {
       "run_id": 35476340310,
@@ -1088,7 +1092,11 @@
       "allocation_id": "16660",
       "failure_stage": "agentx_warmup",
       "failure_evidence": "Canonical AgentX warmup flooded approximately 17,635 requests at requested concurrency 16,384; a root warmup request failed after Connection reset by peer, followed by ServerDisconnectedError responses. AIPerf raised ProfileAborted before profiling began. Server initialization had completed and the retained logs contain no EngineDead or CUDA out-of-memory signature.",
-      "log_archive_sha256": "b2ec6b8492d86b19e90e95b4d9f950fa8701144ba0e9b4e68e0119d682a8a5cf"
+      "log_archive_sha256": "b2ec6b8492d86b19e90e95b4d9f950fa8701144ba0e9b4e68e0119d682a8a5cf",
+      "storage_evidence": "Failure cleanup receipt verified deleted=true for exact workflow-owned scratch /offload-scratch/inferencex-offload-35476340310-1-16660-7cc18a4dda17. Before deletion it contained one cache file totaling 7,727 logical bytes and 8,192 allocated bytes.",
+      "evidence_sha256": {
+        "offload_cleanup.json": "dea59d454cfb751590999c79887e6969533733b8b0b4f81d57ae2396999e45ac"
+      }
     },
     {
       "run_id": 35478297080,
