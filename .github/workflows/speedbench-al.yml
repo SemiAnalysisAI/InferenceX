@@ -1,4 +1,5 @@
 name: SpeedBench AL Collection
+run-name: "SPEED-Bench ${{ inputs.model }} | ${{ inputs.precision }} | k=[${{ inputs.mtp-list }}] | thinking=[${{ inputs.thinking-modes }}]"
 
 # Push-button (workflow_dispatch) collection of a SPEED-Bench acceptance-length
 # (AL) matrix: thinking_on/off x MTP levels, for the given model (defaults to
@@ -184,29 +185,16 @@ jobs:
     runs-on: >-
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
-        (
-          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
-          format(
-            '["self-hosted",{0},{1},{2},{3}]',
-            toJSON(inputs.runner),
-            '"nodes:1"',
-            toJSON(format(
-              'ci-job-{0}-{1}',
-              needs.setup.outputs.priority,
-              needs.setup.outputs.queue-token
-            )),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
-          ) ||
-          format(
-            '["self-hosted",{0},{1},{2}]',
-            toJSON(inputs.runner),
-            toJSON(format(
-              'ci-job-{0}-{1}',
-              needs.setup.outputs.priority,
-              needs.setup.outputs.queue-token
-            )),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
-          )
+        format(
+          '["self-hosted",{0},{1},{2},{3}]',
+          toJSON(inputs.runner),
+          '"nodes:1"',
+          toJSON(format(
+            'ci-job-{0}-{1}',
+            needs.setup.outputs.priority,
+            needs.setup.outputs.queue-token
+          )),
+          toJSON(format('ci-attempt-{0}', github.run_attempt))
         ) ||
         format('[{0}]', toJSON(inputs.runner))
       ) }}
