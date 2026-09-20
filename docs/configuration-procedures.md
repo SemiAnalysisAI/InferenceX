@@ -547,3 +547,21 @@ runtime directories stay out of `/workspace`. The MI300X launcher also raises it
 allocation from 180 to 480 minutes for this checkpoint: the HF cache there is node-local, so
 the first arm on each node downloads 511 GB before serving. GPU sweep and eval evidence is
 required before calling either arm validated.
+
+## Qwen3.8-27B FP8 native MTP golden acceptance
+
+The H100, H200, MI300X and MI325X fixed-sequence FP8 recipes use three native MTP
+draft tokens and the `thinking_on` curve measured in [#3304](https://github.com/SemiAnalysisAI/InferenceX/pull/3304).
+Throughput-only runs load AL **2.52** from
+[`qwen3.827b_fp8_mtp.yaml`](../golden_al_distribution/qwen3.827b_fp8_mtp.yaml).
+The pinned Qwen chat template defaults to thinking on; these recipes reject another
+`THINKING_MODE` instead of pairing a different curve with that template. The
+configuration helper accepts only measured draft lengths 1–4.
+
+Both eval-only and combined throughput+eval runs use real standard verification.
+The target remains FP8; the native head comes from the pinned original BF16
+`Qwen/Qwen3.8-27B` checkpoint with native BF16 draft KV cache. Explicit MTP module
+exclusions prevent vLLM from applying target FP8 quantization to that head.
+Runtime model inspection and the server command are retained in the logs. These
+fixed-sequence recipes explicitly use measured synthetic throughput acceptance;
+the SRT connector's non-AgentX selection policy is separate.
