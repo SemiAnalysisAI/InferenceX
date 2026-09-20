@@ -121,6 +121,35 @@ Before accepting an updated curve, reviewers should verify:
 - The source Actions run is linked at the first line of the YAML.
 - The committed values exactly match the workflow artifact.
 
+## Qwen3.8-27B collection
+
+The revision-aware collector `benchmarks/single_node/speedbench/qwen3.827b_vllm.sh`
+supports FP8 and BF16 targets with native MTP or DSpark. Dispatch `speedbench-al.yml`
+with `collector-script` set to that path, `precision`, `tp=1`, a pinned
+`model-revision`, and an explicit `speculative-config` (the collector supplies
+`num_speculative_tokens`). Use the Qwen chat setting
+`thinking-kwargs={"enable_thinking":true}`. Sampling follows the model card:
+thinking on uses temperature 1.0, top-p 0.95 and presence penalty 0; thinking off
+uses 0.7, 0.8 and 1.5, respectively; both use top-k 20.
+
+The official FP8 checkpoint also quantizes its embedded MTP head. To preserve
+the original draft precision, native MTP collection must explicitly select
+`model=Qwen/Qwen3.8-27B` and its pinned BF16 revision inside `speculative-config`,
+with `kv_cache_dtype=auto`. DSpark likewise requires an original BF16 drafter,
+its revision, explicit draft sampling, and real rejection sampling with adaptive
+verification disabled. These measurements do not validate recipes that quantize
+the draft head or inherit the target's FP8 KV cache for the draft.
+
+All selected coding prompts must complete before a cell is accepted. The collector
+disables the benchmark client's extra readiness request and warmups, and retains
+before/after Prometheus counters. AL is `1 + accepted / drafts`; AR is
+`accepted / proposed_tokens`, using actual proposals rather than an assumed
+fixed draft length. `speedbench-evidence-<model-prefix>-<precision>` contains
+commands, checkpoint metadata, the prepared dataset, per-request outputs, logs,
+unrounded counters/AL/AR, and an AR matrix. Runtime directories are created under
+`/tmp`; the final YAML and evidence archive are staged as workspace-root files.
+Failed or incomplete cells never produce a golden matrix.
+
 ## Current golden curves
 
 | Model | Method | Golden YAML | Source run |

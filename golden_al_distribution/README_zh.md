@@ -121,6 +121,32 @@ gh workflow run speedbench-al.yml \
 - YAML 第一行链接了源 Actions run。
 - 提交的数值与工作流 artifact 完全一致。
 
+## Qwen3.8-27B 收集
+
+支持固定版本的收集器 `benchmarks/single_node/speedbench/qwen3.827b_vllm.sh`
+可测量 FP8 和 BF16 目标模型的原生 MTP 或 DSpark。触发 `speedbench-al.yml`
+时，将 `collector-script` 设为该路径，并显式传入 `precision`、`tp=1`、固定的
+`model-revision` 和 `speculative-config`（由收集器逐点填入
+`num_speculative_tokens`）。Qwen 使用
+`thinking-kwargs={"enable_thinking":true}`。采样遵循模型卡：thinking 开启时，
+temperature 为 1.0、top-p 为 0.95、presence penalty 为 0；关闭时分别为
+0.7、0.8 和 1.5；两种模式的 top-k 均为 20。
+
+官方 FP8 checkpoint 同时量化了内嵌 MTP 头。为保持原始草稿精度，收集原生 MTP
+时必须在 `speculative-config` 中显式指定 `model=Qwen/Qwen3.8-27B` 及其固定的
+BF16 revision，并设置 `kv_cache_dtype=auto`。DSpark 同样要求原始 BF16 草稿模型、
+固定 revision、显式草稿采样方式、真实拒绝采样，并关闭自适应验证。这些测量不能
+作为量化草稿头或让草稿继承目标模型 FP8 KV cache 的配方的有效性证明。
+
+只有所选 coding 提示词全部成功完成，测量点才会被接受。收集器关闭基准客户端
+额外的就绪检查请求和预热，并保留运行前后的 Prometheus 计数器。
+AL 为 `1 + accepted / drafts`；AR 为 `accepted / proposed_tokens`，使用实际
+提出的草稿 token 数，而非假设每轮草稿长度固定。
+`speedbench-evidence-<model-prefix>-<precision>` 包含命令、checkpoint 元数据、
+处理后的数据集、逐请求输出、日志、未舍入的计数器与 AL/AR，以及 AR 矩阵。
+运行时目录位于 `/tmp`，最终 YAML 和证据归档以文件形式放在工作区根目录。
+失败或未完成的测量点不会生成黄金矩阵。
+
 ## 当前黄金曲线
 
 | 模型 | 方法 | 黄金 YAML | 源 run |
