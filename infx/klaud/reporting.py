@@ -771,6 +771,8 @@ def public_point(entry: dict) -> dict:
     """Project generated settings onto the public BenchmarkRow identity (not metrics)."""
     from infx.matrix.generate import _hardware_family
 
+    from .models import normalized_image
+
     agentic = entry.get("scenario-type") == "agentic-coding"
     multi = entry.get("prefill") is not None
     point = {
@@ -786,7 +788,7 @@ def public_point(entry: dict) -> dict:
         "osl": None if agentic else entry["osl"],
         "offload_mode": "on" if entry.get("kv-offloading", "none") != "none" else "off",
         "conc": int(entry["conc"]),
-        "image": entry["image"],
+        "image": normalized_image(entry["image"]),
     }
     for role in ("prefill", "decode"):
         topology = entry[role] if multi else entry
@@ -862,10 +864,12 @@ def resolve_baseline(
         if any(fnmatchcase(candidate.family.split(":", 1)[1], key) for key in change["config_keys"])
     }
     for row in feed.payload:
+        if not isinstance(row, dict) or not isinstance(row.get("image"), str):
+            continue
         # Do not filter ISL/OSL here: that would erase other curves in the original family.
         if any(
             (
-                normalized_image(row.get(key, "")) != normalized_image(context["source"][key])
+                normalized_image(row[key]) != normalized_image(context["source"][key])
                 if key == "image"
                 else row.get(key) != context["source"][key]
             )
@@ -925,7 +929,9 @@ def resolve_baseline(
             raise VerificationError("Duplicate public baseline point")
         # Retain all original points, even if a current family or API response is smaller.
         entries.update(
-            (point_key(point), point) for point in historical[head] if point["image"] == old_image
+            (point_key(point), point)
+            for point in historical[head]
+            if normalized_image(point["image"]) == normalized_image(old_image)
         )
         published[key] = Point(
             key=key,
