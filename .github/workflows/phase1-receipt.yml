@@ -1,0 +1,79 @@
+name: Seal Phase 1 measurement receipt
+
+# Each reviewed approval produces an independent immutable record; later requests must not cancel pending issuances.
+on: # zizmor: ignore[concurrency-limits]
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: Seal source measurement or its later publication reference
+        required: true
+        default: measurement
+        type: choice
+        options: [measurement, publication]
+      approval-path:
+        description: Reviewed default-branch qualification/phase1/*.json expectation
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read # Read source workflow attempts and download the exact artifacts being sealed.
+
+jobs:
+  seal:
+    name: Seal reviewed measurement or publication
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Resolve reviewed expectation
+        env:
+          APPROVAL_PATH: ${{ inputs.approval-path }}
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          path = Path(os.environ['APPROVAL_PATH']).resolve(strict=True)
+          root = Path('qualification/phase1').resolve()
+          if not path.is_relative_to(root) or path.suffix != '.json' or any(c in str(path) for c in '\r\n'):
+              raise ValueError('approval must be a reviewed qualification/phase1 JSON file')
+          with Path(os.environ['GITHUB_ENV']).open('a') as stream:
+              stream.write(f'REVIEWED_APPROVAL={path}\n')
+      - name: Seal independently approved complete source sweep
+        if: inputs.kind == 'measurement'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRUSTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        shell: python
+        run: |
+          import os, subprocess
+          subprocess.run(['uv', 'run', '--locked', 'python', '-m', 'infx.workflows.phase1_publication',
+                          '--approval', os.environ['REVIEWED_APPROVAL'], '--archives', 'verified-archives',
+                          '--output', 'receipt.json'], check=True)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: inputs.kind == 'measurement'
+        with:
+          name: measurement-receipt
+          path: receipt.json
+          if-no-files-found: error
+      - name: Bind accepted source to reviewed publication
+        if: inputs.kind == 'publication'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRUSTED_ISSUER_SHAS: ${{ vars.INFX_RECEIPT_ISSUER_SHAS }}
+          DEPLOYED_READER_SHA: ${{ vars.INFX_PHASE1_READER_REVISION }}
+        shell: python
+        run: |
+          import os, subprocess
+          subprocess.run(['uv', 'run', '--locked', 'python', '-m', 'infx.workflows.phase1_record',
+                          '--approval', os.environ['REVIEWED_APPROVAL'], '--output', 'publication.json'], check=True)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: inputs.kind == 'publication'
+        with:
+          name: publication-record
+          path: publication.json
+          if-no-files-found: error

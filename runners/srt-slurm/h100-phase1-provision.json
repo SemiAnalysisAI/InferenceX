@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "shared_root": "/mnt/nfs/sa-shared/gharunners/inferencex-native",
+  "hub_cache": "/mnt/nfs/sa-shared/gharunners/hf-hub-cache",
+  "image_path": "/mnt/nfs/lustre/containers/vllm_vllm-openai_nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3.sqsh",
+  "image_reference": "vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3",
+  "model_repository": "deepseek-ai/DeepSeek-V4.1-Flash",
+  "model_revision": "dba1be0a40aa45a94ad051997016db3960a90277",
+  "dataset_repository": "semianalysisai/cc-traces-weka-062126",
+  "dataset_revision": "23f152f6f0f9399a85901b89a6458def0ef16729"
+}

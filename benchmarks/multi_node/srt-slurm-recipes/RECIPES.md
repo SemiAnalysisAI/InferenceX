@@ -2,9 +2,9 @@
 
 **English** | [中文](./RECIPES_zh.md)
 
-InferenceX owns the recipes in this directory. Every NVIDIA srt-slurm launcher uses `setup_srt_slurm()` in [`runners/slurm_utils.sh`](../../../runners/slurm_utils.sh), makes a job-local Git clone of the pinned submodule, and copies this entire tree into `recipes/`. The shared helper records the actual revision in `srt-slurm-sha.txt`; power lanes copy that revision into `power-producer-sha.txt` for result validation.
+InferenceX owns the recipes in this directory. The shared NVIDIA launcher path uses `setup_srt_slurm()` in [`runners/slurm_utils.sh`](../../../runners/slurm_utils.sh), makes a job-local Git clone of the pinned submodule, and copies this entire tree into `recipes/`. The shared helper records the actual revision in `srt-slurm-sha.txt`; power lanes copy that revision into `power-producer-sha.txt` for result validation. The prepared H100 execution path described below uses its own explicit runtime lock.
 
-The shared version is the Git submodule pointer at [`utils/srt-slurm`](../../../utils/srt-slurm), currently [v2.2.1](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.2.1) (`984180e5b8755aef85e9995048b5a16cb5336bce`). Update that submodule pointer when upgrading, then run the recipe and integration checks. Do not add model-specific checkout branches to launchers.
+The shared helper's version is the Git submodule pointer at [`utils/srt-slurm`](../../../utils/srt-slurm), currently [v2.2.1](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.2.1) (`984180e5b8755aef85e9995048b5a16cb5336bce`). Update that submodule pointer when upgrading, then run the recipe and integration checks. Do not add model-specific checkout branches to launchers.
 
 InferenceX requires srt-slurm 2.0 or newer and `schema: 2` recipes. Legacy recipe layouts are unsupported; migrate them before adding them to this tree.
 
@@ -29,7 +29,18 @@ Shared runtime assets stay under `configs/` beside the model directories; they a
 
 ## TileRT exception
 
-For `FRAMEWORK=tilert`, `setup_srt_slurm()` fetches the SemiAnalysisAI/srt-slurm fork directly at `6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde` into the job checkout. This is the schema-2 TileRT port in [SemiAnalysisAI/srt-slurm#13](https://github.com/SemiAnalysisAI/srt-slurm/pull/13). It is the only alternate checkout; its pin lives in that helper because the TileRT backend and router are absent from the NVIDIA pin. TileRT uses the same schema-2 recipe layout and native post-eval dispatch as NVIDIA. TileRT jobs need network access to the fork at setup time. Remove the fork exception once those features are available upstream.
+For `FRAMEWORK=tilert`, `setup_srt_slurm()` fetches the SemiAnalysisAI/srt-slurm fork directly at `6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde` into the job checkout. This is the schema-2 TileRT port in [SemiAnalysisAI/srt-slurm#13](https://github.com/SemiAnalysisAI/srt-slurm/pull/13). It is the only alternate checkout selected by that helper; its pin lives in the helper because the TileRT backend and router are absent from the NVIDIA pin. TileRT uses the same schema-2 recipe layout and native post-eval dispatch as NVIDIA. TileRT jobs need network access to the fork at setup time. Remove the fork exception once those features are available upstream.
+
+## Prepared H100 execution
+
+The H100 DSV4.1 Flash pilot uses the same recipe hierarchy, including for its single-node aggregate topology. Its master entry selects the prepared Python adapter with `execution.runtime: srt-slurm` and binds these committed inputs:
+
+- Recipe: [`dsv41flash/vllm/h100-fp4/agentx/agg-tp8-dspark5.yaml`](./dsv41flash/vllm/h100-fp4/agentx/agg-tp8-dspark5.yaml).
+- `execution.runtime-lock`: [`configs/prepared-runtime-lock.json`](./configs/prepared-runtime-lock.json), which pins the prepared native source revision, dependency-lock digest and required capabilities independently of the shared `utils/srt-slurm` gitlink.
+- `execution.client-policy`: [`configs/dsv41flash-agentx-client-policy.json`](./configs/dsv41flash-agentx-client-policy.json), which binds the AgentX and GSM8K evaluation requirements and the measured golden-curve input.
+- `execution.profile`: [`runners/srt-slurm/h100-phase1.yaml`](../../../runners/srt-slurm/h100-phase1.yaml), which supplies the H100 cluster profile.
+
+The adapter validates these input digests, the separately installed native runtime and explicitly prepared shared assets before allocation. This selection uses the prepared runtime contract rather than the shared helper's `CONFIG_FILE` submission path. Keep recipe moves synchronized with every `execution` reference, its input digests and workflow filters. Provisioning, deployment prerequisites, validation commands and hardware qualification limits are documented in the [Phase 1 guide](../../../docs/srt-slurm-phase1.md).
 
 ## Schema 2 and master configuration
 

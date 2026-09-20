@@ -230,7 +230,7 @@ Treat fast results as bring-up evidence, never as a replacement for the canonica
 
 ## 8. Preserve trace and run provenance
 
-AgentX defaults to recorded assistant-response replay. Live server outputs are measured but discarded when constructing later turns. Set `AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1` only for an explicitly different live-assistant experiment. The selected trace corpus is model-family dependent unless `WEKA_LOADER_OVERRIDE` pins it. The resolver logs both loader and Hugging Face dataset ([trace resolution](../benchmarks/benchmark_lib.sh#L2023-L2102), [replay semantics](../benchmarks/benchmark_lib.sh#L2104-L2270)).
+At the pilot client revision `754356e9a39acc6cc6afb242d123bb57c3fb6f75`, AgentX always constructs later turns from recorded assistant-response deltas. Live server outputs are measured; `AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES` does not change this loader's behavior. A different replay methodology requires its own qualification. The legacy resolver chooses a model-family-dependent corpus unless `WEKA_LOADER_OVERRIDE` pins it. The prepared H100 client explicitly uses `semianalysis_cc_traces_weka_062126`, 393 entries, and no replay context filter ([Python client](../infx/benchmarks/agentx.py)).
 
 Capture orchestration provenance immediately:
 

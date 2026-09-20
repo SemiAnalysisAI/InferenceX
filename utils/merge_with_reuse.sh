@@ -103,31 +103,12 @@ REUSE_INCOMPATIBLE_LABELS="$(
 [ -z "$REUSE_INCOMPATIBLE_LABELS" ] \
     || die "PR #${PR} uses ${REUSE_INCOMPATIBLE_LABELS}, which is not eligible for artifact reuse"
 
-# Fail early unless a successful run with reusable artifacts exists on a
-# current PR commit. This excludes reuse-gate-only success runs.
-PR_SHAS="$(gh api "repos/${REPO}/pulls/${PR}/commits" --paginate --jq '.[].sha')"
-ELIGIBLE_RUN=""
-while IFS=$'\t' read -r run_id run_sha; do
-    grep -qxF "$run_sha" <<<"$PR_SHAS" || continue
-    artifact_names="$(
-        gh api "repos/${REPO}/actions/runs/${run_id}/artifacts?per_page=100" \
-            --paginate \
-            --jq '.artifacts[] | select(.expired == false) | .name'
-    )"
-    if grep -Eq '^(results_bmk|eval_results_all|bmk_agentic_)' \
-        <<<"$artifact_names"; then
-        ELIGIBLE_RUN="$run_id"
-        break
-    fi
-done < <(
-    gh api \
-        "repos/${REPO}/actions/workflows/run-sweep.yml/runs?event=pull_request&branch=${HEAD_BRANCH}&status=completed&per_page=100" \
-        --paginate \
-        --jq '.workflow_runs[] | select(.conclusion == "success") | [.id, .head_sha] | @tsv'
-)
-if [ -z "$ELIGIBLE_RUN" ]; then
-    die "PR #${PR} has no successful reusable run-sweep.yml run on a current commit"
-fi
+# Preserve an existing explicit maintainer source choice, including failed runs
+# accepted via /use. Never let a newer diagnostic sweep silently replace it.
+ELIGIBLE_RUN="$(
+    PYTHONPATH="$SCRIPT_DIR/..${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.workflows.merge_source \
+        --repo "$REPO" --pr "$PR" --branch "$HEAD_BRANCH"
+)"
 
 log "Posting /reuse-sweep-run ${ELIGIBLE_RUN} on PR #${PR}"
 gh pr comment "$PR" --repo "$REPO" --body "/reuse-sweep-run ${ELIGIBLE_RUN}" >/dev/null

@@ -6,6 +6,7 @@ import urllib.parse
 from typing import Any
 
 from infx import github
+from infx.srt_slurm.qualification import qualification_artifacts
 
 REUSABLE_AGGREGATE_ARTIFACTS = {
     "results_bmk",
@@ -51,6 +52,8 @@ def pr_commit_shas(repo: str, pr_number: int, token: str) -> set[str]:
 
 def has_reusable_result_artifacts(names: set[str]) -> bool:
     """Return whether a run produced ingest-relevant result artifacts."""
+    if qualification_artifacts(names):
+        return False
     return bool(names & REUSABLE_AGGREGATE_ARTIFACTS) or any(
         name.startswith("bmk_agentic_") for name in names
     )

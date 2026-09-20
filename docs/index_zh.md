@@ -16,6 +16,7 @@
 | [`agent-guide.md`](./agent-guide.md) / [`agent-guide_zh.md`](./agent-guide_zh.md) | Agent 入门、安全开始、关键约束与验证 |
 | [`procedures.md`](./procedures.md) / [`procedures_zh.md`](./procedures_zh.md) | 从常见任务路由到一份聚焦运维清单 |
 | [`architecture.md`](./architecture.md) / [`architecture_zh.md`](./architecture_zh.md) | 配置到结果的流程、所有权边界、产物与 InferenceX-app 交接 |
+| [`srt-slurm-phase1.md`](./srt-slurm-phase1.md) / [`srt-slurm-phase1_zh.md`](./srt-slurm-phase1_zh.md) | 阶段 1 原生 H100 执行：代码职责、部署准备、恢复、回执发布及验收账本 |
 | [`configuration-procedures.md`](./configuration-procedures.md) / [`configuration-procedures_zh.md`](./configuration-procedures_zh.md) | 配置、Runner、镜像、Recipe、llm-d、srt-slurm 与 MTP 变更 |
 | [`ci-procedures.md`](./ci-procedures.md) / [`ci-procedures_zh.md`](./ci-procedures_zh.md) | 矩阵生成、校验、派发、PR 扫描、复用、暂存与产物下载 |
 | [`eval-agentx-procedures.md`](./eval-agentx-procedures.md) / [`eval-agentx-procedures_zh.md`](./eval-agentx-procedures_zh.md) | Eval 与 AgentX 选择、执行、打分、证据与实时运行诊断 |

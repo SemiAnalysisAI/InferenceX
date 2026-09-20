@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "golden_curve": "golden_al_distribution/dsv41flash_dspark.yaml",
+  "golden_model": "deepseek-v4.1-flash",
+  "thinking_mode": "thinking_on",
+  "dataset_repository": "semianalysisai/cc-traces-weka-062126",
+  "dataset_loader": "semianalysis_cc_traces_weka_062126",
+  "dataset_entries": 393,
+  "duration_seconds": 3600,
+  "warmup_requests_per_lane": 10,
+  "warmup_grace_seconds": 1800,
+  "trace_idle_gap_cap_seconds": 300,
+  "live_failed_request_threshold": 0.1,
+  "failed_request_threshold": 0.1,
+  "random_seed": 42,
+  "required_server_metric_prefix": "vllm:",
+  "eval_task": "gsm8k",
+  "eval_documents": 1319,
+  "eval_max_length": 16384,
+  "eval_max_tokens": 12288,
+  "eval_minimum_score": 0.9,
+  "telemetry": "temporary-parity-exception-no-native-power"
+}

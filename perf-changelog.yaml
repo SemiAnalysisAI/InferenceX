@@ -8455,3 +8455,30 @@
   description:
     - "Update B200 vLLM AgentX to DSpark6 and a new image with TP8 and DEP8 configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Migrate the H100 aggregate TP8 vLLM DSV4.1-Flash AgentX lane to an isolated pinned native srt-slurm runtime with prepared Python clients, immutable measurement receipts and a separate real c28 GSM8K evaluation; preserve the image, eight concurrency points and 480-minute exclusive allocation. Power telemetry remains an explicit temporary parity exception."
+    - "将 H100 聚合 TP8 vLLM DSV4.1-Flash AgentX 路径迁移至独立固定的原生 srt-slurm 运行时，使用预备式 Python 客户端、不可变测量回执及独立真实 c28 GSM8K eval；保留镜像、八个并发点及 480 分钟独占分配。功耗遥测保留明确临时一致性例外。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3299
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Require owned direct-vLLM listeners and explicitly disable unprovisioned native telemetry for the H100 Phase 1 pilot; qualify the complete unchanged throughput/eval workload using isolated PR-only artifacts while app publication is unavailable."
+    - "H100 阶段 1 试点要求直连 vLLM 监听端口的进程归属可验证，并显式关闭尚未部署的原生遥测；在 app 发布能力不可用期间，使用隔离的 PR 验收产物运行完整且参数不变的吞吐与 eval 工作负载。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3299
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin the H100 prepared runtime to native 62beb5ec4f8c33abc26851ba0adaded29957ca5b for job-scoped StepMgr step discovery and owned cleanup. Align disposable cancellation probes with the real c28 eval serving settings (56 sequences, graph capture 512); retain the same image, TP8 topology, eight full AgentX points and separate full c28 GSM8K evaluation. Hardware lifecycle reruns remain required."
+    - "将 H100 预备式运行时固定至原生 62beb5ec4f8c33abc26851ba0adaded29957ca5b，按所属任务发现 StepMgr step 并清理资源。一次性取消探针对齐真实 c28 eval 服务设置（56 个序列、graph capture 512）；保留相同镜像、TP8 拓扑、八个完整 AgentX 点及独立完整 c28 GSM8K eval。硬件生命周期仍须重跑验收。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3299

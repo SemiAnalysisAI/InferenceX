@@ -13,6 +13,11 @@ on:
         description: "Benchmark configuration as JSON"
         required: true
         type: string
+      native-qualification:
+        description: "Run native PR qualification with diagnostics only; never publish measurements"
+        required: false
+        type: boolean
+        default: false
       klaud-run:
         description: "Run Klaud Cold benchmarks at background priority"
         required: false
@@ -95,6 +100,7 @@ on:
         type: string
         default: ""
 env:
+  NATIVE_CHECKOUT_ROOT: ${{ fromJSON(inputs.config).execution.runtime == 'srt-slurm' && format('{0}/native-candidate-{1}-{2}-{3}', github.workspace, github.run_id, github.run_attempt, inputs.queue-token) || github.workspace }}
   PORT: '8888'
   INFMAX_CONTAINER_WORKSPACE: '/workspace'
   DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE: '1'
@@ -165,7 +171,7 @@ jobs:
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
-          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
+          (vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' || fromJSON(inputs.config).execution.runtime == 'srt-slurm') &&
           (
             inputs.skip-queue-pr != '' &&
             format(
@@ -203,7 +209,8 @@ jobs:
         ) ||
         format('[{0}]', toJSON(inputs.runner))
       ) }}
-    timeout-minutes: 500
+    # Native preparation hashes immutable shared assets before the bounded eight-hour wait.
+    timeout-minutes: ${{ fromJSON(inputs.config).execution.runtime == 'srt-slurm' && 600 || 500 }}
     name: >-
       ${{ inputs.klaud-run && 'klaud | ' || '' }}p${{ inputs.priority }} | ${{ fromJSON(inputs.config).model-prefix }} ${{ fromJSON(inputs.config).precision }} ${{ inputs.runner }} ${{ fromJSON(inputs.config).framework == 'sglang' && 'sgl' || fromJSON(inputs.config).framework == 'dynamo-sglang' && 'dyn-sgl' || fromJSON(inputs.config).framework == 'sglang-disagg' && 'sgl-disagg' || fromJSON(inputs.config).framework }}
       TP${{ fromJSON(inputs.config).tp }}${{ format('{0}', fromJSON(inputs.config).pp) != '' && format('{0}', fromJSON(inputs.config).pp) != '1' && format('/PP{0}', fromJSON(inputs.config).pp) || '' }}${{ format('{0}', fromJSON(inputs.config).dcp-size) != '' && format('{0}', fromJSON(inputs.config).dcp-size) != '1' && format('/DCP{0}', fromJSON(inputs.config).dcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).pcp-size) != '' && format('{0}', fromJSON(inputs.config).pcp-size) != '1' && format('/PCP{0}', fromJSON(inputs.config).pcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).ep) != '' && format('{0}', fromJSON(inputs.config).ep) != '1' && format('/EP{0}', fromJSON(inputs.config).ep) || '' }}${{ inputs.dp-attn && '/DPA' || '' }}
@@ -220,6 +227,7 @@ jobs:
           fi
 
       - name: Resource cleanup (pre-run)
+        if: ${{ fromJSON(inputs.config).execution.runtime != 'srt-slurm' }}
         run: &resource-cleanup |
           # Cleanup Docker resources
           if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
@@ -243,6 +251,7 @@ jobs:
           fi
 
       - name: Repair stale git state (pre-run)
+        if: ${{ fromJSON(inputs.config).execution.runtime != 'srt-slurm' }}
         run: |
           # Interrupted runs leave index.lock files and corrupt submodule git
           # dirs behind in the persistent self-hosted workspace, and both make
@@ -269,13 +278,65 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Each native attempt has a fresh Git directory; stale parent locks/submodules are never reused.
+          path: ${{ fromJSON(inputs.config).execution.runtime == 'srt-slurm' && format('native-candidate-{0}-{1}-{2}', github.run_id, github.run_attempt, inputs.queue-token) || '.' }}
           fetch-depth: 0
           ref: ${{ inputs.ref || github.sha }}
           clean: true
           submodules: true
           persist-credentials: false
 
+      - name: Set up uv for native pilot preparation
+        if: ${{ fromJSON(inputs.config).execution.runtime == 'srt-slurm' }}
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - name: Launch prepared native pilot
+        if: ${{ fromJSON(inputs.config).execution.runtime == 'srt-slurm' }}
+        env:
+          # Prepared native clients and serving assets are offline; retain no legacy download/scoring credentials.
+          HF_TOKEN: ''
+          MODAL_TOKEN_ID: ''
+          MODAL_TOKEN_SECRET: ''
+          NATIVE_CONFIG_JSON: ${{ inputs.config }}
+          NATIVE_PRIORITY: ${{ inputs.priority }}
+          NATIVE_QUEUE_TOKEN: ${{ inputs.queue-token }}
+          NATIVE_RUN_EVAL: ${{ toJSON(inputs.run-eval) }}
+          NATIVE_EVAL_ONLY: ${{ toJSON(inputs.eval-only) }}
+          NATIVE_EVAL_FRAMEWORK: ${{ inputs.eval-framework }}
+          NATIVE_EVAL_SUITE: ${{ inputs.eval-suite }}
+          NATIVE_AGENTX_FAST: ${{ toJSON(inputs.agentx-fast) }}
+          NATIVE_EVAL_LIMIT: ${{ inputs.eval-limit }}
+          NATIVE_REQUIRE_POWER: ${{ toJSON(inputs.require-power) }}
+          NATIVE_PURPOSE: ${{ inputs.native-qualification && 'pr-qualification' || 'publication' }}
+          NATIVE_PREPARED_SITE_JSON: ${{ vars.INFX_H100_PHASE1_PREPARED_SITE_JSON }}
+          NATIVE_SITE_JSON: ${{ vars.INFX_H100_PHASE1_SITE_JSON }}
+          NATIVE_READER_REVISION: ${{ vars.INFX_PHASE1_READER_REVISION }}
+          NATIVE_COLLECTOR_REVISION: ${{ vars.INFX_PHASE1_COLLECTOR_REVISION }}
+        # H100 runners lack ambient python; uv supplies the explicit managed interpreter.
+        working-directory: ${{ env.NATIVE_CHECKOUT_ROOT }}
+        shell: uv run --locked --python 3.12 python {0} # zizmor: ignore[misfeature]
+        run: |
+          from infx.srt_slurm.workflow import main
+          raise SystemExit(main())
+
+      - name: Upload native execution provenance
+        if: ${{ always() && !inputs.native-qualification && fromJSON(inputs.config).execution.runtime == 'srt-slurm' && env.NATIVE_POINT_ID != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-execution-${{ env.NATIVE_POINT_ID }}
+          path: ${{ env.NATIVE_CHECKOUT_ROOT }}/native-execution/**
+          if-no-files-found: error
+
+      - name: Upload nonpublishing native qualification evidence
+        if: ${{ always() && inputs.native-qualification && fromJSON(inputs.config).execution.runtime == 'srt-slurm' && env.NATIVE_POINT_ID != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-qualification-${{ env.NATIVE_POINT_ID }}
+          path: ${{ env.NATIVE_CHECKOUT_ROOT }}/native-qualification/**
+          if-no-files-found: error
+
       - name: Launch job script
+        if: ${{ fromJSON(inputs.config).execution.runtime != 'srt-slurm' }}
         env:
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
@@ -338,7 +399,7 @@ jobs:
           fi
 
       - name: Process result
-        if: ${{ always() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
+        if: ${{ !inputs.native-qualification && always() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
         run: |
@@ -349,106 +410,109 @@ jobs:
           python3 utils/process_result.py
 
       - name: Upload result
-        if: ${{ success() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
+        if: ${{ !inputs.native-qualification && success() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}.json
 
       - name: Upload agentic aggregated result
-        if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
+        if: ${{ !inputs.native-qualification && always() && inputs.scenario-type == 'agentic-coding' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}
-          path: ${{ env.RESULT_FILENAME }}.json
+          path: ${{ env.NATIVE_CHECKOUT_ROOT }}/${{ env.RESULT_FILENAME }}.json
 
       - name: Upload agentic raw results
-        if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
+        if: ${{ !inputs.native-qualification && always() && inputs.scenario-type == 'agentic-coding' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: agentic_${{ env.RESULT_FILENAME }}
           path: |
-            results/**
-            !results/aiperf_artifacts/inputs.json
-            !results/aiperf_artifacts/profile_export_raw.jsonl
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/results/**
+            !${{ env.NATIVE_CHECKOUT_ROOT }}/results/aiperf_artifacts/inputs.json
+            !${{ env.NATIVE_CHECKOUT_ROOT }}/results/aiperf_artifacts/profile_export_raw.jsonl
           if-no-files-found: ignore
 
       - name: Upload server logs
-        if: always()
+        if: ${{ always() && !inputs.native-qualification }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.eval-only && 'eval_server_logs_' || 'server_logs_' }}${{ env.RESULT_FILENAME }}
           # fixed-seq writes server.log at root; agentic writes logs under results/.
           path: |
-            server.log
-            results/*.log
-            results/*_config.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/server.log
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/results/*.log
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/results/*_config.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/results/native/**/*.log
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/results/native/**/*.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/results/native/**/*.yaml
           if-no-files-found: ignore
 
       - name: Upload GPU metrics
-        if: always()
+        if: ${{ always() && !inputs.native-qualification }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.eval-only && 'eval_gpu_metrics_' || 'gpu_metrics_' }}${{ env.RESULT_FILENAME }}
           path: |
-            gpu_metrics.csv
-            gpu_metrics*_context.json
-            gpu_metrics_energy_start.csv
-            gpu_metrics_energy_end.csv
-            gpu_metrics_identity.json
-            gpu_metrics_identity.csv
-            results/gpu_metrics*.csv
-            results/gpu_metrics*_context.json
-            results/gpu_metrics_identity.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/gpu_metrics.csv
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/gpu_metrics*_context.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/gpu_metrics_energy_start.csv
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/gpu_metrics_energy_end.csv
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/gpu_metrics_identity.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/gpu_metrics_identity.csv
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/results/gpu_metrics*.csv
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/results/gpu_metrics*_context.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/results/gpu_metrics_identity.json
           if-no-files-found: ignore
 
       - name: Upload power audit bundle
-        if: ${{ always() && !inputs.eval-only }}
+        if: ${{ !inputs.native-qualification && always() && !inputs.eval-only }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: power_audit_${{ env.RESULT_FILENAME }}
           path: |
-            ${{ env.RESULT_FILENAME }}.json
-            agg_${{ env.RESULT_FILENAME }}.json
-            gpu_metrics.csv
-            gpu_metrics*_context.json
-            gpu_metrics_energy_start.csv
-            gpu_metrics_energy_end.csv
-            gpu_metrics_identity.json
-            gpu_metrics_identity.csv
-            power_validation_${{ env.RESULT_FILENAME }}.json
-            results/gpu_metrics*.csv
-            results/gpu_metrics*_context.json
-            results/gpu_metrics_identity.json
-            results/agentic_power_window.json
-            results/agentic_power_timezone_offset.txt
-            results/power_validation.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/${{ env.RESULT_FILENAME }}.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/agg_${{ env.RESULT_FILENAME }}.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/gpu_metrics.csv
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/gpu_metrics*_context.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/gpu_metrics_energy_start.csv
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/gpu_metrics_energy_end.csv
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/gpu_metrics_identity.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/gpu_metrics_identity.csv
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/results/gpu_metrics*.csv
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/results/gpu_metrics*_context.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/results/gpu_metrics_identity.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/results/agentic_power_window.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/results/agentic_power_timezone_offset.txt
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/results/power_validation.json
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)
-        if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
+        if: ${{ !inputs.native-qualification && always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: eval_${{ env.RESULT_FILENAME }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ github.run_attempt }}
           path: |
-            meta_env.json
-            results*.json
-            *_report.json
-            *_results.jsonl
-            *_artifacts.tar.gz
-            sample*.jsonl
-            agent_preds.json
-            predictions.jsonl
-            swebench_report_*.json
-            *.traj*
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/meta_env.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/results*.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/*_report.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/*_results.jsonl
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/*_artifacts.tar.gz
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/sample*.jsonl
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/agent_preds.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/predictions.jsonl
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/swebench_report_*.json
+            ${{ env.NATIVE_CHECKOUT_ROOT }}/*.traj*
           if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
 
       - name: Verify eval scores
-        if: ${{ (success() || failure()) && inputs.eval-only }}
+        if: ${{ (success() || failure()) && inputs.eval-only && fromJSON(inputs.config).execution.runtime != 'srt-slurm' }}
         run: python3 utils/evals/validate_scores.py
 
       - name: Cleanup eval outputs (post-upload)
-        if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
+        if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) && fromJSON(inputs.config).execution.runtime != 'srt-slurm' }}
         run: |
           rm -f meta_env.json || true
           # Remove any eval results JSONs that were moved into workspace
@@ -467,5 +531,5 @@ jobs:
           fi
 
       - name: Resource cleanup (post-run)
-        if: always()
+        if: ${{ always() && fromJSON(inputs.config).execution.runtime != 'srt-slurm' }}
         run: *resource-cleanup

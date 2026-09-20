@@ -2,9 +2,9 @@
 
 [English](./RECIPES.md) | **中文**
 
-InferenceX 负责维护本目录中的配置。所有 NVIDIA srt-slurm 启动器均调用 [`runners/slurm_utils.sh`](../../../runners/slurm_utils.sh) 中的 `setup_srt_slurm()`，为作业创建固定版本子模块的本地 Git 克隆，并将整个目录复制到 `recipes/`。共享函数将实际提交记录到 `srt-slurm-sha.txt`；功耗测试路径还会将其复制到 `power-producer-sha.txt`，供结果校验使用。
+InferenceX 负责维护本目录中的配置。共享 NVIDIA 启动路径调用 [`runners/slurm_utils.sh`](../../../runners/slurm_utils.sh) 中的 `setup_srt_slurm()`，为作业创建固定版本子模块的本地 Git 克隆，并将整个目录复制到 `recipes/`。共享函数将实际提交记录到 `srt-slurm-sha.txt`；功耗测试路径还会将其复制到 `power-producer-sha.txt`，供结果校验使用。下文介绍的 H100 prepared 执行路径使用独立且显式指定的运行时锁文件。
 
-统一版本由 [`utils/srt-slurm`](../../../utils/srt-slurm) 的 Git 子模块指针指定，目前为 [v2.2.1](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.2.1)（`984180e5b8755aef85e9995048b5a16cb5336bce`）。升级时更新该子模块指针，然后运行配置和集成检查。不要在启动器中新增按模型选择检出版本的分支。
+共享函数使用的版本由 [`utils/srt-slurm`](../../../utils/srt-slurm) 的 Git 子模块指针指定，目前为 [v2.2.1](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.2.1)（`984180e5b8755aef85e9995048b5a16cb5336bce`）。升级时更新该子模块指针，然后运行配置和集成检查。不要在启动器中新增按模型选择检出版本的分支。
 
 InferenceX 要求 srt-slurm 2.0 或更新版本，且配置必须声明 `schema: 2`。不支持旧版配置结构；加入本目录前必须先完成迁移。
 
@@ -29,7 +29,18 @@ qwen3.5/trtllm/gb300-fp4/agentx/disagg-1p7d-dep4-tep8-c7-b1-mtp-kvoffload.yaml
 
 ## TileRT 例外
 
-当 `FRAMEWORK=tilert` 时，`setup_srt_slurm()` 直接从 SemiAnalysisAI/srt-slurm 分支仓库获取提交 `6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde`，检出到作业目录。该版本为 [SemiAnalysisAI/srt-slurm#13](https://github.com/SemiAnalysisAI/srt-slurm/pull/13) 中支持 schema 2 的 TileRT 移植。这是唯一的备用检出路径；由于统一的 NVIDIA 版本尚未包含 TileRT 后端和路由器，该例外的固定提交在共享函数中指定。TileRT 使用与 NVIDIA 相同的 schema 2 配置结构和原生评估调度。TileRT 作业在准备阶段需要通过网络访问分支仓库。上游支持这些功能后，应删除此分支仓库例外。
+当 `FRAMEWORK=tilert` 时，`setup_srt_slurm()` 直接从 SemiAnalysisAI/srt-slurm 分支仓库获取提交 `6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde`，检出到作业目录。该版本为 [SemiAnalysisAI/srt-slurm#13](https://github.com/SemiAnalysisAI/srt-slurm/pull/13) 中支持 schema 2 的 TileRT 移植。这是该共享函数选择的唯一备用检出路径；由于共享 NVIDIA 版本尚未包含 TileRT 后端和路由器，该例外的固定提交在共享函数中指定。TileRT 使用与 NVIDIA 相同的 schema 2 配置结构和原生评估调度。TileRT 作业在准备阶段需要通过网络访问分支仓库。上游支持这些功能后，应删除此分支仓库例外。
+
+## H100 prepared 执行路径
+
+H100 DSV4.1 Flash 试点遵循相同的配置目录结构，其单节点聚合拓扑也使用此结构。主配置条目通过 `execution.runtime: srt-slurm` 选择 prepared Python 适配器，并绑定以下已纳入版本控制的输入：
+
+- 配置：[`dsv41flash/vllm/h100-fp4/agentx/agg-tp8-dspark5.yaml`](./dsv41flash/vllm/h100-fp4/agentx/agg-tp8-dspark5.yaml)。
+- `execution.runtime-lock`：[`configs/prepared-runtime-lock.json`](./configs/prepared-runtime-lock.json)，独立固定 prepared 原生源码提交、依赖锁文件 digest 及必需能力，不依赖共享 `utils/srt-slurm` gitlink。
+- `execution.client-policy`：[`configs/dsv41flash-agentx-client-policy.json`](./configs/dsv41flash-agentx-client-policy.json)，绑定 AgentX、GSM8K 评估要求及实测 golden-curve 输入。
+- `execution.profile`：[`runners/srt-slurm/h100-phase1.yaml`](../../../runners/srt-slurm/h100-phase1.yaml)，提供 H100 集群配置。
+
+适配器在申请资源前校验上述输入 digest、独立安装的原生运行时以及显式准备的共享资源。此路径采用 prepared 运行时契约，不经过共享函数的 `CONFIG_FILE` 提交流程。移动配置时，同步更新所有 `execution` 引用、对应输入 digest 及工作流过滤器。资源准备、部署前置条件、验证命令和硬件验收边界见 [Phase 1 指南](../../../docs/srt-slurm-phase1_zh.md)。
 
 ## Schema 2 与主配置
 
