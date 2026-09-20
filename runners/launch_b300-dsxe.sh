@@ -336,7 +336,7 @@ else
     fi
 
     # Keep all new AgentX runtime directories outside /workspace.
-    if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" ]]; then
+    if [[ "$MODEL_PREFIX" == "dsv41flash" && ( "$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "sglang" ) ]]; then
         CONTAINER_MOUNT_DIR=/ix
         export INFMAX_CONTAINER_WORKSPACE=/ix
         export RESULT_DIR=/ix/results
