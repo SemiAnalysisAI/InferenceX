@@ -1855,7 +1855,7 @@
       "arm": "dram-nvme",
       "concurrency": 256,
       "repeat": 1,
-      "attempt": 1,
+      "attempt": 2,
       "head_sha": "283950b1471d52406c5a2af419dfa49f9d2c7b10",
       "status": "queued",
       "node": null,
@@ -1863,16 +1863,47 @@
       "performance_result": false,
       "workflow_name": "offload-v1-dram-nvme-c256-r1-20260920T1656Z",
       "dispatched_at": "2026-09-20T16:56:58Z",
-      "job_id": 106113702870,
-      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35524297747/job/106113702870",
-      "queued_at": "2026-09-20T16:57:15Z"
+      "job_id": 106118323709,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35524297747/job/106118323709",
+      "queued_at": "2026-09-20T17:30:23Z",
+      "attempt_history": [
+        {
+          "attempt": 1,
+          "status": "failure",
+          "job_id": 106113702870,
+          "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35524297747/job/106113702870",
+          "started_at": "2026-09-20T17:01:04Z",
+          "completed_at": "2026-09-20T17:02:43Z",
+          "runner": "b200-nscale-slurm_02",
+          "node": "im-b200-c003",
+          "allocation_id": "16696",
+          "performance_result": false,
+          "failure_stage": "offload_prepare",
+          "failure_evidence": "The runner allocated im-b200-c003, but the combined-tier preflight failed before model startup with RuntimeError: Insufficient node-local NVMe space for budget plus reserve. Only about 5.72 GB was free and the draft-model download also reported insufficient space. No profiling started and the retained aggregate is empty, so this is an infrastructure storage-capacity failure rather than a performance result.",
+          "log_archive_sha256": "6ba17e11b89d57b9f7b6ded70ff6963466e028ab94898e0a18af4454088eda76",
+          "artifacts": [
+            {
+              "id": 10609555312,
+              "name": "results_bmk",
+              "size_bytes": 142
+            },
+            {
+              "id": 10609084893,
+              "name": "run-stats",
+              "size_bytes": 280
+            }
+          ],
+          "note": "Infrastructure-only retry attempt 2 was dispatched immediately after a fresh zero-queue capacity check under the user standing authorization."
+        }
+      ],
+      "rerun_triggering_actor": "alec"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918",
-  "status": "All four matched c16 arms and the c256 HBM control are valid. Fresh c256 HBM+NVMe and HBM+DRAM runs are active; c256 HBM+DRAM+NVMe is the sole queued B200 job. Both c1024 HBM and HBM+NVMe reached the 480-minute allocation limit during canonical warmup with zero profiled responses and will not be retried unchanged.",
+  "status": "All four matched c16 arms and the c256 HBM control are valid. Fresh c256 HBM+NVMe and HBM+DRAM runs are active. The c256 combined arm failed preflight on a low-space node and its infrastructure-only retry is the sole queued B200 job. Both c1024 HBM and HBM+NVMe reached the 480-minute allocation limit during canonical warmup with zero profiled responses and will not be retried unchanged.",
   "last_capacity_check": {
-    "checked_at": "2026-09-20T16:57:15Z",
-    "cluster_observed_at": "2026-09-20T16:56:23Z",
+    "checked_at": "2026-09-20T17:30:23Z",
+    "cluster_observed_at": "2026-09-20T17:29:47Z",
     "cluster_stale": false,
     "eligible_nodes": 11,
     "idle_nodes": 9,
@@ -1882,7 +1913,7 @@
     "pending_requested_nodes": 1,
     "demand_nodes": 3,
     "demand_percent": 27.27,
-    "scheduler_snapshot_at": "2026-09-20T16:56:39Z",
+    "scheduler_snapshot_at": "2026-09-20T17:30:08Z",
     "scheduler_available": true,
     "active_study_run_ids": [
       35524019140,
@@ -1892,12 +1923,12 @@
     "active_study_job_ids": [
       106112961565,
       106113129196,
-      106113702870
+      106118323709
     ],
     "active_reservations_global": 1,
     "reserved_nodes_global": 1,
     "dispatch_allowed": false,
-    "reason": "The validated c256 matched offload set is now fully dispatched. HBM+NVMe and HBM+DRAM are running; HBM+DRAM+NVMe is the sole queued B200 job, so no additional dispatch is allowed until the queued count returns to zero."
+    "reason": "The c256 combined infrastructure-only retry is the sole queued B200 job. No additional dispatch is allowed until it starts and a fresh status check confirms zero queued jobs."
   },
   "next_dispatch": {
     "requires": "After the c256 matched offload arms produce validated results, choose the next lower-concurrency probes from the observed c16-to-c256 change. Do not add any job while one B200 job remains queued, and do not retry c1024, c4096, or c8192 feasibility failures unchanged."
