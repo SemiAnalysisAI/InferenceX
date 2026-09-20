@@ -199,6 +199,19 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 7. 同时添加脚本 + 主配置条目 + launcher 路由 + changelog。
 8. 运行 Bash 语法和生成检查；检查 `spec-decoding`、draft/native 方法、token 数、chat-template 使用、capture 范围和解析出的脚本。
 
+### Qwen3.8-27B BF16 原生 MTP
+
+H100 配方支持 TP1 的 1k/1k 和 8k/1k，并发范围为 1–128。
+
+BF16 vLLM 配方启用 thinking，使用 3 个原生 MTP 草稿 token。吞吐测试设置
+`rejection_sample_method: synthetic` 和 `synthetic_acceptance_length: 2.51`，
+对应 [#3304](https://github.com/SemiAnalysisAI/InferenceX/pull/3304) 中 BF16 的 `thinking_on[3]` 测量值。
+服务端在默认 chat-template kwargs 中显式开启 thinking；固定序列长度客户端通过
+`--use-chat-template` 使用 checkpoint 默认开启的 thinking 模式。
+配方要求 `THINKING_MODE=thinking_on`，避免其他模式误用此 AL。
+通过 `EVAL_ONLY` 或 `RUN_EVAL` 请求准确率评测时，使用真实 MTP 验证。
+目标权重、原生 MTP 权重及 KV cache 均保持 BF16。
+
 ### DeepSeek-V4.1-Flash DSpark
 
 GB200 的 DSpark 配方将 CUDA graph 最小捕获范围设为 64 tokens，以覆盖 AgentX 子代理并发。这会将 c1/c2/c4 的上限从 8/16/32 提升至 64；c8 及以上保持原有大小。完整轨迹、AL 3.51 和 Engram UVA 配置保持不变；需通过 CI 验证低并发尾延迟改善。
