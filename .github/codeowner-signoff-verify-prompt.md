@@ -479,23 +479,6 @@ not an unconditional five-point requirement or a new commit-status gate.
 The checklist stays concise; the detailed Pareto rules live here, not in
 `CONTRIBUTING.md` or either repository's `AGENTS.md`.
 
-Cross-repository synchronization applies even when benchmark-curve coverage is
-N/A. Any Pareto implementation change in `SemiAnalysisAI/InferenceX` or
-`SemiAnalysisAI/InferenceX-app` must include the counterpart update in the same
-workstream. Check the app's `packages/app/src/lib/chart-utils.ts`,
-`components/inference/metric-registry.ts` and
-`components/inference/utils/{powerCurves,canonicalFrontier}.ts` under
-`packages/app/src/`, against `infx/workflows/pareto_coverage.py` in InferenceX.
-Synchronize direction, metric/percentile selection, eligibility, series grouping,
-tie/duplicate handling and conditional canonical intersection. Preserve deliberate
-review-policy differences such as invalid-evidence warnings. Require regression
-tests in both repositories against the same measured-point fixtures (including
-ties, duplicates, invalid metrics and canonical intersection), updated pinned
-references and affected bilingual docs, and cross-linked companion PRs recording
-parity results and merge dependencies. Do not mark synchronization complete
-without the counterpart ready for coordinated review. This does not authorize
-a merge or an admin bypass.
-
 Pinned app references at
 [`d507f3689274c82972709abb531bdedcb2e77946`](https://github.com/SemiAnalysisAI/InferenceX-app/commit/d507f3689274c82972709abb531bdedcb2e77946):
 

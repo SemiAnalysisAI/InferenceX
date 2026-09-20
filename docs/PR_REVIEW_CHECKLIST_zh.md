@@ -36,7 +36,6 @@ As a PR reviewer and CODEOWNER, I have reviewed this and have:
 - [ ] If this PR uses `append-only: true`, verified that it only adds generated points or recipe variants inside a selected existing config/scenario and existing same-image visual curve: every previously generated point remains present with the same recipe, no prior point is removed or rerun, and every benchmark-affecting change in the complete diff can affect only the corresponding newly appended points (never an existing point), regardless of which file contains it.
 - [ ] If any of the above criteria cannot reasonably be satisfied, I have provided additional reasoning below.
 - [ ] Reported measured throughput/E2EL Pareto counts and evidence per affected curve (≥5 points strongly recommended). Below 5 or unverifiable: tag a core maintainer for review; recorded admin bypass required before merge. N/A if no curves are affected. [Details](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/codeowner-signoff-verify-prompt.md#check-14--pareto-coverage-recommendation-with-admin-exception).
-- [ ] If Pareto logic changed, updated both InferenceX and InferenceX-app with matching regression tests and cross-linked PRs.
 
 ### Additional detail section:
 - insert any additional info here
@@ -61,7 +60,6 @@ Signed: `FILL_IN_GITHUB_USERNAME`
 14. 如果 PR 使用 `append-only: true`，已确认它只在所选现有配置/场景和同镜像的现有可视化曲线内新增生成点或配方变体。所有已有点及其配方均保留，不删除或重跑旧点；完整 diff 中所有影响基准测试的改动，无论位于哪个文件，都只会作用于对应新增点，不能影响已有点。
 15. 如果上述任何条目无法合理满足，已在下方提供额外说明。
 16. 已报告每条受影响曲线的吞吐量/E2EL Pareto 实测点数及证据，强烈建议 ≥5 个点。少于 5 个或无法核实：提醒一位核心维护者审阅，合并前须记录管理员例外。无曲线受影响时可填 N/A。详见[验证器说明](../.github/codeowner-signoff-verify-prompt.md#check-14--pareto-coverage-recommendation-with-admin-exception)。
-17. 如修改了 Pareto 逻辑，已同步更新 InferenceX 和 InferenceX-app，并提供对应回归测试和互相链接的 PR。
 
 ## 示例
 

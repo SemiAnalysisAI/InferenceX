@@ -34,7 +34,6 @@ As a PR reviewer and CODEOWNER, I have reviewed this and have:
 - [ ] If this PR uses `append-only: true`, verified that it only adds generated points or recipe variants inside a selected existing config/scenario and existing same-image visual curve: every previously generated point remains present with the same recipe, no prior point is removed or rerun, and every benchmark-affecting change in the complete diff can affect only the corresponding newly appended points (never an existing point), regardless of which file contains it.
 - [ ] If any of the above criteria cannot reasonably be satisfied, I have provided additional reasoning below.
 - [ ] Reported measured throughput/E2EL Pareto counts and evidence per affected curve (≥5 points strongly recommended). Below 5 or unverifiable: tag a core maintainer for review; recorded admin bypass required before merge. N/A if no curves are affected. [Details](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/codeowner-signoff-verify-prompt.md#check-14--pareto-coverage-recommendation-with-admin-exception).
-- [ ] If Pareto logic changed, updated both InferenceX and InferenceX-app with matching regression tests and cross-linked PRs.
 
 ### Additional detail section:
 - insert any additional info here
