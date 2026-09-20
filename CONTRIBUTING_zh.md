@@ -19,8 +19,6 @@
 
 **性能变更日志要求：** 凡是可能影响基准测试性能的变更，以及任何配方（recipe）的新增或修改，都**必须**在 `perf-changelog.yaml` 文件的物理末尾追加一个新条目。历史条目**严禁**编辑。
 
-Pareto 覆盖度及跨仓库同步要求见 [PR 审阅清单](docs/PR_REVIEW_CHECKLIST_zh.md)。
-
 ## Draft 模型精度
 
 投机解码提交必须使用原始、未量化的 draft 权重，并保留其原生精度。此规则适用于内嵌的 MTP/NextN/EAGLE draft head 及独立 draft 模型（包括 DSpark），覆盖所有硬件厂商和框架。相对于参考实现，不得对 draft 精度进行任何更改，包括量化、降精度、升精度、同位宽 dtype 转换（如 BF16 转 FP16）或混合精度覆盖设置。此要求涵盖 draft 权重、激活、计算及 draft KV cache，无论更改发生在离线、加载时还是服务运行时；同样不得替换为经过精度转换的 draft checkpoint。

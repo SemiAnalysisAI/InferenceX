@@ -9,8 +9,6 @@ Guidance for AI agents working with InferenceX.
 3. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening or reviewing a PR or changing review, sweep, or merge policy.
 4. Read [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md) before debugging a Klaud-Cold or `claude/*` image-bump PR.
 
-For Pareto coverage and cross-repository synchronization requirements, follow the [InferenceX PR Review Checklist](https://github.com/SemiAnalysisAI/InferenceX/blob/main/docs/PR_REVIEW_CHECKLIST.md).
-
 ## Agent-specific policy
 
 - Every PR description must include an **AI model disclosure** section naming the exact model/version used to prepare the PR. List each contributing model and its role, including delegated agents. Tool names such as Claude Code, Cursor, or Perplexity Computer are not model identities. Copy the model identifier exposed by the runtime; do not guess an unavailable identifier. If the runtime does not expose the exact model, explicitly state that it could not be verified. Human-only PRs must state `No AI used`. Keep the disclosure current when later edits use another model.

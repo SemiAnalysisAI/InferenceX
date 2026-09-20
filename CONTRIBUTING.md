@@ -19,8 +19,6 @@ Every PR description must include an **AI model disclosure** section. Name the e
 
 **Performance changelog requirement:** Every change that can affect benchmark performance and every recipe addition or modification **MUST** append a new entry to the physical end of `perf-changelog.yaml`. Historical entries **MUST NOT** be edited.
 
-For Pareto coverage and cross-repository synchronization requirements, follow the [PR Review Checklist](docs/PR_REVIEW_CHECKLIST.md).
-
 ## Draft-model precision
 
 Speculative-decoding submissions must use the original, unquantized draft weights
