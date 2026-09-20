@@ -8455,3 +8455,10 @@
   description:
     - "Update B200 vLLM AgentX to DSpark6 and a new image with TP8 and DEP8 configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
+
+- config-keys:
+    - qwen3.827b-bf16-mi325x-vllm-mtp
+  description:
+    - "Add MI325X Qwen3.8-27B BF16 vLLM TP1 native MTP with three draft tokens, BF16 KV cache, chat-templated 1k1k prompts, and concurrency 1-128; rerun the workload from #3295 with the unquantized checkpoint and the same pinned image"
+    - "新增 MI325X Qwen3.8-27B BF16 vLLM TP1 原生 MTP 配方：预测 3 个 token，使用 BF16 KV cache、经 chat template 处理的 1k1k 提示词及并发 1-128；使用原始未量化 checkpoint 和相同固定镜像重跑 #3295 的工作负载"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
