@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Qwen3.8-27B real SPEED-Bench acceptance; both target precisions keep BF16 drafts.
+# Qwen3.8-27B native MTP SPEED-Bench acceptance; both targets keep the BF16 head.
 set -eo pipefail
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL MODEL_PATH MODEL_REVISION PRECISION TP IMAGE PORT MTP_LIST \
@@ -39,8 +39,10 @@ import json, os
 from pathlib import Path
 from huggingface_hub import snapshot_download
 spec = json.loads(os.environ['SPEEDBENCH_SPECULATIVE_CONFIG'])
-if spec['method'] not in ('mtp', 'dspark') or spec.get('rejection_sample_method') == 'synthetic':
-    raise ValueError('Collection requires real MTP or DSpark verification')
+if spec['method'] != 'mtp' or spec.get('rejection_sample_method') == 'synthetic':
+    raise ValueError('Collection requires real native MTP verification')
+if spec['model'] != 'Qwen/Qwen3.8-27B':
+    raise ValueError('Use the original Qwen3.8-27B MTP head')
 if spec.get('quantization') or spec.get('kv_cache_dtype') != 'auto':
     raise ValueError('Keep the original BF16 draft weights, compute and KV cache')
 draft = snapshot_download(spec['model'], revision=spec['revision'])

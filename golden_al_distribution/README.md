@@ -124,7 +124,7 @@ Before accepting an updated curve, reviewers should verify:
 ## Qwen3.8-27B collection
 
 The revision-aware collector `benchmarks/single_node/speedbench/qwen3.827b_vllm.sh`
-supports FP8 and BF16 targets with native MTP or DSpark. Dispatch `speedbench-al.yml`
+supports FP8 and BF16 targets with native MTP. Dispatch `speedbench-al.yml`
 on `runner=b300` or `runner=cluster:h200-dgxc` (the H200 pool also accepts the
 explicit collector override),
 with `collector-script` set to that path, `precision`, `tp=1`, a pinned
@@ -137,13 +137,7 @@ uses 0.7, 0.8 and 1.5, respectively; both use top-k 20.
 The official FP8 checkpoint also quantizes its embedded MTP head. To preserve
 the original draft precision, native MTP collection must explicitly select
 `model=Qwen/Qwen3.8-27B` and its pinned BF16 revision inside `speculative-config`,
-with `kv_cache_dtype=auto`. DSpark likewise requires an original BF16 drafter,
-its revision, explicit draft sampling, and real rejection sampling with adaptive
-verification disabled. The DSpark PRs use the v1 weights: Doopeworld revision
-`ebaa0919226a29408fa2c8f3efc493e98189c7ed` matches RadixArk revision
-`85ef153be924f17ce4bf62726954eeaa4a73e854` byte-for-byte (safetensors SHA256
-`9d26d5e637551c244d543c67c790bd0947f360e005c569e5851a185ffe692786`).
-RadixArk main now contains a different v2 drafter; its curve must be measured separately.
+with `kv_cache_dtype=auto`. Both target precisions use this same original MTP head.
 These measurements do not validate recipes that quantize
 the draft head or inherit the target's FP8 KV cache for the draft.
 

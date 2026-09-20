@@ -124,7 +124,7 @@ gh workflow run speedbench-al.yml \
 ## Qwen3.8-27B 收集
 
 支持固定版本的收集器 `benchmarks/single_node/speedbench/qwen3.827b_vllm.sh`
-可测量 FP8 和 BF16 目标模型的原生 MTP 或 DSpark。触发 `speedbench-al.yml`
+可测量 FP8 和 BF16 目标模型的原生 MTP。触发 `speedbench-al.yml`
 时，可选择 `runner=b300` 或 `runner=cluster:h200-dgxc`（H200 池同样支持显式
 指定收集器）。将 `collector-script` 设为该路径，并显式传入 `precision`、`tp=1`、固定的
 `model-revision` 和 `speculative-config`（由收集器逐点填入
@@ -135,12 +135,8 @@ temperature 为 1.0、top-p 为 0.95、presence penalty 为 0；关闭时分别�
 
 官方 FP8 checkpoint 同时量化了内嵌 MTP 头。为保持原始草稿精度，收集原生 MTP
 时必须在 `speculative-config` 中显式指定 `model=Qwen/Qwen3.8-27B` 及其固定的
-BF16 revision，并设置 `kv_cache_dtype=auto`。DSpark 同样要求原始 BF16 草稿模型、
-固定 revision、显式草稿采样方式、真实拒绝采样，并关闭自适应验证。DSpark PR 使用
-v1 权重：Doopeworld revision `ebaa0919226a29408fa2c8f3efc493e98189c7ed` 与
-RadixArk revision `85ef153be924f17ce4bf62726954eeaa4a73e854` 的权重逐字节一致
-（safetensors SHA256：`9d26d5e637551c244d543c67c790bd0947f360e005c569e5851a185ffe692786`）。
-RadixArk main 现已包含不同的 v2 草稿模型，需要单独测量其曲线。这些测量不能
+BF16 revision，并设置 `kv_cache_dtype=auto`。两种目标精度均使用同一原始 MTP 头。
+这些测量不能
 作为量化草稿头或让草稿继承目标模型 FP8 KV cache 的配方的有效性证明。
 
 只有所选 coding 提示词全部成功完成，测量点才会被接受。收集器关闭基准客户端
