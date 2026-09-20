@@ -260,32 +260,71 @@ jobs:
                 ref: ${{ inputs.ref || github.workflow_sha }}
                 path: phase1-site-${{ github.run_id }}-${{ github.run_attempt }}
                 persist-credentials: false
-            - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-            - name: Prepare explicit shared paths
+            - name: Read active provisioning progress
               working-directory: phase1-site-${{ github.run_id }}-${{ github.run_attempt }}
               env:
                 SITE_OPERATION: ${{ inputs.phase1-site-operation }}
                 SITE_DRAFT: ${{ inputs.phase1-site-draft }}
-              # H100 login runners do not provide an ambient python executable.
-              shell: uv run --locked --no-dev --python 3.12 python {0} # zizmor: ignore[misfeature]
+              # Reuse the fixed generation interpreter without resolving or installing packages.
+              shell: /mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35481075834-1/envs/wrapper/bin/python -I -S -B {0} # zizmor: ignore[misfeature]
               run: |
-                import os, sys
+                import json, os, stat
                 from pathlib import Path
-                operation = os.environ["SITE_OPERATION"]
-                if operation in {"cancel-startup", "cancel-client"}:
-                    from infx.srt_slurm.qualify_cancellation import qualify
-                    if not os.environ["SITE_DRAFT"]:
-                        raise ValueError("Cancellation qualification requires phase1-site-draft")
-                    mode = operation.removeprefix("cancel-")
-                    walltime, observation = (300, 240) if mode == "startup" else (3600, 3300)
-                    qualify(Path.cwd(), Path(os.environ["SITE_DRAFT"]), Path("phase1-provision-report"),
-                            f"{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}-{mode}",
-                            mode=mode, walltime_seconds=walltime,
-                            observation_timeout_seconds=observation, cleanup_timeout_seconds=180)
+
+                if os.environ["SITE_OPERATION"] != "inspect":
+                    raise ValueError("This diagnostic branch only supports inspect")
+                generation = Path("/mnt/nfs/sa-shared/gharunners/inferencex-native/generations/35481075834-1")
+                report = Path.cwd() / "phase1-provision-report"
+                report.mkdir(exist_ok=False)
+                status = {"purpose": "operational-diagnostic", "qualification_evidence": False, "generation": str(generation), "files": {}}
+
+                def read_owned(path, parent, limit, *, tail=False):
+                    if parent.resolve(strict=True) != parent or path.parent != parent:
+                        raise ValueError("diagnostic source escapes its fixed parent")
+                    if path.resolve(strict=True) != path:
+                        raise ValueError("diagnostic source must not be a symlink")
+                    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                    with os.fdopen(descriptor, "rb") as stream:
+                        info = os.fstat(stream.fileno())
+                        if not stat.S_ISREG(info.st_mode):
+                            raise ValueError("diagnostic source is not a regular file")
+                        if not tail and info.st_size > limit:
+                            raise ValueError("diagnostic JSON exceeds the size bound")
+                        offset = max(0, info.st_size - limit) if tail else 0
+                        stream.seek(offset)
+                        data = stream.read(limit if tail else limit + 1)
+                        if len(data) > limit:
+                            raise ValueError("diagnostic JSON grew beyond the size bound")
+                        if offset and b"\n" in data:
+                            data = data.split(b"\n", 1)[1]
+                        return data, offset > 0
+
+                progress = None
+                for name in ("progress.json", "state.json"):
+                    try:
+                        raw, _ = read_owned(generation / name, generation, 65536)
+                        (report / name).write_bytes(raw)
+                        value = json.loads(raw)
+                        if not isinstance(value, dict):
+                            raise ValueError("diagnostic JSON must be an object")
+                        if name == "progress.json":
+                            progress = value
+                        status["files"][name] = {"state": "copied", "bytes": len(raw)}
+                    except (OSError, ValueError) as error:
+                        status["files"][name] = {"state": "unavailable", "error_type": type(error).__name__}
+
+                if progress is not None and isinstance(progress.get("log"), str):
+                    try:
+                        raw, truncated = read_owned(Path(progress["log"]), generation / "logs", 1048576, tail=True)
+                        tail = b"\n".join(raw.splitlines()[-200:]) + b"\n"
+                        (report / "current-stage.log").write_bytes(tail)
+                        status["files"]["current-stage.log"] = {"state": "copied", "bytes": len(tail), "source_tail_truncated": truncated}
+                    except (OSError, ValueError) as error:
+                        status["files"]["current-stage.log"] = {"state": "unavailable", "error_type": type(error).__name__}
                 else:
-                    from infx.srt_slurm.provision import main
-                    sys.argv = ["provision", "--config", "runners/srt-slurm/h100-phase1-provision.json", "--output", "phase1-provision-report", "--operation", operation]
-                    raise SystemExit(main())
+                    status["files"]["current-stage.log"] = {"state": "unavailable", "reason": "no-current-log"}
+                (report / "diagnostic.json").write_text(json.dumps(status, indent=2) + "\n")
+                print("Read-only operational diagnostic retained in phase1-provision-report; not qualification evidence.")
             - name: Preserve provisioning evidence
               if: ${{ always() }}
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
