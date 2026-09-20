@@ -37,7 +37,7 @@ python3 -m sglang.launch_server \
 --model-path=$MODEL --host=0.0.0.0 --port=$PORT --trust-remote-code \
 --tensor-parallel-size=$TP \
 --mem-fraction-static=0.8 \
---cuda-graph-max-bs=128 \
+--cuda-graph-max-bs-decode=128 \
 --chunked-prefill-size=131072 \
 --num-continuous-decode-steps=4 \
 --max-prefill-tokens=131072 \
