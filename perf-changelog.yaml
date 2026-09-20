@@ -8468,3 +8468,15 @@
   - Use 72 or 298 GB/rank prefill HiCache, first-use write-through for higher loads,
     and 32 or 64 decode slots.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-dpa-diagnostic
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add diagnostic-only B300 Qwen3.5 FP8 TP2/EP2/DP2 1P1D AgentX variants at C24 and
+    C32 with attention TP1, unchanged original BF16 MTP and HiCache settings.
+  - Keep source pins, automatic measured synthetic acceptance, real accuracy gates
+    and four-active/eight-allocated GPU power accounting; qualify performance before
+    any publication.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
