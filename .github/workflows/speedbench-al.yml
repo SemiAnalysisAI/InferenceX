@@ -116,6 +116,7 @@ env:
   # the launcher resolves MODEL_PATH to the pre-staged local weights and mounts
   # them. The collector serves from MODEL_PATH (see SERVE_MODEL), so no download.
   MODEL: ${{ inputs.model }}
+  MODEL_PATH: /mnt/hf_hub_cache/speedbench-${{ inputs.model-prefix }}-${{ inputs.precision }}
   MODEL_PREFIX: ${{ inputs.model-prefix }}
   PRECISION: ${{ inputs.precision }}
   FRAMEWORK: vllm

@@ -125,6 +125,8 @@ Before accepting an updated curve, reviewers should verify:
 
 The revision-aware collector `benchmarks/single_node/speedbench/qwen3.827b_vllm.sh`
 supports FP8 and BF16 targets with native MTP or DSpark. Dispatch `speedbench-al.yml`
+on `runner=b300` or `runner=cluster:h200-dgxc` (the H200 pool also accepts the
+explicit collector override),
 with `collector-script` set to that path, `precision`, `tp=1`, a pinned
 `model-revision`, and an explicit `speculative-config` (the collector supplies
 `num_speculative_tokens`). Use the Qwen chat setting

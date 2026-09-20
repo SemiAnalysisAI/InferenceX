@@ -125,7 +125,8 @@ gh workflow run speedbench-al.yml \
 
 支持固定版本的收集器 `benchmarks/single_node/speedbench/qwen3.827b_vllm.sh`
 可测量 FP8 和 BF16 目标模型的原生 MTP 或 DSpark。触发 `speedbench-al.yml`
-时，将 `collector-script` 设为该路径，并显式传入 `precision`、`tp=1`、固定的
+时，可选择 `runner=b300` 或 `runner=cluster:h200-dgxc`（H200 池同样支持显式
+指定收集器）。将 `collector-script` 设为该路径，并显式传入 `precision`、`tp=1`、固定的
 `model-revision` 和 `speculative-config`（由收集器逐点填入
 `num_speculative_tokens`）。Qwen 使用
 `thinking-kwargs={"enable_thinking":true}`。采样遵循模型卡：thinking 开启时，

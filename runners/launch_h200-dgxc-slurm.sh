@@ -467,6 +467,10 @@ else
         LEGACY_FW_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
         BENCH_SCRIPT="${BENCH_BASE}${LEGACY_FW_SUFFIX}${SPEC_SUFFIX}.sh"
     fi
+    # Explicit collectors use the same pool launcher and allocation as benchmarks.
+    if [[ -n "${BENCH_SCRIPT_OVERRIDE:-}" ]]; then
+        BENCH_SCRIPT="$BENCH_SCRIPT_OVERRIDE"
+    fi
 
     # DeepSeek-V4.1-Flash creates AgentX runtime directories next to the
     # repository, which must not land under /workspace.
