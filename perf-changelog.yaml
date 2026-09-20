@@ -8454,3 +8454,10 @@
     - "Add the MI325X Qwen3.8-27B-FP8 recipe: vLLM nightly-a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b on one GPU (TP1), 1k1k only, with the checkpoint's native MTP head (mtp_num_hidden_layers=1, --speculative-config method mtp) drafting three tokens as the vLLM recipe page prescribes, Triton attention with a bf16 KV cache (gfx942 has no calibrated fp8 attention scales), --max-num-seqs sized to the sweep point (floor 16; 256 for accuracy evals), prefix caching disabled, the matrix context as --max-model-len, --language-model-only, and chat-templated prompts; concurrency 1-128"
     - "新增 MI325X Qwen3.8-27B-FP8 配方：vLLM nightly-a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b 单卡（TP1），仅 1k1k，使用 checkpoint 自带的原生 MTP 头（mtp_num_hidden_layers=1，--speculative-config method mtp）按 vLLM recipe 页面建议预测 3 个 token，Triton attention 与 bf16 KV cache（gfx942 无校准的 fp8 attention scale），--max-num-seqs 按并发点设定（下限 16；精度评测为 256），关闭 prefix caching，--max-model-len 使用矩阵上下文，--language-model-only，提示词经 chat template 处理；并发 1-128"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3295
+
+- config-keys:
+    - qwen3.827b-fp8-mi325x-vllm-mtp
+  description:
+    - "Apply SPEED-Bench thinking-on golden AL 2.52 to Qwen3.8-27B-FP8 native MTP3 throughput on mi325x; preserve the original BF16 MTP head, computation and draft KV cache with pinned revisions and quantization exclusions; accuracy paths retain real verification"
+    - "在 mi325x 的 Qwen3.8-27B-FP8 原生 MTP3 吞吐测试中应用 SPEED-Bench thinking-on 黄金 AL 2.52；固定模型版本并排除草稿量化，保持原始 BF16 MTP 头、计算和草稿 KV cache；精度评测路径保留真实验证"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3295
