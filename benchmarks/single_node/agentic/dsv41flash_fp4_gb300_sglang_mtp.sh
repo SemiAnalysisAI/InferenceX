@@ -93,6 +93,13 @@ unset SGLANG_SIMULATE_ACC_LEN SGLANG_SIMULATE_ACC_METHOD SGLANG_SIMULATE_ACC_TOK
 SPECULATIVE_ARGS=()
 # Bound long-prefill decode stalls for DSpark as well as the STP comparison.
 SCHEDULING_ARGS=(--prefill-decode-interval 16)
+# Compressed full-KV capacity alone cannot preserve a prefix whose SWA tail
+# has been evicted. Reserve more cached tails within the static pool for the
+# high-concurrency TP4 DSpark comparison; checkpoint math stays unchanged.
+CACHE_ARGS=()
+if [[ "$SPEC_DECODING" == mtp ]] && (( TP == 4 && CONC >= 16 )); then
+    CACHE_ARGS=(--swa-prefix-tails 1024)
+fi
 case "$SPEC_DECODING" in
     mtp)
         DSPARK_BLOCK_SIZE=5
@@ -128,6 +135,7 @@ SGLANG_CMD=(
     --chunked-prefill-size 4096
     "${SPECULATIVE_ARGS[@]}"
     "${SCHEDULING_ARGS[@]}"
+    "${CACHE_ARGS[@]}"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     --reasoning-parser auto
