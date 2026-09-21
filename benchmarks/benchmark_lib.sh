@@ -800,6 +800,7 @@ run_benchmark_serving() {
     local model=""
     local port=""
     local backend=""
+    local base_url=""
     local endpoint=""
     local input_len=""
     local output_len=""
@@ -832,6 +833,10 @@ run_benchmark_serving() {
                 ;;
             --endpoint)
                 endpoint="$2"
+                shift 2
+                ;;
+            --base-url)
+                base_url="$2"
                 shift 2
                 ;;
             --input-len)
@@ -954,12 +959,16 @@ run_benchmark_serving() {
         num_prompts="$max_concurrency"
     fi
 
+    if [[ -z "$base_url" ]]; then
+        base_url="http://0.0.0.0:$port"
+    fi
+
     local benchmark_cmd=(
         env PYTHONPATH="$workspace_dir${PYTHONPATH:+:$PYTHONPATH}"
         python3 -m infx.bench_serving.benchmark_serving
         --model "$model"
         --backend "$backend"
-        --base-url "http://0.0.0.0:$port"
+        --base-url "$base_url"
         --dataset-name random
         --random-input-len "$input_len"
         --random-output-len "$output_len"
