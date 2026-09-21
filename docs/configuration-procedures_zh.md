@@ -345,6 +345,13 @@ Maximum concurrency for 1,048,576 tokens per request: 6.70x
 
 ### SGLang 上的 DeepSeek-V4.1-Flash DSpark
 
+`dsv41flash-fp4-gb300-sglang-agentic` 在固定 digest 的官方 nightly 上以
+TP2/EP2 或 TP4/EP4 运行原生非推测解码。STP 入口通过 `SPEC_DECODING=none`
+复用 GB300 脚本，清除继承的合成接受率设置，不传入草稿模型参数。
+GB300 禁用了共享内存大页，因此 Engram 主机表使用 `per_rank` 布局申请匿名大页。
+独立 DSpark 配方需先确保草稿权重精度不变，才能通过资格验证。
+
+
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` 是 vLLM 配方在 h100、h200、b200、b300、gb200、gb300
 与 mi355x 上的 SGLang 对应版本（每个 SKU 一个 PR），遵循
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1)。

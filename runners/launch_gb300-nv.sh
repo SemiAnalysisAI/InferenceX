@@ -130,10 +130,19 @@ import_squash() {
 import_squash "$SQUASH_FILE" "$IMAGE"
 # Keep this branch before the nginx import and srtctl setup.
 if [[ "$MODEL_PREFIX" == "dsv41flash" && ( "$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "sglang" ) && "${IS_MULTINODE}" != "true" ]]; then
-    BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb300_${FRAMEWORK}_mtp.sh"
+    check_env_vars SPEC_DECODING
+    BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb300_${FRAMEWORK}"
+    case "$SPEC_DECODING" in
+        mtp) BENCH_SCRIPT+="_mtp.sh" ;;
+        none)
+            [[ "$FRAMEWORK" == "sglang" ]] || { echo "Native STP requires the SGLang recipe" >&2; exit 1; }
+            BENCH_SCRIPT+=".sh"
+            ;;
+        *) echo "Unsupported SPEC_DECODING=$SPEC_DECODING" >&2; exit 1 ;;
+    esac
     # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
     export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
-    [[ "${IS_AGENTIC}" == "1" && "${SPEC_DECODING:-}" == "mtp" && -f "$BENCH_SCRIPT" ]] || {
+    [[ "${IS_AGENTIC}" == "1" && -f "$BENCH_SCRIPT" ]] || {
         echo "Unsupported single-node recipe: $BENCH_SCRIPT" >&2
         exit 1
     }

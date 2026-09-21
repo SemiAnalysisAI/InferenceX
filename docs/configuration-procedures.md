@@ -397,6 +397,14 @@ Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/mode
 
 ### DeepSeek-V4.1-Flash DSpark on SGLang
 
+`dsv41flash-fp4-gb300-sglang-agentic` runs native non-speculative serving at
+TP2/EP2 or TP4/EP4 on the pinned official nightly. Its STP entry point shares the
+GB300 script with `SPEC_DECODING=none`, clears inherited synthetic acceptance,
+and passes no draft flags. The `per_rank` Engram host layout uses anonymous
+huge pages on GB300, where shared-memory huge pages are disabled. The separate
+DSpark arm remains unqualified until its draft-weight precision is preserved.
+
+
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` are the SGLang counterparts of the vLLM
 arms, one PR per SKU across h100, h200, b200, b300, gb200, gb300 and mi355x. They follow the
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1),
