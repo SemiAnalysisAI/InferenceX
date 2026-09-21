@@ -8550,6 +8550,6 @@
     - agentic-coding
   description:
     - "Add GB300 SGLang DeepSeek-V4.1-Flash AgentX TP2/EP2 and TP4/EP4 candidates on official nightly-dev-cu13-20260921-0f6761b5, digest sha256:987c7e4bd26918647211a5dcad72a2bdf2a5f394ac1469eff730e7517fc139be."
-    - "The native non-speculative arm clears inherited synthetic acceptance and sends no draft flags. The separate DSpark arm keeps canonical thinking-on five-token AL 3.51 and real eval verification, but remains unqualified pending a native draft-precision fix."
+    - "The native non-speculative arm clears inherited synthetic acceptance and sends no draft flags. The separate DSpark arm keeps canonical thinking-on five-token AL 3.51 and real eval verification, and applies the hash-verified native FP8 WO_A loader/projection fix; full-model qualification remains pending."
     - "Use per-rank anonymous Engram host tables for huge-page backing without changing host sysctls; resolve the downloaded local checkpoint path so upstream model-local page-cache advice can find its files. Keep GPU KV cache, 4096-token prefill chunks, 0.80 static memory fraction, and automatic backend selection."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3344

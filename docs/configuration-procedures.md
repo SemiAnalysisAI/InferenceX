@@ -402,7 +402,12 @@ TP2/EP2 or TP4/EP4 on the pinned official nightly. Its STP entry point shares th
 GB300 script with `SPEC_DECODING=none`, clears inherited synthetic acceptance,
 and passes no draft flags. The `per_rank` Engram host layout uses anonymous
 huge pages on GB300, where shared-memory huge pages are disabled. The separate
-DSpark arm remains unqualified until its draft-weight precision is preserved.
+DSpark arm applies `patch_sglang_dsv41_native_wo_a.py`, which verifies the nightly
+source hash and preserves all three draft WO_A projections' native FP8 weights and
+block scales. Markov weights retain native BF16. Full-model accuracy and performance
+qualification are still required. The downloaded checkpoint resolves to a local
+snapshot so upstream Engram cache advice can locate its files; verify actual
+huge-page coverage in the startup logs.
 
 
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` are the SGLang counterparts of the vLLM
