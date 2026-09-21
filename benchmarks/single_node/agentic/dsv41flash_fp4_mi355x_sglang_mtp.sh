@@ -100,8 +100,13 @@ fi
 # SGLang already does on CUDA; aiter's custom all-reduce supports the mode.
 export PYTORCH_HIP_ALLOC_CONF=expandable_segments:True
 export SGLANG_USE_AITER=1
-# Keep stock weight shuffling and MoE dispatch in the same supported layout.
-export SGLANG_USE_AITER_MOE_GU_ITLV=0
+# Official preview image defaults required by its native A8W4 MoE path.
+# Keep the latest nightly binaries; provenance hashes the unchanged tuning CSV.
+export SGLANG_USE_AITER_MOE_GU_ITLV=1
+export AITER_BF16_FP8_MOE_BOUND=0
+export TORCH_BLAS_PREFER_HIPBLASLT=1
+export SGLANG_USE_ROCM700A=0
+export AITER_CONFIG_FMOE="$(dirname "$0")/../../patches/sglang_dsv41_rocm/dsv41_rocm/fmoe_gfx950_dsv41_ep4_a8w4.csv"
 export SGLANG_MOE_PADDING=1
 export AITER_FLYDSL_FORCE_REDUCE=1
 export ROCM_QUICK_REDUCE_QUANTIZATION=NONE

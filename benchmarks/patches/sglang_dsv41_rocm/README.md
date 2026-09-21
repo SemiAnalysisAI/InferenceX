@@ -58,8 +58,12 @@ Passing startup or a limited eval is not full performance or accuracy
 qualification. Source is adapted from SGLang under the accompanying Apache 2.0
 license.
 
-The recipe selects `SGLANG_USE_AITER_MOE_GU_ITLV=0` consistently for stock weight
-shuffling and MoE dispatch; the interleaved path selects an unsupported CK kernel.
+The recipe retains interleaved gate/up weights and reproduces the official
+preview image's `AITER_BF16_FP8_MOE_BOUND=0` and model-specific A8W4 tuning CSV,
+plus its hipBLASLt preference. These image defaults were absent from the latest
+nightly. The CSV is copied unchanged with its exact source hash in provenance;
+AITER source/binaries and draft weight loading remain untouched. Correctness
+must be established with the restored defaults before performance qualification.
 For V4.1 only, the installer ports the official preview's split-buffer FP4
 indexer store/read methods, which the nightly pool lacks. The existing HIP
 allocation and FP4 values/round-to-even scaling remain unchanged.

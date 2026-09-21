@@ -70,6 +70,12 @@
       "adapted_sha256": "01321cd8d25d0ad7d7b54cfe6d9e7f3a6017dbce8950f49c05c375e944f77f60",
       "nightly_kernel_path": "aiter/ops/triton/_triton_kernels/fusions/fused_clamp_act_mul.py",
       "nightly_kernel_sha256": "c478b02e6696958eb2fce88dc113b3d0ad36a430008feadfc3615a69f0872d41"
+    },
+    {
+      "installed_name": "fmoe_gfx950_dsv41_ep4_a8w4.csv",
+      "source_path": "/sgl-workspace/aiter_configs/fmoe_gfx950_dsv41_ep4_a8w4.csv",
+      "source_sha256": "f62b5d4046f36177efe55b28c01b3a8413d094a1d0d5b202cdb2482e2b78a61c",
+      "adapted_sha256": "f62b5d4046f36177efe55b28c01b3a8413d094a1d0d5b202cdb2482e2b78a61c"
     }
   ],
   "registry_sha256": "dfd9c0b6e85774524f6378ae09278cf6dc000e093ddf6beaadc44d1d20bdacd1",
@@ -77,5 +83,11 @@
   "engram_sha256": "6468ead93f279c478928e354e612408f2dcd562372da98c062abc154a43d0f18",
   "model_sha256": "4164c354f38e7b35e6bf5445b4d506e610b9f956f3e85f1431946ff6b0471ded",
   "mlp_sha256": "9ffa2913974db31151c18e4931cebceca27c64c734be59a67540d4567e5d5a9f",
-  "pool_sha256": "69e7b1dee0d2a35ac090660d354b934cf66ee9169b34e48615904f9af757f42e"
+  "pool_sha256": "69e7b1dee0d2a35ac090660d354b934cf66ee9169b34e48615904f9af757f42e",
+  "source_image_runtime_defaults": {
+    "AITER_BF16_FP8_MOE_BOUND": "0",
+    "TORCH_BLAS_PREFER_HIPBLASLT": "1",
+    "SGLANG_USE_ROCM700A": "0",
+    "AITER_CONFIG_FMOE": "/sgl-workspace/aiter_configs/fmoe_gfx950_dsv41_ep4_a8w4.csv"
+  }
 }
