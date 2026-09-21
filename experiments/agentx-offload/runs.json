@@ -2947,10 +2947,32 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "64ee17834e6fbab522311a63f57ca918d8d46b69",
-      "status": "queued",
+      "status": "failure",
       "workflow_name": "offload-v1-nvme4tib-c512-r1-20260921",
       "dispatched_at": "2026-09-21T08:56:01Z",
       "get_jobs_job_id": 106271978576,
+      "performance_result": false,
+      "target_node": "im-b200-c001",
+      "capacity_bytes_per_node": 4398046511104,
+      "capacity_reserve_bytes": 137438953472,
+      "capacity_required_bytes": 4535485464576,
+      "completed_at": "2026-09-21T08:56:32Z",
+      "failure_stage": "workflow repository checkout",
+      "failure_evidence": "The dispatch supplied a nine-character short SHA as the workflow ref input. actions/checkout fetched all branches and tags but accepts this input as a branch or tag name, so it failed before matrix generation, priority admission, GPU allocation, or scratch creation. Retry uses the full experiment branch name."
+    },
+    {
+      "run_id": 35583529913,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35583529913",
+      "arm": "nvme",
+      "concurrency": 512,
+      "repeat": 2,
+      "attempt": 1,
+      "retry_of": 35580481104,
+      "head_sha": "cce1fb2f2f28a848c401930ca9ae06c0d73555d1",
+      "status": "in_progress",
+      "workflow_name": "offload-v1-nvme4tib-c512-r2-20260921",
+      "dispatched_at": "2026-09-21T09:28:55Z",
+      "get_jobs_job_id": 106281545020,
       "performance_result": false,
       "target_node": "im-b200-c001",
       "capacity_bytes_per_node": 4398046511104,
@@ -2959,23 +2981,26 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871",
-  "status": "The successful 4 TiB c256 NVMe result is recorded. The next 4 TiB NVMe-only c512 probe 35580481104 is queued, preserving the one-queued-B200-job and one-NVMe-workflow ceilings. It targets im-b200-c001 and must complete exact owner-verified cleanup before another NVMe-bearing dispatch.",
+  "status": "The first c512 dispatch 35580481104 failed before matrix generation because its input ref was a short SHA interpreted as a missing branch or tag; it used no B200 or NVMe. Corrected c512 retry 35583529913 is in progress using the full experiment branch ref.",
   "last_capacity_check": {
-    "checked_at": "2026-09-21T08:56:10Z",
-    "pending_e2e_workflows_before_dispatch": 0,
-    "active_study_run_ids": [],
-    "active_study_job_ids": [],
-    "pending_study_run_ids": [
-      35580481104
+    "checked_at": "2026-09-21T09:29:05Z",
+    "pending_b200_jobs_before_dispatch": 0,
+    "other_queued_workflows": [
+      35576547691
     ],
-    "pending_study_job_ids": [
-      106271978576
+    "other_queued_workflow_cluster": "cluster:mi355x-amds",
+    "active_study_run_ids": [
+      35583529913
     ],
+    "active_study_job_ids": [
+      106281545020
+    ],
+    "pending_study_run_ids": [],
     "dispatch_allowed": false,
-    "reason": "The single allowed queued B200 job is the c512 NVMe probe. Launch nothing else until it starts or reaches a terminal state; no additional NVMe-bearing run is permitted until c512 is terminal and exact cleanup is verified."
+    "reason": "The corrected c512 NVMe workflow is active. No additional NVMe-bearing workflow may dispatch until it is terminal and exact cleanup is verified."
   },
   "next_dispatch": {
-    "requires": "Monitor c512 run 35580481104. After it is terminal, retain hash-verified performance and cache evidence, verify exact task-owned cleanup, then perform a fresh B200 queue check before any further dispatch. Retry c4 maintenance on im-b200-c008 later when the one-queued-job ceiling permits."
+    "requires": "Monitor corrected c512 run 35583529913. After it is terminal, retain hash-verified performance and cache evidence, verify exact task-owned cleanup, then perform a fresh B200 queue check before any further dispatch."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
