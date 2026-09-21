@@ -97,7 +97,7 @@ def test_submission_manifest(tmp_path, record, expected):
         assert submission_fields(path) == expected
 
 
-@pytest.mark.parametrize("failure", ["none", "allocation", "submission"])
+@pytest.mark.parametrize("failure", ["none", "allocation", "submission", "bootstrap"])
 def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, failure):
     path, _, point_env = point
     binaries = tmp_path / "bin"
@@ -112,6 +112,7 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
     scripts = {
         "git": 'if [[ "$1" == clone ]]; then mkdir -p "${@: -1}/configs"; else echo test-commit; fi',
         "uv": 'if [[ "$1" == venv ]]; then mkdir -p .venv/bin; echo ":" > .venv/bin/activate; fi',
+        "make": '[[ "$TEST_FAILURE" == bootstrap ]] && exit 13; mkdir -p bin; touch bin/uv',
         "squeue": '[[ "$TEST_FAILURE" == submission ]] && echo "42 RUNNING"; exit 0',
         "sacct": 'if [[ "$TEST_FAILURE" == allocation ]]; then echo "FAILED|1:0"; else echo "COMPLETED|0:0"; fi',
         "scancel": 'printf "%s\\n" "$@" >> "$CANCEL_CAPTURE"',
@@ -125,6 +126,7 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
     srtctl.write_text(
         f"#!{sys.executable}\n"
         "import json, os, pathlib, sys\n"
+        "assert pathlib.Path('bin/uv').is_file(), 'native bootstrap was skipped'\n"
         "output = pathlib.Path(sys.argv[sys.argv.index('--output') + 1]) / '42'\n"
         "logs = output / 'logs'\n"
         "logs.mkdir(parents=True)\n"
@@ -153,7 +155,11 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
         ["bash", str(ROOT / "runners/launch_h200-dgxc-slurm.sh")], cwd=tmp_path,
         env=env, capture_output=True, text=True, timeout=30,
     )
-    assert result.returncode == {"none": 0, "allocation": 1, "submission": 7}[failure], result.stderr
+    assert result.returncode == {"none": 0, "allocation": 1, "submission": 7, "bootstrap": 13}[failure], result.stderr
+    if failure == "bootstrap":
+        assert not (tmp_path / "srt-single-node-submission.json").exists()
+        assert not capture.exists()
+        return
     assert json.loads((tmp_path / "point-identity.json").read_text()) == {"completed": 2}
     assert (tmp_path / "gpu_metrics.csv").read_text() == "gpu,power\n0,300\n"
     assert json.loads((tmp_path / "gpu_metrics_context.json").read_text()) == {"device_count": 4}

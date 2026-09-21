@@ -58,6 +58,7 @@ if [[ "$EXECUTION_PATH" == native-single-node ]]; then
         --model "hf:$MODEL" "$DSR1_FP8_MODEL_PATH" \
         --container "$IMAGE" "$IMAGE" \
         --mount "$HF_HUB_CACHE_MOUNT" "$HF_HUB_CACHE" --exclusive
+    make setup ARCH=x86_64
 
     SRT_JOB_ID=""
     SRT_JOB_OUTPUT=""
