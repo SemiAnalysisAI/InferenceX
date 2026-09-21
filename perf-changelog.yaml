@@ -8531,3 +8531,15 @@
     - "为 GB300 vLLM DeepSeek-V4.1-Flash AgentX 配方在现有 TP4 臂旁新增 TP2 臂，Engram 表继续通过 --engram-config cpu_offload 放在固定页主机 DRAM；每张 277 GiB GPU 的权重升至约 175 GiB"
     - "在 dsv41flash_fp4_vllm_mtp.sh 中将 B200 TP2 的上限推广到所有 TP2 臂：--max-num-batched-tokens 4096（上游 16384 时 indexer 的 [batched-tokens, 1M] fp8 缓冲区达 32 GiB）、--max-num-seqs 为并发的两倍（16-256）、CUDA graph 捕获上限 512，为每张 GPU 留出约 36 GiB KV；TP4 与 TP8 臂沿用上游默认值"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3321
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the full GB300 Kimi-K3 AgentX curve with measured power across aggregated and disaggregated deployments."
+    - "Update four disaggregated recipes to use srtctl's dcgm_exporter and collect_interval_ms telemetry fields."
+    - "重测 GB300 Kimi-K3 AgentX 完整曲线，为聚合和分离部署补齐实测功耗。"
+    - "将四个分离部署配方的 telemetry 字段更新为 srtctl 的 dcgm_exporter 和 collect_interval_ms。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3315
