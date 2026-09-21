@@ -73,17 +73,13 @@ if agentic_kv_offload_enabled; then
         HICACHE_RATIO="1.0"
     fi
     HICACHE_WRITE_POLICY="write_through"
-    HICACHE_IO_BACKEND="direct"
-    HICACHE_MEM_LAYOUT="page_first_direct"
     case "$KV_OFFLOAD_BACKEND" in
         hicache)
-            echo "HiCache (GPU+host DRAM only): ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
+            echo "HiCache (GPU+host DRAM only): ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY"
             CACHE_ARGS=(
                 --enable-hierarchical-cache
                 --hicache-ratio "$HICACHE_RATIO"
                 --hicache-write-policy "$HICACHE_WRITE_POLICY"
-                --hicache-io-backend "$HICACHE_IO_BACKEND"
-                --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
             )
             ;;
         mooncake)
@@ -117,8 +113,6 @@ EOF
                 --hicache-ratio "$HICACHE_RATIO"
                 --hicache-size 0
                 --hicache-write-policy "$HICACHE_WRITE_POLICY"
-                --hicache-io-backend "$HICACHE_IO_BACKEND"
-                --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
                 --hicache-storage-backend mooncake
                 --hicache-storage-prefetch-policy wait_complete
             )

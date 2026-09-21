@@ -8462,7 +8462,7 @@
     - agentic-coding
   description:
     - "Update the GLM-5.2 MXFP4 MI355X SGLang AgentX image from lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260920, whose SGLang commit c610c40399 contains sgl-project/sglang#37152."
-    - "Set the TP4/EP4 HiCache DRAM arm high-concurrency sweep to 12, 14, and 16. Limit the TP8/EP1 GPU-resident arm to concurrency 1, 2, and 4; keep the HiCache settings, parallel topologies, and all other serving parameters unchanged."
+    - "Remove the explicit direct/page_first_direct HiCache overrides and use the SGLang defaults. Set the TP4/EP4 HiCache DRAM arm high-concurrency sweep to 12, 14, and 16, and limit the TP8/EP1 GPU-resident arm to concurrency 1, 2, and 4; keep both parallel topologies unchanged."
     - "将 GLM-5.2 MXFP4 MI355X SGLang AgentX 镜像从 lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917 更新到 lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260920；该镜像的 SGLang commit c610c40399 已包含 sgl-project/sglang#37152。"
-    - "将 TP4/EP4 HiCache DRAM arm 的高并发 sweep 设置为 12、14、16；TP8/EP1 GPU-resident arm 仅保留并发 1、2、4；HiCache 设置、并行拓扑与其他服务参数保持不变。"
+    - "删除显式的 direct/page_first_direct HiCache 覆盖，改用 SGLang 默认值；将 TP4/EP4 HiCache DRAM arm 的高并发 sweep 设置为 12、14、16，TP8/EP1 GPU-resident arm 仅保留并发 1、2、4；两个并行拓扑保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3329
