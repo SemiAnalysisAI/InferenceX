@@ -231,7 +231,8 @@ def profile_op(kernel_fn) -> dict | None:
     if _METRICS:
         summary["counters"] = _counters_pass(kernel_fn)
     try:
-        if _TRACE_DIR and (_counter % _TRACE_EVERY) == 1:
+        # "== 1 % N" (not "== 1") so TRACE_EVERY=1 keeps every trace
+        if _TRACE_DIR and (_counter % _TRACE_EVERY) == (1 % _TRACE_EVERY):
             os.makedirs(_TRACE_DIR, exist_ok=True)
             dest = os.path.join(_TRACE_DIR, f"op{_counter:06d}.json")
             # shutil.move, not os.replace: the temp file lives on a different
