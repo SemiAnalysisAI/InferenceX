@@ -2785,15 +2785,57 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "7d9afca38140823a4f45817e057d0cde49ce32d9",
-      "status": "in_progress",
+      "status": "success",
       "workflow_name": "offload-v1-none-c1-r1-cleanup-c002-20260921",
       "dispatched_at": "2026-09-21T05:41:45Z",
       "job_id": 106226489652,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35565505126/job/106226489652",
       "started_at": "2026-09-21T05:42:22Z",
-      "performance_result": false,
+      "performance_result": true,
       "target_node": "im-b200-c002",
-      "maintenance_cleanup_run_id": 35476050409
+      "maintenance_cleanup_run_id": 35476050409,
+      "completed_at": "2026-09-21T06:53:53Z",
+      "node": "im-b200-c002",
+      "allocation_id": "16711",
+      "artifacts": [
+        {
+          "id": 10625821288,
+          "name": "results_bmk",
+          "size_bytes": 2015,
+          "sha256": "6819190772cbd8d60336674caf6eb55ce9eb0db916df2e5b19022612a5e9e330"
+        },
+        {
+          "id": 10625642790,
+          "name": "server_logs_minimaxm3_tp4_conc1_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp_c-1ae30eed8ea2625b9b5e",
+          "size_bytes": 62542,
+          "sha256": "8d254b9d67f0a24b695e59c1f7918b34834c4e46c59474ec471f3c8fb36fe4c7"
+        }
+      ],
+      "performance": {
+        "num_requests_total": 253,
+        "num_requests_successful": 242,
+        "num_requests_warmup_dropped": 11,
+        "num_requests_error_dropped": 0,
+        "duration_seconds": 3602.2704,
+        "output_tokens_per_second": 124.90539,
+        "output_tokens_per_second_per_gpu": 31.22635,
+        "total_tokens_per_second": 16482.26211,
+        "total_tokens_per_second_per_gpu": 4120.56553,
+        "p90_e2e_latency_seconds": 25.07143,
+        "p90_interactivity_tokens_per_second_per_user": 193.77752,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 91.60961,
+        "avg_power_w_per_gpu": 354.852
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.97153,
+        "external_cache_hit_rate": 0.0,
+        "overall_cache_hit_rate": 0.97153,
+        "gpu_cache_hit_prompt_tokens": 60722816,
+        "external_cache_hit_prompt_tokens": 0,
+        "computed_prompt_tokens": 1779315,
+        "prompt_tokens_total": 62502131
+      },
+      "maintenance_cleanup_evidence": "On im-b200-c002, cleanup_stale.py accepted only registered run 35476050409, verified the exact safe path and owner identity when present, removed it, verified absence, and exited 0 before the benchmark. The receipt was written inside the run results but was not included by the server-log artifact allowlist."
     },
     {
       "run_id": 35565517309,
@@ -2836,20 +2878,18 @@
       "capacity_required_bytes": 4535485464576
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012",
-  "status": "The 4 TiB NVMe-only c256 probe 35565538871 is active on the c001-targeted workflow, and HBM c1 maintenance/control 35565505126 is active on c002 to remove only run 35476050409 scratch before benchmarking. The c4 maintenance/control 35565517309 was cancelled before launch to restore the one-queued-B200-job ceiling. No c512 or other NVMe-bearing run may dispatch until c256 is terminal and exact cleanup is verified.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126",
+  "status": "HBM c1 maintenance/control 35565505126 completed successfully on im-b200-c002 with 242 profiled responses and zero phase errors. Its exact registered cleanup for run 35476050409 completed before benchmarking. The 4 TiB NVMe-only c256 probe 35565538871 remains active; no other NVMe-bearing run may dispatch until it is terminal and its exact cleanup is verified.",
   "last_capacity_check": {
-    "checked_at": "2026-09-21T05:43:45Z",
+    "checked_at": "2026-09-21T07:18:16Z",
     "eligible_nodes": 11,
     "idle_nodes_before_dispatch": 11,
     "total_nodes": 11,
     "pending_b200_jobs_before_dispatch": 0,
     "active_study_run_ids": [
-      35565505126,
       35565538871
     ],
     "active_study_job_ids": [
-      106226489652,
       106226573520
     ],
     "pending_study_run_ids": [],
@@ -2868,14 +2908,6 @@
     "supersedes": "The previous 125% allocated-plus-pending demand ceiling."
   },
   "cleanup_required": [
-    {
-      "run_id": 35476050409,
-      "node": "im-b200-c002",
-      "scratch": "/offload-scratch/inferencex-offload-35476050409-2-16690-ccf4bb49cf4d",
-      "last_observed_logical_bytes": 1099502125056,
-      "last_observed_allocated_bytes": 1099492540416,
-      "reason": "The allocation time limit killed the container step before offload_cleanup.json was written. Delete only this exact task-owned scratch through approved InferenceX infrastructure, then record proof and remove this entry."
-    },
     {
       "run_id": 35476043213,
       "node": "im-b200-c008",
