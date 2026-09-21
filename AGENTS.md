@@ -11,6 +11,7 @@ Guidance for AI agents working with InferenceX.
 
 ## Agent-specific policy
 
+- Pareto logic changes must update both InferenceX and InferenceX-app with matching regression tests and cross-linked PRs.
 - Every PR description must include an **AI model disclosure** section naming the exact model/version used to prepare the PR. List each contributing model and its role, including delegated agents. Tool names such as Claude Code, Cursor, or Perplexity Computer are not model identities. Copy the model identifier exposed by the runtime; do not guess an unavailable identifier. If the runtime does not expose the exact model, explicitly state that it could not be verified. Human-only PRs must state `No AI used`. Keep the disclosure current when later edits use another model.
 - Repository skills are canonical under `.agents/skills/`. Add or update skills there. `.claude/skills/` contains compatibility symlinks for Claude discovery.
 - PR and issue titles, descriptions, and human-authored PR comments must include English and natural Simplified Chinese. Titles use `<English title> / <中文标题>`. In bodies and comments, keep English visible and put Chinese in one collapsed `<details><summary>中文</summary>` section. Keep code, commands, logs, stack traces, model names, hardware SKUs, framework names, flags, and identifiers unchanged. The exact CODEOWNER sign-off template is English-only. See [`docs/documentation-procedures.md`](docs/documentation-procedures.md) and [`.github/AGENT_OPERATIONS.md`](.github/AGENT_OPERATIONS.md#translation-terminology).
@@ -48,6 +49,15 @@ Then validate it in the receiving script after sourcing the shared helper:
 ```bash
 check_env_vars IS_MULTINODE MODEL_NAME PRECISION
 ```
+
+## Deprecating benchmark configs
+
+- Move deprecated entries out of the active master config into [`configs/deprecated/amd-master.yaml`](configs/deprecated/amd-master.yaml) or [`configs/deprecated/nvidia-master.yaml`](configs/deprecated/nvidia-master.yaml), matching the vendor. These are the only deprecated master-config files; do not create separate files per model, scenario, or deprecation.
+- For a partial deprecation, archive only the retired scenarios and retain the supported scenarios in the active entry. Preserve archived settings and explanatory comments; do not update historical image pins or runners during archival.
+- Keep every archive key unique. If a key already exists with different settings, preserve both versions with a descriptive suffix on the historical key and a comment recording its original config key. Existing colliding 1k1k versions use `-deprecated-1k1k`. Never overwrite an archived version or add duplicate YAML keys.
+- Check retirement statements in [`MODELS.md`](MODELS.md) against active configs and script routing in the same PR, and update `MODELS.md` plus `MODELS_zh.md` together. Preserve explicitly documented exceptions and conditional retirement policies; do not treat planned retirement as completed.
+- Remove unused retired-model branches from launchers and runtime settings, and update workflow/agent guidance that still recommends retired coverage. Audit callers before removing shared helpers; retained SPEED-Bench collectors and historical result readers may still need model-specific support.
+- Keep these archives out of active sweep inputs. Follow the existing benchmark-script archival convention, moving retired scripts into the sibling `deprecated/` directory only when no active config still uses them.
 
 ## Runner launchers (one file per pool)
 

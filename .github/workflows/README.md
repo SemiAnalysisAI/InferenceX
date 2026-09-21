@@ -55,9 +55,9 @@ By default, throughput runs for every generated config and eval-only jobs run fo
 full-sweep --config-files configs/nvidia-master.yaml
 ```
 
-**Test all single-node gptoss configurations on B200 with 1k1k sequence lengths:**
+**Test all single-node dsr1 configurations on B200 with 8k1k sequence lengths:**
 ```
-full-sweep --single-node --model-prefix gptoss --runner-type b200 --seq-lens 1k1k --config-files configs/nvidia-master.yaml
+full-sweep --single-node --model-prefix dsr1 --runner-type b200 --seq-lens 8k1k --config-files configs/nvidia-master.yaml
 ```
 
 **Test all single-node fp8 precision configs for 8k1k workloads:**
@@ -72,7 +72,7 @@ full-sweep --single-node --framework trt --runner-type h200 b200-trt --config-fi
 
 **Test specific single-node model on specific hardware with specific sequence lengths:**
 ```
-full-sweep --single-node --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sglang --seq-lens 1k1k 8k1k --config-files configs/nvidia-master.yaml
+full-sweep --single-node --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sglang --seq-lens 8k1k --config-files configs/nvidia-master.yaml
 ```
 
 **Limit concurrency and parallelism for faster testing:**
@@ -134,7 +134,7 @@ test-config --config-keys dsr1* --config-files configs/nvidia-master.yaml
 
 **Mix exact keys and patterns:**
 ```
-test-config --config-keys dsr1-fp4-b200-sglang gptoss* --config-files configs/nvidia-master.yaml
+test-config --config-keys dsr1-fp4-b200-sglang qwen3.5* --config-files configs/nvidia-master.yaml
 ```
 
 **Override concurrency for targeted testing:**
