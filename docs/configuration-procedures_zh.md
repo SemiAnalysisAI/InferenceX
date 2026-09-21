@@ -345,6 +345,8 @@ Maximum concurrency for 1,048,576 tokens per request: 6.70x
 
 ### SGLang 上的 DeepSeek-V4.1-Flash DSpark
 
+H100 的 `-agentic-stp` 配置键通过同一个脚本选择非推测解码：不传入 draft 参数，也不使用模拟接受率，并发为 1/2/4/8/16/20。DSpark 配置键保留独立的解码模式元数据。两种模式共同组成 H100/SGLang 的同一条 AgentX 曲线。
+
 H100 nightly 候选配方使用 `nightly-dev-cu13-20260921-0f6761b5`、自动后端选择，以及 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`，让匿名主机表能够使用大页。带源码哈希校验的 `patch_sglang_dsv41_native_wo_a.py` 通过现有 FP8 线性实现保留 draft WO_A 检查点的 FP8 权重与分块缩放；镜像源码不匹配时会在启动前报错。原生 Markov BF16 保持不变。验收前必须确认每个 draft 阶段加载了原生权重和缩放，并完成全模型准确率评测。
 
 

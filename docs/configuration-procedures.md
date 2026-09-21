@@ -397,6 +397,8 @@ Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/mode
 
 ### DeepSeek-V4.1-Flash DSpark on SGLang
 
+The H100 `-agentic-stp` key selects non-speculative serving via the same script: no draft flags or synthetic acceptance, with concurrency 1/2/4/8/16/20. The DSpark key retains its own mode metadata. Both appear on the same H100/SGLang AgentX curve.
+
 The H100 nightly candidate uses `nightly-dev-cu13-20260921-0f6761b5`, automatic backend selection, and `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank` for anonymous host tables that can obtain huge-page backing. Its hash-guarded `patch_sglang_dsv41_native_wo_a.py` preserves the draft WO_A checkpoint FP8 weights and block scales through the existing FP8 linear implementation; unexpected image source fails before launch. Native Markov BF16 remains unchanged. Confirm every draft stage loads its native weights/scales and require full-model accuracy evals before qualification.
 
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` are the SGLang counterparts of the vLLM
