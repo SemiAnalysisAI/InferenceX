@@ -173,9 +173,6 @@ benchmark:
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic
-    SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE: custom
-    SRT_MEASUREMENT_WINDOW_CONCURRENCIES: '12'
-    SRT_MEASUREMENT_WINDOW_RESULT_ROOT: /logs
     PORT: '8000'
     IS_MULTINODE: 'true'
     WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
@@ -186,14 +183,3 @@ benchmark:
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
   concurrencies:
     - 12
-telemetry:
-  enabled: true
-  collect_interval_ms: 1000
-  storage_subdir: power
-  required: true
-  startup_timeout_seconds: 120
-  request_timeout_seconds: 2
-  dcgm_exporter:
-    container_image: dcgm-exporter
-    port: 9401
-    command: dcgm-exporter --collect-interval=100 --address :{port} --devices g:0,1,2,3,4,5,6,7 --collectors /configs/qwen35-dcgm-basic.csv

@@ -8457,12 +8457,71 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
 
 - config-keys:
+    - dsv41flash-fp4-h200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a TP4 arm to the H200 vLLM DeepSeek-V4.1-Flash AgentX recipe alongside the existing TP8 arm, keeping the Engram tables in pinned host DRAM via --engram-config cpu_offload; ~99 GiB of weights per 141 GB GPU leaves ~15 GiB of KV per rank (~17M tokens), about three times the pool that served c1-c128 on B200 TP2"
+    - "On sub-TP8 Hopper arms dsv41flash_fp4_vllm_mtp.sh caps --max-num-batched-tokens at 4096 (the indexer's [batched-tokens, 1M] fp8 buffer is 32 GiB at the upstream 16384), bounds --max-num-seqs to twice the concurrency (16-256) and stops CUDA graph capture at 512 tokens; the gate is TP<8 on GPUs under 150 GB, so B200/GB200 TP4 and every TP8 arm are unchanged"
+    - "为 H200 vLLM DeepSeek-V4.1-Flash AgentX 配方在现有 TP8 臂旁新增 TP4 臂，Engram 表继续通过 --engram-config cpu_offload 放在固定页主机 DRAM；每张 141 GB GPU 约 99 GiB 权重，每 rank 约 15 GiB KV（约 1700 万 token），约为 B200 TP2 跑通 c1-c128 所用 KV 池的三倍"
+    - "在低于 TP8 的 Hopper 臂上，dsv41flash_fp4_vllm_mtp.sh 将 --max-num-batched-tokens 上限设为 4096（上游 16384 时 indexer 的 [batched-tokens, 1M] fp8 缓冲区达 32 GiB），--max-num-seqs 限定为并发的两倍（16-256），CUDA graph 捕获上限 512 token；判定条件为 TP<8 且 GPU 显存低于 150 GB，因此 B200/GB200 TP4 与所有 TP8 臂不受影响"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3310
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Add B200 TP2 DeepSeek-V4.1-Flash with --engram-config '{\"cpu_offload\":true}' for AgentX, at concurrency 1, 2, 4, 8, 16, 32, 64, 128; retain the existing TP4 AgentX arm and pinned vLLM image."
+    - "Keep DSpark5, golden AL 3.51 for throughput, real block rejection with adaptive verification for evals, and GPU-resident KV."
+    - "新增 B200 TP2 DeepSeek-V4.1-Flash AgentX 配方，启用 Engram CPU 卸载，并发为 1、2、4、8、16、32、64、128；保留现有 TP4 AgentX 分支和固定 vLLM 镜像。吞吐使用 DSpark5 和黄金 AL 3.51，eval 使用真实块拒绝采样和自适应验证，KV 保留在 GPU 上。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "TP2 only: cap --max-num-batched-tokens at 4096, bound --max-num-seqs to 2*CONC (max 256) and stop CUDA graph capture at 512 tokens in the shared AgentX script, after run 35180394796 served TP2 c1-c16 but c32, c64 and c128 died in memory profiling with -10.8 GiB of KV budget (145 GiB of weights per GPU plus the 32 GiB indexer buffer at 16384 batched tokens); TP4 and TP8 arms keep the upstream defaults"
+    - "仅 TP2：在共享 AgentX 脚本中将 --max-num-batched-tokens 上限设为 4096，--max-num-seqs 限制为 2*CONC（最多 256），CUDA graph 捕获止于 512 token；运行 35180394796 中 TP2 c1-c16 可服务，但 c32、c64、c128 在显存分析阶段因 KV 预算为 -10.8 GiB 而失败（每 GPU 145 GiB 权重加 16384 批处理 token 时 32 GiB 的 indexer 缓冲区）；TP4 与 TP8 配方保持上游默认"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Floor the TP2 --max-num-seqs at 16 (it stays 2x the concurrency above that, capped at 256): in run 35320655804 c1, c2 and c4 never started because FlashInfer's autotune dummy run batches max-num-seqs requests through the DSpark draft head and with 2-8 requests selected an invalid MXFP8 split-K tactic ((128, 8), (1, 1), True, False, 4), while c8 with 16 seqs and every larger point served"
+    - "将 TP2 的 --max-num-seqs 下限设为 16（高于该值时仍为并发数的 2 倍，上限 256）：运行 35320655804 中 c1、c2、c4 未能启动，原因是 FlashInfer 的 autotune dummy run 会让 max-num-seqs 个请求经过 DSpark draft head，在 2-8 个请求时选中了无效的 MXFP8 split-K tactic ((128, 8), (1, 1), True, False, 4)，而 c8（16 seqs）及更大的点均正常服务"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3216
+
+- config-keys:
+    - dsv41flash-fp4-gb200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a TP2 arm to the GB200 vLLM DeepSeek-V4.1-Flash AgentX recipe alongside the existing TP4 arm, keeping the Engram tables in pinned host DRAM via --engram-config cpu_offload; weights rise to ~145 GiB on each 256 GiB GPU"
+    - "Apply the B200 TP2 caps in dsv41flash_fp4_vllm_mtp.sh to every TP2 arm: --max-num-batched-tokens 4096 (the sparse-attention indexer's [batched-tokens, 1M] fp8 buffer is 32 GiB at the upstream 16384), --max-num-seqs at twice the concurrency (16-256) and CUDA graph capture stopped at 512, which leaves ~49 GiB of KV per GPU; TP4 and TP8 arms keep the upstream defaults"
+    - "为 GB200 vLLM DeepSeek-V4.1-Flash AgentX 配方在现有 TP4 臂旁新增 TP2 臂，Engram 表继续通过 --engram-config cpu_offload 放在固定页主机 DRAM；每张 256 GiB GPU 的权重升至约 145 GiB"
+    - "在 dsv41flash_fp4_vllm_mtp.sh 中将 B200 TP2 的上限推广到所有 TP2 臂：--max-num-batched-tokens 4096（上游 16384 时 indexer 的 [batched-tokens, 1M] fp8 缓冲区达 32 GiB）、--max-num-seqs 为并发的两倍（16-256）、CUDA graph 捕获上限 512，为每张 GPU 留出约 49 GiB KV；TP4 与 TP8 臂沿用上游默认值"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3320
+
+- config-keys:
+    - dsv41flash-fp4-gb300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a TP2 arm to the GB300 vLLM DeepSeek-V4.1-Flash AgentX recipe alongside the existing TP4 arm, keeping the Engram tables in pinned host DRAM via --engram-config cpu_offload; weights rise to ~175 GiB on each 277 GiB GPU"
+    - "Apply the B200 TP2 caps in dsv41flash_fp4_vllm_mtp.sh to every TP2 arm: --max-num-batched-tokens 4096 (the sparse-attention indexer's [batched-tokens, 1M] fp8 buffer is 32 GiB at the upstream 16384), --max-num-seqs at twice the concurrency (16-256) and CUDA graph capture stopped at 512, which leaves ~36 GiB of KV per GPU; TP4 and TP8 arms keep the upstream defaults"
+    - "为 GB300 vLLM DeepSeek-V4.1-Flash AgentX 配方在现有 TP4 臂旁新增 TP2 臂，Engram 表继续通过 --engram-config cpu_offload 放在固定页主机 DRAM；每张 277 GiB GPU 的权重升至约 175 GiB"
+    - "在 dsv41flash_fp4_vllm_mtp.sh 中将 B200 TP2 的上限推广到所有 TP2 臂：--max-num-batched-tokens 4096（上游 16384 时 indexer 的 [batched-tokens, 1M] fp8 缓冲区达 32 GiB）、--max-num-seqs 为并发的两倍（16-256）、CUDA graph 捕获上限 512，为每张 GPU 留出约 36 GiB KV；TP4 与 TP8 臂沿用上游默认值"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3321
+
+- config-keys:
   - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
   scenario-type:
   - agentic-coding
   description:
   - 'Add B300 Qwen3.5 FP8 AgentX 1P1D recipes: TP4 at C4/C12/C24, TP2+EP2 at C32/C40/C44/C48/C56, and prefill TP4+EP4
     at C32.'
-  - Use prefill HiCache, ReplaySSM at C56, tuned decode capacity and basic DCGM power counters.
+  - Use prefill HiCache, ReplaySSM at C56, tuned decode capacity.
   - Use SGLang nightly 20260918-20518d85 and Dynamo/SRT Slurm with the official FP8 checkpoint’s embedded NEXTN head.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268

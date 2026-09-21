@@ -102,15 +102,14 @@ if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
 ' "$_RECIPE_SRC"; then
     USES_DCGM_POWER=1
 fi
-if [[ "$USES_DCGM_POWER" == "1" ]]; then
-    if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
-        : # AgentX uses the native SRT measurement-window contract and adapter.
-    elif [[ "$IS_AGENTIC" != "1" && "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" && ( "$FRAMEWORK" == "dynamo-sglang" || "$FRAMEWORK" == "dynamo-vllm" ) ]]; then
-        : # Existing fixed-sequence telemetry path.
-    else
-        echo "Error: B300 dcgm-power supports fixed-sequence DSV4 FP4 and Qwen3.5 FP8 dynamo-sglang AgentX" >&2
-        exit 1
-    fi
+if [[ "$USES_DCGM_POWER" == "1" && (
+    "${IS_AGENTIC}" == "1" ||
+    "$MODEL_PREFIX" != "dsv4" ||
+    "$PRECISION" != "fp4" ||
+    ( "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" )
+) ]]; then
+    echo "Error: B300 dcgm-power is limited to fixed-sequence DSV4 FP4 dynamo-sglang/vllm" >&2
+    exit 1
 fi
 
 SRT_REPO_DIR="srt-slurm"
@@ -151,7 +150,6 @@ export ISL="$ISL"
 export OSL="$OSL"
 
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
-
 echo "Creating srtslurm.yaml configuration..."
 write_srt_cluster_config b300-dsxe srtslurm.yaml "$USES_DCGM_POWER" \
     --var MODEL_ROOT "$MODEL_ROOT" || exit 1
@@ -181,12 +179,6 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
 fi
 
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
-
-if [[ "$USES_DCGM_POWER" == "1" ]]; then
-    read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
-    python "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
-        "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
-fi
 
 # Weights live on node-local MODEL_ROOT, which this login host cannot stat, so
 # srtctl's preflight model.path check is always skipped. Runtime loading still
@@ -233,13 +225,6 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
     mkdir -p "$LOGS_DIR/power"
     cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
     cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
-fi
-
-if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" && "${EVAL_ONLY}" != "true" ]]; then
-    read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
-    collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" "$GITHUB_WORKSPACE" \
-        "$GITHUB_WORKSPACE" "$RESULT_FILENAME" "$SRT_SLURM_COMMIT" \
-        "${POWER_CONCURRENCIES[@]}" || SRT_JOB_RC=$?
 fi
 
 cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
