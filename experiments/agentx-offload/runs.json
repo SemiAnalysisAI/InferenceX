@@ -2865,39 +2865,94 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "7d9afca38140823a4f45817e057d0cde49ce32d9",
-      "status": "in_progress",
+      "status": "success",
       "workflow_name": "offload-v1-nvme4tib-c256-r1-20260921",
       "dispatched_at": "2026-09-21T05:42:13Z",
       "job_id": 106226573520,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35565538871/job/106226573520",
       "started_at": "2026-09-21T05:42:52Z",
-      "performance_result": false,
+      "performance_result": true,
       "target_node": "im-b200-c001",
       "capacity_bytes_per_node": 4398046511104,
       "capacity_reserve_bytes": 137438953472,
-      "capacity_required_bytes": 4535485464576
+      "capacity_required_bytes": 4535485464576,
+      "completed_at": "2026-09-21T08:43:58Z",
+      "node": "im-b200-c001",
+      "runner": "b200-nscale-slurm_02",
+      "allocation_id": "16712",
+      "artifacts": [
+        {
+          "id": 10628894036,
+          "name": "results_bmk",
+          "size_bytes": 2073,
+          "sha256": "b5ae633046b6dd992d3de97a735d227e44aff93e044f5d2f06e056f6c0f870b2"
+        },
+        {
+          "id": 10629706233,
+          "name": "server_logs_minimaxm3_tp4_conc256_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-c9a67c5aa6f8a4c7a06c",
+          "size_bytes": 150690,
+          "sha256": "89c043f4479a2e424798c290ab069e188a52d0e6fd2418f592c6221bc9d3cffa"
+        }
+      ],
+      "performance": {
+        "num_requests_total": 5106,
+        "num_requests_successful": 2261,
+        "num_requests_warmup_dropped": 2845,
+        "num_requests_error_dropped": 4,
+        "duration_seconds": 3625.34094,
+        "output_tokens_per_second": 647.72611,
+        "output_tokens_per_second_per_gpu": 161.93153,
+        "input_tokens_per_second": 68401.85465,
+        "total_tokens_per_second": 69049.58076,
+        "total_tokens_per_second_per_gpu": 17262.39519,
+        "p90_e2e_latency_seconds": 841.61763,
+        "p90_ttft_seconds": 803.38642,
+        "p90_tpot_seconds": 0.05999,
+        "p90_interactivity_tokens_per_second_per_user": 16.66934,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.20228,
+        "mean_e2e_latency_seconds": 573.0736,
+        "avg_power_w_per_gpu": 798.53
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.02202,
+        "external_cache_hit_rate": 0.6168,
+        "overall_cache_hit_rate": 0.63881,
+        "gpu_cache_hit_prompt_tokens": 16350080,
+        "external_cache_hit_prompt_tokens": 458053632,
+        "computed_prompt_tokens": 268229497,
+        "prompt_tokens_total": 742633209
+      },
+      "matched_delta_vs_hbm_percent": {
+        "total_tokens_per_second_per_gpu": 114.11808,
+        "output_tokens_per_second_per_gpu": 126.85739,
+        "p90_interactivity_tokens_per_second_per_user": 116.18817,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 77.65677,
+        "p90_e2e_latency_seconds": -47.33506,
+        "mean_e2e_latency_seconds": -44.00642,
+        "avg_power_w_per_gpu": -9.52424
+      },
+      "runtime_evidence": "Four disk-backed SimpleCPUOffloadConnector workers each allocated a 1 TiB lazy cache on im-b200-c001. External NVMe cache served 458,053,632 prompt tokens (61.680%). Profiling completed 2,261 accepted responses with four phase errors.",
+      "storage_evidence": "The c001 allocation reported 17,763,845,365,760 bytes free before the run and passed O_DIRECT. The successful workflow exit proves runtime.finish verified the exact study/run/attempt/job owner identity, recorded usage, deleted the exact task-owned scratch, and returned zero; the receipt itself was not included by the server-log artifact allowlist.",
+      "evidence_sha256": {
+        "server.log": "3744df2e20cec008d6af88f50b36bb29c0f0734aefa2d1802ff27326bc25b1d3",
+        "offload_config.json": "8fd94cb6b3a41c8607eb2387c8a18808dd968b69984bf8dac58e103a281955e4",
+        "benchmark.log": "217b0278041b43fb6178fd09e112723bde4e63d1a06d54306fcb7a788900f931"
+      }
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126",
-  "status": "HBM c1 maintenance/control 35565505126 completed successfully on im-b200-c002 with 242 profiled responses and zero phase errors. Its exact registered cleanup for run 35476050409 completed before benchmarking. The 4 TiB NVMe-only c256 probe 35565538871 remains active; no other NVMe-bearing run may dispatch until it is terminal and its exact cleanup is verified.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871",
+  "status": "The 4 TiB NVMe-only c256 probe 35565538871 completed successfully on im-b200-c001. It delivered 17,262.395 total tok/s/GPU and 16.669 P90 interactivity with a 61.680% external-cache hit rate. Relative to matched HBM c256, total throughput/GPU improved 114.118%, P90 interactivity improved 116.188%, and P90 E2E latency fell 47.335%. Exact task-owned scratch cleanup completed through the owner-verified runtime exit path.",
   "last_capacity_check": {
-    "checked_at": "2026-09-21T07:18:16Z",
-    "eligible_nodes": 11,
-    "idle_nodes_before_dispatch": 11,
-    "total_nodes": 11,
-    "pending_b200_jobs_before_dispatch": 0,
-    "active_study_run_ids": [
-      35565538871
-    ],
-    "active_study_job_ids": [
-      106226573520
-    ],
+    "checked_at": "2026-09-21T08:52:46Z",
+    "pending_e2e_workflows": 0,
+    "active_study_run_ids": [],
+    "active_study_job_ids": [],
     "pending_study_run_ids": [],
-    "dispatch_allowed": false,
-    "reason": "One NVMe-bearing study workflow is active. Wait for terminal state and verified exact cleanup before another NVMe-bearing dispatch."
+    "dispatch_allowed": true,
+    "reason": "The c256 NVMe run is terminal with valid profiling and exact cleanup. No e2e-tests workflow was queued at the fresh GitHub queue check."
   },
   "next_dispatch": {
-    "requires": "Verify the c1 cleanup receipt for run 35476050409 and the c256 4 TiB run result plus exact cleanup. Then perform a fresh B200 queue check; if no B200 job is queued, dispatch one NVMe-only c512 run pinned to an allowlisted node with at least 4,535,485,464,576 bytes free. Retry c4 maintenance on c008 separately when the one-queued-job ceiling permits."
+    "requires": "Dispatch one 4 TiB NVMe-only c512 probe pinned to im-b200-c001. Do not allow any additional NVMe-bearing study workflow to become active or queued until c512 is terminal and exact cleanup is verified. Retry c4 maintenance on c008 later when the one-queued-job ceiling permits."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
