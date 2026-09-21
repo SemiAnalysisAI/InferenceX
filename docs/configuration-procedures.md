@@ -425,6 +425,8 @@ chunks to 2048; measure startup memory and transient workspace before extending 
 The TP2 stock loader exhausted HBM before cache allocation while stacking target
 MoE weights. Its hash-verified load-memory patch releases completed w13 input lists
 before stacking w2; tensor payloads, layouts, and computation remain unchanged.
+TP2 also enables PyTorch expandable allocator segments: releasing the temporaries
+lowered live allocation by 2.24 GiB but left fragmented cached blocks.
 TP4 DSpark also compares GPU-resident Engram at a 0.80 static memory fraction
 against the pinned host-table baseline; TP2 keeps host tables.
 DSpark also uses `--prefill-decode-interval 16` to give draft/verify rounds service

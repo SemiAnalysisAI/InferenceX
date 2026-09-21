@@ -8559,4 +8559,5 @@
     - "Compare TP4 DSpark with GPU-resident Engram at static memory fraction 0.80 against the pinned host-table baseline; TP2 retains host tables"
     - "Release completed target MoE shuffle temporaries before the next stack in the hash-verified TP2 loader to reduce load-time peak memory; preserve all tensor payloads and computation"
     - "Reserve eight reusable SWA prefix tails per running request for DSpark within the same static memory budget to test cache reuse under high concurrency"
+    - "Use expandable CUDA allocator segments for TP2 so released loader temporaries can satisfy the next contiguous weight stack"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3346
