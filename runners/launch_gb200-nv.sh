@@ -96,7 +96,7 @@ import_squash() {
 }
 
 # Direct single-tray AgentX uses the existing shared image and HF caches.
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE}" != "true" ]]; then
+if [[ "$MODEL_PREFIX" == "dsv41flash" && ( "$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "sglang" ) && "${IS_MULTINODE}" != "true" ]]; then
     BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb200_${FRAMEWORK}_mtp.sh"
     # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
     export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
@@ -189,7 +189,7 @@ fi
 # Recipes name HF model IDs; resolve them to pre-staged paths so the shared
 # cluster does not re-download. SRT_SLURM_MODEL_PREFIX must match the recipe's
 # model.path alias.
-MODEL_PATHS_EXTRA=""
+SRT_CLUSTER_ARGS=()
 if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
     if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
@@ -267,7 +267,7 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         # Lustre sibling is the FP8 checkpoint, so the CamelCase path is deliberate.
         export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
-        MODEL_PATHS_EXTRA='  "deepseek-v4-pro-mxfp4": "/mnt/lustre01/models/DeepSeek-V4-Pro"'
+        SRT_CLUSTER_ARGS+=(--model deepseek-v4-pro-mxfp4 "/mnt/lustre01/models/DeepSeek-V4-Pro")
     elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5-NVFP4"
         export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
@@ -454,66 +454,27 @@ fi
 # Persistent Lustre caches for aiperf's dataset mmap files (~65 GB per corpus,
 # re-tokenized from scratch without it) and the HF trace dataset; the container
 # paths are referenced by the agentic recipes' benchmark.env.
-DEFAULT_MOUNTS_BLOCK=""
 if [[ "$IS_AGENTIC" == "1" ]]; then
     AIPERF_MMAP_CACHE_HOST_PATH="/mnt/lustre01/users-public/sa-shared/ai-perf-cache"
     HF_HUB_CACHE_HOST_PATH="/mnt/lustre01/users-public/sa-shared/hf-hub-cache"
     mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH"
     chmod 777 "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH" 2>/dev/null || true
-    DEFAULT_MOUNTS_BLOCK="default_mounts:
-  ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
-  ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+    SRT_CLUSTER_ARGS+=(
+        --mount "$AIPERF_MMAP_CACHE_HOST_PATH" /aiperf_mmap_cache
+        --mount "$HF_HUB_CACHE_HOST_PATH" /hf_hub_cache
+    )
     if uses_watchtower_shared_fs && [[ "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
         DYNAMO_WHEELS_CACHE_HOST_PATH="${SHARED_BASE}/dynamo-wheels"
         mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
         chmod 777 "$DYNAMO_WHEELS_CACHE_HOST_PATH" 2>/dev/null || true
-        DEFAULT_MOUNTS_BLOCK+="
-  ${DYNAMO_WHEELS_CACHE_HOST_PATH}: /configs/dynamo-wheels"
+        SRT_CLUSTER_ARGS+=(--mount "$DYNAMO_WHEELS_CACHE_HOST_PATH" /configs/dynamo-wheels)
     fi
 fi
 
 echo "Creating srtslurm.yaml configuration..."
-cat > srtslurm.yaml <<EOF
-# SRT SLURM Configuration for GB200
-
-# Default SLURM settings
-default_account: "${SLURM_ACCOUNT}"
-default_partition: "${SLURM_PARTITION}"
-default_time_limit: "6:00:00"
-
-# Resource defaults
-gpus_per_node: 4
-network_interface: ""
-
-# Path to srtctl repo root (where the configs live)
-srtctl_root: "${SRTCTL_ROOT}"
-
-# Model path aliases
-model_paths:
-  "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
-${MODEL_PATHS_EXTRA}
-containers:
-  dynamo-trtllm: ${SQUASH_FILE}
-  dynamo-sglang: ${SQUASH_FILE}
-  "${IMAGE}": ${SQUASH_FILE}
-  nginx-sqsh: ${NGINX_SQUASH_FILE}
-# srtctl defaults this to true, which adds #SBATCH --segment=<total_nodes>.
-# On watchtower the whole batch partition (blue-cn01-18) is a single NVL72
-# rack, so segment contiguity buys nothing for MNNVL — but it DOES make
-# jobs unschedulable when the partition is fragmented: Slurm backfills a
-# non-contiguous node set, fails segment placement at start, and the job
-# dies with "CANCELLED Reason=Resources" at RunTime=0 (hit by the first
-# gb200 agentic run, job 18582). Mirror launch_gb300-nv.sh and disable.
-use_segment_sbatch_directive: false
-${DEFAULT_MOUNTS_BLOCK}
-EOF
-
-# Appended via sed so non-power lanes' generated yaml stays byte-identical.
-if [[ "$USES_DCGM_POWER" == "1" ]]; then
-    sed -i "/^  nginx-sqsh:/a\\  dcgm-exporter: ${DCGM_EXPORTER_SQSH}" srtslurm.yaml
-    # sed's append is a silent no-op if the anchor drifts.
-    grep -q "^  dcgm-exporter: " srtslurm.yaml || { echo "Error: dcgm-exporter injection failed: nginx-sqsh anchor not found in srtslurm.yaml" >&2; exit 1; }
-fi
+write_srt_cluster_config gb200-nv srtslurm.yaml "$USES_DCGM_POWER" \
+    --model "$SRT_SLURM_MODEL_PREFIX" "$MODEL_PATH" \
+    "${SRT_CLUSTER_ARGS[@]}" || exit 1
 
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
