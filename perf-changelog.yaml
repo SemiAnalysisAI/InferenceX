@@ -8462,9 +8462,9 @@
     - agentic-coding
   description:
     - "Add a TP=2 search space alongside TP=4 for MI355X DSv4.1-Flash AgentX, and extend both to concurrency 128. TP=2 is feasible now that the Engram tables live in host memory rather than costing 47.2 GiB of device memory per rank, which previously forced four GPUs per server."
-    - "Re-pin the image to the upstream ROCm nightly this sweep runs on, staying on the existing nightly channel rather than nightly-rocm100; the digest is filled in before dispatch."
+    - "Move the image to the ROCm 10 nightly; the digest is pinned once that build is published."
     - "Drop the fixed max_num_seqs of 128 and use vLLM's MI355X API-server default of 1024, since a fixed 128 caps in-flight sequences at the outer concurrency once the sweep reaches c128. The CUDA graph ceiling stays at 1024 through c64 and rises to 2048 at c128, covering twice the outer concurrency. Supersedes PR #3111."
     - "为 MI355X DSv4.1-Flash AgentX 在 TP=4 之外新增 TP=2 搜索空间，并将两者的并发扩展到 128。Engram 表已驻留主机内存，不再占用每 rank 47.2 GiB 设备内存（此前这迫使每个服务器使用四张 GPU），因此 TP=2 可行。"
-    - "将镜像重新固定到本次 sweep 实际运行的上游 ROCm nightly，继续使用现有 nightly 渠道而非 nightly-rocm100；digest 在派发前填入。"
+    - "镜像切换到 ROCm 10 nightly；该构建发布后再固定 digest。"
     - "移除固定的 max_num_seqs 128，改用 vLLM 在 MI355X API server 上的默认值 1024：扫描到 c128 时，固定 128 会把在途序列数限制在外层并发上。CUDA graph 上限在 c64 及以下保持 1024，c128 提升至 2048，以覆盖两倍外层并发。本 PR 取代 PR #3111。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3326
