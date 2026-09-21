@@ -63,11 +63,13 @@ DeepSeek-V4-Pro-AgentX: &DeepSeek-V4-Pro-AgentX
   ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
   prefill_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention --enable-tbo"
   decode_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
-  # Load-bearing DP env for the agentic prefix-reuse path (recipe: session
-  # affinity keeps a trajectory on one rank). Cross-DP prefill coalescing is
-  # off on the DP-attention tiers per the recipe.
-  tp_dp_env: "ATOM_NUMA_BIND=1 GPU_MAX_HW_QUEUES=5 ATOM_DP_SESSION_AFFINITY=1 ATOM_DP_LB_REQ_EQUIV=512 ATOM_DP_MASTER_PORT=29510 ATOM_DP_BASE_PORT=29610 ATOM_ENABLE_PREFILL_DELAYER=0"
-  ep_dp_env: "ATOM_NUMA_BIND=1 GPU_MAX_HW_QUEUES=5 ATOM_DP_SESSION_AFFINITY=1 ATOM_DP_LB_REQ_EQUIV=512 ATOM_DP_MASTER_PORT=29510 ATOM_DP_BASE_PORT=29610 ATOM_ENABLE_PREFILL_DELAYER=0"
+  # DP env for the agentic DP-attention tiers. Under --dp-aware the cache-aware
+  # router sends explicit P/D rank hints that take priority over engine-local
+  # session affinity and load balancing, so ATOM_DP_SESSION_AFFINITY and
+  # ATOM_DP_LB_REQ_EQUIV are not needed on this routing path (recipe). Cross-DP
+  # prefill coalescing stays off on the DP-attention tiers per the recipe.
+  tp_dp_env: "ATOM_NUMA_BIND=1 GPU_MAX_HW_QUEUES=5 ATOM_DP_MASTER_PORT=29510 ATOM_DP_BASE_PORT=29610 ATOM_ENABLE_PREFILL_DELAYER=0"
+  ep_dp_env: "ATOM_NUMA_BIND=1 GPU_MAX_HW_QUEUES=5 ATOM_DP_MASTER_PORT=29510 ATOM_DP_BASE_PORT=29610 ATOM_ENABLE_PREFILL_DELAYER=0"
   mtp_flags: "--method dspark --num-speculative-tokens"
   # config.py forces block-size 256 for V4 (lcm(4,128)); 16 is ignored/misleading.
   block_size: "256"

@@ -596,10 +596,19 @@ else
     if [[ "$IS_AGENTIC_RUN" == "1" ]]; then
         # Recipe max-num-seqs is 2*concurrency.
         DECODE_MAX_NUM_SEQS=$((2 * _MAX_CONC))
-        # Dense capture ladder 1..min(64, 2*conc): every batch size up to the
-        # cap gets a graph, which measurably helps small-batch agentic decode.
-        _dense_max=$((2 * _MAX_CONC))
-        if [[ "$_dense_max" -gt 64 ]]; then _dense_max=64; fi
+        # Dense capture ladder per the recipe's per-tier decode sizing:
+        #   TP decode (no DP attention): 1..min(64, 2*conc).
+        #   DP-attention decode: per-rank 1..(conc/4), since max-num-seqs=2*conc
+        #     spreads across the 8 DP ranks (2*conc / 8 = conc/4).
+        # Every batch size up to the cap gets a graph, which measurably helps
+        # small-batch agentic decode.
+        if [[ "$DECODE_ENABLE_DP" == "true" ]]; then
+            _dense_max=$((_MAX_CONC / 4))
+        else
+            _dense_max=$((2 * _MAX_CONC))
+            if [[ "$_dense_max" -gt 64 ]]; then _dense_max=64; fi
+        fi
+        if [[ "$_dense_max" -lt 1 ]]; then _dense_max=1; fi
         CUDAGRAPH_SIZES="[$(seq -s, 1 "$_dense_max")]"
     else
         DECODE_MAX_NUM_SEQS="${_MAX_CONC}"
