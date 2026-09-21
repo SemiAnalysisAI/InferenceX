@@ -8,7 +8,7 @@
       "installed_name": "backend.py",
       "source_path": "python/sglang/srt/layers/attention/deepseek_v4_backend_hip_radix.py",
       "source_sha256": "7f0c0aebfd0413f83102698714e84454055deac4d64398979c75c06b2d654916",
-      "adapted_sha256": "3d02677eaa00dce764b7b566256752b2a744b8d9fcaf2ea60c5503753a8c95d8"
+      "adapted_sha256": "d9af12740c1223d9804a0fbfb5969f945f8688852ba2796a9feff94a7beae39a"
     },
     {
       "installed_name": "low_ratio.py",
@@ -51,7 +51,14 @@
       "source_path": "python/sglang/kernels/ops/attention/dsv4/fp4_indexer_schedule_hip.py",
       "source_sha256": "6fb6c5cd43cd5a799b613b8634e9fcc9dc2041eec867ebccac5aa9e9d2a78b3f",
       "adapted_sha256": "dfebdd44fcd5ebb17c176523f05addd45b5051f70f860eb9af0c601b4bdd927b"
+    },
+    {
+      "installed_name": "fp8_linear.py",
+      "source_path": null,
+      "description": "V4.1-only adapter using existing nightly Triton UE8M0 quantizer and block-FP8 GEMM; no weight or quantization setting changes",
+      "adapted_sha256": "6b48b97d52ffc9d7b05b7978e96b97faa53513f3c4df41e9ebe7071fa2cd2f42"
     }
   ],
-  "registry_sha256": "dfd9c0b6e85774524f6378ae09278cf6dc000e093ddf6beaadc44d1d20bdacd1"
+  "registry_sha256": "dfd9c0b6e85774524f6378ae09278cf6dc000e093ddf6beaadc44d1d20bdacd1",
+  "fp8_utils_sha256": "193c262f77133f58847f843446ca7b168364e4a69ff8fe88e8ed50b59efba07d"
 }

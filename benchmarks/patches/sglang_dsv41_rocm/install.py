@@ -20,6 +20,23 @@ REPLACEMENT = """    elif _is_hip:
             return DeepseekV41BackportBackend(runner)
         from sglang.srt.layers.attention.deepseek_v4_backend_hip_radix import (
 """
+FP8_ANCHOR = (
+    "    # Only Triton reads the block size at launch; DeepGEMM, the FlashInfer\n"
+)
+FP8_REPLACEMENT = (
+    """    if _is_hip and _is_gfx95_supported and weight_block_size == [32, 32] and act_scale_ue8m0:
+        from sglang.srt.runtime_context import process_model_config
+
+        config = process_model_config().hf_text_config
+        if getattr(config, "model_type", None) == "deepseek_v41":
+            from sglang.srt.layers.attention.dsv41_rocm.fp8_linear import (
+                rocm_v41_block_fp8_linear,
+            )
+
+            return rocm_v41_block_fp8_linear
+"""
+    + FP8_ANCHOR
+)
 
 
 def sha256(data: bytes) -> str:
@@ -34,22 +51,41 @@ def install(package: Path, evidence: Path) -> None:
     if REPLACEMENT in original:
         original = original.replace(REPLACEMENT, ANCHOR, 1)
     if sha256(original.encode()) != manifest["registry_sha256"]:
-        raise RuntimeError("Unexpected SGLang attention registry; refusing to patch another revision")
+        raise RuntimeError(
+            "Unexpected SGLang attention registry; refusing to patch another revision"
+        )
     if original.count(ANCHOR) != 1:
         raise RuntimeError("Expected exactly one HIP dsv4 registry anchor")
+    fp8_utils = package / "srt/layers/quantization/fp8_utils.py"
+    fp8_original = fp8_utils.read_text()
+    if FP8_REPLACEMENT in fp8_original:
+        fp8_original = fp8_original.replace(FP8_REPLACEMENT, FP8_ANCHOR, 1)
+    if sha256(fp8_original.encode()) != manifest["fp8_utils_sha256"]:
+        raise RuntimeError(
+            "Unexpected SGLang FP8 dispatch source; refusing to patch another revision"
+        )
+    if fp8_original.count(FP8_ANCHOR) != 1:
+        raise RuntimeError("Expected exactly one block-FP8 dispatch anchor")
     for item in manifest["files"]:
         data = (source / "dsv41_rocm" / item["installed_name"]).read_bytes()
         if sha256(data) != item["adapted_sha256"]:
-            raise RuntimeError(f"Backport source hash mismatch: {item['installed_name']}")
+            raise RuntimeError(
+                f"Backport source hash mismatch: {item['installed_name']}"
+            )
     destination = registry.parent / "dsv41_rocm"
     destination.mkdir(exist_ok=True)
     for path in (source / "dsv41_rocm").glob("*.py"):
         shutil.copy2(path, destination / path.name)
     patched = original.replace(ANCHOR, REPLACEMENT, 1)
     registry.write_text(patched)
+    fp8_patched = fp8_original.replace(FP8_ANCHOR, FP8_REPLACEMENT, 1)
+    fp8_utils.write_text(fp8_patched)
     manifest["installed_registry_sha256"] = sha256(patched.encode())
+    manifest["installed_fp8_utils_sha256"] = sha256(fp8_patched.encode())
     evidence.write_text(json.dumps(manifest, indent=2) + "\n")
-    print(f"V4.1 ROCm backport installed; exact source evidence: {evidence}", flush=True)
+    print(
+        f"V4.1 ROCm backport installed; exact source evidence: {evidence}", flush=True
+    )
 
 
 if __name__ == "__main__":

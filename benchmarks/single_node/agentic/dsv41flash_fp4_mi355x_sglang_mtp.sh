@@ -141,6 +141,10 @@ if [[ "${EVAL_ONLY}" != true ]]; then
 fi
 echo "DSpark block size: $DSPARK_BLOCK_SIZE, golden AL=$DSV41_GOLDEN_AL"
 
+# Install the V4.1 ROCm compatibility backport; keep stock draft quantization.
+python3 "$(dirname "$0")/../../patches/sglang_dsv41_rocm/install.py" \
+    --evidence "$RESULT_DIR/sglang_dsv41_rocm_backport.json"
+
 # --disable-radix-cache is the cookbook's ROCm setting; the server rejects
 # hierarchical caching alongside it, which is consistent with kv-offloading none.
 SGLANG_CMD=(

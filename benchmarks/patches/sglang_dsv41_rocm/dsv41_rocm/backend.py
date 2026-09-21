@@ -760,8 +760,6 @@ class DeepseekV4HipRadixBackend(
         self.mtp_enabled = self.topk > 0
         self.speculative_num_steps = speculative_num_steps
         self.speculative_num_draft_tokens: int = get_spec().speculative_num_draft_tokens
-        if model_runner.spec_algorithm.is_dspark():
-            raise ValueError("V4.1 ROCm backport currently qualifies STP only; DSpark precision audit pending")
         self.is_draft_worker = getattr(model_runner, "is_draft_worker", False)
         self.is_dspark_draft = (
             self.is_draft_worker and model_runner.spec_algorithm.is_dspark()

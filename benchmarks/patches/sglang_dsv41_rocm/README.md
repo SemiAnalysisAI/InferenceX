@@ -26,7 +26,14 @@ these files into the job's ephemeral container. It rejects an unexpected registr
 revision and records the installed registry hash in the result directory. Run it
 before importing the attention registry. Installation is idempotent.
 
-Initial qualification is STP only. The backport rejects DSpark until its separate
-native FP8 draft `wo_a` precision issue is repaired. Passing startup or a limited
-eval is not full performance or accuracy qualification. Source is adapted from
-SGLang under the accompanying Apache 2.0 license.
+Both STP and DSpark retain the quantization defaults shipped with the pinned
+nightly. No custom draft weight or projection conversion patch is installed.
+The V4.1 gfx950 block-FP8 adapter reuses the nightly's existing Triton group
+quantizer and GEMM because the generic UE8M0 wrapper selects a CUDA-only JIT
+header. It preserves group size 32, E4M3 range, the 1e-10 absmax floor, and upward
+power-of-two scales. The dispatcher is gated to V4.1 on HIP; original paths for
+other models remain intact. GPU numerical and graph tests cover the adapter.
+
+Passing startup or a limited eval is not full performance or accuracy
+qualification. Source is adapted from SGLang under the accompanying Apache 2.0
+license.
