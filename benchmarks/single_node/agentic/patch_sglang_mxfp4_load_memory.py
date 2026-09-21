@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Release dead shuffle temporaries in the pinned SGLang MXFP4 loader."""
 
 import argparse
