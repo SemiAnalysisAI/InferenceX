@@ -23,7 +23,9 @@ if [[ "$IS_MULTINODE" != true && "${MODEL_PREFIX:-}" == dsv41flash &&
     BATCH_SCRIPT=$(mktemp "${RUNNER_TEMP:-$GITHUB_WORKSPACE}/b300-agentx.XXXXXX.sh") || exit 1
     BATCH_LOG="${BATCH_SCRIPT%.sh}.log"
     {
-        printf '#!/usr/bin/env bash\nexport B300_AGENTX_BATCH=1\nexec bash '
+        # Enroot's PMI hook also inspects this variable. Without it, inherited
+        # batch PMIX variables trigger mounts absent from our --mpi=none step.
+        printf '#!/usr/bin/env bash\nexport B300_AGENTX_BATCH=1\nexport SLURM_MPI_TYPE=none\nexec bash '
         printf '%q\n' "$GITHUB_WORKSPACE/runners/launch_b300-dsxe.sh"
     } > "$BATCH_SCRIPT"
     BATCH_ARGS=(--parsable --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT"
