@@ -352,12 +352,7 @@ Maximum concurrency for 1,048,576 tokens per request: 6.70x
 `lmsysorg/sglang:dev-dsv41`，MI355X 使用 `lmsysorg/sglang:dev-dsv41-mi35x`。两个标签均可变，
 因此 master 配置与 changelog 记录了验证时的 digest。
 
-B300 在固定到摘要的最新 CUDA 13 nightly 上注册 STP 和 DSpark。DSpark 路径应用
-经过哈希校验的 `patch_sglang_dsv41_native_wo_a.py` 修复，保留三个原生 FP8 WO_A
-权重及分块 scale；Markov 权重保持原生 BF16。STP 不加载草稿模型，STP 与评估均清除
-合成接受率设置。B300 使用每个 rank 的匿名 Engram 主机表，无需修改主机 sysctl，
-并在服务启动前从本地解析已下载的 Hugging Face 快照。必须核实实际大页覆盖率、
-草稿原生精度启动检查及完整准确率结果。
+DSpark 使用固定官方 nightly 默认提供的精度，不应用自定义草稿量化或精度补丁。STP 不加载草稿模型；完整准确率和性能验证仍然必需。
 
 DSpark 是检查点自带的草稿模型。SGLang 对它不提供 EAGLE 或 MTP 路径，也没有
 `--speculative-num-steps` 参数；配方传入 `--speculative-algorithm DSPARK
