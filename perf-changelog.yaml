@@ -8549,3 +8549,10 @@
     - "Begin the parallel single-node SRT-Slurm port with native H200 SGLang 8k1k serving settings and the existing InferenceX benchmark client; production routing is unchanged and GPU parity remains unqualified"
     - "开始并行构建单节点 SRT-Slurm 迁移：采用原生 H200 SGLang 8k1k 服务设置并复用现有 InferenceX 基准客户端；生产路由未变，GPU 性能一致性尚未验收"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
+
+- config-keys:
+    - dsr1-fp8-h200-sglang
+  description:
+    - "Wire the opt-in H200 native SRT single-node pilot through the matrix, launcher, result and GPU power paths; keep production routing unchanged pending qualification"
+    - "将显式启用的 H200 原生 SRT 单节点试点接入矩阵、启动器、结果及 GPU 功耗流程；验收完成前保留现有生产路由"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352

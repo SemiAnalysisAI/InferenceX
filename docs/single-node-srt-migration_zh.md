@@ -51,12 +51,29 @@ python -m pytest utils/test_srt_fixed_sequence.py
 
 未提供集群 profile 时，该命令使用 SRT 的通用调度默认值。它验证配置结构，不代表集群或基准已经验收。
 
+## 显式启用的工作流试点
+
+[`configs/pilots/h200-srt.yaml`](../configs/pilots/h200-srt.yaml) 仅选择 `cluster:h200-dgxc`、8k1k、TP8 和并发 4。搜索空间的 `srt-recipe` 字段将原生文件及选择器经矩阵和工作流传给现有 H200 池启动器。生产 `h200` 覆盖（包括 CoreWeave）保持不变。
+
+启动器在提交前核对配方与矩阵中的模型、镜像、精度、拓扑和工作负载。它使用集群已暂存的模型及指定镜像，申请独占节点，并通过原生 `--set` 绑定并发与产物参数。资源缺失会在就绪检查时失败，不会重复下载或换用其他镜像。普通 `sglang` 提交也经过共享的自动 acceptance 连接器。
+
+提交使用原生 JSON 输出。启动器验证 Slurm 分配成功结束，保留结果文件名，并将原始结果和 GPU 采样附属文件交给现有处理及上传流程。原生日志归档、提交清单和 SRT commit 用于追踪运行来源。失败时保留已有产物，取消操作仅针对本次提交的作业。
+
+从草稿分支触发工作流，将 `ref` 设为已推送的准确 commit：
+
+```bash
+gh workflow run e2e-tests.yml --ref codex/single-node-srt-slurm \
+  -f ref=<COMMIT> -f test-name='native H200 SRT pilot' \
+  -f generate-cli-command='test-config --config-keys dsr1-fp8-h200-sglang --config-file configs/pilots/h200-srt.yaml --no-evals' \
+  -f require-power=true
+```
+
+试点必须传 `--no-evals`，目前仍明确拒绝 eval。一次吞吐运行通过不代表准确性或性能一致性已验收。
+
 ## 启用替代路径之前
 
-- 在主配置、矩阵和工作流中增加一等配方选择字段，并由现有池启动器消费，保持每个池只有一个启动器。
 - 保留两个 H200 runner 路径：当前 `h200` 标签同时包含 `h200-dgxc-slurm` 和 `h200-cw`。不能静默删除 CoreWeave 覆盖，也不能把其 Docker 执行视为已被 Slurm 配方覆盖。
-- 在作业独立检出目录中准备候选配方，通过原生 `--set` 绑定调用方输入，并保留 `nodes:1`、现有结果文件名和元数据。
-- 接入 eval 上下文、真实验证评测、结果及评测产物准备和 GPU 功耗收集，不改变发布格式。
+- 接入 eval 上下文、真实验证评测和评测产物准备，并验收已接入的结果与 GPU 功耗路径，不改变发布格式。
 - 比较旧路径与原生路径的命令，在相同镜像、模型和硬件上验收启动、吞吐、准确性、功耗、取消及清理。协调现有 smoke/vendor 评测工作，避免重复执行。
 - 首条路径验收后，再扩展到其他活跃单节点配方，包括推测解码和 KV offload；AMD 能力与 Cam 的分叉工作协调。只有调用方完成迁移后才删除旧脚本。
 

@@ -87,17 +87,46 @@ python -m pytest utils/test_srt_fixed_sequence.py
 Without a cluster profile this renders SRT's generic scheduling defaults. It
 validates configuration structure; it does not qualify a cluster or benchmark.
 
+## Opt-in workflow pilot
+
+[`configs/pilots/h200-srt.yaml`](../configs/pilots/h200-srt.yaml) selects only
+`cluster:h200-dgxc`, 8k1k, TP8, concurrency 4. The search-space `srt-recipe` field
+passes a native file/selector through the matrix and workflow to the existing
+H200 pool launcher. Production `h200` coverage, including CoreWeave, is unchanged.
+
+The launcher checks the recipe's model, image, precision, topology, and workload
+against matrix metadata before submission. It resolves the model and requested
+image to their existing staged cluster assets, requests an exclusive node, and
+binds concurrency and artifact inputs with native `--set`. Missing assets fail
+readiness instead of starting a second download or using a different image.
+Plain `sglang` submissions use the shared automatic acceptance connector.
+
+Submission uses native JSON output. The launcher waits for a successful Slurm
+allocation exit, preserves the result basename, and stages raw results and GPU
+sampling sidecars for the existing processor and uploads. A native log archive,
+submission manifest, and SRT commit identify the run. Failed jobs retain available
+artifacts; cancellation targets only the submitted job.
+
+Dispatch the workflow definition from the draft branch, with `ref` set to the
+exact pushed commit:
+
+```bash
+gh workflow run e2e-tests.yml --ref codex/single-node-srt-slurm \
+  -f ref=<COMMIT> -f test-name='native H200 SRT pilot' \
+  -f generate-cli-command='test-config --config-keys dsr1-fp8-h200-sglang --config-file configs/pilots/h200-srt.yaml --no-evals' \
+  -f require-power=true
+```
+
+The pilot requires `--no-evals`: evals are still rejected explicitly. A passing
+throughput run alone is not accuracy or performance-parity qualification.
+
 ## Before enabling the replacement
 
-- Add first-class recipe selection to the master/matrix/workflow contract and
-  consume it in the existing pool launcher; retain one launcher per pool.
 - Preserve both H200 runner paths: the current `h200` label includes
   `h200-dgxc-slurm` and `h200-cw`. Do not silently drop CoreWeave or pretend its
   Docker execution is already covered by a Slurm recipe.
-- Stage the candidate in the job-local checkout and bind caller inputs using
-  native `--set`; retain `nodes:1` and the existing result filename/metadata.
-- Connect eval context, real-verification evals, result/eval artifact staging,
-  and GPU power collection to the workflow without changing publication format.
+- Connect eval context, real-verification evals, and eval artifact staging;
+  qualify the wired result and GPU power paths without changing publication format.
 - Compare legacy and native commands, then qualify startup, throughput, accuracy,
   power, cancellation, and cleanup on the same image/model/hardware. Coordinate
   existing smoke/vendor evaluation work rather than duplicating it.

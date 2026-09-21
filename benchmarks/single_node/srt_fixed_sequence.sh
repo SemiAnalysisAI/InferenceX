@@ -15,7 +15,7 @@ for name in CONC ISL OSL SRT_FRONTEND_PORT GPU_MONITOR_INTERVAL; do
 done
 
 # The initial parallel port supports throughput only. Eval context and artifact
-# forwarding must be connected before this becomes a workflow execution path.
+# forwarding must be connected before production cutover.
 if [[ "$RUN_EVAL" != false || "$EVAL_ONLY" != false ]]; then
     echo "ERROR: the single-node SRT pilot does not support evals yet" >&2
     exit 1
