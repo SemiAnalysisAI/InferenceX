@@ -595,28 +595,26 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
 # Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
 # speculative decoding. Acceptance is pinned to the committed golden curve in
 # golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
-# at both draft lengths used here: 7 draft tokens -> AL 3.84 at concurrency 1-4,
-# 3 draft tokens -> AL 3.00 at concurrency 8 through 16.
+# at both draft lengths used here: 7 draft tokens -> AL 3.84 at concurrency 1 and 4,
+# 3 draft tokens -> AL 3.00 at concurrency 14 and 16.
 # Companion to kimik3-fp4-mi355x-vllm-agentic-mtp: same checkpoint, same runner.
 # TP8 only -- the 1.56 TB MXFP4 checkpoint is ~195 GB/GPU and TP4 cannot load,
 # which is also why there is no DP-attention arm.
 # Three serving bands, tracking the ATOM recipe:
-#   interactive (1, 2, 4)        the latency floor, GPU-resident, dcp 1.
-#   mid         (8, 12, 14, 16)  decode is KV-bandwidth-bound over 100k+ token
-#                                contexts, so dcp-size 8 shards the KV read
-#                                across all 8 GPUs and the LMCache DRAM tier
-#                                backs the paged KV.
-#   throughput  (32, 40, 56, 64) same shape, no draft model.
+#   interactive (1, 4)        the latency floor, GPU-resident, dcp 1.
+#   mid         (14, 16)      decode is KV-bandwidth-bound over 100k+ token
+#                             contexts, so dcp-size 8 shards the KV read across
+#                             all 8 GPUs and the LMCache DRAM tier backs the
+#                             paged KV.
+#   throughput  (48, 56, 72)  same shape, no draft model.
 # Two utilization blocks because the per-rank LMCache pool differs, and the
 # launcher divides the aggregate budget by TP:
-#   0.343 -> 1028 GB aggregate -> 128 GB/rank (conc 8 through 40).
-#   0.513 -> 1538 GB aggregate -> 192 GB/rank (conc 56 and 64), where the wider
-#            in-flight window needs the deeper pool to keep the paged KV
+#   0.343 -> 1028 GB aggregate -> 128 GB/rank (conc 14 through 48).
+#   0.513 -> 1538 GB aggregate -> 192 GB/rank (conc 56 and 72), where the
+#            wider in-flight window needs the deeper pool to keep the paged KV
 #            resident.
-# Concurrency 14 is deliberate: it runs the concurrency 16 server verbatim,
-# including the pinned CUDA-graph width, and only moves the client concurrency.
 kimik3-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0907
+  image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0911
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
@@ -627,11 +625,11 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.343
       search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp }
-      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [8, 12, 14, 16, 32, 40], spec-decoding: mtp }
+      - { tp: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp }
+      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [14, 16, 48], spec-decoding: mtp }
     - dram-utilization: 0.513
       search-space:
-      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [56, 64], spec-decoding: mtp }
+      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [56, 72], spec-decoding: mtp }
 
 minimaxm3-fp4-mi355x-atom-agentic-mtp:
   image: rocm/atom-dev:nightly_202609140645-lirzhang-triton-build
@@ -999,12 +997,12 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
       # while MTP creates two. Restore these points after the upstream hybrid
       # KV recovery fix lands: https://github.com/vllm-project/vllm/pull/45497
 
-# DeepSeek-V4-Pro FP4 AgentX on one MI355X node using ATOM MTP. Throughput
-# uses the thinking_on golden AL 2.49 for three draft tokens; eval uses real
-# MTP acceptance. max-num-seqs is set to 2x concurrency by the recipe.
+# DeepSeek-V4-Pro-0813 FP4 AgentX on one MI355X node using ATOM DSpark K6.
+# Both throughput bands use thinking_on golden AL 3.77; eval uses real
+# acceptance. Keep the historical config key for changelog compatibility.
 dsv4-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202608280858
-  model: deepseek-ai/DeepSeek-V4-Pro
+  image: rocm/atom-dev:nightly_202609161445
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
   precision: fp4
@@ -1013,8 +1011,8 @@ dsv4-fp4-mi355x-atom-agentic-mtp:
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16] }
-      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [48, 64, 96, 128, 256] }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: draft_model, conc-list: [48, 64, 96, 128, 256] }
 
 dsr1-fp4-mi355x-sglang-disagg-mtp:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519

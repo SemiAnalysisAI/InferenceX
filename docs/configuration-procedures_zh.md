@@ -199,6 +199,35 @@ llm-d 不是 srt-slurm 路径：InferenceX 自己持有 Slurm allocation，并�
 7. 同时添加脚本 + 主配置条目 + launcher 路由 + changelog。
 8. 运行 Bash 语法和生成检查；检查 `spec-decoding`、draft/native 方法、token 数、chat-template 使用、capture 范围和解析出的脚本。
 
+### MI355X ATOM 上的 DeepSeek-V4-Pro-0813 DSpark
+
+`dsv4-fp4-mi355x-atom-agentic-mtp` 保留历史配置 key 和 `_mtp.sh` 文件名，
+矩阵元数据改为 `spec-decoding: draft_model`。AMD launcher 将这两种投机解码
+元数据都路由到该脚本，并为 0813 checkpoint 挂载共享 HF 缓存。配方固定 revision
+`72e1d3230f6c080a530b0a1d46f8eb4602340597`，以实际 snapshot 路径启动服务；
+显式传入的 `MODEL_PATH` 也必须通过相同检查。GPU 启动前核对 config/index 哈希、
+DSpark Markov/confidence head、全部 66 个分片的 header 与 payload 边界，
+并离线加载 tokenizer。这验证可读性和完整性，不计算完整权重文件哈希。
+
+全部十个 AgentX 性能点使用 DSpark K6（target 验证长度为 7）和已提交的
+golden AL 3.77。C1/2/4/8/16 使用 TP8/EP1；C48/64/96/128/256 使用
+TP8/DPA8/EP8 原生 RCCL。每个性能点运行 3600 秒。C256 全量 GSM8K 不传强制
+接受率参数。保留固定的 `rocm/atom-dev:nightly_202609161445` 镜像和 GPU KV；C1 至 C16
+使用 BF16 KV，C48 及以上继续使用 FP8 KV，所有任务均使用 FP4 index cache、
+8192-token checkpoint 和 DEP dense FULL graph 阶梯。每个新服务进程重新捕获固定
+q7 图；必须从 `server.log` 确认 target 和 DSpark draft capture 完成。confidence
+schedule 和 ragged verification 保持关闭。
+
+`AGENTIC_TOKENIZER_PATH` 可覆盖 AgentX 的 tokenizer 来源，默认仍为 `MODEL`；
+本配方将其设置为已验证的服务 snapshot。`checkpoint_preflight.json`、
+`runtime_manifest.json` 和 `server_command.txt` 保存模型/源码身份及请求的配置。
+成功启动、graph capture 和请求执行仍需运行时日志证明。
+
+固定镜像为官方 ATOM nightly `rocm/atom-dev:nightly_202609161445`，已包含已合入的
+[ROCm/ATOM#2233](https://github.com/ROCm/ATOM/pull/2233) inference-mode 修复。
+配方不再在运行时修改 AITER 源码；TP 通信融合、DSpark K6 和 graph capture
+直接使用镜像内实现。
+
 ### DeepSeek-V4.1-Flash DSpark
 
 GB200 的 DSpark 配方将 CUDA graph 最小捕获范围设为 64 tokens，以覆盖 AgentX 子代理并发。这会将 c1/c2/c4 的上限从 8/16/32 提升至 64；c8 及以上保持原有大小。完整轨迹、AL 3.51 和 Engram UVA 配置保持不变；需通过 CI 验证低并发尾延迟改善。

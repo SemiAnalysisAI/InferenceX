@@ -1,16 +1,14 @@
-"""Publish one advisory CODEOWNER verdict without editing human comments."""
+"""Publish a new advisory CODEOWNER verdict comment for every verification."""
 
 from __future__ import annotations
 
 import os
 import re
 from pathlib import Path
-from typing import Any
 
 from infx import github
 
 MARKER = "<!-- codeowner-signoff-verify -->"
-AUTHORS = {"Klaud-Cold", "github-actions[bot]"}
 SUCCESS_HEADER = "## ✅✅✅ **Verdict: PASS** ✅✅✅"
 REJECT = "## ❌❌❌ **REJECTED** ❌❌❌"
 WARN = "## ⚠️ **Verdict: WARN** ⚠️"
@@ -28,15 +26,6 @@ ESCALATION = (
 INVALID = (
     f"{REJECT}\n\nThe verifier did not produce a valid verdict. Retry the sign-off verification."
 )
-
-
-def is_verdict(comment: dict[str, Any]) -> bool:
-    return (comment.get("user") or {}).get("login") in AUTHORS and bool(
-        re.match(
-            r"^<!-- codeowner-signoff-verify(?: sha=[a-f0-9]{40})? -->\r?\n",
-            comment.get("body") or "",
-        )
-    )
 
 
 def check_statuses(lines: list[str]) -> dict[int, str]:
@@ -87,38 +76,11 @@ def publish(
     *,
     verification_succeeded: bool,
 ) -> None:
-    comments = [
-        comment
-        for comment in github.paginate(repo, f"/issues/{pr_number}/comments", token)
-        if is_verdict(comment)
-    ]
-    current = next(
-        (comment for comment in comments if comment["body"].startswith(MARKER)),
-        comments[-1] if comments else None,
-    )
     verdict = ""
     if verification_succeeded and verdict_path.exists():
         verdict = verdict_path.read_text(encoding="utf-8").strip()
     body, status = verdict_body(verdict, head_sha)
-    if current is None or current["body"] != body:
-        created = current is None
-        if current is not None:
-            try:
-                github.api(
-                    repo,
-                    f"/issues/comments/{current['id']}",
-                    token,
-                    method="PATCH",
-                    data={"body": body},
-                )
-            except github.APIError as exc:
-                if exc.status != 404:
-                    raise
-                created = True
-        if created:
-            github.api(
-                repo, f"/issues/{pr_number}/comments", token, method="POST", data={"body": body}
-            )
+    github.api(repo, f"/issues/{pr_number}/comments", token, method="POST", data={"body": body})
     print(f"CODEOWNER sign-off={status} for assessed commit {head_sha}")
 
 
