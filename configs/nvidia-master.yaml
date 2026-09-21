@@ -8175,14 +8175,17 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
 # DSv4.1 Flash support has not shipped in an SGLang release (v0.5.20 predates
 # the 2026-09-18 main integration, sgl-project/sglang#38798); this uses the
 # main nightly lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5 (commit
-# 0f6761b5, 2026-09-21, amd64 + arm64), pinned by digest.
+# 0f6761b5, digest
+# sha256:987c7e4bd26918647211a5dcad72a2bdf2a5f394ac1469eff730e7517fc139be,
+# 2026-09-21, amd64 + arm64). The b200-nscale enroot rejects tag@digest
+# references (Docker Hub token 400), so the immutable date-commit tag is used.
 # Native five-token DSpark (--speculative-algorithm DSPARK
 # --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
 # throughput, real verification for evals. The KV cache stays GPU-resident.
 # Follows the cookbook's verified Blackwell TP4/EP4 low-latency cell; backends
 # resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl).
 dsv41flash-fp4-b200-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5@sha256:987c7e4bd26918647211a5dcad72a2bdf2a5f394ac1469eff730e7517fc139be
+  image: lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b200-nscale
