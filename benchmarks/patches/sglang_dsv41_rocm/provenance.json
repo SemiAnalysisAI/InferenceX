@@ -89,5 +89,15 @@
     "TORCH_BLAS_PREFER_HIPBLASLT": "1",
     "SGLANG_USE_ROCM700A": "0",
     "AITER_CONFIG_FMOE": "/sgl-workspace/aiter_configs/fmoe_gfx950_dsv41_ep4_a8w4.csv"
+  },
+  "v41_q_head_norm_compatibility": {
+    "reference_q_head_norm": false,
+    "recipe_env": {
+      "SGLANG_OPT_USE_FUSED_QK_NORM_ROPE": "0"
+    },
+    "reason": "Official preview requires self.q_head_norm and weight_block_size=[128,128] for fused HIP Q/K normalization; nightly dropped these eligibility checks and the fused kernel always RMS-normalizes Q. Disable the existing optimization only in V4.1 recipes.",
+    "source_model_sha256": "c145b69b3d7094936b63a9e531dcb819c4667685e7a3923984ae9e58c5465527",
+    "target_model_sha256": "4164c354f38e7b35e6bf5445b4d506e610b9f956f3e85f1431946ff6b0471ded",
+    "target_fused_kernel_sha256": "6c3b7f280316926e4e17b8b1d222a115f9c09254fda5239e7fae7b4dc4cb6412"
   }
 }

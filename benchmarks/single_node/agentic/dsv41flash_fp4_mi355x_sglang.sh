@@ -102,6 +102,9 @@ export PYTORCH_HIP_ALLOC_CONF=expandable_segments:True
 export SGLANG_USE_AITER=1
 # The official preview selects this backend through its gfx950 auto default.
 export SGLANG_HACK_FLASHMLA_BACKEND=aiter_sparse
+# V4.1 has q_head_norm=False; the nightly fused HIP kernel always normalizes Q.
+# The official preview excludes V4.1 from this optimization.
+export SGLANG_OPT_USE_FUSED_QK_NORM_ROPE=0
 # Official preview image defaults required by its native A8W4 MoE path.
 # Keep the latest nightly binaries; provenance hashes the unchanged tuning CSV.
 export SGLANG_USE_AITER_MOE_GU_ITLV=1

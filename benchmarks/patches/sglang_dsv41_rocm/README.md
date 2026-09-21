@@ -67,3 +67,9 @@ must be established with the restored defaults before performance qualification.
 For V4.1 only, the installer ports the official preview's split-buffer FP4
 indexer store/read methods, which the nightly pool lacks. The existing HIP
 allocation and FP4 values/round-to-even scaling remain unchanged.
+
+V4.1 sets `q_head_norm=False`. The nightly HIP fused Q/K kernel always
+RMS-normalizes Q, whereas the official preview excludes this model from that
+optimization. These V4.1 recipes set `SGLANG_OPT_USE_FUSED_QK_NORM_ROPE=0`
+to retain the model's existing unfused, unnormalized-Q path. Provenance records
+the exact preview model, nightly model, and fused-kernel source hashes.
