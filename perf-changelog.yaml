@@ -8545,15 +8545,13 @@
 
 - config-keys:
     - dsv41flash-fp4-h100-sglang-agentic-dspark
-    - dsv41flash-fp4-h100-sglang-agentic-stp
   scenario-type:
     - agentic-coding
   description:
     - "Move H100 DeepSeek-V4.1-Flash DSpark from dev-dsv41 to upstream SGLang nightly-dev-cu13-20260921-0f6761b5 and let the engine select attention and MoE backends per the current cookbook."
     - "Use stock nightly DSpark precision and kernels, with row-sharded anonymous host Engram tables and a resolved local snapshot for upstream file-scoped page-cache eviction and huge-page backing."
     - "Retain TP8/EP8, GPU-resident KV, 4096-token prefill chunks, static memory fraction 0.70, the shipped draft precision defaults, and the existing AgentX acceptance and real-verification eval behavior."
-    - "Add the official non-speculative TP8/EP8 mode at concurrency 1, 2, 4, 8, 16 and 20 with truthful spec-decoding none, no synthetic acceptance, and 16 decode steps between prefill chunks to prevent long-context prefill from starving ready decodes; both modes contribute to the same H100/SGLang curve."
-    - "Prioritize DSpark across the full AgentX concurrency curve and test 16 decode steps between prefill chunks with unchanged shipped precision and canonical acceptance; keep STP only if it contributes a measured frontier point."
+    - "Use DSpark across the full AgentX concurrency curve with 16 decode steps between prefill chunks, unchanged shipped precision and canonical acceptance; completed STP diagnostics did not contribute a measured frontier point."
     - "Install H100-specific block32 FP8 GEMM tiling configurations for three missing shapes, retaining default tiling for the regressing batch-64 case; preserve stock weights, scales and output precision and record the resolved config hashes."
     - "Use expandable CUDA allocator segments to reduce fragmentation from long-context indexer masks without changing checkpoint precision or the static KV budget."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3345
