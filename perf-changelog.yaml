@@ -8462,8 +8462,8 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Refresh the complete GB300 Kimi-K3 AgentX curve so every published point carries measured power. The 6 published disaggregated points come from a 2026-09-14 sweep whose recipes did not yet declare the dcgm-power provider, so they carry no power values, and AgentX resolves one curve per hardware, so only a sweep selecting both config keys can replace them together."
-    - "Migrate the four disagg Kimi-K3 recipes to the current srtctl telemetry schema: provider and default_frequency were retired for dcgm_exporter and collect_interval_ms when the submodule moved to the upstream pin, and srtctl rejected them as Unknown field before submitting anything."
-    - "重测 GB300 Kimi-K3 AgentX 整条曲线，使每个已发布的点都带实测功耗。已发布的 6 个分离部署点来自 2026-09-14 的 sweep，当时配方尚未声明 dcgm-power provider，因此没有功耗数值；而 AgentX 每个硬件只解析出一条曲线，因此只有同时选中两个 config key 的 sweep 才能整体替换它们。"
-    - "将四个分离部署的 Kimi-K3 配方迁移到当前的 srtctl telemetry schema：submodule 切到上游 pin 时，provider 与 default_frequency 已被 dcgm_exporter 和 collect_interval_ms 取代，srtctl 在提交作业前就以 Unknown field 拒绝了它们。"
+    - "Refresh the full GB300 Kimi-K3 AgentX curve with measured power across aggregated and disaggregated deployments."
+    - "Update four disaggregated recipes to use srtctl's dcgm_exporter and collect_interval_ms telemetry fields."
+    - "重测 GB300 Kimi-K3 AgentX 完整曲线，为聚合和分离部署补齐实测功耗。"
+    - "将四个分离部署配方的 telemetry 字段更新为 srtctl 的 dcgm_exporter 和 collect_interval_ms。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3315
