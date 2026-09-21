@@ -43,13 +43,14 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# One shared host copy of the two fp8 Engram tables instead of a row-sharded
-# copy per rank: the SGLang analogue of the vLLM arm's Engram CPU offload. It
-# frees ~46 GiB of HBM per GPU for the 1M-context prefill working set and the
-# KV pool, and output is bitwise unchanged (cookbook). The first sweep ran
-# with the tables on GPU and the server died on the first long AgentX prompts
-# (run 35304536578: c2 came up, then the server exited on the first warmup prompt).
+# Keep the Engram weights in row-sharded host DRAM. GB200's 64 KiB-page
+# kernel enables anonymous THP with madvise but disables shmem THP, so the
+# shared memfd layout cannot obtain huge-page backing. The upstream per-rank
+# layout uses anonymous mappings, MADV_HUGEPAGE and MADV_COLLAPSE for 512 MiB
+# pages; row ownership and the original FP8 table weights are preserved.
+# This trades two TP all-reduces for fewer host-table translation misses.
 export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
+export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
 
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts, but

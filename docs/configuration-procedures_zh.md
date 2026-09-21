@@ -357,6 +357,12 @@ GB200 配方保留 TP4/EP4、原生五 token DSpark、自动后端选择、GPU �
 `lmsysorg/sglang:dev-dsv41`，MI355X 使用 `lmsysorg/sglang:dev-dsv41-mi35x`。两个标签均可变，
 因此 master 配置与 changelog 记录了验证时的 digest。
 
+GB200 的主机表布局为 `per_rank`：计算节点内核通过 `madvise` 启用匿名大页，
+而 `shmem_enabled=never` 阻止共享 memfd 布局使用大页。上游在匿名主机内存中
+按行分片，并通过 `MADV_HUGEPAGE`/`MADV_COLLAPSE` 请求 512 MiB 大页。
+该方式保留原始 FP8 表权重，并恢复两次 TP all-reduce；声称性能收益前，
+须检查启动日志中的实际驻留内存与大页覆盖量。
+
 DSpark 是检查点自带的草稿模型。SGLang 对它不提供 EAGLE 或 MTP 路径，也没有
 `--speculative-num-steps` 参数；配方传入 `--speculative-algorithm DSPARK
 --speculative-dspark-block-size 5`。吞吐测试通过 `SGLANG_SIMULATE_ACC_LEN`（`match-expected`、

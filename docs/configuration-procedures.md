@@ -410,6 +410,13 @@ multi-arch preview build `lmsysorg/sglang:dev-dsv41` and MI355X uses
 `lmsysorg/sglang:dev-dsv41-mi35x`. Both tags are mutable, so the master configs and the
 changelog record the digests they were validated against.
 
+The GB200 host-table layout is `per_rank`: its compute-node kernel enables
+anonymous huge pages through `madvise`, while `shmem_enabled=never` prevents huge
+pages for the shared memfd layout. Upstream allocates row shards in anonymous host
+memory and requests 512 MiB huge pages with `MADV_HUGEPAGE`/`MADV_COLLAPSE`.
+It preserves the original FP8 table weights and restores the two TP all-reduces;
+inspect startup's actual resident/huge-page counts before claiming a benefit.
+
 DSpark is the checkpoint's own bundled draft. SGLang exposes no EAGLE or MTP path and no
 `--speculative-num-steps` knob for it; the recipes pass `--speculative-algorithm DSPARK
 --speculative-dspark-block-size 5`. Throughput uses the same
