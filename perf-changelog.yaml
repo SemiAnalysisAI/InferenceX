@@ -8522,6 +8522,6 @@
   description:
   - 'Add B300 Qwen3.5 FP8 AgentX 1P1D recipes: TP4 at C4/C12/C24, TP2+EP2 at C32/C40/C44/C48/C56, and prefill TP4+EP4
     at C32.'
-  - Use prefill HiCache, ReplaySSM at C56, tuned decode capacity.
+  - Use prefill HiCache, ReplaySSM at C56, and tuned decode capacity.
   - Use SGLang nightly 20260918-20518d85 and Dynamo/SRT Slurm with the official FP8 checkpoint’s embedded NEXTN head.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268

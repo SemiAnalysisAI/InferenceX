@@ -11,9 +11,6 @@ identity:
     revision: ea5b4f81096f3901c91dea97f81324302495781d
   container:
     image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
-  frameworks:
-    dynamo: 1.6.0
-    sglang: 0.0.0.dev1+g20518d851
 dynamo:
   install: true
   source:
@@ -162,12 +159,8 @@ roles:
       disaggregation-decode-extra-slots: 0
       disaggregation-decode-retraction-backup: cpu_tensor
 sbatch_directives:
-  exclude: dsxe-sa-b300-prd0-gpu-[11,16]
   mem: '0'
   cpus-per-task: '144'
-srun_options:
-  mem: '0'
-  container-remap-root: ''
 benchmark:
   type: custom
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
