@@ -529,19 +529,6 @@ PY
         # Bench against Envoy (EPP routes to decode; the sidecar pulls from
         # prefill via NIXL). --bench-serving-dir = the /workspace repo bind-mount;
         # --tokenizer = /models (served-model-name is not a valid HF repo id).
-        # DSV4-Pro needs trust-remote-code + tokenizer-mode deepseek_v4 (the older
-        # transformers wheel does not register it) + chat template / --dsv4 to
-        # match the dynamo-vllm bench prompt formatting.
-        bench_extra_args=()
-        if [[ "${MODEL_NAME,,}" == *"deepseek-v4"* ]]; then
-            bench_extra_args+=(
-                --trust-remote-code
-                --tokenizer-mode deepseek_v4
-                --use-chat-template
-                --dsv4
-            )
-        fi
-
         # Non-fatal: a failed or timed-out conc point must not abort the sweep or (under
         # set -e) skip the allocation release below.
         run_benchmark_serving \
@@ -557,7 +544,6 @@ PY
             --max-concurrency "$max_concurrency" \
             --result-filename "${RESULT_FILENAME}_c${max_concurrency}_gpus_${_bench_total_gpus}_ctx_${_bench_prefill_gpus}_gen_${_bench_decode_gpus}" \
             --result-dir "$BENCHMARK_LOGS_DIR/" \
-            "${bench_extra_args[@]}" \
             || echo "WARNING: benchmark conc=$max_concurrency failed/timed out (rc=$?)"
     done
     fi

@@ -11,8 +11,8 @@ Arguments (`$ARGUMENTS`): `<engine> <target-tag> [filter]`
 - `target-tag`. For example, use `v0.22.0` for NVIDIA/CUDA. For SGLang, the NVIDIA and AMD tag
   strings usually differ (CUDA `…-cu130` vs ROCm `…-rocm720-mi35x-…`), so confirm
   the exact tag per image repo with the user before editing.
-- `filter` (optional). Restrict the scope to a model and/or SKU substring (e.g. `kimik2.5`,
-  `b300`, `minimaxm2.5 mi355x`). If omitted, all matching recipes are in scope.
+- `filter` (optional). Restrict the scope to a model and/or SKU substring (e.g. `qwen3.5`,
+  `b300`, `dsr1 mi355x`). If omitted, all matching recipes are in scope.
 
 ## Image repos by engine + vendor
 
@@ -24,7 +24,7 @@ Arguments (`$ARGUMENTS`): `<engine> <target-tag> [filter]`
 ## Grouping rules (NON-NEGOTIABLE)
 
 1. **One PR per `model + precision + SKU` recipe family.** The config-key shape is
-   `<model>-<precision>-<sku>-<engine>` (e.g. `kimik2.5-int4-b300-vllm`).
+   `<model>-<precision>-<sku>-<engine>` (e.g. `dsr1-fp8-b300-vllm`).
 2. **Fold the `-mtp` (and non-mtp) sibling into the SAME PR** as its base recipe.
    This is the *only* thing you may combine.
 3. **Never** put two different models, two different precisions, or two different
