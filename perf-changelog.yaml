@@ -8465,4 +8465,4 @@
     - "Move the image to the ROCm 10 nightly; the digest is pinned once that build is published."
     - "为 MI355X DSv4.1-Flash AgentX 在 TP=4 之外新增 TP=2 搜索空间，并将两者的并发扩展到 128。Engram 表已驻留主机内存，不再占用每 rank 47.2 GiB 设备内存（此前这迫使每个服务器使用四张 GPU），因此 TP=2 可行。"
     - "镜像切换到 ROCm 10 nightly；该构建发布后再固定 digest。"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3326
