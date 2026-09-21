@@ -8556,11 +8556,10 @@
 
 - config-keys:
     - dsv41flash-fp4-mi355x-sglang-agentic-dspark
-    - dsv41flash-fp4-mi355x-sglang-agentic
   scenario-type:
     - agentic-coding
   description:
     - "Add the MI355X DeepSeek V4.1 Flash SGLang DSpark AgentX lane on the official 2026-09-21 ROCm 7.2.4 nightly, pinned to sha256:33c1c6fb49cade4880edd8939ec8646274b555543f3f659c67cbb9315ec0eaca (SGLang 0.5.20.dev20260921+g0f6761b54f), with TP4/EP4 and concurrency 1-32"
     - "Start from the cookbook MI350X recipe and PR #3245 long-context memory safeguards; retain the default DSpark quantization shipped in the pinned nightly, the measured thinking-on AL 3.51 for throughput, and real verification for evals"
-    - "Add an isolated V4.1-only ROCm attention source backport from official preview digest c609f74f01b206af9664fb66da8ebef47642a7328a2478eabeebb352e014661a onto the pinned latest nightly; support genuine compression ratios 1/2, stock block-FP8 scaling through existing Triton kernels and BF16 normalization output, correct HIP mapped-device pointers for host Engram, nightly AITER masked shared-expert activation, official preview A8W4 MoE environment and unchanged tuning CSV, disabled incompatible fused Q-head normalization to preserve q_head_norm=False, and official split-buffer FP4 low-ratio indexer accessors, with source hashes and real STP/DSpark evals"
+    - "Add an isolated V4.1-only ROCm attention source backport from official preview digest c609f74f01b206af9664fb66da8ebef47642a7328a2478eabeebb352e014661a onto the pinned latest nightly; support genuine compression ratios 1/2, stock block-FP8 scaling through existing Triton kernels and BF16 normalization output, correct HIP mapped-device pointers for host Engram, nightly AITER masked shared-expert activation, official preview A8W4 MoE environment and unchanged tuning CSV, disabled incompatible fused Q-head normalization to preserve q_head_norm=False, and official split-buffer FP4 low-ratio indexer accessors, with source hashes and real DSpark evals"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3343
