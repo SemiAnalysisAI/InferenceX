@@ -156,7 +156,9 @@ SGLANG_CMD=(
     # NEXTN silently resets --max-running-requests to 48 when it is unset, so
     # this must stay explicit and sized to the AgentX concurrency.
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    # SGLang v0.5.20 removed the deprecated --cuda-graph-max-bs alias
+    # (sgl-project/sglang#38375); the decode-phase flag is its replacement.
+    --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     "${MAMBA_CACHE_ARGS[@]}"
     --stream-interval 50

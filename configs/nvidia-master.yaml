@@ -5198,7 +5198,7 @@ qwen3.5-fp4-b200-sglang-agentic-mtp:
 # Qwen3.8-Flash-Next NVFP4 AgentX on B200 via SGLang with native NEXTN MTP.
 # TP1 matches the verified single-node recipe.
 qwen3.8next-fp4-b200-sglang-agentic-mtp:
-  image: lmsysorg/sglang:qwen38flashnext
+  image: lmsysorg/sglang:v0.5.20-cu130
   model: RadixArk/Qwen3.8-Flash-Next-NVFP4
   model-prefix: qwen3.8next
   runner: cluster:b200-nscale
