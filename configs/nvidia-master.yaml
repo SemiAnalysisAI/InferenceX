@@ -8226,6 +8226,12 @@ dsv41flash-fp4-h200-vllm-agentic-dspark:
       # 8x141 GB holds the 511 GB checkpoint minus the UVA-offloaded Engram
       # tables, so the KV cache stays GPU-resident across the full range.
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      # TP4 doubles the per-GPU share to ~99 GiB of weights on each 141 GB H200
+      # with the Engram tables offloaded, leaving ~15 GiB of KV per GPU (~17M
+      # tokens across the four ranks, about 3x the pool that served c1-c128 on
+      # B200 TP2). The script caps batched tokens and the scheduler batch on
+      # this arm so the sparse-attention indexer buffer does not consume it.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on H200, from the SGLang cookbook
 # (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
