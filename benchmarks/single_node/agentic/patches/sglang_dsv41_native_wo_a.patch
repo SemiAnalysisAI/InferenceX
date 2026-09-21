@@ -1,0 +1,123 @@
+diff --git a/python/sglang/srt/models/deepseek_v4_dspark.py b/python/sglang/srt/models/deepseek_v4_dspark.py
+index baebc2d..e2cd9f8 100644
+--- a/python/sglang/srt/models/deepseek_v4_dspark.py
++++ b/python/sglang/srt/models/deepseek_v4_dspark.py
+@@ -53,6 +53,7 @@ from sglang.srt.models.dspark import (
+     project_through_lm_head,
+     run_markov_block,
+ )
++from sglang.srt.models.dspark_projection import apply_grouped_wo_a
+ from sglang.srt.runtime_context import (
+     get_parallel,
+     get_platform,
+@@ -104,6 +105,9 @@ class DSparkAttention(MqaAttentionBase):
+         prefix: str = "",
+         alt_streams: Optional[List[torch.cuda.Stream]] = None,
+     ) -> None:
++        native_wo_a = (
++            getattr(config, "model_type", None) == "deepseek_v41" and not _is_npu
++        )
+         super().__init__(
+             config,
+             layer_id,
+@@ -114,13 +118,14 @@ class DSparkAttention(MqaAttentionBase):
+             compress_ratio=0,
+             fuse_wqa_wkv=False,
+             wo_a_fp8=False,
+-            wo_a_keeps_quant_config=False,
++            wo_a_keeps_quant_config=native_wo_a,
+             wo_b_reduce_results=True,
+             rope_original_seq_len=0,
+         )
+         assert self.compress_ratio == 0, (
+             "DSpark draft attention requires compress_ratio == 0."
+         )
++        self.native_wo_a = native_wo_a
+         self.window_size = int(
+             getattr(config, "sliding_window", None) or config.window_size
+         )
+@@ -352,8 +357,14 @@ class DSparkAttention(MqaAttentionBase):
+             self.n_local_groups,
+             o.shape[1] * o.shape[2] // self.n_local_groups,
+         )
+-        wo_a = self.wo_a.weight.view(self.n_local_groups, self.o_lora_rank, -1)
+-        if self._use_fast_kernel:
++        if self.native_wo_a:
++            # V4.1 uses 32x32-scaled FP8 weights. The grouped absorb GEMM only
++            # supports 128x128 scales, so use the existing dense quant method
++            # and retain each group's own output. At TP8 there is one local
++            # group and this is a single ordinary FP8 linear projection.
++            o = apply_grouped_wo_a(self.wo_a, o, self.o_lora_rank)
++        elif self._use_fast_kernel:
++            wo_a = self.wo_a.weight.view(self.n_local_groups, self.o_lora_rank, -1)
+             o = _apply_wo_a_bf16_matmul(
+                 o,
+                 wo_a,
+@@ -362,6 +373,7 @@ class DSparkAttention(MqaAttentionBase):
+                 fast_path=self.is_dsv41,
+             )
+         else:
++            wo_a = self.wo_a.weight.view(self.n_local_groups, self.o_lora_rank, -1)
+             o = torch.einsum("bgd,grd->bgr", o.float(), wo_a.float()).to(q.dtype)
+         out, _ = self.wo_b(o.reshape(o.shape[0], o.shape[1] * o.shape[2]))
+         return out
+@@ -1071,7 +1083,8 @@ class DeepseekV4ForCausalLMDSpark(nn.Module):
+         params_dict = dict(self.named_parameters())
+         loaded_params = set()
+ 
+-        weights = _dequant_fp8_wo_a_streaming(weights)
++        if getattr(self.config, "model_type", None) != "deepseek_v41" or _is_npu:
++            weights = _dequant_fp8_wo_a_streaming(weights)
+ 
+         stacked_params_mapping = DEEPSEEK_V4_STACKED_PARAMS_MAPPING
+         from sglang.srt.layers.moe.fused_moe_triton import FusedMoE
+@@ -1143,6 +1156,23 @@ class DeepseekV4ForCausalLMDSpark(nn.Module):
+                     weight_loader(param, loaded_weight)
+                     loaded_params.add(mapped)
+ 
++        if getattr(self.config, "model_type", None) == "deepseek_v41" and not _is_npu:
++            for stage_id, stage in enumerate(self.stages):
++                prefix = f"stages.{stage_id}.self_attn.wo_a"
++                required = {f"{prefix}.weight", f"{prefix}.weight_scale_inv"}
++                if not required.issubset(loaded_params):
++                    raise ValueError(
++                        f"Native FP8 DSpark projection missing {required - loaded_params}"
++                    )
++                if stage.self_attn.wo_a.weight.dtype != torch.float8_e4m3fn:
++                    raise ValueError(
++                        f"{prefix} must retain native FP8 checkpoint weights"
++                    )
++            logger.info(
++                "DSpark native FP8 WO_A weights and block scales loaded for %d stages",
++                len(self.stages),
++            )
++
+         self._assert_confidence_head_loaded(
+             params_dict=params_dict, loaded_params=loaded_params
+         )
+diff --git a/python/sglang/srt/models/dspark_projection.py b/python/sglang/srt/models/dspark_projection.py
+new file mode 100644
+index 0000000..89df415
+--- /dev/null
++++ b/python/sglang/srt/models/dspark_projection.py
+@@ -0,0 +1,20 @@
++from typing import Callable, Optional, Tuple
++
++import torch
++
++
++def apply_grouped_wo_a(
++    projection: Callable[[torch.Tensor], Tuple[torch.Tensor, Optional[torch.Tensor]]],
++    hidden_states: torch.Tensor,
++    output_rank: int,
++) -> torch.Tensor:
++    """Apply each local group's projection through its native linear method.
++
++    The linear owns all local groups' weight rows. Projecting each input group
++    through it and retaining the diagonal supports its existing quantized
++    kernels without changing weight storage. One local group needs one GEMM.
++    """
++    tokens, groups, width = hidden_states.shape
++    projected, _ = projection(hidden_states.reshape(tokens * groups, width))
++    projected = projected.view(tokens, groups, groups, output_rank)
++    return projected.diagonal(dim1=1, dim2=2).transpose(1, 2).contiguous()

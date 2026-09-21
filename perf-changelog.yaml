@@ -8552,4 +8552,5 @@
     - "Move H200 DeepSeek-V4.1-Flash SGLang to the latest official CUDA 13 nightly and qualify AgentX performance against the vLLM counterpart"
     - "Use per-rank anonymous Engram host tables so transparent huge pages can back lookups when shared-memory huge pages are disabled; preserve Engram checkpoint payload and scales"
     - "Add the official non-speculative throughput arm with no synthetic acceptance; retain the DSpark arm for native draft-precision qualification"
+    - "Preserve native FP8 DSpark WO_A weights with a source-hash-verified patch using the existing block-scaled dense linear kernel instead of persistent BF16 dequantization"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341

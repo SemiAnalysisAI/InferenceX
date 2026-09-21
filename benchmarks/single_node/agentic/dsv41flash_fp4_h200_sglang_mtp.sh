@@ -30,6 +30,11 @@ SERVER_LOG="$RESULT_DIR/server.log"
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 
+# The official nightly expands three native FP8 draft WO_A weights to BF16.
+# Keep their native payload/scales through the existing dense FP8 linear path.
+python3 "$(dirname "$0")/patch_sglang_dsv41_native_wo_a.py" \
+    | tee "$RESULT_DIR/native_wo_a_patch.txt"
+
 # Agentic warmup dispatches hundreds of large prompts at once and SGLang's
 # tokenizer can leave bytes unacknowledged past AIPerf's default 30 s
 # TCP_USER_TIMEOUT, so Linux aborts live localhost connections.
@@ -123,6 +128,7 @@ SGLANG_CMD=(
 )
 write_command "$RESULT_DIR/sglang_command.txt" "${SGLANG_CMD[@]}"
 {
+    cat "$RESULT_DIR/native_wo_a_patch.txt"
     echo "=== SGLANG_* env vars at launch ==="
     env | grep -E '^SGLANG_' | sort
     echo "==================================="
