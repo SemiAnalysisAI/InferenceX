@@ -2471,37 +2471,200 @@
     },
     {
       "head_sha": "9334ea53bde6e8645a34ed40918fceb2d5750f0c",
-      "artifacts": [],
-      "performance_result": false,
+      "artifacts": [
+        {
+          "id": 10618731888,
+          "name": "power_audit_minimaxm3_tp4_conc128_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-dd1ed12b23ad7deb9335",
+          "size_bytes": 432810
+        },
+        {
+          "id": 10618602355,
+          "name": "server_logs_minimaxm3_tp4_conc128_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-dd1ed12b23ad7deb9335",
+          "size_bytes": 122393
+        },
+        {
+          "id": 10618462681,
+          "name": "gpu_metrics_minimaxm3_tp4_conc128_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-dd1ed12b23ad7deb9335",
+          "size_bytes": 429254
+        },
+        {
+          "id": 10618437806,
+          "name": "run-stats",
+          "size_bytes": 284
+        },
+        {
+          "id": 10618427793,
+          "name": "results_bmk",
+          "size_bytes": 2034
+        },
+        {
+          "id": 10618322920,
+          "name": "bmk_agentic_minimaxm3_tp4_conc128_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-dd1ed12b23ad7deb9335",
+          "size_bytes": 2231
+        },
+        {
+          "id": 10618173301,
+          "name": "agentic_minimaxm3_tp4_conc128_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-dd1ed12b23ad7deb9335",
+          "size_bytes": 17994830
+        }
+      ],
+      "performance_result": true,
       "run_id": 35542193122,
       "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35542193122",
       "arm": "none",
       "concurrency": 128,
       "repeat": 1,
       "attempt": 1,
-      "status": "in_progress",
+      "status": "success",
       "workflow_name": "offload-v1-none-c128-r1-20260920T2236Z",
       "dispatched_at": "2026-09-20T22:36:12Z",
       "job_id": 106161771803,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35542193122/job/106161771803",
-      "started_at": "2026-09-20T22:36:42Z"
+      "started_at": "2026-09-20T22:36:42Z",
+      "node": "im-b200-c005",
+      "runner": "b200-nscale-slurm_05",
+      "allocation_id": "16703",
+      "completed_at": "2026-09-21T01:39:49Z",
+      "performance": {
+        "num_requests_total": 2884,
+        "num_requests_successful": 1462,
+        "num_requests_warmup_dropped": 1422,
+        "num_requests_error_dropped": 3,
+        "duration_seconds": 3627.76598,
+        "output_tokens_per_second": 378.21403,
+        "output_tokens_per_second_per_gpu": 94.55351,
+        "input_tokens_per_second": 36314.566,
+        "total_tokens_per_second": 36692.78004,
+        "total_tokens_per_second_per_gpu": 9173.19501,
+        "p90_e2e_latency_seconds": 790.0248,
+        "p90_ttft_seconds": 718.37036,
+        "p90_tpot_seconds": 0.10893,
+        "p90_interactivity_tokens_per_second_per_user": 9.17993,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.2453,
+        "mean_e2e_latency_seconds": 509.42818,
+        "avg_power_w_per_gpu": 909.432
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.06361,
+        "external_cache_hit_rate": 0.0,
+        "overall_cache_hit_rate": 0.06361,
+        "gpu_cache_hit_prompt_tokens": 24755712,
+        "external_cache_hit_prompt_tokens": 0,
+        "computed_prompt_tokens": 364400200,
+        "prompt_tokens_total": 389155912
+      },
+      "runtime_evidence": "Canonical HBM-only c128 AgentX control completed the full profiling window with 1,462 accepted responses, 248 grace-time cancellations and zero phase errors. No external cache tier was configured or observed.",
+      "storage_evidence": "HBM-only configured zero DRAM/NVMe offload. Its workflow-owned scratch remained empty (0 files, 0 bytes); cleanup exit code 0 and deleted true.",
+      "log_archive_sha256": "38ad153e655b0ffd1c1e2a539bab36adcd55a8d594fc77f46e449d839ab13226",
+      "evidence_sha256": {
+        "server.log": "32f2911a0dab6e50988129491ce0eeb222c0631e336520a652f5185eb4396c7b",
+        "offload_cleanup.json": "d4e7b5350abfef6113605a86a8182dfacc7d6ba7b42c345ed7124deca985bea3",
+        "agg_bmk.json": "0c1e0dfb146b6bbc46aa264ecf1ac406c7d5a5ec109b771e323acf7066b8e0cd",
+        "profile_export.jsonl": "835b492f23c3deaef42e84ce2dc4d63035357993f0801066b4e383f5b81a4987"
+      }
     },
     {
       "head_sha": "9334ea53bde6e8645a34ed40918fceb2d5750f0c",
-      "artifacts": [],
-      "performance_result": false,
+      "artifacts": [
+        {
+          "id": 10618970311,
+          "name": "server_logs_minimaxm3_tp4_conc128_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-58182ae1169fd46f5c9d",
+          "size_bytes": 125248
+        },
+        {
+          "id": 10618955239,
+          "name": "gpu_metrics_minimaxm3_tp4_conc128_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-58182ae1169fd46f5c9d",
+          "size_bytes": 435353
+        },
+        {
+          "id": 10618925343,
+          "name": "power_audit_minimaxm3_tp4_conc128_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-58182ae1169fd46f5c9d",
+          "size_bytes": 438947
+        },
+        {
+          "id": 10618338213,
+          "name": "run-stats",
+          "size_bytes": 284
+        },
+        {
+          "id": 10618283437,
+          "name": "results_bmk",
+          "size_bytes": 2070
+        },
+        {
+          "id": 10618039398,
+          "name": "bmk_agentic_minimaxm3_tp4_conc128_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-58182ae1169fd46f5c9d",
+          "size_bytes": 2262
+        },
+        {
+          "id": 10617869921,
+          "name": "agentic_minimaxm3_tp4_conc128_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-58182ae1169fd46f5c9d",
+          "size_bytes": 18226815
+        }
+      ],
+      "performance_result": true,
       "run_id": 35542196012,
       "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35542196012",
       "arm": "dram",
       "concurrency": 128,
       "repeat": 1,
       "attempt": 1,
-      "status": "in_progress",
+      "status": "success",
       "workflow_name": "offload-v1-dram-c128-r1-20260920T2236Z",
       "dispatched_at": "2026-09-20T22:36:15Z",
       "job_id": 106161780979,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35542196012/job/106161780979",
-      "started_at": "2026-09-20T22:36:46Z"
+      "started_at": "2026-09-20T22:36:46Z",
+      "node": "im-b200-c007",
+      "runner": "b200-nscale-slurm_07",
+      "allocation_id": "16705",
+      "completed_at": "2026-09-21T01:43:03Z",
+      "performance": {
+        "num_requests_total": 2904,
+        "num_requests_successful": 1482,
+        "num_requests_warmup_dropped": 1422,
+        "num_requests_error_dropped": 5,
+        "duration_seconds": 3627.66944,
+        "output_tokens_per_second": 385.20158,
+        "output_tokens_per_second_per_gpu": 96.30039,
+        "input_tokens_per_second": 36934.41756,
+        "total_tokens_per_second": 37319.61914,
+        "total_tokens_per_second_per_gpu": 9329.90478,
+        "p90_e2e_latency_seconds": 782.70221,
+        "p90_ttft_seconds": 722.31422,
+        "p90_tpot_seconds": 0.08998,
+        "p90_interactivity_tokens_per_second_per_user": 11.11354,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.26015,
+        "mean_e2e_latency_seconds": 487.16113,
+        "avg_power_w_per_gpu": 903.469
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.05935,
+        "external_cache_hit_rate": 0.02273,
+        "overall_cache_hit_rate": 0.08208,
+        "gpu_cache_hit_prompt_tokens": 23233664,
+        "external_cache_hit_prompt_tokens": 8896128,
+        "computed_prompt_tokens": 359308961,
+        "prompt_tokens_total": 391438753
+      },
+      "matched_delta_vs_hbm_percent": {
+        "total_tokens_per_second_per_gpu": 1.70834,
+        "output_tokens_per_second_per_gpu": 1.8475,
+        "p90_interactivity_tokens_per_second_per_user": 21.06345,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 6.05381,
+        "p90_e2e_latency_seconds": -0.92688,
+        "mean_e2e_latency_seconds": -4.37099,
+        "avg_power_w_per_gpu": -0.65568
+      },
+      "runtime_evidence": "SimpleCPUOffloadConnector used the matched 739 GB host budget. External CPU cache served 8,896,128 prompt tokens (2.273%), proving active DRAM offload. Profiling completed 1,482 accepted responses with zero phase errors.",
+      "storage_evidence": "DRAM-only configured zero NVMe capacity. Its workflow-owned scratch remained empty (0 files, 0 bytes); cleanup exit code 0 and deleted true.",
+      "log_archive_sha256": "26d5ee8d81e1c69e5a033813070e9da1ecf769cdc2f562bf07ef9613e4dd0db8",
+      "evidence_sha256": {
+        "server.log": "17c9e0e2cd851795c4fdd8a298e6824e269970b356bfa667ee2c19c3c60a590a",
+        "offload_cleanup.json": "aaf131d042fa98a8779c086dc07d27cd79ffc4233fd274ca182d7720dcf243e1",
+        "agg_bmk.json": "cb5f11d29c71a0e42f09616fa16257798ccda99772fafed2edf60d1833344765",
+        "profile_export.jsonl": "d3f30dcd46f1024763e5ad3e2c297fa917e1cb64426cc52fde8babf19f936e5c"
+      }
     },
     {
       "head_sha": "9334ea53bde6e8645a34ed40918fceb2d5750f0c",
@@ -2615,8 +2778,8 @@
       "cancellation_reason": "Cancelled before GPU allocation because runner admission again left two B200 jobs queued; c64 NVMe retained the single permitted queue slot."
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560",
-  "status": "The c64 HBM control is valid and visible on the comparison page. The c256 combined retry completed profiling but independently exceeded the same 2 TiB filesystem stop guard as c64, so it is invalidated and excluded. Both cleanup receipts prove task-owned scratch deletion. HBM and DRAM c128 probes remain active. New NVMe-bearing dispatches remain held because im-b200-c003 repeatedly has only about 5.73 GB free.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012",
+  "status": "Both c128 matched controls are valid and visible on the comparison page. Relative to HBM, HBM+DRAM improves total throughput/GPU by 1.708%, output throughput/GPU by 1.848%, P90 interactivity by 21.063%, and P90 E2E-normalized interactivity by 6.054%, with 2.273% external CPU cache hits. No study workflows remain active. NVMe-bearing dispatches remain held because im-b200-c003 repeatedly has only about 5.73 GB free; combined runs require a capacity redesign.",
   "last_capacity_check": {
     "checked_at": "2026-09-20T22:41:19Z",
     "cluster_observed_at": "2026-09-20T22:40:49Z",
@@ -2631,21 +2794,15 @@
     "demand_percent": 63.64,
     "scheduler_snapshot_at": "2026-09-20T22:41:19Z",
     "scheduler_available": true,
-    "active_study_run_ids": [
-      35542193122,
-      35542196012
-    ],
-    "active_study_job_ids": [
-      106161771803,
-      106161780979
-    ],
+    "active_study_run_ids": [],
+    "active_study_job_ids": [],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": false,
-    "reason": "Two study jobs remain active. Do not dispatch NVMe-bearing work until im-b200-c003 has sufficient local capacity or is excluded. Do not retry the combined c64 or c256 configurations unchanged because both deterministically exceeded the filesystem stop guard. Retry c64 DRAM only after verifying free space in /data/home/sa-shared/.triton/cache."
+    "reason": "No study jobs remain active. Do not dispatch NVMe-bearing work until im-b200-c003 has sufficient local capacity or is excluded. Do not retry combined c64/c256 unchanged because both exceeded the filesystem stop guard. A c64 DRAM infrastructure retry requires a fresh queue/capacity check."
   },
   "next_dispatch": {
-    "requires": "Continue monitoring the two active c128 GPU jobs. After infrastructure remediation and a fresh queue/capacity check, retry c64 DRAM and prioritize c64/c128 NVMe. Redesign the combined tier capacity semantics before any further combined attempt; do not rerun it unchanged."
+    "requires": "Query fresh cluster and scheduler state. If no B200 job is queued and useful idle capacity exists, retry c64 DRAM because c128 DRAM subsequently proved the connector path healthy. Prioritize c64/c128 NVMe only after node-local capacity is remediated. Redesign combined tier capacity semantics before any further combined attempt."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-19T23:34:00Z",
