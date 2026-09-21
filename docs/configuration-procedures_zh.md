@@ -357,6 +357,10 @@ B200 设置 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。在
 中，共享主机表的大页覆盖率为零。每个 rank 的匿名分片无需修改主机 sysctl 即可申请大页，
 并保留查询结果的 all-reduce。必须从每个 rank 的启动日志核实实际大页比例；
 仅设置该变量并不能证明大页分配成功。
+B200 还通过 `dsv41flash-fp4-b200-sglang-agentic` 注册原生 STP 测试点。
+DSpark 应用经过哈希校验的 `patch_sglang_dsv41_native_wo_a.py` 修复，使三个
+WO_A 投影保留原生 FP8 权重与分块 scale；Markov 权重保持原生 BF16。
+STP 不加载草稿模型，STP 与评估均清除合成接受率设置。
 
 DSpark 是检查点自带的草稿模型。SGLang 对它不提供 EAGLE 或 MTP 路径，也没有
 `--speculative-num-steps` 参数；配方传入 `--speculative-algorithm DSPARK
