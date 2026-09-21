@@ -60,6 +60,6 @@ license.
 
 The recipe selects `SGLANG_USE_AITER_MOE_GU_ITLV=0` consistently for stock weight
 shuffling and MoE dispatch; the interleaved path selects an unsupported CK kernel.
-For V4.1 only, the indexer uses the existing packed FP4 payload/scale allocation
-required by the low-ratio backport, preserving FP4 values and round-to-even
-scaling. The nightly HIP split-buffer allocation serves its V4 indexer instead.
+For V4.1 only, the installer ports the official preview's split-buffer FP4
+indexer store/read methods, which the nightly pool lacks. The existing HIP
+allocation and FP4 values/round-to-even scaling remain unchanged.

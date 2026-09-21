@@ -96,10 +96,19 @@ MLP_CALL_ANCHOR = (
 )
 MLP_CALL_REPLACEMENT = '                if getattr(self, "_infx_v41_hip", False):\n                    from sglang.srt.layers.attention.dsv41_rocm.activation import (\n                        rocm_v41_silu_and_mul_clamp,\n                    )\n\n                    rocm_v41_silu_and_mul_clamp(gate_up, x, float(self.swiglu_limit))\n                else:\n                    silu_and_mul_clamp(gate_up, x, float(self.swiglu_limit))\n'
 
-POOL_ANCHOR = "        self.uses_aiter_fp4_layout = _is_hip and self.use_fp4_indexer\n"
-POOL_REPLACEMENT = (
-    POOL_ANCHOR
-    + '        if self.uses_aiter_fp4_layout:\n            from sglang.srt.runtime_context import process_model_config\n\n            if process_model_config().hf_text_config.model_type == "deepseek_v41":\n                # Low-ratio preview kernels use the stock packed payload+scale\n                # format, not the V4-only AITER split-buffer format.\n                self.uses_aiter_fp4_layout = False\n'
+POOL_REWRITES = (
+    (
+        "        self.uses_aiter_fp4_layout = _is_hip and self.use_fp4_indexer\n",
+        '        self.uses_aiter_fp4_layout = _is_hip and self.use_fp4_indexer\n        self._infx_v41_hip = False\n        if self.uses_aiter_fp4_layout:\n            from sglang.srt.runtime_context import process_model_config\n\n            self._infx_v41_hip = (\n                process_model_config().hf_text_config.model_type == "deepseek_v41"\n            )\n',
+    ),
+    (
+        "        from sglang.kernels.ops.attention.dsv4.fp4_indexer import (\n            store_fp4_index_k_cache,\n        )\n",
+        "        if self._infx_v41_hip:\n            from sglang.srt.layers.attention.dsv41_rocm.fp4_indexer import (\n                store_fp4_index_k_cache_split,\n            )\n\n            return store_fp4_index_k_cache_split(\n                cache_k,\n                self.index_k_payload_buffer[layer_id - self.start_layer],\n                self.index_k_scale_buffer[layer_id - self.start_layer],\n                loc,\n                page_size=self.page_size,\n                rne=self.index_k_rne,\n            )\n        from sglang.kernels.ops.attention.dsv4.fp4_indexer import (\n            store_fp4_index_k_cache,\n        )\n",
+    ),
+    (
+        '        assert self.use_fp4_indexer, "packed readback only applies to the fp4 layout"\n',
+        '        assert self.use_fp4_indexer, "packed readback only applies to the fp4 layout"\n        if self._infx_v41_hip:\n            from sglang.srt.layers.attention.dsv41_rocm.fp4_indexer import (\n                read_fp4_index_k_split,\n            )\n\n            return read_fp4_index_k_split(\n                self.index_k_payload_buffer[layer_id - self.start_layer],\n                self.index_k_scale_buffer[layer_id - self.start_layer],\n                slots,\n                page_size=self.page_size,\n            )\n',
+    ),
 )
 
 
@@ -164,14 +173,16 @@ def install(package: Path, evidence: Path) -> None:
         raise RuntimeError("Unexpected MLP fused-clamp patch anchor count")
     pool = package / "srt/mem_cache/deepseek_v4_memory_pool.py"
     pool_original = pool.read_text()
-    if POOL_REPLACEMENT in pool_original:
-        pool_original = pool_original.replace(POOL_REPLACEMENT, POOL_ANCHOR, 1)
+    for before, after in POOL_REWRITES:
+        if after in pool_original:
+            pool_original = pool_original.replace(after, before, 1)
     if sha256(pool_original.encode()) != manifest["pool_sha256"]:
         raise RuntimeError(
             "Unexpected KV-pool source; refusing to patch another revision"
         )
-    if pool_original.count(POOL_ANCHOR) != 1:
-        raise RuntimeError("Unexpected indexer-pool layout patch anchor count")
+    for before, _ in POOL_REWRITES:
+        if pool_original.count(before) != 1:
+            raise RuntimeError("Unexpected indexer-pool access patch anchor count")
     for item in manifest["files"]:
         data = (source / "dsv41_rocm" / item["installed_name"]).read_bytes()
         if sha256(data) != item["adapted_sha256"]:
@@ -195,7 +206,9 @@ def install(package: Path, evidence: Path) -> None:
     mlp_patched = mlp_original.replace(MLP_ANCHOR, MLP_REPLACEMENT, 1)
     mlp_patched = mlp_patched.replace(MLP_CALL_ANCHOR, MLP_CALL_REPLACEMENT, 1)
     mlp.write_text(mlp_patched)
-    pool_patched = pool_original.replace(POOL_ANCHOR, POOL_REPLACEMENT, 1)
+    pool_patched = pool_original
+    for before, after in POOL_REWRITES:
+        pool_patched = pool_patched.replace(before, after, 1)
     pool.write_text(pool_patched)
     manifest["installed_registry_sha256"] = sha256(patched.encode())
     manifest["installed_fp8_utils_sha256"] = sha256(fp8_patched.encode())
