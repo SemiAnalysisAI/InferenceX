@@ -8553,5 +8553,5 @@
   - Keep automatic backends, host Engram tables, GPU-resident KV, bounded prefill and decode graphs; route the B300 SGLang runtime through /ix.
   - Add non-speculative B300 DeepSeek-V4.1-Flash SGLang AgentX TP4/EP4 on the pinned latest nightly, with no draft and no synthetic acceptance, while native DSpark precision qualification remains blocked.
   - Use per-rank anonymous host Engram tables to allow transparent huge pages without changing host settings; preserve native FP8 table payload and automatic backend selection.
-  - Apply the hash-verified native FP8 DSpark WO_A preservation fix on the pinned nightly, retain native BF16 Markov weights, and resolve downloaded checkpoints locally before serving.
+  - Apply the hash-verified native FP8 DSpark WO_A preservation fix on the pinned nightly, retain native BF16 Markov weights, normalize strided FP8 projection inputs for eager and CUDA-graph execution, and resolve downloaded checkpoints locally before serving.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3342
