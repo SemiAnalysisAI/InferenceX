@@ -103,6 +103,14 @@ VLLM_CMD=(
     --max-model-len 1048576
     --max-cudagraph-capture-size "$CAPTURE_SIZE"
     --max-num-batched-tokens 16384
+    # vllm-project/vllm#56227 added SWA bounded replay (default on) after the
+    # eed1f3d0 pin and before this one. It pads the replayed tokens' slots in the
+    # prefix-cacheable groups, but the window clamp it relies on landed in the
+    # FlashInfer and FlashMLA kernels; the ROCm sparse SWA path only gained the
+    # replay_start kwarg. On gfx950 every TP=2 and TP=4 point of run 35567570539
+    # died with HSA_STATUS_ERROR_MEMORY_FAULT at the first prefix hit carrying a
+    # replay start. Drop this once ROCm clamps too; prefix caching stays on.
+    --no-swa-bounded-replay
     --disable-uvicorn-access-log
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
