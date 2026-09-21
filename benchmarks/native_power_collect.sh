@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One native SMI collector per serving node. Raw files stay on node-local scratch;
 # the launcher stages them as its host user after containers stop.
-set -uo pipefail
+set -o pipefail
 power_dir=$1
 control_dir=$2
 vendor=$3

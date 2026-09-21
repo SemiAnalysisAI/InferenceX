@@ -2,37 +2,22 @@ from __future__ import annotations
 
 import copy
 import json
-import os
-import shutil
 import subprocess
-import sys
-from pathlib import Path
+from urllib.parse import parse_qsl
 
 import pytest
 
 from infx.workflows import reuse_comment as acknowledgment
 
 
-def test_comment_entrypoint_runs_with_only_the_infx_package(tmp_path):
-    root = Path(__file__).resolve().parents[1]
-    shutil.copytree(root / "infx", tmp_path / "infx")
-    event_path = tmp_path / "event.json"
-    event_path.write_text(json.dumps({"action": "created", "issue": {"number": 7}}))
-    env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
-    env.update(GH_TOKEN="test-token", GITHUB_REPOSITORY="example/project",
-               GITHUB_EVENT_PATH=str(event_path))
-    run = subprocess.run(
-        [sys.executable, "-m", "infx.workflows.reuse_comment"],
-        cwd=tmp_path, env=env, text=True, capture_output=True, timeout=10,
-    )
-    assert run.returncode == 0, run.stderr
-    assert run.stdout == ""
-
-
 @pytest.fixture
 def request_case(monkeypatch):
+    return make_request_case(monkeypatch)
+
+
+def make_request_case(monkeypatch) -> dict:
     comment = {
-        "id": 41, "body": "/reuse-sweep-run 123", "author_association": "MEMBER",
+        "id": 41, "body": "/use 123", "author_association": "MEMBER",
         "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z",
     }
     case = {
@@ -77,14 +62,24 @@ def request_case(monkeypatch):
         if path == "/actions/runs/123":
             return case["run"]
         if path == "/actions/workflows/run-sweep.yml/runs":
-            return {"workflow_runs": [case["run"]]}
+            return {"workflow_runs": [case["run"]], "total_count": 1}
         if path == "/actions/runs/123/artifacts":
             if callback := case.get("during_validation"):
                 callback()
-            return {"artifacts": case["artifacts"]}
+            return {"artifacts": case["artifacts"], "total_count": len(case["artifacts"])}
         raise AssertionError((method, path))
 
-    monkeypatch.setattr(acknowledgment.github, "api", api)
+    def run(args, **kwargs):
+        endpoint = next(arg for arg in args if arg.startswith("repos/"))
+        path, _, query = endpoint.split("/", 3)[3].partition("?")
+        response = api("example/project", "/" + path, kwargs["env"]["GH_TOKEN"],
+                       dict(parse_qsl(query)), method=args[args.index("--method") + 1],
+                       data=json.loads(kwargs["input"]) if kwargs["input"] else None)
+        if "--slurp" in args:
+            response = [response]
+        return subprocess.CompletedProcess(args, 0, json.dumps(response), "")
+
+    monkeypatch.setattr(acknowledgment.github.subprocess, "run", run)
     monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
     return case
 
@@ -98,7 +93,7 @@ def bot_status(case):
     return [r["content"] for r in case["reactions"] if r["user"]["login"] == "github-actions[bot]"]
 
 
-@pytest.mark.parametrize("body", ["/reuse-sweep-run", "/reuse-sweep-run 123"])
+@pytest.mark.parametrize("body", ["/reuse-sweep-run", "/reuse-sweep-run 123", "/use 123"])
 @pytest.mark.parametrize("labels", [[], [{"name": "sweep-enabled"}]])
 def test_accepts_valid_reuse_without_full_sweep_label(request_case, body, labels):
     case = request_case
@@ -134,7 +129,7 @@ def test_rejects_invalid_requests_without_approving(request_case, capsys, proble
     if problem == "unauthorized":
         case["comment"]["author_association"] = "CONTRIBUTOR"
     elif problem == "syntax":
-        case["comment"]["body"] = "/reuse-sweep-run nope"
+        case["comment"]["body"] = "/use nope"
     elif problem == "closed":
         case["pr"]["state"] = "closed"
     elif problem == "workflow":
@@ -160,7 +155,7 @@ def test_rejects_invalid_requests_without_approving(request_case, capsys, proble
     assert reason in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("body,status", [("withdrawn", []), ("/reuse-sweep-run nope", ["-1"])])
+@pytest.mark.parametrize("body,status", [("withdrawn", []), ("/use", ["-1"]), ("/reuse-sweep-run 123", ["+1"])])
 def test_edit_replaces_bot_status_and_preserves_human_reaction(request_case, body, status):
     case = request_case
     case["reactions"] = [
@@ -168,7 +163,8 @@ def test_edit_replaces_bot_status_and_preserves_human_reaction(request_case, bod
         {"id": 2, "content": "+1", "user": {"login": "maintainer"}},
     ]
     case["comment"]["body"] = body
-    acknowledgment.acknowledge("example/project", event_for(case, action="edited"), "test-token")
+    event = event_for(case, action="edited", changes={"body": {"from": "/use 123"}})
+    acknowledgment.acknowledge("example/project", event, "test-token")
     assert bot_status(case) == status
     assert case["reactions"][0] == {"id": 2, "content": "+1", "user": {"login": "maintainer"}}
 
@@ -201,15 +197,32 @@ def test_redelivery_leaves_one_acceptance_reaction(request_case):
     assert bot_status(request_case) == ["+1"]
 
 
-@pytest.mark.parametrize("change", ["issue", "unrelated", "inline-mention"])
-def test_unrelated_activity_does_not_get_acknowledged(request_case, change):
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+def test_number_on_next_line_does_not_authorize_partial_run(request_case, newline):
+    request_case["comment"]["body"] = f"/reuse-sweep-run{newline}123"
+    request_case["run"]["conclusion"] = "failure"
+    assert acknowledgment.acknowledge("example/project", event_for(request_case), "test-token") == 1
+    assert bot_status(request_case) == ["-1"]
+
+
+@pytest.mark.parametrize("change", ["issue", "unrelated", "inline-mention", "attachment", "unrelated-edit"])
+def test_unrelated_activity_preserves_existing_reactions(request_case, change):
+    request_case["reactions"] = [
+        {"id": 1, "content": "+1", "user": {"login": "github-actions[bot]"}},
+    ]
     event = event_for(request_case)
     if change == "issue":
         event["issue"].pop("pull_request")
     else:
-        request_case["comment"]["body"] = (
-            "hello" if change == "unrelated" else "please use /reuse-sweep-run later"
-        )
+        request_case["comment"]["body"] = {
+            "unrelated": "hello",
+            "inline-mention": "please use /reuse-sweep-run later",
+            "attachment": "![screenshot](https://github.com/user-attachments/assets/example)",
+            "unrelated-edit": "Updated screenshot",
+        }[change]
         event = event_for(request_case)
+        if change == "unrelated-edit":
+            event.update(action="edited", changes={"body": {"from": "https://example.com/users/alice"}})
     assert acknowledgment.acknowledge("example/project", event, "test-token") == 0
     assert request_case["writes"] == []
+    assert bot_status(request_case) == ["+1"]

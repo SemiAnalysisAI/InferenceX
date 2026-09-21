@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Validate whether an aiperf agentic replay produced benchmarkable results."""
 
 from __future__ import annotations
@@ -74,9 +73,11 @@ def validate_result(artifact_dir: Path, failed_request_threshold: float) -> list
     error_rate = errors / completed
     if error_rate > failed_request_threshold:
         return [
-            "aiperf request error rate exceeded the benchmark limit: "
-            f"{errors:g}/{completed:g} = {error_rate:.3%} > "
-            f"{failed_request_threshold:.3%}"
+            (
+                "aiperf request error rate exceeded the benchmark limit: "
+                f"{errors:g}/{completed:g} = {error_rate:.3%} > "
+                f"{failed_request_threshold:.3%}"
+            )
         ]
 
     print(

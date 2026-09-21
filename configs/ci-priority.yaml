@@ -11,29 +11,33 @@ adjustments:
   additional-node: -0.001
   event:
     push: 2.0
-  multi-node: 1.25
-  agentic: 1.0
+  multi-node: 0.25
+  agentic: 0.1
   eval-only: 0.0
   precision:
-    fp4: 0.75
+    fp4: 0.1
   spec-decoding:
-    mtp: 0.75
-    eagle: 0.75
-    eagle3: 0.75
+    mtp: 0.1
+    eagle: 0.1
+    eagle3: 0.1
   framework-prefix:
-    sglang: 0.5
-    vllm: 0.5
-    dynamo-sglang: 0.5
-    dynamo-vllm: 0.5
+    sglang: 1.5
+    vllm: 1.5
+    dynamo-sglang: 1.5
+    dynamo-vllm: 1.5
   model-prefix:
-    kimik3: 1.5
+    dsv41flash: 0.5
+    kimik3: 0.5
+    glm5.2: 0.5
+    # Retained SPEED-Bench collectors still use these retired-family scores.
     glm5: 0.75
     glm5.1: 0.75
-    kimik2.5: 0.75
-    dsv4: 0.75
-    minimaxm3: 0.75
-    qwen3.5: 0.75
-    dsr1: 0.75
+    kimik2.5: 0.75 # SPEED-Bench only; no active master entry.
+    dsv4: 0.25
+    minimaxm3: 0.25
+    qwen3.5: 0.1
+    qwen3.8next: 0.05
+    dsr1: 0.05
 
 labels:
   # inferencex-ci-tracker verifies the active actor with INFX_CI_SCHEDULER_PAT.

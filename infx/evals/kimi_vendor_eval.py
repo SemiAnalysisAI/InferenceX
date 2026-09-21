@@ -9,7 +9,7 @@ import re
 import subprocess
 import sys
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,21 +22,18 @@ EXPECTED_MODES = {"non-stream", "stream"}
 EXPECTED_TOTALS = {TASK_NAME: 2, FULL_TASK_NAME: 408}
 FULL_SELECTED_CASES = 204
 DEFAULT_TIMEOUT_SECONDS = 900
-FULL_TIMEOUT_SECONDS = 7200
 FULL_WORKERS = 8
 RESULT_FORMAT = "inferencex-eval-v1"
 ADAPTER_NAME = "kimi-vendor-verifier"
 
-ENDPOINT_REJECTION_RE = re.compile(
-    r"(?im)^(?:E\s+)?AssertionError:.*tool schema rejected:"
-)
+ENDPOINT_REJECTION_RE = re.compile(r"(?im)^(?:E\s+)?AssertionError:.*tool schema rejected:")
 
 
 def prepare_compatibility_path(output_dir: Path) -> Path:
     """Remove stale projections and return a timestamped collector artifact path."""
     for stale_path in output_dir.glob(COMPATIBILITY_GLOB):
         stale_path.unlink()
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S.%f")
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S.%f")
     return output_dir / f"results_kimi_vendor_{timestamp}.json"
 
 
@@ -148,13 +145,8 @@ def _project_report(
     selected_identities: set[tuple[str, int]] = set()
     if task_name == FULL_TASK_NAME:
         selected_cases = root.get("selected_cases")
-        if (
-            not isinstance(selected_cases, list)
-            or len(selected_cases) != FULL_SELECTED_CASES
-        ):
-            raise ValueError(
-                f"report.selected_cases must contain {FULL_SELECTED_CASES} cases"
-            )
+        if not isinstance(selected_cases, list) or len(selected_cases) != FULL_SELECTED_CASES:
+            raise ValueError(f"report.selected_cases must contain {FULL_SELECTED_CASES} cases")
         selected_keys: set[tuple[str, int, str]] = set()
         for index, selected_case in enumerate(selected_cases):
             record = _mapping(
@@ -205,15 +197,11 @@ def _project_report(
                 or isinstance(line, bool)
                 or line < 1
             ):
-                raise ValueError(
-                    f"report.results[{index}] has invalid suite or line identity"
-                )
+                raise ValueError(f"report.results[{index}] has invalid suite or line identity")
             identity = (suite, line)
             identity_modes = case_modes.setdefault(identity, set())
             if mode in identity_modes:
-                raise ValueError(
-                    "report contains a duplicate mode for a selected suite and line"
-                )
+                raise ValueError("report contains a duplicate mode for a selected suite and line")
             identity_modes.add(mode)
 
     if total != len(results) or passed != result_passes:
@@ -226,17 +214,13 @@ def _project_report(
     if task_name == TASK_NAME:
         if set(modes) != EXPECTED_MODES or len(modes) != len(set(modes)):
             raise ValueError("report does not contain the expected stream modes")
-    elif any(
-        modes_for_case != EXPECTED_MODES for modes_for_case in case_modes.values()
-    ):
+    elif any(modes_for_case != EXPECTED_MODES for modes_for_case in case_modes.values()):
         raise ValueError(
             "report does not contain exactly one of each stream mode "
             "for every selected suite and line"
         )
     if task_name == FULL_TASK_NAME and set(case_modes) != selected_identities:
-        raise ValueError(
-            "report results do not match the selected suite and line identities"
-        )
+        raise ValueError("report results do not match the selected suite and line identities")
 
     score = passed / total
     return (
@@ -301,7 +285,7 @@ def _write_native_failure(
     path.write_text(
         json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "model": model,
                 "task": task_name,
                 "completed": False,
@@ -336,9 +320,11 @@ def run_evaluation(
     model_prefix: str = "",
     output_dir: Path,
     task_name: str = TASK_NAME,
-    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    timeout_seconds: int | None = None,
 ) -> bool:
-    """Run upstream pytest and always attempt to publish a compatibility result."""
+    """Run upstream pytest, bounding only smoke or explicitly timed invocations."""
+    if timeout_seconds is None and task_name == TASK_NAME:
+        timeout_seconds = DEFAULT_TIMEOUT_SECONDS
     output_dir.mkdir(parents=True, exist_ok=True)
     native_report = output_dir / NATIVE_REPORT_FILENAME
     compatibility_path = prepare_compatibility_path(output_dir)
@@ -395,9 +381,7 @@ def run_evaluation(
         elif valid_outcome:
             completed_successfully = True
         elif not valid_outcome:
-            integration_error = RuntimeError(
-                f"upstream verifier exited with code {subprocess_rc}"
-            )
+            integration_error = RuntimeError(f"upstream verifier exited with code {subprocess_rc}")
             compatibility = _compatibility_result(
                 model,
                 0.0,
@@ -455,7 +439,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         choices=SUPPORTED_TASK_NAMES,
         default=TASK_NAME,
     )
-    parser.add_argument("--timeout-seconds", type=_positive_int)
+    parser.add_argument(
+        "--timeout-seconds",
+        type=_positive_int,
+        help="Whole-suite deadline in seconds; defaults to 900 for smoke and none for full.",
+    )
     parser.add_argument("--integration-error")
     args = parser.parse_args(argv)
     if args.integration_error is None:
@@ -468,9 +456,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             if value is None
         ]
         if missing:
-            parser.error(
-                f"{', '.join(missing)} required unless --integration-error is provided"
-            )
+            parser.error(f"{', '.join(missing)} required unless --integration-error is provided")
     return args
 
 
@@ -496,15 +482,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             ),
         )
         return 0
-    timeout_seconds = (
-        args.timeout_seconds
-        if args.timeout_seconds is not None
-        else (
-            FULL_TIMEOUT_SECONDS
-            if args.task_name == FULL_TASK_NAME
-            else DEFAULT_TIMEOUT_SECONDS
-        )
-    )
     passed = run_evaluation(
         verifier_dir=args.verifier_dir,
         base_url=args.base_url,
@@ -513,7 +490,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         model_prefix=args.model_prefix,
         output_dir=args.output_dir,
         task_name=args.task_name,
-        timeout_seconds=timeout_seconds,
+        timeout_seconds=args.timeout_seconds,
     )
     return 0 if passed else 1
 

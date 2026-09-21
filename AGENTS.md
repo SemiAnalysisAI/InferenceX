@@ -11,20 +11,103 @@ Guidance for AI agents working with InferenceX.
 
 ## Agent-specific policy
 
+- Pareto logic changes must update both InferenceX and InferenceX-app with matching regression tests and cross-linked PRs.
+- Every PR description must include an **AI model disclosure** section naming the exact model/version used to prepare the PR. List each contributing model and its role, including delegated agents. Tool names such as Claude Code, Cursor, or Perplexity Computer are not model identities. Copy the model identifier exposed by the runtime; do not guess an unavailable identifier. If the runtime does not expose the exact model, explicitly state that it could not be verified. Human-only PRs must state `No AI used`. Keep the disclosure current when later edits use another model.
 - Repository skills are canonical under `.agents/skills/`. Add or update skills there. `.claude/skills/` contains compatibility symlinks for Claude discovery.
-- PR and issue titles, descriptions, and human-authored PR comments must include English and natural Simplified Chinese. Keep code, commands, logs, stack traces, model names, hardware SKUs, framework names, flags, and identifiers unchanged. The exact CODEOWNER sign-off template is English-only. See [`docs/documentation-procedures.md`](docs/documentation-procedures.md) and [`.github/AGENT_OPERATIONS.md`](.github/AGENT_OPERATIONS.md#translation-terminology).
-- **Klaud Cold reports:** Keep English visible and put Simplified Chinese inside a collapsed `<details><summary>中文</summary>` section. Numeric tables appear once. Follow the compact body/comment templates in [`docs/klaud-reporting.md`](docs/klaud-reporting.md), including cleanup and completion reports.
+- PR and issue titles, descriptions, and human-authored PR comments must include English and natural Simplified Chinese. Titles use `<English title> / <中文标题>`. In bodies and comments, keep English visible and put Chinese in one collapsed `<details><summary>中文</summary>` section. Keep code, commands, logs, stack traces, model names, hardware SKUs, framework names, flags, and identifiers unchanged. The exact CODEOWNER sign-off template is English-only. See [`docs/documentation-procedures.md`](docs/documentation-procedures.md) and [`.github/AGENT_OPERATIONS.md`](.github/AGENT_OPERATIONS.md#translation-terminology).
+- **One reviewer checklist per PR:** Only one eligible CODEOWNER reviewer needs to post the completed PR Review Checklist. Check for an existing checklist before posting; other reviewers do not need to duplicate it. The original reviewer must edit their existing checklist comment when correcting items or adding evidence, rather than post a new checklist. Create a replacement only if the original was deleted. See [`CONTRIBUTING.md`](CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off).
+- **Klaud Cold reports:** Follow the compact body/comment templates in [`docs/klaud-reporting.md`](docs/klaud-reporting.md), including cleanup and completion reports.
 - Commit subjects use conventional English style, while commit bodies include the Chinese translation. Contributor-facing docs use English as the source version and ship with a synchronized `_zh.md` page and language switcher.
+- Python under `infx/` uses all stable Ruff rules with reviewed exclusions in `infx/ruff.toml`, line length 100, and the Ruff formatter. The Lint job in `.github/workflows/ci.yml` runs whenever Python files change and fails on any finding. Before pushing Python changes, run the [commands in the testing guide](docs/testing.md#python-lint-and-formatting). Fix findings where practical; justified exceptions use inline `# noqa: CODE` rather than file-wide ignores.
 - Follow the nearest existing pattern. Python uses typed signatures and strict Pydantic schemas. YAML uses kebab-case fields. Shared benchmark Bash behavior belongs in `benchmark_lib.sh`, with parameters passed through environment variables.
+
+## Bash conventions (mandatory)
+
+These rules apply to active Bash scripts and shell commands embedded in workflows and recipes. Follow them when adding, changing, or reviewing Bash code. Leave deprecated code alone unless explicitly asked to update it.
+
+- **Configuration flows from the caller.** Workflows, master configs, runtime profiles, and launchers explicitly supply configuration to the scripts they invoke. Receiving scripts consume and validate those inputs; they must not silently choose defaults.
+- **No fallback defaults for caller-supplied configuration.** Avoid `${VAR:-default}`, `${VAR:=default}`, their colon-free equivalents, and equivalent "if unset, assign a default" logic. A missing input is a caller error and must fail clearly. Pass values such as `false` and `0` explicitly too.
+- **Validate every required environment input with `check_env_vars` before use.** Use the shared helper in `benchmarks/benchmark_lib.sh`. Group required inputs near the beginning, after sourcing the helper; validate inputs used only by a particular execution path when entering that path. The helper rejects both missing and empty values. Do not duplicate it or remove its safe handling of unset variables. Callers needing validation without benchmark initialization can source the library with `--validation-only`.
+- **Do not enable nounset.** No `set -u`, `set -o nounset`, combined flags such as `set -euo pipefail`, or `bash -u` invocation flags. Use explicit validation; preserve other intended shell options, for example `set -eo pipefail`.
+- **Preserve configuration precedence and forwarding.** Apply caller-owned settings before recipe-specific overrides, and explicitly forward required inputs across container or job boundaries. Do not replace a supported override with an unconditional assignment in the receiving script.
+- Preserve deliberate optional-input handling, runtime-derived values, and unset-safe internal-state probes. These are not permission to invent fallback configuration or replace a documented automatic selection with an arbitrary constant.
+
+For example, remove this from the receiving script:
+
+```bash
+export IS_MULTINODE="${IS_MULTINODE:-true}"
+```
+
+Set it in the responsible caller:
+
+```bash
+export IS_MULTINODE=true
+```
+
+Then validate it in the receiving script after sourcing the shared helper:
+
+```bash
+check_env_vars IS_MULTINODE MODEL_NAME PRECISION
+```
+
+## Deprecating benchmark configs
+
+- Move deprecated entries out of the active master config into [`configs/deprecated/amd-master.yaml`](configs/deprecated/amd-master.yaml) or [`configs/deprecated/nvidia-master.yaml`](configs/deprecated/nvidia-master.yaml), matching the vendor. These are the only deprecated master-config files; do not create separate files per model, scenario, or deprecation.
+- For a partial deprecation, archive only the retired scenarios and retain the supported scenarios in the active entry. Preserve archived settings and explanatory comments; do not update historical image pins or runners during archival.
+- Keep every archive key unique. If a key already exists with different settings, preserve both versions with a descriptive suffix on the historical key and a comment recording its original config key. Existing colliding 1k1k versions use `-deprecated-1k1k`. Never overwrite an archived version or add duplicate YAML keys.
+- Check retirement statements in [`MODELS.md`](MODELS.md) against active configs and script routing in the same PR, and update `MODELS.md` plus `MODELS_zh.md` together. Preserve explicitly documented exceptions and conditional retirement policies; do not treat planned retirement as completed.
+- Remove unused retired-model branches from launchers and runtime settings, and update workflow/agent guidance that still recommends retired coverage. Audit callers before removing shared helpers; retained SPEED-Bench collectors and historical result readers may still need model-specific support.
+- Keep these archives out of active sweep inputs. Follow the existing benchmark-script archival convention, moving retired scripts into the sibling `deprecated/` directory only when no active config still uses them.
+
+## Runner launchers (one file per pool)
+
+- The reusable workflows run `bash ./runners/launch_${RUNNER_NAME%%_*}.sh`. The runner-name prefix before the first underscore is the only routing key, so each self-hosted pool maps to exactly one `runners/launch_<pool>.sh`, and every `runners/launch_*.sh` must be the launcher of a pool listed in [`configs/runners.yaml`](configs/runners.yaml). For example, runner `b200-nscale-slurm_03` runs `runners/launch_b200-nscale-slurm.sh`. See [Stage 4 in `docs/architecture.md`](docs/architecture.md#stage-4-launcher-and-runtime-execution).
+- Do not add a second launcher for a pool and `exec` into it for some jobs. Different execution paths for one pool (single-node `salloc`, srt-slurm recipes, cluster-maintained lanes) branch inside that pool's one file. Select the path once near the top and name it, so the routing for a pool reads in one place.
+- Do not add launcher-name aliases to `runners/runtime_settings.sh` or elsewhere for scripts that no runner resolves to. A launcher without a pool is dead code; a pool without a launcher fails at job start.
+- When a pool is retired, delete its launcher in the same PR rather than keeping it as a fallback for another pool.
+
+## SRT Slurm synthetic acceptance
+
+- **Do not hard-code synthetic acceptance lengths in SRT recipes, master configs, or launchers.** InferenceX automatically selects the measured value from [`golden_al_distribution/`](golden_al_distribution/) for speculative AgentX throughput runs. Do not add manual `SYNTHETIC_ACCEPTANCE_LENGTH`, vLLM `synthetic_acceptance_length`, SGLang `SGLANG_SIMULATE_ACC_LEN`, or TRT-LLM `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` settings.
+- Submit recipes through [`apply_srt_recipe`](runners/slurm_utils.sh). Its [`infx/srt_slurm` connector](infx/srt_slurm/synthetic_acceptance.py) applies native SRT `--set` / `--unset` overrides; calling upstream `srtctl` directly does not perform InferenceX's automatic selection.
+- Keep the actual speculative method, draft model, draft-token count, and relevant sampling settings explicit in the recipe. The connector combines the generation role's settings (decode, otherwise aggregated), after caller overrides, with `MODEL_PREFIX` and `THINKING_MODE` to select the golden curve. For Kimi DSpark, explicitly set `draft_sample_method` to `greedy` or `probabilistic`.
+- Eval-only and non-AgentX runs use real verification; the connector removes stale synthetic settings. Non-speculative roles do not receive simulation settings. `RUN_EVAL` does not disable simulation for the throughput portion.
+- Missing golden curves or unmeasured draft lengths fail before submission. Add the corresponding measured golden data when supporting a new combination; do not work around the error with a guessed or hard-coded acceptance length.
 
 ## Test quality
 
-- Every test must catch a plausible regression in observable behavior. Do not add tests just to increase coverage or test counts. Delete redundant or tautological tests without replacing them when useful coverage already exists.
-- Use small, controlled inputs and independently determined expected results. Cover meaningful boundaries, invalid inputs, and failure paths. Exercise the real implementation, not a test-local copy of its parser, formula, or filtering logic.
-- Do not freeze current recipe counts, hardware/framework inventories, image tags, pins, enum values, or source-code strings in assertions. A config addition or harmless refactor should not require updating unrelated tests.
-- Fixed expected values are appropriate for hand-worked examples and externally consumed contracts. Keep those assertions focused on the behavior that matters; do not compute the expected result with the same helper or algorithm being tested.
-- Reuse existing fixtures and test files. Mock external collaborators when needed, not the behavior under test. Shared helpers in expectations require their own independent behavioral coverage.
-- Apply the reasoning in [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/20/tautological-tests/); see [the testing guide](docs/testing.md#test-quality) for review questions.
+**The one rule: a test must exercise the real implementation with concrete inputs and assert on what it computes, returns, writes, or raises. A test that inspects the code, the repo, or a config file instead of running behavior is not a test and must be deleted.** These rules are mandatory for every test added, modified, or reviewed in this repository. When in doubt, delete the test.
+
+### Forbidden: tests about the code rather than its behavior
+
+Never write, and always delete on sight, a test that does any of the following:
+
+1. **Reads source text and asserts on it.** Opening a `.sh`, `.py`, `.yml`, `.yaml`, `.cjs`, or `.md` file and asserting that a string, flag, regex, command, or line is present or absent, counting occurrences, or checking line order. This includes launchers, workflow files, skill files, and docs. Grepping is not testing.
+2. **Parses source structure.** Using `ast.parse`, `inspect.getsource`, `inspect.signature`, `hasattr`, `callable`, `__doc__`, or import-succeeds checks to assert that a function, class, constant, argument, or flag exists or has a given shape.
+3. **Git-greps the repo.** Asserting which files contain a literal, how many files match, or that a pin appears in exactly N places.
+4. **Pins checked-in config or data.** Asserting the contents of a recipe, master config, `runners.yaml`, `platform_config.json`, a registry dict, an enum, an image tag, a SHA, a port number, or the current count of recipes, SKUs, backends, or models. Validate config through the real validation code with controlled inputs instead.
+5. **Is tautological.** Asserting a constant equals its own literal; asserting a dict or fixture equals what the test just built; asserting only that a mock was called with the arguments the test itself passed; or computing the expected value with the same helper, formula, or algorithm the test is supposed to check.
+6. **Reimplements the code under test.** Any parser, filter, jq/YAML expression, argparse tree, formula, or state machine copied into the test file so the test can run against the copy. This also covers "mirror" parsers and "reference specs" cross-checked against a second in-test implementation.
+7. **Tests the test infrastructure.** Tests of fixtures, conftest helpers, in-test expression evaluators, or "this test has teeth" self-checks.
+8. **Is smoke-only.** Module imports, `--help` exits 0, or "does not raise" with no assertion on output.
+9. **Duplicates a covered path.** Several tests that reach the same branch with trivially different inputs. Keep one, or use `pytest.mark.parametrize` / `subTest`. A second test is justified only by a distinct branch, error path, or boundary.
+
+### Required: what every kept test looks like
+
+- Feeds small, controlled inputs into the real function, CLI, or script and asserts on the computed output, written artifact, exit code, or raised error.
+- Uses expected values worked out independently by hand, never derived by calling the implementation or its helpers.
+- Covers a specific branch, boundary, malformed input, or failure path that no other test already covers.
+- Mocks only external collaborators (network, GitHub, Slurm, clocks, GPUs), never the behavior under test. Shell scripts are tested by running them with stubbed binaries on `PATH` and checking what they produced, not by reading their text.
+- Would fail on a plausible regression in observable behavior, and would not fail on a harmless refactor, a rename, or the addition of a valid recipe or SKU.
+
+### Before adding or approving a test, answer all four
+
+1. Which line of the real implementation does this run, and what bug in it would make the assertion fail?
+2. Would this test still pass if the code were rewritten with identical behavior? If not, it is testing structure and must go.
+3. Would this test fail because someone added a recipe, bumped an image tag, or reworded a comment? If yes, it is pinning config or source and must go.
+4. Does an existing test already reach this branch? If yes, extend it or drop the new one.
+
+Deleting a test that fails these questions needs no replacement. Do not preserve test counts. See [the testing guide](docs/testing.md#test-quality) for the reasoning and [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/20/tautological-tests/) for the distinction between independent expectations and assertions that repeat the implementation.
 
 ## Non-negotiable benchmark invariants
 
