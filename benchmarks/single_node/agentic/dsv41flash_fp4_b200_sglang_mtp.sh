@@ -44,12 +44,14 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# Keep Engram weights in host memory. The shared layout had 0% huge-page
-# backing on this pool (run 35626514270: shmem_enabled=never), and upstream
-# warns that base-page lookups can be ~10x slower. Per-rank anonymous shards
-# request huge pages without changing host sysctls; ranks retain the lookup
-# all-reduce and the original checkpoint precision.
-export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
+# TP4 can hold the original Engram payload on GPU: the STP placement probe
+# measured 120.54 GiB weights and 35.31 GiB free after the .80 memory pool.
+# TP2 retains per-rank anonymous host shards with verified huge-page backing.
+case "$TP" in
+    4) export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0 ;;
+    2) export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1 ;;
+    *) echo "Unsupported DSpark TP=$TP; expected 2 or 4" >&2; exit 1 ;;
+esac
 export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
 
 # AgentX concurrency counts live session trees, not individual requests.
@@ -67,8 +69,8 @@ fi
 
 # TP2 doubles the per-GPU weight footprint. Bound long-context indexer
 # workspace with smaller chunks while reserving roughly 18 GiB for transient
-# allocations. TP4 retains the established memory and prefill settings.
-MEM_FRACTION_STATIC=0.70
+# allocations. TP4 reserves roughly 35 GiB before draft and graph buffers.
+MEM_FRACTION_STATIC=0.80
 CHUNKED_PREFILL_SIZE=4096
 if (( TP == 2 )); then
     MEM_FRACTION_STATIC=0.90
@@ -121,10 +123,8 @@ SGLANG_CMD=(
     --tp "$TP" --ep-size "$EP_SIZE"
     # Backends resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl
     # on Blackwell); the cookbook warns that overriding them costs decode speed.
-    # 0.70 rather than the cookbook's 0.8, and a bounded prefill chunk: the
-    # sparse-attention indexer and DSpark prefill buffers scale with the chunk
-    # times the 1M context, and the default 16384 chunk exhausted HBM on the
-    # first 66k-99k-token AgentX prompts.
+    # The sparse-attention indexer and DSpark prefill buffers scale with the
+    # chunk times the 1M context; bound chunks to retain transient workspace.
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     # Long AgentX prefills otherwise starve active draft/verify decode rounds.

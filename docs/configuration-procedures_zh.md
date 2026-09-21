@@ -352,7 +352,7 @@ Maximum concurrency for 1,048,576 tokens per request: 6.70x
 `lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5`；其他 NVIDIA 配方使用
 `lmsysorg/sglang:dev-dsv41`，MI355X 使用 `lmsysorg/sglang:dev-dsv41-mi35x`。
 
-B200 设置 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。在
+B200 主机表候选设置 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。在
 [run 35626514270](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35626514270)
 中，共享主机表的大页覆盖率为零。每个 rank 的匿名分片无需修改主机 sysctl 即可申请大页，
 并保留查询结果的 all-reduce。必须从每个 rank 的启动日志核实实际大页比例；
@@ -367,6 +367,8 @@ DSpark 使用固定上游 nightly 自带的默认草稿实现，包括默认计�
 STP 不加载草稿模型，STP 与评估均清除合成接受率设置。受限 TP2/EP2 DSpark C1 探测
 保留主机 Engram 分片，将静态显存比例设为 0.90，prefill chunk 减半至 2048；
 扩展测试点前必须实测启动显存与临时工作区。
+TP4 DSpark 还比较静态显存比例 0.80 的 GPU 常驻 Engram 与固定提交的主机表基线；
+TP2 保留主机表。
 DSpark 也设置 `--prefill-decode-interval 16`，在长 prefill 之间调度草稿生成与验证；
 需评估完整吞吐与交互性能曲线。
 

@@ -404,7 +404,7 @@ which has no released SGLang version for this model yet. B200 pins the CUDA 13 n
 `lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5` by digest; the other NVIDIA arms use
 `lmsysorg/sglang:dev-dsv41` and MI355X uses `lmsysorg/sglang:dev-dsv41-mi35x`.
 
-B200 uses `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`. Its shared host tables had
+B200 host-table candidates use `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`. Shared host tables had
 zero huge-page backing in [run 35626514270](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35626514270).
 Per-rank anonymous shards request huge pages without host sysctl changes and retain the
 lookup all-reduce. Verify the actual huge-page percentage in every rank's startup log;
@@ -422,6 +422,8 @@ including its default computation and Markov precision. STP loads no draft;
 both STP and evals clear synthetic acceptance. A bounded TP2/EP2 DSpark C1 probe
 keeps host Engram shards, uses a 0.90 static memory fraction, and halves prefill
 chunks to 2048; measure startup memory and transient workspace before extending it.
+TP4 DSpark also compares GPU-resident Engram at a 0.80 static memory fraction
+against the pinned host-table baseline; TP2 keeps host tables.
 DSpark also uses `--prefill-decode-interval 16` to give draft/verify rounds service
 between long prefills; evaluate its full throughput/interactivity curve.
 
