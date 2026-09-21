@@ -8114,16 +8114,16 @@ dsv41flash-fp4-gb200-vllm-agentic-dspark:
 
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on GB200, from the SGLang cookbook
 # (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
-# DSv4.1 Flash support has not shipped in an SGLang release; this uses the
-# preview build lmsysorg/sglang:dev-dsv41, digest
-# sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860 (2026-09-11, amd64 + arm64).
+# Official CUDA 13 nightly, verified 2026-09-21 (amd64 + arm64):
+# manifest sha256:987c7e4bd26918647211a5dcad72a2bdf2a5f394ac1469eff730e7517fc139be
+# arm64 sha256:9e1fb4c395b9c406136e10aa445b8784d06bca3839623b52cbe4a3b231a157a8.
 # Native five-token DSpark (--speculative-algorithm DSPARK
 # --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
 # throughput, real verification for evals. The KV cache stays GPU-resident.
 # Follows the cookbook's verified Blackwell TP4/EP4 low-latency cell; backends
 # resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl).
 dsv41flash-fp4-gb200-sglang-agentic-dspark:
-  image: lmsysorg/sglang:dev-dsv41
+  image: lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5@sha256:987c7e4bd26918647211a5dcad72a2bdf2a5f394ac1469eff730e7517fc139be
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb200-nv

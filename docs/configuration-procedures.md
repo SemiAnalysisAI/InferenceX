@@ -400,7 +400,12 @@ Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/mode
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` are the SGLang counterparts of the vLLM
 arms, one PR per SKU across h100, h200, b200, b300, gb200, gb300 and mi355x. They follow the
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1),
-which has no released SGLang version for this model yet: every NVIDIA arm uses the
+which has no released SGLang version for this model yet. The GB200 arm pins the official
+`lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5` multi-architecture manifest
+`sha256:987c7e4bd26918647211a5dcad72a2bdf2a5f394ac1469eff730e7517fc139be`;
+its ARM64 image is `sha256:9e1fb4c395b9c406136e10aa445b8784d06bca3839623b52cbe4a3b231a157a8`.
+The GB200 recipe retains TP4/EP4, native five-token DSpark, automatic backends,
+and the existing GPU-resident KV and golden-AL policy. Other NVIDIA arms use the
 multi-arch preview build `lmsysorg/sglang:dev-dsv41` and MI355X uses
 `lmsysorg/sglang:dev-dsv41-mi35x`. Both tags are mutable, so the master configs and the
 changelog record the digests they were validated against.
