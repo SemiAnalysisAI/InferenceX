@@ -112,7 +112,6 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
     scripts = {
         "git": 'if [[ "$1" == clone ]]; then mkdir -p "${@: -1}/configs"; else echo test-commit; fi',
         "uv": 'if [[ "$1" == venv ]]; then mkdir -p .venv/bin; echo ":" > .venv/bin/activate; fi',
-        "unsquashfs": "exit 0",
         "squeue": '[[ "$TEST_FAILURE" == submission ]] && echo "42 RUNNING"; exit 0',
         "sacct": 'if [[ "$TEST_FAILURE" == allocation ]]; then echo "FAILED|1:0"; else echo "COMPLETED|0:0"; fi',
         "scancel": 'printf "%s\\n" "$@" >> "$CANCEL_CAPTURE"',
@@ -159,4 +158,7 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
     assert (tmp_path / "gpu_metrics.csv").read_text() == "gpu,power\n0,300\n"
     assert json.loads((tmp_path / "gpu_metrics_context.json").read_text()) == {"device_count": 4}
     assert (tmp_path / "srt-single-node-logs.tar.gz").stat().st_size > 0
+    cluster_config = yaml.safe_load(next(tmp_path.glob("srt-single.*/checkout/srtslurm.yaml")).read_text())
+    assert cluster_config["containers"]["test:tag"] == "test:tag"
+    assert cluster_config["use_exclusive_sbatch_directive"] is True
     assert (capture.read_text() if capture.exists() else "") == ("42\n" if failure == "submission" else "")

@@ -46,13 +46,17 @@ if [[ "$EXECUTION_PATH" == native-single-node ]]; then
     python3 -m infx.srt_slurm.single_node prepare "$GITHUB_WORKSPACE/$SRT_RECIPE" "$SRT_PILOT_ROOT/arguments"
     mapfile -d '' -t SRT_RUNTIME_ARGS < "$SRT_PILOT_ROOT/arguments"
     SQUASH_FILE="/data/containers/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    check_staged_srt_assets "$DSR1_FP8_MODEL_PATH" "$SQUASH_FILE"
+    if [[ ! -r "$DSR1_FP8_MODEL_PATH/config.json" ]]; then
+        echo "ERROR: staged model config is unavailable: $DSR1_FP8_MODEL_PATH" >&2
+        exit 1
+    fi
     NGINX_SQUASH_FILE=/data/containers/nginx+1.27.4.sqsh
     write_srt_cluster_config h200-dgxc-slurm srtslurm.yaml 0 \
         --var SRT_DEFAULT_TIME_LIMIT "$SALLOC_TIME_LIMIT" \
         --var AIPERF_MMAP_CACHE_HOST_PATH "$AIPERF_MMAP_CACHE_HOST_PATH" \
         --var HF_HUB_CACHE_MOUNT "$HF_HUB_CACHE_MOUNT" --var CONTAINER_KEY "$IMAGE" \
         --model "hf:$MODEL" "$DSR1_FP8_MODEL_PATH" \
+        --container "$IMAGE" "$IMAGE" \
         --mount "$HF_HUB_CACHE_MOUNT" "$HF_HUB_CACHE" --exclusive
 
     SRT_JOB_ID=""

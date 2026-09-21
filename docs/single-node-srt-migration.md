@@ -95,10 +95,11 @@ passes a native file/selector through the matrix and workflow to the existing
 H200 pool launcher. Production `h200` coverage, including CoreWeave, is unchanged.
 
 The launcher checks the recipe's model, image, precision, topology, and workload
-against matrix metadata before submission. It resolves the model and requested
-image to their existing staged cluster assets, requests an exclusive node, and
-binds concurrency and artifact inputs with native `--set`. Missing assets fail
-readiness instead of starting a second download or using a different image.
+against matrix metadata before submission. It resolves the model to its staged
+cluster path and passes the exact recipe image URI to native SRT/Pyxis container
+startup. It requests an exclusive node and binds concurrency and artifact inputs
+with native `--set`. Missing model assets fail before submission; the pilot does
+not depend on the legacy launcher's separately managed squash cache.
 Plain `sglang` submissions use the shared automatic acceptance connector.
 
 Submission uses native JSON output. The launcher waits for a successful Slurm
