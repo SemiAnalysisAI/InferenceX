@@ -132,10 +132,30 @@ sbatch_directives:
 srun_options:
   container-remap-root: ""
 
+telemetry:
+  enabled: true
+  # Fleet-standard cadence (1000 ms / 2 s), same as the seven GB200 Kimi-K3
+  # recipes that already pass the power gate. Run 35492708340 showed the
+  # head node's own dcgm-exporter has a 1.0-1.6 s response tail while it
+  # shares the node with the frontend, NATS/etcd and the AIPerf client; a 1 s
+  # request_timeout censors that tail into repeated misses and
+  # sample_gap_exceeded. Do not tighten request_timeout_seconds below 2.
+  collect_interval_ms: 1000
+  storage_subdir: power
+  required: true
+  startup_timeout_seconds: 120
+  request_timeout_seconds: 2
+  collector_join_timeout_seconds: 12
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    port: 9401
+
 benchmark:
   type: custom
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
+    ENABLE_AGENTX_POWER: "1"
+    REQUIRE_POWER: "1"
     INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
     AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: "300"
     AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: "0.25"

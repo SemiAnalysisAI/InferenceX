@@ -15,7 +15,7 @@ import math
 import os
 import socket
 import time
-from datetime import UTC
+from datetime import timezone
 from pathlib import Path
 
 from . import ALL_POWER_METRIC_KEYS
@@ -248,7 +248,9 @@ def run(
                         continue
                     if gpu not in selected_ids:
                         continue
-                    timestamp = _parse_timestamp((row.get(t_col) or ""), naive_timezone=UTC)
+                    timestamp = _parse_timestamp(
+                        (row.get(t_col) or ""), naive_timezone=timezone.utc
+                    )
                     # Invalid rows are retained for the common validator to reject.
                     samples.append((timestamp, selected_ids[gpu], row.get(p_col) or ""))
             receipts.append(

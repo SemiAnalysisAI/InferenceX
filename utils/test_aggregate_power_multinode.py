@@ -653,3 +653,84 @@ def test_v2_samples_reject_mixed_versions_and_invalid_utilization(tmp_path, row)
     rows, reasons = apm.read_samples(path)
     assert not rows
     assert reasons == ("samples_csv_malformed",)
+
+
+class TestOverlongSampleGapBudget:
+    """An over-long gap is interpolated coverage, not a corrupt measurement.
+
+    H200 Kimi-K3 run 35532102407 voided its whole TP16 lane because one node's
+    exporter answered in 3.26 s and 3.10 s during a 3640 s window. The passing
+    TP8 lane in the same run had a larger 3.22 s excursion and survived only
+    because it landed in warmup, outside the window. These fix the tolerance to
+    what the coverage is actually worth instead of to that accident.
+
+    Both bounds mirror srt-slurm; the producer stores its own verdict and this
+    consumer recomputes it, so a value that drifts fails as a recompute
+    mismatch rather than silently diverging.
+    """
+
+    WINDOW = (1_000_000.0, 1_003_600.0)  # a 3600 s agentic window
+
+    def _devices(self, pauses=(), step=1.0):
+        """One host of 8 GPUs sampling at `step`, dwelling at each (offset, gap)."""
+        start, end = self.WINDOW
+        pending = sorted(pauses)
+        times, timestamp = [], start - 2.0
+        while timestamp <= end + 2.0:
+            times.append(timestamp)
+            advance = step
+            if pending and timestamp - start >= pending[0][0]:
+                advance = pending.pop(0)[1]
+            timestamp = round(timestamp + advance, 3)
+        return [
+            apm.ObservedDevice(
+                hostname="node-p", gpu_index=index, gpu_uuids=(f"GPU-{index}",),
+                first_sample_time_unix=times[0], last_sample_time_unix=times[-1],
+                sample_times=tuple(times),
+            )
+            for index in range(8)
+        ]
+
+    def _judge(self, devices):
+        start, end = self.WINDOW
+        return apm._check_coverage(start, end, {d.key for d in devices}, devices)
+
+    def test_two_isolated_excursions_are_absorbed(self):
+        # The exact H200 TP16 c6 shape: 6.36 s of 3600 s, 0.18%.
+        gaps, reasons = self._judge(self._devices([(600.0, 3.26), (1800.0, 3.10)]))
+
+        assert reasons == []
+        assert gaps["node-p/GPU-0"] == pytest.approx(3.26)
+
+    def test_gap_past_the_hard_ceiling_is_rejected(self):
+        # 11 s is 0.3% of the window, inside the budget, so only the ceiling catches it.
+        _, reasons = self._judge(self._devices([(600.0, 11.0)]))
+
+        assert "sample_gap_exceeded" in reasons
+
+    def test_excursions_are_rejected_once_they_leave_the_budget(self):
+        # Six 3.5 s gaps is 21 s of 3600 s, past 0.5%, none near the ceiling.
+        gaps, reasons = self._judge(self._devices([(300.0 * n, 3.5) for n in range(1, 7)]))
+
+        assert "sample_gap_exceeded" in reasons
+        assert gaps["node-p/GPU-0"] == pytest.approx(3.5)
+
+    def test_a_short_window_still_rejects_what_a_long_one_absorbs(self):
+        """The budget is a fraction, so tolerance tracks what is actually lost."""
+        devices = self._devices([(10.0, 3.26)])
+        start = self.WINDOW[0]
+        short_end = start + 60.0
+        _, reasons = apm._check_coverage(start, short_end, {d.key for d in devices}, devices)
+
+        assert "sample_gap_exceeded" in reasons
+
+    def test_the_rule_only_ever_relaxes(self):
+        """Nothing the old ceiling accepted can start failing.
+
+        With no gap past MAX_SAMPLE_GAP_SECONDS there is no over-long time to
+        budget and no gap near the ceiling, so the new rule is a strict
+        superset of the old one and no already-published point can regress.
+        """
+        _, reasons = self._judge(self._devices(step=apm.MAX_SAMPLE_GAP_SECONDS))
+
+        assert reasons == []

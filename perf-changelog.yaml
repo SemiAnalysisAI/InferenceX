@@ -8455,3 +8455,15 @@
   description:
     - "Update B200 vLLM AgentX to DSpark6 and a new image with TP8 and DEP8 configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable required measured power on the four remaining GB200 Kimi-K3 aggregate recipes (tp16-latency, tep16-balanced, dep16, dep16-vllm-simple-offload), matching the seven already collecting power. Also restores the srt-slurm power staging that has been failing to import on the runner interpreter since #3153. Selects every GB200 Kimi-K3 config key so the sweep re-measures the complete published curve in one run: AgentX resolves one curve per hardware, so a partial GB200 selection would replace the published points instead of extending them. Telemetry on the four lanes stays at the fleet-standard 1000 ms / 2 s cadence: run 35492708340 showed the head node's dcgm-exporter has a 1.0-1.6 s response tail, so the earlier 500 ms / 1 s setting censored it into sample_gap_exceeded on every completed point. The two DEP16 recipes also drop max-num-batched-tokens from 16384 to 8192: FlashInfer's MXFP4 MoE workspace is allocated per forward and scales with the batch's token count, and at 16384 it requested 3.64 GiB against 3.50 GiB free in run 35492708340, killing a rank 24 minutes in and leaving the surviving ranks to hang in a collective until the NCCL heartbeat monitor aborted the job. TP4/DP4 holds four times the non-expert weights per GPU that a TP16 recipe does, so it lacks the headroom the larger chunk needs. 8192 is what every GB200 recipe that survived that run already uses, and it leaves KV cache untouched."
+    - "为 GB200 Kimi-K3 剩余四个聚合配方（tp16-latency、tep16-balanced、dep16、dep16-vllm-simple-offload）启用必需实测功耗，与已采集功耗的七个配方保持一致；同时修复 #3153 之后 srt-slurm 功耗暂存在 runner 解释器上无法导入的问题。本条目选中 GB200 Kimi-K3 全部 config key，让一次 sweep 重测整条已发布曲线：AgentX 每个硬件只解析出一条曲线，只选部分 GB200 key 会替换掉已发布的点而不是扩充它们。 四个配方的 telemetry 保持集群标准的 1000 ms / 2 s 节奏：run 35492708340 显示头节点的 dcgm-exporter 存在 1.0-1.6 s 的响应长尾，此前的 500 ms / 1 s 设置会把它截成 sample_gap_exceeded，导致每个跑完的点都被丢弃。两个 DEP16 配方同时把 max-num-batched-tokens 从 16384 降到 8192：FlashInfer 的 MXFP4 MoE workspace 按每次 forward 分配，大小随 batch 的 token 数增长；在 run 35492708340 中它申请 3.64 GiB，而当时只剩 3.50 GiB free，导致某个 rank 在开跑 24 分钟后被杀，其余 rank 卡在集合通信上，直到 NCCL 心跳监控终止整个作业。TP4/DP4 每张卡驻留的非专家权重是 TP16 配方的四倍，没有更大 chunk 所需的余量。8192 正是该次运行中存活的所有 GB200 配方已在使用的值，且不影响 KV cache。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3287
