@@ -8425,7 +8425,9 @@ glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact:
           # This recipe records bounded PMIx worker startup diagnostics.
           # Use one prefill LIBFABRIC posting thread with automatic acceptance selection.
           # 使用单个预填充 LIBFABRIC 提交线程，并自动选择接受长度。
-          - "CONFIG_FILE=recipes/trtllm/glm5.2/b300-fp4/agentic/dynamo-disagg-b300-1p1d-tep8-compact-c20-b5-mtp5.yaml"
+          # Record periodic stacks on both roles and iteration logs on every prefill rank.
+          # 记录预填充和解码工作进程的周期性调用栈，以及每个预填充工作进程的迭代日志。
+          - "CONFIG_FILE=recipes/trtllm/glm5.2/b300-fp4/agentic/dynamo-disagg-b300-1p1d-tep8-compact-c20-b5-mtp5-runtime-stacks.yaml"
         decode:
           num-worker: 1
           tp: 8
