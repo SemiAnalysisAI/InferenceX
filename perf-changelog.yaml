@@ -8455,3 +8455,16 @@
   description:
     - "Update B200 vLLM AgentX to DSpark6 and a new image with TP8 and DEP8 configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a TP4 arm with Engram CPU offload to the MI325X vLLM DeepSeek-V4.1-Flash AgentX recipe, keeping the existing TP8 arm with the tables GPU-resident; with the tables in pinned host memory the resident weights are ~81 GiB per rank, leaving ~100 GiB of KV per GPU on a 256 GB card after the indexer's 32 GiB logits buffer"
+    - "Repin the image from the expired nightly-eed1f3d0 tag to vllm/vllm-openai-rocm:nightly-3df4ae153eb385e27b52f26c81f8edb9e20b9984, the same commit the MI355X arm moved to; it carries vllm-project/vllm#57491, which widened the two is_cuda() gates to is_cuda_alike() so engram_config resolves on gfx942, and because cpu_offload now defaults on via VLLM_PLE_CPU_OFFLOAD the recipe sets it explicitly per TP"
+    - "Add --no-swa-bounded-replay: vllm-project/vllm#56227 turned SWA bounded replay on by default between the two pins and relies on a window clamp the ROCm sparse SWA path does not have, which crashed every gfx950 point with HSA_STATUS_ERROR_MEMORY_FAULT; gfx942 runs the same path. Prefix caching stays on"
+    - "为 MI325X vLLM DeepSeek-V4.1-Flash AgentX 配方新增启用 Engram CPU 卸载的 TP4 臂，同时保留 Engram 表驻留 GPU 的现有 TP8 臂；表移至固定页主机内存后每 rank 常驻权重约 81 GiB，在 256 GB 卡上扣除 indexer 的 32 GiB logits 缓冲区后每张 GPU 约剩 100 GiB KV"
+    - "将镜像从已失效的 nightly-eed1f3d0 重新固定到 vllm/vllm-openai-rocm:nightly-3df4ae153eb385e27b52f26c81f8edb9e20b9984（与 MI355X 臂相同的 commit）；该镜像包含 vllm-project/vllm#57491，将两处 is_cuda() 判定放宽为 is_cuda_alike()，使 engram_config 在 gfx942 上可解析；由于 cpu_offload 现通过 VLLM_PLE_CPU_OFFLOAD 默认开启，配方按 TP 显式设置该值"
+    - "新增 --no-swa-bounded-replay：vllm-project/vllm#56227 在两个 pin 之间将 SWA bounded replay 默认开启，其依赖的 window clamp 在 ROCm sparse SWA 路径中缺失，曾使所有 gfx950 数据点以 HSA_STATUS_ERROR_MEMORY_FAULT 崩溃；gfx942 使用同一路径。prefix caching 保持开启"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3333

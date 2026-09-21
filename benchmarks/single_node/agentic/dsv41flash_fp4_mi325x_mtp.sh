@@ -4,7 +4,8 @@ set -eo pipefail
 # DeepSeek-V4.1-Flash on MI325X (gfx942): native DSpark, GPU-resident KV. A copy
 # of the validated MI355X arm; gfx942 has no FP4 MFMA, so the MXFP4 experts run
 # through whichever AITER MoE kernel vLLM's selector supports on this arch, and
-# the Engram tables stay row-sharded on GPU per the upstream AMD defaults
+# the Engram tables are row-sharded on GPU at TP8 and offloaded to pinned
+# host memory at TP4
 # (256 GB x TP8 holds the 511 GB checkpoint with room for KV).
 # https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml
 source "$(dirname "$0")/../../benchmark_lib.sh"
@@ -58,6 +59,18 @@ while (( CAPTURE_SIZE < MAX_NUM_SEQS * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2
     CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
 done
 
+# vllm-project/vllm#57491 widened the two is_cuda() gates to is_cuda_alike(), so
+# this image resolves an Engram config on gfx942 and, because cpu_offload now
+# defaults on through VLLM_PLE_CPU_OFFLOAD, an explicit value is required rather
+# than the default. Keep the tables resident at TP8 so that curve stays
+# comparable with the validated concurrency 1-32 run; offload at TP4, where half
+# the checkpoint plus the tables does not fit a 256 GB card.
+if (( TP == 4 )); then
+    ENGRAM_CONFIG='{"cpu_offload":true}'
+else
+    ENGRAM_CONFIG='{"cpu_offload":false}'
+fi
+
 # Use the runner-specific port assigned by launch_mi325x-amds.sh.
 export AIPERF_SERVER_URL="http://localhost:${PORT}"
 export AIPERF_SERVER_METRICS_URLS="${AIPERF_SERVER_URL}/metrics"
@@ -81,6 +94,7 @@ VLLM_CMD=(
     --tokenizer-mode deepseek_v41
     --tool-call-parser deepseek_v41 --enable-auto-tool-choice
     --reasoning-parser deepseek_v41
+    --engram-config "$ENGRAM_CONFIG"
     # aiter: auto selection picked the unfused Triton MoE (TRITON_UNFUSED) on
     # gfx942 in run 35306398350 and still segfaulted at piecewise capture, so
     # the MoE kernel was not the culprit; keep the upstream recipe's name,
@@ -92,6 +106,14 @@ VLLM_CMD=(
     --max-num-seqs "$MAX_NUM_SEQS"
     --max-cudagraph-capture-size "$CAPTURE_SIZE"
     --max-num-batched-tokens 16384
+    # vllm-project/vllm#56227 turned SWA bounded replay on by default between the
+    # eed1f3d0 pin and this one. It relies on a window clamp that landed in the
+    # FlashInfer and FlashMLA kernels; the ROCm sparse SWA path only gained the
+    # replay_start kwarg, which crashed every gfx950 point with
+    # HSA_STATUS_ERROR_MEMORY_FAULT at the first prefix hit carrying a replay
+    # start. gfx942 runs the same ROCm sparse path. Drop this once ROCm clamps
+    # too; prefix caching stays on.
+    --no-swa-bounded-replay
     --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
     --disable-uvicorn-access-log
 )
