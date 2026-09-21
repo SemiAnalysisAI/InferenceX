@@ -85,10 +85,6 @@ export VLLM_USE_DIRECT_DCP_Q_GATHER=1
 export VLLM_USE_DIRECT_DCP_KV_GATHER=1
 # ~1.5 TB of MXFP4 shards loads well past the default readiness window.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
-export VLLM_RPC_TIMEOUT=600000
-# A Mooncake load blocks inside execute_model, which VLLM_RPC_TIMEOUT does not
-# cover; its own cap defaults to 300s and the offload stall tail reaches 240s.
-export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800
 export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=0
 export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
 export PYTHONNOUSERSITE=1
@@ -99,6 +95,9 @@ export PYTHONHASHSEED=42
 # socket race aborts warmup.
 export VLLM_HTTP_TIMEOUT_KEEP_ALIVE=900
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
+# Reconstruct traces serially while the model and Mooncake segments occupy RAM.
+# This changes dataset preparation only, before warmup and measured replay.
+export AIPERF_DATASET_WEKA_PARALLEL_WORKERS=1
 
 SERVER_LOG="$RESULT_DIR/server.log"
 MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"

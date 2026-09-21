@@ -164,6 +164,15 @@ On DSXE the container's libibverbs comes from the host through the enroot EFA
 hook, so the launcher mounts the host library directory at `/host-usr-lib`
 and the recipe loads its mlx5 provider through `RDMAV_DRIVERS`.
 
+The Kimi-K3 B300 recipe sets `AIPERF_DATASET_WEKA_PARALLEL_WORKERS=1` to
+reconstruct traces serially before warmup. This reduces concurrent dataset
+preparation alongside the loaded model and Mooncake memory segments; it does
+not reduce trace coverage, measured concurrency, or the KV cache budget.
+It also uses vLLM's default model RPC timeout after a 1800-second override
+still ended in a stalled worker response. These changes require a new full
+sweep; serial preparation is a candidate mitigation for the observed host OOM,
+not evidence that the separate serving stalls are repaired.
+
 ## Native TileRT power
 
 TileRT's shared importer preserves Docker Hub image names and converts explicit registries such as `ghcr.io/team/image:tag` to Enroot's `docker://ghcr.io#team/image:tag` syntax. Existing `#` references are preserved. Valid cached squash images are reused without importing; a cache hit does not validate the registry import path. Invalid cached images are removed under the import lock before retrying the import.

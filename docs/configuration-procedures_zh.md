@@ -139,6 +139,13 @@ InfiniBand 使用 GID 索引 0，RoCE 保持索引 3。没有兼容的活动网�
 挂入，因此启动脚本把主机库目录挂到 `/host-usr-lib`，配方通过
 `RDMAV_DRIVERS` 加载其中的 mlx5 驱动。
 
+Kimi-K3 B300 配方设置 `AIPERF_DATASET_WEKA_PARALLEL_WORKERS=1`，在 warmup 前
+串行重建 trace，减少模型和 Mooncake 内存段已加载时的数据准备并行度。
+此设置不减少 trace 覆盖、测量并发或 KV 缓存预算。1800 秒的 model RPC timeout
+仍因 worker 不返回而超时，因此配方恢复使用 vLLM 的默认超时。
+这些更改仍需新的完整 sweep；串行准备只是针对已观察到的主机 OOM 的候选缓解措施，
+不能证明另外的 serving 停顿已经修复。
+
 ## TileRT 原生功耗
 
 TileRT 的共享导入器保留 Docker Hub 镜像名称，并将 `ghcr.io/team/image:tag` 等显式仓库地址转换为 Enroot 的 `docker://ghcr.io#team/image:tag` 格式。已有的 `#` 地址保持不变。有效的缓存 squash 镜像会直接复用；命中缓存不能证明仓库导入路径有效。无效的缓存镜像会在持有导入锁时删除，再重新导入。

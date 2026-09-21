@@ -8463,3 +8463,10 @@
     - "Backport vLLM #55297 for request-local recompute after failed asynchronous Mooncake loads on B300; see docs/waiver/3088.md"
     - "Raise VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS to 1800 so an in-flight Mooncake load cannot trip vLLM's 300s execute_model cap, which killed concurrency 48 and 56"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Serialize B300 Kimi-K3 AIPerf trace reconstruction before warmup to reduce preparation memory pressure without reducing the workload or KV cache budget"
+    - "Remove the ignored VLLM_RPC_TIMEOUT variable and restore the default model RPC timeout after the 1800-second override still timed out; serving-stall recovery remains unverified"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3088
