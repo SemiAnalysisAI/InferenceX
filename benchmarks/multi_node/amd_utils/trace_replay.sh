@@ -133,4 +133,7 @@ export RESULT_FILENAME="$RESULT_FILENAME_BASE"
 
 if [ "$ANY_FAILED" -ne 0 ]; then
     echo "WARNING: at least one conc had a non-zero exit; per-conc result files were still written when possible." >&2
+    if [[ "${TRACE_REPLAY_STRICT:-0}" == "1" ]]; then
+        exit 1
+    fi
 fi
