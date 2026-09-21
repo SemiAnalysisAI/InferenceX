@@ -8031,10 +8031,10 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Update the ATOM image from rocm/atom-dev:nightly_202608280858 to rocm/atom-dev:nightly_202609161445, built from a ROCm/ATOM line containing native RCCL DEP."
-    - "Move the concurrency 48/64/96/128/256 ATOM AgentX band from DPA with TBO and the default MoE transport to native RCCL DEP (TP8/DPA8/EP8), while preserving the TP-only concurrency 1/2/4/8/16 band."
-    - "Match the validated DEP run: disable EPLB and TBO, use least-tokens routing with session affinity and zero request equivalence, set the state checkpoint interval to 32768 tokens, and use real MTP acceptance on DEP."
-    - "Carry over the validated AgentX transport, terminal-MTP, and AIPerf timeout/failure settings for stable multi-turn replay."
+    - "Update the ATOM image from rocm/atom-dev:nightly_202608280858 to rocm/atom-dev:nightly_202609161445, the first ROCm/ATOM line carrying native RCCL DEP and the DSpark K6 kernels."
+    - "Switch both throughput bands from EAGLE MTP (spec-decoding: mtp) to DSpark (spec-decoding: draft_model) on the DeepSeek-V4-Pro-0813 checkpoint, pinned to revision 72e1d3230f6c080a530b0a1d46f8eb4602340597 and verified before GPU startup by check_dsv4_dspark_checkpoint.py (66 shards plus the DSpark Markov/confidence heads)."
+    - "Raise NUM_SPEC_TOKENS from 3 to 6 (DSpark K6: six draft tokens plus one target token, a q7 verify window) and the forced acceptance length SPEC_DECODE_AL from 2.49 to 3.77, the committed golden value from golden_al_distribution/dsv4-pro-0813-dspark.yaml (thinking_on, K6). Both throughput bands pin this AL; EVAL_ONLY runs verify real DSpark drafts."
+    - "Move the concurrency 48/64/96/128/256 band from DPA with TBO and the default MoE transport to native RCCL DEP (TP8/DPA8/EP8: --enable-dp-attention --all2all-backend rccl --dp-load-balance least_tokens --moe-backend standard, TBO disabled), while the concurrency 1/2/4/8/16 band stays TP-only (TP8/EP1). Session affinity is preserved via the AIPerf correlation-id session id so each conversation pins to one DP rank, and STATE_CHECKPOINT_INTERVAL_TOKENS stays 8192."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912
 
 - config-keys:
