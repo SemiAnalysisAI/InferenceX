@@ -55,11 +55,10 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# TP4 can hold the original Engram payload on GPU: the STP placement probe
-# measured 120.54 GiB weights and 35.31 GiB free after the .80 memory pool.
-# TP2 retains per-rank anonymous host shards with verified huge-page backing.
+# Host Engram leaves more of the fixed static pool available for retained SWA
+# prefix tails and full KV. Compare with the pinned GPU-placement candidates.
 case "$TP" in
-    4) export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0 ;;
+    4) export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1 ;;
     2) export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1 ;;
     *) echo "Unsupported DSpark TP=$TP; expected 2 or 4" >&2; exit 1 ;;
 esac
@@ -79,12 +78,12 @@ if (( MAX_RUNNING_REQUESTS > CUDA_GRAPH_MAX_BS )); then
 fi
 # Reserve more reusable SWA prefix tails within the same static memory pool.
 # The default four tails per request can evict prefixes while full KV is idle.
-SWA_PREFIX_TAILS=$((8 * MAX_RUNNING_REQUESTS))
+SWA_PREFIX_TAILS=$((16 * MAX_RUNNING_REQUESTS))
 
 # TP2 doubles the per-GPU weight footprint. Bound long-context indexer
 # workspace with smaller chunks while reserving roughly 18 GiB for transient
-# allocations. TP4 reserves roughly 35 GiB before draft and graph buffers.
-MEM_FRACTION_STATIC=0.80
+# allocations. TP4 retains the pinned host baseline's memory budget.
+MEM_FRACTION_STATIC=0.70
 CHUNKED_PREFILL_SIZE=4096
 if (( TP == 2 )); then
     MEM_FRACTION_STATIC=0.90
@@ -142,7 +141,7 @@ SGLANG_CMD=(
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     # Long AgentX prefills otherwise starve active draft/verify decode rounds.
-    --prefill-decode-interval 4
+    --prefill-decode-interval 16
     --swa-prefix-tails "$SWA_PREFIX_TAILS"
     "${SPECULATIVE_ARGS[@]}"
     --max-running-requests "$MAX_RUNNING_REQUESTS"

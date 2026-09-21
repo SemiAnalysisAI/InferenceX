@@ -427,13 +427,12 @@ MoE weights. Its hash-verified load-memory patch releases completed w13 input li
 before stacking w2; tensor payloads, layouts, and computation remain unchanged.
 TP2 also enables PyTorch expandable allocator segments: releasing the temporaries
 lowered live allocation by 2.24 GiB but left fragmented cached blocks.
-TP4 DSpark also compares GPU-resident Engram at a 0.80 static memory fraction
-against the pinned host-table baseline; TP2 keeps host tables.
-DSpark compares `--prefill-decode-interval 4` with a pinned interval-16 baseline
-to balance prefill service and draft/verify latency; evaluate the full frontier.
-The cache candidate reserves eight SWA prefix tails per running request (512
-at the 64-request cap), rather than four. This reallocates the same static pool
-from full KV to reusable sliding-window tails; verify cache hits and capacity.
+TP4 DSpark compares GPU-resident Engram at static memory fraction 0.80 with
+host tables at 0.70. Pinned GPU candidates test intervals 4 and 16 with 512 SWA
+prefix tails at C32. The host cache candidate uses interval 16 and 16 prefix
+tails per running request (1024 at the 64-request cap). This reallocates the
+same static pool from full KV to reusable sliding-window tails; verify cache
+hits, capacity, and the full throughput/interactivity frontier. TP2 keeps host tables.
 
 DSpark is the checkpoint's own bundled draft. SGLang exposes no EAGLE or MTP path and no
 `--speculative-num-steps` knob for it; the recipes pass `--speculative-algorithm DSPARK
