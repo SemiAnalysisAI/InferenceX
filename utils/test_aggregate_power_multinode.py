@@ -87,12 +87,15 @@ def _uuid(host, idx):
     return f"GPU-{host}-{idx}"
 
 
-def _rows(power_fn=None):
+def _rows(power_fn=None, drop_scrapes=None):
+    """Producer rows at 1 Hz; ``drop_scrapes`` maps (host, idx) to scrape seqs it missed."""
     rows = []
     seq = 0
     ts = FIRST_TS
     while ts <= LAST_TS:
         for host, idx, _role, _het, watts in DEVICES:
+            if seq in (drop_scrapes or {}).get((host, idx), ()):
+                continue
             power = power_fn(host, idx, ts) if power_fn else watts
             rows.append([1, repr(ts), seq, host, idx, _uuid(host, idx), repr(power)])
         seq += 1
@@ -100,11 +103,20 @@ def _rows(power_fn=None):
     return rows, seq
 
 
-def build_package(tmp_path, power_fn=None, publication_valid=True, bench_extra=None) -> Package:
+def _largest_gap(host, idx, drop_scrapes):
+    """The largest in-window gap the producer would record for a device."""
+    missed = set((drop_scrapes or {}).get((host, idx), ()))
+    times = [FIRST_TS + seq for seq in range(int(LAST_TS - FIRST_TS) + 1) if seq not in missed]
+    return max(later - earlier for earlier, later in zip(times, times[1:]))
+
+
+def build_package(
+    tmp_path, power_fn=None, publication_valid=True, bench_extra=None, drop_scrapes=None
+) -> Package:
     pkg = Package(tmp_path)
     pkg.windows_dir.mkdir(parents=True)
 
-    rows, scrapes = _rows(power_fn)
+    rows, scrapes = _rows(power_fn, drop_scrapes)
     with open(pkg.power_dir / "samples.csv", "w", newline="") as handle:
         writer = csv.writer(handle)
         # Model the producer's wire format independently of the consumer's parser.
@@ -124,7 +136,10 @@ def build_package(tmp_path, power_fn=None, publication_valid=True, bench_extra=N
         }
         for host, idx, _role, _het, _w in sorted(DEVICES)
     ]
-    gaps = {f"{host}/{_uuid(host, idx)}": 1.0 for host, idx, _r, _h, _w in sorted(DEVICES)}
+    gaps = {
+        f"{host}/{_uuid(host, idx)}": _largest_gap(host, idx, drop_scrapes)
+        for host, idx, _r, _h, _w in sorted(DEVICES)
+    }
     manifest = {
         "schema_version": 1,
         "producer": "srt-slurm.dcgm-power",
@@ -458,19 +473,24 @@ class TestSampleGates:
         sidecar = assert_invalid(pkg, "package_recompute_invalid")
         assert any("timestamp_non_monotonic" in failure for failure in sidecar["failures"])
 
-    def test_sampling_gap_over_fixed_three_seconds_rejected(self, tmp_path):
-        pkg = build_package(tmp_path)
+    def test_sampling_gap_over_three_seconds_is_reported_not_rejected(self, tmp_path):
+        """A 6 s hole on one GPU is metadata, mirroring the srt-slurm producer.
 
-        def drop(body):
-            return [
-                row
-                for row in body
-                if not (row[3] == "node-p" and row[4] == "0" and 20 <= int(row[2]) <= 24)
-            ]
+        The producer records the largest in-window gap per device and no longer
+        emits sample_gap_exceeded; one dcgm-exporter reply past its 2 s timeout
+        is already a 3 s+ gap at a 1 s cadence, and voiding the window over it
+        cost H200 Kimi-K3 run 35532102407 its TP16 lane. Constant power across
+        the hole integrates to the same energy, so every metric still publishes.
+        """
+        pkg = build_package(tmp_path, drop_scrapes={("node-p", 0): range(20, 25)})
 
-        _rewrite_samples(pkg, drop)
-        sidecar = assert_invalid(pkg, "package_recompute_invalid")
-        assert any("sample_gap_exceeded" in failure for failure in sidecar["failures"])
+        assert pkg.run(require_power=True) == 0
+        agg = pkg.agg()
+        assert agg["power_valid"] == 1
+        assert agg["total_gpu_energy_j"] == 84000.0
+        sidecar = pkg.sidecar()
+        assert sidecar["power_valid"] is True
+        assert max(sidecar["per_gpu_max_sample_gap_s"].values()) == 6.0
 
     def test_non_bracketing_device_rejected(self, tmp_path):
         pkg = build_package(tmp_path)

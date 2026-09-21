@@ -85,8 +85,10 @@ SAMPLES_HEADER = (
 # srt-slurm v2 appends optional utilization fields to the power samples.
 SAMPLES_HEADER_V2 = (*SAMPLES_HEADER, "gpu_util_pct", "sm_active")
 
-# Fixed by the producer contract (srt-slurm contract.MAX_SAMPLE_GAP_SECONDS),
-# NOT a multiple of the configured sample interval.
+# Mirrors the producer contract (srt-slurm contract.MAX_SAMPLE_GAP_SECONDS): the
+# interpolation bound at window boundaries, NOT a verdict on gaps inside the
+# window. The producer reports the largest in-window gap per device and no
+# longer emits sample_gap_exceeded; the recompute below must agree with it.
 MAX_SAMPLE_GAP_SECONDS = 3.0
 
 WORKER_ROLES = ("prefill", "decode", "agg")
@@ -742,13 +744,14 @@ def _check_coverage(
         if sequence is None:
             reasons.append("measurement_window_not_bracketed")
             continue
-        largest = max(
+        # Reported, not judged: a gap is interpolated coverage whose energy error
+        # is bounded by (dynamic range) x gap / 2, and one dcgm-exporter reply past
+        # the 2 s request timeout is already a 3 s+ gap at a 1 s cadence. A
+        # collector that stopped for good fails bracketing above instead.
+        gaps[f"{device.hostname}/{device.gpu_uuids[0]}"] = max(
             (later - earlier for earlier, later in itertools.pairwise(sequence)),
             default=0.0,
         )
-        gaps[f"{device.hostname}/{device.gpu_uuids[0]}"] = largest
-        if largest > MAX_SAMPLE_GAP_SECONDS:
-            reasons.append("sample_gap_exceeded")
 
     return gaps, reasons
 
