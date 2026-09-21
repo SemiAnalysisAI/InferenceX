@@ -35,6 +35,11 @@ SERVER_LOG="$RESULT_DIR/server.log"
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 
+# Preserve the three draft WO_A weights in their checkpoint FP8 precision.
+# This transparent patch is hash-guarded against the exact upstream nightly.
+python3 "$(dirname "$0")/patch_sglang_dsv41_native_wo_a.py" \
+    | tee "$RESULT_DIR/native_wo_a_patch.txt"
+
 # Agentic warmup dispatches hundreds of large prompts at once and SGLang's
 # tokenizer can leave bytes unacknowledged past AIPerf's default 30 s
 # TCP_USER_TIMEOUT, so Linux aborts live localhost connections.
@@ -48,12 +53,11 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# One shared host copy of the two fp8 Engram tables instead of a row-sharded
-# copy per rank: both engram all-reduces disappear, the freed HBM goes to the
-# KV pool, and output is bitwise unchanged. This is the SGLang counterpart of
-# the vLLM arm's engram cpu_offload; kv-offloading stays none because the KV
-# cache itself is GPU-resident.
+# Row-sharded anonymous host Engram tables allow transparent huge pages;
+# the shared memfd layout cannot use them when shmem THP is disabled.
+# Checkpoint weights/scales are unchanged, and the KV cache stays on GPU.
 export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
+export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
 
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts, and
@@ -127,6 +131,7 @@ SGLANG_CMD=(
 )
 write_command "$RESULT_DIR/sglang_command.txt" "${SGLANG_CMD[@]}"
 {
+    cat "$RESULT_DIR/native_wo_a_patch.txt"
     echo "=== SGLANG_* env vars at launch ==="
     env | grep -E '^SGLANG_' | sort
     echo "==================================="
