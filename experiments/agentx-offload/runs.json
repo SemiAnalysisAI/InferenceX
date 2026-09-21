@@ -2938,21 +2938,44 @@
         "offload_config.json": "8fd94cb6b3a41c8607eb2387c8a18808dd968b69984bf8dac58e103a281955e4",
         "benchmark.log": "217b0278041b43fb6178fd09e112723bde4e63d1a06d54306fcb7a788900f931"
       }
+    },
+    {
+      "run_id": 35580481104,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35580481104",
+      "arm": "nvme",
+      "concurrency": 512,
+      "repeat": 1,
+      "attempt": 1,
+      "head_sha": "64ee17834e6fbab522311a63f57ca918d8d46b69",
+      "status": "queued",
+      "workflow_name": "offload-v1-nvme4tib-c512-r1-20260921",
+      "dispatched_at": "2026-09-21T08:56:01Z",
+      "get_jobs_job_id": 106271978576,
+      "performance_result": false,
+      "target_node": "im-b200-c001",
+      "capacity_bytes_per_node": 4398046511104,
+      "capacity_reserve_bytes": 137438953472,
+      "capacity_required_bytes": 4535485464576
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871",
-  "status": "The 4 TiB NVMe-only c256 probe 35565538871 completed successfully on im-b200-c001. It delivered 17,262.395 total tok/s/GPU and 16.669 P90 interactivity with a 61.680% external-cache hit rate. Relative to matched HBM c256, total throughput/GPU improved 114.118%, P90 interactivity improved 116.188%, and P90 E2E latency fell 47.335%. Exact task-owned scratch cleanup completed through the owner-verified runtime exit path.",
+  "status": "The successful 4 TiB c256 NVMe result is recorded. The next 4 TiB NVMe-only c512 probe 35580481104 is queued, preserving the one-queued-B200-job and one-NVMe-workflow ceilings. It targets im-b200-c001 and must complete exact owner-verified cleanup before another NVMe-bearing dispatch.",
   "last_capacity_check": {
-    "checked_at": "2026-09-21T08:52:46Z",
-    "pending_e2e_workflows": 0,
+    "checked_at": "2026-09-21T08:56:10Z",
+    "pending_e2e_workflows_before_dispatch": 0,
     "active_study_run_ids": [],
     "active_study_job_ids": [],
-    "pending_study_run_ids": [],
-    "dispatch_allowed": true,
-    "reason": "The c256 NVMe run is terminal with valid profiling and exact cleanup. No e2e-tests workflow was queued at the fresh GitHub queue check."
+    "pending_study_run_ids": [
+      35580481104
+    ],
+    "pending_study_job_ids": [
+      106271978576
+    ],
+    "dispatch_allowed": false,
+    "reason": "The single allowed queued B200 job is the c512 NVMe probe. Launch nothing else until it starts or reaches a terminal state; no additional NVMe-bearing run is permitted until c512 is terminal and exact cleanup is verified."
   },
   "next_dispatch": {
-    "requires": "Dispatch one 4 TiB NVMe-only c512 probe pinned to im-b200-c001. Do not allow any additional NVMe-bearing study workflow to become active or queued until c512 is terminal and exact cleanup is verified. Retry c4 maintenance on c008 later when the one-queued-job ceiling permits."
+    "requires": "Monitor c512 run 35580481104. After it is terminal, retain hash-verified performance and cache evidence, verify exact task-owned cleanup, then perform a fresh B200 queue check before any further dispatch. Retry c4 maintenance on im-b200-c008 later when the one-queued-job ceiling permits."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
