@@ -9,6 +9,20 @@ export BENCH_NUM_PROMPTS_MULTIPLIER=10 DRY_RUN=0 KEEP_CONTAINERS=0
 export AIPERF_DRAIN_TIMEOUT_SECONDS=1800 AIPERF_DRAIN_POLL_SECONDS=10
 
 case "$FRAMEWORK" in
+    vllm-native-pp)
+        export VLLM_ROUTER_IMAGE=unused ROUTER_TYPE=none
+        export ROUTER_PORT=8000 SERVER_PORT=8000 PROXY_PING_PORT=36367 HEADNODE_PORT=20000
+        export SKIP_RDMA_CHECK=1 SKIP_GPU_SANITY=0
+        export ENABLE_METRICS=0 FLUSH_DRAIN_TIMEOUT=120 CLEAR_CACHE_BETWEEN_CONC=1
+        export PREFILL_ROUTER_POLICY=none DECODE_ROUTER_POLICY=none
+        # Kimi-K3 is 1.45 TiB and the Vultri fallback store is NFS.  A cold
+        # two-node load exceeded 30 minutes while making steady shard progress;
+        # match the existing K3 engine-ready allowance instead of killing rank
+        # 0 mid-load and presenting the resulting rank-1 TCPStore break as a
+        # network failure.
+        export TIME_LIMIT=08:00:00 MAX_MODEL_LEN=1048576 SERVER_UP_TIMEOUT=7200
+        export TORCH_NCCL_BLOCKING_WAIT=0 NCCL_BLOCKING_WAIT=0
+        ;;
     sglang-disagg|vllm-disagg|atom-disagg)
         export VLLM_ROUTER_IMAGE=vllm/vllm-router:nightly-20260716-1fbcde7 SKIP_RDMA_CHECK=0 SKIP_GPU_SANITY=0
         export ROUTER_TYPE=vllm-router ROUTER_PORT=30000 PROXY_PING_PORT=36367

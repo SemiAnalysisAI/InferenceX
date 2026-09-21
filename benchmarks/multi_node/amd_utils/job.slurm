@@ -34,7 +34,7 @@ echo ""
 
 # Use $(pwd) not BASH_SOURCE — sbatch copies the script to /var/spool/slurmd/
 # at runtime, but the CWD remains the submit-time directory (amd_utils/).
-if [[ "$ENGINE" == "vllm-disagg" ]]; then
+if [[ "$ENGINE" == "vllm-disagg" || "$ENGINE" == "vllm-native-pp" ]]; then
     MODELS_YAML="$(pwd)/models_vllm.yaml"
 elif [[ "$ENGINE" == "atom-disagg" ]]; then
     MODELS_YAML="$(pwd)/models_atom.yaml"
@@ -74,6 +74,9 @@ fi
 echo "Model found: $MODEL_YAML_KEY (MODEL_NAME=$MODEL_NAME, IS_AGENTIC=${IS_AGENTIC})"
 
 RUN_FILE="server.sh"
+if [[ "$ENGINE" == "vllm-native-pp" ]]; then
+    RUN_FILE="server_native_pp.sh"
+fi
 echo "Runfile set: $RUN_FILE"
 
 # DI_REPO_DIR points to the repo root.
@@ -86,7 +89,7 @@ export DI_REPO_DIR=$(cd "$(pwd)/../../.." && pwd)
 
 export MODEL_DIR
 
-if [[ "$ENGINE" == "vllm-disagg" ]]; then
+if [[ "$ENGINE" == "vllm-disagg" || "$ENGINE" == "vllm-native-pp" ]]; then
     # vLLM: Extract hf_dir from models.yaml, search multiple paths, resolve HF cache snapshots
     DISK_DIR_NAME=$(awk '/^'"$MODEL_NAME"':/{found=1; next}
         found && /^[^ ]/{exit}
@@ -551,7 +554,12 @@ HICACHE_MC_CONFIG="${BENCHMARK_LOGS_DIR}/hicache_mc_${SLURM_JOB_ID}.env"
         ROUTER_RESILIENCE_FLAGS TIME_LIMIT MAX_MODEL_LEN DISABLE_CUSTOM_ALL_REDUCE \
         HICACHE_TIER PREFILL_PORT DECODE_PORT HANDSHAKE_PORT MEM_FRAC_STATIC \
         KV_CACHE_DTYPE BLOCK_SIZE MAX_NUM_SEQS WAIT_SERVER_TIMEOUT WAIT_ROUTER_TIMEOUT \
-        WAIT_REMOTE_ROUTER_TIMEOUT ROUTER_POLICY_FLAGS NCCL_IB_HCA; do
+        WAIT_REMOTE_ROUTER_TIMEOUT ROUTER_POLICY_FLAGS NCCL_IB_HCA \
+        K3_NATIVE_PP K3_PP_LAYER_PARTITION K3_PP_RING_SIZE K3_PP_BATCH_CAP K3_TP_SIZE K3_DCP_SIZE \
+        K3_MAX_NUM_SEQS K3_MAX_CUDAGRAPH_CAPTURE_SIZE K3_CUDAGRAPH_CAPTURE_SIZES K3_MBT \
+        K3_GPU_MEMORY_UTILIZATION K3_MAMBA_SSM_CACHE_DTYPE K3_MAMBA_CACHE_MODE \
+        K3_SIMPLECPU_BYTES_PER_RANK K3_SERVED_MODEL_NAME SPEC_MODEL SPEC_NUM_TOKENS \
+        SPEC_SYNTHETIC_ACCEPTANCE_LENGTH K3_VISIBLE_DEVICES; do
         if [[ -n "${!setting+x}" ]]; then
             printf '%s=%q\n' "$setting" "${!setting}"
         fi
@@ -598,7 +606,7 @@ echo \"[docker-detect] rank \$SLURM_PROCID: DOCKER_CMD=\$DOCKER_CMD\"
 
 # Enable out-of-tree RDMA library mounts for atom-disagg (mooncake requires host RDMA stack)
 RDMA_MOUNTS=()
-if [[ "$ENGINE" == "atom-disagg" ]]; then
+if [[ "$ENGINE" == "atom-disagg" || "$ENGINE" == "vllm-disagg" || "$ENGINE" == "vllm-native-pp" ]]; then
 
 # When the container base OS differs from the host (e.g. Ubuntu 24.04 image
 # on a 22.04 host), the container's bundled libibverbs/libionic may be
@@ -744,11 +752,12 @@ fi
     ${DOCKER_ENV_ENGINE[*]} \
     ${CLIENT_DOCKER_ENV} \
     --name \"$DOCKER_CONT_NAME\" \
-    --entrypoint \"\" \
-    \"$DOCKER_IMAGE_NAME\" bash -lc '
+    --entrypoint \"$SERVER_ENTRYPOINT\" \
+    \"$DOCKER_IMAGE_NAME\" $SERVER_COMMAND '
         set -o pipefail
         mkdir -p /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'
-        '"$RUN_FILE_FULL"' 2>&1 | tee /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'/server_\$(hostname).log
+        test -r '"$RUN_FILE_FULL"' || { echo \"missing launcher: '"$RUN_FILE_FULL"'\"; exit 127; }
+        /bin/bash '"$RUN_FILE_FULL"' 2>&1 | tee /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'/server_\$(hostname).log
     '
 
 # Only reached when exec was skipped (vllm-disagg rank 0)
