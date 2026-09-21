@@ -59,6 +59,7 @@ print(f"PREFILL_MODEL_EP_DP_FLAGS='{sh(m.get('prefill_ep_dp_flags', _ep_dp))}'")
 print(f"DECODE_MODEL_EP_DP_FLAGS='{sh(m.get('decode_ep_dp_flags', _ep_dp))}'")
 print(f"MODEL_TP_DP_ENV='{sh(m.get('tp_dp_env', ''))}'")
 print(f"MODEL_EP_DP_ENV='{sh(m.get('ep_dp_env', ''))}'")
+print(f"MODEL_PREFILL_DP_ENV='{sh(m.get('prefill_dp_env', ''))}'")
 print(f"MODEL_MTP_FLAGS='{sh(m.get('mtp_flags', ''))}'")
 print(f"MODEL_KV_ARG='{sh(m.get('kv_cache_flags', ''))}'")
 print(f"_ONLINE_QUANT_CONFIG='{sh(m.get('online_quant_config', ''))}'")
@@ -179,6 +180,13 @@ if [ "$DECODE_ENABLE_DP" = "true" ]; then
         DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" ${DECODE_MODEL_TP_DP_FLAGS})
         for _dp_env_pair in ${MODEL_TP_DP_ENV}; do export "$_dp_env_pair"; done
     fi
+fi
+# Prefill-only DP env (e.g. GPU_MAX_HW_QUEUES): the shared DP env above is
+# exported on every node, so scope prefill-only knobs by role here. NODE_RANK <
+# NODE_OFFSET is a prefill node (see the node-role branch below); the recipe
+# leaves these unset on decode.
+if [ "$PREFILL_ENABLE_DP" = "true" ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
+    for _dp_env_pair in ${MODEL_PREFILL_DP_ENV}; do export "$_dp_env_pair"; done
 fi
 unset _dp_env_pair
 unset _ONLINE_QUANT_CONFIG _ONLINE_QUANT_DPA_CONFIG
