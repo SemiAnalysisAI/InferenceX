@@ -2,8 +2,8 @@
 set -eo pipefail
 set -x
 
-# DeepSeek-V4-Pro FP4 on B200 with vLLM MTP (num_speculative_tokens=3).
-# Throughput fixes synthetic acceptance to AL 2.49; EVAL_ONLY keeps real
+# DeepSeek-V4-Pro-0813 FP4 on B200 with vLLM DSpark (num_speculative_tokens=6).
+# Throughput fixes synthetic acceptance to AL 3.77; EVAL_ONLY keeps real
 # verification. Cudagraph capture sizes are in tokens (see the capture block).
 #
 # Required env vars:
@@ -75,7 +75,7 @@ fi
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${VLLM_BACKEND_PORT}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 
-export VLLM_ENGINE_READY_TIMEOUT_S=3600
+export VLLM_ENGINE_READY_TIMEOUT_S=7200
 
 # vllm-project/vllm#43447 keeps local SWA prefix-cache tails sparsely, while
 # vllm-project/vllm#44774 applies the same reachability policy to Mooncake's
@@ -203,12 +203,14 @@ if [ "$EP_SIZE" -gt 1 ]; then
     )
 fi
 if [ "$DP_ATTENTION" = "true" ]; then
-    # Keep B200's profiled activation footprint within the 0.90 GPU-memory
-    # budget; 16K prefill batches leave too little DeepGEMM runtime headroom.
+    DEP_KV_CACHE_BYTES=37580963840
+    if [ "$TP" -eq 8 ] && { [ "$CONC" -eq 160 ] || [ "$CONC" -eq 192 ]; }; then
+        DEP_KV_CACHE_BYTES=36507222016
+    fi
     MODE_ARGS+=(
-        --prefill-schedule-interval 8
+        --prefill-schedule-interval 16
         --long-prefill-token-threshold 512
-        --max-num-batched-tokens 8192
+        --kv-cache-memory-bytes "$DEP_KV_CACHE_BYTES"
     )
 fi
 
@@ -217,22 +219,28 @@ fi
 if [ "$DP_ATTENTION" = "true" ]; then
     MAX_NUM_SEQS=$((2 * CONC / TP))
 else
-    MAX_NUM_SEQS=$((2 * CONC))
+    MAX_NUM_SEQS=$CONC
 fi
 
 # Cudagraph capture sizes are in tokens: a decode batch of S seqs verifies
 # S*(1+N) tokens, so capture the multiples (1+N)..MAX_NUM_SEQS*(1+N). vLLM
 # rounds sizes up to multiples of (1+N) and dedups, so a plain 1..MAX_NUM_SEQS
 # list would cover only MAX_NUM_SEQS/(1+N) sequences.
-NUM_SPEC_TOKENS=3
+NUM_SPEC_TOKENS=6
 TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
-# Golden AL: golden_al_distribution/dsv4_mtp.yaml, thinking_on, 3 draft tokens.
-# EVAL_ONLY keeps real verification; synthetic acceptance bypasses it and
-# zeroes the SWE-bench score.
-if [ "${EVAL_ONLY}" = "true" ]; then
-    SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}"
+# Golden AL: golden_al_distribution/dsv4-pro-0813-dspark.yaml, thinking_on,
+# probabilistic drafting, 6 draft tokens. EVAL_ONLY keeps real verification.
+if [ "$EVAL_ONLY" = "true" ]; then
+    SPEC_CONFIG="{\"method\": \"dspark\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"draft_sample_method\": \"probabilistic\"}"
 else
-    SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": 2.49}"
+    SPEC_CONFIG="{\"method\": \"dspark\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": 3.77}"
+fi
+# Reserve verification slots in addition to DEP's 8192-token prefill budget.
+if [ "$DP_ATTENTION" = "true" ]; then
+    MAX_NUM_BATCHED_TOKENS=$((8192 + MAX_NUM_SEQS * TOKENS_PER_SEQ))
+    MODE_ARGS+=(--max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS")
+else
+    MODE_ARGS+=(--max-num-batched-tokens 16384 --kv-cache-memory-bytes 53687091200)
 fi
 CAPTURE_SIZE_LIST=()
 for ((num_seqs = 1; num_seqs <= MAX_NUM_SEQS; num_seqs++)); do
@@ -273,7 +281,7 @@ VLLM_CMD=(
     --tool-call-parser deepseek_v4
     --enable-auto-tool-choice
     --reasoning-parser deepseek_v4
-    --attention-config '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
+    --attention-config '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"indexer_kv_dtype":"mxfp4"}'
     --speculative-config "$SPEC_CONFIG"
     --no-disable-hybrid-kv-cache-manager
     --disable-uvicorn-access-log

@@ -214,8 +214,6 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Repository write credential for authorized reference-data collection.
-          token: ${{ secrets.REPO_PAT }} # zizmor: ignore[secrets-outside-env]
           fetch-depth: 0
           ref: ${{ inputs.ref || github.sha }}
           clean: true
@@ -264,7 +262,7 @@ jobs:
         if: ${{ inputs.open-pr && success() }}
         env:
           # Repository write credential for authorized reference-data collection.
-          GH_TOKEN: ${{ secrets.REPO_PAT }} # zizmor: ignore[secrets-outside-env]
+          GH_TOKEN: ${{ secrets.SPEEDBENCH_PAT }} # zizmor: ignore[secrets-outside-env]
         run: |
           set -eo pipefail
           # NOTE: the reference yaml is keyed by model at the top level. This
