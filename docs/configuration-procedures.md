@@ -405,6 +405,14 @@ multi-arch preview build `lmsysorg/sglang:dev-dsv41` and MI355X uses
 `lmsysorg/sglang:dev-dsv41-mi35x`. Both tags are mutable, so the master configs and the
 changelog record the digests they were validated against.
 
+B300 registers STP and DSpark on the pinned latest CUDA 13 nightly. Its DSpark
+path applies the hash-verified `patch_sglang_dsv41_native_wo_a.py` fix to preserve
+all three native FP8 WO_A weights and block scales; Markov weights remain native
+BF16. STP loads no draft. Both STP and evals clear synthetic acceptance. B300
+uses per-rank anonymous Engram host tables without host sysctl changes, and
+resolves downloaded Hugging Face snapshots locally before serving. Verify
+actual huge-page backing, native draft startup checks and full accuracy results.
+
 DSpark is the checkpoint's own bundled draft. SGLang exposes no EAGLE or MTP path and no
 `--speculative-num-steps` knob for it; the recipes pass `--speculative-algorithm DSPARK
 --speculative-dspark-block-size 5`. Throughput uses the same
