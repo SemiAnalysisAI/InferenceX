@@ -89,6 +89,17 @@ SAMPLES_HEADER_V2 = (*SAMPLES_HEADER, "gpu_util_pct", "sm_active")
 # NOT a multiple of the configured sample interval.
 MAX_SAMPLE_GAP_SECONDS = 3.0
 
+# Mirrors srt-slurm contract.MAX_SAMPLE_GAP_HARD_SECONDS and
+# MAX_OVERLONG_GAP_FRACTION. A gap past MAX_SAMPLE_GAP_SECONDS is over-long:
+# interpolated rather than measured, which bounds the per-device energy error
+# at (dynamic range) x gap / 2 -- under 0.04% for 3.3s of a 3640s window --
+# while rejecting the window discards an hour of measurement on every GPU of
+# the job. A collector that actually stopped still has to be caught, hence the
+# hard ceiling and the budget. Both values must match the producer exactly, or
+# this recompute disagrees with the stored audit and the point fails anyway.
+MAX_SAMPLE_GAP_HARD_SECONDS = 10.0
+MAX_OVERLONG_GAP_FRACTION = 0.005
+
 WORKER_ROLES = ("prefill", "decode", "agg")
 
 STATUS_COMPLETE = "complete"
@@ -742,12 +753,12 @@ def _check_coverage(
         if sequence is None:
             reasons.append("measurement_window_not_bracketed")
             continue
-        largest = max(
-            (later - earlier for earlier, later in itertools.pairwise(sequence)),
-            default=0.0,
-        )
+        observed = [later - earlier for earlier, later in itertools.pairwise(sequence)]
+        largest = max(observed, default=0.0)
         gaps[f"{device.hostname}/{device.gpu_uuids[0]}"] = largest
-        if largest > MAX_SAMPLE_GAP_SECONDS:
+        overlong = sum(gap for gap in observed if gap > MAX_SAMPLE_GAP_SECONDS)
+        budget = MAX_OVERLONG_GAP_FRACTION * (end - start)
+        if largest > MAX_SAMPLE_GAP_HARD_SECONDS or overlong > budget:
             reasons.append("sample_gap_exceeded")
 
     return gaps, reasons
