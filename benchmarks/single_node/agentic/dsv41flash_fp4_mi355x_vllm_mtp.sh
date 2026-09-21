@@ -46,6 +46,18 @@ export PYTHONUNBUFFERED=1
 # reaches c128, leaving no headroom for AgentX subagent fan-out.
 # Keep graph capture at the #3058 size through c64, then cover twice the outer
 # concurrency at c128.
+# vllm-project/vllm#57491 widened the two is_cuda() gates to is_cuda_alike(),
+# so on gfx950 this image now resolves an Engram config and offloads the tables
+# to pinned host memory unless an explicit value says otherwise. The tables cost
+# 47.2 GiB per rank at TP=4, so 94.4 GiB at TP=2, which does not fit beside half
+# of the 511 GB checkpoint on a 288 GiB card. Offload at TP=2; keep them resident
+# at TP=4 so it stays comparable with the validated concurrency 1-32 run.
+if (( TP == 2 )); then
+    ENGRAM_CONFIG='{"cpu_offload":true}'
+else
+    ENGRAM_CONFIG='{"cpu_offload":false}'
+fi
+
 NUM_SPEC_TOKENS=5
 GRAPH_NUM_SEQS=$((2 * CONC))
 if (( GRAPH_NUM_SEQS < 128 )); then
@@ -79,6 +91,7 @@ VLLM_CMD=(
     --tokenizer-mode deepseek_v41
     --tool-call-parser deepseek_v41 --enable-auto-tool-choice
     --reasoning-parser deepseek_v41
+    --engram-config "$ENGRAM_CONFIG"
     # aiter, not aiter_triton_mxfp4_bf16: the plain name opens vLLM's full
     # priority list and the CK kernel at its head wins. CK quantizes
     # activations to FP8 internally and dispatches the a8w4 experts
