@@ -87,11 +87,11 @@ def _uuid(host, idx):
     return f"GPU-{host}-{idx}"
 
 
-def _rows(power_fn=None):
+def _rows(power_fn=None, *, last_ts=LAST_TS):
     rows = []
     seq = 0
     ts = FIRST_TS
-    while ts <= LAST_TS:
+    while ts <= last_ts:
         for host, idx, _role, _het, watts in DEVICES:
             power = power_fn(host, idx, ts) if power_fn else watts
             rows.append([1, repr(ts), seq, host, idx, _uuid(host, idx), repr(power)])
@@ -100,11 +100,23 @@ def _rows(power_fn=None):
     return rows, seq
 
 
-def build_package(tmp_path, power_fn=None, publication_valid=True, bench_extra=None) -> Package:
+def build_package(
+    tmp_path,
+    power_fn=None,
+    publication_valid=True,
+    bench_extra=None,
+    *,
+    duration=60.0,
+    producer_sha=PRODUCER_SHA,
+    required=True,
+    request_timeout_seconds=2.0,
+) -> Package:
     pkg = Package(tmp_path)
     pkg.windows_dir.mkdir(parents=True)
 
-    rows, scrapes = _rows(power_fn)
+    window_end = WINDOW_START + duration
+    last_ts = window_end + 2.0
+    rows, scrapes = _rows(power_fn, last_ts=last_ts)
     with open(pkg.power_dir / "samples.csv", "w", newline="") as handle:
         writer = csv.writer(handle)
         # Model the producer's wire format independently of the consumer's parser.
@@ -120,7 +132,7 @@ def build_package(tmp_path, power_fn=None, publication_valid=True, bench_extra=N
             "gpu_index": idx,
             "gpu_uuids": [_uuid(host, idx)],
             "first_sample_time_unix": FIRST_TS,
-            "last_sample_time_unix": LAST_TS,
+            "last_sample_time_unix": last_ts,
         }
         for host, idx, _role, _het, _w in sorted(DEVICES)
     ]
@@ -129,7 +141,7 @@ def build_package(tmp_path, power_fn=None, publication_valid=True, bench_extra=N
         "schema_version": 1,
         "producer": "srt-slurm.dcgm-power",
         "producer_version": "1.0",
-        "producer_git_commit": PRODUCER_SHA,
+        "producer_git_commit": producer_sha,
         "source_metric": "DCGM_FI_DEV_POWER_USAGE",
         "unit": "W",
         "power_scope": "gpu_device_board_as_reported_by_dcgm",
@@ -137,11 +149,11 @@ def build_package(tmp_path, power_fn=None, publication_valid=True, bench_extra=N
         "job_id": "12345",
         "run_name": "canary",
         "sample_interval_seconds": 1.0,
-        "request_timeout_seconds": 2.0,
+        "request_timeout_seconds": request_timeout_seconds,
         "max_scrape_duration_seconds": 0.05,
-        "required": True,
+        "required": required,
         "started_at_unix": 990.0,
-        "stopped_at_unix": 1070.0,
+        "stopped_at_unix": window_end + 10.0,
         "status": "complete",
         "publication_valid": publication_valid,
         "dcgm_exporter": {
@@ -191,14 +203,19 @@ def build_package(tmp_path, power_fn=None, publication_valid=True, bench_extra=N
         "concurrency": 4,
         "status": "completed",
         "benchmark_start_time_unix": WINDOW_START,
-        "benchmark_end_time_unix": WINDOW_END,
-        "duration": 60.0,
+        "benchmark_end_time_unix": window_end,
+        "duration": duration,
         "reason": None,
         "result_path": f"{RESULT_STEM}.json",
     }
     (pkg.windows_dir / f"{RESULT_STEM}.json").write_text(json.dumps(window, indent=2))
 
-    bench_fields = dict(BENCH_FIELDS, **(bench_extra or {}))
+    bench_fields = dict(
+        BENCH_FIELDS,
+        benchmark_end_time_unix=window_end,
+        duration=duration,
+        **(bench_extra or {}),
+    )
     pkg.original_result.write_text(json.dumps(bench_fields, indent=2))
     pkg.bench_result.write_text(json.dumps(bench_fields, indent=2))
     pkg.agg_result.write_text(json.dumps({"hw": "gb200", "conc": 4}, indent=2))
@@ -220,6 +237,21 @@ def _rewrite_samples(pkg, mutate):
         writer = csv.writer(handle)
         writer.writerow(header)
         writer.writerows(body)
+
+
+def _mark_legacy_fixed_gap_rejection(pkg, *, gap_seconds, removed_rows):
+    manifest_path = pkg.power_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    key = "node-p/GPU-node-p-0"
+    manifest["sample_row_count"] -= removed_rows
+    manifest["publication_valid"] = False
+    manifest["required"] = False
+    manifest["reason_codes"] = ["endpoint_timeout", "sample_gap_exceeded"]
+    validation = manifest["window_validations"][0]
+    validation["power_coverage_valid"] = False
+    validation["reason_codes"] = ["sample_gap_exceeded"]
+    validation["per_device_max_sample_gap_seconds"][key] = gap_seconds
+    manifest_path.write_text(json.dumps(manifest, indent=2))
 
 
 def assert_invalid(pkg, expected_reason, **run_kwargs):
@@ -421,8 +453,123 @@ class TestVerdictAndIdentityGates:
         shutil.rmtree(pkg.power_dir)
         assert_invalid(pkg, "power_artifacts_missing")
 
+    def test_pinned_legacy_fixed_gap_verdict_can_be_recomputed(self, tmp_path):
+        pkg = build_package(
+            tmp_path,
+            duration=1000.0,
+            producer_sha=apm.LEGACY_FIXED_GAP_PRODUCER_SHA,
+            required=False,
+            request_timeout_seconds=1.0,
+        )
+
+        def drop_three_samples(body):
+            return [
+                row
+                for row in body
+                if not (
+                    row[3] == "node-p" and row[4] == "0" and 20 <= int(row[2]) <= 22
+                )
+            ]
+
+        _rewrite_samples(pkg, drop_three_samples)
+        _mark_legacy_fixed_gap_rejection(pkg, gap_seconds=4.0, removed_rows=3)
+
+        assert (
+            pkg.run(
+                sha=apm.LEGACY_FIXED_GAP_PRODUCER_SHA,
+                require_power=True,
+            )
+            == 0
+        )
+        assert pkg.agg()["power_valid"] == 1
+        producer = pkg.sidecar()["producer"]
+        assert producer["stored_publication_valid"] is False
+        assert producer["recomputed_publication_valid"] is True
+        assert producer["compatibility_override"] == "legacy_fixed_gap_policy"
+
+    def test_legacy_override_requires_explicit_best_effort_producer_mode(
+        self, tmp_path
+    ):
+        pkg = build_package(
+            tmp_path,
+            duration=1000.0,
+            producer_sha=apm.LEGACY_FIXED_GAP_PRODUCER_SHA,
+            request_timeout_seconds=1.0,
+        )
+
+        def drop_three_samples(body):
+            return [
+                row
+                for row in body
+                if not (
+                    row[3] == "node-p" and row[4] == "0" and 20 <= int(row[2]) <= 22
+                )
+            ]
+
+        _rewrite_samples(pkg, drop_three_samples)
+        _mark_legacy_fixed_gap_rejection(pkg, gap_seconds=4.0, removed_rows=3)
+        _edit_manifest(pkg, required=True)
+        assert_invalid(
+            pkg,
+            "package_recompute_invalid",
+            sha=apm.LEGACY_FIXED_GAP_PRODUCER_SHA,
+        )
+
+    def test_legacy_override_keeps_rejecting_material_sample_loss(self, tmp_path):
+        pkg = build_package(
+            tmp_path,
+            duration=1000.0,
+            producer_sha=apm.LEGACY_FIXED_GAP_PRODUCER_SHA,
+            required=False,
+            request_timeout_seconds=1.0,
+        )
+
+        def drop_eleven_samples(body):
+            return [
+                row
+                for row in body
+                if not (
+                    row[3] == "node-p" and row[4] == "0" and 20 <= int(row[2]) <= 30
+                )
+            ]
+
+        _rewrite_samples(pkg, drop_eleven_samples)
+        _mark_legacy_fixed_gap_rejection(pkg, gap_seconds=12.0, removed_rows=11)
+        sidecar = assert_invalid(
+            pkg,
+            "package_recompute_invalid",
+            sha=apm.LEGACY_FIXED_GAP_PRODUCER_SHA,
+        )
+        assert any("sample_gap_exceeded" in failure for failure in sidecar["failures"])
+
 
 class TestSampleGates:
+    def test_cumulative_long_gaps_are_bounded(self):
+        missing = {
+            timestamp
+            for gap_start in range(20, 20 + (13 * 50), 50)
+            for timestamp in range(gap_start, gap_start + 3)
+        }
+        times = tuple(float(timestamp) for timestamp in range(1001) if timestamp not in missing)
+        device = apm.ObservedDevice(
+            hostname="node",
+            gpu_index=0,
+            gpu_uuids=("GPU-0",),
+            first_sample_time_unix=times[0],
+            last_sample_time_unix=times[-1],
+            sample_times=times,
+        )
+        gaps, reasons = apm._check_coverage(
+            0.0,
+            1000.0,
+            {("node", 0)},
+            [device],
+            sample_interval_seconds=1.0,
+            request_timeout_seconds=1.0,
+        )
+        assert gaps == {"node/GPU-0": 4.0}
+        assert reasons == ["sample_gap_exceeded"]
+
     def test_duplicate_row_rejected(self, tmp_path):
         pkg = build_package(tmp_path)
         _rewrite_samples(pkg, lambda body: body + [body[10]])

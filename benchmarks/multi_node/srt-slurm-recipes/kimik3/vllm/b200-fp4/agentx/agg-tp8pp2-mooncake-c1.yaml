@@ -117,7 +117,7 @@ telemetry:
   enabled: true
   collect_interval_ms: 1000
   storage_subdir: power
-  required: true
+  required: false
   startup_timeout_seconds: 120
   request_timeout_seconds: 1
   collector_join_timeout_seconds: 12

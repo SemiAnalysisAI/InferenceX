@@ -85,9 +85,23 @@ SAMPLES_HEADER = (
 # srt-slurm v2 appends optional utilization fields to the power samples.
 SAMPLES_HEADER_V2 = (*SAMPLES_HEADER, "gpu_util_pct", "sm_active")
 
-# Fixed by the producer contract (srt-slurm contract.MAX_SAMPLE_GAP_SECONDS),
-# NOT a multiple of the configured sample interval.
-MAX_SAMPLE_GAP_SECONDS = 3.0
+# The producer pinned by PR #3087 uses this unrelated fixed limit. Keep it only
+# to verify that a rejected manifest contains the exact legacy verdict that the
+# compatibility path is allowed to supersede.
+LEGACY_FIXED_GAP_PRODUCER_SHA = "984180e5b8755aef85e9995048b5a16cb5336bce"
+LEGACY_MAX_SAMPLE_GAP_SECONDS = 3.0
+
+# Consumer-side coverage policy. Normal jitter accounts for the configured
+# cadence plus two request timeouts. Longer isolated stalls are bounded by a
+# small part of the measurement window, and their cumulative duration must
+# remain small enough that the energy estimate is still representative.
+MAX_ISOLATED_GAP_SECONDS = 10.0
+MAX_ISOLATED_GAP_WINDOW_FRACTION = 0.005
+MAX_CUMULATIVE_LONG_GAP_FRACTION = 0.05
+
+_LEGACY_GAP_REASON_CODES = frozenset(
+    {"endpoint_http_error", "endpoint_timeout", "sample_gap_exceeded"}
+)
 
 WORKER_ROLES = ("prefill", "decode", "agg")
 
@@ -725,6 +739,10 @@ def _check_coverage(
     end: float,
     expected_device_keys: set[tuple[str, int]],
     observed_devices: list[ObservedDevice],
+    *,
+    sample_interval_seconds: float,
+    request_timeout_seconds: float,
+    legacy_fixed_gap: bool = False,
 ) -> tuple[dict[str, float], list[str]]:
     by_key = {device.key: device for device in observed_devices}
     gaps: dict[str, float] = {}
@@ -742,15 +760,51 @@ def _check_coverage(
         if sequence is None:
             reasons.append("measurement_window_not_bracketed")
             continue
-        largest = max(
-            (later - earlier for earlier, later in itertools.pairwise(sequence)),
-            default=0.0,
-        )
+        intervals = list(itertools.pairwise(sequence))
+        largest = max((later - earlier for earlier, later in intervals), default=0.0)
         gaps[f"{device.hostname}/{device.gpu_uuids[0]}"] = largest
-        if largest > MAX_SAMPLE_GAP_SECONDS:
+
+        if legacy_fixed_gap:
+            coverage_invalid = largest > LEGACY_MAX_SAMPLE_GAP_SECONDS
+        else:
+            coverage_invalid = not _sample_gaps_within_policy(
+                intervals,
+                start=start,
+                end=end,
+                sample_interval_seconds=sample_interval_seconds,
+                request_timeout_seconds=request_timeout_seconds,
+            )
+        if coverage_invalid:
             reasons.append("sample_gap_exceeded")
 
     return gaps, reasons
+
+
+def _sample_gaps_within_policy(
+    intervals: list[tuple[float, float]],
+    *,
+    start: float,
+    end: float,
+    sample_interval_seconds: float,
+    request_timeout_seconds: float,
+) -> bool:
+    """Allow bounded collection overruns without hiding sustained data loss."""
+    duration = end - start
+    normal_gap_budget = sample_interval_seconds + (2 * request_timeout_seconds)
+    allowed_largest_gap = min(
+        MAX_ISOLATED_GAP_SECONDS,
+        max(normal_gap_budget, duration * MAX_ISOLATED_GAP_WINDOW_FRACTION),
+    )
+    largest = max((later - earlier for earlier, later in intervals), default=0.0)
+    if largest > allowed_largest_gap:
+        return False
+
+    long_gap_seconds = sum(
+        max(0.0, min(later, end) - max(earlier, start))
+        for earlier, later in intervals
+        if later - earlier > normal_gap_budget
+    )
+    return long_gap_seconds <= duration * MAX_CUMULATIVE_LONG_GAP_FRACTION
 
 
 def _validate_expected_windows(
@@ -761,8 +815,11 @@ def _validate_expected_windows(
     expected_device_keys: set[tuple[str, int]],
     observed_devices: list[ObservedDevice],
     artifact_errors: list[dict],
+    sample_interval_seconds: float,
+    request_timeout_seconds: float,
+    legacy_fixed_gap: bool = False,
 ) -> tuple[list[dict], dict[tuple[str, int], ParsedWindow]]:
-    """Mirror the producer's per-expected-window audit rows exactly."""
+    """Build the consumer audit, or reproduce the pinned producer's legacy audit."""
     parsed, duplicates = _scan_windows(power_dir / WINDOWS_DIRNAME, result_root, artifact_errors)
     expected_keys = {window.key for window in expected_windows}
 
@@ -809,10 +866,11 @@ def _validate_expected_windows(
                 window.end_unix,
                 expected_device_keys,
                 observed_devices,
+                sample_interval_seconds=sample_interval_seconds,
+                request_timeout_seconds=request_timeout_seconds,
+                legacy_fixed_gap=legacy_fixed_gap,
             )
             reasons.extend(coverage_reasons)
-            if coverage_reasons:
-                gaps = {}
 
         validations.append(
             {
@@ -874,6 +932,45 @@ def _check_stored_evidence(
     return failures
 
 
+def _legacy_gap_override_candidate(
+    *,
+    manifest: dict,
+    expected_producer_sha: str | None,
+    actual_producer_sha: str | None,
+    dynamic_validations: list[dict],
+    legacy_validations: list[dict],
+) -> bool:
+    """Allow only the pinned producer's faithfully recorded fixed-gap rejection."""
+    if expected_producer_sha != LEGACY_FIXED_GAP_PRODUCER_SHA:
+        return False
+    if actual_producer_sha != LEGACY_FIXED_GAP_PRODUCER_SHA:
+        return False
+    if manifest.get("required") is not False or manifest.get("publication_valid") is not False:
+        return False
+    reason_codes = manifest.get("reason_codes")
+    if not isinstance(reason_codes, list):
+        return False
+    if "sample_gap_exceeded" not in reason_codes:
+        return False
+    if not set(reason_codes).issubset(_LEGACY_GAP_REASON_CODES):
+        return False
+    if manifest.get("artifact_errors") != []:
+        return False
+    if manifest.get("window_validations") != legacy_validations:
+        return False
+    if legacy_validations == dynamic_validations:
+        return False
+
+    legacy_failures = [
+        validation for validation in legacy_validations if not validation["power_coverage_valid"]
+    ]
+    if not legacy_failures:
+        return False
+    if any(validation["reason_codes"] != ["sample_gap_exceeded"] for validation in legacy_failures):
+        return False
+    return all(validation["power_coverage_valid"] for validation in dynamic_validations)
+
+
 # --- consumer-side verdict, integration, and metrics ------------------------
 
 
@@ -889,6 +986,7 @@ class MultinodePowerAudit:
     producer_git_commit: str | None = None
     expected_producer_git_commit: str | None = None
     exporter_image_sha256: str | None = None
+    producer_compatibility_override: str | None = None
     window: dict | None = None
     per_gpu_energy_j: dict[str, float] = field(default_factory=dict)
     per_gpu_role: dict[str, str] = field(default_factory=dict)
@@ -981,6 +1079,13 @@ def validate_and_integrate(
     recompute_failures += [f"{reason} (device identity/topology)" for reason in device_reasons]
 
     artifact_errors: list[dict] = []
+    sample_interval_seconds = manifest.get("sample_interval_seconds")
+    request_timeout_seconds = manifest.get("request_timeout_seconds")
+    if not _is_positive_finite(sample_interval_seconds):
+        sample_interval_seconds = 0.0
+    if not _is_positive_finite(request_timeout_seconds):
+        request_timeout_seconds = 0.0
+
     validations, parsed_windows = _validate_expected_windows(
         power_dir=power_dir,
         result_root=logs_root,
@@ -988,6 +1093,27 @@ def validate_and_integrate(
         expected_device_keys={device.key for device in expected_devices},
         observed_devices=observed,
         artifact_errors=artifact_errors,
+        sample_interval_seconds=sample_interval_seconds,
+        request_timeout_seconds=request_timeout_seconds,
+    )
+    legacy_artifact_errors: list[dict] = []
+    legacy_validations, _ = _validate_expected_windows(
+        power_dir=power_dir,
+        result_root=logs_root,
+        expected_windows=expected_windows,
+        expected_device_keys={device.key for device in expected_devices},
+        observed_devices=observed,
+        artifact_errors=legacy_artifact_errors,
+        sample_interval_seconds=sample_interval_seconds,
+        request_timeout_seconds=request_timeout_seconds,
+        legacy_fixed_gap=True,
+    )
+    legacy_gap_override = _legacy_gap_override_candidate(
+        manifest=manifest,
+        expected_producer_sha=expected_producer_sha,
+        actual_producer_sha=audit.producer_git_commit,
+        dynamic_validations=validations,
+        legacy_validations=legacy_validations,
     )
     if not expected_windows:
         recompute_failures.append("no expected measurement window")
@@ -1007,7 +1133,7 @@ def validate_and_integrate(
         expected_windows,
         rows,
         observed,
-        validations,
+        legacy_validations if legacy_gap_override else validations,
         artifact_errors,
     )
 
@@ -1016,9 +1142,13 @@ def validate_and_integrate(
     if recompute_failures:
         _append_reason(audit.reasons, "package_recompute_invalid")
 
-    # Gate: stored verdict must agree with the recomputation, and both must be
-    # true. The stored verdict is never trusted on its own.
-    if audit.stored_publication_valid is not True or (
+    # Gate: the stored verdict normally must agree and be true. The exact
+    # legacy producer may be overridden only after its fixed-gap evidence has
+    # been independently reproduced and the raw package passes this consumer's
+    # bounded cadence-aware policy.
+    if legacy_gap_override and audit.recomputed_publication_valid:
+        audit.producer_compatibility_override = "legacy_fixed_gap_policy"
+    elif audit.stored_publication_valid is not True or (
         audit.stored_publication_valid != audit.recomputed_publication_valid
     ):
         if audit.stored_publication_valid != audit.recomputed_publication_valid:
@@ -1271,6 +1401,7 @@ def _sidecar_payload(
             "exporter_image_sha256": audit.exporter_image_sha256,
             "stored_publication_valid": audit.stored_publication_valid,
             "recomputed_publication_valid": audit.recomputed_publication_valid,
+            "compatibility_override": audit.producer_compatibility_override,
         },
         "expected_gpu_count": audit.expected_gpu_count,
         "observed_gpu_count": audit.observed_gpu_count,
