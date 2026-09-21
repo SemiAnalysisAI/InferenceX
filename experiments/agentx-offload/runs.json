@@ -3020,19 +3020,40 @@
         "offload-telemetry.jsonl": "2016e842b4012b99d8306a2e7a97ab487d0b1c70542d01eb29b81b48b2542d52",
         "profile_export.jsonl": "34569f0717d8a5e4828de0769097f0851fe94c1bb05421e22c50ad53f8e86052"
       }
+    },
+    {
+      "run_id": 35635160852,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35635160852",
+      "arm": "none",
+      "concurrency": 1,
+      "repeat": 2,
+      "attempt": 1,
+      "head_sha": "4805d065a51b7eda11f65fd182b5d05a59953e20",
+      "status": "in_progress",
+      "workflow_name": "offload-v1-none-c1-r2-cleanup-c001-20260921",
+      "dispatched_at": "2026-09-21T17:56:25Z",
+      "job_id": 106450808157,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35635160852/job/106450808157",
+      "started_at": "2026-09-21T17:56:52Z",
+      "performance_result": false,
+      "target_node": "im-b200-c001",
+      "maintenance_cleanup_run_id": 35583529913,
+      "purpose": "Verify the exact owner identity for run 35583529913, delete only its registered 4 TiB task-owned scratch on im-b200-c001, retain cleanup evidence, then run the canonical c1 HBM control."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871",
-  "status": "The 4 TiB c512 NVMe probe 35583529913 failed before profiling after 5,676/5,677 warmup requests completed with zero request errors; one request exceeded the 1,800-second drain limit. Its exact 4 TiB task-owned scratch on im-b200-c001 requires verified cleanup. The completed c256 point and c512 feasibility bound direct the next NVMe probe into the c256-c512 interval.",
+  "status": "The 4 TiB c512 NVMe probe 35583529913 failed before profiling after 5,676/5,677 warmup requests completed with zero request errors; one request exceeded the 1,800-second drain limit. Cleanup control 35635160852 is running on the pinned c001 path to verify ownership and remove only that exact 4 TiB scratch before its canonical c1 HBM measurement. The completed c256 point and c512 feasibility bound direct the next NVMe probe into the c256-c512 interval.",
   "last_capacity_check": {
-    "checked_at": "2026-09-21T17:41:18Z",
-    "active_study_run_ids": [],
+    "checked_at": "2026-09-21T17:56:52Z",
+    "active_study_run_ids": [
+      35635160852
+    ],
     "pending_study_run_ids": [],
     "dispatch_allowed": false,
-    "reason": "Run 35583529913 is terminal, but its exact task-owned scratch still requires owner-verified deletion. Dispatch a c1 HBM maintenance control on im-b200-c001 before any further NVMe-bearing work."
+    "reason": "Cleanup control 35635160852 is active. Wait for terminal owner-verified deletion proof before dispatching another NVMe-bearing run; the cluster-wide maximum remains one queued B200 job."
   },
   "next_dispatch": {
-    "requires": "Dispatch the pinned c1 HBM maintenance control on im-b200-c001 to verify ownership and delete only run 35583529913 scratch. After terminal cleanup proof and a fresh queue/capacity check, probe an intermediate NVMe concurrency between c256 and the c512 warmup feasibility bound."
+    "requires": "Monitor cleanup control 35635160852. After terminal cleanup proof and a fresh queue/capacity check, probe an intermediate NVMe concurrency between c256 and the c512 warmup feasibility bound."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
