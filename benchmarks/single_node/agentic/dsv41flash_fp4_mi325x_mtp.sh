@@ -4,8 +4,8 @@ set -eo pipefail
 # DeepSeek-V4.1-Flash on MI325X (gfx942): native DSpark, GPU-resident KV. A copy
 # of the validated MI355X arm; gfx942 has no FP4 MFMA, so the MXFP4 experts run
 # through whichever AITER MoE kernel vLLM's selector supports on this arch, and
-# the Engram tables stay row-sharded on GPU per the upstream AMD defaults
-# (256 GB x TP8 holds the 511 GB checkpoint with room for KV).
+# the Engram tables are offloaded to pinned host memory so the 256 GB card
+# spends its HBM on KV instead (see --engram-config below).
 # https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
@@ -81,6 +81,13 @@ VLLM_CMD=(
     --tokenizer-mode deepseek_v41
     --tool-call-parser deepseek_v41 --enable-auto-tool-choice
     --reasoning-parser deepseek_v41
+    # vllm-project/vllm#57491 widened the two is_cuda() gates to is_cuda_alike(),
+    # so this image resolves an Engram config on gfx942 and cpu_offload defaults
+    # on through VLLM_PLE_CPU_OFFLOAD; set it explicitly rather than inherit the
+    # default. Resident tables cost 183 GiB per rank at TP8, which is HBM the
+    # 256 GB card would otherwise spend on KV. Every NVIDIA DSv4.1-Flash arm has
+    # offloaded since PR #2963; this brings gfx942 in line.
+    --engram-config '{"cpu_offload":true}'
     # aiter: auto selection picked the unfused Triton MoE (TRITON_UNFUSED) on
     # gfx942 in run 35306398350 and still segfaulted at piecewise capture, so
     # the MoE kernel was not the culprit; keep the upstream recipe's name,
@@ -92,6 +99,14 @@ VLLM_CMD=(
     --max-num-seqs "$MAX_NUM_SEQS"
     --max-cudagraph-capture-size "$CAPTURE_SIZE"
     --max-num-batched-tokens 16384
+    # vllm-project/vllm#56227 turned SWA bounded replay on by default between the
+    # eed1f3d0 pin and this one. It relies on a window clamp that landed in the
+    # FlashInfer and FlashMLA kernels; the ROCm sparse SWA path only gained the
+    # replay_start kwarg, which killed every gfx950 point of run 35567570539 with
+    # HSA_STATUS_ERROR_MEMORY_FAULT at the first prefix hit carrying a replay
+    # start. gfx942 runs the same ROCm sparse path. Drop this once ROCm clamps
+    # too; prefix caching stays on.
+    --no-swa-bounded-replay
     --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
     --disable-uvicorn-access-log
 )
