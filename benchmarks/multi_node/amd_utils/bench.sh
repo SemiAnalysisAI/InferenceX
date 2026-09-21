@@ -74,19 +74,11 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
         extra_flags="--trust-remote-code --tokenizer $MODEL_PATH"
         if [ "$IS_MTP" = "true" ]; then
             # just override extra_flags as dsv3 use different tokenizer path
-            if [[ "$MODEL_NAME" == DeepSeek-V4-Pro* ]]; then
-                extra_flags="--dsv4"
-            else
-                extra_flags="--use-chat-template"
-            fi
+            extra_flags="--use-chat-template"
         fi
     else
         if [ "$IS_MTP" = "true" ]; then
-            if [[ "$MODEL_NAME" == DeepSeek-V4-Pro* ]]; then
-                extra_flags="--dsv4"
-            else
-                extra_flags="--use-chat-template"
-            fi
+            extra_flags="--use-chat-template"
         fi
     fi
 

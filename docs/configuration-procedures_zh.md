@@ -21,6 +21,8 @@
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | 只允许追加的基准触发日志 |
 | [`AGENTS.md`](../AGENTS.md) | 仓库级配置、MTP、changelog 和 sweep 规则 |
 
+弃用的配置项应归档至 [`configs/deprecated/amd-master.yaml`](../configs/deprecated/amd-master.yaml) 或 [`configs/deprecated/nvidia-master.yaml`](../configs/deprecated/nvidia-master.yaml)。仅使用这两个按厂商划分的归档文件，不要为每次弃用创建单独文件。保留历史设置和注释；遇到配置键冲突时，使用描述性后缀区分，并用注释记录原始配置键。仅弃用部分场景时，只移出已退役的场景。归档文件不得加入启用的 sweep 输入。退役的 AMD 服务注册项和模型专用初始化逻辑应移至 `benchmarks/multi_node/amd_utils/deprecated/`，不参与启用服务的查找。保留 SPEED-Bench 采集器仍需使用的共享依赖，包括调度评分。参见[弃用规则](../AGENTS.md#deprecating-benchmark-configs)。
+
 ## 依赖子模块
 
 Git 记录依赖的精确提交版本。[`.gitmodules`](../.gitmodules) 定义各仓库：AIPerf 位于 `utils/aiperf`，NVIDIA srt-slurm 位于 `utils/srt-slurm`。TileRT 由 `setup_srt_slurm()` 手动检出已记录的分支仓库，不是独立子模块。
@@ -426,8 +428,10 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
   --framework <framework> \
   --precision <precision> \
   --runner-type <runner> \
-  --seq-lens 1k1k 8k1k
+  --seq-lens 8k1k
 ```
+
+仅在明确选择保留的 `glm5.1-fp8-b200-tilert` 配置时使用 `--seq-lens 1k1k`；其他 1k1k 场景已退役。
 
 必须检查而非仅计数所生成的 `model`、`image`、`runner`、scenario、并发、`max-model-len`、TP/PP/EP/DCP/PCP、prefill/decode worker block、hardware、router、KV transfer、eval flag、`additional-settings` 和 `spec-decoding`。
 
@@ -454,7 +458,7 @@ python -m pytest utils/matrix_logic/ -v
 - Router 元数据要求组件真实名称及 release/package/commit 版本；镜像 tag 不是组件版本。
 - Agentic 配置要求精确 `cluster:<name>` runner。
 - 设置字段只会生成 env/workflow 值。必须确认被选择的脚本实际消费它。
-- Scenario 的 `max-model-len` 由 ISL + OSL + slack 推导；不要为 8k1k/1k8k 配方硬编码 checkpoint 的完整上下文。
+- Scenario 的 `max-model-len` 由 ISL + OSL + slack 推导；不要为 8k1k 配方硬编码 checkpoint 的完整上下文。
 
 ## 安全追加 changelog
 

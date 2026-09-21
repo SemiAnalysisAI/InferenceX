@@ -27,7 +27,7 @@ install_recipe_deps() {
     _SETUP_INSTALLED+=("ibverbs-utils+iproute2")
 }
 
-# ROCm vLLM lacks the quark dependency needed for MXFP4 (Kimi-K2.5-MXFP4):
+# ROCm vLLM lacks the quark dependency needed for MXFP4 models:
 # https://github.com/vllm-project/vllm/issues/35633
 install_amd_quark() {
     if python3 -c "import quark" 2>/dev/null; then
@@ -45,24 +45,6 @@ install_amd_quark() {
     _SETUP_INSTALLED+=("amd-quark")
 }
 
-# GLM-5 needs a transformers build with the glm_moe_dsa model type, which the mori
-# images do not ship. Gated on any GLM model name.
-install_transformers_glm5() {
-    if [[ "$MODEL_NAME" != *GLM* ]]; then
-        return 0
-    fi
-
-    if python3 -c "from transformers import AutoConfig; AutoConfig.from_pretrained('zai-org/GLM-5-FP8', trust_remote_code=True)" 2>/dev/null; then
-        echo "[SETUP] transformers already supports GLM-5 model type"
-        return 0
-    fi
-
-    echo "[SETUP] Installing transformers with GLM-5 (glm_moe_dsa) support..."
-    pip install --quiet -U --no-cache-dir \
-        "git+https://github.com/huggingface/transformers.git@6ed9ee36f608fd145168377345bfc4a5de12e1e2"
-    _SETUP_INSTALLED+=("transformers-glm5")
-}
-
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
     install_recipe_deps
     install_amd_quark
@@ -72,8 +54,6 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     export RIXL_HOME
     export PATH="${UCX_HOME}/bin:/usr/local/bin/etcd:/root/.cargo/bin:${PATH}"
     export LD_LIBRARY_PATH="${UCX_HOME}/lib:${RIXL_HOME}/lib:${RIXL_HOME}/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
-else
-    install_transformers_glm5
 fi
 
 _SETUP_END=$(date +%s)
