@@ -96,6 +96,12 @@ MLP_CALL_ANCHOR = (
 )
 MLP_CALL_REPLACEMENT = '                if getattr(self, "_infx_v41_hip", False):\n                    from sglang.srt.layers.attention.dsv41_rocm.activation import (\n                        rocm_v41_silu_and_mul_clamp,\n                    )\n\n                    rocm_v41_silu_and_mul_clamp(gate_up, x, float(self.swiglu_limit))\n                else:\n                    silu_and_mul_clamp(gate_up, x, float(self.swiglu_limit))\n'
 
+POOL_ANCHOR = "        self.uses_aiter_fp4_layout = _is_hip and self.use_fp4_indexer\n"
+POOL_REPLACEMENT = (
+    POOL_ANCHOR
+    + '        if self.uses_aiter_fp4_layout:\n            from sglang.srt.runtime_context import process_model_config\n\n            if process_model_config().hf_text_config.model_type == "deepseek_v41":\n                # Low-ratio preview kernels use the stock packed payload+scale\n                # format, not the V4-only AITER split-buffer format.\n                self.uses_aiter_fp4_layout = False\n'
+)
+
 
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -156,6 +162,16 @@ def install(package: Path, evidence: Path) -> None:
         raise RuntimeError("Unexpected MLP source; refusing to patch another revision")
     if mlp_original.count(MLP_ANCHOR) != 1 or mlp_original.count(MLP_CALL_ANCHOR) != 1:
         raise RuntimeError("Unexpected MLP fused-clamp patch anchor count")
+    pool = package / "srt/mem_cache/deepseek_v4_memory_pool.py"
+    pool_original = pool.read_text()
+    if POOL_REPLACEMENT in pool_original:
+        pool_original = pool_original.replace(POOL_REPLACEMENT, POOL_ANCHOR, 1)
+    if sha256(pool_original.encode()) != manifest["pool_sha256"]:
+        raise RuntimeError(
+            "Unexpected KV-pool source; refusing to patch another revision"
+        )
+    if pool_original.count(POOL_ANCHOR) != 1:
+        raise RuntimeError("Unexpected indexer-pool layout patch anchor count")
     for item in manifest["files"]:
         data = (source / "dsv41_rocm" / item["installed_name"]).read_bytes()
         if sha256(data) != item["adapted_sha256"]:
@@ -179,11 +195,14 @@ def install(package: Path, evidence: Path) -> None:
     mlp_patched = mlp_original.replace(MLP_ANCHOR, MLP_REPLACEMENT, 1)
     mlp_patched = mlp_patched.replace(MLP_CALL_ANCHOR, MLP_CALL_REPLACEMENT, 1)
     mlp.write_text(mlp_patched)
+    pool_patched = pool_original.replace(POOL_ANCHOR, POOL_REPLACEMENT, 1)
+    pool.write_text(pool_patched)
     manifest["installed_registry_sha256"] = sha256(patched.encode())
     manifest["installed_fp8_utils_sha256"] = sha256(fp8_patched.encode())
     manifest["installed_engram_sha256"] = sha256(engram_patched.encode())
     manifest["installed_model_sha256"] = sha256(model_patched.encode())
     manifest["installed_mlp_sha256"] = sha256(mlp_patched.encode())
+    manifest["installed_pool_sha256"] = sha256(pool_patched.encode())
     evidence.write_text(json.dumps(manifest, indent=2) + "\n")
     print(
         f"V4.1 ROCm backport installed; exact source evidence: {evidence}", flush=True
