@@ -25,11 +25,12 @@
 
 ## 依赖子模块
 
-Git 记录依赖的精确提交版本。[`.gitmodules`](../.gitmodules) 定义各仓库：AIPerf 位于 `utils/aiperf`，NVIDIA srt-slurm 位于 `utils/srt-slurm`。TileRT 由 `setup_srt_slurm()` 手动检出已记录的分支仓库，不是独立子模块。
+Git 记录依赖的精确提交版本。[`.gitmodules`](../.gitmodules) 定义各仓库：AIPerf 位于 `utils/aiperf`，[SemiAnalysisAI/srt-slurm 分支仓库](https://github.com/SemiAnalysisAI/srt-slurm)位于 `utils/srt-slurm`。该分支仓库作为 YAML 迁移的集成来源；运行时升级完成验证前，子模块仍固定在上游 v2.2.1。TileRT 由 `setup_srt_slurm()` 检出单独固定的提交，不是独立子模块。
 
-本地运行基准测试前，先初始化子模块：
+本地运行基准测试前，先同步 srt-slurm 远程地址并初始化子模块：
 
 ```bash
+git submodule sync -- utils/srt-slurm
 git submodule update --init
 ```
 
