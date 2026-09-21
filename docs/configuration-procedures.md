@@ -601,3 +601,8 @@ runtime directories stay out of `/workspace`. The MI300X launcher also raises it
 allocation from 180 to 480 minutes for this checkpoint: the HF cache there is node-local, so
 the first arm on each node downloads 511 GB before serving. GPU sweep and eval evidence is
 required before calling either arm validated.
+
+The GB300 DSpark cache candidate reserves `64 * CONC` SWA prefix tails at C2 and
+above, capped at 4096; C1 retains the upstream default. This redistributes the
+existing static KV pool without changing checkpoint precision. Matched C8 screens
+and full canonical performance/accuracy are required before adoption.

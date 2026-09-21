@@ -534,3 +534,7 @@ python -m pytest utils/matrix_logic/ -v
 检查点将仓库挂载到 `/ix` 并重写 `RESULT_DIR`，使 AgentX 运行目录不落在 `/workspace` 下。MI300X
 launcher 还为该检查点将 Slurm 分配时长从 180 分钟提高到 480 分钟：那里的 HF 缓存为节点本地，
 每个节点上的首次运行需先下载 511 GB。在获得 GPU sweep 与 eval 证据之前，不得将任一配方视为已验证。
+
+GB300 DSpark 缓存候选在 C2 及以上保留 `64 * CONC` 个 SWA prefix tails，
+上限为 4096；C1 保持上游默认值。这仅重新分配既有静态 KV 池，不改变检查点精度。
+采用前须完成匹配的 C8 测试以及完整规范性能与准确率验证。

@@ -95,9 +95,9 @@ SPECULATIVE_ARGS=()
 SCHEDULING_ARGS=(--prefill-decode-interval 16)
 # Compressed full-KV capacity alone cannot preserve a prefix whose SWA tail
 # has been evicted. Reserve more cached tails within the static pool for the
-# high-concurrency DSpark comparisons; checkpoint math stays unchanged.
+# DSpark comparisons above C1; checkpoint math stays unchanged.
 CACHE_ARGS=()
-if [[ "$SPEC_DECODING" == mtp ]] && (( CONC >= 16 )); then
+if [[ "$SPEC_DECODING" == mtp ]] && (( CONC >= 2 )); then
     SWA_PREFIX_TAILS=$((64 * CONC))
     if (( SWA_PREFIX_TAILS > 4096 )); then
         SWA_PREFIX_TAILS=4096
