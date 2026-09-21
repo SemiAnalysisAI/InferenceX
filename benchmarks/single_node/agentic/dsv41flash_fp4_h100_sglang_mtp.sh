@@ -110,8 +110,8 @@ SGLANG_CMD=(
     --host 0.0.0.0 --port "$PORT"
     --trust-remote-code
     --tp "$TP" --ep-size "$EP_SIZE"
-    # The cookbook's verified Hopper (H200) cell pins these two backends.
-    --attention-backend dsv4 --moe-runner-backend flashinfer_mxfp4
+    # Let the nightly select hardware- and shape-specific backends, as advised
+    # by the current cookbook; verify the resolved choices in the startup log.
     --mem-fraction-static 0.7
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --speculative-algorithm DSPARK
