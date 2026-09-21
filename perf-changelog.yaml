@@ -8455,3 +8455,65 @@
   description:
     - "Update B200 vLLM AgentX to DSpark6 and a new image with TP8 and DEP8 configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
+  description:
+    - "Add six compact GLM-5.2 NVFP4 AgentX recipes on B300 with Dynamo and TensorRT-LLM disaggregated serving."
+    - "Use TensorRT-LLM 1.3.0rc26, enable the DSA metadata and indexer settings, and provide a persistent JIT cache for the recipe workers."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
+  description:
+    - "Record bounded PMIx launch metadata before starting the concurrency-20 TensorRT-LLM workers."
+    - "在启动并发 20 的 TensorRT-LLM 工作进程前，记录限定范围的 PMIx 启动元数据。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
+  description:
+    - "Preserve the Slurm identity for TensorRT-LLM MPI workers and install Dynamo in a separate virtual environment for each job step."
+    - "为 TensorRT-LLM MPI 工作进程保留 Slurm 身份，并在各作业步骤的独立虚拟环境中安装 Dynamo。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
+  description:
+    - "Set an explicit Slurm time limit for server startup, AgentX replay, and result collection."
+    - "显式设置 Slurm 时限，为服务启动、AgentX 回放和结果收集预留时间。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
+  description:
+    - "Use the LIBFABRIC primary CUDA context, set worker OpenMP threads explicitly, colocate single-frontend evaluation endpoints, and retry verified Dynamo installs. / 使用 LIBFABRIC 主 CUDA 上下文，显式设置工作进程的 OpenMP 线程数，将单前端评估端点与评估进程放在同一节点，并重试保留校验的 Dynamo 安装。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
+  description:
+    - "Use the legacy KV manager with standard CUDA KV allocations and enable LIBFABRIC provider warnings for GLM-5.2 B300 prefill and decode workers."
+    - "为 GLM-5.2 B300 的 prefill 和 decode 工作进程采用旧版 KV 管理器和标准 CUDA KV 内存分配，并启用 LIBFABRIC 提供程序警告。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
+  description:
+    - "Forward the workflow result filename into B300 AgentX recipes, collect per-concurrency aggregates from the mounted workspace, and preserve the Slurm producer failure status after staging artifacts."
+    - "将工作流结果文件名传递给 B300 AgentX 配方，从挂载的工作区收集各并发度的聚合结果，并在保留产物后传递 Slurm 生产作业的失败状态。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
+  description:
+    - "Set a single prefill LIBFABRIC posting thread for GLM-5.2 c20 and select acceptance automatically for the compact GLM-5.2 recipes."
+    - "为 GLM-5.2 c20 设置单个预填充 LIBFABRIC 提交线程，并为紧凑型 GLM-5.2 配方自动选择接受长度。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
+  description:
+    - "Spread GLM-5.2 B300 workers across nodes, clean stale shared memory before startup, bind worker CPUs by GPU locality, and bound worker registration waits."
+    - "将 GLM-5.2 B300 工作进程分散到独立节点，启动前清理过期共享内存，按 GPU 的 NUMA 位置绑定工作进程 CPU，并限制工作进程注册等待时间。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993

@@ -149,10 +149,90 @@ fi
 export ISL="$ISL"
 export OSL="$OSL"
 
+SRT_EXTRA_CLUSTER_CONFIG=""
+if [[ "$IS_AGENTIC" == "1" && "$FRAMEWORK" == "dynamo-trt" && "$MODEL_PREFIX" == "glm5.2" ]]; then
+    # TRT-LLM rc26 ships NIXL v1.4.0 without its LIBFABRIC plugin. Stage the
+    # matching wheel plugin and EFA userspace runtime in a shared, immutable
+    # cache, then mount only those runtime libraries.
+    NIXL_LIBFABRIC_HOST_DIR="/data/home/sa-gha-runner/nixl-libfabric/nixl-1.4.0-efa-1.47.0"
+    mkdir -p "$(dirname "$NIXL_LIBFABRIC_HOST_DIR")"
+    (
+        exec 9>"${NIXL_LIBFABRIC_HOST_DIR}.lock"
+        flock -w 1800 9 || exit 1
+
+        if [[ ! -r "$NIXL_LIBFABRIC_HOST_DIR/nixl/libplugin_LIBFABRIC.so" ||
+              ! -r "$NIXL_LIBFABRIC_HOST_DIR/efa/opt/amazon/efa/lib/libfabric.so.1" ||
+              ! -r "$NIXL_LIBFABRIC_HOST_DIR/efa/usr/lib/x86_64-linux-gnu/libibverbs/libefa-rdmav59.so" ]]; then
+            if [[ -e "$NIXL_LIBFABRIC_HOST_DIR" ]]; then
+                echo "Error: incomplete NIXL LIBFABRIC cache: $NIXL_LIBFABRIC_HOST_DIR" >&2
+                exit 1
+            fi
+
+            _nixl_stage=$(mktemp -d "${NIXL_LIBFABRIC_HOST_DIR}.tmp.XXXXXX")
+            trap 'rm -rf -- "$_nixl_stage"' EXIT
+            mkdir -p "$_nixl_stage/runtime/nixl" "$_nixl_stage/runtime/efa" \
+                "$_nixl_stage/installer"
+
+            curl -LfsS --retry 3 -o "$_nixl_stage/nixl.whl" \
+                "https://files.pythonhosted.org/packages/8b/7c/b79fb09e832233c90f1e9d9b953e88c2b92096d968f2444839c6aa92b645/nixl_cu13-1.4.0-cp312-cp312-manylinux_2_28_x86_64.whl"
+            echo "3e606fbe80c39ce14899726fad0cb0fec53c6bac9f34168492692c4166b2fabb  $_nixl_stage/nixl.whl" | sha256sum -c -
+            unzip -p "$_nixl_stage/nixl.whl" \
+                nixl_cu13.libs/nixl/libplugin_LIBFABRIC.so \
+                > "$_nixl_stage/runtime/nixl/libplugin_LIBFABRIC.so"
+            unzip -p "$_nixl_stage/nixl.whl" \
+                nixl_cu13.libs/libnuma-3387f5e3.so.1.0.0 \
+                > "$_nixl_stage/runtime/nixl/libnuma-3387f5e3.so.1.0.0"
+
+            curl -LfsS --retry 3 -o "$_nixl_stage/efa.tar.gz" \
+                "https://efa-installer.amazonaws.com/aws-efa-installer-1.47.0.tar.gz"
+            echo "2df4201e046833c7dc8160907bee7f52b76ff80ed147376a2d0ed8a0dd66b2db  $_nixl_stage/efa.tar.gz" | sha256sum -c -
+            tar -xzf "$_nixl_stage/efa.tar.gz" -C "$_nixl_stage/installer" \
+                aws-efa-installer/DEBS/UBUNTU2404/x86_64/libfabric1-aws_2.4.0amzn1.0_amd64.deb \
+                aws-efa-installer/DEBS/UBUNTU2404/x86_64/rdma-core/ibverbs-providers_61.0-1_amd64.deb \
+                aws-efa-installer/DEBS/UBUNTU2404/x86_64/rdma-core/libibverbs1_61.0-1_amd64.deb \
+                aws-efa-installer/DEBS/UBUNTU2404/x86_64/rdma-core/librdmacm1_61.0-1_amd64.deb \
+                aws-efa-installer/DEBS/UBUNTU2404/x86_64/rdma-core/rdma-core_61.0-1_amd64.deb
+            while IFS= read -r -d '' _efa_deb; do
+                dpkg-deb -x "$_efa_deb" "$_nixl_stage/runtime/efa"
+            done < <(find "$_nixl_stage/installer" -name '*.deb' -print0)
+            mv "$_nixl_stage/runtime" "$NIXL_LIBFABRIC_HOST_DIR"
+        fi
+    ) || exit 1
+
+    # The cluster has EFA and Mellanox HCAs. Its Mellanox Enroot hook otherwise
+    # masks the EFA sysfs devices before the LIBFABRIC backend starts.
+    export MELLANOX_VISIBLE_DEVICES=void
+
+    AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-gha-runner/aiperf-cache"
+    HF_HUB_CACHE_HOST_PATH="/data/home/sa-gha-runner/hf-hub-cache"
+    TRTLLM_JIT_CACHE_HOST_PATH="/data/home/sa-gha-runner/trtllm-jit-cache"
+    mkdir -p \
+        "$AIPERF_MMAP_CACHE_HOST_PATH" \
+        "$HF_HUB_CACHE_HOST_PATH" \
+        "$TRTLLM_JIT_CACHE_HOST_PATH"
+    chmod 0777 \
+        "$AIPERF_MMAP_CACHE_HOST_PATH" \
+        "$HF_HUB_CACHE_HOST_PATH" \
+        "$TRTLLM_JIT_CACHE_HOST_PATH" 2>/dev/null || true
+
+    SRT_EXTRA_CLUSTER_CONFIG=$(cat <<EOF
+default_mounts:
+  "${NIXL_LIBFABRIC_HOST_DIR}": "/nixl-libfabric"
+  "${AIPERF_MMAP_CACHE_HOST_PATH}": "/aiperf_mmap_cache"
+  "${HF_HUB_CACHE_HOST_PATH}": "/hf_hub_cache"
+  "${TRTLLM_JIT_CACHE_HOST_PATH}": "/trtllm-jit-cache"
+default_bash_preamble: "if command -v trtllm-llmapi-launch >/dev/null 2>&1; then source /configs/prepare-dynamo-venv.sh || exit; fi; export NIXL_PLUGIN_DIR=/nixl-libfabric/nixl; export LD_LIBRARY_PATH=/nixl-libfabric/efa/opt/amazon/efa/lib:/nixl-libfabric/efa/usr/lib/x86_64-linux-gnu:/nixl-libfabric/nixl:\${LD_LIBRARY_PATH:-}; export IBV_DRIVERS_PATH=/nixl-libfabric/efa/usr/lib/x86_64-linux-gnu/libibverbs; export FI_PROVIDER=efa; export FI_EFA_USE_DEVICE_RDMA=1"
+EOF
+)
+fi
+
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
 echo "Creating srtslurm.yaml configuration..."
 write_srt_cluster_config b300-dsxe srtslurm.yaml "$USES_DCGM_POWER" \
     --var MODEL_ROOT "$MODEL_ROOT" || exit 1
+if [[ -n "$SRT_EXTRA_CLUSTER_CONFIG" ]]; then
+    printf '%s\n' "$SRT_EXTRA_CLUSTER_CONFIG" >> srtslurm.yaml
+fi
 
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
@@ -188,6 +268,10 @@ SRTCTL_APPLY_ARGS=(
     --no-preflight
     --tags "b300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
+if [[ "$IS_AGENTIC" == "1" && "$EVAL_ONLY" != "true" ]]; then
+    check_env_vars RESULT_FILENAME
+    SRTCTL_APPLY_ARGS+=(--set "benchmark.env.RESULT_FILENAME=$RESULT_FILENAME")
+fi
 SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
@@ -247,14 +331,20 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
     cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
 fi
 
-cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
-tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
-
+RESULT_COLLECTION_RC=0
 if [[ "${EVAL_ONLY}" != "true" ]]; then
-    copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" || exit 1
+    if [[ "$IS_AGENTIC" == "1" ]]; then
+        check_slurm_job_success "$JOB_ID" "$LOGS_DIR" || RESULT_COLLECTION_RC=1
+        copy_agentic_results "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" || RESULT_COLLECTION_RC=1
+    else
+        copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" || RESULT_COLLECTION_RC=1
+    fi
 else
     echo "EVAL_ONLY=true: Skipping benchmark result collection"
 fi
+
+cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
+tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 
 if [[ "${RUN_EVAL}" == "true" || "${EVAL_ONLY}" == "true" ]]; then
     EVAL_DIR="$LOGS_DIR/eval_results"
@@ -281,6 +371,9 @@ for i in 1 2 3 4 5; do
     sleep 10
 done
 find . -name '.nfs*' -delete 2>/dev/null || true
+if [[ "$RESULT_COLLECTION_RC" != "0" ]]; then
+    exit "$RESULT_COLLECTION_RC"
+fi
 
 else
     # AgentX trace datasets need a writable persistent cache. Keep the host and
