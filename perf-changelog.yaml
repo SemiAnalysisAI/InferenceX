@@ -8545,24 +8545,11 @@
 
 - config-keys:
     - dsv41flash-fp4-h200-sglang-agentic-dspark
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Move H200 DeepSeek-V4.1-Flash SGLang DSpark to the latest official CUDA 13 nightly and qualify its AgentX performance against the vLLM counterpart"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341
-
-- config-keys:
-    - dsv41flash-fp4-h200-sglang-agentic-dspark
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Use per-rank anonymous Engram host tables on H200 so transparent huge pages can back lookups when shared-memory huge pages are disabled; preserve checkpoint weights and native DSpark precision"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341
-
-- config-keys:
     - dsv41flash-fp4-h200-sglang-agentic
   scenario-type:
     - agentic-coding
   description:
-    - "Add the official non-speculative H200 DeepSeek-V4.1-Flash SGLang throughput arm on the latest CUDA 13 nightly, using per-rank Engram host tables and no synthetic acceptance"
+    - "Move H200 DeepSeek-V4.1-Flash SGLang to the latest official CUDA 13 nightly and qualify AgentX performance against the vLLM counterpart"
+    - "Use per-rank anonymous Engram host tables so transparent huge pages can back lookups when shared-memory huge pages are disabled; preserve Engram checkpoint payload and scales"
+    - "Add the official non-speculative throughput arm with no synthetic acceptance; retain the DSpark arm for native draft-precision qualification"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341
