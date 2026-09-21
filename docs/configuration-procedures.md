@@ -421,8 +421,10 @@ DSpark uses the pinned upstream nightly's shipped default draft implementation,
 including its default computation and Markov precision. STP loads no draft;
 both STP and evals clear synthetic acceptance. The TP2/EP2 DSpark arm
 keeps host Engram shards, uses a 0.90 static memory fraction, and halves prefill
-chunks to 2048. Target plus draft load at 147.76 GiB per GPU; retain the
-upstream four SWA prefix tails per running request for its smaller KV budget.
+chunks to 2048. Target plus draft load at 147.76 GiB per GPU. A bounded capacity
+comparison floors TP2 SWA prefix tails at 128, retaining the upstream four-tail
+ratio above that floor. The C1 baseline with 16 tails achieved 90.05% cache reuse;
+128 tails reallocates about 0.96 GiB within the same static cache budget.
 The TP2 stock loader exhausted HBM before cache allocation while stacking target
 MoE weights. Its hash-verified load-memory patch releases completed w13 input lists
 before stacking w2; tensor payloads, layouts, and computation remain unchanged.

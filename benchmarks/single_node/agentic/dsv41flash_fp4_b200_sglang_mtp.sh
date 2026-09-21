@@ -80,8 +80,12 @@ fi
 # The default four tails per request can evict prefixes while full KV is idle.
 SWA_PREFIX_TAILS=$((16 * MAX_RUNNING_REQUESTS))
 if (( TP == 2 )); then
-    # TP2 has a smaller static KV budget; retain the upstream four-tail ratio.
+    # Retain more chunk-boundary tails at low concurrency while bounding the
+    # smaller TP2 KV budget. The 16-tail C1 screen lost reusable prefixes.
     SWA_PREFIX_TAILS=$((4 * MAX_RUNNING_REQUESTS))
+    if (( SWA_PREFIX_TAILS < 128 )); then
+        SWA_PREFIX_TAILS=128
+    fi
 fi
 
 # TP2 doubles the per-GPU weight footprint. Bound long-context indexer
