@@ -82,7 +82,8 @@ python3 -m sglang.launch_server \
   --chunked-prefill-size 16384 \
   --decode-log-interval 1 \
   --mem-fraction-static 0.8 \
-  --cuda-graph-max-bs "$CONC" \
+  --cuda-graph-max-bs-decode "$CONC" \
+  --disable-prefill-cuda-graph \
   --context-length "$MAX_SEQ_LEN" \
   --kv-cache-dtype fp8_e4m3 \
   --quantization fp8 \
