@@ -43,13 +43,13 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# One shared host copy of the two fp8 Engram tables instead of a row-sharded
-# copy per rank: the SGLang analogue of the vLLM arm's Engram CPU offload. It
-# frees ~46 GiB of HBM per GPU for the 1M-context prefill working set and the
-# KV pool, and output is bitwise unchanged (cookbook). The first sweep ran
-# with the tables on GPU and the server died on the first long AgentX prompts
-# (run 35304517453: c4 came up, then the server exited on the first two warmup prompts).
+# Keep Engram weights in host memory. The shared layout had 0% huge-page
+# backing on this pool (run 35626514270: shmem_enabled=never), and upstream
+# warns that base-page lookups can be ~10x slower. Per-rank anonymous shards
+# request huge pages without changing host sysctls; ranks retain the lookup
+# all-reduce and the original checkpoint precision.
 export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
+export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
 
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts, but

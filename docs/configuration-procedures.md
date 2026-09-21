@@ -366,10 +366,15 @@ Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/mode
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` are the SGLang counterparts of the vLLM
 arms, one PR per SKU across h100, h200, b200, b300, gb200, gb300 and mi355x. They follow the
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1),
-which has no released SGLang version for this model yet: every NVIDIA arm uses the
-multi-arch preview build `lmsysorg/sglang:dev-dsv41` and MI355X uses
-`lmsysorg/sglang:dev-dsv41-mi35x`. Both tags are mutable, so the master configs and the
-changelog record the digests they were validated against.
+which has no released SGLang version for this model yet. B200 pins the CUDA 13 nightly
+`lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5` by digest; the other NVIDIA arms use
+`lmsysorg/sglang:dev-dsv41` and MI355X uses `lmsysorg/sglang:dev-dsv41-mi35x`.
+
+B200 uses `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`. Its shared host tables had
+zero huge-page backing in [run 35626514270](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35626514270).
+Per-rank anonymous shards request huge pages without host sysctl changes and retain the
+lookup all-reduce. Verify the actual huge-page percentage in every rank's startup log;
+the setting alone does not prove that huge-page allocation succeeded.
 
 DSpark is the checkpoint's own bundled draft. SGLang exposes no EAGLE or MTP path and no
 `--speculative-num-steps` knob for it; the recipes pass `--speculative-algorithm DSPARK

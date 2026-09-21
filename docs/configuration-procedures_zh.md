@@ -319,9 +319,15 @@ Maximum concurrency for 1,048,576 tokens per request: 6.70x
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` 是 vLLM 配方在 h100、h200、b200、b300、gb200、gb300
 与 mi355x 上的 SGLang 对应版本（每个 SKU 一个 PR），遵循
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1)。
-该模型尚无正式发布的 SGLang 版本：所有 NVIDIA 配方使用多架构预览镜像
-`lmsysorg/sglang:dev-dsv41`，MI355X 使用 `lmsysorg/sglang:dev-dsv41-mi35x`。两个标签均可变，
-因此 master 配置与 changelog 记录了验证时的 digest。
+该模型尚无正式发布的 SGLang 版本。B200 通过 digest 固定 CUDA 13 nightly 镜像
+`lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5`；其他 NVIDIA 配方使用
+`lmsysorg/sglang:dev-dsv41`，MI355X 使用 `lmsysorg/sglang:dev-dsv41-mi35x`。
+
+B200 设置 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。在
+[run 35626514270](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35626514270)
+中，共享主机表的大页覆盖率为零。每个 rank 的匿名分片无需修改主机 sysctl 即可申请大页，
+并保留查询结果的 all-reduce。必须从每个 rank 的启动日志核实实际大页比例；
+仅设置该变量并不能证明大页分配成功。
 
 DSpark 是检查点自带的草稿模型。SGLang 对它不提供 EAGLE 或 MTP 路径，也没有
 `--speculative-num-steps` 参数；配方传入 `--speculative-algorithm DSPARK
