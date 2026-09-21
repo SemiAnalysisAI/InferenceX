@@ -71,6 +71,6 @@ index 0000000..89df415
 +    kernels without changing weight storage. One local group needs one GEMM.
 +    """
 +    tokens, groups, width = hidden_states.shape
-+    projected, _ = projection(hidden_states.reshape(tokens * groups, width))
++    projected, _ = projection(hidden_states.reshape(tokens * groups, width).contiguous())
 +    projected = projected.view(tokens, groups, groups, output_rank)
 +    return projected.diagonal(dim1=1, dim2=2).transpose(1, 2).contiguous()
