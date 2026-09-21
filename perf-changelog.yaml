@@ -8455,3 +8455,9 @@
   description:
     - "Update B200 vLLM AgentX to DSpark6 and a new image with TP8 and DEP8 configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3274
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm-agentic-mtp
+  description:
+    - "Update vLLM image from nightly-d9105ea8 to nightly-3df4ae15 (2026-09-21 upstream nightly, pinned by digest)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3327
