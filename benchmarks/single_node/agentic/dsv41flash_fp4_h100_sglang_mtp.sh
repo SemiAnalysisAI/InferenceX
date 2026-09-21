@@ -41,6 +41,9 @@ python3 "$(dirname "$0")/install_h100_block32_configs.py" \
 SERVER_LOG="$RESULT_DIR/server.log"
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
+# Long-context indexer masks change allocation sizes across requests. At C20,
+# the stock allocator OOMed on a 2.39 GiB mask with 5.61 GiB reserved but unused.
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Agentic warmup dispatches hundreds of large prompts at once and SGLang's
 # tokenizer can leave bytes unacknowledged past AIPerf's default 30 s
