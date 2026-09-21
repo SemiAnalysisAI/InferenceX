@@ -417,6 +417,14 @@ loaded, no speculative flags are sent, and inherited synthetic-acceptance
 variables are cleared. The existing DSpark arm selects `SPEC_DECODING=mtp` and
 keeps its golden-AL policy. Both arms preserve the complete AgentX trace corpus.
 
+GB200 resolves the completed HF cache download to its local snapshot so upstream
+Engram page-cache advice can find the checkpoint files; explicit local model paths
+remain unchanged. DSpark applies the hash-verified
+`patch_sglang_dsv41_native_wo_a.py` fix so all three WO_A projections keep native
+FP8 weights and block scales. Markov weights remain native BF16. The fix uses the
+existing quantized linear path without changing the grouped projection's math;
+full model evaluation is still required for qualification.
+
 The GB200 host-table layout is `per_rank`: its compute-node kernel enables
 anonymous huge pages through `madvise`, while `shmem_enabled=never` prevents huge
 pages for the shared memfd layout. Upstream allocates row shards in anonymous host

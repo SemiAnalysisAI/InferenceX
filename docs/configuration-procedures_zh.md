@@ -362,6 +362,12 @@ GB200 配方保留 TP4/EP4、原生五 token DSpark、自动后端选择、GPU �
 不加载草稿模型、不传入推测参数，并清除继承的合成接受率环境变量。
 既有 DSpark 配方选择 `SPEC_DECODING=mtp`，保留黄金 AL 策略；两种模式均使用完整 AgentX 轨迹语料。
 
+GB200 将完成下载的 HF 缓存解析为本地 snapshot，使上游 Engram 页缓存建议能定位检查点文件；
+显式指定的本地模型路径保持不变。DSpark 应用经过哈希校验的
+`patch_sglang_dsv41_native_wo_a.py` 修复，使三个 WO_A 投影保留原生 FP8 权重与分块 scale，
+Markov 权重保持原生 BF16。修复使用既有量化线性计算路径，不改变分组投影的数学含义；
+仍须完成全模型评估后才能确认合格。
+
 GB200 的主机表布局为 `per_rank`：计算节点内核通过 `madvise` 启用匿名大页，
 而 `shmem_enabled=never` 阻止共享 memfd 布局使用大页。上游在匿名主机内存中
 按行分片，并通过 `MADV_HUGEPAGE`/`MADV_COLLAPSE` 请求 512 MiB 大页。
