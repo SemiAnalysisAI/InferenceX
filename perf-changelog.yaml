@@ -8558,3 +8558,11 @@
   description:
     - "Use per-rank anonymous Engram host tables on H200 so transparent huge pages can back lookups when shared-memory huge pages are disabled; preserve checkpoint weights and native DSpark precision"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the official non-speculative H200 DeepSeek-V4.1-Flash SGLang throughput arm on the latest CUDA 13 nightly, using per-rank Engram host tables and no synthetic acceptance"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341

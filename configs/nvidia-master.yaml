@@ -8254,6 +8254,20 @@ dsv41flash-fp4-h200-vllm-agentic-dspark:
 # throughput, real verification for evals. The KV cache stays GPU-resident.
 # Hopper follows the cookbook's verified H200 TP8/EP8 cell, which pins the dsv4
 # attention backend and the flashinfer_mxfp4 MoE runner.
+dsv41flash-fp4-h200-sglang-agentic:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:h200-dgxc
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: none, conc-list: [1, 2, 4, 8, 16, 32, 64] }
+
 dsv41flash-fp4-h200-sglang-agentic-dspark:
   image: lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5
   model: deepseek-ai/DeepSeek-V4.1-Flash
