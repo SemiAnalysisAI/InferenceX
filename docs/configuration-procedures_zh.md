@@ -357,6 +357,11 @@ GB200 配方保留 TP4/EP4、原生五 token DSpark、自动后端选择、GPU �
 `lmsysorg/sglang:dev-dsv41`，MI355X 使用 `lmsysorg/sglang:dev-dsv41-mi35x`。两个标签均可变，
 因此 master 配置与 changelog 记录了验证时的 digest。
 
+`dsv41flash-fp4-gb200-sglang-agentic` 新增 cookbook 的原生非推测吞吐模式，使用 TP4/EP4。
+它通过 STP 脚本入口复用 GB200 实现，由调用方设置 `SPEC_DECODING=none`：
+不加载草稿模型、不传入推测参数，并清除继承的合成接受率环境变量。
+既有 DSpark 配方选择 `SPEC_DECODING=mtp`，保留黄金 AL 策略；两种模式均使用完整 AgentX 轨迹语料。
+
 GB200 的主机表布局为 `per_rank`：计算节点内核通过 `madvise` 启用匿名大页，
 而 `shmem_enabled=never` 阻止共享 memfd 布局使用大页。上游在匿名主机内存中
 按行分片，并通过 `MADV_HUGEPAGE`/`MADV_COLLAPSE` 请求 512 MiB 大页。

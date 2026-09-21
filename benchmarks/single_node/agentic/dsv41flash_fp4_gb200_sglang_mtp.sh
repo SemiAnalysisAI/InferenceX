@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-# DeepSeek-V4.1-Flash AgentX on GB200 with SGLang native DSpark, following the
-# cookbook's verified Blackwell TP4/EP4 low-latency cell. The KV cache is GPU-resident.
+# DeepSeek-V4.1-Flash AgentX on GB200 with native STP or DSpark serving.
+# Both use the cookbook's Blackwell TP4/EP4 layout and GPU-resident KV cache.
 # https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP EP_SIZE CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
-check_env_vars EVAL_ONLY
+check_env_vars EVAL_ONLY SPEC_DECODING
 require_agentic_kv_offload_none
 export GPU_COUNT="$TP"
 
@@ -78,18 +78,30 @@ export AIPERF_SERVER_METRICS_URLS="${AIPERF_SERVER_URL}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="sglang:"
 echo "Using SGLang endpoint ${AIPERF_SERVER_URL}"
 
-# DSpark is the checkpoint's own bundled draft: no EAGLE/MTP path and no
-# --speculative-num-steps knob; the block size is the only tunable. Golden AL:
-# golden_al_distribution/dsv41flash_dspark.yaml, thinking_on, five draft tokens.
-# Throughput fixes acceptance to AL 3.51; accuracy evals keep real verification.
-DSPARK_BLOCK_SIZE=5
-DSV41_GOLDEN_AL=3.51
-if [[ "${EVAL_ONLY}" != true ]]; then
-    export SGLANG_SIMULATE_ACC_LEN="$DSV41_GOLDEN_AL"
-    export SGLANG_SIMULATE_ACC_METHOD=match-expected
-    export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
-fi
-echo "DSpark block size: $DSPARK_BLOCK_SIZE, golden AL=$DSV41_GOLDEN_AL"
+# The caller selects native non-speculative serving or the bundled DSpark
+# draft. STP and accuracy evals must never inherit synthetic acceptance.
+unset SGLANG_SIMULATE_ACC_LEN SGLANG_SIMULATE_ACC_METHOD SGLANG_SIMULATE_ACC_TOKEN_MODE
+SPECULATIVE_ARGS=()
+case "$SPEC_DECODING" in
+    mtp)
+        DSPARK_BLOCK_SIZE=5
+        DSV41_GOLDEN_AL=3.51
+        SPECULATIVE_ARGS=(--speculative-algorithm DSPARK --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE")
+        if [[ "$EVAL_ONLY" != true ]]; then
+            export SGLANG_SIMULATE_ACC_LEN="$DSV41_GOLDEN_AL"
+            export SGLANG_SIMULATE_ACC_METHOD=match-expected
+            export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
+        fi
+        echo "DSpark block size: $DSPARK_BLOCK_SIZE, golden AL=$DSV41_GOLDEN_AL"
+        ;;
+    none)
+        echo "Native non-speculative serving; synthetic acceptance disabled"
+        ;;
+    *)
+        echo "Unsupported SPEC_DECODING=$SPEC_DECODING; expected mtp or none" >&2
+        exit 1
+        ;;
+esac
 
 SGLANG_CMD=(
     python3 -m sglang.launch_server
@@ -105,8 +117,7 @@ SGLANG_CMD=(
     # first 66k-99k-token AgentX prompts.
     --mem-fraction-static 0.70
     --chunked-prefill-size 4096
-    --speculative-algorithm DSPARK
-    --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
+    "${SPECULATIVE_ARGS[@]}"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     --reasoning-parser auto

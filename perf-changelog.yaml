@@ -8558,3 +8558,11 @@
   description:
     - "Use the upstream per_rank Engram host-table layout on GB200: anonymous row-sharded mappings can obtain 512 MiB huge pages on the measured madvise/never anonymous/shared THP policy; preserve original FP8 table weights and restore the two TP all-reduces"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3347
+
+- config-keys:
+    - dsv41flash-fp4-gb200-sglang-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add native non-speculative DeepSeek-V4.1-Flash AgentX serving on GB200 using the latest official pinned SGLang nightly, TP4/EP4 and huge-page-capable per-rank Engram host tables; no draft model, speculative flags, or synthetic acceptance"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3347
