@@ -1170,7 +1170,7 @@ minimaxm3-fp8-mi300x-vllm-agentic-mtp:
 # golden AL 3.51 for throughput, real block verification for evals, adaptive
 # verification off on ROCm.
 dsv41flash-fp4-mi300x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
+  image: vllm/vllm-openai-rocm:nightly-3df4ae153eb385e27b52f26c81f8edb9e20b9984
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi300x-amd
@@ -1181,8 +1181,16 @@ dsv41flash-fp4-mi300x-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      # Follow upstream AMD Engram defaults; omit the CUDA-only config flag.
+      # The recipe now sets engram cpu_offload per TP: off at TP8 so this
+      # curve stays comparable with the validated concurrency 1-32 run, on at
+      # TP4 where the tables would not fit beside half the checkpoint on a
+      # 192 GB card. vllm-project/vllm#57491 widened the two is_cuda() gates to
+      # is_cuda_alike(), so engram_config resolves on gfx942 in this image.
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      # TP4 halves the GPUs per server. With the Engram tables in pinned host
+      # memory the resident weights are ~81 GiB per rank, leaving ~60 GiB of
+      # KV per GPU after the indexer's 16 GiB logits buffer.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
 
 # GLM-5.2 FP8 full-context AgentX refresh on MI325X. This preserves the TP8
 # GPU-resident-KV c1/c2/c3/c4/c5/c6/c8 curve from Actions run 29657732517
