@@ -8554,4 +8554,5 @@
     - "Use DSpark across the full AgentX concurrency curve with 16 decode steps between prefill chunks, unchanged shipped precision and canonical acceptance; completed STP diagnostics did not contribute a measured frontier point."
     - "Install H100-specific block32 FP8 GEMM tiling configurations for three missing shapes, retaining default tiling for the regressing batch-64 case; preserve stock weights, scales and output precision and record the resolved config hashes."
     - "Use expandable CUDA allocator segments to reduce fragmentation from long-context indexer masks without changing checkpoint precision or the static KV budget."
+    - "Select the supported native MXFP4 Marlin MoE backend on Hopper, retaining BF16 activations and the nightly's shipped draft precision."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3345

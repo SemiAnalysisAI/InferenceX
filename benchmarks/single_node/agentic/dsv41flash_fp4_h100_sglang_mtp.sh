@@ -135,8 +135,9 @@ SGLANG_CMD=(
     --host 0.0.0.0 --port "$PORT"
     --trust-remote-code
     --tp "$TP" --ep-size "$EP_SIZE"
-    # Let the nightly select hardware- and shape-specific backends, as advised
-    # by the current cookbook; verify the resolved choices in the startup log.
+    # Native MXFP4 Marlin supports Hopper with BF16 activations; dense FP8
+    # operators and shipped DSpark precision remain unchanged.
+    --moe-runner-backend marlin
     --mem-fraction-static 0.7
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     "${SPECULATIVE_ARGS[@]}"
