@@ -258,7 +258,7 @@ else
     fi
 
     # Avoid a stale saved copy of this checkpoint; read the shared HF cache.
-    if [[ ("$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "atom") ]] && [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro" ]]; then
+    if [[ ("$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "atom") ]] && [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro" || "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro-0813" ]]; then
         export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
     fi
 
