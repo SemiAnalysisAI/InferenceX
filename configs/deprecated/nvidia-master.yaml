@@ -857,6 +857,7 @@ dsr1-fp8-b300-dynamo-trt:
           ep: 1
           dp-attn: true
     # 8k1k MTP configs
+
 dsr1-fp4-b200-sglang:
   image: lmsysorg/sglang:v0.5.12.post1
   model: nvidia/DeepSeek-R1-0528-FP4-V2
@@ -872,6 +873,7 @@ dsr1-fp4-b200-sglang:
       search-space:
       - { tp: 4, ep: 1, conc-start: 1, conc-end: 32 }
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 256 }
+
 dsr1-fp4-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12.post1
   model: nvidia/DeepSeek-R1-0528-FP4-V2
@@ -887,6 +889,7 @@ dsr1-fp4-b200-sglang-mtp:
       search-space:
       - { tp: 4, ep: 1, conc-start: 1, conc-end: 32, spec-decoding: mtp }
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+
 # Original config key: dsv4-fp4-b200-sglang
 dsv4-fp4-b200-sglang-deprecated-1k1k:
   image: lmsysorg/sglang:nightly-dev-cu13-20260628-da802ddc
@@ -916,6 +919,7 @@ dsv4-fp4-b200-sglang-deprecated-1k1k:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128 }
       # DP-attention (DP_ATTENTION=true) — max-throughput CONC range
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
+
 # Original config key: dsv4-fp4-b200-vllm
 dsv4-fp4-b200-vllm-deprecated-1k1k:
   image: vllm/vllm-openai:v0.25.0
@@ -934,6 +938,7 @@ dsv4-fp4-b200-vllm-deprecated-1k1k:
       - { tp: 8, ep: 8, conc-start: 128, conc-end: 256 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 4096 }
+
 # Original config key: dsv4-fp4-b200-trt
 dsv4-fp4-b200-trt-deprecated-1k1k:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
@@ -950,6 +955,7 @@ dsv4-fp4-b200-trt-deprecated-1k1k:
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 32 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 512 }
+
 # Original config key: dsv4-fp4-b200-trt-mtp
 dsv4-fp4-b200-trt-mtp-deprecated-1k1k:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
@@ -966,6 +972,7 @@ dsv4-fp4-b200-trt-mtp-deprecated-1k1k:
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 32, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 256, spec-decoding: mtp }
+
 # Original config key: dsv4-fp4-b200-vllm-mtp
 dsv4-fp4-b200-vllm-mtp-deprecated-1k1k:
   image: vllm/vllm-openai:v0.25.0
@@ -983,6 +990,7 @@ dsv4-fp4-b200-vllm-mtp-deprecated-1k1k:
       - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 8, ep: 8, conc-start: 128, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 4096, spec-decoding: mtp }
+
 dsr1-fp4-b300-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/DeepSeek-R1-0528-FP4-V2
@@ -998,6 +1006,7 @@ dsr1-fp4-b300-sglang:
       search-space:
       - { tp: 4, ep: 4, conc-start: 1, conc-end: 128 }
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 128 }
+
 dsr1-fp4-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: nvidia/DeepSeek-R1-0528-FP4-V2
@@ -1019,6 +1028,7 @@ dsr1-fp4-b200-trt:
       - { tp: 8, conc-start: 4, conc-end: 4 }
       - { tp: 8, ep: 8, conc-start: 64, conc-end: 64 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256 }
+
 dsr1-fp4-b200-trt-mtp:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: nvidia/DeepSeek-R1-0528-FP4-V2
@@ -1040,6 +1050,7 @@ dsr1-fp4-b200-trt-mtp:
       - { tp: 8, conc-start: 128, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, conc-start: 32, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 64, spec-decoding: mtp }
+
 dsr1-fp8-b200-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
@@ -1054,6 +1065,7 @@ dsr1-fp8-b200-sglang:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 64 }
+
 dsr1-fp8-b300-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
@@ -1068,6 +1080,7 @@ dsr1-fp8-b300-sglang:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 64 }
+
 # Original config key: dsv4-fp4-b300-sglang
 dsv4-fp4-b300-sglang-deprecated-1k1k:
   image: lmsysorg/sglang:nightly-dev-cu13-20260624-b2c8f7a2
@@ -1093,6 +1106,7 @@ dsv4-fp4-b300-sglang-deprecated-1k1k:
       - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
       - { tp: 4, ep: 1, dp-attn: true, conc-start: 512, conc-end: 512 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 8192, conc-end: 8192 }
+
 # Original config key: dsv4-fp4-b300-sglang-mtp
 dsv4-fp4-b300-sglang-mtp-deprecated-1k1k:
   image: lmsysorg/sglang:nightly-dev-cu13-20260610-f332e526
@@ -1113,6 +1127,7 @@ dsv4-fp4-b300-sglang-mtp-deprecated-1k1k:
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 8, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
+
 # Original config key: qwen3.5-bf16-b200-sglang
 qwen3.5-bf16-b200-sglang-deprecated-1k1k:
   image: lmsysorg/sglang:v0.5.14-cu130
@@ -1128,6 +1143,7 @@ qwen3.5-bf16-b200-sglang-deprecated-1k1k:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
+
 # Original config key: qwen3.5-bf16-b200-sglang-mtp
 qwen3.5-bf16-b200-sglang-mtp-deprecated-1k1k:
   image: lmsysorg/sglang:v0.5.14-cu130
@@ -1143,6 +1159,7 @@ qwen3.5-bf16-b200-sglang-mtp-deprecated-1k1k:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
 qwen3.5-fp8-b200-sglang:
   image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -1158,6 +1175,7 @@ qwen3.5-fp8-b200-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
+
 qwen3.5-fp4-b200-sglang:
   image: lmsysorg/sglang:v0.5.14-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -1173,6 +1191,7 @@ qwen3.5-fp4-b200-sglang:
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 2, ep: 1, conc-start: 4, conc-end: 128 }
+
 qwen3.5-fp4-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.14-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -1188,6 +1207,7 @@ qwen3.5-fp4-b200-sglang-mtp:
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
       - { tp: 2, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
 # Original config key: glm5-fp8-b200-sglang
 glm5-fp8-b200-sglang-deprecated-1k1k:
   image: lmsysorg/sglang:nightly-dev-cu13-20260605-7dc73766
@@ -1203,6 +1223,7 @@ glm5-fp8-b200-sglang-deprecated-1k1k:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
+
 # Original config key: glm5-fp8-b200-sglang-mtp
 glm5-fp8-b200-sglang-mtp-deprecated-1k1k:
   image: lmsysorg/sglang:nightly-dev-cu13-20260605-7dc73766
@@ -1218,6 +1239,7 @@ glm5-fp8-b200-sglang-mtp-deprecated-1k1k:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+
 # Original config key: glm5-fp8-b300-sglang
 glm5-fp8-b300-sglang-deprecated-1k1k:
   image: lmsysorg/sglang:v0.5.12-cu130
@@ -1233,6 +1255,7 @@ glm5-fp8-b300-sglang-deprecated-1k1k:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
+
 # Original config key: glm5-fp8-b300-sglang-mtp
 glm5-fp8-b300-sglang-mtp-deprecated-1k1k:
   image: lmsysorg/sglang:v0.5.12-cu130
@@ -1248,6 +1271,7 @@ glm5-fp8-b300-sglang-mtp-deprecated-1k1k:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+
 # Original config key: glm5-fp4-b200-sglang
 glm5-fp4-b200-sglang-deprecated-1k1k:
   image: lmsysorg/sglang:nightly-dev-cu13-20260605-7dc73766
@@ -1264,6 +1288,7 @@ glm5-fp4-b200-sglang-deprecated-1k1k:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
+
 # Original config key: glm5-fp4-b200-sglang-mtp
 glm5-fp4-b200-sglang-mtp-deprecated-1k1k:
   image: lmsysorg/sglang:nightly-dev-cu13-20260605-7dc73766
@@ -1280,6 +1305,7 @@ glm5-fp4-b200-sglang-mtp-deprecated-1k1k:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+
 # Original config key: glm5-fp4-b300-sglang
 glm5-fp4-b300-sglang-deprecated-1k1k:
   image: lmsysorg/sglang:v0.5.11-cu130
@@ -1296,6 +1322,7 @@ glm5-fp4-b300-sglang-deprecated-1k1k:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
+
 # Original config key: glm5-fp4-b300-sglang-mtp
 glm5-fp4-b300-sglang-mtp-deprecated-1k1k:
   image: lmsysorg/sglang:v0.5.11-cu130
@@ -1312,6 +1339,7 @@ glm5-fp4-b300-sglang-mtp-deprecated-1k1k:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+
 # Original config key: glm5-fp4-gb300-dynamo-trt
 glm5-fp4-gb300-dynamo-trt-deprecated-1k1k:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-dev.1-cuda13
@@ -1485,6 +1513,7 @@ glm5-fp4-gb300-dynamo-trt-deprecated-1k1k:
           tp: 16
           ep: 16
           dp-attn: true
+
 # Original config key: glm5-fp4-gb200-dynamo-trt
 glm5-fp4-gb200-dynamo-trt-deprecated-1k1k:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-dev.1-cuda13
@@ -1684,6 +1713,7 @@ glm5-fp4-gb200-dynamo-trt-deprecated-1k1k:
           tp: 8
           ep: 8
           dp-attn: true
+
 # Original config key: glm5-fp4-gb200-dynamo-trt-mtp
 glm5-fp4-gb200-dynamo-trt-mtp-deprecated-1k1k:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-dev.1-cuda13
@@ -1897,6 +1927,7 @@ glm5-fp4-gb200-dynamo-trt-mtp-deprecated-1k1k:
           tp: 8
           ep: 8
           dp-attn: true
+
 qwen3.5-fp8-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -1912,6 +1943,7 @@ qwen3.5-fp8-b200-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+
 qwen3.5-fp8-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -1926,6 +1958,7 @@ qwen3.5-fp8-b300-sglang-mtp:
       osl: 1024
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+
 qwen3.5-fp8-b300-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -1940,6 +1973,7 @@ qwen3.5-fp8-b300-sglang:
       osl: 1024
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
+
 qwen3.5-fp4-b300-sglang:
   image: lmsysorg/sglang:v0.5.14-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -1955,6 +1989,7 @@ qwen3.5-fp4-b300-sglang:
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
       - { tp: 2, ep: 2, conc-start: 4, conc-end: 128 }
+
 qwen3.5-fp4-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.14-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -1970,6 +2005,7 @@ qwen3.5-fp4-b300-sglang-mtp:
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 128, spec-decoding: mtp }
       - { tp: 2, ep: 2, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+
 # Original config key: qwen3.5-bf16-b300-sglang
 qwen3.5-bf16-b300-sglang-deprecated-1k1k:
   image: lmsysorg/sglang:v0.5.12-cu130
@@ -1986,6 +2022,7 @@ qwen3.5-bf16-b300-sglang-deprecated-1k1k:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
+
 # Original config key: qwen3.5-bf16-b300-sglang-mtp
 qwen3.5-bf16-b300-sglang-mtp-deprecated-1k1k:
   image: lmsysorg/sglang:v0.5.12-cu130
@@ -2002,6 +2039,7 @@ qwen3.5-bf16-b300-sglang-mtp-deprecated-1k1k:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
 # Original config key: kimik2.5-int4-b200-vllm
 kimik2.5-int4-b200-vllm-deprecated-1k1k:
   image: vllm/vllm-openai:v0.24.0
@@ -2017,6 +2055,7 @@ kimik2.5-int4-b200-vllm-deprecated-1k1k:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
+
 # Original config key: kimik2.5-int4-b300-vllm
 kimik2.5-int4-b300-vllm-deprecated-1k1k:
   image: vllm/vllm-openai:v0.24.0
@@ -2033,6 +2072,7 @@ kimik2.5-int4-b300-vllm-deprecated-1k1k:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
+
 # Original config key: kimik2.5-int4-h200-vllm
 kimik2.5-int4-h200-vllm-deprecated-1k1k:
   image: vllm/vllm-openai:v0.22.0
@@ -2048,6 +2088,7 @@ kimik2.5-int4-h200-vllm-deprecated-1k1k:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
+
 # Original config key: kimik2.5-fp4-b200-vllm
 kimik2.5-fp4-b200-vllm-deprecated-1k1k:
   image: vllm/vllm-openai:v0.22.0
@@ -2064,6 +2105,7 @@ kimik2.5-fp4-b200-vllm-deprecated-1k1k:
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 1, conc-end: 128 }
+
 # Original config key: kimik2.5-fp4-b300-vllm
 kimik2.5-fp4-b300-vllm-deprecated-1k1k:
   image: vllm/vllm-openai:v0.22.0
@@ -2080,6 +2122,7 @@ kimik2.5-fp4-b300-vllm-deprecated-1k1k:
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 1, conc-end: 128 }
+
 dsr1-fp8-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
@@ -2094,6 +2137,7 @@ dsr1-fp8-b200-sglang-mtp:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
+
 dsr1-fp8-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
@@ -2108,6 +2152,7 @@ dsr1-fp8-b300-sglang-mtp:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
+
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528
@@ -2124,6 +2169,7 @@ dsr1-fp8-b200-trt:
       - { tp: 8, ep: 1, conc-start: 64, conc-end: 128 }
       - { tp: 4, ep: 1, conc-start: 8, conc-end: 16 }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 8 }
+
 dsr1-fp8-b200-trt-mtp:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528
@@ -2141,6 +2187,7 @@ dsr1-fp8-b200-trt-mtp:
       # If CONC == 256, then TP8, EP8, DP_ATTN=true
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 256, spec-decoding: mtp }
+
 dsr1-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
@@ -2155,6 +2202,7 @@ dsr1-fp8-h200-sglang:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
+
 dsr1-fp8-h200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
@@ -2169,6 +2217,7 @@ dsr1-fp8-h200-sglang-mtp:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
 # Original config key: dsv4-fp8-h200-vllm
 dsv4-fp8-h200-vllm-deprecated-1k1k:
   image: vllm/vllm-openai:v0.25.1
@@ -2185,6 +2234,7 @@ dsv4-fp8-h200-vllm-deprecated-1k1k:
       search-space:
       - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256 }
+
 # Original config key: dsv4-fp8-h200-vllm-mtp
 dsv4-fp8-h200-vllm-mtp-deprecated-1k1k:
   image: vllm/vllm-openai:v0.25.1
@@ -2201,6 +2251,7 @@ dsv4-fp8-h200-vllm-mtp-deprecated-1k1k:
       search-space:
       - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256, spec-decoding: mtp }
+
 # Original config key: dsv4-fp8-h200-sglang
 dsv4-fp8-h200-sglang-deprecated-1k1k:
   image: lmsysorg/sglang:deepseek-v4-hopper@sha256:1bf5d508ab110cc0fe1659a5f21d1be02a7f0d7ca8f58cea7e7f4e11f6ae208f
@@ -2217,6 +2268,7 @@ dsv4-fp8-h200-sglang-deprecated-1k1k:
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
+
 # Original config key: dsv4-fp8-h200-sglang-mtp
 dsv4-fp8-h200-sglang-mtp-deprecated-1k1k:
   image: lmsysorg/sglang:deepseek-v4-hopper@sha256:1bf5d508ab110cc0fe1659a5f21d1be02a7f0d7ca8f58cea7e7f4e11f6ae208f
@@ -2233,6 +2285,7 @@ dsv4-fp8-h200-sglang-mtp-deprecated-1k1k:
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 1, spec-decoding: mtp }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
 # Original config key: dsv4-fp4-b300-vllm
 dsv4-fp4-b300-vllm-deprecated-1k1k:
   image: vllm/vllm-openai:v0.25.0
@@ -2252,6 +2305,7 @@ dsv4-fp4-b300-vllm-deprecated-1k1k:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512 }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 2048, conc-end: 2048 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 8192 }
+
 # Original config key: dsv4-fp4-b300-trt
 dsv4-fp4-b300-trt-deprecated-1k1k:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
@@ -2269,6 +2323,7 @@ dsv4-fp4-b300-trt-deprecated-1k1k:
       - { tp: 4, conc-start: 1, conc-end: 64 }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 512, conc-end: 1024 }
+
 # Original config key: dsv4-fp4-b300-trt-mtp
 dsv4-fp4-b300-trt-mtp-deprecated-1k1k:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
@@ -2286,6 +2341,7 @@ dsv4-fp4-b300-trt-mtp-deprecated-1k1k:
       - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 512, conc-end: 1024, spec-decoding: mtp }
+
 # Original config key: dsv4-fp4-b300-vllm-mtp
 dsv4-fp4-b300-vllm-mtp-deprecated-1k1k:
   image: vllm/vllm-openai:v0.25.0
@@ -2303,6 +2359,7 @@ dsv4-fp4-b300-vllm-mtp-deprecated-1k1k:
       - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, conc-start: 1, conc-end: 8, spec-decoding: mtp }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 1024, spec-decoding: mtp }
+
 qwen3.5-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -2317,6 +2374,7 @@ qwen3.5-fp8-h200-sglang:
       osl: 1024
       search-space:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+
 qwen3.5-fp8-h200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -2331,6 +2389,7 @@ qwen3.5-fp8-h200-sglang-mtp:
       osl: 1024
       search-space:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+
 # Original config key: glm5-fp8-h200-sglang
 glm5-fp8-h200-sglang-deprecated-1k1k:
   image: lmsysorg/sglang:v0.5.12-cu130
@@ -2346,6 +2405,7 @@ glm5-fp8-h200-sglang-deprecated-1k1k:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
+
 # Original config key: glm5-fp8-h200-sglang-mtp
 glm5-fp8-h200-sglang-mtp-deprecated-1k1k:
   image: lmsysorg/sglang:v0.5.12-cu130
@@ -2361,6 +2421,7 @@ glm5-fp8-h200-sglang-mtp-deprecated-1k1k:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
+
 dsr1-fp8-h200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528
@@ -2377,6 +2438,7 @@ dsr1-fp8-h200-trt:
       # If CONC > 64, then DP_ATTN=true
       search-space:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
+
 dsr1-fp8-h200-trt-mtp:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528
@@ -2394,6 +2456,7 @@ dsr1-fp8-h200-trt-mtp:
       # If CONC >= 128, then DP_ATTN=true, MTP=1
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
+
 dsr1-fp8-h200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
   model: deepseek-ai/DeepSeek-R1-0528
@@ -2673,6 +2736,7 @@ dsr1-fp8-h200-dynamo-trt:
           tp: 8
           ep: 8
           dp-attn: true
+
 dsr1-fp8-h100-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post3
   model: deepseek-ai/DeepSeek-R1-0528
@@ -2952,6 +3016,7 @@ dsr1-fp8-h100-dynamo-trt:
           tp: 16
           ep: 16
           dp-attn: true
+
 # Original config key: minimaxm3-fp8-h100-vllm
 minimaxm3-fp8-h100-vllm-deprecated-1k1k:
   image: vllm/vllm-openai:minimax-m3
@@ -2973,6 +3038,7 @@ minimaxm3-fp8-h100-vllm-deprecated-1k1k:
       # blocks"). TEP8 covers the high-concurrency regime instead.
       - { tp: 8, conc-start: 1, conc-end: 128 }
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256 }
+
 dsr1-fp8-h100-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8-cu130
   model: deepseek-ai/DeepSeek-R1-0528
@@ -3047,6 +3113,7 @@ dsr1-fp8-h100-dynamo-sglang:
           tp: 16
           ep: 16
           dp-attn: true
+
 # Original config key: minimaxm3-fp8-h200-vllm
 minimaxm3-fp8-h200-vllm-deprecated-1k1k:
   image: vllm/vllm-openai:minimax-m3
@@ -3066,6 +3133,7 @@ minimaxm3-fp8-h200-vllm-deprecated-1k1k:
       - { tp: 8, conc-start: 1, conc-end: 128 }
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
+
 dsr1-fp4-gb200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
   model: nvidia/DeepSeek-R1-0528-NVFP4-v2
@@ -3480,6 +3548,7 @@ dsr1-fp8-gb200-dynamo-trt:
           ep: 8
           dp-attn: false
     # 8k1k MTP configs
+
 dsr1-fp8-gb200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130
   model: deepseek-ai/DeepSeek-R1-0528
@@ -3689,6 +3758,7 @@ dsr1-fp4-gb200-dynamo-sglang:
           dp-attn: true
 
     # 8k1k configurations
+
 dsr1-fp4-gb300-dynamo-trt:
   image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
   model: nvidia/DeepSeek-R1-0528-NVFP4-v2
@@ -3881,6 +3951,7 @@ dsr1-fp4-gb300-dynamo-trt:
           tp: 32
           ep: 32
           dp-attn: true
+
 dsr1-fp4-gb300-dynamo-sglang:
   image: "lmsysorg/sglang:v0.5.8.post1-cu130-runtime"
   model: nvidia/DeepSeek-R1-0528-NVFP4-v2
@@ -3946,6 +4017,7 @@ dsr1-fp4-gb300-dynamo-sglang:
           dp-attn: true
 
     # 8k1k configurations
+
 dsr1-fp8-gb300-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-dev.1-cuda13
   model: deepseek-ai/DeepSeek-R1-0528
@@ -4167,6 +4239,7 @@ dsr1-fp8-gb300-dynamo-trt:
           tp: 8
           ep: 8
           dp-attn: true
+
 dsr1-fp8-h200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130
   model: deepseek-ai/DeepSeek-R1-0528
@@ -4273,6 +4346,7 @@ dsr1-fp8-h200-dynamo-sglang:
           tp: 8
           ep: 8
           dp-attn: true
+
 dsr1-fp4-b200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130-runtime
   model: deepseek-r1-fp4
@@ -4342,6 +4416,7 @@ dsr1-fp4-b200-dynamo-sglang:
           tp: 8
           ep: 8
           dp-attn: true
+
 dsr1-fp8-b200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64
   model: deepseek-ai/DeepSeek-R1-0528
@@ -4414,6 +4489,7 @@ dsr1-fp8-b200-dynamo-sglang:
           tp: 8
           ep: 8
           dp-attn: true
+
 dsr1-fp8-b200-dynamo-sglang-mtp:
   image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64
   model: deepseek-ai/DeepSeek-R1-0528
@@ -4509,6 +4585,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
           tp: 8
           ep: 8
           dp-attn: true
+
 dsr1-fp4-b200-dynamo-sglang-mtp:
   image: "lmsysorg/sglang:v0.5.12.post1"
   model: deepseek-r1-fp4
@@ -4581,6 +4658,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           tp: 8
           ep: 8
           dp-attn: true
+
 # Original config key: kimik2.5-fp4-gb200-dynamo-trt
 kimik2.5-fp4-gb200-dynamo-trt-deprecated-1k1k:
   image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-dev.1-cuda13
@@ -5025,6 +5103,7 @@ kimik2.5-fp4-gb200-dynamo-vllm-deprecated-1k1k:
           tp: 1
           ep: 16
           dp-attn: true
+
 qwen3.5-fp8-gb200-dynamo-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260608-303757cc
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -5086,6 +5165,7 @@ qwen3.5-fp8-gb200-dynamo-sglang:
           tp: 16
           ep: 16
           dp-attn: true
+
 # Original config key: glm5-fp4-gb200-dynamo-sglang-mtp
 glm5-fp4-gb200-dynamo-sglang-mtp-deprecated-1k1k:
   image: lmsysorg/sglang:v0.5.13.post1-cu130
@@ -5426,6 +5506,7 @@ dsv4-fp4-gb300-dynamo-trt-deprecated-1k1k:
           tp: 16
           ep: 16
           dp-attn: true
+
 # Original config key: dsv4-fp4-gb300-dynamo-trt-mtp
 dsv4-fp4-gb300-dynamo-trt-mtp-deprecated-1k1k:
   image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1
@@ -5653,6 +5734,7 @@ dsv4-fp4-gb300-dynamo-trt-mtp-deprecated-1k1k:
           tp: 16
           ep: 16
           dp-attn: true
+
 # Original config key: glm5-fp8-b200-dynamo-sglang
 glm5-fp8-b200-dynamo-sglang-deprecated-1k1k:
   image: lmsysorg/sglang:v0.5.11-cu130
@@ -5748,6 +5830,7 @@ glm5-fp8-b200-dynamo-sglang-deprecated-1k1k:
           tp: 8
           ep: 1
           dp-attn: false
+
 qwen3.5-fp8-h100-sglang:
   image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -5763,6 +5846,7 @@ qwen3.5-fp8-h100-sglang:
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 8 }
       - { tp: 8, ep: 8, conc-start: 16, conc-end: 256 }
+
 qwen3.5-fp8-h100-sglang-mtp:
   image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -5777,6 +5861,7 @@ qwen3.5-fp8-h100-sglang-mtp:
       osl: 1024
       search-space:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
+
 # Original config key: glm5-fp4-gb200-dynamo-sglang
 glm5-fp4-gb200-dynamo-sglang-deprecated-1k1k:
   image: lmsysorg/sglang:v0.5.11-cu130
@@ -6561,6 +6646,7 @@ minimaxm3-fp8-b300-dynamo-vllm-deprecated-1k1k:
           tp: 8
           ep: 8
           dp-attn: false
+
 minimaxm3-fp4-b300-dynamo-vllm:
   image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41
   model: nvidia/MiniMax-M3-NVFP4
@@ -6668,6 +6754,7 @@ minimaxm3-fp4-b300-dynamo-vllm:
           tp: 8
           ep: 8
           dp-attn: false
+
 # MiniMax-M3 NVFP4 B300 8k1k disagg sweep with TP1 prefill. This is separate
 # from the legacy entry above so updating the 8k1k frontier does not rerun 1k1k.
 # Original config key: minimaxm3-fp8-gb300-dynamo-vllm
@@ -6795,6 +6882,7 @@ qwen3.5-fp4-b200-trt:
       - { tp: 8, ep: 8, conc-list: [4, 64] }
       - { tp: 4, ep: 4, dp-attn: true, conc-list: [1024] }
       - { tp: 8, ep: 8, dp-attn: true, conc-list: [512, 1024] }
+
 # Original config key: minimaxm3-fp8-gb200-dynamo-vllm
 minimaxm3-fp8-gb200-dynamo-vllm-deprecated-1k1k:
   image: vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223
@@ -6904,6 +6992,7 @@ qwen3.5-fp4-b200-trt-mtp:
       - { tp: 2, ep: 2, spec-decoding: "mtp", conc-list: [4] }
       - { tp: 8, ep: 8, spec-decoding: "mtp", conc-list: [4] }
       - { tp: 8, ep: 8, dp-attn: true, spec-decoding: "mtp", conc-list: [64, 128, 256, 512, 1024] }
+
 # Original config key: minimaxm3-fp8-b300-vllm
 minimaxm3-fp8-b300-vllm-deprecated-1k1k:
   image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
@@ -6927,6 +7016,7 @@ minimaxm3-fp8-b300-vllm-deprecated-1k1k:
       # 1k1k only, drop if it OOMs at the high end.
       - { tp: 2, ep: 2, conc-start: 16, conc-end: 128 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
+
 # Original config key: minimaxm3-fp4-b300-vllm
 minimaxm3-fp4-b300-vllm-deprecated-1k1k:
   image: vllm/vllm-openai:nightly-93d8f834dd8acf33eb0e2a75b2711b628cb6e226
@@ -6947,6 +7037,7 @@ minimaxm3-fp4-b300-vllm-deprecated-1k1k:
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 512 }
       - { tp: 2, ep: 2, dp-attn: true, conc-start: 512, conc-end: 512 }
       - { tp: 2, ep: 2, dp-attn: true, conc-start: 4096, conc-end: 4096 }
+
 # Original config key: minimaxm3-fp4-b300-vllm-mtp
 minimaxm3-fp4-b300-vllm-mtp-deprecated-1k1k:
   image: vllm/vllm-openai:nightly-93d8f834dd8acf33eb0e2a75b2711b628cb6e226
@@ -6967,6 +7058,7 @@ minimaxm3-fp4-b300-vllm-mtp-deprecated-1k1k:
       - { tp: 4, conc-list: [1, 2, 4, 8, 16, 32], spec-decoding: mtp }
       - { tp: 4, ep: 4, conc-list: [1, 2, 32], spec-decoding: mtp }
       - { tp: 8, conc-list: [1, 2, 4, 8], spec-decoding: mtp }
+
 # Original config key: minimaxm3-fp8-b200-vllm
 minimaxm3-fp8-b200-vllm-deprecated-1k1k:
   image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
@@ -6987,6 +7079,7 @@ minimaxm3-fp8-b200-vllm-deprecated-1k1k:
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 512 }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 512 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
+
 # Original config key: minimaxm3-fp4-b200-vllm
 minimaxm3-fp4-b200-vllm-deprecated-1k1k:
   image: vllm/vllm-openai:nightly-93d8f834dd8acf33eb0e2a75b2711b628cb6e226
@@ -7005,6 +7098,7 @@ minimaxm3-fp4-b200-vllm-deprecated-1k1k:
       - { tp: 2, conc-start: 4, conc-end: 8 }
       - { tp: 2, conc-start: 256, conc-end: 2048 }
       - { tp: 4, conc-start: 32, conc-end: 256 }
+
 # Original config key: minimaxm3-fp8-b200-vllm-mtp
 minimaxm3-fp8-b200-vllm-mtp-deprecated-1k1k:
   image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
@@ -7025,6 +7119,7 @@ minimaxm3-fp8-b200-vllm-mtp-deprecated-1k1k:
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 512, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
+
 # Original config key: minimaxm3-fp4-b200-vllm-mtp
 minimaxm3-fp4-b200-vllm-mtp-deprecated-1k1k:
   image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41
@@ -7044,6 +7139,7 @@ minimaxm3-fp4-b200-vllm-mtp-deprecated-1k1k:
       - { tp: 4, conc-list: [1, 2, 4, 8, 16, 32, 64, 256], spec-decoding: mtp }
       - { tp: 4, ep: 4, conc-list: [1, 2, 4, 8, 256], spec-decoding: mtp }
       - { tp: 8, conc-list: [1, 2, 4, 8, 16], spec-decoding: mtp }
+
 # Original config key: minimaxm3-fp8-b300-vllm-mtp
 minimaxm3-fp8-b300-vllm-mtp-deprecated-1k1k:
   image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
@@ -7064,6 +7160,7 @@ minimaxm3-fp8-b300-vllm-mtp-deprecated-1k1k:
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 512, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
+
 # Original config key: minimaxm3-fp8-h200-vllm-mtp
 minimaxm3-fp8-h200-vllm-mtp-deprecated-1k1k:
   image: vllm/vllm-openai:minimax-m3
@@ -7083,6 +7180,7 @@ minimaxm3-fp8-h200-vllm-mtp-deprecated-1k1k:
       - { tp: 8, conc-start: 1, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, conc-start: 256, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
+
 # Original config key: minimaxm3-fp8-h100-vllm-mtp
 minimaxm3-fp8-h100-vllm-mtp-deprecated-1k1k:
   image: vllm/vllm-openai:minimax-m3
@@ -7099,6 +7197,7 @@ minimaxm3-fp8-h100-vllm-mtp-deprecated-1k1k:
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, conc-start: 256, conc-end: 256, spec-decoding: mtp }
+
 # Original config key: kimik2.5-fp4-gb300-dynamo-vllm
 kimik2.5-fp4-gb300-dynamo-vllm-deprecated-1k1k:
   image: vllm/vllm-openai:v0.21.0
@@ -7181,6 +7280,7 @@ kimik2.5-fp4-gb300-dynamo-vllm-deprecated-1k1k:
           tp: 1
           ep: 8
           dp-attn: true
+
 # Original config key: glm5-fp4-gb300-dynamo-trt-mtp
 glm5-fp4-gb300-dynamo-trt-mtp-deprecated-1k1k:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-dev.1-cuda13
@@ -7364,6 +7464,7 @@ glm5-fp4-gb300-dynamo-trt-mtp-deprecated-1k1k:
           tp: 16
           ep: 16
           dp-attn: true
+
 qwen3.5-fp8-gb300-dynamo-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -9953,6 +10054,7 @@ glm5-fp4-b200-sglang-mtp:
   # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/GLM/GLM-5
   # does not have a B300-specific recipe, so this config reuses the existing
   # GLM-5 FP4 B200 SGLang recipe as-is until B300-specific tuning is available.
+
 glm5-fp4-b300-sglang:
   image: lmsysorg/sglang:v0.5.11-cu130
   model: nvidia/GLM-5-NVFP4
@@ -11102,6 +11204,7 @@ glm5-fp4-gb300-dynamo-sglang:
 
 
     # ---------- 1k1k high-throughput (wide-EP TP=32 decode) ----------
+
 glm5-fp8-gb200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.12
   model: zai-org/GLM-5.1-FP8
@@ -11223,6 +11326,7 @@ glm5-fp8-gb200-dynamo-sglang:
 
 
     # ---------- 1k1k high-throughput (wide-EP decode) ----------
+
 glm5-fp8-gb200-dynamo-sglang-mtp:
   image: lmsysorg/sglang:v0.5.13.post1-cu130
   model: zai-org/GLM-5.1-FP8
@@ -11509,6 +11613,7 @@ glm5-fp4-gb300-dynamo-sglang-mtp:
 
 
     # ---------- 1k1k high-throughput (wide-EP decode, MTP) ----------
+
 glm5-fp8-gb300-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.11-cu130
   model: zai-org/GLM-5-FP8
@@ -11623,6 +11728,7 @@ glm5-fp8-gb300-dynamo-sglang:
 
 
     # ---------- 1k1k high-throughput (wide-EP decode) ----------
+
 glm5-fp8-gb300-dynamo-sglang-mtp:
   image: lmsysorg/sglang:v0.5.11-cu130
   model: zai-org/GLM-5.1-FP8
@@ -13252,6 +13358,7 @@ minimaxm2.5-fp8-b200-vllm:
   # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
   # does not have a B300-specific recipe, so this config reuses the existing
   # MiniMax-M2.5 FP8 B200 vLLM recipe as-is until B300-specific tuning is available.
+
 # Diverged from minimaxm2.5-fp8-b200-vllm (agentic-coding sibling). Reasons below;
 # the original minimaxm2.5-fp8-b200-vllm entry is left identical to origin/main so
 # its fixed-seq-len sweep is unaffected.
@@ -13317,6 +13424,7 @@ minimaxm2.5-fp4-b200-vllm:
   # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
   # does not have a B300-specific recipe, so this config reuses the existing
   # MiniMax-M2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
+
 # Diverged from minimaxm2.5-fp4-b200-vllm (agentic-coding sibling). Metadata is
 # identical to origin/main's minimaxm2.5-fp4-b200-vllm; the split exists because this
 # PR adds an agentic-coding scenarios block that differs from main
@@ -15673,6 +15781,7 @@ minimaxm3-fp4-b300-dynamo-vllm-mtp-legacy-dep4:
           tp: 4
           ep: 4
           dp-attn: true
+
 # MiniMax-M3 GB300 disagg sweep — refreshed recipe set (no Marlin variants).
 # All prefill DEP2 (TP1 DP2 EP, 2 GPU/worker). Decode: DEP4, TEP8, DEP8, TEP4.
 # 4 GPU/node (GB300 NVL72). kv-cache-dtype=fp8. srun_options mem=0 required.
