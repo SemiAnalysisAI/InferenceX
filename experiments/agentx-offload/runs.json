@@ -3093,19 +3093,42 @@
         "offload-stale-cleanup-35583529913.json": "8847e0a04b6a2e8b728e34fa92c4b947e0c8b2b7be34e8e3f5dc3b55da4c363f",
         "offload_cleanup.json": "fc7101807dd6f09d899d1f07915902e0c47c9daef3142d0f09e56c6973bdaff1"
       }
+    },
+    {
+      "run_id": 35646317491,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35646317491",
+      "arm": "nvme",
+      "concurrency": 384,
+      "repeat": 1,
+      "attempt": 1,
+      "head_sha": "e04f5708b800fa4f40fe27baa55d40fb71825d05",
+      "status": "queued",
+      "workflow_name": "offload-v1-nvme4tib-c384-r1-20260921",
+      "dispatched_at": "2026-09-21T19:40:40Z",
+      "job_id": 106487644052,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35646317491/job/106487644052",
+      "queued_at": "2026-09-21T19:41:00Z",
+      "performance_result": false,
+      "target_node": "im-b200-c001",
+      "capacity_bytes_per_node": 4398046511104,
+      "capacity_reserve_bytes": 137438953472,
+      "capacity_required_bytes": 4535485464576,
+      "admission_evidence": "Cleanup control 35635160852 verified deletion of the preceding 4 TiB scratch and observed 16,818,788,528,128 free bytes on allowlisted im-b200-c001. No B200 job was queued before dispatch; this workflow became the single queued B200 job and the single active-or-queued NVMe-bearing study workflow."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852",
-  "status": "Cleanup control 35635160852 owner-verified and deleted the exact 4 TiB c512 scratch, then completed its canonical c1 HBM measurement. Fresh c001 evidence reports 16,818,788,528,128 free bytes. The successful c256 point and c512 feasibility bound direct the next 4 TiB HBM+NVMe probe to c384.",
+  "status": "Cleanup control 35635160852 owner-verified and deleted the exact 4 TiB c512 scratch, then completed its canonical c1 HBM measurement. The 4 TiB HBM+NVMe c384 midpoint 35646317491 is now the single queued B200 and NVMe-bearing study workflow.",
   "last_capacity_check": {
-    "checked_at": "2026-09-21T19:30:45Z",
+    "checked_at": "2026-09-21T19:41:00Z",
     "active_study_run_ids": [],
-    "pending_study_run_ids": [],
-    "dispatch_allowed": true,
-    "reason": "Run 35635160852 verified exact cleanup and fresh c001 capacity. Current queued e2e jobs target MI355X, B300, and GB200; no B200 job is queued, and no study NVMe workflow is active or queued."
+    "pending_study_run_ids": [
+      35646317491
+    ],
+    "dispatch_allowed": false,
+    "reason": "Run 35646317491 occupies the single permitted queued B200 slot and is the single active-or-queued NVMe-bearing study workflow."
   },
   "next_dispatch": {
-    "requires": "Dispatch the 4 TiB HBM+NVMe c384 midpoint on allowlisted im-b200-c001, then require terminal exact cleanup before another NVMe-bearing workflow."
+    "requires": "Monitor c384 run 35646317491. Dispatch no other NVMe-bearing workflow until it is terminal and its exact task-owned scratch cleanup is verified."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
