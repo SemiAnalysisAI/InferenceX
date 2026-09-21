@@ -2,7 +2,8 @@
 set -eo pipefail
 
 # DeepSeek-V4.1-Flash AgentX on H200 with SGLang native DSpark, following the
-# cookbook's verified H200 TP8/EP8 low-latency cell. The KV cache is GPU-resident.
+# cookbook's H200 TP8/EP8 low-latency cell with a TP4/EP4 comparison arm.
+# The KV cache is GPU-resident.
 # https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP EP_SIZE CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
@@ -112,6 +113,8 @@ SGLANG_CMD=(
     # 4096, as on B200/GB200: at 8192 the indexer's prefill top-k allocated 5 GiB
     # with 29 requests in flight and OOMed c32 (run 35308550355).
     --chunked-prefill-size 4096
+    # Keep active decode requests progressing while long prefixes are queued.
+    --prefill-decode-interval 16
     --speculative-algorithm DSPARK
     --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
     --max-running-requests "$MAX_RUNNING_REQUESTS"

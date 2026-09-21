@@ -8550,7 +8550,7 @@
     - agentic-coding
   description:
     - "Move H200 DeepSeek-V4.1-Flash SGLang to the latest official CUDA 13 nightly and qualify AgentX performance against the vLLM counterpart"
-    - "Add a TP4/EP4 non-speculative arm with per-rank anonymous Engram host tables; retain TP8 GPU-resident tables for non-speculative serving and TP8 host tables for DSpark, preserving checkpoint payload and scales"
-    - "Add the official non-speculative throughput arm with no synthetic acceptance and test 16 decode steps between prefill chunks to prevent long-prefix decode starvation; retain the DSpark arm for accuracy and performance qualification"
+    - "Add TP4/EP4 non-speculative and stock DSpark comparisons with per-rank anonymous Engram host tables; retain TP8 GPU-resident tables for non-speculative serving and TP8 host tables for DSpark, preserving checkpoint payload and scales"
+    - "Prioritize stock DSpark across low and high concurrency, with 16 decode steps between prefill chunks to prevent long-prefix decode starvation; compare the non-speculative arm without synthetic acceptance and retain it only if measured results improve the frontier"
     - "Use the default MTP/DSpark precision shipped by the official nightly, without custom draft quantization or precision patches."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341
