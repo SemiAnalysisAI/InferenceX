@@ -15,7 +15,7 @@ if TYPE_CHECKING:
         CompressorDecodePlan,
         CompressorPrefillPlan,
     )
-    from sglang.kernels.ops.attention.dsv4.fp4_indexer_schedule_hip import (
+    from sglang.srt.layers.attention.dsv41_rocm.fp4_schedule import (
         PrefillScheduleBuffers,
     )
 
@@ -146,7 +146,7 @@ def _guard_page_table(
     page_table: torch.Tensor, out: Optional[torch.Tensor] = None, bucket: int = 4
 ):
     """Pad page tables for 256-token scheduling and one-chunk lookahead."""
-    from sglang.kernels.ops.attention.dsv4.fp4_indexer_schedule_hip import (
+    from sglang.srt.layers.attention.dsv41_rocm.fp4_schedule import (
         pad_page_table,
     )
 
@@ -251,7 +251,7 @@ def prepare_fp4_prefill_workspace(
         CTA_INFO_WIDTH,
     )
 
-    from sglang.kernels.ops.attention.dsv4.fp4_indexer_schedule_hip import (
+    from sglang.srt.layers.attention.dsv41_rocm.fp4_schedule import (
         PrefillScheduleBuffers,
         build_prefill_schedule,
         padded_page_table_shape,
@@ -343,7 +343,7 @@ def aiter_fp4_paged_mqa_logits(
             CTA_INFO_WIDTH,
         )
 
-        from sglang.kernels.ops.attention.dsv4.fp4_indexer_schedule_hip import (
+        from sglang.srt.layers.attention.dsv41_rocm.fp4_schedule import (
             build_prefill_schedule,
             padded_page_table_shape,
         )

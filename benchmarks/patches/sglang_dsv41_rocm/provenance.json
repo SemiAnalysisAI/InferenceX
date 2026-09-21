@@ -26,7 +26,7 @@
       "installed_name": "fp4_indexer.py",
       "source_path": "python/sglang/kernels/ops/attention/dsv4/fp4_indexer_hip.py",
       "source_sha256": "afaf39ecebc62bb8a9c8300e0acf225ff3d0f09053700ef6a15be1cb18080fe8",
-      "adapted_sha256": "8588bc01e2ab4709ea4eed06711ad9baa7b000015d87b49e60f190259cd4a61f"
+      "adapted_sha256": "35ddadbcda0d53c6fe16f6ccb242110491e55d13b00b07b54072ac7c42db4d41"
     },
     {
       "installed_name": "flash_mla.py",
@@ -45,6 +45,12 @@
       "source_path": "python/sglang/kernels/ops/moe/rocm_router_gate.py",
       "source_sha256": "11afd601058b9801c27e0cabc56b5a8f78750e1b04f12e3e077a59cfd07ee16f",
       "adapted_sha256": "e7aaebf77cd707e85fd48c80161c60017644285e3523a9a07c8939a59848c14a"
+    },
+    {
+      "installed_name": "fp4_schedule.py",
+      "source_path": "python/sglang/kernels/ops/attention/dsv4/fp4_indexer_schedule_hip.py",
+      "source_sha256": "6fb6c5cd43cd5a799b613b8634e9fcc9dc2041eec867ebccac5aa9e9d2a78b3f",
+      "adapted_sha256": "dfebdd44fcd5ebb17c176523f05addd45b5051f70f860eb9af0c601b4bdd927b"
     }
   ],
   "registry_sha256": "dfd9c0b6e85774524f6378ae09278cf6dc000e093ddf6beaadc44d1d20bdacd1"
