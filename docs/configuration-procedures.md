@@ -403,10 +403,10 @@ GB300 script with `SPEC_DECODING=none`, clears inherited synthetic acceptance,
 and passes no draft flags. TP4 keeps the original Engram tables in GPU memory, avoiding host huge-page
 fragmentation. TP2 uses the `per_rank` anonymous host layout; GB300 disables
 shared-memory huge pages. The separate
-DSpark arm applies `patch_sglang_dsv41_native_wo_a.py`, which verifies the nightly
-source hash and preserves all three draft WO_A projections' native FP8 weights and
-block scales. Markov weights retain native BF16. Full-model accuracy and performance
-qualification are still required. The downloaded checkpoint resolves to a local
+DSpark arm uses the official nightly's shipped draft weights, compute precision,
+and KV layout without a custom precision patch. Markov W2 retains the nightly's
+BF16 default. Full-model accuracy and performance qualification are still
+required. The downloaded checkpoint resolves to a local
 snapshot so upstream Engram cache advice can locate its files; verify actual
 huge-page coverage in the startup logs.
 

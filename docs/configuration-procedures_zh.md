@@ -350,8 +350,8 @@ TP2/EP2 或 TP4/EP4 运行原生非推测解码。STP 入口通过 `SPEC_DECODIN
 复用 GB300 脚本，清除继承的合成接受率设置，不传入草稿模型参数。
 TP4 将原始 Engram 表保留在 GPU 显存中，避免主机大页碎片带来的访问开销。
 TP2 使用 `per_rank` 主机布局申请匿名大页；GB300 禁用了共享内存大页。
-独立 DSpark 配方应用 `patch_sglang_dsv41_native_wo_a.py`，校验 nightly 源码哈希，
-保留三个草稿 WO_A 投影的原生 FP8 权重和分块缩放系数。Markov 权重保持原生 BF16。
+独立 DSpark 配方使用官方 nightly 默认的草稿权重、计算精度和 KV 布局，
+不应用自定义精度补丁。Markov W2 保持 nightly 默认的 BF16。
 仍需完成全模型准确率和性能验证。下载的检查点解析为本地快照路径，
 让上游 Engram 缓存建议逻辑能找到对应文件；实际大页覆盖率需通过启动日志确认。
 
