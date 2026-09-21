@@ -10,7 +10,10 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC PORT KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EVAL_ONLY
+check_env_vars MODEL TP CONC PORT KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EVAL_ONLY SPEC_DECODING
+
+# The isolated BFCL experiment can also test native non-speculative decoding.
+[[ "$SPEC_DECODING" == mtp || "$SPEC_DECODING" == none ]]
 
 DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3-GQA"
 NUM_SPEC_TOKENS=3
@@ -26,15 +29,24 @@ if [[ -n "${MODEL_PATH:-}" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
     fi
     DRAFT_MODEL_PATH="/lustre/fsw/gharunners/models/${DRAFT_MODEL##*/}"
-    if [[ ! -d "$DRAFT_MODEL_PATH" || -z "$(ls -A "$DRAFT_MODEL_PATH" 2>/dev/null)" ]]; then
-        mkdir -p "$DRAFT_MODEL_PATH"
-        hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
-    fi
 else
     hf download "$MODEL"
     export MODEL_PATH="$MODEL"
-    hf download "$DRAFT_MODEL"
     DRAFT_MODEL_PATH="$DRAFT_MODEL"
+fi
+
+SPECULATIVE_CONFIG=""
+if [[ "$SPEC_DECODING" == mtp ]]; then
+    if [[ "$DRAFT_MODEL_PATH" == "$DRAFT_MODEL" ]]; then
+        hf download "$DRAFT_MODEL"
+    elif [[ ! -d "$DRAFT_MODEL_PATH" || -z "$(ls -A "$DRAFT_MODEL_PATH" 2>/dev/null)" ]]; then
+        mkdir -p "$DRAFT_MODEL_PATH"
+        hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
+    fi
+    SPECULATIVE_CONFIG="speculative_config:
+    decoding_type: Eagle3
+    max_draft_len: $NUM_SPEC_TOKENS
+    speculative_model: $DRAFT_MODEL_PATH"
 fi
 
 nvidia-smi
@@ -110,10 +122,7 @@ kv_cache_config:
     dtype: fp8
     event_buffer_max_size: 0
     host_cache_size: $mem_off
-speculative_config:
-    decoding_type: Eagle3
-    max_draft_len: 3
-    speculative_model: $DRAFT_MODEL_PATH
+$SPECULATIVE_CONFIG
 scheduler_config:
     capacity_scheduler_policy: MAX_UTILIZATION
 enable_chunked_prefill: true
@@ -146,7 +155,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export TRTLLM_SERVE_ENABLE_MSGSPEC=1
 # Golden AL 2.78 = one target token plus 1.78 accepted draft tokens. The force
 # knob overwrites the verifier's count, so accuracy evals must leave it unset.
-if [ "$EVAL_ONLY" = "true" ]; then
+if [[ "$EVAL_ONLY" == true || "$SPEC_DECODING" == none ]]; then
     unset TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS
 else
     export TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS=1.78

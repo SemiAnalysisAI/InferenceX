@@ -8126,3 +8126,12 @@
     - "Reuse the verified upstream TRT source-built image for a separate MiniMax BFCL eager-prefill diagnostic. Disable torch compilation and prefill CUDA graphs with native configuration to isolate warmup index-cache cloning; preserve model, TP8, concurrency 1, context limits, DRAM offload and real EAGLE3."
     - "复用已验证的上游 TRT 源码镜像，单独开展 MiniMax BFCL 原生预填充诊断。通过原生配置关闭 torch 编译和预填充 CUDA graph，定位预热时索引缓存复制导致的显存问题；模型、TP8、并发 1、上下文上限、DRAM offload 及真实 EAGLE3 验证保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run a separate non-speculative MiniMax BFCL Responses diagnostic with the verified upstream TRT image and eager prefill. Remove EAGLE3 through native configuration and label the probe spec-decoding none; preserve BFCL requests, cases and scoring. This does not qualify the production MTP recipe."
+    - "使用已验证的上游 TRT 镜像及原生预填充，单独运行 MiniMax BFCL Responses 非投机解码诊断。通过原生配置关闭 EAGLE3，并将实验标记为 spec-decoding none；BFCL 请求、测试用例及评分规则保持不变。此测试不能替代生产 MTP 配置的验证。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
