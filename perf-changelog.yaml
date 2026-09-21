@@ -8531,3 +8531,17 @@
     - "为 GB300 vLLM DeepSeek-V4.1-Flash AgentX 配方在现有 TP4 臂旁新增 TP2 臂，Engram 表继续通过 --engram-config cpu_offload 放在固定页主机 DRAM；每张 277 GiB GPU 的权重升至约 175 GiB"
     - "在 dsv41flash_fp4_vllm_mtp.sh 中将 B200 TP2 的上限推广到所有 TP2 臂：--max-num-batched-tokens 4096（上游 16384 时 indexer 的 [batched-tokens, 1M] fp8 缓冲区达 32 GiB）、--max-num-seqs 为并发的两倍（16-256）、CUDA graph 捕获上限 512，为每张 GPU 留出约 36 GiB KV；TP4 与 TP8 臂沿用上游默认值"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3321
+
+- config-keys:
+    - qwen3.5-fp8-gb200-dynamo-sglang
+    - qwen3.5-fp8-gb300-dynamo-sglang
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Enable srt-slurm's independent, best-effort CPU power leg on the 1P1D TP4/TP4 STP Qwen3.5 FP8 GB200 and GB300 recipes: telemetry.cpu_power_exporter with port 9405 (the schema default) and source acpi. Nothing else in either recipe changes; image, serving flags, topology, concurrency list, and the GPU DCGM exporter (port 9401 on GB200, 19401 on GB300, required: true) are untouched."
+    - "At the pinned srt-slurm v2.2.1 (984180e5) srtctl launches cpu-power-exporter --port 9405 --source acpi through srun on the bare host of every worker node, falling back to the ACPI-only Python exporter when make setup did not install the release binary, and the head-node collector writes LOGS/power/cpu/samples.csv plus cpu_manifest.json beside the GPU DCGM package. The leg has no required flag: a missing hwmon sensor or a dead exporter only leaves gaps in samples.csv and cannot fail the job or the GPU power verdict."
+    - "The multinode power validator integrates the Grace Power Socket series over the same formal window as GPU energy and adds cpu_power_valid plus the CPU-side keys (docs/results-and-ingestion.md, Measured Grace CPU-side power); power_valid and every GPU field stay unchanged. The v2.2.1 exporter classifies only the CPU, Grace, and SysIO socket labels, so these runs yield the Grace-side total rather than the module reading."
+    - "These are the smallest active non-Kimi-K3 NVL72 power lanes (2 nodes, 1 prefill + 1 decode host, 4 Grace sockets). The DSV4 8k1k GB200/GB300 lanes are not used: Single-turn 8k1k on DeepSeek-V4-Pro was deprecated after 2026-09-08 (MODELS.md; configs/deprecated/nvidia-dsv4-8k1k-master.yaml), so no sweep would exercise them."
+    - "在 Qwen3.5 FP8 GB200 与 GB300 的 1P1D TP4/TP4 STP recipe 上启用 srt-slurm 独立、尽力而为的 CPU 功耗测量环节：telemetry.cpu_power_exporter，port 9405（schema 默认值），source acpi。两份 recipe 其余内容不变：镜像、服务参数、拓扑、并发列表以及 GPU DCGM exporter（GB200 端口 9401、GB300 端口 19401，required: true）均未改动。在固定版本 srt-slurm v2.2.1（984180e5）下，srtctl 通过 srun 在每个 worker 节点的裸主机上启动 cpu-power-exporter --port 9405 --source acpi，若 make setup 未安装发布的二进制则回退到仅支持 ACPI 的 Python exporter；头节点采集器把 LOGS/power/cpu/samples.csv 和 cpu_manifest.json 写在 GPU DCGM 产物包旁。该环节没有 required 开关：缺少 hwmon 传感器或 exporter 失效只会让 samples.csv 出现空缺，不会导致作业失败或改变 GPU 功耗结论。多节点功耗校验器在与 GPU 能耗相同的正式测量窗口内对 Grace Power Socket 序列积分，新增 cpu_power_valid 与 CPU 侧字段（见 docs/results-and-ingestion_zh.md「NVL72 Grace CPU 侧实测功耗」）；power_valid 与所有 GPU 字段保持不变。v2.2.1 的 exporter 只识别 CPU、Grace、SysIO 三种 socket 标签，因此这些运行得到的是 Grace 侧总功耗而非模块读数。"
+    - "选择这两条 lane 是因为它们是当前活跃、非 Kimi-K3 的最小 NVL72 功耗 lane（2 个节点，1 台 prefill 主机 + 1 台 decode 主机，4 个 Grace socket）。未采用 DSV4 8k1k 的 GB200/GB300 lane：DeepSeek-V4-Pro 的单轮 8k1k 场景已于 2026-09-08 之后弃用（见 MODELS.md 与 configs/deprecated/nvidia-dsv4-8k1k-master.yaml），sweep 不会再执行它们。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296

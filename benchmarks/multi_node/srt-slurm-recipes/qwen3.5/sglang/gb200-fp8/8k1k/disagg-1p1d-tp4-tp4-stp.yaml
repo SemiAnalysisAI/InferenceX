@@ -132,3 +132,6 @@ telemetry:
   dcgm_exporter:
     container_image: dcgm-exporter
     port: 9401
+  cpu_power_exporter:
+    port: 9405
+    source: acpi

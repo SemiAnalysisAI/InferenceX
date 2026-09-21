@@ -34,6 +34,21 @@ ROLE_METRIC_KEYS = (
     "decode_joules_per_output_token",
 )
 ALL_POWER_METRIC_KEYS = WHOLE_METRIC_KEYS + ROLE_METRIC_KEYS
+# Additive Grace CPU-side metrics from the multinode cpu/ sub-package. They
+# share schema version 2 and are governed by cpu_power_valid, not power_valid.
+CPU_METRIC_KEYS = (
+    "avg_cpu_socket_power_w",
+    "avg_total_cpu_power_w",
+    "total_cpu_energy_j",
+    "avg_total_module_power_w",
+    "total_module_energy_j",
+)
+
+
+def _rounded_metric(key: str, value: float | None) -> float:
+    if value is None or not math.isfinite(value):
+        raise ValueError(f"non-finite power metric: {key}")
+    return round(value, 3 if key.endswith(("_w", "_j")) else 6)
 
 
 def with_power_metrics(
@@ -43,17 +58,23 @@ def with_power_metrics(
     schema_version: int,
     power_valid: bool,
     metrics: Mapping[str, float],
+    cpu_power_valid: bool | None = None,
+    cpu_metrics: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
     """Return a result with stale metrics replaced by one validated metric set.
 
     The caller supplies the metric family and schema version. Detailed invalid
     reasons belong in its validation sidecar, not the numeric metric payload.
     Neither the input result nor the supplied metrics is mutated.
+
+    The CPU-side leg is tri-state: ``cpu_power_valid=None`` means the package
+    carried no ``cpu/`` sub-package, so only stale CPU keys are stripped and the
+    output stays byte-identical to a run without the leg.
     """
     # Do not coerce malformed JSON (such as a list of pairs) into an object.
     # Leave non-mappings to fail on the same operations as the existing adapters.
     data = dict(result) if isinstance(result, Mapping) else result
-    for key in metric_keys:
+    for key in (*metric_keys, *CPU_METRIC_KEYS, "cpu_power_valid"):
         data.pop(key, None)
     data["power_metric_schema_version"] = schema_version
     data["power_valid"] = int(power_valid)
@@ -61,8 +82,10 @@ def with_power_metrics(
     data.pop("power_audit", None)
     if power_valid:
         for key, value in metrics.items():
-            if value is None or not math.isfinite(value):
-                raise ValueError(f"non-finite power metric: {key}")
-            precision = 3 if key.endswith(("_w", "_j")) else 6
-            data[key] = round(value, precision)
+            data[key] = _rounded_metric(key, value)
+    if cpu_power_valid is not None:
+        data["cpu_power_valid"] = int(cpu_power_valid)
+        if cpu_power_valid:
+            for key, value in (cpu_metrics or {}).items():
+                data[key] = _rounded_metric(key, value)
     return data
