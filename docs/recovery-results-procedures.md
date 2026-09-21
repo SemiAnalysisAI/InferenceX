@@ -43,6 +43,8 @@ python3 -m infx.results.fixed_sequence
 
 The uploaded `bmk_${RESULT_FILENAME}` artifact contains `agg_${RESULT_FILENAME}_*.json`. Missing source files indicate a benchmark/launcher failure. Missing `agg_` files indicate a processing failure. Missing `results_bmk` indicates a collection failure. Do not classify any of those as a database failure.
 
+Kimi K3 B200 AgentX runs pinned to srt-slurm `984180e5` use producer-side telemetry in best-effort mode because that revision rejects every sample gap over three seconds, regardless of the configured cadence and request timeout. The InferenceX post-processor remains the required publication gate: it revalidates the raw samples, permits at most a 10-second isolated gap and 5% cumulative long-gap coverage, and fails the job when the energy estimate is not reliable. It may override the stored producer verdict only for that exact commit, when the producer recorded the exact legacy fixed-gap rejection and no other artifact error. Remove this compatibility path when the pinned producer includes cadence-aware validation.
+
 Sources: [single-node process/upload](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/benchmark-tmpl.yml#L289-L323), [multi-node process/upload](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/benchmark-multinode-tmpl.yml#L345-L387), [`process_result.py` contract](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/utils/process_result.py#L43-L75), [throughput collector](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/collect-results.yml#L25-L38).
 
 ### Eval results

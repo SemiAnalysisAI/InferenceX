@@ -8553,3 +8553,21 @@
   - Use prefill HiCache, ReplaySSM at C56, and tuned decode capacity.
   - Use SGLang nightly 20260918-20518d85 and Dynamo/SRT Slurm with the official FP8 checkpoint’s embedded NEXTN head.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use vllm/vllm-openai:nightly-2671fedfc7ae604761990603fc736c0c4f21de57, add concurrency recipes for 32, 56, 72 and 80, set mamba-ssm-cache-dtype to bfloat16, and configure DSpark synthetic acceptance by recipe group. Enable formal AgentX power windows, bound the telemetry request timeout to preserve publication coverage, and pin Tachometer to a release that publishes the required x86_64 scraper asset."
+    - "使用 vllm/vllm-openai:nightly-2671fedfc7ae604761990603fc736c0c4f21de57，新增并发 32、56、72 和 80 的 recipe，将 mamba-ssm-cache-dtype 设为 bfloat16，并按 recipe 分组配置 DSpark synthetic acceptance。启用正式的 AgentX 功耗窗口，限制遥测请求超时时间以满足发布覆盖范围要求，并将 Tachometer 固定到包含所需 x86_64 scraper 产物的版本。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3087
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Keep pinned srt-slurm 984180e5 telemetry best-effort for Kimi-K3 B200 AgentX, then require InferenceX to revalidate the raw power samples with cadence- and timeout-aware isolated and cumulative gap limits; unrelated or material telemetry loss remains blocking."
+    - "Kimi-K3 B200 AgentX 继续以 best-effort 模式使用固定的 srt-slurm 984180e5 遥测，再由 InferenceX 按采样周期、请求超时、单次间隔和累计间隔限制严格重新验证原始功耗样本；无关错误或严重遥测缺失仍会阻止发布。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3087

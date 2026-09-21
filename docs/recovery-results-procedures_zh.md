@@ -43,6 +43,8 @@ python3 -m infx.results.fixed_sequence
 
 上传的 `bmk_${RESULT_FILENAME}` 制品包含 `agg_${RESULT_FILENAME}_*.json`。缺少源文件属于基准/launcher 故障；缺少 `agg_` 文件属于结果处理故障；缺少 `results_bmk` 属于收集故障。不要把这些问题归类为数据库故障。
 
+固定使用 srt-slurm `984180e5` 的 Kimi K3 B200 AgentX 任务把 producer 侧遥测设为 best-effort 模式，因为该版本不考虑配置的采样周期和请求超时，会拒绝任何超过三秒的采样间隔。InferenceX 后处理器仍是发布所需的严格关卡：它重新验证原始样本，只允许最多 10 秒的单次间隔和占测量窗口 5% 的累计长间隔；当能耗估算不再可靠时，任务仍会失败。只有 producer commit 完全匹配、producer 准确记录了旧版固定间隔拒绝且不存在其他制品错误时，后处理器才可以覆盖已存储的 producer 结论。当固定版本已包含按采样周期验证的逻辑后，应删除此兼容路径。
+
 来源：[单节点处理/上传](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/benchmark-tmpl.yml#L289-L323)、[多节点处理/上传](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/benchmark-multinode-tmpl.yml#L345-L387)、[`process_result.py` 契约](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/utils/process_result.py#L43-L75)、[吞吐量收集器](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/collect-results.yml#L25-L38)。
 
 ### 评测结果
