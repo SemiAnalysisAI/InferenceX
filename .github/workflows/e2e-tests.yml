@@ -352,7 +352,7 @@ jobs:
     test-sweep-multi-node:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.multi-node-config != '' && needs.get-jobs.outputs.multi-node-config != '[]' }}
-        uses: $/.github/workflows/benchmark-multinode-tmpl.yml
+        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node /
         strategy:
             fail-fast: ${{ inputs.fail-fast }}
@@ -378,7 +378,7 @@ jobs:
     test-sweep-multi-node-evals:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.multi-node-eval-config != '' && needs.get-jobs.outputs.multi-node-eval-config != '[]' }}
-        uses: $/.github/workflows/benchmark-multinode-tmpl.yml
+        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node eval /
         strategy:
             fail-fast: ${{ inputs.fail-fast }}
@@ -408,7 +408,7 @@ jobs:
     test-sweep-agentic:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.agentic-config != '' && needs.get-jobs.outputs.agentic-config != '[]' }}
-        uses: $/.github/workflows/benchmark-tmpl.yml
+        uses: ./.github/workflows/benchmark-tmpl.yml
         name: agentic /
         strategy:
             fail-fast: ${{ inputs.fail-fast }}
@@ -435,7 +435,7 @@ jobs:
     test-sweep-agentic-evals:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.agentic-eval-config != '' && needs.get-jobs.outputs.agentic-eval-config != '[]' }}
-        uses: $/.github/workflows/benchmark-tmpl.yml
+        uses: ./.github/workflows/benchmark-tmpl.yml
         name: agentic eval /
         strategy:
             fail-fast: ${{ inputs.fail-fast }}
@@ -466,7 +466,7 @@ jobs:
     test-sweep-multi-node-agentic:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.multi-node-agentic-config != '' && needs.get-jobs.outputs.multi-node-agentic-config != '[]' }}
-        uses: $/.github/workflows/benchmark-multinode-tmpl.yml
+        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic /
         strategy:
             fail-fast: ${{ inputs.fail-fast }}
@@ -496,7 +496,7 @@ jobs:
     test-sweep-multi-node-agentic-evals:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.multi-node-agentic-eval-config != '' && needs.get-jobs.outputs.multi-node-agentic-eval-config != '[]' }}
-        uses: $/.github/workflows/benchmark-multinode-tmpl.yml
+        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic eval /
         strategy:
             fail-fast: false
@@ -529,7 +529,7 @@ jobs:
     test-sweep-single-node:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.single-node-config != '' && needs.get-jobs.outputs.single-node-config != '[]' }}
-        uses: $/.github/workflows/benchmark-tmpl.yml
+        uses: ./.github/workflows/benchmark-tmpl.yml
         name: single-node /
         strategy:
             fail-fast: ${{ inputs.fail-fast }}
@@ -553,7 +553,7 @@ jobs:
     test-sweep-evals:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.eval-config != '' && needs.get-jobs.outputs.eval-config != '[]' }}
-        uses: $/.github/workflows/benchmark-tmpl.yml
+        uses: ./.github/workflows/benchmark-tmpl.yml
         name: eval /
         strategy:
             fail-fast: ${{ inputs.fail-fast }}
@@ -582,7 +582,7 @@ jobs:
         name: collect-results
         needs: [get-jobs, test-sweep-multi-node, test-sweep-single-node, test-sweep-agentic, test-sweep-multi-node-agentic]
         if: ${{ always() && (needs.test-sweep-multi-node.result != 'skipped' || needs.test-sweep-single-node.result != 'skipped' || needs.test-sweep-agentic.result != 'skipped' || needs.test-sweep-multi-node-agentic.result != 'skipped') }}
-        uses: $/.github/workflows/collect-results.yml
+        uses: ./.github/workflows/collect-results.yml
         with:
             result-prefix: "bmk"
             tooling-ref: ${{ needs.get-jobs.outputs.tooling-ref }}
@@ -591,7 +591,7 @@ jobs:
         name: collect-evals
         needs: [get-jobs, test-sweep-evals, test-sweep-multi-node-evals, test-sweep-agentic-evals, test-sweep-multi-node-agentic-evals]
         if: ${{ always() && (needs.test-sweep-evals.result != 'skipped' || needs.test-sweep-multi-node-evals.result != 'skipped' || needs.test-sweep-agentic-evals.result != 'skipped' || needs.test-sweep-multi-node-agentic-evals.result != 'skipped') }}
-        uses: $/.github/workflows/collect-evals.yml
+        uses: ./.github/workflows/collect-evals.yml
         with:
             tooling-ref: ${{ needs.get-jobs.outputs.tooling-ref }}
 

@@ -8099,3 +8099,12 @@
     - "Test the official September 21 TRT nightly in the isolated B200 MiniMax BFCL Responses probe with an immutable image digest. Preserve the previous probe settings and apply no runtime patches."
     - "在独立的 B200 MiniMax BFCL Responses 实验中测试 9 月 21 日官方 TRT nightly，并固定镜像摘要。沿用此前实验配置，不应用运行时补丁。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Build the experimental B200 MiniMax BFCL image from upstream TRT-LLM main 0d4304aab66e, including native libraries, on the pinned September 21 devel image. Save and hash the built image before testing the unchanged Responses smoke probe in a fresh container."
+    - "基于固定的 9 月 21 日 devel 镜像，从上游 TRT-LLM main 提交 0d4304aab66e 完整构建 B200 MiniMax BFCL 实验镜像及原生库。保存镜像并记录摘要后，在新容器中运行原有 Responses 冒烟测试。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156

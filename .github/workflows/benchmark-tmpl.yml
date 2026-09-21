@@ -283,6 +283,12 @@ jobs:
           # Suppress per-job eval markdown from being appended to the step summary.
           # We'll publish a single combined eval table in the collection job instead.
           GITHUB_STEP_SUMMARY: ''
+          # Experimental source-build probe; this branch is not a production image bump.
+          TRT_SOURCE_SHA: '0d4304aab66e8da3023a027042fb0736f6d63b75'
+          TRT_DEVEL_IMAGE: 'nvcr.io#nvidia/tensorrt-llm/devel:sha256:593c09713a4637df99f9d09d14ef3794a1059ec1b5f5180c574c2767dbcaad16'
+          TRT_BUILD_JOBS: '32'
+          TRT_CUDA_ARCHS: '100-real'
+          TRT_BUILD_TIME_LIMIT: '05:00:00'
         run: |
           if [[ -f utils/result_filename.py ]]; then
             RESULT_FILENAME=$(python3 utils/result_filename.py)
@@ -305,7 +311,7 @@ jobs:
           if [[ -f runners/runtime_settings.sh ]]; then
             source runners/runtime_settings.sh
           fi
-          bash "./runners/launch_${RUNNER_NAME%%_*}.sh"
+          bash experimental/bfcl/launch-trt-main-build.sh
 
           if [ "${EVAL_ONLY}" = "true" ]; then
             echo "Eval-only mode: skipping benchmark result file check"
@@ -336,6 +342,14 @@ jobs:
                 --failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"
             fi
           fi
+
+      - name: Upload upstream source build evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: trt-main-source-build-${{ github.run_attempt }}
+          path: trt-main-build-evidence/**
+          if-no-files-found: ignore
 
       - name: Process result
         if: ${{ always() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
