@@ -413,7 +413,8 @@ The B200 launcher converts pinned Docker image digests to its installed Enroot
 manifest-reference syntax and stops on import failure before trying Pyxis.
 B200 also registers native STP points under `dsv41flash-fp4-b200-sglang-agentic`.
 Its separate STP script evaluates GPU-resident Engram tables with a 0.80 static memory
-fraction and 4096-token prefill chunks. This spends approximately 47.2 GiB more HBM
+fraction, 4096-token prefill chunks, and `--prefill-decode-interval 16` to service
+active decodes between long prefills. This spends approximately 47.2 GiB more HBM
 per TP4 rank to remove host-table accesses; compare measured cache capacity and latency
 against the per-rank host candidate before selecting the final placement.
 DSpark uses the pinned upstream nightly's shipped default draft implementation,

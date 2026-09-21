@@ -90,6 +90,9 @@ SGLANG_CMD=(
     # Bound the 1M-context sparse-indexer workspace with 4096-token chunks.
     --mem-fraction-static 0.80
     --chunked-prefill-size 4096
+    # Give active decodes service between long prefill chunks. The default
+    # prefill-first policy stalled C32 completions with low KV usage.
+    --prefill-decode-interval 16
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     --reasoning-parser auto

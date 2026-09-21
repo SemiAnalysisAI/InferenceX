@@ -359,7 +359,8 @@ B200 设置 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。在
 仅设置该变量并不能证明大页分配成功。
 B200 启动器将固定的 Docker 镜像 digest 转为已安装 Enroot 支持的 manifest 引用格式；导入失败时立即停止，不再启动 Pyxis。
 B200 还通过 `dsv41flash-fp4-b200-sglang-agentic` 注册原生 STP 测试点。
-独立 STP 脚本测试 GPU 常驻 Engram 表，静态显存比例为 0.80，prefill chunk 为 4096。
+独立 STP 脚本测试 GPU 常驻 Engram 表，静态显存比例为 0.80，prefill chunk 为 4096，
+并设置 `--prefill-decode-interval 16`，在长 prefill 之间调度正在运行的 decode。
 TP4 下每个 rank 多占用约 47.2 GiB 显存以消除主机表访问；确定最终放置方式前，
 需与每 rank 主机分片方案比较实测缓存容量和延迟。
 DSpark 使用固定上游 nightly 自带的默认草稿实现，包括默认计算与 Markov 精度。

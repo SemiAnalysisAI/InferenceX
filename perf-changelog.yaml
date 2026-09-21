@@ -8553,5 +8553,5 @@
     - "Use per-rank anonymous host Engram shards to request huge pages after the shared layout reported zero huge-page backing; preserve shipped DSpark defaults, golden acceptance, and GPU-resident KV"
     - "Add native STP comparison points alongside the pinned nightly's shipped default DSpark computation and precision"
     - "Normalize pinned image digests to the installed Enroot manifest-reference syntax and stop immediately when container import fails."
-    - "Compare native STP with GPU-resident Engram tables at mem-fraction-static 0.80 and 4096-token prefill chunks; preserve the original table precision"
+    - "Compare native STP with GPU-resident Engram tables at mem-fraction-static 0.80, 4096-token prefill chunks, and 16 decode rounds between prefills to prevent long-prefill starvation; preserve the original table precision"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3346
