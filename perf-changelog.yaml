@@ -8039,3 +8039,12 @@
     - "Record 4 TiB HBM+NVMe c512 run 35583529913 as a warmup feasibility failure: 5,676 of 5,677 canonical warmup requests completed with zero request errors, but one wire request exceeded the 1,800-second accelerated drain limit, so profiling never began and the allocation reached its 480-minute limit. Register the exact owner identity and scratch child for deletion by a c1 HBM maintenance control pinned to im-b200-c001 before any further NVMe-bearing work. Preserve c256 as the highest completed expanded-capacity point and fill the c256-c512 interval next. Model, engine, TP4, cache budgets, AgentX corpus, warmup request count, and 3,600-second profiling target are unchanged."
     - "将 4 TiB HBM+NVMe c512 运行 35583529913 记录为 warmup 可运行性失败：5,677 个规范 warmup 请求中有 5,676 个完成且请求错误为零，但一个 wire 请求超过 1,800 秒加速 drain 时限，因此 profiling 未开始，分配随后达到 480 分钟时限。登记准确的所有者身份和 scratch 子目录，在任何后续 NVMe 运行前，由固定到 im-b200-c001 的 c1 HBM 维护对照完成删除。c256 仍是扩容后已完成的最高并发点，下一步补充 c256 到 c512 之间的区间。模型、引擎、TP4、缓存预算、AgentX 语料、warmup 请求数和 3,600 秒 profiling 目标均保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add c384 to all four branch-only MiniMax-M3 AgentX offload arms after the 4 TiB HBM+NVMe c512 probe failed before profiling with one of 5,677 canonical warmup requests still outstanding, while c256 completed successfully. This midpoint fills the c256-c512 feasibility interval without changing the model, engine, TP4 layout, storage budgets, AgentX corpus, warmup policy, or 3,600-second profiling window."
+    - "4 TiB HBM+NVMe c512 探针在 profiling 前失败：5,677 个规范 warmup 请求中仍有一个未完成，而 c256 已成功完成。因此为四组分支内 MiniMax-M3 AgentX 卸载实验新增 c384，以填充 c256 到 c512 的可运行性区间中点。模型、引擎、TP4 布局、存储预算、AgentX 语料、warmup 策略及 3,600 秒 profiling 窗口均保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload

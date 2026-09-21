@@ -12,6 +12,7 @@
   ],
   "expanded_nvme_probe_concurrency": [
     256,
+    384,
     512
   ],
   "maintenance_probe_nodes": {
@@ -33,6 +34,7 @@
     64,
     128,
     256,
+    384,
     512,
     1024,
     4096,

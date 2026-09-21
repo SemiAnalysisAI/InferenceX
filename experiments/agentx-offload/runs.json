@@ -3029,31 +3029,83 @@
       "repeat": 2,
       "attempt": 1,
       "head_sha": "4805d065a51b7eda11f65fd182b5d05a59953e20",
-      "status": "in_progress",
+      "status": "success",
       "workflow_name": "offload-v1-none-c1-r2-cleanup-c001-20260921",
       "dispatched_at": "2026-09-21T17:56:25Z",
       "job_id": 106450808157,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35635160852/job/106450808157",
       "started_at": "2026-09-21T17:56:52Z",
-      "performance_result": false,
+      "performance_result": true,
       "target_node": "im-b200-c001",
       "maintenance_cleanup_run_id": 35583529913,
-      "purpose": "Verify the exact owner identity for run 35583529913, delete only its registered 4 TiB task-owned scratch on im-b200-c001, retain cleanup evidence, then run the canonical c1 HBM control."
+      "completed_at": "2026-09-21T19:09:21Z",
+      "node": "im-b200-c001",
+      "allocation_id": "16722",
+      "purpose": "Verify the exact owner identity for run 35583529913, delete only its registered 4 TiB task-owned scratch on im-b200-c001, retain cleanup evidence, then run the canonical c1 HBM control.",
+      "artifacts": [
+        {
+          "id": 10658618894,
+          "name": "results_bmk",
+          "size_bytes": 2004
+        },
+        {
+          "id": 10658788062,
+          "name": "server_logs_minimaxm3_tp4_conc1_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp_c-1ae30eed8ea2625b9b5e",
+          "size_bytes": 62615
+        },
+        {
+          "id": 10658917915,
+          "name": "agentic_minimaxm3_tp4_conc1_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp_c-1ae30eed8ea2625b9b5e",
+          "size_bytes": 4663345
+        }
+      ],
+      "performance": {
+        "num_requests_total": 253,
+        "num_requests_successful": 242,
+        "num_requests_warmup_dropped": 11,
+        "num_requests_error_dropped": 0,
+        "duration_seconds": 3607.80189,
+        "output_tokens_per_second": 124.71389,
+        "output_tokens_per_second_per_gpu": 31.17847,
+        "total_tokens_per_second": 16457.02115,
+        "total_tokens_per_second_per_gpu": 4114.25529,
+        "p90_e2e_latency_seconds": 25.15078,
+        "p90_interactivity_tokens_per_second_per_user": 193.08383,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 91.19363,
+        "avg_power_w_per_gpu": 350.405
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.97153,
+        "external_cache_hit_rate": 0.0,
+        "overall_cache_hit_rate": 0.97153,
+        "gpu_cache_hit_prompt_tokens": 60723072,
+        "external_cache_hit_prompt_tokens": 0,
+        "computed_prompt_tokens": 1779210,
+        "prompt_tokens_total": 62502282
+      },
+      "maintenance_cleanup_evidence": "On im-b200-c001, cleanup_stale.py matched study=agentx-offload-v1, run=35583529913, attempt=1, job=16713; measured 4,398,044,086,272 logical bytes and 4,398,032,576,512 allocated bytes across four files; deleted only /offload-scratch/inferencex-offload-35583529913-1-16713-0553ef74bedf; and recorded deleted=true. The subsequent c1 control also deleted its own empty task-owned scratch.",
+      "storage_evidence": "After exact stale cleanup, c001 preflight reported 16,818,788,528,128 free bytes on xfs /dev/md0 over eight non-rotating NVMe leaves, exceeding the 4 TiB budget plus 128 GiB reserve by 12,283,303,063,552 bytes.",
+      "evidence_sha256": {
+        "server.log": "e8054f3a09611bc76f1c67fd60fa085d9828dbc1e62690526852daefb4cb3868",
+        "offload_config.json": "d79e621af6e7ba441f76e3d5e8704e4b6649cb6bcea654e3dbe4286968ef76cc",
+        "benchmark.log": "2f880f2668013f1a0188671ec21ee1b68bed36d4ec7a997c90a152ffb93ee808",
+        "profile_export.jsonl": "628b383c12a6b8b2766dce4f6ae2a599b2e7a079aa0b6719ee53f68529288789",
+        "offload-stale-cleanup-35583529913.json": "8847e0a04b6a2e8b728e34fa92c4b947e0c8b2b7be34e8e3f5dc3b55da4c363f",
+        "offload_cleanup.json": "fc7101807dd6f09d899d1f07915902e0c47c9daef3142d0f09e56c6973bdaff1"
+      }
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871",
-  "status": "The 4 TiB c512 NVMe probe 35583529913 failed before profiling after 5,676/5,677 warmup requests completed with zero request errors; one request exceeded the 1,800-second drain limit. Cleanup control 35635160852 is running on the pinned c001 path to verify ownership and remove only that exact 4 TiB scratch before its canonical c1 HBM measurement. The completed c256 point and c512 feasibility bound direct the next NVMe probe into the c256-c512 interval.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852",
+  "status": "Cleanup control 35635160852 owner-verified and deleted the exact 4 TiB c512 scratch, then completed its canonical c1 HBM measurement. Fresh c001 evidence reports 16,818,788,528,128 free bytes. The successful c256 point and c512 feasibility bound direct the next 4 TiB HBM+NVMe probe to c384.",
   "last_capacity_check": {
-    "checked_at": "2026-09-21T17:56:52Z",
-    "active_study_run_ids": [
-      35635160852
-    ],
+    "checked_at": "2026-09-21T19:30:45Z",
+    "active_study_run_ids": [],
     "pending_study_run_ids": [],
-    "dispatch_allowed": false,
-    "reason": "Cleanup control 35635160852 is active. Wait for terminal owner-verified deletion proof before dispatching another NVMe-bearing run; the cluster-wide maximum remains one queued B200 job."
+    "dispatch_allowed": true,
+    "reason": "Run 35635160852 verified exact cleanup and fresh c001 capacity. Current queued e2e jobs target MI355X, B300, and GB200; no B200 job is queued, and no study NVMe workflow is active or queued."
   },
   "next_dispatch": {
-    "requires": "Monitor cleanup control 35635160852. After terminal cleanup proof and a fresh queue/capacity check, probe an intermediate NVMe concurrency between c256 and the c512 warmup feasibility bound."
+    "requires": "Dispatch the 4 TiB HBM+NVMe c384 midpoint on allowlisted im-b200-c001, then require terminal exact cleanup before another NVMe-bearing workflow."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
@@ -3071,14 +3123,6 @@
       "last_observed_logical_bytes": 0,
       "last_observed_allocated_bytes": 0,
       "reason": "The allocation time limit killed the container step before offload_cleanup.json was written. The directory was empty at the final telemetry sample; delete only this exact task-owned directory through approved InferenceX infrastructure, then record proof and remove this entry."
-    },
-    {
-      "run_id": 35583529913,
-      "node": "im-b200-c001",
-      "scratch": "/offload-scratch/inferencex-offload-35583529913-1-16713-0553ef74bedf",
-      "last_observed_logical_bytes": 4398044086272,
-      "last_observed_allocated_bytes": 4398032576512,
-      "reason": "The allocation time limit bypassed runtime.finish after canonical c512 warmup failed on one remaining wire request. Delete only this exact task-owned directory through the registered ownership-verifying maintenance workflow, retain the receipt, then remove this entry."
     }
   ]
 }

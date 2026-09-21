@@ -36,8 +36,8 @@ series at c256, the highest NVMe concurrency already proven to finish the full
 canonical run. The c512 probe completed 5,676 of 5,677 canonical warmup requests
 with zero request errors, but one request exceeded the 1,800-second drain limit;
 the phase failed before profiling and the allocation then reached its time limit.
-Treat c512 as a feasibility bound and fill the c256-c512 interval before trying a
-higher concurrency.
+Treat c512 as a feasibility bound. Probe c384 next, then fill the remaining
+c256-c512 interval before trying a higher concurrency.
 
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an
@@ -62,7 +62,7 @@ Inspect recorded corpus identity, full commands and actual allocated KV capacity
 before declaring a pair matched.
 
 Start with a matched four-arm probe at concurrency 16. Then build full curves for
-all four arms. Initial curve points are 1, 4, 8, 16, 32, 64, 128, 256, 512, 1,024,
+all four arms. Initial curve points are 1, 4, 8, 16, 32, 64, 128, 256, 384, 512, 1,024,
 4,096, 8,192 and 16,384. Add intermediate positive integers near observed changes, and
 repeat both sides of a candidate crossover on different nodes.
 Keep the maximum at 16,384. Failure or insufficient completed samples is a
