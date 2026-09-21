@@ -142,7 +142,7 @@ SGLANG_CMD=(
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     # Long AgentX prefills otherwise starve active draft/verify decode rounds.
-    --prefill-decode-interval 16
+    --prefill-decode-interval 4
     --swa-prefix-tails "$SWA_PREFIX_TAILS"
     "${SPECULATIVE_ARGS[@]}"
     --max-running-requests "$MAX_RUNNING_REQUESTS"

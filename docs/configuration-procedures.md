@@ -429,8 +429,8 @@ TP2 also enables PyTorch expandable allocator segments: releasing the temporarie
 lowered live allocation by 2.24 GiB but left fragmented cached blocks.
 TP4 DSpark also compares GPU-resident Engram at a 0.80 static memory fraction
 against the pinned host-table baseline; TP2 keeps host tables.
-DSpark also uses `--prefill-decode-interval 16` to give draft/verify rounds service
-between long prefills; evaluate its full throughput/interactivity curve.
+DSpark compares `--prefill-decode-interval 4` with a pinned interval-16 baseline
+to balance prefill service and draft/verify latency; evaluate the full frontier.
 The cache candidate reserves eight SWA prefix tails per running request (512
 at the 64-request cap), rather than four. This reallocates the same static pool
 from full KV to reusable sliding-window tails; verify cache hits and capacity.
