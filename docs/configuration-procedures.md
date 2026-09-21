@@ -408,53 +408,6 @@ those paths on `vllm` only.
 
 GPU sweep and eval evidence is required before calling any of these arms validated.
 
-### Acquire the original Qwen3.5 BF16 MTP subset
-
-[`infx.models.acquire_mtp`](../infx/models/acquire_mtp.py) prepares an original-weight
-MTP asset using the pinned [manifest](../configs/models/qwen3.5-397b-mtp-bf16.json).
-It downloads four unmodified shards (91–94, about 33.7 GB) and support metadata from
-`Qwen/Qwen3.5-397B-A17B` revision `8472618112abcbd45acbcdc58436aff4233c23f7`.
-Manifest digests come from the immutable HF revision: upstream LFS SHA256 for large
-files and verified original bytes for metadata. No tensors are converted, repacked,
-or dequantized. This directory is an MTP subset, **not a complete target model**.
-
-The caller chooses the shared destination and lock timeout explicitly:
-
-```bash
-python -m infx.models.acquire_mtp \
-  --manifest configs/models/qwen3.5-397b-mtp-bf16.json \
-  --destination /shared/models/Qwen3.5-397B-MTP-BF16-8472618 \
-  --lock-timeout 3600
-```
-
-The helper serializes callers with a destination-specific POSIX lock. It checks every
-original file's size and SHA256, all selected header/index entries, all 1,553 original
-BF16 MTP tensors, and the BF16 embedding/head. It preserves the full upstream index
-as `model.safetensors.index.json.original`, computes the filtered index's `total_size`
-from tensor offsets, and atomically publishes the validated directory with
-`subset-provenance.json`. Warm reuse revalidates the complete asset, including hashes
-and manifest identity. An existing incomplete or conflicting destination fails without
-repair or replacement. Interrupted temporary staging directories are never accepted as
-complete; a subsequent attempt downloads into a new staging directory. Verification
-requires reading the full 33.7 GB on warm reuse too. The helper requires POSIX locking
-and atomic directory rename on the caller's shared filesystem.
-
-The B300 DSXE launcher acquires this asset before submitting Qwen3.5 FP8
-Dynamo/SGLang AgentX jobs. It uses a manifest-hash directory under its existing
-`WRITABLE_MODELS_DIR`, mounts it at `/draft-model` through `write_srt_cluster_config`,
-and includes the manifest, provenance and resolved host/container paths in
-`draft-model-provenance/` inside the server-log archive. Recipes do not depend on
-personal directories.
-For SGLang `20518d85`, the supported separate-draft arguments are:
-`speculative-draft-model-path: /draft-model`, the exact revision above,
-`speculative-draft-model-quantization: unquant`,
-`speculative-draft-kv-cache-dtype: bf16`, and
-`speculative-moe-runner-backend: flashinfer_trtllm`.
-Omitting `unquant` can inherit the FP8 target's quantization. Separate draft KV dtype
-does not guarantee mixed-dtype HiCache compatibility; retain the recipe's independently
-validated cache/retraction configuration. Acquisition does not qualify a serving recipe;
-real accuracy and performance tests remain required.
-
 ## Validate
 
 Run the smallest checks that cover the edited layers.

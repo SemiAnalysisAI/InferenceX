@@ -159,11 +159,6 @@ roles:
       max-running-requests: 64
       cuda-graph-max-bs-decode: 32
       disaggregation-decode-extra-slots: 0
-      speculative-draft-model-path: /draft-model
-      speculative-draft-model-revision: 8472618112abcbd45acbcdc58436aff4233c23f7
-      speculative-draft-kv-cache-dtype: bf16
-      speculative-draft-model-quantization: unquant
-      speculative-moe-runner-backend: flashinfer_trtllm
       disaggregation-decode-retraction-backup: cpu_tensor
 sbatch_directives:
   exclude: dsxe-sa-b300-prd0-gpu-[11,16]

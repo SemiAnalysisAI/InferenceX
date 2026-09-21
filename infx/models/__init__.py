@@ -1,1 +1,0 @@
-"""Verified model asset acquisition."""
