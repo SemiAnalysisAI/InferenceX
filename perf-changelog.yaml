@@ -8117,3 +8117,12 @@
     - "Restore the official pinned NVRTC development package during the experimental upstream TRT image build, matching main's missing-static-library fix. Keep upstream source, native compilation, and the MiniMax BFCL probe unchanged."
     - "构建上游 TRT 实验镜像时，恢复官方固定版本的 NVRTC 开发包，与 main 中补齐静态库的修复一致。上游源码、原生库编译方式及 MiniMax BFCL 测试配置保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Reuse the verified upstream TRT source-built image for a separate MiniMax BFCL eager-prefill diagnostic. Disable torch compilation and prefill CUDA graphs with native configuration to isolate warmup index-cache cloning; preserve model, TP8, concurrency 1, context limits, DRAM offload and real EAGLE3."
+    - "复用已验证的上游 TRT 源码镜像，单独开展 MiniMax BFCL 原生预填充诊断。通过原生配置关闭 torch 编译和预填充 CUDA graph，定位预热时索引缓存复制导致的显存问题；模型、TP8、并发 1、上下文上限、DRAM offload 及真实 EAGLE3 验证保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156

@@ -56,9 +56,6 @@ trap cleanup_agentic_services EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-CAPTURE_TOKENS_LIST=(1 512 1024 2048)
-CAPTURE_TOKENS_LIST=$(printf "%s, " "${CAPTURE_TOKENS_LIST[@]}")
-
 MAX_BATCH=$CONC
 if (( MAX_BATCH <= 20 )); then
     CAPTURE_BATCH_LIST=( $(seq 1 $MAX_BATCH) )
@@ -92,13 +89,9 @@ max_batch_size: $MAX_BATCH
 cuda_graph_config:
     enable_padding: true
     batch_sizes: [${CAPTURE_BATCH_LIST%, }]
-torch_compile_config:
-    enable_fullgraph: true
-    enable_inductor: false
-    enable_piecewise_cuda_graph: true
-    capture_num_tokens: [${CAPTURE_TOKENS_LIST%, }]
-    enable_userbuffers: true
-    max_num_streams: 3
+# Experimental eager-prefill diagnostic: native settings, same immutable image.
+torch_compile_config: null
+prefill_cuda_graph_backend: disabled
 moe_config:
     backend: TRTLLM
     use_low_precision_moe_combine: true
@@ -134,6 +127,7 @@ return_perf_metrics: true
 num_postprocess_workers: 8
 enable_attention_dp: false
 EOF
+cp ser.yaml "$RESULT_DIR/trtllm_config.yaml"
 
 export TLLM_LOG_LEVEL=INFO
 export TRTLLM_SERVER_DISABLE_GC=1
@@ -150,7 +144,6 @@ export TQDM_DISABLE=1
 export HF_HUB_DISABLE_PROGRESS_BARS=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export TRTLLM_SERVE_ENABLE_MSGSPEC=1
-export TRTLLM_TORCH_COMPILE_CONTEXT_ONLY=1
 # Golden AL 2.78 = one target token plus 1.78 accepted draft tokens. The force
 # knob overwrites the verifier's count, so accuracy evals must leave it unset.
 if [ "$EVAL_ONLY" = "true" ]; then

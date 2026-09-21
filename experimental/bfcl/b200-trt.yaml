@@ -1,7 +1,7 @@
-# Source-build diagnostic: upstream main 0d4304aab66e, full native + Python build.
+# Eager-prefill diagnostic: reuse the verified upstream main source-built image.
 # This local image identity is resolved by the experimental launcher, not a registry.
-# 源码构建诊断：固定上游 main 提交，完整编译原生库及 Python 包，不应用运行时补丁。
-minimaxm3-fp4-b200-trt-bfcl-probe:
+# 原生预填充诊断：复用已验证的上游源码镜像，关闭预填充编译，不应用运行时补丁。
+minimaxm3-fp4-b200-trt-bfcl-eager-probe:
   image: inferencex-experimental/trt-main:0d4304aab66e8da3023a027042fb0736f6d63b75
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
