@@ -552,8 +552,8 @@ If any of Checks 0-13 fails, use REJECTED even when Check 14 also warns.
 Keep the `N/A — <reason>` row so the reviewer sees it was considered.
 Write the complete verdict to `/tmp/codeowner-signoff-verdict.md` using the Write
 or Bash tool. Do not post, edit, or delete GitHub comments, labels, or commit
-statuses. The workflow publishes this file by updating one persistent PR comment
-(or creating it if deleted) and records only the assessed commit. It does not publish
+statuses. The workflow publishes this file as a new PR comment for every verification,
+preserving earlier verdict comments and recording only the assessed commit. It does not publish
 commit statuses or carry the verdict forward to later commits.
 Do not include a hidden marker or assessed-commit footer; the publisher adds them.
 Always write your full current assessment, even if it matches a previous verdict.
