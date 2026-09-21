@@ -8068,3 +8068,12 @@
     - "Lower GB200 DSpark AgentX Mooncake embedded segment budget from 60% to 45% node DRAM utilization and restore default vLLM INFO logging after unhelpful DEBUG bring-up."
     - "将 GB200 DSpark AgentX Mooncake 嵌入式段预算从节点 DRAM 利用率的 60% 降至 45%，并在 DEBUG 启动诊断无效后恢复默认 vLLM INFO 日志级别。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add 2P1D DEP8/DEP8 (conc 192/256, 6 nodes) and 3P1D DEP8/DEP16 (conc 256/320, 10 nodes) AgentX sweep arms with agentX long EPP routing; per-engine vLLM flags unchanged from 1P1D."
+    - "新增 2P1D DEP8/DEP8（并发 192/256，6 节点）与 3P1D DEP8/DEP16（并发 256/320，10 节点）AgentX 扫描臂，采用 agentX long EPP 路由；单引擎 vLLM 参数与 1P1D 保持一致。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
