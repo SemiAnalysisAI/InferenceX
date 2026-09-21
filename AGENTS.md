@@ -50,6 +50,15 @@ Then validate it in the receiving script after sourcing the shared helper:
 check_env_vars IS_MULTINODE MODEL_NAME PRECISION
 ```
 
+## Deprecating benchmark configs
+
+- Move deprecated entries out of the active master config into [`configs/deprecated/amd-master.yaml`](configs/deprecated/amd-master.yaml) or [`configs/deprecated/nvidia-master.yaml`](configs/deprecated/nvidia-master.yaml), matching the vendor. These are the only deprecated master-config files; do not create separate files per model, scenario, or deprecation.
+- For a partial deprecation, archive only the retired scenarios and retain the supported scenarios in the active entry. Preserve archived settings and explanatory comments; do not update historical image pins or runners during archival.
+- Keep every archive key unique. If a key already exists with different settings, preserve both versions with a descriptive suffix on the historical key and a comment recording its original config key. Existing colliding 1k1k versions use `-deprecated-1k1k`. Never overwrite an archived version or add duplicate YAML keys.
+- Check retirement statements in [`MODELS.md`](MODELS.md) against active configs and script routing in the same PR, and update `MODELS.md` plus `MODELS_zh.md` together. Preserve explicitly documented exceptions and conditional retirement policies; do not treat planned retirement as completed.
+- Remove unused retired-model branches from launchers and runtime settings, and update workflow/agent guidance that still recommends retired coverage. Audit callers before removing shared helpers; retained SPEED-Bench collectors and historical result readers may still need model-specific support.
+- Keep these archives out of active sweep inputs. Follow the existing benchmark-script archival convention, moving retired scripts into the sibling `deprecated/` directory only when no active config still uses them.
+
 ## Runner launchers (one file per pool)
 
 - The reusable workflows run `bash ./runners/launch_${RUNNER_NAME%%_*}.sh`. The runner-name prefix before the first underscore is the only routing key, so each self-hosted pool maps to exactly one `runners/launch_<pool>.sh`, and every `runners/launch_*.sh` must be the launcher of a pool listed in [`configs/runners.yaml`](configs/runners.yaml). For example, runner `b200-nscale-slurm_03` runs `runners/launch_b200-nscale-slurm.sh`. See [Stage 4 in `docs/architecture.md`](docs/architecture.md#stage-4-launcher-and-runtime-execution).
