@@ -2149,7 +2149,43 @@
     },
     {
       "head_sha": "9334ea53bde6e8645a34ed40918fceb2d5750f0c",
-      "artifacts": [],
+      "artifacts": [
+        {
+          "id": 10616796992,
+          "name": "agentic_minimaxm3_tp4_conc64_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fal-90b1d3b775017b7c7975",
+          "size_bytes": 879454
+        },
+        {
+          "id": 10616772202,
+          "name": "bmk_agentic_minimaxm3_tp4_conc64_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fal-90b1d3b775017b7c7975",
+          "size_bytes": 1521
+        },
+        {
+          "id": 10616642644,
+          "name": "results_bmk",
+          "size_bytes": 1311
+        },
+        {
+          "id": 10616537691,
+          "name": "server_logs_minimaxm3_tp4_conc64_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fal-90b1d3b775017b7c7975",
+          "size_bytes": 48424
+        },
+        {
+          "id": 10616477773,
+          "name": "gpu_metrics_minimaxm3_tp4_conc64_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fal-90b1d3b775017b7c7975",
+          "size_bytes": 151565
+        },
+        {
+          "id": 10616303180,
+          "name": "power_audit_minimaxm3_tp4_conc64_kvdram-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fal-90b1d3b775017b7c7975",
+          "size_bytes": 153763
+        },
+        {
+          "id": 10615723302,
+          "name": "run-stats",
+          "size_bytes": 280
+        }
+      ],
       "performance_result": false,
       "run_id": 35542185178,
       "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35542185178",
@@ -2157,12 +2193,25 @@
       "concurrency": 64,
       "repeat": 1,
       "attempt": 1,
-      "status": "in_progress",
+      "status": "failure",
       "workflow_name": "offload-v1-dram-c64-r1-20260920T2236Z",
       "dispatched_at": "2026-09-20T22:36:03Z",
       "job_id": 106161753934,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35542185178/job/106161753934",
-      "started_at": "2026-09-20T22:36:30Z"
+      "started_at": "2026-09-20T22:36:30Z",
+      "node": "im-b200-c008",
+      "runner": "b200-nscale-slurm_02",
+      "allocation_id": "16706",
+      "completed_at": "2026-09-20T23:49:50Z",
+      "failure_stage": "profiling_startup",
+      "failure_evidence": "The c64 HBM+DRAM server completed all 707 warmup requests in 3,673.43 seconds, then EngineCore died as profiling began because Triton could not create a cache directory under /data/home/sa-shared/.triton/cache: OSError [Errno 28] No space left on device. Only two profiling responses completed, so this is an infrastructure storage failure and not a performance result. Retry requires verified free space on the shared Triton cache filesystem.",
+      "log_archive_sha256": "ca8365fd434104aefd558a12243079a942133d8058151a5c17d626be022aa7e7",
+      "storage_evidence": "DRAM-only configured zero NVMe capacity. The exact workflow-owned scratch remained empty (0 files, 0 bytes); offload_cleanup.json records exit_code=1 and deleted=true.",
+      "evidence_sha256": {
+        "server.log": "945611b431d6811d675809a11caf60ddad1d7d081b4bf8e7797689bea77d3386",
+        "offload_cleanup.json": "409536cafd8cf363cae03c1ed3c7a2cba735840d165d5380523f7643cceb5f67",
+        "agg_bmk.json": "351fb00b56ca1d26a2c2b41f1d8b4f3c5da3ffae4d15ec010490207eb1a8619a"
+      }
     },
     {
       "head_sha": "9334ea53bde6e8645a34ed40918fceb2d5750f0c",
@@ -2202,7 +2251,43 @@
     },
     {
       "head_sha": "9334ea53bde6e8645a34ed40918fceb2d5750f0c",
-      "artifacts": [],
+      "artifacts": [
+        {
+          "id": 10616654080,
+          "name": "results_bmk",
+          "size_bytes": 2083
+        },
+        {
+          "id": 10616297923,
+          "name": "gpu_metrics_minimaxm3_tp4_conc64_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disag-a0b74522a20b6b44c758",
+          "size_bytes": 185906
+        },
+        {
+          "id": 10616203171,
+          "name": "bmk_agentic_minimaxm3_tp4_conc64_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disag-a0b74522a20b6b44c758",
+          "size_bytes": 2272
+        },
+        {
+          "id": 10616083487,
+          "name": "agentic_minimaxm3_tp4_conc64_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disag-a0b74522a20b6b44c758",
+          "size_bytes": 24549853
+        },
+        {
+          "id": 10615988726,
+          "name": "run-stats",
+          "size_bytes": 280
+        },
+        {
+          "id": 10615769047,
+          "name": "server_logs_minimaxm3_tp4_conc64_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disag-a0b74522a20b6b44c758",
+          "size_bytes": 220177
+        },
+        {
+          "id": 10615719180,
+          "name": "power_audit_minimaxm3_tp4_conc64_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disag-a0b74522a20b6b44c758",
+          "size_bytes": 189510
+        }
+      ],
       "performance_result": false,
       "run_id": 35542190411,
       "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35542190411",
@@ -2210,12 +2295,39 @@
       "concurrency": 64,
       "repeat": 1,
       "attempt": 1,
-      "status": "in_progress",
+      "status": "failure",
       "workflow_name": "offload-v1-dram-nvme-c64-r1-20260920T2236Z",
       "dispatched_at": "2026-09-20T22:36:09Z",
       "job_id": 106161772106,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35542190411/job/106161772106",
-      "started_at": "2026-09-20T22:36:42Z"
+      "started_at": "2026-09-20T22:36:42Z",
+      "node": "im-b200-c006",
+      "runner": "b200-nscale-slurm_06",
+      "allocation_id": "16704",
+      "completed_at": "2026-09-21T00:07:43Z",
+      "failure_stage": "offload_capacity_guard",
+      "failure_evidence": "The c64 HBM+DRAM+NVMe workload completed warmup and the full profiling window (3,624 accepted responses), but the native filesystem tier crossed the declared 2 TiB stop guard. offload-guard.json recorded 2,225,326,071,343 logical bytes and 2,225,326,071,808 allocated bytes, so runtime.py intentionally invalidated the run. This is a deterministic configuration-capacity failure and will not be retried unchanged.",
+      "log_archive_sha256": "de3d7a161a8d9a308a1c371bc7f6563c16e86debb2b03676e6eb9ed1a6403bb7",
+      "storage_evidence": "Cleanup captured 3,346,725,477,935 logical bytes, 3,346,725,478,400 allocated bytes and 282,139 files, then deleted the exact workflow-owned scratch successfully (deleted=true).",
+      "invalidated_measurement": {
+        "reason": "NVMe capacity guard exceeded",
+        "num_requests_successful": 3624,
+        "duration_seconds": 3628.53418,
+        "total_tokens_per_second_per_gpu": 32118.53918,
+        "output_tokens_per_second_per_gpu": 253.55197,
+        "p90_interactivity_tokens_per_second_per_user": 38.89047,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 2.4416,
+        "gpu_cache_hit_rate": 0.22828,
+        "external_cache_hit_rate": 0.70541,
+        "overall_cache_hit_rate": 0.93369,
+        "note": "Retained for diagnosis only; excluded from the comparison page and crossover claims."
+      },
+      "evidence_sha256": {
+        "server.log": "e066823798fe18518a597b66eaef14f349d46d49809376e79913f3bd0d14468d",
+        "offload_cleanup.json": "ab632bf778be178a80d0444002301abf8290c3740c4cda58a6a328505bf198cc",
+        "offload-guard.json": "0b2d9a3fb93c03560a658292d3774a7e81f39b31d47b6d9dd95d50c69e0c1f9c",
+        "agg_bmk.json": "55db65f0f658f119b936d3c20b799798c7e5e34c8d07dfe1a854865ff0cf3533"
+      }
     },
     {
       "head_sha": "9334ea53bde6e8645a34ed40918fceb2d5750f0c",
@@ -2364,7 +2476,7 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518",
-  "status": "All four matched c16 arms are valid. At c256, HBM, HBM+NVMe, and HBM+DRAM are valid; a fresh combined c256 workflow is active. HBM, DRAM, and combined c64 probes plus HBM and DRAM c128 probes are active. Three fresh NVMe workflows at c64/c128 were repeatedly allocated to low-space im-b200-c003 and failed before startup; new NVMe-bearing dispatches are held until that node is remediated or excluded. Two c128 combined workflows were cancelled before GPU allocation to enforce the queue ceiling.",
+  "status": "At c64, HBM+DRAM failed at profiling startup because the shared Triton cache filesystem was full; HBM+DRAM+NVMe completed profiling but exceeded its 2 TiB filesystem stop guard and is intentionally invalidated. Both cleanup receipts prove task-owned scratch deletion. The c256 combined retry plus HBM c64 and HBM/DRAM c128 probes remain active. New NVMe-bearing dispatches remain held because im-b200-c003 repeatedly has only about 5.73 GB free.",
   "last_capacity_check": {
     "checked_at": "2026-09-20T22:41:19Z",
     "cluster_observed_at": "2026-09-20T22:40:49Z",
@@ -2382,26 +2494,22 @@
     "active_study_run_ids": [
       35542179539,
       35542182560,
-      35542185178,
-      35542190411,
       35542193122,
       35542196012
     ],
     "active_study_job_ids": [
       106161761186,
       106161752241,
-      106161753934,
-      106161772106,
       106161771803,
       106161780979
     ],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": false,
-    "reason": "The queue is clear, but repeated NVMe-bearing workflows are being allocated to im-b200-c003, which has only about 5.73 GB free. Hold new NVMe or combined dispatches until InferenceX infrastructure remediates or excludes that node; continue the six active jobs."
+    "reason": "Four study jobs remain active. Do not dispatch NVMe-bearing work until im-b200-c003 has sufficient local capacity or is excluded. Do not retry c64 combined unchanged because it deterministically exceeded the filesystem stop guard. Retry c64 DRAM only after verifying free space in /data/home/sa-shared/.triton/cache."
   },
   "next_dispatch": {
-    "requires": "Continue monitoring the six active GPU jobs. Do not dispatch another NVMe-bearing point until im-b200-c003 is remediated or excluded through InferenceX infrastructure. After remediation and a fresh zero-queue capacity check, prioritize c64 NVMe and c128 NVMe/combined, then choose repeats around the measured transition."
+    "requires": "Continue monitoring the four active GPU jobs. After infrastructure remediation and a fresh queue/capacity check, retry c64 DRAM and prioritize c64/c128 NVMe. Redesign the combined tier capacity semantics before another combined c64 attempt; do not rerun it unchanged."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-19T23:34:00Z",
