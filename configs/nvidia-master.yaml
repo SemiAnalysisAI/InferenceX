@@ -916,8 +916,8 @@ dsv4-fp4-b200-sglang-agentic-hicache-mtp:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [64, 96, 128, 160], router: { name: sglang-router, version: "0.3.2" } }
 
 dsv4-fp4-b200-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-426e59f
-  model: deepseek-ai/DeepSeek-V4-Pro
+  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-591bb95
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:b200-nscale
   precision: fp4
@@ -925,12 +925,12 @@ dsv4-fp4-b200-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.95
+    - dram-utilization: 0.90
       search-space:
-      # TP8 SimpleCPU + MTP
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [1, 4, 8, 14] }
-      # DEP8 SimpleCPU + MTP
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [32, 64, 96, 128, 160, 196], router: { name: vllm-router, version: "0.1.14" } }
+      # TP8 resident KV + DSpark6
+      - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 6, 10, 14, 16] }
+      # DEP8 SimpleCPU + DSpark6
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [32, 64, 96, 128, 160, 192], router: { name: vllm-router, version: "0.1.14" } }
 
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
@@ -8105,6 +8105,12 @@ dsv41flash-fp4-gb200-vllm-agentic-dspark:
       search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      # TP2 halves the GPU count per replica. Weights rise to ~145 GiB on each
+      # 256 GiB GPU with the Engram tables in pinned host DRAM, so the arm
+      # takes the same caps as the B200 TP2 arm: batched tokens 4096 (the
+      # indexer's logits buffer is 32 GiB at the upstream 16384) and graph
+      # capture stopped at 512, leaving ~49 GiB of KV per GPU.
+      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on GB200, from the SGLang cookbook
 # (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
@@ -8162,6 +8168,7 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
       search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on B200, from the SGLang cookbook
 # (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
@@ -8201,6 +8208,12 @@ dsv41flash-fp4-gb300-vllm-agentic-dspark:
       search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      # TP2 halves the GPU count per replica. Weights rise to ~175 GiB on each
+      # 277 GiB GPU with the Engram tables in pinned host DRAM, so the arm
+      # takes the same caps as the B200 TP2 arm: batched tokens 4096 (the
+      # indexer's logits buffer is 32 GiB at the upstream 16384) and graph
+      # capture stopped at 512, leaving ~36 GiB of KV per GPU.
+      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 # H200 AgentX arm for DeepSeek-V4.1-Flash. Upstream marks h200 verified and says
 # the GB200 NVL4 TP4 layout becomes TP8 on 8-GPU nodes, so this is TP8.
@@ -8225,6 +8238,12 @@ dsv41flash-fp4-h200-vllm-agentic-dspark:
       # 8x141 GB holds the 511 GB checkpoint minus the UVA-offloaded Engram
       # tables, so the KV cache stays GPU-resident across the full range.
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      # TP4 doubles the per-GPU share to ~99 GiB of weights on each 141 GB H200
+      # with the Engram tables offloaded, leaving ~15 GiB of KV per GPU (~17M
+      # tokens across the four ranks, about 3x the pool that served c1-c128 on
+      # B200 TP2). The script caps batched tokens and the scheduler batch on
+      # this arm so the sparse-attention indexer buffer does not consume it.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on H200, from the SGLang cookbook
 # (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
