@@ -7,9 +7,8 @@ grouped projection instead dequantizes these draft weights permanently to BF16.
 
 import hashlib
 import importlib.util
-from pathlib import Path
 import subprocess
-
+from pathlib import Path
 
 BASE_SHA256 = "61dc79f075c9e1e5a68a466de5eb95a85ff1fa2e5a9f4d66c2fa69e956fd7b61"
 PATCHED_SHA256 = "f33b370d9e49f87c5909e23109c1f22968166690765a7df169144d149f0f3d87"
