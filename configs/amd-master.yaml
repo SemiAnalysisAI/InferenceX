@@ -592,6 +592,55 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
       - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 10, 12, 14], spec-decoding: mtp }
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [44, 48, 70], spec-decoding: mtp }
 
+# Native aggregated Kimi-K3 c56 replay.  This is one 16-GPU engine across two
+# MI355X nodes (TP8 x PP2), not a prefill/decode deployment.
+kimik3-fp4-mi355x-vllm-native-pp2-dcp4-fine-c48:
+  image: docker.io/yukiozzz/vllm-rocm-k3:k3-pp2-dcp4-fine-bf16
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-native-pp
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [48]
+        num-nodes: 2
+        worker:
+          num-worker: 1
+          tp: 4
+          pp: 2
+          dcp-size: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "MODEL_PATH=/shared/data/R7N"
+          - "SPEC_MODEL=/models/models/Kimi-K3-DSpark"
+          - "K3_NATIVE_PP=1"
+          - "K3_TP_SIZE=4"
+          - "K3_DCP_SIZE=4"
+          - "K3_VISIBLE_DEVICES=0,1,2,3"
+          - "K3_PP_LAYER_PARTITION=48,45"
+          - "K3_PP_RING_SIZE=2"
+          - "K3_PP_BATCH_CAP=80"
+          - "K3_MAX_NUM_SEQS=80"
+          - "K3_MAX_CUDAGRAPH_CAPTURE_SIZE=96"
+          - "K3_CUDAGRAPH_CAPTURE_SIZES=1,2,4,8,16,24,32,40,48,56,64,72,80,88,96"
+          - "K3_MBT=16384"
+          - "K3_GPU_MEMORY_UTILIZATION=0.90"
+          - "K3_MAMBA_SSM_CACHE_DTYPE=bfloat16"
+          - "K3_MAMBA_CACHE_MODE=all"
+          - "K3_SIMPLECPU_BYTES_PER_RANK=224875000000"
+          - "SPEC_NUM_TOKENS=4"
+          - "SPEC_SYNTHETIC_ACCEPTANCE_LENGTH=3.36"
+          - "AIPERF_WARMUP_REQUESTS_PER_LANE=1"
+
 # Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
 # speculative decoding. Acceptance is pinned to the committed golden curve in
 # golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
