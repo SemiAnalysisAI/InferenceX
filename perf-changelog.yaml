@@ -8514,3 +8514,31 @@
     - "Add 2P1D DEP8/DEP8 (conc 192/256, 6 nodes) and 3P1D DEP8/DEP16 (conc 256/320, 10 nodes) AgentX sweep arms with agentX long EPP routing; per-engine vLLM flags unchanged from 1P1D."
     - "新增 2P1D DEP8/DEP8（并发 192/256，6 节点）与 3P1D DEP8/DEP16（并发 256/320，10 节点）AgentX 扫描臂，采用 agentX long EPP 路由；单引擎 vLLM 参数与 1P1D 保持一致。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+    - dsv4-fp4-gb200-llmd-vllm-agentx-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Route DeepGEMM MegaMoE symmetric-memory traffic over the GB200 NVLink fabric by disabling NVSHMEM remote/IBGDA transport, enabling CUDA fabric/VMM handles, pinning NCCL P2P to NVL, and enabling UCX CUDA IPC over MNNVL."
+    - "通过禁用 NVSHMEM 远程/IBGDA 传输、启用 CUDA fabric/VMM 句柄、将 NCCL P2P 固定为 NVL，并在 MNNVL 上启用 UCX CUDA IPC，使 DeepGEMM MegaMoE 对称内存流量经由 GB200 NVLink fabric。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the validated 1P1D EPP plugin and scoring profile unchanged for the 2P1D and 3P1D multi-prefill sweep arms."
+    - "2P1D 和 3P1D 多预填充扫描臂不作修改地复用已验证的 1P1D EPP 插件与评分配置。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Reuse the 1P1D DSpark recipe directly for the 2P1D and 3P1D sweep arms and remove the now-identical multi-prefill recipe file; topology remains caller-supplied."
+    - "2P1D 和 3P1D 扫描臂直接复用 1P1D DSpark 配方，并删除现已完全相同的多预填充配方文件；拓扑仍由调用方提供。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719

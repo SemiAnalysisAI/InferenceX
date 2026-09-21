@@ -85,11 +85,17 @@ prefill:
     TILELANG_CLEANUP_TEMP_FILES: "1"
     TORCH_SYMMMEM: NVSHMEM
     DG_JIT_CACHE_DIR: /tmp/dg-cache-dsv4-agentx
-    UCX_TLS: rc,cuda_copy
+    NVSHMEM_REMOTE_TRANSPORT: "none"
+    NVSHMEM_IB_ENABLE_IBGDA: "false"
+    NVSHMEM_CUMEM_HANDLE_TYPE: FABRIC
+    NVSHMEM_DISABLE_CUDA_VMM: "0"
+    UCX_TLS: cuda_copy,cuda_ipc,rc,tcp
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     UCX_MEMTYPE_CACHE: "n"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
+    NCCL_P2P_LEVEL: NVL
 
 slurm:
   time_limit: "08:00:00"
