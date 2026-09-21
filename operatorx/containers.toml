@@ -36,3 +36,6 @@ image = "us-central1-docker.pkg.dev/jax-image-build/jax-tpu/jax-tpu:latest"
 
 [trainium.neuronx]
 image = "public.ecr.aws/neuron/pytorch-training-neuronx:2.5.1-neuronx-py310-sdk2.21.0-ubuntu22.04"
+
+[nvidia.vllm]
+image = "vllm/vllm-openai:cu129-nightly-8e981630c9336233ca9de91452f68918bddbc4e2"
