@@ -189,6 +189,12 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 缺少测量窗口接口时，聚合结果记录 `power_valid: 0`，审计原因标记为
 `multinode_power_contract_missing`；设置 `REQUIRE_POWER=1` 还会在保留已有结果后使任务失败。
 
+通过验证的多节点聚合结果还会按物理主机和角色输出 `workers` 功耗记录。
+`num_gpus` 取该主机审计确认的 GPU UUID 数量；`avg_power_w` 为这些 GPU 在
+同一正式测量窗口内的积分能耗除以窗口时长和卡数。跨两台主机的服务 worker 输出
+两条功耗记录，这里的索引不替代服务拓扑中的 worker 数量。重新校验会先删除旧
+记录；GPU 功耗无效时不发布逐主机功耗。CPU 遥测仍使用独立的有效性判断。
+
 `power_valid: 1` 与 `power_metric_schema_version: 2` 只表示 GPU 遥测有效，
 不代表请求计数或模型质量通过验证。用于可靠对比前，应将已发出、已完成、已取消及
 出错请求数与原始 profiling 记录和 token 总数核对。GPU 板卡能耗与整机功耗估算分开报告。

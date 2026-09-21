@@ -256,6 +256,12 @@ class TestValidPackage:
         assert agg["joules_per_input_token"] == 2.563477
         assert agg["joules_per_output_token"] == 20.507812
         assert agg["joules_per_total_token"] == 2.278646
+        assert agg["workers"] == [
+            {"role": "decode", "worker_idx": 0, "hosts": ["node-d"],
+             "num_gpus": 2, "avg_power_w": 300.0},
+            {"role": "prefill", "worker_idx": 0, "hosts": ["node-p"],
+             "num_gpus": 2, "avg_power_w": 400.0},
+        ]
         assert agg["prefill_gpu_energy_j"] == 48000.0
         assert agg["decode_gpu_energy_j"] == 36000.0
         assert agg["prefill_avg_power_w"] == 400.0
@@ -945,3 +951,30 @@ class TestCpuSidePower:
         assert pkg.run() == 0
         assert pkg.agg()["cpu_power_valid"] == 0
         assert "cpu_window_unavailable" in pkg.sidecar()["cpu"]["reason_codes"]
+
+
+def test_invalid_revalidation_removes_stale_host_power(tmp_path):
+    pkg = build_package(tmp_path)
+    assert pkg.run() == 0
+    assert len(pkg.agg()["workers"]) == 2
+    assert pkg.run(sha="b" * 40) == 0
+    assert pkg.agg()["power_valid"] == 0
+    assert "workers" not in pkg.agg()
+
+
+def test_host_power_preserves_heterogeneous_hosts_inside_one_role(tmp_path):
+    pkg = build_package(tmp_path)
+    manifest_path = pkg.power_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    for device in manifest["expected_devices"]:
+        for assignment in device["assignments"]:
+            assignment["worker_role"] = "agg"
+            assignment["het_group"] = None
+    manifest_path.write_text(json.dumps(manifest))
+    assert pkg.run(prefill_gpus=0, decode_gpus=0, aggregate_gpus=4) == 0
+    assert pkg.agg()["workers"] == [
+        {"role": "agg", "worker_idx": 0, "hosts": ["node-d"],
+         "num_gpus": 2, "avg_power_w": 300.0},
+        {"role": "agg", "worker_idx": 1, "hosts": ["node-p"],
+         "num_gpus": 2, "avg_power_w": 400.0},
+    ]

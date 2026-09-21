@@ -51,8 +51,10 @@ from typing import Any
 from . import (
     ALL_POWER_METRIC_KEYS as _ALL_POWER_METRIC_KEYS,
     CPU_METRIC_KEYS as CPU_METRIC_KEYS,
+    POWER_METRIC_SCHEMA_VERSION,
     ROLE_METRIC_KEYS as ROLE_METRIC_KEYS,
     WHOLE_METRIC_KEYS as WHOLE_METRIC_KEYS,
+    with_power_metrics,
 )
 from .common import (
     BenchmarkData,
@@ -64,7 +66,6 @@ from .common import (
     _write_json_atomic,
     audit_metrics,
     benchmark_window_payload,
-    patch_power_metrics,
 )
 from .cpu_side import CPU_DIRNAME, CpuPowerAudit, validate_cpu_leg
 
@@ -1302,16 +1303,47 @@ def _window_contract_holds(window: ParsedWindow, validations: list[dict]) -> boo
 # --- aggregate patch + sidecar + entry point ---------------------------------
 
 
+def _host_workers(audit: MultinodePowerAudit) -> list[dict]:
+    """Project validated device energy onto physical host/role power entries."""
+    if not audit.power_valid or audit.window is None:
+        return []
+    energies: dict[tuple[str, str], list[float]] = {}
+    for device, joules in audit.per_gpu_energy_j.items():
+        host = device.rsplit("/", 1)[0]
+        role = audit.per_gpu_role[device]
+        energies.setdefault((role, host), []).append(joules)
+    workers = []
+    indices: dict[str, int] = {}
+    for (role, host), values in sorted(energies.items()):
+        index = indices.get(role, 0)
+        workers.append(
+            {
+                "role": role,
+                "worker_idx": index,
+                "hosts": [host],
+                "num_gpus": len(values),
+                "avg_power_w": round(sum(values) / audit.window["duration"] / len(values), 3),
+            }
+        )
+        indices[role] = index + 1
+    return workers
+
+
 def _patch_agg(agg_path: Path, audit: MultinodePowerAudit) -> None:
     cpu = audit.cpu
-    patch_power_metrics(
-        agg_path,
+    data = with_power_metrics(
+        json.loads(agg_path.read_text(encoding="utf-8")),
+        schema_version=POWER_METRIC_SCHEMA_VERSION,
         metric_keys=_ALL_POWER_METRIC_KEYS,
         power_valid=audit.power_valid,
         metrics=audit.metrics,
         cpu_power_valid=None if cpu is None else cpu.valid,
         cpu_metrics={} if cpu is None else cpu.metrics,
     )
+    data.pop("workers", None)
+    if workers := _host_workers(audit):
+        data["workers"] = workers
+    _write_json_atomic(agg_path, data)
 
 
 def _withhold_metrics(audit: MultinodePowerAudit, cpu_reason: str | None = None) -> None:

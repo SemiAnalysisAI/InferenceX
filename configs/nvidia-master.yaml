@@ -6166,6 +6166,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
           - "CONFIG_FILE=recipes/kimik3/vllm/gb200-fp4/agentx/agg-dep16-vllm-simple-offload.yaml"
 # Kimi-K3 GB200 TP16/DCP16 profiles using Mooncake DRAM offload.
 kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg:
+  # Referenced power recipes also collect best-effort Grace CPU telemetry.
   image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
@@ -6193,6 +6194,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg:
           - "CONFIG_FILE=recipes/kimik3/vllm/gb200-fp4/agentx/agg-dcp16-dspark4-maxseq2-mooncake.yaml"
 
 kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg:
+  # Referenced power recipes also collect best-effort Grace CPU telemetry.
   image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
@@ -6338,6 +6340,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
 # Add GB200 TP8 x PP2/DCP8 AgentX operating points. The runtime topology uses
 # 16 GPUs total, allocated across four 4-GPU GB200 nodes.
 kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
+  # Referenced power recipes also collect best-effort Grace CPU telemetry.
   image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-728d3ad
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
@@ -7594,6 +7597,7 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
 # Kimi-K3 GB300 points on the measured global p90-ITL Pareto front. Each
 # DCP8 worker spans two 4-GPU nodes.
 kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
+  # Referenced power recipes also collect best-effort Grace CPU telemetry.
   image: vllm/vllm-openai:nightly-dc36fcce902a63eab06c1b93a5c4a5ee178a0c56
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
@@ -7664,6 +7668,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
 
 kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
+  # Referenced power recipes also collect best-effort Grace CPU telemetry.
   image: vllm/vllm-openai:nightly-dc36fcce902a63eab06c1b93a5c4a5ee178a0c56
   model: moonshotai/Kimi-K3
   model-prefix: kimik3

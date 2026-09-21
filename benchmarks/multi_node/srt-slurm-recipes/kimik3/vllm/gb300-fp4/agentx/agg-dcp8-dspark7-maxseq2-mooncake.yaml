@@ -140,6 +140,10 @@ telemetry:
     container_image: dcgm-exporter
     port: 19401
 
+  cpu_power_exporter:
+    port: 9405
+    source: acpi
+
 benchmark:
   type: custom
   concurrencies: [1, 4]

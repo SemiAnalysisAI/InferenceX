@@ -194,6 +194,14 @@ When that measurement-window contract is absent, the aggregate records
 `power_valid: 0` and the audit names `multinode_power_contract_missing`;
 `REQUIRE_POWER=1` also fails the job after preserving available results.
 
+Validated multinode aggregates also publish `workers` power entries grouped by
+physical hostname and role. `num_gpus` counts the audited device UUIDs on that
+host; `avg_power_w` is their integrated energy divided by the same formal window
+and GPU count. A serving worker spanning two hosts produces two power entries;
+these indices do not replace the serving topology's worker counts. Revalidation
+removes old entries before publishing the current verdict, and invalid GPU power
+publishes no host power. CPU telemetry keeps its independent validity gate.
+
 Treat `power_valid: 1` with `power_metric_schema_version: 2` as a GPU telemetry
 verdict, not a request-accounting or model-quality verdict. Before using a point
 as a clean comparison, reconcile issued, completed, cancelled, and errored
