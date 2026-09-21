@@ -37,19 +37,25 @@ FP8_REPLACEMENT = (
 """
     + FP8_ANCHOR
 )
-HOST_REGISTER_ANCHOR = '''        if int(err) != 0:
+HOST_REGISTER_ANCHOR = """        if int(err) != 0:
             raise RuntimeError(f"cudaHostRegister({nbytes} bytes) failed: {err}")
-'''
-HOST_REGISTER_REPLACEMENT = HOST_REGISTER_ANCHOR + '''        self.device_ptr = self.bytes.data_ptr()
+"""
+HOST_REGISTER_REPLACEMENT = (
+    HOST_REGISTER_ANCHOR
+    + """        self.device_ptr = self.bytes.data_ptr()
         if torch.version.hip is not None:
             from sglang.srt.layers.attention.dsv41_rocm.host_table import (
                 hip_host_device_pointer,
             )
 
             self.device_ptr = hip_host_device_pointer(self.device_ptr)
-'''
-HOST_METHOD_ANCHOR = "    def _load_rows(self, param: nn.Parameter, loaded_weight: torch.Tensor):\n"
-HOST_METHOD_REPLACEMENT = '''    def _table_pointer(self, tensor: torch.Tensor) -> int:
+"""
+)
+HOST_METHOD_ANCHOR = (
+    "    def _load_rows(self, param: nn.Parameter, loaded_weight: torch.Tensor):\n"
+)
+HOST_METHOD_REPLACEMENT = (
+    """    def _table_pointer(self, tensor: torch.Tensor) -> int:
         if self.host_table is None or torch.version.hip is None:
             return tensor.data_ptr()
         return (
@@ -58,7 +64,9 @@ HOST_METHOD_REPLACEMENT = '''    def _table_pointer(self, tensor: torch.Tensor) 
             - self.host_table.bytes.data_ptr()
         )
 
-''' + HOST_METHOD_ANCHOR
+"""
+    + HOST_METHOD_ANCHOR
+)
 ENGRAM_REWRITES = (
     (HOST_REGISTER_ANCHOR, HOST_REGISTER_REPLACEMENT, 1),
     (HOST_METHOD_ANCHOR, HOST_METHOD_REPLACEMENT, 1),
@@ -66,17 +74,28 @@ ENGRAM_REWRITES = (
     ("self.scale.data_ptr()", "self._table_pointer(self.scale)", 2),
 )
 MODEL_ANCHOR = "    return x_quant, x_bf16\n"
-MODEL_REPLACEMENT = '''    if _is_hip and _is_gfx95_supported:
+MODEL_REPLACEMENT = (
+    """    if _is_hip and _is_gfx95_supported:
         from sglang.srt.runtime_context import process_model_config
 
         if process_model_config().hf_text_config.model_type == "deepseek_v41":
             # The V4 fused quantizer emits 128-wide groups. Keep its existing
             # normalized BF16 row; the V4.1 linear applies native 32-wide UE8M0.
             return x_bf16, x_bf16
-''' + MODEL_ANCHOR
+"""
+    + MODEL_ANCHOR
+)
 
 MLP_ANCHOR = "        self.use_fused_clamp_act_mul = _is_hip\n"
-MLP_REPLACEMENT = MLP_ANCHOR + '        if _is_hip:\n            from sglang.srt.runtime_context import process_model_config\n\n            if process_model_config().hf_text_config.model_type == "deepseek_v41":\n                # AITER\'s fused path requires 128-wide groups/alignment. V4.1\n                # uses 32-wide groups and shared-expert widths such as 576.\n                self.use_fused_clamp_act_mul = False\n'
+MLP_REPLACEMENT = (
+    MLP_ANCHOR
+    + '        if _is_hip:\n            from sglang.srt.runtime_context import process_model_config\n\n            if process_model_config().hf_text_config.model_type == "deepseek_v41":\n                # AITER\'s fused path requires 128-wide groups/alignment. V4.1\n                # uses 32-wide groups and shared-expert widths such as 576.\n                self.use_fused_clamp_act_mul = False\n                self._infx_v41_hip = True\n'
+)
+MLP_CALL_ANCHOR = (
+    "                silu_and_mul_clamp(gate_up, x, float(self.swiglu_limit))\n"
+)
+MLP_CALL_REPLACEMENT = '                if getattr(self, "_infx_v41_hip", False):\n                    from sglang.srt.layers.attention.dsv41_rocm.activation import (\n                        rocm_v41_silu_and_mul_clamp,\n                    )\n\n                    rocm_v41_silu_and_mul_clamp(gate_up, x, float(self.swiglu_limit))\n                else:\n                    silu_and_mul_clamp(gate_up, x, float(self.swiglu_limit))\n'
+
 
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -111,7 +130,9 @@ def install(package: Path, evidence: Path) -> None:
         if after in engram_original:
             engram_original = engram_original.replace(after, before, count)
     if sha256(engram_original.encode()) != manifest["engram_sha256"]:
-        raise RuntimeError("Unexpected Engram source; refusing to patch another revision")
+        raise RuntimeError(
+            "Unexpected Engram source; refusing to patch another revision"
+        )
     for before, _, count in ENGRAM_REWRITES:
         if engram_original.count(before) != count:
             raise RuntimeError("Unexpected Engram host-pointer patch anchor count")
@@ -120,16 +141,20 @@ def install(package: Path, evidence: Path) -> None:
     if MODEL_REPLACEMENT in model_original:
         model_original = model_original.replace(MODEL_REPLACEMENT, MODEL_ANCHOR, 1)
     if sha256(model_original.encode()) != manifest["model_sha256"]:
-        raise RuntimeError("Unexpected V4 model source; refusing to patch another revision")
+        raise RuntimeError(
+            "Unexpected V4 model source; refusing to patch another revision"
+        )
     if model_original.count(MODEL_ANCHOR) != 1:
         raise RuntimeError("Unexpected V4 fused-normalization patch anchor count")
     mlp = package / "srt/models/deepseek_v2.py"
     mlp_original = mlp.read_text()
     if MLP_REPLACEMENT in mlp_original:
         mlp_original = mlp_original.replace(MLP_REPLACEMENT, MLP_ANCHOR, 1)
+    if MLP_CALL_REPLACEMENT in mlp_original:
+        mlp_original = mlp_original.replace(MLP_CALL_REPLACEMENT, MLP_CALL_ANCHOR, 1)
     if sha256(mlp_original.encode()) != manifest["mlp_sha256"]:
         raise RuntimeError("Unexpected MLP source; refusing to patch another revision")
-    if mlp_original.count(MLP_ANCHOR) != 1:
+    if mlp_original.count(MLP_ANCHOR) != 1 or mlp_original.count(MLP_CALL_ANCHOR) != 1:
         raise RuntimeError("Unexpected MLP fused-clamp patch anchor count")
     for item in manifest["files"]:
         data = (source / "dsv41_rocm" / item["installed_name"]).read_bytes()
@@ -152,6 +177,7 @@ def install(package: Path, evidence: Path) -> None:
     model_patched = model_original.replace(MODEL_ANCHOR, MODEL_REPLACEMENT, 1)
     model.write_text(model_patched)
     mlp_patched = mlp_original.replace(MLP_ANCHOR, MLP_REPLACEMENT, 1)
+    mlp_patched = mlp_patched.replace(MLP_CALL_ANCHOR, MLP_CALL_REPLACEMENT, 1)
     mlp.write_text(mlp_patched)
     manifest["installed_registry_sha256"] = sha256(patched.encode())
     manifest["installed_fp8_utils_sha256"] = sha256(fp8_patched.encode())

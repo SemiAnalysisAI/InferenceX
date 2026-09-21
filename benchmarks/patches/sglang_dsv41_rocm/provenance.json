@@ -63,6 +63,13 @@
       "source_path": null,
       "description": "HIP-only registered host-table device address resolution through hipHostGetDevicePointer; unchanged CPU parameters and stock gather kernel",
       "adapted_sha256": "033dc006b688a8d4ded03d122659bfc490e1768daca987b44f760a17f82dd726"
+    },
+    {
+      "installed_name": "activation.py",
+      "source": "Authored wrapper around pinned nightly AITER masked SwiGLU kernel; no kernel replacement",
+      "adapted_sha256": "01321cd8d25d0ad7d7b54cfe6d9e7f3a6017dbce8950f49c05c375e944f77f60",
+      "nightly_kernel_path": "aiter/ops/triton/_triton_kernels/fusions/fused_clamp_act_mul.py",
+      "nightly_kernel_sha256": "c478b02e6696958eb2fce88dc113b3d0ad36a430008feadfc3615a69f0872d41"
     }
   ],
   "registry_sha256": "dfd9c0b6e85774524f6378ae09278cf6dc000e093ddf6beaadc44d1d20bdacd1",
