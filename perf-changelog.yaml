@@ -8510,3 +8510,10 @@
     - "Set a single prefill LIBFABRIC posting thread for GLM-5.2 c20 and select acceptance automatically for the compact GLM-5.2 recipes."
     - "为 GLM-5.2 c20 设置单个预填充 LIBFABRIC 提交线程，并为紧凑型 GLM-5.2 配方自动选择接受长度。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-trt-agentic-mtp-compact
+  description:
+    - "Spread GLM-5.2 B300 workers across nodes, clean stale shared memory before startup, bind worker CPUs by GPU locality, and bound worker registration waits."
+    - "将 GLM-5.2 B300 工作进程分散到独立节点，启动前清理过期共享内存，按 GPU 的 NUMA 位置绑定工作进程 CPU，并限制工作进程注册等待时间。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2993

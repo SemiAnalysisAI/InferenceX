@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+bash "$(dirname "${BASH_SOURCE[0]}")/clean_stale_shm.sh" || exit 1
+
 # Read launch metadata without initializing MPI or changing its configuration.
 python3 -S - <<'PY'
 import json

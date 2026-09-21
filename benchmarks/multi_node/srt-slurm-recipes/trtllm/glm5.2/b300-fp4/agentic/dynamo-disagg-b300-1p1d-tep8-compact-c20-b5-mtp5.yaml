@@ -6,6 +6,7 @@ srun_options:
 setup_script: diagnose-pmix.sh
 engine:
   type: trtllm
+  numa_cpu_bind: true
   publish_events_and_metrics: false
 roles:
   prefill:
@@ -17,15 +18,16 @@ roles:
       DYN_PUBLISH_KV_EVENTS: '0'
       DYN_TOKENIZER: fastokens
       DYN_TRTLLM_ENABLE_ATTENTION_DP: '1'
+      ETCD_LEASE_TTL: '120'
       HF_HUB_DISABLE_PROGRESS_BARS: '1'
       HF_HUB_OFFLINE: '1'
       HOME: /trtllm-jit-cache
-      MIMALLOC_PURGE_DELAY: '0'
+      MIMALLOC_PURGE_DELAY: '10000'
       NCCL_GRAPH_MIXING_SUPPORT: '0'
       FI_LOG_LEVEL: warn
       NIXL_DISABLE_CUDA_ADDR_WA: '1'
       NIXL_LIBFABRIC_NUM_THREADS: '1'
-      OMP_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '12'
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
       TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: '0.10'
       TLLM_EXECUTOR_BATCH_RESP_IN_AWAIT: '1'
@@ -102,14 +104,15 @@ roles:
       DYN_PUBLISH_KV_EVENTS: '0'
       DYN_TOKENIZER: fastokens
       DYN_TRTLLM_ENABLE_ATTENTION_DP: '1'
+      ETCD_LEASE_TTL: '120'
       HF_HUB_DISABLE_PROGRESS_BARS: '1'
       HF_HUB_OFFLINE: '1'
       HOME: /trtllm-jit-cache
-      MIMALLOC_PURGE_DELAY: '0'
+      MIMALLOC_PURGE_DELAY: '10000'
       NCCL_GRAPH_MIXING_SUPPORT: '0'
       FI_LOG_LEVEL: warn
       NIXL_DISABLE_CUDA_ADDR_WA: '1'
-      OMP_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '12'
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
       TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: '0.10'
       TLLM_EXECUTOR_BATCH_RESP_IN_AWAIT: '1'
@@ -236,7 +239,7 @@ frontend:
     node: head
 health_check:
   interval_seconds: 10
-  max_attempts: 540
+  max_attempts: 180
 identity:
   model:
     repo: nvidia/GLM-5.2-NVFP4
@@ -251,5 +254,6 @@ model:
   precision: fp4
 name: dynamo-disagg-b300-1p1d-tep8-compact-c20-b5-mtp5
 resources:
+  spread_workers: true
   gpu_type: b300
   gpus_per_node: 8
