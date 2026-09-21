@@ -46,31 +46,35 @@ while (( CAPTURE_SIZE < CONC * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); 
     CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
 done
 
-# TP2 halves the rank count, so each GPU holds ~145 GiB of weights on B200 and
-# GB200 and ~175 GiB on GB300 even with the Engram tables offloaded. At the
-# upstream 16384 batched tokens the sparse-attention indexer's
-# [batched-tokens, 1M] fp8 logits buffer is 32 GiB, and graph capture at 1024
-# (reached at c128) adds ~22 GiB, which drove the KV budget to -5.34 GiB on
-# GB200 c128 (run 35528745995). Cap batched tokens at 4096 (8 GiB, as the H100
-# arm does), bound the scheduler batch to the AgentX fan-out, and stop
-# capturing above 512 tokens; TP4 and TP8 keep the upstream defaults.
-TP2_ARGS=()
-if (( TP == 2 )); then
+# Low-TP arms need the scheduler capped. Two cases reach the same limits:
+# H200 TP4 leaves ~15 GiB of KV per 141 GB GPU, and TP2 on Blackwell leaves
+# ~145 GiB of weights per rank (B200 180 GB, GB200 256 GB, GB300 277 GB). In
+# both, the sparse-attention indexer's [batched-tokens, 1M] fp8 logits buffer
+# is 32 GiB at the upstream 16384 batched tokens, and graph capture above 512
+# pushed the B200 TP2 KV budget to -10.8 GiB (run 35180394796: c1-c16 served,
+# c32/c64/c128 died in memory profiling) and GB200 c128 to -5.34 GiB
+# (run 35528745995). Cap batched tokens at 4096 (8 GiB, as the H100 arm does),
+# bound the scheduler batch to the AgentX fan-out, and stop capturing above
+# 512 tokens. B200/GB200 TP4 (180+ GB) and every TP8 arm keep the defaults.
+GPU_MEM_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -n1 | tr -d ' ')
+LOW_TP_ARGS=()
+if (( TP == 2 || (TP < 8 && GPU_MEM_MIB < 150000) )); then
     MAX_NUM_SEQS=$((2 * CONC))
     if (( MAX_NUM_SEQS > 256 )); then
         MAX_NUM_SEQS=256
     fi
-    # FlashInfer's autotune dummy run batches max-num-seqs requests through the
-    # DSpark draft head; with 2-8 requests it selected an invalid MXFP8 split-K
-    # tactic and the engine never started (run 35320655804). 16 is the smallest
-    # value that has passed.
+    # FlashInfer's autotune dummy run batches max-num-seqs requests through
+    # the DSpark draft head; with 2-8 requests on TP2 it selected an invalid
+    # MXFP8 split-K tactic ((128, 8), (1, 1), True, False, 4) and the engine
+    # never started (run 35320655804: c1/c2/c4 failed, c8 with 16 seqs and
+    # every larger point served). 16 is the smallest value that has passed.
     if (( MAX_NUM_SEQS < 16 )); then
         MAX_NUM_SEQS=16
     fi
     if (( CAPTURE_SIZE > 512 )); then
         CAPTURE_SIZE=512
     fi
-    TP2_ARGS=(--max-num-batched-tokens 4096 --max-num-seqs "$MAX_NUM_SEQS")
+    LOW_TP_ARGS=(--max-num-batched-tokens 4096 --max-num-seqs "$MAX_NUM_SEQS")
 fi
 
 # Pyxis shares the host network; port 8888 can already belong to a host service.
@@ -98,7 +102,7 @@ VLLM_CMD=(
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576
     --max-cudagraph-capture-size "$CAPTURE_SIZE"
-    "${TP2_ARGS[@]}"
+    "${LOW_TP_ARGS[@]}"
     --disable-uvicorn-access-log
     "${LOAD_ARGS[@]}"
 )
