@@ -8394,3 +8394,19 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
           dp-attn: false
         kv-offload-backend:
           name: hicache
+
+# Official SGLang nightly; Engram weights in host DRAM, native DSpark draft.
+dsv41flash-fp4-gb300-sglang-agentic-dspark:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5@sha256:987c7e4bd26918647211a5dcad72a2bdf2a5f394ac1469eff730e7517fc139be
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 2, ep: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
