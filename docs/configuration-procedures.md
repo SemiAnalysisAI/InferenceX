@@ -482,8 +482,10 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
   --framework <framework> \
   --precision <precision> \
   --runner-type <runner> \
-  --seq-lens 1k1k 8k1k
+  --seq-lens 8k1k
 ```
+
+Use `--seq-lens 1k1k` only when explicitly selecting the retained `glm5.1-fp8-b200-tilert` configuration; other 1k1k coverage is retired.
 
 Inspect, do not merely count, the emitted `model`, `image`, `runner`, scenario, concurrency, `max-model-len`, TP/PP/EP/DCP/PCP, prefill/decode worker blocks, hardware, router, KV transfer, eval flags, `additional-settings`, and `spec-decoding`.
 
