@@ -916,8 +916,8 @@ dsv4-fp4-b200-sglang-agentic-hicache-mtp:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [64, 96, 128, 160], router: { name: sglang-router, version: "0.3.2" } }
 
 dsv4-fp4-b200-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-426e59f
-  model: deepseek-ai/DeepSeek-V4-Pro
+  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-591bb95
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:b200-nscale
   precision: fp4
@@ -925,12 +925,12 @@ dsv4-fp4-b200-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.95
+    - dram-utilization: 0.90
       search-space:
-      # TP8 SimpleCPU + MTP
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [1, 4, 8, 14] }
-      # DEP8 SimpleCPU + MTP
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [32, 64, 96, 128, 160, 196], router: { name: vllm-router, version: "0.1.14" } }
+      # TP8 resident KV + DSpark6
+      - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 6, 10, 14, 16] }
+      # DEP8 SimpleCPU + DSpark6
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [32, 64, 96, 128, 160, 192], router: { name: vllm-router, version: "0.1.14" } }
 
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
@@ -1057,7 +1057,7 @@ dsv4-fp4-b300-sglang-agentic-hicache-mtp:
   # max-running-requests 2*CONC.
 
 qwen3.5-fp8-b200-sglang:
-  image: lmsysorg/sglang:v0.5.19-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b200-nscale
@@ -1124,7 +1124,7 @@ qwen3.5-fp4-b200-sglang-mtp:
       - { tp: 2, ep: 2, conc-list: [16, 32, 64], spec-decoding: mtp }
 
 qwen3.5-fp8-b200-sglang-mtp:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260915-8874c51a
+  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b200-nscale
@@ -3875,13 +3875,13 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           dp-attn: true
 
 qwen3.5-fp8-gb200-dynamo-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260608-303757cc
+  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: gb200
   precision: fp8
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "46520ca59afe992fb5ef61b3197b2316f8df9b2b" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260917" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
@@ -3969,7 +3969,6 @@ qwen3.5-fp8-h100-sglang-mtp:
       search-space:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
 
-    # ---------- 1k1k high-throughput (wide-EP TP=32 decode) ----------
 qwen3.5-fp4-gb300-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.14-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
@@ -4837,7 +4836,6 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto:
           additional-settings:
           - "CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp4/agentx/agg-tp8-c7-b1-mtp-hicache-nightly-c20260831.yaml"
 
-    # ---------- 1k1k high-throughput (wide-EP decode, EAGLE MTP) ----------
 qwen3.5-fp8-b300-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -7470,13 +7468,13 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
           dp-attn: true
 
 qwen3.5-fp8-gb200-dynamo-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.14-cu130@sha256:5027e95bf6ec536856b1b52a91d1f35ff5c564ab83e8a94758a169ff09bb8df3
+  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: gb200
   precision: fp8
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "46520ca59afe992fb5ef61b3197b2316f8df9b2b" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260917" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
@@ -8113,8 +8111,9 @@ dsv41flash-fp4-h100-vllm-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       # Extend beyond the c1 full-context capacity estimate to measure the
-      # AgentX workload's practical saturation curve at c8 and c16.
-      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16] }
+      # AgentX workload's practical saturation curve; c20, c24 and c28 fill in
+      # the knee between c16 and the point where 1M-token trajectories preempt.
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 20, 24, 28] }
 
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on H100, from the SGLang cookbook
 # (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
@@ -8156,6 +8155,36 @@ dsv41flash-fp4-gb200-vllm-agentic-dspark:
       search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      # TP2 halves the GPU count per replica. Weights rise to ~145 GiB on each
+      # 256 GiB GPU with the Engram tables in pinned host DRAM, so the arm
+      # takes the same caps as the B200 TP2 arm: batched tokens 4096 (the
+      # indexer's logits buffer is 32 GiB at the upstream 16384) and graph
+      # capture stopped at 512, leaving ~49 GiB of KV per GPU.
+      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
+# SGLang arm for DeepSeek-V4.1-Flash AgentX on GB200, from the SGLang cookbook
+# (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
+# DSv4.1 Flash support has not shipped in an SGLang release; this uses the
+# preview build lmsysorg/sglang:dev-dsv41, digest
+# sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860 (2026-09-11, amd64 + arm64).
+# Native five-token DSpark (--speculative-algorithm DSPARK
+# --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
+# throughput, real verification for evals. The KV cache stays GPU-resident.
+# Follows the cookbook's verified Blackwell TP4/EP4 low-latency cell; backends
+# resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl).
+dsv41flash-fp4-gb200-sglang-agentic-dspark:
+  image: lmsysorg/sglang:dev-dsv41
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 dsv41flash-fp4-b300-vllm-agentic-dspark:
   image: vllm/vllm-openai:deepseekv41-flash-0909
@@ -8189,6 +8218,31 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
       search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
+# SGLang arm for DeepSeek-V4.1-Flash AgentX on B200, from the SGLang cookbook
+# (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
+# DSv4.1 Flash support has not shipped in an SGLang release; this uses the
+# preview build lmsysorg/sglang:dev-dsv41, digest
+# sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860 (2026-09-11, amd64 + arm64).
+# Native five-token DSpark (--speculative-algorithm DSPARK
+# --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
+# throughput, real verification for evals. The KV cache stays GPU-resident.
+# Follows the cookbook's verified Blackwell TP4/EP4 low-latency cell; backends
+# resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl).
+dsv41flash-fp4-b200-sglang-agentic-dspark:
+  image: lmsysorg/sglang:dev-dsv41
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 dsv41flash-fp4-gb300-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e
@@ -8204,6 +8258,12 @@ dsv41flash-fp4-gb300-vllm-agentic-dspark:
       search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      # TP2 halves the GPU count per replica. Weights rise to ~175 GiB on each
+      # 277 GiB GPU with the Engram tables in pinned host DRAM, so the arm
+      # takes the same caps as the B200 TP2 arm: batched tokens 4096 (the
+      # indexer's logits buffer is 32 GiB at the upstream 16384) and graph
+      # capture stopped at 512, leaving ~36 GiB of KV per GPU.
+      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 # H200 AgentX arm for DeepSeek-V4.1-Flash. Upstream marks h200 verified and says
 # the GB200 NVL4 TP4 layout becomes TP8 on 8-GPU nodes, so this is TP8.
@@ -8228,6 +8288,12 @@ dsv41flash-fp4-h200-vllm-agentic-dspark:
       # 8x141 GB holds the 511 GB checkpoint minus the UVA-offloaded Engram
       # tables, so the KV cache stays GPU-resident across the full range.
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      # TP4 doubles the per-GPU share to ~99 GiB of weights on each 141 GB H200
+      # with the Engram tables offloaded, leaving ~15 GiB of KV per GPU (~17M
+      # tokens across the four ranks, about 3x the pool that served c1-c128 on
+      # B200 TP2). The script caps batched tokens and the scheduler batch on
+      # this arm so the sparse-attention indexer buffer does not consume it.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on H200, from the SGLang cookbook
 # (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
@@ -8252,3 +8318,311 @@ dsv41flash-fp4-h200-sglang-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16] }
+
+qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:b200-nscale
+  precision: fp8
+  framework: dynamo-sglang
+  router:
+    name: dynamo-router
+    version: 805a77f053d807b0d8def5d27f674a6df0ed839e
+  kv-p2p-transfer: mooncake
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.8
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        conc-list:
+        - 8
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/qwen3.5/sglang/b200-fp8/agentx/disagg-1p1d-p-tp4-d-tp4-hicache-c8-mtp.yaml
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+        kv-offload-backend:
+          name: hicache
+      - spec-decoding: mtp
+        kv-offloading: dram
+        conc-list:
+        - 16
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/qwen3.5/sglang/b200-fp8/agentx/disagg-1p1d-p-tp4-d-tp4-hicache-c16-mtp.yaml
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+        kv-offload-backend:
+          name: hicache
+      - spec-decoding: mtp
+        kv-offloading: dram
+        conc-list:
+        - 24
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/qwen3.5/sglang/b200-fp8/agentx/disagg-1p1d-p-tp4-d-tp4-hicache-c24-mtp.yaml
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+        kv-offload-backend:
+          name: hicache
+      - spec-decoding: mtp
+        kv-offloading: dram
+        conc-list:
+        - 32
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/qwen3.5/sglang/b200-fp8/agentx/disagg-1p1d-p-tp4-d-tp4-hicache-c32-mtp.yaml
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+        kv-offload-backend:
+          name: hicache
+      - spec-decoding: mtp
+        kv-offloading: dram
+        conc-list:
+        - 48
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/qwen3.5/sglang/b200-fp8/agentx/disagg-1p1d-p-tp4-d-tp4-hicache-c48-write-through-mtp.yaml
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+        kv-offload-backend:
+          name: hicache
+      - spec-decoding: mtp
+        kv-offloading: dram
+        conc-list:
+        - 64
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/qwen3.5/sglang/b200-fp8/agentx/disagg-1p1d-p-tp4-d-tp4-hicache-c64-write-through-mtp.yaml
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+        kv-offload-backend:
+          name: hicache
+
+# Recipes allow four hours for canonical warmup, one-hour profiling and artifact processing.
+# Temporary node exclusions cover observed startup/resource failures, not measured performance.
+qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:b300-dsxe
+  precision: fp8
+  framework: dynamo-sglang
+  router:
+    name: dynamo-router
+    version: 805a77f053d807b0d8def5d27f674a6df0ed839e
+  kv-p2p-transfer: mooncake
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.8
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: hicache
+        conc-list:
+        - 4
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-1p1d-tp4-tp4-colocated-c4-mtp-hicache.yaml
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: hicache
+        conc-list:
+        - 12
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-1p1d-tp4-tp4-colocated-c12-mtp-hicache.yaml
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: hicache
+        conc-list:
+        - 24
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-1p1d-tp4-tp4-colocated-c24-mtp-hicache.yaml
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: hicache
+        conc-list:
+        - 32
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-1p1d-tp4ep4-tp4-colocated-c32-mtp-hicache.yaml
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: hicache
+        conc-list:
+        - 32
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-1p1d-tp2ep2-tp2ep2-colocated-c32-mtp-hicache.yaml
+        decode:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: hicache
+        conc-list:
+        - 40
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-1p1d-tp2ep2-tp2ep2-colocated-c40-mtp-hicache.yaml
+        decode:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: hicache
+        conc-list:
+        - 44
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-1p1d-tp2ep2-tp2ep2-colocated-c44-mtp-hicache.yaml
+        decode:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: hicache
+        conc-list:
+        - 48
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-1p1d-tp2ep2-tp2ep2-colocated-c48-mtp-hicache.yaml
+        decode:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: hicache
+        conc-list:
+        - 56
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/qwen3.5/sglang/b300-fp8/agentx/disagg-1p1d-tp2ep2-tp2ep2-colocated-c56-replayssm-mtp-hicache.yaml
+        decode:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: false

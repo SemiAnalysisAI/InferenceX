@@ -20,7 +20,7 @@ from infx.results.power import (
     POWER_METRIC_SCHEMA_VERSION,
     with_power_metrics,
 )
-from infx.results.power.multinode import run as run_multinode_power
+from infx.results.power.multinode import WINDOWS_DIRNAME, run as run_multinode_power
 from infx.results.power.single_node import (
     _patch_power_result,
     _write_json_atomic,
@@ -33,12 +33,7 @@ from .artifacts import load_aggregate, load_records, resolve_artifact_dir
 _UTC_OFFSET_RE = re.compile(r"^([+-])(\d{2}):?(\d{2})$")
 _COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _MULTINODE_WINDOW_STEM_RE = re.compile(r"^agentic_power_concurrency_([1-9][0-9]*)$")
-_FORMAL_WINDOW_ENV = (
-    "SRT_MEASUREMENT_WINDOW_DIR",
-    "SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE",
-    "SRT_MEASUREMENT_WINDOW_CONCURRENCIES",
-    "SRT_MEASUREMENT_WINDOW_RESULT_ROOT",
-)
+_WINDOW_DIR_ENV = "SRT_MEASUREMENT_WINDOW_DIR"
 
 
 def _captured_timezone(result_dir: Path) -> tuple[timezone | None, str | None]:
@@ -234,46 +229,34 @@ def _fail_multinode_adapter(message: str, *, require_power: bool) -> int:
     return 1 if require_power else 0
 
 
-def _positive_concurrencies(raw: str) -> list[int] | None:
-    tokens = raw.split()
-    if not tokens or any(not token.isdecimal() for token in tokens):
-        return None
-    values = [int(token) for token in tokens]
-    if any(value <= 0 for value in values) or len(set(values)) != len(values):
-        return None
-    return values
-
-
 def _multinode_window_contract(
     *,
     result_dir: Path,
     concurrency: int,
 ) -> tuple[Path, Path, Path] | None:
-    """Resolve and validate the formal custom-benchmark window contract."""
+    """Resolve the custom-benchmark window contract from the producer's window directory.
+
+    srt-slurm exports only ``SRT_MEASUREMENT_WINDOW_DIR`` (``<log dir>/<storage_subdir>/windows``)
+    to a ``benchmark.type: custom`` command and resolves each window's ``result_path`` against
+    the run log directory, the parent of the power directory. Derive that root here rather
+    than requiring producer variables the pinned release never sets.
+    """
     if isinstance(concurrency, bool) or not isinstance(concurrency, int) or concurrency <= 0:
         return None
-    values = {name: os.environ.get(name, "") for name in _FORMAL_WINDOW_ENV}
-    if any(not value for value in values.values()):
+    raw_window_dir = os.environ.get(_WINDOW_DIR_ENV, "")
+    if not raw_window_dir:
         return None
-    if values["SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE"] != "custom":
-        return None
-    measured = _positive_concurrencies(values["SRT_MEASUREMENT_WINDOW_CONCURRENCIES"])
-    if measured is None or concurrency not in measured:
-        return None
-
-    window_dir = Path(values["SRT_MEASUREMENT_WINDOW_DIR"])
-    result_root = Path(values["SRT_MEASUREMENT_WINDOW_RESULT_ROOT"])
+    window_dir = Path(raw_window_dir)
     if (
-        not window_dir.is_absolute()
-        or not result_root.is_absolute()
+        window_dir.name != WINDOWS_DIRNAME
+        or not window_dir.is_absolute()
         or not result_dir.is_absolute()
-        or not window_dir.is_dir()
-        or not result_root.is_dir()
-        or not result_dir.is_dir()
     ):
         return None
+    result_root = window_dir.parent.parent
+    if result_root == result_root.parent or not window_dir.is_dir() or not result_dir.is_dir():
+        return None
     try:
-        window_dir.resolve().relative_to(result_root.resolve())
         relative_result_dir = result_dir.resolve().relative_to(result_root.resolve())
     except (OSError, ValueError):
         return None
