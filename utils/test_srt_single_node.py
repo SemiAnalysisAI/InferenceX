@@ -145,9 +145,11 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
         "IS_MULTINODE": "false", "REQUIRE_POWER": "1", "SALLOC_TIME_LIMIT": "10",
         "HF_HUB_CACHE_MOUNT": str(tmp_path), "AIPERF_MMAP_CACHE_HOST_PATH": str(tmp_path),
         "HF_HUB_CACHE": "/hf", "DSR1_FP8_MODEL_PATH": str(model), "MODEL_PREFIX": "dsr1",
-        "INFERENCEX_RUNTIME_ENV_VARS": "REQUIRE_POWER", "AIPERF_DRAIN_TIMEOUT_SECONDS": "1",
-        "AIPERF_DRAIN_POLL_SECONDS": "1", "TEST_FAILURE": failure, "CANCEL_CAPTURE": str(capture),
+        "INFERENCEX_RUNTIME_ENV_VARS": "REQUIRE_POWER",
+        "TEST_FAILURE": failure, "CANCEL_CAPTURE": str(capture),
     }
+    env.pop("AIPERF_DRAIN_TIMEOUT_SECONDS", None)
+    env.pop("AIPERF_DRAIN_POLL_SECONDS", None)
     result = subprocess.run(
         ["bash", str(ROOT / "runners/launch_h200-dgxc-slurm.sh")], cwd=tmp_path,
         env=env, capture_output=True, text=True, timeout=30,

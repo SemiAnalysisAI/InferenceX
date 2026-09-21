@@ -39,7 +39,7 @@ setup_srt_slurm() {
         return 1
     fi
     local destination="$1" framework="$2" uses_power="$3"
-    check_env_vars INFERENCEX_RUNTIME_ENV_VARS AIPERF_DRAIN_TIMEOUT_SECONDS AIPERF_DRAIN_POLL_SECONDS EVAL_ONLY
+    check_env_vars INFERENCEX_RUNTIME_ENV_VARS EVAL_ONLY
     local eval_passthrough
     eval_passthrough=$(python3 - <<'PYENV'
 import json
