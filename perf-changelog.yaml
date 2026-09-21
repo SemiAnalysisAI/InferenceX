@@ -8539,4 +8539,4 @@
   description:
     - "Add GB300 SGLang DeepSeek-V4.1-Flash AgentX DSpark TP2/EP2 and TP4/EP4 candidates on official nightly-dev-cu13-20260921-0f6761b5, digest sha256:987c7e4bd26918647211a5dcad72a2bdf2a5f394ac1469eff730e7517fc139be."
     - "Offload Engram weights to host DRAM, retain GPU KV and native draft precision, use 4096-token prefill chunks and 0.80 static memory fraction, and preserve canonical thinking-on five-token DSpark AL 3.51 with real verification for evals."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/0
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3344
