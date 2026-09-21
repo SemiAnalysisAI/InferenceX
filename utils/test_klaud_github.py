@@ -214,7 +214,9 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
     assert selection["deferred-reason"] is None
 
 
-def test_baseline_accepts_enroot_image_and_skips_null_public_image(monkeypatch):
+def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
+    monkeypatch,
+):
     base = "a" * 40
     historical_head = "b" * 40
     raw_image = "nvcr.io#nvidia/trtllm:1"
@@ -249,7 +251,7 @@ def test_baseline_accepts_enroot_image_and_skips_null_public_image(monkeypatch):
         "osl": 1000,
         "offload_mode": "off",
         "conc": 1,
-        "image": public_image,
+        "image": raw_image,
         "prefill_tp": 8,
         "prefill_ep": 1,
         "prefill_dp_attention": False,
@@ -324,3 +326,20 @@ def test_baseline_accepts_enroot_image_and_skips_null_public_image(monkeypatch):
         (1, "passed"),
         (2, "unavailable"),
     ]
+
+    feeds["benchmarks"] = [
+        {
+            **public_row,
+            "run_url": "https://github.com/example/project/actions/runs/999",
+        }
+    ]
+    with pytest.raises(
+        github.VerificationError, match="producer provenance is unavailable"
+    ):
+        reporting.resolve_baseline(
+            "example/project",
+            candidate,
+            context,
+            "Model",
+            reporting.Prose(en="Update the image.", zh="更新镜像。"),
+        )

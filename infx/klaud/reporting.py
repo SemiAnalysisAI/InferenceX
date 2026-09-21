@@ -803,6 +803,20 @@ def public_point(entry: dict) -> dict:
     return point
 
 
+def _matches_public_point(row: dict, point: dict) -> bool:
+    """Compare a public row with a generated identity using canonical image spelling."""
+    from .models import normalized_image
+
+    for key, value in point.items():
+        observed = row.get(key)
+        if key == "image":
+            if not isinstance(observed, str) or normalized_image(observed) != value:
+                return False
+        elif observed != value:
+            return False
+    return True
+
+
 def matrix_points(matrix: dict) -> list[dict]:
     from .validation import benchmark_entries
 
@@ -907,9 +921,7 @@ def resolve_baseline(
                 canonical_matrix(repository, head, candidate.family, historical=True)
             )
         matches = [
-            entry
-            for entry in historical[head]
-            if all(row.get(key) == value for key, value in public_point(entry).items())
+            entry for entry in historical[head] if _matches_public_point(row, public_point(entry))
         ]
         if not matches:  # A distinct sibling workload/topology is not this family's baseline.
             continue
@@ -946,10 +958,7 @@ def resolve_baseline(
             run_attempt=run_attempt,
         )
     identities = [public_point(entry) for entry in entries.values()]
-    if any(
-        any(all(row.get(key) == value for key, value in point.items()) for point in identities)
-        for row in unverified
-    ):
+    if any(any(_matches_public_point(row, point) for point in identities) for row in unverified):
         raise VerificationError("Public baseline producer provenance is unavailable")
     if not published:
         raise VerificationError("No verified public baseline points for the selected family")
