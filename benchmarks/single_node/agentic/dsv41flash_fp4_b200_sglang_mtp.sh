@@ -127,6 +127,8 @@ SGLANG_CMD=(
     # first 66k-99k-token AgentX prompts.
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
+    # Long AgentX prefills otherwise starve active draft/verify decode rounds.
+    --prefill-decode-interval 16
     "${SPECULATIVE_ARGS[@]}"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"

@@ -8555,4 +8555,5 @@
     - "Normalize pinned image digests to the installed Enroot manifest-reference syntax and stop immediately when container import fails."
     - "Compare native STP with GPU-resident Engram tables at mem-fraction-static 0.80, 4096-token prefill chunks, and 16 decode rounds between prefills to prevent long-prefill starvation; preserve the original table precision"
     - "Probe TP2/EP2 DSpark at C1 with host Engram tables, static memory fraction 0.90, and 2048-token prefill chunks while preserving TP4 settings"
+    - "Schedule 16 DSpark decode rounds between prefill chunks to address high-concurrency AgentX prefill starvation"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3346

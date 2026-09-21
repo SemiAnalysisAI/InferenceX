@@ -367,6 +367,8 @@ DSpark 使用固定上游 nightly 自带的默认草稿实现，包括默认计�
 STP 不加载草稿模型，STP 与评估均清除合成接受率设置。受限 TP2/EP2 DSpark C1 探测
 保留主机 Engram 分片，将静态显存比例设为 0.90，prefill chunk 减半至 2048；
 扩展测试点前必须实测启动显存与临时工作区。
+DSpark 也设置 `--prefill-decode-interval 16`，在长 prefill 之间调度草稿生成与验证；
+需评估完整吞吐与交互性能曲线。
 
 DSpark 是检查点自带的草稿模型。SGLang 对它不提供 EAGLE 或 MTP 路径，也没有
 `--speculative-num-steps` 参数；配方传入 `--speculative-algorithm DSPARK
