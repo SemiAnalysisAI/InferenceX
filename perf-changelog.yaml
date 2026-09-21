@@ -8550,7 +8550,7 @@
     - agentic-coding
   description:
     - "Move H100 DeepSeek-V4.1-Flash DSpark from dev-dsv41 to upstream SGLang nightly-dev-cu13-20260921-0f6761b5 and let the engine select attention and MoE backends per the current cookbook."
-    - "Preserve native FP8 DSpark WO_A weights and checkpoint block scales with an exact-source hash-guarded patch, and use row-sharded anonymous host Engram tables for huge-page backing."
+    - "Preserve native FP8 DSpark WO_A weights and checkpoint block scales with an exact-source hash-guarded patch, and use row-sharded anonymous host Engram tables with a resolved local snapshot for upstream file-scoped page-cache eviction and huge-page backing."
     - "Retain TP8/EP8, GPU-resident KV, 4096-token prefill chunks, static memory fraction 0.70, native Markov BF16, and the existing AgentX acceptance and real-verification eval behavior."
     - "Add the official non-speculative TP8/EP8 mode at concurrency 1, 2, 4, 8, 16 and 20 with truthful spec-decoding none and no synthetic acceptance; both modes contribute to the same H100/SGLang curve."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3345

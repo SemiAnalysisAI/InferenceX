@@ -24,7 +24,10 @@ if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
     hf download "$MODEL" --local-dir "$MODEL_PATH"
 else
     hf download "$MODEL"
-    export MODEL_PATH="$MODEL"
+    # Resolve the downloaded snapshot so upstream Engram page-cache advice
+    # can find the checkpoint files instead of treating the HF ID as a path.
+    MODEL_PATH=$(python3 -c 'from huggingface_hub import snapshot_download; import sys; print(snapshot_download(repo_id=sys.argv[1], local_files_only=True))' "$MODEL")
+    export MODEL_PATH
 fi
 
 nvidia-smi
