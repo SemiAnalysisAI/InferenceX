@@ -8531,3 +8531,13 @@
     - "为 GB300 vLLM DeepSeek-V4.1-Flash AgentX 配方在现有 TP4 臂旁新增 TP2 臂，Engram 表继续通过 --engram-config cpu_offload 放在固定页主机 DRAM；每张 277 GiB GPU 的权重升至约 175 GiB"
     - "在 dsv41flash_fp4_vllm_mtp.sh 中将 B200 TP2 的上限推广到所有 TP2 臂：--max-num-batched-tokens 4096（上游 16384 时 indexer 的 [batched-tokens, 1M] fp8 缓冲区达 32 GiB）、--max-num-seqs 为并发的两倍（16-256）、CUDA graph 捕获上限 512，为每张 GPU 留出约 36 GiB KV；TP4 与 TP8 臂沿用上游默认值"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3321
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  all-evals: true
+  description:
+    - "Add the MI355X DeepSeek V4.1 Flash SGLang DSpark AgentX lane on the official 2026-09-21 ROCm 7.2.4 nightly, pinned to sha256:33c1c6fb49cade4880edd8939ec8646274b555543f3f659c67cbb9315ec0eaca (SGLang 0.5.20.dev20260921+g0f6761b54f), with TP4/EP4 and concurrency 1-32"
+    - "Start from the cookbook MI350X recipe and PR #3245 long-context memory safeguards; retain native DSpark checkpoint precision, existing measured thinking-on AL 3.51 for throughput, and real verification for evals"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
