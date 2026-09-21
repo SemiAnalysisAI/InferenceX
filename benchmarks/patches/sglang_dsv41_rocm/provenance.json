@@ -1,0 +1,51 @@
+{
+  "source_image": "lmsysorg/sglang:dev-dsv41-mi35x@sha256:c609f74f01b206af9664fb66da8ebef47642a7328a2478eabeebb352e014661a",
+  "source_overlay_history_commit": "f8f290f2 (not publicly resolvable; image digest is authoritative)",
+  "target_image": "lmsysorg/sglang-rocm:v0.5.20-rocm724-mi35x-20260921@sha256:33c1c6fb49cade4880edd8939ec8646274b555543f3f659c67cbb9315ec0eaca",
+  "target_revision": "0f6761b54f",
+  "files": [
+    {
+      "installed_name": "backend.py",
+      "source_path": "python/sglang/srt/layers/attention/deepseek_v4_backend_hip_radix.py",
+      "source_sha256": "7f0c0aebfd0413f83102698714e84454055deac4d64398979c75c06b2d654916",
+      "adapted_sha256": "9509072ccc8830a7a5e44710c3b5914c129ad2634ae4f5c4af94a44edbf71f46"
+    },
+    {
+      "installed_name": "low_ratio.py",
+      "source_path": "python/sglang/srt/layers/attention/dsv4/low_ratio_backend.py",
+      "source_sha256": "b418294e2ae2d695927488156c9974482f90d98faab951612aaad0dff31ddad2",
+      "adapted_sha256": "00ba8ce553544c83ac5fe4fa49ce9dfeac155deda0ba07adf9550e3830db3396"
+    },
+    {
+      "installed_name": "low_ratio_hip.py",
+      "source_path": "python/sglang/srt/layers/attention/dsv4/low_ratio_backend_hip.py",
+      "source_sha256": "f859185ad42ca6de6e988f156cab0e5c0fd8a49eb7de144a5062c7f5a0162274",
+      "adapted_sha256": "f6dfaf2eac2bf5cfc0c75a2c7ca4ca6f5f24495485b61520e8ce329129758433"
+    },
+    {
+      "installed_name": "fp4_indexer.py",
+      "source_path": "python/sglang/kernels/ops/attention/dsv4/fp4_indexer_hip.py",
+      "source_sha256": "afaf39ecebc62bb8a9c8300e0acf225ff3d0f09053700ef6a15be1cb18080fe8",
+      "adapted_sha256": "8588bc01e2ab4709ea4eed06711ad9baa7b000015d87b49e60f190259cd4a61f"
+    },
+    {
+      "installed_name": "flash_mla.py",
+      "source_path": "python/sglang/srt/layers/attention/hip_flash_mla.py",
+      "source_sha256": "c6a286f108adb64a0d0ed21060b898db14cdfcd5a854853431106e76fdcf3ebe",
+      "adapted_sha256": "22778c2da1e6a902811a4a83b7b6e2312ee25a72f69e2382b3fb2f8f59f398a4"
+    },
+    {
+      "installed_name": "sparse_reduce.py",
+      "source_path": "python/sglang/kernels/ops/attention/aiter_sparse_decode_reduce.py",
+      "source_sha256": "5843eea9c996ec638b62dc12d6dd3d9b3f5d5d69587737ead999b8da3191112c",
+      "adapted_sha256": "0340115b3f14e8bcc65fdfa54089cafd615e6f2a1f711de7da1efe21d2b1ddf0"
+    },
+    {
+      "installed_name": "router_gate.py",
+      "source_path": "python/sglang/kernels/ops/moe/rocm_router_gate.py",
+      "source_sha256": "11afd601058b9801c27e0cabc56b5a8f78750e1b04f12e3e077a59cfd07ee16f",
+      "adapted_sha256": "e7aaebf77cd707e85fd48c80161c60017644285e3523a9a07c8939a59848c14a"
+    }
+  ],
+  "registry_sha256": "dfd9c0b6e85774524f6378ae09278cf6dc000e093ddf6beaadc44d1d20bdacd1"
+}
