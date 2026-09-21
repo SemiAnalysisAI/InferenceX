@@ -2,44 +2,18 @@ diff --git a/python/sglang/srt/models/deepseek_v4_dspark.py b/python/sglang/srt/
 index baebc2d..e2cd9f8 100644
 --- a/python/sglang/srt/models/deepseek_v4_dspark.py
 +++ b/python/sglang/srt/models/deepseek_v4_dspark.py
-@@ -53,6 +53,7 @@ from sglang.srt.models.dspark import (
-     project_through_lm_head,
-     run_markov_block,
- )
+@@ -55,0 +56 @@ from sglang.srt.models.dspark import (
 +from sglang.srt.models.dspark_projection import apply_grouped_wo_a
- from sglang.srt.runtime_context import (
-     get_parallel,
-     get_platform,
-@@ -104,6 +105,9 @@ class DSparkAttention(MqaAttentionBase):
-         prefix: str = "",
-         alt_streams: Optional[List[torch.cuda.Stream]] = None,
-     ) -> None:
+@@ -106,0 +108,3 @@ class DSparkAttention(MqaAttentionBase):
 +        native_wo_a = (
 +            getattr(config, "model_type", None) == "deepseek_v41" and not _is_npu
 +        )
-         super().__init__(
-             config,
-             layer_id,
-@@ -114,13 +118,14 @@ class DSparkAttention(MqaAttentionBase):
-             compress_ratio=0,
-             fuse_wqa_wkv=False,
-             wo_a_fp8=False,
+@@ -117 +121 @@ class DSparkAttention(MqaAttentionBase):
 -            wo_a_keeps_quant_config=False,
 +            wo_a_keeps_quant_config=native_wo_a,
-             wo_b_reduce_results=True,
-             rope_original_seq_len=0,
-         )
-         assert self.compress_ratio == 0, (
-             "DSpark draft attention requires compress_ratio == 0."
-         )
+@@ -123,0 +128 @@ class DSparkAttention(MqaAttentionBase):
 +        self.native_wo_a = native_wo_a
-         self.window_size = int(
-             getattr(config, "sliding_window", None) or config.window_size
-         )
-@@ -352,8 +357,14 @@ class DSparkAttention(MqaAttentionBase):
-             self.n_local_groups,
-             o.shape[1] * o.shape[2] // self.n_local_groups,
-         )
+@@ -355,2 +360,8 @@ class DSparkAttention(MqaAttentionBase):
 -        wo_a = self.wo_a.weight.view(self.n_local_groups, self.o_lora_rank, -1)
 -        if self._use_fast_kernel:
 +        if self.native_wo_a:
@@ -50,31 +24,13 @@ index baebc2d..e2cd9f8 100644
 +            o = apply_grouped_wo_a(self.wo_a, o, self.o_lora_rank)
 +        elif self._use_fast_kernel:
 +            wo_a = self.wo_a.weight.view(self.n_local_groups, self.o_lora_rank, -1)
-             o = _apply_wo_a_bf16_matmul(
-                 o,
-                 wo_a,
-@@ -362,6 +373,7 @@ class DSparkAttention(MqaAttentionBase):
-                 fast_path=self.is_dsv41,
-             )
-         else:
+@@ -364,0 +376 @@ class DSparkAttention(MqaAttentionBase):
 +            wo_a = self.wo_a.weight.view(self.n_local_groups, self.o_lora_rank, -1)
-             o = torch.einsum("bgd,grd->bgr", o.float(), wo_a.float()).to(q.dtype)
-         out, _ = self.wo_b(o.reshape(o.shape[0], o.shape[1] * o.shape[2]))
-         return out
-@@ -1071,7 +1083,8 @@ class DeepseekV4ForCausalLMDSpark(nn.Module):
-         params_dict = dict(self.named_parameters())
-         loaded_params = set()
- 
+@@ -1074 +1086,2 @@ class DeepseekV4ForCausalLMDSpark(nn.Module):
 -        weights = _dequant_fp8_wo_a_streaming(weights)
 +        if getattr(self.config, "model_type", None) != "deepseek_v41" or _is_npu:
 +            weights = _dequant_fp8_wo_a_streaming(weights)
- 
-         stacked_params_mapping = DEEPSEEK_V4_STACKED_PARAMS_MAPPING
-         from sglang.srt.layers.moe.fused_moe_triton import FusedMoE
-@@ -1143,6 +1156,23 @@ class DeepseekV4ForCausalLMDSpark(nn.Module):
-                     weight_loader(param, loaded_weight)
-                     loaded_params.add(mapped)
- 
+@@ -1145,0 +1159,17 @@ class DeepseekV4ForCausalLMDSpark(nn.Module):
 +        if getattr(self.config, "model_type", None) == "deepseek_v41" and not _is_npu:
 +            for stage_id, stage in enumerate(self.stages):
 +                prefix = f"stages.{stage_id}.self_attn.wo_a"
@@ -92,9 +48,6 @@ index baebc2d..e2cd9f8 100644
 +                len(self.stages),
 +            )
 +
-         self._assert_confidence_head_loaded(
-             params_dict=params_dict, loaded_params=loaded_params
-         )
 diff --git a/python/sglang/srt/models/dspark_projection.py b/python/sglang/srt/models/dspark_projection.py
 new file mode 100644
 index 0000000..89df415
