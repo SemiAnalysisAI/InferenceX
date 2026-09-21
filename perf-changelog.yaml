@@ -8554,4 +8554,5 @@
     - "Prioritize stock DSpark across low and high concurrency, with 16 decode steps between prefill chunks to prevent long-prefix decode starvation; compare the non-speculative arm without synthetic acceptance and retain it only if measured results improve the frontier"
     - "Use the default MTP/DSpark precision shipped by the official nightly, without custom draft quantization or precision patches."
     - "Tune the three missing H200 TP8 block32 GEMM launch configurations without changing kernels or precision; compare stock DSpark through concurrency 32 on TP4 and TP8."
+    - "Compare the supported Marlin MXFP4 MoE backend on Hopper with BF16 activations and native packed weights/scales; preserve dense GEMM settings and shipped DSpark precision."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341

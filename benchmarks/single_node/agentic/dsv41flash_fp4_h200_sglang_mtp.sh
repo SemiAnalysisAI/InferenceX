@@ -110,9 +110,10 @@ SGLANG_CMD=(
     --host 0.0.0.0 --port "$PORT"
     --trust-remote-code
     --tp "$TP" --ep-size "$EP_SIZE"
-    # The cookbook resolves backends automatically and warns against overriding
-    # them; its verified H200 cell is the one exception and pins these two.
-    --attention-backend dsv4 --moe-runner-backend flashinfer_mxfp4
+    # Compare the pinned nightly's native MXFP4 x BF16 Marlin MoE path with
+    # the earlier SM90 CUTLASS baseline. This only changes the MoE backend;
+    # dense GEMMs and shipped DSpark precision retain their current settings.
+    --attention-backend dsv4 --moe-runner-backend marlin
     # 0.70 rather than the cookbook's 0.8, and a bounded prefill chunk: the
     # sparse-attention indexer and DSpark prefill buffers scale with the chunk
     # times the 1M context, and the default 16384 chunk exhausted HBM on the
