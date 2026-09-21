@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-# DeepSeek-V4.1-Flash AgentX on B200 with native STP or DSpark serving.
-# Use the cookbook's TP4/EP4 layout or a bounded TP2/EP2 memory probe.
+# DeepSeek-V4.1-Flash AgentX on B200 with shipped-default DSpark.
+# TP4 covers the full concurrency curve; TP2 covers C1-C8.
 # https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP EP_SIZE CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
@@ -55,11 +55,9 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# Host Engram leaves more of the fixed static pool available for retained SWA
-# prefix tails and full KV. Compare with the pinned GPU-placement candidates.
+# Keep Engram in per-rank host shards to reserve HBM for reusable KV.
 case "$TP" in
-    4) export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1 ;;
-    2) export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1 ;;
+    2|4) export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1 ;;
     *) echo "Unsupported DSpark TP=$TP; expected 2 or 4" >&2; exit 1 ;;
 esac
 export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
@@ -76,26 +74,27 @@ MAX_RUNNING_REQUESTS=$((2 * CONC))
 if (( MAX_RUNNING_REQUESTS > CUDA_GRAPH_MAX_BS )); then
     MAX_RUNNING_REQUESTS=$CUDA_GRAPH_MAX_BS
 fi
-# Reserve more reusable SWA prefix tails within the same static memory pool.
-# The default four tails per request can evict prefixes while full KV is idle.
-SWA_PREFIX_TAILS=$((16 * MAX_RUNNING_REQUESTS))
-if (( TP == 2 )); then
-    # Retain more chunk-boundary tails at low concurrency while bounding the
-    # smaller TP2 KV budget. The 16-tail C1 screen lost reusable prefixes.
-    SWA_PREFIX_TAILS=$((4 * MAX_RUNNING_REQUESTS))
-    if (( SWA_PREFIX_TAILS < 128 )); then
-        SWA_PREFIX_TAILS=128
-    fi
-fi
-
-# TP2 doubles the per-GPU weight footprint. Bound long-context indexer
-# workspace with smaller chunks while reserving roughly 18 GiB for transient
-# allocations. TP4 retains the pinned host baseline's memory budget.
-MEM_FRACTION_STATIC=0.70
+# Chunked requests leave reusable SWA tails in the radix tree. Size retained
+# tails by session concurrency, rather than the capped running-request count.
+# The tails and full KV share a fixed pool; the cap preserves full-prefix space.
+SWA_PREFIX_TAILS=$((64 * CONC))
+MEM_FRACTION_STATIC=0.80
 CHUNKED_PREFILL_SIZE=4096
 if (( TP == 2 )); then
-    MEM_FRACTION_STATIC=0.90
+    if (( CONC > 8 )); then
+        echo "TP2 supports CONC <= 8 within its smaller KV budget" >&2
+        exit 1
+    fi
+    # TP2 has twice as many chunk boundaries and approximately 147.76 GiB of
+    # target plus draft weights. Smaller chunks bound indexer workspace.
+    SWA_PREFIX_TAILS=$((128 * CONC))
+    MEM_FRACTION_STATIC=0.92
     CHUNKED_PREFILL_SIZE=2048
+fi
+if (( SWA_PREFIX_TAILS < 128 )); then
+    SWA_PREFIX_TAILS=128
+elif (( SWA_PREFIX_TAILS > 4096 )); then
+    SWA_PREFIX_TAILS=4096
 fi
 
 # Saturation arms carry a larger in-flight working set than the 30-minute
@@ -111,30 +110,21 @@ export AIPERF_SERVER_METRICS_URLS="${AIPERF_SERVER_URL}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="sglang:"
 echo "Using SGLang endpoint ${AIPERF_SERVER_URL}"
 
-# The caller selects native non-speculative serving or the bundled DSpark
-# draft. STP and accuracy evals must never inherit synthetic acceptance.
+# Throughput uses the committed golden acceptance curve; evals verify real
+# draft tokens. Leave the pinned nightly's draft computation/precision defaults.
+if [[ "$SPEC_DECODING" != mtp ]]; then
+    echo "Unsupported SPEC_DECODING=$SPEC_DECODING; expected mtp" >&2
+    exit 1
+fi
 unset SGLANG_SIMULATE_ACC_LEN SGLANG_SIMULATE_ACC_METHOD SGLANG_SIMULATE_ACC_TOKEN_MODE
-SPECULATIVE_ARGS=()
-case "$SPEC_DECODING" in
-    mtp)
-        DSPARK_BLOCK_SIZE=5
-        DSV41_GOLDEN_AL=3.51
-        SPECULATIVE_ARGS=(--speculative-algorithm DSPARK --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE")
-        if [[ "$EVAL_ONLY" != true ]]; then
-            export SGLANG_SIMULATE_ACC_LEN="$DSV41_GOLDEN_AL"
-            export SGLANG_SIMULATE_ACC_METHOD=match-expected
-            export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
-        fi
-        echo "DSpark block size: $DSPARK_BLOCK_SIZE, golden AL=$DSV41_GOLDEN_AL"
-        ;;
-    none)
-        echo "Native non-speculative serving; synthetic acceptance disabled"
-        ;;
-    *)
-        echo "Unsupported SPEC_DECODING=$SPEC_DECODING; expected mtp or none" >&2
-        exit 1
-        ;;
-esac
+DSPARK_BLOCK_SIZE=5
+DSV41_GOLDEN_AL=3.51
+if [[ "$EVAL_ONLY" != true ]]; then
+    export SGLANG_SIMULATE_ACC_LEN="$DSV41_GOLDEN_AL"
+    export SGLANG_SIMULATE_ACC_METHOD=match-expected
+    export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
+fi
+echo "DSpark block size: $DSPARK_BLOCK_SIZE, golden AL=$DSV41_GOLDEN_AL"
 
 SGLANG_CMD=(
     python3 -m sglang.launch_server
@@ -151,7 +141,8 @@ SGLANG_CMD=(
     # Long AgentX prefills otherwise starve active draft/verify decode rounds.
     --prefill-decode-interval 16
     --swa-prefix-tails "$SWA_PREFIX_TAILS"
-    "${SPECULATIVE_ARGS[@]}"
+    --speculative-algorithm DSPARK
+    --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     --reasoning-parser auto

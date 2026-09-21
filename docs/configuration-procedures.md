@@ -406,38 +406,34 @@ which has no released SGLang version for this model yet. B200 pins the CUDA 13 n
 `lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5` by digest; the other NVIDIA arms use
 `lmsysorg/sglang:dev-dsv41` and MI355X uses `lmsysorg/sglang:dev-dsv41-mi35x`.
 
-B200 host-table candidates use `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`. Shared host tables had
-zero huge-page backing in [run 35626514270](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35626514270).
-Per-rank anonymous shards request huge pages without host sysctl changes and retain the
-lookup all-reduce. Verify the actual huge-page percentage in every rank's startup log;
-the setting alone does not prove that huge-page allocation succeeded.
-The B200 launcher converts pinned Docker image digests to its installed Enroot
-manifest-reference syntax and stops on import failure before trying Pyxis.
-B200 also registers native STP points under `dsv41flash-fp4-b200-sglang-agentic`.
-Its separate STP script evaluates GPU-resident Engram tables with a 0.80 static memory
-fraction, 4096-token prefill chunks, and `--prefill-decode-interval 16` to service
-active decodes between long prefills. This spends approximately 47.2 GiB more HBM
-per TP4 rank to remove host-table accesses; compare measured cache capacity and latency
-against the per-rank host candidate before selecting the final placement.
-DSpark uses the pinned upstream nightly's shipped default draft implementation,
-including its default computation and Markov precision. STP loads no draft;
-both STP and evals clear synthetic acceptance. The TP2/EP2 DSpark arm
-keeps host Engram shards, uses a 0.90 static memory fraction, and halves prefill
-chunks to 2048. Target plus draft load at 147.76 GiB per GPU. A bounded capacity
-comparison floors TP2 SWA prefix tails at 128, retaining the upstream four-tail
-ratio above that floor. The C1 baseline with 16 tails achieved 90.05% cache reuse;
-128 tails reallocates about 0.96 GiB within the same static cache budget.
-The TP2 stock loader exhausted HBM before cache allocation while stacking target
-MoE weights. Its hash-verified load-memory patch releases completed w13 input lists
-before stacking w2; tensor payloads, layouts, and computation remain unchanged.
-TP2 also enables PyTorch expandable allocator segments: releasing the temporaries
-lowered live allocation by 2.24 GiB but left fragmented cached blocks.
-TP4 DSpark compares GPU-resident Engram at static memory fraction 0.80 with
-host tables at 0.70. Pinned GPU candidates test intervals 4 and 16 with 512 SWA
-prefix tails at C32. The host cache candidate uses interval 16 and 16 prefix
-tails per running request (1024 at the 64-request cap). This reallocates the
-same static pool from full KV to reusable sliding-window tails; verify cache
-hits, capacity, and the full throughput/interactivity frontier. TP2 keeps host tables.
+B200 uses shipped-default DSpark across TP4/EP4 C1–128 and TP2/EP2 C1–8.
+Engram stays in host DRAM with `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`.
+Shared host tables had zero huge-page backing in
+[run 35626514270](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35626514270);
+per-rank anonymous shards request huge pages without changing host sysctls.
+Verify the actual backing percentage in each rank's startup log.
+
+| B200 topology | Static memory fraction | Prefill chunk | SWA prefix tails |
+| --- | ---: | ---: | --- |
+| TP4/EP4, C1–128 | 0.80 | 4096 | `max(128, min(4096, 64 * CONC))` |
+| TP2/EP2, C1–8 | 0.92 | 2048 | `128 * CONC` |
+
+Both use 16 decode rounds between prefill chunks and cap running requests at
+`min(2 * CONC, 64)`. Chunked-prefix caching retains SWA tails separately from full
+KV, so low full-cache occupancy does not prove that reusable SWA capacity is
+available. The concurrency-scaled tail budget shares the fixed static pool with
+full KV. Validate actual cache sizes, transient memory, cache reuse, and the
+throughput/interactivity frontier in the canonical sweep.
+
+TP2 loads about 147.76 GiB of target and draft weights per GPU. Its stock loader
+exhausted HBM before cache allocation while retaining completed target MoE shuffle
+inputs. A hash-verified patch releases those inputs before the next stack, and
+PyTorch expandable segments make the released storage reusable. Tensor payloads,
+layouts, computation, and shipped draft precision are unchanged. The
+[loader waiver](waiver/3346.md) records evidence, the unresolved upstream tracking
+link, and removal criteria. TP4 does not apply this patch or allocator override.
+The B200 launcher also converts pinned Docker digests to the installed Enroot
+manifest-reference syntax and stops immediately on import failure.
 
 DSpark is the checkpoint's own bundled draft. SGLang exposes no EAGLE or MTP path and no
 `--speculative-num-steps` knob for it; the recipes pass `--speculative-algorithm DSPARK

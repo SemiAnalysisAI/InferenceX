@@ -8545,23 +8545,11 @@
 
 - config-keys:
     - dsv41flash-fp4-b200-sglang-agentic-dspark
-    - dsv41flash-fp4-b200-sglang-agentic
   scenario-type:
     - agentic-coding
   description:
-    - "Pin B200 SGLang DeepSeek-V4.1 Flash to nightly-dev-cu13-20260921-0f6761b5 at manifest sha256:987c7e4bd26918647211a5dcad72a2bdf2a5f394ac1469eff730e7517fc139be"
-    - "Use per-rank anonymous host Engram shards to request huge pages after the shared layout reported zero huge-page backing; preserve shipped DSpark defaults, golden acceptance, and GPU-resident KV"
-    - "Add native STP comparison points alongside the pinned nightly's shipped default DSpark computation and precision"
-    - "Normalize pinned image digests to the installed Enroot manifest-reference syntax and stop immediately when container import fails."
-    - "Compare native STP with GPU-resident Engram tables at mem-fraction-static 0.80, 4096-token prefill chunks, and 16 decode rounds between prefills to prevent long-prefill starvation; preserve the original table precision"
-    - "Probe TP2/EP2 DSpark at C1 with host Engram tables, static memory fraction 0.90, and 2048-token prefill chunks while preserving TP4 settings"
-    - "Schedule 16 DSpark decode rounds between prefill chunks to address high-concurrency AgentX prefill starvation"
-    - "Compare TP4 DSpark with GPU-resident Engram at static memory fraction 0.80 against the pinned host-table baseline; TP2 retains host tables"
-    - "Release completed target MoE shuffle temporaries before the next stack in the hash-verified TP2 loader to reduce load-time peak memory; preserve all tensor payloads and computation"
-    - "Reserve eight reusable SWA prefix tails per running request for DSpark within the same static memory budget to test cache reuse under high concurrency"
-    - "Use expandable CUDA allocator segments for TP2 so released loader temporaries can satisfy the next contiguous weight stack"
-    - "Compare four DSpark decode rounds per prefill chunk against interval 16 to increase prefill service while preserving interactivity"
-    - "Compare host-table DSpark with 16 SWA prefix tails per running request (1024 at C32), retaining the pinned host baseline memory and scheduling settings"
-    - "Expand the successfully loaded TP2 topology across the concurrency curve and retain its upstream four-tail SWA ratio to protect the smaller KV budget"
-    - "Compare a 128-tail minimum for TP2 SWA prefix retention at low concurrency within the same static memory budget; higher concurrency retains the upstream four-tail ratio"
+    - "Pin B200 DeepSeek-V4.1 Flash to SGLang nightly-dev-cu13-20260921-0f6761b5 by digest and preserve shipped DSpark precision with the committed five-token golden acceptance curve"
+    - "Use per-rank host Engram shards, interval 16, and concurrency-scaled SWA prefix capacity: TP4 C1-128 uses static fraction 0.80, chunk 4096, and 128-4096 tails; TP2 C1-8 uses static fraction 0.92, chunk 2048, and 128 tails per session"
+    - "Enable TP2 loading by releasing completed target MoE shuffle inputs with a hash-verified lifetime-only patch and using expandable CUDA allocator segments; preserve tensor payloads, layouts, and computation"
+    - "Resolve local model snapshots, retain robust AgentX HTTP timeouts, and normalize digest-pinned images for the installed Enroot parser with immediate import failure handling"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3346

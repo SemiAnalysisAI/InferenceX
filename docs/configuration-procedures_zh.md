@@ -354,33 +354,28 @@ Maximum concurrency for 1,048,576 tokens per request: 6.70x
 `lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5`；其他 NVIDIA 配方使用
 `lmsysorg/sglang:dev-dsv41`，MI355X 使用 `lmsysorg/sglang:dev-dsv41-mi35x`。
 
-B200 主机表候选设置 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。在
+B200 在 TP4/EP4 C1–128 与 TP2/EP2 C1–8 全部使用上游默认 DSpark。
+Engram 保留在主机 DRAM，设置 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。
 [run 35626514270](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35626514270)
-中，共享主机表的大页覆盖率为零。每个 rank 的匿名分片无需修改主机 sysctl 即可申请大页，
-并保留查询结果的 all-reduce。必须从每个 rank 的启动日志核实实际大页比例；
-仅设置该变量并不能证明大页分配成功。
-B200 启动器将固定的 Docker 镜像 digest 转为已安装 Enroot 支持的 manifest 引用格式；导入失败时立即停止，不再启动 Pyxis。
-B200 还通过 `dsv41flash-fp4-b200-sglang-agentic` 注册原生 STP 测试点。
-独立 STP 脚本测试 GPU 常驻 Engram 表，静态显存比例为 0.80，prefill chunk 为 4096，
-并设置 `--prefill-decode-interval 16`，在长 prefill 之间调度正在运行的 decode。
-TP4 下每个 rank 多占用约 47.2 GiB 显存以消除主机表访问；确定最终放置方式前，
-需与每 rank 主机分片方案比较实测缓存容量和延迟。
-DSpark 使用固定上游 nightly 自带的默认草稿实现，包括默认计算与 Markov 精度。
-STP 不加载草稿模型，STP 与评估均清除合成接受率设置。TP2/EP2 DSpark 分支
-保留主机 Engram 分片，将静态显存比例设为 0.90，prefill chunk 减半至 2048；
-目标模型与草稿加载后每 GPU 共占 147.76 GiB。受限容量对比将 TP2 的 SWA
-前缀尾部下限设为 128，超过该下限时保留上游每个运行请求四个尾部的比例。
-16 个尾部的 C1 基线缓存复用率为 90.05%；128 个尾部在相同静态缓存预算内
-重新分配约 0.96 GiB。
-TP2 原始加载器在缓存分配前堆叠目标 MoE 权重时耗尽显存。经哈希校验的加载内存补丁
-在堆叠 w2 前释放已完成的 w13 输入列表；张量数据、布局与计算均不改变。
-TP2 还启用 PyTorch 可扩展分配段：释放临时张量虽使有效分配降低 2.24 GiB，
-但原分配器仍保留碎片化缓存块。
-TP4 DSpark 比较静态显存比例 0.80 的 GPU 常驻 Engram 与比例 0.70 的主机表。
-固定提交的 GPU 候选在 C32 下使用 512 个 SWA 前缀尾部，比较 interval 4 与 16。
-主机缓存候选使用 interval 16，每个运行请求预留 16 个前缀尾部（请求上限 64 时为 1024）。
-这将同一静态内存池的部分完整 KV 容量转给可复用滑动窗口尾部；需验证命中率、容量
-与完整吞吐、交互性能前沿。TP2 保留主机表。
+中共享主机表的大页覆盖率为零；每个 rank 的匿名分片无需修改主机 sysctl 即可申请大页。
+必须从每个 rank 的启动日志核实实际大页比例。
+
+| B200 拓扑 | 静态显存比例 | Prefill chunk | SWA 前缀尾部数 |
+| --- | ---: | ---: | --- |
+| TP4/EP4，C1–128 | 0.80 | 4096 | `max(128, min(4096, 64 * CONC))` |
+| TP2/EP2，C1–8 | 0.92 | 2048 | `128 * CONC` |
+
+两者均在 prefill chunk 之间执行 16 轮 decode，并将运行请求上限设为
+`min(2 * CONC, 64)`。分块前缀缓存将 SWA 尾部与完整 KV 分开保留，因此完整缓存
+占用率低并不证明有足够的可复用 SWA 容量。随并发调整的尾部预算与完整 KV 共享
+固定静态内存池。正式扫描需验证实际缓存大小、临时内存、缓存复用率以及吞吐与交互性能前沿。
+
+TP2 每 GPU 加载约 147.76 GiB 的目标和草稿权重。原始加载器保留已完成的目标 MoE
+shuffle 输入，在缓存分配前耗尽显存。经哈希校验的补丁在下一次 stack 前释放这些
+输入，并通过 PyTorch 可扩展分配段复用空间。张量数据、布局、计算与上游草稿默认
+精度均不改变。[加载器豁免记录](waiver/3346_zh.md) 包含证据、尚缺失的上游跟踪链接
+及移除条件。TP4 不使用该补丁或分配器覆盖。B200 启动器还将固定 Docker digest
+转为已安装 Enroot 支持的 manifest 引用格式，并在导入失败时立即停止。
 
 DSpark 是检查点自带的草稿模型。SGLang 对它不提供 EAGLE 或 MTP 路径，也没有
 `--speculative-num-steps` 参数；配方传入 `--speculative-algorithm DSPARK
