@@ -51,8 +51,11 @@ DeepSeek-V4-Pro:
 # prefill only, agentic prefill-chunk / state-checkpoint / level knobs, and MTP
 # with synthetic acceptance on throughput runs.
 DeepSeek-V4-Pro-AgentX:
-  env: "ATOM_MOE_GU_ITLV=1 AITER_BF16_FP8_MOE_BOUND=0 MC_GID_INDEX=1 MC_ENABLE_DEST_DEVICE_AFFINITY=1 NCCL_IB_DISABLE=1 ATOM_DISABLE_MMAP=true ATOM_PREFIX_CACHE_POLICY=lru ATOM_PREFIX_CACHE_PROTECTED_RATIO=0.5"
-  kv_cache_flags: "--kv_cache_dtype fp8"
+  # Rail-isolated RDMA: matched rails replace dest-device affinity. Omit
+  # ATOM_MOONCAKE_MATCHED_RAILS if every default P/D HCA pair is mutually
+  # reachable on the fabric.
+  env: "ATOM_MOE_GU_ITLV=1 AITER_BF16_FP8_MOE_BOUND=0 MC_GID_INDEX=1 ATOM_MOONCAKE_MATCHED_RAILS=auto NCCL_IB_DISABLE=1 ATOM_DISABLE_MMAP=true ATOM_PREFIX_CACHE_POLICY=lru ATOM_PREFIX_CACHE_PROTECTED_RATIO=0.5"
+  kv_cache_flags: "--kv_cache_dtype fp8 --index-cache-dtype fp4"
   # DP-attention tiers (conc 64+): TBO is prefill-only per the recipe.
   tp_dp_flags: "--enable-dp-attention"
   prefill_tp_dp_flags: "--enable-dp-attention --enable-tbo"
@@ -61,10 +64,11 @@ DeepSeek-V4-Pro-AgentX:
   prefill_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention --enable-tbo"
   decode_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
   # Load-bearing DP env for the agentic prefix-reuse path (recipe: session
-  # affinity keeps a trajectory on one rank).
-  tp_dp_env: "ATOM_NUMA_BIND=1 GPU_MAX_HW_QUEUES=5 ATOM_DP_SESSION_AFFINITY=1 ATOM_DP_LB_REQ_EQUIV=512 ATOM_DP_MASTER_PORT=29510 ATOM_DP_BASE_PORT=29610"
-  ep_dp_env: "ATOM_NUMA_BIND=1 GPU_MAX_HW_QUEUES=5 ATOM_DP_SESSION_AFFINITY=1 ATOM_DP_LB_REQ_EQUIV=512 ATOM_DP_MASTER_PORT=29510 ATOM_DP_BASE_PORT=29610"
-  mtp_flags: "--method mtp --num-speculative-tokens"
+  # affinity keeps a trajectory on one rank). Cross-DP prefill coalescing is
+  # off on the DP-attention tiers per the recipe.
+  tp_dp_env: "ATOM_NUMA_BIND=1 GPU_MAX_HW_QUEUES=5 ATOM_DP_SESSION_AFFINITY=1 ATOM_DP_LB_REQ_EQUIV=512 ATOM_DP_MASTER_PORT=29510 ATOM_DP_BASE_PORT=29610 ATOM_ENABLE_PREFILL_DELAYER=0"
+  ep_dp_env: "ATOM_NUMA_BIND=1 GPU_MAX_HW_QUEUES=5 ATOM_DP_SESSION_AFFINITY=1 ATOM_DP_LB_REQ_EQUIV=512 ATOM_DP_MASTER_PORT=29510 ATOM_DP_BASE_PORT=29610 ATOM_ENABLE_PREFILL_DELAYER=0"
+  mtp_flags: "--method dspark --num-speculative-tokens"
   # config.py forces block-size 256 for V4 (lcm(4,128)); 16 is ignored/misleading.
   block_size: "256"
   mem_frac_static: "0.9"
@@ -73,7 +77,7 @@ DeepSeek-V4-Pro-AgentX:
   attn_prefill_chunk_size: "16384"
   state_checkpoint_interval_tokens: "8192"
   level: "3"
-  spec_decode_acceptance_length: "2.49"
+  spec_decode_acceptance_length: "3.01"
 
 MiniMax-M3-MXFP4:
   env: "AITER_QUICK_REDUCE_QUANTIZATION=INT4 ATOM_FORCE_ATTN_TRITON=1"

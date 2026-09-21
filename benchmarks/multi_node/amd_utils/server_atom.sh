@@ -126,6 +126,7 @@ if [[ "$IS_AGENTIC_RUN" == "1" ]]; then
     [[ -n "$ATTN_PREFILL_CHUNK_SIZE" ]] && AGENTIC_SERVER_ARGS+=" --attn-prefill-chunk-size ${ATTN_PREFILL_CHUNK_SIZE}"
     [[ -n "$STATE_CKPT_INTERVAL" ]] && AGENTIC_SERVER_ARGS+=" --state-checkpoint-interval-tokens ${STATE_CKPT_INTERVAL}"
     [[ -n "$LEVEL" ]] && AGENTIC_SERVER_ARGS+=" --level ${LEVEL}"
+    AGENTIC_SERVER_ARGS+=" --cudagraph-mode FULL"
 fi
 
 IFS=',' read -ra IP_ARRAY <<< "$IPADDRS"
@@ -237,11 +238,16 @@ if [[ "$IS_AGENTIC_RUN" == "1" && "${KV_OFFLOADING:-none}" == "dram" ]]; then
     PREFILL_KV_TRANSFER="{\"kv_connector\":\"multi\",\"connectors\":[{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}},{\"kv_connector\":\"lmcache_offload\",\"kv_role\":\"offload\",\"offload_layout\":\"hybrid\",\"max_pending_saves\":8,\"slot_sidecar_staging_slots\":${OFFLOAD_SLOT_STAGING_SLOTS:-4},\"lmcache.local_cpu\":true,\"lmcache.max_local_cpu_size\":${_per_worker_cpu_gb},\"lmcache.local_disk\":null,\"lmcache.max_local_disk_size\":0,\"lmcache.remote_url\":null,\"lmcache.chunk_size\":256,\"lmcache.cache_policy\":\"LRU\",\"lmcache.lookup_server_worker_ids\":[],\"lmcache.store_location\":\"LocalCPUBackend\",\"lmcache.retrieve_locations\":[\"LocalCPUBackend\"]}]}"
 fi
 
-# Router policy: DP-attention agentic tiers need prefix-affine dp-sticky routing
-# (idx2idx PD rank mapping); the TP tier and all throughput runs use random.
+# Router policy: the agentic DP-attention tiers route cache-aware with balance
+# thresholds, the agentic TP tier routes round-robin, and both pin PD rank
+# mapping to none. Throughput runs keep random.
 ROUTER_POLICY_ARGS="--policy random"
-if [[ "$IS_AGENTIC_RUN" == "1" && "$PREFILL_ENABLE_DP" == "true" ]]; then
-    ROUTER_POLICY_ARGS="--dp-aware --policy dp_sticky --atom-pd-rank-mapping-policy idx2idx"
+if [[ "$IS_AGENTIC_RUN" == "1" ]]; then
+    if [[ "$PREFILL_ENABLE_DP" == "true" ]]; then
+        ROUTER_POLICY_ARGS="--dp-aware --prefill-policy cache_aware --decode-policy cache_aware --cache-threshold 0.8 --balance-abs-threshold 20 --balance-rel-threshold 2.0 --eviction-interval 300 --atom-pd-rank-mapping-policy none"
+    else
+        ROUTER_POLICY_ARGS="--prefill-policy round_robin --decode-policy round_robin --atom-pd-rank-mapping-policy none"
+    fi
 fi
 
 cat <<INFO
@@ -590,6 +596,11 @@ else
     if [[ "$IS_AGENTIC_RUN" == "1" ]]; then
         # Recipe max-num-seqs is 2*concurrency.
         DECODE_MAX_NUM_SEQS=$((2 * _MAX_CONC))
+        # Dense capture ladder 1..min(64, 2*conc): every batch size up to the
+        # cap gets a graph, which measurably helps small-batch agentic decode.
+        _dense_max=$((2 * _MAX_CONC))
+        if [[ "$_dense_max" -gt 64 ]]; then _dense_max=64; fi
+        CUDAGRAPH_SIZES="[$(seq -s, 1 "$_dense_max")]"
     else
         DECODE_MAX_NUM_SEQS="${_MAX_CONC}"
     fi
