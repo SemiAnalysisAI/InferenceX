@@ -39,6 +39,14 @@ if (( TP == 8 )); then
         "$(dirname "$0")/kernel_configs/h200_dsv41_block32" "$RESULT_DIR"
 fi
 
+# Matched C1 screens favored CUTLASS on TP8 p90 interactivity, while Marlin
+# retained a small throughput/interactivity advantage on TP4. Both consume
+# native MXFP4 weights with BF16 activations; dense GEMMs are unchanged.
+MOE_RUNNER_BACKEND=marlin
+if (( TP == 8 )); then
+    MOE_RUNNER_BACKEND=flashinfer_mxfp4
+fi
+
 # Use the default DSpark precision shipped by the pinned SGLang nightly.
 
 # Agentic warmup dispatches hundreds of large prompts at once and SGLang's
@@ -110,10 +118,7 @@ SGLANG_CMD=(
     --host 0.0.0.0 --port "$PORT"
     --trust-remote-code
     --tp "$TP" --ep-size "$EP_SIZE"
-    # Compare the pinned nightly's native MXFP4 x BF16 Marlin MoE path with
-    # the earlier SM90 CUTLASS baseline. This only changes the MoE backend;
-    # dense GEMMs and shipped DSpark precision retain their current settings.
-    --attention-backend dsv4 --moe-runner-backend marlin
+    --attention-backend dsv4 --moe-runner-backend "$MOE_RUNNER_BACKEND"
     # 0.70 rather than the cookbook's 0.8, and a bounded prefill chunk: the
     # sparse-attention indexer and DSpark prefill buffers scale with the chunk
     # times the 1M context, and the default 16384 chunk exhausted HBM on the

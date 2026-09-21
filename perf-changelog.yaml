@@ -8553,6 +8553,6 @@
     - "Prioritize stock DSpark across low and high concurrency, with 16 decode steps between prefill chunks to keep long-prefix decode requests progressing"
     - "Use the default MTP/DSpark precision shipped by the official nightly, without custom draft quantization or precision patches."
     - "Tune the three missing H200 TP8 block32 GEMM launch configurations without changing kernels or precision; compare stock DSpark through concurrency 32 on TP4 and TP8."
-    - "Compare the supported Marlin MXFP4 MoE backend on Hopper with BF16 activations and native packed weights/scales; preserve dense GEMM settings and shipped DSpark precision."
+    - "Select native Marlin MXFP4 MoE on TP4 and flashinfer_mxfp4 on TP8 from matched C1 screens; preserve BF16 activations, native packed weights/scales, dense GEMM settings and shipped DSpark precision."
     - "Retain 1024 SWA prefix tails within the existing KV memory budget to reduce cache eviction, and cover concurrency 1 through 32 on both TP4 and TP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341
