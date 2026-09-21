@@ -8565,5 +8565,4 @@
     - minimaxm3-fp8-mi300x-vllm-agentic-mtp
   description:
     - "Update the vLLM ROCm image from nightly-d9105ea8 to v0.29.0; benchmark configuration unchanged."
-    - "将 vLLM ROCm 镜像从 nightly-d9105ea8 更新到 v0.29.0；基准测试配置不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3063
