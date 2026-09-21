@@ -400,7 +400,9 @@ Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/mode
 `dsv41flash-fp4-gb300-sglang-agentic` runs native non-speculative serving at
 TP2/EP2 or TP4/EP4 on the pinned official nightly. Its STP entry point shares the
 GB300 script with `SPEC_DECODING=none`, clears inherited synthetic acceptance,
-and passes no draft flags. TP4 keeps the original Engram tables in GPU memory, avoiding host huge-page
+and passes no draft flags. STP uses `--prefill-decode-interval 16` to interleave
+decode with long prefills after the default cadence stalled diagnostic latency
+coverage; the throughput/interactivity tradeoff requires measurement. TP4 keeps the original Engram tables in GPU memory, avoiding host huge-page
 fragmentation. TP2 uses the `per_rank` anonymous host layout; GB300 disables
 shared-memory huge pages. The separate
 DSpark arm uses the official nightly's shipped draft weights, compute precision,

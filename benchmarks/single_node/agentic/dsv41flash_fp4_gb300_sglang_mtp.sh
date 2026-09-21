@@ -91,6 +91,7 @@ echo "Using SGLang endpoint ${AIPERF_SERVER_URL}"
 # draft. STP and accuracy evals must never inherit synthetic acceptance.
 unset SGLANG_SIMULATE_ACC_LEN SGLANG_SIMULATE_ACC_METHOD SGLANG_SIMULATE_ACC_TOKEN_MODE
 SPECULATIVE_ARGS=()
+SCHEDULING_ARGS=()
 case "$SPEC_DECODING" in
     mtp)
         DSPARK_BLOCK_SIZE=5
@@ -104,6 +105,8 @@ case "$SPEC_DECODING" in
         echo "DSpark block size: $DSPARK_BLOCK_SIZE, golden AL=$DSV41_GOLDEN_AL"
         ;;
     none)
+        # Interleave decode with long chunked prefills to bound decode stalls.
+        SCHEDULING_ARGS=(--prefill-decode-interval 16)
         echo "Native non-speculative serving; synthetic acceptance disabled"
         ;;
     *)
@@ -124,6 +127,7 @@ SGLANG_CMD=(
     --mem-fraction-static 0.80
     --chunked-prefill-size 4096
     "${SPECULATIVE_ARGS[@]}"
+    "${SCHEDULING_ARGS[@]}"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     --reasoning-parser auto
