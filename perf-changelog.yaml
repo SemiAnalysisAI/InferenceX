@@ -8553,4 +8553,5 @@
     - "Use stock nightly DSpark precision and kernels, with row-sharded anonymous host Engram tables and a resolved local snapshot for upstream file-scoped page-cache eviction and huge-page backing."
     - "Retain TP8/EP8, GPU-resident KV, 4096-token prefill chunks, static memory fraction 0.70, the shipped draft precision defaults, and the existing AgentX acceptance and real-verification eval behavior."
     - "Add the official non-speculative TP8/EP8 mode at concurrency 1, 2, 4, 8, 16 and 20 with truthful spec-decoding none, no synthetic acceptance, and 16 decode steps between prefill chunks to prevent long-context prefill from starving ready decodes; both modes contribute to the same H100/SGLang curve."
+    - "Prioritize DSpark across the full AgentX concurrency curve and test 16 decode steps between prefill chunks with unchanged shipped precision and canonical acceptance; keep STP only if it contributes a measured frontier point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3345
