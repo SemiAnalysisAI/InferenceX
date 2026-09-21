@@ -296,7 +296,7 @@ jobs:
                       - fp4: FP4 precision
                       - mtp, eagle, eagle3: speculative decoding method
                       - sglang, vllm, dynamo-vllm: runtime framework
-                      - model criterion: matching configured model family
+                      - model criterion: matching configured model family; legacy criteria remain in the shared priority taxonomy for retained SPEED-Bench collectors and do not authorize deprecated master coverage
                       - checklist-complete: PR checklist is satisfied
                       - patchwork: modified upstream engine or runtime source
 
@@ -458,7 +458,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.canary-select.outputs.canary-config) }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -491,7 +490,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k'] }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -524,7 +522,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k'] }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -548,7 +545,6 @@ jobs:
             matrix:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k'] }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -581,7 +577,6 @@ jobs:
             matrix:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k'] }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -604,7 +599,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).single_node['agentic'] }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -638,7 +632,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['agentic'] }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -676,7 +669,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).evals }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -714,7 +706,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).agentic_evals }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -751,7 +742,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_evals }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -794,7 +784,6 @@ jobs:
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals }}
         secrets:
-            REPO_PAT: ${{ secrets.REPO_PAT }}
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
             MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
             MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -866,20 +855,25 @@ jobs:
                   SWEEP_MATRIX: ${{ needs.setup.outputs.search-space-config }}
                   SWEEP_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
                   SWEEP_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
-                  FULL_SWEEP: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') && !contains(github.event.pull_request.labels.*.name, 'evals-only') && !contains(github.event.pull_request.labels.*.name, 'agentx-fast') && needs.setup.outputs.reuse-enabled != 'true' }}
+                  FULL_SWEEP: ${{ github.event_name == 'pull_request' && needs.setup.outputs.reuse-enabled != 'true' }}
               run: |
                   python3 - <<'PY'
                   import json, os
                   from pathlib import Path
                   matrix = json.loads(os.environ['SWEEP_MATRIX'])
                   labels = set(json.loads(os.environ['SWEEP_LABELS']) or [])
-                  incompatible = {'sweep-enabled', 'non-canary-full-sweep-enabled', 'full-sweep-fail-fast',
-                                  'full-sweep-fail-fast-no-canary', 'evals-only', 'agentx-fast'}
+                  sweep_labels = labels & {
+                      'sweep-enabled', 'full-sweep-enabled', 'non-canary-full-sweep-enabled',
+                      'full-sweep-fail-fast', 'full-sweep-fail-fast-no-canary',
+                      'all-evals', 'evals-only', 'agentx-fast',
+                  }
                   Path('changelog_metadata.json').write_text(json.dumps(matrix['changelog_metadata']))
                   Path('sweep_manifest.json').write_text(json.dumps({
                       'head': os.environ['SWEEP_HEAD'], 'run-id': int(os.environ['GITHUB_RUN_ID']),
                       'run-attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
-                      'full-sweep': os.environ['FULL_SWEEP'] == 'true' and not labels & incompatible,
+                      'full-sweep': os.environ['FULL_SWEEP'] == 'true' and sweep_labels in (
+                          {'full-sweep-fail-fast'}, {'full-sweep-enabled'},
+                      ),
                       'matrix': matrix,
                   }))
                   PY
@@ -903,18 +897,18 @@ jobs:
         needs: [setup, collect-results]
         if: ${{ always() && needs.collect-results.result != 'skipped'}}
         runs-on: ubuntu-latest
+        permissions:
+            actions: read # Read job timings for run statistics.
+            contents: read
 
         env:
             RESULTS_DIR: "results/"
             STATS_FILENAME: "run_stats"
-            # Repository integration credential for the scoped sweep/ingest job.
-            GITHUB_TOKEN: ${{ secrets.REPO_PAT }} # zizmor: ignore[secrets-outside-env]
+            GITHUB_TOKEN: ${{ github.token }}
 
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                  # Repository integration credential for the scoped sweep/ingest job.
-                  token: ${{ secrets.REPO_PAT }} # zizmor: ignore[secrets-outside-env]
                   ref: ${{ needs.setup.outputs.tooling-ref }}
                   fetch-depth: 0
                   persist-credentials: false
@@ -953,7 +947,7 @@ jobs:
 
         env:
             # Repository integration credential for the scoped sweep/ingest job.
-            DATABASE_URL: ${{ secrets.NEON_PROD_RO_URL }} # zizmor: ignore[secrets-outside-env]
+            DATABASE_URL: ${{ secrets.DB_RO_URL }} # zizmor: ignore[secrets-outside-env]
 
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1014,7 +1008,7 @@ jobs:
                 MERGE_RUN_ID: ${{ github.run_id }}
               with:
                 # Repository integration credential for the scoped sweep/ingest job.
-                github-token: ${{ secrets.INFX_FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
+                github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
                 script: |
                   await github.rest.repos.createDispatchEvent({
                     owner: "SemiAnalysisAI",
@@ -1079,7 +1073,7 @@ jobs:
                 MERGE_RUN_ID: ${{ github.run_id }}
               with:
                 # Repository integration credential for the scoped sweep/ingest job.
-                github-token: ${{ secrets.INFX_FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
+                github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
                 script: |
                   await github.rest.repos.createDispatchEvent({
                     owner: "SemiAnalysisAI",

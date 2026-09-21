@@ -23,6 +23,7 @@ import importlib
 import json
 import os
 import pkgutil
+import sys
 from pathlib import Path
 
 import operatorx.ops  # noqa: F401  populates op registry
@@ -31,8 +32,8 @@ from operatorx.clusters import CLUSTER_PLATFORMS
 from operatorx.runtime import runtime_snapshot, utc_now_iso
 
 
-# Repo root (directory containing testlists/ and results/), one level above the package.
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+# Package directory contains the checked-in testlists and local results.
+_REPO_ROOT = Path(__file__).resolve().parent
 
 
 TESTLIST_DIR = _REPO_ROOT / "testlists"
@@ -59,9 +60,9 @@ def _csv(s: str | None) -> list[str]:
     return [x.strip() for x in s.split(",") if x.strip()]
 
 
-def _load_testlists(names: list[str] | None) -> dict[str, list[dict]]:
+def _load_testlists(names: list[str] | None, directory: Path = TESTLIST_DIR) -> dict[str, list[dict]]:
     """Returns {testlist_name: [shape_dict, ...]}. Default = all available."""
-    available = {p.stem: p for p in sorted(TESTLIST_DIR.glob("*.json"))}
+    available = {p.stem: p for p in sorted(directory.glob("*.json"))}
     if names:
         wanted = {n: available[n] for n in names if n in available}
         missing = [n for n in names if n not in available]
@@ -72,13 +73,15 @@ def _load_testlists(names: list[str] | None) -> dict[str, list[dict]]:
     return {name: json.loads(path.read_text()) for name, path in wanted.items()}
 
 
-def _backend_supported_ops(platform: str, backends: list[str]) -> dict[str, set[str]]:
+def _backend_supported_ops(platform: str, backends: list[str], strict: bool = False) -> dict[str, set[str]]:
     """Discover per-backend supported op_types from each module's IMPLS list."""
     out: dict[str, set[str]] = {}
     for b in backends:
         try:
             mod = importlib.import_module(f"operatorx.runners.{platform}.backends.{b}")
         except Exception as e:
+            if strict:
+                raise RuntimeError(f"requested backend {platform}/{b} cannot be loaded") from e
             print(f"[run_smoke] backend {platform}/{b} not importable: {e}", file=sys.stderr)
             out[b] = set()
             continue
@@ -141,6 +144,9 @@ def main() -> int:
                     help="comma-separated testlist names; default = all in operatorx/testlists/")
     ap.add_argument("--backends", default=None,
                     help="comma-separated backend names; default = all for the platform")
+    ap.add_argument("--testlist-dir", type=Path, default=TESTLIST_DIR)
+    ap.add_argument("--results-dir", type=Path, default=RESULTS_DIR)
+    ap.add_argument("--strict", action="store_true", help="fail on errors or zero successful rows")
     args = ap.parse_args()
 
     run = runtime_snapshot()
@@ -152,14 +158,17 @@ def main() -> int:
     if not backends:
         raise SystemExit(f"no backends configured for platform={platform!r}")
 
-    backend_ops = _backend_supported_ops(platform, backends)
+    backend_ops = _backend_supported_ops(platform, backends, strict=args.strict)
     # Merge per-backend library versions into the run's software dict.
     run.software.update(_collect_backend_versions(platform, backends))
     ws = _resolve_world_size(platform)
     rank = int(os.environ.get("RANK", "0"))
 
     # Testlists
-    testlists = _load_testlists(_csv(args.testlists) or _csv(os.environ.get("OPERATORX_TESTLISTS")) or None)
+    testlists = _load_testlists(
+        _csv(args.testlists) or _csv(os.environ.get("OPERATORX_TESTLISTS")) or None,
+        args.testlist_dir,
+    )
 
     # submit_run.py fans out one job per (ep, routed_tp, shared_tp) MoE combo
     # plus one job per ws for non-MoE ops, since sglang's group state is
@@ -206,8 +215,8 @@ def main() -> int:
             elif shape["type"] == "moe_forward":
                 continue
             for backend in backends:
-                if shape["type"] not in backend_ops.get(backend, set()):
-                    continue  # silent skip — backend doesn't claim this op type
+                if not args.strict and shape["type"] not in backend_ops.get(backend, set()):
+                    continue  # Strict CI retains unsupported backend/operator pairs.
                 entries.append((
                     Op(type=shape["type"], args=shape["args"], backend=backend,
                        name=shape.get("name")),
@@ -222,9 +231,12 @@ def main() -> int:
     import time as _time
     results: list[Result] = []
     counts = {"ok": 0, "unsupported": 0, "error": 0}
+    out_path = args.results_dir / platform / (run.cluster or "unknown") / f"{run.id}.json"
     for op, tl in entries:
         _t0 = _time.perf_counter()
         try:
+            if op.type not in backend_ops.get(op.backend, set()):
+                raise UnsupportedOpError(f"{platform}/{op.backend} has no implementation for {op.type}")
             r = runner_mod.run(op)
             results.append(Result(op=op, metrics=r.metrics, status="ok",
                                   testlist=tl))
@@ -248,6 +260,10 @@ def main() -> int:
             latency_str = f"        ERROR ({type(e).__name__})"
         wall_s = _time.perf_counter() - _t0
         if rank == 0:
+            # Checkpoint outside the timed kernel so cancellation preserves completed rows.
+            if args.strict:
+                run.finished_at = utc_now_iso()
+                write_run_result(out_path, run, results)
             shape_str = " ".join(
                 f"{k}={v}" for k, v in op.args.items() if not k.startswith("dtype")
             )
@@ -267,8 +283,6 @@ def main() -> int:
     run.finished_at = utc_now_iso()
 
     if rank == 0 and results:
-        cluster_dir = run.cluster or "unknown"
-        out_path = RESULTS_DIR / platform / cluster_dir / f"{run.id}.json"
         write_run_result(out_path, run, results)
         print(f"\n[run_smoke] {counts} -> {out_path}")
 
@@ -282,7 +296,7 @@ def main() -> int:
         except Exception:
             pass
 
-    return 0
+    return int(args.strict and (counts["error"] > 0 or counts["ok"] == 0))
 
 
 if __name__ == "__main__":

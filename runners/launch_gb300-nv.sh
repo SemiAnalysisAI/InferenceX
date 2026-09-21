@@ -52,14 +52,6 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     # the runner pod) can fail with "path is unavailable".
     export MODEL_PATH=/scratch/models/DeepSeek-V4-Pro
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
-elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-trt" ]]; then
-    export SERVED_MODEL_NAME="glm-5-nvfp4"
-    export MODEL_PATH=/scratch/models/GLM-5-NVFP4
-    export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5-NVFP4"
-elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
-    # The GLM-5.1 sglang recipes reuse the glm-5-fp4 alias.
-    export MODEL_PATH=/scratch/models/GLM-5.1-NVFP4
-    export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
 elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-trt" ]]; then
     export SERVED_MODEL_NAME="GLM-5.2-NVFP4"
     export MODEL_PATH=/scratch/models/GLM-5.2-NVFP4
@@ -67,27 +59,12 @@ elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" && $FRAMEWORK == "dynam
 elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/GLM-5.2-NVFP4
     export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
-elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH=/scratch/models/GLM-5-NVFP4
-    export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
-elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH=/scratch/models/GLM-5-FP8
-    export SRT_SLURM_MODEL_PREFIX="glm-5-fp8"
-elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH=/data/models/MiniMax-M2.5-NVFP4
-    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
-elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH=/data/models/MiniMax-M2.5
-    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
 elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/MiniMax-M3-NVFP4
     export SRT_SLURM_MODEL_PREFIX="nvidia/MiniMax-M3-NVFP4"
 elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/data/models/MiniMax-M3-MXFP8
     export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
-elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH=/scratch/models/Kimi-K2.5-NVFP4
-    export SRT_SLURM_MODEL_PREFIX="nvidia/Kimi-K2.5-NVFP4"
 elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/Kimi-K3
     export SRT_SLURM_MODEL_PREFIX="moonshotai/Kimi-K3"
@@ -98,7 +75,7 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-FP8
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, glm5.2-fp4, minimaxm2.5-fp4, minimaxm2.5-fp8, minimaxm3-fp4, minimaxm3-fp8, kimik2.5-fp4, kimik3-fp4, qwen3.5-fp4, qwen3.5-fp8"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5.2-fp4, minimaxm3-fp4, minimaxm3-fp8, kimik3-fp4, qwen3.5-fp4, qwen3.5-fp8"
     exit 1
 fi
 
@@ -254,51 +231,12 @@ SRT_DEFAULT_TIME_LIMIT="4:00:00"
 if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && ( "$FRAMEWORK" == "dynamo-sglang" || "$FRAMEWORK" == "dynamo-trt" ) ]]; then
     SRT_DEFAULT_TIME_LIMIT="8:00:00"
 fi
-cat > srtslurm.yaml <<EOF
-# SRT SLURM Configuration for GB300
-
-# Default SLURM settings
-default_account: "${SLURM_ACCOUNT}"
-default_partition: "${SLURM_PARTITION}"
-default_time_limit: "${SRT_DEFAULT_TIME_LIMIT}"
-
-# Resource defaults
-gpus_per_node: 4
-network_interface: ""
-
-# Path to srtctl repo root (where the configs live)
-srtctl_root: "${SRTCTL_ROOT}"
-
-# Cluster-level bind mounts applied to every worker container
-# (see srtctl/core/runtime.py — get_srtslurm_setting("default_mounts")).
-# Used here for aiperf's persistent mmap cache so the dataset isn't
-# re-tokenized + re-written every job.
-default_mounts:
-  "${AIPERF_MMAP_CACHE_HOST_PATH}": "/aiperf_mmap_cache"
-  "${HF_HUB_CACHE_HOST_PATH}": "/hf_hub_cache"
-  # Warm dynamo source-build cache (nested over the auto /configs mount) so the
-  # hash-pinned install is a cache hit (pip-only, no apt/root) on every job.
-  "${DYNAMO_WHEELS_CACHE_HOST_PATH}": "/configs/dynamo-wheels"
-
-# Model path aliases
-model_paths:
-  "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
-containers:
-  dynamo-trtllm: ${SQUASH_FILE}
-  dynamo-sglang: ${SQUASH_FILE}
-  v0.5.11: ${SQUASH_FILE}
-  v0.5.13.post1: ${SQUASH_FILE}
-  "${IMAGE}": ${SQUASH_FILE}
-  nginx-sqsh: ${NGINX_SQUASH_FILE}
-use_segment_sbatch_directive: false
-EOF
-
-# Appended via sed so non-power lanes' generated yaml stays byte-identical.
-if [[ "$USES_DCGM_POWER" == "1" ]]; then
-    sed -i "/^  nginx-sqsh:/a\\  dcgm-exporter: ${DCGM_EXPORTER_SQSH}" srtslurm.yaml
-    # sed's append is a silent no-op if the anchor drifts.
-    grep -q "^  dcgm-exporter: " srtslurm.yaml || { echo "Error: dcgm-exporter injection failed: nginx-sqsh anchor not found in srtslurm.yaml" >&2; exit 1; }
-fi
+write_srt_cluster_config gb300-nv srtslurm.yaml "$USES_DCGM_POWER" \
+    --model "$SRT_SLURM_MODEL_PREFIX" "$MODEL_PATH" \
+    --var SRT_DEFAULT_TIME_LIMIT "$SRT_DEFAULT_TIME_LIMIT" \
+    --var AIPERF_MMAP_CACHE_HOST_PATH "$AIPERF_MMAP_CACHE_HOST_PATH" \
+    --var HF_HUB_CACHE_HOST_PATH "$HF_HUB_CACHE_HOST_PATH" \
+    --var DYNAMO_WHEELS_CACHE_HOST_PATH "$DYNAMO_WHEELS_CACHE_HOST_PATH" || exit 1
 
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
@@ -324,7 +262,6 @@ sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
 # Throughput recipes opt into synthetic acceptance via the master config;
 # eval-only jobs strip it so tokens get real target-model verification.
-inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
 if [[ "$USES_AGENTX_POWER" == "1" ]]; then
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
@@ -338,11 +275,11 @@ SRTCTL_APPLY_ARGS=(
     -f "$CONFIG_FILE"
     --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
-if [[ "$IS_AGENTIC" == "1" || "$MODEL_PREFIX" == "glm5.1" || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" ) || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && ( "$FRAMEWORK" == "dynamo-trt" || "$USES_DCGM_POWER" == "1" ) ) || ( "$USES_DCGM_POWER" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ) ]]; then
+if [[ "$IS_AGENTIC" == "1" || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" ) || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && ( "$FRAMEWORK" == "dynamo-trt" || "$USES_DCGM_POWER" == "1" ) ) || ( "$USES_DCGM_POWER" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ) ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 
-SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_EVAL_ARGS[@]}" "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
+SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
