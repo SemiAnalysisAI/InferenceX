@@ -4,8 +4,8 @@ set -x
 
 # Agentic trace replay benchmark for GLM-5.2 FP8 on MI355X using SGLang with
 # EAGLE/MTP speculative decoding. First GLM-5.2 FP8 AgentX recipe on MI355X;
-# spec-decode only, per the AgentX policy that agentic recipes are run and
-# published with speculative decoding enabled (MODELS.md).
+# this recipe uses speculative decoding. MODELS.md also permits non-speculative
+# recipes that contribute to the Pareto frontier; separate A/B baselines are not required.
 #
 # Port of the validated agentic/glm5.2_fp4_mi355x_sglang_mtp.sh (amd/GLM-5.2-MXFP4).
 # The FP8 deltas are the blocks marked "FP8:" below -- the checkpoint
