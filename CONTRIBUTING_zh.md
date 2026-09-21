@@ -33,7 +33,7 @@
 
 ## PR Review Checklist（CODEOWNER 签署）
 
-CODEOWNER 自动验证目前仅供审阅参考。工作流会核验提交的清单并更新同一条裁定评论，不再发布提交状态。GitHub 单独设置的 Core 团队和 CODEOWNER 批准要求仍然有效，除非有权限的维护者使用绕过权限。
+CODEOWNER 自动验证目前仅供审阅参考。工作流会核验提交的清单，并为每次验证发布一条新的裁定评论，不再发布提交状态。GitHub 单独设置的 Core 团队和 CODEOWNER 批准要求仍然有效，除非有权限的维护者使用绕过权限。
 
 仅当修改的文件存在仓库管理员及 `@SemiAnalysisAI/core` 之外的 CODEOWNER 时，才要求签核。归属以 PR 目标分支当前最新提交中的 CODEOWNERS 为准：先解析该分支的 SHA，再使用同一 SHA 校验并读取 CODEOWNERS，最后匹配的规则生效；重命名同时检查旧路径和新路径。归属规则不从 PR 的 Head 或其记录中可能过期的基础提交读取。同一文件有 core 团队作为 owner，不会豁免其他 owner。个人管理员必须同时拥有仓库 `permission: admin` 和 `role_name: admin`；其他团队和邮箱 owner 均要求签核。归属信息缺失或权限查询失败不能授予豁免。不涉及此类 owner 的改动会跳过验证。
 
@@ -54,9 +54,9 @@ CODEOWNER 自动验证目前仅供审阅参考。工作流会核验提交的清�
 - 启动 Claude 要求触发者为具有合格仓库写权限的人类用户。
 - 请在 "Additional detail section" 中填写清单要求的链接（验证/评测工作流运行、对应的 [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR，以及任何例外理由）。
 
-签署发布后，CI 会独立复核审阅清单中的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、复用命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack、投机解码是否使用 chat template，以及 draft 模型和 draft head 的权重与精度是否保持不变。随后，CI 会为整个 PR 创建或更新同一条裁定评论，并注明实际评估的 SHA。未通过的条目直接显示；已通过和不适用（N/A）的条目统一放入折叠区域。旧版按提交生成的裁定评论会被复用；如果评论已删除，下次验证会创建替代评论。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
+签署发布后，CI 会独立复核审阅清单中的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、复用命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack、投机解码是否使用 chat template，以及 draft 模型和 draft head 的权重与精度是否保持不变。随后，CI 会在每次验证后为 PR 创建一条新的裁定评论，即使裁定内容未变，也会发布新评论，并注明实际评估的 SHA。未通过的条目直接显示；已通过和不适用（N/A）的条目统一放入折叠区域。已有裁定评论会原样保留，作为评估历史；请以对应提交的最新裁定为准。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
 
-裁定只记录实际评估的提交，不会将批准延续到后续提交。需要重新评估时，由原审阅者编辑已有清单，或由有权限的协作者传入 `pr-number` 及其 `comment_url`（两者必须指向同一 PR）手动分发 `codeowner-signoff-verify.yml`。流程会更新同一条裁定评论。
+裁定只记录实际评估的提交，不会将批准延续到后续提交。需要重新评估时，由原审阅者编辑已有清单，或由有权限的协作者传入 `pr-number` 及其 `comment_url`（两者必须指向同一 PR）手动分发 `codeowner-signoff-verify.yml`。每次评估都会发布一条新的裁定评论。
 
 ## 使用 `/use` 在合并时复用 PR 的全绿 sweep
 
