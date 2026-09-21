@@ -1303,7 +1303,9 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
 
 dsv4-fp4-mi355x-atom-disagg-agentic-hicache-mtp:
   image: rocm/atom-dev:nightly_202609210314
-  model: deepseek-ai/DeepSeek-V4-Pro
+  # DSpark needs the draft head the -0813 checkpoint bundles
+  # (dspark_target_layer_ids in config.json); the base Pro checkpoint has none.
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
   precision: fp4

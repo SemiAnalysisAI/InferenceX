@@ -50,7 +50,7 @@ DeepSeek-V4-Pro:
 # prefix caching (server_atom.sh IS_AGENTIC branch), FP8 KV/index cache, TBO on
 # prefill only, agentic prefill-chunk / state-checkpoint / level knobs, and MTP
 # with synthetic acceptance on throughput runs.
-DeepSeek-V4-Pro-AgentX:
+DeepSeek-V4-Pro-AgentX: &DeepSeek-V4-Pro-AgentX
   # Rail-isolated RDMA: matched rails replace dest-device affinity. Omit
   # ATOM_MOONCAKE_MATCHED_RAILS if every default P/D HCA pair is mutually
   # reachable on the fabric.
@@ -78,6 +78,10 @@ DeepSeek-V4-Pro-AgentX:
   state_checkpoint_interval_tokens: "8192"
   level: "3"
   spec_decode_acceptance_length: "3.01"
+
+# The PD-Max recipe runs DSpark, which needs the draft head bundled in the
+# -0813 config.json. Same alias split as models.yaml on the SGLang side.
+DeepSeek-V4-Pro-0813-AgentX: *DeepSeek-V4-Pro-AgentX
 
 MiniMax-M3-MXFP4:
   env: "AITER_QUICK_REDUCE_QUANTIZATION=INT4 ATOM_FORCE_ATTN_TRITON=1"
