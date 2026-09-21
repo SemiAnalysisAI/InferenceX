@@ -8,7 +8,7 @@
       "installed_name": "backend.py",
       "source_path": "python/sglang/srt/layers/attention/deepseek_v4_backend_hip_radix.py",
       "source_sha256": "7f0c0aebfd0413f83102698714e84454055deac4d64398979c75c06b2d654916",
-      "adapted_sha256": "d9af12740c1223d9804a0fbfb5969f945f8688852ba2796a9feff94a7beae39a"
+      "adapted_sha256": "fcc3b2e73639bb2c7025743941ec130e0841e3be152575855f81320f6089bdaf"
     },
     {
       "installed_name": "low_ratio.py",
