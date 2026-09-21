@@ -140,6 +140,10 @@ SGLANG_CMD=(
     --moe-runner-backend marlin
     --mem-fraction-static 0.7
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
+    # The 14.96 GiB H100 KV budget cannot afford the larger Blackwell tail
+    # reserve. At C20, 640 tails retain about 5.3M full tokens while reducing
+    # the measured eviction pressure on the default 160-tail SWA pool.
+    --swa-prefix-tails "$(( CONC >= 4 ? 32 * CONC : 8 * CONC ))"
     "${SPECULATIVE_ARGS[@]}"
     "${SCHEDULING_ARGS[@]}"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
