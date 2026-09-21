@@ -43,16 +43,12 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# Move the two fp8 Engram tables to host memory, freeing ~23 GiB of HBM per
-# GPU for the 1M-context prefill working set and KV pool. Use row-sharded
-# anonymous mappings: H200 compute nodes allow anonymous THP with madvise,
-# but shmem_enabled=never prevents the shared memfd layout from using huge
-# pages. This changes table placement, preserving checkpoint weights/scales.
-# The first sweep ran
-# with the tables on GPU and the server died on the first long AgentX prompts
-# (run 35304458924: c128 died at startup with torch.OutOfMemoryError (12 GiB allocation, 5 GiB free of 139.8 GiB, 127.6 GiB already held by PyTorch)).
-export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
-export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
+# Keep native FP8 Engram tables and E8M0 scales on GPU to avoid host lookups.
+# At TP8 the tables add ~23.6 GiB per GPU. The KV allocator charges these
+# resident weights before sizing its pool, preserving the runtime headroom
+# set by mem-fraction-static=0.70. Keep the 4096-token prefill chunk below;
+# the earlier GPU-table trial used 0.80 and 8192-token chunks.
+export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0
 
 # Allow subagent fan-out above the session count, within the captured batch.
 CUDA_GRAPH_MAX_BS=64
