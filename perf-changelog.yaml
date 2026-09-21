@@ -7925,6 +7925,23 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3118
 
 - config-keys:
+    - kimik3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the MI355X Kimi-K3 FP4 ATOM AgentX submission to image rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0911, tracking recipes/Agentic-Kimi-K3.md at ROCm/ATOM#2131 as retuned by ROCm/ATOM#2208."
+    - "Publish the concurrency set [1, 4, 14, 16, 48, 56, 72], replacing [1, 2, 4, 8, 12, 14, 16, 32, 40, 56, 64]."
+    - "Set gpu-memory-utilization to 0.90 and max-num-batched-tokens to 8192 on every point."
+    - "Set max-num-seqs to 32 through concurrency 16 and to 2 x concurrency above it, giving 96, 112, and 144 at concurrency 48, 56, and 72."
+    - "Set AITER_REUSE_IDENTICAL_COMM_GROUPS=1 at concurrency 56 and 72, and 0 from concurrency 1 through 48."
+    - "Set ATOM_GDN_SSM_DTYPE=fp16, which recipes/Agentic-Kimi-K3.md at ROCm/ATOM#2131 carries and this recipe had never ported. The ATOM default fp32 doubles the SSM half of the per-sequence state-checkpoint image, from 29039616 to 56171520 bytes at zero draft tokens, and that reservation comes out of the KV pool: up to 2209 fewer KV blocks, 7.8 percent, at concurrency 72."
+    - "Start the CUDA-graph capture ladder at batch size 1 instead of 2. ATOM rounds a decode batch up to the smallest captured size, so a single-sequence step previously replayed the batch-size-2 graph and forwarded twice the rows it needed. Batch size 1 is 92 percent of decode steps at concurrency 1 and 55 percent at concurrency 4, and under 2 percent from concurrency 14 up."
+    - "Exclude the DSpark draft model from the ptpc_fp8 online quantization. ptpc_fp8 is a global online-quant target and ATOM runs the online-quant streamer for speculative draft loads as well, so it re-quantized the BF16 Inferact/Kimi-K3-DSpark checkpoint: the five draft decoder layers' self_attn fused_qkv_a_proj, q_b_proj, kv_b_proj and o_proj, their mlp gate_up_proj and down_proj, and the 35840x7168 context_proj aux-fusion linear, which alone is larger than one draft decoder layer. The draft now serves at its native BF16. The draft tree carries no root prefix, so patterns anchored on 'layers.' reach it without touching the target's 'model.layers.' modules."
+    - "Carry the two paged-KV dram-utilization blocks onto the new concurrency set: 0.343 lands 128 GB per rank for concurrency 14 through 48, and 0.513 lands 192 GB per rank for concurrency 56 and 72."
+    - "Draft depth and synthetic acceptance (7 draft tokens at AL 3.84 for concurrency 1 and 4, 3 at AL 3.00 for concurrency 14 and 16, no draft from 48 up), ReplaySSM placement, dcp-size 8 from concurrency 14 up, the FP8 KV cache, the 128-token page, --state-checkpoint-interval-tokens -1 with anchor-only state checkpointing, ptpc_fp8 online quantization, LMCACHE_CHUNK_SIZE 1024, the NUMA pinning, the draft pre-staging retry, --served-model-name $MODEL, and the AgentX client are unchanged from #2852."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3207
+
+- config-keys:
     - glm5.2-fp4-mi355x-atom-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -8025,6 +8042,17 @@
     - "Adds glm5.2/fp8 routing to runners/launch_b200-nscale-compat.sh (MODEL_PATH default /scratch/models/GLM-5.2-FP8, SRT_SLURM_MODEL_PREFIX glm5.2-fp8), which previously hard-failed with 'Unsupported model prefix/precision' for this model. The script's completeness-checked, flock-serialized hf download stages the checkpoint on the day-zero run if it is not already on the cluster."
     - "Re-pin from lmsysorg/sglang:nightly-dev-cu13-20260907-30705c00 to lmsysorg/sglang:nightly-dev-cu13-20260908-20ca564b (2026-09-08 cu13 dev nightly, digest sha256:9a352a35c973a2357372e85f3bcb5388b6b3c46c1329165987260f3b089647dc; Docker Hub last pushed 2026-09-08T01:40:59Z, tag commit sgl-project/sglang@20ca564b). The 2026-09-07 build carries an unguarded kv_index_translator.translate_dcp_read_ids call on the DSA fp8 KV read path that the EAGLE draft backend never binds, so GLM-5.2 MTP runs crash intermittently with AttributeError (observed on the MI355X FP8 sibling in run 34173459478 after 74 minutes of serving). sgl-project/sglang#38318 (merged 2026-09-07T20:03Z) adds the None guard and is six commits behind 20ca564b."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2863
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the ATOM image from rocm/atom-dev:nightly_202608280858 to rocm/atom-dev:nightly_202609161445, the first ROCm/ATOM line carrying native RCCL DEP and the DSpark K6 kernels."
+    - "Switch both throughput bands from EAGLE MTP (spec-decoding: mtp) to DSpark (spec-decoding: draft_model) on the DeepSeek-V4-Pro-0813 checkpoint, pinned to revision 72e1d3230f6c080a530b0a1d46f8eb4602340597 and verified before GPU startup by check_dsv4_dspark_checkpoint.py (66 shards plus the DSpark Markov/confidence heads)."
+    - "Raise NUM_SPEC_TOKENS from 3 to 6 (DSpark K6: six draft tokens plus one target token, a q7 verify window) and the forced acceptance length SPEC_DECODE_AL from 2.49 to 3.77, the committed golden value from golden_al_distribution/dsv4-pro-0813-dspark.yaml (thinking_on, K6). Both throughput bands pin this AL; EVAL_ONLY runs verify real DSpark drafts."
+    - "Move the concurrency 48/64/96/128/256 band from DPA with TBO and the default MoE transport to native RCCL DEP (TP8/DPA8/EP8: --enable-dp-attention --all2all-backend rccl --dp-load-balance least_tokens --moe-backend standard, TBO disabled), while the concurrency 1/2/4/8/16 band stays TP-only (TP8/EP1). Session affinity is preserved via the AIPerf correlation-id session id so each conversation pins to one DP rank, and STATE_CHECKPOINT_INTERVAL_TOKENS stays 8192."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912
 
 - config-keys:
     - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark

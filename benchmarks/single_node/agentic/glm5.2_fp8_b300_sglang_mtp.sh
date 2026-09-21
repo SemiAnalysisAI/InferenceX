@@ -4,9 +4,8 @@ set -x
 
 # Agentic trace replay benchmark for GLM-5.2 FP8 on B300 using SGLang with
 # EAGLE/MTP speculative decoding. First GLM-5.2 FP8 AgentX recipe on B300; it
-# is spec-decode only, per the AgentX policy that agentic recipes are run and
-# published with speculative decoding enabled rather than as an STP/MTP A/B
-# (MODELS.md: GLM-5.2 agentic non-MTP is deprecated after 2026-08-03).
+# uses speculative decoding. MODELS.md also permits non-speculative recipes
+# that contribute to the Pareto frontier; separate A/B baselines are not required.
 #
 # Port of agentic/glm5.2_fp8_b200_sglang_mtp.sh (the FP8 B200 sibling, itself a
 # port of the validated NVFP4 B200 script) with the B300 deltas the NVFP4 B300
