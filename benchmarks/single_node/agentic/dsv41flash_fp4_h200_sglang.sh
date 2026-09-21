@@ -43,12 +43,23 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# Keep native FP8 Engram tables and E8M0 scales on GPU to avoid host lookups.
-# At TP8 the tables add ~23.6 GiB per GPU. The KV allocator charges these
-# resident weights before sizing its pool, preserving the runtime headroom
-# set by mem-fraction-static=0.70. Keep the 4096-token prefill chunk below;
-# the earlier GPU-table trial used 0.80 and 8192-token chunks.
-export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0
+# TP4 needs host tables to leave room for GPU KV and prefill workspaces.
+# Anonymous per-rank mappings can use H200's madvise huge pages; shared
+# mappings cannot because shared-memory huge pages are disabled on the nodes.
+# TP8 keeps the same FP8 tables and E8M0 scales on GPU (~23.6 GiB/rank).
+case "$TP" in
+    4)
+        export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
+        export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
+        ;;
+    8)
+        export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0
+        ;;
+    *)
+        echo "Unsupported H200 STP tensor parallel size: $TP" >&2
+        exit 1
+        ;;
+esac
 
 # Allow subagent fan-out above the session count, within the captured batch.
 CUDA_GRAPH_MAX_BS=64
