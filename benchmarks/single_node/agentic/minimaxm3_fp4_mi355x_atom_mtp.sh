@@ -141,7 +141,7 @@ case "$KV_OFFLOAD_BACKEND" in
 
         case "$OFFLOAD_TIER" in
             cpu256)
-                export LMCACHE_MAX_LOCAL_CPU_SIZE=256
+                export LMCACHE_MAX_LOCAL_CPU_SIZE="$((TOTAL_CPU_DRAM_GB / TP))"
                 export LMCACHE_CHUNK_SIZE=256
                 # ATOM_SLRU needs rocm/atom-dev:nightly_202609140645-lirzhang-triton-build or later.
                 export ATOM_PREFIX_CACHE_POLICY=slru
