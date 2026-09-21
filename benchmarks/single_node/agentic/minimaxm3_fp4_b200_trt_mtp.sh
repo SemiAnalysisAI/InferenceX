@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
-# MiniMax-M3 NVFP4 B200 AgentX with EAGLE3-GQA. Throughput uses forced
-# synthetic acceptance while EVAL_ONLY respects the verifier's actual result.
-# DRAM KV offload uses TRT-LLM's native secondary-memory pool, with the fixed
-# kv_cache_config.host_cache_size documented below.
-# KV_OFFLOADING / KV_OFFLOAD_BACKEND come from the master config through
-# benchmark-tmpl.yml; do not override them here.
+# MiniMax-M3 NVFP4 on B200 with TRT-LLM EAGLE3-GQA. DRAM KV offload uses
+# TRT-LLM's native secondary-memory pool; kv_cache_config.host_cache_size is
+# pinned per topology in ser.yaml (200 GiB at TP8, 250 GiB at TP4), not derived
+# from TOTAL_CPU_DRAM_GB. KV_OFFLOADING / KV_OFFLOAD_BACKEND come from the
+# master config; do not override them here.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
-
-export EVAL_FRAMEWORK="${EVAL_FRAMEWORK:-lm-eval}"
 
 check_env_vars MODEL TP CONC PORT KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EVAL_ONLY
 
@@ -19,8 +16,6 @@ DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3-GQA"
 NUM_SPEC_TOKENS=3
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/prometheus/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="trtllm_kv_cache_utilization"
-# Golden AL for the GQA draft head: golden_al_distribution/minimaxm3_eagle3_gqa.yaml
-# minimax-m3.thinking_on[3].
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -45,17 +40,13 @@ fi
 nvidia-smi
 resolve_trace_source
 install_agentic_deps
-# rc23 gates Prometheus and its expensive per-step timing collector behind the
-# same option. Keep Prometheus request/iteration metrics without timing payloads.
+# rc23 gates Prometheus and its expensive per-step timing collector behind one
+# option; keep request/iteration metrics without timing payloads.
 disable_trtllm_detailed_perf_metrics
 
 # BFCL's stock OpenAI client sends the standard `store=false` field. TRT-LLM
 # 1.3 rejects that field even though this server never persists responses.
 python3 "$(dirname "$0")/../../../runners/patch_trtllm_chat_store.py"
-
-# kv_cache_config.host_cache_size is pinned per topology in ser.yaml below
-# (200 GiB at TP8, 250 GiB at TP4 -- see $mem_off), NOT derived from
-# TOTAL_CPU_DRAM_GB.
 
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
@@ -155,8 +146,8 @@ export TLLM_LOG_LEVEL=INFO
 export TRTLLM_SERVER_DISABLE_GC=1
 export TRTLLM_WORKER_DISABLE_GC=1
 export TLLM_PROFILE_LOG_RANKS=all
-# aiperf resolves its tokenizer by HF repo id ($MODEL), not by path, so do NOT
-# set HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE here.
+# aiperf resolves its tokenizer by HF repo id ($MODEL), so do not set
+# HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE here.
 export PYTHONNOUSERSITE=1
 export TRTLLM_ENABLE_PDL=1
 export ENROOT_ALLOW_DEV=yes
@@ -167,9 +158,8 @@ export HF_HUB_DISABLE_PROGRESS_BARS=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export TRTLLM_SERVE_ENABLE_MSGSPEC=1
 export TRTLLM_TORCH_COMPILE_CONTEXT_ONLY=1
-# Throughput pins the committed MiniMax-M3 EAGLE3-GQA golden AL to 2.78:
-# one target token plus 1.78 accepted draft tokens. The force knob overwrites
-# the verifier's accepted-token count, so accuracy evals must leave it disabled.
+# Golden AL 2.78 = one target token plus 1.78 accepted draft tokens. The force
+# knob overwrites the verifier's count, so accuracy evals must leave it unset.
 if [ "$EVAL_ONLY" = "true" ]; then
     unset TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS
 else
@@ -177,7 +167,6 @@ else
 fi
 
 { set +x; } 2>/dev/null
-# Launch through mpirun, as every other TRT-LLM benchmark in this repo does.
 TRTLLM_CMD=(
     mpirun -n 1 --oversubscribe --allow-run-as-root
     trtllm-serve "$MODEL_PATH"

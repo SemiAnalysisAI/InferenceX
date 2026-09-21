@@ -6,13 +6,12 @@ import sys
 import time
 import traceback
 from dataclasses import dataclass, field
-from typing import List, Optional, Union
+from typing import Any
 
 import aiohttp
 import huggingface_hub.constants
 from tqdm.asyncio import tqdm
-from transformers import (AutoTokenizer, PreTrainedTokenizer,
-                          PreTrainedTokenizerFast)
+from transformers import AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizerFast
 
 AIOHTTP_TIMEOUT = aiohttp.ClientTimeout(total=6 * 60 * 60)
 
@@ -24,11 +23,11 @@ class RequestFuncInput:
     prompt_len: int
     output_len: int
     model: str
-    model_name: Optional[str] = None
+    model_name: str | None = None
     best_of: int = 1
-    logprobs: Optional[int] = None
-    extra_body: Optional[dict] = None
-    multi_modal_content: Optional[dict] = None
+    logprobs: int | None = None
+    extra_body: dict | None = None
+    multi_modal_content: dict | None = None
     ignore_eos: bool = False
 
 
@@ -39,8 +38,7 @@ class RequestFuncOutput:
     latency: float = 0.0
     output_tokens: int = 0
     ttft: float = 0.0  # Time to first token
-    itl: List[float] = field(
-        default_factory=list)  # List of inter-token latencies
+    itl: list[float] = field(default_factory=list)  # List of inter-token latencies
     tpot: float = 0.0  # avg next-token latencies
     prompt_len: int = 0
     error: str = ""
@@ -48,13 +46,12 @@ class RequestFuncOutput:
 
 async def async_request_tgi(
     request_func_input: RequestFuncInput,
-    pbar: Optional[tqdm] = None,
+    pbar: tqdm | None = None,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
-    assert api_url.endswith("generate_stream")
+    assert api_url.endswith("generate_stream")  # noqa: S101
 
-    async with aiohttp.ClientSession(trust_env=True,
-                                     timeout=AIOHTTP_TIMEOUT) as session:
+    async with aiohttp.ClientSession(trust_env=True, timeout=AIOHTTP_TIMEOUT) as session:
         params = {
             "best_of": request_func_input.best_of,
             "max_new_tokens": request_func_input.output_len,
@@ -98,8 +95,7 @@ async def async_request_tgi(
 
                         # Decoding phase
                         else:
-                            output.itl.append(timestamp -
-                                              most_recent_timestamp)
+                            output.itl.append(timestamp - most_recent_timestamp)
 
                         most_recent_timestamp = timestamp
 
@@ -109,7 +105,7 @@ async def async_request_tgi(
                 else:
                     output.error = response.reason or ""
                     output.success = False
-        except Exception:
+        except Exception:  # noqa: BLE001
             output.success = False
             exc_info = sys.exc_info()
             output.error = "".join(traceback.format_exception(*exc_info))
@@ -121,14 +117,13 @@ async def async_request_tgi(
 
 async def async_request_trt_llm(
     request_func_input: RequestFuncInput,
-    pbar: Optional[tqdm] = None,
+    pbar: tqdm | None = None,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
-    assert api_url.endswith("generate_stream")
+    assert api_url.endswith("generate_stream")  # noqa: S101
 
-    async with aiohttp.ClientSession(trust_env=True,
-                                     timeout=AIOHTTP_TIMEOUT) as session:
-        assert request_func_input.best_of == 1
+    async with aiohttp.ClientSession(trust_env=True, timeout=AIOHTTP_TIMEOUT) as session:
+        assert request_func_input.best_of == 1  # noqa: S101
         payload = {
             "accumulate_tokens": True,
             "text_input": request_func_input.prompt,
@@ -153,8 +148,7 @@ async def async_request_trt_llm(
                         if not chunk_bytes:
                             continue
 
-                        chunk = chunk_bytes.decode("utf-8").removeprefix(
-                            "data:")
+                        chunk = chunk_bytes.decode("utf-8").removeprefix("data:")
 
                         data = json.loads(chunk)
                         output.generated_text += data["text_output"]
@@ -166,8 +160,7 @@ async def async_request_trt_llm(
 
                         # Decoding phase
                         else:
-                            output.itl.append(timestamp -
-                                              most_recent_timestamp)
+                            output.itl.append(timestamp - most_recent_timestamp)
 
                         most_recent_timestamp = timestamp
 
@@ -177,7 +170,7 @@ async def async_request_trt_llm(
                 else:
                     output.error = response.reason or ""
                     output.success = False
-        except Exception:
+        except Exception:  # noqa: BLE001
             output.success = False
             exc_info = sys.exc_info()
             output.error = "".join(traceback.format_exception(*exc_info))
@@ -189,11 +182,10 @@ async def async_request_trt_llm(
 
 async def async_request_deepspeed_mii(
     request_func_input: RequestFuncInput,
-    pbar: Optional[tqdm] = None,
+    pbar: tqdm | None = None,
 ) -> RequestFuncOutput:
-    async with aiohttp.ClientSession(trust_env=True,
-                                     timeout=AIOHTTP_TIMEOUT) as session:
-        assert request_func_input.best_of == 1
+    async with aiohttp.ClientSession(trust_env=True, timeout=AIOHTTP_TIMEOUT) as session:
+        assert request_func_input.best_of == 1  # noqa: S101
 
         payload = {
             "prompt": request_func_input.prompt,
@@ -211,8 +203,7 @@ async def async_request_deepspeed_mii(
 
         st = time.perf_counter()
         try:
-            async with session.post(url=request_func_input.api_url,
-                                    json=payload) as response:
+            async with session.post(url=request_func_input.api_url, json=payload) as response:
                 if response.status == 200:
                     parsed_resp = await response.json()
                     output.latency = time.perf_counter() - st
@@ -221,7 +212,7 @@ async def async_request_deepspeed_mii(
                 else:
                     output.error = response.reason or ""
                     output.success = False
-        except Exception:
+        except Exception:  # noqa: BLE001
             output.success = False
             exc_info = sys.exc_info()
             output.error = "".join(traceback.format_exception(*exc_info))
@@ -233,18 +224,16 @@ async def async_request_deepspeed_mii(
 
 async def async_request_openai_completions(
     request_func_input: RequestFuncInput,
-    pbar: Optional[tqdm] = None,
+    pbar: tqdm | None = None,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
-    assert api_url.endswith(
-        ("completions", "profile")
-    ), "OpenAI Completions API URL must end with 'completions' or 'profile'."
+    assert api_url.endswith(("completions", "profile")), (  # noqa: S101
+        "OpenAI Completions API URL must end with 'completions' or 'profile'."
+    )
 
-    async with aiohttp.ClientSession(trust_env=True,
-                                     timeout=AIOHTTP_TIMEOUT) as session:
+    async with aiohttp.ClientSession(trust_env=True, timeout=AIOHTTP_TIMEOUT) as session:
         payload = {
-            "model": request_func_input.model_name \
-                if request_func_input.model_name else request_func_input.model,
+            "model": request_func_input.model_name or request_func_input.model,
             "prompt": request_func_input.prompt,
             "temperature": 0.0,
             "best_of": request_func_input.best_of,
@@ -259,9 +248,7 @@ async def async_request_openai_completions(
             payload["ignore_eos"] = request_func_input.ignore_eos
         if request_func_input.extra_body:
             payload.update(request_func_input.extra_body)
-        headers = {
-            "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}"
-        }
+        headers = {"Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}"}
 
         output = RequestFuncOutput()
         output.prompt_len = request_func_input.prompt_len
@@ -270,8 +257,7 @@ async def async_request_openai_completions(
         st = time.perf_counter()
         most_recent_timestamp = st
         try:
-            async with session.post(url=api_url, json=payload,
-                                    headers=headers) as response:
+            async with session.post(url=api_url, json=payload, headers=headers) as response:
                 if response.status == 200:
                     first_chunk_received = False
                     async for chunk_bytes in response.content:
@@ -279,8 +265,7 @@ async def async_request_openai_completions(
                         if not chunk_bytes:
                             continue
 
-                        chunk = chunk_bytes.decode("utf-8").removeprefix(
-                            "data: ")
+                        chunk = chunk_bytes.decode("utf-8").removeprefix("data: ")
                         if chunk != "[DONE]":
                             data = json.loads(chunk)
 
@@ -300,27 +285,26 @@ async def async_request_openai_completions(
 
                                 # Decoding phase
                                 else:
-                                    output.itl.append(timestamp -
-                                                      most_recent_timestamp)
+                                    output.itl.append(timestamp - most_recent_timestamp)
 
                                 most_recent_timestamp = timestamp
                                 generated_text += text or ""
                             elif usage := data.get("usage"):
-                                output.output_tokens = usage.get(
-                                    "completion_tokens")
+                                output.output_tokens = usage.get("completion_tokens")
                     if first_chunk_received:
                         output.success = True
                     else:
                         output.success = False
                         output.error = (
                             "Never received a valid chunk to calculate TTFT."
-                            "This response will be marked as failed!")
+                            "This response will be marked as failed!"
+                        )
                     output.generated_text = generated_text
                     output.latency = most_recent_timestamp - st
                 else:
                     output.error = response.reason or ""
                     output.success = False
-        except Exception:
+        except Exception:  # noqa: BLE001
             output.success = False
             exc_info = sys.exc_info()
             output.error = "".join(traceback.format_exception(*exc_info))
@@ -332,27 +316,22 @@ async def async_request_openai_completions(
 
 async def async_request_openai_chat_completions(
     request_func_input: RequestFuncInput,
-    pbar: Optional[tqdm] = None,
+    pbar: tqdm | None = None,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
-    assert api_url.endswith(
-        "chat/completions"
-    ), "OpenAI Chat Completions API URL must end with 'chat/completions'."
+    assert api_url.endswith("chat/completions"), (  # noqa: S101
+        "OpenAI Chat Completions API URL must end with 'chat/completions'."
+    )
 
-    async with aiohttp.ClientSession(trust_env=True,
-                                     timeout=AIOHTTP_TIMEOUT) as session:
+    async with aiohttp.ClientSession(trust_env=True, timeout=AIOHTTP_TIMEOUT) as session:
         content = request_func_input.prompt
         if request_func_input.multi_modal_content:
             content = [{"type": "text", "text": request_func_input.prompt}]
             content.append(request_func_input.multi_modal_content)
         payload = {
-            "model": request_func_input.model_name \
-                if request_func_input.model_name else request_func_input.model,
+            "model": request_func_input.model_name or request_func_input.model,
             "messages": [
-                {
-                    "role": "user",
-                    "content": content
-                },
+                {"role": "user", "content": content},
             ],
             "temperature": 0.0,
             "max_completion_tokens": request_func_input.output_len,
@@ -378,16 +357,14 @@ async def async_request_openai_chat_completions(
         st = time.perf_counter()
         most_recent_timestamp = st
         try:
-            async with session.post(url=api_url, json=payload,
-                                    headers=headers) as response:
+            async with session.post(url=api_url, json=payload, headers=headers) as response:
                 if response.status == 200:
                     async for chunk_bytes in response.content:
                         chunk_bytes = chunk_bytes.strip()
                         if not chunk_bytes:
                             continue
 
-                        chunk = chunk_bytes.decode("utf-8").removeprefix(
-                            "data: ")
+                        chunk = chunk_bytes.decode("utf-8").removeprefix("data: ")
                         if chunk != "[DONE]":
                             timestamp = time.perf_counter()
                             data = json.loads(chunk)
@@ -401,13 +378,11 @@ async def async_request_openai_chat_completions(
 
                                 # Decoding phase
                                 else:
-                                    output.itl.append(timestamp -
-                                                      most_recent_timestamp)
+                                    output.itl.append(timestamp - most_recent_timestamp)
 
                                 generated_text += content or ""
                             elif usage := data.get("usage"):
-                                output.output_tokens = usage.get(
-                                    "completion_tokens")
+                                output.output_tokens = usage.get("completion_tokens")
 
                             most_recent_timestamp = timestamp
 
@@ -417,7 +392,7 @@ async def async_request_openai_chat_completions(
                 else:
                     output.error = response.reason or ""
                     output.success = False
-        except Exception:
+        except Exception:  # noqa: BLE001
             output.success = False
             exc_info = sys.exc_info()
             output.error = "".join(traceback.format_exception(*exc_info))
@@ -428,19 +403,21 @@ async def async_request_openai_chat_completions(
 
 
 def get_model(pretrained_model_name_or_path: str) -> str:
-    if os.getenv('VLLM_USE_MODELSCOPE', 'False').lower() == 'true':
+    if os.getenv("VLLM_USE_MODELSCOPE", "False").lower() == "true":
         from modelscope import snapshot_download
 
-        model_path = snapshot_download(
+        return snapshot_download(
             model_id=pretrained_model_name_or_path,
             local_files_only=huggingface_hub.constants.HF_HUB_OFFLINE,
-            ignore_file_pattern=[".*.pt", ".*.safetensors", ".*.bin"])
+            ignore_file_pattern=[".*.pt", ".*.safetensors", ".*.bin"],
+        )
 
-        return model_path
     return pretrained_model_name_or_path
 
 
-def _fix_tokenizer_for_sglang(tokenizer, model_path):
+def _fix_tokenizer_for_sglang(
+    tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast, model_path: str
+) -> PreTrainedTokenizer | PreTrainedTokenizerFast:
     """Fix transformers v5 tokenizer to match sglang server-side behavior.
 
     Root cause: transformers v5 (>= 5.0) changed how tokenizers are loaded.
@@ -466,7 +443,7 @@ def _fix_tokenizer_for_sglang(tokenizer, model_path):
     import json
     from pathlib import Path
 
-    def _resolve(filename):
+    def _resolve(filename: str) -> str | None:
         """Return a filesystem path for `filename`, whether `model_path` is a
         local directory or an HF Hub repo id. Returns None and logs a warning
         on failure so we don't silently fail to apply the v5 fix."""
@@ -475,8 +452,9 @@ def _fix_tokenizer_for_sglang(tokenizer, model_path):
             return str(local)
         try:
             from huggingface_hub import hf_hub_download
+
             return hf_hub_download(repo_id=model_path, filename=filename)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(
                 f"v5 tokenizer fix: cannot resolve {filename} for {model_path!r} "
                 f"({type(e).__name__}: {e}); fix will not apply.",
@@ -489,6 +467,7 @@ def _fix_tokenizer_for_sglang(tokenizer, model_path):
         tok_file = _resolve("tokenizer.json")
         if tok_file is not None:
             from tokenizers import Tokenizer as RawTokenizer
+
             raw = RawTokenizer.from_file(tok_file)
             raw_pre = type(raw.pre_tokenizer).__name__ if raw.pre_tokenizer else None
             loaded_pre = type(backend.pre_tokenizer).__name__ if backend.pre_tokenizer else None
@@ -508,9 +487,13 @@ def _fix_tokenizer_for_sglang(tokenizer, model_path):
             config = json.load(f)
         tok_class = config.get("tokenizer_class", "")
         bos_eos_classes = {
-            "LlamaTokenizer", "LlamaTokenizerFast",
-            "CodeLlamaTokenizer", "CodeLlamaTokenizerFast",
-            "GemmaTokenizer", "GemmaTokenizerFast", "CohereTokenizerFast",
+            "LlamaTokenizer",
+            "LlamaTokenizerFast",
+            "CodeLlamaTokenizer",
+            "CodeLlamaTokenizerFast",
+            "GemmaTokenizer",
+            "GemmaTokenizerFast",
+            "CohereTokenizerFast",
         }
         if tok_class in bos_eos_classes:
             defaults = {"add_bos_token": True, "add_eos_token": False}
@@ -532,33 +515,32 @@ def get_tokenizer(
     pretrained_model_name_or_path: str,
     tokenizer_mode: str = "auto",
     trust_remote_code: bool = False,
-    **kwargs,
-) -> Union[PreTrainedTokenizer, PreTrainedTokenizerFast]:
+    **kwargs: Any,
+) -> PreTrainedTokenizer | PreTrainedTokenizerFast:
     if pretrained_model_name_or_path is not None and not os.path.exists(
-            pretrained_model_name_or_path):
-        pretrained_model_name_or_path = get_model(
-            pretrained_model_name_or_path)
+        pretrained_model_name_or_path
+    ):
+        pretrained_model_name_or_path = get_model(pretrained_model_name_or_path)
     if tokenizer_mode == "slow":
         if kwargs.get("use_fast", False):
-            raise ValueError(
-                "Cannot use the fast tokenizer in slow tokenizer mode.")
+            raise ValueError("Cannot use the fast tokenizer in slow tokenizer mode.")
         kwargs["use_fast"] = False
     if tokenizer_mode == "mistral":
         try:
             from vllm.transformers_utils.tokenizer import MistralTokenizer
         except ImportError as e:
-            raise ImportError("MistralTokenizer requires vllm package.\n"
-                              "Please install it with `pip install vllm` "
-                              "to use mistral tokenizer mode.") from e
-        return MistralTokenizer.from_pretrained(
-            str(pretrained_model_name_or_path))
-    else:
-        tokenizer = AutoTokenizer.from_pretrained(
-            pretrained_model_name_or_path,
-            trust_remote_code=trust_remote_code,
-            **kwargs,
-        )
-        return _fix_tokenizer_for_sglang(tokenizer, pretrained_model_name_or_path)
+            raise ImportError(
+                "MistralTokenizer requires vllm package.\n"
+                "Please install it with `pip install vllm` "
+                "to use mistral tokenizer mode."
+            ) from e
+        return MistralTokenizer.from_pretrained(str(pretrained_model_name_or_path))
+    tokenizer = AutoTokenizer.from_pretrained(
+        pretrained_model_name_or_path,
+        trust_remote_code=trust_remote_code,
+        **kwargs,
+    )
+    return _fix_tokenizer_for_sglang(tokenizer, pretrained_model_name_or_path)
 
 
 ASYNC_REQUEST_FUNCS = {

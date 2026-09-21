@@ -1,0 +1,45 @@
+name: Workflow security
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: &workflow-paths
+      - '.github/workflows/*.yml'
+      - '.github/workflows/*.yaml'
+      - '.github/dependabot.yml'
+      - '.github/dependabot.yaml'
+      - '**/action.yml'
+      - '**/action.yaml'
+      - '**/.pre-commit-*.yml'
+      - '**/.pre-commit-*.yaml'
+      - '**/zizmor.yml'
+      - '**/zizmor.yaml'
+  push:
+    branches: [main]
+    paths: *workflow-paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zizmor-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Zizmor
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Audit GitHub Actions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          uvx --exclude-newer PT12H zizmor@latest
+          --persona auditor --strict-collection --collect all --no-config
+          --format github --no-progress .

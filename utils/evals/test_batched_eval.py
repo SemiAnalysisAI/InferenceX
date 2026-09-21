@@ -24,6 +24,7 @@ def _run_batched_eval(
         "BENCHMARK_LIB": str(benchmark_lib),
         "TRACE_PATH": str(trace_path),
         "FAILING_CONC": failing_conc,
+        "IS_AGENTIC": "0",
     }
     script = r'''
 source "$BENCHMARK_LIB"

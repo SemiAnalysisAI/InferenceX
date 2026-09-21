@@ -10,17 +10,36 @@
 
 ## PR 审阅流程
 
+每个 PR 描述都必须包含 **AI model disclosure（AI 模型使用说明）** 部分，列出准备该 PR 时实际使用的完整模型名称/版本及各自的工作内容，包括委派给其他 agent 的工作。不能只写 Claude Code、Cursor 或 Perplexity Computer 等工具名。模型标识应以运行环境提供的信息为准，不得猜测；如果运行环境未提供确切模型，须明确说明无法确认。完全未使用 AI 的 PR 须填写 `No AI used`。后续修改使用其他模型时，须同步更新说明。
+
 1. 打开你的 PR 并通过 PR 验证。添加 `full-sweep-fail-fast` 标签，强烈推荐使用此标签，因为变更有问题时每个矩阵最多浪费一个任务，而不是整个扇出。仅当需要任务在失败后继续运行时才使用 `full-sweep-enabled`。让基准测试 sweep 运行，并在 PR 的某个 commit 上获得全绿的完整 sweep，包括 evals。
-2. 向你所在公司的 [CODEOWNER](.github/CODEOWNERS) 请求审阅。
-3. CODEOWNER 审阅后在批准评论中填写 **PR Review Checklist** 签署（见下文）。
-4. 只有在清单签署发布之后，才应在 Slack 上联系核心维护者进行最终批准。
-5. 由授权维护者发布 `/reuse-sweep-run`（见下文），然后通过 reuse 路径合并 PR。
+2. 若修改的文件归属于仓库管理员及 `@SemiAnalysisAI/core` 之外的 CODEOWNER，请联系一位有资格的 [CODEOWNER](.github/CODEOWNERS) 审阅，并在批准评论中填写 **PR Review Checklist** 签署（见下文）。
+3. 在 Slack 上联系核心维护者进行最终批准；若要求清单签署，请先完成签署。
+4. 由授权维护者发布 `/use <run_id>`（见下文），然后通过 reuse 路径合并 PR。
 
 **性能变更日志要求：** 凡是可能影响基准测试性能的变更，以及任何配方（recipe）的新增或修改，都**必须**在 `perf-changelog.yaml` 文件的物理末尾追加一个新条目。历史条目**严禁**编辑。
 
+## Draft 模型精度
+
+投机解码提交必须使用原始、未量化的 draft 权重，并保留其原生精度。此规则适用于内嵌的 MTP/NextN/EAGLE draft head 及独立 draft 模型（包括 DSpark），覆盖所有硬件厂商和框架。相对于参考实现，不得对 draft 精度进行任何更改，包括量化、降精度、升精度、同位宽 dtype 转换（如 BF16 转 FP16）或混合精度覆盖设置。此要求涵盖 draft 权重、激活、计算及 draft KV cache，无论更改发生在离线、加载时还是服务运行时；同样不得替换为经过精度转换的 draft checkpoint。
+
+审阅者必须核实 draft 的实际运行精度，不能只看启动参数。检查 checkpoint 元数据、量化排除项、环境变量、锁定镜像中的框架默认行为，以及从 target 模型继承的量化设置。Target/verifier 模型仍可在满足现有 eval 要求的前提下量化，但其量化不能同时作用于 draft 组件。不得仅凭 target checkpoint 的名称或精度标签推断 draft 精度。
+
+此规则涵盖 `--speculative-draft-model-quantization quark_mxfp4`、`SGLANG_GLM_NEXTN_MOE_PTPC=1` 等会量化 draft 计算的设置。上游配方、通过 evals、声称接受长度（AL）未变，或重新测得的 AL 曲线，都不能作为豁免理由。AgentX 的合成接受也不能证明 draft 精度保持不变。
+
+涉及投机解码的改动，CODEOWNER 必须在 Additional detail section 中注明 draft checkpoint 及其 revision（或内嵌 head）、原生精度和实际运行精度，并提供用于确认 draft 权重和精度均未改变的元数据或锁定版本实现。无法核实精度时，该条目不满足要求。参见[审阅清单](docs/PR_REVIEW_CHECKLIST_zh.md)及[验证器检查 13](.github/codeowner-signoff-verify-prompt.md#check-13--draft-weights-and-precision-are-unchanged)。
+
+此要求与 [MLPerf Inference Rules 附录 C：Speculative Decoding](https://github.com/mlcommons/inference_policies/blob/ff7edba545fded369e7e7e3d5a2f0bab4a95eece/inference_rules.adoc#appendix-c-speculative-decoding) 保持参考 head 精度的原则相似。该规则要求参考 MTP head 使用提供时的相同精度（"at the same precision as provided"），并禁止参考 head 权重量化及其他人为操纵接受率的行为。所引用的 MLPerf 版本对特定量化边缘工作负载设有例外，InferenceX 不采用该例外。此处仅比较保留 draft 权重和精度的原则，不引入 MLPerf 的允许模型列表、投机解码配置或接受率测试方法。
+
 ## PR Review Checklist（CODEOWNER 签署）
 
-CODEOWNER 批准 PR 时，必须在批准评论中填写最新的 [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md)（[中文说明](docs/PR_REVIEW_CHECKLIST_zh.md)）模板。
+CODEOWNER 自动验证目前仅供审阅参考。工作流会核验提交的清单并更新同一条裁定评论，不再发布提交状态。GitHub 单独设置的 Core 团队和 CODEOWNER 批准要求仍然有效，除非有权限的维护者使用绕过权限。
+
+仅当修改的文件存在仓库管理员及 `@SemiAnalysisAI/core` 之外的 CODEOWNER 时，才要求签核。归属以 PR 目标分支当前最新提交中的 CODEOWNERS 为准：先解析该分支的 SHA，再使用同一 SHA 校验并读取 CODEOWNERS，最后匹配的规则生效；重命名同时检查旧路径和新路径。归属规则不从 PR 的 Head 或其记录中可能过期的基础提交读取。同一文件有 core 团队作为 owner，不会豁免其他 owner。个人管理员必须同时拥有仓库 `permission: admin` 和 `role_name: admin`；其他团队和邮箱 owner 均要求签核。归属信息缺失或权限查询失败不能授予豁免。不涉及此类 owner 的改动会跳过验证。
+
+由一名符合条件的 CODEOWNER 审阅者在批准评论中填写最新的 [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md)（[中文说明](docs/PR_REVIEW_CHECKLIST_zh.md)）模板。
+
+**每个 PR 只需一名符合条件的 CODEOWNER 审阅者发布清单。** 发布前先检查是否已有清单；其他审阅者无需重复发布。需要更正条目、补充证据或重试验证时，原审阅者必须**编辑自己已有的清单评论**，不要另发一条。只有原评论被删除时才创建替代评论。
 
 友情提醒。请**正确**遵循最新的清单模板：
 
@@ -29,19 +48,24 @@ CODEOWNER 批准 PR 时，必须在批准评论中填写最新的 [PR_REVIEW_CHE
 
   > As a PR reviewer and CODEOWNER, I have reviewed this and have:
 
-  我们的 CI 验证工作流 [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml) 正是通过这句话触发的。**如果你的批准评论没有遵循清单模板，包括这句话，签署验证 CI 将完全不会触发**，你的签署也不会计入合并要求。
+  我们的 CI 验证工作流 [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml) 正是通过这句话触发的。**如果批准评论缺少这句话，工作流就不会核验该清单。**
 - 签署可以以普通会话评论、review 总结或行内 review 评论的形式发布。这三种方式都会触发验证。
+- 请在 PR 处于打开且非草稿状态时提交或编辑清单。推送、重新打开或退出草稿状态不会触发验证。如果合并冲突期间遗漏了 Review 事件，请在解决冲突后编辑已有清单或手动分发工作流来重试。
+- 启动 Claude 要求触发者为具有合格仓库写权限的人类用户。
 - 请在 "Additional detail section" 中填写清单要求的链接（验证/评测工作流运行、对应的 [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR，以及任何例外理由）。
 
-签署发布后，CI 会独立复核决定合并的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、`/reuse-sweep-run` 命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack，以及投机解码是否使用 chat template。随后，CI 会在 PR 上发布裁定评论。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
+签署发布后，CI 会独立复核审阅清单中的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、复用命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack、投机解码是否使用 chat template，以及 draft 模型和 draft head 的权重与精度是否保持不变。随后，CI 会为整个 PR 创建或更新同一条裁定评论，并注明实际评估的 SHA。未通过的条目直接显示；已通过和不适用（N/A）的条目统一放入折叠区域。旧版按提交生成的裁定评论会被复用；如果评论已删除，下次验证会创建替代评论。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
 
-## 使用 `/reuse-sweep-run` 在合并时复用 PR 的全绿 sweep
+裁定只记录实际评估的提交，不会将批准延续到后续提交。需要重新评估时，由原审阅者编辑已有清单，或由有权限的协作者传入 `pr-number` 及其 `comment_url`（两者必须指向同一 PR）手动分发 `codeowner-signoff-verify.yml`。流程会更新同一条裁定评论。
+
+## 使用 `/use` 在合并时复用 PR 的全绿 sweep
 
 完整基准测试 sweep 花费昂贵的 GPU 时间，且 runner 由所有打开的 PR 共享。如果不复用，一个已批准 PR 的 sweep 将运行**两次**，一次用于 PR 验证，另一次在合并后于 `main` 上运行。reuse 路径避免了重复运行：
 
-- 当你的 PR 拥有符合条件的全绿完整 sweep 后，授权维护者（`OWNER`/`MEMBER`/`COLLABORATOR`）在 PR 上评论 `/reuse-sweep-run`（也可固定某次运行：`/reuse-sweep-run <run_id>`）。
+- 当你的 PR 拥有符合条件的全绿完整 sweep 后，授权维护者（`OWNER`/`MEMBER`/`COLLABORATOR`）在 PR 上评论 `/use <run_id>` 来指定该 Run。命令和 Run ID 必须放在同一行。
+- `/reuse-sweep-run <run_id>` 仍受支持，行为完全相同。不带 ID 的 `/reuse-sweep-run` 会自动选择源 Run；不带 ID 的 `/use` 会被拒绝。
 - 合并到 `main` 的运行随后会验证并摄取该 PR sweep 的 artifacts，而不是在 `main` 上重新运行整个 sweep。
-- **这为每个人减少了 CI 排队时间。** 每次复用合并都会为其他 PR 释放数小时的 GPU runner 时间，因此请优先选择 reuse 路径，而不是不带它直接合并。仅有全绿 sweep 还不够。`/reuse-sweep-run` 评论必须在记录中（签署验证会检查这一点），否则 `main` 会静默地重新运行完整 sweep。
+- **这为每个人减少了 CI 排队时间。** 每次复用合并都会为其他 PR 释放数小时的 GPU runner 时间，因此请优先选择 reuse 路径，而不是不带它直接合并。仅有全绿 sweep 还不够。复用命令必须在评论记录中（签署验证会检查这一点），否则 `main` 会静默地重新运行完整 sweep。
 - 复用不要求保留 sweep 标签。机器人会在命令被接受时添加 👍，拒绝时添加 👎，详情见 Actions 运行摘要；合并时仍会重新验证源产物。
 - `utils/merge_with_reuse.sh <pr-number>` 是受支持的合并路径。它会发布命令、将分支与 `main` 同步、等待检查并 squash 合并。资格详情见 [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
 

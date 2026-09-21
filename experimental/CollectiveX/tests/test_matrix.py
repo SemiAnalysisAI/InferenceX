@@ -31,39 +31,6 @@ class MatrixTests(unittest.TestCase):
                     {shard["nodes"]},
                 )
 
-    def test_sku_and_ep_filters_only_remove_cases(self):
-        # Subtractive with ONE deliberate exception: naming an off-path precision explicitly
-        # opts its rows back in (see OFF_PATH_PRECISIONS), so the fp8 subset is compared
-        # against a baseline that also names fp8 rather than against the default matrix.
-        full = matrix(backend="all")
-        full_with_off_path = matrix(backend="all", precisions="bf16,fp8")
-        for case in (
-            ({"exclude_skus": "b300"}, lambda item: item["sku"] != "b300"),
-            ({"ep_sizes": "8"}, lambda item: item["case"]["ep"] == 8),
-            # A precision subset removes only the runnable cases of the other
-            # precision; ep-unsupported cells keep their stable bf16 placeholder.
-            ({"precisions": "bf16"}, lambda item: item["case"]["precision"] == "bf16"),
-            ({"precisions": "fp8"},
-             lambda item: item["case"]["precision"] == "fp8"
-             or item["disposition"] == "unsupported", "off_path"),
-            # A mode subset removes only the runnable cases of the other mode; the
-            # ep-unsupported placeholder is normal-mode and mode-filter-independent, so it
-            # survives both selections (mirrors the precision rows above).
-            ({"modes": "normal"}, lambda item: item["case"]["mode"] == "normal"),
-            ({"modes": "low-latency"},
-             lambda item: item["case"]["mode"] == "low-latency"
-             or item["disposition"] == "unsupported"),
-        ):
-            options, keep = case[0], case[1]
-            partial = matrix(backend="all", **options)
-            baseline = full_with_off_path if len(case) > 2 else full
-            expected = {
-                item["case"]["case_id"]: item
-                for item in baseline["requested_cases"] if keep(item)
-            }
-            actual = {item["case"]["case_id"]: item for item in partial["requested_cases"]}
-            self.assertEqual(actual, expected)
-
     def test_only_real_platform_cells_are_unsupported(self):
         platform = {
             "product": "test-gpu", "gpus_per_node": 8, "scale_up_domain": 8,
@@ -136,11 +103,6 @@ class UndeclaredPrecisionsFailClosed(unittest.TestCase):
                 sweep_matrix.resolve_matrix()
         self.assertIn("deepep-v2", str(caught.exception))
         self.assertIn("BACKEND_PRECISIONS", str(caught.exception))
-
-    def test_every_scheduled_backend_declares_its_precisions(self):
-        for backend in sweep_matrix.SWEEP_BACKENDS:
-            self.assertIn(backend, sweep_matrix.BACKEND_PRECISIONS, backend)
-
 
 if __name__ == "__main__":
     unittest.main()

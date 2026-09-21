@@ -8,29 +8,36 @@
 
 当相应硬件 AI 芯片公司的 [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) 审阅并批准其相关 PR 时，请在批准评论中填写以下表单，然后再联系核心维护者进行最终批准。
 
+**每个 PR 只需一名符合条件的 CODEOWNER 审阅者发布清单。** 发布前先检查是否已有清单；其他审阅者无需重复发布。需要更正条目、补充证据或重试验证时，原审阅者必须**编辑自己已有的清单评论**，不要另发一条。只有原评论被删除时才创建替代评论。
+
 我们欢迎 InferenceX 合作伙伴与社区提交 PR，对本清单进行符合 InferenceX 原则的合理增补或删减。总体原则是：删除一条准则的流程应当与新增一条准则同样容易。
 
 我们同样欢迎 InferenceX 合作伙伴与机器学习社区改进 [codeowner-signoff-verify.yml](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml)（独立复核这些签署的 CI 机器人），使其更加严谨。
+
+自动发布程序会拒绝不完整或前后矛盾的验证结果。每项检查必须且只能出现一次，总体裁定必须与各项检查结果一致；否则需要重试验证。
 
 > **重要：模板请保持英文原文，原样复制粘贴，不要翻译。** CI 签署验证工作流 [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml) 通过开头语句 "As a PR reviewer and CODEOWNER, I have reviewed this and have" 触发；模板被改写或翻译后，签署验证 CI 将不会触发。
 
 ## 模板（请复制英文原文）
 ```
 As a PR reviewer and CODEOWNER, I have reviewed this and have:
-- [ ] Verified that as of the moment of typing this, this is the latest version of [PR_REVIEW_CHECKLIST.md](https://github.com/SemiAnalysisAI/InferenceX/edit/main/docs/PR_REVIEW_CHECKLIST.md)
+- [ ] Verified that as of the moment of typing this, this is the latest version of [PR_REVIEW_CHECKLIST.md](https://github.com/SemiAnalysisAI/InferenceX/blob/main/docs/PR_REVIEW_CHECKLIST.md)
 - [ ] Verified that the general code quality meets the InferenceX standard and does not make the code quality any worse.
 - [ ] Verified that this PR has passed PR validation. Please link to GitHub Action workflow that shows this.
 - [ ] Verified that this PR passes evals.  Please link to GitHub Action workflow that shows this.
 - [ ] Verified that speculative decoding PRs uses chat templates to align the AL distribution to real world
+- [ ] Verified that all draft models and heads retain their original weights and precision, with evidence in the additional detail section. No quantization or precision changes are allowed, regardless of eval results or AL. See [Draft-model precision](https://github.com/SemiAnalysisAI/InferenceX/blob/main/CONTRIBUTING.md#draft-model-precision) for details and the MLPerf comparison.
 - [ ] For agentic workloads: verified that speculative-decoding configs (EAGLE / MTP / draft models) run with simulated synthetic acceptance, with the acceptance-length value taken from the committed golden AL curve in [golden_al_distribution/](https://github.com/SemiAnalysisAI/InferenceX/tree/main/golden_al_distribution) for that model, thinking mode, and draft length. A submission may choose any supported draft length, but it may not substitute a different acceptance target.
 - [ ] Verified against the current [MODELS.md](https://github.com/SemiAnalysisAI/InferenceX/blob/main/MODELS.md) that this PR does not submit a deprecated model, scenario, or model-scenario combination.
-- [ ] Verified that the model architecture isn't changed with benchmark hacks like using --hf-overrides to skipping indexer for every x layers on models that don't natively support this. As a general rule, we won't accept optimizations that reduces the number of model architecture FLOPs. Anything that makes that same computation run faster is fair game; FLOPs at lower precisions is fine, given that the config passes private evals. As an general north star princple, we should only use optimizations which is used in production by customers that care about accuracy
+- [ ] Verified that the model architecture isn't changed with benchmark hacks like using --hf-overrides to skipping indexer for every x layers on models that don't natively support this. As a general rule, we won't accept optimizations that reduces the number of model architecture FLOPs. Anything that makes that same computation run faster is fair game; target/verifier FLOPs at lower precisions is fine, given that the config passes private evals, but this does not permit changing draft-model or draft-head precision. As an general north star princple, we should only use optimizations which is used in production by customers that care about accuracy
 - [ ] If an company claims that they support vLLM/SGLang as first class LLM inference engines on their hardware, I have verified that the respective vLLM submission made using upstream https://hub.docker.com/u/vllm docker repo, upstream SGLang https://hub.docker.com/u/lmsysorg docker repo. The only exceptions are for new hardware, such as MI455X UALoE72, Vera Rubin NVL72, Rubin NVL8, etc., and for new model architectures where there is an actual reason why vLLM/SGLang does not fundamentally support them yet as supported by vLLM/SGLang community maintainers
 - [ ] If an company claims that they support vLLM/SGLang as first class upstream in-tree LLM inference engines on their hardware, I have have verified that the respective vLLM/SGLang submission has been made before additional frameworks (TRT-LLM, ATOM, etc.). The only exceptions are for new hardware, such as MI455X UALoE72, Vera Rubin NVL72, Rubin NVL8, etc., and for new model architectures where there is an actual reason why vLLM/SGLang does not fundamentally support them yet.
-- [ ] Verified that the single-node recipes are similar to the official [vLLM recipes](https://recipes.vllm.ai/) and/or the[SGLang cookbook](https://docs.sglang.io/cookbook/intro):
-  - [ ] If they are not, I have verified that a PR has been opened in [vLLM recipe repo](https://github.com/vllm-project/recipes) or [SGLang repo](https://github.com/sgl-project/sglang/tree/main/docs_new) and linked it below in the additional detail section:
+- [ ] Verified that every single-node vLLM/SGLang recipe in this PR is documented in the official [vLLM recipes](https://recipes.vllm.ai/) and/or the [SGLang cookbook](https://docs.sglang.io/cookbook/intro):
+  - [ ] I linked the corresponding upstream PR in the [vLLM recipe repo](https://github.com/vllm-project/recipes) or [SGLang repo](https://github.com/sgl-project/sglang/tree/main/docs_new) and verified that it is **MERGED** before this InferenceX PR merges. An opened, draft, or closed-without-merge upstream PR does not satisfy this requirement. If the matching recipe was already published, I linked the published recipe/cookbook page in the additional detail section below.
 - [ ] Verified that this PR does not patch the inference engine or serving stack — the pinned image must run as shipped. This covers .patch files / git apply / patch, inline patches embedded in benchmark scripts (e.g. a python3/sed heredoc that rewrites installed engine sources before serving), in-place edits of site-packages, monkey-patching, overwriting container files, and installing forked/rebuilt engine wheels on top of the pinned image. The only exception is a patch covered by a filled-out waiver at [docs/waiver/](https://github.com/SemiAnalysisAI/InferenceX/tree/main/docs/waiver)`<PR_NUMBER>.md` — named after the PR that introduces the patch and filed in that same PR, stating what is patched, why the unmodified upstream image cannot run this benchmark, the upstream PR/issue link, and the removal plan — which I have linked below in the additional detail section.
+- [ ] If this PR uses `append-only: true`, verified that it only adds generated points or recipe variants inside a selected existing config/scenario and existing same-image visual curve: every previously generated point remains present with the same recipe, no prior point is removed or rerun, and every benchmark-affecting change in the complete diff can affect only the corresponding newly appended points (never an existing point), regardless of which file contains it.
 - [ ] If any of the above criteria cannot reasonably be satisfied, I have provided additional reasoning below.
+- [ ] Reported measured throughput/E2EL Pareto counts and evidence per affected curve (≥5 points strongly recommended). Below 5 or unverifiable: tag a core maintainer for review; recorded admin bypass required before merge. N/A if no curves are affected. [Details](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/codeowner-signoff-verify-prompt.md#check-14--pareto-coverage-recommendation-with-admin-exception).
 
 ### Additional detail section:
 - insert any additional info here
@@ -44,14 +51,17 @@ Signed: `FILL_IN_GITHUB_USERNAME`
 3. 已确认该 PR 通过了 PR 验证，并附上能证明这一点的 GitHub Action 工作流链接。
 4. 已确认该 PR 通过了 evals（准确性评测），并附上能证明这一点的 GitHub Action 工作流链接。
 5. 已确认投机解码（speculative decoding）PR 使用 chat template，使接受长度（AL）分布与真实场景对齐。
-6. 对 agentic 工作负载：已确认投机解码配置（EAGLE / MTP / draft 模型）启用了模拟合成接受（simulated synthetic acceptance），且接受长度（AL）取值来自 [golden_al_distribution/](https://github.com/SemiAnalysisAI/InferenceX/tree/main/golden_al_distribution) 中该模型、thinking 模式与 draft 长度对应的已提交黄金 AL 曲线。提交可选择任意受支持的 draft 长度，但不得替换为其他接受目标。
-7. 已确认此 PR 对照最新版 [MODELS.md](https://github.com/SemiAnalysisAI/InferenceX/blob/main/MODELS.md)，未提交已弃用的模型、场景或模型场景组合。
-8. 已确认模型架构未被基准测试 hack 更改，例如在不原生支持的模型上使用 `--hf-overrides` 每 x 层跳过 indexer。一般规则：不接受减少模型架构 FLOPs 的优化；让同样的计算跑得更快没有问题；更低精度的 FLOPs 也可以，前提是该配置通过私有 evals。北极星原则：只使用在意准确性的客户在生产中实际使用的优化。
-9. 如果公司声称在其硬件上将 vLLM/SGLang 作为一等 LLM 推理引擎支持，已确认相应 vLLM 提交使用上游 [vLLM docker 仓库](https://hub.docker.com/u/vllm)、SGLang 提交使用上游 [lmsysorg docker 仓库](https://hub.docker.com/u/lmsysorg)。唯一例外：新硬件（如 MI455X UALoE72、Vera Rubin NVL72、Rubin NVL8 等），以及经 vLLM/SGLang 社区维护者确认上游尚未从根本上支持的新模型架构。
-10. 如果公司声称在其硬件上将 vLLM/SGLang 作为一等上游 in-tree LLM 推理引擎支持，已确认相应 vLLM/SGLang 提交先于其他框架（TRT-LLM、ATOM 等）完成。例外情形同上。
-11. 已确认此 PR 中的每个单节点 vLLM/SGLang recipe 均已记录在官方 [vLLM recipes](https://recipes.vllm.ai/) 和/或 [SGLang cookbook](https://docs.sglang.io/cookbook/intro) 中；已链接对应的上游 PR，并确认其在本 InferenceX PR 合并前已**合并（MERGED）**。处于 open、draft 或未合并关闭状态的上游 PR 不满足此要求。若相应 recipe 已发布，已在下方 Additional detail section 中链接已发布的 recipe/cookbook 页面。
-12. 已确认该 PR 未对推理引擎或 serving 技术栈打补丁，锁定的镜像必须原样运行。涵盖：.patch 文件 / `git apply` / `patch`、内嵌在基准测试脚本中的行内补丁（例如在启动服务前用 python3/sed heredoc 改写已安装的引擎源码）、就地编辑 site-packages、monkey-patch、覆盖容器文件、以及在锁定镜像之上安装 fork 或重新构建的引擎 wheel。唯一例外：该补丁已由 [docs/waiver/](https://github.com/SemiAnalysisAI/InferenceX/tree/main/docs/waiver)`<PR_NUMBER>.md`（以引入补丁的 PR 编号命名，并在同一 PR 中提交）中填写完整的豁免覆盖，写明补丁内容、为何未修改的上游镜像无法运行该基准测试、上游 PR/issue 链接及移除计划，并已在下方 Additional detail section 中给出链接。
-13. 如果上述任何条目无法合理满足，已在下方提供额外说明。
+6. 已确认所有 draft 模型和 head 保留原始权重与精度，并在 Additional detail section 中提供证据。无论 eval 结果或 AL 如何，均不得量化或更改精度。详情及 MLPerf 对照见[Draft 模型精度](../CONTRIBUTING_zh.md#draft-模型精度)。
+7. 对 agentic 工作负载：已确认投机解码配置（EAGLE / MTP / draft 模型）启用了模拟合成接受（simulated synthetic acceptance），且接受长度（AL）取值来自 [golden_al_distribution/](https://github.com/SemiAnalysisAI/InferenceX/tree/main/golden_al_distribution) 中该模型、thinking 模式与 draft 长度对应的已提交黄金 AL 曲线。提交可选择任意受支持的 draft 长度，但不得替换为其他接受目标。
+8. 已确认此 PR 对照最新版 [MODELS.md](https://github.com/SemiAnalysisAI/InferenceX/blob/main/MODELS.md)，未提交已弃用的模型、场景或模型场景组合。
+9. 已确认模型架构未被基准测试 hack 更改，例如在不原生支持的模型上使用 `--hf-overrides` 每 x 层跳过 indexer。一般规则：不接受减少模型架构 FLOPs 的优化；让同样的计算跑得更快没有问题；target/verifier 的更低精度 FLOPs 也可以，前提是该配置通过私有 evals，但这不允许更改 draft 模型或 draft head 的精度。北极星原则：只使用在意准确性的客户在生产中实际使用的优化。
+10. 如果公司声称在其硬件上将 vLLM/SGLang 作为一等 LLM 推理引擎支持，已确认相应 vLLM 提交使用上游 [vLLM docker 仓库](https://hub.docker.com/u/vllm)、SGLang 提交使用上游 [lmsysorg docker 仓库](https://hub.docker.com/u/lmsysorg)。唯一例外：新硬件（如 MI455X UALoE72、Vera Rubin NVL72、Rubin NVL8 等），以及经 vLLM/SGLang 社区维护者确认上游尚未从根本上支持的新模型架构。
+11. 如果公司声称在其硬件上将 vLLM/SGLang 作为一等上游 in-tree LLM 推理引擎支持，已确认相应 vLLM/SGLang 提交先于其他框架（TRT-LLM、ATOM 等）完成。例外情形同上。
+12. 已确认此 PR 中的每个单节点 vLLM/SGLang recipe 均已记录在官方 [vLLM recipes](https://recipes.vllm.ai/) 和/或 [SGLang cookbook](https://docs.sglang.io/cookbook/intro) 中；已链接对应的上游 PR，并确认其在本 InferenceX PR 合并前已**合并（MERGED）**。处于 open、draft 或未合并关闭状态的上游 PR 不满足此要求。若相应 recipe 已发布，已在下方 Additional detail section 中链接已发布的 recipe/cookbook 页面。
+13. 已确认该 PR 未对推理引擎或 serving 技术栈打补丁，锁定的镜像必须原样运行。涵盖：.patch 文件 / `git apply` / `patch`、内嵌在基准测试脚本中的行内补丁（例如在启动服务前用 python3/sed heredoc 改写已安装的引擎源码）、就地编辑 site-packages、monkey-patch、覆盖容器文件、以及在锁定镜像之上安装 fork 或重新构建的引擎 wheel。唯一例外：该补丁已由 [docs/waiver/](https://github.com/SemiAnalysisAI/InferenceX/tree/main/docs/waiver)`<PR_NUMBER>.md`（以引入补丁的 PR 编号命名，并在同一 PR 中提交）中填写完整的豁免覆盖，写明补丁内容、为何未修改的上游镜像无法运行该基准测试、上游 PR/issue 链接及移除计划，并已在下方 Additional detail section 中给出链接。
+14. 如果 PR 使用 `append-only: true`，已确认它只在所选现有配置/场景和同镜像的现有可视化曲线内新增生成点或配方变体。所有已有点及其配方均保留，不删除或重跑旧点；完整 diff 中所有影响基准测试的改动，无论位于哪个文件，都只会作用于对应新增点，不能影响已有点。
+15. 如果上述任何条目无法合理满足，已在下方提供额外说明。
+16. 已报告每条受影响曲线的吞吐量/E2EL Pareto 实测点数及证据，强烈建议 ≥5 个点。少于 5 个或无法核实：提醒一位核心维护者审阅，合并前须记录管理员例外。无曲线受影响时可填 N/A。详见[验证器说明](../.github/codeowner-signoff-verify-prompt.md#check-14--pareto-coverage-recommendation-with-admin-exception)。
 
 ## 示例
 
