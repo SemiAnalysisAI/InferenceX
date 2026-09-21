@@ -41,23 +41,17 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_RUST_FRONTEND=1
 export PYTHONUNBUFFERED=1
 
-# Let vLLM select max_num_seqs; its API-server default is 1024 on MI355X. A
-# fixed 128 caps in-flight sequences at the outer concurrency once the sweep
-# reaches c128, leaving no headroom for AgentX subagent fan-out.
-# Keep graph capture at the #3058 size through c64, then cover twice the outer
-# concurrency at c128.
-# vllm-project/vllm#57491 widened the two is_cuda() gates to is_cuda_alike(),
-# so on gfx950 this image now resolves an Engram config and offloads the tables
-# to pinned host memory unless an explicit value says otherwise. The tables cost
-# 47.2 GiB per rank at TP=4, so 94.4 GiB at TP=2, which does not fit beside half
-# of the 511 GB checkpoint on a 288 GiB card. Offload at TP=2; keep them resident
-# at TP=4 so it stays comparable with the validated concurrency 1-32 run.
-if (( TP == 2 )); then
-    ENGRAM_CONFIG='{"cpu_offload":true}'
-else
-    ENGRAM_CONFIG='{"cpu_offload":false}'
-fi
+# vllm-project/vllm#57491 widened the two is_cuda() gates to is_cuda_alike(), so
+# on gfx950 this image resolves an Engram config and an explicit value is needed
+# rather than the VLLM_PLE_CPU_OFFLOAD default. Offload on every arm, as every
+# NVIDIA DSv4.1-Flash arm has since #2963. Measured on gfx950 at TP=4, batched
+# 16384: resident leaves 37.96 GiB of KV (14.15x max concurrency at 1M context),
+# offloaded leaves 84.54 GiB (31.52x).
+ENGRAM_CONFIG='{"cpu_offload":true}'
 
+# Graph capture covers twice the outer concurrency, floored at the #3058 size of
+# 128 sequences, across the 1+5 DSpark token shape. Twice leaves headroom for
+# AgentX subagent fan-out above the outer concurrency.
 NUM_SPEC_TOKENS=5
 GRAPH_NUM_SEQS=$((2 * CONC))
 if (( GRAPH_NUM_SEQS < 128 )); then
@@ -67,6 +61,26 @@ CAPTURE_SIZE=1
 while (( CAPTURE_SIZE < GRAPH_NUM_SEQS * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
     CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
 done
+# Cap in-flight sequences at the shape graph capture already covers, so the
+# largest decode batch stays on a captured graph. This also drops max_num_seqs
+# from the MI355X API-server default of 1024, which sized scheduler state for
+# four times the sequences this sweep can actually run.
+MAX_NUM_SEQS="$GRAPH_NUM_SEQS"
+
+# The sparse-attention indexer and its companion per-rank buffers scale with
+# --max-num-batched-tokens at roughly 4.4 MiB per token, measured on gfx950.
+# The upstream 16384 is what separates a KV pool that survives concurrency 64
+# from one that collapses: at TP=2 it leaves 20.06 GiB (7.48x), and TP=2 c64 of
+# run 35574132719 fell to a 17.6% prefix cache hit rate, 187 s TTFT and 150
+# tok/s. At 4096 the same arm keeps 79.34 GiB (39.44x). TP=4 has twice the
+# per-rank room, so 8192 is enough there: 121.03 GiB (54.15x), against the B300
+# arm's 132.48 GiB (60.17x). B300 runs 8192 at TP=4 and the Blackwell TP=2 arms
+# run 4096 (#3320, #3321).
+if (( TP == 2 )); then
+    BATCHED_TOKENS=4096
+else
+    BATCHED_TOKENS=8192
+fi
 
 # Use the runner-specific port assigned by launch_mi355x-amds.sh.
 export AIPERF_SERVER_URL="http://localhost:${PORT}"
@@ -102,7 +116,8 @@ VLLM_CMD=(
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576
     --max-cudagraph-capture-size "$CAPTURE_SIZE"
-    --max-num-batched-tokens 16384
+    --max-num-seqs "$MAX_NUM_SEQS"
+    --max-num-batched-tokens "$BATCHED_TOKENS"
     # vllm-project/vllm#56227 added SWA bounded replay (default on) after the
     # eed1f3d0 pin and before this one. It pads the replayed tokens' slots in the
     # prefix-cacheable groups, but the window clamp it relies on landed in the
