@@ -11,6 +11,8 @@ Guidance for AI agents working with InferenceX.
 
 ## Agent-specific policy
 
+- Pareto logic changes must update both InferenceX and InferenceX-app with matching regression tests and cross-linked PRs.
+- Every PR description must include an **AI model disclosure** section naming the exact model/version used to prepare the PR. List each contributing model and its role, including delegated agents. Tool names such as Claude Code, Cursor, or Perplexity Computer are not model identities. Copy the model identifier exposed by the runtime; do not guess an unavailable identifier. If the runtime does not expose the exact model, explicitly state that it could not be verified. Human-only PRs must state `No AI used`. Keep the disclosure current when later edits use another model.
 - Repository skills are canonical under `.agents/skills/`. Add or update skills there. `.claude/skills/` contains compatibility symlinks for Claude discovery.
 - PR and issue titles, descriptions, and human-authored PR comments must include English and natural Simplified Chinese. Titles use `<English title> / <中文标题>`. In bodies and comments, keep English visible and put Chinese in one collapsed `<details><summary>中文</summary>` section. Keep code, commands, logs, stack traces, model names, hardware SKUs, framework names, flags, and identifiers unchanged. The exact CODEOWNER sign-off template is English-only. See [`docs/documentation-procedures.md`](docs/documentation-procedures.md) and [`.github/AGENT_OPERATIONS.md`](.github/AGENT_OPERATIONS.md#translation-terminology).
 - **One reviewer checklist per PR:** Only one eligible CODEOWNER reviewer needs to post the completed PR Review Checklist. Check for an existing checklist before posting; other reviewers do not need to duplicate it. The original reviewer must edit their existing checklist comment when correcting items or adding evidence, rather than post a new checklist. Create a replacement only if the original was deleted. See [`CONTRIBUTING.md`](CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off).
@@ -47,6 +49,21 @@ Then validate it in the receiving script after sourcing the shared helper:
 ```bash
 check_env_vars IS_MULTINODE MODEL_NAME PRECISION
 ```
+
+## Runner launchers (one file per pool)
+
+- The reusable workflows run `bash ./runners/launch_${RUNNER_NAME%%_*}.sh`. The runner-name prefix before the first underscore is the only routing key, so each self-hosted pool maps to exactly one `runners/launch_<pool>.sh`, and every `runners/launch_*.sh` must be the launcher of a pool listed in [`configs/runners.yaml`](configs/runners.yaml). For example, runner `b200-nscale-slurm_03` runs `runners/launch_b200-nscale-slurm.sh`. See [Stage 4 in `docs/architecture.md`](docs/architecture.md#stage-4-launcher-and-runtime-execution).
+- Do not add a second launcher for a pool and `exec` into it for some jobs. Different execution paths for one pool (single-node `salloc`, srt-slurm recipes, cluster-maintained lanes) branch inside that pool's one file. Select the path once near the top and name it, so the routing for a pool reads in one place.
+- Do not add launcher-name aliases to `runners/runtime_settings.sh` or elsewhere for scripts that no runner resolves to. A launcher without a pool is dead code; a pool without a launcher fails at job start.
+- When a pool is retired, delete its launcher in the same PR rather than keeping it as a fallback for another pool.
+
+## SRT Slurm synthetic acceptance
+
+- **Do not hard-code synthetic acceptance lengths in SRT recipes, master configs, or launchers.** InferenceX automatically selects the measured value from [`golden_al_distribution/`](golden_al_distribution/) for speculative AgentX throughput runs. Do not add manual `SYNTHETIC_ACCEPTANCE_LENGTH`, vLLM `synthetic_acceptance_length`, SGLang `SGLANG_SIMULATE_ACC_LEN`, or TRT-LLM `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` settings.
+- Submit recipes through [`apply_srt_recipe`](runners/slurm_utils.sh). Its [`infx/srt_slurm` connector](infx/srt_slurm/synthetic_acceptance.py) applies native SRT `--set` / `--unset` overrides; calling upstream `srtctl` directly does not perform InferenceX's automatic selection.
+- Keep the actual speculative method, draft model, draft-token count, and relevant sampling settings explicit in the recipe. The connector combines the generation role's settings (decode, otherwise aggregated), after caller overrides, with `MODEL_PREFIX` and `THINKING_MODE` to select the golden curve. For Kimi DSpark, explicitly set `draft_sample_method` to `greedy` or `probabilistic`.
+- Eval-only and non-AgentX runs use real verification; the connector removes stale synthetic settings. Non-speculative roles do not receive simulation settings. `RUN_EVAL` does not disable simulation for the throughput portion.
+- Missing golden curves or unmeasured draft lengths fail before submission. Add the corresponding measured golden data when supporting a new combination; do not work around the error with a guessed or hard-coded acceptance length.
 
 ## Test quality
 

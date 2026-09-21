@@ -23,6 +23,9 @@ jobs:
     env:
       # Total candidates per invocation; selected candidates run in parallel.
       MAX_CANDIDATES_PER_RUN: '5'
+      # Bound one semantic-overlap review; recently attempted same-base candidates sort last.
+      REVIEW_BATCH_SIZE: '64'
+      CANDIDATE_COOLDOWN_HOURS: '24'
     outputs:
       tooling-ref: ${{ steps.checkout.outputs.commit }}
       selected: ${{ steps.select.outputs.selected }}
@@ -50,15 +53,19 @@ jobs:
         env:
           # Recovery mutates only sessions recorded by this workflow after their parent finishes.
           # Repository automation credential; the planner runs only on main.
-          GH_TOKEN: ${{ secrets.CLAUDE_PAT }} # zizmor: ignore[secrets-outside-env]
+          GH_TOKEN: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
         run: uv run --locked python -m infx.klaud recover
       - name: Prepare eligible candidates and open PRs
         id: prepare
         env:
           GH_TOKEN: ${{ github.token }}
           # Repository automation credential; the planner runs only on main.
-          KLAUD_DASHBOARD_API_KEY: ${{ secrets.KLAUD_DASHBOARD_API_KEY }} # zizmor: ignore[secrets-outside-env]
-        run: uv run --locked python -m infx.klaud plan --directory "$RUNNER_TEMP/klaud"
+          KLAUD_DASHBOARD_API_KEY: ${{ secrets.DASH_API_KEY }} # zizmor: ignore[secrets-outside-env]
+        run: >-
+          uv run --locked python -m infx.klaud plan
+          --directory "$RUNNER_TEMP/klaud"
+          --review-batch-size "$REVIEW_BATCH_SIZE"
+          --cooldown-hours "$CANDIDATE_COOLDOWN_HOURS"
       - name: Check for overlapping open PRs
         id: review
         if: steps.prepare.outputs.has_candidates == 'true'
@@ -76,7 +83,7 @@ jobs:
             {"fastMode": false}
           claude_args: >-
             --model 'claude-opus-5'
-            --max-turns 200
+            --max-turns 500
             --add-dir '${{ runner.temp }}/klaud'
             --allowedTools "Read,Glob,Grep,Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api --method GET:*),Bash(git show:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*),Bash(git ls-tree:*)"
             --json-schema '${{ steps.prepare.outputs.review_schema }}'
@@ -91,10 +98,13 @@ jobs:
             Read docs/index.md and AGENTS.md. Titles alone cannot exclude
             overlap; incomplete file lists require investigation, not assumptions.
 
-            Each candidate names its live configs/*-master.yaml:KEY family and a matching public
-            observation from the canonical matrix generator. Verify that exact family; never substitute
-            a sibling or a retired workload. Duplicate means overlapping edits or shared dependencies,
-            not merely the same model/image on a different family.
+            Each candidate names its live configs/*-master.yaml:KEY family and an exact published
+            benchmark observation from the canonical matrix generator. The public observation is benchmark
+            evidence only. Verify the exact current family; the candidate agent, not this review, owns
+            upstream image research and compatibility. Never substitute a sibling or retired workload.
+            Duplicate means overlapping edits or shared dependencies, not merely the same model/image on
+            a different family. For every proceed decision, resolve baseline-model to the exact display
+            model accepted by the public benchmark API using the supplied OpenAPI schema.
             Resolve ALL possible target clusters from its runner and configs/runners.yaml to the
             exact IDs in capacity.json. Same-hardware sibling clusters cannot stand in for the
             recipe's target. Proceed only if every target is in eligible-telemetry-clusters;
@@ -105,8 +115,8 @@ jobs:
             is not a duplicate. Return the supplied schema: candidate-id, decision
             (proceed/duplicate/uncertain), family (null if unresolved), telemetry-clusters (exact
             target IDs, empty if unresolved), pull-requests (overlapping
-            PR numbers), reason (brief evidence). Proceed only when the family is current,
-            still needs an update and has no overlap. Missing evidence or ambiguity means uncertain.
+            PR numbers), baseline-model (required for proceed; otherwise null), reason (brief evidence).
+            Missing evidence or ambiguity means uncertain.
             Review EVERY supplied candidate in shuffled order, returning exactly one decision per ID.
             Duplicate/uncertain candidates do not consume dispatch slots. Do not stop after ten reviews
             or after finding ${{ env.MAX_CANDIDATES_PER_RUN }} proceed decisions: the selector needs the
@@ -120,9 +130,9 @@ jobs:
         id: select
         env:
           # Repository automation credential; the planner runs only on main.
-          GH_TOKEN: ${{ secrets.CLAUDE_PAT }} # zizmor: ignore[secrets-outside-env]
+          GH_TOKEN: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
           # Repository automation credential; the planner runs only on main.
-          KLAUD_DASHBOARD_API_KEY: ${{ secrets.KLAUD_DASHBOARD_API_KEY }} # zizmor: ignore[secrets-outside-env]
+          KLAUD_DASHBOARD_API_KEY: ${{ secrets.DASH_API_KEY }} # zizmor: ignore[secrets-outside-env]
           KLAUD_PR_REVIEW: ${{ steps.review.outputs.structured_output }}
           KLAUD_REVIEW_OUTCOME: ${{ steps.review.outcome }}
           KLAUD_REVIEW_EXECUTION: ${{ steps.review.outputs.execution_file }}
@@ -160,5 +170,5 @@ jobs:
       tooling-ref: ${{ needs.plan.outputs.tooling-ref }}
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      CLAUDE_PAT: ${{ secrets.CLAUDE_PAT }}
-      KLAUD_DASHBOARD_API_KEY: ${{ secrets.KLAUD_DASHBOARD_API_KEY }}
+      AGENT_PAT: ${{ secrets.AGENT_PAT }}
+      DASH_API_KEY: ${{ secrets.DASH_API_KEY }}

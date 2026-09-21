@@ -67,9 +67,6 @@ roles:
     env:
       SGLANG_DEFAULT_THINKING: "1"
       SGLANG_DSV4_REASONING_EFFORT: high
-      SGLANG_SIMULATE_ACC_LEN: "3.77"
-      SGLANG_SIMULATE_ACC_METHOD: match-expected
-      SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
       PIP_BREAK_SYSTEM_PACKAGES: "1"
       HF_HUB_CACHE: /hf_hub_cache
       SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"

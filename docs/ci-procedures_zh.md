@@ -44,7 +44,7 @@
 | Changelog 字节、Diff 与矩阵 Gate | [`infx/workflows/validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py)、[`infx.matrix.plan`](../infx/matrix/plan.py) |
 | 复用授权与源 Run 选择 | [`infx/workflows/reuse.py`](../infx/workflows/reuse.py) |
 | 受支持的复用合并与冲突准备 | [`utils/merge_with_reuse.sh`](../utils/merge_with_reuse.sh)、[`infx/workflows/prepare_perf_changelog_merge.py`](../infx/workflows/prepare_perf_changelog_merge.py) |
-| 预发布请求与回调 | [`.github/workflows/stage-results.yml`](../.github/workflows/stage-results.yml)、[`.github/workflows/stage-results-callback.yml`](../.github/workflows/stage-results-callback.yml) |
+| 预发布请求与回调 | [`infx/workflows/stage_results.py`](../infx/workflows/stage_results.py)、[`.github/workflows/stage-results.yml`](../.github/workflows/stage-results.yml)、[`.github/workflows/stage-results-callback.yml`](../.github/workflows/stage-results-callback.yml) |
 | 复用 Agentic 入库的重新派发 | [`.github/workflows/recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) |
 | 合并后责任提醒 | [`.github/workflows/pr-recipe-reminder.yml`](../.github/workflows/pr-recipe-reminder.yml) |
 
@@ -214,6 +214,16 @@ RUN_ID=$(gh run list \
 
 如果 `RUN_ID` 为空，不得继续。Run Metadata 描述派发 Workflow 的 Ref，可能不等于输入 `ref`。解释 GPU 结果前，必须在 `get-jobs` 中确认唯一标题、生成器命令与 Checkout Ref。
 
+## Kimi-K3 AgentX 功耗补测
+
+Kimi-K3 的 B200、GB200 和 GB300 多节点配方启用必需的 DCGM 遥测，并在服务头节点运行自定义 AgentX 客户端。Launcher 选择固定提交的 AgentX 功耗运行时、记录提交 SHA，等待 Slurm 结束和遥测收尾，然后逐一验证所请求的并发点并保存结果。共享结果收集器会保留原生任务的失败状态，先保存可用的功耗诊断文件，再返回失败。H200 路由和 AMD 测量尾部修复属于独立变更，仍待各自集成与验证。启用必需遥测配置本身不代表硬件验证通过。
+
+GB300 Kimi-K3 聚合与分离部署 recipe 使用 exporter 端口 `19401`，因为节点系统服务占用了 `9401`。共享遥测阶段会将此端口传入 prefill 和 decode 两个 Slurm 分组。已有双节点 exporter 生命周期证据验证了端口归属与清理行为，但不能替代分离部署的请求账目、功耗窗口或 eval 验证。
+
+补测缺失功耗时，只生成缺失的配方与并发组合，设置 `require-power: true`，保持 `agentx-fast: false`，并留空时长覆盖。标准 AgentX Profile 为一小时。对新启用的运行时或集群，先验证一个缺失点，再调度其余点。配方渲染通过或 GitHub Runner 在线并不能证明实时采集已就绪，也不能证明 Slurm 有空闲资源。保留现有有效点，新性能与功耗必须来自同一次运行；不得把新运行的能耗附加到旧性能点上。手动 `e2e-tests.yml` 产物仍须经过正常审查和入库流程，才会显示在 Dashboard 中。
+
+B200 Kimi 配方采用 DCP8，且关闭 Mooncake Offload。Master Config 记录 `dcp-size: 8` 和 `kv-offloading: none` 以匹配实际命令；这项元数据修正不会启用 Offload。
+
 ## PR 主标签与修饰标签
 
 同仓库 PR 无论处于草稿还是 ready 状态，都由 sweep 标签授权 GPU 运行。草稿状态控制是否开始审阅，不决定 sweep 资格；fork PR 仍使用受信任调度路径。添加 sweep 标签或在保留标签时推送提交可以启动 sweep。标记为 ready 不会调度或重复运行。已带标签但尚无运行的草稿，可先移除再重新添加对应 sweep 标签来启动。
@@ -277,13 +287,11 @@ gh api "/repos/SemiAnalysisAI/InferenceX/actions/runs/$RUN_ID" \
 
 ### 安全重跑
 
-CODEOWNER 验证仅适用于可信基础版本 CODEOWNERS 中存在非管理员、非 core owner 的改动。其他改动会获得成功的“不适用”状态。归属、重命名及权限规则见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
+CODEOWNER 验证会在合格的人类用户为打开且非草稿的 PR 提交新清单时触发，也可通过 `pr-number` 和该清单的 `comment_url` 手动分发。它仅适用于可信目标分支 CODEOWNERS 中存在非管理员、非 core owner 的改动；其他改动跳过验证。归属、重命名及权限规则见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
 
-首次 PASS 前，CODEOWNER 验证会在 Head 更新、PR 重新打开或退出草稿状态后，补查最新的合格签署。它在当前 Head 上验证已有清单，无需在解决合并冲突后重复发布清单。验证使用可信默认分支代码；在 Claude 开始前发布 pending 状态。
+验证使用可信默认分支代码，并按 PR 串行执行。启动 Claude 要求触发者的基础 `permission` 为 `write` 或 `admin`，且 `role_name` 为 `write`、`maintain` 或 `admin`。未知或自定义角色、字段缺失、机器人触发和查询失败均不能启动验证。手动分发的 `pr-number` 和 `comment_url` 必须指向同一 PR。
 
-已有 PASS 的延续遵循[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)：经认证的仓库管理员从已覆盖 head 推送更新时，保留签署且不调用 Claude。非管理员更新会使签署失效，但不会自动调用 Claude；可编辑已有检查清单或手动分发验证来批准这些改动。非管理员改动尚未审阅时，随后由管理员推送也不能恢复接受状态。缺少更新来源信息时默认拒绝。可信裁定记录已验证和已覆盖的 SHA，重新评估被拒绝时会撤销接受状态。验证器只写入本地裁定文件，可信工作流负责发布评论和状态。
-
-首次验证或重新评估时，Gate 要求触发者的基础 `permission` 为 `write` 或 `admin`，且 `role_name` 为 `write`、`maintain` 或 `admin`。未知或自定义角色、字段缺失、机器人触发和查询失败均不能启动 Claude；自动补查也按相同规则检查签署者。无写权限用户或未获允许的机器人更新 Head 后，可由具有写权限的协作者使用已有签署 URL 发起验证。归属检查、验证与 PASS 延续作为同一任务中的步骤执行，并按 PR 串行运行。手动分发需提供同一 PR 的 `pr-number` 和 `comment_url`。必需的 `CODEOWNER sign-off` 状态独立于工作流任务是否完成，记录 PR head 上的签核结论。
+验证器在每次验证后发布一条新的供审阅参考的评论，注明实际评估的 SHA，不再发布提交状态。后续推送不会延续该评估，也不会触发新运行。编辑清单不会触发验证。需要重新评估时，请手动分发；合并冲突期间遗漏的 Review 事件也按此方式重试。GitHub 单独设置的人工批准要求仍然适用。
 
 不要盲目重跑仍在执行的 Run。已结束的失败 Run 可以只重跑失败 Job 及其依赖项：
 
@@ -326,8 +334,8 @@ Checkout Ref、凭据和审阅
 
 ## 基于仓库角色的授权
 
-结果暂存和可信外部扫描派发直接通过 `actions/github-script` 检查仓库权限，
-使用其已通过 `GITHUB_TOKEN` 认证的客户端。两项操作都要求 Write、Maintain 或
+结果暂存和可信外部扫描派发均使用 `GITHUB_TOKEN` 检查仓库权限。暂存通过
+`infx.workflows.stage_results` 执行，外部派发使用 `actions/github-script`。两项操作都要求 Write、Maintain 或
 Admin 权限；Read、Triage 以及没有仓库访问权限的用户不能执行这些操作。
 
 授权要求原有基础 `permission` 和有效 `role_name` 均为 `admin`、`maintain` 或
@@ -338,8 +346,8 @@ Admin 权限；Read、Triage 以及没有仓库访问权限的用户不能执行
 `author_association` 不会通过这些检查赋予访问权限，也无需查询团队成员身份的额外 Token。
 
 结果暂存检查评论作者；外部批准检查原始 `github.actor`，重跑时也不改用重跑者
-身份。授权检查保留在各自的可信 Workflow 中，无需仓库 Checkout 或 Python
-辅助程序。现有 PR、SHA、标签历史、Source Run、Artifact 和 CODEOWNER 检查
+身份。暂存检出评论事件记录的默认分支提交，并运行依赖已锁定的 `infx` 包，
+绝不加载 PR 代码；外部派发保留内联授权检查。现有 PR、SHA、标签历史、Source Run、Artifact 和 CODEOWNER 检查
 保持不变。其他 Workflow（包括恢复流程）保留原有的授权和派发行为。
 执行凭据和 GitHub 保护措施仍在 Workflow 中明确配置。
 
@@ -379,7 +387,7 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 
 ### 资格与授权
 
-`infx.github` 提供仓库范围的 REST 调用、分页及评论表态基础操作，不包含扫描策略。`infx.workflows.reuse` 负责命令解析、授权查找及源 Run 的选择和验证。`infx.workflows.reuse_comment` 使用相同规则提供表态反馈。工作流通过 `python3 -m` 调用这些模块；现有 `utils/find_reusable_sweep_run.py` 命令和导入路径保持兼容。这些辅助程序使用 Python 标准库和 GitHub CLI；从检出目录运行时无需安装 Python 包。
+`infx.github` 提供仓库范围的 REST 调用、分页及评论表态基础操作，不包含扫描策略。`infx.workflows.sweep_runs` 为暂存和复用共享 PR 提交查询、已完成 Run 列表及未过期结果工件查找；各调用方保留自身的资格规则。`infx.workflows.reuse` 负责命令解析、授权查找及源 Run 的选择和验证。`infx.workflows.reuse_comment` 使用相同规则提供表态反馈。工作流通过 `python3 -m` 调用这些模块；现有 `utils/find_reusable_sweep_run.py` 命令和导入路径保持兼容。这些辅助程序使用 Python 标准库和 GitHub CLI；从检出目录运行时无需安装 Python 包。
 
 1. 复用不要求扫描标签。标签用于选择新的 GPU 工作；移除主标签不会使已有源 Run 失效。Changelog 验证和合并辅助脚本仍会拒绝冲突的主标签。
 2. `evals-only` 与 `agentx-fast` 会令 Run 不可复用。默认完整扫描以及带 `all-evals` 的完整扫描仍可复用。
@@ -546,3 +554,12 @@ jq -r 'to_entries[] | [.key, .value.n_success, .value.total] | @tsv' \
 当源 Run、Merge Run、Artifact 覆盖、Changelog Metadata 或下游 Event 含糊不清时，应停止并升级处理。绝不能替换成方便的 Run ID，也不能仅凭 Actions Dispatch 就宣称发布成功。
 
 原 `kimik3-fp4-h200-vllm-agentic` key 拆为 `-latency`、`-balanced` 和 `-simple` 三个 key，合计保留原来的全部 35 个点（10/12/13）、配方指纹及图表序列。每个 key 选择一份完整配方及其默认评估；功耗启用范围由该配方的 `telemetry.enabled` 决定。使用 `kimik3-fp4-h200-vllm-agentic-*` 可选择三份配方。局部配方运行不能证明其他 key 已通过资格验证。
+
+## OperatorX 微基准
+
+OperatorX 手动工作流支持 H100、H200、B200、B300、GB200、GB300、MI300X、MI325X
+和 MI355X，每个分片使用一个物理 Slurm 节点。GB200/GB300 使用四卡 Arm 节点，其余
+运行器池使用八卡 x86 节点。GEMM 和 attention 每次测量只使用一张 GPU；AMD
+attention 支持 torch 和 AITER。
+触发方式、覆盖范围、产物、取消及验证说明见
+[OperatorX GitHub Actions](../experimental/operatorx/CI_zh.md)。

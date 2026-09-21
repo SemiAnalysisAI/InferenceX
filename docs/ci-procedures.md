@@ -44,7 +44,7 @@ These files are the contract. Follow the target ref's source rather than copying
 | Changelog byte/diff/matrix gate | [`infx/workflows/validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py), [`infx.matrix.plan`](../infx/matrix/plan.py) |
 | Reuse authorization and source-run selection | [`infx/workflows/reuse.py`](../infx/workflows/reuse.py) |
 | Supported reuse merge and conflict preparation | [`utils/merge_with_reuse.sh`](../utils/merge_with_reuse.sh), [`infx/workflows/prepare_perf_changelog_merge.py`](../infx/workflows/prepare_perf_changelog_merge.py) |
-| Staging request and callback | [`.github/workflows/stage-results.yml`](../.github/workflows/stage-results.yml), [`.github/workflows/stage-results-callback.yml`](../.github/workflows/stage-results-callback.yml) |
+| Staging request and callback | [`infx/workflows/stage_results.py`](../infx/workflows/stage_results.py), [`.github/workflows/stage-results.yml`](../.github/workflows/stage-results.yml), [`.github/workflows/stage-results-callback.yml`](../.github/workflows/stage-results-callback.yml) |
 | Reused agentic-ingest redispatch | [`.github/workflows/recover-reused-ingest.yml`](../.github/workflows/recover-reused-ingest.yml) |
 | Post-merge responsibility reminder | [`.github/workflows/pr-recipe-reminder.yml`](../.github/workflows/pr-recipe-reminder.yml) |
 
@@ -222,6 +222,16 @@ RUN_ID=$(gh run list \
 
 Do not continue if `RUN_ID` is empty. Run metadata describes the dispatch workflow ref, which may not equal input `ref`. Verify the unique title, generator command, and checkout ref in `get-jobs` before interpreting GPU results.
 
+## Kimi-K3 AgentX power backfills
+
+The Kimi-K3 B200, GB200 and GB300 multi-node recipes enable required DCGM telemetry and run the custom AgentX client on the serving head. Their launchers select the immutable AgentX power runtime, stamp its commit, wait for Slurm completion and telemetry drain, then validate each requested concurrency before staging results. The shared result collector preserves failed native jobs and stages available power diagnostics before returning a failure. H200 routing and AMD measurement-tail fixes are separate changes pending their own integration and validation. Required telemetry configuration alone does not establish hardware qualification.
+
+GB300 Kimi-K3 aggregate and disaggregated recipes use exporter port `19401` because the node system service occupies `9401`. The shared telemetry stage forwards this port to both prefill and decode Slurm groups. The retained two-node exporter lifecycle evidence covers port ownership and cleanup; it does not replace disaggregated request, power-window, or eval qualification.
+
+For a missing-power backfill, generate only the missing recipe/concurrency combinations, set `require-power: true`, and leave `agentx-fast: false` and the duration override empty. The normal AgentX profile is one hour. Verify a first missing point on each newly enabled runtime/cluster before scheduling its remaining points. A rendered recipe or an online GitHub runner does not establish live collector readiness or Slurm capacity. Preserve the existing validated points, and keep new performance and power values paired with their own run; never attach a new run's energy to an older performance row. Manual `e2e-tests.yml` artifacts still require the normal reviewed ingestion path before they appear in the dashboard.
+
+B200 Kimi recipes use DCP8 with Mooncake offload disabled. The master config records `dcp-size: 8` and `kv-offloading: none` to match those commands; this metadata correction does not enable offload.
+
 ## PR primary and modifier labels
 
 Sweep labels authorize GPU work for same-repository PRs whether draft or ready. Draft status controls review readiness, not sweep eligibility; fork PRs retain their trusted-dispatch path. Adding a sweep label or pushing with one present can start a sweep. Marking ready does not dispatch or repeat one. To start an already-labeled draft that has no run, remove and reapply its sweep label.
@@ -285,13 +295,11 @@ The [`Claude Code` workflow](../.github/workflows/claude.yml) has separate revie
 
 ### Rerun safely
 
-CODEOWNER verification applies only to changes with a non-admin, non-core owner under the trusted base CODEOWNERS. Other changes get a successful “not applicable” status. See the [contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off) for ownership, rename, and permission rules.
+CODEOWNER verification runs when an eligible human submits a new checklist on an open, ready PR, or manually dispatches it with `pr-number` and that checklist's `comment_url`. It applies only to changes with a non-admin, non-core owner under trusted target-branch CODEOWNERS. Other changes skip verification. See the [contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off) for ownership, rename, and permission rules.
 
-Before the first PASS, CODEOWNER verification recovers the latest eligible sign-off after head updates, reopening, or leaving draft. It verifies the current head using the existing checklist, including reviews missed during merge conflicts. Execution stays on the trusted default branch, and a pending status appears before Claude starts.
+Execution stays on the trusted default branch and serializes per PR. Starting Claude requires the actor's base `permission` to be `write` or `admin`, and `role_name` to be `write`, `maintain`, or `admin`. Unknown/custom roles, missing fields, bots, and lookup failures do not start verification. Manual dispatch requires `pr-number` and `comment_url` to identify the same PR.
 
-Existing acceptance follows the [contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off): authenticated repository-admin updates from a covered head retain sign-off without calling Claude. Non-admin updates invalidate it without automatically calling Claude; edit the existing checklist or dispatch verification to approve those changes. An admin push after an unreviewed non-admin change does not restore acceptance. Missing update provenance fails closed. The trusted verdict records assessed and covered SHAs, and rejected reassessments revoke acceptance. The verifier writes a local verdict file; trusted workflow code owns comment and status publication.
-
-Starting Claude requires the actor's base `permission` to be `write` or `admin`, and `role_name` to be `write`, `maintain`, or `admin`. Unknown/custom roles, missing fields, bots, and lookup failures do not start verification. Catch-up applies the same checks to signers. A collaborator with write access can use the existing sign-off URL after an update by a non-writer or disallowed bot. Ownership, verification, and PASS carry-forward run as steps in one job, serialized per PR. Manual dispatch requires `pr-number` and `comment_url` for that PR. The required `CODEOWNER sign-off` status records the verdict on the PR head independently of workflow job completion.
+The verifier posts a new advisory comment with the assessed SHA for each verification and publishes no commit status. Later pushes do not extend that assessment or trigger another run. Checklist edits do not trigger verification. Dispatch manually to reassess, including after a review event was missed during a merge conflict. GitHub's separate human approval requirements still apply.
 
 Do not rerun an in-progress run blindly. A completed failed run can rerun only failed jobs and their dependents:
 
@@ -336,8 +344,9 @@ launchers; this CI dependency migration does not change those environments.
 
 ## Repository-role authorization
 
-Staging and trusted external sweep dispatch check repository permissions directly
-through `actions/github-script`, using its authenticated `GITHUB_TOKEN` client.
+Staging and trusted external sweep dispatch check repository permissions with
+`GITHUB_TOKEN`. Staging uses `infx.workflows.stage_results`; external dispatch uses
+`actions/github-script`.
 Both operations require Write, Maintain, or Admin access; Read, Triage, and users
 without repository access cannot perform these operations.
 
@@ -351,8 +360,9 @@ include both fields. Organization membership and `author_association` do not
 grant access through these checks; no team-membership token is needed.
 
 Staging checks the comment author; external approval checks the original
-`github.actor`, including on reruns. Authorization lives in each trusted workflow
-and needs no repository checkout or Python helper. Existing PR, SHA,
+`github.actor`, including on reruns. Staging checks out the default-branch commit
+recorded in the comment event and runs the locked `infx` package; it never loads PR
+code. External dispatch keeps its inline authorization. Existing PR, SHA,
 label-history, source-run, artifact, and CODEOWNER checks remain in place.
 Other workflows, including recovery, retain their original authorization and
 dispatch behavior. Execution credentials and GitHub protections remain explicit
@@ -395,7 +405,7 @@ Reuse prevents an approved full PR sweep from being rerun on `main`. It is not a
 
 ### Eligibility and authorization
 
-`infx.github` provides repository-scoped REST calls, pagination, and comment-reaction primitives. It contains no sweep policy. `infx.workflows.reuse` owns command parsing, authorization lookup, and source-run selection/validation. `infx.workflows.reuse_comment` uses those same rules for reaction feedback. Workflows run these modules with `python3 -m`; the existing `utils/find_reusable_sweep_run.py` command and imports remain compatible. These helpers use Python’s standard library and the GitHub CLI; no Python package installation is needed when running them from a checkout.
+`infx.github` provides repository-scoped REST calls, pagination, and comment-reaction primitives. It contains no sweep policy. `infx.workflows.sweep_runs` shares PR commit lookup, completed-run listing, and unexpired result-artifact discovery between staging and reuse. Each caller keeps its own eligibility rules. `infx.workflows.reuse` owns command parsing, authorization lookup, and source-run selection/validation. `infx.workflows.reuse_comment` uses those same rules for reaction feedback. Workflows run these modules with `python3 -m`; the existing `utils/find_reusable_sweep_run.py` command and imports remain compatible. These helpers use Python’s standard library and the GitHub CLI; no Python package installation is needed when running them from a checkout.
 
 1. Reuse does not require a sweep label. Labels select new GPU work; removing a primary label does not invalidate an existing source run. Conflicting primary labels remain rejected by changelog validation and the merge helper.
 2. `evals-only` and `agentx-fast` make the run ineligible. A default full sweep and a full sweep with `all-evals` remain eligible.
@@ -562,3 +572,12 @@ A merge is not complete operationally until the `main` publication path and down
 Stop and escalate when the source run, merge run, artifact coverage, changelog metadata, or downstream event is ambiguous. Never substitute a convenient run ID or claim publication from an Actions dispatch alone.
 
 The former `kimik3-fp4-h200-vllm-agentic` key is split into `-latency`, `-balanced`, and `-simple` keys. Together they preserve all 35 original points (10/12/13), recipe fingerprints, and dashboard series. Each key selects one complete recipe and its default evals; power rollout follows that recipe's `telemetry.enabled` setting. Use `kimik3-fp4-h200-vllm-agentic-*` to select all three. A partial recipe run does not qualify the other keys.
+
+## OperatorX microbenchmarks
+
+The manual OperatorX workflow supports H100, H200, B200, B300, GB200, GB300,
+MI300X, MI325X, and MI355X with one physical Slurm node per shard. GB200/GB300 use
+four-GPU Arm nodes; the other pools use eight-GPU x86 nodes. GEMM and attention
+use one GPU per measurement. AMD attention supports both torch and AITER.
+See [OperatorX GitHub Actions](../experimental/operatorx/CI.md) for dispatch,
+coverage, artifacts, cancellation, and validation.
