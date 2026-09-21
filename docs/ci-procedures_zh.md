@@ -287,11 +287,11 @@ gh api "/repos/SemiAnalysisAI/InferenceX/actions/runs/$RUN_ID" \
 
 ### 安全重跑
 
-CODEOWNER 验证会在合格的人类用户为打开且非草稿的 PR 提交或编辑清单时触发，也可通过 `pr-number` 和该清单的 `comment_url` 手动分发。它仅适用于可信目标分支 CODEOWNERS 中存在非管理员、非 core owner 的改动；其他改动跳过验证。归属、重命名及权限规则见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
+CODEOWNER 验证会在合格的人类用户为打开且非草稿的 PR 提交新清单时触发，也可通过 `pr-number` 和该清单的 `comment_url` 手动分发。它仅适用于可信目标分支 CODEOWNERS 中存在非管理员、非 core owner 的改动；其他改动跳过验证。归属、重命名及权限规则见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
 
 验证使用可信默认分支代码，并按 PR 串行执行。启动 Claude 要求触发者的基础 `permission` 为 `write` 或 `admin`，且 `role_name` 为 `write`、`maintain` 或 `admin`。未知或自定义角色、字段缺失、机器人触发和查询失败均不能启动验证。手动分发的 `pr-number` 和 `comment_url` 必须指向同一 PR。
 
-验证器只更新一条供审阅参考的评论，注明实际评估的 SHA，不再发布提交状态。后续推送不会延续该评估，也不会触发新运行。需要重新评估时，请编辑已有清单或手动分发；合并冲突期间遗漏的 Review 事件也按此方式重试。GitHub 单独设置的人工批准要求仍然适用。
+验证器在每次验证后发布一条新的供审阅参考的评论，注明实际评估的 SHA，不再发布提交状态。后续推送不会延续该评估，也不会触发新运行。编辑清单不会触发验证。需要重新评估时，请手动分发；合并冲突期间遗漏的 Review 事件也按此方式重试。GitHub 单独设置的人工批准要求仍然适用。
 
 不要盲目重跑仍在执行的 Run。已结束的失败 Run 可以只重跑失败 Job 及其依赖项：
 
