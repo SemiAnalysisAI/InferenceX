@@ -8557,4 +8557,5 @@
     - "Probe TP2/EP2 DSpark at C1 with host Engram tables, static memory fraction 0.90, and 2048-token prefill chunks while preserving TP4 settings"
     - "Schedule 16 DSpark decode rounds between prefill chunks to address high-concurrency AgentX prefill starvation"
     - "Compare TP4 DSpark with GPU-resident Engram at static memory fraction 0.80 against the pinned host-table baseline; TP2 retains host tables"
+    - "Release completed target MoE shuffle temporaries before the next stack in the hash-verified TP2 loader to reduce load-time peak memory; preserve all tensor payloads and computation"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3346

@@ -10,6 +10,13 @@ check_env_vars EVAL_ONLY SPEC_DECODING
 require_agentic_kv_offload_none
 export GPU_COUNT="$TP"
 
+if (( TP == 2 )); then
+    # The stock TP2 loader OOMed before KV allocation while retaining copies
+    # of an already-stacked target MoE projection. Only shorten their lifetime.
+    MXFP4_LOADER=$(python3 -c 'import pathlib, sglang; print(pathlib.Path(sglang.__file__).parent / "srt/layers/quantization/mxfp4_flashinfer_trtllm_moe.py")')
+    python3 "$(dirname "$0")/patch_sglang_mxfp4_load_memory.py" "$MXFP4_LOADER"
+fi
+
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
