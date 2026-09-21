@@ -823,10 +823,10 @@ class DeepseekV4HipRadixBackend(
         return PagedIndexerMetadata(
             page_size=self.page_size,
             page_table=page_table,
-            c4_seq_lens=c_seq_lens,
+            compressed_seq_lens=c_seq_lens,
             use_topk_v2=self.dsa_topk_backend.should_use_topk_v2(),
             compress_ratio=compress_ratio,
-            index_page_size=index_page_size,
+            compressed_page_size=index_page_size or self.page_size // compress_ratio,
         )
 
     def _init_low_ratio_indexer_metadata(
@@ -1348,7 +1348,7 @@ class DeepseekV4HipRadixBackend(
             indexer_metadata = metadata.indexer_metadata
             metadata.fp4_decode_workspace = prepare_fp4_decode_workspace(
                 indexer_metadata.page_table,
-                indexer_metadata.c4_seq_lens,
+                indexer_metadata.compressed_seq_lens,
             )
 
     def _fp4_workspaces_enabled(self, metadata) -> bool:
@@ -1406,7 +1406,7 @@ class DeepseekV4HipRadixBackend(
         indexer_metadata = metadata.indexer_metadata
         metadata.fp4_prefill_workspace = prepare_fp4_prefill_workspace(
             indexer_metadata.page_table,
-            indexer_metadata.c4_seq_lens,
+            indexer_metadata.compressed_seq_lens,
             workspace=metadata.fp4_prefill_workspace,
         )
 

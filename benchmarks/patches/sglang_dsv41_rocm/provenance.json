@@ -8,19 +8,19 @@
       "installed_name": "backend.py",
       "source_path": "python/sglang/srt/layers/attention/deepseek_v4_backend_hip_radix.py",
       "source_sha256": "7f0c0aebfd0413f83102698714e84454055deac4d64398979c75c06b2d654916",
-      "adapted_sha256": "9509072ccc8830a7a5e44710c3b5914c129ad2634ae4f5c4af94a44edbf71f46"
+      "adapted_sha256": "3d02677eaa00dce764b7b566256752b2a744b8d9fcaf2ea60c5503753a8c95d8"
     },
     {
       "installed_name": "low_ratio.py",
       "source_path": "python/sglang/srt/layers/attention/dsv4/low_ratio_backend.py",
       "source_sha256": "b418294e2ae2d695927488156c9974482f90d98faab951612aaad0dff31ddad2",
-      "adapted_sha256": "00ba8ce553544c83ac5fe4fa49ce9dfeac155deda0ba07adf9550e3830db3396"
+      "adapted_sha256": "d5d181f3f5d0b0bb56b640970abef62ea4f0fb56a59a61c34534e551dedb1e53"
     },
     {
       "installed_name": "low_ratio_hip.py",
       "source_path": "python/sglang/srt/layers/attention/dsv4/low_ratio_backend_hip.py",
       "source_sha256": "f859185ad42ca6de6e988f156cab0e5c0fd8a49eb7de144a5062c7f5a0162274",
-      "adapted_sha256": "f6dfaf2eac2bf5cfc0c75a2c7ca4ca6f5f24495485b61520e8ce329129758433"
+      "adapted_sha256": "78d659b9e0dc86453a3bc13a21e5ff503fe38fb1cba7b9e12d08dbca18298292"
     },
     {
       "installed_name": "fp4_indexer.py",

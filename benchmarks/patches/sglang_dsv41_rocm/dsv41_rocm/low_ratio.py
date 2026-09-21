@@ -876,7 +876,7 @@ class LowRatioBackendMixin:
         )
         assert metadata is not None, f"no prefill graph indexer metadata for {ratio = }"
         assert indexer.n_local_heads == indexer.n_heads
-        width = metadata.max_c4_seq_len
+        width = metadata.max_compressed_seq_len
         if indexer.uses_candidates or indexer.is_candidate_source:
             # Every reachable block is a candidate inside the window, so the
             # two-level selection collapses to the plain top-k below.
@@ -892,10 +892,10 @@ class LowRatioBackendMixin:
 
         k_cache = pool.get_index_k_with_scale_buffer(layer.layer_id)
         assert k_cache.dim() == 2
-        page_size = metadata.c4_page_size
+        page_size = metadata.compressed_page_size
         k_cache = k_cache.view(k_cache.shape[0], page_size, 1, 68)
 
-        lens = metadata.c4_seq_lens
+        lens = metadata.compressed_seq_lens
         page_table = metadata.page_table
         page_indices = core.sparse_page_indices(ratio)
         raw_indices = core.sparse_raw_indices(ratio)
@@ -977,7 +977,7 @@ class LowRatioBackendMixin:
         k_cache = pool.get_index_k_with_scale_buffer(layer.layer_id)
         assert k_cache.dim() == 2
         # Index pool page (64 slots); metadata.page_table is expanded to match.
-        page_size = metadata.c4_page_size
+        page_size = metadata.compressed_page_size
         k_cache = k_cache.view(
             k_cache.shape[0], page_size, 1, 68
         )  # fp4: 64 payload + 4 scale
@@ -986,15 +986,15 @@ class LowRatioBackendMixin:
             (q_fp4, q_sf),
             k_cache,
             weights,
-            metadata.c4_seq_lens,
+            metadata.compressed_seq_lens,
             metadata.page_table,
             metadata.deep_gemm_metadata,
-            metadata.max_c4_seq_len,
+            metadata.max_compressed_seq_len,
         )
 
         logits, published = two_level_decode_logits(
             logits,
-            metadata.c4_seq_lens,
+            metadata.compressed_seq_lens,
             is_candidate_source=indexer.is_candidate_source,
             uses_candidates=indexer.uses_candidates,
             topk_blocks=indexer.candidate_topk_blocks,
@@ -1011,7 +1011,7 @@ class LowRatioBackendMixin:
         if metadata.use_topk_v2 and raw_indices is None:
             topk_transform_paged_v2(
                 logits,
-                metadata.c4_seq_lens,
+                metadata.compressed_seq_lens,
                 None if filter_candidates else metadata.page_table,
                 selected if filter_candidates else page_indices,
                 page_size,
@@ -1020,7 +1020,7 @@ class LowRatioBackendMixin:
         else:
             topk_transform_paged(
                 logits,
-                metadata.c4_seq_lens,
+                metadata.compressed_seq_lens,
                 metadata.page_table,
                 page_indices,
                 page_size,
@@ -1065,7 +1065,7 @@ class LowRatioBackendMixin:
         assert metadata is not None
         # V4 reserves the replay bound in metadata; visibility stays on device.
         # A capture-time length read would both synchronize and truncate replay.
-        lmax = min(metadata.max_c4_seq_len, self.req_to_token.shape[1] // ratio)
+        lmax = min(metadata.max_compressed_seq_len, self.req_to_token.shape[1] // ratio)
         if lmax == 0:
             return
         q = indexer.queries(q_lora, layer.freqs_cis[pos])
