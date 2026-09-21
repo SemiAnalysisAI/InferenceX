@@ -73,8 +73,8 @@ if agentic_kv_offload_enabled; then
         HICACHE_RATIO="1.0"
     fi
     HICACHE_WRITE_POLICY="write_through"
-    HICACHE_IO_BACKEND="direct"
-    HICACHE_MEM_LAYOUT="page_first_direct"
+    HICACHE_IO_BACKEND="kernel"
+    HICACHE_MEM_LAYOUT="page_first"
     case "$KV_OFFLOAD_BACKEND" in
         hicache)
             echo "HiCache (GPU+host DRAM only): ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
