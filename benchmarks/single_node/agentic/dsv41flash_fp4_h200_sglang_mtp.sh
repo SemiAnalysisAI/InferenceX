@@ -43,13 +43,16 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# One shared host copy of the two fp8 Engram tables instead of a row-sharded
-# copy per rank: the SGLang analogue of the vLLM arm's Engram CPU offload. It
-# frees ~23 GiB of HBM per GPU for the 1M-context prefill working set and the
-# KV pool, and output is bitwise unchanged (cookbook). The first sweep ran
+# Move the two fp8 Engram tables to host memory, freeing ~23 GiB of HBM per
+# GPU for the 1M-context prefill working set and KV pool. Use row-sharded
+# anonymous mappings: H200 compute nodes allow anonymous THP with madvise,
+# but shmem_enabled=never prevents the shared memfd layout from using huge
+# pages. This changes table placement, preserving checkpoint weights/scales.
+# The first sweep ran
 # with the tables on GPU and the server died on the first long AgentX prompts
 # (run 35304458924: c128 died at startup with torch.OutOfMemoryError (12 GiB allocation, 5 GiB free of 139.8 GiB, 127.6 GiB already held by PyTorch)).
 export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
+export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
 
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts, but
