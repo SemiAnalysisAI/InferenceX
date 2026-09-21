@@ -347,9 +347,9 @@ Maximum concurrency for 1,048,576 tokens per request: 6.70x
 
 ### SGLang 上的 DeepSeek-V4.1-Flash DSpark
 
-H100 的 `-agentic-stp` 配置键通过同一个脚本选择非推测解码：不传入 draft 参数，也不使用模拟接受率，并发为 1/2/4/8/16/20。DSpark 配置键保留独立的解码模式元数据。两种模式共同组成 H100/SGLang 的同一条 AgentX 曲线。STP 通过 `--prefill-decode-interval 16` 在预填充分块之间执行 16 步解码，避免长提示持续挤占已就绪的解码请求；轨迹内容和上下文限制保持不变。
+H100 SGLang 候选配方在并发 1/2/4/8/16/20 下测试 DSpark。已完成的 STP 对比没有贡献实测性能前沿点，因此所选 sweep 不包含 STP。配方在预填充分块之间插入 16 步解码，轨迹内容和上下文限制保持不变。
 
-H100 nightly 候选配方使用 `nightly-dev-cu13-20260921-0f6761b5`、自动后端选择，以及 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`，让匿名主机表能够使用大页。解析后的本地快照路径让上游分配器能够在分配表之前清理检查点文件缓存。DSpark 沿用官方 nightly 默认的精度、内核和 KV 布局，不添加本地模型补丁或精度覆盖。仍需通过完整模型准确率评测及规范性能测试后才能验收。
+nightly 候选配方使用 `nightly-dev-cu13-20260921-0f6761b5`、原生 MXFP4 Marlin MoE，以及 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。解析后的本地快照路径让上游分配器能够在分配匿名主机表之前清理检查点文件缓存。draft 精度遵循固定镜像的默认处理，包括 WO_A 从 FP8 到 BF16 的转换。针对 GPU 的 block32 FP8 启动配置使用上游内核及其支持的 `SPLIT_K`/`SWAP_AB` 选项；检查点数据、scale、输出 dtype 和上下文限制均不变。小批次配置必须在选择边界通过 FP32 参考值和 CUDA graph 验证，再进行完整模型准确率评测及服务性能测试。较大批次保留原有配置。仍需完成规范全量 sweep 验收。
 
 
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` 是 vLLM 配方在 h100、h200、b200、b300、gb200、gb300

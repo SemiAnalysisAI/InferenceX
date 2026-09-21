@@ -8552,7 +8552,7 @@
     - "Use stock nightly DSpark precision and kernels, with row-sharded anonymous host Engram tables and a resolved local snapshot for upstream file-scoped page-cache eviction and huge-page backing."
     - "Retain TP8/EP8, GPU-resident KV, 4096-token prefill chunks, static memory fraction 0.70, the shipped draft precision defaults, and the existing AgentX acceptance and real-verification eval behavior."
     - "Use DSpark across the full AgentX concurrency curve with 16 decode steps between prefill chunks, unchanged shipped precision and canonical acceptance; completed STP diagnostics did not contribute a measured frontier point."
-    - "Install H100-specific block32 FP8 GEMM tiling configurations for three missing shapes, retaining default tiling for the regressing batch-64 case; preserve stock weights, scales and output precision and record the resolved config hashes."
+    - "Install H100-specific block32 FP8 GEMM tiling configurations for four shapes, including supported SPLIT_K/SWAP_AB small-batch choices for N1792/K5120 and N576/K5120; retain previous large-batch settings and default tiling for the regressing N5120/K288 batch-64 case; preserve stock weights, scales and output precision and record the resolved config hashes."
     - "Use expandable CUDA allocator segments to reduce fragmentation from long-context indexer masks without changing checkpoint precision or the static KV budget."
     - "Select the supported native MXFP4 Marlin MoE backend on Hopper, retaining BF16 activations and the nightly's shipped draft precision."
     - "Increase SWA prefix tails to 32 per concurrency at C4 and above, reaching 640 at C20 within the existing static cache budget; preserve roughly 5.3M full tokens and the existing transient-memory reserve."

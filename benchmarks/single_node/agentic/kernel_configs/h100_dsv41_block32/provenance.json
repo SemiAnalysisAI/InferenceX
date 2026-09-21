@@ -9,5 +9,16 @@
   "resolver_install_slurm_job": 18458,
   "validation": "39 cases: FP32 dequantized reference rtol=0.02/atol=0.05; exact CUDA graph/eager equality; alternating timing order. BF16 rounding may differ from default tiling.",
   "selection": "N5120/K288 batch64 restored to upstream default after timing regression.",
-  "precision": "Stock FP8 inputs and scales, BF16 output; no quantization or model changes."
+  "precision": "Stock FP8 inputs and scales, BF16 output; no quantization or model changes.",
+  "split_k_audit": {
+    "slurm_job": 18479,
+    "cases": 80,
+    "mechanism": "Pinned upstream Hopper SPLIT_K and SWAP_AB launch configuration, FP32 partial reduction, unchanged FP8 inputs/scales and BF16 output",
+    "shapes": [
+      "N1792/K5120",
+      "N576/K5120"
+    ],
+    "boundary_validation": "Slurm18480:56/56 FP32-reference and exact CUDA-graph replay checks passed, batch boundariesM1..1024; changed cases all faster in alternating-order microtimings",
+    "large_batch_policy": "Retain original fallback selection for M129..8192 using explicit boundary anchors"
+  }
 }
