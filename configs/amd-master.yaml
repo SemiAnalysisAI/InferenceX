@@ -1302,7 +1302,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
           - "DECODE_MTP_SIZE=3"
 
 dsv4-fp4-mi355x-atom-disagg-agentic-hicache-mtp:
-  image: rocm/atom-dev:nightly_202609140614
+  image: rocm/atom-dev:nightly_202609210314
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1317,7 +1317,7 @@ dsv4-fp4-mi355x-atom-disagg-agentic-hicache-mtp:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: "mtp"
-        conc-list: [ 1,2,8,16 ]
+        conc-list: [ 1,16 ]
         kv-offloading: none
         prefill:
           num-worker: 1
@@ -1331,43 +1331,6 @@ dsv4-fp4-mi355x-atom-disagg-agentic-hicache-mtp:
           tp: 8
           ep: 1
           dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-      - spec-decoding: "mtp"
-        conc-list: [ 64, 128 ]
-        kv-offloading: none
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-      - spec-decoding: "mtp"
-        conc-list: [ 256 ]
-        kv-offloading: dram
-        kv-offload-backend: { name: lmcache }
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=3"
