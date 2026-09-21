@@ -412,14 +412,11 @@ multi-arch preview build `lmsysorg/sglang:dev-dsv41` and MI355X uses
 `lmsysorg/sglang:dev-dsv41-mi35x`. Both tags are mutable, so the master configs and the
 changelog record the digests they were validated against.
 
-`dsv41flash-fp4-gb200-sglang-agentic` adds the cookbook's native non-speculative
-throughput mode at TP4/EP4. It shares the GB200 implementation through the STP
-script entry point, with caller-owned `SPEC_DECODING=none`: no draft model is
-loaded, no speculative flags are sent, and inherited synthetic-acceptance
-variables are cleared. The existing DSpark arm selects `SPEC_DECODING=mtp` and
-keeps its golden-AL policy. Both arms preserve the complete AgentX trace corpus.
-
-DSpark uses the default precision shipped by the pinned official nightly, without custom draft quantization or precision patches. STP loads no draft; full accuracy and performance validation are still required.
+The GB200 sweep contains only `dsv41flash-fp4-gb200-sglang-agentic-dspark`.
+The unmeasured STP entry is excluded; adding it would require matched evidence
+of a performance-frontier contribution. DSpark uses the default precision shipped
+by the pinned official nightly, without custom draft quantization or precision
+patches. Full accuracy and performance validation remain required.
 
 The GB200 host-table layout is `per_rank`: its compute-node kernel enables
 anonymous huge pages through `madvise`, while `shmem_enabled=never` prevents huge

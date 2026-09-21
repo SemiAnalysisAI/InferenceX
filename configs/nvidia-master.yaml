@@ -8134,23 +8134,6 @@ dsv41flash-fp4-gb200-sglang-agentic-dspark:
       search-space:
       - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
-# Native non-speculative serving follows the cookbook's throughput mode.
-# No draft model or synthetic acceptance; host Engram tables use anonymous
-# per-rank shards for the GB200 kernel's supported huge-page backing.
-dsv41flash-fp4-gb200-sglang-agentic:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5@sha256:987c7e4bd26918647211a5dcad72a2bdf2a5f394ac1469eff730e7517fc139be
-  model: deepseek-ai/DeepSeek-V4.1-Flash
-  model-prefix: dsv41flash
-  runner: cluster:gb200-nv
-  precision: fp4
-  framework: sglang
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
-      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: none, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
-
 dsv41flash-fp4-b300-vllm-agentic-dspark:
   image: vllm/vllm-openai:deepseekv41-flash-0909
   model: deepseek-ai/DeepSeek-V4.1-Flash

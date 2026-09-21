@@ -8556,12 +8556,11 @@
 
 - config-keys:
   - dsv41flash-fp4-gb200-sglang-agentic-dspark
-  - dsv41flash-fp4-gb200-sglang-agentic
   scenario-type:
   - agentic-coding
   description:
   - Move GB200 DeepSeek-V4.1-Flash DSpark from dev-dsv41 to official CUDA 13 nightly-dev-cu13-20260921-0f6761b5, pinned at multi-architecture manifest sha256:987c7e4bd26918647211a5dcad72a2bdf2a5f394ac1469eff730e7517fc139be (ARM64 sha256:9e1fb4c395b9c406136e10aa445b8784d06bca3839623b52cbe4a3b231a157a8); retain TP4/EP4 and native DSpark precision and golden acceptance policy
   - 'Use the upstream per_rank Engram host-table layout on GB200: anonymous row-sharded mappings can obtain 512 MiB huge pages on the measured madvise/never anonymous/shared THP policy; preserve original FP8 table weights and restore the two TP all-reduces'
-  - Add native non-speculative DeepSeek-V4.1-Flash AgentX serving on GB200 using the latest official pinned SGLang nightly, TP4/EP4 and huge-page-capable per-rank Engram host tables; no draft model, speculative flags, or synthetic acceptance
   - "Use the default MTP/DSpark precision shipped by the official nightly, without custom draft quantization or precision patches."
+  - Keep the sweep DSpark-only; remove the unmeasured STP entry and alias.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3347
