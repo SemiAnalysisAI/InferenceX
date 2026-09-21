@@ -3102,12 +3102,13 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "e04f5708b800fa4f40fe27baa55d40fb71825d05",
-      "status": "queued",
+      "status": "in_progress",
       "workflow_name": "offload-v1-nvme4tib-c384-r1-20260921",
       "dispatched_at": "2026-09-21T19:40:40Z",
       "job_id": 106487644052,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35646317491/job/106487644052",
       "queued_at": "2026-09-21T19:41:00Z",
+      "started_at": "2026-09-21T19:41:37Z",
       "performance_result": false,
       "target_node": "im-b200-c001",
       "capacity_bytes_per_node": 4398046511104,
@@ -3117,15 +3118,15 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852",
-  "status": "Cleanup control 35635160852 owner-verified and deleted the exact 4 TiB c512 scratch, then completed its canonical c1 HBM measurement. The 4 TiB HBM+NVMe c384 midpoint 35646317491 is now the single queued B200 and NVMe-bearing study workflow.",
+  "status": "Cleanup control 35635160852 owner-verified and deleted the exact 4 TiB c512 scratch, then completed its canonical c1 HBM measurement. The 4 TiB HBM+NVMe c384 midpoint 35646317491 is now running as the single NVMe-bearing study workflow.",
   "last_capacity_check": {
     "checked_at": "2026-09-21T19:41:00Z",
-    "active_study_run_ids": [],
-    "pending_study_run_ids": [
+    "active_study_run_ids": [
       35646317491
     ],
+    "pending_study_run_ids": [],
     "dispatch_allowed": false,
-    "reason": "Run 35646317491 occupies the single permitted queued B200 slot and is the single active-or-queued NVMe-bearing study workflow."
+    "reason": "Run 35646317491 is active and is the single active-or-queued NVMe-bearing study workflow."
   },
   "next_dispatch": {
     "requires": "Monitor c384 run 35646317491. Dispatch no other NVMe-bearing workflow until it is terminal and its exact task-owned scratch cleanup is verified."
