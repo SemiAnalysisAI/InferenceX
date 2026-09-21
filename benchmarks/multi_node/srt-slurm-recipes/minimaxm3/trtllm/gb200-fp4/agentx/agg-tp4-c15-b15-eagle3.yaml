@@ -49,6 +49,7 @@ roles:
       TRTLLM_TORCH_COMPILE_CONTEXT_ONLY: '1'
       DYN_PUBLISH_KV_EVENTS: '0'
       DYN_REASONING_PARSER: minimax_m3
+      DYN_TOOL_CALL_PARSER: minimax_m3
     args:
       max_seq_len: 1048576
       max_num_tokens: 16384
