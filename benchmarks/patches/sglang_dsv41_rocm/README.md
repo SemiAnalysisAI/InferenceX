@@ -34,6 +34,23 @@ header. It preserves group size 32, E4M3 range, the 1e-10 absmax floor, and upwa
 power-of-two scales. The dispatcher is gated to V4.1 on HIP; original paths for
 other models remain intact. GPU numerical and graph tests cover the adapter.
 
+The ROCm V4 fused RMSNorm helper hardcodes 128-wide activation quantization.
+For V4.1 only, keep its existing normalized BF16 output and let the linear apply
+its configured 32-wide UE8M0 quantization. This avoids passing incompatible
+128-wide scale tuples to WQ_B without changing normalization or model weights.
+`validate_model_norm.py` exercises the installed helper and linear, including
+strided QKV slices and graph replay.
+
+On HIP, a registered host Engram table needs the device alias returned by
+`hipHostGetDevicePointer`; the CPU address can differ and faults when passed to
+GPU kernels. The installer adapts only the host-table gather pointers, retaining
+CPU tensors for loading, the existing gather kernel, table bytes, and stock
+quantization. GPU-resident tables and CUDA behavior are unchanged. Both shared
+and per-rank mapped tables passed exact output checks and graph replay on MI355X.
+The [HIP memory API](https://rocm.docs.amd.com/projects/HIP/en/docs-7.2.4/doxygen/html/group___memory.html)
+documents this pointer distinction. Model-scale host-table performance remains
+unqualified; the recipe still uses GPU-resident Engram pending full-model tests.
+
 Passing startup or a limited eval is not full performance or accuracy
 qualification. Source is adapted from SGLang under the accompanying Apache 2.0
 license.

@@ -37,6 +37,43 @@ FP8_REPLACEMENT = (
 """
     + FP8_ANCHOR
 )
+HOST_REGISTER_ANCHOR = '''        if int(err) != 0:
+            raise RuntimeError(f"cudaHostRegister({nbytes} bytes) failed: {err}")
+'''
+HOST_REGISTER_REPLACEMENT = HOST_REGISTER_ANCHOR + '''        self.device_ptr = self.bytes.data_ptr()
+        if torch.version.hip is not None:
+            from sglang.srt.layers.attention.dsv41_rocm.host_table import (
+                hip_host_device_pointer,
+            )
+
+            self.device_ptr = hip_host_device_pointer(self.device_ptr)
+'''
+HOST_METHOD_ANCHOR = "    def _load_rows(self, param: nn.Parameter, loaded_weight: torch.Tensor):\n"
+HOST_METHOD_REPLACEMENT = '''    def _table_pointer(self, tensor: torch.Tensor) -> int:
+        if self.host_table is None or torch.version.hip is None:
+            return tensor.data_ptr()
+        return (
+            self.host_table.device_ptr
+            + tensor.data_ptr()
+            - self.host_table.bytes.data_ptr()
+        )
+
+''' + HOST_METHOD_ANCHOR
+ENGRAM_REWRITES = (
+    (HOST_REGISTER_ANCHOR, HOST_REGISTER_REPLACEMENT, 1),
+    (HOST_METHOD_ANCHOR, HOST_METHOD_REPLACEMENT, 1),
+    ("self.weight.data_ptr()", "self._table_pointer(self.weight)", 2),
+    ("self.scale.data_ptr()", "self._table_pointer(self.scale)", 2),
+)
+MODEL_ANCHOR = "    return x_quant, x_bf16\n"
+MODEL_REPLACEMENT = '''    if _is_hip and _is_gfx95_supported:
+        from sglang.srt.runtime_context import process_model_config
+
+        if process_model_config().hf_text_config.model_type == "deepseek_v41":
+            # The V4 fused quantizer emits 128-wide groups. Keep its existing
+            # normalized BF16 row; the V4.1 linear applies native 32-wide UE8M0.
+            return x_bf16, x_bf16
+''' + MODEL_ANCHOR
 
 
 def sha256(data: bytes) -> str:
@@ -66,6 +103,24 @@ def install(package: Path, evidence: Path) -> None:
         )
     if fp8_original.count(FP8_ANCHOR) != 1:
         raise RuntimeError("Expected exactly one block-FP8 dispatch anchor")
+    engram = package / "srt/layers/engram.py"
+    engram_original = engram.read_text()
+    for before, after, count in ENGRAM_REWRITES:
+        if after in engram_original:
+            engram_original = engram_original.replace(after, before, count)
+    if sha256(engram_original.encode()) != manifest["engram_sha256"]:
+        raise RuntimeError("Unexpected Engram source; refusing to patch another revision")
+    for before, _, count in ENGRAM_REWRITES:
+        if engram_original.count(before) != count:
+            raise RuntimeError("Unexpected Engram host-pointer patch anchor count")
+    model = package / "srt/models/deepseek_v4.py"
+    model_original = model.read_text()
+    if MODEL_REPLACEMENT in model_original:
+        model_original = model_original.replace(MODEL_REPLACEMENT, MODEL_ANCHOR, 1)
+    if sha256(model_original.encode()) != manifest["model_sha256"]:
+        raise RuntimeError("Unexpected V4 model source; refusing to patch another revision")
+    if model_original.count(MODEL_ANCHOR) != 1:
+        raise RuntimeError("Unexpected V4 fused-normalization patch anchor count")
     for item in manifest["files"]:
         data = (source / "dsv41_rocm" / item["installed_name"]).read_bytes()
         if sha256(data) != item["adapted_sha256"]:
@@ -80,8 +135,16 @@ def install(package: Path, evidence: Path) -> None:
     registry.write_text(patched)
     fp8_patched = fp8_original.replace(FP8_ANCHOR, FP8_REPLACEMENT, 1)
     fp8_utils.write_text(fp8_patched)
+    engram_patched = engram_original
+    for before, after, count in ENGRAM_REWRITES:
+        engram_patched = engram_patched.replace(before, after, count)
+    engram.write_text(engram_patched)
+    model_patched = model_original.replace(MODEL_ANCHOR, MODEL_REPLACEMENT, 1)
+    model.write_text(model_patched)
     manifest["installed_registry_sha256"] = sha256(patched.encode())
     manifest["installed_fp8_utils_sha256"] = sha256(fp8_patched.encode())
+    manifest["installed_engram_sha256"] = sha256(engram_patched.encode())
+    manifest["installed_model_sha256"] = sha256(model_patched.encode())
     evidence.write_text(json.dumps(manifest, indent=2) + "\n")
     print(
         f"V4.1 ROCm backport installed; exact source evidence: {evidence}", flush=True

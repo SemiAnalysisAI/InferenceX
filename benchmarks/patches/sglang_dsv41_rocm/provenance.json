@@ -57,8 +57,16 @@
       "source_path": null,
       "description": "V4.1-only adapter using existing nightly Triton UE8M0 quantizer and block-FP8 GEMM; no weight or quantization setting changes",
       "adapted_sha256": "6b48b97d52ffc9d7b05b7978e96b97faa53513f3c4df41e9ebe7071fa2cd2f42"
+    },
+    {
+      "installed_name": "host_table.py",
+      "source_path": null,
+      "description": "HIP-only registered host-table device address resolution through hipHostGetDevicePointer; unchanged CPU parameters and stock gather kernel",
+      "adapted_sha256": "033dc006b688a8d4ded03d122659bfc490e1768daca987b44f760a17f82dd726"
     }
   ],
   "registry_sha256": "dfd9c0b6e85774524f6378ae09278cf6dc000e093ddf6beaadc44d1d20bdacd1",
-  "fp8_utils_sha256": "193c262f77133f58847f843446ca7b168364e4a69ff8fe88e8ed50b59efba07d"
+  "fp8_utils_sha256": "193c262f77133f58847f843446ca7b168364e4a69ff8fe88e8ed50b59efba07d",
+  "engram_sha256": "6468ead93f279c478928e354e612408f2dcd562372da98c062abc154a43d0f18",
+  "model_sha256": "4164c354f38e7b35e6bf5445b4d506e610b9f956f3e85f1431946ff6b0471ded"
 }
