@@ -451,7 +451,7 @@ python -m pytest utils/matrix_logic/ -v
 - Router 元数据要求组件真实名称及 release/package/commit 版本；镜像 tag 不是组件版本。
 - Agentic 配置要求精确 `cluster:<name>` runner。
 - 设置字段只会生成 env/workflow 值。必须确认被选择的脚本实际消费它。
-- Scenario 的 `max-model-len` 由 ISL + OSL + slack 推导；不要为 8k1k/1k8k 配方硬编码 checkpoint 的完整上下文。
+- Scenario 的 `max-model-len` 由 ISL + OSL + slack 推导；不要为 8k1k 配方硬编码 checkpoint 的完整上下文。
 
 ## 安全追加 changelog
 

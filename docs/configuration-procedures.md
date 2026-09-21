@@ -510,7 +510,7 @@ Enforced details come from [`validation.py`](../utils/matrix_logic/validation.py
 - Router metadata requires its component's real name and release/package/commit version. An image tag is not a component version.
 - Agentic configs require an exact `cluster:<name>` runner.
 - Setting a field only emits an env/workflow value. Confirm the selected script consumes it.
-- Scenario `max-model-len` is derived from ISL + OSL + slack. Do not hardcode the checkpoint's full context for an 8k1k/1k8k recipe.
+- Scenario `max-model-len` is derived from ISL + OSL + slack. Do not hardcode the checkpoint's full context for an 8k1k recipe.
 
 ## Append the changelog safely
 

@@ -56,7 +56,7 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 
 **已于 2026-09-09 执行**（[#2921](https://github.com/SemiAnalysisAI/InferenceX/pull/2921)）：46 个 `dsv4` 8k1k 配置项已从启用的主配置中移除并归档至 [`configs/deprecated/`](configs/deprecated/)，现合并至 `configs/deprecated/nvidia-master.yaml`（33 个）与 `configs/deprecated/amd-master.yaml`（13 个）；对应的 28 个基准测试脚本移入同级 `deprecated/` 目录（`benchmarks/single_node/fixed_seq_len/` 下 25 个，`benchmarks/multi_node/` 下 3 个），与 [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493) 和 [#2527](https://github.com/SemiAnalysisAI/InferenceX/pull/2527) 的做法一致。数量为 46 而非上文所述的 45，是因为 `dsv4-fp4-b200-dynamo-sglang` 在本公告发布后才合入。19 个智能体编码配置项未做改动：`dsv4` 以智能体编码为唯一场景继续运行与发布。`dsv4` 的 SPEED-Bench 接受长度脚本予以保留。Speedbench 由 `speedbench-al.yml` 驱动，不经过主配置。已归档多节点配置项所引用的 srt-slurm 与 llm-d 配方 YAML 作为惰性参考数据原地保留，与 #2493 和 #2527 的处理一致。
 
-**弃用状态一致性核查（2026-09-21）：** 启用的主配置及基准测试脚本位置与上述已执行的退役事项和下方支持矩阵一致。GLM-5.1 B200 TileRT 仍是文档明确保留的例外，不受此前 GLM-5/5.1 和 1k1k 退役范围限制。有条件的 A/B 基线退役仍待执行；对 Pareto 前沿有贡献的非投机解码配置继续受支持。弃用配置现统一归档至 [`configs/deprecated/amd-master.yaml`](configs/deprecated/amd-master.yaml) 和 [`configs/deprecated/nvidia-master.yaml`](configs/deprecated/nvidia-master.yaml)。
+**弃用状态一致性核查（2026-09-21）：** 启用的主配置及基准测试脚本位置与上述已执行的退役事项和下方支持矩阵一致。GLM-5.1 B200 TileRT 仍是文档明确保留的例外，不受此前 GLM-5/5.1 和 1k1k 退役范围限制。有条件的 A/B 基线退役仍待执行；对 Pareto 前沿有贡献的非投机解码配置继续受支持。进一步的路由核查还移除了启动器和运行时设置中遗留的退役模型分支及 GLM-5 专用环境覆盖，并修正了仍推荐退役配置的工作流和智能体指南。SPEED-Bench 采集器、历史结果读取逻辑及明确保留的配方 YAML 继续保留。弃用配置现统一归档至 [`configs/deprecated/amd-master.yaml`](configs/deprecated/amd-master.yaml) 和 [`configs/deprecated/nvidia-master.yaml`](configs/deprecated/nvidia-master.yaml)。
 
 ## 场景
 
