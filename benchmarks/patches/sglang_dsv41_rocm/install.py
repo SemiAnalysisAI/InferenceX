@@ -75,6 +75,8 @@ MODEL_REPLACEMENT = '''    if _is_hip and _is_gfx95_supported:
             return x_bf16, x_bf16
 ''' + MODEL_ANCHOR
 
+MLP_ANCHOR = "        self.use_fused_clamp_act_mul = _is_hip\n"
+MLP_REPLACEMENT = MLP_ANCHOR + '        if _is_hip:\n            from sglang.srt.runtime_context import process_model_config\n\n            if process_model_config().hf_text_config.model_type == "deepseek_v41":\n                # AITER\'s fused path requires 128-wide groups/alignment. V4.1\n                # uses 32-wide groups and shared-expert widths such as 576.\n                self.use_fused_clamp_act_mul = False\n'
 
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -121,6 +123,14 @@ def install(package: Path, evidence: Path) -> None:
         raise RuntimeError("Unexpected V4 model source; refusing to patch another revision")
     if model_original.count(MODEL_ANCHOR) != 1:
         raise RuntimeError("Unexpected V4 fused-normalization patch anchor count")
+    mlp = package / "srt/models/deepseek_v2.py"
+    mlp_original = mlp.read_text()
+    if MLP_REPLACEMENT in mlp_original:
+        mlp_original = mlp_original.replace(MLP_REPLACEMENT, MLP_ANCHOR, 1)
+    if sha256(mlp_original.encode()) != manifest["mlp_sha256"]:
+        raise RuntimeError("Unexpected MLP source; refusing to patch another revision")
+    if mlp_original.count(MLP_ANCHOR) != 1:
+        raise RuntimeError("Unexpected MLP fused-clamp patch anchor count")
     for item in manifest["files"]:
         data = (source / "dsv41_rocm" / item["installed_name"]).read_bytes()
         if sha256(data) != item["adapted_sha256"]:
@@ -141,10 +151,13 @@ def install(package: Path, evidence: Path) -> None:
     engram.write_text(engram_patched)
     model_patched = model_original.replace(MODEL_ANCHOR, MODEL_REPLACEMENT, 1)
     model.write_text(model_patched)
+    mlp_patched = mlp_original.replace(MLP_ANCHOR, MLP_REPLACEMENT, 1)
+    mlp.write_text(mlp_patched)
     manifest["installed_registry_sha256"] = sha256(patched.encode())
     manifest["installed_fp8_utils_sha256"] = sha256(fp8_patched.encode())
     manifest["installed_engram_sha256"] = sha256(engram_patched.encode())
     manifest["installed_model_sha256"] = sha256(model_patched.encode())
+    manifest["installed_mlp_sha256"] = sha256(mlp_patched.encode())
     evidence.write_text(json.dumps(manifest, indent=2) + "\n")
     print(
         f"V4.1 ROCm backport installed; exact source evidence: {evidence}", flush=True

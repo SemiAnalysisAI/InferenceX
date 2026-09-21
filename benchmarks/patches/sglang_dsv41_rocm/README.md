@@ -38,6 +38,9 @@ The ROCm V4 fused RMSNorm helper hardcodes 128-wide activation quantization.
 For V4.1 only, keep its existing normalized BF16 output and let the linear apply
 its configured 32-wide UE8M0 quantization. This avoids passing incompatible
 128-wide scale tuples to WQ_B without changing normalization or model weights.
+The V4.1 shared-expert MLP also uses the existing unfused activation path: the
+AITER fused alternative requires 128-aligned widths and emits 128-wide scales,
+while TP4 V4.1 shared experts have 576-wide partitions and 32-wide scales.
 `validate_model_norm.py` exercises the installed helper and linear, including
 strided QKV slices and graph replay.
 
