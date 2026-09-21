@@ -1464,8 +1464,9 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
 # Two GPUs per server doubles the servers per node and is the layout that
 # decides whether DSv4.1-Flash is throughput- or interactivity-bound here.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark:
-  # TODO: pin to the ROCm 10 nightly digest once that image is published.
-  image: vllm/vllm-openai-rocm:nightly-rocm10-TBD
+  # TODO: pin the nightly this sweep runs on. Stay on the existing ROCm nightly
+  # channel rather than nightly-rocm100, per #3215.
+  image: vllm/vllm-openai-rocm:nightly-TBD
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
