@@ -98,7 +98,11 @@ SCHEDULING_ARGS=(--prefill-decode-interval 16)
 # high-concurrency DSpark comparisons; checkpoint math stays unchanged.
 CACHE_ARGS=()
 if [[ "$SPEC_DECODING" == mtp ]] && (( CONC >= 16 )); then
-    CACHE_ARGS=(--swa-prefix-tails 1024)
+    SWA_PREFIX_TAILS=$((64 * CONC))
+    if (( SWA_PREFIX_TAILS > 4096 )); then
+        SWA_PREFIX_TAILS=4096
+    fi
+    CACHE_ARGS=(--swa-prefix-tails "$SWA_PREFIX_TAILS")
 fi
 case "$SPEC_DECODING" in
     mtp)
