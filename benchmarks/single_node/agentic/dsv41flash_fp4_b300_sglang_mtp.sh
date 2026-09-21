@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-# DeepSeek-V4.1-Flash AgentX on B300 with SGLang native DSpark, following the
-# cookbook's verified Blackwell TP4/EP4 low-latency cell. The KV cache is GPU-resident.
+# DeepSeek-V4.1-Flash AgentX on B300 with SGLang, supporting STP and DSpark.
+# The KV cache is GPU-resident; caller SPEC_DECODING selects the serving mode.
 # https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP EP_SIZE CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
-check_env_vars EVAL_ONLY
+check_env_vars EVAL_ONLY SPEC_DECODING
 require_agentic_kv_offload_none
 export GPU_COUNT="$TP"
 
@@ -43,13 +43,11 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# One shared host copy of the two fp8 Engram tables instead of a row-sharded
-# copy per rank: the SGLang analogue of the vLLM arm's Engram CPU offload. It
-# frees ~46 GiB of HBM per GPU for the 1M-context prefill working set and the
-# KV pool, and output is bitwise unchanged (cookbook). The first sweep ran
-# with the tables on GPU and the server died on the first long AgentX prompts
-# (run 35304517453: c4 came up, then the server exited on the first two warmup prompts).
+# Keep Engram tables in host RAM to make room for long-context AgentX KV.
+# Per-rank anonymous mappings can use THP without requiring shared-memory THP
+# or host sysctl changes. The table payload remains native FP8.
 export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
+export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
 
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts, but
@@ -77,18 +75,27 @@ export AIPERF_SERVER_METRICS_URLS="${AIPERF_SERVER_URL}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="sglang:"
 echo "Using SGLang endpoint ${AIPERF_SERVER_URL}"
 
-# DSpark is the checkpoint's own bundled draft: no EAGLE/MTP path and no
-# --speculative-num-steps knob; the block size is the only tunable. Golden AL:
-# golden_al_distribution/dsv41flash_dspark.yaml, thinking_on, five draft tokens.
-# Throughput fixes acceptance to AL 3.51; accuracy evals keep real verification.
-DSPARK_BLOCK_SIZE=5
-DSV41_GOLDEN_AL=3.51
-if [[ "${EVAL_ONLY}" != true ]]; then
-    export SGLANG_SIMULATE_ACC_LEN="$DSV41_GOLDEN_AL"
-    export SGLANG_SIMULATE_ACC_METHOD=match-expected
-    export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
-fi
-echo "DSpark block size: $DSPARK_BLOCK_SIZE, golden AL=$DSV41_GOLDEN_AL"
+# STP and accuracy evaluations must never inherit synthetic acceptance.
+unset SGLANG_SIMULATE_ACC_LEN SGLANG_SIMULATE_ACC_METHOD SGLANG_SIMULATE_ACC_TOKEN_MODE
+SPECULATIVE_ARGS=()
+case "$SPEC_DECODING" in
+    none)
+        echo "Non-speculative decoding; synthetic acceptance disabled"
+        ;;
+    mtp)
+        # Existing measured curve: dsv41flash_dspark.yaml, thinking_on, K5.
+        SPECULATIVE_ARGS=(--speculative-algorithm DSPARK --speculative-dspark-block-size 5)
+        if [[ "$EVAL_ONLY" != true ]]; then
+            export SGLANG_SIMULATE_ACC_LEN=3.51
+            export SGLANG_SIMULATE_ACC_METHOD=match-expected
+            export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
+        fi
+        ;;
+    *)
+        echo "Unsupported SPEC_DECODING: $SPEC_DECODING" >&2
+        exit 1
+        ;;
+esac
 
 SGLANG_CMD=(
     python3 -m sglang.launch_server
@@ -104,8 +111,7 @@ SGLANG_CMD=(
     # first 66k-99k-token AgentX prompts.
     --mem-fraction-static 0.70
     --chunked-prefill-size 4096
-    --speculative-algorithm DSPARK
-    --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
+    "${SPECULATIVE_ARGS[@]}"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     --reasoning-parser auto
