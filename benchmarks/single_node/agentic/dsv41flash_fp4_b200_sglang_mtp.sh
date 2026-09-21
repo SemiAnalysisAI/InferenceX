@@ -2,7 +2,7 @@
 set -eo pipefail
 
 # DeepSeek-V4.1-Flash AgentX on B200 with native STP or DSpark serving.
-# Both use the cookbook's Blackwell TP4/EP4 layout and GPU-resident KV cache.
+# Use the cookbook's TP4/EP4 layout or a bounded TP2/EP2 memory probe.
 # https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP EP_SIZE CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
@@ -65,6 +65,16 @@ if (( MAX_RUNNING_REQUESTS > CUDA_GRAPH_MAX_BS )); then
     MAX_RUNNING_REQUESTS=$CUDA_GRAPH_MAX_BS
 fi
 
+# TP2 doubles the per-GPU weight footprint. Bound long-context indexer
+# workspace with smaller chunks while reserving roughly 18 GiB for transient
+# allocations. TP4 retains the established memory and prefill settings.
+MEM_FRACTION_STATIC=0.70
+CHUNKED_PREFILL_SIZE=4096
+if (( TP == 2 )); then
+    MEM_FRACTION_STATIC=0.90
+    CHUNKED_PREFILL_SIZE=2048
+fi
+
 # Saturation arms carry a larger in-flight working set than the 30-minute
 # default warmup drain allows.
 if (( CONC >= 32 )); then
@@ -115,8 +125,8 @@ SGLANG_CMD=(
     # sparse-attention indexer and DSpark prefill buffers scale with the chunk
     # times the 1M context, and the default 16384 chunk exhausted HBM on the
     # first 66k-99k-token AgentX prompts.
-    --mem-fraction-static 0.70
-    --chunked-prefill-size 4096
+    --mem-fraction-static "$MEM_FRACTION_STATIC"
+    --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     "${SPECULATIVE_ARGS[@]}"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"

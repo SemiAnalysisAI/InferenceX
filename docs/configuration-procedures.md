@@ -419,7 +419,9 @@ per TP4 rank to remove host-table accesses; compare measured cache capacity and 
 against the per-rank host candidate before selecting the final placement.
 DSpark uses the pinned upstream nightly's shipped default draft implementation,
 including its default computation and Markov precision. STP loads no draft;
-both STP and evals clear synthetic acceptance.
+both STP and evals clear synthetic acceptance. A bounded TP2/EP2 DSpark C1 probe
+keeps host Engram shards, uses a 0.90 static memory fraction, and halves prefill
+chunks to 2048; measure startup memory and transient workspace before extending it.
 
 DSpark is the checkpoint's own bundled draft. SGLang exposes no EAGLE or MTP path and no
 `--speculative-num-steps` knob for it; the recipes pass `--speculative-algorithm DSPARK
