@@ -31,6 +31,14 @@ SERVER_LOG="$RESULT_DIR/server.log"
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 
+# The pinned nightly lacks these TP8 H200 block32 GEMM configurations. Install
+# measured launch tilings into its existing resolver; kernel code and precision
+# stay unchanged. TP4 keeps the configurations already shipped by SGLang.
+if (( TP == 8 )); then
+    python3 "$(dirname "$0")/install_h200_block32_configs.py" \
+        "$(dirname "$0")/kernel_configs/h200_dsv41_block32" "$RESULT_DIR"
+fi
+
 # Use the default DSpark precision shipped by the pinned SGLang nightly.
 
 # Agentic warmup dispatches hundreds of large prompts at once and SGLang's
