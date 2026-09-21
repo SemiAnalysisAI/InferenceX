@@ -87,6 +87,8 @@ SGLANG_CMD=(
     # 4096, as on B200/GB200: at 8192 the indexer's prefill top-k allocated 5 GiB
     # with 29 requests in flight and OOMed c32 (run 35308550355).
     --chunked-prefill-size 4096
+    # Long prefix chunks otherwise starve decode while the prefill queue is busy.
+    --prefill-decode-interval 16
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     --reasoning-parser auto
