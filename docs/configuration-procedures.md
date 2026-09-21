@@ -400,8 +400,9 @@ Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/mode
 `dsv41flash-fp4-gb300-sglang-agentic` runs native non-speculative serving at
 TP2/EP2 or TP4/EP4 on the pinned official nightly. Its STP entry point shares the
 GB300 script with `SPEC_DECODING=none`, clears inherited synthetic acceptance,
-and passes no draft flags. The `per_rank` Engram host layout uses anonymous
-huge pages on GB300, where shared-memory huge pages are disabled. The separate
+and passes no draft flags. TP4 keeps the original Engram tables in GPU memory, avoiding host huge-page
+fragmentation. TP2 uses the `per_rank` anonymous host layout; GB300 disables
+shared-memory huge pages. The separate
 DSpark arm applies `patch_sglang_dsv41_native_wo_a.py`, which verifies the nightly
 source hash and preserves all three draft WO_A projections' native FP8 weights and
 block scales. Markov weights retain native BF16. Full-model accuracy and performance

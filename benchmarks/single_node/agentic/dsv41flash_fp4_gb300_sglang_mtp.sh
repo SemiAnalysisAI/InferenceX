@@ -51,14 +51,17 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# Keep the Engram weights in row-sharded host DRAM. GB300's 64 KiB-page
-# kernel enables anonymous THP with madvise but disables shmem THP, so the
-# shared memfd layout cannot obtain huge-page backing. The upstream per-rank
-# layout uses anonymous mappings, MADV_HUGEPAGE and MADV_COLLAPSE for 512 MiB
-# pages; row ownership and the original FP8 table weights are preserved.
-# This trades two TP all-reduces for fewer host-table translation misses.
-export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
-export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
+# TP4 has room for the original Engram tables in HBM: the STP baseline used
+# 73.3 GiB for weights before the ~47.2 GiB tables. Host shards still had 0%
+# huge-page backing on some ranks after model-local cache advice, so avoid
+# that lookup bottleneck on TP4. TP2 retains the anonymous host-table layout.
+if (( TP >= 4 )); then
+    export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0
+    unset SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT
+else
+    export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
+    export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
+fi
 
 # The bundled Markov embedding/head weights are natively BF16. Preserve the
 # nightly default that keeps W2 BF16 instead of converting it to FP32.
