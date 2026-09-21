@@ -199,18 +199,3 @@ IMPLS = [
     BackendImpl(op_type="gemm", prepare=_prepare_gemm, kernel=_kernel_gemm),
 ]
 
-# The routed-expert (moe_gemm) backend lives in operatorx.runners.moe and is
-# surfaced through this module upstream; merge its impls and version info so
-# both the GEMM paths above and moe_gemm dispatch through "vllm".
-try:
-    from operatorx.runners import moe as _moe
-
-    IMPLS = IMPLS + list(_moe.IMPLS)
-    _gemm_versions = versions
-
-    def versions() -> dict[str, str]:  # noqa: F811
-        out = dict(_moe.versions())
-        out.update(_gemm_versions())
-        return out
-except ImportError:  # moe module needs vLLM features older builds lack
-    pass
