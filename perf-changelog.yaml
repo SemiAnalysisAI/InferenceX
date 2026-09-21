@@ -8553,3 +8553,12 @@
   - Use prefill HiCache, ReplaySSM at C56, and tuned decode capacity.
   - Use SGLang nightly 20260918-20518d85 and Dynamo/SRT Slurm with the official FP8 checkpoint’s embedded NEXTN head.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+    - kimik3-fp4-h200-vllm-agentic-latency
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Report in-window power sample gaps per GPU instead of voiding the window: one dcgm-exporter reply past the 2 s request timeout is a 3 s+ gap at a 1 s cadence, and the 3.0 s verdict discarded whole lanes such as this recipe's TP16 sweep. Applies to every telemetry-enabled recipe and the single-node SMI path; a stream that stops before the window ends still fails."
+    - "窗口内的功耗采样间隙改为按 GPU 报告而非作废窗口：1 秒节拍下 dcgm-exporter 一次超过 2 秒请求超时的回复就是 3 秒以上的间隙，3.0 秒判定曾整条丢弃本配方的 TP16 sweep 等 lane。适用于所有启用遥测的配方及单节点 SMI 路径；窗口结束前停止的数据流仍然失败。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3353
