@@ -21,7 +21,7 @@ Use this page for benchmark configuration, recipe, image, and runner changes. It
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | Append-only benchmark trigger log |
 | [`AGENTS.md`](../AGENTS.md) | Repository-wide config, MTP, changelog, and sweep rules |
 
-Archive deprecated entries in [`configs/deprecated/amd-master.yaml`](../configs/deprecated/amd-master.yaml) or [`configs/deprecated/nvidia-master.yaml`](../configs/deprecated/nvidia-master.yaml). Use only these two vendor archives, not separate files per deprecation. Preserve historical settings and comments; disambiguate colliding keys with a descriptive suffix and an original-key comment. For partial retirements, move only the retired scenarios. Keep archives out of active sweep inputs. See the [deprecation rules](../AGENTS.md#deprecating-benchmark-configs).
+Archive deprecated entries in [`configs/deprecated/amd-master.yaml`](../configs/deprecated/amd-master.yaml) or [`configs/deprecated/nvidia-master.yaml`](../configs/deprecated/nvidia-master.yaml). Use only these two vendor archives, not separate files per deprecation. Preserve historical settings and comments; disambiguate colliding keys with a descriptive suffix and an original-key comment. For partial retirements, move only the retired scenarios. Keep archives out of active sweep inputs. Retired AMD server-registry entries and model-specific setup belong in `benchmarks/multi_node/amd_utils/deprecated/`, outside the active server lookup. Preserve shared dependencies needed by retained SPEED-Bench collectors, including their scheduling scores. See the [deprecation rules](../AGENTS.md#deprecating-benchmark-configs).
 
 ## Dependency submodules
 

@@ -21,7 +21,7 @@
 | [`perf-changelog.yaml`](../perf-changelog.yaml) | 只允许追加的基准触发日志 |
 | [`AGENTS.md`](../AGENTS.md) | 仓库级配置、MTP、changelog 和 sweep 规则 |
 
-弃用的配置项应归档至 [`configs/deprecated/amd-master.yaml`](../configs/deprecated/amd-master.yaml) 或 [`configs/deprecated/nvidia-master.yaml`](../configs/deprecated/nvidia-master.yaml)。仅使用这两个按厂商划分的归档文件，不要为每次弃用创建单独文件。保留历史设置和注释；遇到配置键冲突时，使用描述性后缀区分，并用注释记录原始配置键。仅弃用部分场景时，只移出已退役的场景。归档文件不得加入启用的 sweep 输入。参见[弃用规则](../AGENTS.md#deprecating-benchmark-configs)。
+弃用的配置项应归档至 [`configs/deprecated/amd-master.yaml`](../configs/deprecated/amd-master.yaml) 或 [`configs/deprecated/nvidia-master.yaml`](../configs/deprecated/nvidia-master.yaml)。仅使用这两个按厂商划分的归档文件，不要为每次弃用创建单独文件。保留历史设置和注释；遇到配置键冲突时，使用描述性后缀区分，并用注释记录原始配置键。仅弃用部分场景时，只移出已退役的场景。归档文件不得加入启用的 sweep 输入。退役的 AMD 服务注册项和模型专用初始化逻辑应移至 `benchmarks/multi_node/amd_utils/deprecated/`，不参与启用服务的查找。保留 SPEED-Bench 采集器仍需使用的共享依赖，包括调度评分。参见[弃用规则](../AGENTS.md#deprecating-benchmark-configs)。
 
 ## 依赖子模块
 

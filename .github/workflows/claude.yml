@@ -131,7 +131,7 @@ jobs:
 
             **Specify concurrency and sequence length:**
             ```
-            generate-cli-command: "full-sweep --config-files configs/nvidia-master.yaml --single-node --model-prefix dsr1 --min-conc 4 --max-conc 4 --seq-lens 1k1k"
+            generate-cli-command: "full-sweep --config-files configs/nvidia-master.yaml --single-node --model-prefix dsr1 --min-conc 4 --max-conc 4 --seq-lens 8k1k"
             ```
 
             **Test specific config keys (MUST USE `--conc`):**
@@ -142,7 +142,7 @@ jobs:
             **IMPORTANT: Keep runs precise and efficient:**
             - Use `full-sweep` with filter flags to narrow down the benchmark scope - "full-sweep" does NOT mean running everything
             - When using `full-sweep`, you must use `--min-conc` and `--max-conc` together to specify a single concurrency value. Unless prompted otherwise, use `--min-conc 4 --max-conc 4`
-            - When using `full-sweep`, you can use `--seq-lens` to specify sequence lengths (choices: 1k1k, 8k1k). Unless prompted otherwise, use `--seq-lens 1k1k`
+            - For fixed-sequence runs, use `--seq-lens 8k1k`. Use `1k1k` only for the explicitly retained GLM-5.1 B200 TileRT config. Consult `MODELS.md` for model-specific scenario eligibility.
             - Use `test-config` ONLY when given specific config keys to test - Use `--config-files`, `--config-keys`, and `--conc` flags ONLY
             - Always filter by specific models, frameworks, precision, conc, or config keys when possible
 
@@ -203,8 +203,8 @@ jobs:
             Choose config-file: NVIDIA runners (b200, h200, h100, gb200, gb300) → `nvidia-master.yaml`; AMD runners (mi300x, mi325x, mi355x) → `amd-master.yaml`
 
             **Available SGLang config keys:**
-            NVIDIA: `dsr1-fp4-b200-sglang`, `dsr1-fp8-b200-sglang`, `dsr1-fp8-h200-sglang`, `qwen3.5-bf16-b200-sglang`
-            AMD: `dsr1-fp4-mi355x-sglang`, `dsr1-fp8-mi300x-sglang`, `dsr1-fp8-mi325x-sglang`, `dsr1-fp8-mi355x-sglang`, `qwen3.5-bf16-mi355x-sglang`, `qwen3.5-fp8-mi355x-sglang`
+            NVIDIA: `dsr1-fp4-b200-sglang`, `dsr1-fp8-b200-sglang`, `dsr1-fp8-h200-sglang`, `qwen3.5-fp8-b200-sglang`
+            AMD: `dsr1-fp4-mi355x-sglang`, `dsr1-fp8-mi300x-sglang`, `dsr1-fp8-mi325x-sglang`, `dsr1-fp8-mi355x-sglang`, `qwen3.5-fp8-mi355x-sglang`
 
             **Examples:**
             - "profile sglang b200 deepseek fp4 conc=4" → `config-key: dsr1-fp4-b200-sglang`, `config-file: configs/nvidia-master.yaml`, `conc: 4`
