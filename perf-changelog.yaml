@@ -8462,9 +8462,9 @@
     - agentic-coding
   description:
     - "Add a TP=2 search space alongside TP=4 for MI355X DSv4.1-Flash AgentX, and extend both to concurrency 128. TP=2 is feasible now that the Engram tables live in host memory rather than costing 47.2 GiB of device memory per rank, which previously forced four GPUs per server."
-    - "Move the image to the ROCm 10 nightly; the digest is pinned once that build is published."
+    - "Move the image from vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657 on the plain ROCm nightly channel to vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984 on the ROCm 10.0 nightly channel, published 2026-09-21T05:50:03Z with digest sha256:eccb72b74b8c04ce7406d9212e200b129f58e24be642795a857f755a94fdb3a1. kimik3-fp4-mi355x-vllm-agentic-mtp already runs that channel on this cluster. This sweep is the qualification for the new image; the previous green run is not evidence for it."
     - "Drop the fixed max_num_seqs of 128 and use vLLM's MI355X API-server default of 1024, since a fixed 128 caps in-flight sequences at the outer concurrency once the sweep reaches c128. The CUDA graph ceiling stays at 1024 through c64 and rises to 2048 at c128, covering twice the outer concurrency. Supersedes PR #3111."
     - "为 MI355X DSv4.1-Flash AgentX 在 TP=4 之外新增 TP=2 搜索空间，并将两者的并发扩展到 128。Engram 表已驻留主机内存，不再占用每 rank 47.2 GiB 设备内存（此前这迫使每个服务器使用四张 GPU），因此 TP=2 可行。"
-    - "镜像切换到 ROCm 10 nightly；该构建发布后再固定 digest。"
+    - "镜像从 plain ROCm nightly 渠道的 vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657 切换到 ROCm 10.0 nightly 渠道的 vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984，该镜像于 2026-09-21T05:50:03Z 发布，digest 为 sha256:eccb72b74b8c04ce7406d9212e200b129f58e24be642795a857f755a94fdb3a1。本集群上的 kimik3-fp4-mi355x-vllm-agentic-mtp 已在使用该渠道。本次 sweep 即为新镜像的验证；此前的绿色运行不能作为其证据。"
     - "移除固定的 max_num_seqs 128，改用 vLLM 在 MI355X API server 上的默认值 1024：扫描到 c128 时，固定 128 会把在途序列数限制在外层并发上。CUDA graph 上限在 c64 及以下保持 1024，c128 提升至 2048，以覆盖两倍外层并发。本 PR 取代 PR #3111。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3326
