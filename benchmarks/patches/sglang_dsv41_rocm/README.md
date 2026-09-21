@@ -57,3 +57,9 @@ unqualified; the recipe still uses GPU-resident Engram pending full-model tests.
 Passing startup or a limited eval is not full performance or accuracy
 qualification. Source is adapted from SGLang under the accompanying Apache 2.0
 license.
+
+The recipe selects `SGLANG_USE_AITER_MOE_GU_ITLV=0` consistently for stock weight
+shuffling and MoE dispatch; the interleaved path selects an unsupported CK kernel.
+For V4.1 only, the indexer uses the existing packed FP4 payload/scale allocation
+required by the low-ratio backport, preserving FP4 values and round-to-even
+scaling. The nightly HIP split-buffer allocation serves its V4 indexer instead.

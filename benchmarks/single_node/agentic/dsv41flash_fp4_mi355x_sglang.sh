@@ -100,6 +100,8 @@ fi
 # SGLang already does on CUDA; aiter's custom all-reduce supports the mode.
 export PYTORCH_HIP_ALLOC_CONF=expandable_segments:True
 export SGLANG_USE_AITER=1
+# Keep stock weight shuffling and MoE dispatch in the same supported layout.
+export SGLANG_USE_AITER_MOE_GU_ITLV=0
 export SGLANG_MOE_PADDING=1
 export AITER_FLYDSL_FORCE_REDUCE=1
 export ROCM_QUICK_REDUCE_QUANTIZATION=NONE
