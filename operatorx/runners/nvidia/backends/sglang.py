@@ -327,6 +327,8 @@ def _kernel_moe_forward(ctx: dict) -> None:
         ctx["out"] = ctx["moe"].forward_normal(ctx["x"])
 
 
+
+
 IMPLS = [
     BackendImpl(op_type="gemm", prepare=_prepare_gemm, kernel=_kernel_gemm),
     BackendImpl(op_type="moe_forward", prepare=_prepare_moe_forward, kernel=_kernel_moe_forward),
