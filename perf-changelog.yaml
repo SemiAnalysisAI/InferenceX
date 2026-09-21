@@ -8539,4 +8539,4 @@
   description:
     - "Add B300 SGLang DeepSeek-V4.1-Flash AgentX TP4/EP4 with the newest official CUDA 13 nightly (20260921-0f6761b5), pinned amd64 digest, native DSpark5, measured thinking-on AL 3.51 for throughput and real verification for evals."
     - "Keep automatic backends, host Engram tables, GPU-resident KV, bounded prefill and decode graphs; route the B300 SGLang runtime through /ix."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3342
