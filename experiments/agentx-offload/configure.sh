@@ -9,6 +9,9 @@ configure_offload_experiment() {
     fi
     mkdir -p "$RESULT_DIR"
     case "${SLURMD_NODENAME-}" in
+        im-b200-c001)
+            python3 experiments/agentx-offload/cleanup_stale.py 35583529913 "$RESULT_DIR/offload-stale-cleanup-35583529913.json"
+            ;;
         im-b200-c002)
             python3 experiments/agentx-offload/cleanup_stale.py 35476050409 "$RESULT_DIR/offload-stale-cleanup-35476050409.json"
             ;;

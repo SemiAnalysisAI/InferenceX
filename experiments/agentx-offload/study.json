@@ -15,7 +15,7 @@
     512
   ],
   "maintenance_probe_nodes": {
-    "none-c1": "im-b200-c002",
+    "none-c1": "im-b200-c001",
     "none-c4": "im-b200-c008"
   },
   "tiered_fs_stop_guard_bytes_per_node": 2199023255552,

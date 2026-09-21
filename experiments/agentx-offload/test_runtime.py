@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 import runtime
-from cleanup_stale import cleanup_owned
+from cleanup_stale import TARGETS, cleanup_owned
 from runtime import (
     connector_config,
     nvme_limit,
@@ -93,8 +93,18 @@ def test_study_uses_one_expanded_nvme_run_at_a_time():
     assert study["nvme_node_allowlist"] == ["im-b200-c001"]
     assert study["expanded_nvme_probe_concurrency"] == [256, 512]
     assert study["maintenance_probe_nodes"] == {
-        "none-c1": "im-b200-c002",
+        "none-c1": "im-b200-c001",
         "none-c4": "im-b200-c008",
+    }
+    assert TARGETS["35583529913"] == {
+        "node": "im-b200-c001",
+        "name": "inferencex-offload-35583529913-1-16713-0553ef74bedf",
+        "owner": {
+            "study": "agentx-offload-v1",
+            "run": "35583529913",
+            "attempt": "1",
+            "job": "16713",
+        },
     }
 
 

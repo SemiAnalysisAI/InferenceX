@@ -33,7 +33,11 @@ repeats of the 4 TiB arm. The connector preallocates its configured disk files,
 so requested concurrency does not determine disk footprint: admission requires
 4,398,046,511,104 bytes plus the 128 GiB reserve. Start the expanded-capacity
 series at c256, the highest NVMe concurrency already proven to finish the full
-canonical run, then try c512 before revisiting the c1024 feasibility boundary.
+canonical run. The c512 probe completed 5,676 of 5,677 canonical warmup requests
+with zero request errors, but one request exceeded the 1,800-second drain limit;
+the phase failed before profiling and the allocation then reached its time limit.
+Treat c512 as a feasibility bound and fill the c256-c512 interval before trying a
+higher concurrency.
 
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an
@@ -128,7 +132,7 @@ only from fresh per-node storage evidence.
 
 If a workflow time limit bypasses the normal `finish` trap, register the exact
 run identity and scratch name in `cleanup_stale.py`. The c1 and c4 HBM maintenance
-probes are pinned to the two currently registered nodes. Before their normal
+probes are pinned to nodes with registered scratch. Before their normal
 experiment setup, they verify `owner.json`, delete only that exact scratch child,
 and retain a cleanup receipt in the new run artifacts. The cleanup helper cannot
 accept an arbitrary path, and the resulting HBM measurements still follow the

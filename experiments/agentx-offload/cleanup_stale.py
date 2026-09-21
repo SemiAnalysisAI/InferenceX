@@ -12,6 +12,16 @@ from runtime import cache_usage, write_json
 
 SCRATCH_ROOT = Path("/offload-scratch")
 TARGETS: dict[str, dict[str, Any]] = {
+    "35583529913": {
+        "node": "im-b200-c001",
+        "name": "inferencex-offload-35583529913-1-16713-0553ef74bedf",
+        "owner": {
+            "study": "agentx-offload-v1",
+            "run": "35583529913",
+            "attempt": "1",
+            "job": "16713",
+        },
+    },
     "35476050409": {
         "node": "im-b200-c002",
         "name": "inferencex-offload-35476050409-2-16690-ccf4bb49cf4d",

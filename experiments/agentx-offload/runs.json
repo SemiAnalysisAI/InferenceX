@@ -2969,7 +2969,7 @@
       "attempt": 1,
       "retry_of": 35580481104,
       "head_sha": "cce1fb2f2f28a848c401930ca9ae06c0d73555d1",
-      "status": "in_progress",
+      "status": "failure",
       "workflow_name": "offload-v1-nvme4tib-c512-r2-20260921",
       "dispatched_at": "2026-09-21T09:28:55Z",
       "get_jobs_job_id": 106281545020,
@@ -2977,30 +2977,62 @@
       "target_node": "im-b200-c001",
       "capacity_bytes_per_node": 4398046511104,
       "capacity_reserve_bytes": 137438953472,
-      "capacity_required_bytes": 4535485464576
+      "capacity_required_bytes": 4535485464576,
+      "completed_at": "2026-09-21T17:33:47Z",
+      "node": "im-b200-c001",
+      "runner": "b200-nscale-slurm_00",
+      "allocation_id": "16713",
+      "job_id": 106281686898,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35583529913/job/106281686898",
+      "failure_stage": "canonical warmup drain",
+      "failure_evidence": "Canonical c512 warmup sent all 5,677 requests and returned 5,676 with zero request errors. One wire request remained after the 1,800-second accelerated drain limit, so AIPerf cancelled it and failed the warmup before profiling. The Slurm allocation later reached its 480-minute limit; no benchmark result exists.",
+      "warmup": {
+        "sent": 5677,
+        "completed": 5676,
+        "cancelled": 1,
+        "errors": 0,
+        "elapsed_seconds": 25513.21,
+        "peak_open_session_trees": 512,
+        "profile_started": false
+      },
+      "artifacts": [
+        {
+          "id": 10655231555,
+          "name": "server_logs_minimaxm3_tp4_conc512_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-feef059effb21c7e51ad",
+          "size_bytes": 171081
+        },
+        {
+          "id": 10654657084,
+          "name": "agentic_minimaxm3_tp4_conc512_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-feef059effb21c7e51ad",
+          "size_bytes": 3211693
+        },
+        {
+          "id": 10655445948,
+          "name": "results_bmk",
+          "size_bytes": 142
+        }
+      ],
+      "storage_evidence": "Preflight on im-b200-c001 reported 17,763,841,961,984 bytes free, xfs /dev/md0 over eight non-rotating NVMe leaves, and O_DIRECT success. Final telemetry observed four cache files totaling 4,398,044,086,272 logical bytes and 4,398,032,576,512 allocated bytes. The Slurm time limit bypassed runtime.finish, so exact task-owned scratch cleanup is required before another NVMe-bearing run.",
+      "evidence_sha256": {
+        "server.log": "76c8530bcd19f226a3185f01d0601914a8c82133235ca1d80d28b6455e65d467",
+        "offload_config.json": "f67c7d764d2516f07954d6b47d65f4a609428a138df265184d79fcec7b0a4d16",
+        "benchmark.log": "bec712d20c037855ba79f24ed1330e5078252143f31aae4f90fc916b0c9b4bd9",
+        "offload-telemetry.jsonl": "2016e842b4012b99d8306a2e7a97ab487d0b1c70542d01eb29b81b48b2542d52",
+        "profile_export.jsonl": "34569f0717d8a5e4828de0769097f0851fe94c1bb05421e22c50ad53f8e86052"
+      }
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871",
-  "status": "The first c512 dispatch 35580481104 failed before matrix generation because its input ref was a short SHA interpreted as a missing branch or tag; it used no B200 or NVMe. Corrected c512 retry 35583529913 is in progress using the full experiment branch ref.",
+  "status": "The 4 TiB c512 NVMe probe 35583529913 failed before profiling after 5,676/5,677 warmup requests completed with zero request errors; one request exceeded the 1,800-second drain limit. Its exact 4 TiB task-owned scratch on im-b200-c001 requires verified cleanup. The completed c256 point and c512 feasibility bound direct the next NVMe probe into the c256-c512 interval.",
   "last_capacity_check": {
-    "checked_at": "2026-09-21T09:29:05Z",
-    "pending_b200_jobs_before_dispatch": 0,
-    "other_queued_workflows": [
-      35576547691
-    ],
-    "other_queued_workflow_cluster": "cluster:mi355x-amds",
-    "active_study_run_ids": [
-      35583529913
-    ],
-    "active_study_job_ids": [
-      106281545020
-    ],
+    "checked_at": "2026-09-21T17:41:18Z",
+    "active_study_run_ids": [],
     "pending_study_run_ids": [],
     "dispatch_allowed": false,
-    "reason": "The corrected c512 NVMe workflow is active. No additional NVMe-bearing workflow may dispatch until it is terminal and exact cleanup is verified."
+    "reason": "Run 35583529913 is terminal, but its exact task-owned scratch still requires owner-verified deletion. Dispatch a c1 HBM maintenance control on im-b200-c001 before any further NVMe-bearing work."
   },
   "next_dispatch": {
-    "requires": "Monitor corrected c512 run 35583529913. After it is terminal, retain hash-verified performance and cache evidence, verify exact task-owned cleanup, then perform a fresh B200 queue check before any further dispatch."
+    "requires": "Dispatch the pinned c1 HBM maintenance control on im-b200-c001 to verify ownership and delete only run 35583529913 scratch. After terminal cleanup proof and a fresh queue/capacity check, probe an intermediate NVMe concurrency between c256 and the c512 warmup feasibility bound."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
@@ -3018,6 +3050,14 @@
       "last_observed_logical_bytes": 0,
       "last_observed_allocated_bytes": 0,
       "reason": "The allocation time limit killed the container step before offload_cleanup.json was written. The directory was empty at the final telemetry sample; delete only this exact task-owned directory through approved InferenceX infrastructure, then record proof and remove this entry."
+    },
+    {
+      "run_id": 35583529913,
+      "node": "im-b200-c001",
+      "scratch": "/offload-scratch/inferencex-offload-35583529913-1-16713-0553ef74bedf",
+      "last_observed_logical_bytes": 4398044086272,
+      "last_observed_allocated_bytes": 4398032576512,
+      "reason": "The allocation time limit bypassed runtime.finish after canonical c512 warmup failed on one remaining wire request. Delete only this exact task-owned directory through the registered ownership-verifying maintenance workflow, retain the receipt, then remove this entry."
     }
   ]
 }
