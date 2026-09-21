@@ -18,7 +18,7 @@ def main() -> None:
     destination = Path(fp8_kernel.__file__).resolve().parent / "configs"
     destination.mkdir(exist_ok=True)
     artifacts.mkdir(parents=True, exist_ok=True)
-    for n, k in [(5120, 1024), (5120, 288), (576, 5120)]:
+    for n, k in [(5120, 1024), (5120, 288), (576, 5120), (1792, 5120)]:
         name = f"N={n},K={k},device_name={device},dtype=fp8_w8a8,block_shape=[32, 32].json"
         path = source / name
         expected = {int(m): config for m, config in json.loads(path.read_text()).items()}
