@@ -409,6 +409,8 @@ zero huge-page backing in [run 35626514270](https://github.com/SemiAnalysisAI/In
 Per-rank anonymous shards request huge pages without host sysctl changes and retain the
 lookup all-reduce. Verify the actual huge-page percentage in every rank's startup log;
 the setting alone does not prove that huge-page allocation succeeded.
+The B200 launcher converts pinned Docker image digests to its installed Enroot
+manifest-reference syntax and stops on import failure before trying Pyxis.
 B200 also registers native STP points under `dsv41flash-fp4-b200-sglang-agentic`.
 DSpark applies the hash-verified `patch_sglang_dsv41_native_wo_a.py` fix so all three
 WO_A projections retain native FP8 weights and block scales. Markov weights retain

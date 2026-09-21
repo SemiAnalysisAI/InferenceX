@@ -8551,5 +8551,6 @@
   description:
     - "Pin B200 SGLang DeepSeek-V4.1 Flash to nightly-dev-cu13-20260921-0f6761b5 at manifest sha256:987c7e4bd26918647211a5dcad72a2bdf2a5f394ac1469eff730e7517fc139be"
     - "Use per-rank anonymous host Engram shards to request huge pages after the shared layout reported zero huge-page backing; preserve DSpark weights, native precision, golden acceptance, and GPU-resident KV"
-    - "Add native STP comparison points and preserve DSpark FP8 WO_A weights with the hash-verified native projection fix; retain native Markov BF16 weights"
+    - "Add native STP comparison points and preserve DSpark FP8 WO_A weights with the hash-verified native projection fix with contiguous FP8-kernel inputs; retain native Markov BF16 weights"
+    - "Normalize pinned image digests to the installed Enroot manifest-reference syntax and stop immediately when container import fails."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3346

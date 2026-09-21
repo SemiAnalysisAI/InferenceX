@@ -357,6 +357,7 @@ B200 设置 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。在
 中，共享主机表的大页覆盖率为零。每个 rank 的匿名分片无需修改主机 sysctl 即可申请大页，
 并保留查询结果的 all-reduce。必须从每个 rank 的启动日志核实实际大页比例；
 仅设置该变量并不能证明大页分配成功。
+B200 启动器将固定的 Docker 镜像 digest 转为已安装 Enroot 支持的 manifest 引用格式；导入失败时立即停止，不再启动 Pyxis。
 B200 还通过 `dsv41flash-fp4-b200-sglang-agentic` 注册原生 STP 测试点。
 DSpark 应用经过哈希校验的 `patch_sglang_dsv41_native_wo_a.py` 修复，使三个
 WO_A 投影保留原生 FP8 权重与分块 scale；Markov 权重保持原生 BF16。

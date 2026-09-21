@@ -184,6 +184,15 @@ fi
 # fully qualified references such as ghcr.io/tile-ai/tilert or nvcr.io/....
 enroot_uri_for_image() {
     local image_ref="$1"
+    # This pool's Enroot accepts digests as the manifest tag, not Docker's @ form.
+    if [[ "$image_ref" == *@sha256:* ]]; then
+        local image_digest="${image_ref##*@}"
+        image_ref="${image_ref%@*}"
+        if [[ "${image_ref##*/}" == *:* ]]; then
+            image_ref="${image_ref%:*}"
+        fi
+        image_ref="${image_ref}:${image_digest}"
+    fi
     local first_component="${image_ref%%/*}"
 
     if [[ "$image_ref" == */* && (
@@ -787,6 +796,8 @@ run_single_node() {
     check_env_vars SALLOC_TIME_LIMIT GPU_COUNT
 
     SQUASH_FILE="/data/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    local enroot_uri
+    enroot_uri=$(enroot_uri_for_image "$IMAGE") || return 1
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" || "$SPEC_DECODING" == "draft_model" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b200_vllm.sh) so models
@@ -839,9 +850,10 @@ run_single_node() {
             echo 'Squash file already exists and is valid, skipping import'
         else
             rm -f \"$SQUASH_FILE\"
-            enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+            enroot import -o \"$SQUASH_FILE\" \"$enroot_uri\"
+            unsquashfs -l \"$SQUASH_FILE\" > /dev/null || exit 1
         fi
-    "
+    " || return 1
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
