@@ -17,7 +17,7 @@ refine it; do not manufacture a smooth curve or call an isolated noisy win a thr
 | --- | --- | --- | --- | --- |
 | `none` | 80 GiB/GPU | 0 | 0 | HBM prefix cache |
 | `dram` | 80 GiB/GPU | 739 GB/node | 0 | SimpleCPU, lazy |
-| `nvme` | 80 GiB/GPU | No resident KV cache; transfer buffers remain | 1 TiB/node | SimpleCPU disk, lazy, direct I/O |
+| `nvme` | 80 GiB/GPU | No resident KV cache; transfer buffers remain | 4 TiB/node | SimpleCPU disk, lazy, direct I/O |
 | `dram-nvme` | 80 GiB/GPU | 739 GB/node | 2 TiB stop guard | Native tiered CPU + filesystem |
 
 The host budget is the actual fresh-main generator output at `dram-utilization:
@@ -26,9 +26,18 @@ starting. HBM is pinned to 80 GiB per GPU (320 GiB total) so different connector
 allocation layouts cannot silently change the common budget. All thresholds are
 conditional on these budgets; this is not a universal concurrency threshold.
 
+The NVMe-only arm now uses a 4 TiB bounded capacity so a single run can exercise
+more of the local array. Runs produced with the earlier 1 TiB budget remain
+separately identifiable in the ledger and are not treated as capacity-matched
+repeats of the 4 TiB arm. The connector preallocates its configured disk files,
+so requested concurrency does not determine disk footprint: admission requires
+4,398,046,511,104 bytes plus the 128 GiB reserve. Start the expanded-capacity
+series at c256, the highest NVMe concurrency already proven to finish the full
+canonical run, then try c512 before revisiting the c1024 feasibility boundary.
+
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an
-eviction quota. It was raised independently of the NVMe-only 1 TiB capacity after
+eviction quota. It was raised independently of the NVMe-only capacity after
 run `35456989669` completed canonical profiling with zero request errors but reached
 1,413,881,142,831 logical filesystem bytes and was correctly invalidated. Only runs
 remaining below the guard can support a comparison. A guard hit is a failed
@@ -49,7 +58,7 @@ Inspect recorded corpus identity, full commands and actual allocated KV capacity
 before declaring a pair matched.
 
 Start with a matched four-arm probe at concurrency 16. Then build full curves for
-all four arms. Initial curve points are 1, 4, 8, 16, 32, 64, 128, 256, 1,024,
+all four arms. Initial curve points are 1, 4, 8, 16, 32, 64, 128, 256, 512, 1,024,
 4,096, 8,192 and 16,384. Add intermediate positive integers near observed changes, and
 repeat both sides of a candidate crossover on different nodes.
 Keep the maximum at 16,384. Failure or insufficient completed samples is a
@@ -105,6 +114,25 @@ priority reservations and workflow or scheduler safety limits. Use workflow
 logs, artifacts and InferenceX status APIs; no operator SSH, `salloc`, `sbatch`,
 `srun` or `scancel`. The existing InferenceX runner itself may use Slurm
 internally. The standard job requests `nodes:1`.
+
+Run at most one NVMe-bearing workflow (`nvme` or `dram-nvme`) at a time. The
+previous NVMe-bearing workflow must be terminal and its exact task-owned scratch
+must have verified `deleted=true` before the next one is dispatched. Require the
+declared 4 TiB budget plus the 128 GiB reserve at preflight. Do not dispatch while
+an earlier task-owned scratch remains unresolved, and do not repeatedly target a
+known-full node unchanged. This single-run rule is independent of the cluster-wide
+one-pending-job ceiling above. The workflow currently pins NVMe-bearing allocations
+to the node allowlist in `study.json`; it contains the recent c256 node with
+17,763,847,192,576 bytes free at preflight and verified cleanup. Expand that list
+only from fresh per-node storage evidence.
+
+If a workflow time limit bypasses the normal `finish` trap, register the exact
+run identity and scratch name in `cleanup_stale.py`. The c1 and c4 HBM maintenance
+probes are pinned to the two currently registered nodes. Before their normal
+experiment setup, they verify `owner.json`, delete only that exact scratch child,
+and retain a cleanup receipt in the new run artifacts. The cleanup helper cannot
+accept an arbitrary path, and the resulting HBM measurements still follow the
+full canonical protocol.
 
 Fresh main's `$/` self-repository workflow references are retained. They require
 Actions runner 2.336.0 or newer; actionlint 1.7.12 does not recognize this syntax.

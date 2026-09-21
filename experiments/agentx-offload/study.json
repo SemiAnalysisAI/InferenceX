@@ -5,7 +5,19 @@
   "tp": 4,
   "hbm_bytes_per_gpu": 85899345920,
   "dram_bytes_per_node": 739000000000,
-  "nvme_bytes_per_node": 1099511627776,
+  "nvme_bytes_per_node": 4398046511104,
+  "max_concurrent_nvme_bearing_runs": 1,
+  "nvme_node_allowlist": [
+    "im-b200-c001"
+  ],
+  "expanded_nvme_probe_concurrency": [
+    256,
+    512
+  ],
+  "maintenance_probe_nodes": {
+    "none-c1": "im-b200-c002",
+    "none-c4": "im-b200-c008"
+  },
   "tiered_fs_stop_guard_bytes_per_node": 2199023255552,
   "profile_seconds": 3600,
   "warmup_requests_per_lane": 10,
@@ -21,6 +33,7 @@
     64,
     128,
     256,
+    512,
     1024,
     4096,
     8192,

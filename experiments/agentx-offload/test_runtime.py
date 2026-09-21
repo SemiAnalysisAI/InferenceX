@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 import runtime
+from cleanup_stale import cleanup_owned
 from runtime import (
     connector_config,
     nvme_limit,
@@ -82,6 +83,19 @@ def test_nvme_capacity_and_tiered_stop_guard_are_independent():
     assert nvme_limit(study, "dram") == 0
     assert nvme_limit(study, "nvme") == 1024
     assert nvme_limit(study, "dram-nvme") == 2048
+
+
+def test_study_uses_one_expanded_nvme_run_at_a_time():
+    study = json.loads((Path(__file__).parent / "study.json").read_text())
+
+    assert study["nvme_bytes_per_node"] == 4 * 2**40
+    assert study["max_concurrent_nvme_bearing_runs"] == 1
+    assert study["nvme_node_allowlist"] == ["im-b200-c001"]
+    assert study["expanded_nvme_probe_concurrency"] == [256, 512]
+    assert study["maintenance_probe_nodes"] == {
+        "none-c1": "im-b200-c002",
+        "none-c4": "im-b200-c008",
+    }
 
 
 def test_sysfs_storage_proof_resolves_raid_without_device_node(tmp_path):
@@ -226,3 +240,48 @@ def test_cleanup_requires_ownership_and_preserves_evidence(
         receipt = json.loads((result / "offload_cleanup.json").read_text())
         assert receipt["deleted"] is True
         assert receipt["usage"]["logical_bytes"] == 16
+
+
+def test_stale_cleanup_deletes_only_registered_owned_path(tmp_path):
+    root = tmp_path / "scratch"
+    scratch = root / "registered"
+    cache = scratch / "cache"
+    cache.mkdir(parents=True)
+    (cache / "kv.bin").write_bytes(b"owned cache")
+    owner = {"study": "test", "run": "1", "attempt": "2", "job": "3"}
+    runtime.write_json(scratch / "owner.json", owner)
+    unrelated = root / "shared-model"
+    unrelated.write_text("keep")
+    receipt = tmp_path / "receipt.json"
+
+    cleanup_owned(
+        root,
+        {"node": "fixture", "name": "registered", "owner": owner},
+        receipt,
+    )
+
+    assert not scratch.exists()
+    assert unrelated.read_text() == "keep"
+    assert json.loads(receipt.read_text())["deleted"] is True
+
+
+def test_stale_cleanup_records_an_already_absent_target(tmp_path):
+    receipt = tmp_path / "receipt.json"
+    cleanup_owned(
+        tmp_path / "scratch",
+        {
+            "node": "fixture",
+            "name": "registered",
+            "owner": {"study": "test", "run": "1", "attempt": "2", "job": "3"},
+        },
+        receipt,
+    )
+
+    assert json.loads(receipt.read_text()) == {
+        "node": "fixture",
+        "scratch": str(tmp_path / "scratch" / "registered"),
+        "owner": {"study": "test", "run": "1", "attempt": "2", "job": "3"},
+        "usage": None,
+        "already_absent": True,
+        "deleted": True,
+    }

@@ -14,7 +14,7 @@ agentx-offload-none:
       - tp: 4
         spec-decoding: mtp
         kv-offloading: none
-        conc-list: [1, 4, 8, 16, 32, 64, 128, 256, 1024, 4096, 8192, 16384]
+        conc-list: [1, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 4096, 8192, 16384]
 
 agentx-offload-dram:
   experiment: agentx-offload
@@ -33,7 +33,7 @@ agentx-offload-dram:
         spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
-        conc-list: [1, 4, 8, 16, 32, 64, 128, 256, 1024, 4096, 8192, 16384]
+        conc-list: [1, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 4096, 8192, 16384]
 
 agentx-offload-nvme:
   experiment: agentx-offload
@@ -52,7 +52,7 @@ agentx-offload-nvme:
         spec-decoding: mtp
         kv-offloading: nvme
         kv-offload-backend: { name: vllm-simple }
-        conc-list: [1, 4, 8, 16, 32, 64, 128, 256, 1024, 4096, 8192, 16384]
+        conc-list: [1, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 4096, 8192, 16384]
 
 agentx-offload-dram-nvme:
   experiment: agentx-offload
@@ -71,4 +71,4 @@ agentx-offload-dram-nvme:
         spec-decoding: mtp
         kv-offloading: dram-nvme
         kv-offload-backend: { name: vllm-native }
-        conc-list: [1, 4, 8, 16, 32, 64, 128, 256, 1024, 4096, 8192, 16384]
+        conc-list: [1, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 4096, 8192, 16384]

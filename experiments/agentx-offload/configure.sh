@@ -8,6 +8,14 @@ configure_offload_experiment() {
         return 1
     fi
     mkdir -p "$RESULT_DIR"
+    case "${SLURMD_NODENAME-}" in
+        im-b200-c002)
+            python3 experiments/agentx-offload/cleanup_stale.py 35476050409 "$RESULT_DIR/offload-stale-cleanup-35476050409.json"
+            ;;
+        im-b200-c008)
+            python3 experiments/agentx-offload/cleanup_stale.py 35476043213 "$RESULT_DIR/offload-stale-cleanup-35476043213.json"
+            ;;
+    esac
     python3 experiments/agentx-offload/runtime.py prepare
     OFFLOAD_SCRATCH=$(python3 -c 'import json,os; print(json.load(open(os.path.join(os.environ["RESULT_DIR"],"offload_config.json")))["scratch"])')
     export OFFLOAD_SCRATCH

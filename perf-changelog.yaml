@@ -8021,3 +8021,12 @@
     - "Add concurrency 8,192 to all four branch-only MiniMax-M3 AgentX offload arms after every concurrency-16,384 probe failed during canonical warmup with connection resets before profiling began. This brackets the shared high-concurrency feasibility boundary without changing the model, engine, TP4 layout, cache budgets, AgentX corpus, or 3,600-second profiling window."
     - "四组分支内 MiniMax-M3 AgentX 卸载实验在并发 16,384 的规范 warmup 阶段均出现连接重置，并在 profiling 开始前失败；因此为全部四组新增并发 8,192，以夹定共同的高并发可运行性边界。模型、引擎、TP4 布局、缓存容量、AgentX 语料及 3,600 秒 profiling 窗口均不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Raise the branch-only HBM+NVMe bounded capacity from 1 TiB to 4 TiB per node and serialize NVMe-bearing study workflows. Each larger-capacity run must finish and verify deletion of its exact task-owned scratch before another HBM+NVMe or HBM+DRAM+NVMe run is dispatched; preflight retains a 128 GiB free-space reserve. Pin NVMe-bearing allocations to the study's verified-capacity node allowlist, beginning with the node where c256 observed 17,763,847,192,576 free bytes and completed cleanup. Add c512 to all four arms to probe between the completed c256 point and the c1024 warmup-limit failure. Pin useful c1/c4 HBM probes to nodes with registered stale scratch so an ownership-verifying helper can remove only those exact directories before canonical setup and retain receipts. Earlier 1 TiB results remain separately identified and are not capacity-matched repeats. Model, engine, TP4, HBM and DRAM budgets, AgentX corpus, warmup, and 3,600-second profiling are unchanged."
+    - "将分支内 HBM+NVMe 的有界容量从每节点 1 TiB 提高到 4 TiB，并串行执行所有包含 NVMe 的研究工作流。每个大容量运行结束并验证其专属 scratch 已删除后，才能提交下一个 HBM+NVMe 或 HBM+DRAM+NVMe 运行；预检继续保留 128 GiB 空闲空间。包含 NVMe 的分配固定到研究中已验证容量的节点允许列表，初始节点在 c256 运行预检时有 17,763,847,192,576 字节空闲空间且已完成清理。四组方案均新增 c512，用于探测已完成的 c256 与 c1024 预热时限失败之间的区间。有效的 c1/c4 HBM 探针固定到存在已登记旧 scratch 的节点，所有权验证工具会在规范设置前仅删除这些准确目录并保留凭据。此前的 1 TiB 结果保持独立标识，不作为容量匹配的重复测量。模型、引擎、TP4、HBM 与 DRAM 预算、AgentX 语料、预热和 3,600 秒 profiling 均保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload

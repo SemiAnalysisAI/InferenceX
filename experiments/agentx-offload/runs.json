@@ -2779,7 +2779,7 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012",
-  "status": "Both c128 matched controls are valid and visible on the comparison page. Relative to HBM, HBM+DRAM improves total throughput/GPU by 1.708%, output throughput/GPU by 1.848%, P90 interactivity by 21.063%, and P90 E2E-normalized interactivity by 6.054%, with 2.273% external CPU cache hits. No study workflows remain active. NVMe-bearing dispatches remain held because im-b200-c003 repeatedly has only about 5.73 GB free; combined runs require a capacity redesign.",
+  "status": "Both c128 matched controls are valid and visible on the comparison page. Relative to HBM, HBM+DRAM improves total throughput/GPU by 1.708%, output throughput/GPU by 1.848%, P90 interactivity by 21.063%, and P90 E2E-normalized interactivity by 6.054%, with 2.273% external CPU cache hits. No study workflows remain active. The next phase uses a 4 TiB bounded NVMe-only budget with exactly one NVMe-bearing workflow active or queued at a time. Dispatch remains held until task-owned scratch from run 35476050409 is removed and node-local capacity is verified; im-b200-c003 most recently had only about 5.73 GB free.",
   "last_capacity_check": {
     "checked_at": "2026-09-20T22:41:19Z",
     "cluster_observed_at": "2026-09-20T22:40:49Z",
@@ -2802,13 +2802,14 @@
     "reason": "No study jobs remain active. Do not dispatch NVMe-bearing work until im-b200-c003 has sufficient local capacity or is excluded. Do not retry combined c64/c256 unchanged because both exceeded the filesystem stop guard. A c64 DRAM infrastructure retry requires a fresh queue/capacity check."
   },
   "next_dispatch": {
-    "requires": "Query fresh cluster and scheduler state. If no B200 job is queued and useful idle capacity exists, retry c64 DRAM because c128 DRAM subsequently proved the connector path healthy. Prioritize c64/c128 NVMe only after node-local capacity is remediated. Redesign combined tier capacity semantics before any further combined attempt."
+    "requires": "Remove and verify the exact task-owned scratch from run 35476050409 through approved InferenceX infrastructure, then query fresh node-local capacity and scheduler state. When the storage and queue gates pass, dispatch one 4 TiB NVMe-only c256 run. Do not allow another NVMe-bearing workflow to become active or queued until it is terminal and cleanup is verified. Redesign combined tier capacity semantics before any further combined attempt."
   },
   "dispatch_policy": {
-    "updated_at": "2026-09-19T23:34:00Z",
+    "updated_at": "2026-09-21T05:30:00Z",
     "max_pending_b200_jobs_after_dispatch": 1,
+    "max_active_or_queued_nvme_bearing_runs": 1,
     "scope": "All pending B200 jobs across the cluster, including this study, legacy jobs, and other users' work.",
-    "rule": "Use idle eligible nodes when useful, but dispatch no batch that would leave more than one B200 job queued. If one or more B200 jobs are already pending, launch nothing.",
+    "rule": "Use idle eligible nodes when useful, but dispatch no batch that would leave more than one B200 job queued. If one or more B200 jobs are already pending, launch nothing. Permit only one NVMe-bearing study workflow to be active or queued, and require verified task-owned cleanup before the next NVMe-bearing dispatch.",
     "supersedes": "The previous 125% allocated-plus-pending demand ceiling."
   },
   "cleanup_required": [

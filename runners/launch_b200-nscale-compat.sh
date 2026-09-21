@@ -471,7 +471,31 @@ else
     # submitted to the Nscale batch_1 partition.
     check_env_vars GPU_COUNT
 
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
+    SALLOC_ARGS=(
+        --partition="$SLURM_PARTITION"
+        --account="$SLURM_ACCOUNT"
+        --gres="gpu:$GPU_COUNT"
+        --exclusive
+        --mem=0
+        --time="$SALLOC_TIME_LIMIT"
+        --no-shell
+        --job-name="$RUNNER_NAME"
+    )
+    if [[ "${INFERENCEX_EXPERIMENT-}" == "agentx-offload" && "${KV_OFFLOADING-}" == *nvme* ]]; then
+        OFFLOAD_NODELIST=$(python3 -c 'import json; print(",".join(json.load(open("experiments/agentx-offload/study.json"))["nvme_node_allowlist"]))')
+        if [[ -z "$OFFLOAD_NODELIST" ]]; then
+            echo 'AgentX offload NVMe node allowlist is empty.' >&2
+            exit 1
+        fi
+        SALLOC_ARGS+=(--nodelist="$OFFLOAD_NODELIST")
+    elif [[ "${INFERENCEX_EXPERIMENT-}" == "agentx-offload" && "${KV_OFFLOADING-}" == "none" ]]; then
+        OFFLOAD_MAINTENANCE_KEY="none-c${CONC-}"
+        OFFLOAD_NODELIST=$(python3 -c 'import json,sys; print(json.load(open("experiments/agentx-offload/study.json"))["maintenance_probe_nodes"].get(sys.argv[1], ""))' "$OFFLOAD_MAINTENANCE_KEY")
+        if [[ -n "$OFFLOAD_NODELIST" ]]; then
+            SALLOC_ARGS+=(--nodelist="$OFFLOAD_NODELIST")
+        fi
+    fi
+    salloc "${SALLOC_ARGS[@]}"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     # Bench scripts skip `hf download` when MODEL is a local path.
