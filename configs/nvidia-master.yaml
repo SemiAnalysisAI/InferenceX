@@ -5162,7 +5162,7 @@ minimaxm3-fp8-h100-vllm-agentic-mtp:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [6, 8] }
 
 minimaxm3-fp8-h200-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36
+  image: vllm/vllm-openai:nightly-3df4ae153eb385e27b52f26c81f8edb9e20b9984@sha256:1e1f56a164a3dfdf87a57168983602421a295b0b3570d27c5b49c54b97b341b4
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: cluster:h200-dgxc
