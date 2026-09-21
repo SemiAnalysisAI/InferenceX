@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import gzip
 import hashlib
+import io
 import json
 import math
 import os
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -29,6 +32,7 @@ ENDPOINTS = {
 }
 USER_AGENT = "InferenceX-Klaud-Cold/1.0"
 MAX_BYTES = 16 * 1024 * 1024
+RETRY_DELAYS_SECONDS = (0.5, 1.5)
 
 
 class ReadError(ValueError):
@@ -67,6 +71,7 @@ def fetch(
     date: str | None = None,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     opener: Callable[..., Any] | None = None,
+    sleeper: Callable[[float], None] = time.sleep,
 ) -> Feed:
     query = {}
     if resource == "benchmarks" and model:
@@ -89,21 +94,54 @@ def fetch(
         headers["Authorization"] = "Bearer " + token.strip()
     request = urllib.request.Request(url, headers=headers, method="GET")  # noqa: S310
     open_request = opener or urllib.request.build_opener(NoRedirects()).open
+    for attempt in range(len(RETRY_DELAYS_SECONDS) + 1):
+        try:
+            with open_request(request, timeout=15) as response:
+                if response.status != 200:
+                    if (response.status in (408, 429) or response.status >= 500) and attempt < len(
+                        RETRY_DELAYS_SECONDS
+                    ):
+                        sleeper(RETRY_DELAYS_SECONDS[attempt])
+                        continue
+                    raise ReadError("http-status-error")
+                raw = response.read(MAX_BYTES + 1)
+                if len(raw) > MAX_BYTES:
+                    raise ReadError("response-too-large")
+                if "application/json" not in response.headers.get("Content-Type", "").lower():
+                    raise ReadError("response-not-json")
+                encoding = response.headers.get("Content-Encoding", "").strip().lower()
+                if encoding == "gzip":
+                    try:
+                        with gzip.GzipFile(fileobj=io.BytesIO(raw)) as compressed:
+                            decoded = compressed.read(MAX_BYTES + 1)
+                    except (gzip.BadGzipFile, EOFError):
+                        raise ReadError("invalid-content-encoding") from None
+                    if len(decoded) > MAX_BYTES:
+                        raise ReadError("response-too-large")
+                elif encoding in ("", "identity"):
+                    decoded = raw
+                else:
+                    raise ReadError("unsupported-content-encoding")
+                metadata = {
+                    key.lower(): response.headers[key]
+                    for key in ("Age", "Cache-Control", "Date", "ETag")
+                    if key in response.headers
+                }
+            break
+        except urllib.error.HTTPError as error:
+            if (error.code in (408, 429) or error.code >= 500) and attempt < len(
+                RETRY_DELAYS_SECONDS
+            ):
+                sleeper(RETRY_DELAYS_SECONDS[attempt])
+                continue
+            raise ReadError(f"http-{error.code}") from None
+        except (urllib.error.URLError, TimeoutError, OSError):
+            if attempt < len(RETRY_DELAYS_SECONDS):
+                sleeper(RETRY_DELAYS_SECONDS[attempt])
+                continue
+            raise ReadError("network-error") from None
     try:
-        with open_request(request, timeout=15) as response:
-            if response.status != 200:
-                raise ReadError("http-status-error")
-            raw = response.read(MAX_BYTES + 1)
-            if len(raw) > MAX_BYTES:
-                raise ReadError("response-too-large")
-            if "application/json" not in response.headers.get("Content-Type", "").lower():
-                raise ReadError("response-not-json")
-            metadata = {
-                key.lower(): response.headers[key]
-                for key in ("Age", "Cache-Control", "Date", "ETag")
-                if key in response.headers
-            }
-        payload = json.loads(raw, parse_constant=reject_nonfinite, parse_float=finite_float)
+        payload = json.loads(decoded, parse_constant=reject_nonfinite, parse_float=finite_float)
         if resource == "images" and not isinstance(payload, list):
             raise ReadError("invalid-images-payload")
         if resource == "releases" and (
@@ -114,10 +152,6 @@ def fetch(
             )
         ):
             raise ReadError("invalid-releases-payload")
-    except urllib.error.HTTPError as error:
-        raise ReadError(f"http-{error.code}") from None
-    except (urllib.error.URLError, TimeoutError, OSError):
-        raise ReadError("network-error") from None
     except (UnicodeError, json.JSONDecodeError):
         raise ReadError("invalid-json") from None
     except ReadError:
@@ -127,24 +161,10 @@ def fetch(
     return Feed(
         url=url,
         retrieved_at=stamp(clock()),
-        sha256=hashlib.sha256(raw).hexdigest(),
+        sha256=hashlib.sha256(decoded).hexdigest(),
         payload=payload,
         headers=metadata,
     )
-
-
-UNSTABLE_MARKERS = ("nightly", "rocm/sgl-dev", "sglang-rocm")
-
-
-def image_reasons(image: str, release: str | None) -> list[str]:
-    reasons = []
-    if any(marker in image.lower() for marker in UNSTABLE_MARKERS):
-        reasons.append("unstable-image")
-    if release is None:
-        reasons.append("release-comparison-unknown")
-    elif release not in image:
-        reasons.append("release-string-mismatch")
-    return reasons
 
 
 def feed_issues(feed: Feed | None, now: datetime, policy: Policy) -> list[str]:
@@ -159,19 +179,8 @@ def feed_issues(feed: Feed | None, now: datetime, policy: Policy) -> list[str]:
     return issues
 
 
-def catalog(
-    images: Feed | None, releases: Feed | None, now: datetime, policy: Policy
-) -> tuple[list[dict], list[str]]:
+def catalog(images: Feed | None, now: datetime, policy: Policy) -> tuple[list[dict], list[str]]:
     issues = [f"images:{issue}" for issue in feed_issues(images, now, policy)]
-    issues += [f"releases:{issue}" for issue in feed_issues(releases, now, policy)]
-    release_map = releases.payload if releases and isinstance(releases.payload, dict) else {}
-    if releases is not None and not isinstance(releases.payload, dict):
-        issues.append("releases:invalid-payload")
-    for value in release_map.values():
-        if value is not None and (not isinstance(value, str) or not value.strip()):
-            issues.append("releases:invalid-tag")
-            release_map = {}
-            break
     if images is None or not isinstance(images.payload, list):
         return [], [*issues, "images:invalid-or-missing-payload"]
     result = []
@@ -187,36 +196,16 @@ def catalog(
             item.update(
                 {
                     "source-status": "invalid",
-                    "review-reasons": ["invalid-public-row"],
                     "invalid-fields": sorted(
                         {str(part["loc"][0]) for part in error.errors() if part["loc"]}
                     ),
-                    "release": None,
-                    "needs-review": False,
                 }
             )
         else:
-            bases = [
-                key
-                for key in release_map
-                if row.framework == key or row.framework.endswith("-" + key)
-            ]
-            release = release_map[max(bases, key=len)] if bases else None
-            reasons = image_reasons(row.image, release)
             days = max(0, (utc(now) - utc(f"{row.date}T00:00:00Z")).days)
-            if row.benchmark_type == "agentic_traces" and days > 14:
-                reasons.append("agentx-age")
-            needs_review = any(reason != "release-comparison-unknown" for reason in reasons)
             item.update(
                 {
-                    "source-status": "review"
-                    if needs_review
-                    else "unknown"
-                    if reasons
-                    else "no-review-signal",
-                    "review-reasons": reasons,
-                    "release": release,
-                    "needs-review": needs_review,
+                    "source-status": "baseline",
                     "benchmark-age-days": days,
                 }
             )
@@ -225,13 +214,11 @@ def catalog(
 
 
 def fetch_catalog(policy: Policy) -> tuple[list[dict], list[str]]:
-    feeds = {}
-    for resource in ("images", "releases"):
-        try:
-            feeds[resource] = fetch(resource)
-        except ReadError as error:
-            raise ReadError(f"{resource}:{error}") from None
-    return catalog(feeds["images"], feeds["releases"], datetime.now(UTC), policy)
+    try:
+        images = fetch("images")
+    except ReadError as error:
+        raise ReadError(f"images:{error}") from None
+    return catalog(images, datetime.now(UTC), policy)
 
 
 def fresh(value: Any, now: datetime, policy: Policy) -> bool:

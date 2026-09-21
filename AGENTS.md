@@ -11,6 +11,7 @@ Guidance for AI agents working with InferenceX.
 
 ## Agent-specific policy
 
+- Pareto logic changes must update both InferenceX and InferenceX-app with matching regression tests and cross-linked PRs.
 - Every PR description must include an **AI model disclosure** section naming the exact model/version used to prepare the PR. List each contributing model and its role, including delegated agents. Tool names such as Claude Code, Cursor, or Perplexity Computer are not model identities. Copy the model identifier exposed by the runtime; do not guess an unavailable identifier. If the runtime does not expose the exact model, explicitly state that it could not be verified. Human-only PRs must state `No AI used`. Keep the disclosure current when later edits use another model.
 - Repository skills are canonical under `.agents/skills/`. Add or update skills there. `.claude/skills/` contains compatibility symlinks for Claude discovery.
 - PR and issue titles, descriptions, and human-authored PR comments must include English and natural Simplified Chinese. Titles use `<English title> / <中文标题>`. In bodies and comments, keep English visible and put Chinese in one collapsed `<details><summary>中文</summary>` section. Keep code, commands, logs, stack traces, model names, hardware SKUs, framework names, flags, and identifiers unchanged. The exact CODEOWNER sign-off template is English-only. See [`docs/documentation-procedures.md`](docs/documentation-procedures.md) and [`.github/AGENT_OPERATIONS.md`](.github/AGENT_OPERATIONS.md#translation-terminology).
