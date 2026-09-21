@@ -79,6 +79,10 @@ fi
 # Reserve more reusable SWA prefix tails within the same static memory pool.
 # The default four tails per request can evict prefixes while full KV is idle.
 SWA_PREFIX_TAILS=$((16 * MAX_RUNNING_REQUESTS))
+if (( TP == 2 )); then
+    # TP2 has a smaller static KV budget; retain the upstream four-tail ratio.
+    SWA_PREFIX_TAILS=$((4 * MAX_RUNNING_REQUESTS))
+fi
 
 # TP2 doubles the per-GPU weight footprint. Bound long-context indexer
 # workspace with smaller chunks while reserving roughly 18 GiB for transient

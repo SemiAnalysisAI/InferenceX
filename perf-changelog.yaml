@@ -8562,4 +8562,5 @@
     - "Use expandable CUDA allocator segments for TP2 so released loader temporaries can satisfy the next contiguous weight stack"
     - "Compare four DSpark decode rounds per prefill chunk against interval 16 to increase prefill service while preserving interactivity"
     - "Compare host-table DSpark with 16 SWA prefix tails per running request (1024 at C32), retaining the pinned host baseline memory and scheduling settings"
+    - "Expand the successfully loaded TP2 topology across the concurrency curve and retain its upstream four-tail SWA ratio to protect the smaller KV budget"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3346
