@@ -10,20 +10,28 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.parametrize("model_prefix", ["kimik3", "dsv4"])
+@pytest.mark.parametrize("model_prefix,gate_exit", [("kimik3", 0), ("dsv4", 0), ("kimik3", 42)])
 def test_b300_staged_target_keeps_kimi_draft_in_persistent_mount(
-    tmp_path: Path, model_prefix: str,
+    tmp_path: Path, model_prefix: str, gate_exit: int,
 ) -> None:
     log = tmp_path / "launch.jsonl"
+    for directory in ("runners", "benchmarks", "diagnostics"):
+        (tmp_path / directory).symlink_to(REPO_ROOT / directory, target_is_directory=True)
     result = subprocess.run(
         ["bash", "-c", '''
-        mkdir() { :; }
+        mkdir() {
+            if [[ "$2" == "$GITHUB_WORKSPACE/results/"* ]]; then command mkdir "$@"; fi
+        }
+        scontrol() { echo "JobId=123"; }
+        timeout() { shift; "$@"; }
         unsquashfs() { return 0; }
         salloc() { echo 'salloc: Granted job allocation 123' >&2; }
         scancel() { :; }
         srun() {
             python3 -c 'import json,os,sys; open(sys.argv[1], "a").write(json.dumps({"args":sys.argv[2:], "draft_root":os.environ.get("WRITABLE_MODELS_DIR")})+"\\n")' "$SRUN_LOG" "$@"
+            if [[ "$*" == *runtime.py* ]]; then return "$GATE_EXIT"; fi
         }
+        export GATE_EXIT="$4"
         unset WRITABLE_MODELS_DIR
         export MODEL_PREFIX="$3" PRECISION=fp4 FRAMEWORK=vllm
         export MODEL=moonshotai/Kimi-K3 IS_MULTINODE=false
@@ -37,11 +45,15 @@ def test_b300_staged_target_keeps_kimi_draft_in_persistent_mount(
         export GPU_COUNT=8
         cd "$GITHUB_WORKSPACE"
         source runners/launch_b300-dsxe.sh
-        ''', "bash", str(REPO_ROOT), str(log), model_prefix],
+        ''', "bash", str(tmp_path), str(log), model_prefix, str(gate_exit)],
         capture_output=True, text=True, timeout=10, check=False,
     )
-    assert result.returncode == 0, result.stderr
-    serve = json.loads(log.read_text().splitlines()[-1])
+    assert result.returncode == gate_exit, result.stderr
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    if gate_exit:
+        assert not any(arg.startswith("--container-image=") for call in calls for arg in call["args"])
+        return
+    serve = calls[-1]
     mounts = next(arg for arg in serve["args"] if arg.startswith("--container-mounts="))
     assert "/scratch/models:/scratch/models" in mounts
     if model_prefix == "kimik3":

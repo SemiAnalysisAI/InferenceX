@@ -344,7 +344,11 @@ else
         export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
     fi
 
-    import_squash_image "$IMAGE" "$SQUASH_FILE"
+    # Diagnostic only: do not spend another allocation importing an image.
+    unsquashfs -l "$SQUASH_FILE" > /dev/null 2>&1 || {
+        echo 'ERROR: C70 diagnostic requires the existing readable image cache' >&2
+        exit 1
+    }
 
     check_env_vars GPU_COUNT
 
@@ -371,6 +375,19 @@ else
     ) || exit 1
     [[ "$JOB_ID" =~ ^[0-9]+$ ]] || { echo 'ERROR: B300 allocation unavailable' >&2; exit 1; }
     trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
+    # Prior runs saved no container identity; retained runtimes need ownership review.
+    C70_RECEIPT_DIR="$GITHUB_WORKSPACE/results/c70-resource-receipt"
+    mkdir -p "$C70_RECEIPT_DIR" || exit "$?"
+    python3 - "$C70_RECEIPT_DIR/allocation.json" "$JOB_ID" <<'PY_RECEIPT' || exit "$?"
+import json, os, sys
+from pathlib import Path
+Path(sys.argv[1]).write_text(json.dumps({"job_id": sys.argv[2], "uid": os.getuid()}) + "\n")
+PY_RECEIPT
+    scontrol show job "$JOB_ID" > "$C70_RECEIPT_DIR/slurm-job.txt" || exit "$?"
+    timeout 75s srun --jobid="$JOB_ID" --nodes=1 --ntasks=1 --time=1 --mpi=none \
+        python3 "$GITHUB_WORKSPACE/diagnostics/pr3088-c70/runtime.py" \
+        "$C70_RECEIPT_DIR" "$SQUASH_FILE" || exit "$?"
+
     if [[ "$MODEL_MOUNT_DIR" == "$MODEL_ROOT" ]]; then
         # MODEL_ROOT is node-local: probe the allocated compute node, not the login host.
         srun --jobid="$JOB_ID" test -r "$MODEL_PATH/config.json" || {
