@@ -429,6 +429,9 @@ TP4 DSpark also compares GPU-resident Engram at a 0.80 static memory fraction
 against the pinned host-table baseline; TP2 keeps host tables.
 DSpark also uses `--prefill-decode-interval 16` to give draft/verify rounds service
 between long prefills; evaluate its full throughput/interactivity curve.
+The cache candidate reserves eight SWA prefix tails per running request (512
+at the 64-request cap), rather than four. This reallocates the same static pool
+from full KV to reusable sliding-window tails; verify cache hits and capacity.
 
 DSpark is the checkpoint's own bundled draft. SGLang exposes no EAGLE or MTP path and no
 `--speculative-num-steps` knob for it; the recipes pass `--speculative-algorithm DSPARK

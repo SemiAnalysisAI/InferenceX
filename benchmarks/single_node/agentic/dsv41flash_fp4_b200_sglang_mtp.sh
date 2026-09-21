@@ -73,6 +73,9 @@ MAX_RUNNING_REQUESTS=$((2 * CONC))
 if (( MAX_RUNNING_REQUESTS > CUDA_GRAPH_MAX_BS )); then
     MAX_RUNNING_REQUESTS=$CUDA_GRAPH_MAX_BS
 fi
+# Reserve more reusable SWA prefix tails within the same static memory pool.
+# The default four tails per request can evict prefixes while full KV is idle.
+SWA_PREFIX_TAILS=$((8 * MAX_RUNNING_REQUESTS))
 
 # TP2 doubles the per-GPU weight footprint. Bound long-context indexer
 # workspace with smaller chunks while reserving roughly 18 GiB for transient
@@ -136,6 +139,7 @@ SGLANG_CMD=(
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     # Long AgentX prefills otherwise starve active draft/verify decode rounds.
     --prefill-decode-interval 16
+    --swa-prefix-tails "$SWA_PREFIX_TAILS"
     "${SPECULATIVE_ARGS[@]}"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"

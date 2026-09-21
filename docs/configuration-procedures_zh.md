@@ -373,6 +373,8 @@ TP4 DSpark 还比较静态显存比例 0.80 的 GPU 常驻 Engram 与固定提�
 TP2 保留主机表。
 DSpark 也设置 `--prefill-decode-interval 16`，在长 prefill 之间调度草稿生成与验证；
 需评估完整吞吐与交互性能曲线。
+缓存候选为每个运行请求预留八个 SWA 前缀尾部（请求上限 64 时为 512），而非默认四个。
+这将同一静态内存池的部分完整 KV 容量转给可复用滑动窗口尾部；需验证命中率与容量。
 
 DSpark 是检查点自带的草稿模型。SGLang 对它不提供 EAGLE 或 MTP 路径，也没有
 `--speculative-num-steps` 参数；配方传入 `--speculative-algorithm DSPARK
