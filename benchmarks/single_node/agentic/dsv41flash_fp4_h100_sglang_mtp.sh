@@ -34,6 +34,10 @@ nvidia-smi
 resolve_trace_source
 install_agentic_deps
 mkdir -p "$RESULT_DIR"
+# Hardware-specific tiling only; checkpoint data, scales and dtypes are unchanged.
+# Resolve and verify the installed configs through the nightly's actual loader.
+python3 "$(dirname "$0")/install_h100_block32_configs.py" \
+    "$(dirname "$0")/kernel_configs/h100_dsv41_block32" "$RESULT_DIR"
 SERVER_LOG="$RESULT_DIR/server.log"
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1

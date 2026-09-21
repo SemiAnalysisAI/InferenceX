@@ -1,0 +1,13 @@
+{
+  "sglang_commit": "0f6761b54facebb47f2068f87ecccd8f14da3a0e",
+  "image": "lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5",
+  "hardware": "NVIDIA H100 80GB HBM3",
+  "tuner": "benchmark/kernels/quantization/tuning_block_wise_kernel.py",
+  "search_change": "Use BLOCK_SIZE_K=[32] for checkpoint block32 scales; upstream CUDA candidates [64,128] otherwise filter to an empty search.",
+  "tuning_slurm_job": 18452,
+  "selected_audit_slurm_job": 18457,
+  "resolver_install_slurm_job": 18458,
+  "validation": "39 cases: FP32 dequantized reference rtol=0.02/atol=0.05; exact CUDA graph/eager equality; alternating timing order. BF16 rounding may differ from default tiling.",
+  "selection": "N5120/K288 batch64 restored to upstream default after timing regression.",
+  "precision": "Stock FP8 inputs and scales, BF16 output; no quantization or model changes."
+}
