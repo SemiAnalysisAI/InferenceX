@@ -8090,3 +8090,12 @@
     - "Correct the experimental B200 TRT nightly probe image reference for Enroot 3.x while preserving the exact manifest digest; no runtime patching."
     - "修正 B200 TRT nightly 实验配置的镜像引用格式，兼容 Enroot 3.x 并保留相同的 manifest 摘要；不应用运行时补丁。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Test the official September 21 TRT nightly in the isolated B200 MiniMax BFCL Responses probe with an immutable image digest. Preserve the previous probe settings and apply no runtime patches."
+    - "在独立的 B200 MiniMax BFCL Responses 实验中测试 9 月 21 日官方 TRT nightly，并固定镜像摘要。沿用此前实验配置，不应用运行时补丁。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
