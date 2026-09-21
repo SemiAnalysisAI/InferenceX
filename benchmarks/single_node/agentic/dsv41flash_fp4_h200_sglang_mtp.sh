@@ -124,6 +124,11 @@ SGLANG_CMD=(
     --chunked-prefill-size 4096
     # Keep active decode requests progressing while long prefixes are queued.
     --prefill-decode-interval 16
+    # The default 4*max-running-requests retains too few SWA prefix tails:
+    # C16 exhausted its 94,976-slot SWA pool while millions of full-pool
+    # slots remained free. Rebalance the existing KV budget toward reusable
+    # tails; weights, KV precision and the total static budget stay unchanged.
+    --swa-prefix-tails 1024
     --speculative-algorithm DSPARK
     --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
