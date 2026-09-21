@@ -2114,7 +2114,43 @@
     },
     {
       "head_sha": "9334ea53bde6e8645a34ed40918fceb2d5750f0c",
-      "artifacts": [],
+      "artifacts": [
+        {
+          "id": 10618066666,
+          "name": "results_bmk",
+          "size_bytes": 2060
+        },
+        {
+          "id": 10617916400,
+          "name": "server_logs_minimaxm3_tp4_conc256_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disa-5f56eb1408c87b9b5c01",
+          "size_bytes": 401277
+        },
+        {
+          "id": 10617891530,
+          "name": "bmk_agentic_minimaxm3_tp4_conc256_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disa-5f56eb1408c87b9b5c01",
+          "size_bytes": 2251
+        },
+        {
+          "id": 10617696698,
+          "name": "gpu_metrics_minimaxm3_tp4_conc256_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disa-5f56eb1408c87b9b5c01",
+          "size_bytes": 314544
+        },
+        {
+          "id": 10617607966,
+          "name": "run-stats",
+          "size_bytes": 280
+        },
+        {
+          "id": 10616908235,
+          "name": "agentic_minimaxm3_tp4_conc256_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disa-5f56eb1408c87b9b5c01",
+          "size_bytes": 23910753
+        },
+        {
+          "id": 10616893348,
+          "name": "power_audit_minimaxm3_tp4_conc256_kvdram-nvme-vllm-native_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disa-5f56eb1408c87b9b5c01",
+          "size_bytes": 318130
+        }
+      ],
       "performance_result": false,
       "run_id": 35542179539,
       "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35542179539",
@@ -2123,29 +2159,133 @@
       "repeat": 2,
       "attempt": 1,
       "retry_of": 35524297747,
-      "status": "in_progress",
+      "status": "failure",
       "workflow_name": "offload-v1-dram-nvme-c256-r2-20260920T2236Z",
       "dispatched_at": "2026-09-20T22:35:57Z",
       "job_id": 106161761186,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35542179539/job/106161761186",
-      "started_at": "2026-09-20T22:36:36Z"
+      "started_at": "2026-09-20T22:36:36Z",
+      "node": "im-b200-c004",
+      "runner": "b200-nscale-slurm_04",
+      "allocation_id": "16702",
+      "completed_at": "2026-09-21T00:52:41Z",
+      "failure_stage": "offload_capacity_guard",
+      "failure_evidence": "The c256 HBM+DRAM+NVMe retry completed warmup and the full profiling window (2,584 accepted responses), but the native filesystem tier crossed the declared 2 TiB stop guard. offload-guard.json recorded 2,222,075,878,959 logical bytes and 2,222,075,879,424 allocated bytes, so runtime.py intentionally invalidated the run. This independently reproduces the deterministic capacity failure and will not be retried unchanged.",
+      "invalidated_measurement": {
+        "reason": "NVMe capacity guard exceeded",
+        "num_requests_successful": 2584,
+        "duration_seconds": 3628.66467,
+        "total_tokens_per_second_per_gpu": 15244.42549,
+        "output_tokens_per_second_per_gpu": 153.47057,
+        "p90_interactivity_tokens_per_second_per_user": 13.43143,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.29077,
+        "gpu_cache_hit_rate": 0.5548,
+        "external_cache_hit_rate": 0.17351,
+        "overall_cache_hit_rate": 0.72831,
+        "note": "Retained for diagnosis only; excluded from the comparison page and crossover claims."
+      },
+      "storage_evidence": "Cleanup captured 7,847,115,038,255 logical bytes, 7,847,115,038,720 allocated bytes and 661,534 files, then deleted the exact workflow-owned scratch successfully (deleted=true).",
+      "log_archive_sha256": "e41a3637780b2d28b774f98758ed3e0660be7625c37ec82492e6687467238dcc",
+      "evidence_sha256": {
+        "server.log": "327778a28daf3ae1829e4c4b5093057b7b0c660db01172d2763c501e30f98fd8",
+        "offload_cleanup.json": "cf7afb6866fef885cc901037ce4a579b86d689ef03ed74c4bc4377f4ebb762be",
+        "offload-guard.json": "0a69736128ea2bb788ae6619b672ca355a0a899e5bfe8c364a9f1f89cf9701d8",
+        "agg_bmk.json": "11a2a9bc75efc65eed0d5d831707674af74e2504691606605f620e2b4a9076e0"
+      }
     },
     {
       "head_sha": "9334ea53bde6e8645a34ed40918fceb2d5750f0c",
-      "artifacts": [],
-      "performance_result": false,
+      "artifacts": [
+        {
+          "id": 10617946925,
+          "name": "server_logs_minimaxm3_tp4_conc64_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp_-250c15d9780f38e40937",
+          "size_bytes": 98615
+        },
+        {
+          "id": 10617877135,
+          "name": "agentic_minimaxm3_tp4_conc64_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp_-250c15d9780f38e40937",
+          "size_bytes": 13382044
+        },
+        {
+          "id": 10617692544,
+          "name": "gpu_metrics_minimaxm3_tp4_conc64_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp_-250c15d9780f38e40937",
+          "size_bytes": 304899
+        },
+        {
+          "id": 10617607640,
+          "name": "power_audit_minimaxm3_tp4_conc64_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp_-250c15d9780f38e40937",
+          "size_bytes": 308471
+        },
+        {
+          "id": 10617596616,
+          "name": "results_bmk",
+          "size_bytes": 2051
+        },
+        {
+          "id": 10617397887,
+          "name": "bmk_agentic_minimaxm3_tp4_conc64_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp_-250c15d9780f38e40937",
+          "size_bytes": 2241
+        },
+        {
+          "id": 10617223431,
+          "name": "run-stats",
+          "size_bytes": 284
+        }
+      ],
+      "performance_result": true,
       "run_id": 35542182560,
       "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35542182560",
       "arm": "none",
       "concurrency": 64,
       "repeat": 1,
       "attempt": 1,
-      "status": "in_progress",
+      "status": "success",
       "workflow_name": "offload-v1-none-c64-r1-20260920T2236Z",
       "dispatched_at": "2026-09-20T22:36:00Z",
       "job_id": 106161752241,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35542182560/job/106161752241",
-      "started_at": "2026-09-20T22:36:30Z"
+      "started_at": "2026-09-20T22:36:30Z",
+      "node": "im-b200-c002",
+      "runner": "b200-nscale-slurm_01",
+      "allocation_id": "16700",
+      "completed_at": "2026-09-21T00:50:19Z",
+      "performance": {
+        "num_requests_total": 1862,
+        "num_requests_successful": 1155,
+        "num_requests_warmup_dropped": 707,
+        "num_requests_error_dropped": 1,
+        "duration_seconds": 3608.68154,
+        "output_tokens_per_second": 281.94646,
+        "output_tokens_per_second_per_gpu": 70.48662,
+        "input_tokens_per_second": 38091.35178,
+        "total_tokens_per_second": 38373.29824,
+        "total_tokens_per_second_per_gpu": 9593.32456,
+        "p90_e2e_latency_seconds": 381.03174,
+        "p90_ttft_seconds": 282.99766,
+        "p90_tpot_seconds": 0.10456,
+        "p90_interactivity_tokens_per_second_per_user": 9.56385,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.50054,
+        "mean_e2e_latency_seconds": 210.31578,
+        "avg_power_w_per_gpu": 900.271
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.11486,
+        "external_cache_hit_rate": 0.0,
+        "overall_cache_hit_rate": 0.11486,
+        "gpu_cache_hit_prompt_tokens": 32155392,
+        "external_cache_hit_prompt_tokens": 0,
+        "computed_prompt_tokens": 247790943,
+        "prompt_tokens_total": 279946335
+      },
+      "runtime_evidence": "Canonical HBM-only AgentX control completed the 3,600-second profiling window with 1,155 accepted responses, 81 grace-time cancellations and zero phase errors. No external cache tier was configured or observed.",
+      "storage_evidence": "HBM-only configured zero DRAM/NVMe offload. Its workflow-owned scratch remained empty (0 files, 0 bytes); cleanup exit code 0 and deleted true.",
+      "log_archive_sha256": "df6923abc5eee4c498f1e60520540d4da34db439caaf300547586e8f0a2e564d",
+      "evidence_sha256": {
+        "server.log": "6ff03eb6e6cafd1e3bc97a3c7e69c190ffaaeed10059b33d99a51dc33dd5ad74",
+        "offload_cleanup.json": "ae1e2689382a1902798fe46a014a744493d16e79ac3a2c2c158c29dbe130e049",
+        "agg_bmk.json": "f7a77123c64f180d7953de4ae7e8345265fb1c6aa99177d444102be570089926",
+        "profile_export.jsonl": "a49a184dd80260e52a00e39b1c755a73509f4988aaf1871f1d9e63515db1930f"
+      }
     },
     {
       "head_sha": "9334ea53bde6e8645a34ed40918fceb2d5750f0c",
@@ -2475,8 +2615,8 @@
       "cancellation_reason": "Cancelled before GPU allocation because runner admission again left two B200 jobs queued; c64 NVMe retained the single permitted queue slot."
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518",
-  "status": "At c64, HBM+DRAM failed at profiling startup because the shared Triton cache filesystem was full; HBM+DRAM+NVMe completed profiling but exceeded its 2 TiB filesystem stop guard and is intentionally invalidated. Both cleanup receipts prove task-owned scratch deletion. The c256 combined retry plus HBM c64 and HBM/DRAM c128 probes remain active. New NVMe-bearing dispatches remain held because im-b200-c003 repeatedly has only about 5.73 GB free.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560",
+  "status": "The c64 HBM control is valid and visible on the comparison page. The c256 combined retry completed profiling but independently exceeded the same 2 TiB filesystem stop guard as c64, so it is invalidated and excluded. Both cleanup receipts prove task-owned scratch deletion. HBM and DRAM c128 probes remain active. New NVMe-bearing dispatches remain held because im-b200-c003 repeatedly has only about 5.73 GB free.",
   "last_capacity_check": {
     "checked_at": "2026-09-20T22:41:19Z",
     "cluster_observed_at": "2026-09-20T22:40:49Z",
@@ -2492,24 +2632,20 @@
     "scheduler_snapshot_at": "2026-09-20T22:41:19Z",
     "scheduler_available": true,
     "active_study_run_ids": [
-      35542179539,
-      35542182560,
       35542193122,
       35542196012
     ],
     "active_study_job_ids": [
-      106161761186,
-      106161752241,
       106161771803,
       106161780979
     ],
     "active_reservations_global": 0,
     "reserved_nodes_global": 0,
     "dispatch_allowed": false,
-    "reason": "Four study jobs remain active. Do not dispatch NVMe-bearing work until im-b200-c003 has sufficient local capacity or is excluded. Do not retry c64 combined unchanged because it deterministically exceeded the filesystem stop guard. Retry c64 DRAM only after verifying free space in /data/home/sa-shared/.triton/cache."
+    "reason": "Two study jobs remain active. Do not dispatch NVMe-bearing work until im-b200-c003 has sufficient local capacity or is excluded. Do not retry the combined c64 or c256 configurations unchanged because both deterministically exceeded the filesystem stop guard. Retry c64 DRAM only after verifying free space in /data/home/sa-shared/.triton/cache."
   },
   "next_dispatch": {
-    "requires": "Continue monitoring the four active GPU jobs. After infrastructure remediation and a fresh queue/capacity check, retry c64 DRAM and prioritize c64/c128 NVMe. Redesign the combined tier capacity semantics before another combined c64 attempt; do not rerun it unchanged."
+    "requires": "Continue monitoring the two active c128 GPU jobs. After infrastructure remediation and a fresh queue/capacity check, retry c64 DRAM and prioritize c64/c128 NVMe. Redesign the combined tier capacity semantics before any further combined attempt; do not rerun it unchanged."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-19T23:34:00Z",
