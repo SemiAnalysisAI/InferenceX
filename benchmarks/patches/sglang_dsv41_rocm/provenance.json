@@ -20,7 +20,7 @@
       "installed_name": "low_ratio_hip.py",
       "source_path": "python/sglang/srt/layers/attention/dsv4/low_ratio_backend_hip.py",
       "source_sha256": "f859185ad42ca6de6e988f156cab0e5c0fd8a49eb7de144a5062c7f5a0162274",
-      "adapted_sha256": "78d659b9e0dc86453a3bc13a21e5ff503fe38fb1cba7b9e12d08dbca18298292"
+      "adapted_sha256": "fc5cff2c7dda4213fb2e8b7ea61410fd9194a0df0a3ae9c05300521205d57ed5"
     },
     {
       "installed_name": "fp4_indexer.py",

@@ -383,18 +383,7 @@ def topk_within_candidate_blocks_hip(
 
 
 def _indexer_head_weights(indexer, x: torch.Tensor) -> torch.Tensor:
-    """`indexer.head_weights(x)` as the contiguous bf16 [T, H] the FlyDSL kernels take; decode row
-    counts run `rocm_indexer_head_weights` (same two roundings as aiter's GEMM plus the scale)."""
-    max_m = indexer.weights_proj_hip_max_tokens
-    if (
-        0 < x.shape[0] <= max_m
-        and x.dim() == 2
-        and x.dtype == torch.bfloat16
-        and x.stride(1) == 1
-    ):
-        return rocm_indexer_head_weights(
-            x, indexer.weights_proj.weight, indexer.head_weight_scale
-        )
+    """Use the nightly's stock projection and scale with contiguous BF16 output."""
     return indexer.head_weights(x).contiguous()
 
 
