@@ -23,9 +23,7 @@ if [[ "$IS_MULTINODE" != true && "${MODEL_PREFIX:-}" == dsv41flash &&
     BATCH_SCRIPT=$(mktemp "${RUNNER_TEMP:-$GITHUB_WORKSPACE}/b300-agentx.XXXXXX.sh") || exit 1
     BATCH_LOG="${BATCH_SCRIPT%.sh}.log"
     {
-        # Enroot's PMI hook also inspects this variable. Without it, inherited
-        # batch PMIX variables trigger mounts absent from our --mpi=none step.
-        printf '#!/usr/bin/env bash\nexport B300_AGENTX_BATCH=1\nexport SLURM_MPI_TYPE=none\nexec bash '
+        printf '#!/usr/bin/env bash\nexport B300_AGENTX_BATCH=1\nexec bash '
         printf '%q\n' "$GITHUB_WORKSPACE/runners/launch_b300-dsxe.sh"
     } > "$BATCH_SCRIPT"
     BATCH_ARGS=(--parsable --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT"
@@ -438,8 +436,14 @@ else
     fi
     CONTAINER_MOUNTS_ARG=$(IFS=,; printf '%s' "${CONTAINER_MOUNTS[*]}")
 
+    B300_CONTAINER_MPI=none
+    if [[ "${B300_AGENTX_BATCH:-}" == 1 ]]; then
+        # The installed Enroot hook sees PMIx variables in batch jobs. Use the
+        # supported plugin so its required per-step mount directories exist.
+        B300_CONTAINER_MPI=pmix
+    fi
     srun --jobid="$JOB_ID" \
-        --mpi=none \
+        --mpi="$B300_CONTAINER_MPI" \
         --container-image="$SQUASH_FILE" \
         --container-mounts="$CONTAINER_MOUNTS_ARG" \
         --no-container-mount-home \
