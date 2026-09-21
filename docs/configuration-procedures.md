@@ -416,9 +416,9 @@ Its separate STP script evaluates GPU-resident Engram tables with a 0.80 static 
 fraction and 4096-token prefill chunks. This spends approximately 47.2 GiB more HBM
 per TP4 rank to remove host-table accesses; compare measured cache capacity and latency
 against the per-rank host candidate before selecting the final placement.
-DSpark applies the hash-verified `patch_sglang_dsv41_native_wo_a.py` fix so all three
-WO_A projections retain native FP8 weights and block scales. Markov weights retain
-native BF16. STP loads no draft, and both STP and evals clear synthetic acceptance.
+DSpark uses the pinned upstream nightly's shipped default draft implementation,
+including its default computation and Markov precision. STP loads no draft;
+both STP and evals clear synthetic acceptance.
 
 DSpark is the checkpoint's own bundled draft. SGLang exposes no EAGLE or MTP path and no
 `--speculative-num-steps` knob for it; the recipes pass `--speculative-algorithm DSPARK

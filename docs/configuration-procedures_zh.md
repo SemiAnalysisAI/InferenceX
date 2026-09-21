@@ -362,8 +362,7 @@ B200 还通过 `dsv41flash-fp4-b200-sglang-agentic` 注册原生 STP 测试点�
 独立 STP 脚本测试 GPU 常驻 Engram 表，静态显存比例为 0.80，prefill chunk 为 4096。
 TP4 下每个 rank 多占用约 47.2 GiB 显存以消除主机表访问；确定最终放置方式前，
 需与每 rank 主机分片方案比较实测缓存容量和延迟。
-DSpark 应用经过哈希校验的 `patch_sglang_dsv41_native_wo_a.py` 修复，使三个
-WO_A 投影保留原生 FP8 权重与分块 scale；Markov 权重保持原生 BF16。
+DSpark 使用固定上游 nightly 自带的默认草稿实现，包括默认计算与 Markov 精度。
 STP 不加载草稿模型，STP 与评估均清除合成接受率设置。
 
 DSpark 是检查点自带的草稿模型。SGLang 对它不提供 EAGLE 或 MTP 路径，也没有
