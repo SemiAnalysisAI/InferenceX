@@ -3,6 +3,7 @@
 set -eo pipefail
 source /infx/benchmarks/benchmark_lib.sh --validation-only
 check_env_vars TRT_SOURCE_SHA TRT_BUILD_JOBS TRT_CUDA_ARCHS TRT_DEVEL_IMAGE
+check_env_vars TRT_NVRTC_VERSION TRT_NVRTC_DEB_URL TRT_NVRTC_DEB_SHA256
 [[ "$TRT_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
 [[ "$TRT_BUILD_JOBS" =~ ^[1-9][0-9]*$ ]]
 command -v git
@@ -28,6 +29,23 @@ git lfs fsck
 git diff --exit-code
 git diff --cached --exit-code
 git show --no-patch --format=fuller HEAD > /build-evidence/upstream-commit.txt
+
+# Reproduce main's CUDA dependency fix: the published devel image omits the
+# NVRTC static archives despite reporting the pinned package version. Restore
+# the official package payload inside this build container. Extraction avoids
+# privileged dpkg maintainer scripts in the rootless Pyxis namespace.
+grep -Fx "NVRTC_VER=\"$TRT_NVRTC_VERSION\"" docker/common/install_cuda_libs.sh
+NVRTC_DEB=/trt-build/nvrtc-dev.deb
+curl --fail --location --retry 3 "$TRT_NVRTC_DEB_URL" -o "$NVRTC_DEB"
+printf '%s  %s\n' "$TRT_NVRTC_DEB_SHA256" "$NVRTC_DEB" | sha256sum --check
+[[ "$(dpkg-deb -f "$NVRTC_DEB" Package)" == cuda-nvrtc-dev-13-4 ]]
+[[ "$(dpkg-deb -f "$NVRTC_DEB" Version)" == "$TRT_NVRTC_VERSION" ]]
+[[ "$(dpkg-deb -f "$NVRTC_DEB" Architecture)" == amd64 ]]
+dpkg-deb --fsys-tarfile "$NVRTC_DEB" | tar --no-same-owner -xf - -C /
+test -s /usr/local/cuda-13.4/targets/x86_64-linux/lib/libnvrtc_static.a
+test -s /usr/local/cuda-13.4/targets/x86_64-linux/lib/libnvrtc-builtins_static.a
+sha256sum "$NVRTC_DEB" > /build-evidence/nvrtc-package.sha256
+dpkg-deb -f "$NVRTC_DEB" > /build-evidence/nvrtc-package-control.txt
 
 # Build both Python and native extensions with the upstream build entrypoint.
 # No precompiled reuse, fast-build kernel omissions, editable install, or source edits.
@@ -82,6 +100,11 @@ assert any(name.endswith('.so') for name in files)
 manifest = {
     'source_commit': os.environ['TRT_SOURCE_SHA'],
     'base_devel_image': os.environ['TRT_DEVEL_IMAGE'],
+    'nvrtc_development_package': {
+        'version': os.environ['TRT_NVRTC_VERSION'],
+        'url': os.environ['TRT_NVRTC_DEB_URL'],
+        'sha256': os.environ['TRT_NVRTC_DEB_SHA256'],
+    },
     'cuda_archs': os.environ['TRT_CUDA_ARCHS'],
     'package_version': metadata.version('tensorrt_llm'),
     'torch_version': torch.__version__,

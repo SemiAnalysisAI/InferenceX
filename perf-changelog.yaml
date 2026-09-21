@@ -8108,3 +8108,12 @@
     - "Build the experimental B200 MiniMax BFCL image from upstream TRT-LLM main 0d4304aab66e, including native libraries, on the pinned September 21 devel image. Save and hash the built image before testing the unchanged Responses smoke probe in a fresh container."
     - "基于固定的 9 月 21 日 devel 镜像，从上游 TRT-LLM main 提交 0d4304aab66e 完整构建 B200 MiniMax BFCL 实验镜像及原生库。保存镜像并记录摘要后，在新容器中运行原有 Responses 冒烟测试。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156
+
+- config-keys:
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Restore the official pinned NVRTC development package during the experimental upstream TRT image build, matching main's missing-static-library fix. Keep upstream source, native compilation, and the MiniMax BFCL probe unchanged."
+    - "构建上游 TRT 实验镜像时，恢复官方固定版本的 NVRTC 开发包，与 main 中补齐静态库的修复一致。上游源码、原生库编译方式及 MiniMax BFCL 测试配置保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3156

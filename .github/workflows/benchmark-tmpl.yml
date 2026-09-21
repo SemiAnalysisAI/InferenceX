@@ -289,6 +289,9 @@ jobs:
           TRT_BUILD_JOBS: '32'
           TRT_CUDA_ARCHS: '100-real'
           TRT_BUILD_TIME_LIMIT: '05:00:00'
+          TRT_NVRTC_VERSION: '13.4.59-1'
+          TRT_NVRTC_DEB_URL: 'https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-nvrtc-dev-13-4_13.4.59-1_amd64.deb'
+          TRT_NVRTC_DEB_SHA256: '3cc224178e7dee1e8b13f5bdc1bd8834ac97abb853bf6d1eac2077c1ad5ed9f1'
         run: |
           if [[ -f utils/result_filename.py ]]; then
             RESULT_FILENAME=$(python3 utils/result_filename.py)
