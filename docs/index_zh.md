@@ -25,6 +25,7 @@
 | [`troubleshooting.md`](./troubleshooting.md) / [`troubleshooting_zh.md`](./troubleshooting_zh.md) | 故障层级诊断、已知案例、安全修复与停止条件 |
 | [`documentation-procedures.md`](./documentation-procedures.md) / [`documentation-procedures_zh.md`](./documentation-procedures_zh.md) | 新增、翻译、索引、审阅与维护文档 |
 | [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md) / [`PR_REVIEW_CHECKLIST_zh.md`](./PR_REVIEW_CHECKLIST_zh.md) | CODEOWNER 审阅与精确签署要求 |
+| [`waiver/3343.md`](./waiver/3343.md) / [`waiver/3343_zh.md`](./waiver/3343_zh.md) | MI355X V4.1 兼容补丁范围、上游跟踪及待完成的豁免审阅 |
 | [`DOCUMENTATION_PLAN.md`](./DOCUMENTATION_PLAN.md) / [`DOCUMENTATION_PLAN_zh.md`](./DOCUMENTATION_PLAN_zh.md) | 剩余文档缺口、目标信息架构与落地计划 |
 
 ## 权威参考
