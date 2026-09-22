@@ -13,6 +13,38 @@ source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
 
+# This lane's interactive allocation notifications fail on login-02, while
+# batch submission and steps launched from the allocated node work. Keep the
+# workaround scoped to this recipe and use normal Slurm resource accounting.
+if [[ "$IS_MULTINODE" != true && "${MODEL_PREFIX:-}" == dsv41flash &&
+      "${FRAMEWORK:-}" == sglang && "${IS_AGENTIC:-}" == 1 &&
+      "${B300_AGENTX_BATCH:-}" != 1 ]]; then
+    check_env_vars GITHUB_WORKSPACE GPU_COUNT RUNNER_NAME
+    BATCH_SCRIPT=$(mktemp "${RUNNER_TEMP:-$GITHUB_WORKSPACE}/b300-agentx.XXXXXX.sh") || exit 1
+    BATCH_LOG="${BATCH_SCRIPT%.sh}.log"
+    {
+        printf '#!/usr/bin/env bash\nexport B300_AGENTX_BATCH=1\nexec bash '
+        printf '%q\n' "$GITHUB_WORKSPACE/runners/launch_b300-dsxe.sh"
+    } > "$BATCH_SCRIPT"
+    BATCH_ARGS=(--parsable --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT"
+        --nodes=1 --ntasks=1 --gres="gpu:$GPU_COUNT" --exclusive --mem=0
+        --time="$SALLOC_TIME_LIMIT" --job-name="$RUNNER_NAME" --export=ALL
+        --chdir="$GITHUB_WORKSPACE" --output="$BATCH_LOG")
+    if [[ -n "${SALLOC_EXCLUDE:-}" ]]; then
+        BATCH_ARGS+=(--exclude="$SALLOC_EXCLUDE")
+    fi
+    JOB_ID=$(sbatch "${BATCH_ARGS[@]}" "$BATCH_SCRIPT") || { rm -f "$BATCH_SCRIPT"; exit 1; }
+    JOB_ID="${JOB_ID%%;*}"
+    [[ "$JOB_ID" =~ ^[0-9]+$ ]] || { echo 'ERROR: B300 batch allocation unavailable' >&2; rm -f "$BATCH_SCRIPT"; exit 1; }
+    trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; rm -f "$BATCH_SCRIPT"; exit "$rc"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    echo "B300 AgentX batch job $JOB_ID; log: $BATCH_LOG"
+    stream_slurm_job_log "$JOB_ID" "$BATCH_LOG" || exit 1
+    verify_slurm_job_status "$JOB_ID"
+    exit $?
+fi
+
 # enroot squash images. Must be on storage every compute node mounts and writable
 # by the runner user (/data/squash is root-owned, hence the per-user default).
 SQUASH_DIR="/data/home/sa-gha-runner/squash"
@@ -68,8 +100,13 @@ import_squash_image() {
         return 0
     fi
 
-    srun -N 1 -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION" \
-        --time="${ENROOT_IMPORT_TIME_LIMIT}" bash -c "
+    local import_launcher=(srun -N 1 -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION"
+        --time="${ENROOT_IMPORT_TIME_LIMIT}")
+    if [[ "${B300_AGENTX_BATCH:-}" == 1 ]]; then
+        # Already inside our exclusive compute-node allocation.
+        import_launcher=()
+    fi
+    "${import_launcher[@]}" bash -c "
         set -eo pipefail
         exec 9>\"$lock\"
         flock -w 3600 9
@@ -341,7 +378,7 @@ else
     fi
 
     # Keep all new AgentX runtime directories outside /workspace.
-    if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" ]]; then
+    if [[ "$MODEL_PREFIX" == "dsv41flash" && ( "$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "sglang" ) ]]; then
         CONTAINER_MOUNT_DIR=/ix
         export INFMAX_CONTAINER_WORKSPACE=/ix
         export RESULT_DIR=/ix/results
@@ -369,13 +406,17 @@ else
         SALLOC_ARGS+=(--exclude="$SALLOC_EXCLUDE")
     fi
     # Capture this allocation's ID; a runner name can also match an older job.
-    JOB_ID=$(
+    if [[ "${B300_AGENTX_BATCH:-}" == 1 ]]; then
+        JOB_ID="${SLURM_JOB_ID:?B300 batch execution requires a Slurm allocation}"
+    else
+        JOB_ID=$(
         set -o pipefail
         LC_ALL=C salloc "${SALLOC_ARGS[@]}" 2>&1 | tee /dev/stderr |
             sed -n 's/.*Granted job allocation \([0-9][0-9]*\)$/\1/p'
-    ) || exit 1
-    [[ "$JOB_ID" =~ ^[0-9]+$ ]] || { echo 'ERROR: B300 allocation unavailable' >&2; exit 1; }
-    trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
+        ) || exit 1
+        [[ "$JOB_ID" =~ ^[0-9]+$ ]] || { echo 'ERROR: B300 allocation unavailable' >&2; exit 1; }
+        trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
+    fi
     if [[ "$MODEL_MOUNT_DIR" == "$MODEL_ROOT" ]]; then
         # MODEL_ROOT is node-local: probe the allocated compute node, not the login host.
         srun --jobid="$JOB_ID" test -r "$MODEL_PATH/config.json" || {
@@ -400,8 +441,14 @@ else
     fi
     CONTAINER_MOUNTS_ARG=$(IFS=,; printf '%s' "${CONTAINER_MOUNTS[*]}")
 
+    B300_CONTAINER_MPI=none
+    if [[ "${B300_AGENTX_BATCH:-}" == 1 ]]; then
+        # The installed Enroot hook sees PMIx variables in batch jobs. Use the
+        # supported plugin so its required per-step mount directories exist.
+        B300_CONTAINER_MPI=pmix
+    fi
     srun --jobid="$JOB_ID" \
-        --mpi=none \
+        --mpi="$B300_CONTAINER_MPI" \
         --container-image="$SQUASH_FILE" \
         --container-mounts="$CONTAINER_MOUNTS_ARG" \
         --no-container-mount-home \

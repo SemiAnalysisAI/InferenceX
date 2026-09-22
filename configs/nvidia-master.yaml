@@ -8966,3 +8966,21 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg:
           tp: 2
           ep: 2
           dp-attn: false
+
+# Official 2026-09-21 CUDA 13 nightly, amd64 manifest pinned for B300.
+# Latest multiarch index: sha256:987c7e4bd26918647211a5dcad72a2bdf2a5f394ac1469eff730e7517fc139be.
+# Uses the cookbook's automatic backends and the existing B200 AgentX memory bounds.
+dsv41flash-fp4-b300-sglang-agentic-dspark:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:35ea4d321b0735051dcce2599fc495853ad1ef30f6a1908f0a75e74204362d14
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 2, ep: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
