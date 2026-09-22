@@ -8213,6 +8213,24 @@ dsv41flash-fp4-gb300-vllm-agentic-dspark:
       # capture stopped at 512, leaving ~36 GiB of KV per GPU.
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
+dsv41flash-fp4-gb300-sglang-agentic-dspark:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260922-4cbf290f@sha256:504d34fd712ac2656e9a9da363160e49fddb9957b60092893d6b773fc26c0f5f
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # Launcher keeps Engram on GPU for these points.
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8] }
+      # Launcher offloads Engram weights, not KV, for these points.
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 64, 80] }
+      - { tp: 2, ep: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [16, 32] }
+
 # H200 AgentX arm for DeepSeek-V4.1-Flash. Upstream marks h200 verified and says
 # the GB200 NVL4 TP4 layout becomes TP8 on 8-GPU nodes, so this is TP8.
 # `precision: fp4` labels the checkpoint's MXFP4 routed experts, as on the

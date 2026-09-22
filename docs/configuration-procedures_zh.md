@@ -409,6 +409,28 @@ offload），prefill 分块上限设为 4096，即 vLLM H100 配方在 80 GB 显
 
 在获得 GPU sweep 与 eval 证据之前，不得将这些配方视为已验证。
 
+### GB300 DeepSeek-V4.1-Flash SGLang 候选配方
+
+GB300 SGLang 脚本支持九个选定 AgentX 点：TP4/EP4 的 C1/C2/C4/C8 使用
+GPU 常驻 Engram；TP4/EP4 的 C32/C64/C80 和 TP2/EP2 的 C16/C32 使用每 rank
+主机 Engram。所有点的 KV 均保留在 GPU；`kv-offloading: none` 不表示 Engram
+权重的放置方式。启动器根据 TP 和并发选择放置方式，并在服务器日志中记录生效的
+SGLang 环境变量。必须检查每个主机卸载 rank 的实际大页覆盖率；请求每 rank 布局
+不保证获得大页。
+
+候选配方保留原生 DSpark5，吞吐使用 thinking-on 黄金 AL 3.51，准确率 eval 清除
+强制接受设置，并使用正式 3600 秒 AgentX 回放。初始调优为静态显存比例 0.8、
+chunk 4096、interval 16，以及由 `64 * CONC` 限制在 128–4096 的 SWA tails。
+运行请求上限为 `2 * CONC`；decode graph 向上取二次幂，最少 64 个**请求**，
+而非 token。因此 C80 请求 graph batch 256。这些设置尚未完成 GPU 验证，
+尤其是 TP2 加载和高并发 graph 显存需求。
+
+master 配置使用多架构 digest 固定 `lmsysorg/sglang:nightly-dev-cu13-20260922-4cbf290f`。
+镜像仓库元数据确认支持 ARM64，源码 commit 为 `4cbf290fb9e71518f1f8f133025f507d69f9b409`，
+即 SGLang 修复 #40637 的合并提交。启动器沿用 B200 的方式，将 Docker digest
+引用转换为 Enroot 的 manifest-tag 语法。
+发布前仍需真实权重启动、全部选定点的 sweep 和真实验证的准确率评测证据。
+
 ## 验证
 
 运行覆盖被修改层的最小检查。

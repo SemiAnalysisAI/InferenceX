@@ -472,6 +472,31 @@ those paths on `vllm` only.
 
 GPU sweep and eval evidence is required before calling any of these arms validated.
 
+### GB300 DeepSeek-V4.1-Flash SGLang candidate
+
+The GB300 SGLang script supports nine selected AgentX points: TP4/EP4 at
+C1/C2/C4/C8 with GPU-resident Engram, TP4/EP4 at C32/C64/C80 with per-rank
+host Engram, and TP2/EP2 at C16/C32 with per-rank host Engram. KV stays on GPU
+in every case; `kv-offloading: none` does not describe Engram weight placement.
+The launcher selects placement from TP and concurrency and records the effective
+SGLang environment in the server log. Verify actual huge-page backing for each
+host-offload rank; requesting per-rank layout does not guarantee huge pages.
+
+The candidate retains native DSpark5 and thinking-on golden AL 3.51 for throughput,
+clears forced acceptance for accuracy evals, and uses the canonical 3600-second
+AgentX replay. Initial tuning is fraction 0.8, chunk 4096, interval 16, and
+128–4096 SWA tails from `64 * CONC`. Maximum running requests is `2 * CONC`;
+decode graphs round up to the next power of two, with minimum 64 **requests**, not
+tokens. C80 therefore requests graph batch 256. These settings are not yet
+GPU-qualified, especially TP2 loading and high-concurrency graph memory.
+
+The master entry pins `lmsysorg/sglang:nightly-dev-cu13-20260922-4cbf290f`
+to its multi-architecture digest. Registry metadata confirms ARM64 support and
+source commit `4cbf290fb9e71518f1f8f133025f507d69f9b409`, the merge of SGLang
+fix #40637. The launcher converts Docker digest references to Enroot's manifest-tag
+syntax, following the B200 launcher. Real-weight startup, the complete selected sweep and
+real-verification eval evidence are still required before publication.
+
 ## Validate
 
 Run the smallest checks that cover the edited layers.

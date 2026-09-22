@@ -32,7 +32,7 @@ mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
 
 export MODEL_PATH=$MODEL
 
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE}" != "true" ]]; then
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && ( "$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "sglang" ) && "${IS_MULTINODE}" != "true" ]]; then
     # Download the new checkpoint into the persistent shared HF cache.
     export MODEL_PATH="$MODEL"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
@@ -91,6 +91,15 @@ NGINX_SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$NGINX_IMAGE" 
 # The login node is x86_64 and the compute nodes aarch64, so import on a compute node.
 import_squash() {
     local squash="$1" image="$2"
+    # Enroot uses the digest as the manifest tag, not Docker's @ syntax.
+    if [[ "$image" == *@sha256:* ]]; then
+        local image_digest="${image##*@}"
+        image="${image%@*}"
+        if [[ "${image##*/}" == *:* ]]; then
+            image="${image%:*}"
+        fi
+        image="${image}:${image_digest}"
+    fi
     local lock="${squash}.lock"
     srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" --exclusive --time=180 bash -c "
         exec 9>\"$lock\"
@@ -106,7 +115,7 @@ import_squash() {
 
 import_squash "$SQUASH_FILE" "$IMAGE"
 # Keep this branch before the nginx import and srtctl setup.
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE}" != "true" ]]; then
+if [[ "$MODEL_PREFIX" == "dsv41flash" && ( "$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "sglang" ) && "${IS_MULTINODE}" != "true" ]]; then
     BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb300_${FRAMEWORK}_mtp.sh"
     # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
     export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
@@ -119,6 +128,20 @@ if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINO
     export RESULT_DIR=/ix/results
     # Cold model loading and graph capture exceeded the one-hour frontend deadline.
     export VLLM_ENGINE_READY_TIMEOUT_S=7200
+    if [[ "$FRAMEWORK" == "sglang" ]]; then
+        check_env_vars TP CONC
+        # Engram weight placement changes with load; KV stays on GPU throughout.
+        case "$TP:$CONC" in
+            4:1|4:2|4:4|4:8)
+                export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0
+                ;;
+            4:32|4:64|4:80|2:16|2:32)
+                export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
+                export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
+                ;;
+            *) echo "Unsupported SGLang GB300 point: TP=$TP CONC=$CONC" >&2; exit 1 ;;
+        esac
+    fi
     srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
         --nodes=1 --ntasks=1 --gpus="${TP:?}" --cpus-per-task=144 --exclusive --mem=0 \
         --time="${SALLOC_TIME_LIMIT}" --job-name="$RUNNER_NAME" \
