@@ -8622,3 +8622,14 @@
     - "从 MI300X vLLM DeepSeek-V4.1-Flash AgentX 配方中移除 TP2 臂：经实测不可行。在 Actions 运行 35671005506 中，TP2 并发 1 数据点报告 \"Available KV cache memory: -13.51 GiB\"，引擎以 \"No available memory for the cache blocks\" 拒绝启动，且此时稀疏注意力 indexer 缓冲区已减半至 4096 batched tokens。TP2 下经 Engram 卸载后每 rank 常驻权重约 145 GiB，192 GB 的卡无法在容纳该权重的同时保留可用的 1M 上下文 KV 池。将 gpu-memory-utilization 提高到 0.95 可回收约 9 GiB，再次将缓冲区减半可回收约 4 GiB，仍几乎不剩 KV，因此选择移除该臂而非调参。MI325X 以每卡 256 GB 运行相同的 TP2 配置"
     - "TP8 与 TP4 臂不受影响并保留。TP4 在同一运行中以每 rank 约 81 GiB 在并发 1 与 32 通过"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3336
+
+- config-keys:
+    - dsv41flash-fp4-b200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin B200 DeepSeek-V4.1 Flash to SGLang nightly-dev-cu13-20260922-582389ce by digest and preserve shipped DSpark precision with the committed five-token golden acceptance curve"
+    - "Use per-rank host Engram shards, interval 16, and concurrency-scaled SWA prefix capacity: TP4 C1-128 uses static fraction 0.80, chunk 4096, and 128-4096 tails; TP2 C1-8 uses static fraction 0.92, chunk 2048, and 128 tails per session"
+    - "Test TP2 loading with the unmodified pinned stock loader and expandable CUDA allocator segments alone; preserve tensor payloads, layouts, and computation"
+    - "Resolve local model snapshots, retain robust AgentX HTTP timeouts, and normalize digest-pinned images for the installed Enroot parser with immediate import failure handling"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3346
