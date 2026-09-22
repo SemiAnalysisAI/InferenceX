@@ -24,9 +24,9 @@ Ordinary benchmark runs are best-effort: invalid telemetry records
 ``power_valid=0`` (and no energy metrics) in the aggregate plus a validation
 sidecar, but never fails the benchmark. Power studies set ``REQUIRE_POWER=1``
 to fail after those audit artifacts exist. If a consistent package contains a
-failed sibling window, a healthy measurement is retained only in the sidecar's
-``selected_window``. This does not change the package publication verdict or
-populate the aggregate's power metrics.
+failed sibling window, the sidecar retains the healthy measurement in
+``selected_window`` and its per-GPU diagnostics at the top level. Publication
+and aggregate power metrics remain blocked.
 """
 
 from __future__ import annotations

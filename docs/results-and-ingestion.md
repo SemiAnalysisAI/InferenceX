@@ -111,20 +111,13 @@ Processing and diagnostic power-audit uploads run after launcher or validation f
 
 ### SRT multinode window retention
 
-The SRT DCGM consumer keeps publication separate from individual measurement retention.
-`power_validation_*.json` (or AgentX `power_validation.json`) records
-`package_integrity_valid` for the producer pin, shared artifact checks, and stored/recomputed
-evidence agreement. `window_validations` retains every expected window's identity and reasons.
-For the selected completed result, `selected_window.power_valid` and
-`selected_window.metrics` expose its independently validated measurement, including workflow
-topology and result binding. These fields do not authorize publication.
-
-A consistently recorded failed, missing, or uncovered sibling can leave the selected window
-readable, while top-level and aggregate `power_valid` remain false, top-level/aggregate energy
-metrics remain absent, and `REQUIRE_POWER=1` still fails. Corrupt samples, malformed artifacts,
-producer mismatch, or stored-evidence disagreement block even this independent measurement.
-Replays never rewrite the input package. Older packages whose stored window audits disagree
-with the current validator remain invalid; diagnostic readback is not a historical repair.
+Power audit sidecars retain independently validated measurements in `selected_window`;
+`package_integrity_valid` records shared evidence checks and `window_validations` records
+per-window verdicts. Retention requires trusted evidence, matching topology and result binding.
+If a sibling window fails, top-level and aggregate `power_valid` stay false, sidecar `metrics`
+stays empty, aggregate power metrics are omitted, and `REQUIRE_POWER=1` fails. The sidecar may still contain the healthy window's
+metrics and top-level `per_gpu_energy_j` / `per_gpu_max_sample_gap_s` diagnostics;
+these do not authorize publication. Replay never rewrites inputs or repairs inconsistent evidence.
 
 ### Native multinode telemetry
 

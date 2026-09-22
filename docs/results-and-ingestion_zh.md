@@ -111,17 +111,13 @@ PR changelog 选择具有代表性的 NVIDIA 和 AMD 覆盖，并非所有受影
 
 ### SRT 多节点窗口保留
 
-SRT DCGM 消费端将发布判定与单个测量窗口的保留分开。
-`power_validation_*.json`（AgentX 为 `power_validation.json`）通过
-`package_integrity_valid` 记录生产者版本、共享工件检查以及存储证据与重新计算结果是否一致。
-`window_validations` 保留每个预期窗口的身份和失败原因。对于选中的已完成结果，
-`selected_window.power_valid` 和 `selected_window.metrics` 提供独立验证后的测量值，
-该验证仍包括工作流拓扑与结果绑定。这些字段不构成发布许可。
-
-当相邻窗口的失败、缺失或覆盖不足被如实记录时，健康窗口仍可读回，但顶层和聚合结果的
-`power_valid` 保持 false，顶层及聚合结果不输出能量指标，`REQUIRE_POWER=1` 仍返回失败。
-采样损坏、工件格式错误、生产者不匹配或存储证据对账不一致也会阻止独立测量被判为有效。
-回放不会重写输入包；旧包的窗口审计与当前校验器不一致时仍判无效，诊断读回不等于历史修复。
+功耗审计文件在 `selected_window` 中保留独立验证后的测量；`package_integrity_valid`
+记录共享证据检查，`window_validations` 记录逐窗口结论。保留测量仍要求证据可信、
+拓扑匹配且结果绑定正确。其他窗口失败时，顶层及聚合结果的 `power_valid` 仍为 false，
+审计顶层 `metrics` 为空，聚合结果不输出功耗指标，`REQUIRE_POWER=1` 返回失败。
+审计文件仍可包含健康窗口的指标，
+以及顶层 `per_gpu_energy_j` / `per_gpu_max_sample_gap_s` 诊断字段；这些不构成发布许可。
+回放不会重写输入或修复不一致的证据。
 
 ### 原生多节点遥测
 
