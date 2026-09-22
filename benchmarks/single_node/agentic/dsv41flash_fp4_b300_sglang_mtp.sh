@@ -66,14 +66,16 @@ if (( MAX_RUNNING_REQUESTS > CUDA_GRAPH_MAX_BS )); then
 fi
 
 # AgentX reuses long prefixes across turns even at low session concurrency.
-# TP4's measured 110.55 GiB KV budget leaves room to retain session prefixes
-# across subagent turns. TP2 keeps its conservative budget until measured.
-SWA_PREFIX_TAILS=$((4 * MAX_RUNNING_REQUESTS))
-if (( TP == 4 )); then
-    SWA_PREFIX_TAILS=$((64 * CONC))
-    if (( SWA_PREFIX_TAILS > 4096 )); then
-        SWA_PREFIX_TAILS=4096
-    fi
+# At memory fraction 0.70, TP4 has 110.55 GiB of KV budget but TP2 has only
+# 38.83 GiB. Give TP2's larger working sets more KV space before retaining
+# additional SWA tails; keep the conservative low-concurrency allocation.
+MEM_FRACTION_STATIC=0.70
+if (( TP == 2 && CONC >= 16 )); then
+    MEM_FRACTION_STATIC=0.80
+fi
+SWA_PREFIX_TAILS=$((64 * CONC))
+if (( SWA_PREFIX_TAILS > 4096 )); then
+    SWA_PREFIX_TAILS=4096
 fi
 if (( SWA_PREFIX_TAILS < 128 )); then
     SWA_PREFIX_TAILS=128
@@ -124,11 +126,10 @@ SGLANG_CMD=(
     --tp "$TP" --ep-size "$EP_SIZE"
     # Backends resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl
     # on Blackwell); the cookbook warns that overriding them costs decode speed.
-    # 0.70 rather than the cookbook's 0.8, and a bounded prefill chunk: the
-    # sparse-attention indexer and DSpark prefill buffers scale with the chunk
-    # times the 1M context, and the default 16384 chunk exhausted HBM on the
-    # first 66k-99k-token AgentX prompts.
-    --mem-fraction-static 0.70
+    # Bound transient prefill allocations: the sparse-attention indexer and
+    # DSpark buffers scale with the chunk times the 1M context. Static KV
+    # memory is selected above from the measured TP2/TP4 weight footprints.
+    --mem-fraction-static "$MEM_FRACTION_STATIC"
     --chunked-prefill-size 4096
     # Long AgentX prefills otherwise starve ready decode requests.
     --prefill-decode-interval 16
