@@ -63,16 +63,34 @@ _NUM_BUFFER_SETS = 1
 _COOLDOWN_RATIO = float(os.environ.get("OPERATORX_COOLDOWN_RATIO", "4"))
 _COOLDOWN_MAX_S = float(os.environ.get("OPERATORX_COOLDOWN_MAX_S", "1.0"))
 
-def run(op: Op) -> Result:
-    _load()
-    impl = _DISPATCH.get((op.type, op.backend))
-    if impl is None:
-        raise UnsupportedOpError(
-            f"nvidia/{op.backend} has no impl for op_type={op.type!r}"
-        )
+# Throttle-retry policy: if telemetry observes actual power/thermal capping
+# (throttle reason active while the SM clock is depressed below rated boost)
+# during the timed window, re-measure with increased inter-kernel sleeps so
+# the power budget recovers between iterations. At most this many retries;
+# then the best (lowest-median) attempt is kept and reported.
+_THROTTLE_RETRIES = int(os.environ.get("OPERATORX_THROTTLE_RETRIES", "3"))
+_RETRY_SLEEP_BASE_MS = float(os.environ.get("OPERATORX_RETRY_SLEEP_MS", "2"))
 
-    ctxs = [impl.prepare(op) for _ in range(_NUM_BUFFER_SETS)]
+_TELEMETRY = None
 
+
+def _telemetry():
+    global _TELEMETRY
+    if _TELEMETRY is None:
+        from operatorx.runners import telemetry as _t
+        _TELEMETRY = _t.get_provider("nvidia", torch.cuda.current_device())
+    return _TELEMETRY
+
+
+def _time_op(impl, ctxs, sleep_s: float) -> list[float]:
+    """Warmup + timed loop; returns sorted per-iteration times in us.
+
+    With sleep_s == 0 all iterations are enqueued behind one GPU spin
+    (shield) so event brackets exclude host launch gaps. With sleep_s > 0
+    (throttle retry) each iteration is spaced by a host sleep to let the
+    power budget recover, which forces a sync per iteration -- so each
+    iteration gets its own small shield before its start event.
+    """
     for i in range(_WARMUP):
         impl.kernel(ctxs[i % _NUM_BUFFER_SETS])
     torch.cuda.synchronize()
@@ -88,22 +106,63 @@ def run(op: Op) -> Result:
 
     starts = [torch.cuda.Event(enable_timing=True) for _ in range(_ITERS)]
     ends = [torch.cuda.Event(enable_timing=True) for _ in range(_ITERS)]
-    # Head-start shield: for microsecond kernels the start/end event pair is
-    # only tight if the GPU is still busy when the CPU enqueues it -- otherwise
-    # the bracket times the CPU's launch path (tens of us, and unbounded under
-    # driver-lock contention, e.g. a concurrent nvidia-smi poll). A few ms of
-    # enqueued GPU spin lets the CPU queue ALL timed iterations before the
-    # first one starts executing, making every bracket kernel-only.
-    torch.cuda._sleep(_SHIELD_CYCLES)
-    for i in range(_ITERS):
-        _clear_l2()
-        starts[i].record()
-        impl.kernel(ctxs[i % _NUM_BUFFER_SETS])
-        ends[i].record()
-    torch.cuda.synchronize()
+    if sleep_s <= 0.0:
+        # Head-start shield: for microsecond kernels the start/end event pair
+        # is only tight if the GPU is still busy when the CPU enqueues it --
+        # otherwise the bracket times the CPU's launch path (tens of us, and
+        # unbounded under driver-lock contention, e.g. a concurrent telemetry
+        # poll). A few ms of enqueued GPU spin lets the CPU queue ALL timed
+        # iterations before the first one starts executing.
+        torch.cuda._sleep(_SHIELD_CYCLES)
+        for i in range(_ITERS):
+            _clear_l2()
+            starts[i].record()
+            impl.kernel(ctxs[i % _NUM_BUFFER_SETS])
+            ends[i].record()
+        torch.cuda.synchronize()
+    else:
+        for i in range(_ITERS):
+            time.sleep(sleep_s)
+            torch.cuda._sleep(max(_SHIELD_CYCLES // 4, 500000))
+            _clear_l2()
+            starts[i].record()
+            impl.kernel(ctxs[i % _NUM_BUFFER_SETS])
+            ends[i].record()
+            torch.cuda.synchronize()
 
-    times = sorted(starts[i].elapsed_time(ends[i]) * 1000.0 for i in range(_ITERS))
-    median_us = times[_ITERS // 2]
+    return sorted(starts[i].elapsed_time(ends[i]) * 1000.0
+                  for i in range(_ITERS))
+
+
+def run(op: Op) -> Result:
+    _load()
+    impl = _DISPATCH.get((op.type, op.backend))
+    if impl is None:
+        raise UnsupportedOpError(
+            f"nvidia/{op.backend} has no impl for op_type={op.type!r}"
+        )
+
+    ctxs = [impl.prepare(op) for _ in range(_NUM_BUFFER_SETS)]
+
+    sleep_s = 0.0
+    best = None  # (median_us, telemetry report)
+    attempts = 0
+    for attempt in range(1 + max(_THROTTLE_RETRIES, 0)):
+        attempts += 1
+        tel = _telemetry()
+        tel.start()
+        times = _time_op(impl, ctxs, sleep_s)
+        rep = tel.stop()
+        median_us = times[_ITERS // 2]
+        rep.dump(f"{op.type}/{op.backend}/attempt{attempt}")
+        if best is None or median_us < best[0]:
+            best = (median_us, rep, sleep_s)
+        if not rep.capped:
+            break
+        # capping observed: space kernels out and try again
+        sleep_s = (_RETRY_SLEEP_BASE_MS * (2 ** attempt)) / 1e3
+
+    median_us, rep, used_sleep = best
 
     # Let the board shed the power it just drew before the next test case, so
     # the next measurement also starts at boost clocks (see _COOLDOWN_RATIO).
@@ -112,6 +171,10 @@ def run(op: Op) -> Result:
         time.sleep(min(busy_s * _COOLDOWN_RATIO, _COOLDOWN_MAX_S))
 
     metrics = {"latency_us": median_us}
+    telemetry_summary = rep.summary()
+    telemetry_summary["attempts"] = attempts
+    telemetry_summary["inter_kernel_sleep_ms"] = used_sleep * 1e3
+    metrics["telemetry"] = telemetry_summary
     prof = profiling.profile_op(lambda: impl.kernel(ctxs[0]))
     if prof is not None:
         metrics["profile"] = prof
