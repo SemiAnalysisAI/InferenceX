@@ -3195,16 +3195,19 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491",
-  "status": "The 4 TiB HBM+NVMe c384 midpoint 35646317491 completed successfully and exact task-owned cleanup is verified. Its 5.299% external hit rate and 9,198.026 total tok/s/GPU sharply regress from c256, so c320 is the next adaptive midpoint.",
+  "status": "The 4 TiB HBM+NVMe c384 midpoint 35646317491 completed successfully and exact task-owned cleanup is verified. Its 5.299% external hit rate and 9,198.026 total tok/s/GPU sharply regress from c256, so c320 is the next adaptive midpoint. Dispatch is held because the current B200 priority queue contains 48 jobs.",
   "last_capacity_check": {
-    "checked_at": "2026-09-22T03:45:25Z",
+    "checked_at": "2026-09-22T03:53:07Z",
     "active_study_run_ids": [],
     "pending_study_run_ids": [],
     "dispatch_allowed": false,
-    "reason": "Run 35646317491 is terminal and exact cleanup is verified. Refresh the cluster-wide B200 queue and per-node free-byte evidence immediately before dispatching c320."
+    "b200_priority_jobs_queued": 48,
+    "b200_nodes_allocated": 8,
+    "b200_nodes_idle": 3,
+    "reason": "Run 35646317491 is terminal and exact cleanup is verified, but InferenceX Dash currently reports 48 queued jobs for b200-new-cluster. The one-queued-job ceiling forbids a c320 dispatch."
   },
   "next_dispatch": {
-    "requires": "After a fresh zero-pending-B200 check and fresh c001 free-byte evidence above 4,535,485,464,576 bytes, dispatch the 4 TiB HBM+NVMe c320 midpoint as the only active-or-queued NVMe-bearing study workflow."
+    "requires": "Wait until the cluster-wide B200 priority queue is empty. Then refresh c001 free-byte evidence above 4,535,485,464,576 bytes and dispatch the 4 TiB HBM+NVMe c320 midpoint as the only active-or-queued NVMe-bearing study workflow."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
