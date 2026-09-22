@@ -127,6 +127,62 @@ apply_srt_recipe() {
         "$config" "$framework" -- "$@"
 }
 
+prepare_gb200_srt_power() {
+    check_env_vars IS_AGENTIC EVAL_ONLY
+    # Keep inspection and submission on the same native overrides. The benchmark
+    # client and the collector must expect the same matrix concurrency windows.
+    local config="$1" framework="$2" concurrency power_mode concurrency_json
+    SRTCTL_RECIPE_ARGS=("${SRTCTL_EVAL_ARGS[@]}")
+    if [[ "$IS_AGENTIC" == "1" ]]; then
+        check_env_vars CONC_LIST
+        local -a power_concurrencies
+        read -r -a power_concurrencies <<< "$CONC_LIST"
+        for concurrency in "${power_concurrencies[@]}"; do
+            [[ "$concurrency" =~ ^[1-9][0-9]*$ ]] || {
+                echo "Error: invalid AgentX concurrency: $concurrency" >&2
+                return 1
+            }
+        done
+        concurrency_json=$(IFS=,; echo "[${power_concurrencies[*]}]")
+        SRTCTL_RECIPE_ARGS+=(
+            --set "benchmark.concurrencies=$concurrency_json"
+            --set "benchmark.env.CONC_LIST=\"${power_concurrencies[*]}\""
+        )
+    fi
+    power_mode=$(PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" \
+        python3 -m infx.srt_slurm.synthetic_acceptance --inspect-power \
+        "$config" "$framework" -- "${SRTCTL_RECIPE_ARGS[@]}") || return 1
+    USES_DCGM_POWER=0
+    USES_AGENTX_POWER=0
+    case "$power_mode" in
+        agentx)
+            USES_DCGM_POWER=1
+            USES_AGENTX_POWER=1
+            SRTCTL_RECIPE_ARGS+=(
+                --set 'benchmark.env.ENABLE_AGENTX_POWER="1"'
+                --set 'benchmark.env.REQUIRE_POWER="1"'
+            )
+            ;;
+        dcgm)
+            USES_DCGM_POWER=1
+            if [[ "$framework" != "dynamo-sglang" ]]; then
+                echo "Error: non-AgentX dcgm-power requires dynamo-sglang" >&2
+                return 1
+            fi
+            ;;
+        none) ;;
+        *) echo "Error: unknown recipe power mode: $power_mode" >&2; return 1 ;;
+    esac
+}
+
+# A later submission can fail after an earlier variant acquired an allocation.
+cancel_submitted_srt_jobs() {
+    local job_id
+    while read -r job_id; do
+        [[ -n "$job_id" ]] && scancel "$job_id" 2>/dev/null || true
+    done < <(printf '%s\n' "$1" | sed -nE 's/.*Job ([0-9]+).*/\1/p' | sort -u)
+}
+
 slurm_job_is_active() {
     local job_id="$1"
     squeue -j "$job_id" --noheader 2>/dev/null | grep -q "$job_id"

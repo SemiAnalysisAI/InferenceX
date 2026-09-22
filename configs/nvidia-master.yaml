@@ -5702,6 +5702,8 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg:
   scenarios:
     agentic-coding:
     - search-space:
+      # Both recipes require PowerX; the launcher supplies each matrix concurrency
+      # to the native collector and the shared AgentX benchmark window writer.
       # Match the B200 TP8 latency points for direct normalized-interactivity
       # comparison, then use the public vLLM GB200 DEP8 topology for throughput.
       - spec-decoding: mtp

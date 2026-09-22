@@ -160,6 +160,28 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 
 不得只提交一侧：`srtctl` 读取配方，而矩阵生成读取主配置。仅改配方可能给结果贴错标签；仅改主配置不会改变实际部署的配方。
 
+### GB200 AgentX 实测功耗
+
+GB200 SRT AgentX 根据原生 selector 展开及调用方 overrides 后的实际配方启用
+PowerX。使用现有的 `telemetry.enabled: true`、`telemetry.required: true`、
+`storage_subdir: power` 及 `dcgm_exporter` 配置（`container_image: dcgm-exporter`），
+无需添加模型专属功耗分支。benchmark 必须使用
+`bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh`，并设置
+`INFMAX_CONTAINER_WORKSPACE: /infmax-workspace`、`RESULT_DIR: /logs/agentic`
+和 `IS_MULTINODE: "true"`。SRT 校验 head client 时钟、拓扑与采样设置。
+模型路径、服务参数、量化和挂载保留各自现有的运行配置。
+
+launcher 先安装固定 submodule runtime，再检查配方、准备 exporter，记录同一份
+producer SHA 供采集使用。每个 AgentX 或启用功耗的矩阵 job 必须只选中一个配方（可用带索引的 zip
+selector）；多配方选择会在提交前失败。原生 overrides 将矩阵 `CONC_LIST` 同时
+传给 benchmark 和 `benchmark.concurrencies`，不重写配方 YAML。启用 AgentX
+功耗后必须使用共享窗口写入器与严格结果适配器，不能通过关闭 required telemetry
+制造成功。eval-only 保留正常评估行为，不发布吞吐测量功耗结果。
+
+DSV4 GB200 vLLM TP8/DEP8 aggregate 配方示范了普通配方的功耗接入。
+本地路由测试不代表真实采样通过：所选 PR sweep 仍需完整设备/窗口证据、
+采集失败后的产物保留、eval，以及下游 ingest/API/页面验收。
+
 ## 注册 llm-d 配方
 
 来源：[`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md)、[`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md)、[`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes/) 和当前 [`llmd-vllm` 基准 wrapper](../benchmarks/multi_node/dsv4_fp4_gb200_llmd-vllm-disagg.sh)。
