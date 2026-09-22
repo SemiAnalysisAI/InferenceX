@@ -7,7 +7,7 @@ schema: 2
 name: dynamo-agg-gb200-tp4-c40-b1-eagle3
 model:
   path: minimax-m3-nvfp4
-  container: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc23.post1
+  container: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc28.dev202609220000
   precision: fp4
 dynamo:
   install: true
@@ -98,11 +98,11 @@ roles:
         implementation: msa
         indexer_kv_dtype: fp8
         sparse_disable_index_value: true
-        fuse_qkv_index_projection: true
       kv_cache_config:
         free_gpu_memory_fraction: 0.94
         enable_block_reuse: true
-        block_reuse_policy: per_conversation
+        block_reuse_config:
+          policy: per_conversation
         tokens_per_block: 128
         use_kv_cache_manager_v2: true
         dtype: fp8

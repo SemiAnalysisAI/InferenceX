@@ -402,12 +402,15 @@ normal dispatch. The BFCL adapters, suites, scoring and artifact format remain
 intact; no adapter rewrite or data migration is needed. Validate the candidate
 image on an experimental branch before enabling these production paths.
 
-MiniMax B200/B300 TRT recipes retain the original `1.3.0rc23.post1` image and
-its native configuration fields. Stock BFCL Chat Completions sends
-`store=false`, which that image rejects; its Responses path and newer images
-have not passed the native BFCL validation. InferenceX does not patch request
-schemas or restore runtime framework-source patches. The experimental TRT
-nightly probe has been removed.
+MiniMax B200/B300 TRT and GB200 Dynamo-TRT recipes use the official
+`1.3.0rc28.dev202609220000` nightly with native
+`kv_cache_config.block_reuse_config.policy: per_conversation`; the removed
+`fuse_qkv_index_projection` option is omitted. This image update requires fresh
+GPU startup, vendor-evaluation and throughput validation. TRT BFCL remains
+disabled: the earlier source-built four-case Responses smoke passed only with
+eager prefill and speculative decoding disabled, so it does not qualify the
+production EAGLE3 recipes or this nightly image. InferenceX does not patch
+request schemas or restore runtime framework-source patches.
 
 The generic `bfcl_responses_smoke` adapter remains available for other serving
 frameworks. It uses BFCL's stock `OpenAIResponsesHandler`, four smoke case IDs,
