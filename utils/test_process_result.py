@@ -1175,6 +1175,56 @@ stop_gpu_monitor
         assert metrics.read_text().splitlines() == [header, complete_sample]
         assert (tmp_path / "gpu_metrics_energy_end.csv").exists()
 
+    def test_amd_monitor_emits_small_frames_before_producer_eof(self, tmp_path):
+        """A quiet open pipe must not strand final samples or hide invalid reads."""
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
+        fake_amd_smi = fake_bin / "amd-smi"
+        fake_amd_smi.write_text(
+            "#!/usr/bin/env bash\n"
+            'if [[ "$*" == *" -w "* ]]; then\n'
+            "    printf 'preamble\\ntimestamp,gpu,socket_power\\n1,0,238\\n'\n"
+            "    printf 'timestamp,gpu,socket_power\\n2,0,N/A\\n'\n"
+            "    while :; do sleep 0.1; echo; done\n"
+            "else\n"
+            "    printf '{}\\n'\n"
+            "fi\n"
+        )
+        fake_amd_smi.chmod(0o755)
+        metrics = tmp_path / "gpu_metrics.csv"
+        benchmark_lib = REPO_ROOT / "benchmarks/benchmark_lib.sh"
+        script = f"""
+source {str(benchmark_lib)!r}
+start_gpu_monitor --output {str(metrics)!r}
+for _ in $(seq 1 200); do
+    if grep -q '^2,0,N/A$' {str(metrics)!r}; then
+        stop_gpu_monitor
+        exit 0
+    fi
+    sleep 0.01
+done
+echo 'collector buffered samples until producer EOF' >&2
+exit 1
+"""
+        proc = subprocess.Popen(
+            ["bash", "-c", script],
+            env={"PATH": f"{fake_bin}:/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1"},
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            start_new_session=True,
+        )
+        try:
+            _, stderr = proc.communicate(timeout=10)
+        finally:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            proc.communicate()
+        assert proc.returncode == 0, stderr
+        assert [line for line in metrics.read_text().splitlines() if line] == [
+            "timestamp,gpu,socket_power", "1,0,238", "2,0,N/A",
+        ]
+
     def test_start_stop_gpu_monitor_amd_lifecycle(self, tmp_path):
         """Watch rows survive the kill and both boundary snapshots are written."""
         fake_bin = tmp_path / "bin"

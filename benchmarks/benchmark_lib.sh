@@ -457,10 +457,23 @@ start_gpu_monitor() {
     elif command -v amd-smi &>/dev/null; then
         GPU_MONITOR_VENDOR="amd"
         # amd-smi is Python and block-buffers stdout; without PYTHONUNBUFFERED the
-        # trailing ticks were lost at kill (measured on MI355X). awk keeps the first
-        # CSV header, drops repeated ones, and flushes every row for the same reason.
+        # trailing ticks were lost at kill (measured on MI355X). Use a line reader:
+        # mawk buffers pipe input even when fflush() flushes its output, so killing
+        # that filter can discard seconds of samples. Preserve every data row,
+        # including invalid readings for the strict power validator to reject.
         PYTHONUNBUFFERED=1 amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
-            | awk '/^timestamp,/{if(!h){print;h=1};next} h{print;fflush()}' > "$output" &
+            | python3 -u -c '
+import sys
+
+header_seen = False
+for line in sys.stdin:
+    if line.startswith("timestamp,"):
+        if header_seen:
+            continue
+        header_seen = True
+    if header_seen:
+        sys.stdout.write(line)
+' > "$output" &
         GPU_MONITOR_PID=$!
         # Hardware energy-accumulator + identity snapshots; the end-side twin in
         # stop_gpu_monitor lets auditors cross-check the integrated energy
