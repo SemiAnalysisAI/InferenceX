@@ -20,18 +20,30 @@ echo "native PP live logs: $run_dir"
 max_num_seqs="${K3_MAX_NUM_SEQS:-80}"
 max_capture_size="${K3_MAX_CUDAGRAPH_CAPTURE_SIZE:-96}"
 capture_sizes="${K3_CUDAGRAPH_CAPTURE_SIZES:-1,2,4,8,16,24,32,40,48,56,64,72,80,88,96}"
-compile_config=$(printf '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":%s,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[%s]}' "$max_capture_size" "$capture_sizes")
+# FULL_AND_PIECEWISE captures every size twice and cost 14.2 GiB per card on
+# this model. The capture list is sized for decode, which runs whole-model, so
+# FULL alone gives 4.0-6.3 GiB and lifts available KV from 46.27 to 54.26 GiB.
+cudagraph_mode="${K3_CUDAGRAPH_MODE:-FULL}"
+compile_config=$(printf '{"mode":3,"cudagraph_mode":"%s","max_cudagraph_capture_size":%s,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[%s]}' "$cudagraph_mode" "$max_capture_size" "$capture_sizes")
 spec_config=$(printf '{"model":"%s","num_speculative_tokens":%s,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":%s,"disable_eagle_block_drop":true,"draft_load_config":{"load_format":"safetensors"}}' "${SPEC_MODEL:-/models/models/Kimi-K3-DSpark}" "${SPEC_NUM_TOKENS:-4}" "${SPEC_SYNTHETIC_ACCEPTANCE_LENGTH:-3.36}")
 
 export VLLM_PP_LAYER_PARTITION="${K3_PP_LAYER_PARTITION:-48,45}"
-export K3_HYBRID_PP_FIX=1 K3_PP_ASYNC_ACTIVATION=1
+# The async activation ring and receive preposting both stall concurrent
+# warmup on this stack: the receiver waits on a next-step sender that warmup
+# never schedules. The transport ships either way; these decide whether it runs.
+export K3_HYBRID_PP_FIX=1
+export K3_PP_ASYNC_ACTIVATION="${K3_PP_ASYNC_ACTIVATION:-0}"
 export K3_PP_RING_SIZE="${K3_PP_RING_SIZE:-2}"
-export K3_PP_PREPOST_RECV=1 K3_PP_BATCH_CAP="${K3_PP_BATCH_CAP:-104}"
+export K3_PP_PREPOST_RECV="${K3_PP_PREPOST_RECV:-0}"
+export K3_PP_BATCH_CAP="${K3_PP_BATCH_CAP:-104}"
 export K3_DSPARK_FUSION_SKIP_MISSING=1 K3_DSPARK_FUSION_STAGE=0
 export VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_MLA=1
 export VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
 export AITER_SITUV2_A8W4=1 AITER_BF16_FP8_MOE_BOUND=0
-export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm VLLM_ROCM_AITER_NATIVE_DCP_VERIFY=1
+# VLLM_ROCM_AITER_NATIVE_DCP_VERIFY belongs to the PD/MoRIIO lineage and is
+# read nowhere in this stack, which routes DCP verify through the asm cprr path
+# selected by VLLM_ROCM_AITER_MLA_DCP_VERIFY instead.
+export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 VLLM_KV_CACHE_LAYOUT=HND
 export VLLM_USE_BREAKABLE_CUDAGRAPH=1 HSA_ENABLE_IPC_MODE_LEGACY=1
 export HIP_FORCE_DEV_KERNARG=1 TORCH_NCCL_BLOCKING_WAIT=0 NCCL_BLOCKING_WAIT=0
