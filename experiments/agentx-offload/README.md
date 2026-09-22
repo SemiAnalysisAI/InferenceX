@@ -38,7 +38,11 @@ total throughput per GPU fell 46.716%, and P90 end-to-end latency rose 162.274%
 relative to c256. The c512 probe completed 5,676 of 5,677 canonical warmup
 requests with zero request errors, but one request exceeded the 1,800-second
 drain limit; the phase failed before profiling and the allocation then reached
-its time limit. Probe c320 next to localize the sharp c256-c384 transition.
+its time limit. The c320 midpoint completed between c256 and c384 with 24.540%
+external hits, 13,193.777 total tokens/s/GPU, P90 interactivity 11.998
+tokens/s/user, and P90 TTFT 1,331.284 seconds. This confirms a steep, ordered
+cache-reuse and performance cliff across c256, c320, and c384. Run the matched
+HBM-only c320 control next, then add narrower NVMe points within the transition.
 
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an

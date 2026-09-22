@@ -3201,13 +3201,13 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "5e3eb6679e622cffd8c1a550a804297b9d58256b",
-      "status": "in_progress",
+      "status": "success",
       "workflow_name": "offload-v1-nvme4tib-c320-r1-20260922",
       "dispatched_at": "2026-09-22T12:27:20Z",
       "job_id": 106744052621,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35727274307/job/106744052621",
       "started_at": "2026-09-22T12:28:16Z",
-      "performance_result": false,
+      "performance_result": true,
       "target_node": "im-b200-c001",
       "node": "im-b200-c001",
       "runner": "b200-nscale-slurm_00",
@@ -3215,27 +3215,138 @@
       "capacity_bytes_per_node": 4398046511104,
       "capacity_reserve_bytes": 137438953472,
       "capacity_required_bytes": 4535485464576,
-      "admission_evidence": "InferenceX Dash reported a zero-job B200 priority queue, zero active B200 allocations, all 11 B200 nodes idle, and allowlisted im-b200-c001 idle at 2026-09-22T12:24:44Z. The pinned workflow performs a fresh c001 free-byte check above 4,535,485,464,576 bytes and O_DIRECT verification before creating its task-owned 4 TiB scratch; failure of either guard invalidates the run before cache allocation."
+      "admission_evidence": "InferenceX Dash reported a zero-job B200 priority queue, zero active B200 allocations, all 11 B200 nodes idle, and allowlisted im-b200-c001 idle at 2026-09-22T12:24:44Z. The pinned workflow performs a fresh c001 free-byte check above 4,535,485,464,576 bytes and O_DIRECT verification before creating its task-owned 4 TiB scratch; failure of either guard invalidates the run before cache allocation.",
+      "completed_at": "2026-09-22T17:45:35Z",
+      "artifacts": [
+        {
+          "id": 10711300414,
+          "name": "bmk_agentic_minimaxm3_tp4_conc320_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-46bebfb379b724a6c386",
+          "size_bytes": 2266,
+          "sha256": "c623cb9b2ed17a9b14ad9d3d89873c6ff3ff942124a013b5449b9020e31a43a0"
+        },
+        {
+          "id": 10710906367,
+          "name": "power_audit_minimaxm3_tp4_conc320_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-46bebfb379b724a6c386",
+          "size_bytes": 733100,
+          "sha256": "3b52ed2ce6ca065bfc86d024dd377b8f82a326504d15458ced9eb6543fc82476"
+        },
+        {
+          "id": 10710851658,
+          "name": "server_logs_minimaxm3_tp4_conc320_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-46bebfb379b724a6c386",
+          "size_bytes": 184511,
+          "sha256": "fdfb76e9c17f60d5864e12eb66c5f8a3c0ebd358f863de5c53e56655236027d2"
+        },
+        {
+          "id": 10710796927,
+          "name": "run-stats",
+          "size_bytes": 284,
+          "sha256": "e5e4fdca75c07f25a3c0612eba7c52ce8e6dbccd7d9bd922d6b8848cc1bdbce4"
+        },
+        {
+          "id": 10710751839,
+          "name": "agentic_minimaxm3_tp4_conc320_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-46bebfb379b724a6c386",
+          "size_bytes": 27948402,
+          "sha256": "1ee9624e82d587d64c3796efe034b980ae83bf29d277bfae121dcb24d145408a"
+        },
+        {
+          "id": 10710597025,
+          "name": "gpu_metrics_minimaxm3_tp4_conc320_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-46bebfb379b724a6c386",
+          "size_bytes": 729501,
+          "sha256": "d077077bb97a367e4c001ef19027ad1bff60a25bea8779bcc675e8af96febb3c"
+        },
+        {
+          "id": 10710522036,
+          "name": "results_bmk",
+          "size_bytes": 2071,
+          "sha256": "dadde05fcc9fbf0d24fc587830253dce1e6ff63c08b48cd218125723ffa9bc02"
+        }
+      ],
+      "performance": {
+        "num_requests_total": 5245,
+        "num_requests_successful": 1697,
+        "num_requests_warmup_dropped": 3548,
+        "num_requests_error_dropped": 2,
+        "request_error_categories": {
+          "InvalidInferenceResultError": 2
+        },
+        "duration_seconds": 3623.8605,
+        "output_tokens_per_second": 501.58636,
+        "output_tokens_per_second_per_gpu": 125.39659,
+        "input_tokens_per_second": 52273.51965,
+        "total_tokens_per_second": 52775.10601,
+        "total_tokens_per_second_per_gpu": 13193.7765,
+        "p90_e2e_latency_seconds": 1360.12733,
+        "p90_ttft_seconds": 1331.28375,
+        "p90_tpot_seconds": 0.08335,
+        "p90_interactivity_tokens_per_second_per_user": 11.99795,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.12357,
+        "mean_e2e_latency_seconds": 793.6207,
+        "avg_power_w_per_gpu": 858.982
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.01434,
+        "external_cache_hit_rate": 0.2454,
+        "overall_cache_hit_rate": 0.25974,
+        "theoretical_cache_hit_rate": 0.95104,
+        "gpu_cache_hit_prompt_tokens": 11743616,
+        "external_cache_hit_prompt_tokens": 200931072,
+        "computed_prompt_tokens": 606125502,
+        "prompt_tokens_total": 818800190,
+        "generation_tokens_total": 1887192,
+        "gpu_cache_usage_pct": 1.0
+      },
+      "delta_vs_nvme_c256_percent": {
+        "total_tokens_per_second_per_gpu": -23.56926,
+        "output_tokens_per_second_per_gpu": -22.56197,
+        "p90_interactivity_tokens_per_second_per_user": -28.02384,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": -38.91141,
+        "p90_e2e_latency_seconds": 61.6087,
+        "p90_ttft_seconds": 65.70902,
+        "avg_power_w_per_gpu": 7.57041,
+        "external_cache_hit_rate": -60.21401
+      },
+      "delta_vs_nvme_c384_percent": {
+        "total_tokens_per_second_per_gpu": 43.44139,
+        "output_tokens_per_second_per_gpu": 46.56432,
+        "p90_interactivity_tokens_per_second_per_user": 37.57271,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 49.16707,
+        "p90_e2e_latency_seconds": -38.3817,
+        "p90_ttft_seconds": -38.19975,
+        "avg_power_w_per_gpu": -3.07077,
+        "external_cache_hit_rate": 363.10625
+      },
+      "runtime_evidence": "Four disk-backed SimpleCPUOffloadConnector workers each allocated a 1 TiB lazy cache on im-b200-c001. Profiling completed 1,697 accepted responses with two InvalidInferenceResultError phase errors. External NVMe cache served 200,931,072 prompt tokens (24.540%), establishing an ordered c256-c320-c384 cache and performance cliff.",
+      "storage_evidence": "Preflight on im-b200-c001 reported 17,748,091,392,000 free bytes on xfs /dev/md0 over eight non-rotating NVMe leaves and passed O_DIRECT. offload_cleanup.json matched run 35727274307 and Slurm job 16884, measured four cache files totaling 4,398,044,086,272 logical bytes and 4,398,033,166,336 allocated bytes, deleted only /offload-scratch/inferencex-offload-35727274307-1-16884-d75693fb0ffd, and recorded deleted=true with exit_code=0.",
+      "evidence_sha256": {
+        "agg_bmk.json": "bf877c916f72a3cfb67b38640ee4b570d4886126ec815d37bbb206696661e184",
+        "bmk_result.json": "f7203955516aafb1d6d515154feef55adc8ad28cffbefebc9b41fc45e1084b94",
+        "server.log": "a15ec5b851f6684aacdc142401a73ff1075e58373d88aeb09ec64d8cd7859e82",
+        "offload_config.json": "bc2476d880bbd24fa00dcf473b2a621cae3a438ada45e0df6a0bd74efaaa0ab0",
+        "benchmark.log": "415971a9d315461c401f84cd2df8faab78cc35ea5c877b8b7a1415a7de9b206d",
+        "offload-telemetry.jsonl": "e0de66b937450cd74abf7c0df7d9dec0d25f7f9a4817ff58cc04bd2eae552a7e",
+        "profile_export.jsonl": "dc5c72cc85ded0303d6fd7286db8ab70887bd71822e5d0b4a07f7fb76cf1a0db",
+        "offload_cleanup.json": "f36aef441169dd574763457ae2152849918d5c18ddeb39f477260c8c57f6ea9d",
+        "gpu_metrics.csv": "4a4a8a92c3e60bc7d8ce44cb1d15e2bf23d3e4829998c243b30e1fb5a8dea911",
+        "power_validation.json": "508c4033e325f6169c46692fea9fc989580cd96c012d40e175d81ba43f76756a"
+      }
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491",
-  "status": "The 4 TiB HBM+NVMe c320 midpoint 35727274307 is now the only active or queued NVMe-bearing study workflow. It was dispatched after the B200 queue reached zero and allowlisted im-b200-c001 became idle; its pinned runtime must pass a fresh free-byte and O_DIRECT preflight before allocating scratch.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307",
+  "status": "The 4 TiB HBM+NVMe c320 midpoint 35727274307 completed successfully with 24.540% external-cache hits, 13,193.777 total tok/s/GPU, P90 interactivity 11.998, and verified deletion of its exact task-owned scratch. The matched HBM-only c320 control is next when the B200 queue policy allows dispatch.",
   "last_capacity_check": {
-    "checked_at": "2026-09-22T12:27:27Z",
-    "active_study_run_ids": [
-      35727274307
-    ],
+    "checked_at": "2026-09-22T18:11:17Z",
+    "active_study_run_ids": [],
     "pending_study_run_ids": [],
-    "dispatch_allowed": false,
+    "dispatch_allowed": true,
     "b200_priority_jobs_queued": 0,
-    "b200_nodes_allocated": 0,
-    "b200_nodes_idle": 11,
-    "target_node": "im-b200-c001",
-    "target_node_state": "idle",
-    "reason": "Run 35727274307 is active in workflow setup and is the single active-or-queued NVMe-bearing study workflow. Its c001 runtime preflight must verify more than 4,535,485,464,576 free bytes before allocating scratch."
+    "b200_nodes_allocated": 4,
+    "b200_nodes_idle": 7,
+    "target_node": "any eligible B200 node",
+    "target_node_state": "seven nodes idle",
+    "reason": "InferenceX Dash showed no B200 entry in the live priority queue and a fresh b200-nscale scheduler snapshot with four allocated and seven idle nodes. The matched HBM-only c320 control may be dispatched as the only new queued study job."
   },
   "next_dispatch": {
-    "requires": "Monitor c320 run 35727274307. Dispatch no other NVMe-bearing workflow until it is terminal and its exact task-owned scratch cleanup is verified."
+    "requires": "Dispatch the matched HBM-only c320 control while the B200 priority queue remains empty, then compare it directly with NVMe c320 run 35727274307."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
