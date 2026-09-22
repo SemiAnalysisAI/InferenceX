@@ -2,8 +2,8 @@
 set -eo pipefail
 
 # DeepSeek-V4.1-Flash AgentX on MI355X with SGLang DSpark, following the
-# cookbook's verified MI350X low-latency cell: AITER kernels, radix cache off,
-# breakable prefill graphs. The KV cache is GPU-resident.
+# cookbook's MI350X cell, with radix caching enabled for this isolated
+# experimental candidate. The KV cache is GPU-resident.
 # https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP EP_SIZE CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
@@ -152,15 +152,14 @@ echo "DSpark block size: $DSPARK_BLOCK_SIZE, golden AL=$DSV41_GOLDEN_AL"
 python3 "$(dirname "$0")/../../patches/sglang_dsv41_rocm/install.py" \
     --evidence "$RESULT_DIR/sglang_dsv41_rocm_backport.json"
 
-# --disable-radix-cache is the cookbook's ROCm setting; the server rejects
-# hierarchical caching alongside it, which is consistent with kv-offloading none.
+# Isolated cache-only candidate: retain the same TP, memory, kernel and draft
+# settings while enabling the nightly's default unified radix cache.
 SGLANG_CMD=(
     python3 -m sglang.launch_server
     --model-path "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0 --port "$PORT"
     --trust-remote-code
     --tp "$TP" --ep-size "$EP_SIZE"
-    --disable-radix-cache
     # 0.60 rather than the cookbook's 0.8, and a 2048-token prefill chunk (half
     # the CUDA arms' 4096, halving each chunk's transient indexer buffers): the sparse-attention indexer and DSpark prefill buffers
     # scale with the chunk times the 1M context (the default 16384 exhausted
