@@ -406,7 +406,9 @@ which has no released SGLang version for this model yet. B200 pins the CUDA 13 n
 `lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce` by digest; the other NVIDIA arms use
 `lmsysorg/sglang:dev-dsv41` and MI355X uses `lmsysorg/sglang:dev-dsv41-mi35x`.
 
-B200 uses shipped-default DSpark across TP4/EP4 C1–128 and TP2/EP2 C1–8.
+B200 uses shipped-default DSpark across TP4/EP4 C1–128 and TP2/EP2 C1–16.
+The isolated C16 comparison retains the proven C8 serving capacity; performance
+and full C16 accuracy must pass before selecting that point.
 Engram stays in host DRAM with `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`.
 Shared host tables had zero huge-page backing in
 [run 35626514270](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35626514270);
@@ -416,10 +418,10 @@ Verify the actual backing percentage in each rank's startup log.
 | B200 topology | Static memory fraction | Prefill chunk | SWA prefix tails |
 | --- | ---: | ---: | --- |
 | TP4/EP4, C1–128 | 0.80 | 4096 | `max(128, min(4096, 64 * CONC))` |
-| TP2/EP2, C1–8 | 0.92 | 2048 | `128 * CONC` |
+| TP2/EP2, C1–16 | 0.92 | 2048 | `min(1024, 128 * CONC)` |
 
-Both use 16 decode rounds between prefill chunks and cap running requests at
-`min(2 * CONC, 64)`. Chunked-prefix caching retains SWA tails separately from full
+Both use 16 decode rounds between prefill chunks. TP4 caps running requests at
+`min(2 * CONC, 64)`; TP2 uses `min(2 * CONC, 16)`. Chunked-prefix caching retains SWA tails separately from full
 KV, so low full-cache occupancy does not prove that reusable SWA capacity is
 available. The concurrency-scaled tail budget shares the fixed static pool with
 full KV. Validate actual cache sizes, transient memory, cache reuse, and the

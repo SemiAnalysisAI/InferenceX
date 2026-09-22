@@ -2,7 +2,7 @@
 set -eo pipefail
 
 # DeepSeek-V4.1-Flash AgentX on B200 with shipped-default DSpark.
-# TP4 covers the full concurrency curve; TP2 covers C1-C8.
+# TP4 covers the full concurrency curve; this isolated TP2 comparison adds C16.
 # https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP EP_SIZE CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
@@ -88,13 +88,21 @@ SWA_PREFIX_TAILS=$((64 * CONC))
 MEM_FRACTION_STATIC=0.80
 CHUNKED_PREFILL_SIZE=4096
 if (( TP == 2 )); then
-    if (( CONC > 8 )); then
-        echo "TP2 supports CONC <= 8 within its smaller KV budget" >&2
+    if (( CONC > 16 )); then
+        echo "TP2 capacity comparison supports CONC <= 16" >&2
         exit 1
     fi
     # TP2 has twice as many chunk boundaries and approximately 147.76 GiB of
     # target plus draft weights. Smaller chunks bound indexer workspace.
     SWA_PREFIX_TAILS=$((128 * CONC))
+    # C16 changes client load while preserving the proven C8 server capacity.
+    # Growing tails to 2048 would exceed this TP2 KV budget.
+    if (( SWA_PREFIX_TAILS > 1024 )); then
+        SWA_PREFIX_TAILS=1024
+    fi
+    if (( MAX_RUNNING_REQUESTS > 16 )); then
+        MAX_RUNNING_REQUESTS=16
+    fi
     MEM_FRACTION_STATIC=0.92
     CHUNKED_PREFILL_SIZE=2048
 fi

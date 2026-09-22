@@ -354,7 +354,8 @@ Maximum concurrency for 1,048,576 tokens per request: 6.70x
 `lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce`；其他 NVIDIA 配方使用
 `lmsysorg/sglang:dev-dsv41`，MI355X 使用 `lmsysorg/sglang:dev-dsv41-mi35x`。
 
-B200 在 TP4/EP4 C1–128 与 TP2/EP2 C1–8 全部使用上游默认 DSpark。
+B200 在 TP4/EP4 C1–128 与 TP2/EP2 C1–16 全部使用上游默认 DSpark。
+独立 C16 对照保留已验证的 C8 服务容量；选择该点前仍需通过性能测量与完整 C16 准确率验证。
 Engram 保留在主机 DRAM，设置 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。
 [run 35626514270](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35626514270)
 中共享主机表的大页覆盖率为零；每个 rank 的匿名分片无需修改主机 sysctl 即可申请大页。
@@ -363,10 +364,10 @@ Engram 保留在主机 DRAM，设置 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_
 | B200 拓扑 | 静态显存比例 | Prefill chunk | SWA 前缀尾部数 |
 | --- | ---: | ---: | --- |
 | TP4/EP4，C1–128 | 0.80 | 4096 | `max(128, min(4096, 64 * CONC))` |
-| TP2/EP2，C1–8 | 0.92 | 2048 | `128 * CONC` |
+| TP2/EP2，C1–16 | 0.92 | 2048 | `min(1024, 128 * CONC)` |
 
-两者均在 prefill chunk 之间执行 16 轮 decode，并将运行请求上限设为
-`min(2 * CONC, 64)`。分块前缀缓存将 SWA 尾部与完整 KV 分开保留，因此完整缓存
+两者均在 prefill chunk 之间执行 16 轮 decode；TP4 的运行请求上限为
+`min(2 * CONC, 64)`，TP2 为 `min(2 * CONC, 16)`。分块前缀缓存将 SWA 尾部与完整 KV 分开保留，因此完整缓存
 占用率低并不证明有足够的可复用 SWA 容量。随并发调整的尾部预算与完整 KV 共享
 固定静态内存池。正式扫描需验证实际缓存大小、临时内存、缓存复用率以及吞吐与交互性能前沿。
 
