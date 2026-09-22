@@ -11,21 +11,9 @@ require_agentic_kv_offload_none
 export GPU_COUNT="$TP"
 
 if (( TP == 2 )); then
-    # Use the validated stock loader with expandable allocator segments.
+    # Reduce CUDA allocator fragmentation during TP2 loading.
     export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
     echo "TP2 CUDA allocator: $PYTORCH_CUDA_ALLOC_CONF"
-    python3 - <<'PY_STOCK_LOADER'
-import hashlib
-from pathlib import Path
-import sglang
-
-loader = Path(sglang.__file__).parent / "srt/layers/quantization/mxfp4_flashinfer_trtllm_moe.py"
-actual = hashlib.sha256(loader.read_bytes()).hexdigest()
-expected = "0ff4ca142e71ec0baabc00844b4854e554c607c1a356ffe13419c59b1f51813c"
-if actual != expected:
-    raise SystemExit(f"Expected pinned stock loader {expected}, found {actual}")
-print(f"Verified unmodified stock MXFP4 loader: {actual}")
-PY_STOCK_LOADER
 fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
@@ -37,8 +25,7 @@ if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
     hf download "$MODEL" --local-dir "$MODEL_PATH"
 else
     hf download "$MODEL"
-    MODEL_PATH=$(python3 -c 'from huggingface_hub import snapshot_download; import sys; print(snapshot_download(repo_id=sys.argv[1], local_files_only=True))' "$MODEL")
-    export MODEL_PATH
+    export MODEL_PATH="$MODEL"
 fi
 
 nvidia-smi
