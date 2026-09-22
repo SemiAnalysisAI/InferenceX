@@ -8,9 +8,11 @@ Every measured op gets, in this order:
      module runs before or during it;
   2. a profiling replay under torch.profiler (CUPTI on CUDA, rocprofiler
      on ROCm — both through kineto) whose per-kernel decomposition is
-     attached to the result metrics. Replays are back-to-back and hence
-     warm-cache unless OPERATORX_PROFILE_FLUSH_MB is set; use them for
-     kernel attribution and launch-gap analysis, never as cold timing.
+     attached to the result metrics. Replays are COLD by default: the
+     full cache hierarchy is flushed before every replay
+     (OPERATORX_PROFILE_FLUSH_MB, default 512; set 0 for legacy warm
+     back-to-back replays). The flush kernel is excluded from the
+     decomposition by identity and reported as flush_kernels_excluded.
 
 Disable with OPERATORX_PROFILE=0 (timing-only runs). Latencies from
 counter/marker runs must never be ingested as timing ground truth.
@@ -75,7 +77,10 @@ _MARKERS = os.environ.get("OPERATORX_PROFILE_MARKERS", "") == "1"
 # against caches warmed by the preceding timed loop. Size it to cover the
 # FULL cache hierarchy (incl. any memory-side cache), not just L2. The
 # flush runs OUTSIDE the marker range so its dispatch is not attributed.
-_FLUSH_MB = int(os.environ.get("OPERATORX_PROFILE_FLUSH_MB", "0"))
+_FLUSH_MB = int(os.environ.get("OPERATORX_PROFILE_FLUSH_MB", "512"))
+# the int8 zero_() flush dispatches a FillFunctor<signed char> kernel;
+# excluded from the per-kernel decomposition by this identity marker
+_FLUSH_KERNEL_MARKER = "FillFunctor"
 _FLUSH_BUF = None
 
 
@@ -202,11 +207,15 @@ def profile_op(kernel_fn) -> dict | None:
         return {"error": f"trace: {type(e).__name__}: {e}"[:200]}
 
     kernels: dict[str, dict] = {}
+    flush_excluded = 0
     for e in events:
         if e.get("ph") != "X" or e.get("cat") not in (
                 "kernel", "gpu_memcpy", "gpu_memset"):
             continue
         name = e.get("name", "")[:200]
+        if _FLUSH_MB > 0 and _FLUSH_KERNEL_MARKER in name:
+            flush_excluded += 1
+            continue
         a = e.get("args") or {}
         k = kernels.setdefault(name, {"name": name, "cat": e["cat"],
                                       "count": 0, "total_us": 0.0})
@@ -228,6 +237,8 @@ def profile_op(kernel_fn) -> dict | None:
     summary = {"iters": _ITERS, "kernels": out,
                "gpu_us_per_call": round(gpu_us, 3),
                "op_index": _counter}
+    if flush_excluded:
+        summary["flush_kernels_excluded"] = flush_excluded
     if _METRICS:
         summary["counters"] = _counters_pass(kernel_fn)
     try:
