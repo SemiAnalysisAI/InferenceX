@@ -335,7 +335,7 @@ qwen3.5-fp4-mi355x-sglang-agentic-mtp:
 # only, per the AgentX policy; same shape as the B200/B300/H200 qwen3.8next
 # SGLang AgentX arms. TP1: the ~126 GiB checkpoint fits on one MI355X.
 qwen3.8next-fp4-mi355x-sglang-agentic-mtp:
-  image: aigmkt/qwen3.8-flash-next:v0.5.19-rocm724-mi35x-20260910-pr36601-pr37242
+  image: aigmkt/qwen3.8-flash-next:v0.5.19-rocm724-mi35x-20260910-pr36601-pr37242-opt
   model: amd/Qwen3.8-Flash-Next-Quark-MXFP4-PLEFP8
   model-prefix: qwen3.8next
   runner: cluster:mi355x-amds

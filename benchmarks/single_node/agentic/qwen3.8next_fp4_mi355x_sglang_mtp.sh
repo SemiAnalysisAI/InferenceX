@@ -29,9 +29,13 @@ if [[ "$EP_SIZE" != 1 ]]; then
     exit 1
 fi
 
-# Weights are pre-staged on the shared filesystem; read them directly instead
-# of downloading from the Hub (avoids gated/cache-permission issues).
-export MODEL_PATH=/it-share/data/Qwen3.8-Flash-Next-Quark-MXFP4-PLEFP8
+# Let HF validate/resume downloads even when a local directory is nonempty.
+if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
+    hf download "$MODEL" --local-dir "$MODEL_PATH"
+else
+    hf download "$MODEL"
+    export MODEL_PATH="$MODEL"
+fi
 
 rocm-smi || true
 amd-smi || true
@@ -69,6 +73,8 @@ fi
 
 export PYTHONNOUSERSITE=1
 export SGLANG_USE_AITER=1
+export SGLANG_AITER_GDN_CONV=1
+export SGLANG_QSA_PAGED_DECODE=1
 # Honor the explicit --mem-fraction-static instead of AITER's autotuned value.
 export SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION=1
 export SGLANG_TIMEOUT_KEEP_ALIVE=1800
@@ -87,7 +93,7 @@ fi
 
 SGLANG_CMD=(
     python3 -m sglang.launch_server
-    --model-path /it-share/data/Qwen3.8-Flash-Next-Quark-MXFP4-PLEFP8
+    --model-path "$MODEL_PATH"
     --served-model-name "$MODEL"
     --host 0.0.0.0
     --port "$PORT"
@@ -118,7 +124,7 @@ SGLANG_CMD=(
     --stream-interval 50
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
     "${TOKENIZER_ARGS[@]}"
-    --tokenizer-path /it-share/data/Qwen3.8-Flash-Next-Quark-MXFP4-PLEFP8
+    --tokenizer-path "$MODEL"
     --enable-metrics
     --enable-cache-report
 )
@@ -135,9 +141,5 @@ if [ "${EVAL_ONLY:-false}" = "true" ]; then
 else
     build_replay_cmd "$RESULT_DIR"
     REPLAY_CMD+=" --apply-chat-template"
-    # build_replay_cmd points aiperf's client-side --tokenizer at $MODEL (a
-    # gated HF id); redirect it to the pre-staged local checkpoint so no Hub
-    # access is needed. The server loads its tokenizer from the same path.
-    REPLAY_CMD="${REPLAY_CMD/--tokenizer $MODEL/--tokenizer $MODEL_PATH}"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 fi
