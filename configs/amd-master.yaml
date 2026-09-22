@@ -595,7 +595,7 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
 # Native aggregated Kimi-K3 c56 replay.  This is one 16-GPU engine across two
 # MI355X nodes (TP8 x PP2), not a prefill/decode deployment.
 kimik3-fp4-mi355x-vllm-native-pp2-dcp4-fine-c48:
-  image: docker.io/yukiozzz/vllm-rocm-k3:k3-pp2-dcp4-fine-bf16
+  image: docker.io/yukiozzz/vllm-rocm-k3:k3-pp2-dcp4-fine-bf16@sha256:77610d5a5736adbf427aaae354bed8b5fc5e3021ac9eae59b74d6017dfc1295b
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
