@@ -66,9 +66,15 @@ if (( MAX_RUNNING_REQUESTS > CUDA_GRAPH_MAX_BS )); then
 fi
 
 # AgentX reuses long prefixes across turns even at low session concurrency.
-# Floor the nightly's four-tails-per-request default while preserving its
-# existing larger-request budget until the high-concurrency sweep is measured.
+# TP4's measured 110.55 GiB KV budget leaves room to retain session prefixes
+# across subagent turns. TP2 keeps its conservative budget until measured.
 SWA_PREFIX_TAILS=$((4 * MAX_RUNNING_REQUESTS))
+if (( TP == 4 )); then
+    SWA_PREFIX_TAILS=$((64 * CONC))
+    if (( SWA_PREFIX_TAILS > 4096 )); then
+        SWA_PREFIX_TAILS=4096
+    fi
+fi
 if (( SWA_PREFIX_TAILS < 128 )); then
     SWA_PREFIX_TAILS=128
 fi
