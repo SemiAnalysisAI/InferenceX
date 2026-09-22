@@ -85,6 +85,11 @@ MAX_RUNNING_REQUESTS=$((2 * CONC))
 if (( MAX_RUNNING_REQUESTS > CUDA_GRAPH_MAX_BS )); then
     MAX_RUNNING_REQUESTS=$CUDA_GRAPH_MAX_BS
 fi
+if [[ "$DP_ATTENTION" == true ]] && (( MAX_RUNNING_REQUESTS < TP )); then
+    # SGLang divides this global cap by attention DP size when sizing pools.
+    # Low-concurrency DP still needs at least one request slot per rank.
+    MAX_RUNNING_REQUESTS=$TP
+fi
 
 # Saturation arms carry a larger in-flight working set than the 30-minute
 # default warmup drain allows.

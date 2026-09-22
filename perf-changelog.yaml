@@ -8567,5 +8567,5 @@
     - "Tune H200 TP8 block32 GEMM launch configurations, including upstream-supported split-K at small DSpark verification batches, without changing kernel code or precision; preserve large-prefill settings and compare stock DSpark through concurrency 32 on TP4 and TP8."
     - "Select native Marlin MXFP4 MoE on TP4 and flashinfer_mxfp4 on TP8 from matched C1 screens; preserve BF16 activations, native packed weights/scales, dense GEMM settings and shipped DSpark precision."
     - "Retain 1024 SWA prefix tails within the existing KV memory budget to reduce cache eviction, and cover concurrency 1 through 32 on both TP4 and TP8."
-    - "Screen supported TP8/EP8/DP8 DSpark at concurrency 16 with the required DP LM head, session-affinity routing and the unchanged engine-wide prefill budget."
+    - "Compare supported TP8/EP8/DP8 DSpark at concurrency 1 and 16 with the required DP LM head, session-affinity routing and unchanged engine-wide prefill budget; reserve at least one request slot per DP rank at low concurrency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341
