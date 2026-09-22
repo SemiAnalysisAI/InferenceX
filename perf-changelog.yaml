@@ -8616,4 +8616,4 @@
     required telemetry, window identity and failure propagation.
   - Enable required measured power for both DSV4 GB200 vLLM AgentX aggregate recipes
     without a model-specific power branch.
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3358
