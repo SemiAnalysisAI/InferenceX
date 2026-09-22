@@ -8932,3 +8932,62 @@
     preserve the original configs and scripts in the existing deprecated archives
   - 退役仅支持 Docker 的 RTX PRO 6000 定长配置及 runner 路由，使活跃的单节点定长覆盖仅使用 SRT-Slurm；原始配置和脚本保留在现有弃用归档中
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
+
+- config-keys:
+  - dsr1-fp4-mi355x-sglang
+  - dsr1-fp4-mi355x-sglang-mtp
+  - dsr1-fp4-mi355x-atom
+  - dsr1-fp4-mi355x-atom-mtp
+  - dsr1-fp8-mi300x-sglang
+  - dsr1-fp8-mi325x-sglang
+  - dsr1-fp8-mi355x-sglang
+  - dsr1-fp8-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi325x-sglang
+  - qwen3.5-fp8-mi355x-sglang
+  - qwen3.5-fp8-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi355x-atom
+  - qwen3.5-fp8-mi355x-atom-mtp
+  - qwen3.5-fp4-mi355x-sglang
+  - qwen3.5-fp4-mi355x-atom
+  - qwen3.5-fp4-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi300x-sglang
+  - dsr1-fp8-mi355x-atom
+  - dsr1-fp8-mi355x-atom-mtp
+  - dsr1-fp8-mi325x-sglang-mtp
+  - qwen3.5-fp8-mi325x-sglang-mtp
+  - dsr1-fp4-b200-sglang
+  - dsr1-fp4-b200-sglang-mtp
+  - dsr1-fp4-b300-sglang
+  - dsr1-fp4-b200-trt
+  - dsr1-fp4-b200-trt-mtp
+  - dsr1-fp8-b200-sglang
+  - dsr1-fp8-b300-sglang
+  - qwen3.5-fp8-b200-sglang
+  - qwen3.5-fp4-b200-sglang
+  - qwen3.5-fp4-b200-sglang-mtp
+  - qwen3.5-fp8-b200-sglang-mtp
+  - qwen3.5-fp8-b300-sglang-mtp
+  - qwen3.5-fp8-b300-sglang
+  - qwen3.5-fp4-b300-sglang
+  - qwen3.5-fp4-b300-sglang-mtp
+  - dsr1-fp8-b200-sglang-mtp
+  - dsr1-fp8-b300-sglang-mtp
+  - dsr1-fp8-b200-trt
+  - dsr1-fp8-b200-trt-mtp
+  - dsr1-fp8-h200-sglang
+  - dsr1-fp8-h200-sglang-mtp
+  - qwen3.5-fp8-h200-sglang
+  - qwen3.5-fp8-h200-sglang-mtp
+  - dsr1-fp8-h200-trt
+  - dsr1-fp8-h200-trt-mtp
+  - qwen3.5-fp8-h100-sglang
+  - qwen3.5-fp8-h100-sglang-mtp
+  - qwen3.5-fp4-b200-trt
+  - qwen3.5-fp4-b200-trt-mtp
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Install native fixed-sequence client dependencies in the container Python environment
+    without forcing user-site packages, which ROCm image virtual environments disable
+  - 原生定长客户端依赖安装到容器 Python 环境，不再强制使用 ROCm 镜像虚拟环境禁用的用户级软件包目录
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352

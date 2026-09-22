@@ -44,7 +44,7 @@ fi
 
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh"
 cd "$INFERENCEX_REPO_ROOT"
-pip3 install --user --break-system-packages sentencepiece datasets pandas
+pip3 install --break-system-packages sentencepiece datasets pandas
 
 start_gpu_monitor --output "$RESULT_DIR/gpu_metrics.csv" --interval "$SRT_MONITOR_INTERVAL"
 trap 'rc=$?; stop_gpu_monitor; exit "$rc"' EXIT
