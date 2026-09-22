@@ -2,11 +2,11 @@ name: CODEOWNER Sign-off Verify
 
 on:
   issue_comment:
-    types: [created, edited]
+    types: [created]
   pull_request_review:
-    types: [submitted, edited]
+    types: [submitted]
   pull_request_review_comment:
-    types: [created, edited]
+    types: [created]
   workflow_dispatch:
     inputs:
       pr-number:
@@ -42,7 +42,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write # Publish PR feedback.
-      issues: write # Update the verdict comment.
+      issues: write # Post a new verdict comment.
       actions: read # Read workflow runs and artifacts.
     steps:
       - name: Checkout trusted workflow code
@@ -121,7 +121,7 @@ jobs:
             already rendered with this run's PR number, head SHA, and sign-off
             metadata.
 
-      - name: Update verdict comment
+      - name: Post verdict comment
         if: always() && steps.resolve.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
