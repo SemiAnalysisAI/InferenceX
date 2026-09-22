@@ -8600,5 +8600,5 @@
     - "Install H100-specific block32 FP8 GEMM tiling configurations for four shapes, including supported SPLIT_K/SWAP_AB small-batch choices for N1792/K5120 and N576/K5120; retain previous large-batch settings and default tiling for the regressing N5120/K288 batch-64 case; preserve stock weights, scales and output precision and record the resolved config hashes."
     - "Use expandable CUDA allocator segments to reduce fragmentation from long-context indexer masks without changing checkpoint precision or the static KV budget."
     - "Select the supported native MXFP4 Marlin MoE backend on Hopper, retaining BF16 activations and the nightly's shipped draft precision."
-    - "Reserve at least 128 SWA prefix tails at C1/C2 and 32 per concurrency at C4 and above, reaching 640 at C20 within the existing static cache budget; preserve roughly 5.3M full tokens at C20 and the existing transient-memory reserve."
+    - "Retain 8 SWA prefix tails per concurrency at C1/C2 and reserve 32 per concurrency at C4 and above, reaching 640 at C20 within the existing static cache budget; preserve roughly 5.3M full tokens at C20 and the existing transient-memory reserve."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3345
