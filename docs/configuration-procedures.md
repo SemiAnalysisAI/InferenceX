@@ -441,6 +441,8 @@ sweep remains required. Draft precision remains upstream default.
 The B200 launcher also converts pinned Docker digests to the installed Enroot
 manifest-reference syntax and stops immediately on import failure.
 
+DSpark uses the default precision shipped by the pinned official nightly, without custom draft quantization or precision patches. STP loads no draft; full accuracy and performance validation are still required.
+
 DSpark is the checkpoint's own bundled draft. SGLang exposes no EAGLE or MTP path and no
 `--speculative-num-steps` knob for it; the recipes pass `--speculative-algorithm DSPARK
 --speculative-dspark-block-size 5`. Throughput uses the same

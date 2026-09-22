@@ -385,6 +385,8 @@ TP2 每 GPU 加载约 147.76 GiB 的目标和草稿权重。配方校验固定�
 B200 启动器还将固定 Docker digest
 转为已安装 Enroot 支持的 manifest 引用格式，并在导入失败时立即停止。
 
+DSpark 使用固定官方 nightly 默认提供的精度，不应用自定义草稿量化或精度补丁。STP 不加载草稿模型；完整准确率和性能验证仍然必需。
+
 DSpark 是检查点自带的草稿模型。SGLang 对它不提供 EAGLE 或 MTP 路径，也没有
 `--speculative-num-steps` 参数；配方传入 `--speculative-algorithm DSPARK
 --speculative-dspark-block-size 5`。吞吐测试通过 `SGLANG_SIMULATE_ACC_LEN`（`match-expected`、
