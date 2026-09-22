@@ -32,12 +32,13 @@ separately identifiable in the ledger and are not treated as capacity-matched
 repeats of the 4 TiB arm. The connector preallocates its configured disk files,
 so requested concurrency does not determine disk footprint: admission requires
 4,398,046,511,104 bytes plus the 128 GiB reserve. Start the expanded-capacity
-series at c256, the highest NVMe concurrency already proven to finish the full
-canonical run. The c512 probe completed 5,676 of 5,677 canonical warmup requests
-with zero request errors, but one request exceeded the 1,800-second drain limit;
-the phase failed before profiling and the allocation then reached its time limit.
-Treat c512 as a feasibility bound. Probe c384 next, then fill the remaining
-c256-c512 interval before trying a higher concurrency.
+series at c256, which completed the full canonical run with 61.680% external
+cache hits. The c384 midpoint also completed, but external hits fell to 5.299%,
+total throughput per GPU fell 46.716%, and P90 end-to-end latency rose 162.274%
+relative to c256. The c512 probe completed 5,676 of 5,677 canonical warmup
+requests with zero request errors, but one request exceeded the 1,800-second
+drain limit; the phase failed before profiling and the allocation then reached
+its time limit. Probe c320 next to localize the sharp c256-c384 transition.
 
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an
@@ -62,7 +63,7 @@ Inspect recorded corpus identity, full commands and actual allocated KV capacity
 before declaring a pair matched.
 
 Start with a matched four-arm probe at concurrency 16. Then build full curves for
-all four arms. Initial curve points are 1, 4, 8, 16, 32, 64, 128, 256, 384, 512, 1,024,
+all four arms. Initial curve points are 1, 4, 8, 16, 32, 64, 128, 256, 320, 384, 512, 1,024,
 4,096, 8,192 and 16,384. Add intermediate positive integers near observed changes, and
 repeat both sides of a candidate crossover on different nodes.
 Keep the maximum at 16,384. Failure or insufficient completed samples is a

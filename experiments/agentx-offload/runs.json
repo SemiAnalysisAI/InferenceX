@@ -3102,34 +3102,109 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "e04f5708b800fa4f40fe27baa55d40fb71825d05",
-      "status": "in_progress",
+      "status": "success",
       "workflow_name": "offload-v1-nvme4tib-c384-r1-20260921",
       "dispatched_at": "2026-09-21T19:40:40Z",
       "job_id": 106487644052,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35646317491/job/106487644052",
       "queued_at": "2026-09-21T19:41:00Z",
       "started_at": "2026-09-21T19:41:37Z",
-      "performance_result": false,
+      "completed_at": "2026-09-22T03:45:25Z",
+      "performance_result": true,
       "target_node": "im-b200-c001",
+      "node": "im-b200-c001",
+      "allocation_id": "16744",
       "capacity_bytes_per_node": 4398046511104,
       "capacity_reserve_bytes": 137438953472,
       "capacity_required_bytes": 4535485464576,
-      "admission_evidence": "Cleanup control 35635160852 verified deletion of the preceding 4 TiB scratch and observed 16,818,788,528,128 free bytes on allowlisted im-b200-c001. No B200 job was queued before dispatch; this workflow became the single queued B200 job and the single active-or-queued NVMe-bearing study workflow."
+      "admission_evidence": "Cleanup control 35635160852 verified deletion of the preceding 4 TiB scratch and observed 16,818,788,528,128 free bytes on allowlisted im-b200-c001. No B200 job was queued before dispatch; this workflow became the single queued B200 job and the single active-or-queued NVMe-bearing study workflow.",
+      "artifacts": [
+        {
+          "id": 10675968289,
+          "name": "agentic_minimaxm3_tp4_conc384_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-ae3420a8ba0f560ff03d",
+          "size_bytes": 30800930,
+          "sha256": "4814ec2a5e9f77b3977c576c287b5096ee548421bf05c22fcec53696dbe3acc0"
+        },
+        {
+          "id": 10675823433,
+          "name": "results_bmk",
+          "size_bytes": 2059,
+          "sha256": "c7fd18ee7947e102038ac5c8f2715d0a991222bde2f75cfbf75201efb218acd9"
+        },
+        {
+          "id": 10675443942,
+          "name": "server_logs_minimaxm3_tp4_conc384_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-ae3420a8ba0f560ff03d",
+          "size_bytes": 205531,
+          "sha256": "07d7c97c0177d4cf90ba86a7df156ba52b8d608152c6deefd84d2ef809b04b65"
+        },
+        {
+          "id": 10675423973,
+          "name": "bmk_agentic_minimaxm3_tp4_conc384_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-ae3420a8ba0f560ff03d",
+          "size_bytes": 2253,
+          "sha256": "6a3c7bd136d90342773b04b0219bd2b30995cc995f620c22cd764ecc1a477201"
+        }
+      ],
+      "performance": {
+        "num_requests_total": 5406,
+        "num_requests_successful": 1157,
+        "num_requests_warmup_dropped": 4249,
+        "num_requests_error_dropped": 6,
+        "duration_seconds": 3616.6283,
+        "output_tokens_per_second": 342.22953,
+        "output_tokens_per_second_per_gpu": 85.55738,
+        "input_tokens_per_second": 36449.87457,
+        "total_tokens_per_second": 36792.1041,
+        "total_tokens_per_second_per_gpu": 9198.02602,
+        "p90_e2e_latency_seconds": 2207.34318,
+        "p90_ttft_seconds": 2154.1721,
+        "p90_tpot_seconds": 0.11466,
+        "p90_interactivity_tokens_per_second_per_user": 8.72117,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.08284,
+        "mean_e2e_latency_seconds": 1097.92327,
+        "avg_power_w_per_gpu": 886.195
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.01134,
+        "external_cache_hit_rate": 0.05299,
+        "overall_cache_hit_rate": 0.06433,
+        "gpu_cache_hit_prompt_tokens": 10125696,
+        "external_cache_hit_prompt_tokens": 47300480,
+        "computed_prompt_tokens": 835237322,
+        "prompt_tokens_total": 892663498
+      },
+      "delta_vs_nvme_c256_percent": {
+        "total_tokens_per_second_per_gpu": -46.7164,
+        "output_tokens_per_second_per_gpu": -47.16447,
+        "p90_interactivity_tokens_per_second_per_user": -47.68137,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": -59.04687,
+        "p90_e2e_latency_seconds": 162.27388,
+        "avg_power_w_per_gpu": 10.9783,
+        "external_cache_hit_rate": -91.40888
+      },
+      "runtime_evidence": "Four disk-backed SimpleCPUOffloadConnector workers each allocated a 1 TiB lazy cache on im-b200-c001. Profiling completed 1,157 accepted responses with six phase errors. External NVMe cache served 47,300,480 prompt tokens (5.299%), a sharp collapse from the c256 run's 61.680% external hit rate.",
+      "storage_evidence": "Preflight on im-b200-c001 reported 17,746,765,049,856 free bytes on xfs /dev/md0 over eight non-rotating NVMe leaves and passed O_DIRECT. offload_cleanup.json matched run 35646317491 and Slurm job 16744, measured four cache files totaling 4,398,044,086,272 logical bytes and 4,398,037,131,264 allocated bytes, deleted only /offload-scratch/inferencex-offload-35646317491-1-16744-13ef55f0fa95, and recorded deleted=true with exit_code=0.",
+      "evidence_sha256": {
+        "agg_bmk.json": "f2dc7dc4fc02e1f9e6428a4c237f305bb324d6152cf120fe00a5b1c21e560106",
+        "server.log": "98236393bea3a41cf60070e0be281cfbc4d281df5d98d321019ed8e34c613e66",
+        "offload_config.json": "3de93bc1dba930456c20bd39dbaf474259abd7008474ad437c0f4c45ff5144e4",
+        "benchmark.log": "e418bc6d4e36a643c6e2168da624a1f2fe84be457f6f882741b8f2435bfe23a6",
+        "offload-telemetry.jsonl": "4a7a2e2d09ba1e107dedcd2d19f93e2176ef409369bc8d70d3dbaac334c257f1",
+        "profile_export.jsonl": "2afc02661a78ee53e3f55ed96eb1e2ec657aa3fc3399a0f06ca5249de4dfa08f",
+        "offload_cleanup.json": "5b97cbb8f43115cad73bf97b4f256e17518d2e60b52de92cfa31705d050e861e"
+      }
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852",
-  "status": "Cleanup control 35635160852 owner-verified and deleted the exact 4 TiB c512 scratch, then completed its canonical c1 HBM measurement. The 4 TiB HBM+NVMe c384 midpoint 35646317491 is now running as the single NVMe-bearing study workflow.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491",
+  "status": "The 4 TiB HBM+NVMe c384 midpoint 35646317491 completed successfully and exact task-owned cleanup is verified. Its 5.299% external hit rate and 9,198.026 total tok/s/GPU sharply regress from c256, so c320 is the next adaptive midpoint.",
   "last_capacity_check": {
-    "checked_at": "2026-09-21T19:41:00Z",
-    "active_study_run_ids": [
-      35646317491
-    ],
+    "checked_at": "2026-09-22T03:45:25Z",
+    "active_study_run_ids": [],
     "pending_study_run_ids": [],
     "dispatch_allowed": false,
-    "reason": "Run 35646317491 is active and is the single active-or-queued NVMe-bearing study workflow."
+    "reason": "Run 35646317491 is terminal and exact cleanup is verified. Refresh the cluster-wide B200 queue and per-node free-byte evidence immediately before dispatching c320."
   },
   "next_dispatch": {
-    "requires": "Monitor c384 run 35646317491. Dispatch no other NVMe-bearing workflow until it is terminal and its exact task-owned scratch cleanup is verified."
+    "requires": "After a fresh zero-pending-B200 check and fresh c001 free-byte evidence above 4,535,485,464,576 bytes, dispatch the 4 TiB HBM+NVMe c320 midpoint as the only active-or-queued NVMe-bearing study workflow."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
