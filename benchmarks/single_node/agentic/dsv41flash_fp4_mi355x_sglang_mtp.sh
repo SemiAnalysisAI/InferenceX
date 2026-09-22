@@ -93,10 +93,11 @@ fi
 # with hipIpcGetMemHandle(invalid argument). The native allocator passed target
 # and stock DSpark graph capture plus real requests on this pinned image.
 # Long-context memory/performance qualification is still required.
-# Long-prefill RCCL queues exhausted device memory with the native allocator.
-# Reclaim unused cached allocations above 80% before external HIP allocations;
-# retain native segments because AITER graph IPC rejects expandable ones.
-export PYTORCH_HIP_ALLOC_CONF=expandable_segments:False,garbage_collection_threshold:0.8
+# Test reclamation after long-prefill RCCL resource exhaustion. This pinned
+# PyTorch enables proactive GC only when its per-process limit is below 1.0:
+# cap native reservations at 99%, collecting unused blocks above 80% of that
+# limit (79.2% total HBM). Keep native segments for AITER graph IPC.
+export PYTORCH_HIP_ALLOC_CONF=expandable_segments:False,garbage_collection_threshold:0.8,per_process_memory_fraction:0.99
 export SGLANG_USE_AITER=1
 # The official preview selects this backend through its gfx950 auto default.
 export SGLANG_HACK_FLASHMLA_BACKEND=aiter_sparse

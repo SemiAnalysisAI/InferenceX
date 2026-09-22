@@ -91,6 +91,11 @@ V4.1 设置 `q_head_norm=False`。nightly 的 HIP 融合 Q/K 内核始终对 Q
 97.3465%），但 C1 AgentX 与禁用缓存的 C32 运行均首先在 RCCL 队列中报
 `HSA_STATUS_ERROR_OUT_OF_RESOURCES` 和 `Available Free mem : 0 MB`。
 后续 Engram 或通信清理栈不能证明另一项独立故障。实验分支增加原生分配器
-`garbage_collection_threshold:0.8`，尝试在外部 HIP 分配前回收未使用的缓存块。
+`garbage_collection_threshold:0.8,per_process_memory_fraction:0.99`，尝试在外部 HIP
+分配前回收未使用的缓存块。固定的 PyTorch 提交
+[`c9ab269`](https://github.com/ROCm/pytorch/blob/c9ab269368d46a826d64705192fef55594c8b698/c10/cuda/CUDACachingAllocator.cpp)
+仅在进程内存上限低于 1.0 时启用 GC；只设置阈值的诊断已在性能采样前取消。
+原生分配器上限为 HBM 的 99%，在超过总 HBM 的 79.2% 时回收未使用的块；
+这与 SGLang 静态内存比例 0.60 是两个独立设置。
 为兼容 AITER 图 IPC，仍禁用 expandable segments。这是待验证的假设，
 不是已确认的性能或稳定性提升；权重、KV 格式和镜像默认 DSpark 精度均未改变。

@@ -125,7 +125,12 @@ The cache-enabled candidate passed official full C1 GSM8K (1,319 examples,
 first aborted an RCCL queue with `HSA_STATUS_ERROR_OUT_OF_RESOURCES` and
 `Available Free mem : 0 MB`. Later Engram/collective teardown stacks do not
 identify an independent fault. The experimental branch adds native-allocator
-`garbage_collection_threshold:0.8` to reclaim unused blocks before external HIP
-allocations. Expandable segments remain disabled for AITER graph IPC. This is
+`garbage_collection_threshold:0.8,per_process_memory_fraction:0.99` to reclaim
+unused blocks before external HIP allocations. The pinned PyTorch commit
+[`c9ab269`](https://github.com/ROCm/pytorch/blob/c9ab269368d46a826d64705192fef55594c8b698/c10/cuda/CUDACachingAllocator.cpp)
+requires a per-process limit below 1.0 to activate GC; the threshold-only diagnostic
+was canceled before profiling. The native allocator is capped at 99% of HBM and
+collects unused blocks above 79.2% of total HBM. This is separate from SGLang
+static memory 0.60. Expandable segments remain disabled for AITER graph IPC. This is
 a hypothesis under test, not a qualified performance or stability improvement;
 weights, KV format and shipped DSpark precision are unchanged.
