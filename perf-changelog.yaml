@@ -7142,5 +7142,5 @@
 - config-keys:
     - glm5.2-fp8-mi325x-sglang-agentic-mtp
   description:
-    - "Update the GLM-5.2 FP8 MI325X SGLang AgentX MTP image from lmsysorg/sglang:v0.5.16-rocm720-mi30x to the SGLang v0.5.19 release image lmsysorg/sglang:v0.5.19-rocm720-mi30x (AITER c16d44b9, torch 2.11.0+rocm7.2) while preserving the TP8/EP1, GPU-resident BF16 KV, TileLang DSA, 1M-context, EAGLE MTP topology and the c1/c2/c3/c4/c5/c6/c8 search space"
+    - "Update the SGLang ROCm image from v0.5.16-rocm720-mi30x to v0.5.19-rocm720-mi30x; benchmark configuration unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2980
