@@ -350,9 +350,33 @@ Maximum concurrency for 1,048,576 tokens per request: 6.70x
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` 是 vLLM 配方在 h100、h200、b200、b300、gb200、gb300
 与 mi355x 上的 SGLang 对应版本（每个 SKU 一个 PR），遵循
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1)。
-该模型尚无正式发布的 SGLang 版本：所有 NVIDIA 配方使用多架构预览镜像
-`lmsysorg/sglang:dev-dsv41`，MI355X 使用 `lmsysorg/sglang:dev-dsv41-mi35x`。两个标签均可变，
-因此 master 配置与 changelog 记录了验证时的 digest。
+该模型尚无正式发布的 SGLang 版本。B200 通过 digest 固定 CUDA 13 nightly 镜像
+`lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce`；其他 NVIDIA 配方使用
+`lmsysorg/sglang:dev-dsv41`，MI355X 使用 `lmsysorg/sglang:dev-dsv41-mi35x`。
+
+B200 在 TP4/EP4 C1–128 与 TP2/EP2 C1–8 全部使用上游默认 DSpark。
+Engram 保留在主机 DRAM，设置 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。
+[run 35626514270](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35626514270)
+中共享主机表的大页覆盖率为零；每个 rank 的匿名分片无需修改主机 sysctl 即可申请大页。
+必须从每个 rank 的启动日志核实实际大页比例。
+
+| B200 拓扑 | 静态显存比例 | Prefill chunk | SWA 前缀尾部数 |
+| --- | ---: | ---: | --- |
+| TP4/EP4，C1–128 | 0.80 | 4096 | `max(128, min(4096, 64 * CONC))` |
+| TP2/EP2，C1–8 | 0.92 | 2048 | `128 * CONC` |
+
+两者均在 prefill chunk 之间执行 16 轮 decode，并将运行请求上限设为
+`min(2 * CONC, 64)`。分块前缀缓存将 SWA 尾部与完整 KV 分开保留，因此完整缓存
+占用率低并不证明有足够的可复用 SWA 容量。随并发调整的尾部预算与完整 KV 共享
+固定静态内存池。正式扫描需验证实际缓存大小、临时内存、缓存复用率以及吞吐与交互性能前沿。
+
+TP2 每 GPU 加载约 147.76 GiB 的目标和草稿权重。配方校验固定原始加载器的哈希，
+启用 PyTorch 可扩展分配段，不应用引擎补丁。9 月 22 日 nightly 在独立 Slurm 诊断中
+成功启动，并在 C8 完成全部 1,319 道 GSM8K，严格准确率为 97.65%。评测后的打包因
+诊断脚本缺少环境变量而失败，之后单独恢复；这不等于官方工作流全绿。仍需完成最新镜像
+的完整 sweep。草稿精度保留上游默认值。
+B200 启动器还将固定 Docker digest
+转为已安装 Enroot 支持的 manifest 引用格式，并在导入失败时立即停止。
 
 DSpark 是检查点自带的草稿模型。SGLang 对它不提供 EAGLE 或 MTP 路径，也没有
 `--speculative-num-steps` 参数；配方传入 `--speculative-algorithm DSPARK
