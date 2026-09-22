@@ -8593,6 +8593,7 @@
   scenario-type:
     - agentic-coding
   description:
+    - "Isolated exact-topology audit: compare TP2/EP1 against the existing TP2/EP2 recipe with identical shipped DSpark precision, serving settings, and canonical protocol; qualification pending."
     - "Add GB300 SGLang DeepSeek-V4.1-Flash AgentX TP2/EP2 and TP4/EP4 candidates on official nightly-dev-cu13-20260922-582389ce, digest sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40."
     - "The DSpark arm keeps canonical thinking-on five-token AL 3.51 and real eval verification, using the official nightly shipped draft precision and KV layout without custom precision patches; full-model evaluation uses real verification."
     - "Keep original Engram tables in GPU memory on TP4 to avoid measured host huge-page fragmentation; TP2 uses per-rank anonymous host tables and local checkpoint paths for file-scoped cache advice without host sysctl changes. Keep GPU KV cache, 0.80 static memory fraction, request/graph cap 64 and automatic backends. Select 8192-token prefill chunks only at TP2 C64/C128; retain 4096 at C32 and all other points."
