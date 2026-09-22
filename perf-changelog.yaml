@@ -8565,4 +8565,5 @@
   - "Use the default MTP/DSpark precision shipped by the official nightly, without custom draft quantization or precision patches."
   - "Add DSpark TP2/EP2 alongside TP4/EP4 to explore the vLLM parallelism frontier, keeping native host Engram tables and GPU KV; interleave 16 decode batches between prefill chunks to test long-context responsiveness."
   - "Submit this SGLang AgentX lane through a Slurm batch allocation and launch its steps from the compute node, avoiding failed interactive allocation notifications on the runner login host while preserving GPU reservations and terminal-status checks."
+  - "Test a 128-tail minimum for low-concurrency prefix reuse while preserving the larger-concurrency budget and 0.70 static memory fraction; prefetch checkpoints for shared Lustre loading."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3342

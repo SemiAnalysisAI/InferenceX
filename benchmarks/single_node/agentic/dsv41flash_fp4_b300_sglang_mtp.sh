@@ -65,6 +65,14 @@ if (( MAX_RUNNING_REQUESTS > CUDA_GRAPH_MAX_BS )); then
     MAX_RUNNING_REQUESTS=$CUDA_GRAPH_MAX_BS
 fi
 
+# AgentX reuses long prefixes across turns even at low session concurrency.
+# Floor the nightly's four-tails-per-request default while preserving its
+# existing larger-request budget until the high-concurrency sweep is measured.
+SWA_PREFIX_TAILS=$((4 * MAX_RUNNING_REQUESTS))
+if (( SWA_PREFIX_TAILS < 128 )); then
+    SWA_PREFIX_TAILS=128
+fi
+
 # Saturation arms carry a larger in-flight working set than the 30-minute
 # default warmup drain allows.
 if (( CONC >= 32 )); then
@@ -105,6 +113,8 @@ SGLANG_CMD=(
     --model-path "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0 --port "$PORT"
     --trust-remote-code
+    # Feed mmap weight copies sequentially from shared Lustre storage.
+    --weight-loader-prefetch-checkpoints
     --tp "$TP" --ep-size "$EP_SIZE"
     # Backends resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl
     # on Blackwell); the cookbook warns that overriding them costs decode speed.
@@ -118,6 +128,7 @@ SGLANG_CMD=(
     --prefill-decode-interval 16
     "${SPECULATIVE_ARGS[@]}"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
+    --swa-prefix-tails "$SWA_PREFIX_TAILS"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     --reasoning-parser auto
     --tool-call-parser auto
