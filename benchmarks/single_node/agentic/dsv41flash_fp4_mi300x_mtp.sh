@@ -72,18 +72,11 @@ else
 fi
 
 # The sparse-attention indexer allocates a [batched-tokens, 1M] fp8 logits
-# buffer at startup: 32 GiB at 16384, 16 GiB at 8192, 8 GiB at 4096. TP2 leaves
-# ~145 GiB of offloaded weights on every rank, so halve the buffer and cap the
-# scheduler there to keep a usable KV pool. Same shape as the Blackwell TP2
-# arms, which validated this cap set on B200, GB200 and GB300.
+# buffer at startup: 16 GiB at 8192, 8 GiB at 4096. 8192 leaves TP4 ~64 GiB of
+# KV per rank after the ~81 GiB of offloaded weights. There is no TP2 arm here:
+# run 35671005506 measured "Available KV cache memory: -13.51 GiB" at TP2 even
+# with the buffer halved, so a 192 GB card cannot serve this checkpoint at TP2.
 BATCHED_TOKENS=8192
-if (( TP == 2 )); then
-    BATCHED_TOKENS=4096
-    MAX_NUM_SEQS=$((2 * CONC))
-    if (( MAX_NUM_SEQS > 256 )); then MAX_NUM_SEQS=256; fi
-    if (( MAX_NUM_SEQS < 16 )); then MAX_NUM_SEQS=16; fi
-    if (( CAPTURE_SIZE > 512 )); then CAPTURE_SIZE=512; fi
-fi
 
 # Use the runner-specific port assigned by launch_mi300x-amd.sh.
 export AIPERF_SERVER_URL="http://localhost:${PORT}"

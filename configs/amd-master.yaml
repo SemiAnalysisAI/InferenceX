@@ -1188,9 +1188,11 @@ dsv41flash-fp4-mi300x-vllm-agentic-dspark:
       # TP4 halves the GPUs per server. With the Engram tables in pinned host
       # memory the resident weights are ~81 GiB per rank.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
-      # TP2 quarters them. Resident weights rise to ~145 GiB per rank, so the
-      # recipe halves the indexer buffer and caps the scheduler here.
-      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8] }
+      # No TP2 arm on this SKU. Measured in run 35671005506: at TP2 the resident
+      # weights are ~145 GiB per rank, and even with the indexer buffer halved
+      # to 4096 batched tokens the engine reported "Available KV cache memory:
+      # -13.51 GiB" and refused to start. A 192 GB card cannot hold this
+      # checkpoint at TP2 with a usable KV pool; MI325X does it on 256 GB.
 
 # GLM-5.2 FP8 full-context AgentX refresh on MI325X. This preserves the TP8
 # GPU-resident-KV c1/c2/c3/c4/c5/c6/c8 curve from Actions run 29657732517
