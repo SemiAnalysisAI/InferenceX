@@ -1146,7 +1146,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=1"
 
 minimaxm3-fp8-mi300x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36
+  image: vllm/vllm-openai-rocm:v0.29.0
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: cluster:mi300x-amd

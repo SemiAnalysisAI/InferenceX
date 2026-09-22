@@ -8562,6 +8562,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3200
 
 - config-keys:
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  description:
+    - "Update the vLLM ROCm image from nightly-d9105ea8 to v0.29.0; benchmark configuration unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3063
+
+- config-keys:
     - kimik3-fp4-h200-vllm-agentic-latency
   scenario-type:
     - agentic-coding
