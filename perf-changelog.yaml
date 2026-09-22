@@ -8643,3 +8643,9 @@
   description:
   - 'Validate srt-slurm 049a6b5804fb3f9bfbc959a7f7379935fe8952a7 with rank-sized MoRI handshake blocks and handshake/notify defaults below Linux ephemeral ports. Preserve engine images, serving options, and all nine workload concurrencies.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2824
+
+- config-keys:
+  - minimaxm3-fp4-mi355x-vllm-disagg
+  description:
+  - 'Pin synchronized AMD runtime 7a7ca652fad37026bbf476b3f4368cd34c73c1c6 and add an explicit single-node colocated TP4/TP4 smoke recipe. Preserve the archived production two-node layout and engine settings.'
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2824
