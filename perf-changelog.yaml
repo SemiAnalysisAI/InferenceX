@@ -8564,7 +8564,7 @@
     - "Add TP4/EP4 stock DSpark alongside TP8/EP8 with per-rank anonymous Engram host tables, preserving checkpoint payload and scales"
     - "Prioritize stock DSpark across low and high concurrency, with 16 decode steps between prefill chunks to keep long-prefix decode requests progressing"
     - "Use the default MTP/DSpark precision shipped by the official nightly, without custom draft quantization or precision patches."
-    - "Tune H200 TP8 block32 GEMM launch configurations, including upstream-supported split-K at small DSpark verification batches, without changing kernel code or precision; preserve large-prefill settings and compare stock DSpark through concurrency 32 on TP4 and TP8."
+    - "Tune H200 TP8 block32 GEMM launch configurations, including upstream-supported split-K at small DSpark verification batches and the stock draft Q/KV projections, without changing kernel code or precision; retain stock settings above validated batch ranges and compare stock DSpark through concurrency 32 on TP4 and TP8."
     - "Select native Marlin MXFP4 MoE on TP4 and flashinfer_mxfp4 on TP8 from matched C1 screens; preserve BF16 activations, native packed weights/scales, dense GEMM settings and shipped DSpark precision."
     - "Retain 1024 SWA prefix tails within the existing KV memory budget to reduce cache eviction, and cover concurrency 1 through 32 on both TP4 and TP8."
     - "Compare supported TP8/EP8/DP8 DSpark at concurrency 1 and 16 with the required DP LM head, session-affinity routing and unchanged engine-wide prefill budget; reserve at least one request slot per DP rank at low concurrency."
