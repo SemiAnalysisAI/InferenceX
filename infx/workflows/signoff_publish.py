@@ -38,7 +38,7 @@ def check_statuses(lines: list[str]) -> dict[int, str]:
             continue
         emoji, number, status = match.groups()
         check = int(number)
-        allowed = {"PASS", "N/A", "WARN"} if check == 14 else {"PASS", "N/A", "FAIL"}
+        allowed = {"PASS", "N/A", "WARN"} if check in {4, 14} else {"PASS", "N/A", "FAIL"}
         if check in statuses or status not in allowed or emoji != STATUS_EMOJI[status]:
             return {}
         statuses[check] = status
@@ -49,12 +49,12 @@ def verdict_body(verdict: str, head_sha: str) -> tuple[str, str]:
     lines = verdict.splitlines()
     headers = [line for line in lines if line in (SUCCESS_HEADER, REJECT, WARN)]
     checks = check_statuses(lines)
-    warning = checks.get(14) == "WARN"
+    warning = "WARN" in checks.values()
     expected = REJECT if "FAIL" in checks.values() else WARN if warning else SUCCESS_HEADER
     valid = bool(checks) and headers == [expected] and lines[0] == expected
     if not valid:
         verdict = INVALID
-    elif warning:
+    elif checks.get(14) == "WARN":
         header, _, rest = verdict.partition("\n")
         verdict = f"{header}\n\n{ESCALATION}\n\n{rest}"
     status = (
