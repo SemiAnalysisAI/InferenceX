@@ -8589,6 +8589,80 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3337
 
 - config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B200 Dynamo+SGLang AgentX TP8 aggregate HiCache recipes at concurrency 1, 4, and 8."
+    - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with bundled DSpark K=6, full-node CPU/DRAM allocation, and per-point request/CUDA-graph limits."
+    - "Map the exact DeepSeek-V4-Pro-0813 recipe alias to the pre-staged NScale checkpoint."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3257
+
+- config-keys:
+    - dsv41flash-fp4-mi300x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add TP4 and TP2 arms with Engram CPU offload to the MI300X vLLM DeepSeek-V4.1-Flash AgentX recipe, keeping the existing TP8 arm with the 183 GiB of tables GPU-resident. With the tables in pinned host memory the resident weights are ~81 GiB per rank at TP4 and ~145 GiB per rank at TP2, against 192 GB per card"
+    - "Cap the scheduler at TP2 only: halve the sparse-attention indexer buffer to 4096 batched tokens (8 GiB rather than 16 GiB of a [batched-tokens, 1M] fp8 logits allocation), scale max-num-seqs to 2*CONC clamped to [16, 256] and cap cudagraph capture at 512. Same cap set the Blackwell TP2 arms validated on B200, GB200 and GB300. TP2 concurrency stops at 8 because ~145 GiB of weights leaves the smallest KV pool of any arm here"
+    - "Repin the image from the expired nightly-eed1f3d0 tag to vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984, the ROCm 10.0 nightly channel build of the same commit the MI355X arm moved to in SemiAnalysisAI/InferenceX#3326 (digest sha256:eccb72b74b8c04ce7406d9212e200b129f58e24be642795a857f755a94fdb3a1, published 2026-09-21T05:50:03Z); it carries vllm-project/vllm#57491, which widened the two is_cuda() gates to is_cuda_alike() so engram_config resolves on gfx942, and because cpu_offload now defaults on via VLLM_PLE_CPU_OFFLOAD the recipe sets it explicitly per TP"
+    - "Add --no-swa-bounded-replay: vllm-project/vllm#56227 turned SWA bounded replay on by default between the two pins and relies on a window clamp the ROCm sparse SWA path does not have, which crashed every gfx950 point with HSA_STATUS_ERROR_MEMORY_FAULT; gfx942 runs the same path. Prefix caching stays on"
+    - "为 MI300X vLLM DeepSeek-V4.1-Flash AgentX 配方新增启用 Engram CPU 卸载的 TP4 与 TP2 臂，同时保留 183 GiB Engram 表驻留 GPU 的现有 TP8 臂；表移至固定页主机内存后，TP4 每 rank 常驻权重约 81 GiB，TP2 约 145 GiB，而每张卡为 192 GB"
+    - "仅在 TP2 收紧调度器：将稀疏注意力 indexer 缓冲区减半至 4096 batched tokens（[batched-tokens, 1M] fp8 logits 分配由 16 GiB 降至 8 GiB），max-num-seqs 取 2*CONC 并夹在 [16, 256]，cudagraph capture 上限 512。该组参数与 Blackwell TP2 臂在 B200、GB200、GB300 上验证过的一致。TP2 并发止于 8，因为约 145 GiB 权重使其 KV 池为本配方中最小"
+    - "将镜像从已失效的 nightly-eed1f3d0 重新固定到 vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984（与 MI355X 臂在 SemiAnalysisAI/InferenceX#3326 中所用相同 commit 的 ROCm 10.0 nightly 渠道构建）；该镜像包含 vllm-project/vllm#57491，将两处 is_cuda() 判定放宽为 is_cuda_alike()，使 engram_config 在 gfx942 上可解析；由于 cpu_offload 现通过 VLLM_PLE_CPU_OFFLOAD 默认开启，配方按 TP 显式设置该值"
+    - "新增 --no-swa-bounded-replay：vllm-project/vllm#56227 在两个 pin 之间将 SWA bounded replay 默认开启，其依赖的 window clamp 在 ROCm sparse SWA 路径中缺失，曾使所有 gfx950 数据点以 HSA_STATUS_ERROR_MEMORY_FAULT 崩溃；gfx942 使用同一路径。prefix caching 保持开启"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3336
+- config-keys:
+    - dsv41flash-fp4-mi300x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Drop the TP2 arm from the MI300X vLLM DeepSeek-V4.1-Flash AgentX recipe: measured infeasible. In Actions run 35671005506 the TP2 concurrency-1 point reported \"Available KV cache memory: -13.51 GiB\" and the engine refused to start with \"No available memory for the cache blocks\", even with the sparse-attention indexer buffer already halved to 4096 batched tokens. At TP2 the Engram-offloaded resident weights are ~145 GiB per rank, which a 192 GB card cannot hold alongside a usable 1M-context KV pool. Raising gpu-memory-utilization to 0.95 recovers ~9 GiB and halving the buffer again ~4 GiB, which still leaves effectively no KV, so the arm is removed rather than tuned. MI325X runs the same TP2 configuration on 256 GB per card"
+    - "The TP8 and TP4 arms are unaffected and stay. TP4 passed at concurrency 1 and 32 in the same run with the tables offloaded, at ~81 GiB per rank"
+    - "从 MI300X vLLM DeepSeek-V4.1-Flash AgentX 配方中移除 TP2 臂：经实测不可行。在 Actions 运行 35671005506 中，TP2 并发 1 数据点报告 \"Available KV cache memory: -13.51 GiB\"，引擎以 \"No available memory for the cache blocks\" 拒绝启动，且此时稀疏注意力 indexer 缓冲区已减半至 4096 batched tokens。TP2 下经 Engram 卸载后每 rank 常驻权重约 145 GiB，192 GB 的卡无法在容纳该权重的同时保留可用的 1M 上下文 KV 池。将 gpu-memory-utilization 提高到 0.95 可回收约 9 GiB，再次将缓冲区减半可回收约 4 GiB，仍几乎不剩 KV，因此选择移除该臂而非调参。MI325X 以每卡 256 GB 运行相同的 TP2 配置"
+    - "TP8 与 TP4 臂不受影响并保留。TP4 在同一运行中以每 rank 约 81 GiB 在并发 1 与 32 通过"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3336
+
+- config-keys:
+    - dsv41flash-fp4-b200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin B200 DeepSeek-V4.1 Flash to SGLang nightly-dev-cu13-20260922-582389ce by digest and preserve shipped DSpark precision with the committed five-token golden acceptance curve"
+    - "Use per-rank host Engram shards, interval 16, and concurrency-scaled SWA prefix capacity: TP4 C1-128 uses static fraction 0.80, chunk 4096, and 128-4096 tails; TP2 C1-8 uses static fraction 0.92, chunk 2048, and 128 tails per session"
+    - "Test TP2 loading with the unmodified pinned stock loader and expandable CUDA allocator segments alone; preserve tensor payloads, layouts, and computation"
+    - "Resolve local model snapshots, retain robust AgentX HTTP timeouts, and normalize digest-pinned images for the installed Enroot parser with immediate import failure handling"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3346
+
+- config-keys:
+  - dsv41flash-fp4-b300-sglang-agentic-dspark
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add B300 SGLang DeepSeek-V4.1-Flash AgentX TP4/EP4 with the newest official CUDA 13 nightly (20260922-582389ce), pinned amd64 digest, native DSpark5, measured thinking-on AL 3.51 for throughput and real verification for evals.
+  - Keep automatic backends, host Engram tables, GPU-resident KV, bounded prefill and decode graphs; route the B300 SGLang runtime through /ix.
+  - Use per-rank anonymous host Engram tables to allow transparent huge pages without changing host settings; preserve native FP8 table payload and automatic backend selection.
+  - "Use the default MTP/DSpark precision shipped by the official nightly, without custom draft quantization or precision patches."
+  - "Add DSpark TP2/EP2 alongside TP4/EP4 to explore the vLLM parallelism frontier, keeping native host Engram tables and GPU KV; interleave 16 decode batches between prefill chunks to test long-context responsiveness."
+  - "Submit this SGLang AgentX lane through a Slurm batch allocation and launch its steps from the compute node, avoiding failed interactive allocation notifications on the runner login host while preserving GPU reservations and terminal-status checks."
+  - "Test retained SWA tails at 64 times concurrency, bounded to 128–4096; use static memory 0.80 for TP2 C16 and 0.85 at C32 and above after measuring its smaller KV budget and 43.59 GiB of post-graph headroom at C64, otherwise retain 0.70. Prefetch checkpoints for shared Lustre loading. Test prefill/decode interval 4 at TP2 C32 and above against the interval-16 baseline; keep other points at 16."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3342
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Raise ATOM GPU memory utilization from 0.90 to 0.95 and declare a fine-grained CUDA graph ladder (capture sizes 1-64) sized for the observed AgentX running batch, which is 22-41% of CONC; ModelRunner trims it to min(2*CONC, 8192). A controlled TP4 C24 A/B improved throughput by 9.2% and interactivity by 50.7% with unchanged estimated graph memory."
+    - "Enable ATOM_M3_INDEXER_CP for TP4 C15/C20/C24/C28/C32/C40/C48, where MiniMax-M3's four index query heads can context-parallelize the replicated single index-K head; the TP-size gate (tp_size == sparse_num_index_heads == 4) keeps it disabled for the TP2 C20 offload point. Same-commit A/B pairs at TP4 C15/C24/C28 improved interactivity by 3.7%/12.3%/16.7% and ISL-normalized throughput by 0.67%/0.24%/2.7%; C20 is interpolated between measured C15 and C24. Restore EAGLE3 K3 with golden AL 2.78 at C40/C48 instead of disabling speculative decoding."
+    - "Collapse the per-band capacity knobs into a single case statement, add the measured TP2 LMCache DRAM-offload curve at C20/C25/C30 on the chunk-256 ATOM_SLRU tier, size LMCACHE_MAX_LOCAL_CPU_SIZE as TOTAL_CPU_DRAM_GB/TP, and derive LMCACHE_LOOKUP_SERVER_WORKER_IDS from TP so every rank is covered. Remove the TP2 C5 point and the unreachable hybrid/state-offload (STATE_OFFLOAD/OFFLOAD_STATE) and C56 branches."
+    - "Spread offload ranks across NUMA nodes by selecting GPUs 0,4 for TP2 and 0,1,4,5 for TP4 when the caller has not pinned devices, cutting TP2 host-memory pinning from 45 minutes to 21 seconds at unchanged throughput. Move to rocm/atom-dev:nightly_202609171455 and record LMCache 0.5.5rc3+rocm7.2.4 for both offload arms."
+    - "Set dram-utilization to 0.687 so the recorded budget matches the real per-rank pinning: LMCACHE_MAX_LOCAL_CPU_SIZE = TOTAL_CPU_DRAM_GB/TP resolves to ~256 GB per rank on both offload arms (512 GB total at TP2, 1,024 GB at TP4), independent of TP. This replaces the earlier 0.20 metadata that under-described the allocation."
+    - "Verified against ATOM commit b6e2a39433d73b586c366ca90e661f098eb463e3 that --online_quant_config ptpc_fp8 does not change the Inferact/MiniMax-M3-EAGLE3-GQA draft precision: atom/models/eagle3_llama.py builds every draft linear (qkv_proj, o_proj, gate_up_proj, down_proj, fc) with no quant_config, so should_stream_online_quant short-circuits to False and OnlineQuantStreamer.maybe_create finds no streaming candidates. The EAGLE3 draft loads and runs at its native bf16 checkpoint precision; only the target MiniMax-M3 weights are online-quantized to ptpc_fp8, and the exclude_layer list applies to the target alone."
+    - "将 MiniMax-M3 ATOM AgentX 的 GPU 显存利用率提高到 0.95，并按真实运行 batch（约为 CONC 的 22-41%）声明细粒度 CUDA graph（capture 档 1-64，运行时裁剪为 min(2*CONC, 8192)）；TP4 在 C15/C20/C24/C28/C32/C40/C48 启用 indexer-only CP，TP2 C20 由 TP-size gate 保持关闭，C40/C48 恢复 EAGLE3。将分档容量参数合并为单一 case，新增 TP2 C20/C25/C30 的 LMCache SLRU offload 曲线，LMCACHE_MAX_LOCAL_CPU_SIZE 取 TOTAL_CPU_DRAM_GB/TP，lookup worker 覆盖全部 rank，并将 offload GPU 跨 NUMA 节点放置（TP2 用 0,4；TP4 用 0,1,4,5），把 TP2 主机内存 pinning 从 45 分钟缩短到 21 秒；更新到 20260917 rocm7 ATOM 镜像 nightly_202609171455 与 LMCache 0.5.5rc3。dram-utilization 改为 0.687，使记录预算与每 rank 约 256 GB 的真实固定一致（与 TP 无关），取代此前 0.20 的元数据。已在 ATOM commit b6e2a394 验证 online_quant（ptpc_fp8）不改变 EAGLE3-GQA 草稿模型精度：eagle3_llama.py 的各 draft 线性层不带 quant_config，should_stream_online_quant 直接返回 False，草稿以原生 bf16 运行，仅目标 MiniMax-M3 权重在线量化为 ptpc_fp8。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3189
+
+- config-keys:
     - glm5.2-fp4-mi355x-atom-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -8598,4 +8672,4 @@
     - "Drop the LMCache DRAM offload from the small-concurrency TP4 arm: conc [2, 4, 8, 10] moves from kv-offloading dram with the lmcache 0.4.5 backend to kv-offloading none, so those points serve off the native GPU prefix cache alone and no longer start an LMCache CPU tier. The TP4+DCP4 arm at conc [16, 24, 32, 40, 48] keeps LMCache at 256 GiB per rank (dram-utilization 0.171 unchanged), and the TP8 arm stays GPU-resident as before."
     - "Add --index_cache_dtype fp4 and --block-size 64 to the ATOM server launch on every point. Neither flag was set before, so both took the ATOM default."
     - "Drop ATOM_USE_FLYDSL_GATHER_KV_B_PROJ=0, which pinned gather_kv_b_proj to the Triton path on the DCP prefill-context and MTP verify paths; the updated recipe no longer sets it."
-  pr-link: PLACEHOLDER-INFERENCEX-PR
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3359  
