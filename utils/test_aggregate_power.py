@@ -455,7 +455,7 @@ def test_integrate_power_requires_every_gpu_to_bracket_window(tmp_path: Path):
     assert result.device_issues == {"1": ["benchmark_window_not_bracketed"]}
 
 
-def test_integrate_power_rejects_sampling_gap(tmp_path: Path):
+def test_integrate_power_reports_sampling_gap_without_rejecting(tmp_path: Path):
     csv = tmp_path / "gpu_metrics.csv"
     base = 1_700_000_000.0
     _write_nvidia_csv(
@@ -463,7 +463,8 @@ def test_integrate_power_rejects_sampling_gap(tmp_path: Path):
         [
             (base - 1, 0, 500.0),
             (base + 1, 0, 500.0),
-            # The 8-second gap makes a 1 Hz telemetry stream unusable.
+            # An 8-second hole in a 1 Hz stream is interpolated coverage: it is
+            # surfaced per GPU for the consumer to weigh, never a verdict.
             (base + 9, 0, 500.0),
             (base + 11, 0, 500.0),
         ],
@@ -476,9 +477,12 @@ def test_integrate_power_rejects_sampling_gap(tmp_path: Path):
         expected_num_gpus=1,
     )
 
-    assert result.power_valid is False
-    assert "sampling_gap_exceeded" in result.invalid_reasons
-    assert result.device_issues == {"0": ["sampling_gap_exceeded"]}
+    assert result.power_valid is True
+    assert result.invalid_reasons == ()
+    assert result.device_issues == {}
+    assert result.per_gpu_max_sample_gap_s == {"0": 8.0}
+    # Constant 500 W across the gap integrates to exactly 500 W x 10 s.
+    assert result.per_gpu_energy_j == {"0": pytest.approx(5000.0)}
 
 
 def test_integrate_power_ignores_invalid_samples_far_outside_window(tmp_path: Path):
@@ -1542,9 +1546,11 @@ def test_power_percentiles_weights_time_and_clips_the_validated_window(tmp_path)
 
 def test_power_percentiles_is_withheld_for_invalid_telemetry(tmp_path):
     csv_path = tmp_path / "power.csv"
-    _write_amd_csv(csv_path, [(0, 0, 100), (10, 0, 500)])
+    # First sample lands after the window opens, so the stream is not bracketed.
+    _write_amd_csv(csv_path, [(1, 0, 100), (10, 0, 500)])
     result = integrate_power(csv_path, start_unix=0, end_unix=10, expected_num_gpus=1)
     assert not result.power_valid
+    assert "benchmark_window_not_bracketed" in result.invalid_reasons
     assert result.p75_power_w is None
     assert result.p75_total_gpu_power_w is None
     assert result.p90_power_w is None

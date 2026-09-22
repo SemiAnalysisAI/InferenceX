@@ -283,9 +283,11 @@ def integrate_power(
     """Validate and integrate per-device GPU power over the formal window.
 
     A valid stream must contain parseable timestamps and power values, expose
-    stable GPU identities, match the expected topology when supplied, bracket
-    both window boundaries for every device, and have no in-window sampling gap
-    larger than ``max_sample_gap_s``.
+    stable GPU identities, match the expected topology when supplied, and
+    bracket both window boundaries for every device. In-window sampling gaps are
+    reported per GPU (``per_gpu_max_sample_gap_s``) and never invalidate the
+    stream; ``max_sample_gap_s`` only bounds how far outside the window a row
+    may sit before it is treated as teardown noise.
     """
     reasons: list[str] = []
     if not math.isfinite(start_unix) or not math.isfinite(end_unix) or end_unix <= start_unix:
@@ -443,11 +445,9 @@ def integrate_power(
             right_index = bisect.bisect_left(times, end_unix)
             relevant = samples[left_index : right_index + 1]
             gaps = [right[0] - left[0] for left, right in itertools.pairwise(relevant)]
-            max_gap = max(gaps, default=0.0)
-            per_gpu_max_sample_gap_s[gpu_id] = max_gap
-            if max_gap > max_sample_gap_s:
-                issues.append("sampling_gap_exceeded")
-                _append_reason(reasons, "sampling_gap_exceeded")
+            # Reported, not judged: the gap is interpolated coverage, and the
+            # multinode producer/consumer contract made the same call.
+            per_gpu_max_sample_gap_s[gpu_id] = max(gaps, default=0.0)
             per_gpu_energy_j[gpu_id] = _integrate_device(
                 samples,
                 start_unix=start_unix,
