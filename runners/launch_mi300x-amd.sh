@@ -8,7 +8,7 @@ export HF_HUB_CACHE_MOUNT="/raid/inferencex/models/hub"
 export AIPERF_MMAP_CACHE_MOUNT="/raid/inferencex/aiperf-mmap-cache"
 export AIPERF_DATASET_MMAP_CACHE_DIR="/aiperf_mmap_cache"
 
-PARTITION="compute"
+PARTITION="compute-0"
 SQUASH_FILE="/raid/inferencex/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 

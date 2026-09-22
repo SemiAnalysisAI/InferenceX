@@ -8044,6 +8044,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2863
 
 - config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the ATOM image from rocm/atom-dev:nightly_202608280858 to rocm/atom-dev:nightly_202609161445, the first ROCm/ATOM line carrying native RCCL DEP and the DSpark K6 kernels."
+    - "Switch both throughput bands from EAGLE MTP (spec-decoding: mtp) to DSpark (spec-decoding: draft_model) on the DeepSeek-V4-Pro-0813 checkpoint, pinned to revision 72e1d3230f6c080a530b0a1d46f8eb4602340597 and verified before GPU startup by check_dsv4_dspark_checkpoint.py (66 shards plus the DSpark Markov/confidence heads)."
+    - "Raise NUM_SPEC_TOKENS from 3 to 6 (DSpark K6: six draft tokens plus one target token, a q7 verify window) and the forced acceptance length SPEC_DECODE_AL from 2.49 to 3.77, the committed golden value from golden_al_distribution/dsv4-pro-0813-dspark.yaml (thinking_on, K6). Both throughput bands pin this AL; EVAL_ONLY runs verify real DSpark drafts."
+    - "Move the concurrency 48/64/96/128/256 band from DPA with TBO and the default MoE transport to native RCCL DEP (TP8/DPA8/EP8: --enable-dp-attention --all2all-backend rccl --dp-load-balance least_tokens --moe-backend standard, TBO disabled), while the concurrency 1/2/4/8/16 band stays TP-only (TP8/EP1). Session affinity is preserved via the AIPerf correlation-id session id so each conversation pins to one DP rank, and STATE_CHECKPOINT_INTERVAL_TOKENS stays 8192."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2912
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
   scenario-type:
     - agentic-coding
@@ -8531,6 +8542,30 @@
     - "为 GB300 vLLM DeepSeek-V4.1-Flash AgentX 配方在现有 TP4 臂旁新增 TP2 臂，Engram 表继续通过 --engram-config cpu_offload 放在固定页主机 DRAM；每张 277 GiB GPU 的权重升至约 175 GiB"
     - "在 dsv41flash_fp4_vllm_mtp.sh 中将 B200 TP2 的上限推广到所有 TP2 臂：--max-num-batched-tokens 4096（上游 16384 时 indexer 的 [batched-tokens, 1M] fp8 缓冲区达 32 GiB）、--max-num-seqs 为并发的两倍（16-256）、CUDA graph 捕获上限 512，为每张 GPU 留出约 36 GiB KV；TP4 与 TP8 臂沿用上游默认值"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3321
+
+- config-keys:
+  - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - 'Add B300 Qwen3.5 FP8 AgentX 1P1D recipes: TP4 at C4/C12/C24, TP2+EP2 at C32/C40/C44/C48/C56, and prefill TP4+EP4
+    at C32.'
+  - Use prefill HiCache, ReplaySSM at C56, and tuned decode capacity.
+  - Use SGLang nightly 20260918-20518d85 and Dynamo/SRT Slurm with the official FP8 checkpoint’s embedded NEXTN head.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161 to lmsysorg/sglang:nightly-dev-cu13-20260916-c9a8fba9 (2026-09-16 upstream cu13 nightly, sgl-project/sglang@c9a8fba9, index digest sha256:509c2742b9441fe9182ae3dd7dac8840ba48e03d2d44b7b24e80d428f117fd85, amd64 digest sha256:19a1b266fac457d4ef92cba90b464119e42bdbee680c081df0a73f31461c03ca; Docker Hub last pushed 2026-09-16T01:06:04Z). This is the first cu13 nightly carrying sgl-project/sglang#39516, the CUDA fallback for the HiCache registered host-pool ImportError that sgl-project/sglang#35233 introduced against the pinned sglang-kernel 0.4.7 wheel and that broke every kv-offloading dram point on the 2026-09-15 build. The image moves sglang-kernel 0.4.6.post1 to 0.4.7 and sgl-deep-gemm 0.1.7 to 0.2.0; CUDA 13.0.3, NCCL 2.30.7 and FlashInfer 0.6.18 are unchanged, and server_args.py is identical across the 100 upstream commits. benchmarks/single_node/agentic/qwen3.5_fp8_h200_mtp.sh is unchanged: SGLANG_ENABLE_SPEC_V2 EAGLE MTP at 3 steps with golden AL 3.39, flashinfer attention with allreduce fusion, fp8 quantization with fp8_e4m3 KV, HiCache kernel IO / page_first layout / write_through_selective; the TP8/EP1 DRAM HiCache c2-c24 grid is unchanged."
+    - "将 SGLang 镜像从 lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161 更新为 lmsysorg/sglang:nightly-dev-cu13-20260916-c9a8fba9（2026-09-16 上游 cu13 nightly，sgl-project/sglang@c9a8fba9，索引摘要 sha256:509c2742b9441fe9182ae3dd7dac8840ba48e03d2d44b7b24e80d428f117fd85）。这是首个包含 sgl-project/sglang#39516 的 cu13 nightly，该修复为 sgl-project/sglang#35233 在固定 sglang-kernel 0.4.7 wheel 上引入的 HiCache 已注册主机池 ImportError 提供 CUDA 回退，该问题曾导致 2026-09-15 构建的所有 kv-offloading dram 点无法启动。镜像将 sglang-kernel 由 0.4.6.post1 升至 0.4.7、sgl-deep-gemm 由 0.1.7 升至 0.2.0；CUDA 13.0.3、NCCL 2.30.7 与 FlashInfer 0.6.18 不变，100 个上游提交中 server_args.py 亦未改动。配方脚本、MTP 设置、HiCache 分支及 TP8/EP1 DRAM HiCache c2-c24 网格保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3200
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  description:
+    - "Update the vLLM ROCm image from nightly-d9105ea8 to v0.29.0; benchmark configuration unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3063
 
 - config-keys:
     - dsv41flash-fp4-mi300x-vllm-agentic-dspark
