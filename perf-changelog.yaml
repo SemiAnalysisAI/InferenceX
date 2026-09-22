@@ -8773,8 +8773,9 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add GB200 Dynamo+SGLang AgentX HiCache recipes for 1P1D DEP8/DEP16 at concurrency 64, 128, and 400, plus 2P1D DEP8/DEP16 at concurrency 800."
-    - "Limit decode max-running-requests to 128, 256, 800, and 1600, respectively."
+    - "Add GB200 Dynamo+SGLang AgentX HiCache recipes for 1P1D DEP8/DEP16 at concurrency 64 and 128, 1P1D DEP16/DEP32 at concurrency 256, and 2P1D DEP16/DEP32 at concurrencies 768, 1024, and 1280."
+    - "Use the lower-concurrency DEP8/DEP16 points and the wider DEP16/DEP32 configurations to avoid the long P90 TTFT observed at the superseded DEP8/DEP16 concurrency 400 and 800 points."
+    - "Set the DEP16/DEP32 decode max-running-requests caps to 512 for 1P1D and 1024 for 2P1D, with cuda-graph-max-bs-decode set to 64."
     - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with the Dynamo 1.5.0.dev20260910 wheel and the checkpoint's bundled DSpark head at block size 6 (golden AL 3.77, thinking_on)."
     - "Use the compute-visible Watchtower workspace and node-local DeepSeek-V4-Pro checkpoint staging."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3182
