@@ -8604,3 +8604,11 @@
   description:
   - 'Update the AMD srt-slurm runtime to c3a5cecd5d4513aa69444323cd6bce668dcbdc88: native connector resolution, allocator-owned MoRI-IO listener ports, and discovery-aware vLLM Router readiness. Preserve workload options and engine images.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
+
+- config-keys:
+  - '*-mi355x-*-disagg*'
+  - qwen3-0.6b-fp16-mi355x-sglang-srt-agg
+  - qwen3-0.6b-fp16-mi355x-sglang-srt-disagg
+  description:
+  - 'Pin AMD runtime 7a7ca652fad37026bbf476b3f4368cd34c73c1c6 and share the native srt-slurm invocation between MI355X and MI300X. Add an explicit MI300X Qwen3-0.6B aggregate smoke matrix without changing production serving settings.'
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
