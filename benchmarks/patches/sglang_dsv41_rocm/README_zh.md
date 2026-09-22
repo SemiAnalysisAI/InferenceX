@@ -3,15 +3,17 @@
 [English](README.md) | **中文**
 
 此独立 Python 包将官方预览镜像中支持压缩比 1/2 的 ROCm 注意力实现移植到固定的
-9 月 21 日 nightly 镜像。原版 nightly 在图捕获阶段报错
+9 月 22 日 ROCm 10 nightly 镜像。9 月 21 日原版 nightly 在图捕获阶段报错
 `No indexer pool for compression ratio 4`。仅 HIP `deepseek_v41` 注册路径使用
 此包；其他模型和硬件路径仍使用 nightly 原有实现。
 
 `provenance.json` 记录两个不可变镜像摘要、原始文件哈希和适配后文件哈希。
 预览镜像的构建历史标记源代码覆盖层为 `f8f290f2`，但该提交无法公开解析，因此以
-镜像摘要为准。两个镜像均使用 ROCm 7.2.4、AITER
-`4ad99832823dde2315b361cbd3b54b1c5c12acd5` 和 Triton
-`3.7.0+amd.rocm7.2.0.git89002410`。没有使用预览镜像的二进制替换 nightly 二进制。
+镜像摘要为准。预览版使用 ROCm 7.2.4 和 Triton `3.7.0+amd.rocm7.2.0.git89002410`；
+新 nightly 使用 ROCm 10 和 Triton `3.8.0+git4cff872c.rocm10.0.0`。两个镜像均使用
+AITER `4ad99832823dde2315b361cbd3b54b1c5c12acd5`，不使用预览二进制替换 nightly 二进制。
+9 月 21 日与 22 日 SGLang 的六个安装器目标文件逐字一致。下文 GPU 结果来自 9 月 21 日；
+新镜像仍须单独完成运行、完整精度与性能验证。
 
 适配包括隔离导入、对接 nightly 已迁移的候选索引和图捕获 API，并通过 `get_exec()`
 读取内核配置。nightly 在 HIP 上禁用融合低压缩比内核，因此保留其非融合压缩器的

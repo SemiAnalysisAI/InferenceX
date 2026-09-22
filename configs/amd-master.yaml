@@ -1484,7 +1484,7 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
 # Official 2026-09-21 ROCm nightly, mirrored byte-for-byte from rocm/sgl-dev.
 # SGLang 0.5.20.dev20260921+g0f6761b54f; ROCm 7.2.4, gfx950.
 dsv41flash-fp4-mi355x-sglang-agentic-dspark:
-  image: lmsysorg/sglang-rocm:v0.5.20-rocm724-mi35x-20260921@sha256:33c1c6fb49cade4880edd8939ec8646274b555543f3f659c67cbb9315ec0eaca
+  image: lmsysorg/sglang-rocm:v0.5.20-rocm10-mi35x-20260922@sha256:f35d19d2e826f72c8fdfa3e1b3b29e7ecbaed691c688ff644370f5640990ae23
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds

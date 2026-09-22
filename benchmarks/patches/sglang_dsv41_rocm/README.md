@@ -3,17 +3,20 @@
 **English** | [中文](README_zh.md)
 
 This isolated Python package brings the official preview's compression-ratio 1/2
-ROCm attention implementation onto the pinned September 21 nightly image. The
-stock nightly fails graph capture with `No indexer pool for compression ratio 4`.
+ROCm attention implementation onto the pinned September 22 ROCm 10 nightly image. The
+September 21 stock nightly failed graph capture with `No indexer pool for compression ratio 4`.
 Only the HIP `deepseek_v41` registry path selects this package. Other model and
 hardware paths retain the original nightly implementation.
 
 `provenance.json` records both immutable image digests, the original file hashes,
 and the adapted file hashes. The preview image history identifies overlay
 `f8f290f2`, which is not publicly resolvable; the image digest is authoritative.
-The preview and nightly use ROCm 7.2.4, AITER
-`4ad99832823dde2315b361cbd3b54b1c5c12acd5`, and Triton
-`3.7.0+amd.rocm7.2.0.git89002410`. No preview binaries replace nightly binaries.
+The preview uses ROCm 7.2.4 and Triton `3.7.0+amd.rocm7.2.0.git89002410`;
+the new nightly uses ROCm 10 and Triton `3.8.0+git4cff872c.rocm10.0.0`. Both use
+AITER `4ad99832823dde2315b361cbd3b54b1c5c12acd5`. No preview binaries replace nightly binaries.
+All six installer-target files are byte-identical between the September 21 and 22
+SGLang revisions. The GPU results described below used September 21; the newer
+image still requires its own runtime, full accuracy and performance qualification.
 
 Adaptations isolate imports, follow the nightly's moved candidate-indexer and
 capture APIs, and read kernel configuration through `get_exec()`. The current
