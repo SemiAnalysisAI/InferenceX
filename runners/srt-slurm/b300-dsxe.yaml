@@ -31,3 +31,6 @@ containers:
   "${IMAGE}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
 use_exclusive_sbatch_directive: true
+default_sbatch_directives:
+  # gpu-16 retains a foreign 1.63 TB tmpfs allocation; rechecked 2026-09-21.
+  exclude: dsxe-sa-b300-prd0-gpu-16
