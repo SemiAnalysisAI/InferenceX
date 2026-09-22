@@ -61,14 +61,14 @@ fi
 # nightly default that keeps W2 BF16 instead of converting it to FP32.
 export SGLANG_DSPARK_OPT_MARKOV_W2_BF16=True
 
-# AgentX concurrency counts live session trees, not individual requests.
-# Allow subagent fan-out to exceed CONC without clipping request bursts, but
-# never let the pool exceed the decode graph batch: a DSpark verify step for a
-# batch above the captured 64 runs eagerly and allocates its attention
-# workspace on the fly, which OOMed the H200 eval at 128 running requests
-# (6.4 GiB allocation with 2 GiB free, run 35306704553). Batches within the
-# graph tier reuse the capture-time workspace instead.
+# AgentX concurrency counts live session trees, including subagent fan-out.
+# GB300 TP2 retained ~45 GiB after capture at the 0.80 memory fraction;
+# test a larger high-concurrency graph tier instead of inheriting Hopper's
+# 64-request workspace limit. Lower concurrency and TP4 keep the baseline.
 CUDA_GRAPH_MAX_BS=64
+if (( TP == 2 && CONC >= 64 )); then
+    CUDA_GRAPH_MAX_BS=128
+fi
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 if (( MAX_RUNNING_REQUESTS > CUDA_GRAPH_MAX_BS )); then
     MAX_RUNNING_REQUESTS=$CUDA_GRAPH_MAX_BS

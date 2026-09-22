@@ -608,3 +608,9 @@ existing static KV pool without changing checkpoint precision. Matched C8 screen
 and full canonical performance/accuracy are required before adoption.
 The candidate pins official `nightly-dev-cu13-20260922-582389ce`; repeat startup
 and full accuracy qualification because upstream changed parallel execution contexts.
+
+The isolated GB300 TP2 C64+ candidate tests decode graph and running-request
+caps of 128 at memory fraction 0.80 and 4096-token prefill chunks. The prior cap
+of 64 came from a Hopper workspace constraint; GB300 retained about 45 GiB
+after capture. Full accuracy and a matched performance comparison must qualify
+this capacity change.
