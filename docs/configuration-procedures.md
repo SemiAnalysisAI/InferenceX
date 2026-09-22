@@ -183,6 +183,33 @@ Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchm
 
 Do not ship one side alone. `srtctl` reads the recipe, while matrix generation reads the master config. Recipe-only changes can mislabel results. Master-only changes do not alter the deployed recipe.
 
+### GB200 AgentX measured power
+
+GB200 SRT AgentX uses the selected recipe, after native selector expansion and
+caller overrides, to enable PowerX. Use the existing `telemetry.enabled: true`,
+`telemetry.required: true`, `storage_subdir: power`, and `dcgm_exporter` block
+(`container_image: dcgm-exporter`); no model-specific power branch is needed.
+The benchmark must use `bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh`
+with `INFMAX_CONTAINER_WORKSPACE: /infmax-workspace`, `RESULT_DIR: /logs/agentic`,
+and `IS_MULTINODE: "true"`. SRT validates the head-client clock, topology and
+sampling settings. Model paths, serving arguments, quantization and mounts retain
+their existing runtime configuration.
+
+The launcher installs the pinned submodule runtime before inspecting the recipe,
+then provisions the exporter and records the same producer SHA for collection.
+Each AgentX or power-enabled matrix job must select exactly one recipe (including an indexed zip
+selector); a multi-recipe selection fails before submission. Native overrides
+supply matrix `CONC_LIST` to both the benchmark and `benchmark.concurrencies`,
+without rewriting recipe YAML. Enabled AgentX power also requires the shared
+window writer and strict result adapter; it cannot be made successful by disabling
+required telemetry. Eval-only jobs retain normal eval behavior and do not publish
+throughput power results.
+
+The DSV4 GB200 vLLM TP8/DEP8 aggregate recipes demonstrate ordinary recipe-only
+power enrollment. Local routing tests do not qualify live sampling: the selected
+PR sweep still needs complete device/window evidence, failed-collection artifact
+retention, evals, and downstream ingest/API/page verification.
+
 ## Register an llm-d recipe
 
 Sources: [`benchmarks/llm-d/README.md`](../benchmarks/llm-d/README.md), [`benchmarks/multi_node/llm-d/README.md`](../benchmarks/multi_node/llm-d/README.md), [`llm-d-recipes/`](../benchmarks/multi_node/llm-d-recipes/), and the current [`llmd-vllm` benchmark wrapper](../benchmarks/multi_node/dsv4_fp4_gb200_llmd-vllm-disagg.sh).

@@ -96,7 +96,20 @@ roles:
 sbatch_directives: {cpus-per-task: "144", mem: "0"}
 srun_options: {container-remap-root: ""}
 
+telemetry:
+  enabled: true
+  collect_interval_ms: 1000
+  storage_subdir: power
+  required: true
+  startup_timeout_seconds: 120
+  request_timeout_seconds: 2
+  collector_join_timeout_seconds: 12
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    port: 9401
+
 benchmark:
+  concurrencies: [1]
   type: custom
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
