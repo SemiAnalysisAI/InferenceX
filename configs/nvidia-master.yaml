@@ -8088,6 +8088,21 @@ dsv41flash-fp4-h100-sglang-agentic-dspark:
       search-space:
       - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 20] }
 
+# Isolated DP8 C16 qualification; keep the TP8 arm for a matched baseline.
+dsv41flash-fp4-h100-sglang-agentic-dspark-dpa:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:h100-dgxc
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [16] }
+
 dsv41flash-fp4-gb200-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3
   model: deepseek-ai/DeepSeek-V4.1-Flash

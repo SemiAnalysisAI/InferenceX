@@ -8590,6 +8590,7 @@
 
 - config-keys:
     - dsv41flash-fp4-h100-sglang-agentic-dspark
+    - dsv41flash-fp4-h100-sglang-agentic-dspark-dpa
   scenario-type:
     - agentic-coding
   description:
@@ -8601,4 +8602,5 @@
     - "Use expandable CUDA allocator segments to reduce fragmentation from long-context indexer masks without changing checkpoint precision or the static KV budget."
     - "Select the supported native MXFP4 Marlin MoE backend on Hopper, retaining BF16 activations and the nightly's shipped draft precision."
     - "Reserve at least 128 SWA prefix tails at C1/C2 and 32 per concurrency at C4 and above, reaching 640 at C20 within the existing static cache budget; preserve roughly 5.3M full tokens at C20 and the existing transient-memory reserve."
+    - "Qualify an isolated C16 DP8 attention and DP LM-head arm with consistent-hash session routing, 64 SWA tails per rank, and the same static budget, chunk size, native precision and measured H100 kernels; retain TP8 as the matched baseline."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3345
