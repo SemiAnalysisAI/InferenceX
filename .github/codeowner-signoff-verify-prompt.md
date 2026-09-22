@@ -582,9 +582,10 @@ Check 4 or Check 14 also warns.
 Keep the `N/A — <reason>` row so the reviewer sees it was considered.
 Write the complete verdict to `/tmp/codeowner-signoff-verdict.md` using the Write
 or Bash tool. Do not post, edit, or delete GitHub comments, labels, or commit
-statuses. The workflow publishes this file as a new PR comment for every verification,
-preserving earlier verdict comments and recording only the assessed commit. It does not publish
-commit statuses or carry the verdict forward to later commits.
+statuses. The workflow publishes this file as the verdict associated with this sign-off resource.
+Reverification of the same sign-off updates that verdict; verdicts for other sign-offs stay
+unchanged. It records only the assessed commit and does not publish commit statuses or carry the
+verdict forward to later commits.
 Do not include a hidden marker or assessed-commit footer; the publisher adds them.
 Always write your full current assessment, even if it matches a previous verdict.
 
