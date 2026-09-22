@@ -8597,7 +8597,7 @@
     - "Rely on the pinned SGLang image's defaults for JIT norm, Top-K v2, SWA leaf splitting, unified-cache out-of-window reclamation, and custom all-reduce v2 instead of overriding them in the recipes."
     - "新增 B200 Dynamo+SGLang AgentX TP8 聚合式 HiCache 配方，并发为 1、4、8；使用 lmsysorg/sglang:nightly-dev-20260916-c9a8fba9、检查点内置 DSpark K=6、整节点 CPU/DRAM 分配，以及按数据点设置的请求数/CUDA graph 上限。"
     - "依赖固定 SGLang 镜像对 JIT norm、Top-K v2、SWA leaf splitting、unified-cache 窗口外槽位回收和 custom all-reduce v2 的默认行为，不在配方中覆盖这些设置。"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3356
 
 - config-keys:
     - dsv4-fp4-b200-dynamo-sglang-agentic-disagg
@@ -8608,4 +8608,4 @@
     - "Use automatic golden acceptance-length selection and rely on the pinned SGLang image's defaults for SWA leaf splitting, unified-cache out-of-window reclamation, and custom all-reduce v2."
     - "新增 B200 Dynamo+SGLang AgentX DEP8/DEP8 HiCache 配方：1P1D 并发 64、128，以及 2P1D 并发 256；decode max-running-requests 分别限制为 128、256、512；1P1D 的 decode swa-full-tokens-ratio 为 0.01，2P1D c256 为 0.005 且 memory fraction 为 0.91。"
     - "使用自动黄金接受长度选择，并依赖固定 SGLang 镜像对 SWA leaf splitting、unified-cache 窗口外槽位回收和 custom all-reduce v2 的默认行为。"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3356
