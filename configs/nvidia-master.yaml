@@ -8273,7 +8273,7 @@ minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg-mooncake:
       - spec-decoding: mtp
         kv-offloading: dram
         conc-list:
-        - 100
+        - 75
         kv-offload-backend:
           name: mooncake
           version: 0.3.14.dev20260910
@@ -8283,7 +8283,7 @@ minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg-mooncake:
           ep: 4
           dp-attn: true
           additional-settings:
-          - CONFIG_FILE=recipes/minimaxm3/vllm/gb300-fp4/agentx/disagg-1p5d-dep4-tp2-c100-mtp.yaml
+          - CONFIG_FILE=recipes/minimaxm3/vllm/gb300-fp4/agentx/disagg-1p5d-dep4-tp2-c75-mtp.yaml
         decode:
           num-worker: 5
           tp: 2

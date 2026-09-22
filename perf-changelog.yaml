@@ -8098,3 +8098,12 @@
     - "Isolate the checksum-pinned Mooncake wheel install from unrelated image package overrides"
     - "将固定校验和的 Mooncake wheel 安装与镜像中无关的软件包版本覆盖项隔离"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3232
+
+- config-keys:
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg-mooncake
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Rename the TP2 max-num-seqs-4 disaggregated recipe and update its selected concurrency and references together"
+    - "重命名 TP2 max-num-seqs-4 分离式部署配方，并同步更新其选定并发度与引用"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3232
