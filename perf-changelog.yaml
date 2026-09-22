@@ -8625,3 +8625,9 @@
   - 'Restack this port directly on #2542 and migrate its recipes to srt-slurm v2, preserving the existing port workload
     settings. Keep this upstream-deprecated workload in the archived master config, outside active sweeps.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2824
+
+- config-keys:
+  - minimaxm3-fp4-mi355x-vllm-disagg
+  description:
+  - 'Remove the historical per-role srt-slurm commit override so vLLM/MoRI validation uses the shared AMD stack pin, including allocator-owned transfer ports and native Router discovery readiness. Engine images and serving options are unchanged.'
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2824
