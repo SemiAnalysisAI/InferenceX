@@ -1437,14 +1437,14 @@ glm5.2-fp8-mi355x-sglang-agentic-mtp:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 10], spec-decoding: mtp }
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8, 12, 16], spec-decoding: mtp }
 # GLM-5.2 FP4 agentic-coding benchmark on MI355X via ATOM with MTP speculative
-# decoding, matching the standalone recipe (ROCm/ATOM PR 2247). TP4 + LMCache
-# DRAM offload for every point; small concurrency (C2-C10) is TP4-only, large
-# concurrency (C16-C48) adds DCP4 to shard the decode KV. The script resolves
-# the draft depth and forced golden AL per concurrency point (K5/3.61 for
-# C2-C8, K4/3.33 for C10-C40, K3/2.99 for C48). The TP8 arm stays GPU-resident
-# with no KV offload.
+# decoding, matching the standalone recipe (ROCm/ATOM PR 2345). Small
+# concurrency (C2-C10) is TP4-only on the GPU prefix cache with no KV offload;
+# large concurrency (C16-C48) adds DCP4 to shard the decode KV and keeps the
+# LMCache DRAM offload. The script resolves the draft depth and forced golden AL
+# per concurrency point (K5/3.61 for C2-C8, K4/3.33 for C10-C40, K3/2.99 for
+# C48). The TP8 arm stays GPU-resident with no KV offload.
 glm5.2-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202609151450
+  image: rocm/atom-dev:nightly_202609211553
   model: amd/GLM-5.2-MXFP4
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
@@ -1455,9 +1455,10 @@ glm5.2-fp4-mi355x-atom-agentic-mtp:
     agentic-coding:
     # dram-utilization 0.171 -> TOTAL_CPU_DRAM_GB=256 per TP4 rank (recipe's
     # LMCACHE_MAX_LOCAL_CPU_SIZE=256): min(3095781,2861022)MiB*0.171*4/8 = 256.
+    # Only the DCP4 arm offloads; the other two are GPU-resident.
     - dram-utilization: 0.171
       search-space:
-       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [2, 4, 8, 10], spec-decoding: mtp }
+       - { tp: 4, kv-offloading: none, conc-list: [2, 4, 8, 10], spec-decoding: mtp }
        - { tp: 4, dcp-size: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [16, 24, 32, 40, 48], spec-decoding: mtp }
        - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp }
 
@@ -1481,8 +1482,14 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
 # tag predates vllm-project/vllm#56503, which moves the mHC delayed pre block off
 # the eager Torch reference and onto AITER. MI355X run 34710937012 passed the
 # full concurrency 1-32 sweep and eval-only concurrency 32.
+# TP=2 joins TP=4, and both extend to concurrency 128. TP=2 became feasible on
+# this SKU once the Engram tables moved to host memory: they cost 47.2 GiB of
+# device memory per rank, which is what previously forced four GPUs per server.
+# Two GPUs per server doubles the servers per node and is the layout that
+# decides whether DSv4.1-Flash is throughput- or interactivity-bound here.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
+  # ROCm 10.0 nightly channel, shared with kimik3-fp4-mi355x-vllm-agentic-mtp.
+  image: vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
@@ -1493,5 +1500,10 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      # Follow upstream AMD Engram defaults; omit the CUDA-only config flag.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      # The recipe only changes the memory split where a point ran short of KV:
+      # TP=4 offloads the engram tables at c128, and the prefill chunk shrinks at
+      # TP=2 c64, TP=4 c128 and TP=2 c128. Every point is measured here rather
+      # than combined from the earlier run: the image move leaves concurrency
+      # 1-32 measured only on the superseded nightly-eed1f3d0 pin.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
