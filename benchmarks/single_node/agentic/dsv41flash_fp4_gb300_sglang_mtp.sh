@@ -126,11 +126,12 @@ case "$SPEC_DECODING" in
         ;;
 esac
 
-# C64 on the 0.80 pool retained 45.46 GiB after graph capture. Test a
-# modest full-KV capacity increase for the high-concurrency working set.
+# Test larger prefill batches at high TP2 concurrency while preserving
+# the validated static cache budget and native 1M context.
 MEM_FRACTION_STATIC=0.80
-if (( CONC >= 32 )); then
-    MEM_FRACTION_STATIC=0.85
+CHUNKED_PREFILL_SIZE=4096
+if (( TP == 2 && CONC >= 32 )); then
+    CHUNKED_PREFILL_SIZE=8192
 fi
 
 SGLANG_CMD=(
@@ -143,7 +144,7 @@ SGLANG_CMD=(
     # on Blackwell); the cookbook warns that overriding them costs decode speed.
     # Bound prefill workspace while retaining the native 1M context.
     --mem-fraction-static "$MEM_FRACTION_STATIC"
-    --chunked-prefill-size 4096
+    --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     "${SPECULATIVE_ARGS[@]}"
     "${SCHEDULING_ARGS[@]}"
     "${CACHE_ARGS[@]}"
