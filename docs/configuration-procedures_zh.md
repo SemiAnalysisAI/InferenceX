@@ -148,8 +148,6 @@ B200 Nscale 的 GLM-5.1 可用 `MODEL_PATH` 指定已有共享权重，覆盖默
 
 ## 注册 srt-slurm 配方
 
-并行构建的单节点迁移及其启用清单见[单节点 SRT-Slurm 迁移](./single-node-srt-migration_zh.md)。首个候选配方尚未接入生产主配置或启动器。
-
 映射来源：[`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md)。检入的配方：[`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/)。
 
 1. 定位精确的上游 [NVIDIA/srt-slurm](https://github.com/NVIDIA/srt-slurm) 配方，并记录固定到 commit 的来源路径。

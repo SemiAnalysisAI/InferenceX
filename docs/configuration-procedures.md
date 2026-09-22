@@ -171,10 +171,6 @@ Only fixed 8192/1024 `glm5.1-fp8-b200-tilert` requires native power. TileRT runs
 
 ## Register an srt-slurm recipe
 
-For the parallel single-node migration and its activation checklist, see
-[Single-node SRT-Slurm migration](./single-node-srt-migration.md). Its initial
-recipe is not selected by the production master config or launcher yet.
-
 Mapping source: [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md). Checked-in recipes: [`benchmarks/multi_node/srt-slurm-recipes/`](../benchmarks/multi_node/srt-slurm-recipes/).
 
 1. Locate the exact upstream [NVIDIA/srt-slurm](https://github.com/NVIDIA/srt-slurm) recipe and record its commit-pinned source path.
