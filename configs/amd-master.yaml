@@ -1360,50 +1360,11 @@ dsv4-fp4-mi355x-atom-disagg-agentic-hicache-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - spec-decoding: "mtp"
-        conc-list: [ 1,16 ]
-        kv-offloading: none
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-      # DP-attention tier (recipe: concurrency 64-128). TP8 + DP attention,
-      # prefill TBO only, cache-aware router, no CPU offload.
-      - spec-decoding: "mtp"
-        conc-list: [ 64, 128 ]
-        kv-offloading: none
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-      # DP-attention + CPU offload tier (recipe: concurrency 256). Prefill adds
-      # the lmcache host KV offload tier; decode is plain Mooncake.
+      # DP-attention tier at concurrency 256 with no CPU offload: the lmcache
+      # arm's control, to separate DP-attention scaling from the host KV tier.
       - spec-decoding: "mtp"
         conc-list: [ 256 ]
-        kv-offloading: dram
-        kv-offload-backend: { name: lmcache }
+        kv-offloading: none
         prefill:
           num-worker: 1
           tp: 8
