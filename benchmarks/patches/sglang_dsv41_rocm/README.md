@@ -16,7 +16,8 @@ the new nightly uses ROCm 10 and Triton `3.8.0+git4cff872c.rocm10.0.0`. Both use
 AITER `4ad99832823dde2315b361cbd3b54b1c5c12acd5`. No preview binaries replace nightly binaries.
 All six installer-target files are byte-identical between the September 21 and 22
 SGLang revisions. Bounded GPU regressions now also pass on September 22 as
-recorded below; full accuracy and performance qualification remain pending.
+recorded below; complete C4 GSM8K now passes, while cache-enabled accuracy and
+performance qualification remain pending.
 
 Adaptations isolate imports, follow the nightly's moved candidate-indexer and
 capture APIs, and read kernel configuration through `get_exec()`. The current
@@ -104,3 +105,15 @@ real prompts: 52/719/2,159 input tokens and 19/23/25 generated tokens, all answe
 allocator. This does not establish full GSM8K accuracy or long-context memory and
 performance; prior-image long-prefill fragmentation motivated the old setting, so
 that workload still needs explicit qualification.
+
+## Full GSM8K on September 22
+
+The direct Slurm run at commit `6eb873439aa9d1d27f28bf05a1fcc090988e7293`
+completed all 1,319 examples with no evaluation limit: 97.3465% strict accuracy
+and 97.2707% flexible accuracy, both passing the canonical 90% threshold.
+Settings were TP4/EP4, concurrency 4, DSpark block 5, shipped precision, native
+allocator and radix caching disabled. `evidence-rocm10.json` records raw-result
+hash and completeness. The evaluator exited successfully; a missing wrapper
+metadata variable was repaired during artifact staging without rerunning inference.
+This direct result does not establish GitHub workflow success, cache-enabled
+accuracy, AgentX performance or completion of the required full sweep.

@@ -554,5 +554,56 @@
         }
       }
     ]
+  },
+  "full_gsm8k_cache_disabled": {
+    "sha": "6eb873439aa9d1d27f28bf05a1fcc090988e7293",
+    "slurm_job": 45371,
+    "node": "mia1-p01-g16",
+    "source": "direct Slurm; not GitHub qualification",
+    "results": {
+      "gsm8k": {
+        "alias": "gsm8k",
+        "exact_match,strict-match": 0.9734647460197119,
+        "exact_match_stderr,strict-match": 0.00442704598726517,
+        "exact_match,flexible-extract": 0.9727065959059894,
+        "exact_match_stderr,flexible-extract": 0.004488095380209722
+      }
+    },
+    "n-samples": {
+      "gsm8k": {
+        "original": 1319,
+        "effective": 1319
+      }
+    },
+    "limit": null,
+    "num_concurrent": 4,
+    "raw_results_file": "results_2026-09-22T06-08-10.685959.json",
+    "raw_results_sha256": "1f19a48ed82178e24c23eb6ef8d31322ca371f8e06c1a040f6832c839e12dc2c",
+    "postprocessing": "lm-eval exit0; wrapper omitted IS_MULTINODE and exited1 after successful evaluation; exact committed append_lm_eval_summary restaged artifacts with truthful metadata; validate_scores PASS"
+  },
+  "cache_enabled_probe": {
+    "scope": "synthetic known-answer diagnostic; not AgentX performance or full cache-enabled accuracy",
+    "base_commit": "6eb873439aa9d1d27f28bf05a1fcc090988e7293",
+    "only_setting_changed": "remove --disable-radix-cache",
+    "settings": "TP4/EP4, mem0.60, max-running8, native allocator, stock DSpark5 precision",
+    "prompt_tokens": [
+      3783,
+      14954,
+      59638
+    ],
+    "repeat_cached_tokens": [
+      3584,
+      14848,
+      59392
+    ],
+    "correct_final_answers": 6,
+    "requests": 6,
+    "full_pool_tokens": 24786688,
+    "swa_pool_tokens": 26112,
+    "longest_prompt_seconds": [
+      7.906351055949926,
+      0.8864227790618315
+    ],
+    "client_note": "Original assertion rejected correct reasoning+42 output; final check parses content after </think>. Engine unchanged."
   }
 }
