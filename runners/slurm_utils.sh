@@ -70,6 +70,7 @@ PYENV
             return 1
         fi
         SRT_SLURM_COMMIT=$(git -C "$source" rev-parse HEAD) || return 1
+        SRTCTL_EVAL_ARGS+=(--set benchmark.stream_output=true)
         # A local clone keeps job writes isolated and preserves upstream Git provenance.
         git clone --no-hardlinks "$source" "$destination" || return 1
     fi
