@@ -8,9 +8,11 @@ base:
     model:
       repo: nvidia/GLM-5.2-NVFP4
       revision: aec724e
+    container:
+      image: lmsysorg/sglang:nightly-dev-20260910-00840301
     frameworks:
-      dynamo: 1.2.1
-      sglang: nightly-dev-cu13-20260824-95f5ecd3
+      dynamo: 1.5.0.dev20260909
+      sglang: 0.0.0.dev1+g008403017
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -27,8 +29,7 @@ base:
       active-prefill-tokens-threshold: None
       active-prefill-tokens-threshold-frac: None
   dynamo:
-    hash: 71eb001e17fa73c742f0afe1a6ed96836cb135fd
-    install: true
+    install: false
   backend:
     type: sglang
     prefill_environment:

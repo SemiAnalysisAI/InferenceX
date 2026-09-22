@@ -8379,3 +8379,12 @@
   description:
     - "Update SGLang image from lmsysorg/sglang:nightly-dev-cu13-20260824-95f5ecd3 to lmsysorg/sglang:nightly-dev-20260910-00840301."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2654
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the nightly-dev-20260910-00840301 image's bundled Dynamo (1.5.0.dev20260909) and SGLang (0.0.0.dev1+g008403017) instead of a separately installed Dynamo."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2654

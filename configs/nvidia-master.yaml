@@ -7230,7 +7230,7 @@ glm5.2-fp4-b300-dynamo-sglang-agentic-agg:
   runner: cluster:b300-dsxe
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "71eb001e17fa73c742f0afe1a6ed96836cb135fd" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260909" }
   multinode: true
   disagg: false
   scenarios:
@@ -7271,7 +7271,7 @@ glm5.2-fp4-b300-dynamo-sglang-agentic-disagg:
   runner: cluster:b300-dsxe
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "71eb001e17fa73c742f0afe1a6ed96836cb135fd" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260909" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
