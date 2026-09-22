@@ -414,7 +414,7 @@ offload），prefill 分块上限设为 4096，即 vLLM H100 配方在 80 GB 显
 GB300 SGLang 脚本支持九个选定 AgentX 点：TP4/EP4 的 C1/C2/C4/C8 使用
 GPU 常驻 Engram；TP4/EP4 的 C32/C64/C80 和 TP2/EP2 的 C16/C32 使用每 rank
 主机 Engram。所有点的 KV 均保留在 GPU；`kv-offloading: none` 不表示 Engram
-权重的放置方式。启动器根据 TP 和并发选择放置方式，并在服务器日志中记录生效的
+权重的放置方式。benchmark 脚本根据 TP 和并发选择放置方式，并在服务器日志中记录生效的
 SGLang 环境变量。必须检查每个主机卸载 rank 的实际大页覆盖率；请求每 rank 布局
 不保证获得大页。
 

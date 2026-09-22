@@ -128,20 +128,6 @@ if [[ "$MODEL_PREFIX" == "dsv41flash" && ( "$FRAMEWORK" == "vllm" || "$FRAMEWORK
     export RESULT_DIR=/ix/results
     # Cold model loading and graph capture exceeded the one-hour frontend deadline.
     export VLLM_ENGINE_READY_TIMEOUT_S=7200
-    if [[ "$FRAMEWORK" == "sglang" ]]; then
-        check_env_vars TP CONC
-        # Engram weight placement changes with load; KV stays on GPU throughout.
-        case "$TP:$CONC" in
-            4:1|4:2|4:4|4:8)
-                export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0
-                ;;
-            4:32|4:64|4:80|2:16|2:32)
-                export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
-                export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
-                ;;
-            *) echo "Unsupported SGLang GB300 point: TP=$TP CONC=$CONC" >&2; exit 1 ;;
-        esac
-    fi
     srun --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
         --nodes=1 --ntasks=1 --gpus="${TP:?}" --cpus-per-task=144 --exclusive --mem=0 \
         --time="${SALLOC_TIME_LIMIT}" --job-name="$RUNNER_NAME" \

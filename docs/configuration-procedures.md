@@ -478,7 +478,7 @@ The GB300 SGLang script supports nine selected AgentX points: TP4/EP4 at
 C1/C2/C4/C8 with GPU-resident Engram, TP4/EP4 at C32/C64/C80 with per-rank
 host Engram, and TP2/EP2 at C16/C32 with per-rank host Engram. KV stays on GPU
 in every case; `kv-offloading: none` does not describe Engram weight placement.
-The launcher selects placement from TP and concurrency and records the effective
+The benchmark script selects placement from TP and concurrency and records the effective
 SGLang environment in the server log. Verify actual huge-page backing for each
 host-offload rank; requesting per-rank layout does not guarantee huge pages.
 

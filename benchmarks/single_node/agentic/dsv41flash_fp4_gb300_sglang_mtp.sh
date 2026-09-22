@@ -4,25 +4,27 @@ set -eo pipefail
 # DeepSeek-V4.1-Flash on GB300, using the image's native DSpark.
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP EP_SIZE CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
-check_env_vars EVAL_ONLY SPEC_DECODING IMAGE SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE
+check_env_vars EVAL_ONLY SPEC_DECODING IMAGE
 require_agentic_kv_offload_none
 
 if [[ "$MODEL" != deepseek-ai/DeepSeek-V4.1-Flash || "$TP" != "$EP_SIZE" || "$SPEC_DECODING" != mtp ]]; then
     echo "This recipe requires DeepSeek-V4.1-Flash, EP_SIZE=TP, and SPEC_DECODING=mtp" >&2
     exit 1
 fi
+# Engram weight placement changes with load; KV stays on GPU throughout.
 case "$TP:$CONC" in
-    4:1|4:2|4:4|4:8|4:32|4:64|4:80|2:16|2:32) ;;
+    4:1|4:2|4:4|4:8)
+        export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0
+        ;;
+    4:32|4:64|4:80|2:16|2:32)
+        export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
+        export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
+        ;;
     *) echo "Unsupported GB300 SGLang point: TP=$TP CONC=$CONC" >&2; exit 1 ;;
 esac
 case "$EVAL_ONLY" in
     true|false) ;;
     *) echo "EVAL_ONLY must be true or false" >&2; exit 1 ;;
-esac
-case "$SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE" in
-    0) ;;
-    1) check_env_vars SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT ;;
-    *) echo "SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE must be 0 or 1" >&2; exit 1 ;;
 esac
 export GPU_COUNT="$TP"
 export PYTHONNOUSERSITE=1
