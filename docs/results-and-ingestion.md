@@ -109,6 +109,23 @@ The PR changelog selects representative NVIDIA and AMD coverage, not an exhausti
 
 Processing and diagnostic power-audit uploads run after launcher or validation failure, retaining raw and aggregate JSON. Normal `bmk_*` upload requires successful benchmark and processing steps, so an incomplete batch or failed Slurm job does not publish diagnostic rows. The main-branch ingest trigger can still publish other successful configurations from a partially failed sweep; it does not establish complete fleet coverage. Downstream importers can use the retained outcome to reject explicitly failed benchmarks.
 
+### SRT multinode window retention
+
+The SRT DCGM consumer keeps publication separate from individual measurement retention.
+`power_validation_*.json` (or AgentX `power_validation.json`) records
+`package_integrity_valid` for the producer pin, shared artifact checks, and stored/recomputed
+evidence agreement. `window_validations` retains every expected window's identity and reasons.
+For the selected completed result, `selected_window.power_valid` and
+`selected_window.metrics` expose its independently validated measurement, including workflow
+topology and result binding. These fields do not authorize publication.
+
+A consistently recorded failed, missing, or uncovered sibling can leave the selected window
+readable, while top-level and aggregate `power_valid` remain false, top-level/aggregate energy
+metrics remain absent, and `REQUIRE_POWER=1` still fails. Corrupt samples, malformed artifacts,
+producer mismatch, or stored-evidence disagreement block even this independent measurement.
+Replays never rewrite the input package. Older packages whose stored window audits disagree
+with the current validator remain invalid; diagnostic readback is not a historical repair.
+
 ### Native multinode telemetry
 
 `native_power_collect.sh` and `native_power_lifecycle.sh` provide per-node collection and bounded ready/stop receipts. Launchers opt into the native package under `LOGS/native_power`; this prerequisite enables no new recipe. The adapter validates serving GPU identity, synchronized clocks, collector completion, and complete formal-window coverage. It preserves per-node failures, sample counts, and collector revision in the audit.

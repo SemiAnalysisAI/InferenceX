@@ -23,7 +23,10 @@ of that role's GPUs across the whole serving window, not a phase power.
 Ordinary benchmark runs are best-effort: invalid telemetry records
 ``power_valid=0`` (and no energy metrics) in the aggregate plus a validation
 sidecar, but never fails the benchmark. Power studies set ``REQUIRE_POWER=1``
-to fail after those audit artifacts exist.
+to fail after those audit artifacts exist. If a consistent package contains a
+failed sibling window, a healthy measurement is retained only in the sidecar's
+``selected_window``. This does not change the package publication verdict or
+populate the aggregate's power metrics.
 """
 
 from __future__ import annotations
@@ -886,10 +889,14 @@ class MultinodePowerAudit:
     failures: list[str] = field(default_factory=list)
     stored_publication_valid: bool | None = None
     recomputed_publication_valid: bool | None = None
+    package_integrity_valid: bool = False
+    window_validations: list[dict] = field(default_factory=list)
     producer_git_commit: str | None = None
     expected_producer_git_commit: str | None = None
     exporter_image_sha256: str | None = None
     window: dict | None = None
+    window_power_valid: bool = False
+    window_metrics: dict[str, float] = field(default_factory=dict)
     per_gpu_energy_j: dict[str, float] = field(default_factory=dict)
     per_gpu_role: dict[str, str] = field(default_factory=dict)
     per_gpu_max_sample_gap_s: dict[str, float] = field(default_factory=dict)
@@ -991,11 +998,12 @@ def validate_and_integrate(
     )
     if not expected_windows:
         recompute_failures.append("no expected measurement window")
-    for validation in validations:
-        recompute_failures += [
-            f"{reason} (window {validation['benchmark_type']}/{validation['concurrency']})"
-            for reason in validation["reason_codes"]
-        ]
+    audit.window_validations = validations
+    window_failures = [
+        f"{reason} (window {validation['benchmark_type']}/{validation['concurrency']})"
+        for validation in validations
+        for reason in validation["reason_codes"]
+    ]
     recompute_failures += [
         f"{reason} ({error['path']})"
         for error in artifact_errors
@@ -1011,9 +1019,17 @@ def validate_and_integrate(
         artifact_errors,
     )
 
-    audit.recomputed_publication_valid = not recompute_failures
-    audit.failures.extend(recompute_failures)
-    if recompute_failures:
+    audit.recomputed_publication_valid = not (recompute_failures or window_failures)
+    # A faithfully recorded failed window does not corrupt its siblings. Keep
+    # the complete package verdict for publication, while separately requiring
+    # trusted, reconciled evidence before retaining any individual measurement.
+    audit.package_integrity_valid = (
+        not recompute_failures
+        and not audit.reasons
+        and audit.stored_publication_valid == audit.recomputed_publication_valid
+    )
+    audit.failures.extend(recompute_failures + window_failures)
+    if recompute_failures or window_failures:
         _append_reason(audit.reasons, "package_recompute_invalid")
 
     # Gate: stored verdict must agree with the recomputation, and both must be
@@ -1035,7 +1051,9 @@ def validate_and_integrate(
     # workers are mutually exclusive with disaggregated prefill/decode workers;
     # this prevents phase-local fields from being fabricated for shared GPUs.
     expected_roles = {}
+    topology_valid = True
     if aggregate_gpus > 0 and (prefill_gpus > 0 or decode_gpus > 0):
+        topology_valid = False
         _add_reason(
             audit,
             "topology_env_mismatch",
@@ -1048,6 +1066,7 @@ def validate_and_integrate(
     if aggregate_gpus > 0:
         expected_roles["agg"] = aggregate_gpus
     if not expected_roles:
+        topology_valid = False
         _add_reason(
             audit,
             "topology_env_mismatch",
@@ -1055,6 +1074,7 @@ def validate_and_integrate(
         )
     elif roles:
         topology_failures = _check_role_topology(expected_devices, roles, expected_roles)
+        topology_valid = topology_valid and not topology_failures
         for failure in topology_failures:
             _add_reason(audit, "topology_env_mismatch", failure)
 
@@ -1079,7 +1099,18 @@ def validate_and_integrate(
         audit, parsed_windows, logs_root, bench_result_path, benchmark
     )
 
-    if audit.reasons or window is None or benchmark is None:
+    if (
+        not audit.package_integrity_valid
+        or not topology_valid
+        or window is None
+        or benchmark is None
+        or not any(
+            validation["benchmark_type"] == window.benchmark_type
+            and validation["concurrency"] == window.concurrency
+            and validation["power_coverage_valid"]
+            for validation in validations
+        )
+    ):
         return audit
 
     # Integration: per-GPU trapezoid clipped to the formal window; roles sum.
@@ -1158,8 +1189,13 @@ def validate_and_integrate(
     if non_finite:
         _add_reason(audit, "non_finite_power_metric", f"non-finite: {', '.join(non_finite)}")
         return audit
-    audit.metrics = metrics
-    audit.power_valid = True
+    audit.window_metrics = metrics
+    audit.window_power_valid = True
+    # Retention is independent of publication. An invalid sibling still blocks
+    # aggregate metrics and REQUIRE_POWER, even for this healthy measurement.
+    if not audit.reasons:
+        audit.metrics = metrics
+        audit.power_valid = True
     return audit
 
 
@@ -1262,7 +1298,17 @@ def _sidecar_payload(
         "telemetry_source": str(power_dir),
         "benchmark_result": str(bench_result),
         "benchmark_window": benchmark_window_payload(benchmark),
-        "selected_window": audit.window,
+        "selected_window": (
+            {
+                **audit.window,
+                "power_valid": audit.window_power_valid,
+                "metrics": audit_metrics(audit.window_metrics),
+            }
+            if audit.window is not None
+            else None
+        ),
+        "package_integrity_valid": audit.package_integrity_valid,
+        "window_validations": audit.window_validations,
         "integration_method": _INTEGRATION_METHOD,
         "power_percentile_method": "time_weighted_synchronized_total_piecewise_linear",
         "producer": {
