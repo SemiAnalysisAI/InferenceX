@@ -100,7 +100,7 @@ Use compact metadata lines, exact `8k/1k` shorthand and shared settings above th
 
 `finish` generates the final report from verified artifacts and the frozen baseline for both normal execution and interrupted-session recovery. It publishes the report **before** marking ready. Missing historical baseline data is explicitly N/A; it never invents deltas or launches a replacement baseline. A successful sweep may contain regressions; readiness means work and validation are complete, not that every metric improved. After `finish` returns `validated`, Klaud posts `/use <verified-final-run-id>` once so the completed sweep can be reused. It never posts reuse for another outcome, stages results or merges the PR.
 
-## Final preflight and maintainer retry
+## Final preflight
 
 Before adding `full-sweep-fail-fast`, validate the exact pushed head's full matrix:
 
@@ -114,13 +114,4 @@ uv run --no-project --python 3.12 --with 'pydantic>=2.10,<3' --with pyyaml \
 
 The verifier independently generates the unfiltered family from exact-head YAML with trusted helper code. It compares full recipe settings using the workflow's matrix schemas, which account for defaults added after fingerprinting; changed settings with a copied fingerprint still fail. An equivalent scenario filter can pass; an omitted/changed point or default eval cannot. It does not execute downloaded PR code. Generator-policy drift on an old run requires inspection rather than silently weakening validation.
 
-`check-final` also checks **every frozen baseline point** against the canonical final family before dispatch. `finish` and interrupted-session recovery apply the same check after validating full artifact coverage, before readiness. A missing baseline or omitted/changed original point fails validation even if the smaller current-family sweep is green. Report the affected points and call `finish` with `outcome: failed` to clean up owned runs and close the PR; never mark it ready or validated. `N/A` permits an unproven delta, not a missing updated-image result. Targeted smoke subsets remain allowed. Existing maintainer-handoff and branch-retention rules still apply.
-
-After a confirmed blocker is fixed, a repository maintainer may explicitly release a closed candidate's retained branch:
-
-```bash
-"${KLAUD[@]}" release-candidate --parent-run-id PARENT_RUN_ID \
-  --candidate-file ORIGINAL_CANDIDATE_JSON --head REVIEWED_CLOSED_PR_SHA
-```
-
-This rejects the Klaud account and non-maintainers. It requires a completed parent, verified cleanup receipt, closed/unmerged exact-head PR and terminal owned children, rechecks the branch, records approval, then deletes only that retained branch. It does not relaunch, erase historical results or take over an open PR. Ordinary capacity/readiness deferrals already release their branches through `finish`.
+`check-final` also checks **every frozen baseline point** against the canonical final family before dispatch. `finish` and interrupted-session recovery apply the same check after validating full artifact coverage, before readiness. A missing baseline or omitted/changed original point fails validation even if the smaller current-family sweep is green. Report the affected points and call `finish` with `outcome: failed` to clean up owned runs, close the PR and delete its unchanged exact-head branch; never mark it ready or validated. `N/A` permits an unproven delta, not a missing updated-image result. Targeted smoke subsets remain allowed. Explicit maintainer handoff still preserves the PR and branch.

@@ -133,8 +133,10 @@ uv run --locked \
   --framework <framework> \
   --precision <precision> \
   --runner-type <runner> \
-  --seq-lens 1k1k 8k1k
+  --seq-lens 8k1k
 ```
+
+仅在明确选择保留的 `glm5.1-fp8-b200-tilert` 配置时使用 `--seq-lens 1k1k`；其他 1k1k 场景已退役。
 
 不要只检查退出码或行数，还要检查发出的值：配置键、模型、镜像、运行器、场景、并发、`max-model-len`、TP/PP/EP/DCP/PCP、prefill/decode worker、硬件、路由器、KV 传输、评测标志、`additional-settings` 和 `spec-decoding`。模式位于 [`validation.py`](../infx/matrix/validation.py)，生成器是 [`generate.py`](../infx/matrix/generate.py)。
 
