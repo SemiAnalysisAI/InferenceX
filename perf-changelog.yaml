@@ -8710,7 +8710,6 @@
     - "删除显式的 direct/page_first_direct HiCache 覆盖，使 TP4/EP4 HiCache arm 运行 SGLang 默认的 kernel/page_first 路径；处于休眠状态的 DP-attention 与 Mooncake 分支同样删除这两个覆盖。该路径在 ROCm 上的正确性来自 sgl-project/sglang#35233——它把 registered host pool 的 device-accessible alias 交给 transfer kernel；上游在同一个 TP4/EP4 MXFP4 MI355X arm 上实测并发 14 时 kernel/page_first 为 338 tok/s，direct/page_first_direct 为 291 tok/s。"
     - "将 dram-utilization 从 0.80 提升到 0.85，并把 TP4/EP4 arm 的 ratio-1.0 host KV pool（实测约 115.19 GB/rank）改为固定 180 GB/rank；DSA indexer 同比扩展到约 41.25 GB/rank，在 SA 的 1,274 GB 预算内保留约 125 GB 启动余量。该 arm 的并发 sweep 为 4、8、10、12、14、16，TP8/EP1 GPU-resident arm 仅保留 1、2、4。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3329
-
 - config-keys:
     - glm5.3-fp8-mi355x-tilert-agentic
   scenario-type:
