@@ -608,3 +608,6 @@ existing static KV pool without changing checkpoint precision. Matched C8 screen
 and full canonical performance/accuracy are required before adoption.
 The candidate pins official `nightly-dev-cu13-20260922-582389ce`; repeat startup
 and full accuracy qualification because upstream changed parallel execution contexts.
+The isolated high-concurrency memory candidate raises static fraction from 0.80
+to 0.85 at C32 and above. It preserves the SWA reserve, graph bound, chunk size,
+and precision; qualify against the same-image 0.80 baseline with full accuracy.

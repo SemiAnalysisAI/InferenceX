@@ -126,6 +126,13 @@ case "$SPEC_DECODING" in
         ;;
 esac
 
+# C64 on the 0.80 pool retained 45.46 GiB after graph capture. Test a
+# modest full-KV capacity increase for the high-concurrency working set.
+MEM_FRACTION_STATIC=0.80
+if (( CONC >= 32 )); then
+    MEM_FRACTION_STATIC=0.85
+fi
+
 SGLANG_CMD=(
     python3 -m sglang.launch_server
     --model-path "$MODEL_PATH" --served-model-name "$MODEL"
@@ -135,7 +142,7 @@ SGLANG_CMD=(
     # Backends resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl
     # on Blackwell); the cookbook warns that overriding them costs decode speed.
     # Bound prefill workspace while retaining the native 1M context.
-    --mem-fraction-static 0.80
+    --mem-fraction-static "$MEM_FRACTION_STATIC"
     --chunked-prefill-size 4096
     "${SPECULATIVE_ARGS[@]}"
     "${SCHEDULING_ARGS[@]}"
