@@ -6437,8 +6437,6 @@ dsv4-fp4-b300-dynamo-sglang-agentic-agg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/b300-fp4/agentx/agg-tp8-c1-mtp.yaml"
       - spec-decoding: draft_model
         conc-list: [4]
@@ -6449,8 +6447,6 @@ dsv4-fp4-b300-dynamo-sglang-agentic-agg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/b300-fp4/agentx/agg-tp4-c4-mtp.yaml"
       - spec-decoding: draft_model
         conc-list: [8]
@@ -6461,8 +6457,6 @@ dsv4-fp4-b300-dynamo-sglang-agentic-agg:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/b300-fp4/agentx/agg-tp4-c8-mtp.yaml"
 dsv4-fp4-b300-dynamo-sglang-agentic-disagg:
   image: lmsysorg/sglang:nightly-dev-20260916-c9a8fba9
@@ -6489,8 +6483,6 @@ dsv4-fp4-b300-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/b300-fp4/agentx/disagg-1p1d-dep8-dep8-c240-mtp-kvoffload.yaml"
         decode:
           num-worker: 1
@@ -6507,8 +6499,6 @@ dsv4-fp4-b300-dynamo-sglang-agentic-disagg:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "SYNTHETIC_ACCEPTANCE=true"
-          - "SYNTHETIC_ACCEPTANCE_LENGTH=3.77"
           - "CONFIG_FILE=recipes/dsv4/sglang/b300-fp4/agentx/disagg-2p1d-dep8-dep8-c480-mtp-kvoffload.yaml"
         decode:
           num-worker: 1

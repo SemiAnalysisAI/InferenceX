@@ -8778,3 +8778,13 @@
     - "为 DSXE 多节点任务挂载持久化的 AgentX 数据集 mmap 缓存与 Hugging Face 缓存。"
     - "将 DSXE DSV4 Dynamo+SGLang AgentX 的作业时限提高到八小时，使低并发轨迹能够完成。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3190
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Exclude the two B300 DSXE nodes that produced degraded low-concurrency results from all five recipes while their health is investigated."
+    - "在节点健康状况调查期间，从全部五个配方中排除两个在低并发测试中性能异常的 B300 DSXE 节点。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3190
