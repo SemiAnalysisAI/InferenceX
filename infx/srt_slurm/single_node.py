@@ -124,7 +124,9 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
     for name in ("RUN_EVAL", "EVAL_ONLY", "DP_ATTENTION"):
         if environment[name] not in {"true", "false"}:
             raise ValueError(f"{name} must be true or false")
-    overrides = []
+    # Exclusive nodes include idle GPUs. Restrict each server/client step to
+    # the serving GPU count so client-side power collection sees the same set.
+    overrides = ["--set", f"srun_options.gpus-per-node={json.dumps(environment['GPU_COUNT'])}"]
     if environment.get("SRT_SRUN_OPTIONS"):
         options = json.loads(environment["SRT_SRUN_OPTIONS"])
         if not isinstance(options, dict) or any(

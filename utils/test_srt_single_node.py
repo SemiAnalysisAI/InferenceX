@@ -22,6 +22,7 @@ from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
 def point(tmp_path):
     recipe = {
         "engine": "sglang",
+        "resources": {"gpus_per_node": 8},
         "model": {"path": "hf:test/model", "container": "test:tag", "precision": "fp8"},
         "roles": {"agg": {
             "nodes": 1, "workers": 1, "gpus": 4,
@@ -53,6 +54,7 @@ def test_native_binding_submits_one_point_and_keeps_server_settings(point):
     overrides = parse_overrides(argv[1::2], [])
     actual = copy.deepcopy(recipe)
     apply_overrides_to_recipe(actual, overrides)
+    assert actual["srun_options"]["gpus-per-node"] == "4"
     assert actual["benchmark"]["env"] == {
         "MODEL": "test/model", "ISL": "256", "OSL": "64", "RANDOM_RANGE_RATIO": "0.5",
         "USE_CHAT_TEMPLATE": "false",
@@ -369,7 +371,9 @@ def test_runtime_container_options_remain_native_mapping(point):
     argv = runtime_arguments(f"{path}:base", env)
     actual = copy.deepcopy(recipe)
     apply_overrides_to_recipe(actual, parse_overrides(argv[1::2], []))
-    assert actual['srun_options'] == {'container-remap-root': '', 'container-writable': ''}
+    assert actual['srun_options'] == {
+        'gpus-per-node': '4', 'container-remap-root': '', 'container-writable': '',
+    }
     with pytest.raises(ValueError, match='must map option names to string values'):
         runtime_arguments(f"{path}:base", {**env, 'SRT_SRUN_OPTIONS': '{"container-remap-root": true}'})
 
