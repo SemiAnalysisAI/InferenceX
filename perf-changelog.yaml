@@ -8555,6 +8555,40 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
 
 - config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161 to lmsysorg/sglang:nightly-dev-cu13-20260916-c9a8fba9 (2026-09-16 upstream cu13 nightly, sgl-project/sglang@c9a8fba9, index digest sha256:509c2742b9441fe9182ae3dd7dac8840ba48e03d2d44b7b24e80d428f117fd85, amd64 digest sha256:19a1b266fac457d4ef92cba90b464119e42bdbee680c081df0a73f31461c03ca; Docker Hub last pushed 2026-09-16T01:06:04Z). This is the first cu13 nightly carrying sgl-project/sglang#39516, the CUDA fallback for the HiCache registered host-pool ImportError that sgl-project/sglang#35233 introduced against the pinned sglang-kernel 0.4.7 wheel and that broke every kv-offloading dram point on the 2026-09-15 build. The image moves sglang-kernel 0.4.6.post1 to 0.4.7 and sgl-deep-gemm 0.1.7 to 0.2.0; CUDA 13.0.3, NCCL 2.30.7 and FlashInfer 0.6.18 are unchanged, and server_args.py is identical across the 100 upstream commits. benchmarks/single_node/agentic/qwen3.5_fp8_h200_mtp.sh is unchanged: SGLANG_ENABLE_SPEC_V2 EAGLE MTP at 3 steps with golden AL 3.39, flashinfer attention with allreduce fusion, fp8 quantization with fp8_e4m3 KV, HiCache kernel IO / page_first layout / write_through_selective; the TP8/EP1 DRAM HiCache c2-c24 grid is unchanged."
+    - "将 SGLang 镜像从 lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161 更新为 lmsysorg/sglang:nightly-dev-cu13-20260916-c9a8fba9（2026-09-16 上游 cu13 nightly，sgl-project/sglang@c9a8fba9，索引摘要 sha256:509c2742b9441fe9182ae3dd7dac8840ba48e03d2d44b7b24e80d428f117fd85）。这是首个包含 sgl-project/sglang#39516 的 cu13 nightly，该修复为 sgl-project/sglang#35233 在固定 sglang-kernel 0.4.7 wheel 上引入的 HiCache 已注册主机池 ImportError 提供 CUDA 回退，该问题曾导致 2026-09-15 构建的所有 kv-offloading dram 点无法启动。镜像将 sglang-kernel 由 0.4.6.post1 升至 0.4.7、sgl-deep-gemm 由 0.1.7 升至 0.2.0；CUDA 13.0.3、NCCL 2.30.7 与 FlashInfer 0.6.18 不变，100 个上游提交中 server_args.py 亦未改动。配方脚本、MTP 设置、HiCache 分支及 TP8/EP1 DRAM HiCache c2-c24 网格保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3200
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  description:
+    - "Update the vLLM ROCm image from nightly-d9105ea8 to v0.29.0; benchmark configuration unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3063
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update the SGLang ROCm image from v0.5.16-rocm720-mi30x to v0.5.19-rocm720-mi30x; benchmark configuration unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2980
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add TP4 and TP2 arms with Engram CPU offload to the MI325X vLLM DeepSeek-V4.1-Flash AgentX recipe, keeping the existing TP8 arm with the 183 GiB of tables GPU-resident. With the tables in pinned host memory the resident weights are ~81 GiB per rank at TP4 and ~145 GiB per rank at TP2, against 256 GB per card, so TP2 keeps the full concurrency 1-32 list here"
+    - "Cap the scheduler at TP2 only: halve the sparse-attention indexer buffer to 8192 batched tokens (16 GiB rather than 32 GiB of a [batched-tokens, 1M] fp8 logits allocation), scale max-num-seqs to 2*CONC clamped to [16, 256] and cap cudagraph capture at 512. Same cap set the Blackwell TP2 arms validated on B200, GB200 and GB300"
+    - "Repin the image from the expired nightly-eed1f3d0 tag to vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984, the ROCm 10.0 nightly channel build of the same commit the MI355X arm moved to in SemiAnalysisAI/InferenceX#3326 (digest sha256:eccb72b74b8c04ce7406d9212e200b129f58e24be642795a857f755a94fdb3a1, published 2026-09-21T05:50:03Z); it carries vllm-project/vllm#57491, which widened the two is_cuda() gates to is_cuda_alike() so engram_config resolves on gfx942, and because cpu_offload now defaults on via VLLM_PLE_CPU_OFFLOAD the recipe sets it explicitly per TP"
+    - "Add --no-swa-bounded-replay: vllm-project/vllm#56227 turned SWA bounded replay on by default between the two pins and relies on a window clamp the ROCm sparse SWA path does not have, which crashed every gfx950 point with HSA_STATUS_ERROR_MEMORY_FAULT; gfx942 runs the same path. Prefix caching stays on"
+    - "为 MI325X vLLM DeepSeek-V4.1-Flash AgentX 配方新增启用 Engram CPU 卸载的 TP4 与 TP2 臂，同时保留 183 GiB Engram 表驻留 GPU 的现有 TP8 臂；表移至固定页主机内存后，TP4 每 rank 常驻权重约 81 GiB，TP2 约 145 GiB，而每张卡为 256 GB，因此 TP2 在此保留完整的并发 1-32 列表"
+    - "仅在 TP2 收紧调度器：将稀疏注意力 indexer 缓冲区减半至 8192 batched tokens（[batched-tokens, 1M] fp8 logits 分配由 32 GiB 降至 16 GiB），max-num-seqs 取 2*CONC 并夹在 [16, 256]，cudagraph capture 上限 512。该组参数与 Blackwell TP2 臂在 B200、GB200、GB300 上验证过的一致"
+    - "将镜像从已失效的 nightly-eed1f3d0 重新固定到 vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984（与 MI355X 臂在 SemiAnalysisAI/InferenceX#3326 中所用相同 commit 的 ROCm 10.0 nightly 渠道构建）；该镜像包含 vllm-project/vllm#57491，将两处 is_cuda() 判定放宽为 is_cuda_alike()，使 engram_config 在 gfx942 上可解析；由于 cpu_offload 现通过 VLLM_PLE_CPU_OFFLOAD 默认开启，配方按 TP 显式设置该值"
+    - "新增 --no-swa-bounded-replay：vllm-project/vllm#56227 在两个 pin 之间将 SWA bounded replay 默认开启，其依赖的 window clamp 在 ROCm sparse SWA 路径中缺失，曾使所有 gfx950 数据点以 HSA_STATUS_ERROR_MEMORY_FAULT 崩溃；gfx942 使用同一路径。prefix caching 保持开启"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3337
+
+- config-keys:
   - dsv41flash-fp4-b300-sglang-agentic-dspark
   scenario-type:
   - agentic-coding
