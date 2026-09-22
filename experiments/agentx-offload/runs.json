@@ -3346,24 +3346,26 @@
       "queued_at": "2026-09-22T18:16:18Z",
       "performance_result": false,
       "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c320, 3,600-second profiling, kv-offloading=none, and experiment=agentx-offload. InferenceX Dash showed no B200 job in the live priority queue and seven idle nodes immediately before dispatch.",
-      "started_at": "2026-09-22T18:17:03Z"
+      "started_at": "2026-09-22T18:17:03Z",
+      "runner": "b200-nscale-slurm_02",
+      "allocation_id": "16901"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307",
   "status": "Matched HBM-only c320 control 35766002905 is active in Launch job script on the same pinned MiniMax-M3 NVFP4 TP4 AgentX protocol. The completed NVMe c320 result and verified cleanup remain recorded.",
   "last_capacity_check": {
-    "checked_at": "2026-09-22T18:17:45Z",
+    "checked_at": "2026-09-22T18:18:52Z",
     "active_study_run_ids": [
       35766002905
     ],
     "pending_study_run_ids": [],
     "dispatch_allowed": true,
     "b200_priority_jobs_queued": 0,
-    "b200_nodes_allocated": 5,
-    "b200_nodes_idle": 6,
-    "target_node": "assigned by InferenceX workflow",
-    "target_node_state": "active benchmark allocation",
-    "reason": "Matched HBM-only c320 run 35766002905 left the queue and entered Launch job script. The queue ceiling permits another non-NVMe dispatch, but no additional study run is useful until this matched control produces comparison evidence."
+    "b200_nodes_allocated": 3,
+    "b200_nodes_idle": 8,
+    "target_node": "one of im-b200-c001 through im-b200-c003; exact node pending runtime evidence",
+    "target_node_state": "active allocation 16901 on b200-nscale-slurm_02",
+    "reason": "InferenceX Dash showed allocation 16901 active on b200-nscale-slurm_02 with three B200 nodes allocated, eight idle, and no queued B200 job. No additional study run is useful until the matched c320 control produces comparison evidence."
   },
   "next_dispatch": {
     "requires": "Monitor matched HBM-only c320 run 35766002905 through canonical profiling and artifacts. On success, compare it directly with NVMe c320 run 35727274307 before selecting the next adaptive point."
