@@ -425,11 +425,13 @@ available. The concurrency-scaled tail budget shares the fixed static pool with
 full KV. Validate actual cache sizes, transient memory, cache reuse, and the
 throughput/interactivity frontier in the canonical sweep.
 
-TP2 loads about 147.76 GiB of target and draft weights per GPU. This isolated
-qualification candidate verifies the pinned stock loader's hash and enables
-PyTorch expandable allocator segments without applying an engine patch. Full
-load and accuracy validation must establish whether allocator fragmentation alone
-explains the original TP2 startup failure. Draft precision remains upstream default.
+TP2 loads about 147.76 GiB of target and draft weights per GPU. The recipe
+verifies the pinned stock loader's hash and enables PyTorch expandable allocator
+segments without applying an engine patch. The September 22 nightly completed
+startup and all 1,319 GSM8K examples at C8 (97.65% strict accuracy) in an isolated
+Slurm diagnostic. Its post-eval packaging was recovered separately after a missing
+wrapper variable; this is not a green official workflow. The full latest-image
+sweep remains required. Draft precision remains upstream default.
 The B200 launcher also converts pinned Docker digests to the installed Enroot
 manifest-reference syntax and stops immediately on import failure.
 

@@ -11,7 +11,7 @@ require_agentic_kv_offload_none
 export GPU_COUNT="$TP"
 
 if (( TP == 2 )); then
-    # Test whether expandable segments alone avoid load-time fragmentation.
+    # Use the validated stock loader with expandable allocator segments.
     export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
     echo "TP2 CUDA allocator: $PYTORCH_CUDA_ALLOC_CONF"
     python3 - <<'PY_STOCK_LOADER'
