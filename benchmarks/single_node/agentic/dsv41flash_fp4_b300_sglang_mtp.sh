@@ -120,6 +120,13 @@ case "$SPEC_DECODING" in
         ;;
 esac
 
+# At high TP2 concurrency, test more prefill duty against the matched C64
+# baseline. Keep the latency-oriented cadence on low-C and TP4 points.
+PREFILL_DECODE_INTERVAL=16
+if (( TP == 2 && CONC >= 32 )); then
+    PREFILL_DECODE_INTERVAL=4
+fi
+
 SGLANG_CMD=(
     python3 -m sglang.launch_server
     --model-path "$MODEL_PATH" --served-model-name "$MODEL"
@@ -136,7 +143,7 @@ SGLANG_CMD=(
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --chunked-prefill-size 4096
     # Long AgentX prefills otherwise starve ready decode requests.
-    --prefill-decode-interval 16
+    --prefill-decode-interval "$PREFILL_DECODE_INTERVAL"
     "${SPECULATIVE_ARGS[@]}"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --swa-prefix-tails "$SWA_PREFIX_TAILS"
