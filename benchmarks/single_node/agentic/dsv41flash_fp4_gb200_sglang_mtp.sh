@@ -106,6 +106,21 @@ case "$SPEC_DECODING" in
         ;;
 esac
 
+# Cached prefixes need their final SWA window as well as full-attention KV.
+# C16 measured 27.0M full tokens with 1,024 retained tails. Cap the reserve:
+# uncapped 64*CONC at C128 would exceed this node's measured KV budget.
+SWA_PREFIX_TAILS=$((64 * CONC))
+if (( SWA_PREFIX_TAILS > 1024 )); then
+    SWA_PREFIX_TAILS=1024
+fi
+
+# C16 canonical comparison: +13.65% p90 interactivity, -0.30% throughput,
+# with p90 TTFT increasing from 2.35 s to 3.51 s. Other points keep defaults.
+SCHEDULING_ARGS=()
+if [[ "$TP" -eq 4 && "$CONC" -eq 16 ]]; then
+    SCHEDULING_ARGS=(--prefill-decode-interval 16)
+fi
+
 SGLANG_CMD=(
     python3 -m sglang.launch_server
     --model-path "$MODEL_PATH" --served-model-name "$MODEL"
@@ -120,6 +135,8 @@ SGLANG_CMD=(
     # first 66k-99k-token AgentX prompts.
     --mem-fraction-static 0.70
     --chunked-prefill-size 4096
+    --swa-prefix-tails "$SWA_PREFIX_TAILS"
+    "${SCHEDULING_ARGS[@]}"
     "${SPECULATIVE_ARGS[@]}"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"

@@ -418,6 +418,15 @@ of a performance-frontier contribution. DSpark uses the default precision shippe
 by the pinned official nightly, without custom draft quantization or precision
 patches. Full accuracy and performance validation remain required.
 
+GB200 reserves `min(64*CONC, 1024)` SWA prefix tails while retaining static memory
+0.70 and chunk size 4096. The C16 reserve leaves a measured 27.0M full-context
+KV slots and 439,040 SWA slots; the cap avoids exhausting the measured 51.82 GiB
+KV budget at high concurrency. Only TP4 C16 uses prefill/decode interval 16:
+its canonical comparison improved p90 interactivity 13.65% for 0.30% lower
+throughput, with p90 TTFT increasing from 2.35 to 3.51 seconds. Full GSM8K
+passed all 1,319 samples. Other concurrency points still require the full sweep;
+these C16 results do not establish a benefit at every concurrency.
+
 The GB200 host-table layout is `per_rank`: its compute-node kernel enables
 anonymous huge pages through `madvise`, while `shmem_enabled=never` prevents huge
 pages for the shared memfd layout. Upstream allocates row shards in anonymous host

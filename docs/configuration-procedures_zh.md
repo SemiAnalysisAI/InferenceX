@@ -364,6 +364,13 @@ GB200 sweep 仅包含 `dsv41flash-fp4-gb200-sglang-agentic-dspark`。
 DSpark 使用固定官方 nightly 默认提供的精度，不应用自定义草稿量化或精度补丁。
 完整准确率和性能验证仍然必需。
 
+GB200 保留 `min(64*CONC, 1024)` 个 SWA prefix tails，并维持 static memory 0.70
+和 chunk size 4096。C16 实测保留 2,700 万个 full-context KV slots 与 439,040 个 SWA slots；
+该上限避免高并发时耗尽实测 51.82 GiB KV 预算。仅 TP4 C16 使用 prefill/decode interval 16：
+canonical 对比中 p90 interactivity 提升 13.65%，吞吐下降 0.30%，p90 TTFT 从 2.35 秒增至
+3.51 秒。完整 GSM8K 的 1,319 个样本通过验证。其他并发点仍需完整 sweep；
+C16 结果不能证明该设置在所有并发下均有收益。
+
 GB200 的主机表布局为 `per_rank`：计算节点内核通过 `madvise` 启用匿名大页，
 而 `shmem_enabled=never` 阻止共享 memfd 布局使用大页。上游在匿名主机内存中
 按行分片，并通过 `MADV_HUGEPAGE`/`MADV_COLLAPSE` 请求 512 MiB 大页。
