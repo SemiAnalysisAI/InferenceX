@@ -61,7 +61,7 @@ fi
 
 # TileRT configuration. Every value is explicit here: server_tilert.sh
 # validates each one with check_env_vars and supplies no defaults of its own.
-export TILERT_VERSION=0.1.6
+export TILERT_VERSION=0.1.6.post1
 export TILERT_PROFILE=glm5_2          # decode_server --model (TileRT model profile)
 export TILERT_MODEL_TYPE=glm-5        # weight_converter --model_type (fallback converter)
 export TILERT_MODEL_PKG=glm_5_2_rocm  # per-model converter package, preferred when importable
@@ -77,19 +77,20 @@ export SERVED_MODEL_NAME=glm5_2
 #   prefill: weights 90.45 GiB + profiling/non-torch 40.3 GiB + vLLM KV 91.71 GiB
 #            + PD staging buffer 99.06 GiB (prefill_connector.py, TP rank 0,
 #              allocated OUTSIDE vLLM's gpu-memory-utilization budget)
-# Both PD buffers must live in pinned host memory (~3.2 TB RAM per node) for
-# this context to start; on the GPU the decode side is node-marginal (~283 of
-# 288 GiB) and the prefill side cannot fit at any utilization (~321 GiB).
-# TileRT 0.1.6 places both on the GPU, so setup_deps.sh applies
-# patches/tilert-0.1.6-pd-buffers-in-dram.patch at container start (engine-patch
-# waiver docs/waiver/3330.md) and TILERT_PD_BUFFER_DEVICE=cpu selects the host
-# buffers. They are 2 MiB-backed and verified as such: the ionic RDMA VFs cap
-# 4 KiB-page registrations at ~3.9 GiB per HCA. Cost: two extra PCIe copies on
-# the KV path (~0.83 GB each at 8k tokens, estimated ~17 ms apiece; the RDMA
-# hop itself measured 20.9 GiB/s). Drop the patch and this knob when a TileRT
-# release carries DRAM PD buffers.
+# Undivided, neither side starts: the decode rank is node-marginal (~283 of
+# 288 GiB) and the prefill rank cannot fit at any utilization (~321 GiB).
+# tilert 0.1.6.post1 keeps both buffers on the GPU but shards them by layer
+# across the eight devices (layer lid on device lid % 8, TILERT_PD_SHARDS,
+# default on), so each card holds 12.54 GiB instead of 99.06 GiB on one.
+# convert() dequantises each layer on the device that received it, which spreads
+# its transients too (108.6 KiB/token, 82.9 GiB at 800k tokens) instead of
+# leaving them on cuda:0. Measured on 2x8 MI350X at this context with bf16 KV:
+# decode peaks at 202.1 GiB per card, prefill at 269.2 GiB of 287.69 GiB, and
+# the KV path stays device-to-device at 108 GB/s (81 GB in 751 ms, 54% of the
+# 4x400 GbE line rate). No host hop, so the DRAM patch and
+# TILERT_PD_BUFFER_DEVICE are not used here.
 export TILERT_MAX_MODEL_LEN=1048576
-export TILERT_PD_BUFFER_DEVICE=cpu
+export TILERT_PD_BUFFER_DEVICE=cuda
 export TILERT_TRANSPORT=mooncake
 export TILERT_PARSER=none
 export TILERT_RDMA_STRICT=0
