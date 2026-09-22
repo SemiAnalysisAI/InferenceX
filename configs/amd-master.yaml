@@ -632,7 +632,7 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
       - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [56, 72], spec-decoding: mtp }
 
 minimaxm3-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202609140645-lirzhang-triton-build
+  image: rocm/atom-dev:nightly_202609171455
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: cluster:mi355x-amds
@@ -641,11 +641,14 @@ minimaxm3-fp4-mi355x-atom-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.20
+    # 0.687 targets ~256 GB/rank on the dram-offload arms: LMCACHE_MAX_LOCAL_CPU_SIZE
+    # = TOTAL_CPU_DRAM_GB / TP = node_DRAM * dram-utilization / 8 (TP-independent).
+    - dram-utilization: 0.687
       search-space:
       - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 5, 8, 10, 12, 15, 20, 24, 28, 32], spec-decoding: mtp }
-      - { tp: 2, kv-offloading: none, conc-list: [1, 2, 5], spec-decoding: mtp }
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [40, 48], spec-decoding: mtp }
+      - { tp: 2, kv-offloading: none, conc-list: [1, 2], spec-decoding: mtp }
+      - { tp: 2, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5rc3+rocm7.2.4" }, conc-list: [20, 25, 30], spec-decoding: mtp }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5rc3+rocm7.2.4" }, conc-list: [40, 48], spec-decoding: mtp }
 
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
