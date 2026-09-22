@@ -4,6 +4,24 @@ source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validat
 check_env_vars IS_MULTINODE
 set -eo pipefail
 
+# Select native fixed-sequence execution before the retained AgentX/multi-node paths.
+EXECUTION_PATH=legacy
+if [[ "$IS_MULTINODE" == false && -n "${SRT_RECIPE:-}" ]]; then
+    EXECUTION_PATH=native-single-node
+fi
+if [[ "$EXECUTION_PATH" == native-single-node ]]; then
+    check_env_vars GITHUB_WORKSPACE MODEL IMAGE
+    source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
+    export HF_HUB_CACHE_MOUNT=/raid/inferencex/models/hub
+    export SRT_MODEL_PATH="hf:$MODEL"
+    export SALLOC_TIME_LIMIT=180
+    export SRT_SCRATCH_ROOT="$(dirname "$GITHUB_WORKSPACE")"
+    export SRT_SRUN_OPTIONS='{"container-remap-root":"", "container-writable":""}'
+    SRT_SQUASH_FILE="/raid/inferencex/squash/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    launch_srt_single_node mi300x-amd
+    exit $?
+fi
+
 export HF_HUB_CACHE_MOUNT="/raid/inferencex/models/hub"
 export AIPERF_MMAP_CACHE_MOUNT="/raid/inferencex/aiperf-mmap-cache"
 export AIPERF_DATASET_MMAP_CACHE_DIR="/aiperf_mmap_cache"

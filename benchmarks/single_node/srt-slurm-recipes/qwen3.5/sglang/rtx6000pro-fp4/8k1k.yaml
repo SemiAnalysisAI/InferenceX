@@ -1,0 +1,82 @@
+# Serving settings from qwen3.5_fp4_rtx6000pro_sglang.sh.
+base:
+  schema: 2
+  name: qwen3.5-fp4-rtx6000pro-sglang-8k1k
+  model:
+    path: hf:nvidia/Qwen3.5-397B-A17B-NVFP4
+    container: lmsysorg/sglang:v0.5.16-cu130
+    precision: fp4
+  resources:
+    gpu_type: rtx6000pro
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        reasoning-parser: qwen3
+        tool-call-parser: qwen3_coder
+        quantization: modelopt_fp4
+        fp4-gemm-backend: flashinfer_cutlass
+        moe-runner-backend: flashinfer_cutlass
+        attention-backend: flashinfer
+        kv-cache-dtype: fp8_e4m3
+        mamba-ssm-dtype: bfloat16
+        mamba-scheduler-strategy: no_buffer
+        disable-custom-all-reduce: true
+        disable-radix-cache: true
+        mem-fraction-static: 0.7
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        context-length: 9236
+        cuda-graph-max-bs-decode: 1
+        max-running-requests: 128
+        scheduler-recv-interval: 10
+        stream-interval: 20
+        enable-metrics: false
+      env:
+        SGLANG_ENABLE_JIT_DEEPGEMM: 'false'
+        PYTHONUNBUFFERED: '1'
+        PYTHONNOUSERSITE: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh --trust-remote-code
+    env:
+      MODEL: nvidia/Qwen3.5-397B-A17B-NVFP4
+      ISL: '8192'
+      OSL: '1024'
+      RANDOM_RANGE_RATIO: '0.8'
+      USE_CHAT_TEMPLATE: 'false'
+zip_override_tp4_ep1:
+  roles:
+    agg:
+      args:
+        cuda-graph-max-bs-decode: [1, 4, 16, 64]
+        scheduler-recv-interval: [10, 10, 30, 30]
+  benchmark:
+    env:
+      CONC: ['1', '4', '16', '64']
+zip_override_tp4_ep4:
+  roles:
+    agg:
+      args:
+        cuda-graph-max-bs-decode: [1, 4, 16, 64]
+        expert-parallel-size: 4
+        scheduler-recv-interval: [10, 10, 30, 30]
+  benchmark:
+    env:
+      CONC: ['1', '4', '16', '64']

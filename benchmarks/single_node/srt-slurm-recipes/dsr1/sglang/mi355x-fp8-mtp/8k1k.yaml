@@ -1,0 +1,68 @@
+# Serving settings from dsr1_fp8_mi355x_mtp.sh.
+base:
+  schema: 2
+  name: dsr1-fp8-mi355x-sglang-mtp-8k1k
+  model:
+    path: hf:deepseek-ai/DeepSeek-R1-0528
+    container: lmsysorg/sglang:v0.5.12-rocm700-mi35x
+    precision: fp8
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        attention-backend: aiter
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        trust-remote-code: true
+        chunked-prefill-size: 196608
+        mem-fraction-static: 0.8
+        disable-radix-cache: true
+        num-continuous-decode-steps: 8
+        max-prefill-tokens: 196608
+        kv-cache-dtype: fp8_e4m3
+        cuda-graph-max-bs: 4
+        max-running-requests: 4
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        data-parallel-size: 1
+        served-model-name: deepseek-ai/DeepSeek-R1-0528
+        enable-metrics: false
+      env:
+        SGLANG_USE_AITER: '1'
+        SGLANG_AITER_MLA_PERSIST: '1'
+        SGLANG_ENABLE_SPEC_V2: '1'
+        RCCL_MSCCL_ENABLE: '0'
+        ROCM_QUICK_REDUCE_QUANTIZATION: INT4
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-R1-0528
+      ISL: '8192'
+      OSL: '1024'
+      RANDOM_RANGE_RATIO: '0.8'
+      USE_CHAT_TEMPLATE: 'true'
+zip_override_concurrency:
+  roles:
+    agg:
+      args:
+        cuda-graph-max-bs: [4, 8, 16, 32, 64]
+        max-running-requests: [4, 8, 16, 32, 64]
+  benchmark:
+    env:
+      CONC: ['4', '8', '16', '32', '64']

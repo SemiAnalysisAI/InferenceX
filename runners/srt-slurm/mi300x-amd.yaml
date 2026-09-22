@@ -1,0 +1,21 @@
+default_partition: compute-0
+default_time_limit: ${SRT_DEFAULT_TIME_LIMIT}
+gpus_per_node: 8
+network_interface: ''
+visible_devices_env: ROCR_VISIBLE_DEVICES
+srtctl_root: ${SRTCTL_ROOT}
+default_mounts:
+  /dev/kfd: /dev/kfd
+  /dev/dri: /dev/dri
+default_sbatch_directives:
+  cpus-per-task: '128'
+use_gpus_per_node_directive: true
+use_segment_sbatch_directive: false
+use_exclusive_sbatch_directive: true
+default_bash_preamble: |
+  if [[ "$$MODEL_PREFIX" == dsr1 && "$$FRAMEWORK" == sglang ]]; then
+      firmware=$$(rocm-smi --showfw | awk '/MEC/ {print $$NF; exit}')
+      if [[ -z "$$firmware" || "$$firmware" -lt 177 ]]; then
+          export HSA_NO_SCRATCH_RECLAIM=1
+      fi
+  fi

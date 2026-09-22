@@ -1,0 +1,66 @@
+# Serving settings from dsr1_fp4_mi355x_mtp.sh.
+base:
+  schema: 2
+  name: dsr1-fp4-mi355x-sglang-mtp-8k1k
+  model:
+    path: hf:amd/DeepSeek-R1-0528-MXFP4
+    container: lmsysorg/sglang:v0.5.12-rocm700-mi35x
+    precision: fp4
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        chunked-prefill-size: 196608
+        mem-fraction-static: 0.8
+        disable-radix-cache: true
+        num-continuous-decode-steps: 4
+        max-prefill-tokens: 196608
+        cuda-graph-max-bs: 128
+        attention-backend: aiter
+        kv-cache-dtype: fp8_e4m3
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        data-parallel-size: 1
+        served-model-name: amd/DeepSeek-R1-0528-MXFP4
+        enable-metrics: false
+      env:
+        SGLANG_USE_AITER: '1'
+        SGLANG_AITER_MLA_PERSIST: '1'
+        SGLANG_ENABLE_SPEC_V2: '1'
+        ROCM_QUICK_REDUCE_QUANTIZATION: INT4
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
+    env:
+      MODEL: amd/DeepSeek-R1-0528-MXFP4
+      ISL: '8192'
+      OSL: '1024'
+      RANDOM_RANGE_RATIO: '0.8'
+      USE_CHAT_TEMPLATE: 'true'
+zip_override_concurrency:
+  roles:
+    agg:
+      args:
+        chunked-prefill-size: [196608, 196608, 196608, 196608, 32768]
+        max-prefill-tokens: [196608, 196608, 196608, 196608, 32768]
+  benchmark:
+    env:
+      CONC: ['4', '8', '16', '32', '64']

@@ -202,6 +202,37 @@ def test_trt_binding_keeps_engine_options_and_sets_eval_token_budget(point):
         runtime_arguments(f"{path}:base", {**env, "EP_SIZE": "1"})
 
 
+def test_atom_binding_uses_allocation_tp_and_native_mtp_arguments(point):
+    path, recipe, env = point
+    recipe["engine"] = "atom"
+    recipe["roles"]["agg"]["args"] = {
+        "method": "mtp", "num-speculative-tokens": 3, "kv_cache_dtype": "fp8",
+        "enable-expert-parallel": True, "enable-dp-attention": True,
+    }
+    recipe["benchmark"]["env"]["USE_CHAT_TEMPLATE"] = "true"
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    env = {**env, "FRAMEWORK": "atom", "EP_SIZE": "4", "DP_ATTENTION": "true",
+           "SPEC_DECODING": "mtp", "EVAL_ONLY": "true", "MAX_MODEL_LEN": "2048"}
+    argv = runtime_arguments(f"{path}:base", env)
+    actual = copy.deepcopy(recipe)
+    apply_overrides_to_recipe(actual, parse_overrides(argv[1::2], []))
+    assert actual["roles"]["agg"]["args"] == {
+        "method": "mtp", "num-speculative-tokens": 3, "kv_cache_dtype": "fp8",
+        "enable-expert-parallel": True, "enable-dp-attention": True, "max-model-len": 2048,
+    }
+    assert plan_commands(f"{path}:base", "atom", ["--json", *argv], env) == [[
+        "srtctl", "apply", "--json", *argv, "--file", f"{path}:base",
+    ]]
+    for changes, error in [
+        ({"EP_SIZE": "2"}, "expert parallelism"),
+        ({"EP_SIZE": "1"}, "enable-expert-parallel"),
+        ({"TP": "8", "EP_SIZE": "8"}, "ATOM TP"),
+        ({"DP_ATTENTION": "false"}, "DP_ATTENTION"),
+    ]:
+        with pytest.raises(ValueError, match=error):
+            runtime_arguments(f"{path}:base", {**env, **changes})
+
+
 @pytest.mark.parametrize("record,expected", [
     ({"status": "submitted", "slurm_job_id": "42", "output_dir": "/shared/42"}, ("42", "/shared/42")),
     ({"status": "error"}, None),
@@ -224,6 +255,7 @@ def test_submission_manifest(tmp_path, record, expected):
     ("h200-cw", "none"), ("h100-cw", "none"), ("h100-dgxc-slurm", "none"),
     ("b200-cw", "none"), ("b200-nb", "none"), ("b200-nscale-slurm", "none"),
     ("b300-dsxe", "none"),
+    ("mi300x-amd", "none"), ("mi325x-amds", "none"), ("mi355x-amds", "none"),
 ])
 def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, pool, failure):
     path, _, point_env = point
@@ -278,6 +310,7 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
         "B300_HF_CACHE_CONTAINER_DIR": "/hf", "ENROOT_IMPORT_TIME_LIMIT": "10",
         "INFERENCEX_RUNTIME_ENV_VARS": "REQUIRE_POWER",
         "TEST_FAILURE": failure, "CANCEL_CAPTURE": str(capture),
+        "KEEP_LOGS": "0",
     }
     env.pop("AIPERF_DRAIN_TIMEOUT_SECONDS", None)
     env.pop("AIPERF_DRAIN_POLL_SECONDS", None)
@@ -294,7 +327,8 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
     assert (tmp_path / "gpu_metrics.csv").read_text() == "gpu,power\n0,300\n"
     assert json.loads((tmp_path / "gpu_metrics_context.json").read_text()) == {"device_count": 4}
     assert (tmp_path / "srt-single-node-logs.tar.gz").stat().st_size > 0
-    cluster_config = yaml.safe_load(next(tmp_path.glob("srt-single.*/checkout/srtslurm.yaml")).read_text())
+    scratch = tmp_path.parent if pool.startswith("mi") else tmp_path
+    cluster_config = yaml.safe_load(next(scratch.glob("srt-single.*/checkout/srtslurm.yaml")).read_text())
     assert cluster_config["containers"]["test:tag"] == "test:tag"
     assert cluster_config["use_exclusive_sbatch_directive"] is True
     assert (capture.read_text() if capture.exists() else "") == ("42\n" if failure == "submission" else "")

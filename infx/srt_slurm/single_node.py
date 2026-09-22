@@ -13,6 +13,8 @@ import yaml
 
 from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_parameters
 
+SINGLE_NODE_ENGINES = {**ENGINES, "atom": "atom"}
+
 
 def parallelism_constraints(
     engine: str, args: Mapping[str, Any], environment: Mapping[str, str]
@@ -33,6 +35,13 @@ def parallelism_constraints(
             "moe_expert_parallel_size": (args["moe_expert_parallel_size"], ep),
             "pipeline_parallel_size": (args.get("pipeline_parallel_size", 1), 1),
             "DP_ATTENTION": (args.get("enable_attention_dp", False), dp_attention),
+        }
+    if engine == "atom":
+        if ep not in {1, tp}:
+            raise ValueError("ATOM expert parallelism must be 1 or TP")
+        return {
+            "enable-expert-parallel": (args.get("enable-expert-parallel", False), ep > 1),
+            "DP_ATTENTION": (args.get("enable-dp-attention", False), dp_attention),
         }
     raise ValueError(f"Unsupported single-node SRT engine: {engine!r}")
 
@@ -67,14 +76,14 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     workload = benchmark["env"]
     engine_config = recipe["engine"]
     engine = engine_config["type"] if isinstance(engine_config, dict) else engine_config
-    if environment["FRAMEWORK"] not in {"sglang", "trt"}:
+    if environment["FRAMEWORK"] not in {"sglang", "trt", "atom"}:
         raise ValueError(f"Unsupported single-node framework: {environment['FRAMEWORK']!r}")
     spec = spec_parameters(role, engine)
     if spec and spec["method"] not in {"eagle", "nextn", "mtp"}:
         raise ValueError("Single-node SRT supports only native MTP or no speculation")
     speculation = "mtp" if spec else "none"
     expected = {
-        "engine": (engine, ENGINES[environment["FRAMEWORK"]]),
+        "engine": (engine, SINGLE_NODE_ENGINES[environment["FRAMEWORK"]]),
         "model": (recipe["model"]["path"], f"hf:{environment['MODEL']}"),
         "image": (recipe["model"]["container"], environment["IMAGE"]),
         "precision": (recipe["model"]["precision"], environment["PRECISION"]),
@@ -90,6 +99,9 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     }
     if "CONC" in workload:
         expected["CONC"] = (str(workload["CONC"]), environment["CONC"])
+    if engine == "atom":
+        # Native ATOM derives -tp from the aggregate worker's GPU allocation.
+        expected["ATOM TP"] = (role["gpus"], int(environment["TP"]))
     for name in ("ISL", "OSL", "RANDOM_RANGE_RATIO"):
         expected[name] = (str(workload[name]), environment[name])
     # Multi-node and AgentX workloads use their existing connector.
@@ -132,11 +144,11 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
         context = int(environment["MAX_MODEL_LEN"])
         if context <= 0:
             raise ValueError("MAX_MODEL_LEN must be positive")
-        context_keys = (
-            ("context-length",)
-            if environment["FRAMEWORK"] == "sglang"
-            else ("max_seq_len", "max_num_tokens")
-        )
+        context_keys = {
+            "sglang": ("context-length",),
+            "trt": ("max_seq_len", "max_num_tokens"),
+            "atom": ("max-model-len",),
+        }[environment["FRAMEWORK"]]
         for key in context_keys:
             overrides += ["--set", f"roles.agg.args.{key}={context}"]
     return [*overrides, "--set", 'benchmark.env.RESULT_DIR="/logs"']

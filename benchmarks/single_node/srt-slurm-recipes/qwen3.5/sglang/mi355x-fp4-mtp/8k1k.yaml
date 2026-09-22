@@ -1,0 +1,76 @@
+# Serving settings from qwen3.5_fp4_mi355x_mtp.sh.
+base:
+  schema: 2
+  name: qwen3.5-fp4-mi355x-sglang-mtp-8k1k
+  model:
+    path: hf:amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
+    container: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913
+    precision: fp4
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 2
+      args:
+        trust-remote-code: true
+        tensor-parallel-size: 2
+        attention-backend: aiter
+        mem-fraction-static: 0.8
+        model-loader-extra-config: '{"enable_multithread_load": true}'
+        watchdog-timeout: 1200
+        disable-radix-cache: true
+        max-running-requests: 4
+        page-size: 16
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        kv-cache-dtype: fp8_e4m3
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        served-model-name: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
+        enable-metrics: false
+      env:
+        SGLANG_USE_AITER: '1'
+        SGLANG_USE_AITER_UNIFIED_ATTN: '1'
+        AITER_FLYDSL_FORCE: '1'
+        SGLANG_MAMBA_SSM_DTYPE: bfloat16
+        ROCM_QUICK_REDUCE_QUANTIZATION: INT8
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
+    env:
+      MODEL: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
+      ISL: '8192'
+      OSL: '1024'
+      RANDOM_RANGE_RATIO: '0.8'
+      USE_CHAT_TEMPLATE: 'true'
+zip_override_tp2_ep1:
+  roles:
+    agg:
+      args:
+        max-running-requests: [4, 8, 16, 32, 64, 128]
+  benchmark:
+    env:
+      CONC: ['4', '8', '16', '32', '64', '128']
+zip_override_tp4_ep1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-running-requests: [4, 8, 16]
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: ['4', '8', '16']

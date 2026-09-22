@@ -59,17 +59,18 @@ def client_environment(tmp_path):
     return env
 
 
-@pytest.mark.parametrize("exit_code,chat_template,framework,backend", [
-    (0, "false", "sglang", "vllm"), (7, "false", "sglang", "vllm"),
-    (0, "true", "trt", "openai"),
+@pytest.mark.parametrize("exit_code,chat_template,framework,backend,extra", [
+    (0, "false", "sglang", "vllm", []), (7, "false", "sglang", "vllm", []),
+    (0, "true", "trt", "openai", []),
+    (0, "true", "atom", "vllm", ["--trust-remote-code"]),
 ])
 def test_native_endpoint_preserves_client_settings_and_failure(
-    client_environment, exit_code, chat_template, framework, backend
+    client_environment, exit_code, chat_template, framework, backend, extra
 ):
     env = {**client_environment, "CLIENT_EXIT": str(exit_code), "USE_CHAT_TEMPLATE": chat_template,
            "FRAMEWORK": framework}
     result = subprocess.run(
-        ["bash", str(CLIENT)], env=env, capture_output=True, text=True
+        ["bash", str(CLIENT), *extra], env=env, capture_output=True, text=True
     )
     assert result.returncode == exit_code, result.stderr
     argv = json.loads(Path(env["CAPTURE"]).read_text())
@@ -106,7 +107,7 @@ def test_native_endpoint_preserves_client_settings_and_failure(
         env["RESULT_DIR"],
         "--result-filename",
         "test-result.json",
-    ] + (["--use-chat-template"] if chat_template == "true" else [])
+    ] + (["--use-chat-template"] if chat_template == "true" else []) + extra
     assert (
         (Path(env["RESULT_DIR"]) / "gpu_metrics.csv")
         .read_text()

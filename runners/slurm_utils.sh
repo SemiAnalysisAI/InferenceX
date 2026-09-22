@@ -58,7 +58,7 @@ PYENV
     # native recipe environment and benchmark.env retain their override priority.
     local source="$INFERENCEX_SLURM_UTILS_DIR/../utils/srt-slurm"
     if [[ "$framework" == "tilert" ]]; then
-        # Sole fork exception until NVIDIA supports the TileRT backend and router.
+        # TileRT still needs its legacy runtime until the native backend and router land.
         SRT_SLURM_COMMIT=6bc3f306bdafa1edfb5dded2fcda8f1ccede1bde
         git init "$destination" || return 1
         git -C "$destination" remote add origin https://github.com/SemiAnalysisAI/srt-slurm.git || return 1
@@ -137,7 +137,12 @@ launch_srt_single_node() {
         TP PP_SIZE DCP_SIZE PCP_SIZE EP_SIZE DP_ATTENTION GPU_COUNT IS_AGENTIC SPEC_DECODING \
         CONC ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME GPU_MONITOR_INTERVAL SRT_MODEL_PATH \
         HF_HUB_CACHE_MOUNT HF_HUB_CACHE SALLOC_TIME_LIMIT
-    SRT_SINGLE_NODE_ROOT=$(mktemp -d "$GITHUB_WORKSPACE/srt-single.XXXXXX")
+    local scratch_root="$GITHUB_WORKSPACE"
+    if [[ -n "${SRT_SCRATCH_ROOT:-}" ]]; then
+        check_env_vars SRT_SCRATCH_ROOT
+        scratch_root="$SRT_SCRATCH_ROOT"
+    fi
+    SRT_SINGLE_NODE_ROOT=$(mktemp -d "$scratch_root/srt-single.XXXXXX")
     SRTCTL_ROOT="$SRT_SINGLE_NODE_ROOT/checkout"
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
     setup_srt_slurm "$SRTCTL_ROOT" "$FRAMEWORK" 0
@@ -154,6 +159,10 @@ launch_srt_single_node() {
     mapfile -d '' -t SRT_RUNTIME_ARGS < "$SRT_SINGLE_NODE_ROOT/arguments"
     SRT_SELECTED_RECIPE="${SRT_RUNTIME_ARGS[0]}"
     SRT_RUNTIME_ARGS=("${SRT_RUNTIME_ARGS[@]:1}")
+    if [[ -n "${SRT_SRUN_OPTIONS:-}" ]]; then
+        check_env_vars SRT_SRUN_OPTIONS
+        SRT_RUNTIME_ARGS+=(--set "srun_options=$SRT_SRUN_OPTIONS")
+    fi
     SRT_RUNTIME_ARGS+=(
         --set 'post_eval.command=["bash", "{infmax_workspace}/benchmarks/single_node/srt_eval.sh", "{endpoint}", "/logs/infx-eval-exit-code"]'
         --set "post_eval.passthrough_env=$SRT_EVAL_PASSTHROUGH"

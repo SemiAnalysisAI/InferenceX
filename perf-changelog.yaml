@@ -8690,3 +8690,94 @@
     - "Cut over eight H200/B200 TRT-LLM fixed-sequence recipes to native SRT-Slurm, preserving all 63 points, engine configuration, real MTP verification, and the OpenAI benchmark client; retain explicit legacy metrics settings and eval token budgets"
     - "将八个 H200/B200 TRT-LLM 定长配方切换至原生 SRT-Slurm，保留全部 63 个测试点、引擎配置、真实 MTP 验证及 OpenAI 基准客户端；显式保留原有指标设置和 eval token 预算"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
+
+- config-keys:
+  - dsr1-fp4-mi355x-sglang
+  - dsr1-fp4-mi355x-sglang-mtp
+  - dsr1-fp4-mi355x-atom
+  - dsr1-fp4-mi355x-atom-mtp
+  - dsr1-fp8-mi300x-sglang
+  - dsr1-fp8-mi325x-sglang
+  - dsr1-fp8-mi355x-sglang
+  - dsr1-fp8-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi325x-sglang
+  - qwen3.5-fp8-mi355x-sglang
+  - qwen3.5-fp8-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi355x-atom
+  - qwen3.5-fp8-mi355x-atom-mtp
+  - qwen3.5-fp4-mi355x-sglang
+  - qwen3.5-fp4-mi355x-atom
+  - qwen3.5-fp4-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi300x-sglang
+  - dsr1-fp8-mi355x-atom
+  - dsr1-fp8-mi355x-atom-mtp
+  - dsr1-fp8-mi325x-sglang-mtp
+  - qwen3.5-fp8-mi325x-sglang-mtp
+  - qwen3.5-fp4-rtx6000pro-sglang
+  - qwen3.5-fp4-rtx6000pro-sglang-mtp
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Cut over the remaining 23 AMD SGLang/ATOM and RTX PRO 6000 fixed-sequence recipes to native SRT configuration, retaining all 179 points and legacy server/client settings; use direct ATOM serving and native command generation within the existing Docker pool lifecycle
+  - 将剩余 23 个 AMD SGLang/ATOM 和 RTX PRO 6000 定长配方切换至原生 SRT 配置，保留全部 179 个测试点及原有服务端和客户端参数；ATOM 使用直接服务模式，Docker 池在现有容器生命周期内使用原生命令生成
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
+
+- config-keys:
+  - dsr1-fp4-b200-sglang
+  - dsr1-fp4-b200-sglang-mtp
+  - dsr1-fp4-b300-sglang
+  - dsr1-fp4-b200-trt
+  - dsr1-fp4-b200-trt-mtp
+  - dsr1-fp8-b200-sglang
+  - dsr1-fp8-b300-sglang
+  - qwen3.5-fp8-b200-sglang
+  - qwen3.5-fp4-b200-sglang
+  - qwen3.5-fp4-b200-sglang-mtp
+  - qwen3.5-fp8-b200-sglang-mtp
+  - qwen3.5-fp8-b300-sglang-mtp
+  - qwen3.5-fp8-b300-sglang
+  - qwen3.5-fp4-b300-sglang
+  - qwen3.5-fp4-rtx6000pro-sglang
+  - qwen3.5-fp4-rtx6000pro-sglang-mtp
+  - qwen3.5-fp4-b300-sglang-mtp
+  - dsr1-fp8-b200-sglang-mtp
+  - dsr1-fp8-b300-sglang-mtp
+  - dsr1-fp8-b200-trt
+  - dsr1-fp8-b200-trt-mtp
+  - dsr1-fp8-h200-sglang
+  - dsr1-fp8-h200-sglang-mtp
+  - qwen3.5-fp8-h200-sglang
+  - qwen3.5-fp8-h200-sglang-mtp
+  - dsr1-fp8-h200-trt
+  - dsr1-fp8-h200-trt-mtp
+  - qwen3.5-fp8-h100-sglang
+  - qwen3.5-fp8-h100-sglang-mtp
+  - qwen3.5-fp4-b200-trt
+  - qwen3.5-fp4-b200-trt-mtp
+  - dsr1-fp4-mi355x-sglang
+  - dsr1-fp4-mi355x-sglang-mtp
+  - dsr1-fp4-mi355x-atom
+  - dsr1-fp4-mi355x-atom-mtp
+  - dsr1-fp8-mi300x-sglang
+  - dsr1-fp8-mi325x-sglang
+  - dsr1-fp8-mi355x-sglang
+  - dsr1-fp8-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi325x-sglang
+  - qwen3.5-fp8-mi355x-sglang
+  - qwen3.5-fp8-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi355x-atom
+  - qwen3.5-fp8-mi355x-atom-mtp
+  - qwen3.5-fp4-mi355x-sglang
+  - qwen3.5-fp4-mi355x-atom
+  - qwen3.5-fp4-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi300x-sglang
+  - dsr1-fp8-mi355x-atom
+  - dsr1-fp8-mi355x-atom-mtp
+  - dsr1-fp8-mi325x-sglang-mtp
+  - qwen3.5-fp8-mi325x-sglang-mtp
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Pin the native SRT runtime to the reviewed-in-draft AMD/ATOM integration stack plus direct aggregate ATOM support; keep runner hardware settings in cluster profiles and exclude the held served-model-name PR
+  - 将原生 SRT 运行时固定到待评审的 AMD/ATOM 集成依赖链及 ATOM 聚合直接服务支持；硬件设置保留在集群配置中，不包含暂缓的 served-model-name PR
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352

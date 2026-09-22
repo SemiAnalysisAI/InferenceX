@@ -12,12 +12,18 @@ for name in RUN_EVAL EVAL_ONLY; do
     fi
 done
 case "$FRAMEWORK" in
-    sglang) CLIENT_BACKEND=vllm ;;
+    sglang|atom) CLIENT_BACKEND=vllm ;;
     trt) CLIENT_BACKEND=openai ;;
     *) echo "ERROR: unsupported fixed-sequence FRAMEWORK: $FRAMEWORK" >&2; exit 1 ;;
 esac
 SRT_MONITOR_INTERVAL="$GPU_MONITOR_INTERVAL"
 CLIENT_ARGS=()
+for argument in "$@"; do
+    case "$argument" in
+        --trust-remote-code) CLIENT_ARGS+=("$argument") ;;
+        *) echo "ERROR: unsupported fixed-sequence argument: $argument" >&2; exit 1 ;;
+    esac
+done
 case "$USE_CHAT_TEMPLATE" in
     true) CLIENT_ARGS+=(--use-chat-template) ;;
     false) ;;

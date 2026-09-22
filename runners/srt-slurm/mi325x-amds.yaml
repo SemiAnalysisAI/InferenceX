@@ -1,0 +1,17 @@
+default_partition: compute
+default_time_limit: ${SRT_DEFAULT_TIME_LIMIT}
+gpus_per_node: 8
+network_interface: ''
+visible_devices_env: ROCR_VISIBLE_DEVICES
+srtctl_root: ${SRTCTL_ROOT}
+default_mounts:
+  /dev/kfd: /dev/kfd
+  /dev/dri: /dev/dri
+default_sbatch_directives:
+  cpus-per-task: '256'
+use_gpus_per_node_directive: true
+use_segment_sbatch_directive: false
+use_exclusive_sbatch_directive: true
+default_bash_preamble: |
+  export XDG_CACHE_HOME="/tmp/xdg-cache-$$SLURM_JOB_ID"
+  export TRITON_CACHE_DIR="/tmp/triton-cache-$$SLURM_JOB_ID"

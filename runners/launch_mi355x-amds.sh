@@ -3,6 +3,24 @@
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
 check_env_vars EVAL_ONLY IS_AGENTIC IS_MULTINODE KEEP_LOGS RUN_EVAL
 
+# Select native fixed-sequence execution before the retained AgentX/multi-node paths.
+EXECUTION_PATH=legacy
+if [[ "$IS_MULTINODE" == false && -n "${SRT_RECIPE:-}" ]]; then
+    EXECUTION_PATH=native-single-node
+fi
+if [[ "$EXECUTION_PATH" == native-single-node ]]; then
+    check_env_vars GITHUB_WORKSPACE MODEL IMAGE
+    source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
+    export HF_HUB_CACHE_MOUNT=/var/lib/hf-hub-cache/
+    export SRT_MODEL_PATH="hf:$MODEL"
+    export SALLOC_TIME_LIMIT=500
+    export SRT_SCRATCH_ROOT="$(dirname "$GITHUB_WORKSPACE")"
+    export SRT_SRUN_OPTIONS='{"container-remap-root":"", "container-writable":""}'
+    SRT_SQUASH_FILE="/var/lib/squash/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    launch_srt_single_node mi355x-amds
+    exit $?
+fi
+
 scancel_sync() {
     local jobid=$1
     local timeout=${2:-600}
