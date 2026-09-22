@@ -413,6 +413,10 @@ run_lm_eval_on_router() {
     else
         export EVAL_CONCURRENT_REQUESTS=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
     fi
+    # run_lm_eval reads the endpoint from PORT (check_env_vars) and names the
+    # model from MODEL_NAME, which the vLLM prefill also serves next to
+    # SERVED_MODEL_NAME; MODEL stays the local HF dir for the context lookup.
+    export PORT="$ROUTER_PORT"
     export MODEL="$MODEL_PATH"
     export MAX_MODEL_LEN="$TILERT_MAX_MODEL_LEN"
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -429,7 +433,12 @@ run_lm_eval_on_router() {
             export DECODE_TP="${DECODE_TP_SIZE}" DECODE_EP=1 DECODE_NUM_WORKERS="${yD}"
             export DP_ATTENTION=false PREFILL_DP_ATTENTION=false DECODE_DP_ATTENTION=false
             export ISL="${BENCH_INPUT_LEN}" OSL="${BENCH_OUTPUT_LEN}"
-            append_lm_eval_summary
+            # As on the SGLang path: rewrite meta_env.json from the exports above,
+            # then stage unless run_eval already did (agentic eval-only).
+            rewrite_lm_eval_meta_env
+            if [[ "$EVAL_ONLY" != "true" || "$TILERT_IS_AGENTIC" != "1" ]]; then
+                append_lm_eval_summary
+            fi
         fi
         local eval_copy_dir="$LOG_DIR/eval_results"
         if stage_eval_artifacts "$eval_copy_dir" /workspace "${EVAL_RESULT_DIR:-}"; then
@@ -574,8 +583,14 @@ case "$TILERT_ROLE" in
         fi
         echo "Ready for benchmarking on ${host_name}:${host_ip}"
         cd "$WS_PATH" || exit 1
-        if [[ "$TILERT_IS_AGENTIC" == "1" ]]; then
+        # EVAL_ONLY skips the AgentX replay and runs GSM8K on the same router;
+        # RUN_EVAL after a replay runs it once the replay has finished. The
+        # fixed-sequence path handles both flags inside run_bench_and_eval.
+        if [[ "$TILERT_IS_AGENTIC" == "1" && "$EVAL_ONLY" != "true" ]]; then
             run_agentic_replay; BENCH_RC=$?
+            if [[ "$RUN_EVAL" == "true" ]]; then
+                run_lm_eval_on_router || BENCH_RC=1
+            fi
         else
             run_bench_and_eval; BENCH_RC=$?
         fi
