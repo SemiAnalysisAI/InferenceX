@@ -354,6 +354,8 @@ Maximum concurrency for 1,048,576 tokens per request: 6.70x
 `lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5`；其他 NVIDIA 配方使用
 `lmsysorg/sglang:dev-dsv41`，MI355X 使用 `lmsysorg/sglang:dev-dsv41-mi35x`。
 
+B200 独立块长度对比使用四个草稿 token 与已提交的 thinking-on 黄金 AL 3.26；评估保留真实验证。
+
 B200 在 TP4/EP4 C1–128 与 TP2/EP2 C1–8 全部使用上游默认 DSpark。
 Engram 保留在主机 DRAM，设置 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。
 [run 35626514270](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35626514270)

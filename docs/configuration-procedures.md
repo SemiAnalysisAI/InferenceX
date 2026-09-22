@@ -406,6 +406,8 @@ which has no released SGLang version for this model yet. B200 pins the CUDA 13 n
 `lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5` by digest; the other NVIDIA arms use
 `lmsysorg/sglang:dev-dsv41` and MI355X uses `lmsysorg/sglang:dev-dsv41-mi35x`.
 
+B200 isolated block-length comparison uses four draft tokens and committed thinking-on golden AL 3.26; evaluations retain real verification.
+
 B200 uses shipped-default DSpark across TP4/EP4 C1–128 and TP2/EP2 C1–8.
 Engram stays in host DRAM with `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`.
 Shared host tables had zero huge-page backing in

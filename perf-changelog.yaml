@@ -8559,7 +8559,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Pin B200 DeepSeek-V4.1 Flash to SGLang nightly-dev-cu13-20260921-0f6761b5 by digest and preserve shipped DSpark precision with the committed five-token golden acceptance curve"
+    - "Pin B200 DeepSeek-V4.1 Flash to SGLang nightly-dev-cu13-20260921-0f6761b5 by digest and preserve shipped DSpark precision with the committed four-token golden acceptance curve (AL 3.26) for an isolated block-length comparison"
     - "Use per-rank host Engram shards, interval 16, and concurrency-scaled SWA prefix capacity: TP4 C1-128 uses static fraction 0.80, chunk 4096, and 128-4096 tails; TP2 C1-8 uses static fraction 0.92, chunk 2048, and 128 tails per session"
     - "Enable TP2 loading by releasing completed target MoE shuffle inputs with a hash-verified lifetime-only patch and using expandable CUDA allocator segments; preserve tensor payloads, layouts, and computation"
     - "Resolve local model snapshots, retain robust AgentX HTTP timeouts, and normalize digest-pinned images for the installed Enroot parser with immediate import failure handling"
