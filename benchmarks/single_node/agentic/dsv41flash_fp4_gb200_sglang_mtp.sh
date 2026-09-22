@@ -106,6 +106,11 @@ case "$SPEC_DECODING" in
         ;;
 esac
 
+SCHEDULING_ARGS=()
+if [[ "$TP" -eq 4 && "$CONC" -eq 16 ]]; then
+    SCHEDULING_ARGS=(--prefill-decode-interval 16)
+fi
+
 SGLANG_CMD=(
     python3 -m sglang.launch_server
     --model-path "$MODEL_PATH" --served-model-name "$MODEL"
@@ -120,8 +125,9 @@ SGLANG_CMD=(
     # first 66k-99k-token AgentX prompts.
     --mem-fraction-static 0.70
     --chunked-prefill-size 4096
-    # Qualify cached SWA tail retention without changing scheduling or precision.
+    # Retain the measured tail reserve; qualify scheduling separately at C16.
     --swa-prefix-tails 1024
+    "${SCHEDULING_ARGS[@]}"
     "${SPECULATIVE_ARGS[@]}"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
