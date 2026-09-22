@@ -13,10 +13,13 @@ REJECT = "## ❌❌❌ **REJECTED** ❌❌❌"
 WARN = "## ⚠️ **Verdict: WARN** ⚠️"
 
 
-def verdict(header=PASS, *, failure=False, warning=False, prefix=""):
+def verdict(header=PASS, *, failure=False, warning=False, reuse_warning=False, prefix=""):
     rows = [f"✅ Check {number} (Requirement): PASS — Verified." for number in range(14)]
     rows[13] = "➖ Check 13 (Draft precision): N/A — No speculative changes."
     expanded = []
+    if reuse_warning:
+        rows.pop(4)
+        expanded.append("⚠️ Check 4 (Reuse command): WARN — No authorized reuse command.")
     if failure:
         rows.pop(1)
         expanded.append("❌ Check 1 (Sweep): FAIL — No passing sweep.")
@@ -107,6 +110,9 @@ def test_each_verification_appends_a_verdict_and_preserves_history(publish, auth
     (verdict(WARN, failure=True, warning=True), True),
     (verdict(PASS, warning=True, prefix="- "), True),
     (verdict(WARN), True),
+    (verdict(PASS, reuse_warning=True), True),
+    (verdict(REJECT, reuse_warning=True), True),
+    (verdict().replace("✅ Check 4 (Requirement): PASS", "❌ Check 4 (Requirement): FAIL"), True),
     (verdict(REJECT), True),
     (verdict().replace("✅ Check 14 (Pareto coverage): PASS — curve-a: 5/5.\n", ""), True),
     (verdict() + "\n✅ Check 14 (Pareto coverage): PASS — duplicate", True),
@@ -180,3 +186,16 @@ def test_successful_reassessment_preserves_warning_history_without_copying_tags(
     assert "@functionstackx" not in result["comments"][-1]["body"]
     assert "@adibarra" not in result["comments"][-1]["body"]
     assert "curve-a: 3/5" not in result["comments"][-1]["body"]
+
+
+@pytest.mark.parametrize("failure,coverage_warning", [(False, False), (True, False), (False, True), (True, True)])
+def test_reuse_warning_preserves_verdict_and_only_coverage_escalates(publish, failure, coverage_warning):
+    header = REJECT if failure else WARN
+    result = publish(verdict(header, failure=failure, warning=coverage_warning, reuse_warning=True))
+    body = result["comments"][0]["body"]
+    assert body.startswith("<!-- codeowner-signoff-verify -->\n" + header)
+    assert "⚠️ Check 4 (Reuse command): WARN — No authorized reuse command." in body
+    assert ("Pareto coverage needs additional review" in body) == coverage_warning
+    assert ("@functionstackx" in body) == coverage_warning
+    assert ("❌ Check 1 (Sweep): FAIL" in body) == failure
+    assert "did not produce a valid verdict" not in body
