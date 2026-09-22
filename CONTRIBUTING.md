@@ -21,43 +21,89 @@ Every PR description must include an **AI model disclosure** section. Name the e
 
 ## Draft-model precision
 
-Speculative-decoding submissions must use the original, unquantized draft weights
-and their native precision. This applies to embedded MTP/NextN/EAGLE draft heads
-and standalone draft models, including DSpark, on every hardware vendor and
-framework. Do not change draft precision at all relative to the reference:
-no quantization, downcasts, upcasts, same-width dtype conversions (such as
-BF16 to FP16), or mixed-precision overrides. This covers draft weights,
-activations, computation, and draft KV cache, whether changed offline, at load
-time, or during serving. Do not substitute a precision-converted draft checkpoint.
+The rule is simple: **serve the draft as it ships.** A speculative-decoding
+submission must run the draft head or draft model that ships with the checkpoint
+it serves, at the precision it ships in, through the pinned upstream framework's
+default handling of that checkpoint. This applies to embedded MTP/NextN/EAGLE heads
+and standalone draft models, including DSpark, on every hardware vendor and framework.
 
-Reviewers must check the effective draft precision, not just the launch flags.
-Inspect checkpoint metadata and quantization exclusions, environment variables,
-framework defaults in the pinned image, and any inherited target-model
-quantization. A quantized target/verifier is allowed under the existing eval
-requirements, but its quantization must not also quantize the draft components.
-Do not infer draft precision from the target checkpoint's name or precision label.
+"As it ships" does not mean BF16 and does not mean "the unquantized release". It
+means the default: what the checkpoint's authors published for that checkpoint, and
+what the pinned upstream image does with it out of the box. The baseline is the
+same checkpoint loaded by the same pinned image with no draft-related settings from
+the submission. A submission is compliant when its effective draft precision matches
+that baseline. It is not compliant when it makes the draft cheaper than that baseline.
 
-This includes settings such as `--speculative-draft-model-quantization quark_mxfp4`
-and `SGLANG_GLM_NEXTN_MOE_PTPC=1` when they quantize draft computation. An upstream
-recipe, passing evals, a claimed unchanged acceptance length (AL), or a newly
-measured AL curve does not exempt a submission from this rule. Synthetic AgentX
-acceptance is not evidence that draft precision was preserved.
+Allowed (this is the baseline, not an exception):
+
+- The draft head or draft weights embedded in, or released alongside, the served
+  checkpoint, in the precision they are stored in. If the served FP8 checkpoint ships
+  an FP8 MTP head, the FP8 head is the correct draft. Example: the Qwen FP8 checkpoints
+  store their MTP weights in FP8, so the embedded FP8 head is compliant, and swapping in
+  the BF16 release's head or forcing an unquantized-draft override is the violation,
+  not the fix.
+- Load-time handling that the pinned upstream framework applies by default to that
+  checkpoint, including dtype conversions. Example: the pinned SGLang image loads the
+  DeepSeek V4.1 DSpark `wo_a` projections, stored as FP8, as BF16, matching DeepSeek's
+  reference implementation. That conversion is the shipped path. A local patch that
+  keeps them FP8 changes the draft computation and is the violation.
+- The framework's default draft KV-cache dtype for that checkpoint, and an
+  upstream-supported KV-cache dtype applied consistently to target and draft (for
+  example FP8 draft KV inherited from an FP8 target).
+- Genuine upstream optimizations that ship in the pinned image and are used in
+  production by accuracy-sensitive customers: fused or lower-precision kernels that
+  upstream enables by default for that model, scheduling, and anything else that runs
+  the same draft computation faster without lowering the precision of its weights or
+  activations below what ships.
+
+Forbidden (submission-side precision hacking of the draft):
+
+- Online or offline quantization of draft weights, activations, or computation below
+  the shipped precision, whether through a flag, environment variable, config file, or
+  conversion step. This includes `--speculative-draft-model-quantization quark_mxfp4`
+  applied to a BF16 MTP head, `SGLANG_GLM_NEXTN_MOE_PTPC=1`, and an ATOM
+  `--online_quant_config` whose `exclude_layer` patterns do not cover the entire draft
+  head.
+- Dtype or KV-cache dtype overrides aimed at the draft that lower its precision below
+  the framework's default for that checkpoint.
+- Substituting a precision-converted or differently quantized draft checkpoint, or a
+  draft head taken from a different release than the served target.
+- Patching the pinned image so that it loads or computes the draft at a different
+  precision than it does by default, in either direction. The engine-patch rule
+  already forbids this; a waiver does not exempt draft precision.
+- Reducing draft FLOPs in ways the checkpoint's authors did not ship, such as
+  pruning draft layers or experts.
+
+A quantized target/verifier remains allowed under the existing eval requirements.
+Target quantization is fine as long as it does not also quantize the draft below what
+ships; check inherited quantization and `exclude_layer` coverage rather than assuming.
+
+Matching an upstream recipe, passing evals, a claimed unchanged acceptance length
+(AL), or a newly measured AL curve does not exempt a submission that lowers draft
+precision. Synthetic AgentX acceptance is not evidence either way. Draft-precision
+changes shift the accuracy hit onto acceptance rate, which the target-model evals do
+not measure.
+
+Reviewers must check the effective draft precision against the shipped baseline, not
+just the launch flags. Inspect checkpoint metadata and quantization exclusions,
+environment variables, framework defaults in the pinned image, and any inherited
+target-model quantization. Do not infer draft precision from the target checkpoint's
+name or precision label.
 
 For speculative-decoding changes, the CODEOWNER's additional detail section must
-identify the draft checkpoint/revision (or embedded head), its native and effective
-precision, and the metadata or pinned implementation used to verify that no draft
-weights or precision were changed. If the precision cannot be verified, the
-criterion is not satisfied. See the [review checklist](docs/PR_REVIEW_CHECKLIST.md) and
-[verifier Check 13](.github/codeowner-signoff-verify-prompt.md#check-13--draft-weights-and-precision-are-unchanged).
+identify the draft checkpoint/revision (or embedded head), the precision it ships in,
+how the pinned upstream image handles it by default, and its effective serving
+precision, so the reviewer can confirm the last two match. If this cannot be
+verified, the criterion is not satisfied. See the [review checklist](docs/PR_REVIEW_CHECKLIST.md) and
+[verifier Check 13](.github/codeowner-signoff-verify-prompt.md#check-13--draft-runs-as-shipped).
 
-This follows the same reference-head precision principle as
+This follows the same principle as
 [MLPerf Inference Rules, Appendix C: Speculative Decoding](https://github.com/mlcommons/inference_policies/blob/ff7edba545fded369e7e7e3d5a2f0bab4a95eece/inference_rules.adoc#appendix-c-speculative-decoding),
 which requires the reference MTP head "at the same precision as provided" and
 prohibits reference-head weight quantization and other acceptance-rate manipulation.
-That MLPerf revision includes a workload-specific quantized-edge exception;
-InferenceX does not adopt that exception. This comparison concerns preserving
-draft weights and precision, not adopting MLPerf's allowed-model list,
-speculative-decoding configuration, or acceptance methodology.
+InferenceX does not adopt that revision's workload-specific quantized-edge exception,
+its allowed-model list, or its speculative-decoding configuration and acceptance
+methodology.
 
 ## The PR Review Checklist (CODEOWNER sign-off)
 
@@ -67,7 +113,7 @@ Sign-off is required only when a changed file has a CODEOWNER other than a repos
 
 One eligible CODEOWNER reviewer fills in the latest [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) template in their approval comment.
 
-**Only one eligible CODEOWNER reviewer needs to post the checklist for each PR.** Check for an existing checklist before posting; additional reviewers do not need to post their own copies. For corrections, missing evidence, or verification retries, the original reviewer must **edit their existing checklist comment** instead of adding a new one. Create a replacement only if the original comment was deleted.
+**Only one eligible CODEOWNER reviewer needs to post the checklist for each PR.** Check for an existing checklist before posting; additional reviewers do not need to post their own copies. For corrections or missing evidence, the original reviewer must **edit their existing checklist comment** instead of adding a new one. Create a replacement only if the original comment was deleted.
 
 A friendly reminder. Please follow the latest checklist template **correctly**:
 
@@ -78,13 +124,13 @@ A friendly reminder. Please follow the latest checklist template **correctly**:
 
   Our CI verification workflow, [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml), triggers on exactly this phrase. **If your approval comment omits that phrase, the workflow will not verify the checklist.**
 - The sign-off can be posted as a regular conversation comment, a review summary, or an inline review comment. All three trigger verification.
-- Submit or edit the checklist when the PR is open and ready. Pushes, reopening, and leaving draft do not trigger verification. If a review event was missed during a merge conflict, retry after resolving it by editing the existing checklist or using manual dispatch.
+- Submit a new checklist when the PR is open and ready. Edits, pushes, reopening, and leaving draft do not trigger verification. If a review event was missed during a merge conflict, retry after resolving it using manual dispatch.
 - Starting Claude requires an eligible human actor with repository write access.
 - Fill in the "Additional detail section" with the links the checklist asks for (validation/eval workflow runs, the corresponding [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR, and any exception reasoning).
 
 Once the sign-off is posted, CI independently re-verifies the review checklist claims, including CODEOWNER status, a green sweep and evals on a commit in the PR, the linked recipe, the reuse command, use of the latest checklist template, upstream [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) images, no architecture-changing benchmark hacks, chat-template usage for speculative decoding, and unchanged draft-model/head weights and precision. It then creates a new verdict comment for the PR on every verification, even when the verdict is unchanged, including the SHA actually assessed. Failing criteria stay visible; passing and N/A criteria appear together in a collapsed section. Earlier verdict comments remain unchanged as assessment history; use the latest verdict for the assessed commit. Checkmarks are not taken on trust, so please only check items you have actually verified.
 
-The verdict records only the commit actually assessed; it does not carry approval forward to later commits. To request a new assessment, the original reviewer edits their existing checklist, or an authorized collaborator dispatches `codeowner-signoff-verify.yml` with `pr-number` and its `comment_url` (both must identify the same PR). Each assessment posts a new verdict comment.
+The verdict records only the commit actually assessed; it does not carry approval forward to later commits. To request a new assessment after correcting the existing checklist as needed, an authorized collaborator dispatches `codeowner-signoff-verify.yml` with `pr-number` and its `comment_url` (both must identify the same PR). Each assessment posts a new verdict comment.
 
 ## Reusing your PR's green sweep at merge with `/use`
 

@@ -40,12 +40,13 @@ def service(monkeypatch):
 
 
 def event_for(name):
-    comment = {"id": 41, "user": {"login": "reviewer"}}
+    comment = {"id": 41, "user": {"login": "reviewer"}, "body": "As a PR reviewer and CODEOWNER, I have reviewed this and have:"}
     event = {
+        "action": "submitted" if name == "pull_request_review" else "created",
         "issue": {"number": 7},
         "pull_request": {"number": 7},
         "comment": comment,
-        "review": {"id": 42, "user": {"login": "reviewer"}},
+        "review": {**comment, "id": 42},
         "sender": {"type": "User"},
     }
     if name == "pull_request_review_comment":
@@ -190,3 +191,21 @@ def test_entrypoint_writes_real_actions_outputs(service, tmp_path, monkeypatch):
         "signoff-kind=review summary\n"
         "signoff-fetch-cmd=gh api repos/example/repo/pulls/7/reviews/42 --jq .body\n"
     )
+
+
+@pytest.mark.parametrize("name", ["issue_comment", "pull_request_review", "pull_request_review_comment"])
+@pytest.mark.parametrize("action", ["edited", "deleted", "dismissed"])
+def test_existing_signoff_changes_do_not_start_verification(service, name, action):
+    event = event_for(name)
+    event["action"] = action
+    service.clear()  # Rejected events must not reach GitHub or verification.
+    assert resolve(name, event) == {"proceed": "false"}
+
+
+@pytest.mark.parametrize("name", ["issue_comment", "pull_request_review", "pull_request_review_comment"])
+@pytest.mark.parametrize("body", [None, "", "Please review this.", "<!-- codeowner-signoff-verify -->\nVerdict: PASS"])
+def test_new_non_signoff_comments_do_not_start_verification(service, name, body):
+    event = event_for(name)
+    event["review" if name == "pull_request_review" else "comment"]["body"] = body
+    service.clear()
+    assert resolve(name, event) == {"proceed": "false"}

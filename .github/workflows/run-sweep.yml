@@ -296,7 +296,7 @@ jobs:
                       - fp4: FP4 precision
                       - mtp, eagle, eagle3: speculative decoding method
                       - sglang, vllm, dynamo-vllm: runtime framework
-                      - model criterion: matching configured model family
+                      - model criterion: matching configured model family; legacy criteria remain in the shared priority taxonomy for retained SPEED-Bench collectors and do not authorize deprecated master coverage
                       - checklist-complete: PR checklist is satisfied
                       - patchwork: modified upstream engine or runtime source
 

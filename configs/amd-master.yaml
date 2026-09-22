@@ -997,12 +997,12 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
       # while MTP creates two. Restore these points after the upstream hybrid
       # KV recovery fix lands: https://github.com/vllm-project/vllm/pull/45497
 
-# DeepSeek-V4-Pro FP4 AgentX on one MI355X node using ATOM MTP. Throughput
-# uses the thinking_on golden AL 2.49 for three draft tokens; eval uses real
-# MTP acceptance. max-num-seqs is set to 2x concurrency by the recipe.
+# DeepSeek-V4-Pro-0813 FP4 AgentX on one MI355X node using ATOM DSpark K6.
+# Both throughput bands use thinking_on golden AL 3.77; eval uses real
+# acceptance. Keep the historical config key for changelog compatibility.
 dsv4-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202608280858
-  model: deepseek-ai/DeepSeek-V4-Pro
+  image: rocm/atom-dev:nightly_202609161445
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
   precision: fp4
@@ -1011,8 +1011,8 @@ dsv4-fp4-mi355x-atom-agentic-mtp:
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16] }
-      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [48, 64, 96, 128, 256] }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: draft_model, conc-list: [48, 64, 96, 128, 256] }
 
 dsr1-fp4-mi355x-sglang-disagg-mtp:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
@@ -1146,7 +1146,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=1"
 
 minimaxm3-fp8-mi300x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36
+  image: vllm/vllm-openai-rocm:v0.29.0
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: cluster:mi300x-amd

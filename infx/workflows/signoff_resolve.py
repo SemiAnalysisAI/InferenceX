@@ -87,6 +87,13 @@ def resolve(
         "workflow_dispatch",
     }:
         return {"proceed": "false"}
+    if event_name != "workflow_dispatch":
+        expected_action = "submitted" if event_name == "pull_request_review" else "created"
+        comment = event.get("review" if event_name == "pull_request_review" else "comment") or {}
+        if event.get("action") != expected_action or "As a PR reviewer and CODEOWNER" not in (
+            comment.get("body") or ""
+        ):
+            return {"proceed": "false"}
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
         raise ValueError("Invalid GitHub repository")
     number, author, kind, fetch_cmd = _reference(event_name, event, repo, token)

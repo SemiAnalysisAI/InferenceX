@@ -131,7 +131,7 @@ jobs:
 
             **Specify concurrency and sequence length:**
             ```
-            generate-cli-command: "full-sweep --config-files configs/nvidia-master.yaml --single-node --model-prefix dsr1 --min-conc 4 --max-conc 4 --seq-lens 1k1k"
+            generate-cli-command: "full-sweep --config-files configs/nvidia-master.yaml --single-node --model-prefix dsr1 --min-conc 4 --max-conc 4 --seq-lens 8k1k"
             ```
 
             **Test specific config keys (MUST USE `--conc`):**
@@ -142,7 +142,7 @@ jobs:
             **IMPORTANT: Keep runs precise and efficient:**
             - Use `full-sweep` with filter flags to narrow down the benchmark scope - "full-sweep" does NOT mean running everything
             - When using `full-sweep`, you must use `--min-conc` and `--max-conc` together to specify a single concurrency value. Unless prompted otherwise, use `--min-conc 4 --max-conc 4`
-            - When using `full-sweep`, you can use `--seq-lens` to specify sequence lengths (choices: 1k1k, 8k1k). Unless prompted otherwise, use `--seq-lens 1k1k`
+            - For fixed-sequence runs, use `--seq-lens 8k1k`. Use `1k1k` only for the explicitly retained GLM-5.1 B200 TileRT config. Consult `MODELS.md` for model-specific scenario eligibility.
             - Use `test-config` ONLY when given specific config keys to test - Use `--config-files`, `--config-keys`, and `--conc` flags ONLY
             - Always filter by specific models, frameworks, precision, conc, or config keys when possible
 
@@ -193,7 +193,7 @@ jobs:
 
             **How to map a natural-language request to inputs:**
             The user will say something like "profile sglang b200 deepseek fp4 conc=4". Parse it as:
-            - Model: "deepseek" / "dsr1" → model-prefix `dsr1`; "gptoss" → `gptoss`; "qwen" → `qwen3.5`
+            - Model: resolve the requested model against the current active master configs and `MODELS.md`; for example, `dsr1` means DeepSeek-R1 and `qwen3.5` means Qwen3.5. Reject retired model/scenario requests and preserve documented exceptions.
             - Precision: "fp4" / "fp8" / "bf16"
             - Runner/hardware: "b200", "h200", "h100", "mi300x", "mi325x", "mi355x", etc.
             - Framework: must be "sglang" (reject if not)
@@ -203,8 +203,8 @@ jobs:
             Choose config-file: NVIDIA runners (b200, h200, h100, gb200, gb300) → `nvidia-master.yaml`; AMD runners (mi300x, mi325x, mi355x) → `amd-master.yaml`
 
             **Available SGLang config keys:**
-            NVIDIA: `dsr1-fp4-b200-sglang`, `dsr1-fp8-b200-sglang`, `dsr1-fp8-h200-sglang`, `qwen3.5-bf16-b200-sglang`
-            AMD: `dsr1-fp4-mi355x-sglang`, `dsr1-fp8-mi300x-sglang`, `dsr1-fp8-mi325x-sglang`, `dsr1-fp8-mi355x-sglang`, `qwen3.5-bf16-mi355x-sglang`, `qwen3.5-fp8-mi355x-sglang`
+            NVIDIA: `dsr1-fp4-b200-sglang`, `dsr1-fp8-b200-sglang`, `dsr1-fp8-h200-sglang`, `qwen3.5-fp8-b200-sglang`
+            AMD: `dsr1-fp4-mi355x-sglang`, `dsr1-fp8-mi300x-sglang`, `dsr1-fp8-mi325x-sglang`, `dsr1-fp8-mi355x-sglang`, `qwen3.5-fp8-mi355x-sglang`
 
             **Examples:**
             - "profile sglang b200 deepseek fp4 conc=4" → `config-key: dsr1-fp4-b200-sglang`, `config-file: configs/nvidia-master.yaml`, `conc: 4`
@@ -585,27 +585,15 @@ jobs:
             ## Model Prefix Validation:
             When reviewing changes to `configs/*-master.yaml` files, verify that ALL config keys use valid model prefixes.
 
-            **Valid model prefixes:**
-            - `dsr1` - DeepSeek R1 models
-            - `gptoss` - GPT-OSS models
+            Use `MODELS.md` and the active master configs as the source of truth for supported models, scenarios, precisions, and documented exceptions. Do not use a hard-coded historical prefix allowlist.
 
-            **Invalid model prefixes (will break frontend):**
-            - `dsr1-fp8` - INVALID: precision should NOT be part of the model prefix
-            - `dsr1-fp4` - INVALID: precision should NOT be part of the model prefix
-            - Any other prefix not in the valid list above
+            **Config identity:**
+            - `model-prefix` identifies the model family and does not include precision (for example, `dsr1`, not `dsr1-fp8`).
+            - Config keys begin with `{model-prefix}-{precision}-{hardware}-{framework}` and may have scenario or recipe suffixes.
+            - Example: `dsr1-fp8-gb200-vllm` has model-prefix `dsr1` and precision `fp8`.
 
-            **Config key format:**
-            Config keys follow the pattern: `{model-prefix}-{precision}-{hardware}-{framework}`
-            Example valid keys:
-            - `dsr1-fp8-gb200-vllm` (model-prefix=dsr1, precision=fp8)
-            - `gptoss-fp4-h200-sglang` (model-prefix=gptoss, precision=fp4)
-
-            **Why this matters:**
-            The frontend expects specific model prefixes (`dsr1` or `gptoss`) to display benchmark results correctly. Using invalid prefixes like `dsr1-fp8` will cause the frontend to fail to display results, breaking the user experience.
-
-            **Validation:**
-            When reviewing config additions or changes, check that the first segment of config keys (before the first `-`) is either `dsr1` or `gptoss`.
-
-            If a config key uses an invalid model prefix:
-            - This is a 🔴 **BLOCKING** issue
-            - Comment: "Invalid model prefix detected. The frontend only supports `dsr1` and `gptoss` as model prefixes. Using other prefixes like `dsr1-fp8` will break the frontend and prevent benchmark results from being displayed. Please use the format `{valid-prefix}-{precision}-{hardware}-{framework}` where valid-prefix is either `dsr1` or `gptoss`."
+            **Deprecation validation:**
+            - Reject new active entries for retired models, scenarios, or precisions unless `MODELS.md` explicitly documents an exception.
+            - Preserve the GLM-5.1 B200 TileRT exception and the conditional non-speculative AgentX policy; do not infer retirement from the existence of a speculative counterpart.
+            - Deprecated entries belong only in `configs/deprecated/amd-master.yaml` or `configs/deprecated/nvidia-master.yaml`, following `AGENTS.md`. Historical entries in these archives are not active submissions.
+            - For a newly supported model, require matching updates to `MODELS.md` and `MODELS_zh.md` rather than rejecting it against an obsolete model list.

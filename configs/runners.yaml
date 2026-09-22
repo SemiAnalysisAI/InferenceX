@@ -76,7 +76,6 @@ labels:
     - mi300x-amd_05
     - mi300x-amd_06
     - mi300x-amd_07
-    - mi300x-amd_08
   mi325x:
     - mi325x-amds_00
     - mi325x-amds_01
@@ -251,7 +250,6 @@ labels:
     - mi300x-amd_05
     - mi300x-amd_06
     - mi300x-amd_07
-    - mi300x-amd_08
   cluster:mi300x-tw:
     - mi300x-tw_00
     - mi300x-tw_01

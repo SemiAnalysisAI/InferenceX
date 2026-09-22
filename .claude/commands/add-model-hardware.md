@@ -36,6 +36,8 @@ breakdown. Do **not** invent image tags. Verify them on the registry first.
 Don't guess flags or concurrencies. **Deep-research the InferenceX codebase first**, then
 the external sources. Read *several* similar files, not just one, and copy what actually runs.
 
+Check `MODELS.md` before choosing a model, scenario, or precision. Do not reintroduce retired coverage; preserve only explicitly documented exceptions. Use active siblings, not files under `deprecated/`.
+
 **A. In-codebase research (primary because this repo is the source of truth):**
 ```bash
 # similar benchmark scripts: same model on other SKUs, AND same SKU on other models
@@ -50,10 +52,10 @@ grep -nE "run_benchmark_serving|setup_eval_context|wait_for_server_ready|start_g
 - **Read multiple sibling scripts** end-to-end for the exact env vars and serve shape (`VLLM_*`,
   `SGLANG_*`, device mapping, download/cache handling, `--enforce-eager` vs graph capture,
   KV-cache dtype, attention/MoE backend, parsers). These are the truth for each runner.
-- **Compare several master-config search spaces** (e.g. `dsv4`, `glm5`, the same model on a
+- **Compare several master-config search spaces** (e.g. `dsr1`, `qwen3.5`, the same model on a
   sibling SKU) to choose `{tp, ep, dp-attn} × concurrency` combos that fit *this* hardware's
   memory. Small-memory SKUs like h100/mi300x go TP8-only, while bigger SKUs add tp4/tp2/DEP.
-- **Internalize the fixed-seq-len nuances from the existing configs**: `8k1k`/`1k8k` do **not**
+- **Internalize the fixed-seq-len nuances from the existing configs**: `8k1k` runs do **not**
   need the full `MAX_MODEL_LEN` (the matrix supplies `isl + osl + slack`), and graph-capture
   batch sizes are scaled to concurrency/scenario (and spec-token count for MTP), not maxed.
   Copy how sibling scripts/configs already do it.
@@ -107,7 +109,7 @@ the model's `recipes.vllm.ai` page:
   Capture up to the next power of two ≥ `CONC` (≥ `CONC * (1 + NUM_SPEC_TOKENS)` with spec
   decoding), capped at vLLM's 2048.
 - **`MAX_MODEL_LEN`** is the matrix-supplied scenario value (`isl + osl + slack`). Never
-  hardcode the full context for 8k1k / 1k8k.
+  hardcode the full context for 8k1k.
 - **Memory headroom.** Bigger checkpoints constrain TP/EP. If the sibling on a smaller-memory
   SKU is TP8-only (e.g. h100), match that.
 
@@ -117,7 +119,7 @@ Validate as you go: `bash -n <script>`.
 
 Append `<model>-<precision>-<sku>[-<engine>][-mtp]` after the sibling, with the correct
 `image`, `model`, `model-prefix`, `runner`, `precision`, `framework`. The **search space** is
-`{tp, ep, dp-attn} × concurrency` per scenario (1k1k, 8k1k):
+`{tp, ep, dp-attn} × concurrency` per supported scenario from `MODELS.md` (8k1k or AgentX as applicable; 1k1k is only retained for GLM-5.1 B200 TileRT):
 - Mirror a sibling's parallelism layouts. Trim concurrency ranges to what the SKU's memory
   supports (small-mem SKUs → TP8-only, drop tp2/tp4 and DEP).
 - Latency (TP-only) rows should start at conc 1. TEP/DEP rows start higher (they only pay off
