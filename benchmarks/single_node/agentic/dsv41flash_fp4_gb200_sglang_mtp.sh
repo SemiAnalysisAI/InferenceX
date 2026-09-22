@@ -120,6 +120,8 @@ SGLANG_CMD=(
     # first 66k-99k-token AgentX prompts.
     --mem-fraction-static 0.70
     --chunked-prefill-size 4096
+    # Qualify cached SWA tail retention without changing scheduling or precision.
+    --swa-prefix-tails 1024
     "${SPECULATIVE_ARGS[@]}"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"

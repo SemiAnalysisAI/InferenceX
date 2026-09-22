@@ -8597,4 +8597,5 @@
   - 'Use the upstream per_rank Engram host-table layout on GB200: anonymous row-sharded mappings can obtain 512 MiB huge pages on the measured madvise/never anonymous/shared THP policy; preserve original FP8 table weights and restore the two TP all-reduces'
   - "Use the default MTP/DSpark precision shipped by the official nightly, without custom draft quantization or precision patches."
   - Keep the sweep DSpark-only; remove the unmeasured STP entry and alias.
+  - Qualify 1024 cached SWA prefix tails against the matched host-Engram baseline at canonical C16; preserve default scheduling, the 4096-token chunk, static allocation 0.70, full context, and shipped DSpark precision. Performance and full accuracy qualification remain pending.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3347
