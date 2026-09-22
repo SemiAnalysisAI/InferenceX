@@ -261,10 +261,29 @@ verify_slurm_job_status() {
     local job_id="$1"
     # Disappearing from squeue means terminal, not successful. Accounting can
     # lag briefly; inspect only the allocation, never successful service steps.
-    local attempt accounting state exit_code
+    local attempt accounting state exit_code controller field controller_job_id
+    local -a controller_fields
     for attempt in {1..10}; do
         accounting=$(sacct -X -n -P -j "$job_id" --format=State,ExitCode 2>/dev/null) || accounting=""
         IFS='|' read -r state exit_code <<< "$accounting"
+        if [[ -z "$state" ]]; then
+            # Some pools do not expose slurmdbd. The controller retains recent
+            # terminal allocations; require its state and exit code, too.
+            controller=$(scontrol show job -o "$job_id" 2>/dev/null) || controller=""
+            controller_job_id=""
+            read -r -a controller_fields <<< "$controller"
+            for field in "${controller_fields[@]}"; do
+                case "$field" in
+                    JobId=*) controller_job_id="${field#JobId=}" ;;
+                    JobState=*) state="${field#JobState=}" ;;
+                    ExitCode=*) exit_code="${field#ExitCode=}" ;;
+                esac
+            done
+            if [[ "$controller_job_id" != "$job_id" ]]; then
+                state=""
+                exit_code=""
+            fi
+        fi
         case "$state" in
             COMPLETED)
                 if [[ "$exit_code" == "0:0" ]]; then

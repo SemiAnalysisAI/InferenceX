@@ -12,6 +12,6 @@ default_sbatch_directives:
 use_gpus_per_node_directive: true
 use_segment_sbatch_directive: false
 use_exclusive_sbatch_directive: true
-default_bash_preamble: |
+default_bash_preamble: |-
   export XDG_CACHE_HOME="/tmp/xdg-cache-$$SLURM_JOB_ID"
   export TRITON_CACHE_DIR="/tmp/triton-cache-$$SLURM_JOB_ID"

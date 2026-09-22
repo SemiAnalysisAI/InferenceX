@@ -342,3 +342,31 @@ def test_runtime_container_options_remain_native_mapping(point):
     assert actual['srun_options'] == {'container-remap-root': '', 'container-writable': ''}
     with pytest.raises(ValueError, match='must map option names to string values'):
         runtime_arguments(f"{path}:base", {**env, 'SRT_SRUN_OPTIONS': '{"container-remap-root": true}'})
+
+
+@pytest.mark.parametrize("controller,expected", [
+    ("JobId=42 JobState=COMPLETED ExitCode=0:0", 0),
+    ("JobId=42 JobState=FAILED ExitCode=1:0", 1),
+    ("JobId=42 JobState=COMPLETED ExitCode=0:9", 1),
+    ("JobId=43 JobState=COMPLETED ExitCode=0:0", 1),
+    ("", 1),
+])
+def test_terminal_allocation_without_accounting(tmp_path, controller, expected):
+    binaries = tmp_path / "bin"
+    binaries.mkdir()
+    for name, body in {
+        "sacct": "exit 1",
+        "scontrol": 'printf "%s\\n" "$CONTROLLER_RECORD"',
+        "sleep": "exit 0",
+    }.items():
+        binary = binaries / name
+        binary.write_text(f"#!/usr/bin/env bash\n{body}\n")
+        binary.chmod(0o755)
+    result = subprocess.run(
+        ["bash", "-c", 'source "$1"; verify_slurm_job_status 42', "bash", str(ROOT / "runners/slurm_utils.sh")],
+        env={**os.environ, "PATH": f"{binaries}:{os.environ['PATH']}", "CONTROLLER_RECORD": controller},
+        capture_output=True, text=True, timeout=5,
+    )
+    assert result.returncode == expected, result.stdout + result.stderr
+    if expected:
+        assert "ERROR:" in result.stderr

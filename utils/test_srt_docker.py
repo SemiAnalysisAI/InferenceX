@@ -82,6 +82,25 @@ def test_docker_client_failure_and_readiness_clean_up_owned_server(tmp_path, cli
         binary.chmod(0o755)
     if ready:
         (workspace / "srt-docker-server.sh").write_text('echo $$ > "$INFMAX_CONTAINER_WORKSPACE/server.pid"\nexec /bin/sleep 120\n')
+    else:
+        # A log follower can take time to stop. Detach its output so EOF alone
+        # cannot hide a missing wait in the wrapper's failed-readiness path.
+        follower = binaries / "tail"
+        follower.write_text(f"#!{sys.executable}\n" +
+            "import os, pathlib, signal, time\n"
+            "workspace = pathlib.Path(os.environ['INFMAX_CONTAINER_WORKSPACE'])\n"
+            "null = os.open(os.devnull, os.O_WRONLY)\n"
+            "os.dup2(null, 1); os.dup2(null, 2); os.close(null)\n"
+            "def stop(*_):\n"
+            "    time.sleep(0.1)\n"
+            "    (workspace / 'follower-stopped').touch()\n"
+            "    raise SystemExit(0)\n"
+            "signal.signal(signal.SIGTERM, stop)\n"
+            "(workspace / 'follower-ready').touch()\n"
+            "signal.pause()\n")
+        follower.chmod(0o755)
+        (binaries / "curl").write_text(
+            '#!/bin/bash\nwhile [[ ! -e "$INFMAX_CONTAINER_WORKSPACE/follower-ready" ]]; do /bin/sleep 0.01; done\nexit 1\n')
     env = {**os.environ, "PATH": f"{binaries}:{Path(sys.executable).parent}:{os.environ['PATH']}",
            "INFMAX_CONTAINER_WORKSPACE": str(workspace), "MODEL": "test/model", "PORT": "9019",
            "RUN_EVAL": "false", "EVAL_ONLY": "false", "MODEL_PATH": ""}
@@ -89,6 +108,8 @@ def test_docker_client_failure_and_readiness_clean_up_owned_server(tmp_path, cli
     assert result.returncode == (client_exit if ready else 1), result.stdout + result.stderr
     assert (workspace / "client-ran").exists() is ready
     assert (workspace / "download").read_text() == "download\ntest/model\n"
+    if not ready:
+        assert (workspace / "follower-stopped").exists()
     if ready:
         pid = int((workspace / "server.pid").read_text())
         for _ in range(100):

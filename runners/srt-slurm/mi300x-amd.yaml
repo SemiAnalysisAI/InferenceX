@@ -12,7 +12,7 @@ default_sbatch_directives:
 use_gpus_per_node_directive: true
 use_segment_sbatch_directive: false
 use_exclusive_sbatch_directive: true
-default_bash_preamble: |
+default_bash_preamble: |-
   if [[ "$$MODEL_PREFIX" == dsr1 && "$$FRAMEWORK" == sglang ]]; then
       firmware=$$(rocm-smi --showfw | awk '/MEC/ {print $$NF; exit}')
       if [[ -z "$$firmware" || "$$firmware" -lt 177 ]]; then

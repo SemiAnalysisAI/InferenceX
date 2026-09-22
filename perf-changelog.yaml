@@ -8831,3 +8831,19 @@
   - Pass AMD container runtime options as native dotted leaf overrides so SRT validates them as a mapping before submission; surface native submission errors in workflow logs
   - 将 AMD 容器运行时选项作为原生点路径叶值传递，确保 SRT 在提交前将其校验为映射，并在工作流日志中显示原生提交错误
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
+
+- config-keys:
+  - dsr1-fp8-mi300x-sglang
+  - dsr1-fp8-mi325x-sglang
+  - qwen3.5-fp8-mi325x-sglang
+  - qwen3.5-fp8-mi300x-sglang
+  - dsr1-fp8-mi325x-sglang-mtp
+  - qwen3.5-fp8-mi325x-sglang-mtp
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Strip the trailing newline from AMD native shell preambles and verify completed
+    allocations through the Slurm controller when accounting is unavailable; reap
+    failed-startup log followers before exit
+  - 去除 AMD 原生 shell 前置命令的尾部换行，并在 accounting 不可用时通过 Slurm 控制器核验已完成的资源分配；启动失败时等待日志跟随进程退出
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
