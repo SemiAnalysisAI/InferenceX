@@ -8132,7 +8132,7 @@ dsv41flash-fp4-gb200-sglang-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
 
 dsv41flash-fp4-b300-vllm-agentic-dspark:
   image: vllm/vllm-openai:deepseekv41-flash-0909
