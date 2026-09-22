@@ -214,6 +214,16 @@ RUN_ID=$(gh run list \
 
 如果 `RUN_ID` 为空，不得继续。Run Metadata 描述派发 Workflow 的 Ref，可能不等于输入 `ref`。解释 GPU 结果前，必须在 `get-jobs` 中确认唯一标题、生成器命令与 Checkout Ref。
 
+## Kimi-K3 AgentX 功耗补测
+
+Kimi-K3 的 B200、GB200 和 GB300 多节点配方启用必需的 DCGM 遥测，并在服务头节点运行自定义 AgentX 客户端。Launcher 选择固定提交的 AgentX 功耗运行时、记录提交 SHA，等待 Slurm 结束和遥测收尾，然后逐一验证所请求的并发点并保存结果。共享结果收集器会保留原生任务的失败状态，先保存可用的功耗诊断文件，再返回失败。H200 路由和 AMD 测量尾部修复属于独立变更，仍待各自集成与验证。启用必需遥测配置本身不代表硬件验证通过。
+
+GB300 Kimi-K3 聚合与分离部署 recipe 使用 exporter 端口 `19401`，因为节点系统服务占用了 `9401`。共享遥测阶段会将此端口传入 prefill 和 decode 两个 Slurm 分组。已有双节点 exporter 生命周期证据验证了端口归属与清理行为，但不能替代分离部署的请求账目、功耗窗口或 eval 验证。
+
+补测缺失功耗时，只生成缺失的配方与并发组合，设置 `require-power: true`，保持 `agentx-fast: false`，并留空时长覆盖。标准 AgentX Profile 为一小时。对新启用的运行时或集群，先验证一个缺失点，再调度其余点。配方渲染通过或 GitHub Runner 在线并不能证明实时采集已就绪，也不能证明 Slurm 有空闲资源。保留现有有效点，新性能与功耗必须来自同一次运行；不得把新运行的能耗附加到旧性能点上。手动 `e2e-tests.yml` 产物仍须经过正常审查和入库流程，才会显示在 Dashboard 中。
+
+B200 Kimi 配方采用 DCP8，且关闭 Mooncake Offload。Master Config 记录 `dcp-size: 8` 和 `kv-offloading: none` 以匹配实际命令；这项元数据修正不会启用 Offload。
+
 ## PR 主标签与修饰标签
 
 同仓库 PR 无论处于草稿还是 ready 状态，都由 sweep 标签授权 GPU 运行。草稿状态控制是否开始审阅，不决定 sweep 资格；fork PR 仍使用受信任调度路径。添加 sweep 标签或在保留标签时推送提交可以启动 sweep。标记为 ready 不会调度或重复运行。已带标签但尚无运行的草稿，可先移除再重新添加对应 sweep 标签来启动。
@@ -277,11 +287,11 @@ gh api "/repos/SemiAnalysisAI/InferenceX/actions/runs/$RUN_ID" \
 
 ### 安全重跑
 
-CODEOWNER 验证会在合格的人类用户为打开且非草稿的 PR 提交或编辑清单时触发，也可通过 `pr-number` 和该清单的 `comment_url` 手动分发。它仅适用于可信目标分支 CODEOWNERS 中存在非管理员、非 core owner 的改动；其他改动跳过验证。归属、重命名及权限规则见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
+CODEOWNER 验证会在合格的人类用户为打开且非草稿的 PR 提交新清单时触发，也可通过 `pr-number` 和该清单的 `comment_url` 手动分发。它仅适用于可信目标分支 CODEOWNERS 中存在非管理员、非 core owner 的改动；其他改动跳过验证。归属、重命名及权限规则见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
 
 验证使用可信默认分支代码，并按 PR 串行执行。启动 Claude 要求触发者的基础 `permission` 为 `write` 或 `admin`，且 `role_name` 为 `write`、`maintain` 或 `admin`。未知或自定义角色、字段缺失、机器人触发和查询失败均不能启动验证。手动分发的 `pr-number` 和 `comment_url` 必须指向同一 PR。
 
-验证器只更新一条供审阅参考的评论，注明实际评估的 SHA，不再发布提交状态。后续推送不会延续该评估，也不会触发新运行。需要重新评估时，请编辑已有清单或手动分发；合并冲突期间遗漏的 Review 事件也按此方式重试。GitHub 单独设置的人工批准要求仍然适用。
+验证器在每次验证后发布一条新的供审阅参考的评论，注明实际评估的 SHA，不再发布提交状态。后续推送不会延续该评估，也不会触发新运行。编辑清单不会触发验证。需要重新评估时，请手动分发；合并冲突期间遗漏的 Review 事件也按此方式重试。GitHub 单独设置的人工批准要求仍然适用。
 
 不要盲目重跑仍在执行的 Run。已结束的失败 Run 可以只重跑失败 Job 及其依赖项：
 

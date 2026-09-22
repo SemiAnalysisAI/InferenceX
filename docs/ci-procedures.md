@@ -222,6 +222,16 @@ RUN_ID=$(gh run list \
 
 Do not continue if `RUN_ID` is empty. Run metadata describes the dispatch workflow ref, which may not equal input `ref`. Verify the unique title, generator command, and checkout ref in `get-jobs` before interpreting GPU results.
 
+## Kimi-K3 AgentX power backfills
+
+The Kimi-K3 B200, GB200 and GB300 multi-node recipes enable required DCGM telemetry and run the custom AgentX client on the serving head. Their launchers select the immutable AgentX power runtime, stamp its commit, wait for Slurm completion and telemetry drain, then validate each requested concurrency before staging results. The shared result collector preserves failed native jobs and stages available power diagnostics before returning a failure. H200 routing and AMD measurement-tail fixes are separate changes pending their own integration and validation. Required telemetry configuration alone does not establish hardware qualification.
+
+GB300 Kimi-K3 aggregate and disaggregated recipes use exporter port `19401` because the node system service occupies `9401`. The shared telemetry stage forwards this port to both prefill and decode Slurm groups. The retained two-node exporter lifecycle evidence covers port ownership and cleanup; it does not replace disaggregated request, power-window, or eval qualification.
+
+For a missing-power backfill, generate only the missing recipe/concurrency combinations, set `require-power: true`, and leave `agentx-fast: false` and the duration override empty. The normal AgentX profile is one hour. Verify a first missing point on each newly enabled runtime/cluster before scheduling its remaining points. A rendered recipe or an online GitHub runner does not establish live collector readiness or Slurm capacity. Preserve the existing validated points, and keep new performance and power values paired with their own run; never attach a new run's energy to an older performance row. Manual `e2e-tests.yml` artifacts still require the normal reviewed ingestion path before they appear in the dashboard.
+
+B200 Kimi recipes use DCP8 with Mooncake offload disabled. The master config records `dcp-size: 8` and `kv-offloading: none` to match those commands; this metadata correction does not enable offload.
+
 ## PR primary and modifier labels
 
 Sweep labels authorize GPU work for same-repository PRs whether draft or ready. Draft status controls review readiness, not sweep eligibility; fork PRs retain their trusted-dispatch path. Adding a sweep label or pushing with one present can start a sweep. Marking ready does not dispatch or repeat one. To start an already-labeled draft that has no run, remove and reapply its sweep label.
@@ -285,11 +295,11 @@ The [`Claude Code` workflow](../.github/workflows/claude.yml) has separate revie
 
 ### Rerun safely
 
-CODEOWNER verification runs when an eligible human submits or edits a checklist on an open, ready PR, or manually dispatches it with `pr-number` and that checklist's `comment_url`. It applies only to changes with a non-admin, non-core owner under trusted target-branch CODEOWNERS. Other changes skip verification. See the [contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off) for ownership, rename, and permission rules.
+CODEOWNER verification runs when an eligible human submits a new checklist on an open, ready PR, or manually dispatches it with `pr-number` and that checklist's `comment_url`. It applies only to changes with a non-admin, non-core owner under trusted target-branch CODEOWNERS. Other changes skip verification. See the [contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off) for ownership, rename, and permission rules.
 
 Execution stays on the trusted default branch and serializes per PR. Starting Claude requires the actor's base `permission` to be `write` or `admin`, and `role_name` to be `write`, `maintain`, or `admin`. Unknown/custom roles, missing fields, bots, and lookup failures do not start verification. Manual dispatch requires `pr-number` and `comment_url` to identify the same PR.
 
-The verifier updates one advisory comment with the assessed SHA and publishes no commit status. Later pushes do not extend that assessment or trigger another run. Edit the existing checklist or dispatch manually to reassess, including after a review event was missed during a merge conflict. GitHub's separate human approval requirements still apply.
+The verifier posts a new advisory comment with the assessed SHA for each verification and publishes no commit status. Later pushes do not extend that assessment or trigger another run. Checklist edits do not trigger verification. Dispatch manually to reassess, including after a review event was missed during a merge conflict. GitHub's separate human approval requirements still apply.
 
 Do not rerun an in-progress run blindly. A completed failed run can rerun only failed jobs and their dependents:
 
