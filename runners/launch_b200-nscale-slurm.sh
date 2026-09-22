@@ -65,8 +65,13 @@ echo "B200 Nscale launch path: $LAUNCH_PATH"
 if [[ "$LAUNCH_PATH" == "native-srt" ]]; then
     case "${MODEL_PREFIX}/${PRECISION}" in
         dsv4/fp4)
-            check_env_vars MODEL_PATH
-            export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+            if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro-0813" ]]; then
+                export MODEL_PATH="/scratch/models/DeepSeek-V4-Pro-0813"
+                export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-0813"
+            else
+                check_env_vars MODEL_PATH
+                export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+            fi
             ;;
         kimik3/fp4)
             check_env_vars MODEL_PATH

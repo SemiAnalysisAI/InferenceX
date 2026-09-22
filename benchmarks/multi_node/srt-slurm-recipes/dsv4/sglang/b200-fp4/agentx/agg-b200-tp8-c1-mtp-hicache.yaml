@@ -1,0 +1,131 @@
+schema: 2
+name: "agg-b200-tp8-c1-mtp-hicache"
+
+# B200 AgentX aggregate topology: one TP8 worker uses one eight-GPU node
+# and serves both prefill and decode with bundled DSpark and HiCache.
+
+model:
+  path: "deepseek-v4-pro-0813"
+  container: "dynamo-sglang"
+  precision: "fp4"
+
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
+  container:
+    image: "lmsysorg/sglang:nightly-dev-20260916-c9a8fba9"
+  frameworks:
+    dynamo: "1.5.0.dev20260914"
+
+dynamo:
+  install: true
+  source:
+    wheel: "1.5.0.dev20260914"
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
+resources:
+  gpu_type: "b200"
+  gpus_per_node: 8
+services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
+frontend:
+  type: dynamo
+  nginx_session_affinity: true
+  nginx_session_affinity_header: X-Dynamo-Session-ID
+  enable_multiple_frontends: false
+  env:
+    PIP_BREAK_SYSTEM_PACKAGES: "1"
+    DYN_NATS_REQUEST_TIMEOUT_SECS: "1800"
+  args:
+    router-mode: "kv"
+    router-session-affinity-ttl-secs: "3600"
+    active-decode-blocks-threshold: "None"
+    active-prefill-tokens-threshold: "None"
+    active-prefill-tokens-threshold-frac: "None"
+
+engine: sglang
+roles:
+  agg:
+    nodes: 1
+    workers: 1
+    gpus: 8
+
+    env:
+      SGLANG_RAGGED_VERIFY_MODE: "static"
+      SGLANG_ENABLE_PREFILL_WAR_READ_DONE: "1"
+      SGLANG_DEFAULT_THINKING: "1"
+      SGLANG_DSV4_REASONING_EFFORT: high
+      PIP_BREAK_SYSTEM_PACKAGES: "1"
+      SGLANG_JIT_DEEPGEMM_PRECOMPILE: "1"
+      SGLANG_OPT_USE_ONLINE_COMPRESS: "0"
+      SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
+
+    args:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro-0813"
+      enable-metrics: true
+      enable-cache-report: true
+      trust-remote-code: true
+      weight-loader-prefetch-checkpoints: true
+      stream-interval: 10
+      watchdog-timeout: 1000000
+      mem-fraction-static: 0.90
+      page-size: 256
+      chunked-prefill-size: 8192
+      max-prefill-tokens: 8192
+      moe-runner-backend: "flashinfer_mxfp4"
+      enable-deepseek-v4-fp4-indexer: true
+      disable-flashinfer-autotune: true
+      swa-full-tokens-ratio: 0.1
+      max-running-requests: 2
+      cuda-graph-max-bs-decode: 2
+      scheduler-recv-interval: 30
+      dp-size: 1
+      tp-size: 8
+      ep-size: 1
+      speculative-algorithm: DSPARK
+      speculative-dspark-block-size: 6
+      speculative-num-steps: 1
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 7
+      enable-hierarchical-cache: true
+      hicache-ratio: 2.75
+      hicache-write-policy: write_through
+      hicache-io-backend: direct
+      hicache-mem-layout: page_first_direct
+
+sbatch_directives:
+  mem: "0"
+  # NScale B200 nodes expose 192 logical CPUs. Request the full node CPU set;
+  # mem=0 reserves all 1.7 TiB of allocatable host DRAM for HiCache.
+  cpus-per-task: "192"
+
+srun_options:
+  mem: "0"
+  container-remap-root: ""
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
+    RESULT_DIR: "/logs/agentic"
+    PORT: "8000"
+    IS_MULTINODE: "false"
+    TP: "8"
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"

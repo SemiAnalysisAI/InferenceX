@@ -8587,3 +8587,25 @@
     - "将镜像从已失效的 nightly-eed1f3d0 重新固定到 vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984（与 MI355X 臂在 SemiAnalysisAI/InferenceX#3326 中所用相同 commit 的 ROCm 10.0 nightly 渠道构建）；该镜像包含 vllm-project/vllm#57491，将两处 is_cuda() 判定放宽为 is_cuda_alike()，使 engram_config 在 gfx942 上可解析；由于 cpu_offload 现通过 VLLM_PLE_CPU_OFFLOAD 默认开启，配方按 TP 显式设置该值"
     - "新增 --no-swa-bounded-replay：vllm-project/vllm#56227 在两个 pin 之间将 SWA bounded replay 默认开启，其依赖的 window clamp 在 ROCm sparse SWA 路径中缺失，曾使所有 gfx950 数据点以 HSA_STATUS_ERROR_MEMORY_FAULT 崩溃；gfx942 使用同一路径。prefix caching 保持开启"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3337
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B200 Dynamo+SGLang AgentX TP8 aggregate HiCache recipes at concurrency 1, 4, and 8, using lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with bundled DSpark K=6, full-node CPU/DRAM allocation, and per-point request/CUDA-graph limits."
+    - "Rely on the pinned SGLang image's defaults for JIT norm, Top-K v2, SWA leaf splitting, unified-cache out-of-window reclamation, and custom all-reduce v2 instead of overriding them in the recipes."
+    - "新增 B200 Dynamo+SGLang AgentX TP8 聚合式 HiCache 配方，并发为 1、4、8；使用 lmsysorg/sglang:nightly-dev-20260916-c9a8fba9、检查点内置 DSpark K=6、整节点 CPU/DRAM 分配，以及按数据点设置的请求数/CUDA graph 上限。"
+    - "依赖固定 SGLang 镜像对 JIT norm、Top-K v2、SWA leaf splitting、unified-cache 窗口外槽位回收和 custom all-reduce v2 的默认行为，不在配方中覆盖这些设置。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3356
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B200 Dynamo+SGLang AgentX DEP8/DEP8 HiCache recipes for 1P1D at concurrency 64 and 128, plus 2P1D at concurrency 256. Limit decode max-running-requests to 128, 256, and 512, respectively; 1P1D uses swa-full-tokens-ratio 0.01 for prefill and 0.02 for decode, while 2P1D c256 uses decode ratio 0.005 plus memory fraction 0.91."
+    - "Use automatic golden acceptance-length selection and rely on the pinned SGLang image's defaults for SWA leaf splitting, unified-cache out-of-window reclamation, and custom all-reduce v2."
+    - "新增 B200 Dynamo+SGLang AgentX DEP8/DEP8 HiCache 配方：1P1D 并发 64、128，以及 2P1D 并发 256；decode max-running-requests 分别限制为 128、256、512；1P1D 的 swa-full-tokens-ratio 在 prefill 为 0.01、decode 为 0.02，2P1D c256 的 decode ratio 为 0.005 且 memory fraction 为 0.91。"
+    - "使用自动黄金接受长度选择，并依赖固定 SGLang 镜像对 SWA leaf splitting、unified-cache 窗口外槽位回收和 custom all-reduce v2 的默认行为。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3356
