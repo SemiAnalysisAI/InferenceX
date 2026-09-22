@@ -45,7 +45,7 @@ minimaxm3-fp4-mi355x-vllm-disagg:
   runner: cluster:mi355x-amds
   precision: fp4
   framework: vllm-disagg
-  router: { name: vllm-router, version: "1d10e71fb7bb4c0adc9f2c16ec77bf5dd4aa1586" }
+  router: { name: vllm-router, version: "5d3c3af9a41dec2d5ecff412024b7a743763472d" }
   kv-p2p-transfer: moriio
   multinode: true
   disagg: true

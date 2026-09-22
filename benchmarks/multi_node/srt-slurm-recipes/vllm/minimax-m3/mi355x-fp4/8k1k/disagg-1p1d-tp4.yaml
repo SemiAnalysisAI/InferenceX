@@ -16,7 +16,7 @@ identity:
   container:
     image: vllm/vllm-openai-rocm:v0.28.0
   frameworks:
-    vllm-router: 1d10e71fb7bb4c0adc9f2c16ec77bf5dd4aa1586
+    vllm-router: 5d3c3af9a41dec2d5ecff412024b7a743763472d
 
 slurm:
   time_limit: "08:00:00"
@@ -26,7 +26,7 @@ resources:
   gpus_per_node: 8
 frontend:
   type: vllm-router
-  container_image: vllm/vllm-router:nightly-20260903-1d10e71
+  container_image: vllm/vllm-router:nightly-20260922-5d3c3af
   enable_multiple_frontends: false
   args:
     policy: consistent_hash

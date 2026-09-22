@@ -8631,3 +8631,9 @@
   description:
   - 'Remove the historical per-role srt-slurm commit override so vLLM/MoRI validation uses the shared AMD stack pin, including allocator-owned transfer ports and native Router discovery readiness. Engine images and serving options are unchanged.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2824
+
+- config-keys:
+  - minimaxm3-fp4-mi355x-vllm-disagg
+  description:
+  - 'Replace the unavailable vLLM Router nightly-20260903-1d10e71 image (registry HTTP 404 in run 35750577041) with the official nightly-20260922-5d3c3af, index digest sha256:4e9071e4f1e1670367b8d5d05befb8025e580385688978c7aeab2a7075a4b1a9. The MoRI discovery implementation is unchanged between these Router commits; preserve vLLM v0.28.0, TP4/TP4, and the workload settings.'
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2824
