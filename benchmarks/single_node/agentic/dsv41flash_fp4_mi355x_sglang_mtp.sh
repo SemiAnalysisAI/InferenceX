@@ -89,16 +89,11 @@ mec_version=$(rocm-smi --showfw 2>/dev/null | grep MEC | head -n 1 | awk '{print
 if [[ "$mec_version" == "" || ${mec_version:-0} -lt 177 ]]; then
     export HSA_NO_SCRATCH_RECLAIM=1
 fi
-# The ROCm image runs the torch caching allocator with fixed segments (aiter
-# logs expandable_segments=False). Eager chunked prefill of one 126k-token
-# AgentX prompt then hoards every non-static byte in differently sized cached
-# blocks: at --mem-fraction-static 0.60 a single running request exhausted the
-# 112 GB outside the static pool 14 chunks in, and the next RCCL kernel launch
-# aborted with HSA_STATUS_ERROR_OUT_OF_RESOURCES at 0 MB free (run
-# 35460273555, c2; the same abort with 72 GB at c2 and 107 GB at c16 earlier).
-# Expandable segments let the allocator grow and reuse one arena instead, as
-# SGLang already does on CUDA; aiter's custom all-reduce supports the mode.
-export PYTORCH_HIP_ALLOC_CONF=expandable_segments:True
+# ROCm10 AITER graph-buffer registration rejects expandable-segment pointers
+# with hipIpcGetMemHandle(invalid argument). The native allocator passed target
+# and stock DSpark graph capture plus real requests on this pinned image.
+# Long-context memory/performance qualification is still required.
+export PYTORCH_HIP_ALLOC_CONF=expandable_segments:False
 export SGLANG_USE_AITER=1
 # The official preview selects this backend through its gfx950 auto default.
 export SGLANG_HACK_FLASHMLA_BACKEND=aiter_sparse

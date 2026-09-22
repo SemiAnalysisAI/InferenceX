@@ -15,8 +15,8 @@ The preview uses ROCm 7.2.4 and Triton `3.7.0+amd.rocm7.2.0.git89002410`;
 the new nightly uses ROCm 10 and Triton `3.8.0+git4cff872c.rocm10.0.0`. Both use
 AITER `4ad99832823dde2315b361cbd3b54b1c5c12acd5`. No preview binaries replace nightly binaries.
 All six installer-target files are byte-identical between the September 21 and 22
-SGLang revisions. The GPU results described below used September 21; the newer
-image still requires its own runtime, full accuracy and performance qualification.
+SGLang revisions. Bounded GPU regressions now also pass on September 22 as
+recorded below; full accuracy and performance qualification remain pending.
 
 Adaptations isolate imports, follow the nightly's moved candidate-indexer and
 capture APIs, and read kernel configuration through `get_exec()`. The current
@@ -75,3 +75,32 @@ RMS-normalizes Q, whereas the official preview excludes this model from that
 optimization. These V4.1 recipes set `SGLANG_OPT_USE_FUSED_QK_NORM_ROPE=0`
 to retain the model's existing unfused, unnormalized-Q path. Provenance records
 the exact preview model, nightly model, and fused-kernel source hashes.
+
+## September 22 ROCm10 regressions
+
+[Recorded GPU evidence](evidence-rocm10.json) includes the original host-pointer
+backtrace and before/after cache bytes. The image's generic `find_library` resolves
+`libamdhip64.so.5`, while PyTorch loads
+`/opt/venv/lib/python3.12/site-packages/_rocm_sdk_core/lib/libamdhip64.so.7`.
+Loading the former crashes inside `hipHostGetDevicePointer`, before teardown.
+The helper now resolves the symbol from the existing process runtime. `dladdr`
+confirms the SDK library, and shared/per-rank gathers pass exact eager/graph tests.
+
+The stock FlashMLA store overflows int32 byte offsets above 2 GiB. A guarded GPU
+reproducer keeps even the incorrect addresses inside its own allocation and
+confirms wrong FP8 values/scales at page sizes 64/128/256.
+[Upstream SGLang #40351](https://github.com/sgl-project/sglang/pull/40351) widens
+`loc` to int64; `wide_store.py` extracts only that stock FlashMLA store with the
+same cast change. Only HIP V4.1 pools select it. The installed pool passes all
+nine boundary cases in eager mode and graph replay, including untouched padding
+and BF16 RoPE; the original other-model fallback also passes. No KV format,
+quantization, checkpoint or draft precision changes accompany these fixes.
+
+With `expandable_segments:True`, full target graph capture aborts in AITER
+`hipIpcGetMemHandle` graph-buffer registration (`invalid argument`). Changing only
+this allocator setting to `False` passed target/DSpark startup and the same three
+real prompts: 52/719/2,159 input tokens and 19/23/25 generated tokens, all answering
+42 without hitting the output limit. The recipe now uses that validated native
+allocator. This does not establish full GSM8K accuracy or long-context memory and
+performance; prior-image long-prefill fragmentation motivated the old setting, so
+that workload still needs explicit qualification.

@@ -98,6 +98,38 @@ MLP_CALL_REPLACEMENT = '                if getattr(self, "_infx_v41_hip", False)
 
 POOL_REWRITES = (
     (
+        "        self.global_page_size = global_page_size or page_size\n",
+        (
+            "        self.global_page_size = global_page_size or page_size\n"
+            "        self._infx_v41_hip = False\n"
+            "        if _is_hip:\n"
+            "            from sglang.srt.runtime_context import process_model_config\n\n"
+            "            self._infx_v41_hip = (\n"
+            '                process_model_config().hf_text_config.model_type == "deepseek_v41"\n'
+            "            )\n"
+        ),
+    ),
+    (
+        (
+            "        return fused_store_cache(\n"
+            "            input=cache_k,\n"
+            "            cache=self.kv_buffer[layer_id],\n"
+        ),
+        (
+            "        if self._infx_v41_hip:\n"
+            "            assert self.kv_layout is KVLayout.V4 and freqs_cis is None\n"
+            "            from sglang.srt.layers.attention.dsv41_rocm.wide_store import (\n"
+            "                triton_fused_store_flashmla,\n"
+            "            )\n\n"
+            "            return triton_fused_store_flashmla(\n"
+            "                cache_k, self.kv_buffer[layer_id], loc, self.page_size\n"
+            "            )\n"
+            "        return fused_store_cache(\n"
+            "            input=cache_k,\n"
+            "            cache=self.kv_buffer[layer_id],\n"
+        ),
+    ),
+    (
         "        self.uses_aiter_fp4_layout = _is_hip and self.use_fp4_indexer\n",
         '        self.uses_aiter_fp4_layout = _is_hip and self.use_fp4_indexer\n        self._infx_v41_hip = False\n        if self.uses_aiter_fp4_layout:\n            from sglang.srt.runtime_context import process_model_config\n\n            self._infx_v41_hip = (\n                process_model_config().hf_text_config.model_type == "deepseek_v41"\n            )\n',
     ),

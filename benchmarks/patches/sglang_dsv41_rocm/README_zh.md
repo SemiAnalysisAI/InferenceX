@@ -12,8 +12,8 @@
 镜像摘要为准。预览版使用 ROCm 7.2.4 和 Triton `3.7.0+amd.rocm7.2.0.git89002410`；
 新 nightly 使用 ROCm 10 和 Triton `3.8.0+git4cff872c.rocm10.0.0`。两个镜像均使用
 AITER `4ad99832823dde2315b361cbd3b54b1c5c12acd5`，不使用预览二进制替换 nightly 二进制。
-9 月 21 日与 22 日 SGLang 的六个安装器目标文件逐字一致。下文 GPU 结果来自 9 月 21 日；
-新镜像仍须单独完成运行、完整精度与性能验证。
+9 月 21 日与 22 日 SGLang 的六个安装器目标文件逐字一致。限定范围的 GPU 回归测试
+现已在 9 月 22 日镜像上通过，详见下文；完整精度与性能验证仍未完成。
 
 适配包括隔离导入、对接 nightly 已迁移的候选索引和图捕获 API，并通过 `get_exec()`
 读取内核配置。nightly 在 HIP 上禁用融合低压缩比内核，因此保留其非融合压缩器的
@@ -51,3 +51,25 @@ V4.1 设置 `q_head_norm=False`。nightly 的 HIP 融合 Q/K 内核始终对 Q
 执行 RMS 归一化，而官方预览版会将此模型排除在该优化之外。V4.1 配方设置
 `SGLANG_OPT_USE_FUSED_QK_NORM_ROPE=0`，保留模型原有的不对 Q 归一化的
 非融合路径。来源记录包含预览版模型、nightly 模型及融合内核的精确源码哈希。
+
+## 9 月 22 日 ROCm10 回归验证
+
+[GPU 证据](evidence-rocm10.json)记录主机指针原始回溯及缓存修复前后的结果。镜像的通用
+`find_library` 返回 `libamdhip64.so.5`，PyTorch 实际加载
+`/opt/venv/lib/python3.12/site-packages/_rocm_sdk_core/lib/libamdhip64.so.7`。
+加载前者会在 `hipHostGetDevicePointer` 内崩溃，并非清理阶段的问题。适配器现在从进程
+已有运行时解析符号；`dladdr` 确认绑定 SDK 库，共享表及每 rank 表的精确输出与图回放均通过。
+
+原始 FlashMLA store 在字节偏移超过 2 GiB 时发生 int32 溢出。GPU 复现测试为错误地址也
+保留自有分配空间，在页大小 64/128/256 下确认 FP8 数值和尺度写错位置。
+[上游 SGLang #40351](https://github.com/sgl-project/sglang/pull/40351)将 `loc` 扩为 int64；
+`wide_store.py` 只提取原 FlashMLA store 并应用同一类型转换，仅 HIP V4.1 缓存选择此路径。
+安装后的缓存方法通过九个边界用例的即时执行及图回放，包含填充字节与 BF16 RoPE；其他
+模型原有路径也通过验证。这些修复不改变 KV 格式、量化、检查点或草稿精度。
+
+启用 `expandable_segments:True` 时，完整目标图捕获在 AITER 的
+`hipIpcGetMemHandle` 图缓冲区注册中报 `invalid argument` 并退出。仅将该分配器设置
+改为 `False` 后，目标与 DSpark 启动及三条真实请求通过：输入 52/719/2,159 token，
+输出 19/23/25 token，均回答 42 且未达到输出上限。配方采用已验证的原生分配器。
+这不代表完整 GSM8K、长上下文内存或性能已通过；旧设置曾用于缓解旧镜像长预填充碎片，
+因此仍须明确验证相应工作负载。

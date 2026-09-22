@@ -61,8 +61,8 @@
     {
       "installed_name": "host_table.py",
       "source_path": null,
-      "description": "HIP-only registered host-table device address resolution through hipHostGetDevicePointer; unchanged CPU parameters and stock gather kernel",
-      "adapted_sha256": "033dc006b688a8d4ded03d122659bfc490e1768daca987b44f760a17f82dd726"
+      "description": "Resolve HIP registered host pointers through the already-loaded PyTorch runtime; avoids ROCm10 ldconfig selecting incompatible HIP .so.5. CPU parameters and stock gather unchanged.",
+      "adapted_sha256": "a20315ec91fe10ec7c73a848fd13aa3419be7472d6e9ab52b9a39f869df0104c"
     },
     {
       "installed_name": "activation.py",
@@ -76,6 +76,16 @@
       "source_path": "/sgl-workspace/aiter_configs/fmoe_gfx950_dsv41_ep4_a8w4.csv",
       "source_sha256": "f62b5d4046f36177efe55b28c01b3a8413d094a1d0d5b202cdb2482e2b78a61c",
       "adapted_sha256": "f62b5d4046f36177efe55b28c01b3a8413d094a1d0d5b202cdb2482e2b78a61c"
+    },
+    {
+      "installed_name": "wide_store.py",
+      "source_path": "python/sglang/kernels/ops/kvcache/triton_store_cache.py",
+      "source_commit": "598e43ba961ef43a746bcb97034346091c8abda4",
+      "source_sha256": "6c4b892865a0c198e9b980d03a8e7b75803cbc0b0a565ec0f1e3533bc8db6584",
+      "upstream_fix": "https://github.com/sgl-project/sglang/pull/40351",
+      "upstream_fix_head": "5df9051e60e3a49f6432dfc4af2a1e7c18c66a6b",
+      "description": "Extract only the stock FlashMLA store and constants; widen loc to int64 exactly as upstream. Used only by HIP V4.1 pools; quantization, cache format, and other model paths unchanged.",
+      "adapted_sha256": "b2386fe46b835cb757c30312bf5057531c88125f519f19278f62bb6c631cc8d3"
     }
   ],
   "registry_sha256": "dfd9c0b6e85774524f6378ae09278cf6dc000e093ddf6beaadc44d1d20bdacd1",
@@ -106,6 +116,12 @@
     "torch": "2.11.0+rocm10.0.0",
     "triton": "3.8.0+git4cff872c.rocm10.0.0",
     "aiter_commit": "4ad99832823dde2315b361cbd3b54b1c5c12acd5",
-    "qualification": "Pending actual image GPU checks and full model eval/performance"
+    "qualification": "Bounded GPU numerical/graph regressions and TP4 stock DSpark real-prompt serving pass with native allocator; full accuracy/performance pending"
+  },
+  "rocm10_allocator_compatibility": {
+    "recipe_env": {
+      "PYTORCH_HIP_ALLOC_CONF": "expandable_segments:False"
+    },
+    "reason": "AITER graph-buffer IPC export aborts with expandable_segments=True on the pinned ROCm10 image; False passed paired full-model startup and real requests. Long-context memory qualification remains required."
   }
 }
