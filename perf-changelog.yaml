@@ -8568,21 +8568,32 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3063
 
 - config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update the SGLang ROCm image from v0.5.16-rocm720-mi30x to v0.5.19-rocm720-mi30x; benchmark configuration unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2980
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add TP4 and TP2 arms with Engram CPU offload to the MI325X vLLM DeepSeek-V4.1-Flash AgentX recipe, keeping the existing TP8 arm with the 183 GiB of tables GPU-resident. With the tables in pinned host memory the resident weights are ~81 GiB per rank at TP4 and ~145 GiB per rank at TP2, against 256 GB per card, so TP2 keeps the full concurrency 1-32 list here"
+    - "Cap the scheduler at TP2 only: halve the sparse-attention indexer buffer to 8192 batched tokens (16 GiB rather than 32 GiB of a [batched-tokens, 1M] fp8 logits allocation), scale max-num-seqs to 2*CONC clamped to [16, 256] and cap cudagraph capture at 512. Same cap set the Blackwell TP2 arms validated on B200, GB200 and GB300"
+    - "Repin the image from the expired nightly-eed1f3d0 tag to vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984, the ROCm 10.0 nightly channel build of the same commit the MI355X arm moved to in SemiAnalysisAI/InferenceX#3326 (digest sha256:eccb72b74b8c04ce7406d9212e200b129f58e24be642795a857f755a94fdb3a1, published 2026-09-21T05:50:03Z); it carries vllm-project/vllm#57491, which widened the two is_cuda() gates to is_cuda_alike() so engram_config resolves on gfx942, and because cpu_offload now defaults on via VLLM_PLE_CPU_OFFLOAD the recipe sets it explicitly per TP"
+    - "Add --no-swa-bounded-replay: vllm-project/vllm#56227 turned SWA bounded replay on by default between the two pins and relies on a window clamp the ROCm sparse SWA path does not have, which crashed every gfx950 point with HSA_STATUS_ERROR_MEMORY_FAULT; gfx942 runs the same path. Prefix caching stays on"
+    - "为 MI325X vLLM DeepSeek-V4.1-Flash AgentX 配方新增启用 Engram CPU 卸载的 TP4 与 TP2 臂，同时保留 183 GiB Engram 表驻留 GPU 的现有 TP8 臂；表移至固定页主机内存后，TP4 每 rank 常驻权重约 81 GiB，TP2 约 145 GiB，而每张卡为 256 GB，因此 TP2 在此保留完整的并发 1-32 列表"
+    - "仅在 TP2 收紧调度器：将稀疏注意力 indexer 缓冲区减半至 8192 batched tokens（[batched-tokens, 1M] fp8 logits 分配由 32 GiB 降至 16 GiB），max-num-seqs 取 2*CONC 并夹在 [16, 256]，cudagraph capture 上限 512。该组参数与 Blackwell TP2 臂在 B200、GB200、GB300 上验证过的一致"
+    - "将镜像从已失效的 nightly-eed1f3d0 重新固定到 vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984（与 MI355X 臂在 SemiAnalysisAI/InferenceX#3326 中所用相同 commit 的 ROCm 10.0 nightly 渠道构建）；该镜像包含 vllm-project/vllm#57491，将两处 is_cuda() 判定放宽为 is_cuda_alike()，使 engram_config 在 gfx942 上可解析；由于 cpu_offload 现通过 VLLM_PLE_CPU_OFFLOAD 默认开启，配方按 TP 显式设置该值"
+    - "新增 --no-swa-bounded-replay：vllm-project/vllm#56227 在两个 pin 之间将 SWA bounded replay 默认开启，其依赖的 window clamp 在 ROCm sparse SWA 路径中缺失，曾使所有 gfx950 数据点以 HSA_STATUS_ERROR_MEMORY_FAULT 崩溃；gfx942 使用同一路径。prefix caching 保持开启"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3337
+
+- config-keys:
     - dsv4-fp4-b200-dynamo-sglang-agentic-agg
   scenario-type:
     - agentic-coding
   description:
     - "Add B200 Dynamo+SGLang AgentX TP8 aggregate HiCache recipes at concurrency 1, 4, and 8."
     - "Use lmsysorg/sglang:nightly-dev-20260916-c9a8fba9 with bundled DSpark K=6, full-node CPU/DRAM allocation, and per-point request/CUDA-graph limits."
-    - "Map the exact DeepSeek-V4-Pro-0813 recipe alias to the pre-staged NScale checkpoint."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3257
-
-- config-keys:
-    - dsv4-fp4-b200-dynamo-sglang-agentic-disagg
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Add B200 Dynamo+SGLang AgentX DEP8/DEP8 HiCache recipes for 1P1D at concurrency 64 and 128, plus 2P1D at concurrency 256."
-    - "Limit decode max-running-requests to 128, 256, and 512, respectively. Set decode swa-full-tokens-ratio to 0.01 for 1P1D and 0.005 for 2P1D c256, and use a 0.91 decode memory fraction for c256 so both KV pools retain headroom under transient DP-rank imbalance."
     - "Map the exact DeepSeek-V4-Pro-0813 recipe alias to the pre-staged NScale checkpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3257
