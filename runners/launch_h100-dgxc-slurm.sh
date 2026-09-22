@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
-check_env_vars EVAL_ONLY IS_MULTINODE RUN_EVAL SALLOC_TIME_LIMIT
+check_env_vars EVAL_ONLY IS_MULTINODE RUN_EVAL SALLOC_TIME_LIMIT IS_AGENTIC
 set -e
 
 # shellcheck source=runners/slurm_utils.sh
@@ -14,10 +14,11 @@ SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 set -x
 
-EXECUTION_PATH=legacy-single-node
+EXECUTION_PATH=agentic
 if [[ "$IS_MULTINODE" == true ]]; then
     EXECUTION_PATH=multinode
-elif [[ -n "${SRT_RECIPE:-}" ]]; then
+elif [[ "$IS_AGENTIC" == 0 ]]; then
+    check_env_vars SRT_RECIPE
     EXECUTION_PATH=native-single-node
 fi
 

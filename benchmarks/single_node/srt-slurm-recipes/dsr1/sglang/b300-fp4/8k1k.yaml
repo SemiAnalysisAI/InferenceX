@@ -1,4 +1,3 @@
-# Serving settings from dsr1_fp4_b300.sh.
 base:
   schema: 2
   name: dsr1-fp4-b300-sglang-8k1k

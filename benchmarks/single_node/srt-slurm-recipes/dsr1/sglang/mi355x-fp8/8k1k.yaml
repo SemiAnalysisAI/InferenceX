@@ -1,4 +1,3 @@
-# Serving settings from dsr1_fp8_mi355x.sh.
 base:
   schema: 2
   name: dsr1-fp8-mi355x-sglang-8k1k

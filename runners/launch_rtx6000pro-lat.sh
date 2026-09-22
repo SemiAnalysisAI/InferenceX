@@ -20,29 +20,6 @@ check_env_vars NCCL_IB_DISABLE
 : "${EXP_NAME:?EXP_NAME must be set}"
 : "${PRECISION:?PRECISION must be set}"
 
-EXECUTION_PATH=legacy
-if [[ -n "${SRT_RECIPE:-}" ]]; then
-    EXECUTION_PATH=native-single-node
-fi
-NATIVE_ARGS=()
-if [[ "$EXECUTION_PATH" == native-single-node ]]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
-    SRTCTL_ROOT=$(mktemp -d "$GITHUB_WORKSPACE/srt-docker.XXXXXX")
-    setup_srt_slurm "$SRTCTL_ROOT" "$FRAMEWORK" 0
-    if ! command -v uv >/dev/null; then
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        source "$HOME/.local/bin/env"
-    fi
-    uv venv .venv
-    source .venv/bin/activate
-    uv pip install -e .
-    PYTHONPATH="$GITHUB_WORKSPACE${PYTHONPATH:+:$PYTHONPATH}" \
-        python3 -m infx.srt_slurm.docker "$GITHUB_WORKSPACE/$SRT_RECIPE" "$GITHUB_WORKSPACE"
-    NATIVE_ARGS=(--volume "$GITHUB_WORKSPACE:/infmax-workspace" --volume "$GITHUB_WORKSPACE:/logs"
-        --env "MODEL_NAME=$MODEL")
-    cd "$GITHUB_WORKSPACE"
-fi
-
 mkdir -p "$HF_HUB_CACHE_MOUNT"
 
 check_env_vars GPU_COUNT
@@ -70,9 +47,7 @@ SCENARIO_SUBDIR="${SCENARIO_SUBDIR%/}/"
 # untagged name for scripts not yet retagged.
 BENCH_BASE="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_rtx6000pro"
 BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK:-}${SPEC_SUFFIX}.sh"
-if [[ "$EXECUTION_PATH" == native-single-node ]]; then
-    BENCH_SCRIPT=benchmarks/single_node/srt_docker.sh
-elif [[ ! -f "$GITHUB_WORKSPACE/$BENCH_SCRIPT" ]]; then
+if [[ ! -f "$GITHUB_WORKSPACE/$BENCH_SCRIPT" ]]; then
     BENCH_SCRIPT="${BENCH_BASE}${SPEC_SUFFIX}.sh"
 fi
 
@@ -102,7 +77,6 @@ done
 
 docker run \
     "${RUNTIME_ENV_ARGS[@]}" \
-    "${NATIVE_ARGS[@]}" \
     --env IS_MULTINODE \
     --env REQUIRE_POWER \
     --env INFMAX_CONTAINER_WORKSPACE \

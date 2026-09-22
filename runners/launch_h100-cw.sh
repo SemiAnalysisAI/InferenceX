@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
-check_env_vars IS_MULTINODE
+check_env_vars IS_MULTINODE IS_AGENTIC
 
-EXECUTION_PATH=legacy-single-node
-if [[ "$IS_MULTINODE" != true && -n "${SRT_RECIPE:-}" ]]; then
+EXECUTION_PATH=agentic
+if [[ "$IS_MULTINODE" == true ]]; then
+    EXECUTION_PATH=multinode
+elif [[ "$IS_AGENTIC" == 0 ]]; then
+    check_env_vars SRT_RECIPE
     EXECUTION_PATH=native-single-node
 fi
 if [[ "$EXECUTION_PATH" == native-single-node ]]; then

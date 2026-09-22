@@ -8847,3 +8847,76 @@
     failed-startup log followers before exit
   - 去除 AMD 原生 shell 前置命令的尾部换行，并在 accounting 不可用时通过 Slurm 控制器核验已完成的资源分配；启动失败时等待日志跟随进程退出
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
+
+- config-keys:
+  - qwen3.5-fp4-rtx6000pro-sglang
+  - qwen3.5-fp4-rtx6000pro-sglang-mtp
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Exclude the Docker-only RTX PRO 6000 configs from the native SRT migration and
+    retain their existing Docker execution; remove the proposed Docker adapter and
+    recipes from this PR
+  - 将仅使用 Docker 的 RTX PRO 6000 配置排除在原生 SRT 迁移之外，保留现有 Docker 执行路径；从本 PR 中移除拟新增的 Docker
+    适配器与配方
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
+
+- config-keys:
+  - dsr1-fp4-mi355x-sglang
+  - dsr1-fp4-mi355x-sglang-mtp
+  - dsr1-fp4-mi355x-atom
+  - dsr1-fp4-mi355x-atom-mtp
+  - dsr1-fp8-mi300x-sglang
+  - dsr1-fp8-mi325x-sglang
+  - dsr1-fp8-mi355x-sglang
+  - dsr1-fp8-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi325x-sglang
+  - qwen3.5-fp8-mi355x-sglang
+  - qwen3.5-fp8-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi355x-atom
+  - qwen3.5-fp8-mi355x-atom-mtp
+  - qwen3.5-fp4-mi355x-sglang
+  - qwen3.5-fp4-mi355x-atom
+  - qwen3.5-fp4-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi300x-sglang
+  - dsr1-fp8-mi355x-atom
+  - dsr1-fp8-mi355x-atom-mtp
+  - dsr1-fp8-mi325x-sglang-mtp
+  - qwen3.5-fp8-mi325x-sglang-mtp
+  - dsr1-fp4-b200-sglang
+  - dsr1-fp4-b200-sglang-mtp
+  - dsr1-fp4-b300-sglang
+  - dsr1-fp4-b200-trt
+  - dsr1-fp4-b200-trt-mtp
+  - dsr1-fp8-b200-sglang
+  - dsr1-fp8-b300-sglang
+  - qwen3.5-fp8-b200-sglang
+  - qwen3.5-fp4-b200-sglang
+  - qwen3.5-fp4-b200-sglang-mtp
+  - qwen3.5-fp8-b200-sglang-mtp
+  - qwen3.5-fp8-b300-sglang-mtp
+  - qwen3.5-fp8-b300-sglang
+  - qwen3.5-fp4-b300-sglang
+  - qwen3.5-fp4-b300-sglang-mtp
+  - dsr1-fp8-b200-sglang-mtp
+  - dsr1-fp8-b300-sglang-mtp
+  - dsr1-fp8-b200-trt
+  - dsr1-fp8-b200-trt-mtp
+  - dsr1-fp8-h200-sglang
+  - dsr1-fp8-h200-sglang-mtp
+  - qwen3.5-fp8-h200-sglang
+  - qwen3.5-fp8-h200-sglang-mtp
+  - dsr1-fp8-h200-trt
+  - dsr1-fp8-h200-trt-mtp
+  - qwen3.5-fp8-h100-sglang
+  - qwen3.5-fp8-h100-sglang-mtp
+  - qwen3.5-fp4-b200-trt
+  - qwen3.5-fp4-b200-trt-mtp
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Require native SRT recipes for active Slurm single-node fixed-sequence jobs and
+    remove their superseded Bash implementations; keep AgentX, multi-node, and explicitly
+    selected SPEED-Bench collector paths separate
+  - 活跃的 Slurm 单节点定长作业必须提供原生 SRT 配方，并移除已替代的 Bash 实现；AgentX、多节点和显式选择的 SPEED-Bench 采集器保留独立执行路径
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352

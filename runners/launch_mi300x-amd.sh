@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
-check_env_vars IS_MULTINODE
+check_env_vars IS_MULTINODE IS_AGENTIC
 set -eo pipefail
 
 # Select native fixed-sequence execution before the retained AgentX/multi-node paths.
-EXECUTION_PATH=legacy
-if [[ "$IS_MULTINODE" == false && -n "${SRT_RECIPE:-}" ]]; then
+EXECUTION_PATH=agentic
+if [[ "$IS_MULTINODE" == true ]]; then
+    EXECUTION_PATH=multinode
+elif [[ "$IS_AGENTIC" == 0 ]]; then
+    check_env_vars SRT_RECIPE
     EXECUTION_PATH=native-single-node
 fi
 if [[ "$EXECUTION_PATH" == native-single-node ]]; then

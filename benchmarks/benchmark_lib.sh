@@ -718,13 +718,11 @@ wait_for_ready() {
         if ! kill -0 "$process_pid" 2>/dev/null; then
             echo "Process died before $endpoint became ready." >&2
             kill "$tail_pid" 2>/dev/null || true
-            wait "$tail_pid" 2>/dev/null || true
             exit 1
         fi
         if [[ "$deadline" -gt 0 && "$SECONDS" -ge "$deadline" ]]; then
             echo "Timed out waiting for $endpoint." >&2
             kill "$tail_pid" 2>/dev/null || true
-            wait "$tail_pid" 2>/dev/null || true
             exit 1
         fi
         sleep "$sleep_interval"

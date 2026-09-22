@@ -4,8 +4,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validat
 check_env_vars EVAL_ONLY IS_AGENTIC IS_MULTINODE KEEP_LOGS RUN_EVAL
 
 # Select native fixed-sequence execution before the retained AgentX/multi-node paths.
-EXECUTION_PATH=legacy
-if [[ "$IS_MULTINODE" == false && -n "${SRT_RECIPE:-}" ]]; then
+EXECUTION_PATH=agentic
+if [[ "$IS_MULTINODE" == true ]]; then
+    EXECUTION_PATH=multinode
+elif [[ "$IS_AGENTIC" == 0 ]]; then
+    check_env_vars SRT_RECIPE
     EXECUTION_PATH=native-single-node
 fi
 if [[ "$EXECUTION_PATH" == native-single-node ]]; then

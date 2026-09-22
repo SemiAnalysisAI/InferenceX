@@ -8,7 +8,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 
 # B300 DSXE Slurm cluster (dsxe-sa-b300-prd0); runners run as sa-gha-runner.
 # Cluster-specific facts live in this block. Multi-node jobs go through
-# srt-slurm/srtctl, single-node jobs through salloc + pyxis.
+# srt-slurm/srtctl; AgentX and explicit collector scripts retain salloc + pyxis.
 
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
@@ -84,10 +84,14 @@ import_squash_image() {
     test -r "$sqsh" || { echo "Error: squash file not readable: $sqsh" >&2; exit 1; }
 }
 
-EXECUTION_PATH=legacy-single-node
+EXECUTION_PATH=agentic
 if [[ "$IS_MULTINODE" == true ]]; then
     EXECUTION_PATH=multinode
-elif [[ -n "${SRT_RECIPE:-}" ]]; then
+elif [[ -n "${BENCH_SCRIPT_OVERRIDE:-}" ]]; then
+    # SPEED-Bench collectors explicitly supply their script outside this migration.
+    EXECUTION_PATH=script
+elif [[ "$IS_AGENTIC" == 0 ]]; then
+    check_env_vars SRT_RECIPE
     EXECUTION_PATH=native-single-node
 fi
 

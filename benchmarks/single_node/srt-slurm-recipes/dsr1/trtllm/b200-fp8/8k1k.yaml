@@ -1,4 +1,3 @@
-# Serving settings from dsr1_fp8_b200_trt.sh.
 base:
   schema: 2
   name: dsr1-fp8-b200-trt-8k1k

@@ -1,4 +1,3 @@
-# Serving settings from dsr1_fp8_mi355x_atom_mtp.sh.
 base:
   schema: 2
   name: dsr1-fp8-mi355x-atom-mtp-8k1k

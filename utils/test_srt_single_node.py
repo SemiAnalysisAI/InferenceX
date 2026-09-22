@@ -254,9 +254,14 @@ def test_submission_manifest(tmp_path, record, expected):
     ("h200-dgxc-slurm", "submission"), ("h200-dgxc-slurm", "bootstrap"),
     ("h200-cw", "none"), ("h100-cw", "none"), ("h100-dgxc-slurm", "none"),
     ("b200-cw", "none"), ("b200-nb", "none"), ("b200-nscale-slurm", "none"),
+    ("b200-nscale-slurm", "agentic"),
     ("b300-dsxe", "none"),
     ("mi300x-amd", "none"), ("mi325x-amds", "none"), ("mi355x-amds", "none"),
-])
+] + [(pool, "missing-recipe") for pool in (
+    "b200-cw", "b200-nb", "b200-nscale-slurm", "b300-dsxe", "h100-cw",
+    "h100-dgxc-slurm", "h200-cw", "h200-dgxc-slurm", "mi300x-amd",
+    "mi325x-amds", "mi355x-amds",
+)])
 def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, pool, failure):
     path, _, point_env = point
     binaries = tmp_path / "bin"
@@ -272,7 +277,8 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
         "git": 'if [[ "$1" == clone ]]; then mkdir -p "${@: -1}/configs"; else echo test-commit; fi',
         "uv": 'if [[ "$1" == venv ]]; then mkdir -p .venv/bin; echo ":" > .venv/bin/activate; fi',
         "make": '[[ "$TEST_FAILURE" == bootstrap ]] && exit 13; mkdir -p bin; touch bin/uv',
-        "squeue": '[[ "$TEST_FAILURE" == submission ]] && echo "42 RUNNING"; exit 0',
+        "squeue": '[[ "$TEST_FAILURE" == submission || "$TEST_FAILURE" == agentic ]] && echo "42"; exit 0',
+        "salloc": 'echo "Granted job allocation 42"',
         "sacct": 'if [[ "$TEST_FAILURE" == allocation ]]; then echo "FAILED|1:0"; else echo "COMPLETED|0:0"; fi',
         "scancel": 'printf "%s\\n" "$@" >> "$CANCEL_CAPTURE"',
         "tail": 'exit 0',
@@ -297,6 +303,11 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
         "sys.exit(7 if os.environ['TEST_FAILURE'] == 'submission' else 0)\n"
     )
     srtctl.chmod(0o755)
+    srun = binaries / "srun"
+    srun.write_text(f"#!{sys.executable}\n" +
+        "import json, os, pathlib, sys\n"
+        "with pathlib.Path(os.environ['SRUN_CAPTURE']).open('a') as f: f.write(json.dumps(sys.argv[1:])+'\\n')\n")
+    srun.chmod(0o755)
     env = {
         **os.environ, **point_env,
         "PATH": f"{binaries}:{Path(sys.executable).parent}:{os.environ['PATH']}",
@@ -310,15 +321,34 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
         "B300_HF_CACHE_CONTAINER_DIR": "/hf", "ENROOT_IMPORT_TIME_LIMIT": "10",
         "INFERENCEX_RUNTIME_ENV_VARS": "REQUIRE_POWER",
         "TEST_FAILURE": failure, "CANCEL_CAPTURE": str(capture),
+        "SRUN_CAPTURE": str(tmp_path / "srun.jsonl"),
         "KEEP_LOGS": "0",
     }
     env.pop("AIPERF_DRAIN_TIMEOUT_SECONDS", None)
     env.pop("AIPERF_DRAIN_POLL_SECONDS", None)
+    env.pop("BENCH_SCRIPT_OVERRIDE", None)
+    if failure == "missing-recipe":
+        env.pop("SRT_RECIPE")
+    if failure == "agentic":
+        env.update(IS_AGENTIC="1", SCENARIO_SUBDIR="agentic/", EXP_NAME="fixture_agentic",
+                   RUNNER_NAME="fixture_00", SRT_RECIPE="unused.yaml")
     result = subprocess.run(
         ["bash", str(ROOT / f"runners/launch_{pool}.sh")], cwd=tmp_path,
         env=env, capture_output=True, text=True, timeout=30,
     )
-    assert result.returncode == {"none": 0, "allocation": 1, "submission": 7, "bootstrap": 13}[failure], result.stderr
+    assert result.returncode == {"none": 0, "allocation": 1, "submission": 7, "bootstrap": 13, "missing-recipe": 1, "agentic": 0}[failure], result.stderr
+    if failure == "agentic":
+        calls = [json.loads(line) for line in Path(env["SRUN_CAPTURE"]).read_text().splitlines()]
+        assert calls[-1][-2:] == ["bash", "benchmarks/single_node/agentic/fixture_fp8_b200.sh"]
+        assert "--jobid=42" in calls[-1]
+        assert not (tmp_path / "srt-single-node-submission.json").exists()
+        return
+    if failure == "missing-recipe":
+        assert "SRT_RECIPE" in result.stdout
+        assert not (tmp_path / "srt-single-node-submission.json").exists()
+        assert not (tmp_path / "point-identity.json").exists()
+        assert not capture.exists()
+        return
     if failure == "bootstrap":
         assert not (tmp_path / "srt-single-node-submission.json").exists()
         assert not capture.exists()
@@ -370,3 +400,47 @@ def test_terminal_allocation_without_accounting(tmp_path, controller, expected):
     assert result.returncode == expected, result.stdout + result.stderr
     if expected:
         assert "ERROR:" in result.stderr
+
+
+@pytest.mark.parametrize("collector", [False, True])
+def test_b300_keeps_agentic_and_explicit_collector_dispatch(tmp_path, collector):
+    binaries = tmp_path / "bin"
+    binaries.mkdir()
+    for name, body in {
+        # Host image-cache directories and Slurm operations are external here.
+        "mkdir": "exit 0",
+        "unsquashfs": "exit 0",
+        "salloc": 'echo "Granted job allocation 42"',
+        "scancel": 'printf "%s\\n" "$@" > "$CANCEL_CAPTURE"',
+    }.items():
+        binary = binaries / name
+        binary.write_text(f"#!/usr/bin/env bash\n{body}\n")
+        binary.chmod(0o755)
+    srun = binaries / "srun"
+    srun.write_text(f"#!{sys.executable}\n" +
+        "import json, os, pathlib, sys\n"
+        "with pathlib.Path(os.environ['SRUN_CAPTURE']).open('a') as f: f.write(json.dumps(sys.argv[1:])+'\\n')\n"
+        "sys.exit(7 if '--container-image' in ' '.join(sys.argv) else 0)\n")
+    srun.chmod(0o755)
+    env = {**os.environ, "PATH": f"{binaries}:{os.environ['PATH']}",
+        "GITHUB_WORKSPACE": str(tmp_path), "B300_HF_CACHE_HOST_DIR": str(tmp_path / "cache"),
+        "B300_HF_CACHE_CONTAINER_DIR": "/cache", "RUNNER_NAME": "fixture_00",
+        "ENROOT_IMPORT_TIME_LIMIT": "10", "SALLOC_TIME_LIMIT": "10", "IS_MULTINODE": "false",
+        "IS_AGENTIC": "0" if collector else "1", "EVAL_ONLY": "false", "RUN_EVAL": "false",
+        "MODEL": "test/DeepSeek-V4-Pro", "MODEL_PREFIX": "fixture", "PRECISION": "fp4",
+        "FRAMEWORK": "vllm", "EXP_NAME": "fixture_workload", "IMAGE": "fixture:tag",
+        "SPEC_DECODING": "none", "GPU_COUNT": "4",
+        "SCENARIO_SUBDIR": "fixed_seq_len/" if collector else "agentic/",
+        "SRUN_CAPTURE": str(tmp_path / "srun.jsonl"), "CANCEL_CAPTURE": str(tmp_path / "cancelled")}
+    env.pop("SRT_RECIPE", None)
+    env.pop("BENCH_SCRIPT_OVERRIDE", None)
+    if collector:
+        env["BENCH_SCRIPT_OVERRIDE"] = "benchmarks/single_node/speedbench/fixture.py"
+    result = subprocess.run(["bash", str(ROOT / "runners/launch_b300-dsxe.sh")], cwd=tmp_path,
+                            env=env, capture_output=True, text=True, timeout=10)
+    assert result.returncode == 7, result.stdout + result.stderr
+    calls = [json.loads(line) for line in Path(env["SRUN_CAPTURE"]).read_text().splitlines()]
+    expected = "benchmarks/single_node/speedbench/fixture.py" if collector else "benchmarks/single_node/agentic/fixture_fp4_b300.sh"
+    assert calls[-1][-2:] == ["bash", expected]
+    assert "--jobid=42" in calls[-1]
+    assert (tmp_path / "cancelled").read_text() == "42\n"
