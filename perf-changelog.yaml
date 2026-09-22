@@ -8635,6 +8635,20 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3346
 
 - config-keys:
+  - dsv41flash-fp4-b300-sglang-agentic-dspark
+  scenario-type:
+  - agentic-coding
+  description:
+  - Add B300 SGLang DeepSeek-V4.1-Flash AgentX TP4/EP4 with the newest official CUDA 13 nightly (20260922-582389ce), pinned amd64 digest, native DSpark5, measured thinking-on AL 3.51 for throughput and real verification for evals.
+  - Keep automatic backends, host Engram tables, GPU-resident KV, bounded prefill and decode graphs; route the B300 SGLang runtime through /ix.
+  - Use per-rank anonymous host Engram tables to allow transparent huge pages without changing host settings; preserve native FP8 table payload and automatic backend selection.
+  - "Use the default MTP/DSpark precision shipped by the official nightly, without custom draft quantization or precision patches."
+  - "Add DSpark TP2/EP2 alongside TP4/EP4 to explore the vLLM parallelism frontier, keeping native host Engram tables and GPU KV; interleave 16 decode batches between prefill chunks to test long-context responsiveness."
+  - "Submit this SGLang AgentX lane through a Slurm batch allocation and launch its steps from the compute node, avoiding failed interactive allocation notifications on the runner login host while preserving GPU reservations and terminal-status checks."
+  - "Test retained SWA tails at 64 times concurrency, bounded to 128–4096; use static memory 0.80 for TP2 C16 and 0.85 at C32 and above after measuring its smaller KV budget and 43.59 GiB of post-graph headroom at C64, otherwise retain 0.70. Prefetch checkpoints for shared Lustre loading. Test prefill/decode interval 4 at TP2 C32 and above against the interval-16 baseline; keep other points at 16."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3342
+
+- config-keys:
     - minimaxm3-fp4-mi355x-atom-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -8647,4 +8661,3 @@
     - "Verified against ATOM commit b6e2a39433d73b586c366ca90e661f098eb463e3 that --online_quant_config ptpc_fp8 does not change the Inferact/MiniMax-M3-EAGLE3-GQA draft precision: atom/models/eagle3_llama.py builds every draft linear (qkv_proj, o_proj, gate_up_proj, down_proj, fc) with no quant_config, so should_stream_online_quant short-circuits to False and OnlineQuantStreamer.maybe_create finds no streaming candidates. The EAGLE3 draft loads and runs at its native bf16 checkpoint precision; only the target MiniMax-M3 weights are online-quantized to ptpc_fp8, and the exclude_layer list applies to the target alone."
     - "将 MiniMax-M3 ATOM AgentX 的 GPU 显存利用率提高到 0.95，并按真实运行 batch（约为 CONC 的 22-41%）声明细粒度 CUDA graph（capture 档 1-64，运行时裁剪为 min(2*CONC, 8192)）；TP4 在 C15/C20/C24/C28/C32/C40/C48 启用 indexer-only CP，TP2 C20 由 TP-size gate 保持关闭，C40/C48 恢复 EAGLE3。将分档容量参数合并为单一 case，新增 TP2 C20/C25/C30 的 LMCache SLRU offload 曲线，LMCACHE_MAX_LOCAL_CPU_SIZE 取 TOTAL_CPU_DRAM_GB/TP，lookup worker 覆盖全部 rank，并将 offload GPU 跨 NUMA 节点放置（TP2 用 0,4；TP4 用 0,1,4,5），把 TP2 主机内存 pinning 从 45 分钟缩短到 21 秒；更新到 20260917 rocm7 ATOM 镜像 nightly_202609171455 与 LMCache 0.5.5rc3。dram-utilization 改为 0.687，使记录预算与每 rank 约 256 GB 的真实固定一致（与 TP 无关），取代此前 0.20 的元数据。已在 ATOM commit b6e2a394 验证 online_quant（ptpc_fp8）不改变 EAGLE3-GQA 草稿模型精度：eagle3_llama.py 的各 draft 线性层不带 quant_config，should_stream_online_quant 直接返回 False，草稿以原生 bf16 运行，仅目标 MiniMax-M3 权重在线量化为 ptpc_fp8。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3189
-  
