@@ -8697,3 +8697,16 @@
     - "Drop ATOM_USE_FLYDSL_GATHER_KV_B_PROJ=0, which pinned gather_kv_b_proj to the Triton path on the DCP prefill-context and MTP verify paths; the updated recipe no longer sets it."
     - "The MTP block data precision is not touched by --online_quant_config: the exclude_layer list adds \"model.layers.78.*\" so layer 78 (the GLM-5.2 MTP head) is skipped by online quantization and stays in native BF16, as it ships unquantized in amd/GLM-5.2-MXFP4. The expert excludes only reach layers 0-77, so without this exclude the whole MTP block would be online-quantized to ptpc_fp8 while the target's experts stay MXFP4."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3359  
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GLM-5.2 MXFP4 MI355X SGLang AgentX image from lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260920, whose SGLang commit c610c40399 contains sgl-project/sglang#37152: the ROCm HiCache JIT gains copy rounds narrower than 128 B, which is what lets GLM's 576 B MLA fp8 row reach the transfer kernels instead of falling back."
+    - "Remove the explicit direct/page_first_direct HiCache overrides so the TP4/EP4 HiCache arm runs SGLang's default kernel/page_first path; the dormant DP-attention and Mooncake branches drop the same two overrides. sgl-project/sglang#35233 is what makes that path correct on ROCm, by handing the transfer kernels the device-accessible alias of the registered host pool; upstream measured kernel/page_first at 338 tok/s against 291 tok/s for direct/page_first_direct at concurrency 14 on this same TP4/EP4 MXFP4 MI355X arm."
+    - "Raise dram-utilization from 0.80 to 0.85 and replace the TP4/EP4 arm's ratio-1.0 host KV pool (~115.19 GB/rank measured) with a fixed 180 GB/rank pool; the DSA indexer scales to ~41.25 GB/rank, leaving ~125 GB of startup headroom under the 1,274 GB SA budget. Set that arm's sweep to concurrency 4, 8, 10, 12, 14, and 16, and limit the TP8/EP1 GPU-resident arm to 1, 2, and 4."
+    - "将 GLM-5.2 MXFP4 MI355X SGLang AgentX 镜像从 lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917 更新到 lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260920；该镜像的 SGLang commit c610c40399 已包含 sgl-project/sglang#37152：ROCm HiCache JIT 新增了窄于 128 B 的 copy round，GLM 的 576 B MLA fp8 行因此能够走 transfer kernel 而不再回退。"
+    - "删除显式的 direct/page_first_direct HiCache 覆盖，使 TP4/EP4 HiCache arm 运行 SGLang 默认的 kernel/page_first 路径；处于休眠状态的 DP-attention 与 Mooncake 分支同样删除这两个覆盖。该路径在 ROCm 上的正确性来自 sgl-project/sglang#35233——它把 registered host pool 的 device-accessible alias 交给 transfer kernel；上游在同一个 TP4/EP4 MXFP4 MI355X arm 上实测并发 14 时 kernel/page_first 为 338 tok/s，direct/page_first_direct 为 291 tok/s。"
+    - "将 dram-utilization 从 0.80 提升到 0.85，并把 TP4/EP4 arm 的 ratio-1.0 host KV pool（实测约 115.19 GB/rank）改为固定 180 GB/rank；DSA indexer 同比扩展到约 41.25 GB/rank，在 SA 的 1,274 GB 预算内保留约 125 GB 启动余量。该 arm 的并发 sweep 为 4、8、10、12、14、16，TP8/EP1 GPU-resident arm 仅保留 1、2、4。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3329
