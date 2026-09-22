@@ -129,6 +129,13 @@ if [[ "${EVAL_ONLY}" != true ]]; then
 fi
 echo "DSpark block size: $DSPARK_BLOCK_SIZE, golden AL=$DSV41_GOLDEN_AL"
 
+# Isolated TP8 C16 cache-capacity candidate. Redistribute the existing static
+# KV budget toward cached SWA tails; preserve other topologies and settings.
+SWA_PREFIX_TAILS=1024
+if (( TP == 8 && CONC == 16 )) && [[ "$DP_ATTENTION" == false ]]; then
+    SWA_PREFIX_TAILS=2048
+fi
+
 SGLANG_CMD=(
     python3 -m sglang.launch_server
     --model-path "$MODEL_PATH" --served-model-name "$MODEL"
@@ -150,7 +157,7 @@ SGLANG_CMD=(
     # C16 exhausted its 94,976-slot SWA pool while millions of full-pool
     # slots remained free. Rebalance the existing KV budget toward reusable
     # tails; weights, KV precision and the total static budget stay unchanged.
-    --swa-prefix-tails 1024
+    --swa-prefix-tails "$SWA_PREFIX_TAILS"
     --speculative-algorithm DSPARK
     --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
