@@ -8577,7 +8577,7 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg:
 
 # Official SGLang nightly; Engram weights in host DRAM, native DSpark draft.
 dsv41flash-fp4-gb300-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5@sha256:987c7e4bd26918647211a5dcad72a2bdf2a5f394ac1469eff730e7517fc139be
+  image: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb300-nv

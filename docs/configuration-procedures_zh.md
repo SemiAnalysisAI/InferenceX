@@ -347,23 +347,24 @@ Maximum concurrency for 1,048,576 tokens per request: 6.70x
 
 ### SGLang 上的 DeepSeek-V4.1-Flash DSpark
 
-`dsv41flash-fp4-gb300-sglang-agentic` 在固定 digest 的官方 nightly 上以
-TP2/EP2 或 TP4/EP4 运行原生非推测解码。STP 入口通过 `SPEC_DECODING=none`
-复用 GB300 脚本，清除继承的合成接受率设置，不传入草稿模型参数。
-STP 使用 `--prefill-decode-interval 16` 在长预填充之间插入解码批次，
-针对默认调度造成的延迟覆盖率不足；吞吐量与交互延迟的取舍仍需实测。
-TP4 将原始 Engram 表保留在 GPU 显存中，避免主机大页碎片带来的访问开销。
-TP2 使用 `per_rank` 主机布局申请匿名大页；GB300 禁用了共享内存大页。
-独立 DSpark 配方使用官方 nightly 默认的草稿权重、计算精度和 KV 布局，
-不应用自定义精度补丁。Markov W2 保持 nightly 默认的 BF16。
-仍需完成全模型准确率和性能验证。下载的检查点解析为本地快照路径，
-让上游 Engram 缓存建议逻辑能找到对应文件；实际大页覆盖率需通过启动日志确认。
+`dsv41flash-fp4-gb300-sglang-agentic-dspark` 使用 TP2/EP2 和 TP4/EP4，固定
+`nightly-dev-cu13-20260922-582389ce`，manifest 为
+`sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40`。
+sweep 仅包含 DSpark，使用默认草稿精度与 KV 布局，包括默认 BF16 Markov W2。
+TP4 将原始 Engram 表保留在 GPU 显存；TP2 使用匿名 `per_rank` 主机表和本地检查点路径。
+主机大页覆盖率可能变化，须检查启动日志。
 
+配方保留 static memory 0.80、request/graph cap 64、prefill/decode interval 16、
+原生 1M context 与完整 AgentX 工作负载。从 C2 开始，SWA prefix tails 为
+`min(64*CONC, 4096)`。TP2 C64/C128 使用 prefill chunk 8192；C32 和其他点保持 4096。
+已完成的 C64 chunk 对比以较低 interactivity 换得 56.86% 吞吐提升，完整 GSM8K 的
+1,319 个样本通过验证。独立 cap-128 候选未提升吞吐；static memory 0.85 也未改善 C128。
+不叠加这些设置。C128 的 chunk8192 仍须通过最终完整 sweep 验证。
 
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` 是 vLLM 配方在 h100、h200、b200、b300、gb200、gb300
 与 mi355x 上的 SGLang 对应版本（每个 SKU 一个 PR），遵循
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1)。
-该模型尚无正式发布的 SGLang 版本：所有 NVIDIA 配方使用多架构预览镜像
+该模型尚无正式发布的 SGLang 版本：除上述 GB300 固定版本外，NVIDIA 配方使用多架构预览镜像
 `lmsysorg/sglang:dev-dsv41`，MI355X 使用 `lmsysorg/sglang:dev-dsv41-mi35x`。两个标签均可变，
 因此 master 配置与 changelog 记录了验证时的 digest。
 

@@ -399,26 +399,27 @@ Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/mode
 
 ### DeepSeek-V4.1-Flash DSpark on SGLang
 
-`dsv41flash-fp4-gb300-sglang-agentic` runs native non-speculative serving at
-TP2/EP2 or TP4/EP4 on the pinned official nightly. Its STP entry point shares the
-GB300 script with `SPEC_DECODING=none`, clears inherited synthetic acceptance,
-and passes no draft flags. STP uses `--prefill-decode-interval 16` to interleave
-decode with long prefills after the default cadence stalled diagnostic latency
-coverage; the throughput/interactivity tradeoff requires measurement. TP4 keeps the original Engram tables in GPU memory, avoiding host huge-page
-fragmentation. TP2 uses the `per_rank` anonymous host layout; GB300 disables
-shared-memory huge pages. The separate
-DSpark arm uses the official nightly's shipped draft weights, compute precision,
-and KV layout without a custom precision patch. Markov W2 retains the nightly's
-BF16 default. Full-model accuracy and performance qualification are still
-required. The downloaded checkpoint resolves to a local
-snapshot so upstream Engram cache advice can locate its files; verify actual
-huge-page coverage in the startup logs.
+`dsv41flash-fp4-gb300-sglang-agentic-dspark` uses TP2/EP2 and TP4/EP4 on
+`nightly-dev-cu13-20260922-582389ce`, pinned to manifest
+`sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40`.
+The sweep is DSpark-only, with shipped-default draft precision and KV layout,
+including the default BF16 Markov W2. TP4 keeps original Engram tables in GPU
+memory; TP2 uses anonymous `per_rank` host tables and local checkpoint paths.
+Actual host hugepage coverage varies and must be checked in startup logs.
 
+The recipe retains static memory 0.80, request/graph cap 64, prefill/decode
+interval 16, native 1M context and the complete AgentX workload. From C2 upward,
+SWA prefix tails scale as `min(64*CONC, 4096)`. TP2 C64/C128 use prefill chunk
+8192; C32 and all other points retain 4096. The completed C64 chunk comparison
+traded lower interactivity for 56.86% higher throughput, with full GSM8K passing
+all 1,319 samples. The independent cap-128 candidate did not improve throughput;
+raising static memory to 0.85 also failed to improve C128. These settings are not
+combined. C128 with chunk8192 remains unqualified until the final full sweep.
 
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` are the SGLang counterparts of the vLLM
 arms, one PR per SKU across h100, h200, b200, b300, gb200, gb300 and mi355x. They follow the
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1),
-which has no released SGLang version for this model yet: every NVIDIA arm uses the
+which has no released SGLang version for this model yet. Apart from the GB300 pin above, NVIDIA arms use the
 multi-arch preview build `lmsysorg/sglang:dev-dsv41` and MI355X uses
 `lmsysorg/sglang:dev-dsv41-mi35x`. Both tags are mutable, so the master configs and the
 changelog record the digests they were validated against.

@@ -95,9 +95,9 @@ SPECULATIVE_ARGS=()
 SCHEDULING_ARGS=(--prefill-decode-interval 16)
 # Compressed full-KV capacity alone cannot preserve a prefix whose SWA tail
 # has been evicted. Reserve more cached tails within the static pool for the
-# high-concurrency DSpark comparisons; checkpoint math stays unchanged.
+# DSpark comparisons above C1; checkpoint math stays unchanged.
 CACHE_ARGS=()
-if [[ "$SPEC_DECODING" == mtp ]] && (( CONC >= 16 )); then
+if [[ "$SPEC_DECODING" == mtp ]] && (( CONC >= 2 )); then
     SWA_PREFIX_TAILS=$((64 * CONC))
     if (( SWA_PREFIX_TAILS > 4096 )); then
         SWA_PREFIX_TAILS=4096
@@ -126,6 +126,14 @@ case "$SPEC_DECODING" in
         ;;
 esac
 
+# Test larger prefill batches at high TP2 concurrency while preserving
+# the validated static cache budget and native 1M context.
+MEM_FRACTION_STATIC=0.80
+CHUNKED_PREFILL_SIZE=4096
+if (( TP == 2 && CONC >= 64 )); then
+    CHUNKED_PREFILL_SIZE=8192
+fi
+
 SGLANG_CMD=(
     python3 -m sglang.launch_server
     --model-path "$MODEL_PATH" --served-model-name "$MODEL"
@@ -135,8 +143,8 @@ SGLANG_CMD=(
     # Backends resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl
     # on Blackwell); the cookbook warns that overriding them costs decode speed.
     # Bound prefill workspace while retaining the native 1M context.
-    --mem-fraction-static 0.80
-    --chunked-prefill-size 4096
+    --mem-fraction-static "$MEM_FRACTION_STATIC"
+    --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     "${SPECULATIVE_ARGS[@]}"
     "${SCHEDULING_ARGS[@]}"
     "${CACHE_ARGS[@]}"
