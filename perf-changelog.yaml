@@ -8602,4 +8602,5 @@
     - "Select native Marlin MXFP4 MoE on TP4 and flashinfer_mxfp4 on TP8 from matched C1 screens; preserve BF16 activations, native packed weights/scales, dense GEMM settings and shipped DSpark precision."
     - "Retain 1024 SWA prefix tails within the existing KV memory budget to reduce cache eviction, and cover concurrency 1 through 32 on both TP4 and TP8."
     - "Add supported TP8/EP8/DP8 attention with stable session routing at concurrency 4 through 32 after a matched C16 gain; retain plain TP at low concurrency following the matched DP8 C1 loss. Qualify both arms on the September 22 official nightly."
+    - "Isolate exact vLLM starting topologies TP4/EP1 and TP8/EP1 across concurrency 1 through 128; retain existing DSpark precision, memory and scheduling settings while qualifying effective tensor-sharded expert execution. Use native Marlin at EP1 because the shipped SM90 CUTLASS method rejects the TP8 expert width of 288."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341

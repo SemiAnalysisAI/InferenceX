@@ -2,7 +2,7 @@
 set -eo pipefail
 
 # DeepSeek-V4.1-Flash AgentX on H200 with SGLang native DSpark, following the
-# cookbook's H200 TP8/EP8 low-latency cell with a TP4/EP4 comparison arm.
+# vLLM baseline topologies TP4/EP1 and TP8/EP1 in this isolated experiment.
 # The KV cache is GPU-resident.
 # https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
 source "$(dirname "$0")/../../benchmark_lib.sh"
@@ -40,8 +40,11 @@ python3 "$(dirname "$0")/install_h200_block32_configs.py" \
 # Matched C1 screens favored CUTLASS on TP8 p90 interactivity, while Marlin
 # retained a small throughput/interactivity advantage on TP4. Both consume
 # native MXFP4 weights with BF16 activations; dense GEMMs are unchanged.
+# EP1 tensor-shards the 2304-wide routed experts: TP4=576, TP8=288.
+# The shipped SM90 CUTLASS method requires multiples of 128 and rejects
+# those widths; native Marlin supports padding without changing precision.
 MOE_RUNNER_BACKEND=marlin
-if (( TP == 8 )); then
+if (( TP == 8 && EP_SIZE != 1 )); then
     MOE_RUNNER_BACKEND=flashinfer_mxfp4
 fi
 
