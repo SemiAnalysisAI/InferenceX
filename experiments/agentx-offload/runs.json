@@ -3338,31 +3338,32 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "97daa26297294f3acfa239793f3fcd8b07933870",
-      "status": "queued",
+      "status": "in_progress",
       "workflow_name": "offload-v1-none-c320-r1-20260922",
       "dispatched_at": "2026-09-22T18:15:46Z",
       "job_id": 106875745645,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35766002905/job/106875745645",
       "queued_at": "2026-09-22T18:16:18Z",
       "performance_result": false,
-      "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c320, 3,600-second profiling, kv-offloading=none, and experiment=agentx-offload. InferenceX Dash showed no B200 job in the live priority queue and seven idle nodes immediately before dispatch."
+      "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c320, 3,600-second profiling, kv-offloading=none, and experiment=agentx-offload. InferenceX Dash showed no B200 job in the live priority queue and seven idle nodes immediately before dispatch.",
+      "started_at": "2026-09-22T18:17:03Z"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307",
-  "status": "The 4 TiB HBM+NVMe c320 midpoint 35727274307 completed successfully and its scratch is clean. Matched HBM-only c320 control 35766002905 is queued on the same pinned MiniMax-M3 NVFP4 TP4 AgentX protocol.",
+  "status": "Matched HBM-only c320 control 35766002905 is active in Launch job script on the same pinned MiniMax-M3 NVFP4 TP4 AgentX protocol. The completed NVMe c320 result and verified cleanup remain recorded.",
   "last_capacity_check": {
-    "checked_at": "2026-09-22T18:16:18Z",
-    "active_study_run_ids": [],
-    "pending_study_run_ids": [
+    "checked_at": "2026-09-22T18:17:45Z",
+    "active_study_run_ids": [
       35766002905
     ],
-    "dispatch_allowed": false,
-    "b200_priority_jobs_queued": 1,
-    "b200_nodes_allocated": 4,
-    "b200_nodes_idle": 7,
-    "target_node": "any eligible B200 node",
-    "target_node_state": "queued for allocation",
-    "reason": "Matched HBM-only c320 run 35766002905 is the single queued B200 study job. Launch nothing else until it starts or completes and the cluster-wide one-queued-job ceiling permits another dispatch."
+    "pending_study_run_ids": [],
+    "dispatch_allowed": true,
+    "b200_priority_jobs_queued": 0,
+    "b200_nodes_allocated": 5,
+    "b200_nodes_idle": 6,
+    "target_node": "assigned by InferenceX workflow",
+    "target_node_state": "active benchmark allocation",
+    "reason": "Matched HBM-only c320 run 35766002905 left the queue and entered Launch job script. The queue ceiling permits another non-NVMe dispatch, but no additional study run is useful until this matched control produces comparison evidence."
   },
   "next_dispatch": {
     "requires": "Monitor matched HBM-only c320 run 35766002905 through canonical profiling and artifacts. On success, compare it directly with NVMe c320 run 35727274307 before selecting the next adaptive point."
