@@ -11,14 +11,21 @@ require_agentic_kv_offload_none
 export GPU_COUNT="$TP"
 
 if (( TP == 2 )); then
-    # Freed expert-shuffle inputs otherwise leave 2.92 GiB in fragmented
-    # allocator blocks that cannot satisfy the next contiguous 1.05 GiB stack.
+    # Test whether expandable segments alone avoid load-time fragmentation.
     export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
     echo "TP2 CUDA allocator: $PYTORCH_CUDA_ALLOC_CONF"
-    # The stock TP2 loader OOMed before KV allocation while retaining copies
-    # of an already-stacked target MoE projection. Only shorten their lifetime.
-    MXFP4_LOADER=$(python3 -c 'import pathlib, sglang; print(pathlib.Path(sglang.__file__).parent / "srt/layers/quantization/mxfp4_flashinfer_trtllm_moe.py")')
-    python3 "$(dirname "$0")/patch_sglang_mxfp4_load_memory.py" "$MXFP4_LOADER"
+    python3 - <<'PY_STOCK_LOADER'
+import hashlib
+from pathlib import Path
+import sglang
+
+loader = Path(sglang.__file__).parent / "srt/layers/quantization/mxfp4_flashinfer_trtllm_moe.py"
+actual = hashlib.sha256(loader.read_bytes()).hexdigest()
+expected = "0ff4ca142e71ec0baabc00844b4854e554c607c1a356ffe13419c59b1f51813c"
+if actual != expected:
+    raise SystemExit(f"Expected pinned stock loader {expected}, found {actual}")
+print(f"Verified unmodified stock MXFP4 loader: {actual}")
+PY_STOCK_LOADER
 fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then

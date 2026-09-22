@@ -425,13 +425,11 @@ available. The concurrency-scaled tail budget shares the fixed static pool with
 full KV. Validate actual cache sizes, transient memory, cache reuse, and the
 throughput/interactivity frontier in the canonical sweep.
 
-TP2 loads about 147.76 GiB of target and draft weights per GPU. Its stock loader
-exhausted HBM before cache allocation while retaining completed target MoE shuffle
-inputs. A hash-verified patch releases those inputs before the next stack, and
-PyTorch expandable segments make the released storage reusable. Tensor payloads,
-layouts, computation, and shipped draft precision are unchanged. The
-[loader waiver](waiver/3346.md) records evidence, the unresolved upstream tracking
-link, and removal criteria. TP4 does not apply this patch or allocator override.
+TP2 loads about 147.76 GiB of target and draft weights per GPU. This isolated
+qualification candidate verifies the pinned stock loader's hash and enables
+PyTorch expandable allocator segments without applying an engine patch. Full
+load and accuracy validation must establish whether allocator fragmentation alone
+explains the original TP2 startup failure. Draft precision remains upstream default.
 The B200 launcher also converts pinned Docker digests to the installed Enroot
 manifest-reference syntax and stops immediately on import failure.
 
