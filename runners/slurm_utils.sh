@@ -159,10 +159,6 @@ launch_srt_single_node() {
     mapfile -d '' -t SRT_RUNTIME_ARGS < "$SRT_SINGLE_NODE_ROOT/arguments"
     SRT_SELECTED_RECIPE="${SRT_RUNTIME_ARGS[0]}"
     SRT_RUNTIME_ARGS=("${SRT_RUNTIME_ARGS[@]:1}")
-    if [[ -n "${SRT_SRUN_OPTIONS:-}" ]]; then
-        check_env_vars SRT_SRUN_OPTIONS
-        SRT_RUNTIME_ARGS+=(--set "srun_options=$SRT_SRUN_OPTIONS")
-    fi
     SRT_RUNTIME_ARGS+=(
         --set 'post_eval.command=["bash", "{infmax_workspace}/benchmarks/single_node/srt_eval.sh", "{endpoint}", "/logs/infx-eval-exit-code"]'
         --set "post_eval.passthrough_env=$SRT_EVAL_PASSTHROUGH"
@@ -209,9 +205,14 @@ launch_srt_single_node() {
     trap finish_native_single_node EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
+    local submission_rc=0
     apply_srt_recipe "$SRT_SELECTED_RECIPE" "$FRAMEWORK" \
         --json --yes --output "$SRT_SINGLE_NODE_ROOT/outputs" "${SRT_RUNTIME_ARGS[@]}" \
-        > "$GITHUB_WORKSPACE/srt-single-node-submission.json"
+        > "$GITHUB_WORKSPACE/srt-single-node-submission.json" || submission_rc=$?
+    if (( submission_rc != 0 )); then
+        cat "$GITHUB_WORKSPACE/srt-single-node-submission.json" >&2
+        return "$submission_rc"
+    fi
     python3 -m infx.srt_slurm.single_node submission "$GITHUB_WORKSPACE/srt-single-node-submission.json" \
         > "$SRT_SINGLE_NODE_ROOT/submission-fields"
     mapfile -t SRT_SUBMISSION < "$SRT_SINGLE_NODE_ROOT/submission-fields"

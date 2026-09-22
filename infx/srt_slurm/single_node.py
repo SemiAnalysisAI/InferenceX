@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -124,6 +125,17 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
         if environment[name] not in {"true", "false"}:
             raise ValueError(f"{name} must be true or false")
     overrides = []
+    if environment.get("SRT_SRUN_OPTIONS"):
+        options = json.loads(environment["SRT_SRUN_OPTIONS"])
+        if not isinstance(options, dict) or any(
+            not re.fullmatch(r"[a-z][a-z0-9-]*", key) or not isinstance(value, str)
+            for key, value in options.items()
+        ):
+            raise ValueError("SRT_SRUN_OPTIONS must map option names to string values")
+        # Native --set preserves whole mappings as JSON strings for engine
+        # flags. Runtime option mappings therefore need individual leaf sets.
+        for key, value in options.items():
+            overrides += ["--set", f"srun_options.{key}={json.dumps(value)}"]
     for name in (
         "CONC",
         "RESULT_FILENAME",

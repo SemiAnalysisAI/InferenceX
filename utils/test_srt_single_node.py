@@ -332,3 +332,14 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
     assert cluster_config["containers"]["test:tag"] == "test:tag"
     assert cluster_config["use_exclusive_sbatch_directive"] is True
     assert (capture.read_text() if capture.exists() else "") == ("42\n" if failure == "submission" else "")
+
+
+def test_runtime_container_options_remain_native_mapping(point):
+    path, recipe, env = point
+    env = {**env, "SRT_SRUN_OPTIONS": '{"container-remap-root":"", "container-writable":""}'}
+    argv = runtime_arguments(f"{path}:base", env)
+    actual = copy.deepcopy(recipe)
+    apply_overrides_to_recipe(actual, parse_overrides(argv[1::2], []))
+    assert actual['srun_options'] == {'container-remap-root': '', 'container-writable': ''}
+    with pytest.raises(ValueError, match='must map option names to string values'):
+        runtime_arguments(f"{path}:base", {**env, 'SRT_SRUN_OPTIONS': '{"container-remap-root": true}'})

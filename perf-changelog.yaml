@@ -8802,3 +8802,32 @@
     - "Forward the native Docker server model identity into the shared eval path and reject missing eval metadata before startup"
     - "将原生 Docker 服务的模型名称传入共享 eval 路径，并在启动前拒绝缺失的 eval 元数据"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
+
+- config-keys:
+  - dsr1-fp4-mi355x-sglang
+  - dsr1-fp4-mi355x-sglang-mtp
+  - dsr1-fp4-mi355x-atom
+  - dsr1-fp4-mi355x-atom-mtp
+  - dsr1-fp8-mi300x-sglang
+  - dsr1-fp8-mi325x-sglang
+  - dsr1-fp8-mi355x-sglang
+  - dsr1-fp8-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi325x-sglang
+  - qwen3.5-fp8-mi355x-sglang
+  - qwen3.5-fp8-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi355x-atom
+  - qwen3.5-fp8-mi355x-atom-mtp
+  - qwen3.5-fp4-mi355x-sglang
+  - qwen3.5-fp4-mi355x-atom
+  - qwen3.5-fp4-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi300x-sglang
+  - dsr1-fp8-mi355x-atom
+  - dsr1-fp8-mi355x-atom-mtp
+  - dsr1-fp8-mi325x-sglang-mtp
+  - qwen3.5-fp8-mi325x-sglang-mtp
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Pass AMD container runtime options as native dotted leaf overrides so SRT validates them as a mapping before submission; surface native submission errors in workflow logs
+  - 将 AMD 容器运行时选项作为原生点路径叶值传递，确保 SRT 在提交前将其校验为映射，并在工作流日志中显示原生提交错误
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
