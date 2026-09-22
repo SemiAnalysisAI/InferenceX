@@ -403,9 +403,9 @@ Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/mode
 arms, one PR per SKU across h100, h200, b200, b300, gb200, gb300 and mi355x. They follow the
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1),
 which has no released SGLang version for this model yet. The GB200 arm pins the official
-`lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5` multi-architecture manifest
-`sha256:987c7e4bd26918647211a5dcad72a2bdf2a5f394ac1469eff730e7517fc139be`;
-its ARM64 image is `sha256:9e1fb4c395b9c406136e10aa445b8784d06bca3839623b52cbe4a3b231a157a8`.
+`lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce` multi-architecture manifest
+`sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40`;
+its ARM64 image is `sha256:044b18a3a7ce0437e366c60a32d7e7109d1d846aee4e301e3ff1c7932c30695a`.
 The GB200 recipe retains TP4/EP4, native five-token DSpark, automatic backends,
 and the existing GPU-resident KV and golden-AL policy. Other NVIDIA arms use the
 multi-arch preview build `lmsysorg/sglang:dev-dsv41` and MI355X uses

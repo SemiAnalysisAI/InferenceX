@@ -351,9 +351,9 @@ Maximum concurrency for 1,048,576 tokens per request: 6.70x
 与 mi355x 上的 SGLang 对应版本（每个 SKU 一个 PR），遵循
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1)。
 该模型尚无正式发布的 SGLang 版本。GB200 配方固定官方
-`lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5` 的多架构 manifest
-`sha256:987c7e4bd26918647211a5dcad72a2bdf2a5f394ac1469eff730e7517fc139be`；
-ARM64 镜像为 `sha256:9e1fb4c395b9c406136e10aa445b8784d06bca3839623b52cbe4a3b231a157a8`。
+`lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce` 的多架构 manifest
+`sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40`；
+ARM64 镜像为 `sha256:044b18a3a7ce0437e366c60a32d7e7109d1d846aee4e301e3ff1c7932c30695a`。
 GB200 配方保留 TP4/EP4、原生五 token DSpark、自动后端选择、GPU 常驻 KV cache 与既有黄金 AL 策略。
 其他 NVIDIA 配方使用多架构预览镜像
 `lmsysorg/sglang:dev-dsv41`，MI355X 使用 `lmsysorg/sglang:dev-dsv41-mi35x`。两个标签均可变，
