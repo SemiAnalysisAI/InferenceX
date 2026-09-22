@@ -46,11 +46,17 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# Keep Engram tables in host RAM to make room for long-context AgentX KV.
-# Per-rank anonymous mappings can use THP without requiring shared-memory THP
-# or host sysctl changes. The table payload remains native FP8.
-export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
-export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
+# TP2 keeps Engram tables in host RAM for long-context AgentX KV. Its per-rank
+# anonymous mappings can use THP without host sysctl changes. TP4 tests native
+# FP8 tables on GPU, where its smaller weight shard leaves room for them.
+if (( TP == 4 )); then
+    # TP4 can fit the native FP8 tables on GPU; qualify this placement on B300.
+    export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0
+    unset SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT
+else
+    export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
+    export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
+fi
 
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts, but
@@ -70,7 +76,10 @@ fi
 # 38.83 GiB. Give TP2's larger working sets more KV space before retaining
 # additional SWA tails; keep the conservative low-concurrency allocation.
 MEM_FRACTION_STATIC=0.70
-if (( TP == 2 && CONC >= 32 )); then
+if (( TP == 4 )); then
+    # GPU-resident tables add about 47 GiB/rank; retain room for long prefixes.
+    MEM_FRACTION_STATIC=0.80
+elif (( TP == 2 && CONC >= 32 )); then
     # At C64, 0.80 left 43.59 GiB after graphs but only 18.29M full tokens.
     # Retain more long prefixes while leaving room for transient prefills.
     MEM_FRACTION_STATIC=0.85

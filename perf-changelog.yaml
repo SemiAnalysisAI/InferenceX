@@ -8594,10 +8594,10 @@
   - agentic-coding
   description:
   - Add B300 SGLang DeepSeek-V4.1-Flash AgentX TP4/EP4 with the newest official CUDA 13 nightly (20260922-582389ce), pinned amd64 digest, native DSpark5, measured thinking-on AL 3.51 for throughput and real verification for evals.
-  - Keep automatic backends, host Engram tables, GPU-resident KV, bounded prefill and decode graphs; route the B300 SGLang runtime through /ix.
-  - Use per-rank anonymous host Engram tables to allow transparent huge pages without changing host settings; preserve native FP8 table payload and automatic backend selection.
+  - Keep automatic backends, GPU-resident Engram at TP4 and host Engram at TP2, GPU-resident KV, bounded prefill and decode graphs; route the B300 SGLang runtime through /ix.
+  - Use per-rank anonymous TP2 host Engram tables to allow transparent huge pages without changing host settings; preserve native FP8 table payload and automatic backend selection.
   - "Use the default MTP/DSpark precision shipped by the official nightly, without custom draft quantization or precision patches."
-  - "Add DSpark TP2/EP2 alongside TP4/EP4 to explore the vLLM parallelism frontier, keeping native host Engram tables and GPU KV; interleave 16 decode batches between prefill chunks to test long-context responsiveness."
+  - "Add DSpark TP2/EP2 alongside TP4/EP4 to explore the vLLM parallelism frontier, keeping native FP8 Engram tables and GPU KV; interleave 16 decode batches between prefill chunks to test long-context responsiveness."
   - "Submit this SGLang AgentX lane through a Slurm batch allocation and launch its steps from the compute node, avoiding failed interactive allocation notifications on the runner login host while preserving GPU reservations and terminal-status checks."
-  - "Test retained SWA tails at 64 times concurrency, bounded to 128–4096; use static memory 0.80 for TP2 C16 and 0.85 at C32 and above after measuring its smaller KV budget and 43.59 GiB of post-graph headroom at C64, otherwise retain 0.70. Prefetch checkpoints for shared Lustre loading."
+  - "Test retained SWA tails at 64 times concurrency, bounded to 128–4096; use static memory 0.80 for TP2 C16 and 0.85 at C32 and above after measuring its smaller KV budget and 43.59 GiB of post-graph headroom at C64, use 0.80 for GPU-resident TP4 Engram and retain 0.70 for low-concurrency TP2. Prefetch checkpoints for shared Lustre loading."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3342
