@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from infx.srt_slurm.synthetic_acceptance import selected_recipes
+from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
 
 
 def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
@@ -27,6 +27,10 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
     args = role["args"]
     benchmark = recipe["benchmark"]
     workload = benchmark["env"]
+    spec = spec_parameters(role, "sglang")
+    if spec and spec["method"] not in {"eagle", "nextn"}:
+        raise ValueError("Single-node SRT pilot supports only native MTP or no speculation")
+    speculation = "mtp" if spec else "none"
     expected = {
         "engine": (recipe["engine"], environment["FRAMEWORK"]),
         "model": (recipe["model"]["path"], f"hf:{environment['MODEL']}"),
@@ -34,13 +38,21 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
         "precision": (recipe["model"]["precision"], environment["PRECISION"]),
         "tensor-parallel-size": (args["tensor-parallel-size"], int(environment["TP"])),
         "data-parallel-size": (args["data-parallel-size"], 1),
+        "expert-parallel-size": (
+            args.get("expert-parallel-size", args.get("ep-size", 1)),
+            int(environment["EP_SIZE"]),
+        ),
         "gpus": (role["gpus"], int(environment["GPU_COUNT"])),
         "nodes": (role["nodes"], 1),
         "workers": (role["workers"], 1),
         "roles": (set(recipe["roles"]), {"agg"}),
         "benchmark type": (benchmark["type"], "custom"),
         "benchmark MODEL": (workload["MODEL"], environment["MODEL"]),
+        "SPEC_DECODING": (speculation, environment["SPEC_DECODING"]),
+        "USE_CHAT_TEMPLATE": (workload["USE_CHAT_TEMPLATE"], "true" if spec else "false"),
     }
+    if "CONC" in workload:
+        expected["CONC"] = (str(workload["CONC"]), environment["CONC"])
     for name in ("ISL", "OSL", "RANDOM_RANGE_RATIO"):
         expected[name] = (str(workload[name]), environment[name])
     # Other topology/eval paths remain on their current launchers until ported.
@@ -49,10 +61,8 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
         "PP_SIZE": "1",
         "DCP_SIZE": "1",
         "PCP_SIZE": "1",
-        "EP_SIZE": "1",
         "DP_ATTENTION": "false",
         "IS_AGENTIC": "0",
-        "SPEC_DECODING": "none",
         "RUN_EVAL": "false",
         "EVAL_ONLY": "false",
     }.items():

@@ -25,9 +25,9 @@ fi
 if [[ "$EXECUTION_PATH" == native-single-node ]]; then
     check_env_vars GITHUB_WORKSPACE SRT_RECIPE FRAMEWORK MODEL MODEL_PREFIX IMAGE PRECISION \
         TP PP_SIZE DCP_SIZE PCP_SIZE EP_SIZE DP_ATTENTION GPU_COUNT IS_AGENTIC SPEC_DECODING \
-        CONC ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME GPU_MONITOR_INTERVAL DSR1_FP8_MODEL_PATH HF_HUB_CACHE
-    if [[ "$MODEL_PREFIX" != dsr1 || "$PRECISION" != fp8 ]]; then
-        echo "ERROR: the native H200 pilot currently supports dsr1/fp8 only" >&2
+        CONC ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME GPU_MONITOR_INTERVAL SRT_MODEL_PATH HF_HUB_CACHE
+    if [[ ( "$MODEL_PREFIX" != dsr1 && "$MODEL_PREFIX" != qwen3.5 ) || "$PRECISION" != fp8 ]]; then
+        echo "ERROR: the native H200 pilot supports dsr1/fp8 and qwen3.5/fp8 only" >&2
         exit 1
     fi
     SRT_PILOT_ROOT=$(mktemp -d "$GITHUB_WORKSPACE/srt-single.XXXXXX")
@@ -46,8 +46,8 @@ if [[ "$EXECUTION_PATH" == native-single-node ]]; then
     python3 -m infx.srt_slurm.single_node prepare "$GITHUB_WORKSPACE/$SRT_RECIPE" "$SRT_PILOT_ROOT/arguments"
     mapfile -d '' -t SRT_RUNTIME_ARGS < "$SRT_PILOT_ROOT/arguments"
     SQUASH_FILE="/data/containers/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    if [[ ! -r "$DSR1_FP8_MODEL_PATH/config.json" ]]; then
-        echo "ERROR: staged model config is unavailable: $DSR1_FP8_MODEL_PATH" >&2
+    if [[ ! -r "$SRT_MODEL_PATH/config.json" ]]; then
+        echo "ERROR: staged model config is unavailable: $SRT_MODEL_PATH" >&2
         exit 1
     fi
     NGINX_SQUASH_FILE=/data/containers/nginx+1.27.4.sqsh
@@ -55,7 +55,7 @@ if [[ "$EXECUTION_PATH" == native-single-node ]]; then
         --var SRT_DEFAULT_TIME_LIMIT "$SALLOC_TIME_LIMIT" \
         --var AIPERF_MMAP_CACHE_HOST_PATH "$AIPERF_MMAP_CACHE_HOST_PATH" \
         --var HF_HUB_CACHE_MOUNT "$HF_HUB_CACHE_MOUNT" --var CONTAINER_KEY "$IMAGE" \
-        --model "hf:$MODEL" "$DSR1_FP8_MODEL_PATH" \
+        --model "hf:$MODEL" "$SRT_MODEL_PATH" \
         --container "$IMAGE" "$IMAGE" \
         --mount "$HF_HUB_CACHE_MOUNT" "$HF_HUB_CACHE" --exclusive
     make setup ARCH=x86_64

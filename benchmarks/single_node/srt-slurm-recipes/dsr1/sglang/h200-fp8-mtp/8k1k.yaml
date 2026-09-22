@@ -1,11 +1,10 @@
-# Parallel replacement for dsr1-fp8-h200-sglang; not selected by production yet.
-# Each concurrency is a separate native SRT job, matching the current sweep.
+# Parallel port of dsr1_fp8_h200_mtp.sh; real verification, embedded MTP head.
 base:
   schema: 2
-  name: dsr1-fp8-h200-sglang-8k1k
+  name: dsr1-fp8-h200-sglang-mtp-8k1k
   model:
     path: hf:deepseek-ai/DeepSeek-R1-0528
-    container: lmsysorg/sglang:v0.5.12-cu130
+    container: lmsysorg/sglang:v0.5.19-cu130
     precision: fp8
   resources:
     gpu_type: h200
@@ -26,9 +25,11 @@ base:
       env:
         PYTHONNOUSERSITE: "1"
         TORCH_CUDA_ARCH_LIST: "9.0"
+        SGLANG_ENABLE_SPEC_V2: "1"
       args:
         tensor-parallel-size: 8
         data-parallel-size: 1
+        ep-size: 1
         trust-remote-code: true
         served-model-name: deepseek-ai/DeepSeek-R1-0528
         enable-metrics: false
@@ -41,6 +42,10 @@ base:
         attention-backend: flashinfer
         stream-interval: 10
         decode-log-interval: 1
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 2
+        speculative-num-draft-tokens: 3
+        speculative-eagle-topk: 1
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
@@ -49,7 +54,7 @@ base:
       ISL: "8192"
       OSL: "1024"
       RANDOM_RANGE_RATIO: "0.8"
-      USE_CHAT_TEMPLATE: "false"
+      USE_CHAT_TEMPLATE: "true"
 
 zip_override_concurrency:
   benchmark:

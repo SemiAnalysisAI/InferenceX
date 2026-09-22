@@ -8556,3 +8556,12 @@
     - "Wire the opt-in H200 native SRT single-node pilot through the matrix, launcher, result and GPU power paths; keep production routing unchanged pending qualification"
     - "将显式启用的 H200 原生 SRT 单节点试点接入矩阵、启动器、结果及 GPU 功耗流程；验收完成前保留现有生产路由"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
+
+- config-keys:
+    - dsr1-fp8-h200-sglang
+    - dsr1-fp8-h200-sglang-mtp
+    - qwen3.5-fp8-h200-sglang
+  description:
+    - "Extend the opt-in native H200 SRT pilot to DeepSeek-R1 MTP and Qwen3.5 EP8, preserving real verification, chat formatting, and concurrency-dependent graph capture; select 4/16/64 for sequential regression checks without production cutover"
+    - "将显式启用的原生 H200 SRT 试点扩展到 DeepSeek-R1 MTP 和 Qwen3.5 EP8，保留真实验证、聊天模板及随并发变化的图捕获；选择 4/16/64 逐点检查回归，尚不切换生产路由"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352

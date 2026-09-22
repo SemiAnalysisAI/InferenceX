@@ -4,8 +4,14 @@
 set -eo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh" --validation-only
 check_env_vars MODEL CONC ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME RESULT_DIR \
-    SRT_FRONTEND_HOST SRT_FRONTEND_PORT RUN_EVAL EVAL_ONLY GPU_MONITOR_INTERVAL
+    SRT_FRONTEND_HOST SRT_FRONTEND_PORT RUN_EVAL EVAL_ONLY GPU_MONITOR_INTERVAL USE_CHAT_TEMPLATE
 SRT_MONITOR_INTERVAL="$GPU_MONITOR_INTERVAL"
+CLIENT_ARGS=()
+case "$USE_CHAT_TEMPLATE" in
+    true) CLIENT_ARGS+=(--use-chat-template) ;;
+    false) ;;
+    *) echo "ERROR: USE_CHAT_TEMPLATE must be true or false" >&2; exit 1 ;;
+esac
 
 for name in CONC ISL OSL SRT_FRONTEND_PORT GPU_MONITOR_INTERVAL; do
     if [[ ! "${!name}" =~ ^[1-9][0-9]*$ ]]; then
@@ -28,7 +34,7 @@ fi
 
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh"
 cd "$INFERENCEX_REPO_ROOT"
-pip3 install --user --break-system-packages sentencepiece
+pip3 install --user --break-system-packages sentencepiece datasets pandas
 
 start_gpu_monitor --output "$RESULT_DIR/gpu_metrics.csv" --interval "$SRT_MONITOR_INTERVAL"
 trap 'rc=$?; stop_gpu_monitor; exit "$rc"' EXIT
@@ -44,4 +50,5 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir "$RESULT_DIR"
+    --result-dir "$RESULT_DIR" \
+    "${CLIENT_ARGS[@]}"

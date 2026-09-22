@@ -46,6 +46,7 @@ def client_environment(tmp_path):
         "RUN_EVAL": "false",
         "EVAL_ONLY": "false",
         "GPU_MONITOR_INTERVAL": "2",
+        "USE_CHAT_TEMPLATE": "false",
         "IS_AGENTIC": "0",
         "SCENARIO_TYPE": "fixed-seq-len",
         "CLIENT_EXIT": "0",
@@ -56,11 +57,11 @@ def client_environment(tmp_path):
     return env
 
 
-@pytest.mark.parametrize("exit_code", [0, 7])
+@pytest.mark.parametrize("exit_code,chat_template", [(0, "false"), (7, "false"), (0, "true")])
 def test_native_endpoint_preserves_client_settings_and_failure(
-    client_environment, exit_code
+    client_environment, exit_code, chat_template
 ):
-    env = {**client_environment, "CLIENT_EXIT": str(exit_code)}
+    env = {**client_environment, "CLIENT_EXIT": str(exit_code), "USE_CHAT_TEMPLATE": chat_template}
     result = subprocess.run(
         ["bash", str(CLIENT)], env=env, capture_output=True, text=True
     )
@@ -99,7 +100,7 @@ def test_native_endpoint_preserves_client_settings_and_failure(
         env["RESULT_DIR"],
         "--result-filename",
         "test-result.json",
-    ]
+    ] + (["--use-chat-template"] if chat_template == "true" else [])
     assert (
         (Path(env["RESULT_DIR"]) / "gpu_metrics.csv")
         .read_text()
@@ -112,6 +113,7 @@ def test_native_endpoint_preserves_client_settings_and_failure(
     [
         ("MODEL", None, "MODEL"),
         ("GPU_MONITOR_INTERVAL", None, "GPU_MONITOR_INTERVAL"),
+        ("USE_CHAT_TEMPLATE", "yes", "USE_CHAT_TEMPLATE must be true or false"),
         ("CONC", "0", "CONC must be a positive integer"),
         ("RUN_EVAL", "true", "does not support evals yet"),
         ("EVAL_ONLY", "true", "does not support evals yet"),

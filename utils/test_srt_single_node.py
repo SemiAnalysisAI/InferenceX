@@ -11,7 +11,7 @@ import pytest
 import yaml
 
 from infx.srt_slurm.single_node import runtime_arguments, submission_fields
-from infx.srt_slurm.synthetic_acceptance import plan_commands
+from infx.srt_slurm.synthetic_acceptance import plan_commands, selected_recipes
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
@@ -29,6 +29,7 @@ def point(tmp_path):
         }},
         "benchmark": {"type": "custom", "env": {
             "MODEL": "test/model", "ISL": "256", "OSL": "64", "RANDOM_RANGE_RATIO": "0.5",
+            "USE_CHAT_TEMPLATE": "false",
         }},
     }
     path = tmp_path / "recipe.yaml"
@@ -54,6 +55,7 @@ def test_native_binding_submits_one_point_and_keeps_server_settings(point):
     apply_overrides_to_recipe(actual, overrides)
     assert actual["benchmark"]["env"] == {
         "MODEL": "test/model", "ISL": "256", "OSL": "64", "RANDOM_RANGE_RATIO": "0.5",
+        "USE_CHAT_TEMPLATE": "false",
         "CONC": "2", "RESULT_FILENAME": "point-identity", "GPU_MONITOR_INTERVAL": "3",
         "RUN_EVAL": "false", "EVAL_ONLY": "false", "RESULT_DIR": "/logs",
     }
@@ -68,6 +70,7 @@ def test_native_binding_submits_one_point_and_keeps_server_settings(point):
     ("TP", "2", "tensor-parallel-size"), ("IMAGE", "other:tag", "image"),
     ("ISL", "128", "ISL"), ("RUN_EVAL", "true", "RUN_EVAL"),
     ("PP_SIZE", "2", "PP_SIZE"), ("RESULT_FILENAME", "", "Missing runtime input"),
+    ("EP_SIZE", "2", "expert-parallel-size"), ("SPEC_DECODING", "mtp", "SPEC_DECODING"),
 ])
 def test_mismatched_point_fails_before_submission(point, field, value, message):
     path, _, env = point
@@ -79,6 +82,43 @@ def test_multi_variant_selection_is_rejected(point):
     path, _, env = point
     with pytest.raises(ValueError, match="exactly one"):
         runtime_arguments(str(path), env)
+
+
+def test_mtp_binding_uses_real_verification_and_preserves_expert_parallelism(point):
+    path, recipe, env = point
+    recipe["roles"]["agg"]["args"].update({
+        "expert-parallel-size": 4, "speculative-algorithm": "EAGLE",
+        "speculative-num-steps": 2, "speculative-num-draft-tokens": 3,
+    })
+    recipe["roles"]["agg"]["env"] = {"SGLANG_SIMULATE_ACC_LEN": "2.5"}
+    recipe["benchmark"]["env"]["USE_CHAT_TEMPLATE"] = "true"
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    env = {**env, "EP_SIZE": "4", "SPEC_DECODING": "mtp"}
+    argv = runtime_arguments(f"{path}:base", env)
+    commands = plan_commands(f"{path}:base", "sglang", ["--json", *argv], env)
+    assert commands == [[
+        "srtctl", "apply", "--json", *argv, "--file", f"{path}:base",
+        "--unset", "roles.agg.env.SGLANG_SIMULATE_ACC_LEN",
+    ]]
+    recipe["benchmark"]["env"]["USE_CHAT_TEMPLATE"] = "false"
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    with pytest.raises(ValueError, match="USE_CHAT_TEMPLATE"):
+        runtime_arguments(f"{path}:base", env)
+
+
+def test_concurrency_selector_keeps_graph_capture_coupled_to_client(point):
+    path, recipe, env = point
+    path.write_text(yaml.safe_dump({"base": recipe, "zip_override_conc": {
+        "roles": {"agg": {"args": {"cuda-graph-max-bs": [2, 4]}}},
+        "benchmark": {"env": {"CONC": ["2", "4"]}},
+    }}))
+    argv = runtime_arguments(f"{path}:zip_override_conc[1]", {**env, "CONC": "4"})
+    actual = selected_recipes(yaml.safe_load(path.read_text()), "zip_override_conc[1]")[0][1]
+    apply_overrides_to_recipe(actual, parse_overrides(argv[1::2], []))
+    assert actual["roles"]["agg"]["args"]["cuda-graph-max-bs"] == 4
+    assert actual["benchmark"]["env"]["CONC"] == "4"
+    with pytest.raises(ValueError, match="CONC"):
+        runtime_arguments(f"{path}:zip_override_conc[1]", env)
 
 
 @pytest.mark.parametrize("record,expected", [
@@ -145,7 +185,7 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
         "GITHUB_WORKSPACE": str(tmp_path), "SRT_RECIPE": f"{path.name}:base",
         "IS_MULTINODE": "false", "REQUIRE_POWER": "1", "SALLOC_TIME_LIMIT": "10",
         "HF_HUB_CACHE_MOUNT": str(tmp_path), "AIPERF_MMAP_CACHE_HOST_PATH": str(tmp_path),
-        "HF_HUB_CACHE": "/hf", "DSR1_FP8_MODEL_PATH": str(model), "MODEL_PREFIX": "dsr1",
+        "HF_HUB_CACHE": "/hf", "SRT_MODEL_PATH": str(model), "MODEL_PREFIX": "dsr1",
         "INFERENCEX_RUNTIME_ENV_VARS": "REQUIRE_POWER",
         "TEST_FAILURE": failure, "CANCEL_CAPTURE": str(capture),
     }

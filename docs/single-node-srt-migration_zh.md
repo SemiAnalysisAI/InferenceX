@@ -25,7 +25,7 @@ SRT 负责资源分配、容器启动、端点选择、就绪检查及服务清�
 
 原生 `custom` benchmark 调用 [`srt_fixed_sequence.sh`](../benchmarks/single_node/srt_fixed_sequence.sh)，复用现有 `run_benchmark_serving` 和 GPU 采样器。它保留 `10 * concurrency` 个请求、`2 * concurrency` 次预热、随机长度变化、completions API 行为和现有 JSON 结果格式。共享 helper 新增显式 base URL 参数，让客户端连接 SRT 选定的端点；现有调用仍使用原来的本地端点。
 
-客户端在服务镜像中运行，并保留原有 `sentencepiece` 安装步骤。这是客户端兼容胶水，不是第二套服务启动器。初版客户端明确拒绝 eval 请求；切换前必须完成 eval-only 上下文处理、评测产物接入和取消验收。
+客户端在服务镜像中运行，在测量前安装 `sentencepiece`、`datasets` 和 `pandas` 依赖。配方中的 `USE_CHAT_TEMPLATE` 保留原有客户端行为，包括 MTP 的聊天模板格式。初版客户端明确拒绝 eval 请求；切换前必须完成 eval-only 上下文处理、评测产物接入和取消验收。
 
 ## 运行时输入
 
@@ -53,7 +53,7 @@ python -m pytest utils/test_srt_fixed_sequence.py
 
 ## 显式启用的工作流试点
 
-[`configs/pilots/h200-srt.yaml`](../configs/pilots/h200-srt.yaml) 仅选择 `cluster:h200-dgxc`、8k1k、TP8 和并发 4。搜索空间的 `srt-recipe` 字段将原生文件及选择器经矩阵和工作流传给现有 H200 池启动器。生产 `h200` 覆盖（包括 CoreWeave）保持不变。
+[`configs/pilots/h200-srt.yaml`](../configs/pilots/h200-srt.yaml) 仅选择 `cluster:h200-dgxc`、8k1k、TP8 和并发 4、16、64。现包含无推测的 DeepSeek-R1 FP8、DeepSeek-R1 FP8 MTP，以及 EP8 的 Qwen3.5 FP8。MTP 保留内置 draft head、EAGLE 的两步/三个 draft token 及真实验证。Qwen 保留 9236-token 上下文、FP8 KV cache，以及等于并发数的图捕获大小；原生 zipped overrides 同时绑定图大小和客户端并发。若选择器的并发与矩阵不一致，绑定器会拒绝提交。搜索空间的 `srt-recipe` 字段将原生文件及选择器经矩阵和工作流传给现有 H200 池启动器。生产 `h200` 覆盖（包括 CoreWeave）保持不变。
 
 启动器在提交前核对配方与矩阵中的模型、镜像、精度、拓扑和工作负载。它使用集群已暂存的模型路径，将配方指定的准确镜像 URI 交给原生 SRT/Pyxis 启动容器，申请独占节点，并通过原生 `--set` 绑定并发与产物参数。模型资源缺失会在提交前失败；试点不依赖旧启动器单独管理的 squash 缓存。普通 `sglang` 提交也经过共享的自动 acceptance 连接器。
 
@@ -64,9 +64,11 @@ python -m pytest utils/test_srt_fixed_sequence.py
 ```bash
 gh workflow run e2e-tests.yml --ref codex/single-node-srt-slurm \
   -f ref=<COMMIT> -f test-name='native H200 SRT pilot' \
-  -f generate-cli-command='test-config --config-keys dsr1-fp8-h200-sglang --config-file configs/pilots/h200-srt.yaml --no-evals' \
+  -f generate-cli-command='test-config --config-keys dsr1-fp8-h200-sglang --config-file configs/pilots/h200-srt.yaml --conc 4 --no-evals' \
   -f require-power=true
 ```
+
+每次 E2E 仅提交一个配方和一个 `--conc` 值，等待该分配结束后再提交下一点，并在提交前检查集群负载。选择配置中的最低、中间和最高并发（此处为 4/16/64），不运行完整扫描；先比较已有匹配基线，仅在差异需要调查时重新运行对应的旧路径点，以限制 GPU 使用量。
 
 试点必须传 `--no-evals`，目前仍明确拒绝 eval。一次吞吐运行通过不代表准确性或性能一致性已验收。
 

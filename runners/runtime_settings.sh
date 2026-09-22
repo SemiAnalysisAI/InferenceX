@@ -28,8 +28,11 @@ case "${RUNNER_NAME%%_*}" in
         ;;
     gb300-nv) export SLURM_PARTITION=batch_1 ;;
     h200-dgxc-slurm)
-        export DSR1_FP8_MODEL_PATH=/models/DeepSeek-R1-0528
         export HF_HUB_CACHE_MOUNT=/models/gharunners/hf-hub-cache
+        case "$MODEL_PREFIX/$PRECISION" in
+            dsr1/fp8) export SRT_MODEL_PATH=/models/DeepSeek-R1-0528 ;;
+            qwen3.5/fp8) export SRT_MODEL_PATH="$HF_HUB_CACHE_MOUNT/Qwen3.5-397B-A17B-FP8" ;;
+        esac
         export AIPERF_MMAP_CACHE_HOST_PATH=/home/sa-shared/gharunners/ai-perf-cache
         export DSV4_MODEL_PATH="$HF_HUB_CACHE_MOUNT/DeepSeek-V4-Pro"
         export GLM52_FP8_MODEL_PATH=/models/GLM-5.2-FP8
