@@ -8593,6 +8593,7 @@
   scenario-type:
     - agentic-coding
   description:
+    - "Isolated exact-topology audit: compare TP2/EP1 against the existing TP2/EP2 recipe with identical shipped DSpark precision, serving settings, and canonical protocol; qualification pending."
     - "Pin B200 DeepSeek-V4.1 Flash to SGLang nightly-dev-cu13-20260922-582389ce by digest and preserve shipped DSpark precision with the committed five-token golden acceptance curve"
     - "Use per-rank host Engram shards, interval 16, and concurrency-scaled SWA prefix capacity: TP4 C1-128 uses static fraction 0.80, chunk 4096, and 128-4096 tails; TP2 C1-16 uses static fraction 0.92 and chunk 2048, with C16 retaining the proven C8 limits of 1024 tails and 16 running requests"
     - "Test TP2 loading with the unmodified pinned stock loader and expandable CUDA allocator segments alone; preserve tensor payloads, layouts, and computation"
