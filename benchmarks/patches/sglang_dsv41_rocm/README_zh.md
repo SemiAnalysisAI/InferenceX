@@ -84,3 +84,13 @@ V4.1 设置 `q_head_norm=False`。nightly 的 HIP 融合 Q/K 内核始终对 Q
 原始结果哈希和完整性。评估程序正常退出；包装脚本缺失的元数据变量仅在
 收集产物时补全，未重新运行推理。这项直接结果不代表 GitHub 工作流通过、
 启用缓存后的准确率、AgentX 性能或要求的完整扫描已完成。
+
+## 实验性长预填充分配器诊断
+
+启用缓存的候选方案通过了官方 C1 完整 GSM8K（1,319 个样本，严格准确率
+97.3465%），但 C1 AgentX 与禁用缓存的 C32 运行均首先在 RCCL 队列中报
+`HSA_STATUS_ERROR_OUT_OF_RESOURCES` 和 `Available Free mem : 0 MB`。
+后续 Engram 或通信清理栈不能证明另一项独立故障。实验分支增加原生分配器
+`garbage_collection_threshold:0.8`，尝试在外部 HIP 分配前回收未使用的缓存块。
+为兼容 AITER 图 IPC，仍禁用 expandable segments。这是待验证的假设，
+不是已确认的性能或稳定性提升；权重、KV 格式和镜像默认 DSpark 精度均未改变。

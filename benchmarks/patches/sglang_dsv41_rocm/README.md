@@ -117,3 +117,15 @@ hash and completeness. The evaluator exited successfully; a missing wrapper
 metadata variable was repaired during artifact staging without rerunning inference.
 This direct result does not establish GitHub workflow success, cache-enabled
 accuracy, AgentX performance or completion of the required full sweep.
+
+## Experimental long-prefill allocator diagnostic
+
+The cache-enabled candidate passed official full C1 GSM8K (1,319 examples,
+97.3465% strict), but its C1 AgentX run and the cache-disabled C32 run both
+first aborted an RCCL queue with `HSA_STATUS_ERROR_OUT_OF_RESOURCES` and
+`Available Free mem : 0 MB`. Later Engram/collective teardown stacks do not
+identify an independent fault. The experimental branch adds native-allocator
+`garbage_collection_threshold:0.8` to reclaim unused blocks before external HIP
+allocations. Expandable segments remain disabled for AITER graph IPC. This is
+a hypothesis under test, not a qualified performance or stability improvement;
+weights, KV format and shipped DSpark precision are unchanged.
