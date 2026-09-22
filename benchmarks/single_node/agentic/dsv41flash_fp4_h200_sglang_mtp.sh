@@ -101,7 +101,7 @@ if [[ "$DP_ATTENTION" == true ]]; then
     # The shipped MoE DSpark worker requires attn_tp=1 under DP attention.
     # Keep the engine-wide 4096-token chunk budget for this bounded screen;
     # SGLang divides it by DP, yielding 512 tokens/rank at TP8/DP8.
-    PARALLEL_ARGS+=(--enable-dp-attention --dp-size "$TP")
+    PARALLEL_ARGS+=(--enable-dp-attention --dp-size "$TP" --enable-dp-lm-head)
     SGLANG_BACKEND_PORT=$((PORT + 1))
     SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
     export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
