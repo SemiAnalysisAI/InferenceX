@@ -8555,6 +8555,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3268
 
 - config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161 to lmsysorg/sglang:nightly-dev-cu13-20260916-c9a8fba9 (2026-09-16 upstream cu13 nightly, sgl-project/sglang@c9a8fba9, index digest sha256:509c2742b9441fe9182ae3dd7dac8840ba48e03d2d44b7b24e80d428f117fd85, amd64 digest sha256:19a1b266fac457d4ef92cba90b464119e42bdbee680c081df0a73f31461c03ca; Docker Hub last pushed 2026-09-16T01:06:04Z). This is the first cu13 nightly carrying sgl-project/sglang#39516, the CUDA fallback for the HiCache registered host-pool ImportError that sgl-project/sglang#35233 introduced against the pinned sglang-kernel 0.4.7 wheel and that broke every kv-offloading dram point on the 2026-09-15 build. The image moves sglang-kernel 0.4.6.post1 to 0.4.7 and sgl-deep-gemm 0.1.7 to 0.2.0; CUDA 13.0.3, NCCL 2.30.7 and FlashInfer 0.6.18 are unchanged, and server_args.py is identical across the 100 upstream commits. benchmarks/single_node/agentic/qwen3.5_fp8_h200_mtp.sh is unchanged: SGLANG_ENABLE_SPEC_V2 EAGLE MTP at 3 steps with golden AL 3.39, flashinfer attention with allreduce fusion, fp8 quantization with fp8_e4m3 KV, HiCache kernel IO / page_first layout / write_through_selective; the TP8/EP1 DRAM HiCache c2-c24 grid is unchanged."
+    - "将 SGLang 镜像从 lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161 更新为 lmsysorg/sglang:nightly-dev-cu13-20260916-c9a8fba9（2026-09-16 上游 cu13 nightly，sgl-project/sglang@c9a8fba9，索引摘要 sha256:509c2742b9441fe9182ae3dd7dac8840ba48e03d2d44b7b24e80d428f117fd85）。这是首个包含 sgl-project/sglang#39516 的 cu13 nightly，该修复为 sgl-project/sglang#35233 在固定 sglang-kernel 0.4.7 wheel 上引入的 HiCache 已注册主机池 ImportError 提供 CUDA 回退，该问题曾导致 2026-09-15 构建的所有 kv-offloading dram 点无法启动。镜像将 sglang-kernel 由 0.4.6.post1 升至 0.4.7、sgl-deep-gemm 由 0.1.7 升至 0.2.0；CUDA 13.0.3、NCCL 2.30.7 与 FlashInfer 0.6.18 不变，100 个上游提交中 server_args.py 亦未改动。配方脚本、MTP 设置、HiCache 分支及 TP8/EP1 DRAM HiCache c2-c24 网格保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3200
+
+- config-keys:
     - kimik3-fp4-h200-vllm-agentic-latency
   scenario-type:
     - agentic-coding
