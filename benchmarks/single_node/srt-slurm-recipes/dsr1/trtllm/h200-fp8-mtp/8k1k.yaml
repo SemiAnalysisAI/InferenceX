@@ -1,0 +1,91 @@
+# Serving settings from dsr1_fp8_h200_trt_mtp.sh.
+base:
+  schema: 2
+  name: dsr1-fp8-h200-trt-mtp-8k1k
+  model:
+    path: hf:deepseek-ai/DeepSeek-R1-0528
+    container: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
+    precision: fp8
+  resources:
+    gpu_type: h200
+    gpus_per_node: 8
+  frontend:
+    type: trtllm_serve
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: trtllm
+    served_model_name: deepseek-ai/DeepSeek-R1-0528
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        cuda_graph_config:
+          enable_padding: true
+          max_batch_size: 128
+        print_iter_log: true
+        kv_cache_config:
+          dtype: fp8
+          free_gpu_memory_fraction: 0.75
+          enable_block_reuse: false
+        stream_interval: 10
+        moe_config:
+          backend: CUTLASS
+        speculative_config:
+          decoding_type: MTP
+        trust_remote_code: true
+        backend: pytorch
+        max_seq_len: 9472
+        tensor_parallel_size: 8
+        moe_expert_parallel_size: 8
+        pipeline_parallel_size: 1
+        enable_iter_perf_stats: false
+        return_perf_metrics: false
+      env:
+        PYTHONNOUSERSITE: '1'
+      # The pinned native launcher needs this CLI flag as well as engine metadata.
+      extra_args: [--served_model_name, deepseek-ai/DeepSeek-R1-0528]
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-R1-0528
+      ISL: '8192'
+      OSL: '1024'
+      RANDOM_RANGE_RATIO: '0.8'
+      USE_CHAT_TEMPLATE: 'true'
+zip_override_tp8_ep8:
+  roles:
+    agg:
+      args:
+        enable_attention_dp: false
+        speculative_config:
+          num_nextn_predict_layers: 3
+        max_batch_size: [4, 8, 16, 32]
+        max_num_tokens: [8320, 8320, 8320, 8384]
+  benchmark:
+    env:
+      CONC: ['4', '8', '16', '32']
+zip_override_tp8_ep8_dpa:
+  roles:
+    agg:
+      args:
+        enable_attention_dp: true
+        speculative_config:
+          num_nextn_predict_layers: 1
+        attention_dp_config:
+          batching_wait_iters: 0
+          enable_balance: true
+          timeout_iters: 60
+        max_batch_size: [8, 16, 32]
+        max_num_tokens: 8320
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: max_split_size_mb:8192
+  benchmark:
+    env:
+      CONC: ['64', '128', '256']

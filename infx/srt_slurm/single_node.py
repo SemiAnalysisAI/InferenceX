@@ -11,7 +11,30 @@ from typing import Any
 
 import yaml
 
-from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
+from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_parameters
+
+
+def parallelism_constraints(
+    engine: str, args: Mapping[str, Any], environment: Mapping[str, str]
+) -> dict[str, tuple[Any, Any]]:
+    """Read each engine's native topology fields without translating the recipe."""
+    tp, ep = int(environment["TP"]), int(environment["EP_SIZE"])
+    dp_attention = environment["DP_ATTENTION"] == "true"
+    if engine == "sglang":
+        return {
+            "tensor-parallel-size": (args["tensor-parallel-size"], tp),
+            "data-parallel-size": (args.get("data-parallel-size", 1), tp if dp_attention else 1),
+            "expert-parallel-size": (args.get("expert-parallel-size", args.get("ep-size", 1)), ep),
+            "DP_ATTENTION": (args.get("enable-dp-attention", False), dp_attention),
+        }
+    if engine == "trtllm":
+        return {
+            "tensor_parallel_size": (args["tensor_parallel_size"], tp),
+            "moe_expert_parallel_size": (args["moe_expert_parallel_size"], ep),
+            "pipeline_parallel_size": (args.get("pipeline_parallel_size", 1), 1),
+            "DP_ATTENTION": (args.get("enable_attention_dp", False), dp_attention),
+        }
+    raise ValueError(f"Unsupported single-node SRT engine: {engine!r}")
 
 
 def select_recipe(config: str, environment: Mapping[str, str]) -> tuple[str, dict[str, Any]]:
@@ -42,28 +65,20 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     args = role["args"]
     benchmark = recipe["benchmark"]
     workload = benchmark["env"]
-    spec = spec_parameters(role, "sglang")
-    if spec and spec["method"] not in {"eagle", "nextn"}:
+    engine_config = recipe["engine"]
+    engine = engine_config["type"] if isinstance(engine_config, dict) else engine_config
+    if environment["FRAMEWORK"] not in {"sglang", "trt"}:
+        raise ValueError(f"Unsupported single-node framework: {environment['FRAMEWORK']!r}")
+    spec = spec_parameters(role, engine)
+    if spec and spec["method"] not in {"eagle", "nextn", "mtp"}:
         raise ValueError("Single-node SRT supports only native MTP or no speculation")
     speculation = "mtp" if spec else "none"
     expected = {
-        "engine": (recipe["engine"], environment["FRAMEWORK"]),
+        "engine": (engine, ENGINES[environment["FRAMEWORK"]]),
         "model": (recipe["model"]["path"], f"hf:{environment['MODEL']}"),
         "image": (recipe["model"]["container"], environment["IMAGE"]),
         "precision": (recipe["model"]["precision"], environment["PRECISION"]),
-        "tensor-parallel-size": (args["tensor-parallel-size"], int(environment["TP"])),
-        "data-parallel-size": (
-            args.get("data-parallel-size", 1),
-            int(environment["TP"]) if environment["DP_ATTENTION"] == "true" else 1,
-        ),
-        "DP_ATTENTION": (
-            args.get("enable-dp-attention", False),
-            environment["DP_ATTENTION"] == "true",
-        ),
-        "expert-parallel-size": (
-            args.get("expert-parallel-size", args.get("ep-size", 1)),
-            int(environment["EP_SIZE"]),
-        ),
+        **parallelism_constraints(engine, args, environment),
         "gpus": (role["gpus"], int(environment["GPU_COUNT"])),
         "nodes": (role["nodes"], 1),
         "workers": (role["workers"], 1),
@@ -79,7 +94,6 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         expected[name] = (str(workload[name]), environment[name])
     # Multi-node and AgentX workloads use their existing connector.
     for name, value in {
-        "FRAMEWORK": "sglang",
         "PP_SIZE": "1",
         "DCP_SIZE": "1",
         "PCP_SIZE": "1",
@@ -98,7 +112,14 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
         if environment[name] not in {"true", "false"}:
             raise ValueError(f"{name} must be true or false")
     overrides = []
-    for name in ("CONC", "RESULT_FILENAME", "GPU_MONITOR_INTERVAL", "RUN_EVAL", "EVAL_ONLY"):
+    for name in (
+        "CONC",
+        "RESULT_FILENAME",
+        "GPU_MONITOR_INTERVAL",
+        "RUN_EVAL",
+        "EVAL_ONLY",
+        "FRAMEWORK",
+    ):
         value = environment[name]
         if not value:
             raise ValueError(f"Missing runtime input: {name}")
@@ -111,7 +132,13 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
         context = int(environment["MAX_MODEL_LEN"])
         if context <= 0:
             raise ValueError("MAX_MODEL_LEN must be positive")
-        overrides += ["--set", f"roles.agg.args.context-length={context}"]
+        context_keys = (
+            ("context-length",)
+            if environment["FRAMEWORK"] == "sglang"
+            else ("max_seq_len", "max_num_tokens")
+        )
+        for key in context_keys:
+            overrides += ["--set", f"roles.agg.args.{key}={context}"]
     return [*overrides, "--set", 'benchmark.env.RESULT_DIR="/logs"']
 
 

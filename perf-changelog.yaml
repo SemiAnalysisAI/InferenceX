@@ -8639,3 +8639,19 @@
     - "Cut over 21 active H100/H200/B200/B300 SGLang fixed-sequence recipes to native SRT-Slurm across their Slurm pools, retaining all 181 configured points, per-point serving settings, real MTP verification, shared eval dispatch, and existing result/power artifacts"
     - "将 21 个活跃的 H100/H200/B200/B300 SGLang 定长配方切换到各自 Slurm 池的原生 SRT-Slurm 路径，保留全部 181 个配置点、逐点服务参数、真实 MTP 验证、共享 eval 调度及现有结果和功耗产物"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
+
+- config-keys:
+    - dsr1-fp4-b200-trt
+    - dsr1-fp4-b200-trt-mtp
+    - dsr1-fp8-b200-trt
+    - dsr1-fp8-b200-trt-mtp
+    - dsr1-fp8-h200-trt
+    - dsr1-fp8-h200-trt-mtp
+    - qwen3.5-fp4-b200-trt
+    - qwen3.5-fp4-b200-trt-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Cut over eight H200/B200 TRT-LLM fixed-sequence recipes to native SRT-Slurm, preserving all 63 points, engine configuration, real MTP verification, and the OpenAI benchmark client; retain explicit legacy metrics settings and eval token budgets"
+    - "将八个 H200/B200 TRT-LLM 定长配方切换至原生 SRT-Slurm，保留全部 63 个测试点、引擎配置、真实 MTP 验证及 OpenAI 基准客户端；显式保留原有指标设置和 eval token 预算"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352

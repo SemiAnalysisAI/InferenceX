@@ -4,13 +4,18 @@
 set -eo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh" --validation-only
 check_env_vars MODEL CONC ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME RESULT_DIR \
-    SRT_FRONTEND_HOST SRT_FRONTEND_PORT RUN_EVAL EVAL_ONLY GPU_MONITOR_INTERVAL USE_CHAT_TEMPLATE
+    SRT_FRONTEND_HOST SRT_FRONTEND_PORT RUN_EVAL EVAL_ONLY GPU_MONITOR_INTERVAL USE_CHAT_TEMPLATE FRAMEWORK
 for name in RUN_EVAL EVAL_ONLY; do
     if [[ "${!name}" != true && "${!name}" != false ]]; then
         echo "ERROR: $name must be true or false" >&2
         exit 1
     fi
 done
+case "$FRAMEWORK" in
+    sglang) CLIENT_BACKEND=vllm ;;
+    trt) CLIENT_BACKEND=openai ;;
+    *) echo "ERROR: unsupported fixed-sequence FRAMEWORK: $FRAMEWORK" >&2; exit 1 ;;
+esac
 SRT_MONITOR_INTERVAL="$GPU_MONITOR_INTERVAL"
 CLIENT_ARGS=()
 case "$USE_CHAT_TEMPLATE" in
@@ -42,7 +47,7 @@ run_benchmark_serving \
     --model "$MODEL" \
     --port "$SRT_FRONTEND_PORT" \
     --base-url "http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}" \
-    --backend vllm \
+    --backend "$CLIENT_BACKEND" \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \

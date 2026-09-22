@@ -48,6 +48,7 @@ def client_environment(tmp_path):
         "EVAL_ONLY": "false",
         "GPU_MONITOR_INTERVAL": "2",
         "USE_CHAT_TEMPLATE": "false",
+        "FRAMEWORK": "sglang",
         "IS_AGENTIC": "0",
         "SCENARIO_TYPE": "fixed-seq-len",
         "CLIENT_EXIT": "0",
@@ -58,11 +59,15 @@ def client_environment(tmp_path):
     return env
 
 
-@pytest.mark.parametrize("exit_code,chat_template", [(0, "false"), (7, "false"), (0, "true")])
+@pytest.mark.parametrize("exit_code,chat_template,framework,backend", [
+    (0, "false", "sglang", "vllm"), (7, "false", "sglang", "vllm"),
+    (0, "true", "trt", "openai"),
+])
 def test_native_endpoint_preserves_client_settings_and_failure(
-    client_environment, exit_code, chat_template
+    client_environment, exit_code, chat_template, framework, backend
 ):
-    env = {**client_environment, "CLIENT_EXIT": str(exit_code), "USE_CHAT_TEMPLATE": chat_template}
+    env = {**client_environment, "CLIENT_EXIT": str(exit_code), "USE_CHAT_TEMPLATE": chat_template,
+           "FRAMEWORK": framework}
     result = subprocess.run(
         ["bash", str(CLIENT)], env=env, capture_output=True, text=True
     )
@@ -74,7 +79,7 @@ def test_native_endpoint_preserves_client_settings_and_failure(
         "--model",
         "test/model",
         "--backend",
-        "vllm",
+        backend,
         "--base-url",
         "http://10.2.3.4:9444",
         "--dataset-name",
@@ -118,6 +123,7 @@ def test_native_endpoint_preserves_client_settings_and_failure(
         ("CONC", "0", "CONC must be a positive integer"),
         ("RUN_EVAL", "yes", "RUN_EVAL must be true or false"),
         ("EVAL_ONLY", "yes", "EVAL_ONLY must be true or false"),
+        ("FRAMEWORK", "unknown", "unsupported fixed-sequence FRAMEWORK"),
     ],
 )
 def test_invalid_runtime_inputs_fail_before_the_client(

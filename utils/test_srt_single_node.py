@@ -58,6 +58,7 @@ def test_native_binding_submits_one_point_and_keeps_server_settings(point):
         "USE_CHAT_TEMPLATE": "false",
         "CONC": "2", "RESULT_FILENAME": "point-identity", "GPU_MONITOR_INTERVAL": "3",
         "RUN_EVAL": "false", "EVAL_ONLY": "false", "RESULT_DIR": "/logs",
+        "FRAMEWORK": "sglang",
     }
     assert actual["roles"]["agg"]["args"] == {
         "tensor-parallel-size": 4, "data-parallel-size": 1, "max-running-requests": 32,
@@ -168,6 +169,37 @@ def test_dp_attention_is_validated_without_replacing_recipe_topology(point):
     }
     with pytest.raises(ValueError, match="data-parallel-size|DP_ATTENTION"):
         runtime_arguments(f"{path}:base", {**env, "DP_ATTENTION": "false"})
+
+
+def test_trt_binding_keeps_engine_options_and_sets_eval_token_budget(point):
+    path, recipe, env = point
+    recipe["engine"] = {"type": "trtllm", "served_model_name": "test/model"}
+    recipe["roles"]["agg"]["args"] = {
+        "tensor_parallel_size": 4, "moe_expert_parallel_size": 4,
+        "enable_attention_dp": True, "max_seq_len": 512, "max_num_tokens": 256,
+        "speculative_config": {"decoding_type": "MTP", "num_nextn_predict_layers": 3},
+        "cuda_graph_config": {"batch_sizes": [1, 2, 4]},
+    }
+    recipe["roles"]["agg"]["env"] = {"TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS": "3"}
+    recipe["benchmark"]["env"]["USE_CHAT_TEMPLATE"] = "true"
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    env = {**env, "FRAMEWORK": "trt", "EP_SIZE": "4", "DP_ATTENTION": "true",
+           "SPEC_DECODING": "mtp", "EVAL_ONLY": "true", "MAX_MODEL_LEN": "1024"}
+    argv = runtime_arguments(f"{path}:base", env)
+    actual = copy.deepcopy(recipe)
+    apply_overrides_to_recipe(actual, parse_overrides(argv[1::2], []))
+    assert actual["roles"]["agg"]["args"] == {
+        "tensor_parallel_size": 4, "moe_expert_parallel_size": 4,
+        "enable_attention_dp": True, "max_seq_len": 1024, "max_num_tokens": 1024,
+        "speculative_config": {"decoding_type": "MTP", "num_nextn_predict_layers": 3},
+        "cuda_graph_config": {"batch_sizes": [1, 2, 4]},
+    }
+    assert plan_commands(f"{path}:base", "trt", ["--json", *argv], env) == [[
+        "srtctl", "apply", "--json", *argv, "--file", f"{path}:base",
+        "--unset", "roles.agg.env.TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS",
+    ]]
+    with pytest.raises(ValueError, match="moe_expert_parallel_size"):
+        runtime_arguments(f"{path}:base", {**env, "EP_SIZE": "1"})
 
 
 @pytest.mark.parametrize("record,expected", [
