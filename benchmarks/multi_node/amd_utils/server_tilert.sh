@@ -47,6 +47,10 @@ export TILERT_ROLE
 
 source "$WS_PATH/setup_deps.sh"
 source "$WS_PATH/env.sh"
+# benchmark_lib.sh derives AGENTIC_DIR/AIPERF_DIR from this at source time, so
+# it must be set before the library is loaded, not in run_agentic_replay. The
+# AgentX replay runs in this container, where the repo is mounted at /workspace.
+export INFMAX_CONTAINER_WORKSPACE=/workspace
 source /workspace/benchmarks/benchmark_lib.sh
 
 # Model-specific engine environment (not caller configuration): the prefill
@@ -460,23 +464,23 @@ run_agentic_replay() {
     export PORT="$ROUTER_PORT"
     export MODEL="$MODEL_PATH"              # aiperf --tokenizer (local HF dir)
     export SERVED_MODEL_NAME                # aiperf --model (name the router/vLLM serve)
-    check_env_vars DURATION RESULT_FILENAME
-    # The replay runs in this container, where the repo is bind-mounted at
-    # /workspace, so benchmark_lib's agentic helpers need the workspace root
-    # here. The SGLang path sets it in the separate client container's env file,
-    # and the launcher only exports it for the DSv4.1-Flash single-node branch.
-    export INFMAX_CONTAINER_WORKSPACE=/workspace
+    check_env_vars DURATION RESULT_FILENAME INFMAX_CONTAINER_WORKSPACE
     export MAX_MODEL_LEN="$TILERT_MAX_MODEL_LEN"
     # TileRT decode exposes no /metrics route; only the vLLM prefill is scraped.
     export AIPERF_SERVER_METRICS_URLS="http://${PREFILL_HOST}:${PREFILL_PORT}/metrics"
     export TRANSFORMERS_VERBOSITY=error TOKENIZERS_PARALLELISM=false
+    # Keep the trace corpus and aiperf's HF downloads on the node's /tmp mount
+    # instead of the container's ephemeral ~/.cache, as the SGLang client does.
+    export HF_HOME=/run_logs/hf_cache
 
     local result_dir="$LOG_DIR/agentic"
     local result_filename_base="$RESULT_FILENAME"
     mkdir -p "$result_dir"
 
-    resolve_trace_source
-    install_agentic_deps
+    # Neither server.sh nor this script runs with errexit; a failed bootstrap
+    # must not fall through into the replay loop and its misleading cascade.
+    resolve_trace_source || return 1
+    install_agentic_deps || return 1
 
     local conc conc_result_dir
     for conc in ${BENCH_MAX_CONCURRENCY//x/ }; do

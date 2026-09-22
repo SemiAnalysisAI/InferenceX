@@ -47,6 +47,13 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export OSL="$OSL"
 
     check_env_vars BENCHMARK_LOGS_DIR
+    # cleanup_and_save_logs below removes BENCHMARK_LOGS_DIR wholesale. A profile
+    # that points it at the checkout (or a parent of it) deletes the workspace
+    # and every result just copied into it; sweep 35704948491 did exactly that.
+    if [[ "$BENCHMARK_LOGS_DIR" == "$GITHUB_WORKSPACE" || "$GITHUB_WORKSPACE" == "$BENCHMARK_LOGS_DIR"/* ]]; then
+        echo "ERROR: BENCHMARK_LOGS_DIR ($BENCHMARK_LOGS_DIR) must not be the checkout ($GITHUB_WORKSPACE) or contain it" >&2
+        exit 1
+    fi
     mkdir -p "$BENCHMARK_LOGS_DIR"
     sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 

@@ -71,6 +71,12 @@ case "$FRAMEWORK" in
             # VLLM_ROUTER_IMAGE, which ENGINE=tilert never enters.
             export VLLM_ROUTER_IMAGE=vllm/vllm-router:nightly-20260716-1fbcde7
             export SKIP_RDMA_CHECK=0 SKIP_GPU_SANITY=0
+            # The B200 profile above points BENCHMARK_LOGS_DIR at the workspace
+            # itself; launch_mi355x-amds.sh's EXIT trap does `rm -rf
+            # "$BENCHMARK_LOGS_DIR"`, which then deleted the whole checkout,
+            # results included (sweep 35704948491). Use the AMD launcher's own
+            # convention from runners/runtime_settings.sh.
+            export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
             export ROUTER_TYPE=tilert-pd-router ROUTER_PORT=30000 PROXY_PING_PORT=36367
             export HEADNODE_PORT=20000 SERVER_PORT=2584 PROXY_STREAM_IDLE_TIMEOUT=300
             export ENABLE_METRICS=0 PREFILL_ROUTER_POLICY=random DECODE_ROUTER_POLICY=random
