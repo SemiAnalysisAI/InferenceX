@@ -12,13 +12,19 @@ from sglang.kernels.ops.quantization import fp8_kernel
 def main() -> None:
     source = Path(sys.argv[1])
     artifacts = Path(sys.argv[2]) / "fp8_kernel_configs"
+    tp = int(sys.argv[3])
+    if tp not in (4, 8):
+        raise ValueError(f"H200 tiling configs support TP4 or TP8, got TP{tp}")
     device = fp8_kernel.get_device_name().replace(" ", "_")
     if device != "NVIDIA_H200":
         raise RuntimeError(f"H200 tiling configs cannot be installed on {device}")
     destination = Path(fp8_kernel.__file__).resolve().parent / "configs"
     destination.mkdir(exist_ok=True)
     artifacts.mkdir(parents=True, exist_ok=True)
-    for n, k in [(5120, 1024), (5120, 288), (576, 5120)]:
+    shapes = [(1792, 5120)]
+    if tp == 8:
+        shapes += [(5120, 1024), (5120, 288), (576, 5120)]
+    for n, k in shapes:
         name = f"N={n},K={k},device_name={device},dtype=fp8_w8a8,block_shape=[32, 32].json"
         path = source / name
         expected = {int(m): config for m, config in json.loads(path.read_text()).items()}
