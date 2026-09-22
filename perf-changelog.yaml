@@ -8661,3 +8661,16 @@
     - "Verified against ATOM commit b6e2a39433d73b586c366ca90e661f098eb463e3 that --online_quant_config ptpc_fp8 does not change the Inferact/MiniMax-M3-EAGLE3-GQA draft precision: atom/models/eagle3_llama.py builds every draft linear (qkv_proj, o_proj, gate_up_proj, down_proj, fc) with no quant_config, so should_stream_online_quant short-circuits to False and OnlineQuantStreamer.maybe_create finds no streaming candidates. The EAGLE3 draft loads and runs at its native bf16 checkpoint precision; only the target MiniMax-M3 weights are online-quantized to ptpc_fp8, and the exclude_layer list applies to the target alone."
     - "将 MiniMax-M3 ATOM AgentX 的 GPU 显存利用率提高到 0.95，并按真实运行 batch（约为 CONC 的 22-41%）声明细粒度 CUDA graph（capture 档 1-64，运行时裁剪为 min(2*CONC, 8192)）；TP4 在 C15/C20/C24/C28/C32/C40/C48 启用 indexer-only CP，TP2 C20 由 TP-size gate 保持关闭，C40/C48 恢复 EAGLE3。将分档容量参数合并为单一 case，新增 TP2 C20/C25/C30 的 LMCache SLRU offload 曲线，LMCACHE_MAX_LOCAL_CPU_SIZE 取 TOTAL_CPU_DRAM_GB/TP，lookup worker 覆盖全部 rank，并将 offload GPU 跨 NUMA 节点放置（TP2 用 0,4；TP4 用 0,1,4,5），把 TP2 主机内存 pinning 从 45 分钟缩短到 21 秒；更新到 20260917 rocm7 ATOM 镜像 nightly_202609171455 与 LMCache 0.5.5rc3。dram-utilization 改为 0.687，使记录预算与每 rank 约 256 GB 的真实固定一致（与 TP 无关），取代此前 0.20 的元数据。已在 ATOM commit b6e2a394 验证 online_quant（ptpc_fp8）不改变 EAGLE3-GQA 草稿模型精度：eagle3_llama.py 的各 draft 线性层不带 quant_config，should_stream_online_quant 直接返回 False，草稿以原生 bf16 运行，仅目标 MiniMax-M3 权重在线量化为 ptpc_fp8。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3189
+
+- config-keys:
+    - glm5.2-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Track the updated GLM-5.2 standalone recipe (ROCm/ATOM PR 2345) on the MI355X ATOM AgentX config."
+    - "Bump the image from rocm/atom-dev:nightly_202609151450 to rocm/atom-dev:nightly_202609211553, which carries ROCm/ATOM PR 2345."
+    - "Drop the LMCache DRAM offload from the small-concurrency TP4 arm: conc [2, 4, 8, 10] moves from kv-offloading dram with the lmcache 0.4.5 backend to kv-offloading none, so those points serve off the native GPU prefix cache alone and no longer start an LMCache CPU tier. The TP4+DCP4 arm at conc [16, 24, 32, 40, 48] keeps LMCache at 256 GiB per rank (dram-utilization 0.171 unchanged), and the TP8 arm stays GPU-resident as before."
+    - "Add --index_cache_dtype fp4 and --block-size 64 to the ATOM server launch on every point. Neither flag was set before, so both took the ATOM default."
+    - "Drop ATOM_USE_FLYDSL_GATHER_KV_B_PROJ=0, which pinned gather_kv_b_proj to the Triton path on the DCP prefill-context and MTP verify paths; the updated recipe no longer sets it."
+    - "The MTP block data precision is not touched by --online_quant_config: the exclude_layer list adds \"model.layers.78.*\" so layer 78 (the GLM-5.2 MTP head) is skipped by online quantization and stays in native BF16, as it ships unquantized in amd/GLM-5.2-MXFP4. The expert excludes only reach layers 0-77, so without this exclude the whole MTP block would be online-quantized to ptpc_fp8 while the target's experts stay MXFP4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3359  
