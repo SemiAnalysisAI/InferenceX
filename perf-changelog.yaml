@@ -8623,6 +8623,7 @@
     - "TP8 与 TP4 臂不受影响并保留。TP4 在同一运行中以每 rank 约 81 GiB 在并发 1 与 32 通过"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3336
 
+- config-keys:
     - dsv41flash-fp4-b200-sglang-agentic-dspark
   scenario-type:
     - agentic-coding
