@@ -2,7 +2,7 @@
 set -eo pipefail
 
 # DeepSeek-V4.1-Flash AgentX on H200 with SGLang native DSpark, following the
-# vLLM baseline topologies TP4/EP1 and TP8/EP1 in this isolated experiment.
+# published vLLM baseline topologies TP4/EP1 and TP8/EP1.
 # The KV cache is GPU-resident.
 # https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
 source "$(dirname "$0")/../../benchmark_lib.sh"
