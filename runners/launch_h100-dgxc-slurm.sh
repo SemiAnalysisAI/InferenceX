@@ -14,7 +14,21 @@ SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 set -x
 
-if [[ "$IS_MULTINODE" == "true" ]]; then
+EXECUTION_PATH=legacy-single-node
+if [[ "$IS_MULTINODE" == true ]]; then
+    EXECUTION_PATH=multinode
+elif [[ -n "${SRT_RECIPE:-}" ]]; then
+    EXECUTION_PATH=native-single-node
+fi
+
+if [[ "$EXECUTION_PATH" == native-single-node ]]; then
+    HF_HUB_CACHE_MOUNT=/mnt/nfs/sa-shared/gharunners/hf-hub-cache
+    SRT_MODEL_PATH="hf:$MODEL"
+    SRT_SQUASH_FILE="/mnt/nfs/lustre/containers/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    launch_srt_single_node h100-dgxc-slurm \
+        --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION" \
+        --var CONTAINER_KEY "$IMAGE"
+elif [[ "$EXECUTION_PATH" == multinode ]]; then
 
     # Recipes name HF model IDs; resolve them to pre-staged paths so the shared
     # cluster does not re-download. SRT_SLURM_MODEL_PREFIX must match the

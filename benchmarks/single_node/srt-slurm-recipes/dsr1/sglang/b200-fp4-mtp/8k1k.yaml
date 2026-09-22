@@ -1,0 +1,84 @@
+# Serving settings from dsr1_fp4_b200_mtp.sh.
+base:
+  schema: 2
+  name: dsr1-fp4-b200-sglang-mtp-8k1k
+  model:
+    path: hf:nvidia/DeepSeek-R1-0528-FP4-V2
+    container: lmsysorg/sglang:v0.5.16-cu130
+    precision: fp4
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        data-parallel-size: 1
+        cuda-graph-max-bs: 256
+        max-running-requests: 256
+        mem-fraction-static: 0.85
+        kv-cache-dtype: fp8_e4m3
+        chunked-prefill-size: 16384
+        expert-parallel-size: 1
+        quantization: modelopt_fp4
+        enable-flashinfer-allreduce-fusion: true
+        scheduler-recv-interval: 10
+        disable-piecewise-cuda-graph: true
+        attention-backend: trtllm_mla
+        moe-runner-backend: flashinfer_trtllm
+        stream-interval: 10
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 2
+        speculative-num-draft-tokens: 3
+        speculative-eagle-topk: 1
+        served-model-name: nvidia/DeepSeek-R1-0528-FP4-V2
+        enable-metrics: false
+      env:
+        SGLANG_ENABLE_SPEC_V2: '1'
+        SGLANG_RADIX_FORCE_MISS: '1'
+        PYTHONNOUSERSITE: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
+    env:
+      MODEL: nvidia/DeepSeek-R1-0528-FP4-V2
+      ISL: '8192'
+      OSL: '1024'
+      RANDOM_RANGE_RATIO: '0.8'
+      USE_CHAT_TEMPLATE: 'true'
+zip_override_tp4_ep1:
+  roles:
+    agg:
+      args:
+        scheduler-recv-interval: [10, 10, 10, 10, 30, 30]
+  benchmark:
+    env:
+      CONC: ['1', '2', '4', '8', '16', '32']
+zip_override_tp4_ep4_dpa:
+  roles:
+    agg:
+      args:
+        chunked-prefill-size: 32768
+        data-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-attention-local-control-broadcast: true
+        enable-dp-lm-head: true
+        enable-prefill-delayer: true
+        expert-parallel-size: 4
+        schedule-conservativeness: 3.33
+        scheduler-recv-interval: 1
+  benchmark:
+    env:
+      CONC: ['64', '128', '256']

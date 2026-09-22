@@ -1,13 +1,13 @@
-# Serving settings from dsr1_fp8_h200.sh.
+# Serving settings from dsr1_fp8_b200.sh.
 base:
   schema: 2
-  name: dsr1-fp8-h200-sglang-8k1k
+  name: dsr1-fp8-b200-sglang-8k1k
   model:
     path: hf:deepseek-ai/DeepSeek-R1-0528
     container: lmsysorg/sglang:v0.5.12-cu130
     precision: fp8
   resources:
-    gpu_type: h200
+    gpu_type: b200
     gpus_per_node: 8
   frontend:
     type: sglang
@@ -23,23 +23,27 @@ base:
       workers: 1
       gpus: 8
       args:
-        trust-remote-code: true
         tensor-parallel-size: 8
         data-parallel-size: 1
-        disable-radix-cache: true
-        max-running-requests: 256
-        cuda-graph-max-bs: 256
+        cuda-graph-max-bs: 128
+        max-running-requests: 128
+        mem-fraction-static: 0.82
+        kv-cache-dtype: fp8_e4m3
         chunked-prefill-size: 32768
         max-prefill-tokens: 32768
-        mem-fraction-static: 0.82
-        attention-backend: flashinfer
-        stream-interval: 10
-        decode-log-interval: 1
+        enable-flashinfer-allreduce-fusion: true
+        scheduler-recv-interval: 10
+        disable-radix-cache: true
+        attention-backend: trtllm_mla
+        stream-interval: 30
         expert-parallel-size: 1
+        moe-runner-backend: flashinfer_trtllm
+        quantization: fp8
         served-model-name: deepseek-ai/DeepSeek-R1-0528
         enable-metrics: false
       env:
-        TORCH_CUDA_ARCH_LIST: '9.0'
+        SGL_ENABLE_JIT_DEEPGEMM: 'false'
+        SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
         PYTHONNOUSERSITE: '1'
   benchmark:
     type: custom
@@ -50,7 +54,21 @@ base:
       OSL: '1024'
       RANDOM_RANGE_RATIO: '0.8'
       USE_CHAT_TEMPLATE: 'false'
-zip_override_concurrency:
+zip_override_tp8_ep1:
   benchmark:
     env:
-      CONC: ['4', '8', '16', '32', '64']
+      CONC: ['1', '2', '4']
+zip_override_tp4_ep1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        chunked-prefill-size: 8192
+        cuda-graph-max-bs: 32
+        max-prefill-tokens: 8192
+        max-running-requests: 32
+        mem-fraction-static: 0.95
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: ['1', '2', '4', '8', '16', '32']

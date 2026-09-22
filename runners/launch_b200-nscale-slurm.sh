@@ -49,6 +49,8 @@ if uses_native_srt_lane; then
     LAUNCH_PATH="native-srt"
 elif [[ "$IS_MULTINODE" == "true" ]]; then
     LAUNCH_PATH="multinode-srt"
+elif [[ -n "${SRT_RECIPE:-}" ]]; then
+    LAUNCH_PATH="native-single-node"
 else
     LAUNCH_PATH="single-node"
 fi
@@ -141,6 +143,15 @@ else
     echo "Available models under /scratch/models:"
     ls -la /scratch/models
     exit 1
+fi
+
+if [[ "$LAUNCH_PATH" == native-single-node ]]; then
+    HF_HUB_CACHE_MOUNT=/data/home/sa-shared/gharunners/hf-hub-cache
+    SRT_MODEL_PATH="$MODEL_PATH"
+    SRT_SQUASH_FILE="$B200_SQUASH_DIR/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    launch_srt_single_node b200-nscale-slurm \
+        --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION"
+    exit $?
 fi
 
 # ---------------------------------------------------------------------------

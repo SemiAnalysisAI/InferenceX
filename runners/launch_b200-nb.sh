@@ -3,6 +3,20 @@
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
 check_env_vars IS_MULTINODE
 
+EXECUTION_PATH=legacy-single-node
+if [[ "$IS_MULTINODE" != true && -n "${SRT_RECIPE:-}" ]]; then
+    EXECUTION_PATH=native-single-node
+fi
+if [[ "$EXECUTION_PATH" == native-single-node ]]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
+    HF_HUB_CACHE_MOUNT=/mnt/data/gharunners/hf-hub-cache
+    SRT_MODEL_PATH="hf:$MODEL"
+    unset SRT_SQUASH_FILE
+    export UCX_NET_DEVICES=eth0
+    launch_srt_single_node b200-nb
+    exit $?
+fi
+
 HF_HUB_CACHE_MOUNT="/mnt/data/gharunners/hf-hub-cache/"
 PARTITION="main"
 FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')

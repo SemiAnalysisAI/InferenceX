@@ -23,81 +23,11 @@ elif [[ -n "${SRT_RECIPE:-}" ]]; then
 fi
 
 if [[ "$EXECUTION_PATH" == native-single-node ]]; then
-    check_env_vars GITHUB_WORKSPACE SRT_RECIPE FRAMEWORK MODEL MODEL_PREFIX IMAGE PRECISION \
-        TP PP_SIZE DCP_SIZE PCP_SIZE EP_SIZE DP_ATTENTION GPU_COUNT IS_AGENTIC SPEC_DECODING \
-        CONC ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME GPU_MONITOR_INTERVAL SRT_MODEL_PATH HF_HUB_CACHE
-    if [[ ( "$MODEL_PREFIX" != dsr1 && "$MODEL_PREFIX" != qwen3.5 ) || "$PRECISION" != fp8 ]]; then
-        echo "ERROR: the native H200 pilot supports dsr1/fp8 and qwen3.5/fp8 only" >&2
-        exit 1
-    fi
-    SRT_PILOT_ROOT=$(mktemp -d "$GITHUB_WORKSPACE/srt-single.XXXXXX")
-    SRTCTL_ROOT="$SRT_PILOT_ROOT/checkout"
-    export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
-    setup_srt_slurm "$SRTCTL_ROOT" "$FRAMEWORK" 0
-    if ! command -v uv >/dev/null; then
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        source "$HOME/.local/bin/env"
-    fi
-    uv venv .venv
-    source .venv/bin/activate
-    uv pip install -e .
-    export PYTHONPATH="$GITHUB_WORKSPACE${PYTHONPATH:+:$PYTHONPATH}"
-
-    python3 -m infx.srt_slurm.single_node prepare "$GITHUB_WORKSPACE/$SRT_RECIPE" "$SRT_PILOT_ROOT/arguments"
-    mapfile -d '' -t SRT_RUNTIME_ARGS < "$SRT_PILOT_ROOT/arguments"
-    SQUASH_FILE="/data/containers/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    if [[ ! -r "$SRT_MODEL_PATH/config.json" ]]; then
-        echo "ERROR: staged model config is unavailable: $SRT_MODEL_PATH" >&2
-        exit 1
-    fi
-    NGINX_SQUASH_FILE=/data/containers/nginx+1.27.4.sqsh
-    write_srt_cluster_config h200-dgxc-slurm srtslurm.yaml 0 \
-        --var SRT_DEFAULT_TIME_LIMIT "$SALLOC_TIME_LIMIT" \
+    SRT_SQUASH_FILE="/data/containers/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    launch_srt_single_node h200-dgxc-slurm \
+        --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION" \
         --var AIPERF_MMAP_CACHE_HOST_PATH "$AIPERF_MMAP_CACHE_HOST_PATH" \
-        --var HF_HUB_CACHE_MOUNT "$HF_HUB_CACHE_MOUNT" --var CONTAINER_KEY "$IMAGE" \
-        --model "hf:$MODEL" "$SRT_MODEL_PATH" \
-        --container "$IMAGE" "$IMAGE" \
-        --mount "$HF_HUB_CACHE_MOUNT" "$HF_HUB_CACHE" --exclusive
-    make setup ARCH=x86_64
-
-    SRT_JOB_ID=""
-    SRT_JOB_OUTPUT=""
-    finish_native_single_node() {
-        local rc=$? artifact
-        trap - EXIT
-        # Submission may succeed immediately before cancellation or a client error.
-        if [[ -z "$SRT_JOB_ID" ]] && python3 -m infx.srt_slurm.single_node submission \
-            "$GITHUB_WORKSPACE/srt-single-node-submission.json" > "$SRT_PILOT_ROOT/submission-fields" 2>/dev/null; then
-            mapfile -t SRT_SUBMISSION < "$SRT_PILOT_ROOT/submission-fields"
-            SRT_JOB_ID="${SRT_SUBMISSION[0]}"
-            SRT_JOB_OUTPUT="${SRT_SUBMISSION[1]}"
-        fi
-        if [[ -n "$SRT_JOB_ID" ]] && slurm_job_is_active "$SRT_JOB_ID"; then
-            scancel "$SRT_JOB_ID" || true
-        fi
-        if [[ -n "$SRT_JOB_OUTPUT" && -d "$SRT_JOB_OUTPUT" ]]; then
-            bundle_server_logs "$SRT_JOB_OUTPUT" "$GITHUB_WORKSPACE/srt-single-node-logs.tar.gz"
-            for artifact in "$SRT_JOB_OUTPUT/logs/$RESULT_FILENAME.json" "$SRT_JOB_OUTPUT"/logs/gpu_metrics*; do
-                [[ -f "$artifact" ]] || continue
-                copy_to_workspace "$artifact" "$GITHUB_WORKSPACE/$(basename "$artifact")" || rc=1
-            done
-        fi
-        exit "$rc"
-    }
-    trap finish_native_single_node EXIT
-    trap 'exit 130' INT
-    trap 'exit 143' TERM
-    apply_srt_recipe "$GITHUB_WORKSPACE/$SRT_RECIPE" "$FRAMEWORK" \
-        --json --yes --output "$SRT_PILOT_ROOT/outputs" "${SRT_RUNTIME_ARGS[@]}" \
-        > "$GITHUB_WORKSPACE/srt-single-node-submission.json"
-    python3 -m infx.srt_slurm.single_node submission "$GITHUB_WORKSPACE/srt-single-node-submission.json" \
-        > "$SRT_PILOT_ROOT/submission-fields"
-    mapfile -t SRT_SUBMISSION < "$SRT_PILOT_ROOT/submission-fields"
-    SRT_JOB_ID="${SRT_SUBMISSION[0]}"
-    SRT_JOB_OUTPUT="${SRT_SUBMISSION[1]}"
-    stream_slurm_job_log "$SRT_JOB_ID" "$SRT_JOB_OUTPUT/logs/sweep_${SRT_JOB_ID}.log"
-    verify_slurm_job_status "$SRT_JOB_ID"
-    test -s "$SRT_JOB_OUTPUT/logs/$RESULT_FILENAME.json"
+        --var HF_HUB_CACHE_MOUNT "$HF_HUB_CACHE_MOUNT" --var CONTAINER_KEY "$IMAGE"
 
 elif [[ "$EXECUTION_PATH" == multinode ]]; then
 

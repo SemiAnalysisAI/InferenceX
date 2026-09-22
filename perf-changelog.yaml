@@ -8610,3 +8610,32 @@
     - "Extend the opt-in native H200 SRT pilot to DeepSeek-R1 MTP and Qwen3.5 EP8, preserving real verification, chat formatting, and concurrency-dependent graph capture; select 4/16/64 for sequential regression checks without production cutover"
     - "将显式启用的原生 H200 SRT 试点扩展到 DeepSeek-R1 MTP 和 Qwen3.5 EP8，保留真实验证、聊天模板及随并发变化的图捕获；选择 4/16/64 逐点检查回归，尚不切换生产路由"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
+
+- config-keys:
+    - dsr1-fp4-b200-sglang
+    - dsr1-fp4-b200-sglang-mtp
+    - dsr1-fp4-b300-sglang
+    - dsr1-fp8-b200-sglang
+    - dsr1-fp8-b300-sglang
+    - qwen3.5-fp8-b200-sglang
+    - qwen3.5-fp4-b200-sglang
+    - qwen3.5-fp4-b200-sglang-mtp
+    - qwen3.5-fp8-b200-sglang-mtp
+    - qwen3.5-fp8-b300-sglang-mtp
+    - qwen3.5-fp8-b300-sglang
+    - qwen3.5-fp4-b300-sglang
+    - qwen3.5-fp4-b300-sglang-mtp
+    - dsr1-fp8-b200-sglang-mtp
+    - dsr1-fp8-b300-sglang-mtp
+    - dsr1-fp8-h200-sglang
+    - dsr1-fp8-h200-sglang-mtp
+    - qwen3.5-fp8-h200-sglang
+    - qwen3.5-fp8-h200-sglang-mtp
+    - qwen3.5-fp8-h100-sglang
+    - qwen3.5-fp8-h100-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Cut over 21 active H100/H200/B200/B300 SGLang fixed-sequence recipes to native SRT-Slurm across their Slurm pools, retaining all 181 configured points, per-point serving settings, real MTP verification, shared eval dispatch, and existing result/power artifacts"
+    - "将 21 个活跃的 H100/H200/B200/B300 SGLang 定长配方切换到各自 Slurm 池的原生 SRT-Slurm 路径，保留全部 181 个配置点、逐点服务参数、真实 MTP 验证、共享 eval 调度及现有结果和功耗产物"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352

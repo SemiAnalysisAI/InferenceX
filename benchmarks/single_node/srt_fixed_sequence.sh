@@ -5,6 +5,12 @@ set -eo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh" --validation-only
 check_env_vars MODEL CONC ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME RESULT_DIR \
     SRT_FRONTEND_HOST SRT_FRONTEND_PORT RUN_EVAL EVAL_ONLY GPU_MONITOR_INTERVAL USE_CHAT_TEMPLATE
+for name in RUN_EVAL EVAL_ONLY; do
+    if [[ "${!name}" != true && "${!name}" != false ]]; then
+        echo "ERROR: $name must be true or false" >&2
+        exit 1
+    fi
+done
 SRT_MONITOR_INTERVAL="$GPU_MONITOR_INTERVAL"
 CLIENT_ARGS=()
 case "$USE_CHAT_TEMPLATE" in
@@ -19,13 +25,6 @@ for name in CONC ISL OSL SRT_FRONTEND_PORT GPU_MONITOR_INTERVAL; do
         exit 1
     fi
 done
-
-# The initial parallel port supports throughput only. Eval context and artifact
-# forwarding must be connected before production cutover.
-if [[ "$RUN_EVAL" != false || "$EVAL_ONLY" != false ]]; then
-    echo "ERROR: the single-node SRT pilot does not support evals yet" >&2
-    exit 1
-fi
 
 if [[ ! -d "$RESULT_DIR" ]]; then
     echo "ERROR: RESULT_DIR must be an existing runtime-provided directory" >&2

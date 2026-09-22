@@ -1,0 +1,96 @@
+# Serving settings from qwen3.5_fp4_b200_mtp.sh.
+base:
+  schema: 2
+  name: qwen3.5-fp4-b200-sglang-mtp-8k1k
+  model:
+    path: hf:nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+    container: lmsysorg/sglang:v0.5.14-cu130
+    precision: fp4
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        enable-symm-mem: true
+        disable-radix-cache: true
+        quantization: modelopt_fp4
+        kv-cache-dtype: fp8_e4m3
+        mamba-ssm-dtype: bfloat16
+        attention-backend: trtllm_mha
+        moe-runner-backend: flashinfer_trtllm
+        cuda-graph-max-bs: 4
+        max-running-requests: 4
+        max-prefill-tokens: 16384
+        chunked-prefill-size: 16384
+        mem-fraction-static: 0.8
+        stream-interval: 50
+        scheduler-recv-interval: 10
+        tokenizer-worker-num: 6
+        tokenizer-path: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        context-length: 9236
+        served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+        enable-metrics: false
+      env:
+        SGLANG_ENABLE_SPEC_V2: '1'
+        PYTHONNOUSERSITE: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
+    env:
+      MODEL: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+      ISL: '8192'
+      OSL: '1024'
+      RANDOM_RANGE_RATIO: '0.8'
+      USE_CHAT_TEMPLATE: 'true'
+zip_override_tp4_ep1:
+  benchmark:
+    env:
+      CONC: ['4']
+zip_override_tp2_ep1:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        cuda-graph-max-bs: [4, 8, 16, 32, 64]
+        max-running-requests: [4, 8, 16, 32, 64]
+        scheduler-recv-interval: [10, 30, 30, 30, 30]
+        tensor-parallel-size: 2
+  benchmark:
+    env:
+      CONC: ['4', '8', '16', '32', '64']
+zip_override_tp2_ep2:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        cuda-graph-max-bs: [16, 32, 64]
+        expert-parallel-size: 2
+        linear-attn-backend: triton
+        linear-attn-decode-backend: flashinfer
+        linear-attn-prefill-backend: flashinfer
+        max-running-requests: [16, 32, 64]
+        scheduler-recv-interval: 30
+        tensor-parallel-size: 2
+  benchmark:
+    env:
+      CONC: ['16', '32', '64']

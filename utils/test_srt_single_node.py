@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from infx.srt_slurm.single_node import runtime_arguments, submission_fields
+from infx.srt_slurm.single_node import runtime_arguments, select_recipe, submission_fields
 from infx.srt_slurm.synthetic_acceptance import plan_commands, selected_recipes
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -68,7 +68,7 @@ def test_native_binding_submits_one_point_and_keeps_server_settings(point):
 
 @pytest.mark.parametrize("field,value,message", [
     ("TP", "2", "tensor-parallel-size"), ("IMAGE", "other:tag", "image"),
-    ("ISL", "128", "ISL"), ("RUN_EVAL", "true", "RUN_EVAL"),
+    ("ISL", "128", "ISL"), ("RUN_EVAL", "yes", "RUN_EVAL"),
     ("PP_SIZE", "2", "PP_SIZE"), ("RESULT_FILENAME", "", "Missing runtime input"),
     ("EP_SIZE", "2", "expert-parallel-size"), ("SPEC_DECODING", "mtp", "SPEC_DECODING"),
 ])
@@ -78,8 +78,22 @@ def test_mismatched_point_fails_before_submission(point, field, value, message):
         runtime_arguments(f"{path}:base", {**env, field: value})
 
 
-def test_multi_variant_selection_is_rejected(point):
+def test_native_variants_select_only_the_matching_matrix_point(point):
     path, _, env = point
+    config, recipe = select_recipe(str(path), {**env, "CONC": "4"})
+    assert config == f"{path}:zip_override_conc[1]"
+    assert recipe["benchmark"]["env"]["CONC"] == "4"
+    argv = runtime_arguments(config, {**env, "CONC": "4"})
+    assert plan_commands(config, "sglang", ["--json", *argv], env) == [[
+        "srtctl", "apply", "--json", *argv, "--file", f"{path}:zip_override_conc[1]",
+    ]]
+    with pytest.raises(ValueError, match="exactly one"):
+        select_recipe(str(path), {**env, "CONC": "8"})
+
+
+def test_ambiguous_native_variants_are_rejected(point):
+    path, recipe, env = point
+    path.write_text(yaml.safe_dump({"base": recipe, "override_first": {}, "override_second": {}}))
     with pytest.raises(ValueError, match="exactly one"):
         runtime_arguments(str(path), env)
 
@@ -121,6 +135,41 @@ def test_concurrency_selector_keeps_graph_capture_coupled_to_client(point):
         runtime_arguments(f"{path}:zip_override_conc[1]", env)
 
 
+def test_eval_binding_changes_context_without_changing_selected_concurrency(point):
+    path, recipe, env = point
+    recipe["roles"]["agg"]["args"]["context-length"] = 512
+    path.write_text(yaml.safe_dump({"base": recipe, "zip_override_conc": {
+        "benchmark": {"env": {"CONC": ["2", "4"]}},
+    }}))
+    env = {**env, "EVAL_ONLY": "true", "RUN_EVAL": "true", "CONC": "4", "MAX_MODEL_LEN": "1024"}
+    config, _ = select_recipe(str(path), env)
+    argv = runtime_arguments(config, env)
+    raw = yaml.safe_load(path.read_text())
+    apply_overrides_to_recipe(raw, parse_overrides(argv[1::2], []))
+    actual = selected_recipes(raw, "zip_override_conc[1]")[0][1]
+    assert actual["roles"]["agg"]["args"]["context-length"] == 1024
+    assert actual["benchmark"]["env"]["CONC"] == "4"
+    assert len(plan_commands(config, "sglang", ["--json", *argv], env)) == 1
+
+
+def test_dp_attention_is_validated_without_replacing_recipe_topology(point):
+    path, recipe, env = point
+    recipe["roles"]["agg"]["args"].update({
+        "data-parallel-size": 4, "expert-parallel-size": 4, "enable-dp-attention": True,
+    })
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    env = {**env, "DP_ATTENTION": "true", "EP_SIZE": "4"}
+    actual = copy.deepcopy(recipe)
+    argv = runtime_arguments(f"{path}:base", env)
+    apply_overrides_to_recipe(actual, parse_overrides(argv[1::2], []))
+    assert actual["roles"]["agg"]["args"] == {
+        "tensor-parallel-size": 4, "data-parallel-size": 4,
+        "max-running-requests": 32, "expert-parallel-size": 4, "enable-dp-attention": True,
+    }
+    with pytest.raises(ValueError, match="data-parallel-size|DP_ATTENTION"):
+        runtime_arguments(f"{path}:base", {**env, "DP_ATTENTION": "false"})
+
+
 @pytest.mark.parametrize("record,expected", [
     ({"status": "submitted", "slurm_job_id": "42", "output_dir": "/shared/42"}, ("42", "/shared/42")),
     ({"status": "error"}, None),
@@ -137,8 +186,14 @@ def test_submission_manifest(tmp_path, record, expected):
         assert submission_fields(path) == expected
 
 
-@pytest.mark.parametrize("failure", ["none", "allocation", "submission", "bootstrap"])
-def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, failure):
+@pytest.mark.parametrize("pool,failure", [
+    ("h200-dgxc-slurm", "none"), ("h200-dgxc-slurm", "allocation"),
+    ("h200-dgxc-slurm", "submission"), ("h200-dgxc-slurm", "bootstrap"),
+    ("h200-cw", "none"), ("h100-cw", "none"), ("h100-dgxc-slurm", "none"),
+    ("b200-cw", "none"), ("b200-nb", "none"), ("b200-nscale-slurm", "none"),
+    ("b300-dsxe", "none"),
+])
+def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, pool, failure):
     path, _, point_env = point
     binaries = tmp_path / "bin"
     binaries.mkdir()
@@ -186,13 +241,16 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
         "IS_MULTINODE": "false", "REQUIRE_POWER": "1", "SALLOC_TIME_LIMIT": "10",
         "HF_HUB_CACHE_MOUNT": str(tmp_path), "AIPERF_MMAP_CACHE_HOST_PATH": str(tmp_path),
         "HF_HUB_CACHE": "/hf", "SRT_MODEL_PATH": str(model), "MODEL_PREFIX": "dsr1",
+        "SLURM_ACCOUNT": "fixture", "SLURM_PARTITION": "fixture",
+        "B200_SQUASH_DIR": str(tmp_path), "B300_HF_CACHE_HOST_DIR": str(tmp_path),
+        "B300_HF_CACHE_CONTAINER_DIR": "/hf", "ENROOT_IMPORT_TIME_LIMIT": "10",
         "INFERENCEX_RUNTIME_ENV_VARS": "REQUIRE_POWER",
         "TEST_FAILURE": failure, "CANCEL_CAPTURE": str(capture),
     }
     env.pop("AIPERF_DRAIN_TIMEOUT_SECONDS", None)
     env.pop("AIPERF_DRAIN_POLL_SECONDS", None)
     result = subprocess.run(
-        ["bash", str(ROOT / "runners/launch_h200-dgxc-slurm.sh")], cwd=tmp_path,
+        ["bash", str(ROOT / f"runners/launch_{pool}.sh")], cwd=tmp_path,
         env=env, capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == {"none": 0, "allocation": 1, "submission": 7, "bootstrap": 13}[failure], result.stderr

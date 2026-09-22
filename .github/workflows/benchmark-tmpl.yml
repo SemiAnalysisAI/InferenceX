@@ -306,10 +306,6 @@ jobs:
           if [[ -f runners/runtime_settings.sh ]]; then
             source runners/runtime_settings.sh
           fi
-          if [[ -n "$SRT_RECIPE" && "${RUNNER_NAME%%_*}" != h200-dgxc-slurm ]]; then
-            echo "The native single-node SRT pilot requires the H200 DGXC Slurm pool" >&2
-            exit 1
-          fi
           bash "./runners/launch_${RUNNER_NAME%%_*}.sh"
 
           if [ "${EVAL_ONLY}" = "true" ]; then

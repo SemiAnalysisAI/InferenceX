@@ -40,8 +40,7 @@ setup_srt_slurm() {
     fi
     local destination="$1" framework="$2" uses_power="$3"
     check_env_vars INFERENCEX_RUNTIME_ENV_VARS EVAL_ONLY
-    local eval_passthrough
-    eval_passthrough=$(python3 - <<'PYENV'
+    SRT_EVAL_PASSTHROUGH=$(python3 - <<'PYENV'
 import json
 import os
 
@@ -49,11 +48,12 @@ names = [
     "EVAL_FRAMEWORK", "EVAL_CONC", "EVAL_LIMIT", "EVAL_SUITE",
     "SWEBENCH_GEN_MODE", "SWEBENCH_USE_MODAL", "MODAL_TOKEN_ID",
     "MODAL_TOKEN_SECRET", "IS_AGENTIC", "SCENARIO_TYPE",
+    "TP", "EP_SIZE", "DP_ATTENTION", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "CONC",
 ]
 print(json.dumps(names + os.environ["INFERENCEX_RUNTIME_ENV_VARS"].split()))
 PYENV
     ) || return 1
-    SRTCTL_EVAL_ARGS+=(--set "post_eval.passthrough_env=$eval_passthrough")
+    SRTCTL_EVAL_ARGS+=(--set "post_eval.passthrough_env=$SRT_EVAL_PASSTHROUGH")
     # Custom benchmarks inherit exported workflow settings through sbatch/srun;
     # native recipe environment and benchmark.env retain their override priority.
     local source="$INFERENCEX_SLURM_UTILS_DIR/../utils/srt-slurm"
@@ -125,6 +125,100 @@ apply_srt_recipe() {
     PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" \
         python3 -m infx.srt_slurm.synthetic_acceptance \
         "$config" "$framework" -- "$@"
+}
+
+# One native submission per fixed-sequence matrix point, shared across Slurm pools.
+launch_srt_single_node() {
+    set -eo pipefail
+    local profile="$1"
+    shift
+    check_env_vars GITHUB_WORKSPACE SRT_RECIPE FRAMEWORK MODEL MODEL_PREFIX IMAGE PRECISION \
+        TP PP_SIZE DCP_SIZE PCP_SIZE EP_SIZE DP_ATTENTION GPU_COUNT IS_AGENTIC SPEC_DECODING \
+        CONC ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME GPU_MONITOR_INTERVAL SRT_MODEL_PATH \
+        HF_HUB_CACHE_MOUNT HF_HUB_CACHE SALLOC_TIME_LIMIT
+    SRT_SINGLE_NODE_ROOT=$(mktemp -d "$GITHUB_WORKSPACE/srt-single.XXXXXX")
+    SRTCTL_ROOT="$SRT_SINGLE_NODE_ROOT/checkout"
+    export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
+    setup_srt_slurm "$SRTCTL_ROOT" "$FRAMEWORK" 0
+    if ! command -v uv >/dev/null; then
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        source "$HOME/.local/bin/env"
+    fi
+    uv venv .venv
+    source .venv/bin/activate
+    uv pip install -e .
+    export PYTHONPATH="$GITHUB_WORKSPACE${PYTHONPATH:+:$PYTHONPATH}"
+
+    python3 -m infx.srt_slurm.single_node prepare "$GITHUB_WORKSPACE/$SRT_RECIPE" "$SRT_SINGLE_NODE_ROOT/arguments"
+    mapfile -d '' -t SRT_RUNTIME_ARGS < "$SRT_SINGLE_NODE_ROOT/arguments"
+    SRT_SELECTED_RECIPE="${SRT_RUNTIME_ARGS[0]}"
+    SRT_RUNTIME_ARGS=("${SRT_RUNTIME_ARGS[@]:1}")
+    SRT_RUNTIME_ARGS+=(
+        --set 'post_eval.command=["bash", "{infmax_workspace}/benchmarks/single_node/srt_eval.sh", "{endpoint}", "/logs/infx-eval-exit-code"]'
+        --set "post_eval.passthrough_env=$SRT_EVAL_PASSTHROUGH"
+    )
+    # Reuse only a valid cache for this exact image. Missing caches are imported
+    # by native Pyxis inside the same benchmark allocation.
+    SRT_CONTAINER="$IMAGE"
+    if [[ -n "${SRT_SQUASH_FILE:-}" && -r "$SRT_SQUASH_FILE" ]] && unsquashfs -s "$SRT_SQUASH_FILE" >/dev/null 2>&1; then
+        SRT_CONTAINER="$SRT_SQUASH_FILE"
+    fi
+    python3 -m infx.srt_slurm.cluster_config \
+        "$INFERENCEX_SLURM_UTILS_DIR/srt-slurm/${profile}.yaml" srtslurm.yaml \
+        --var SRTCTL_ROOT "$SRTCTL_ROOT" --var SQUASH_FILE "$SRT_CONTAINER" \
+        --var IMAGE "$IMAGE" --var NGINX_SQUASH_FILE nginx:1.27.4 \
+        --var SRT_DEFAULT_TIME_LIMIT "$SALLOC_TIME_LIMIT" \
+        --model "hf:$MODEL" "$SRT_MODEL_PATH" --container "$IMAGE" "$SRT_CONTAINER" \
+        --mount "$HF_HUB_CACHE_MOUNT" "$HF_HUB_CACHE" --exclusive "$@"
+    make setup ARCH=x86_64
+
+    SRT_JOB_ID=""
+    SRT_JOB_OUTPUT=""
+    finish_native_single_node() {
+        local rc=$? artifact
+        trap - EXIT
+        # Submission may succeed immediately before cancellation or a client error.
+        if [[ -z "$SRT_JOB_ID" ]] && python3 -m infx.srt_slurm.single_node submission \
+            "$GITHUB_WORKSPACE/srt-single-node-submission.json" > "$SRT_SINGLE_NODE_ROOT/submission-fields" 2>/dev/null; then
+            mapfile -t SRT_SUBMISSION < "$SRT_SINGLE_NODE_ROOT/submission-fields"
+            SRT_JOB_ID="${SRT_SUBMISSION[0]}"
+            SRT_JOB_OUTPUT="${SRT_SUBMISSION[1]}"
+        fi
+        if [[ -n "$SRT_JOB_ID" ]] && slurm_job_is_active "$SRT_JOB_ID"; then
+            scancel "$SRT_JOB_ID" || true
+        fi
+        if [[ -n "$SRT_JOB_OUTPUT" && -d "$SRT_JOB_OUTPUT" ]]; then
+            bundle_server_logs "$SRT_JOB_OUTPUT" "$GITHUB_WORKSPACE/srt-single-node-logs.tar.gz"
+            for artifact in "$SRT_JOB_OUTPUT/logs/$RESULT_FILENAME.json" "$SRT_JOB_OUTPUT"/logs/gpu_metrics*; do
+                [[ -f "$artifact" ]] || continue
+                copy_to_workspace "$artifact" "$GITHUB_WORKSPACE/$(basename "$artifact")" || rc=1
+            done
+        fi
+        exit "$rc"
+    }
+    trap finish_native_single_node EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    apply_srt_recipe "$SRT_SELECTED_RECIPE" "$FRAMEWORK" \
+        --json --yes --output "$SRT_SINGLE_NODE_ROOT/outputs" "${SRT_RUNTIME_ARGS[@]}" \
+        > "$GITHUB_WORKSPACE/srt-single-node-submission.json"
+    python3 -m infx.srt_slurm.single_node submission "$GITHUB_WORKSPACE/srt-single-node-submission.json" \
+        > "$SRT_SINGLE_NODE_ROOT/submission-fields"
+    mapfile -t SRT_SUBMISSION < "$SRT_SINGLE_NODE_ROOT/submission-fields"
+    SRT_JOB_ID="${SRT_SUBMISSION[0]}"
+    SRT_JOB_OUTPUT="${SRT_SUBMISSION[1]}"
+    stream_slurm_job_log "$SRT_JOB_ID" "$SRT_JOB_OUTPUT/logs/sweep_${SRT_JOB_ID}.log"
+    verify_slurm_job_status "$SRT_JOB_ID"
+    # Native SRT treats post-throughput eval failure as non-fatal. InferenceX
+    # requires every requested eval to finish successfully, including staging.
+    if [[ "$RUN_EVAL" == true || "$EVAL_ONLY" == true ]]; then
+        test -f "$SRT_JOB_OUTPUT/logs/infx-eval-exit-code"
+        test "$(cat "$SRT_JOB_OUTPUT/logs/infx-eval-exit-code")" = 0
+    fi
+    if [[ "$EVAL_ONLY" != true ]]; then
+        test -s "$SRT_JOB_OUTPUT/logs/$RESULT_FILENAME.json"
+    fi
+
 }
 
 slurm_job_is_active() {

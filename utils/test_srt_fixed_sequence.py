@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -115,8 +116,8 @@ def test_native_endpoint_preserves_client_settings_and_failure(
         ("GPU_MONITOR_INTERVAL", None, "GPU_MONITOR_INTERVAL"),
         ("USE_CHAT_TEMPLATE", "yes", "USE_CHAT_TEMPLATE must be true or false"),
         ("CONC", "0", "CONC must be a positive integer"),
-        ("RUN_EVAL", "true", "does not support evals yet"),
-        ("EVAL_ONLY", "true", "does not support evals yet"),
+        ("RUN_EVAL", "yes", "RUN_EVAL must be true or false"),
+        ("EVAL_ONLY", "yes", "EVAL_ONLY must be true or false"),
     ],
 )
 def test_invalid_runtime_inputs_fail_before_the_client(
@@ -156,3 +157,45 @@ run_benchmark_serving --model test/model --port 8888 --backend vllm \\
     assert result.returncode == 0, result.stderr
     argv = json.loads(Path(env["CAPTURE"]).read_text())
     assert argv[argv.index("--base-url") + 1] == "http://0.0.0.0:8888"
+
+
+@pytest.mark.parametrize("eval_exit", [0, 7])
+def test_native_post_eval_preserves_results_topology_and_failure(client_environment, tmp_path, eval_exit):
+    workspace = tmp_path / "repo"
+    scripts = workspace / "benchmarks/single_node"
+    scripts.mkdir(parents=True)
+    shutil.copyfile(ROOT / "benchmarks/benchmark_lib.sh", scripts.parent / "benchmark_lib.sh")
+    shutil.copyfile(ROOT / "benchmarks/single_node/srt_eval.sh", scripts / "srt_eval.sh")
+    python = tmp_path / "bin/python3"
+    python.write_text(
+        f"#!{sys.executable}\n"
+        "import json, os, pathlib, sys\n"
+        "args = sys.argv[1:]\n"
+        "assert args[:2] == ['-m', 'lm_eval']\n"
+        "pathlib.Path(os.environ['CAPTURE']).write_text(json.dumps(args))\n"
+        "output = pathlib.Path(args[args.index('--output_path') + 1])\n"
+        "output.mkdir(parents=True, exist_ok=True)\n"
+        "(output / 'results_fixture.json').write_text('{\"score\":0.75}')\n"
+        "sys.exit(int(os.environ['CLIENT_EXIT']))\n"
+    )
+    env = {
+        **client_environment, "CLIENT_EXIT": str(eval_exit), "MODEL_NAME": "served-model",
+        "TP": "4", "EP_SIZE": "4", "DP_ATTENTION": "true", "IS_MULTINODE": "false",
+        "MAX_MODEL_LEN": "8192", "EVAL_MAX_MODEL_LEN": "8192", "OPENAI_API_KEY": "EMPTY",
+        "INFERENCEX_LM_EVAL_RUNTIME_READY": "true", "EVAL_ONLY": "true", "RUN_EVAL": "true",
+        "EVAL_RESULT_DIR": str(tmp_path / "eval-output"), "FRAMEWORK": "sglang", "PRECISION": "fp8",
+    }
+    status = tmp_path / "eval-status"
+    result = subprocess.run(
+        ["bash", str(scripts / "srt_eval.sh"), "http://localhost:9444", str(status)],
+        env=env, capture_output=True, text=True,
+    )
+    assert result.returncode == eval_exit, result.stderr
+    assert status.read_text() == f"{eval_exit}\n"
+    assert json.loads((workspace / "results_fixture.json").read_text()) == {"score": 0.75}
+    metadata = json.loads((workspace / "meta_env.json").read_text())
+    assert (metadata["tp"], metadata["ep"], metadata["dp_attention"], metadata["conc"]) == (4, 4, True, 3)
+    argv = json.loads(Path(env["CAPTURE"]).read_text())
+    model_args = argv[argv.index("--model_args") + 1]
+    assert "model=served-model,base_url=http://0.0.0.0:9444/v1/chat/completions" in model_args
+    assert "num_concurrent=3" in model_args

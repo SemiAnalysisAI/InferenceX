@@ -1,0 +1,91 @@
+# Serving settings from qwen3.5_fp4_b300_mtp.sh.
+base:
+  schema: 2
+  name: qwen3.5-fp4-b300-sglang-mtp-8k1k
+  model:
+    path: hf:nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+    container: lmsysorg/sglang:v0.5.19-cu130
+    precision: fp4
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        reasoning-parser: qwen3
+        tool-call-parser: qwen3_coder
+        mamba-scheduler-strategy: no_buffer
+        quantization: modelopt_fp4
+        fp4-gemm-backend: flashinfer_cutlass
+        kv-cache-dtype: fp8_e4m3
+        mamba-ssm-dtype: bfloat16
+        cuda-graph-max-bs: 4
+        max-running-requests: 128
+        mem-fraction-static: 0.8
+        chunked-prefill-size: 32768
+        max-prefill-tokens: 32768
+        context-length: 9236
+        disable-radix-cache: true
+        attention-backend: trtllm_mha
+        mm-attention-backend: triton_attn
+        moe-runner-backend: flashinfer_trtllm
+        scheduler-recv-interval: 10
+        tokenizer-worker-num: 6
+        stream-interval: 30
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        enable-metrics: false
+      env:
+        NCCL_NVLS_ENABLE: '1'
+        SGL_ENABLE_JIT_DEEPGEMM: 'false'
+        SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+        PYTHONUNBUFFERED: '1'
+        PYTHONNOUSERSITE: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
+    env:
+      MODEL: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+      ISL: '8192'
+      OSL: '1024'
+      RANDOM_RANGE_RATIO: '0.8'
+      USE_CHAT_TEMPLATE: 'true'
+zip_override_tp4_ep1:
+  roles:
+    agg:
+      args:
+        cuda-graph-max-bs: [4, 8, 16, 32, 64, 128]
+        scheduler-recv-interval: [10, 10, 30, 30, 30, 30]
+  benchmark:
+    env:
+      CONC: ['4', '8', '16', '32', '64', '128']
+zip_override_tp2_ep2:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        cuda-graph-max-bs: [4, 8, 16, 32, 64, 128]
+        expert-parallel-size: 2
+        scheduler-recv-interval: [10, 10, 30, 30, 30, 30]
+        tensor-parallel-size: 2
+  benchmark:
+    env:
+      CONC: ['4', '8', '16', '32', '64', '128']
