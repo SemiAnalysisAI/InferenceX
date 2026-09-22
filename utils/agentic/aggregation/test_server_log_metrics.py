@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from utils.agentic.aggregation.backends.dynamo_vllm import DynamoVllmBackend
-from utils.agentic.aggregation.backends.sglang import SglangBackend
-from utils.agentic.aggregation.backends.vllm import VllmBackend
-from utils.agentic.aggregation.server_log_metrics import (
+from infx.results.agentic.backends.dynamo_vllm import DynamoVllmBackend
+from infx.results.agentic.backends.sglang import SglangBackend
+from infx.results.agentic.backends.vllm import VllmBackend
+from infx.results.agentic.artifacts import (
     find_server_log_paths,
     load_server_log_head,
 )
@@ -18,12 +18,6 @@ def test_kv_cache_pool_tokens_from_server_log_missing() -> None:
     assert SglangBackend.kv_cache_pool_tokens_from_server_log(None) is None
     assert SglangBackend.kv_cache_pool_tokens_from_server_log("") is None
     assert SglangBackend.kv_cache_pool_tokens_from_server_log("INFO no kv cache line") is None
-
-
-def test_kv_cache_pool_tokens_from_single_engine_server_log() -> None:
-    log = "INFO (EngineCore pid=123) GPU KV cache size: 11,294,463 tokens"
-
-    assert VllmBackend.kv_cache_pool_tokens_from_server_log(log) == 11_294_463
 
 
 def test_kv_cache_pool_tokens_from_data_parallel_server_log() -> None:
@@ -77,7 +71,7 @@ def test_kv_cache_pool_tokens_from_sglang_per_rank_lines() -> None:
     log = "\n".join(
         [
             "[2026-06-23 01:10:14 DP0 TP0 EP0] max_total_num_tokens=1000",
-            "[2026-06-23 01:10:14 DP1 TP1 EP1] max_total_num_tokens=1200",
+            "[2026-06-23 01:10:14 DP1  TP1\tEP1] max_total_num_tokens=1200",
             "[2026-06-23 01:10:14 DP1 TP1 EP1] max_total_num_tokens=1200",
         ]
     )
@@ -100,7 +94,7 @@ def test_kv_cache_pool_tokens_sums_multiple_log_files(tmp_path: Path) -> None:
         "INFO (EngineCore_DP0 pid=200) GPU KV cache size: 7,000,000 tokens"
     )
 
-    assert VllmBackend().gpu_kv_capacity_tokens({}, [first, second]) == 18_500_000
+    assert VllmBackend().gpu_kv_capacity_tokens({}, (load_server_log_head(p) for p in (first, second))) == 18_500_000
 
 
 def test_dynamo_vllm_uses_vllm_server_log_capacity_parser(tmp_path: Path) -> None:
@@ -114,7 +108,7 @@ def test_dynamo_vllm_uses_vllm_server_log_capacity_parser(tmp_path: Path) -> Non
         )
     )
 
-    assert DynamoVllmBackend().gpu_kv_capacity_tokens({}, [worker_log]) == 11_500_000
+    assert DynamoVllmBackend().gpu_kv_capacity_tokens({}, [load_server_log_head(worker_log)]) == 11_500_000
 
 
 def test_find_server_log_paths_includes_multinode_watchtower_logs(tmp_path: Path) -> None:

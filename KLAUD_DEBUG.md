@@ -46,6 +46,24 @@ authorization. This catches deleted history or malformed appended entries
 before reuse can skip setup. `utils/merge_with_reuse.sh <PR>` performs the push
 and waits for the PR checks automatically.
 
+### 1.2 Truncated NATS/etcd dependency archives
+
+**Symptom:** H200 `srt-slurm` setup fails while `dpkg-deb` reads the downloaded
+NATS package or while `tar` reads the downloaded etcd archive, with an error
+such as an unexpected end of file or truncated gzip stream.
+
+**Root cause:** a GitHub release download can leave an incomplete archive on
+disk. Transport-level retries do not help when the transfer itself reports
+success.
+
+**Fix:** preserve the first setup error and let the H200 launcher validate any
+NATS or etcd archive left by the failed attempt. It deletes and re-downloads
+only an archive that fails `dpkg-deb --contents` or `tar -tzf`, with at most five
+setup attempts. When no invalid archive is present, setup stops immediately so
+an unrelated failure is not hidden by repeated downloads. If all archive-aware
+attempts fail, classify the release-download path as infrastructure rather than
+changing the benchmark recipe.
+
 ---
 
 ## 2. vLLM v0.21.x / v0.20.x: GPU OOM at model-load
@@ -219,7 +237,7 @@ directory to the normal ingestion code. The only reuse-specific substitution is
 that changelog metadata comes from the merge run. A generator-policy change
 between the PR sweep and merge therefore does not require another GPU sweep.
 
-### 7.2 Capacity deferrals must release the candidate claim
+### 7.2 Every unsuccessful outcome must release the candidate claim
 
 The planner ignores closed PRs but treats every matching `klaud/auto-*` branch
 as occupied. If the capacity check fails before a targeted dispatch, the final
@@ -231,18 +249,19 @@ can select the candidate again. Without a PR, report the deferral in the agent's
 final response. A utilization increase after dispatch does not cancel healthy
 work. Closing the PR alone does not make the candidate eligible.
 
-Confirmed infrastructure blockers such as missing staged weights also require a
-failure/deferral report, confirmed child-run completion, PR closure and branch
-deletion at session termination. For image incompatibility, exhausted image
-repairs or uncertain causes, close the unsuccessful PR but retain its branch:
-this blocks the exact candidate without blocking newer releases for the family.
-Uncertain causes require manual review, not an incompatibility claim. Apply
-cleanup only to the session's own PR and runs.
+Confirmed infrastructure blockers, image incompatibility, exhausted repairs,
+uncertain causes and unexpected failures all require a failure/deferral report,
+confirmed child-run completion, PR closure and branch deletion at session
+termination. This returns the family to the pool for a later independent check.
+Uncertain causes remain distinct from incompatibility. Apply cleanup only to the
+session's own unchanged exact-head branch, PR and runs; an explicit maintainer
+handoff remains untouched.
 
-### 7.3 Final reusable sweeps require a ready PR
+### 7.3 Final reusable sweeps stay draft until reporting finishes
 
-`run-sweep.yml` skips PR jobs while the PR is a draft. After the trimmed smoke,
-append the changelog entry, mark the PR ready, then apply `full-sweep-enabled`.
+`run-sweep.yml` permits labeled same-repository drafts. After the smoke, append
+the changelog, check the full matrix and apply `full-sweep-enabled` while DRAFT.
+Only `finish` marks ready after full validation and final report publication.
 If that sweep fails, remove the label and return the PR to draft before pushing
 a repair, or each intermediate push starts another full sweep. The Klaud Stop
 hook verifies the `finish` receipt, including exact-head full matrix/result
@@ -271,7 +290,7 @@ are skipped; dispatch a new autosweep so recovery checks the old session first.
 ## 9. PR conventions for this repo
 
 - Image-bump / new-recipe PRs I open on behalf of the user (or that the user creates) get the **`[Klaud Cold]`** title prefix.
-- Klaud Cold keeps targeted attempts draft and unlabeled; final validation requires a ready PR with `full-sweep-enabled` as its sole sweep label. Wait for successful completion on the exact head and reusable artifacts. See [the current Klaud guide](docs/klaud.md); generic manual-sweep recommendations do not override this flow.
+- Klaud Cold keeps targeted attempts draft and unlabeled; final validation keeps the PR draft with `full-sweep-enabled` as its sole sweep label; `finish` publishes verified results before readiness. Wait for successful completion on the exact head and reusable artifacts. See [the current Klaud guide](docs/klaud.md); generic manual-sweep recommendations do not override this flow.
 - After any code change that shifts a PR's scope (drops a recipe, changes an image tag), **update the PR title AND body in the same step** and **verify** with `gh pr view <N> --json title,body`. `gh pr edit` silently fails (see §8).
 - `utils/merge_with_reuse.sh <N>` is the merge entrypoint. It handles the `perf-changelog.yaml` auto-append.
 
@@ -317,3 +336,69 @@ The dashboard advanced to schema version 7 while Klaud required exactly 6, so
 a fresh, available feed produced zero eligible clusters. Validate the consumed
 fields and invariants instead of gating on schemaVersion. Keep freshness, kind,
 availability, count consistency and the strict below-80% utilization checks.
+
+### 7.5 Distinguish autosweep queueing, recovery failures and agent interruption
+
+The former `klaud-auto-sweep` concurrency group held new waves behind the entire
+previous invocation. It is removed; five candidates is a per-invocation cap.
+Recovery now makes a nonblocking pass under per-session leases. Active child work
+remains owned and excluded, while unrelated families proceed. Once an unsuccessful
+session is terminal, recovery closes it, deletes its unchanged branch and releases
+the family instead of retaining the failed candidate indefinitely.
+Unknown global ownership/inventory still fails closed.
+
+Run `34597845951` waited 3h35m before planning, then rejected #3012's successful
+12-point AgentX sweep because of a redundant `scenario-type: [agentic-coding]`.
+The verifier now independently generates the unfiltered exact-head family and
+compares every benchmark fingerprint/concurrency/image and required default eval.
+Equivalent filtering passes; real omissions fail. Do not rerun successful GPU work
+just to repair metadata interpretation. The unchanged B200 artifacts reproduce
+both the old rejection and the corrected full-coverage success locally.
+
+Run `34597094310` succeeded on attempt 2 but retained two manifests and benchmark
+aggregates. Select the current-attempt manifest and newest same-name artifacts
+from that run/head. Preserve earlier successful eval jobs only when their producers
+did not rerun, then verify all raw/aggregate coverage. Never overlay archives or
+mix unrelated runs. This exact retry also passes the corrected local verifier.
+
+Three earlier candidate jobs exceeded GitHub's six-hour limit; #3012's agent
+returned no `structured_output` after 154 turns. More turns do not extend that
+limit. Durable typed reports and ownership refs survive agent interruption;
+verified lifecycle receipts take precedence over missing SDK output. Recovery
+publishes the artifact-derived final comparison before readiness. Completed but
+uncertifiable work closes for inspection and releases its branch, not as invented
+image incompatibility.
+See [workflow operation](docs/klaud.md#workflow-operation-and-credentials),
+[reporting](docs/klaud-reporting.md) and [中文报告指南](docs/klaud-reporting_zh.md).
+
+### 7.6 Successful agent action without a verifiable lifecycle outcome
+
+**Symptom:** the Claude action reports success, but no PR or benchmark run exists and
+the diagnostics fall back to `unexpected-error`. Earlier workflow logic invoked
+`recover-current` only when the action itself failed, so this success-shaped failure
+kept its family claim until the next autosweep.
+
+**Resolution:** run trusted reconciliation after every non-skipped agent step. A
+no-PR/no-run session releases its claim immediately; active children remain owned;
+terminal sessions finish validation or cleanup. Upload sanitized diagnostics before
+failing an unverifiable candidate, and distinguish session, receipt, structured-output
+and lifecycle-verification failures with fixed public-safe codes.
+
+The planner now also reconstructs a candidate's complete public baseline before
+claiming its family or launching an agent. This prevents known incomplete or ambiguous
+baseline families from consuming a candidate slot. A bounded review batch and soft
+same-base cooldown reduce repeated work without removing candidates from the pool.
+
+### 7.7 Planner preflight must degrade per candidate
+
+The overlap reviewer reads untrusted PR content and private capacity hints together, so
+it has no unrestricted outbound fetch tool. Its read-only local and GitHub tools are
+enough for overlap classification.
+
+Cooldown history comes from the paginated `klaud-plan.yml` run inventory and each
+matching run's artifacts, rather than the first page of repository-wide artifacts.
+Malformed history remains a soft hint failure. Baseline rows with invalid image fields
+are skipped, and registry `/` and enroot `#` image spellings are normalized for both
+historical identity matching and point backfill. A transient or malformed baseline for
+one candidate defers that candidate and continues through the reviewed pool; it does
+not consume or block later candidate slots.
