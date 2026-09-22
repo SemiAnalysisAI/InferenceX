@@ -57,7 +57,8 @@ export SERVED_MODEL_NAME=glm5_2
 # TileRT recipe this mirrors.)
 #
 # Memory at this context, per rank, bf16 wire layout (verified against the
-# tilert 0.1.6 and vLLM 0.24.0 sources and the MI355X logs, 287.98 GiB cards):
+# tilert 0.1.6 and vLLM 0.24.0 sources and the MI355X logs, 287.98 GiB cards;
+# the undivided PD buffer sizes are what 0.1.6 allocated on one card):
 #   decode : weights 90.72 GiB + engine cache window 93.25 GiB
 #            + PD receive buffer 99.06 GiB (receive_server.py, dense in max_seq_len)
 #   prefill: weights 90.45 GiB + profiling/non-torch 40.3 GiB + vLLM KV 91.71 GiB
@@ -73,10 +74,8 @@ export SERVED_MODEL_NAME=glm5_2
 # leaving them on cuda:0. Measured on 2x8 MI350X at this context with bf16 KV:
 # decode peaks at 202.1 GiB per card, prefill at 269.2 GiB of 287.69 GiB, and
 # the KV path stays device-to-device at 108 GB/s (81 GB in 751 ms, 54% of the
-# 4x400 GbE line rate). No host hop, so the DRAM patch and
-# TILERT_PD_BUFFER_DEVICE are not used here.
+# 4x400 GbE line rate). No host hop and no patch: the wheel runs as shipped.
 export TILERT_MAX_MODEL_LEN=1048576
-export TILERT_PD_BUFFER_DEVICE=cuda
 export TILERT_TRANSPORT=mooncake
 export TILERT_PARSER=none
 export TILERT_RDMA_STRICT=0
@@ -96,12 +95,13 @@ export PREFILL_KV_DTYPE=bfloat16
 # the connector's KI plane copy fail and MLA address the wrong rows.
 export PREFILL_BLOCK_SIZE=64
 export DECODE_KV_DTYPE=bf16
-# With the PD staging buffer in host memory, vLLM needs 90.45 (weights) + 40.3
-# (profiling) + 91.71 GiB (KV for one 1048576-token request) = 222.5 GiB inside
-# its budget: 0.85 x 287.98 = 244.8 GiB leaves 22 GiB of KV margin and 43 GiB
-# outside the budget for the ~6.3 GiB non-torch baseline measured on the decode
-# OOM node (287.98 - 95.94 free - 184.17 - 1.58 reserved). 0.75 (216 GiB) refuses
-# with "91.71 GiB KV cache is needed ... available 85.25 GiB".
+# The PD staging shard sits outside vLLM's budget, so vLLM needs 90.45 (weights)
+# + 40.3 (profiling) + 91.71 GiB (KV for one 1048576-token request) = 222.5 GiB
+# inside it: 0.85 x 287.98 = 244.8 GiB leaves 22 GiB of KV margin and 43 GiB
+# outside the budget for the 12.54 GiB staging shard plus the ~6.3 GiB non-torch
+# baseline measured on the decode OOM node (287.98 - 95.94 free - 184.17 - 1.58
+# reserved). 0.75 (216 GiB) refuses with "91.71 GiB KV cache is needed ...
+# available 85.25 GiB".
 export GPU_MEM_UTIL=0.85
 export SKIP_CONTAINER_BARRIER=0
 # Two images, one per rank, ~32 GB each. On a node that has neither cached the

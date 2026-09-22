@@ -20,15 +20,7 @@ check_env_vars \
     DECODE_MTP_SIZE GPU_MEM_UTIL SERVED_MODEL_NAME \
     DECODE_CTRL_PORT DECODE_HTTP_PORT PREFILL_PORT ROUTER_PORT \
     DECODE_WAIT PREFILL_WAIT ROUTER_WAIT SKIP_CONTAINER_BARRIER \
-    CONTAINER_BARRIER_TIMEOUT TILERT_PD_BUFFER_DEVICE
-
-# TILERT_PD_BUFFER_DEVICE selects the patched host-buffer path (cpu) or the
-# shipped wheel (cuda); anything else would only be rejected by decode_server's
-# argparse after weight conversion.
-case "$TILERT_PD_BUFFER_DEVICE" in
-    cpu|cuda) ;;
-    *) echo "ERROR: TILERT_PD_BUFFER_DEVICE must be 'cpu' or 'cuda' (got '$TILERT_PD_BUFFER_DEVICE')" >&2; exit 1 ;;
-esac
+    CONTAINER_BARRIER_TIMEOUT
 
 LOG_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}"
 SHARED_LOG_DIR="${BENCHMARK_LOGS_DIR}/logs/slurm_job-${SLURM_JOB_ID}"
@@ -105,7 +97,7 @@ host_name=$(hostname)
 
 echo "[tilert] ROLE=$TILERT_ROLE rank=$NODE_RANK host=$host_name ($host_ip)"
 echo "[tilert] PREFILL_HOST=$PREFILL_HOST:$PREFILL_PORT  DECODE_HOST=$DECODE_HOST:$DECODE_CTRL_PORT/$DECODE_HTTP_PORT  ROUTER=:$ROUTER_PORT"
-echo "[tilert] MODEL_PATH=$MODEL_PATH  profile=$TILERT_PROFILE  served=$SERVED_MODEL_NAME  max_len=$TILERT_MAX_MODEL_LEN  transport=$TILERT_TRANSPORT  kv=${PREFILL_KV_DTYPE}->${DECODE_KV_DTYPE}  mtp=${SPEC_DECODING}  pd_buffers=$TILERT_PD_BUFFER_DEVICE  agentic=$TILERT_IS_AGENTIC"
+echo "[tilert] MODEL_PATH=$MODEL_PATH  profile=$TILERT_PROFILE  served=$SERVED_MODEL_NAME  max_len=$TILERT_MAX_MODEL_LEN  transport=$TILERT_TRANSPORT  kv=${PREFILL_KV_DTYPE}->${DECODE_KV_DTYPE}  mtp=${SPEC_DECODING}  agentic=$TILERT_IS_AGENTIC"
 
 # Enable libibverbs fork safety on both ranks before any verbs context exists.
 # Without it, ibv_fork_init() can fail in these containers while Mooncake
@@ -280,18 +272,13 @@ PYEOF
         unset TILERT_SIMULATE_ACC_LEN TILERT_SIMULATE_ACC_METHOD
         echo "[decode] real MTP verification (no simulated acceptance)"
     fi
-    # The shipped 0.1.6 decode_server has no --pd-buffer-device (strict
-    # parse_args); setup_deps.sh applies the PD-DRAM patch only for cpu, so
-    # pass the flag only then and let cuda run the wheel exactly as shipped.
-    local pd_buf=()
-    [[ "$TILERT_PD_BUFFER_DEVICE" == "cpu" ]] && pd_buf=(--pd-buffer-device cpu)
     local cmd=("$PY" -m tilert.pd_vllm.decode_server
         --engine tilert --model "$TILERT_PROFILE"
         --model-weights-dir "$TILERT_WEIGHTS_DIR"
         --max-seq-len "$TILERT_MAX_MODEL_LEN"
         --kv-cache-dtype "$DECODE_KV_DTYPE" --transport "$TILERT_TRANSPORT"
         --ctrl-port "$DECODE_CTRL_PORT" --http-port "$DECODE_HTTP_PORT"
-        "${pd_buf[@]}" "${DECODE_MTP[@]}" "${extra[@]}")
+        "${DECODE_MTP[@]}" "${extra[@]}")
     log_and_run_bg decode "$LOG_DIR/decode_${host_name}.log" "${cmd[@]}"
     DECODE_PID=$LAST_BG_PID
 }
@@ -306,8 +293,8 @@ start_prefill() {
     # shellcheck disable=SC2206
     local extra=( ${TILERT_PREFILL_EXTRA_FLAGS} )
     local kv_cfg
-    kv_cfg=$(printf '{"kv_connector":"TileRTConnector","kv_connector_module_path":"tilert.pd_vllm.prefill_connector","kv_role":"kv_producer","kv_connector_extra_config":{"tilert_host":"%s","tilert_ctrl_port":%s,"tilert_model":"%s","tilert_max_seq_len":%s,"tilert_transport":"%s","tilert_pd_buffer_device":"%s"}}' \
-        "$DECODE_HOST" "$DECODE_CTRL_PORT" "$TILERT_PROFILE" "$TILERT_MAX_MODEL_LEN" "$TILERT_TRANSPORT" "$TILERT_PD_BUFFER_DEVICE")
+    kv_cfg=$(printf '{"kv_connector":"TileRTConnector","kv_connector_module_path":"tilert.pd_vllm.prefill_connector","kv_role":"kv_producer","kv_connector_extra_config":{"tilert_host":"%s","tilert_ctrl_port":%s,"tilert_model":"%s","tilert_max_seq_len":%s,"tilert_transport":"%s"}}' \
+        "$DECODE_HOST" "$DECODE_CTRL_PORT" "$TILERT_PROFILE" "$TILERT_MAX_MODEL_LEN" "$TILERT_TRANSPORT")
     local cmd=(vllm serve "$MODEL_PATH"
         --served-model-name "${served[@]}" --port "$PREFILL_PORT"
         --tensor-parallel-size "$PREFILL_TP_SIZE" --max-model-len "$TILERT_MAX_MODEL_LEN"

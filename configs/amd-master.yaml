@@ -1487,7 +1487,7 @@ glm5.3-fp8-mi355x-tilert:
   runner: cluster:mi355x-amds
   precision: fp8
   framework: tilert
-  router: { name: tilert-pd-router, version: "0.1.6" }
+  router: { name: tilert-pd-router, version: "0.1.6.post1" }
   multinode: true
   disagg: true
   kv-p2p-transfer: mooncake
@@ -1536,7 +1536,7 @@ glm5.3-fp8-mi355x-tilert-agentic:
   runner: cluster:mi355x-amds
   precision: fp8
   framework: tilert
-  router: { name: tilert-pd-router, version: "0.1.6" }
+  router: { name: tilert-pd-router, version: "0.1.6.post1" }
   multinode: true
   disagg: true
   kv-p2p-transfer: mooncake

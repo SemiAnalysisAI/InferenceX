@@ -92,18 +92,18 @@ _tilert_install_missing() {
 
 install_tilert_container_tools() {
     if command -v ip >/dev/null 2>&1 && command -v curl >/dev/null 2>&1 \
-        && command -v ibv_devices >/dev/null 2>&1 && command -v patch >/dev/null 2>&1; then
+        && command -v ibv_devices >/dev/null 2>&1; then
         echo "[SETUP] Container RDMA/net tools already present"
         return 0
     fi
-    echo "[SETUP] Installing iproute2 + curl + patch + ibverbs userspace in container..."
+    echo "[SETUP] Installing iproute2 + curl + ibverbs userspace in container..."
     apt-get update -q -y && apt-get install -q -y --no-install-recommends \
-        iproute2 curl patch ibverbs-utils libibverbs1 librdmacm1 ibverbs-providers \
+        iproute2 curl ibverbs-utils libibverbs1 librdmacm1 ibverbs-providers \
         && rm -rf /var/lib/apt/lists/*
-    if ! command -v ip >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1 || ! command -v patch >/dev/null 2>&1; then
-        echo "[SETUP] ERROR: failed to install iproute2/curl/patch"; exit 1
+    if ! command -v ip >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
+        echo "[SETUP] ERROR: failed to install iproute2/curl"; exit 1
     fi
-    _SETUP_INSTALLED+=("iproute2+curl+patch+ibverbs")
+    _SETUP_INSTALLED+=("iproute2+curl+ibverbs")
 }
 
 _tilert_install_wheel() {
@@ -127,37 +127,9 @@ _tilert_install_wheel() {
     _SETUP_INSTALLED+=("$TILERT_PACKAGE==$TILERT_VERSION($mode)")
 }
 
-# PD buffers in DRAM. TileRT 0.1.6 allocates the mooncake receive buffer (decode)
-# and the connector staging buffer (prefill TP rank 0) on the GPU, dense in
-# max_seq_len: 99.06 GiB each at 1048576 tokens, which does not fit next to the
-# weights and the engine cache window. The patch moves both into 2 MiB-backed
-# pinned host memory behind decode_server --pd-buffer-device cpu and connector
-# extra config tilert_pd_buffer_device, verifying the huge-page backing because
-# the ionic RDMA VFs cap 4 KiB-page registrations at ~3.9 GiB per HCA.
-# Engine-patch waiver: docs/waiver/3330.md. Applied only when the recipe asks
-# for host buffers; with TILERT_PD_BUFFER_DEVICE=cuda the wheel runs as shipped.
-_TILERT_PD_DRAM_PATCH="$(dirname "${BASH_SOURCE[0]}")/patches/tilert-0.1.6-pd-buffers-in-dram.patch"
-
-_tilert_apply_pd_dram_patch() {
-    [[ "$TILERT_PD_BUFFER_DEVICE" == "cpu" ]] || { echo "[SETUP] PD buffers on GPU (TILERT_PD_BUFFER_DEVICE=$TILERT_PD_BUFFER_DEVICE); tilert unpatched"; return 0; }
-    local dir
-    dir="$("$PY" -c 'import os, tilert.pd_vllm as m; print(os.path.dirname(m.__file__))')" || { echo "[SETUP] ERROR: cannot locate tilert.pd_vllm"; exit 1; }
-    if grep -q "def alloc_pinned_huge" "$dir/transport.py"; then
-        echo "[SETUP] tilert PD-buffers-in-DRAM patch already applied in $dir"
-        return 0
-    fi
-    [[ -f "$_TILERT_PD_DRAM_PATCH" ]] || { echo "[SETUP] ERROR: missing $_TILERT_PD_DRAM_PATCH"; exit 1; }
-    echo "[SETUP] applying $(basename "$_TILERT_PD_DRAM_PATCH") to $dir (waiver docs/waiver/3330.md)"
-    patch -p1 -s -N -d "$dir" < "$_TILERT_PD_DRAM_PATCH" || { echo "[SETUP] ERROR: patch failed to apply"; exit 1; }
-    "$PY" -m py_compile "$dir"/*.py "$dir"/profiles/*.py || { echo "[SETUP] ERROR: patched tilert.pd_vllm does not compile"; exit 1; }
-    "$PY" -c 'from tilert.pd_vllm.transport import alloc_pinned_huge' || { echo "[SETUP] ERROR: alloc_pinned_huge missing after patch"; exit 1; }
-    _SETUP_INSTALLED+=("tilert-pd-buffers-in-dram.patch")
-}
-
 install_tilert_decode() {
     install_tilert_container_tools
     _tilert_install_wheel full
-    _tilert_apply_pd_dram_patch
     _tilert_install_missing uvicorn $TILERT_HTTP_DEPS
     _tilert_install_missing mooncake.engine "$TILERT_TRANSPORT_DEPS"
     _tilert_install_missing transformers "$TILERT_TRANSFORMERS_SPEC"
@@ -177,7 +149,6 @@ install_tilert_prefill() {
     echo "[SETUP] prefill-side vLLM $vllm_v"
     install_tilert_container_tools
     _tilert_install_wheel no-deps
-    _tilert_apply_pd_dram_patch
     _tilert_install_missing mooncake.engine "$TILERT_TRANSPORT_DEPS"
     "$PY" -c "import tilert.pd_vllm.prefill_connector" 2>/dev/null || {
         echo "[SETUP] WARN: import tilert.pd_vllm.prefill_connector failed (vLLM will report again when loading the connector plugin):"
@@ -194,11 +165,7 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     export PATH="${UCX_HOME}/bin:/usr/local/bin/etcd:/root/.cargo/bin:${PATH}"
     export LD_LIBRARY_PATH="${UCX_HOME}/lib:${RIXL_HOME}/lib:${RIXL_HOME}/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
 elif [[ "$ENGINE" == "tilert" ]]; then
-    check_env_vars TILERT_VERSION TILERT_PD_BUFFER_DEVICE
-    if [[ "$TILERT_PD_BUFFER_DEVICE" == "cpu" && "$TILERT_VERSION" != "0.1.6" ]]; then
-        echo "[SETUP] ERROR: $_TILERT_PD_DRAM_PATCH targets tilert 0.1.6, got $TILERT_VERSION; drop the patch, this check and TILERT_PD_BUFFER_DEVICE when bumping to a release with DRAM PD buffers"
-        exit 1
-    fi
+    check_env_vars TILERT_VERSION
     TILERT_PIP_SPEC="$TILERT_PACKAGE==$TILERT_VERSION"
     _tilert_resolve_python
     case "${TILERT_ROLE:-}" in
