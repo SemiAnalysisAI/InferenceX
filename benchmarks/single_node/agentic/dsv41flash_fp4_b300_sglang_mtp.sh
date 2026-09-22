@@ -70,7 +70,11 @@ fi
 # 38.83 GiB. Give TP2's larger working sets more KV space before retaining
 # additional SWA tails; keep the conservative low-concurrency allocation.
 MEM_FRACTION_STATIC=0.70
-if (( TP == 2 && CONC >= 16 )); then
+if (( TP == 2 && CONC >= 32 )); then
+    # At C64, 0.80 left 43.59 GiB after graphs but only 18.29M full tokens.
+    # Retain more long prefixes while leaving room for transient prefills.
+    MEM_FRACTION_STATIC=0.85
+elif (( TP == 2 && CONC >= 16 )); then
     MEM_FRACTION_STATIC=0.80
 fi
 SWA_PREFIX_TAILS=$((64 * CONC))
