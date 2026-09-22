@@ -75,17 +75,11 @@ elif (( CUDA_GRAPH_MAX_BS > 128 )); then
     CUDA_GRAPH_MAX_BS=128
 fi
 
-# The indexer's scoring buffer and the hyper-connection activations scale with
-# the prefill chunk times the 1M context. 4096 at mem-fraction 0.8 left 16 GB
-# of headroom on the 80 GB card and c8 OOMed in eager extend once five
-# requests were live with a 570k-token prompt pending (run 35304509605); 2048
-# with 0.7 leaves 24 GB and halves the per-chunk working set.
-# Back to 4096 with the static fraction kept at 0.7: at 2048 prefill ran near
-# 1,000 tok/s and c4 failed AIPerf's 95% latency-coverage check (TTFT 87.6%,
-# ITL 88.4% over the 3600 s window, run 35307250127) while c1/c2 passed.
-# 0.7 leaves 24 GB for the doubled per-chunk working set instead of the
-# 16 GB that OOMed c8 at 0.8/4096.
-CHUNKED_PREFILL_SIZE=4096
+# Exact TP8/EP1 Marlin pads the native expert shards from width 288 to 384,
+# increasing resident weight memory. Reserve one quarter of HBM for runtime
+# work and bound the indexer's [chunk, context] temporary at the full 1M context.
+# Capacity and transient headroom require runtime validation on every point.
+CHUNKED_PREFILL_SIZE=2048
 
 # Saturation arms carry a larger in-flight working set than the 30-minute
 # default warmup drain allows.
@@ -133,8 +127,9 @@ case "$SPEC_DECODING" in
         ;;
 esac
 
-# Retain the supported TP cache policy while qualifying the exact EP1 topology.
-SWA_PREFIX_TAILS=$(( CONC >= 4 ? 32 * CONC : 8 * CONC ))
+# The stock cap-mode reserve is four tails per live request (max-running=2*C).
+# Larger EP8-era reserves consume the limited EP1 KV budget before full KV.
+SWA_PREFIX_TAILS=$((8 * CONC))
 
 SGLANG_CMD=(
     python3 -m sglang.launch_server
@@ -145,10 +140,9 @@ SGLANG_CMD=(
     # Native MXFP4 Marlin supports Hopper with BF16 activations; dense FP8
     # operators and shipped DSpark precision remain unchanged.
     --moe-runner-backend marlin
-    --mem-fraction-static 0.7
+    --mem-fraction-static 0.75
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
-    # EP1 changes expert sharding and its resident weight budget. Full-model
-    # startup verifies each pool, including 768/896 tails at C24/C28.
+    # Preserve native context while budgeting both live SWA and reusable tails.
     --swa-prefix-tails "$SWA_PREFIX_TAILS"
     "${SPECULATIVE_ARGS[@]}"
     "${SCHEDULING_ARGS[@]}"
