@@ -632,7 +632,7 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
       - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [56, 72], spec-decoding: mtp }
 
 minimaxm3-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202609140645-lirzhang-triton-build
+  image: rocm/atom-dev:nightly_202609171455
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: cluster:mi355x-amds
@@ -641,11 +641,14 @@ minimaxm3-fp4-mi355x-atom-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.20
+    # 0.687 targets ~256 GB/rank on the dram-offload arms: LMCACHE_MAX_LOCAL_CPU_SIZE
+    # = TOTAL_CPU_DRAM_GB / TP = node_DRAM * dram-utilization / 8 (TP-independent).
+    - dram-utilization: 0.687
       search-space:
       - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 5, 8, 10, 12, 15, 20, 24, 28, 32], spec-decoding: mtp }
-      - { tp: 2, kv-offloading: none, conc-list: [1, 2, 5], spec-decoding: mtp }
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [40, 48], spec-decoding: mtp }
+      - { tp: 2, kv-offloading: none, conc-list: [1, 2], spec-decoding: mtp }
+      - { tp: 2, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5rc3+rocm7.2.4" }, conc-list: [20, 25, 30], spec-decoding: mtp }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5rc3+rocm7.2.4" }, conc-list: [40, 48], spec-decoding: mtp }
 
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
@@ -1146,7 +1149,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=1"
 
 minimaxm3-fp8-mi300x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36
+  image: vllm/vllm-openai-rocm:v0.29.0
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: cluster:mi300x-amd
@@ -1168,7 +1171,7 @@ minimaxm3-fp8-mi300x-vllm-agentic-mtp:
 # golden AL 3.51 for throughput, real block verification for evals, adaptive
 # verification off on ROCm.
 dsv41flash-fp4-mi300x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
+  image: vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi300x-amd
@@ -1179,14 +1182,26 @@ dsv41flash-fp4-mi300x-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      # Follow upstream AMD Engram defaults; omit the CUDA-only config flag.
+      # The recipe sets engram cpu_offload per TP: off at TP8 so this curve stays
+      # comparable with the validated concurrency 1-32 run, on below TP8 where
+      # the tables would not fit beside the checkpoint share on a 192 GB card.
+      # vllm-project/vllm#57491 widened the two is_cuda() gates to
+      # is_cuda_alike(), so engram_config resolves on gfx942 in this image.
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      # TP4 halves the GPUs per server. With the Engram tables in pinned host
+      # memory the resident weights are ~81 GiB per rank.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      # No TP2 arm on this SKU. Measured in run 35671005506: at TP2 the resident
+      # weights are ~145 GiB per rank, and even with the indexer buffer halved
+      # to 4096 batched tokens the engine reported "Available KV cache memory:
+      # -13.51 GiB" and refused to start. A 192 GB card cannot hold this
+      # checkpoint at TP2 with a usable KV pool; MI325X does it on 256 GB.
 
 # GLM-5.2 FP8 full-context AgentX refresh on MI325X. This preserves the TP8
 # GPU-resident-KV c1/c2/c3/c4/c5/c6/c8 curve from Actions run 29657732517
 # and enables EAGLE MTP with the committed thinking-on golden AL.
 glm5.2-fp8-mi325x-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.16-rocm720-mi30x
+  image: lmsysorg/sglang:v0.5.19-rocm720-mi30x
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:mi325x-amds
@@ -1221,7 +1236,7 @@ minimaxm3-fp8-mi325x-vllm-agentic-mtp:
 # golden AL 3.51 for throughput, real block verification for evals, adaptive
 # verification off on ROCm.
 dsv41flash-fp4-mi325x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
+  image: vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi325x-amds
@@ -1232,8 +1247,18 @@ dsv41flash-fp4-mi325x-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      # Follow upstream AMD Engram defaults; omit the CUDA-only config flag.
+      # The recipe sets engram cpu_offload per TP: off at TP8 so this curve stays
+      # comparable with the validated concurrency 1-32 run, on below TP8 where
+      # the tables would not fit beside the checkpoint share on a 256 GB card.
+      # vllm-project/vllm#57491 widened the two is_cuda() gates to
+      # is_cuda_alike(), so engram_config resolves on gfx942 in this image.
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      # TP4 halves the GPUs per server. With the Engram tables in pinned host
+      # memory the resident weights are ~81 GiB per rank.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      # TP2 quarters them. Resident weights rise to ~145 GiB per rank, so the
+      # recipe halves the indexer buffer and caps the scheduler here.
+      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
 
 dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
   # Renamed from dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp when this arm
