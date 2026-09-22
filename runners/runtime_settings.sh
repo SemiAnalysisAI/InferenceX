@@ -46,8 +46,4 @@ case "${RUNNER_NAME%%_*}" in
         check_env_vars GITHUB_WORKSPACE
         export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
         ;;
-    rtx6000pro-lat)
-        export HF_HUB_CACHE_MOUNT=/var/lib/inferencex/hf-hub-cache
-        export NCCL_IB_DISABLE=1
-        ;;
 esac

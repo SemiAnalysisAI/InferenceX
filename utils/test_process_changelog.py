@@ -691,6 +691,39 @@ def test_invalid_key_after_valid_key_rejects_entire_selection(changelog_run, key
         changelog_run([{"config-keys": keys}])
 
 
+@pytest.mark.parametrize("keys,expected_concs", [
+    (["retired", "single"], [16, 32, 64]),
+    (["retired"], []),
+])
+def test_archived_changelog_keys_do_not_schedule_retired_configs(
+    planning_repo, changelog_run, keys, expected_concs,
+):
+    archive = planning_repo[0] / "configs/deprecated"
+    archive.mkdir()
+    # Historical settings need not satisfy the current runtime schema. An older
+    # archived version of an active key must not replace its current definition.
+    (archive / "nvidia-master.yaml").write_text("retired: {}\nsingle: {}\n")
+    output = changelog_run([{"config-keys": keys, "scenario-type": ["fixed-seq-len"]}])
+    assert [row["conc"] for row in output["single_node"].get("8k1k", [])] == expected_concs
+    assert [row["conc"] for row in output["evals"]] == ([32, 64] if expected_concs else [])
+    assert output["multi_node"] == {}
+
+
+@pytest.mark.parametrize("keys,flags,message", [
+    (["retired", "missing"], {}, "Config key 'missing' not found"),
+    (["retired-*"], {}, "No config keys matched"),
+    (["retired"], {"append-only": True}, "Config key 'retired' not found"),
+])
+def test_archives_do_not_relax_unknown_keys_wildcards_or_append_only(
+    planning_repo, changelog_run, keys, flags, message,
+):
+    archive = planning_repo[0] / "configs/deprecated"
+    archive.mkdir()
+    (archive / "nvidia-master.yaml").write_text("retired: {}\nretired-old: {}\n")
+    with pytest.raises(ValueError, match=message):
+        changelog_run([{"config-keys": keys, **flags}])
+
+
 @pytest.mark.parametrize("trim", [False, True])
 def test_append_only_main_runs_only_added_points_and_skips_evals(planning_repo, changelog_run, trim):
     root, master, _ = planning_repo

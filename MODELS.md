@@ -58,6 +58,8 @@ Rationale: `dsv4` carries the largest single-turn footprint in the repository. 4
 
 **Deprecation parity audit (2026-09-21):** Active master configs and benchmark-script locations match the enacted retirements above and in the support matrix below. GLM-5.1 B200 TileRT remains the documented exception to the earlier GLM-5/5.1 and 1k1k retirements. Conditional A/B baseline retirement remains pending; non-speculative Pareto contributors remain supported. The broader routing audit also removed stale retired-model branches from launchers/runtime settings and a GLM-5-only environment override, and corrected workflow/agent guidance that still recommended retired coverage. SPEED-Bench collectors, historical result readers, and the explicitly retained recipe YAMLs remain available. Deprecated configs are consolidated in [`configs/deprecated/amd-master.yaml`](configs/deprecated/amd-master.yaml) and [`configs/deprecated/nvidia-master.yaml`](configs/deprecated/nvidia-master.yaml).
 
+**Single-node SRT-only cutover (2026-09-22):** Active single-node fixed-sequence recipes now use SRT-Slurm. The two Docker-only Qwen3.5 RTX PRO 6000 FP4 configs (with and without MTP) are retired, with their original settings preserved in `configs/deprecated/nvidia-master.yaml` and their scripts in `benchmarks/single_node/fixed_seq_len/deprecated/`. The unused `rtx6000pro-lat` runner mappings, launcher, and runtime settings are removed. Qwen3.5 remains active on the other supported Slurm pools; AgentX and multi-node coverage are unchanged.
+
 ## Scenarios
 
 | Scenario | ISL/OSL | Status |

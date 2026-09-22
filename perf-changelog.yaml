@@ -8920,3 +8920,15 @@
     selected SPEED-Bench collector paths separate
   - 活跃的 Slurm 单节点定长作业必须提供原生 SRT 配方，并移除已替代的 Bash 实现；AgentX、多节点和显式选择的 SPEED-Bench 采集器保留独立执行路径
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
+
+- config-keys:
+  - qwen3.5-fp4-rtx6000pro-sglang
+  - qwen3.5-fp4-rtx6000pro-sglang-mtp
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Retire the Docker-only RTX PRO 6000 fixed-sequence configs and runner routing
+    so active single-node fixed-sequence coverage uses SRT-Slurm exclusively;
+    preserve the original configs and scripts in the existing deprecated archives
+  - 退役仅支持 Docker 的 RTX PRO 6000 定长配置及 runner 路由，使活跃的单节点定长覆盖仅使用 SRT-Slurm；原始配置和脚本保留在现有弃用归档中
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352

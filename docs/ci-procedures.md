@@ -180,6 +180,8 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
 
 Add `--all-evals` and/or `--evals-only` when those PR modifiers will be active. [`run-sweep.yml`](../.github/workflows/run-sweep.yml) passes the same flags. Never use a formatter to rewrite `perf-changelog.yaml`, and never treat `yaml.safe_load` alone as sufficient changelog validation.
 
+Changelog entries may name configs retired later in the same PR. Exact keys absent from active masters but present in the matching vendor `configs/deprecated/` archive remain in changelog metadata and produce no jobs. Active definitions take precedence over archived versions; wildcards match only active configs, unknown keys still fail, and `append-only` entries cannot retire configs.
+
 ## Manual end-to-end dispatch
 
 Use [`e2e-tests.yml`](../.github/workflows/e2e-tests.yml) for a bounded one-off run only after the identical generator command succeeds locally. Make the test name unique. In the common pattern, `--ref main` selects the deployed workflow definition while input `ref` selects the branch or SHA to measure. Setup resolves that ref once and passes its checkout SHA to all eight benchmark/eval routes, covering single-node, multi-node, fixed-sequence, and AgentX jobs. Queued jobs keep that SHA if the branch advances. With no input `ref`, the run uses `github.sha` as before.
