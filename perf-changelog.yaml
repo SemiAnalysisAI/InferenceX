@@ -8596,4 +8596,4 @@
   description:
     - "Add a throughput-only DeepSeek-V4-Pro-0813 ATOM 1P1D DPA baseline at concurrency 128, 192 and 256 on two MI355X nodes, eight GPUs per role. Use plain Mooncake KV transfer with no LMCache CPU/NVMe offload, and DSpark K3 at the committed golden acceptance length."
     - "新增 DeepSeek-V4-Pro-0813 ATOM 1P1D DPA 吞吐测试：P/D 各一台八卡 MI355X，并发 128、192、256。使用普通 Mooncake KV 传输，关闭 LMCache CPU/NVMe offload，DSpark K3 使用仓库已有 golden AL。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/0
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3355
