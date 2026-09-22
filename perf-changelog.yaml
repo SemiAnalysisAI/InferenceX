@@ -8559,7 +8559,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add GB300 SGLang DeepSeek-V4.1-Flash AgentX TP2/EP2 and TP4/EP4 candidates on official nightly-dev-cu13-20260921-0f6761b5, digest sha256:987c7e4bd26918647211a5dcad72a2bdf2a5f394ac1469eff730e7517fc139be."
+    - "Add GB300 SGLang DeepSeek-V4.1-Flash AgentX TP2/EP2 and TP4/EP4 candidates on official nightly-dev-cu13-20260922-582389ce, digest sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40."
     - "The DSpark arm keeps canonical thinking-on five-token AL 3.51 and real eval verification, using the official nightly shipped draft precision and KV layout without custom precision patches; full-model qualification remains pending."
     - "Keep original Engram tables in GPU memory on TP4 to avoid measured host huge-page fragmentation; TP2 uses per-rank anonymous host tables and local checkpoint paths for file-scoped cache advice without host sysctl changes. Keep GPU KV cache, 4096-token prefill chunks, 0.80 static memory fraction, and automatic backend selection."
     - "Prioritize DSpark across the full AgentX concurrency curve and test 16 decode steps between prefill chunks with unchanged shipped precision and canonical acceptance; remove the STP sweep arm because measured DSpark points dominate its completed diagnostics."

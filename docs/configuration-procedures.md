@@ -606,3 +606,5 @@ The GB300 DSpark cache candidate reserves `64 * CONC` SWA prefix tails at C2 and
 above, capped at 4096; C1 retains the upstream default. This redistributes the
 existing static KV pool without changing checkpoint precision. Matched C8 screens
 and full canonical performance/accuracy are required before adoption.
+The candidate pins official `nightly-dev-cu13-20260922-582389ce`; repeat startup
+and full accuracy qualification because upstream changed parallel execution contexts.
