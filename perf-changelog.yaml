@@ -8647,5 +8647,5 @@
     - "Use expandable CUDA allocator segments to reduce fragmentation from long-context indexer masks without changing checkpoint precision or the static KV budget."
     - "Select the supported native MXFP4 Marlin MoE backend on Hopper, retaining BF16 activations and the nightly's shipped draft precision."
     - "Retain 8 SWA prefix tails per concurrency at C1/C2 after rejecting the 128-tail floor in matched canonical testing; use 32 per concurrency at C4 and above, reaching 896 at C28, with the changed EP1 pool requiring fresh startup and full-model qualification."
-    - "Allow 12-hour allocations and a one-hour warmup drain for performance at C20 and above, preserving every warmup request and the canonical 3600-second profile; full GSM8K remains uncapped."
+    - "Allow 12-hour allocations, a matching 750-minute job timeout, and a one-hour warmup drain for performance at C20 and above, preserving every warmup request and the canonical 3600-second profile; full GSM8K remains uncapped."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3345
