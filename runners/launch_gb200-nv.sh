@@ -189,10 +189,6 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-v4-pro"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
-    elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
-        # The GLM-5.1 sglang recipes reuse the glm-5-fp4 alias.
-        export MODEL_PATH="/mnt/lustre01/models/GLM-5.1-NVFP4"
-        export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
     elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/Qwen3.5-397B-A17B-FP8"
         export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
@@ -202,20 +198,11 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/users-public/sa-shared/models/GLM-5.2-NVFP4"
         export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
-    elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/GLM-5.1-NVFP4"
-        export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
-    elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/GLM-5.1-FP8"
-        export SRT_SLURM_MODEL_PREFIX="glm-5.1-fp8"
     else
         export MODEL_PATH=$MODEL
     fi
 elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
-    if [[ $MODEL_PREFIX == "gptoss" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/gpt-oss-120b"
-        export SERVED_MODEL_NAME="gpt-oss-120b"
-    elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
+    if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/numa1/models/DeepSeek-R1-0528-NVFP4-v2"
         export SERVED_MODEL_NAME="deepseek-r1-fp4"
         export SRT_SLURM_MODEL_PREFIX="dsr1"
@@ -223,27 +210,16 @@ elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         export MODEL_PATH="/mnt/numa1/models/DeepSeek-R1-0528"
         export SERVED_MODEL_NAME="deepseek-r1-fp8"
         export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
-    elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
-        export SERVED_MODEL_NAME="kimi-k2.5-nvfp4"
-        export SRT_SLURM_MODEL_PREFIX="nvidia/Kimi-K2.5-NVFP4"
-    elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="/mnt/lustre01/slurm-shared/glm-model/GLM-5-NVFP4"
-        export SERVED_MODEL_NAME="glm-5-nvfp4"
-        export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5-NVFP4"
     elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M3-NVFP4"
         export SERVED_MODEL_NAME="nvidia/MiniMax-M3-NVFP4"
         export SRT_SLURM_MODEL_PREFIX="minimax-m3-nvfp4"
     else
-        echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss, dsr1, kimik2.5, glm5, or minimaxm3 (fp4)"
+        echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: dsr1 or minimaxm3 (fp4)"
         exit 1
     fi
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
-    if [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
-        export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
-    elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
+    if [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
         # Node-local NVMe; the checkpoint must be pre-staged at this exact path on every allocated node.
         export MODEL_PATH="/mnt/numa1/models/Kimi-K3"
         export SRT_SLURM_MODEL_PREFIX="kimi-k3"
@@ -256,12 +232,6 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
         SRT_CLUSTER_ARGS+=(--model deepseek-v4-pro-mxfp4 "/mnt/lustre01/models/DeepSeek-V4-Pro")
-    elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5-NVFP4"
-        export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
-    elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5"
-        export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
     elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M3-MXFP8"
         export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
@@ -269,7 +239,7 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M3-NVFP4"
         export SRT_SLURM_MODEL_PREFIX="minimax-m3-nvfp4"
     else
-        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, kimik3/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8, minimaxm3/fp4, minimaxm3/fp8"
+        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik3/fp4, dsv4/fp4, minimaxm3/fp4, minimaxm3/fp8"
         exit 1
     fi
 else
@@ -280,7 +250,7 @@ NGINX_IMAGE="nginx:1.27.4"
 
 uses_watchtower_shared_fs() {
     case "$MODEL_PREFIX" in
-        minimaxm2.5|minimaxm3|kimik2.5|kimik3|qwen3.5|glm5.2) return 0 ;;
+        minimaxm3|kimik3|qwen3.5|glm5.2) return 0 ;;
     esac
     # dsv4 multinode runs only under dynamo-vllm on watchtower, where the runner
     # home is not cross-mounted to compute nodes.
@@ -310,20 +280,24 @@ if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
     USES_DCGM_POWER=1
 fi
 
-if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" ]]; then
-    echo "Error: dcgm-power lanes are only validated for FRAMEWORK=dynamo-sglang, got: $FRAMEWORK" >&2
-    exit 1
-fi
-
 USES_AGENTX_POWER=0
 if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" ]]; then
     if [[ "$MODEL_PREFIX" == "glm5.2" && "$PRECISION" == "fp4" &&
+        "$FRAMEWORK" == "dynamo-sglang" &&
         "$_RECIPE_REL" == "recipes/glm5.2/sglang/gb200-fp4/agentx/agg.yaml" ]]; then
         USES_AGENTX_POWER=1
+    elif [[ "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" &&
+        "$FRAMEWORK" == "dynamo-vllm" &&
+        "$_RECIPE_REL" == recipes/kimik3/vllm/gb200-fp4/agentx/* ]]; then
+        USES_AGENTX_POWER=1
     else
-        echo "Error: GB200 AgentX dcgm-power requires the GLM-5.2 aggregate recipe" >&2
+        echo "Error: AgentX dcgm-power requires the GLM-5.2 aggregate or supported Kimi-K3 recipe" >&2
         exit 1
     fi
+fi
+if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" && "$USES_AGENTX_POWER" != "1" ]]; then
+    echo "Error: dcgm-power requires dynamo-sglang or the supported Kimi-K3 AgentX route" >&2
+    exit 1
 fi
 
 if [[ "$USES_DCGM_POWER" == "1" ]]; then
@@ -573,7 +547,7 @@ LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 AGENTX_POWER_RC=0
 stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || AGENTX_POWER_RC=$?
 if [[ "$AGENTX_POWER_RC" != "0" && "$USES_AGENTX_POWER" != "1" ]]; then
-    exit 1
+    exit "$AGENTX_POWER_RC"
 fi
 
 set -x
@@ -582,42 +556,10 @@ echo "Job $JOB_ID finished!"
 echo "Collecting results..."
 
 if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY}" != "true" ]]; then
-    mkdir -p "$LOGS_DIR/power"
-    # Accounting can lag squeue removal. Retry only a missing/nonterminal row.
-    for status_attempt in 1 2 3; do
-        echo "$status_attempt" > "$LOGS_DIR/power/native-job-status-attempts.txt"
-        sacct -X -n -P -j "$JOB_ID" --format=JobIDRaw,State,ExitCode \
-            > "$LOGS_DIR/power/native-job-status.txt" \
-            2>> "$LOGS_DIR/power/native-job-status.stderr" || true
-        if awk -F'|' -v job="$JOB_ID" '
-            $1 == job && $2 !~ /^(PENDING|RUNNING|COMPLETING)$/ { found = 1 }
-            END { exit !found }
-        ' "$LOGS_DIR/power/native-job-status.txt"; then
-            break
-        fi
-        if [[ "$status_attempt" != "3" ]]; then sleep 5; fi
-    done
-    if ! awk -F'|' -v job="$JOB_ID" '
-        $1 == job { found = 1; if ($2 != "COMPLETED" || $3 != "0:0") failed = 1 }
-        END { exit (!found || failed) }
-    ' "$LOGS_DIR/power/native-job-status.txt"; then
-        AGENTX_POWER_RC=1
-    fi
-    copy_agentic_results "$INFMAX_WORKSPACE" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" || AGENTX_POWER_RC=$?
-    POWER_LOGS_ROOT="$(pwd -P)/$LOGS_DIR"
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
-    for concurrency in "${POWER_CONCURRENCIES[@]}"; do
-        (
-            cd "$GITHUB_WORKSPACE" || exit 1
-            python3 -m utils.agentic.aggregation.power_adapter \
-                --result-dir "$POWER_LOGS_ROOT/agentic/conc_${concurrency}" \
-                --agg-result "$GITHUB_WORKSPACE/${RESULT_FILENAME}_conc${concurrency}.json" \
-                --power-dir "$POWER_LOGS_ROOT/power" \
-                --logs-root "$POWER_LOGS_ROOT" \
-                --expected-producer-sha "$SRT_SLURM_COMMIT" \
-                --require-power
-        ) || AGENTX_POWER_RC=$?
-    done
+    collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" "$INFMAX_WORKSPACE" \
+        "$GITHUB_WORKSPACE" "$RESULT_FILENAME" "$SRT_SLURM_COMMIT" \
+        "${POWER_CONCURRENCIES[@]}" || AGENTX_POWER_RC=$?
 fi
 
 if [ -d "$LOGS_DIR" ]; then

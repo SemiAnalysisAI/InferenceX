@@ -2,11 +2,11 @@ name: CODEOWNER Sign-off Verify
 
 on:
   issue_comment:
-    types: [created, edited]
+    types: [created]
   pull_request_review:
-    types: [submitted, edited]
+    types: [submitted]
   pull_request_review_comment:
-    types: [created, edited]
+    types: [created]
   workflow_dispatch:
     inputs:
       pr-number:
@@ -42,7 +42,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write # Publish PR feedback.
-      issues: write # Update the verdict comment.
+      issues: write # Post a new verdict comment.
       actions: read # Read workflow runs and artifacts.
     steps:
       - name: Checkout trusted workflow code
@@ -65,104 +65,9 @@ jobs:
         id: resolve
         if: steps.scope.outputs.required == 'true'
         env:
+          GH_TOKEN: ${{ github.token }}
           SCOPED_HEAD_SHA: ${{ steps.scope.outputs.head-sha }}
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const repoFull = `${owner}/${repo}`;
-            const eventName = context.eventName;
-            let prNumber, author, refId, kind, fetchCmd;
-            if (eventName === 'issue_comment') {
-              prNumber = context.payload.issue.number;
-              author = context.payload.comment.user.login;
-              refId = context.payload.comment.id;
-              kind = 'conversation comment';
-              fetchCmd = `gh api repos/${repoFull}/issues/comments/${refId} --jq .body`;
-            } else if (eventName === 'pull_request_review') {
-              prNumber = context.payload.pull_request.number;
-              author = context.payload.review.user.login;
-              refId = context.payload.review.id;
-              kind = 'review summary';
-              fetchCmd = `gh api repos/${repoFull}/pulls/${prNumber}/reviews/${refId} --jq .body`;
-            } else if (eventName === 'pull_request_review_comment') {
-              prNumber = context.payload.pull_request.number;
-              author = context.payload.comment.user.login;
-              refId = context.payload.comment.id;
-              kind = 'inline review comment';
-              fetchCmd = `gh api repos/${repoFull}/pulls/comments/${refId} --jq .body`;
-            } else if (eventName === 'workflow_dispatch') {
-              // Parse a sign-off URL like
-              //   https://github.com/OWNER/REPO/pull/123#issuecomment-456
-              //   .../pull/123#pullrequestreview-456
-              //   .../pull/123#discussion_r456
-              const url = (context.payload.inputs && context.payload.inputs.comment_url) || '';
-              const prMatch = url.match(/\/pull\/(\d+)/);
-              if (!prMatch) {
-                core.setOutput('proceed', 'false');
-                core.setFailed(`comment_url must contain /pull/<number>: ${url}`);
-                return;
-              }
-              prNumber = parseInt(prMatch[1], 10);
-              let m;
-              if ((m = url.match(/#issuecomment-(\d+)/))) {
-                refId = m[1];
-                kind = 'conversation comment';
-                fetchCmd = `gh api repos/${repoFull}/issues/comments/${refId} --jq .body`;
-                const c = await github.rest.issues.getComment({ owner, repo, comment_id: parseInt(refId, 10) });
-                author = c.data.user.login;
-              } else if ((m = url.match(/#pullrequestreview-(\d+)/))) {
-                refId = m[1];
-                kind = 'review summary';
-                fetchCmd = `gh api repos/${repoFull}/pulls/${prNumber}/reviews/${refId} --jq .body`;
-                const r = await github.rest.pulls.getReview({ owner, repo, pull_number: prNumber, review_id: parseInt(refId, 10) });
-                author = r.data.user.login;
-              } else if ((m = url.match(/#discussion_r(\d+)/))) {
-                refId = m[1];
-                kind = 'inline review comment';
-                fetchCmd = `gh api repos/${repoFull}/pulls/comments/${refId} --jq .body`;
-                const rc = await github.rest.pulls.getReviewComment({ owner, repo, comment_id: parseInt(refId, 10) });
-                author = rc.data.user.login;
-              } else {
-                core.setOutput('proceed', 'false');
-                core.setFailed(`comment_url must end with #issuecomment-<id>, #pullrequestreview-<id>, or #discussion_r<id>: ${url}`);
-                return;
-              }
-            } else {
-              core.setOutput('proceed', 'false');
-              return;
-            }
-
-            const { data: pr } = await github.rest.pulls.get({
-              owner, repo, pull_number: prNumber,
-            });
-
-            if (pr.head.sha !== process.env.SCOPED_HEAD_SHA) {
-              core.setFailed('PR head changed while determining sign-off scope; retry on the current head.');
-              return;
-            }
-
-            if (eventName !== 'workflow_dispatch' && (pr.state !== 'open' || pr.draft)) {
-              core.info(`PR #${prNumber} is not ready; skipping.`);
-              return;
-            }
-            const { data: permission } = await github.rest.repos.getCollaboratorPermissionLevel({
-              owner, repo, username: context.actor,
-            });
-            if (!['admin', 'write'].includes(permission?.permission) ||
-                !['admin', 'maintain', 'write'].includes(permission?.role_name) ||
-                context.actor.endsWith('[bot]') || context.payload.sender?.type === 'Bot') {
-              core.info(`Actor ${context.actor} cannot request verification.`);
-              return;
-            }
-
-            core.setOutput('proceed', 'true');
-            core.setOutput('pr-number', String(prNumber));
-            core.setOutput('head-sha', pr.head.sha);
-            core.setOutput('signoff-author', author);
-            core.setOutput('signoff-kind', kind);
-            core.setOutput('signoff-fetch-cmd', fetchCmd);
+        run: uv run --locked --extra workflows python -m infx.workflows.signoff_resolve
 
       - name: Render verifier prompt
         if: steps.resolve.outputs.proceed == 'true'
@@ -216,20 +121,12 @@ jobs:
             already rendered with this run's PR number, head SHA, and sign-off
             metadata.
 
-      - name: Update verdict comment
+      - name: Post verdict comment
         if: always() && steps.resolve.outputs.proceed == 'true'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
+          GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ steps.scope.outputs.head-sha }}
           PR_NUMBER: ${{ steps.scope.outputs.pr-number }}
           VERIFICATION_SUCCEEDED: ${{ steps.claude.outcome == 'success' }}
-        with:
-          script: |
-            const { publish } = require('./.github/scripts/codeowner-signoff.cjs');
-            await publish({
-              github, context, core,
-              prNumber: Number(process.env.PR_NUMBER),
-              headSha: process.env.HEAD_SHA,
-              verdictPath: '/tmp/codeowner-signoff-verdict.md',
-              verificationSucceeded: process.env.VERIFICATION_SUCCEEDED === 'true',
-            });
+          VERDICT_PATH: /tmp/codeowner-signoff-verdict.md
+        run: uv run --locked --extra workflows python -m infx.workflows.signoff_publish

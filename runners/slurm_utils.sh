@@ -70,6 +70,7 @@ PYENV
             return 1
         fi
         SRT_SLURM_COMMIT=$(git -C "$source" rev-parse HEAD) || return 1
+        SRTCTL_EVAL_ARGS+=(--set benchmark.stream_output=true)
         # A local clone keeps job writes isolated and preserves upstream Git provenance.
         git clone --no-hardlinks "$source" "$destination" || return 1
     fi
@@ -155,6 +156,32 @@ stream_slurm_job_log() {
     echo "Tailing $log_file"
     tail -F -s 2 -n+1 "$log_file" --pid="$poll_pid" 2>/dev/null
     wait "$poll_pid"
+}
+
+verify_slurm_job_status() {
+    local job_id="$1"
+    # Disappearing from squeue means terminal, not successful. Accounting can
+    # lag briefly; inspect only the allocation, never successful service steps.
+    local attempt accounting state exit_code
+    for attempt in {1..10}; do
+        accounting=$(sacct -X -n -P -j "$job_id" --format=State,ExitCode 2>/dev/null) || accounting=""
+        IFS='|' read -r state exit_code <<< "$accounting"
+        case "$state" in
+            COMPLETED)
+                if [[ "$exit_code" == "0:0" ]]; then
+                    return 0
+                fi
+                ;;
+            ""|PENDING|RUNNING|CONFIGURING|COMPLETING)
+                sleep 1
+                continue
+                ;;
+        esac
+        echo "ERROR: Slurm job $job_id ended with state=$state exit_code=$exit_code" >&2
+        return 1
+    done
+    echo "ERROR: could not verify terminal Slurm status for job $job_id" >&2
+    return 1
 }
 
 copy_to_workspace() {

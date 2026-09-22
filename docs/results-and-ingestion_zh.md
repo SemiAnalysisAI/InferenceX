@@ -109,6 +109,16 @@ PR changelog 选择具有代表性的 NVIDIA 和 AMD 覆盖，并非所有受影
 
 启动器或验证失败后仍会运行处理和功耗诊断上传，并在审计工件中保留原始及聚合 JSON。正常 `bmk_*` 上传要求基准和处理步骤成功，因此不完整批次或 Slurm 失败不会发布诊断数据。主分支的入库触发器仍可发布部分失败 sweep 中其他成功配置的数据；这并不证明整个硬件范围已完成覆盖。下游导入器可利用保留的状态拒绝明确失败的基准结果。
 
+### SRT 多节点窗口保留
+
+功耗审计文件在 `selected_window` 中保留独立验证后的测量；`package_integrity_valid`
+记录共享证据检查，`window_validations` 记录逐窗口结论。保留测量仍要求证据可信、
+拓扑匹配且结果绑定正确。其他窗口失败时，顶层及聚合结果的 `power_valid` 仍为 false，
+审计顶层 `metrics` 为空，聚合结果不输出功耗指标，`REQUIRE_POWER=1` 返回失败。
+审计文件仍可包含健康窗口的指标，
+以及顶层 `per_gpu_energy_j` / `per_gpu_max_sample_gap_s` 诊断字段；这些不构成发布许可。
+回放不会重写输入或修复不一致的证据。
+
 ### 原生多节点遥测
 
 `native_power_collect.sh` 和 `native_power_lifecycle.sh` 提供每节点采集及有时限的就绪/停止状态文件。启动器可使用 `LOGS/native_power` 下的原生产物；此前置改动不会启用新 recipe。适配器验证服务 GPU 身份、时钟同步、采集完成及正式窗口完整覆盖，并在审计中保留节点故障、样本数和采集器版本。
@@ -184,7 +194,8 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 正式测量窗口、时区偏移和校验结果。多节点运行在同一审计工件中保留
 `LOGS/power/` 下的部署遥测，以及 `LOGS/agentic/` 下各并发的窗口和校验文件。
 即使基准测试失败，已有的审计文件和 AgentX 聚合结果仍会上传。
-文件缺失不代表路径支持功耗采集：多节点配方还需要兼容的 producer 和 launcher 适配器。
+文件缺失不代表路径支持功耗采集：多节点配方还需启用 `telemetry`，让固定版本的 srt-slurm
+向自定义基准命令导出 `SRT_MEASUREMENT_WINDOW_DIR`；InferenceX 据此目录和回放本身推导结果根目录与并发数。
 缺少测量窗口接口时，聚合结果记录 `power_valid: 0`，审计原因标记为
 `multinode_power_contract_missing`；设置 `REQUIRE_POWER=1` 还会在保留已有结果后使任务失败。
 
