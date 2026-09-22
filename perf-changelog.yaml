@@ -8597,4 +8597,5 @@
     - "Use per-rank host Engram shards, interval 16, and concurrency-scaled SWA prefix capacity: TP4 C1-128 uses static fraction 0.80, chunk 4096, and 128-4096 tails; TP2 C1-8 uses static fraction 0.92, chunk 2048, and 128 tails per session"
     - "Test TP2 loading with the unmodified pinned stock loader and expandable CUDA allocator segments alone; preserve tensor payloads, layouts, and computation"
     - "Resolve local model snapshots, retain robust AgentX HTTP timeouts, and normalize digest-pinned images for the installed Enroot parser with immediate import failure handling"
+    - "Test DSpark block length 4 with committed golden AL 3.26 using the stock loader; keep real verification for full accuracy."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3346

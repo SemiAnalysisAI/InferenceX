@@ -611,3 +611,5 @@ runtime directories stay out of `/workspace`. The MI300X launcher also raises it
 allocation from 180 to 480 minutes for this checkpoint: the HF cache there is node-local, so
 the first arm on each node downloads 511 GB before serving. GPU sweep and eval evidence is
 required before calling either arm validated.
+
+The isolated B200 stock-loader block-length comparison uses four draft tokens with the committed thinking-on golden AL 3.26. Full accuracy retains real draft verification; this candidate is not selected pending matched measurements.
