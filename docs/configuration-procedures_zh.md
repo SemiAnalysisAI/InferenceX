@@ -521,3 +521,30 @@ python -m pytest utils/matrix_logic/ -v
 检查点将仓库挂载到 `/ix` 并重写 `RESULT_DIR`，使 AgentX 运行目录不落在 `/workspace` 下。MI300X
 launcher 还为该检查点将 Slurm 分配时长从 180 分钟提高到 480 分钟：那里的 HF 缓存为节点本地，
 每个节点上的首次运行需先下载 511 GB。在获得 GPU sweep 与 eval 证据之前，不得将任一配方视为已验证。
+
+## DeepSeek-V4-Pro-0813 ATOM P/D 无 offload 测试
+
+`dsv4-fp4-mi355x-atom-disagg-agentic-dpa-mtp` 是仅测吞吐的 AgentX 配置，
+并发为 128、192、256。每档使用两个 MI355X 节点：一个八卡 prefill worker
+和一个八卡 decode worker，两端均为 TP8、开启 DPA、关闭 EP。launcher 参考
+GLM-5.3 配方，沿用 AMD 共用的 P/D 提交链路；提交前会拒绝 offload、不支持的
+拓扑以及这三档之外的并发。
+
+镜像为 `rocm/atom-dev:nightly_202609210314`。两端均使用普通 Mooncake KV
+传输，搭配支持 DPA、按缓存路由的 atomesh。不会创建 LMCache CPU 或 NVMe KV
+池，也不修改 THP 或替换 HIP/HSA。DSpark 使用三个 draft token，吞吐测试的
+acceptance 从仓库已有 `dsv4-pro-0813-dspark.yaml` golden 曲线读取（3.01）。
+P 端保留 TBO 和 `GPU_MAX_HW_QUEUES=5`，D 端关闭 TBO。三档的
+`max-num-seqs` 分别为 256、384、512。
+
+生成精确 CI 矩阵：
+
+```bash
+python -m infx.matrix.generate test-config \
+  --config-files configs/amd-master.yaml \
+  --config-keys dsv4-fp4-mi355x-atom-disagg-agentic-dpa-mtp \
+  --scenario-type agentic-coding --no-evals
+```
+
+新增 changelog 只选择这三档，并为本次诊断测试关闭 eval。仍需 GPU 实测确认
+启动和压测表现；这份配置本身不能证明此前 offload 分配卡住的根因。

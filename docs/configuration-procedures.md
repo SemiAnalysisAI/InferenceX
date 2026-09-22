@@ -585,3 +585,33 @@ runtime directories stay out of `/workspace`. The MI300X launcher also raises it
 allocation from 180 to 480 minutes for this checkpoint: the HF cache there is node-local, so
 the first arm on each node downloads 511 GB before serving. GPU sweep and eval evidence is
 required before calling either arm validated.
+
+## DeepSeek-V4-Pro-0813 ATOM P/D without offload
+
+`dsv4-fp4-mi355x-atom-disagg-agentic-dpa-mtp` is a throughput-only AgentX test
+at concurrency 128, 192, and 256. Each point allocates two MI355X nodes: one
+eight-GPU prefill worker and one eight-GPU decode worker, both TP8 with DPA
+and EP disabled. The launcher follows the shared AMD P/D submission chain used
+by the GLM-5.3 recipe. It rejects offload, unsupported topology, and concurrency
+outside these three points before submission.
+
+The image is `rocm/atom-dev:nightly_202609210314`. Both roles use plain Mooncake
+KV transfer and a DP-aware, cache-aware atomesh router. There is no LMCache CPU
+or NVMe KV pool and no THP or HIP/HSA override. DSpark uses three draft tokens
+with throughput acceptance read from the committed `dsv4-pro-0813-dspark.yaml`
+golden curve (3.01). Prefill keeps TBO and `GPU_MAX_HW_QUEUES=5`; decode keeps
+TBO disabled. `max-num-seqs` is 256, 384, and 512 respectively.
+
+Generate the exact CI matrix with:
+
+```bash
+python -m infx.matrix.generate test-config \
+  --config-files configs/amd-master.yaml \
+  --config-keys dsv4-fp4-mi355x-atom-disagg-agentic-dpa-mtp \
+  --scenario-type agentic-coding --no-evals
+```
+
+The appended changelog selects only these three points and disables evals for
+this diagnostic test. GPU execution is still needed to establish startup and
+benchmark behavior; this configuration alone does not establish the cause of
+the earlier offload allocation hang.
