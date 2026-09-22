@@ -8579,7 +8579,7 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg:
 # Latest multiarch index: sha256:987c7e4bd26918647211a5dcad72a2bdf2a5f394ac1469eff730e7517fc139be.
 # Uses the cookbook's automatic backends and the existing B200 AgentX memory bounds.
 dsv41flash-fp4-b300-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5@sha256:18aed2cd75ed45932a9d409e167e75191e0596a47925de1f176d1cc03036cf8c
+  image: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:35ea4d321b0735051dcce2599fc495853ad1ef30f6a1908f0a75e74204362d14
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b300-dsxe
