@@ -8792,3 +8792,13 @@
   - Pin the native SRT runtime to the reviewed-in-draft AMD/ATOM integration stack plus direct aggregate ATOM support; keep runner hardware settings in cluster profiles and exclude the held served-model-name PR
   - 将原生 SRT 运行时固定到待评审的 AMD/ATOM 集成依赖链及 ATOM 聚合直接服务支持；硬件设置保留在集群配置中，不包含暂缓的 served-model-name PR
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
+
+- config-keys:
+    - qwen3.5-fp4-rtx6000pro-sglang
+    - qwen3.5-fp4-rtx6000pro-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Forward the native Docker server model identity into the shared eval path and reject missing eval metadata before startup"
+    - "将原生 Docker 服务的模型名称传入共享 eval 路径，并在启动前拒绝缺失的 eval 元数据"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352

@@ -24,7 +24,7 @@ EXECUTION_PATH=legacy
 if [[ -n "${SRT_RECIPE:-}" ]]; then
     EXECUTION_PATH=native-single-node
 fi
-NATIVE_MOUNTS=()
+NATIVE_ARGS=()
 if [[ "$EXECUTION_PATH" == native-single-node ]]; then
     source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
     SRTCTL_ROOT=$(mktemp -d "$GITHUB_WORKSPACE/srt-docker.XXXXXX")
@@ -38,7 +38,8 @@ if [[ "$EXECUTION_PATH" == native-single-node ]]; then
     uv pip install -e .
     PYTHONPATH="$GITHUB_WORKSPACE${PYTHONPATH:+:$PYTHONPATH}" \
         python3 -m infx.srt_slurm.docker "$GITHUB_WORKSPACE/$SRT_RECIPE" "$GITHUB_WORKSPACE"
-    NATIVE_MOUNTS=(--volume "$GITHUB_WORKSPACE:/infmax-workspace" --volume "$GITHUB_WORKSPACE:/logs")
+    NATIVE_ARGS=(--volume "$GITHUB_WORKSPACE:/infmax-workspace" --volume "$GITHUB_WORKSPACE:/logs"
+        --env "MODEL_NAME=$MODEL")
     cd "$GITHUB_WORKSPACE"
 fi
 
@@ -101,7 +102,7 @@ done
 
 docker run \
     "${RUNTIME_ENV_ARGS[@]}" \
-    "${NATIVE_MOUNTS[@]}" \
+    "${NATIVE_ARGS[@]}" \
     --env IS_MULTINODE \
     --env REQUIRE_POWER \
     --env INFMAX_CONTAINER_WORKSPACE \

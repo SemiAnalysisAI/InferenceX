@@ -99,3 +99,62 @@ def test_docker_client_failure_and_readiness_clean_up_owned_server(tmp_path, cli
             time.sleep(0.01)
         else:
             pytest.fail("Docker wrapper left its server process alive")
+
+
+def test_rtx_launcher_binds_eval_model_and_preserves_container_failure(tmp_path):
+    binaries = tmp_path / "bin"
+    binaries.mkdir()
+    (tmp_path / "benchmarks").symlink_to(ROOT / "benchmarks", target_is_directory=True)
+    path = tmp_path / "recipe.yaml"
+    path.write_text(yaml.safe_dump({
+        "schema": 2, "name": "fixture", "engine": "sglang",
+        "model": {"path": "hf:test/model", "container": "test:tag", "precision": "fp4"},
+        "resources": {"gpu_type": "rtx6000pro", "gpus_per_node": 8},
+        "frontend": {"type": "sglang", "enable_multiple_frontends": False},
+        "roles": {"agg": {"nodes": 1, "workers": 1, "gpus": 4,
+                           "args": {"tensor-parallel-size": 4, "served-model-name": "test/model"}}},
+        "benchmark": {"type": "custom", "command": "bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh",
+            "env": {"MODEL": "test/model", "ISL": "128", "OSL": "64", "RANDOM_RANGE_RATIO": "0.5", "USE_CHAT_TEMPLATE": "false"}},
+    }))
+    scripts = {
+        "git": 'if [[ "$1" == clone ]]; then mkdir -p "${@: -1}/configs"; else echo test-commit; fi',
+        "uv": 'if [[ "$1" == venv ]]; then mkdir -p .venv/bin; echo ":" > .venv/bin/activate; fi',
+    }
+    for name, body in scripts.items():
+        binary = binaries / name
+        binary.write_text(f"#!/usr/bin/env bash\n{body}\n")
+        binary.chmod(0o755)
+    docker = binaries / "docker"
+    docker.write_text(f"#!{sys.executable}\n" +
+        "import json, os, pathlib, sys\n"
+        "with pathlib.Path(os.environ['CAPTURE']).open('a') as f: f.write(json.dumps(sys.argv[1:])+'\\n')\n"
+        "sys.exit(7 if sys.argv[1] == 'run' else 0)\n")
+    docker.chmod(0o755)
+    env = {**os.environ, "PATH": f"{binaries}:{Path(sys.executable).parent}:{os.environ['PATH']}",
+        "PYTHONPATH": f"{ROOT}:{ROOT / 'utils/srt-slurm/src'}", "GITHUB_WORKSPACE": str(tmp_path),
+        "SRT_RECIPE": path.name, "FRAMEWORK": "sglang", "MODEL": "test/model", "MODEL_PREFIX": "test",
+        "IMAGE": "test:tag", "PRECISION": "fp4", "TP": "4", "GPU_COUNT": "4", "PP_SIZE": "1",
+        "DCP_SIZE": "1", "PCP_SIZE": "1", "EP_SIZE": "1", "DP_ATTENTION": "false", "SPEC_DECODING": "none",
+        "IS_AGENTIC": "0", "RUN_EVAL": "true", "EVAL_ONLY": "true", "MAX_MODEL_LEN": "1024",
+        "ISL": "128", "OSL": "64", "RANDOM_RANGE_RATIO": "0.5", "CONC": "3", "RESULT_FILENAME": "point",
+        "GPU_MONITOR_INTERVAL": "1", "PORT": "9019", "IS_MULTINODE": "false", "HF_HUB_CACHE_MOUNT": str(tmp_path / 'cache'),
+        "HF_HUB_CACHE": "/hf", "NCCL_IB_DISABLE": "1", "EXP_NAME": "test_8k1k", "SCENARIO_SUBDIR": "fixed_seq_len/",
+        "RUNNER_NAME": "fixture_00", "INFERENCEX_RUNTIME_ENV_VARS": "REQUIRE_POWER", "REQUIRE_POWER": "1",
+        "CAPTURE": str(tmp_path / "docker.jsonl"), "MODEL_PATH": ""}
+    result = subprocess.run(["bash", str(ROOT / 'runners/launch_rtx6000pro-lat.sh')], cwd=tmp_path,
+                            env=env, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 7, result.stdout + result.stderr
+    calls = [json.loads(line) for line in Path(env["CAPTURE"]).read_text().splitlines()]
+    run = next(call for call in calls if call[0] == 'run')
+    assert "MODEL_NAME=test/model" in [run[i+1] for i,v in enumerate(run[:-1]) if v == '--env']
+    assert run[-2:] == ["test:tag", "benchmarks/single_node/srt_docker.sh"]
+    assert calls[-1] == ["rm", "-f", "bmk-server-fixture_00"]
+    # Run the emitted script against an external Python stub to verify the
+    # launcher's actual CLI path emitted the eval context and requested model.
+    stub = binaries / "python3"
+    stub.write_text(f"#!{sys.executable}\nimport json,sys\nprint(json.dumps(sys.argv[1:]))\n")
+    stub.chmod(0o755)
+    observed = subprocess.run(["bash", str(tmp_path / "srt-docker-server.sh")], env=env, capture_output=True, text=True, check=True)
+    argv = json.loads(observed.stdout)
+    assert argv[argv.index('--context-length')+1] == '1024'
+    assert argv[argv.index('--served-model-name')+1] == 'test/model'

@@ -10,6 +10,9 @@ for flag in RUN_EVAL EVAL_ONLY; do
         exit 1
     fi
 done
+if [[ "$RUN_EVAL" == true || "$EVAL_ONLY" == true ]]; then
+    check_env_vars MODEL_NAME
+fi
 SERVER_LOG="$INFMAX_CONTAINER_WORKSPACE/server.log"
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
