@@ -403,7 +403,7 @@ Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/mode
 arms, one PR per SKU across h100, h200, b200, b300, gb200, gb300 and mi355x. They follow the
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1),
 which has no released SGLang version for this model yet. B200 pins the CUDA 13 nightly
-`lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5` by digest; the other NVIDIA arms use
+`lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce` by digest; the other NVIDIA arms use
 `lmsysorg/sglang:dev-dsv41` and MI355X uses `lmsysorg/sglang:dev-dsv41-mi35x`.
 
 B200 uses shipped-default DSpark across TP4/EP4 C1–128 and TP2/EP2 C1–8.
