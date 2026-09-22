@@ -163,7 +163,7 @@ class NullTelemetry(_PollingProvider):
 
 
 class NvmlTelemetry(_PollingProvider):
-    # FIXME(Harrison): switch to DCGM (dcgm_fields / nv-hostengine) for
+    # FIXME(hbarclay): switch to DCGM (dcgm_fields / nv-hostengine) for
     # ~1 ms sampling and richer prof fields once DCGM is blessed on the
     # benchmark hosts; NVML polling + sample-ring drain is the interim.
     name = "nvml"
