@@ -134,3 +134,7 @@ collects unused blocks above 79.2% of total HBM. This is separate from SGLang
 static memory 0.60. Expandable segments remain disabled for AITER graph IPC. This is
 a hypothesis under test, not a qualified performance or stability improvement;
 weights, KV format and shipped DSpark precision are unchanged.
+
+## Rebuilt nightly and matched topology candidate
+
+The 14:49 UTC September 22 rebuild uses digest `6d71b69744074b26a02fd6267223227ca7399c540e0c1a73db10fe422a2ca405`, SGLang `244db08d60` and AITER `acf8fdf9`. All six source files checked by the installer retain identical hashes; GPU import and serving checks are pending. Earlier accuracy and performance evidence belongs to the `f35d19d2` image and TP4/EP4. This experiment matches vLLM topology coverage with TP2/EP1 and TP4/EP1 through C128, host Engram at TP2 and GPU Engram at TP4. EP1 uses upstream kernel lookup, without the EP4-only preview tuning override. No point is qualified by matrix generation; startup, full accuracy and canonical performance must establish support.

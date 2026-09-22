@@ -99,3 +99,7 @@ V4.1 设置 `q_head_norm=False`。nightly 的 HIP 融合 Q/K 内核始终对 Q
 这与 SGLang 静态内存比例 0.60 是两个独立设置。
 为兼容 AITER 图 IPC，仍禁用 expandable segments。这是待验证的假设，
 不是已确认的性能或稳定性提升；权重、KV 格式和镜像默认 DSpark 精度均未改变。
+
+## 重建 nightly 与匹配拓扑的候选方案
+
+9 月 22 日 14:49 UTC 的重建镜像摘要为 `6d71b69744074b26a02fd6267223227ca7399c540e0c1a73db10fe422a2ca405`，使用 SGLang `244db08d60` 和 AITER `acf8fdf9`。安装器检查的六个源文件哈希均未改变；GPU 导入与服务验证仍待完成。此前准确率与性能证据来自 `f35d19d2` 镜像及 TP4/EP4。实验配置匹配 vLLM 的 TP2/EP1、TP4/EP1 拓扑，覆盖至 C128；TP2 使用主机 Engram，TP4 使用 GPU Engram。EP1 使用上游内核查找，不使用仅针对 EP4 的预览调优覆盖。矩阵生成不代表任何配置已通过；仍须验证启动、完整准确率与标准性能协议。

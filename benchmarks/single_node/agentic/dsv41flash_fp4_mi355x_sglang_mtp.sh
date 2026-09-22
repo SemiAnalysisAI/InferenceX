@@ -64,14 +64,15 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# Engram tables stay on the GPU here. The shared host copy
-# (SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1) that the CUDA arms use made decode
-# graph capture fail on gfx950 with hipErrorIllegalAddress at the first batch
-# (bs=16, 0/12 captured, run 35311289442), while the first sweep captured
-# graphs up to bs=32 with the tables resident (run 35304555945). The 288 GB
-# card holds the ~46 GiB of tables next to the weights; the 1M-context
-# prefill working set is bounded by --mem-fraction-static 0.60 and the
-# 2048-token chunk below instead.
+# Match the vLLM reference placement: TP4 tables stay on GPU; TP2 tables
+# use pinned host memory. The V4.1 HIP pointer backport below binds the already
+# loaded ROCm runtime. This new topology still requires real runtime/eval proof.
+if (( TP == 2 )); then
+    export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
+    export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
+else
+    export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0
+fi
 
 # Cookbook MI350X environment.
 # Cap the HIP hardware queues per rank, as the DeepSeek-V4 MI355X SGLang arm
@@ -110,7 +111,12 @@ export SGLANG_USE_AITER_MOE_GU_ITLV=1
 export AITER_BF16_FP8_MOE_BOUND=0
 export TORCH_BLAS_PREFER_HIPBLASLT=1
 export SGLANG_USE_ROCM700A=0
-export AITER_CONFIG_FMOE="$(dirname "$0")/../../patches/sglang_dsv41_rocm/dsv41_rocm/fmoe_gfx950_dsv41_ep4_a8w4.csv"
+# The preview CSV is tuned for EP4 shapes. EP1 uses upstream default lookup.
+if (( EP_SIZE == 4 )); then
+    export AITER_CONFIG_FMOE="$(dirname "$0")/../../patches/sglang_dsv41_rocm/dsv41_rocm/fmoe_gfx950_dsv41_ep4_a8w4.csv"
+else
+    unset AITER_CONFIG_FMOE
+fi
 export SGLANG_MOE_PADDING=1
 export AITER_FLYDSL_FORCE_REDUCE=1
 export ROCM_QUICK_REDUCE_QUANTIZATION=NONE
@@ -156,8 +162,7 @@ echo "DSpark block size: $DSPARK_BLOCK_SIZE, golden AL=$DSV41_GOLDEN_AL"
 python3 "$(dirname "$0")/../../patches/sglang_dsv41_rocm/install.py" \
     --evidence "$RESULT_DIR/sglang_dsv41_rocm_backport.json"
 
-# Isolated cache-only candidate: retain the same TP, memory, kernel and draft
-# settings while enabling the nightly's default unified radix cache.
+# Experimental EP1 topology candidate with the nightly unified radix cache.
 SGLANG_CMD=(
     python3 -m sglang.launch_server
     --model-path "$MODEL_PATH" --served-model-name "$MODEL"

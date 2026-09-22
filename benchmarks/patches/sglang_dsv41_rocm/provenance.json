@@ -1,8 +1,8 @@
 {
   "source_image": "lmsysorg/sglang:dev-dsv41-mi35x@sha256:c609f74f01b206af9664fb66da8ebef47642a7328a2478eabeebb352e014661a",
   "source_overlay_history_commit": "f8f290f2 (not publicly resolvable; image digest is authoritative)",
-  "target_image": "lmsysorg/sglang-rocm:v0.5.20-rocm10-mi35x-20260922@sha256:f35d19d2e826f72c8fdfa3e1b3b29e7ecbaed691c688ff644370f5640990ae23",
-  "target_revision": "598e43ba961ef43a746bcb97034346091c8abda4",
+  "target_image": "lmsysorg/sglang-rocm:v0.5.20-rocm10-mi35x-20260922@sha256:6d71b69744074b26a02fd6267223227ca7399c540e0c1a73db10fe422a2ca405",
+  "target_revision": "244db08d60cc05275f71079fba0dabc2bbde1eb9",
   "files": [
     {
       "installed_name": "backend.py",
