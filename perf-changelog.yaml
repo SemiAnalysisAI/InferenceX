@@ -8596,5 +8596,6 @@
   - Move GB200 DeepSeek-V4.1-Flash DSpark from dev-dsv41 to official CUDA 13 nightly-dev-cu13-20260922-582389ce, pinned at multi-architecture manifest sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40 (ARM64 sha256:044b18a3a7ce0437e366c60a32d7e7109d1d846aee4e301e3ff1c7932c30695a); retain TP4/EP4 and native DSpark precision and golden acceptance policy
   - 'Use the upstream per_rank Engram host-table layout on GB200: anonymous row-sharded mappings can obtain 512 MiB huge pages on the measured madvise/never anonymous/shared THP policy; preserve original FP8 table weights and restore the two TP all-reduces'
   - "Use the default MTP/DSpark precision shipped by the official nightly, without custom draft quantization or precision patches."
+  - Qualify prefill-decode interval 16 against the matched host-Engram baseline at canonical C16; preserve the 4096-token chunk, static allocation 0.70, full context, and shipped DSpark precision. Performance and full accuracy qualification remain pending.
   - Keep the sweep DSpark-only; remove the unmeasured STP entry and alias.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3347
