@@ -8483,16 +8483,15 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
 
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on B200, from the SGLang cookbook
 # (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
-# DSv4.1 Flash support has not shipped in an SGLang release; this uses the
-# preview build lmsysorg/sglang:dev-dsv41, digest
-# sha256:4a5d132a06a77c8331e15845f2e925adc788b00105097ad55409afa3f4fa4860 (2026-09-11, amd64 + arm64).
+# Latest CUDA 13 nightly verified 2026-09-21, pinned to its multi-arch digest.
+# Per-rank host Engram shards permit anonymous huge-page backing on this pool.
 # Native five-token DSpark (--speculative-algorithm DSPARK
 # --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
 # throughput, real verification for evals. The KV cache stays GPU-resident.
 # Follows the cookbook's verified Blackwell TP4/EP4 low-latency cell; backends
 # resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl).
 dsv41flash-fp4-b200-sglang-agentic-dspark:
-  image: lmsysorg/sglang:dev-dsv41
+  image: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b200-nscale
@@ -8504,6 +8503,7 @@ dsv41flash-fp4-b200-sglang-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 2, ep: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8] }
 
 dsv41flash-fp4-gb300-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-af1c01499b289be555c475669ba50a88e96d846e
