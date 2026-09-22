@@ -8637,3 +8637,9 @@
   description:
   - 'Replace the unavailable vLLM Router nightly-20260903-1d10e71 image (registry HTTP 404 in run 35750577041) with the official nightly-20260922-5d3c3af, index digest sha256:4e9071e4f1e1670367b8d5d05befb8025e580385688978c7aeab2a7075a4b1a9. The MoRI discovery implementation is unchanged between these Router commits; preserve vLLM v0.28.0, TP4/TP4, and the workload settings.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2824
+
+- config-keys:
+  - minimaxm3-fp4-mi355x-vllm-disagg
+  description:
+  - 'Validate srt-slurm 049a6b5804fb3f9bfbc959a7f7379935fe8952a7 with rank-sized MoRI handshake blocks and handshake/notify defaults below Linux ephemeral ports. Preserve engine images, serving options, and all nine workload concurrencies.'
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2824
