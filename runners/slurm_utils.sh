@@ -137,12 +137,7 @@ launch_srt_single_node() {
         TP PP_SIZE DCP_SIZE PCP_SIZE EP_SIZE DP_ATTENTION GPU_COUNT IS_AGENTIC SPEC_DECODING \
         CONC ISL OSL RANDOM_RANGE_RATIO RESULT_FILENAME GPU_MONITOR_INTERVAL SRT_MODEL_PATH \
         HF_HUB_CACHE_MOUNT HF_HUB_CACHE SALLOC_TIME_LIMIT
-    local scratch_root="$GITHUB_WORKSPACE"
-    if [[ -n "${SRT_SCRATCH_ROOT:-}" ]]; then
-        check_env_vars SRT_SCRATCH_ROOT
-        scratch_root="$SRT_SCRATCH_ROOT"
-    fi
-    SRT_SINGLE_NODE_ROOT=$(mktemp -d "$scratch_root/srt-single.XXXXXX")
+    SRT_SINGLE_NODE_ROOT=$(mktemp -d "$GITHUB_WORKSPACE/srt-single.XXXXXX")
     SRTCTL_ROOT="$SRT_SINGLE_NODE_ROOT/checkout"
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
     setup_srt_slurm "$SRTCTL_ROOT" "$FRAMEWORK" 0

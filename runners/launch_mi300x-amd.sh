@@ -15,7 +15,6 @@ if [[ "$EXECUTION_PATH" == native-single-node ]]; then
     export HF_HUB_CACHE_MOUNT=/raid/inferencex/models/hub
     export SRT_MODEL_PATH="hf:$MODEL"
     export SALLOC_TIME_LIMIT=180
-    export SRT_SCRATCH_ROOT="$(dirname "$GITHUB_WORKSPACE")"
     export SRT_SRUN_OPTIONS='{"container-remap-root":"", "container-writable":""}'
     SRT_SQUASH_FILE="/raid/inferencex/squash/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     launch_srt_single_node mi300x-amd
