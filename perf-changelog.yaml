@@ -8559,7 +8559,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Move H100 DeepSeek-V4.1-Flash DSpark from dev-dsv41 to upstream SGLang nightly-dev-cu13-20260921-0f6761b5 and retain automatic attention selection from the current cookbook."
+    - "Move H100 DeepSeek-V4.1-Flash DSpark from dev-dsv41 to upstream SGLang nightly-dev-cu13-20260922-582389ce and retain automatic attention selection from the current cookbook."
     - "Use stock nightly DSpark precision and kernels, with row-sharded anonymous host Engram tables and a resolved local snapshot for upstream file-scoped page-cache eviction and huge-page backing."
     - "Retain TP8/EP8, GPU-resident KV, 4096-token prefill chunks, static memory fraction 0.70, the shipped draft precision defaults, and the existing AgentX acceptance and real-verification eval behavior."
     - "Use DSpark across the full AgentX concurrency curve with 16 decode steps between prefill chunks, unchanged shipped precision and canonical acceptance; completed STP diagnostics did not contribute a measured frontier point."
