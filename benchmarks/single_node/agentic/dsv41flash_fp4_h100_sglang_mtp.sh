@@ -103,7 +103,7 @@ SGLANG_BACKEND_PORT="$PORT"
 PARALLEL_ARGS=(--tp "$TP" --ep-size "$EP_SIZE")
 if [[ "$DP_ATTENTION" == true ]]; then
     # The shipped MoE DSpark worker requires attn_tp=1 under DP attention.
-    # Keep the engine-wide 4096-token chunk budget for this bounded screen;
+    # Keep the engine-wide 4096-token chunk budget for the DP sweep;
     # SGLang divides it by DP, yielding 512 tokens/rank at TP8/DP8.
     PARALLEL_ARGS+=(--enable-dp-attention --dp-size "$TP" --enable-dp-lm-head)
     SGLANG_BACKEND_PORT=$((PORT + 1))
@@ -148,7 +148,7 @@ esac
 
 # The DP pool is per rank. 64 tails/rank preserves the C16 TP baseline's
 # aggregate 512-tail reserve while leaving an estimated 4.4M full tokens/rank.
-SWA_PREFIX_TAILS=$(( CONC >= 4 ? 32 * CONC : 128 ))
+SWA_PREFIX_TAILS=$(( CONC >= 4 ? 32 * CONC : 8 * CONC ))
 if [[ "$DP_ATTENTION" == true ]]; then
     SWA_PREFIX_TAILS=64
 fi
@@ -167,7 +167,7 @@ SGLANG_CMD=(
     # The 14.96 GiB H100 KV budget cannot afford the larger Blackwell tail
     # reserve. At C20, 640 tails retain about 5.3M full tokens while reducing
     # the measured eviction pressure on the default 160-tail SWA pool.
-    # Low-concurrency traces also retain long multi-turn prefixes.
+    # Retain the measured TP low-concurrency reserve; DP uses its own rank-local pool.
     --swa-prefix-tails "$SWA_PREFIX_TAILS"
     "${SPECULATIVE_ARGS[@]}"
     "${SCHEDULING_ARGS[@]}"
