@@ -1,8 +1,8 @@
 schema: 2
-name: "disagg-gb300-1p2d-dep8-dep16-c480-mtp-kvoffload"
+name: "disagg-gb300-2p1d-dep8-dep16-c480-mtp-kvoffload"
 
 # Agentic-coding SGLang disaggregated Pareto recipe for DeepSeek-V4-Pro on GB300
-# (1P x DEP8 / 2D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 480.
+# (2P x DEP8 / 1D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 480.
 #
 # Uses the flat single-variant srtctl schema the agentic CI flow expects;
 # resources + backend (prefill/decode env + sglang_config) are normalized
@@ -61,8 +61,8 @@ frontend:
 engine: sglang
 roles:
   prefill:
-    nodes: 2
-    workers: 1
+    nodes: 4
+    workers: 2
     gpus: 8
     env:
       SGLANG_ENABLE_PREFILL_WAR_READ_DONE: "1"
@@ -121,7 +121,7 @@ roles:
       mem-fraction-static: 0.85
       page-size: 256
       swa-full-tokens-ratio: 0.02
-      max-running-requests: 256
+      max-running-requests: 512
       cuda-graph-max-bs-decode: 256
       chunked-prefill-size: 65536
       disable-flashinfer-autotune: true
@@ -138,8 +138,8 @@ roles:
       hicache-io-backend: direct
 
   decode:
-    nodes: 8
-    workers: 2
+    nodes: 4
+    workers: 1
     gpus: 16
 
     env:
@@ -196,7 +196,7 @@ roles:
       mem-fraction-static: 0.9
       page-size: 256
       swa-full-tokens-ratio: 0.02
-      max-running-requests: 512
+      max-running-requests: 1024
       cuda-graph-max-bs-decode: 256
       disable-flashinfer-autotune: true
       model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
