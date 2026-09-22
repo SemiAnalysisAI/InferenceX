@@ -8563,7 +8563,7 @@
     - "Add TP4/EP4 stock DSpark alongside TP8/EP8 with per-rank anonymous Engram host tables, preserving checkpoint payload and scales"
     - "Prioritize stock DSpark across low and high concurrency, with 16 decode steps between prefill chunks to keep long-prefix decode requests progressing"
     - "Use the default MTP/DSpark precision shipped by the official nightly, without custom draft quantization or precision patches."
-    - "Tune H200 TP8 block32 GEMM launch configurations, including upstream-supported split-K at small DSpark verification batches, without changing kernel code or precision; preserve large-prefill settings and compare stock DSpark through concurrency 32 on TP4 and TP8."
+    - "Tune H200 block32 GEMM launch configurations, including upstream-supported split-K for the replicated N1792 projection at TP4 and TP8 and additional TP8 sharded shapes, without changing kernel code or precision; preserve large-prefill settings and compare stock DSpark through concurrency 32."
     - "Select native Marlin MXFP4 MoE on TP4 and flashinfer_mxfp4 on TP8 from matched C1 screens; preserve BF16 activations, native packed weights/scales, dense GEMM settings and shipped DSpark precision."
     - "Retain 1024 SWA prefix tails within the existing KV memory budget to reduce cache eviction, and cover concurrency 1 through 32 on both TP4 and TP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341

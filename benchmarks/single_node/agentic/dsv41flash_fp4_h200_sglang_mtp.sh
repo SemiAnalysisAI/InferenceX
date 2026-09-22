@@ -31,13 +31,11 @@ SERVER_LOG="$RESULT_DIR/server.log"
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 
-# Install measured TP8 H200 block32 launch configurations, including supported
-# split-K for small DSpark verification batches. Preserve large-prefill tilings,
-# kernel code and precision. TP4 keeps the configurations shipped by SGLang.
-if (( TP == 8 )); then
-    python3 "$(dirname "$0")/install_h200_block32_configs.py" \
-        "$(dirname "$0")/kernel_configs/h200_dsv41_block32" "$RESULT_DIR"
-fi
+# Install measured H200 block32 launch configurations. The replicated N1792
+# projection uses the same supported split-K tiling at TP4 and TP8; the three
+# sharded shapes are TP8-only. Preserve large-prefill tilings and precision.
+python3 "$(dirname "$0")/install_h200_block32_configs.py" \
+    "$(dirname "$0")/kernel_configs/h200_dsv41_block32" "$RESULT_DIR" "$TP"
 
 # Matched C1 screens favored CUTLASS on TP8 p90 interactivity, while Marlin
 # retained a small throughput/interactivity advantage on TP4. Both consume
