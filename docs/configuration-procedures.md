@@ -399,17 +399,17 @@ Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/mode
 
 ### DeepSeek-V4.1-Flash DSpark on SGLang
 
-The H100 SGLang candidate sweeps DSpark at concurrency 1/2/4/8/16/20. It retains 8 SWA prefix tails per concurrency at C1/C2 and 32 at C4 and above. A matched one-hour comparison rejected a blanket 128-tail floor: C2 throughput improved only 1.7% while interactivity fell 44.5%. Completed STP comparisons did not contribute a measured frontier point, so STP is excluded from the selected sweep. The recipe interleaves 16 decode steps between prefill chunks, preserving trace content and context limits.
+The H100 SGLang candidate matches the published vLLM topology: TP8/EP1 without DP attention at concurrency 1/2/4/8/16/20/24/28. The earlier TP8/EP8 and DP8 sweep is historical evidence, not qualification of this baseline comparison. The recipe retains 8 SWA prefix tails per concurrency at C1/C2 and 32 at C4 and above, with native MXFP4 Marlin expert tensor parallelism. EP1 increases resident expert weight memory, so every point requires fresh startup, canonical performance and full GSM8K validation. Native 1M context, AgentX child sessions and shipped DSpark precision remain unchanged.
 
-The same sweep also qualifies supported TP8/EP8/DP8 attention at C4/C8/C16/C20. DP uses a stock consistent-hash router with stable session keys, DP LM-head execution, and 64 SWA prefix tails per rank. Full C16 GSM8K passed on all 1,319 examples; its performance contribution remains under measurement. The native 1M context and the AgentX subagent/session semantics are preserved.
+Performance at C20 and above receives a 12-hour Slurm allocation and a one-hour warmup drain because earlier C20 runs exhausted the allocation or drain limit while still progressing. Warmup request counts and the 3600-second scoring duration are unchanged. Inspect live progress before stopping a slow job.
 
-The nightly candidate uses `nightly-dev-cu13-20260922-582389ce`, native MXFP4 Marlin MoE, and `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`. A resolved local snapshot lets the upstream allocator evict checkpoint file cache before allocating anonymous host tables. Draft precision follows the pinned image's default handling, including its WO_A FP8-to-BF16 conversion. GPU-specific block32 FP8 launch configurations use the upstream kernel and supported `SPLIT_K`/`SWAP_AB` options; checkpoint data, scales, output dtype and context limits remain unchanged. Small-batch configurations require FP32-reference and CUDA-graph validation at selection boundaries, followed by full-model accuracy and serving measurements. Larger batches retain their previous configurations. Full canonical qualification is still required.
+The nightly candidate uses `nightly-dev-cu13-20260922-4cbf290f`, native MXFP4 Marlin MoE, and `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`. A resolved local snapshot lets the upstream allocator evict checkpoint file cache before allocating anonymous host tables. Draft precision follows the pinned image's default handling, including its WO_A FP8-to-BF16 conversion. GPU-specific block32 FP8 launch configurations use the upstream kernel and supported `SPLIT_K`/`SWAP_AB` options; checkpoint data, scales, output dtype and context limits remain unchanged. Small-batch configurations require FP32-reference and CUDA-graph validation at selection boundaries, followed by full-model accuracy and serving measurements. Larger batches retain their previous configurations. Full canonical qualification is still required.
 
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` are the SGLang counterparts of the vLLM
 arms, one PR per SKU across h100, h200, b200, b300, gb200, gb300 and mi355x. They follow the
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1),
 which has no released SGLang version for this model yet. B200 pins the CUDA 13 nightly
-`lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce` by digest; the other NVIDIA arms use
+`lmsysorg/sglang:nightly-dev-cu13-20260922-4cbf290f` by digest; the other NVIDIA arms use
 `lmsysorg/sglang:dev-dsv41` and MI355X uses `lmsysorg/sglang:dev-dsv41-mi35x`.
 
 B200 uses shipped-default DSpark across TP4/EP4 C1–128 and TP2/EP2 C1–8.

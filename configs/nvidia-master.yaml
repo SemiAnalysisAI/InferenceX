@@ -8066,16 +8066,16 @@ dsv41flash-fp4-h100-vllm-agentic-dspark:
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on H100, from the SGLang cookbook
 # (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
 # Latest upstream CUDA 13 nightly, verified 2026-09-22. Manifest digest:
-# sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40.
+# sha256:504d34fd712ac2656e9a9da363160e49fddb9957b60092893d6b773fc26c0f5f.
 # Native five-token DSpark (--speculative-algorithm DSPARK
 # --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
 # throughput, real verification for evals. The KV cache stays GPU-resident.
 # H100 is not in the cookbook's hardware table. The script moves the Engram
 # tables to per-rank anonymous host shards and uses 4096-token prefill chunks
 # so weights, indexer buffers and the KV pool fit 80 GB.
-# Concurrency 1 through 20 is subject to full canonical qualification.
+# Match the published vLLM TP8/EP1 topology and every concurrency through 28.
 dsv41flash-fp4-h100-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40
+  image: lmsysorg/sglang:nightly-dev-cu13-20260922-4cbf290f@sha256:504d34fd712ac2656e9a9da363160e49fddb9957b60092893d6b773fc26c0f5f
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:h100-dgxc
@@ -8086,22 +8086,8 @@ dsv41flash-fp4-h100-sglang-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 20] }
+      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 20, 24, 28] }
 
-# Sweep supported DP8 attention alongside the retained plain TP8 curve.
-dsv41flash-fp4-h100-sglang-agentic-dspark-dpa:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40
-  model: deepseek-ai/DeepSeek-V4.1-Flash
-  model-prefix: dsv41flash
-  runner: cluster:h100-dgxc
-  precision: fp4
-  framework: sglang
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 8, 16, 20] }
 
 dsv41flash-fp4-gb200-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3

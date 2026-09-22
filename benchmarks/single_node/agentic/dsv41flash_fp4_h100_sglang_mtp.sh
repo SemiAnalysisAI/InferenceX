@@ -68,9 +68,6 @@ export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
 # Allow subagent fan-out to exceed CONC without clipping request bursts, and
 # keep decode graphs covering that fan-out down to the cookbook's 64.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
-if [[ "$DP_ATTENTION" == true ]] && (( MAX_RUNNING_REQUESTS < TP )); then
-    MAX_RUNNING_REQUESTS=$TP
-fi
 CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
 if (( CUDA_GRAPH_MAX_BS < 64 )); then
     CUDA_GRAPH_MAX_BS=64
@@ -92,28 +89,18 @@ CHUNKED_PREFILL_SIZE=4096
 
 # Saturation arms carry a larger in-flight working set than the 30-minute
 # default warmup drain allows.
-if (( CONC >= 32 )); then
+if (( CONC >= 20 )); then
     export AGENTIC_WARMUP_GRACE_PERIOD=3600
 fi
 
 # Pyxis shares the host network; port 8888 can already belong to a host service.
 select_available_server_port
 export AIPERF_SERVER_URL="http://localhost:${PORT}"
-SGLANG_BACKEND_PORT="$PORT"
-PARALLEL_ARGS=(--tp "$TP" --ep-size "$EP_SIZE")
-if [[ "$DP_ATTENTION" == true ]]; then
-    # The shipped MoE DSpark worker requires attn_tp=1 under DP attention.
-    # Keep the engine-wide 4096-token chunk budget for the DP sweep;
-    # SGLang divides it by DP, yielding 512 tokens/rank at TP8/DP8.
-    PARALLEL_ARGS+=(--enable-dp-attention --dp-size "$TP" --enable-dp-lm-head)
-    SGLANG_BACKEND_PORT=$((PORT + 1))
-    SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
-    export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
-elif [[ "$DP_ATTENTION" != false ]]; then
-    echo "Error: DP_ATTENTION must be true or false, got '$DP_ATTENTION'" >&2
+if [[ "$DP_ATTENTION" != false ]]; then
+    echo "The H100 baseline comparison requires plain TP attention (DP_ATTENTION=false)" >&2
     exit 1
 fi
-export AIPERF_SERVER_METRICS_URLS="http://localhost:${SGLANG_BACKEND_PORT}/metrics"
+export AIPERF_SERVER_METRICS_URLS="${AIPERF_SERVER_URL}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="sglang:"
 echo "Using SGLang endpoint ${AIPERF_SERVER_URL}"
 
@@ -146,28 +133,22 @@ case "$SPEC_DECODING" in
         ;;
 esac
 
-# The DP pool is per rank. 64 tails/rank preserves the C16 TP baseline's
-# aggregate 512-tail reserve while leaving an estimated 4.4M full tokens/rank.
+# Retain the supported TP cache policy while qualifying the exact EP1 topology.
 SWA_PREFIX_TAILS=$(( CONC >= 4 ? 32 * CONC : 8 * CONC ))
-if [[ "$DP_ATTENTION" == true ]]; then
-    SWA_PREFIX_TAILS=64
-fi
 
 SGLANG_CMD=(
     python3 -m sglang.launch_server
     --model-path "$MODEL_PATH" --served-model-name "$MODEL"
-    --host 0.0.0.0 --port "$SGLANG_BACKEND_PORT"
+    --host 0.0.0.0 --port "$PORT"
     --trust-remote-code
-    "${PARALLEL_ARGS[@]}"
+    --tp "$TP" --ep-size "$EP_SIZE"
     # Native MXFP4 Marlin supports Hopper with BF16 activations; dense FP8
     # operators and shipped DSpark precision remain unchanged.
     --moe-runner-backend marlin
     --mem-fraction-static 0.7
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
-    # The 14.96 GiB H100 KV budget cannot afford the larger Blackwell tail
-    # reserve. At C20, 640 tails retain about 5.3M full tokens while reducing
-    # the measured eviction pressure on the default 160-tail SWA pool.
-    # Retain the measured TP low-concurrency reserve; DP uses its own rank-local pool.
+    # EP1 changes expert sharding and its resident weight budget. Full-model
+    # startup verifies each pool, including 768/896 tails at C24/C28.
     --swa-prefix-tails "$SWA_PREFIX_TAILS"
     "${SPECULATIVE_ARGS[@]}"
     "${SCHEDULING_ARGS[@]}"
@@ -188,29 +169,7 @@ write_command "$RESULT_DIR/sglang_command.txt" "${SGLANG_CMD[@]}"
 } | tee "$SERVER_LOG"
 "${SGLANG_CMD[@]}" >> "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
-wait_for_server_ready --port "$SGLANG_BACKEND_PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
-
-if [[ "$DP_ATTENTION" == true ]]; then
-    # Stable session keys preserve prefix reuse across turns. The DP-aware
-    # router selects a rank through SGLang's supported routed_dp_rank path.
-    ROUTER_LOG="$RESULT_DIR/router.log"
-    ROUTER_CMD=(
-        python3 -m sglang_router.launch_router
-        --worker-urls "http://localhost:$SGLANG_BACKEND_PORT"
-        --policy consistent_hashing
-        --request-id-headers x-correlation-id
-        --dp-aware
-        --host 0.0.0.0 --port "$PORT"
-        --prometheus-host 127.0.0.1
-        --prometheus-port "$SGLANG_ROUTER_METRICS_PORT"
-        --connect-timeout-secs 900 --request-timeout-secs 14400
-        --disable-health-check --disable-retries
-    )
-    write_command "$RESULT_DIR/router_command.txt" "${ROUTER_CMD[@]}"
-    "${ROUTER_CMD[@]}" > "$ROUTER_LOG" 2>&1 &
-    ROUTER_PID=$!
-    wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
-fi
+wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 
 if [[ "${EVAL_ONLY}" == true ]]; then
