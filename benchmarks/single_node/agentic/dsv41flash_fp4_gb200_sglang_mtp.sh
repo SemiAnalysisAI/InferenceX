@@ -46,14 +46,12 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# Keep the Engram weights in row-sharded host DRAM. GB200's 64 KiB-page
-# kernel enables anonymous THP with madvise but disables shmem THP, so the
-# shared memfd layout cannot obtain huge-page backing. The upstream per-rank
-# layout uses anonymous mappings, MADV_HUGEPAGE and MADV_COLLAPSE for 512 MiB
-# pages; row ownership and the original FP8 table weights are preserved.
-# This trades two TP all-reduces for fewer host-table translation misses.
-export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
-export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
+# Keep native Engram weights/scales on GPU. The GB200 512 MiB host THP
+# collapse left uneven backing (including 0%) in the bounded host diagnostic.
+# TP4 GPU placement adds 47.21 GiB/rank; static 0.80 leaves a measured
+# 22.77 GiB KV pool and 29.45 GiB free after target/draft graphs at max64.
+export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0
+unset SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT
 
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts, but
@@ -114,11 +112,9 @@ SGLANG_CMD=(
     --tp "$TP" --ep-size "$EP_SIZE"
     # Backends resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl
     # on Blackwell); the cookbook warns that overriding them costs decode speed.
-    # 0.70 rather than the cookbook's 0.8, and a bounded prefill chunk: the
-    # sparse-attention indexer and DSpark prefill buffers scale with the chunk
-    # times the 1M context, and the default 16384 chunk exhausted HBM on the
-    # first 66k-99k-token AgentX prompts.
-    --mem-fraction-static 0.70
+    # The GPU-resident Engram weights need a larger static allocation than
+    # the host-table arm. Preserve full 1M context and the bounded chunk.
+    --mem-fraction-static 0.80
     --chunked-prefill-size 4096
     "${SPECULATIVE_ARGS[@]}"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
