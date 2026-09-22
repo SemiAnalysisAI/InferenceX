@@ -1486,8 +1486,8 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
       search-space:
       # The recipe only changes the memory split where a point ran short of KV:
       # TP=4 offloads the engram tables at c128, and the prefill chunk shrinks at
-      # TP=2 c64, TP=4 c128 and TP=2 c128. Concurrency 1-32 and TP=4 c64 keep the
-      # settings the earlier run on this image already measured, so those points
-      # are combined with these rather than re-run.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128] }
-      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128] }
+      # TP=2 c64, TP=4 c128 and TP=2 c128. Every point is measured here rather
+      # than combined from the earlier run: the image move leaves concurrency
+      # 1-32 measured only on the superseded nightly-eed1f3d0 pin.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
