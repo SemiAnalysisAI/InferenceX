@@ -8789,4 +8789,4 @@
   description:
     - "Enable official decoder SWA bounded replay for H200 DeepSeek V4.1 Flash native DSpark"
     - "Pin SGLang nightly-dev-cu13-20260923-06008c17; qualify TP4/EP1 and TP8/EP1 C1-128 with unchanged shipped draft precision"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3392
