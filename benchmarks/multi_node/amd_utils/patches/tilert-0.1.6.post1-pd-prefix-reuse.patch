@@ -9,14 +9,15 @@
              engine.inject(conv)
              t_inj = time.time()
 --- a/prefill_connector.py	2026-09-23 10:51:39
-+++ b/prefill_connector.py	2026-09-23 12:15:52
-@@ -1,3 +1,5 @@
++++ b/prefill_connector.py	2026-09-23 14:34:58
+@@ -1,3 +1,6 @@
 +import array
 +import base64
++import hashlib
  import logging
  import queue
  import os
-@@ -26,6 +28,7 @@
+@@ -26,6 +29,7 @@
      tilert_ctrl_port: int
      sampling: dict | None = None
      prompt_token_ids: list = field(default_factory=list)
@@ -24,7 +25,32 @@
  
  @dataclass
  class TileRTMetadata(KVConnectorMetadata):
-@@ -120,7 +123,7 @@
+@@ -39,6 +43,16 @@
+     block_ids_per_group: list
+     params: dict
+ 
++def _common_bytes(a: bytes, b: bytes) -> int:
++    lo, hi = 0, min(len(a), len(b))
++    while lo < hi:
++        mid = (lo + hi + 1) // 2
++        if a[:mid] == b[:mid]:
++            lo = mid
++        else:
++            hi = mid - 1
++    return lo
++
+ class TileRTConnector(KVConnectorBase_V1, SupportsHMA):
+ 
+     def __init__(self, vllm_config, role, kv_cache_config=None):
+@@ -58,6 +72,7 @@
+         self._staging = None
+         self._send_q: queue.Queue = queue.Queue()
+         self._sender_thread: threading.Thread | None = None
++        self._last_ids: dict = {}
+         logger.info('TileRTConnector: role=%s profile=%s target=%s:%s', role, self._profile.name, self._default_host, self._default_port)
+ 
+     @staticmethod
+@@ -120,7 +135,7 @@
          return meta
  
      def _emit(self, req_id, token_ids, groups, params) -> _ReqMeta:
@@ -33,7 +59,7 @@
          logger.info('claimed %s (rid=%s, %d tokens) -> %s:%d', req_id, m.rid, m.num_tokens, m.tilert_host, m.tilert_ctrl_port)
          return m
  
-@@ -222,8 +225,12 @@
+@@ -222,8 +237,24 @@
              remote_max_seq = int(hello['max_seq_len'])
              assert seq <= remote_max_seq, f'seq {seq} exceeds decode max_seq_len {remote_max_seq}'
              msg = {'rid': m.rid, 'rank': self._tp_rank, 'seq_len': seq, 'last_prompt_token': m.last_prompt_token, 'sampling': m.sampling, 'admission_window_s': self._admission_window()}
@@ -41,15 +67,36 @@
 +            if self._tp_rank == 0 and m.prompt_token_ids and m.wants_ids:
                  msg['prompt_token_ids'] = m.prompt_token_ids
 +            # InferenceX patch: a decode node that keeps KV prefixes asks for
-+            # the prompt ids in its hello; they travel as packed int32.
++            # the prompt ids in its hello; they travel as packed int32, as a
++            # suffix over the last ids this rank sent when the hello shows the
++            # decode node still holds them.
++            ids_blob = None
 +            if self._tp_rank == 0 and m.prompt_token_ids and hello.get('want_prompt_ids'):
-+                msg['prompt_ids_i32'] = base64.b64encode(array.array('i', m.prompt_token_ids).tobytes()).decode('ascii')
++                ids_blob = array.array('i', m.prompt_token_ids).tobytes()
++                dest = (m.tilert_host, m.tilert_ctrl_port)
++                prev = self._last_ids.get(dest)
++                if prev is not None and hello.get('prompt_ids_sha1') == prev[1]:
++                    keep = _common_bytes(prev[0], ids_blob) // 4
++                    msg['prompt_ids_base'] = prev[1]
++                    msg['prompt_ids_keep'] = keep
++                    msg['prompt_ids_i32'] = base64.b64encode(ids_blob[4 * keep:]).decode('ascii')
++                else:
++                    msg['prompt_ids_i32'] = base64.b64encode(ids_blob).decode('ascii')
              wire.send_msg(conn, msg)
              ack = wire.recv_msg(conn)
              if not ack.get('accepted'):
+@@ -234,6 +265,8 @@
+                 logger.error('discarding %s rank=%d: admission does not match the request (%s)', m.rid, self._tp_rank, ack)
+                 return _REJECTED_PERMANENT
+             generation = ack['generation']
++            if ids_blob is not None:
++                self._last_ids[(m.tilert_host, m.tilert_ctrl_port)] = (ids_blob, hashlib.sha1(ids_blob).hexdigest())
+             base = ([t.data_ptr() for t in self._staging]
+                     if isinstance(self._staging, list) else self._staging.data_ptr())
+             srcs, dsts, lens = self._profile.rdma_plan(hello, job['sections'], self._tp_rank, seq, base)
 --- a/profiles/glm5_rocm_engine.py
 +++ b/profiles/glm5_rocm_engine.py
-@@ -1,13 +1,51 @@
+@@ -1,13 +1,50 @@
  from __future__ import annotations
  import logging
  import os
@@ -61,16 +108,22 @@
  _FP8_MAX = 448.0
  _INDEX_HEAD_DIM = 128
 +# Prefix reuse (InferenceX patch): the engine keeps the KV of the last injected
-+# prompt. When the next prompt extends it, only the rows from the first
-+# differing 64-token page onward are copied in again. The prefill's vLLM
-+# recomputes a partial last page, and the MTP layer's KV at position i depends
-+# on token i + 1, so reuse stops at a page boundary at or before
-+# min(common prefix, previous length) - 1.
++# prompt. When the next prompt's token ids extend it, the main layers keep the
++# rows below a 64-token page boundary at or before
++# min(common prefix, previous length) - 1 (vLLM recomputes a partial last
++# page) and only the rows above it are copied in again. The kept rows are the
++# prefill's KV for the same tokens from an earlier turn: vLLM recomputes part
++# of the prefix with different chunking, so layers past 0 differ from the
++# fresh transfer in rounding but not in meaning. Layer 0, which depends only on
++# the token embeddings, must match byte for byte on every rank; a few deeper
++# layers must match within a relative error. The MTP layer, which
++# reset_sequence() clears, and the index keys are always copied in full.
 +_REUSE_ENV = 'TILERT_PD_PREFIX_REUSE'
 +_REUSE_PAGE = 64
 +_VERIFY_SPREAD = 192
 +_VERIFY_TAIL = 64
-+_PRE_RESET_CHECKS = 3
++_REUSE_REL_TOL = float(os.environ.get('TILERT_PD_REUSE_REL_TOL') or '0.25')
++_TOL_RANKS = (0, 1)
  
 +
 +def _env_on(name: str) -> bool:
@@ -91,23 +144,17 @@
 +    return int(diff[0, 0]) if diff.numel() else n
 +
 +
-+def _span(xs: list) -> str:
-+    xs = sorted(set(xs))
-+    if len(xs) <= 12:
-+        return ','.join(str(x) for x in xs)
-+    return f'{len(xs)} in [{xs[0]}..{xs[-1]}]'
-+
-+
  def is_rocm_torch() -> bool:
      return getattr(torch.version, 'hip', None) is not None
  
-@@ -45,6 +83,13 @@
+@@ -45,6 +82,14 @@
          self._full_layers = list(full_layer_ordinals(self.n_layers))
          self._pure_tp8 = True if pure_tp8 is None else pure_tp8
          self._fp8_ki = fp8_ki_enabled() if fp8_ki is None else fp8_ki
 +        self._prefix_reuse = _env_on(_REUSE_ENV)
 +        self._resident_ids: torch.Tensor | None = None
-+        self._pre_checks_left = _PRE_RESET_CHECKS
++        n = self.n_layers
++        self._tol_layers = sorted({1, n // 4, n // 2, (3 * n) // 4, n - 1} - {0}) if n > 1 else []
 +        self._pair_streams: dict = {}
 +        self._inject_stats: dict = {}
 +        logger.info('glm5_rocm inject: parallel per-pair copy streams; prefix reuse %s (%s)',
@@ -115,7 +162,7 @@
  
      def supports_logprobs(self) -> bool:
          return False
-@@ -74,6 +119,83 @@
+@@ -74,6 +119,75 @@
          slot[:nbytes].view(torch.float8_e4m3fn).view(L, _INDEX_HEAD_DIM)[:seq].copy_(q)
          slot[nbytes:nbytes + L * 4].view(torch.float32)[:seq].copy_(scale)
  
@@ -154,52 +201,44 @@
 +        keep = min(_common_prefix(prev, ids), prev.numel()) - 1
 +        return max(0, keep // _REUSE_PAGE * _REUSE_PAGE)
 +
-+    def _check_rows(self, targets: list, start: int) -> tuple[list, list]:
-+        # The prefill resends the whole prompt, so each kept cache can be
-+        # checked byte for byte against it: a spread of rows plus the last
-+        # page before start. Returns per-target (differs, all-zero) flags.
++    @staticmethod
++    def _sample_rows(start: int) -> torch.Tensor:
 +        spread = torch.linspace(0, start - 1, steps=min(_VERIFY_SPREAD, start)).round().long()
 +        tail = torch.arange(max(0, start - _VERIFY_TAIL), start)
-+        pos = torch.unique(torch.cat([spread, tail]))
-+        pos_on: dict = {}
-+        per_dev: dict = {}
-+        for i, (_rank, _lid, _kind, dst, src) in enumerate(targets):
-+            dd, sd = dst.device, src.device
-+            if dd not in pos_on:
-+                pos_on[dd] = pos.to(dd)
-+            if sd not in pos_on:
-+                pos_on[sd] = pos.to(sd)
-+            got = dst.index_select(0, pos_on[dd]).view(torch.uint8)
-+            want = torch.empty((pos.numel(),) + tuple(dst.shape[1:]), dtype=dst.dtype, device=dd)
-+            want.copy_(src.index_select(0, pos_on[sd]))
-+            per_dev.setdefault(dd, []).append((i, (got != want.view(torch.uint8)).any(), (got == 0).all()))
-+        bad = [False] * len(targets)
-+        zero = [False] * len(targets)
-+        for items in per_dev.values():
-+            b = torch.stack([x[1] for x in items]).cpu().tolist()
-+            z = torch.stack([x[2] for x in items]).cpu().tolist()
-+            for (i, _b, _z), bb, zz in zip(items, b, z):
-+                bad[i], zero[i] = bool(bb), bool(zz)
-+        return bad, zero
++        return torch.unique(torch.cat([spread, tail]))
 +
-+    @staticmethod
-+    def _summary(targets: list, bad: list, zero: list) -> str:
-+        hit = [t for t, b in zip(targets, bad) if b]
-+        if not hit:
-+            return '0 differ'
-+        nz = sum(1 for b, z in zip(bad, zero) if b and z)
-+        kinds = {}
-+        for rank, lid, kind, _d, _s in hit:
-+            kinds.setdefault(kind, (set(), set()))
-+            kinds[kind][0].add(lid)
-+            kinds[kind][1].add(rank)
-+        parts = [f'{k}: layers {_span(list(v[0]))} ranks {_span(list(v[1]))}' for k, v in sorted(kinds.items())]
-+        return f'{len(hit)}/{len(targets)} differ ({nz} all-zero); ' + '; '.join(parts)
++    def _check_prefix(self, targets: list, start: int) -> tuple[bool, float, str]:
++        # Returns (keep, worst relative error over the tolerance layers, reason).
++        pos = self._sample_rows(start)
++        pos_on: dict = {}
++
++        def rows(t):
++            d = t.device
++            if d not in pos_on:
++                pos_on[d] = pos.to(d)
++            return t.index_select(0, pos_on[d])
++        exact, rel = [], []
++        for rank, lid, _kind, dst, src in targets:
++            if lid == 0:
++                got = rows(dst)
++                want = torch.empty_like(got)
++                want.copy_(rows(src))
++                exact.append((got.view(torch.uint8) != want.view(torch.uint8)).any().cpu())
++            elif lid in self._tol_layers and rank in _TOL_RANKS:
++                got = rows(dst).float()
++                want = rows(src).to(got.device).float()
++                rel.append(((got - want).norm() / want.norm().clamp_min(1e-6)).cpu())
++        if any(bool(x) for x in exact):
++            return False, float('nan'), 'layer 0 differs'
++        worst = max((float(x) for x in rel), default=0.0)
++        if not worst <= _REUSE_REL_TOL:
++            return False, worst, f'relative error {worst:.3g} > {_REUSE_REL_TOL:g}'
++        return True, worst, 'ok'
 +
      def inject(self, req) -> None:
          dl = self.dl
          layers = req.layers
-@@ -86,16 +208,47 @@
+@@ -86,16 +200,38 @@
          if n_extra and len(layers) == self.n_layers:
              raise RuntimeError('glm5_rocm inject: engine has an MTP block but the prefill sent no MTP-layer KV (prefill must run with --speculative-config mtp)')
          use = layers[:self.n_layers + n_extra]
@@ -207,12 +246,6 @@
 +        t0 = time.time()
 +        start = self._reuse_start(req, seq)
 +        self._resident_ids = None
-+        pre = None
-+        if start > 0 and self._pre_checks_left > 0:
-+            # Diagnostic: the same check before the reset shows whether the
-+            # reset or the previous decode changed the kept rows.
-+            self._pre_checks_left -= 1
-+            pre = self._check_rows(targets, start)
          dl.reset_sequence()
 -        for rank in range(self.npes):
 -            if rank == 0 and (not self._pure_tp8):
@@ -227,18 +260,15 @@
 +        # from other streams.
 +        for d in range(self.npes):
 +            torch.cuda.synchronize(d)
-+        starts = [0] * len(targets)
-+        verified = 'none'
-+        n_ok = 0
++        verified, rel = 'none', float('nan')
 +        if start > 0:
-+            bad, zero = self._check_rows(targets, start)
-+            starts = [0 if b else start for b in bad]
-+            n_ok = len(targets) - sum(bad)
-+            verified = 'ok' if n_ok == len(targets) else ('partial' if n_ok else 'mismatch')
-+            if n_ok < len(targets) or pre is not None:
-+                logger.warning('glm5_rocm inject: seq=%d keep=%d before reset: %s | after reset: %s',
-+                               seq, start, self._summary(targets, *pre) if pre is not None else 'not checked',
-+                               self._summary(targets, bad, zero))
++            keep, rel, why = self._check_prefix(targets, start)
++            verified = 'ok' if keep else 'rejected'
++            if not keep:
++                logger.warning('glm5_rocm inject: seq=%d keep=%d rejected (%s); copying all rows', seq, start, why)
++                start = 0
++        # Main layers keep [0, start); the MTP layer is always copied in full.
++        starts = [start if lid < self.n_layers else 0 for _r, lid, _k, _d, _s in targets]
 +        t1 = time.time()
 +        # One stream per (destination, source) device pair: torch fences a
 +        # cross-device copy against the current stream on both devices, so a
@@ -256,7 +286,7 @@
          caches0 = dl._caches[0]
          ki_base = 2 * self.n_layers if self._pure_tp8 else 0
          ki_layers = self._full_layers + ([self.n_layers] if n_extra else [])
-@@ -103,9 +256,21 @@
+@@ -103,9 +239,20 @@
              if lid >= len(use):
                  break
              self._write_ki(caches0[ki_base + ki_slot], use[lid][0], seq)
@@ -271,15 +301,14 @@
 +        if self._prefix_reuse:
 +            ids = _ids_tensor(getattr(req, 'prompt_ids_i32', b''))
 +            self._resident_ids = ids if ids is not None and ids.numel() == seq else None
-+        copied = sum(seq - s0 for s0 in starts) // max(1, len(targets))
-+        self._inject_stats = {'reuse_rows': start, 'reuse_tensors': f'{n_ok}/{len(targets)}', 'reuse_verify': verified,
-+                              'mean_copy_rows': copied, 'verify_ms': round(1000 * (t1 - t0), 1), 'copy_ms': round(1000 * (t2 - t1), 1)}
-+        logger.info('glm5_rocm inject: seq=%d keep=%d reused %d/%d caches, mean rows copied %d, verify=%s (%.1f ms) copy %.1f ms',
-+                    seq, start, n_ok, len(targets), copied, verified, 1000 * (t1 - t0), 1000 * (t2 - t1))
++        self._inject_stats = {'reuse_rows': start, 'reuse_verify': verified, 'reuse_rel_err': round(rel, 5) if rel == rel else 'nan',
++                              'verify_ms': round(1000 * (t1 - t0), 1), 'copy_ms': round(1000 * (t2 - t1), 1)}
++        logger.info('glm5_rocm inject: seq=%d kept=%d copied=%d verify=%s rel_err=%.3g (%.1f ms) copy %.1f ms',
++                    seq, start, seq - start, verified, rel, 1000 * (t1 - t0), 1000 * (t2 - t1))
  
      def decode(self, first_token_id, max_tokens, sampling, on_token=None, cancel_event=None, grammar_session=None, top_logprobs=None):
          if grammar_session is not None:
-@@ -140,7 +305,7 @@
+@@ -140,7 +287,7 @@
              finish = self._decode_mtp(first, budget, tokens, stop_ids, on_token, cancel_event)
          else:
              finish = self._decode_plain(first, budget, tokens, stop_ids, on_token, cancel_event)
@@ -290,12 +319,13 @@
          return tokens
 --- a/receive_server.py
 +++ b/receive_server.py
-@@ -1,3 +1,4 @@
+@@ -1,3 +1,5 @@
 +import base64
++import hashlib
  import logging
  import os
  import queue
-@@ -22,6 +23,7 @@
+@@ -22,6 +24,7 @@
      first_token_id: int | None
      sampling: dict | None
      prompt_token_ids: list = field(default_factory=list)
@@ -303,26 +333,41 @@
      done_ranks: set = field(default_factory=set)
      t_first_conn: float = 0.0
      t_complete: float = 0.0
-@@ -41,6 +43,9 @@
+@@ -41,6 +44,11 @@
          self.ctrl_port = ctrl_port
          self.device = device
          self.request_timeout = request_timeout
 +        # InferenceX patch: ask the prefill for the prompt ids on every request
 +        # so the engine can keep the KV prefix the next turn shares.
 +        self._want_prompt_ids = (os.environ.get('TILERT_PD_PREFIX_REUSE') or '').strip().lower() not in ('', '0', 'false', 'no', 'off')
++        self._last_ids = b''
++        self._last_ids_sha1 = None
          total = profile.buffer_bytes(max_seq_len)
          nshards = int((os.environ.get('TILERT_PD_SHARDS') or '8').strip() or 8)
          nshards = max(1, min(nshards, torch.cuda.device_count() or 1))
-@@ -188,6 +193,8 @@
+@@ -188,6 +196,21 @@
              else:
                  self._current = cur = ReceivedRequest(rid=rid, seq_len=int(req['seq_len']), last_prompt_token=int(req.get('last_prompt_token', 0)), first_token_id=req.get('first_token_id'), sampling=req.get('sampling'), prompt_token_ids=list(req.get('prompt_token_ids') or []), t_first_conn=time.time(), generation=self._next_generation(), state=RESERVED)
                  logger.info('request %s: seq_len=%d (generation %d)', rid, cur.seq_len, cur.generation)
 +            if not cur.prompt_ids_i32 and req.get('prompt_ids_i32'):
-+                cur.prompt_ids_i32 = base64.b64decode(req['prompt_ids_i32'])
++                blob = base64.b64decode(req['prompt_ids_i32'])
++                base = req.get('prompt_ids_base')
++                if base is not None:
++                    keep = int(req.get('prompt_ids_keep', 0))
++                    if base == self._last_ids_sha1 and 0 <= 4 * keep <= len(self._last_ids):
++                        blob = self._last_ids[:4 * keep] + blob
++                    else:
++                        logger.warning('request %s: prompt id delta against an unknown base; prefix reuse skipped', rid)
++                        blob = b''
++                cur.prompt_ids_i32 = blob
++                if len(blob) == 4 * cur.seq_len:
++                    self._last_ids, self._last_ids_sha1 = blob, hashlib.sha1(blob).hexdigest()
++                else:
++                    self._last_ids, self._last_ids_sha1 = b'', None
              if not cur.prompt_token_ids and req.get('prompt_token_ids'):
                  cur.prompt_token_ids = list(req['prompt_token_ids'])
                  logger.info('request %s: prompt bitmap seeded from rank %d (%d ids)', rid, rank, len(cur.prompt_token_ids))
-@@ -212,7 +219,10 @@
+@@ -212,7 +235,13 @@
              conn.settimeout(self.request_timeout)
              with self._lock:
                  advisory_busy = self._current is not None and (not self._reusable(self._current))
@@ -330,6 +375,9 @@
 +            hello = wire.hello_msg(self._transport.name, self._transport_meta, self.max_seq_len, self.profile.layout_version, self._hello_layout, busy=advisory_busy)
 +            if self._want_prompt_ids:
 +                hello['want_prompt_ids'] = True
++                with self._lock:
++                    if self._last_ids_sha1:
++                        hello['prompt_ids_sha1'] = self._last_ids_sha1
 +            wire.send_msg(conn, hello)
              req = wire.recv_msg(conn)
              rid, rank = (req['rid'], int(req['rank']))
