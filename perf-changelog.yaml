@@ -8718,3 +8718,13 @@
     - "Require validated GPU power for the retained Qwen3.5 H200 FP8 8k1k points."
     - "要求保留的 Qwen3.5 H200 FP8 8k1k 数据点提供通过验证的 GPU 功耗。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3172
+
+- config-keys:
+  - qwen3.5-fp8-h200-sglang
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Extend Qwen3.5 H200 FP8 STP coverage to c1-c128 while retaining required power
+    and existing MTP coverage.
+  - 将 Qwen3.5 H200 FP8 STP 扩展到 c1-c128，保留功耗要求及已有 MTP 覆盖。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3172
