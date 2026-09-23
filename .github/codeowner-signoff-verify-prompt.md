@@ -198,7 +198,8 @@ a green sweep alone is not enough. Verify the command directly from the comments
 - PASS only if a matching comment exists whose `author_association` is `OWNER`,
   `MEMBER`, or `COLLABORATOR`. Both command names share this requirement; the newest
   authorized matching comment across both names determines the requested source.
-- FAIL if no authorized reuse command is present. State: "No authorized reuse command
+- WARN if no authorized reuse command is present. This is an advisory reminder,
+  not a failing criterion. State: "No authorized reuse command
   has been posted on this PR" and ask an authorized maintainer to comment
   `/use <run_id>` before merging via reuse.
 
@@ -263,7 +264,7 @@ that nothing alters the model architecture or reduces its FLOPs. Examples includ
 `--hf-overrides` that skip the indexer every N layers on a model that doesn't natively
 support it, trimmed layers/experts/heads, or other ways of skipping computation. The rule: making the
 SAME computation run faster is fair game. Target/verifier FLOPs at lower precision
-are fine when evals pass; this does not permit draft precision changes (Check 13).
+are fine when evals pass; this does not permit lowering draft precision below what ships (Check 13).
 REMOVING model-architecture FLOPs is not. Optimizations should be ones used in
 production by accuracy-sensitive customers.
 - Scan for architecture-override knobs: `--hf-overrides`, `hf_overrides`,
@@ -343,7 +344,7 @@ Verify BOTH:
   Name the config/script and line.
 - (b) AL VALUE MATCHES THE GOLDEN CURVE. Read the committed golden AL YAML for the
   model in `golden_al_distribution/` on the default-branch checkout. Examples include
-  `qwen3.5_mtp.yaml` and `kimik2.5_eagle3.yaml`. Confirm the pinned AL equals the golden value for that
+  `qwen3.5_mtp.yaml` and `minimaxm3_eagle3.yaml`. Confirm the pinned AL equals the golden value for that
   model, thinking mode, and the config's `num_speculative_tokens` / MTP level (e.g.
   qwen3.5 thinking_on with 3 speculative tokens -> 3.39). For TRT-LLM configs, compare
   the pinned `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` value PLUS 1 against the
@@ -388,7 +389,7 @@ APPLICABILITY: this check applies when any new `perf-changelog.yaml` entry conta
   metadata, but this does not mechanically prove that launcher or benchmark-script
   changes are isolated at runtime.
 
-## Check 13 — Draft weights and precision are unchanged
+## Check 13 — Draft runs as shipped
 APPLICABILITY: any change that adds, modifies, or re-enables a speculative-decoding
 benchmark, including image-only bumps and changes to shared launchers/helpers that
 affect such benchmarks. Cover agentic and non-agentic, single-node and multi-node,
@@ -396,36 +397,62 @@ all vendors/frameworks, embedded MTP/NextN/EAGLE heads, and standalone draft mod
 including DSpark. Inspect the effective recipe at the PINNED head SHA, not just added
 diff lines. Read unchanged referenced files when needed to resolve runtime behavior.
 
-The draft must retain its original, unquantized weights and native precision.
-ANY change to draft precision relative to the reference FAILs, including
-quantization, downcasts, upcasts, same-width dtype conversions (e.g. BF16 to FP16),
-mixed-precision overrides, or substituting a precision-converted draft checkpoint.
-Check weights, activations, computation, and draft KV cache, whether the change
-occurs offline, at load time, or at runtime. Target/verifier quantization remains
-allowed under the existing eval requirements only when draft weights and precision
-remain unchanged. Do not assume every draft must be BF16; verify the native
-precision against the original unquantized draft release and reference implementation.
+THE STANDARD: the draft must be served as it ships. The BASELINE is the served
+checkpoint's own draft head or draft weights, in the precision they are stored in,
+loaded by the pinned upstream image with its default handling and no draft-related
+settings from the submission. PASS when the effective draft precision matches that
+baseline. FAIL when the submission makes the draft cheaper than that baseline.
 
-See `CONTRIBUTING.md` ("Draft-model precision") for the comparison with
-[MLPerf Inference Rules, Appendix C](https://github.com/mlcommons/inference_policies/blob/ff7edba545fded369e7e7e3d5a2f0bab4a95eece/inference_rules.adoc#appendix-c-speculative-decoding):
+"As it ships" does NOT mean BF16 and does NOT mean the unquantized release:
+- If the served FP8 checkpoint stores its MTP head in FP8, the FP8 head IS the
+  baseline. Swapping in the BF16 release's head, or forcing an unquantized-draft
+  override, deviates from the baseline; do not demand it and do not treat the embedded
+  FP8 head as a violation.
+- If the pinned upstream framework converts draft tensors at load time by default (for
+  example SGLang loading DeepSeek V4.1 DSpark `wo_a` FP8 weights as BF16, matching
+  DeepSeek's reference), that default conversion IS the baseline. A patch or setting
+  that removes it changes the draft computation and FAILs; its absence is not a
+  violation.
+- The framework's default draft KV-cache dtype for that checkpoint, or an
+  upstream-supported KV-cache dtype applied consistently to target and draft (for
+  example FP8 draft KV inherited from an FP8 target), is allowed.
+- Upstream optimizations that ship in the pinned image and run the same draft
+  computation faster without lowering weight or activation precision below what ships
+  (fused or default lower-precision kernels for that model, scheduling) are allowed.
+
+FAIL when the submission lowers draft precision below the baseline: online or offline
+quantization of draft weights, activations, or computation; dtype or KV-cache dtype
+overrides aimed at the draft that go below the framework default; substituting a
+precision-converted or differently quantized draft checkpoint, or a head from a
+different release than the target; patching the pinned image so the draft loads or
+computes at a different precision than it does by default (an engine-patch waiver does
+not exempt this); or pruning draft layers/experts. Target/verifier quantization
+remains allowed under the existing eval requirements as long as it does not also
+quantize the draft below what ships.
+
+See `CONTRIBUTING.md` ("Draft-model precision") for the full rule and the comparison
+with [MLPerf Inference Rules, Appendix C](https://github.com/mlcommons/inference_policies/blob/ff7edba545fded369e7e7e3d5a2f0bab4a95eece/inference_rules.adoc#appendix-c-speculative-decoding):
 the reference MTP head stays "at the same precision as provided".
 InferenceX does not adopt MLPerf's workload-specific quantized-edge exception or
 its separate speculative-algorithm/configuration requirements.
 
-- Identify the draft checkpoint/revision or embedded head and compare its native
-  precision with its effective serving precision. Check checkpoint quantization
-  metadata and exclusions, launch flags, JSON/YAML configs, environment variables,
-  download/conversion steps, dtype casts, inherited target precision settings, and
-  framework defaults or auto-detection in the pinned image. For image bumps, inspect the relevant
-  pinned implementation; an unchanged launch command does not prove unchanged precision.
+- Identify the draft checkpoint/revision or embedded head. Establish the baseline:
+  the stored precision from checkpoint metadata (config quantization sections,
+  safetensors dtypes, quantization exclusions) and the pinned image's default handling
+  of that checkpoint. Then determine the effective serving precision from launch flags,
+  JSON/YAML configs, environment variables, download/conversion steps, dtype casts,
+  inherited target precision settings, and framework defaults or auto-detection in the
+  pinned image. For image bumps, inspect the relevant pinned implementation; an
+  unchanged launch command does not prove unchanged precision.
 - Investigate `--speculative-draft-model-quantization` (both space and `=` forms),
   quantization/dtype fields in `--speculative-config`, `speculative_draft_model_quantization`,
   `--speculative-draft-model-path`, `--dtype` / `torch_dtype` / draft dtype and
   KV-cache dtype overrides, and settings such as
   `SGLANG_GLM_NEXTN_MOE_PTPC=1`. These are inspection leads, not a string denylist:
   resolve variables and inherited defaults, and determine whether the effective path
-  changes draft precision. A draft path or explicit disabled quantization setting alone
-  is not a violation; an omitted flag alone is not proof of compliance.
+  lowers draft precision below the baseline. A draft path or an explicit setting that
+  restates the default is not a violation; an omitted flag alone is not proof of
+  compliance.
 - Inspect generic online-quantization configs too, even when their flag names do not
   mention draft models. For ATOM's `--online_quant_config` (space or `=` form),
   resolve the supplied JSON and variables, then inspect `global_quant_config` and
@@ -444,28 +471,30 @@ its separate speculative-algorithm/configuration requirements.
   draft and FAILs this check. Excluding only target experts, a gate, or some draft
   submodules does not preserve the entire draft head.
   With complete draft exclusions, target-only online quantization is not itself a
-  violation, but PASS still requires proving unchanged effective draft precision.
+  violation, but PASS still requires proving the effective draft precision matches
+  the baseline.
   Do not treat layer 78 as a universal MTP index or this literal JSON as an allowlist;
   derive the draft modules for each model. Inspect the pinned recipe rather than
   trusting a PR description or changelog that may still describe an older exclude list.
 - Require evidence in the sign-off's additional detail section identifying the
-  draft checkpoint/revision or embedded head, native/effective precision, and
-  supporting metadata or pinned implementation. Independently verify that evidence.
+  draft checkpoint/revision or embedded head, its stored precision, the pinned
+  image's default handling, and the effective serving precision, with supporting
+  metadata or pinned implementation. Independently verify that evidence.
   A quantized target checkpoint may explicitly exclude draft layers; verify those
-  exclusions and that no runtime setting changes the excluded layers' precision.
+  exclusions and that no runtime setting lowers the excluded layers' precision.
 - FAIL with the config/script, exact flag/value or checkpoint, and precision change
-  when draft weights or precision change. `--speculative-draft-model-quantization quark_mxfp4`
+  when the draft is served below its baseline. `--speculative-draft-model-quantization quark_mxfp4`
   that converts BF16 MTP experts to MXFP4 fails, as does a NextN/MTP path using
-  `SGLANG_GLM_NEXTN_MOE_PTPC=1` to quantize draft computation to FP8. A BF16 draft
-  loaded as FP16 or FP32 also fails, even without a quantization flag.
+  `SGLANG_GLM_NEXTN_MOE_PTPC=1` to quantize draft computation to FP8, or a local patch
+  that changes how the pinned image loads or computes the draft.
 - Matching an upstream recipe, passing target-model evals, an engine-patch waiver,
   a claimed unchanged AL, or a new AL measurement does not override this rule.
   Golden/synthetic AgentX acceptance (Check 11) does not demonstrate preserved draft
-  precision and cannot excuse any draft precision change.
-- PASS only when the effective draft path is verified to preserve the original
-  unquantized weights and native precision. If evidence is missing or inaccessible,
-  FAIL as "Draft precision could not be verified", naming the missing evidence;
-  do not assert that a weights/precision change was proven.
+  precision and cannot excuse lowering it.
+- PASS only when the effective draft path is verified to match the shipped baseline.
+  If evidence is missing or inaccessible, FAIL as "Draft precision could not be
+  verified", naming the missing evidence; do not assert that a precision change was
+  proven.
 - N/A only when the PR does not affect any speculative-decoding benchmark.
   A change that removes speculative decoding entirely is also N/A; verify that no
   affected speculative path remains.
@@ -547,14 +576,16 @@ Pinned app references at
 
 ## Verdict and output
 Decide PASS only if Checks 0-14 ALL pass. A check reported as `N/A` counts as a pass.
-If Checks 0-13 pass/N/A but Check 14 is WARN, use the WARN header below.
-If any of Checks 0-13 fails, use REJECTED even when Check 14 also warns.
+Checks 4 and 14 may WARN but never FAIL. If either warns and no other check fails,
+use the WARN header below. If any other check fails, use REJECTED even when
+Check 4 or Check 14 also warns.
 Keep the `N/A — <reason>` row so the reviewer sees it was considered.
 Write the complete verdict to `/tmp/codeowner-signoff-verdict.md` using the Write
 or Bash tool. Do not post, edit, or delete GitHub comments, labels, or commit
-statuses. The workflow publishes this file as a new PR comment for every verification,
-preserving earlier verdict comments and recording only the assessed commit. It does not publish
-commit statuses or carry the verdict forward to later commits.
+statuses. The workflow publishes this file as the verdict associated with this sign-off resource.
+Reverification of the same sign-off updates that verdict; verdicts for other sign-offs stay
+unchanged. It records only the assessed commit and does not publish commit statuses or carry the
+verdict forward to later commits.
 Do not include a hidden marker or assessed-commit footer; the publisher adds them.
 Always write your full current assessment, even if it matches a previous verdict.
 
@@ -564,10 +595,10 @@ single terse line. Rules:
   verdict word in bold and flanked by three status emojis on each side, EXACTLY as follows:
     on pass: `## ✅✅✅ **Verdict: PASS** ✅✅✅`
     on fail: `## ❌❌❌ **REJECTED** ❌❌❌`
-    on coverage warning only: `## ⚠️ **Verdict: WARN** ⚠️`
-- Keep failing criteria AND Check 14 warnings in the main body, beneath the verdict header and
+    on warnings without failures: `## ⚠️ **Verdict: WARN** ⚠️`
+- Keep failing criteria AND Check 4/14 warnings in the main body, beneath the verdict header and
   blocking summary. Put every PASS and N/A criterion in ONE collapsed HTML details
-  group after the failures. Use exactly this structure (replace the placeholders;
+  group after the failures and warnings. Use exactly this structure (replace the placeholders;
   the rows below illustrate the format, not actual findings):
 
   <details>
@@ -591,8 +622,11 @@ single terse line. Rules:
     `✅ Check N (<name>): PASS — <brief reason>`
     `❌ Check N (<name>): FAIL — <root issue>`
     `➖ Check N (<name>): N/A — <reason>`
+    `⚠️ Check 4 (Reuse command): WARN — <missing authorized command; reminder to post /use run_id>`
     `⚠️ Check 14 (Pareto coverage): WARN — <curve, count or unverifiable reason; admin-exception state; evidence>`
-  Never hide Check 14 WARN inside the collapsed group. The publisher adds the
+  Never hide Check 4 or Check 14 WARN inside the collapsed group.
+  A Check 4 warning alone must not trigger the Pareto-coverage escalation.
+  For Check 14 WARN, the publisher adds the
   warning and mentions @functionstackx, @cquil11, @Oseltamivir, and @adibarra
   above the findings. Use only @usernames, without personal names; do not
   duplicate that escalation text yourself. Do not add these escalation mentions
@@ -606,13 +640,14 @@ single terse line. Rules:
   run/recipe instead of describing it.
 - If all checks pass or are N/A: write the PASS verdict header followed by the
   collapsed group containing all fifteen PASS/N/A rows. No criteria appear expanded.
-- If only Check 14 warns: write the WARN header, the expanded Check 14 warning,
-  then the collapsed group for Checks 0-13. The publisher adds reviewer mentions.
-- If any of Checks 0-13 fails: immediately after the REJECTED header, write a
+- If there are warnings but no failures: write the WARN header, the expanded
+  Check 4 and/or Check 14 warning rows, then the collapsed PASS/N/A group.
+  The publisher adds reviewer mentions only for Check 14 warnings.
+- If any check other than Checks 4 and 14 fails: immediately after the REJECTED header, write a
   line that @-mentions the sign-off author as `@${SIGNOFF_AUTHOR}` with the blocking
   summary. Then show only FAIL rows, each led by its root issue (e.g. "No passing
   sweep/eval on any commit in this PR") with the supporting link after. Keep any
-  Check 14 warning expanded too. Finish with
+  Check 4 and Check 14 warnings expanded too. Finish with
   the collapsed PASS/N/A group.
 
 Use no emojis anywhere in the comment other than the ✅ / ❌ / ➖ / ⚠️ status emojis

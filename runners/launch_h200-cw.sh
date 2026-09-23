@@ -26,22 +26,18 @@ if [ -z "$JOB_ID" ]; then
     exit 1
 fi
 
-if [[ "$MODEL" == "openai/gpt-oss-120b" && "$FRAMEWORK" == "trt" ]]; then
-    CONTAINER_IMAGE=$IMAGE
-else
-    # Concurrent jobs import to the same squash file; serialize them.
-    srun --jobid=$JOB_ID --job-name="$RUNNER_NAME" bash -c "
-        exec 9>\"$LOCK_FILE\"
-        flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
-        if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
-            echo 'Squash file already exists and is valid, skipping import'
-        else
-            rm -f \"$SQUASH_FILE\"
-            enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
-        fi
-    "
-    CONTAINER_IMAGE=$(realpath $SQUASH_FILE)
-fi
+# Concurrent jobs import to the same squash file; serialize them.
+srun --jobid=$JOB_ID --job-name="$RUNNER_NAME" bash -c "
+    exec 9>\"$LOCK_FILE\"
+    flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
+    if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
+        echo 'Squash file already exists and is valid, skipping import'
+    else
+        rm -f \"$SQUASH_FILE\"
+        enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+    fi
+"
+CONTAINER_IMAGE=$(realpath $SQUASH_FILE)
 
 srun --jobid=$JOB_ID \
 --container-image=$CONTAINER_IMAGE \
