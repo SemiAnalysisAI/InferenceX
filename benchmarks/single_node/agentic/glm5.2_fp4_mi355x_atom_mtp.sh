@@ -101,10 +101,6 @@ export PYTHONNOUSERSITE=1
 
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 export AITER_USE_FLYDSL_MOE_SORTING=1
-# GLM-5.2 MLA is nope=192/v=256; FlyDSL gather_kv_b_proj only supports 128/128,
-# so force the Triton gather (needed on the DCP prefill-context and MTP verify
-# paths).
-export ATOM_USE_FLYDSL_GATHER_KV_B_PROJ=0
 
 if (( DCP_SIZE > 1 )); then
     # TP+DCP large-concurrency path: [1,2,4,8] then 12..(2*CONC) step 4.
@@ -187,6 +183,8 @@ ATOM_CMD=(
     --cudagraph-capture-sizes "$CUDAGRAPH_CAPTURE_SIZES"
     --max-num-batched-tokens 16384
     --kv_cache_dtype fp8
+    --index_cache_dtype fp4
+    --block-size 64
     "${SPEC_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
