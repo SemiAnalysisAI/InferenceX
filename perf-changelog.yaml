@@ -8783,3 +8783,10 @@
     - "Run a new canonical full sweep with 16 performance and 16 full-evaluation cells. Earlier EP4/EP8 and DP8 measurements remain historical evidence and do not qualify the EP1 grid."
     - "Extend only H200 SGLang AgentX performance cells at C64/C128 to 24-hour Slurm allocations and 24.5-hour GitHub jobs after the original eight-hour allocation expired during progressing warmup. Preserve normal warmup, the full 3600-second profile, image, model, precision and topology."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic-dspark
+  description:
+    - "Enable official decoder SWA bounded replay for H200 DeepSeek V4.1 Flash native DSpark"
+    - "Pin SGLang nightly-dev-cu13-20260923-06008c17; qualify TP4/EP1 and TP8/EP1 C1-128 with unchanged shipped draft precision"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
