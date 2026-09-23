@@ -3169,7 +3169,7 @@ resolve_trace_source() {
     # corpus; 1M-context families take the unfiltered variant, others 256k.
     local default_loader
     case "${MODEL_PREFIX:-}" in
-        dsv4*|glm5.2*|minimaxm3*|kimik3*)
+        dsv4*|glm5.2*|glm5.3*|minimaxm3*|kimik3*)
             default_loader="semianalysis_cc_traces_weka_062126"
             ;;
         *)
