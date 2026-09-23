@@ -1369,7 +1369,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
           - "DECODE_MTP_SIZE=3"
 
 dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark:
-  image: rocm/atom-dev:nightly_202609210314
+  image: rocm/atom-dev:nightly_202609221542
   # DSpark needs the draft head the -0813 checkpoint bundles
   # (dspark_target_layer_ids in config.json); the base Pro checkpoint has none.
   model: deepseek-ai/DeepSeek-V4-Pro-0813
@@ -1383,7 +1383,7 @@ dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark:
   disagg: true
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    - dram-utilization: 0.50
       search-space:
       - spec-decoding: "mtp"
         conc-list: [ 1,16 ]
