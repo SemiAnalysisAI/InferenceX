@@ -32,7 +32,7 @@ base:
         enable-dp-attention: false
         enable-dp-lm-head: false
         max-running-requests: 10
-        cuda-graph-max-bs: 10
+        cuda-graph-max-bs-decode: 10
         chunked-prefill-size: 8192
         max-prefill-tokens: 8192
         context-length: 1048576

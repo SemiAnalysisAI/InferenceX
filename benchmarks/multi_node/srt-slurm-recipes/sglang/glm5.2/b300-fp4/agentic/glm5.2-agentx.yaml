@@ -87,7 +87,6 @@ base:
         chunked-prefill-size: 65536
         max-prefill-tokens: 16384
         max-running-requests: 16
-        cuda-graph-max-bs: 16
         disable-cuda-graph: true
         nsa-prefill-backend: trtllm
         nsa-decode-backend: trtllm
@@ -126,7 +125,7 @@ base:
         enable-dp-attention: false
         enable-dp-lm-head: false
         max-running-requests: 16
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 16
         chunked-prefill-size: 64
         context-length: 1048576
         nsa-prefill-backend: trtllm
@@ -214,7 +213,7 @@ zip_override_mtp_agentx_lowlat:
   backend:
     sglang_config:
       decode:
-        cuda-graph-max-bs: [16, 16, 16, 16, 139]
+        cuda-graph-max-bs-decode: [16, 16, 16, 16, 139]
         data-parallel-size: [1, 1, 1, 1, 8]
         enable-dp-attention: [false, false, false, false, true]
         enable-dp-lm-head: [false, false, false, false, true]
