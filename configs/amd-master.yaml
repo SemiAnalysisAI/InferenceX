@@ -1343,7 +1343,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=3"
 
-dsv4-fp4-mi355x-atom-disagg-agentic-hicache-mtp:
+dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark:
   image: rocm/atom-dev:nightly_202609210314
   # DSpark needs the draft head the -0813 checkpoint bundles
   # (dspark_target_layer_ids in config.json); the base Pro checkpoint has none.
