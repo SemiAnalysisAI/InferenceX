@@ -9188,3 +9188,50 @@
     import failures at the filesystem root
   - 原生单节点容器步骤从现有 InferenceX 仓库挂载目录启动，保留旧版工作目录行为，避免在文件系统根目录导入 Python 动态生成模块时失败
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
+
+- config-keys:
+  - dsr1-fp4-mi355x-sglang
+  - dsr1-fp4-mi355x-sglang-mtp
+  - dsr1-fp4-mi355x-atom
+  - dsr1-fp4-mi355x-atom-mtp
+  - dsr1-fp8-mi300x-sglang
+  - dsr1-fp8-mi325x-sglang
+  - dsr1-fp8-mi355x-sglang
+  - dsr1-fp8-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi325x-sglang
+  - qwen3.5-fp8-mi355x-sglang
+  - qwen3.5-fp8-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+  - qwen3.5-fp8-mi355x-atom
+  - qwen3.5-fp8-mi355x-atom-mtp
+  - qwen3.5-fp4-mi355x-sglang
+  - qwen3.5-fp4-mi355x-atom
+  - qwen3.5-fp4-mi355x-sglang-mtp
+  - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  - qwen3.5-fp8-mi300x-sglang
+  - qwen3.5-fp8-mi300x-sglang-agentic-mtp
+  - dsr1-fp8-mi355x-atom
+  - dsr1-fp8-mi355x-atom-mtp
+  - kimik3-fp4-mi355x-vllm-agentic-mtp
+  - kimik3-fp4-mi355x-atom-agentic-mtp
+  - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  - dsr1-fp8-mi325x-sglang-mtp
+  - qwen3.5-fp8-mi325x-sglang-mtp
+  - dsv4-fp4-mi355x-vllm-agentic-mtp
+  - dsv4-fp4-mi355x-atom-agentic-mtp
+  - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  - dsv41flash-fp4-mi300x-vllm-agentic-dspark
+  - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  - minimaxm3-fp8-mi325x-vllm-agentic-mtp
+  - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  - glm5.2-fp8-mi355x-sglang-agentic-mtp
+  - glm5.2-fp4-mi355x-atom-agentic-mtp
+  - dsv4-fp4-mi355x-sglang-agentic-mtp
+  - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+  - Stream AMD power CSV rows without awk input buffering so the sampler preserves final benchmark-window
+    samples during shutdown. Keep benchmark settings and power validation unchanged.
+  - AMD 功耗 CSV 逐行写出，避免 awk 输入缓冲导致采样器关闭时丢失基准窗口末尾的样本；基准设置和功耗校验保持不变。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
