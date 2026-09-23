@@ -28,7 +28,7 @@ _OP_TO_TESTLIST = {
 
 def _dedupe_key(op_type: str, args: dict[str, Any]) -> tuple:
     """Treat entries with the same op_type + args as the same testlist entry."""
-    return (op_type, tuple(sorted(args.items())))
+    return (op_type, json.dumps(args, sort_keys=True))
 
 
 def write_testlists(
