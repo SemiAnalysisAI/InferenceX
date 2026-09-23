@@ -8712,7 +8712,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3329
 
 - config-keys:
-      - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang
     - qwen3.5-fp4-mi355x-sglang-mtp
   scenario-type:
     - fixed-seq-len
