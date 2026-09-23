@@ -3726,7 +3726,7 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "5f2fdf3b4b9357c93db25999368c260568b5d3e9",
-      "status": "in_progress",
+      "status": "success",
       "workflow_name": "offload-v1-none-c448-r1-20260923",
       "dispatched_at": "2026-09-23T15:30:42Z",
       "get_jobs_job_id": 107252865036,
@@ -3736,31 +3736,135 @@
       "node": "im-b200-c001",
       "runner": "b200-nscale-slurm_00",
       "allocation_id": "16943",
-      "performance_result": null,
+      "performance_result": true,
       "matched_nvme_run_id": 35832083322,
       "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c448, 3,600-second profiling, kv-offloading=none, and experiment=agentx-offload. A fresh GitHub Actions inventory found no active or queued job carrying the cluster:b200-nscale label before dispatch. The matched NVMe c448 workflow was terminal, its artifacts were accepted, and its exact task-owned scratch cleanup was verified.",
-      "live_phase_evidence": "Slurm allocation 16943 started on im-b200-c001 through runner b200-nscale-slurm_00. Canonical warmup started at 2026-09-23T15:40:32Z. At 15:52:02Z it had returned 163 of 4,958 requests with 315 in flight and zero errors. Benchmark and server logs continued updating with no OOM, NCCL failure, traceback, connection refusal, or storage failure."
+      "completed_at": "2026-09-23T23:04:42Z",
+      "artifacts": [
+        {
+          "id": 10781212406,
+          "name": "bmk_agentic_minimaxm3_tp4_conc448_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-411dd9deb20f31dd5634",
+          "size_bytes": 2229,
+          "sha256": "8af273f08a3a76efc820e449b36ac2a5bd6c3908e3b53dfd1d89694436b4d7b3"
+        },
+        {
+          "id": 10781183993,
+          "name": "run-stats",
+          "size_bytes": 284,
+          "sha256": "a2aa7ea752e7f2d54026d33a6b9945157ea03485d579d6940cf31d845f1ad730"
+        },
+        {
+          "id": 10781032819,
+          "name": "agentic_minimaxm3_tp4_conc448_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-411dd9deb20f31dd5634",
+          "size_bytes": 34472573,
+          "sha256": "42116215a6d6adfa4b68682c827548d047fd6216487af97170222c9a61422d36"
+        },
+        {
+          "id": 10780938039,
+          "name": "results_bmk",
+          "size_bytes": 2035,
+          "sha256": "1432709e9a7e97f89be2bef4365202d865b7d3f78fb618f76e1c6fe32b17a72a"
+        },
+        {
+          "id": 10780883202,
+          "name": "server_logs_minimaxm3_tp4_conc448_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-411dd9deb20f31dd5634",
+          "size_bytes": 223666,
+          "sha256": "c5e6f2ab24bf72038016cc93b2a5d3bddcc7d9a9ba9d0e6063cad149a55651c4"
+        },
+        {
+          "id": 10780518791,
+          "name": "power_audit_minimaxm3_tp4_conc448_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-411dd9deb20f31dd5634",
+          "size_bytes": 1080086,
+          "sha256": "786a91aa490d85b8c1c20cb7b473ab16656869f3f63147881643115278ec2f56"
+        },
+        {
+          "id": 10780434132,
+          "name": "gpu_metrics_minimaxm3_tp4_conc448_kvnone_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-false_spec-mtp-411dd9deb20f31dd5634",
+          "size_bytes": 1076525,
+          "sha256": "c4568638c60c9fb563caf5333fc49e53332b15dad87ca9bdda60871f1b9af884"
+        }
+      ],
+      "performance": {
+        "num_requests_total": 6078,
+        "num_requests_successful": 1120,
+        "num_requests_warmup_dropped": 4958,
+        "num_requests_error_dropped": 6,
+        "request_error_categories": {
+          "InvalidInferenceResultError": 6
+        },
+        "duration_seconds": 3627.74335,
+        "output_tokens_per_second": 302.66446,
+        "output_tokens_per_second_per_gpu": 75.66612,
+        "input_tokens_per_second": 32704.55638,
+        "total_tokens_per_second": 33007.22085,
+        "total_tokens_per_second_per_gpu": 8251.80521,
+        "p90_e2e_latency_seconds": 2707.97215,
+        "p90_ttft_seconds": 2658.68166,
+        "p90_tpot_seconds": 0.12178,
+        "p90_interactivity_tokens_per_second_per_user": 8.21176,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.07716,
+        "mean_e2e_latency_seconds": 1323.50386,
+        "avg_power_w_per_gpu": 901.303,
+        "joules_per_successful_query": 11716.9437
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.01332,
+        "external_cache_hit_rate": 0.0,
+        "overall_cache_hit_rate": 0.01332,
+        "theoretical_cache_hit_rate": 0.93997,
+        "gpu_cache_hit_prompt_tokens": 13527168,
+        "external_cache_hit_prompt_tokens": 0,
+        "computed_prompt_tokens": 1002285284,
+        "prompt_tokens_total": 1015812452,
+        "generation_tokens_total": 1162677,
+        "gpu_cache_usage_pct": 1.0
+      },
+      "nvme_delta_vs_hbm_percent": {
+        "total_tokens_per_second_per_gpu": 7.122,
+        "output_tokens_per_second_per_gpu": 6.64871,
+        "p90_interactivity_tokens_per_second_per_user": 9.27256,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": -0.37584,
+        "p90_ttft_seconds": -0.42716,
+        "p90_e2e_latency_seconds": -0.89252,
+        "mean_e2e_latency_seconds": -7.81136,
+        "num_requests_successful": 7.5,
+        "avg_power_w_per_gpu": -0.41606,
+        "joules_per_successful_query": -7.36377,
+        "computed_prompt_tokens": -0.85752
+      },
+      "runtime_evidence": "Matched MiniMax-M3 NVFP4 TP4 AgentX HBM-only control on im-b200-c001. Canonical warmup completed all 4,958 requests with zero errors. Profiling completed 1,120 accepted responses with six InvalidInferenceResultError classifications. No external cache was configured or observed. Under the same 3,600-second protocol, NVMe c448 completed 1,204 responses and improved total throughput per GPU by 7.122%, P90 interactivity by 9.273%, and P90 TTFT by 0.427%. P90 E2E-normalized interactivity was 0.376% lower, while energy per successful query improved 7.364%. The matched benefit remains positive but continues to narrow toward the c512 warmup feasibility bound.",
+      "storage_evidence": "HBM-only configured zero DRAM and zero NVMe capacity with no connector. Startup storage proof on im-b200-c001 observed 17,712,236,392,448 free bytes. The workflow-owned scratch remained empty, and offload_cleanup.json matched run 35882091021 and Slurm job 16943, recorded exit_code=0, and deleted the exact task-owned directory /offload-scratch/inferencex-offload-35882091021-1-16943-239dbb9334dc. A post-run node check found no scratch directory containing run 35882091021.",
+      "evidence_sha256": {
+        "agg_bmk.json": "9574b4c34b51253db8dc4469793e73f6f00bca741bbbdf4a6b37d0db65a551dd",
+        "bmk_result.json": "c0e3681de579313a077843e58d3721b87f85e90eabe162f1d46ac3f6f21aa749",
+        "server.log": "24d913d4e56b818946e7c6c6dad7a9ff36d98ffe1f8fa18e8f96a11254f1d58e",
+        "offload_config.json": "76f7ab2f22545cf721ffae7298ce3cd25dc9d054650be9af38567dc36e1064fb",
+        "benchmark.log": "be03c08edaf72f4c7ecede853069e42db45520cc65c3f004866a1bc2a8c3a3ce",
+        "offload-telemetry.jsonl": "8c8ec659c0450bf42536e10dda6e38828c528878120dddb3753e94e69361c2a3",
+        "profile_export.jsonl": "a8e98d0cd41459c456d3f6b1e103d1454be4d1422d7c9d1bc08569a8e688a873",
+        "offload_cleanup.json": "ec2189c574bfbe5c8c6c7cfa1b5d353d7e47e4ec4a7cb4b4f8379d3f03af54b1",
+        "gpu_metrics.csv": "d1b609086702b4e81db5a515fcfe87e63ca2462003de3f502f304f81d3a40303",
+        "power_validation.json": "06c1bd1f44a6313e9b1c8b4241b9f97a5b8950639db25d77fbdf53e511be54b1"
+      }
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322",
-  "status": "4 TiB HBM+NVMe c448 run 35832083322 completed successfully with verified artifacts and exact scratch cleanup. Matched HBM-only c448 control 35882091021 is now active through the InferenceX workflow.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021",
+  "status": "Matched c448 is complete: 4 TiB HBM+NVMe run 35832083322 beat HBM-only run 35882091021 by 7.122% total throughput per GPU and 9.273% P90 interactivity, with 7.364% less energy per successful query. The next adaptive midpoint is c480 between the matched c448 win and the c512 canonical warmup feasibility failure.",
   "last_capacity_check": {
-    "checked_at": "2026-09-23T15:52:17Z",
-    "active_study_run_ids": [
-      35882091021
-    ],
+    "checked_at": "2026-09-23T23:21:24Z",
+    "active_study_run_ids": [],
     "pending_study_run_ids": [],
     "dispatch_allowed": false,
     "b200_priority_jobs_queued": 0,
-    "b200_nodes_allocated": null,
-    "b200_nodes_idle": null,
+    "b200_nodes_allocated": 11,
+    "b200_nodes_idle": 0,
     "target_node": "im-b200-c001",
-    "target_node_state": "HBM-only c448 allocation 16943 active on im-b200-c001; canonical warmup healthy",
+    "target_node_state": "allocated to non-study workload; no fresh c001 capacity measurement available",
     "observed_free_bytes": null,
-    "reason": "The matched HBM-only c448 control is active. Dispatch no additional study workflow until it is terminal or the one-queued-B200-job ceiling permits another planned point."
+    "reason": "Matched c448 is recorded and c480 is prepared, but all 11 B200 nodes are allocated. Recheck the cluster-wide B200 workflow queue and c001 admission before dispatch."
   },
   "next_dispatch": {
-    "requires": "Monitor HBM-only c448 run 35882091021 through canonical warmup, 3,600-second profiling, artifact aggregation, and exact task-owned scratch cleanup. Compare it directly with NVMe c448 before choosing the next adaptive point."
+    "requires": "When the cluster-wide B200 queue permits at most one queued job, dispatch the 4 TiB HBM+NVMe c480 midpoint as the only active-or-queued NVMe-bearing study workflow. Require placement on allowlisted im-b200-c001, fresh free bytes above 4,535,485,464,576, and O_DIRECT before cache creation. If c480 profiles successfully, run its matched HBM-only control."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",

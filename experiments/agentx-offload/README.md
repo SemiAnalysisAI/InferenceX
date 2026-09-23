@@ -55,9 +55,14 @@ That control completed 1,048 profiling responses versus NVMe's 1,157. NVMe still
 won at c384, but by much less than at c320: 9,198.026 versus 8,277.940 total
 tokens/s/GPU (+11.115%), 8.721 versus 8.149 P90 interactivity (+7.028%), and
 2,154.172 versus 2,333.924 seconds P90 TTFT (-7.702%). Average power was 2.710%
-lower with NVMe. The next high-concurrency probe is c448, midway between the
-modest c384 win and c512's canonical warmup feasibility failure. Pair it with an
-HBM-only c448 control if profiling completes.
+lower with NVMe. Matched c448 also completed: NVMe delivered 8,839.499 versus
+8,251.805 total tokens/s/GPU (+7.122%), improved P90 interactivity from 8.212
+to 8.973 tokens/s/user (+9.273%), and completed 1,204 versus 1,120 responses.
+P90 TTFT improved only 0.427%, while P90 E2E-normalized interactivity was 0.376%
+lower; average power fell 0.416% and energy per successful query fell 7.364%.
+The benefit remains positive but continues to narrow. The next probe is c480,
+midway between the matched c448 win and c512's canonical warmup feasibility
+failure. Pair it with an HBM-only c480 control if profiling completes.
 
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an
@@ -82,7 +87,7 @@ Inspect recorded corpus identity, full commands and actual allocated KV capacity
 before declaring a pair matched.
 
 Start with a matched four-arm probe at concurrency 16. Then build full curves for
-all four arms. Initial curve points are 1, 4, 8, 16, 32, 64, 128, 256, 320, 384, 512, 1,024,
+all four arms. Initial curve points are 1, 4, 8, 16, 32, 64, 128, 256, 320, 384, 448, 480, 512, 1,024,
 4,096, 8,192 and 16,384. Add intermediate positive integers near observed changes, and
 repeat both sides of a candidate crossover on different nodes.
 Keep the maximum at 16,384. Failure or insufficient completed samples is a
