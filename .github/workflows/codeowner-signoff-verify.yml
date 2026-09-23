@@ -42,7 +42,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write # Publish PR feedback.
-      issues: write # Update the verdict comment.
+      issues: write # Post a new verdict comment.
       actions: read # Read workflow runs and artifacts.
     steps:
       - name: Checkout trusted workflow code
@@ -121,12 +121,13 @@ jobs:
             already rendered with this run's PR number, head SHA, and sign-off
             metadata.
 
-      - name: Update verdict comment
+      - name: Post verdict comment
         if: always() && steps.resolve.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ steps.scope.outputs.head-sha }}
           PR_NUMBER: ${{ steps.scope.outputs.pr-number }}
+          SIGNOFF_KEY: ${{ steps.resolve.outputs.signoff-key }}
           VERIFICATION_SUCCEEDED: ${{ steps.claude.outcome == 'success' }}
           VERDICT_PATH: /tmp/codeowner-signoff-verdict.md
         run: uv run --locked --extra workflows python -m infx.workflows.signoff_publish

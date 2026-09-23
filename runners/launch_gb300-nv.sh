@@ -32,7 +32,7 @@ mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
 
 export MODEL_PATH=$MODEL
 
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE}" != "true" ]]; then
+if [[ "$MODEL_PREFIX" == "dsv41flash" && "$PRECISION" == "fp4" && ( "$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "sglang" ) && "${IS_MULTINODE}" != "true" ]]; then
     # Download the new checkpoint into the persistent shared HF cache.
     export MODEL_PATH="$MODEL"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
@@ -52,14 +52,6 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     # the runner pod) can fail with "path is unavailable".
     export MODEL_PATH=/scratch/models/DeepSeek-V4-Pro
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
-elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-trt" ]]; then
-    export SERVED_MODEL_NAME="glm-5-nvfp4"
-    export MODEL_PATH=/scratch/models/GLM-5-NVFP4
-    export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5-NVFP4"
-elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
-    # The GLM-5.1 sglang recipes reuse the glm-5-fp4 alias.
-    export MODEL_PATH=/scratch/models/GLM-5.1-NVFP4
-    export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
 elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-trt" ]]; then
     export SERVED_MODEL_NAME="GLM-5.2-NVFP4"
     export MODEL_PATH=/scratch/models/GLM-5.2-NVFP4
@@ -67,27 +59,12 @@ elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" && $FRAMEWORK == "dynam
 elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/GLM-5.2-NVFP4
     export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
-elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH=/scratch/models/GLM-5-NVFP4
-    export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
-elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH=/scratch/models/GLM-5-FP8
-    export SRT_SLURM_MODEL_PREFIX="glm-5-fp8"
-elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH=/data/models/MiniMax-M2.5-NVFP4
-    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
-elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH=/data/models/MiniMax-M2.5
-    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
 elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/MiniMax-M3-NVFP4
     export SRT_SLURM_MODEL_PREFIX="nvidia/MiniMax-M3-NVFP4"
 elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/data/models/MiniMax-M3-MXFP8
     export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
-elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH=/scratch/models/Kimi-K2.5-NVFP4
-    export SRT_SLURM_MODEL_PREFIX="nvidia/Kimi-K2.5-NVFP4"
 elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/Kimi-K3
     export SRT_SLURM_MODEL_PREFIX="moonshotai/Kimi-K3"
@@ -98,7 +75,7 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-FP8
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, glm5.2-fp4, minimaxm2.5-fp4, minimaxm2.5-fp8, minimaxm3-fp4, minimaxm3-fp8, kimik2.5-fp4, kimik3-fp4, qwen3.5-fp4, qwen3.5-fp8"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5.2-fp4, minimaxm3-fp4, minimaxm3-fp8, kimik3-fp4, qwen3.5-fp4, qwen3.5-fp8"
     exit 1
 fi
 
@@ -129,11 +106,20 @@ import_squash() {
 
 import_squash "$SQUASH_FILE" "$IMAGE"
 # Keep this branch before the nginx import and srtctl setup.
-if [[ "$MODEL_PREFIX" == "dsv41flash" && "$FRAMEWORK" == "vllm" && "${IS_MULTINODE}" != "true" ]]; then
-    BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb300_${FRAMEWORK}_mtp.sh"
+if [[ "$MODEL_PREFIX" == "dsv41flash" && ( "$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "sglang" ) && "${IS_MULTINODE}" != "true" ]]; then
+    check_env_vars SPEC_DECODING
+    BENCH_SCRIPT="benchmarks/single_node/agentic/${MODEL_PREFIX}_${PRECISION}_gb300_${FRAMEWORK}"
+    case "$SPEC_DECODING" in
+        mtp) BENCH_SCRIPT+="_mtp.sh" ;;
+        none)
+            [[ "$FRAMEWORK" == "sglang" ]] || { echo "Native STP requires the SGLang recipe" >&2; exit 1; }
+            BENCH_SCRIPT+=".sh"
+            ;;
+        *) echo "Unsupported SPEC_DECODING=$SPEC_DECODING" >&2; exit 1 ;;
+    esac
     # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
     export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
-    [[ "${IS_AGENTIC}" == "1" && "${SPEC_DECODING:-}" == "mtp" && -f "$BENCH_SCRIPT" ]] || {
+    [[ "${IS_AGENTIC}" == "1" && -f "$BENCH_SCRIPT" ]] || {
         echo "Unsupported single-node recipe: $BENCH_SCRIPT" >&2
         exit 1
     }
@@ -298,7 +284,7 @@ SRTCTL_APPLY_ARGS=(
     -f "$CONFIG_FILE"
     --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
-if [[ "$IS_AGENTIC" == "1" || "$MODEL_PREFIX" == "glm5.1" || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" ) || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && ( "$FRAMEWORK" == "dynamo-trt" || "$USES_DCGM_POWER" == "1" ) ) || ( "$USES_DCGM_POWER" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ) ]]; then
+if [[ "$IS_AGENTIC" == "1" || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" ) || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && ( "$FRAMEWORK" == "dynamo-trt" || "$USES_DCGM_POWER" == "1" ) ) || ( "$USES_DCGM_POWER" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ) ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 
