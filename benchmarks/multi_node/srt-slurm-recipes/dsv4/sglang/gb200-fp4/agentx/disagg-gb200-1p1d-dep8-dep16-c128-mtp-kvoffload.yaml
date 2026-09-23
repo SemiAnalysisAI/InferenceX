@@ -117,7 +117,7 @@ roles:
       disaggregation-transfer-backend: mooncake
       disaggregation-mode: prefill
       load-balance-method: total_tokens
-      mem-fraction-static: 0.85
+      mem-fraction-static: 0.80
       page-size: 256
       swa-full-tokens-ratio: 0.02
       max-running-requests: 256
