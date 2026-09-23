@@ -47,6 +47,13 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export OSL="$OSL"
 
     check_env_vars BENCHMARK_LOGS_DIR
+    # cleanup_and_save_logs below removes BENCHMARK_LOGS_DIR wholesale. A profile
+    # that points it at the checkout (or a parent of it) deletes the workspace
+    # and every result just copied into it; sweep 35704948491 did exactly that.
+    if [[ "$BENCHMARK_LOGS_DIR" == "$GITHUB_WORKSPACE" || "$GITHUB_WORKSPACE" == "$BENCHMARK_LOGS_DIR"/* ]]; then
+        echo "ERROR: BENCHMARK_LOGS_DIR ($BENCHMARK_LOGS_DIR) must not be the checkout ($GITHUB_WORKSPACE) or contain it" >&2
+        exit 1
+    fi
     mkdir -p "$BENCHMARK_LOGS_DIR"
     sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
@@ -74,7 +81,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh"
-    if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]] || [[ "$FRAMEWORK" == "atom-disagg" ]]; then
+    if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]] || [[ "$FRAMEWORK" == "atom-disagg" ]] || [[ "$FRAMEWORK" == "tilert" ]]; then
         # Agentic recipes under multi_node/agentic/ export the HiCache tunables;
         # fixed-seq-len recipes live at the multi_node/ root.
         if [[ "${SCENARIO_SUBDIR}" == "agentic/" ]]; then
@@ -86,6 +93,16 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         BENCHMARK_SUBDIR="single_node/fixed_seq_len"
     fi
     JOB_ID=$(bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}")
+
+    # An empty JOB_ID means the recipe or submit.sh failed before sbatch. The
+    # wait loop below would then poll for slurm_job-.out forever, because its
+    # liveness guard degenerates to `grep -q ""` and matches any job this user
+    # has queued. Fail here instead of burning the job's whole time limit.
+    if [[ -z "${JOB_ID//[[:space:]]/}" ]]; then
+        echo "ERROR: benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME} returned no Slurm job id;" \
+             "the recipe or submit.sh failed before sbatch (see its stderr above)" >&2
+        exit 1
+    fi
 
     LOG_FILE="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID}.out"
 

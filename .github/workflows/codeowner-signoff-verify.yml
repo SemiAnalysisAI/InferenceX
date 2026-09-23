@@ -2,11 +2,11 @@ name: CODEOWNER Sign-off Verify
 
 on:
   issue_comment:
-    types: [created]
+    types: [created, edited]
   pull_request_review:
-    types: [submitted]
+    types: [submitted, edited]
   pull_request_review_comment:
-    types: [created]
+    types: [created, edited]
   workflow_dispatch:
     inputs:
       pr-number:
@@ -127,6 +127,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ steps.scope.outputs.head-sha }}
           PR_NUMBER: ${{ steps.scope.outputs.pr-number }}
+          SIGNOFF_KEY: ${{ steps.resolve.outputs.signoff-key }}
           VERIFICATION_SUCCEEDED: ${{ steps.claude.outcome == 'success' }}
           VERDICT_PATH: /tmp/codeowner-signoff-verdict.md
         run: uv run --locked --extra workflows python -m infx.workflows.signoff_publish

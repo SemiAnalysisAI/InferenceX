@@ -21,7 +21,7 @@ def _positive_id(value: Any) -> int:
 
 def _reference(
     event_name: str, event: dict[str, Any], repo: str, token: str
-) -> tuple[int, str, str, str]:
+) -> tuple[int, str, str, str, str]:
     if event_name == "workflow_dispatch":
         inputs = event["inputs"]
         match = re.fullmatch(
@@ -33,6 +33,7 @@ def _reference(
         if match is None or _positive_id(inputs["pr-number"]) != int(match[1]):
             raise ValueError("comment_url must identify a sign-off on pr-number in this repository")
         number, fragment, ref_id = int(match[1]), match[2].lower(), int(match[3])
+        signoff_key = f"{fragment}{ref_id}"
         if fragment == "issuecomment-":
             kind, path = "conversation comment", f"/issues/comments/{ref_id}"
         elif fragment == "pullrequestreview-":
@@ -63,13 +64,16 @@ def _reference(
         author = comment["user"]["login"]
         if event_name == "issue_comment":
             kind, path = "conversation comment", f"/issues/comments/{ref_id}"
+            signoff_key = f"issuecomment-{ref_id}"
         elif event_name == "pull_request_review":
             kind, path = "review summary", f"/pulls/{number}/reviews/{ref_id}"
+            signoff_key = f"pullrequestreview-{ref_id}"
         else:
             kind, path = "inline review comment", f"/pulls/comments/{ref_id}"
+            signoff_key = f"discussion_r{ref_id}"
     if not isinstance(author, str) or not re.fullmatch(r"[A-Za-z0-9-]+(?:\[bot\])?", author):
         raise ValueError("Invalid sign-off author")
-    return number, author, kind, f"gh api repos/{repo}{path} --jq .body"
+    return number, author, kind, signoff_key, f"gh api repos/{repo}{path} --jq .body"
 
 
 def resolve(
@@ -88,15 +92,19 @@ def resolve(
     }:
         return {"proceed": "false"}
     if event_name != "workflow_dispatch":
-        expected_action = "submitted" if event_name == "pull_request_review" else "created"
+        expected_actions = (
+            {"submitted", "edited"}
+            if event_name == "pull_request_review"
+            else {"created", "edited"}
+        )
         comment = event.get("review" if event_name == "pull_request_review" else "comment") or {}
-        if event.get("action") != expected_action or "As a PR reviewer and CODEOWNER" not in (
+        if event.get("action") not in expected_actions or "As a PR reviewer and CODEOWNER" not in (
             comment.get("body") or ""
         ):
             return {"proceed": "false"}
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
         raise ValueError("Invalid GitHub repository")
-    number, author, kind, fetch_cmd = _reference(event_name, event, repo, token)
+    number, author, kind, signoff_key, fetch_cmd = _reference(event_name, event, repo, token)
     pr = github.api(repo, f"/pulls/{number}", token)
     if pr["head"]["sha"] != scoped_head_sha:
         raise RuntimeError(
@@ -118,6 +126,7 @@ def resolve(
         "head-sha": pr["head"]["sha"],
         "signoff-author": author,
         "signoff-kind": kind,
+        "signoff-key": signoff_key,
         "signoff-fetch-cmd": fetch_cmd,
     }
 
