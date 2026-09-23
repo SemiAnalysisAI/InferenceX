@@ -117,7 +117,7 @@ SGLANG_CMD=(
     --mem-fraction-static 0.70
     # Native FP4 prefill scratch scales with query tokens times context.
     # The 16384-token default OOMed five canonical cells; match the existing
-    # 4096-token breakable graph ceiling without reducing model context.
+    # 4096-token prefill bound without reducing model context.
     --chunked-prefill-size 4096
     # AgentX C32 fanout reached 63 running requests before a native HIP illegal
     # access. Bound admission; additional client requests remain queued.
@@ -125,8 +125,9 @@ SGLANG_CMD=(
     --speculative-algorithm DSPARK
     --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
-    --cuda-graph-backend-prefill breakable
-    --cuda-graph-max-bs-prefill 4096
+    # Native breakable prefill still hit HIP illegal access with admission32
+    # and ample measured HBM headroom. Test eager prefill; retain decode graphs.
+    --cuda-graph-backend-prefill disabled
     --reasoning-parser auto
     --tool-call-parser auto
     # Draft-token forward passes under long-context agentic load block the
