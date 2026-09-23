@@ -41,8 +41,17 @@ drain limit; the phase failed before profiling and the allocation then reached
 its time limit. The c320 midpoint completed between c256 and c384 with 24.540%
 external hits, 13,193.777 total tokens/s/GPU, P90 interactivity 11.998
 tokens/s/user, and P90 TTFT 1,331.284 seconds. This confirms a steep, ordered
-cache-reuse and performance cliff across c256, c320, and c384. Run the matched
-HBM-only c320 control next, then add narrower NVMe points within the transition.
+cache-reuse and performance cliff across c256, c320, and c384. Its matched
+HBM-only c320 control completed 1,010 profiling responses versus NVMe's 1,697.
+At the same 3,600-second profiling window, NVMe delivered 13,193.777 versus
+7,997.601 total tokens/s/GPU (+64.972%), improved P90 interactivity from 8.047
+to 11.998 tokens/s/user (+49.097%), and reduced P90 TTFT from 1,990.296 to
+1,331.284 seconds (-33.111%). NVMe also used 4.633% less average power and
+43.241% less energy per successful query. This single matched run establishes
+that 4 TiB NVMe helps at c320 under this protocol, but a repeat is still needed
+before treating the size of the win as stable. Run the matched HBM-only c384
+control next to determine whether NVMe still helps after the observed cache cliff;
+then use a narrower point between c320 and c384 if the sign changes.
 
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an

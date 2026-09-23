@@ -3338,37 +3338,145 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "97daa26297294f3acfa239793f3fcd8b07933870",
-      "status": "in_progress",
+      "status": "success",
       "workflow_name": "offload-v1-none-c320-r1-20260922",
       "dispatched_at": "2026-09-22T18:15:46Z",
       "job_id": 106875745645,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35766002905/job/106875745645",
       "queued_at": "2026-09-22T18:16:18Z",
-      "performance_result": false,
+      "performance_result": true,
       "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c320, 3,600-second profiling, kv-offloading=none, and experiment=agentx-offload. InferenceX Dash showed no B200 job in the live priority queue and seven idle nodes immediately before dispatch.",
       "started_at": "2026-09-22T18:17:03Z",
       "runner": "b200-nscale-slurm_02",
-      "allocation_id": "16901"
+      "allocation_id": "16901",
+      "completed_at": "2026-09-23T00:06:53Z",
+      "node": "im-b200-c003",
+      "artifacts": [
+        {
+          "id": 10725727717,
+          "name": "run-stats",
+          "size_bytes": 284,
+          "sha256": "5ed4150e289e56fb1a43c3d0c048c0aad32abe6bf047e7a603207b252f7cc250"
+        },
+        {
+          "id": 10725692731,
+          "name": "results_bmk",
+          "size_bytes": 2047,
+          "sha256": "bd07123dfc05adb409bae836a1280e1b2ef5685fbb9fd85581463f27d3ac6809"
+        },
+        {
+          "id": 10725223211,
+          "name": "server_logs_minimaxm3_tp4_conc320_kvnone",
+          "size_bytes": 181864,
+          "sha256": "4afa8bd40e03b6e61e416de9d0a014322d83e58e5d737f30ffa680e33abca4ec"
+        },
+        {
+          "id": 10725198425,
+          "name": "agentic_minimaxm3_tp4_conc320_kvnone",
+          "size_bytes": 26713047,
+          "sha256": "f834b8b8450757e34e511213a517dc1113b6f62a76aefea95855c9f7d5e42d05"
+        },
+        {
+          "id": 10725168550,
+          "name": "power_audit_minimaxm3_tp4_conc320_kvnone",
+          "size_bytes": 820417,
+          "sha256": "a3d3328636b4f3684bbeffddc2b933dd10c30f232f5b66be1bdc6715380bf9bb"
+        },
+        {
+          "id": 10724984449,
+          "name": "bmk_agentic_minimaxm3_tp4_conc320_kvnone",
+          "size_bytes": 2238,
+          "sha256": "c2109d6d10dcd821657a11e4741ead99798e1120063fecb8375395110d38e4a3"
+        },
+        {
+          "id": 10724899994,
+          "name": "gpu_metrics_minimaxm3_tp4_conc320_kvnone",
+          "size_bytes": 816845,
+          "sha256": "8f157449d84d50e061a9e3f63cb87eb92594f395b416a1f315e3a78739f4aabf"
+        }
+      ],
+      "performance": {
+        "num_requests_total": 4558,
+        "num_requests_successful": 1010,
+        "num_requests_warmup_dropped": 3548,
+        "num_requests_error_dropped": 4,
+        "request_error_categories": {
+          "InvalidInferenceResultError": 4
+        },
+        "duration_seconds": 3615.24338,
+        "output_tokens_per_second": 288.83007,
+        "output_tokens_per_second_per_gpu": 72.20752,
+        "input_tokens_per_second": 31701.57582,
+        "total_tokens_per_second": 31990.40589,
+        "total_tokens_per_second_per_gpu": 7997.60147,
+        "p90_e2e_latency_seconds": 2048.42719,
+        "p90_ttft_seconds": 1990.2963,
+        "p90_tpot_seconds": 0.12427,
+        "p90_interactivity_tokens_per_second_per_user": 8.04706,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.10172,
+        "mean_e2e_latency_seconds": 1089.12957,
+        "avg_power_w_per_gpu": 900.713,
+        "total_gpu_energy_j": 13114393.975,
+        "joules_per_successful_query": 12984.54849
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.01614,
+        "external_cache_hit_rate": 0.0,
+        "overall_cache_hit_rate": 0.01614,
+        "theoretical_cache_hit_rate": 0.946,
+        "gpu_cache_hit_prompt_tokens": 12005760,
+        "external_cache_hit_prompt_tokens": 0,
+        "computed_prompt_tokens": 732011422,
+        "prompt_tokens_total": 744017182,
+        "generation_tokens_total": 1167860,
+        "gpu_cache_usage_pct": 1.0
+      },
+      "matched_nvme_c320_run_id": 35727274307,
+      "nvme_delta_vs_hbm_percent": {
+        "total_tokens_per_second_per_gpu": 64.97167,
+        "output_tokens_per_second_per_gpu": 73.6614,
+        "p90_interactivity_tokens_per_second_per_user": 49.09731,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 21.48053,
+        "p90_ttft_seconds": -33.11128,
+        "p90_e2e_latency_seconds": -33.60138,
+        "mean_e2e_latency_seconds": -27.13257,
+        "num_requests_successful": 68.0198,
+        "avg_power_w_per_gpu": -4.63311,
+        "joules_per_successful_query": -43.2407,
+        "computed_prompt_tokens": -17.19726
+      },
+      "runtime_evidence": "Matched MiniMax-M3 NVFP4 TP4 AgentX HBM-only control on im-b200-c003. It completed 1,010 profiling responses with four InvalidInferenceResultError classifications. No external cache was configured or observed. Under the same 3,600-second protocol, NVMe c320 completed 1,697 responses and improved total throughput per GPU by 64.972%, P90 interactivity by 49.097%, and P90 TTFT by 33.111%.",
+      "storage_evidence": "HBM-only configured zero DRAM and zero NVMe capacity with no connector. The workflow-owned scratch remained empty (zero files and zero bytes), and offload_cleanup.json matched run 35766002905 and Slurm job 16901, recorded exit_code=0, and deleted the exact task-owned directory.",
+      "evidence_sha256": {
+        "agg_bmk.json": "605fcde50753cf4eddec6992955dd96b71bde41f636452bf6571a5150118d147",
+        "bmk_result.json": "bda1fd539240c4eeb1180c74a1852af0996e8277ccc90303b864a836821c2dee",
+        "server.log": "e025467293d0c65cd91a4aa02ae87906b9fbd17c261e2e2e4e991a68f743c19b",
+        "offload_config.json": "5d5121ef19cc3074b68ed3c51afe3dbd5820f98f958bcdd35c04274a5885d293",
+        "benchmark.log": "3c19d2469ef69b177697a529331c4a7f0b4128e70bca6f163e8cd516cc6e43e9",
+        "offload-telemetry.jsonl": "53bec3381a963d78b0df796de7f3caa0ffa53a329cd1290e0b896f4bf54212bf",
+        "profile_export.jsonl": "bf515c60bc51e75be7a01fad77b1ea4318e2391375e4ca7deea6431fbd9728d9",
+        "offload_cleanup.json": "6211a6132706a9df5d441c7b571b0f5dc3ea646a5a754022f9129e2d1702c7ae",
+        "gpu_metrics.csv": "b9ec6ae8a97c0a1b1575fd4aab90c19aad44d69381909c708771065a6b9a7b50",
+        "power_validation.json": "77bb0335f2ae51efa75d9a7e16c335a1ae2c889bab62f5575eaa52e93d337db6"
+      }
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307",
-  "status": "Matched HBM-only c320 control 35766002905 is active in Launch job script on the same pinned MiniMax-M3 NVFP4 TP4 AgentX protocol. The completed NVMe c320 result and verified cleanup remain recorded.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905",
+  "status": "Matched c320 is complete: 4 TiB HBM+NVMe beat HBM-only across throughput, P90 interactivity, latency, power, and energy per successful query under the same 3,600-second protocol. The matched HBM-only c384 control is the next P0 point.",
   "last_capacity_check": {
-    "checked_at": "2026-09-22T18:18:52Z",
-    "active_study_run_ids": [
-      35766002905
-    ],
+    "checked_at": "2026-09-23T00:06:53Z",
+    "active_study_run_ids": [],
     "pending_study_run_ids": [],
-    "dispatch_allowed": true,
-    "b200_priority_jobs_queued": 0,
-    "b200_nodes_allocated": 3,
-    "b200_nodes_idle": 8,
-    "target_node": "one of im-b200-c001 through im-b200-c003; exact node pending runtime evidence",
-    "target_node_state": "active allocation 16901 on b200-nscale-slurm_02",
-    "reason": "InferenceX Dash showed allocation 16901 active on b200-nscale-slurm_02 with three B200 nodes allocated, eight idle, and no queued B200 job. No additional study run is useful until the matched c320 control produces comparison evidence."
+    "dispatch_allowed": null,
+    "b200_priority_jobs_queued": null,
+    "b200_nodes_allocated": null,
+    "b200_nodes_idle": null,
+    "target_node": "im-b200-c003",
+    "target_node_state": "allocation 16901 completed and released",
+    "reason": "HBM-only c320 workflow 35766002905 completed successfully. Refresh the live B200 priority queue before dispatching the matched HBM-only c384 control."
   },
   "next_dispatch": {
-    "requires": "Monitor matched HBM-only c320 run 35766002905 through canonical profiling and artifacts. On success, compare it directly with NVMe c320 run 35727274307 before selecting the next adaptive point."
+    "requires": "If the refreshed cluster-wide B200 priority queue is empty, dispatch matched HBM-only c384. Compare it directly with completed NVMe c384 run 35646317491; if the sign differs from c320, choose an adaptive midpoint between c320 and c384."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
