@@ -8785,6 +8785,16 @@
   scenario-type:
     - agentic-coding
   description:
+    - "Expand all five B300 DSXE recipes to exclude the complete known degraded-node set (gpu-00, gpu-01, gpu-04, gpu-06, and gpu-16) before rerunning the full sweep on the latest main branch."
+    - "在最新 main 分支上重新运行完整 sweep 前，将五个 B300 DSXE 配方的排除列表扩展为全部已知异常节点（gpu-00、gpu-01、gpu-04、gpu-06 和 gpu-16）。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3190
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
     - "Exclude the two B300 DSXE nodes that produced degraded low-concurrency results from all five recipes while their health is investigated."
     - "在节点健康状况调查期间，从全部五个配方中排除两个在低并发测试中性能异常的 B300 DSXE 节点。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3190

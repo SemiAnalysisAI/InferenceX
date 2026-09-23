@@ -228,7 +228,7 @@ roles:
 sbatch_directives:
   mem: "0"
   cpus-per-task: "192"
-  exclude: "dsxe-sa-b300-prd0-gpu-00,dsxe-sa-b300-prd0-gpu-04,dsxe-sa-b300-prd0-gpu-16"
+  exclude: "dsxe-sa-b300-prd0-gpu-00,dsxe-sa-b300-prd0-gpu-01,dsxe-sa-b300-prd0-gpu-04,dsxe-sa-b300-prd0-gpu-06,dsxe-sa-b300-prd0-gpu-16"
 
 srun_options:
   mem: "0"
