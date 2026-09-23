@@ -2,8 +2,8 @@
 set -eo pipefail
 
 # DeepSeek-V4.1-Flash AgentX on MI355X with SGLang DSpark, following the
-# cookbook's MI350X cell, with radix caching enabled for this isolated
-# experimental candidate. The KV cache is GPU-resident.
+# cookbook's MI350X cell, with radix caching enabled for AgentX prefix reuse.
+# The KV cache and TP4 Engram tables are GPU-resident.
 # https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP EP_SIZE CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION

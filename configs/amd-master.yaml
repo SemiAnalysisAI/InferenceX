@@ -1557,7 +1557,7 @@ glm5.3-fp8-mi355x-tilert-agentic:
           - "TILERT_EXTRA_ENV=GLM5_AR_N=2"
 
 # Official 2026-09-23 14:49 UTC ROCm nightly; gfx950, ROCm 10.
-# Match the published TP4/EP1 vLLM baseline; larger topologies qualify separately.
+# Official MI350X TP4/EP4 candidate; compare against the separate TP4/EP1 vLLM baseline.
 dsv41flash-fp4-mi355x-sglang-agentic-dspark:
   image: lmsysorg/sglang-rocm:v0.5.20-rocm10-mi35x-20260923@sha256:cc9f4ed6cc0d8610eb01c54e0c46e1d6a51010d8aaa54d298cbf0b522c792d89
   model: deepseek-ai/DeepSeek-V4.1-Flash
