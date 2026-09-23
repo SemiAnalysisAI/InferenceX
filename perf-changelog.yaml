@@ -8612,3 +8612,9 @@
   description:
   - 'Pin AMD runtime 7a7ca652fad37026bbf476b3f4368cd34c73c1c6 and share the native srt-slurm invocation between MI355X and MI300X. Add an explicit MI300X Qwen3-0.6B aggregate smoke matrix without changing production serving settings.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542
+
+- config-keys:
+  - '*'
+  description:
+  - 'Bump the NVIDIA srt-slurm submodule to v2.22.1 (3cbc5dd256af2bfd2fed09b724628c3f5456c85f) and use it for AMD ports instead of a separate fork pin. Reuse the shared Slurm log and completion helpers.'
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542

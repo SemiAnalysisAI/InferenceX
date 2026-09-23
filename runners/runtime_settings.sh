@@ -41,8 +41,6 @@ case "${RUNNER_NAME%%_*}" in
     mi300x-amd)
         check_env_vars GITHUB_WORKSPACE HOME
         export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
-        export SRT_SLURM_REPOSITORY=https://github.com/SemiAnalysisAI/srt-slurm.git
-        export SRT_SLURM_COMMIT=7a7ca652fad37026bbf476b3f4368cd34c73c1c6
         export SRT_SLURM_SHARED_BASE="$HOME/srt-slurm"
         export SRT_SLURM_CLUSTER_CONFIG="$GITHUB_WORKSPACE/runners/srt-slurm/mi300x-amd.yaml"
         export SRT_SLURM_COMPUTE_ARCH=x86_64
@@ -51,8 +49,6 @@ case "${RUNNER_NAME%%_*}" in
     mi355x-amds)
         check_env_vars GITHUB_WORKSPACE
         export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
-        export SRT_SLURM_REPOSITORY=https://github.com/SemiAnalysisAI/srt-slurm.git
-        export SRT_SLURM_COMMIT=7a7ca652fad37026bbf476b3f4368cd34c73c1c6
         export SRT_SLURM_SHARED_BASE=/it-share/gharunners2/srt-slurm
         export SRT_SLURM_CLUSTER_CONFIG="$GITHUB_WORKSPACE/runners/srt-slurm/mi355x-amds.yaml"
         export SRT_SLURM_COMPUTE_ARCH=x86_64
