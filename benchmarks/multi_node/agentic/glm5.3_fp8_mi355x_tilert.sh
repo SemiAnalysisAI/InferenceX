@@ -95,6 +95,12 @@ export TILERT_PARSER=none
 export TILERT_RDMA_STRICT=0
 export TILERT_CONVERT_LOCK_WAIT=21600
 export TILERT_SIMULATE_ACC_METHOD=match-expected
+# Keep the KV of the previous turn on the decode node and copy in only what the
+# new prompt adds (patches/tilert-0.1.6.post1-pd-prefix-reuse.patch, applied by
+# setup_deps.sh). At concurrency 1, 200 of 239 AgentX turns continue the
+# previous request's conversation, adding 334 tokens at the median; the
+# unpatched wheel re-copies the whole context into all eight ranks each turn.
+export TILERT_PD_PREFIX_REUSE=1
 export TILERT_WEIGHTS_DIR="/models/${MODEL_NAME}-tilert-tp${DECODE_TP}"
 # bf16 MLA KV on both roles. This is the only layout TileRT 0.1.6 can consume
 # from vLLM on ROCm: MlaNsaProfile.classify_layers infers the layout from the
