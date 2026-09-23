@@ -48,7 +48,9 @@ case "$FRAMEWORK" in
         fi
         ;;
     tilert)
-        check_env_vars GITHUB_WORKSPACE
+        # RUNNER_TYPE selects the AMD block below, so a missing value must fail
+        # here rather than silently skip it.
+        check_env_vars GITHUB_WORKSPACE RUNNER_TYPE
         export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE" RESULT_DIR=/workspace
         export GPU_MEM_UTIL=0.75 DECODE_CTRL_PORT=5556 DECODE_HTTP_PORT=5557 PREFILL_PORT=8000
         export DECODE_WAIT=3600 PREFILL_WAIT=3600 TILERT_QUEUE_TIMEOUT=0
@@ -57,6 +59,30 @@ case "$FRAMEWORK" in
         export B200_SQUASH_DIR=/home/sa-shared/containers
         if [[ "$IS_AGENTIC" == 1 || "$IS_AGENTIC" == true ]]; then
             export TILERT_QUEUE_TIMEOUT=1800
+        fi
+        # The MI355X TileRT recipe runs through the shared amd_utils chain
+        # (submit.sh -> job.slurm -> server.sh -> setup_deps.sh), which validates
+        # the same orchestration inputs the AMD SGLang/vLLM/ATOM arms receive.
+        # Without them submit.sh exits before sbatch and the launcher never gets
+        # a job id. The B200 TileRT lane goes through srt-slurm and reads none of
+        # these, so they are scoped to the AMD pool.
+        if [[ "$RUNNER_TYPE" == *mi355x-amds* ]]; then
+            # Validated by job.slurm; only the vllm-disagg router branch reads
+            # VLLM_ROUTER_IMAGE, which ENGINE=tilert never enters.
+            export VLLM_ROUTER_IMAGE=vllm/vllm-router:nightly-20260716-1fbcde7
+            export SKIP_RDMA_CHECK=0 SKIP_GPU_SANITY=0
+            # The B200 profile above points BENCHMARK_LOGS_DIR at the workspace
+            # itself; launch_mi355x-amds.sh's EXIT trap does `rm -rf
+            # "$BENCHMARK_LOGS_DIR"`, which then deleted the whole checkout,
+            # results included (sweep 35704948491). Use the AMD launcher's own
+            # convention from runners/runtime_settings.sh.
+            export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
+            export ROUTER_TYPE=tilert-pd-router ROUTER_PORT=30000 PROXY_PING_PORT=36367
+            export HEADNODE_PORT=20000 SERVER_PORT=2584 PROXY_STREAM_IDLE_TIMEOUT=300
+            export ENABLE_METRICS=0 PREFILL_ROUTER_POLICY=random DECODE_ROUTER_POLICY=random
+            export FLUSH_DRAIN_TIMEOUT=120 CLEAR_CACHE_BETWEEN_CONC=1
+            export DECODE_MTP_SIZE=0
+            export ROCM_PATH=/opt/rocm UCX_HOME=/usr/local/ucx RIXL_HOME=/usr/local/rixl
         fi
         ;;
     llmd-vllm)
