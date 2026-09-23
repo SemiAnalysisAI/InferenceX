@@ -30,7 +30,11 @@ case "${RUNNER_NAME%%_*}" in
     h100-dgxc-slurm)
         if [[ "$MODEL_PREFIX" == dsv41flash && "$FRAMEWORK" == sglang && "$IS_MULTINODE" == false && "$IS_AGENTIC" == 1 ]]; then
             check_env_vars CONC EVAL_ONLY
-            if [[ "$EVAL_ONLY" == false ]] && (( CONC >= 20 )); then
+            if [[ "$EVAL_ONLY" == false ]] && (( CONC >= 24 )); then
+                # Earlier full-context C24/C28 profiles exhausted 12 hours
+                # while progressing; preserve warmup and the canonical hour.
+                export SALLOC_TIME_LIMIT=1080
+            elif [[ "$EVAL_ONLY" == false ]] && (( CONC >= 20 )); then
                 # Preserve full warmup and the hour-long profile at the upper
                 # vLLM baseline concurrencies; C20 previously exhausted 8 hours.
                 export SALLOC_TIME_LIMIT=720
