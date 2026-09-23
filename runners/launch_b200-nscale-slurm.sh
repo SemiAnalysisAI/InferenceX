@@ -6,7 +6,7 @@
 # b200-nscale-slurm_* runner enters here and this is the pool's only launcher.
 # Three execution paths share the file and are selected once, below:
 #   native-srt     multi-node lanes whose srt-slurm recipes are maintained
-#                  against this cluster (DSV4 / Kimi K2.6 / Kimi K3 / GLM-5.2
+#                  against this cluster (DSV4 / Kimi K3 / GLM-5.2
 #                  FP4 and GLM-5.1 FP8 TileRT)
 #   multinode-srt  every other multi-node job, through srt-slurm with the
 #                  cluster-wide model table
@@ -33,7 +33,7 @@ uses_native_srt_lane() {
         return 1
     fi
     case "${MODEL_PREFIX}/${PRECISION}" in
-        dsv4/fp4|kimik2.6/fp4|kimik3/fp4|glm5.2/fp4) ;;
+        dsv4/fp4|kimik3/fp4|glm5.2/fp4) ;;
         glm5.1/fp8) [[ "$FRAMEWORK" == "tilert" ]] || return 1 ;;
         *) return 1 ;;
     esac
@@ -65,12 +65,13 @@ echo "B200 Nscale launch path: $LAUNCH_PATH"
 if [[ "$LAUNCH_PATH" == "native-srt" ]]; then
     case "${MODEL_PREFIX}/${PRECISION}" in
         dsv4/fp4)
-            check_env_vars MODEL_PATH
-            export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
-            ;;
-        kimik2.6/fp4)
-            check_env_vars MODEL_PATH
-            export SRT_SLURM_MODEL_PREFIX="kimi-k2.6-nvfp4"
+            if [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro-0813" ]]; then
+                export MODEL_PATH="$NSCALE_MODEL_ROOT/DeepSeek-V4-Pro-0813"
+                export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-0813"
+            else
+                check_env_vars MODEL_PATH
+                export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+            fi
             ;;
         kimik3/fp4)
             check_env_vars MODEL_PATH
@@ -101,9 +102,6 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     # Node-local weights are not visible on the runner/login node.
     export MODEL_PATH="/scratch/models/DeepSeek-V4-Pro-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
-elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "bf16" ]]; then
-    export MODEL_PATH="/scratch/models/Qwen3.5-397B-A17B"
-    export SRT_SLURM_MODEL_PREFIX="qwen3.5"
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/scratch/models/Qwen3.5-397B-A17B-FP8"
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
@@ -117,39 +115,15 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" && $MODEL == *NVFP4-V2
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/models/Qwen3.5-397B-A17B-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
-elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/scratch/models/GLM-5-FP8"
-    export SRT_SLURM_MODEL_PREFIX="glm5-fp8"
 elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
     check_env_vars MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="glm5.1-fp8"
-elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/scratch/models/GLM-5-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="glm5-fp4"
 elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
     check_env_vars MODEL_PATH
     export SRT_SLURM_MODEL_PREFIX="glm5.2-fp4"
 elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="${MODEL_PATH:-/scratch/models/GLM-5.2-FP8}"
     export SRT_SLURM_MODEL_PREFIX="glm5.2-fp8"
-elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "int4" ]]; then
-    export MODEL_PATH="/scratch/models/Kimi-K2.5"
-    export SRT_SLURM_MODEL_PREFIX="kimik2.5"
-elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/scratch/models/Kimi-K2.5-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="kimik2.5-fp4"
-elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
-    check_env_vars MODEL_PATH
-    export SRT_SLURM_MODEL_PREFIX="kimi-k2.6-nvfp4"
-elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/scratch/models/MiniMax-M2.5"
-    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
-elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/scratch/models/MiniMax-M2.5-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
-elif [[ $MODEL_PREFIX == "gptoss" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/scratch/models/gpt-oss-120b"
-    export SRT_SLURM_MODEL_PREFIX="gptoss"
 elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/scratch/models/MiniMax-M3-MXFP8"
     export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
@@ -184,6 +158,15 @@ fi
 # fully qualified references such as ghcr.io/tile-ai/tilert or nvcr.io/....
 enroot_uri_for_image() {
     local image_ref="$1"
+    # This pool's Enroot accepts digests as the manifest tag, not Docker's @ form.
+    if [[ "$image_ref" == *@sha256:* ]]; then
+        local image_digest="${image_ref##*@}"
+        image_ref="${image_ref%@*}"
+        if [[ "${image_ref##*/}" == *:* ]]; then
+            image_ref="${image_ref%:*}"
+        fi
+        image_ref="${image_ref}:${image_digest}"
+    fi
     local first_component="${image_ref%%/*}"
 
     if [[ "$image_ref" == */* && (
@@ -269,8 +252,7 @@ run_native_srt_lane() {
         "${IS_AGENTIC}" == "1" ||
         "$PRECISION" != "fp4" ||
         ( "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" != "dynamo-sglang" && "$FRAMEWORK" != "dynamo-vllm" ) ||
-        ( "$MODEL_PREFIX" == "kimik2.6" && "$FRAMEWORK" != "dynamo-vllm" ) ||
-        ( "$MODEL_PREFIX" != "dsv4" && "$MODEL_PREFIX" != "kimik2.6" )
+        "$MODEL_PREFIX" != "dsv4"
     ) ]]; then
         echo "Error: B200 nscale dcgm-power requires a supported fixed-sequence lane or Kimi-K3 AgentX vLLM" >&2
         exit 1
@@ -398,8 +380,7 @@ run_native_srt_lane() {
 
     SRTCTL_PREFLIGHT_ARGS=()
     # These weights are staged on the Slurm compute nodes, not the login node.
-    if [[ $MODEL_PREFIX == "kimik2.6" ]] ||
-       [[ $MODEL_PREFIX == "kimik3" ]] ||
+    if [[ $MODEL_PREFIX == "kimik3" ]] ||
        [[ $MODEL_PREFIX == "glm5.2" ]] ||
        [[ $MODEL_PREFIX == "dsv4" ]]; then
         SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
@@ -545,6 +526,7 @@ run_multinode_srt() {
     fi
 
     USES_DCGM_POWER=0
+    USES_AGENTX_POWER=0
     _POWER_CONFIG_FILE="${CONFIG_FILE:-}"
     if [[ "${EVAL_ONLY}" == "true" && -n "${EVAL_CONFIG_FILE:-}" ]]; then
         _POWER_CONFIG_FILE="$EVAL_CONFIG_FILE"
@@ -560,13 +542,16 @@ run_multinode_srt() {
     ' "$_RECIPE_SRC"; then
         USES_DCGM_POWER=1
     fi
-    if [[ "$USES_DCGM_POWER" == "1" && (
+    if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
+        "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+        USES_AGENTX_POWER=1
+    elif [[ "$USES_DCGM_POWER" == "1" && (
         "${IS_AGENTIC}" == "1" ||
         "$MODEL_PREFIX" != "dsv4" ||
         "$PRECISION" != "fp4" ||
         "$FRAMEWORK" != "dynamo-vllm"
     ) ]]; then
-        echo "Error: B200 Nscale dcgm-power is limited to fixed-sequence DSV4 FP4 dynamo-vllm" >&2
+        echo "Error: B200 Nscale dcgm-power requires fixed-sequence DSV4 FP4 dynamo-vllm or Qwen3.5 FP8 AgentX dynamo-sglang" >&2
         exit 1
     fi
 
@@ -586,11 +571,7 @@ run_multinode_srt() {
     curl -LsSf https://astral.sh/uv/install.sh | sh
     export PATH="$UV_INSTALL_DIR:$PATH"
 
-    if [[ $MODEL_PREFIX == "minimaxm2.5" && $FRAMEWORK == "dynamo-vllm" ]]; then
-        uv venv --seed "$GITHUB_WORKSPACE/.venv"
-    else
-        uv venv "$GITHUB_WORKSPACE/.venv"
-    fi
+    uv venv "$GITHUB_WORKSPACE/.venv"
     source "$GITHUB_WORKSPACE/.venv/bin/activate"
     uv pip install -e .
 
@@ -600,7 +581,7 @@ run_multinode_srt() {
     fi
 
     NGINX_IMAGE="nginx:1.27.4"
-    # Set by runners/runtime_settings.sh (a different squash dir for MiniMax-M2.5 dynamo-vllm).
+    # Set by runners/runtime_settings.sh.
     check_env_vars B200_SQUASH_DIR B200_SQUASH_LOCK_TIMEOUT
     SQUASH_DIR="${B200_SQUASH_DIR}"
     SQUASH_LOCK_TIMEOUT="${B200_SQUASH_LOCK_TIMEOUT}"
@@ -678,8 +659,9 @@ run_multinode_srt() {
     sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "${CONFIG_FILE%%:*}"
 
     SRTCTL_PREFLIGHT_ARGS=()
-    # Kimi K2.6 weights are staged on the Slurm compute nodes, not the login node.
-    if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
+    # These weights are staged on the Slurm compute nodes, not the login node.
+    # SRT still checks the resolved model path when the worker starts.
+    if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
         SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
     fi
 
@@ -700,29 +682,11 @@ run_multinode_srt() {
     LOGS_DIR="outputs/$JOB_ID/logs"
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
-    while ! ls "$LOG_FILE" &>/dev/null; do
-        if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
-            echo "ERROR: Job $JOB_ID failed before creating log file"
-            scontrol show job "$JOB_ID"
-            exit 1
-        fi
-        echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
-        sleep 5
-    done
-
-    (
-        while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
-            sleep 10
-        done
-    ) &
-    POLL_PID=$!
-
-    echo "Tailing LOG_FILE: $LOG_FILE"
-
-    # -F follows by name and polls; inotify does not work on NFS.
-    tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
-
-    wait $POLL_PID
+    local srt_job_rc=0
+    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || srt_job_rc=$?
+    if [[ "$srt_job_rc" -eq 0 ]]; then
+        verify_slurm_job_status "$JOB_ID" || srt_job_rc=$?
+    fi
 
     set -x
 
@@ -735,6 +699,15 @@ run_multinode_srt() {
     fi
 
     echo "Found logs directory: $LOGS_DIR"
+
+    if [[ "$USES_AGENTX_POWER" == "1" && "${EVAL_ONLY}" != "true" ]]; then
+        check_env_vars CONC_LIST
+        local -a power_concurrencies
+        read -r -a power_concurrencies <<< "$CONC_LIST"
+        collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" \
+            "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" \
+            "$SRT_SLURM_COMMIT" "${power_concurrencies[@]}" || srt_job_rc=$?
+    fi
 
     if [[ "$USES_DCGM_POWER" == "1" ]]; then
         mkdir -p "$LOGS_DIR/power"
@@ -776,6 +749,8 @@ run_multinode_srt() {
         sleep 10
     done
     find . -name '.nfs*' -delete 2>/dev/null || true
+    # Failed runs still provide the diagnostics and eval outputs above.
+    return "$srt_job_rc"
 }
 
 # ---------------------------------------------------------------------------
@@ -788,6 +763,8 @@ run_single_node() {
     check_env_vars SALLOC_TIME_LIMIT GPU_COUNT
 
     SQUASH_FILE="/data/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    local enroot_uri
+    enroot_uri=$(enroot_uri_for_image "$IMAGE") || return 1
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" || "$SPEC_DECODING" == "draft_model" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b200_vllm.sh) so models
@@ -840,9 +817,10 @@ run_single_node() {
             echo 'Squash file already exists and is valid, skipping import'
         else
             rm -f \"$SQUASH_FILE\"
-            enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+            enroot import -o \"$SQUASH_FILE\" \"$enroot_uri\"
+            unsquashfs -l \"$SQUASH_FILE\" > /dev/null || exit 1
         fi
-    "
+    " || return 1
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \

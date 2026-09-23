@@ -595,28 +595,26 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
 # Kimi-K3 MXFP4 agentic-coding benchmark on MI355X via ATOM with DSpark
 # speculative decoding. Acceptance is pinned to the committed golden curve in
 # golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
-# at both draft lengths used here: 7 draft tokens -> AL 3.84 at concurrency 1-4,
-# 3 draft tokens -> AL 3.00 at concurrency 8 through 16.
+# at both draft lengths used here: 7 draft tokens -> AL 3.84 at concurrency 1 and 4,
+# 3 draft tokens -> AL 3.00 at concurrency 14 and 16.
 # Companion to kimik3-fp4-mi355x-vllm-agentic-mtp: same checkpoint, same runner.
 # TP8 only -- the 1.56 TB MXFP4 checkpoint is ~195 GB/GPU and TP4 cannot load,
 # which is also why there is no DP-attention arm.
 # Three serving bands, tracking the ATOM recipe:
-#   interactive (1, 2, 4)        the latency floor, GPU-resident, dcp 1.
-#   mid         (8, 12, 14, 16)  decode is KV-bandwidth-bound over 100k+ token
-#                                contexts, so dcp-size 8 shards the KV read
-#                                across all 8 GPUs and the LMCache DRAM tier
-#                                backs the paged KV.
-#   throughput  (32, 40, 56, 64) same shape, no draft model.
+#   interactive (1, 4)        the latency floor, GPU-resident, dcp 1.
+#   mid         (14, 16)      decode is KV-bandwidth-bound over 100k+ token
+#                             contexts, so dcp-size 8 shards the KV read across
+#                             all 8 GPUs and the LMCache DRAM tier backs the
+#                             paged KV.
+#   throughput  (48, 56, 72)  same shape, no draft model.
 # Two utilization blocks because the per-rank LMCache pool differs, and the
 # launcher divides the aggregate budget by TP:
-#   0.343 -> 1028 GB aggregate -> 128 GB/rank (conc 8 through 40).
-#   0.513 -> 1538 GB aggregate -> 192 GB/rank (conc 56 and 64), where the wider
-#            in-flight window needs the deeper pool to keep the paged KV
+#   0.343 -> 1028 GB aggregate -> 128 GB/rank (conc 14 through 48).
+#   0.513 -> 1538 GB aggregate -> 192 GB/rank (conc 56 and 72), where the
+#            wider in-flight window needs the deeper pool to keep the paged KV
 #            resident.
-# Concurrency 14 is deliberate: it runs the concurrency 16 server verbatim,
-# including the pinned CUDA-graph width, and only moves the client concurrency.
 kimik3-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0907
+  image: rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0911
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
@@ -627,14 +625,14 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.343
       search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp }
-      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [8, 12, 14, 16, 32, 40], spec-decoding: mtp }
+      - { tp: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp }
+      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [14, 16, 48], spec-decoding: mtp }
     - dram-utilization: 0.513
       search-space:
-      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [56, 64], spec-decoding: mtp }
+      - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [56, 72], spec-decoding: mtp }
 
 minimaxm3-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202609140645-lirzhang-triton-build
+  image: rocm/atom-dev:nightly_202609171455
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: cluster:mi355x-amds
@@ -643,11 +641,14 @@ minimaxm3-fp4-mi355x-atom-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.20
+    # 0.687 targets ~256 GB/rank on the dram-offload arms: LMCACHE_MAX_LOCAL_CPU_SIZE
+    # = TOTAL_CPU_DRAM_GB / TP = node_DRAM * dram-utilization / 8 (TP-independent).
+    - dram-utilization: 0.687
       search-space:
       - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 5, 8, 10, 12, 15, 20, 24, 28, 32], spec-decoding: mtp }
-      - { tp: 2, kv-offloading: none, conc-list: [1, 2, 5], spec-decoding: mtp }
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [40, 48], spec-decoding: mtp }
+      - { tp: 2, kv-offloading: none, conc-list: [1, 2], spec-decoding: mtp }
+      - { tp: 2, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5rc3+rocm7.2.4" }, conc-list: [20, 25, 30], spec-decoding: mtp }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.5rc3+rocm7.2.4" }, conc-list: [40, 48], spec-decoding: mtp }
 
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
@@ -999,12 +1000,12 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
       # while MTP creates two. Restore these points after the upstream hybrid
       # KV recovery fix lands: https://github.com/vllm-project/vllm/pull/45497
 
-# DeepSeek-V4-Pro FP4 AgentX on one MI355X node using ATOM MTP. Throughput
-# uses the thinking_on golden AL 2.49 for three draft tokens; eval uses real
-# MTP acceptance. max-num-seqs is set to 2x concurrency by the recipe.
+# DeepSeek-V4-Pro-0813 FP4 AgentX on one MI355X node using ATOM DSpark K6.
+# Both throughput bands use thinking_on golden AL 3.77; eval uses real
+# acceptance. Keep the historical config key for changelog compatibility.
 dsv4-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202608280858
-  model: deepseek-ai/DeepSeek-V4-Pro
+  image: rocm/atom-dev:nightly_202609161445
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
   precision: fp4
@@ -1013,8 +1014,8 @@ dsv4-fp4-mi355x-atom-agentic-mtp:
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16] }
-      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [48, 64, 96, 128, 256] }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: draft_model, conc-list: [48, 64, 96, 128, 256] }
 
 dsr1-fp4-mi355x-sglang-disagg-mtp:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
@@ -1148,7 +1149,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=1"
 
 minimaxm3-fp8-mi300x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-d9105ea8001e0a6d77a96327d17515bb5791fb36
+  image: vllm/vllm-openai-rocm:v0.29.0
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: cluster:mi300x-amd
@@ -1170,7 +1171,7 @@ minimaxm3-fp8-mi300x-vllm-agentic-mtp:
 # golden AL 3.51 for throughput, real block verification for evals, adaptive
 # verification off on ROCm.
 dsv41flash-fp4-mi300x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
+  image: vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi300x-amd
@@ -1181,14 +1182,26 @@ dsv41flash-fp4-mi300x-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      # Follow upstream AMD Engram defaults; omit the CUDA-only config flag.
+      # The recipe sets engram cpu_offload per TP: off at TP8 so this curve stays
+      # comparable with the validated concurrency 1-32 run, on below TP8 where
+      # the tables would not fit beside the checkpoint share on a 192 GB card.
+      # vllm-project/vllm#57491 widened the two is_cuda() gates to
+      # is_cuda_alike(), so engram_config resolves on gfx942 in this image.
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      # TP4 halves the GPUs per server. With the Engram tables in pinned host
+      # memory the resident weights are ~81 GiB per rank.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      # No TP2 arm on this SKU. Measured in run 35671005506: at TP2 the resident
+      # weights are ~145 GiB per rank, and even with the indexer buffer halved
+      # to 4096 batched tokens the engine reported "Available KV cache memory:
+      # -13.51 GiB" and refused to start. A 192 GB card cannot hold this
+      # checkpoint at TP2 with a usable KV pool; MI325X does it on 256 GB.
 
 # GLM-5.2 FP8 full-context AgentX refresh on MI325X. This preserves the TP8
 # GPU-resident-KV c1/c2/c3/c4/c5/c6/c8 curve from Actions run 29657732517
 # and enables EAGLE MTP with the committed thinking-on golden AL.
 glm5.2-fp8-mi325x-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.16-rocm720-mi30x
+  image: lmsysorg/sglang:v0.5.19-rocm720-mi30x
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:mi325x-amds
@@ -1223,7 +1236,7 @@ minimaxm3-fp8-mi325x-vllm-agentic-mtp:
 # golden AL 3.51 for throughput, real block verification for evals, adaptive
 # verification off on ROCm.
 dsv41flash-fp4-mi325x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
+  image: vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi325x-amds
@@ -1234,8 +1247,18 @@ dsv41flash-fp4-mi325x-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      # Follow upstream AMD Engram defaults; omit the CUDA-only config flag.
+      # The recipe sets engram cpu_offload per TP: off at TP8 so this curve stays
+      # comparable with the validated concurrency 1-32 run, on below TP8 where
+      # the tables would not fit beside the checkpoint share on a 256 GB card.
+      # vllm-project/vllm#57491 widened the two is_cuda() gates to
+      # is_cuda_alike(), so engram_config resolves on gfx942 in this image.
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      # TP4 halves the GPUs per server. With the Engram tables in pinned host
+      # memory the resident weights are ~81 GiB per rank.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      # TP2 quarters them. Resident weights rise to ~145 GiB per rank, so the
+      # recipe halves the indexer buffer and caps the scheduler here.
+      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
 
 dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
   # Renamed from dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp when this arm
@@ -1362,15 +1385,15 @@ minimaxm3-fp4-mi355x-vllm-agentic-mtp:
 
 # GLM-5.2 FP4 agentic-coding benchmark on MI355X via SGLang with MTP speculative
 # decoding. Two arms:
-# (1) TP4/EP4 with HiCache KV offloading to DRAM at concurrency [4, 8, 10, 12];
-#     serves the throughput-dominant regime (conc ≥ 8).
-# (2) TP8/EP1 without KV offloading, concurrency sweep [1, 2, 4, 10];
+# (1) TP4/EP4 with HiCache KV offloading to DRAM at concurrency [4, 8, 10, 12, 14, 16];
+#     serves the high-concurrency, throughput-dominant regime.
+# (2) TP8/EP1 without KV offloading, concurrency sweep [1, 2, 4];
 #     EP=1 eliminates the MoE all-to-all collective, reducing ITL at low-to-mid
 #     concurrency; GPU-resident KV keeps latency independent of DRAM bandwidth.
-#     c6 and c8 removed after sweep validation: dominated by TP4/EP4 arm.
+#     c4 intentionally overlaps both arms to compare the topology crossover.
 # SA selects the Pareto-optimal arm per concurrency point.
 glm5.2-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260916
+  image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260920
   model: amd/GLM-5.2-MXFP4
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
@@ -1379,10 +1402,10 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.8
+    - dram-utilization: 0.85
       search-space:
-      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 10, 12], spec-decoding: mtp }
-      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 10], spec-decoding: mtp }
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 10, 12, 14, 16], spec-decoding: mtp }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp }
 
 # GLM-5.2 FP8 agentic-coding benchmark on MI355X via SGLang with MTP speculative
 # decoding: the FP8 precision sibling of glm5.2-fp4-mi355x-sglang-agentic-mtp,
@@ -1400,7 +1423,7 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
 #     throughput-dominant regime where the working set outgrows the device pool.
 # SA selects the Pareto-optimal arm per concurrency point.
 glm5.2-fp8-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260908
+  image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260917
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
@@ -1414,14 +1437,14 @@ glm5.2-fp8-mi355x-sglang-agentic-mtp:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 10], spec-decoding: mtp }
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8, 12, 16], spec-decoding: mtp }
 # GLM-5.2 FP4 agentic-coding benchmark on MI355X via ATOM with MTP speculative
-# decoding, matching the standalone recipe (ROCm/ATOM PR 2247). TP4 + LMCache
-# DRAM offload for every point; small concurrency (C2-C10) is TP4-only, large
-# concurrency (C16-C48) adds DCP4 to shard the decode KV. The script resolves
-# the draft depth and forced golden AL per concurrency point (K5/3.61 for
-# C2-C8, K4/3.33 for C10-C40, K3/2.99 for C48). The TP8 arm stays GPU-resident
-# with no KV offload.
+# decoding, matching the standalone recipe (ROCm/ATOM PR 2345). Small
+# concurrency (C2-C10) is TP4-only on the GPU prefix cache with no KV offload;
+# large concurrency (C16-C48) adds DCP4 to shard the decode KV and keeps the
+# LMCache DRAM offload. The script resolves the draft depth and forced golden AL
+# per concurrency point (K5/3.61 for C2-C8, K4/3.33 for C10-C40, K3/2.99 for
+# C48). The TP8 arm stays GPU-resident with no KV offload.
 glm5.2-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202609151450
+  image: rocm/atom-dev:nightly_202609211553
   model: amd/GLM-5.2-MXFP4
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
@@ -1432,9 +1455,10 @@ glm5.2-fp4-mi355x-atom-agentic-mtp:
     agentic-coding:
     # dram-utilization 0.171 -> TOTAL_CPU_DRAM_GB=256 per TP4 rank (recipe's
     # LMCACHE_MAX_LOCAL_CPU_SIZE=256): min(3095781,2861022)MiB*0.171*4/8 = 256.
+    # Only the DCP4 arm offloads; the other two are GPU-resident.
     - dram-utilization: 0.171
       search-space:
-       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [2, 4, 8, 10], spec-decoding: mtp }
+       - { tp: 4, kv-offloading: none, conc-list: [2, 4, 8, 10], spec-decoding: mtp }
        - { tp: 4, dcp-size: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [16, 24, 32, 40, 48], spec-decoding: mtp }
        - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp }
 
@@ -1458,8 +1482,14 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
 # tag predates vllm-project/vllm#56503, which moves the mHC delayed pre block off
 # the eager Torch reference and onto AITER. MI355X run 34710937012 passed the
 # full concurrency 1-32 sweep and eval-only concurrency 32.
+# TP=2 joins TP=4, and both extend to concurrency 128. TP=2 became feasible on
+# this SKU once the Engram tables moved to host memory: they cost 47.2 GiB of
+# device memory per rank, which is what previously forced four GPUs per server.
+# Two GPUs per server doubles the servers per node and is the layout that
+# decides whether DSv4.1-Flash is throughput- or interactivity-bound here.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
+  # ROCm 10.0 nightly channel, shared with kimik3-fp4-mi355x-vllm-agentic-mtp.
+  image: vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
@@ -1470,5 +1500,10 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      # Follow upstream AMD Engram defaults; omit the CUDA-only config flag.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }
+      # The recipe only changes the memory split where a point ran short of KV:
+      # TP=4 offloads the engram tables at c128, and the prefill chunk shrinks at
+      # TP=2 c64, TP=4 c128 and TP=2 c128. Every point is measured here rather
+      # than combined from the earlier run: the image move leaves concurrency
+      # 1-32 measured only on the superseded nightly-eed1f3d0 pin.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
