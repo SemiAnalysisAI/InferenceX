@@ -3855,11 +3855,12 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "253ba506c0d451ec815bafb373e6bcd4b504c723",
-      "status": "queued",
+      "status": "in_progress",
       "workflow_name": "offload-v1-nvme4tib-c480-r1-20260923",
       "dispatched_at": "2026-09-23T23:36:10Z",
       "get_jobs_job_id": 107428093337,
       "queued_at": "2026-09-23T23:36:31Z",
+      "started_at": "2026-09-23T23:36:39Z",
       "job_id": 107428174310,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35934408414/job/107428174310",
       "performance_result": null,
@@ -3869,25 +3870,30 @@
       "capacity_required_bytes": 4535485464576,
       "matched_hbm_required_on_success": true,
       "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c480, 3,600-second profiling, kv-offloading=nvme with the vllm-simple backend, and experiment=agentx-offload. The c480 point is the midpoint between the matched c448 NVMe win and the c512 canonical warmup feasibility failure. Immediately before dispatch, a fresh GitHub Actions job-label inventory found zero queued cluster:b200-nscale jobs; live cluster inventory showed all 11 B200 nodes allocated. This workflow is therefore the single queued B200 job and the only active-or-queued NVMe-bearing study workflow.",
-      "admission_evidence": "Pending allocation. Runtime must land on allowlisted im-b200-c001 and verify more than 4,535,485,464,576 free bytes plus O_DIRECT before creating task-owned 4 TiB scratch."
+      "node": "im-b200-c001",
+      "runner": "b200-nscale-slurm_00",
+      "allocation_id": 16993,
+      "scratch": "/offload-scratch/inferencex-offload-35934408414-1-16993-659802d8b091",
+      "admission_evidence": "Slurm allocation 16993 landed on allowlisted im-b200-c001. Runtime preflight observed 17,712,031,088,640 free bytes on xfs /dev/md0 over eight non-rotating NVMe leaves, exceeded the 4 TiB budget plus 128 GiB reserve, and verified O_DIRECT before creating the exact task-owned scratch.",
+      "live_evidence": "Canonical warmup started at 2026-09-23T23:46:31Z. At 23:53:01Z it had returned 86 of 5,310 requests with 424 in flight and zero errors after 390.1 seconds. Four lazy disk-backed cache files reported 4,398,044,086,272 logical bytes and 835,491,045,376 allocated bytes in the latest retained telemetry sample. No OOM, NCCL/RCCL failure, traceback, connection refusal, storage-guard failure, or O_DIRECT failure was observed."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021",
-  "status": "Matched c448 is complete with a 7.122% NVMe total-throughput-per-GPU win. The adaptive 4 TiB HBM+NVMe c480 midpoint is now the single queued B200 job and the only queued NVMe-bearing study workflow.",
+  "status": "Matched c448 is complete with a 7.122% NVMe total-throughput-per-GPU win. The adaptive 4 TiB HBM+NVMe c480 midpoint is active on allowlisted im-b200-c001 with capacity and O_DIRECT admission verified; canonical warmup is making forward progress without errors.",
   "last_capacity_check": {
-    "checked_at": "2026-09-23T23:36:31Z",
-    "active_study_run_ids": [],
-    "pending_study_run_ids": [
+    "checked_at": "2026-09-23T23:53:01Z",
+    "active_study_run_ids": [
       35934408414
     ],
+    "pending_study_run_ids": [],
     "dispatch_allowed": false,
-    "b200_priority_jobs_queued": 1,
-    "b200_nodes_allocated": 11,
-    "b200_nodes_idle": 0,
+    "b200_priority_jobs_queued": 0,
+    "b200_nodes_allocated": null,
+    "b200_nodes_idle": null,
     "target_node": "im-b200-c001",
-    "target_node_state": "allocated to a non-study workload; c480 is queued for allowlisted placement",
-    "observed_free_bytes": null,
-    "reason": "c480 is the sole queued B200 job. Dispatch nothing else until it is terminal, and dispatch no other NVMe-bearing workflow until its exact scratch cleanup is verified."
+    "target_node_state": "allocated to active c480 study run 35934408414 under Slurm allocation 16993",
+    "observed_free_bytes": 17712031088640,
+    "reason": "c480 is the only active NVMe-bearing study workflow. Runtime admission passed on allowlisted im-b200-c001 with 17,712,031,088,640 free bytes and O_DIRECT verified before exact task-owned scratch creation. Dispatch nothing else until it is terminal and cleanup is verified."
   },
   "next_dispatch": {
     "requires": "Monitor c480 run 35934408414. On allocation, require im-b200-c001, fresh free bytes above 4,535,485,464,576, and O_DIRECT before cache creation. On success, record and compare it, verify exact scratch cleanup, then dispatch the matched HBM-only c480 control when the cluster-wide B200 queue permits. On warmup failure, retain the feasibility boundary evidence."
