@@ -8057,3 +8057,12 @@
     - "Add c320 to all four branch-only MiniMax-M3 AgentX offload arms after the completed 4 TiB HBM+NVMe c384 run showed a sharp regression from c256: external cache hits fell from 61.680% to 5.299%, total throughput per GPU fell 46.716%, and P90 end-to-end latency rose 162.274%. This midpoint localizes the c256-c384 transition without changing the model, engine, TP4 layout, storage budgets, AgentX corpus, warmup policy, or 3,600-second profiling window."
     - "已完成的 4 TiB HBM+NVMe c384 运行相对 c256 出现明显退化：外部缓存命中率从 61.680% 降至 5.299%，每 GPU 总吞吐量下降 46.716%，P90 端到端延迟上升 162.274%。因此为四组分支内 MiniMax-M3 AgentX 卸载实验新增 c320，以定位 c256 到 c384 之间的转折。模型、引擎、TP4 布局、存储预算、AgentX 语料、warmup 策略及 3,600 秒 profiling 窗口均保持不变。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add c448 to all four branch-only MiniMax-M3 AgentX offload arms after matched c384 runs showed that 4 TiB HBM+NVMe still beat HBM-only by 11.115% total throughput per GPU, while c512 failed during canonical warmup before profiling. This midpoint narrows the c384-c512 feasibility and benefit boundary without changing the model, engine, TP4 layout, storage budgets, AgentX corpus, warmup policy, or 3,600-second profiling window."
+    - "匹配的 c384 运行显示，4 TiB HBM+NVMe 的每 GPU 总吞吐量仍比 HBM-only 高 11.115%，而 c512 在 profiling 前的规范 warmup 阶段失败。因此为四组分支内 MiniMax-M3 AgentX 卸载实验新增 c448，以缩小 c384 到 c512 之间的可运行性与收益边界。模型、引擎、TP4 布局、存储预算、AgentX 语料、warmup 策略及 3,600 秒 profiling 窗口均保持不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
