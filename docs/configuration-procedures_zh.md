@@ -35,6 +35,14 @@ git submodule update --init
 
 升级时，在对应子模块中获取并检出目标提交，再将更新后的子模块指针提交到 InferenceX。基准测试工作流已配置为自动初始化子模块。Slurm 启动器为每个作业创建本地 Git 克隆，避免配方准备和运行时写入修改子模块，并记录实际提交以供结果溯源。NVIDIA 启动器使用本地克隆；TileRT 启动器通过网络获取固定的分支提交。
 
+单节点固定序列长度配方使用 NVIDIA 上游 srt-slurm。ATOM 配方使用原生 `atomesh`
+frontend、一个聚合 worker，并设置 `enable_multiple_frontends: false`。旧版基准 worker
+镜像不包含 AToMesh，因此通过 `frontend.container_image` 单独固定路由器的官方镜像。
+`model.container` 必须与主配置中的 worker `image` 一致；更换路由器镜像无需更换 worker
+镜像。TRT-LLM 配方使用原生 `engine.served_model_name`，不再通过 `roles.agg.extra_args`
+重复传入该参数。不再依赖此前分叉中的 ATOM 直连 frontend。历史直连 smoke 不能作为新路由
+路径的验收证据；需在新固定版本上验证启动、请求、功耗、清理和性能。
+
 ## 规程索引
 
 1. [准备 worktree](#准备-worktree)

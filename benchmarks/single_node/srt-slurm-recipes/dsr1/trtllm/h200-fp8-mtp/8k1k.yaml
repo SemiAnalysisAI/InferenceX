@@ -47,8 +47,6 @@ base:
         return_perf_metrics: false
       env:
         PYTHONNOUSERSITE: '1'
-      # The pinned native launcher needs this CLI flag as well as engine metadata.
-      extra_args: [--served_model_name, deepseek-ai/DeepSeek-R1-0528]
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
