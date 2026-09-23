@@ -1,11 +1,11 @@
 """Rewrite DeepSeek-V4-architecture serving GEMM testlists to checkpoint schemes.
 
 The serving testlists were captured with coarse weight dtypes (bf16 / fp8 /
-mxfp4) on bf16 activations. The DeepSeek-V4-Pro checkpoint, as vLLM loads it
-(deepseek_v4_fp8), quantizes every dense Linear to FP8 128x128 blocks with
-ue8m0 scales and 1x128 dynamic activation groups - including the shared experts
-the capture labelled mxfp4 - except the compressor and the indexer's kv/gate/
-weights projections, which stay bf16. The router, mHC projection and lm_head
+mxfp4) on bf16 activations. The DeepSeek-V4-Pro checkpoint quantizes every
+dense Linear to FP8 128x128 blocks with ue8m0 scales and 1x128 dynamic
+activation groups - including the shared experts the capture labelled mxfp4 -
+except the compressor and the indexer's kv/gate/weights projections, which
+stay bf16. The router, mHC projection and lm_head
 were already bf16. Shapes are unchanged; an (n, k) that is both an FP8
 projection and a bf16 compressor (n = head_dim) gets one entry of each.
 
