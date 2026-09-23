@@ -127,6 +127,9 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
     # Exclusive nodes include idle GPUs. Restrict each server/client step to
     # the serving GPU count so client-side power collection sees the same set.
     overrides = ["--set", f"srun_options.gpus-per-node={json.dumps(environment['GPU_COUNT'])}"]
+    # Match the legacy container working directory using the existing repo mount.
+    # PyTorch's generated module imports fail from / with PYTHONPYCACHEPREFIX set.
+    overrides += ["--set", 'srun_options.container-workdir="/infmax-workspace"']
     if environment.get("SRT_SRUN_OPTIONS"):
         options = json.loads(environment["SRT_SRUN_OPTIONS"])
         if not isinstance(options, dict) or any(

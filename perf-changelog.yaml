@@ -9115,3 +9115,63 @@
     to benchmark power collection
   - 原生单节点 Slurm 步骤使用已验证的推理 GPU 数量并保留节点独占预留，避免部分节点配方将空闲设备暴露给基准功耗采集
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
+
+- config-keys:
+  - dsr1-fp4-mi355x-sglang
+  - dsr1-fp4-mi355x-sglang-mtp
+  - dsr1-fp4-mi355x-atom
+  - dsr1-fp4-mi355x-atom-mtp
+  - dsr1-fp8-mi300x-sglang
+  - dsr1-fp8-mi325x-sglang
+  - dsr1-fp8-mi355x-sglang
+  - dsr1-fp8-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi325x-sglang
+  - qwen3.5-fp8-mi355x-sglang
+  - qwen3.5-fp8-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi355x-atom
+  - qwen3.5-fp8-mi355x-atom-mtp
+  - qwen3.5-fp4-mi355x-sglang
+  - qwen3.5-fp4-mi355x-atom
+  - qwen3.5-fp4-mi355x-sglang-mtp
+  - qwen3.5-fp8-mi300x-sglang
+  - dsr1-fp8-mi355x-atom
+  - dsr1-fp8-mi355x-atom-mtp
+  - dsr1-fp8-mi325x-sglang-mtp
+  - qwen3.5-fp8-mi325x-sglang-mtp
+  - dsr1-fp4-b200-sglang
+  - dsr1-fp4-b200-sglang-mtp
+  - dsr1-fp4-b300-sglang
+  - dsr1-fp4-b200-trt
+  - dsr1-fp4-b200-trt-mtp
+  - dsr1-fp8-b200-sglang
+  - dsr1-fp8-b300-sglang
+  - qwen3.5-fp8-b200-sglang
+  - qwen3.5-fp4-b200-sglang
+  - qwen3.5-fp4-b200-sglang-mtp
+  - qwen3.5-fp8-b200-sglang-mtp
+  - qwen3.5-fp8-b300-sglang-mtp
+  - qwen3.5-fp8-b300-sglang
+  - qwen3.5-fp4-b300-sglang
+  - qwen3.5-fp4-b300-sglang-mtp
+  - dsr1-fp8-b200-sglang-mtp
+  - dsr1-fp8-b300-sglang-mtp
+  - dsr1-fp8-b200-trt
+  - dsr1-fp8-b200-trt-mtp
+  - dsr1-fp8-h200-sglang
+  - dsr1-fp8-h200-sglang-mtp
+  - qwen3.5-fp8-h200-sglang
+  - qwen3.5-fp8-h200-sglang-mtp
+  - dsr1-fp8-h200-trt
+  - dsr1-fp8-h200-trt-mtp
+  - qwen3.5-fp8-h100-sglang
+  - qwen3.5-fp8-h100-sglang-mtp
+  - qwen3.5-fp4-b200-trt
+  - qwen3.5-fp4-b200-trt-mtp
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Run native single-node container steps from the existing InferenceX repository
+    mount, preserving legacy working-directory behavior and avoiding Python generated-module
+    import failures at the filesystem root
+  - 原生单节点容器步骤从现有 InferenceX 仓库挂载目录启动，保留旧版工作目录行为，避免在文件系统根目录导入 Python 动态生成模块时失败
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352

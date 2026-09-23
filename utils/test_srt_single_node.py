@@ -54,7 +54,9 @@ def test_native_binding_submits_one_point_and_keeps_server_settings(point):
     overrides = parse_overrides(argv[1::2], [])
     actual = copy.deepcopy(recipe)
     apply_overrides_to_recipe(actual, overrides)
-    assert actual["srun_options"]["gpus-per-node"] == "4"
+    assert actual["srun_options"] == {
+        "gpus-per-node": "4", "container-workdir": "/infmax-workspace",
+    }
     assert actual["benchmark"]["env"] == {
         "MODEL": "test/model", "ISL": "256", "OSL": "64", "RANDOM_RANGE_RATIO": "0.5",
         "USE_CHAT_TEMPLATE": "false",
@@ -367,12 +369,15 @@ def test_pool_launcher_stages_artifacts_and_propagates_failure(point, tmp_path, 
 
 def test_runtime_container_options_remain_native_mapping(point):
     path, recipe, env = point
-    env = {**env, "SRT_SRUN_OPTIONS": '{"container-remap-root":"", "container-writable":""}'}
+    env = {**env, "SRT_SRUN_OPTIONS": json.dumps({
+        "container-remap-root": "", "container-writable": "", "container-workdir": "/custom",
+    })}
     argv = runtime_arguments(f"{path}:base", env)
     actual = copy.deepcopy(recipe)
     apply_overrides_to_recipe(actual, parse_overrides(argv[1::2], []))
     assert actual['srun_options'] == {
         'gpus-per-node': '4', 'container-remap-root': '', 'container-writable': '',
+        'container-workdir': '/custom',
     }
     with pytest.raises(ValueError, match='must map option names to string values'):
         runtime_arguments(f"{path}:base", {**env, 'SRT_SRUN_OPTIONS': '{"container-remap-root": true}'})
