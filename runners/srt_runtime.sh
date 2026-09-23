@@ -55,10 +55,10 @@ run_srt_recipe_job() (
     OUTPUT_DIR=$(jq -er '.output_dir' "${WORK_DIR}/submission.json")
     echo "SRT_SLURM_JOB_ID=$JOB_ID"
 
-    # srt-slurm handles queue/accounting transitions and propagates failures.
     # Always collect available diagnostics, including on an unsuccessful job.
     job_rc=0
-    srtctl wait "$JOB_ID" --log-file "${OUTPUT_DIR}/logs/sweep_${JOB_ID}.log" || job_rc=$?
+    stream_slurm_job_log "$JOB_ID" "${OUTPUT_DIR}/logs/sweep_${JOB_ID}.log" || job_rc=$?
+    verify_slurm_job_status "$JOB_ID" || job_rc=$?
     collect_rc=0
     PYTHONPATH="$GITHUB_WORKSPACE${PYTHONPATH:+:$PYTHONPATH}" python -m "$ADAPTER" collect --submission "${WORK_DIR}/submission.json" \
         --workspace "$GITHUB_WORKSPACE" --results-root "$SHARED_RESULTS" || collect_rc=$?
