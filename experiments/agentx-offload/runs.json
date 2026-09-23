@@ -3459,24 +3459,43 @@
         "gpu_metrics.csv": "b9ec6ae8a97c0a1b1575fd4aab90c19aad44d69381909c708771065a6b9a7b50",
         "power_validation.json": "77bb0335f2ae51efa75d9a7e16c335a1ae2c889bab62f5575eaa52e93d337db6"
       }
+    },
+    {
+      "run_id": 35802396548,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35802396548",
+      "arm": "none",
+      "concurrency": 384,
+      "repeat": 1,
+      "attempt": 1,
+      "head_sha": "3e2390b3973d2fea12a6b3791f2ff7971395c0b1",
+      "status": "in_progress",
+      "workflow_name": "offload-v1-none-c384-r1-20260923",
+      "dispatched_at": "2026-09-23T00:30:55Z",
+      "queued_at": "2026-09-23T00:31:30Z",
+      "started_at": "2026-09-23T00:31:37Z",
+      "job_id": 106995592887,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35802396548/job/106995592887",
+      "performance_result": false,
+      "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c384, 3,600-second profiling, kv-offloading=none, and experiment=agentx-offload. A fresh GitHub Actions inventory found zero queued and zero active cluster:b200-nscale benchmark jobs immediately before dispatch. The benchmark job entered in_progress without joining the queue."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905",
-  "status": "Matched c320 is complete: 4 TiB HBM+NVMe beat HBM-only across throughput, P90 interactivity, latency, power, and energy per successful query under the same 3,600-second protocol. The matched HBM-only c384 control is the next P0 point.",
+  "status": "Matched HBM-only c384 control 35802396548 is active. It will determine whether 4 TiB NVMe still helps after the sharp c320-to-c384 external-cache cliff.",
   "last_capacity_check": {
-    "checked_at": "2026-09-23T00:06:53Z",
-    "active_study_run_ids": [],
+    "checked_at": "2026-09-23T00:30:40Z",
+    "active_study_run_ids": [
+      35802396548
+    ],
     "pending_study_run_ids": [],
-    "dispatch_allowed": null,
-    "b200_priority_jobs_queued": null,
-    "b200_nodes_allocated": null,
-    "b200_nodes_idle": null,
-    "target_node": "im-b200-c003",
-    "target_node_state": "allocation 16901 completed and released",
-    "reason": "HBM-only c320 workflow 35766002905 completed successfully. Refresh the live B200 priority queue before dispatching the matched HBM-only c384 control."
+    "dispatch_allowed": true,
+    "b200_priority_jobs_queued": 0,
+    "b200_benchmark_jobs_active_before_dispatch": 0,
+    "target_node": "pending runtime evidence",
+    "target_node_state": "benchmark job 106995592887 entered in_progress at 2026-09-23T00:31:37Z",
+    "reason": "The live GitHub Actions inventory found no queued or active jobs labeled cluster:b200-nscale before dispatch; c384 became active immediately and did not add a queued B200 job."
   },
   "next_dispatch": {
-    "requires": "If the refreshed cluster-wide B200 priority queue is empty, dispatch matched HBM-only c384. Compare it directly with completed NVMe c384 run 35646317491; if the sign differs from c320, choose an adaptive midpoint between c320 and c384."
+    "requires": "Monitor matched HBM-only c384 run 35802396548 through canonical warmup, 3,600-second profiling, artifacts, and cleanup. Compare it directly with completed NVMe c384 run 35646317491. Dispatch no additional study run until that comparison is recorded."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
