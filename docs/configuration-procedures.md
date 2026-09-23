@@ -296,6 +296,26 @@ GPU sweep and eval evidence is required before calling any recipe validated.
 
 Source: [upstream recipe](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash).
 
+### DeepSeek-V4.1-Flash DSpark on ATOM
+
+`dsv41flash-fp4-mi355x-atom-agentic-dspark` follows the
+[upstream ATOM recipe](https://github.com/ROCm/ATOM/blob/53b11c9a665e786798785acbedfdfd4da3fb87c4/recipes/DeepSeek-V4.1-Flash-Agentic.md)
+with `rocm/atom-dev:nightly_202609231248`. TP2 covers concurrency
+`[1, 2, 8, 16, 32, 64]`; TP4 covers `[2, 8, 16, 32, 64]`, without expert
+parallelism or KV offload. Every point uses BF16 KV, FP8 index cache, 128 maximum
+sequences, 16K batched-token/prefill chunks, prefix caching with block size 16,
+8K state checkpoints, compilation level 3 and FULL graphs. Concurrency 32 captures
+every size from 1 through 32 plus 48, 64 and 128; other points use the upstream
+sparse list. Five-token DSpark uses golden AL 3.51 for throughput and real
+acceptance for eval, with the checkpoint's shipped draft and `dsml_v41` parser.
+
+The existing MI355X launcher mounts this model's shared cache and the repository
+at `/ix`, preserves Slurm's GPU allocation and routes `draft_model` to the new
+`dsv41flash_fp4_mi355x_atom_mtp.sh` script. Canonical AgentX runs use the uncapped
+`semianalysis_cc_traces_weka_062126` corpus, 3600 seconds per point and five warmup
+requests per lane. Workflow duration overrides and `agentx-fast` remain available
+for diagnostics. GPU sweep and eval validation is pending.
+
 ### DeepSeek-V4.1-Flash DSpark on H200
 
 `dsv41flash-fp4-h200-vllm-agentic-dspark` is the H200 AgentX arm of the
