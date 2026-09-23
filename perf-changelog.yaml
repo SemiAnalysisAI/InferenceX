@@ -8789,7 +8789,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Qualify MI355X DeepSeek V4.1 Flash AgentX on official ROCm10 Sep23 nightly sha256:cc9f4ed6cc0d8610eb01c54e0c46e1d6a51010d8aaa54d298cbf0b522c792d89, using the official MI350X TP4/EP4 DSpark5 recipe with GPU Engram, memory fraction 0.80 and breakable prefill graphs through 4096 tokens; keep radix caching enabled and bound AgentX chunks to 4096."
-    - "Preserve full 1M context, shipped default DSpark precision, canonical thinking-on AL3.51 throughput and real full1319 GSM verification. Retain the isolated V4.1 HIP compatibility backport, official EP4 A8W4 tuning data, hardware-queue and native allocator safeguards; do not restore incompatible Q-head normalization or group128 FP8 kernels."
-    - "Retain measured prefill-decode interval16 to prevent long-prompt starvation. Current-image startup and long-prompt graph/cache checks precede canonical qualification; prior TP4/EP1 Sep22 results remain dated evidence, not proof of this recipe."
+    - "Use the user-selected official lmsysorg/sglang:dev-dsv41-mi35x model preview, pinned to sha256:c609f74f01b206af9664fb66da8ebef47642a7328a2478eabeebb352e014661a, with the native MI350X TP4/EP4 DSpark5 recipe, GPU Engram, memory fraction 0.80 and breakable prefill graphs through 4096 tokens."
+    - "Keep radix caching enabled for AgentX, bound long-prefill chunks to 4096, and retain measured prefill-decode interval16. Preserve full 1M context, shipped-default DSpark precision, canonical thinking-on AL3.51 throughput and real full1319 GSM verification."
+    - "Use image-native attention, dense FP8 and MoE kernels, allocator defaults and EP4 tuning data; remove the downstream nightly compatibility installer, source payload, tuning copy, hash checks and obsolete waiver documentation. The model-preview image explicitly supersedes the earlier latest-nightly selection for this lane."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3343

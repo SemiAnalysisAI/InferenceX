@@ -25,7 +25,6 @@ This is the mandatory low-context router for InferenceX work. Pick the one page 
 | [`troubleshooting.md`](./troubleshooting.md) / [`troubleshooting_zh.md`](./troubleshooting_zh.md) | Failure-layer diagnosis, known cases, safe remediation, and stop conditions |
 | [`documentation-procedures.md`](./documentation-procedures.md) / [`documentation-procedures_zh.md`](./documentation-procedures_zh.md) | Adding, translating, indexing, reviewing, and maintaining documentation |
 | [`PR_REVIEW_CHECKLIST.md`](./PR_REVIEW_CHECKLIST.md) / [`PR_REVIEW_CHECKLIST_zh.md`](./PR_REVIEW_CHECKLIST_zh.md) | CODEOWNER review and exact sign-off requirements |
-| [`waiver/3343.md`](./waiver/3343.md) / [`waiver/3343_zh.md`](./waiver/3343_zh.md) | MI355X V4.1 compatibility patch scope, upstream tracking, and pending waiver review |
 | [`DOCUMENTATION_PLAN.md`](./DOCUMENTATION_PLAN.md) / [`DOCUMENTATION_PLAN_zh.md`](./DOCUMENTATION_PLAN_zh.md) | Remaining documentation gaps, target information architecture, and rollout |
 
 ## Authoritative references

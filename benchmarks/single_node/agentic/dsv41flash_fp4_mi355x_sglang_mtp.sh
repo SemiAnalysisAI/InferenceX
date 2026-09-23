@@ -64,59 +64,10 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# Match the vLLM reference placement: TP4 tables stay on GPU; TP2 tables
-# use pinned host memory. The V4.1 HIP pointer backport below binds the already
-# loaded ROCm runtime. This new topology still requires real runtime/eval proof.
-if (( TP == 2 )); then
-    export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
-    export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
-else
-    export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0
-fi
-
-# Cookbook MI350X environment.
-# Cap the HIP hardware queues per rank, as the DeepSeek-V4 MI355X SGLang arm
-# does. In runs 35304555945 and 35362380897 the server died a few requests
-# into AgentX warmup when RCCL queues aborted with HSA_STATUS_ERROR_OUT_OF_
-# RESOURCES ("the runtime failed to allocate the necessary resources") with
-# 67 GB of HBM still free after the KV pool: the eager 1M-context prefill
-# path plus RCCL exhausted the device's hardware queues, not its memory.
-export GPU_MAX_HW_QUEUES=2
-# MEC firmware below 177 has an RCCL memory-reclaim issue (see the Kimi-K3
-# MI355X arm). With the queue cap alone, run 35372886390 still lost c8 to the
-# same RCCL HSA_STATUS_ERROR_OUT_OF_RESOURCES abort while c1-c32 served, so
-# keep scratch from being reclaimed on affected firmware as well.
-mec_version=$(rocm-smi --showfw 2>/dev/null | grep MEC | head -n 1 | awk '{print $NF}')
-if [[ "$mec_version" == "" || ${mec_version:-0} -lt 177 ]]; then
-    export HSA_NO_SCRATCH_RECLAIM=1
-fi
-# ROCm10 AITER graph-buffer registration rejects expandable-segment pointers
-# with hipIpcGetMemHandle(invalid argument). The native allocator passed target
-# and stock DSpark graph capture plus real requests on this pinned image.
-# Long-context memory/performance qualification is still required.
-# Test reclamation after long-prefill RCCL resource exhaustion. This pinned
-# PyTorch enables proactive GC only when its per-process limit is below 1.0:
-# cap native reservations at 99%, collecting unused blocks above 80% of that
-# limit (79.2% total HBM). Keep native segments for AITER graph IPC.
-export PYTORCH_HIP_ALLOC_CONF=expandable_segments:False,garbage_collection_threshold:0.8,per_process_memory_fraction:0.99
+# Use the official model-preview image's native kernels, allocator and tuning
+# CSV. TP4 Engram remains GPU-resident, as in the official MI350X recipe.
+export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0
 export SGLANG_USE_AITER=1
-# The official preview selects this backend through its gfx950 auto default.
-export SGLANG_HACK_FLASHMLA_BACKEND=aiter_sparse
-# V4.1 has q_head_norm=False; the nightly fused HIP kernel always normalizes Q.
-# The official preview excludes V4.1 from this optimization.
-export SGLANG_OPT_USE_FUSED_QK_NORM_ROPE=0
-# Official preview image defaults required by its native A8W4 MoE path.
-# Keep the latest nightly binaries; provenance hashes the unchanged tuning CSV.
-export SGLANG_USE_AITER_MOE_GU_ITLV=1
-export AITER_BF16_FP8_MOE_BOUND=0
-export TORCH_BLAS_PREFER_HIPBLASLT=1
-export SGLANG_USE_ROCM700A=0
-# The preview CSV is tuned for EP4 shapes. EP1 uses upstream default lookup.
-if (( EP_SIZE == 4 )); then
-    export AITER_CONFIG_FMOE="$(dirname "$0")/../../patches/sglang_dsv41_rocm/dsv41_rocm/fmoe_gfx950_dsv41_ep4_a8w4.csv"
-else
-    unset AITER_CONFIG_FMOE
-fi
 export SGLANG_MOE_PADDING=1
 export AITER_FLYDSL_FORCE_REDUCE=1
 export ROCM_QUICK_REDUCE_QUANTIZATION=NONE
@@ -158,10 +109,6 @@ if [[ "${EVAL_ONLY}" != true ]]; then
 fi
 echo "DSpark block size: $DSPARK_BLOCK_SIZE, golden AL=$DSV41_GOLDEN_AL"
 
-# Install the V4.1 ROCm compatibility backport; keep stock draft quantization.
-python3 "$(dirname "$0")/../../patches/sglang_dsv41_rocm/install.py" \
-    --evidence "$RESULT_DIR/sglang_dsv41_rocm_backport.json"
-
 # Official MI350X TP4/EP4 recipe adapted for AgentX radix prefix reuse.
 SGLANG_CMD=(
     python3 -m sglang.launch_server
@@ -171,7 +118,7 @@ SGLANG_CMD=(
     --tp "$TP" --ep-size "$EP_SIZE"
     # Official MI350X memory budget; bound AgentX long-prefill chunks to the
     # official 4096-token breakable graph ceiling. Qualify on current GPU
-    # Engram and ROCm10 instead of inheriting the old host-table graph failure.
+    # Engram on the model-preview image using its native implementation.
     --mem-fraction-static 0.80
     --chunked-prefill-size 4096
     # Bound decode starvation during long prompt bursts. Interval 0 in the
