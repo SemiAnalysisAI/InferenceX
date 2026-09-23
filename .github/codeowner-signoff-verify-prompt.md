@@ -198,7 +198,8 @@ a green sweep alone is not enough. Verify the command directly from the comments
 - PASS only if a matching comment exists whose `author_association` is `OWNER`,
   `MEMBER`, or `COLLABORATOR`. Both command names share this requirement; the newest
   authorized matching comment across both names determines the requested source.
-- FAIL if no authorized reuse command is present. State: "No authorized reuse command
+- WARN if no authorized reuse command is present. This is an advisory reminder,
+  not a failing criterion. State: "No authorized reuse command
   has been posted on this PR" and ask an authorized maintainer to comment
   `/use <run_id>` before merging via reuse.
 
@@ -575,14 +576,16 @@ Pinned app references at
 
 ## Verdict and output
 Decide PASS only if Checks 0-14 ALL pass. A check reported as `N/A` counts as a pass.
-If Checks 0-13 pass/N/A but Check 14 is WARN, use the WARN header below.
-If any of Checks 0-13 fails, use REJECTED even when Check 14 also warns.
+Checks 4 and 14 may WARN but never FAIL. If either warns and no other check fails,
+use the WARN header below. If any other check fails, use REJECTED even when
+Check 4 or Check 14 also warns.
 Keep the `N/A — <reason>` row so the reviewer sees it was considered.
 Write the complete verdict to `/tmp/codeowner-signoff-verdict.md` using the Write
 or Bash tool. Do not post, edit, or delete GitHub comments, labels, or commit
-statuses. The workflow publishes this file as a new PR comment for every verification,
-preserving earlier verdict comments and recording only the assessed commit. It does not publish
-commit statuses or carry the verdict forward to later commits.
+statuses. The workflow publishes this file as the verdict associated with this sign-off resource.
+Reverification of the same sign-off updates that verdict; verdicts for other sign-offs stay
+unchanged. It records only the assessed commit and does not publish commit statuses or carry the
+verdict forward to later commits.
 Do not include a hidden marker or assessed-commit footer; the publisher adds them.
 Always write your full current assessment, even if it matches a previous verdict.
 
@@ -592,10 +595,10 @@ single terse line. Rules:
   verdict word in bold and flanked by three status emojis on each side, EXACTLY as follows:
     on pass: `## ✅✅✅ **Verdict: PASS** ✅✅✅`
     on fail: `## ❌❌❌ **REJECTED** ❌❌❌`
-    on coverage warning only: `## ⚠️ **Verdict: WARN** ⚠️`
-- Keep failing criteria AND Check 14 warnings in the main body, beneath the verdict header and
+    on warnings without failures: `## ⚠️ **Verdict: WARN** ⚠️`
+- Keep failing criteria AND Check 4/14 warnings in the main body, beneath the verdict header and
   blocking summary. Put every PASS and N/A criterion in ONE collapsed HTML details
-  group after the failures. Use exactly this structure (replace the placeholders;
+  group after the failures and warnings. Use exactly this structure (replace the placeholders;
   the rows below illustrate the format, not actual findings):
 
   <details>
@@ -619,8 +622,11 @@ single terse line. Rules:
     `✅ Check N (<name>): PASS — <brief reason>`
     `❌ Check N (<name>): FAIL — <root issue>`
     `➖ Check N (<name>): N/A — <reason>`
+    `⚠️ Check 4 (Reuse command): WARN — <missing authorized command; reminder to post /use run_id>`
     `⚠️ Check 14 (Pareto coverage): WARN — <curve, count or unverifiable reason; admin-exception state; evidence>`
-  Never hide Check 14 WARN inside the collapsed group. The publisher adds the
+  Never hide Check 4 or Check 14 WARN inside the collapsed group.
+  A Check 4 warning alone must not trigger the Pareto-coverage escalation.
+  For Check 14 WARN, the publisher adds the
   warning and mentions @functionstackx, @cquil11, @Oseltamivir, and @adibarra
   above the findings. Use only @usernames, without personal names; do not
   duplicate that escalation text yourself. Do not add these escalation mentions
@@ -634,13 +640,14 @@ single terse line. Rules:
   run/recipe instead of describing it.
 - If all checks pass or are N/A: write the PASS verdict header followed by the
   collapsed group containing all fifteen PASS/N/A rows. No criteria appear expanded.
-- If only Check 14 warns: write the WARN header, the expanded Check 14 warning,
-  then the collapsed group for Checks 0-13. The publisher adds reviewer mentions.
-- If any of Checks 0-13 fails: immediately after the REJECTED header, write a
+- If there are warnings but no failures: write the WARN header, the expanded
+  Check 4 and/or Check 14 warning rows, then the collapsed PASS/N/A group.
+  The publisher adds reviewer mentions only for Check 14 warnings.
+- If any check other than Checks 4 and 14 fails: immediately after the REJECTED header, write a
   line that @-mentions the sign-off author as `@${SIGNOFF_AUTHOR}` with the blocking
   summary. Then show only FAIL rows, each led by its root issue (e.g. "No passing
   sweep/eval on any commit in this PR") with the supporting link after. Keep any
-  Check 14 warning expanded too. Finish with
+  Check 4 and Check 14 warnings expanded too. Finish with
   the collapsed PASS/N/A group.
 
 Use no emojis anywhere in the comment other than the ✅ / ❌ / ➖ / ⚠️ status emojis
