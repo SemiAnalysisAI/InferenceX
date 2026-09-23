@@ -155,11 +155,11 @@ InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和
 | 模型架构类别 | 前缀 | 加入日期 | 启用场景 | 已弃用场景 |
 |---|---|---|---|---|
 | DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | 智能体编码（DSpark、Engram UVA 卸载；GPU 待验证） | |
+| GLM-5.3 | `glm5.3` | 2026-09-22（[#3366](https://github.com/SemiAnalysisAI/InferenceX/pull/3366)） | 智能体编码（仅 MTP，见弃用公告） | 单轮 1k1k（在本模型加入前已对所有模型弃用，从未运行） |
 | Qwen3.8-Flash-Next | `qwen3.8next` | 2026-08-26（[#2742](https://github.com/SemiAnalysisAI/InferenceX/pull/2742)） | 智能体编码 | |
 | Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | 智能体编码（可关闭 DSpark 以获得更优帕累托点） | 独立非 DSpark A/B 基线（自第 0 天起即不要求） |
 | GLM-5.2 | `glm5.2` | 2026-07-18（[#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)） | 智能体编码（非 MTP 数据点仍可按帕累托策略参与发布；见弃用公告） | |
 | MiniMax-M3 | `minimaxm3` | 2026-06-12（[#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)） | 智能体编码 | 单轮 1k1k、单轮 8k1k（2026-08-04 移除，[#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)） |
-| DeepSeek-V4.1-Flash | `dsv41flash` | 待验证 | MI355X 上的 Agentic coding（草案；等待 GPU 验证） | — |
 | DeepSeek-V4-Pro | `dsv4` | 2026-04-24（[#1130](https://github.com/SemiAnalysisAI/InferenceX/pull/1130)） | 智能体编码（非投机解码数据点仍可按帕累托策略参与发布） | 单轮 1k1k、单轮 8k1k（已于 2026-09-09 移除，[#2921](https://github.com/SemiAnalysisAI/InferenceX/pull/2921)） |
 | GLM-5 / GLM-5.1 | `glm5`、`glm5.1` | 2026-03-06（[#762](https://github.com/SemiAnalysisAI/InferenceX/pull/762)），GLM-5.1 于 2026-04-21 加入（[#1098](https://github.com/SemiAnalysisAI/InferenceX/pull/1098)） | 仅 GLM-5.1 B200 TileRT：1k1k 和 8k1k 于 2026-08-09 加入（[#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533)）；智能体编码由 [#2650](https://github.com/SemiAnalysisAI/InferenceX/pull/2650) 加入 | 此前的 GLM-5 / GLM-5.1 配方于 2026-07-18 退役（[#2276](https://github.com/SemiAnalysisAI/InferenceX/pull/2276)） |
 | MiniMax-M2.5/2.7 | `minimaxm2.5` | 2026-02-18（[#755](https://github.com/SemiAnalysisAI/InferenceX/pull/755)） | 无（2026-06-20 退役，[#1874](https://github.com/SemiAnalysisAI/InferenceX/pull/1874)） | 单轮 1k1k、单轮 1k8k、单轮 8k1k |

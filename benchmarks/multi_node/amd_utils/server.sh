@@ -6,6 +6,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
 #   ENGINE=sglang-disagg (default) -> server_sglang.sh (SGLang + MoRI)
 #   ENGINE=vllm-disagg             -> server_vllm.sh  (vLLM + Nixl/MoRI-IO)
 #   ENGINE=atom-disagg             -> server_atom.sh  (ATOM + mooncake)
+#   ENGINE=tilert                  -> server_tilert.sh (vLLM prefill + TileRT decode)
 
 check_env_vars ENGINE WS_PATH
 if [[ -f /config/hicache_mc.env ]]; then
@@ -22,6 +23,8 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
 elif [[ "$ENGINE" == "atom-disagg" ]]; then
     export ATOM_WS_PATH="$WS_PATH"
     source "$WS_PATH/server_atom.sh"
+elif [[ "$ENGINE" == "tilert" ]]; then
+    source "$WS_PATH/server_tilert.sh"
 else
     source "$WS_PATH/server_sglang.sh"
 fi
