@@ -103,8 +103,7 @@ partial coverage. A successful shard requires successful measurements, not just
 successful Slurm submission. Result environments record the workflow run,
 attempt, shard, source SHA and image digest.
 
-Download artifacts through `gh run download`. Preserve raw files and provenance;
-`scripts/consolidate_results.py` is not part of CI. Dashboard ingestion is separate.
+Download artifacts through `gh run download`. Preserve raw files and provenance.
 
 ## Local validation
 
