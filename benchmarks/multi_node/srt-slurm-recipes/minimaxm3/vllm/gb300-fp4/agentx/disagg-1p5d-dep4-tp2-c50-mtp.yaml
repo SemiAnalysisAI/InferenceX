@@ -1,5 +1,5 @@
 schema: 2
-name: minimax-m3-gb300-1p-dep4-5d-tp2-c90
+name: minimax-m3-gb300-1p-dep4-5d-tp2-c50
 setup_script: minimaxm3-mooncake/setup-disagg.sh
 host_setup:
   commands:
