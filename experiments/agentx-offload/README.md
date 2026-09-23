@@ -50,8 +50,14 @@ to 11.998 tokens/s/user (+49.097%), and reduced P90 TTFT from 1,990.296 to
 43.241% less energy per successful query. This single matched run establishes
 that 4 TiB NVMe helps at c320 under this protocol, but a repeat is still needed
 before treating the size of the win as stable. Run the matched HBM-only c384
-control next to determine whether NVMe still helps after the observed cache cliff;
-then use a narrower point between c320 and c384 if the sign changes.
+control next to determine whether NVMe still helps after the observed cache cliff.
+That control completed 1,048 profiling responses versus NVMe's 1,157. NVMe still
+won at c384, but by much less than at c320: 9,198.026 versus 8,277.940 total
+tokens/s/GPU (+11.115%), 8.721 versus 8.149 P90 interactivity (+7.028%), and
+2,154.172 versus 2,333.924 seconds P90 TTFT (-7.702%). Average power was 2.710%
+lower with NVMe. The next high-concurrency probe is c448, midway between the
+modest c384 win and c512's canonical warmup feasibility failure. Pair it with an
+HBM-only c448 control if profiling completes.
 
 The combined tier uses a different connector and storage policy. The pinned FS
 tier has no bounded LRU capacity setting: the 2 TiB value is an abort guard, not an

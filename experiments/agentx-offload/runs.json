@@ -3468,34 +3468,145 @@
       "repeat": 1,
       "attempt": 1,
       "head_sha": "3e2390b3973d2fea12a6b3791f2ff7971395c0b1",
-      "status": "in_progress",
+      "status": "success",
       "workflow_name": "offload-v1-none-c384-r1-20260923",
       "dispatched_at": "2026-09-23T00:30:55Z",
       "queued_at": "2026-09-23T00:31:30Z",
       "started_at": "2026-09-23T00:31:37Z",
       "job_id": 106995592887,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35802396548/job/106995592887",
-      "performance_result": false,
-      "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c384, 3,600-second profiling, kv-offloading=none, and experiment=agentx-offload. A fresh GitHub Actions inventory found zero queued and zero active cluster:b200-nscale benchmark jobs immediately before dispatch. The benchmark job entered in_progress without joining the queue."
+      "performance_result": true,
+      "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c384, 3,600-second profiling, kv-offloading=none, and experiment=agentx-offload. A fresh GitHub Actions inventory found zero queued and zero active cluster:b200-nscale benchmark jobs immediately before dispatch. The benchmark job entered in_progress without joining the queue.",
+      "completed_at": "2026-09-23T07:05:06Z",
+      "node": "im-b200-c001",
+      "runner": "b200-nscale-slurm_00",
+      "allocation_id": "16909",
+      "artifacts": [
+        {
+          "id": 10736402278,
+          "name": "power_audit_minimaxm3_tp4_conc384_kvnone_spec-mtp",
+          "size_bytes": 937627,
+          "sha256": "dc8be211eb00d07ad3ac979c813bb1cd00ff1f5f3264a9c39232e92d6c695bef"
+        },
+        {
+          "id": 10736397285,
+          "name": "server_logs_minimaxm3_tp4_conc384_kvnone_spec-mtp",
+          "size_bytes": 201686,
+          "sha256": "2745fe7c5a538bbfe999cd1d24910ac9cf9d75672fd11acba90606d47e810c85"
+        },
+        {
+          "id": 10736392324,
+          "name": "bmk_agentic_minimaxm3_tp4_conc384_kvnone_spec-mtp",
+          "size_bytes": 2233,
+          "sha256": "9b0bc03b7555c555e4eb18314c0fc96b2714d544460f1151c84c0074eabb36aa"
+        },
+        {
+          "id": 10736193312,
+          "name": "gpu_metrics_minimaxm3_tp4_conc384_kvnone_spec-mtp",
+          "size_bytes": 934069,
+          "sha256": "f526820034031e4e8e7dda8e6f024505a7ce2446fff9afe9c0b6df4da33b0615"
+        },
+        {
+          "id": 10736173522,
+          "name": "agentic_minimaxm3_tp4_conc384_kvnone_spec-mtp",
+          "size_bytes": 30456049,
+          "sha256": "18388692ccfcf444d81b6f97fe9673eeb8c058bbbf8f55ef488198a27716daf3"
+        },
+        {
+          "id": 10736064137,
+          "name": "run-stats",
+          "size_bytes": 284,
+          "sha256": "36842166569703537103d4311e6ccff137ce7319afed2b049a2e906e8143f706"
+        },
+        {
+          "id": 10735734647,
+          "name": "results_bmk",
+          "size_bytes": 2036,
+          "sha256": "e4cedb75072d3783b865b1e72998e3f8446fe25d405c07d79de7aefa441ea145"
+        }
+      ],
+      "performance": {
+        "num_requests_total": 5297,
+        "num_requests_successful": 1048,
+        "num_requests_warmup_dropped": 4249,
+        "num_requests_error_dropped": 11,
+        "request_error_categories": {
+          "InvalidInferenceResultError": 11
+        },
+        "duration_seconds": 3626.9238,
+        "output_tokens_per_second": 298.12096,
+        "output_tokens_per_second_per_gpu": 74.53024,
+        "input_tokens_per_second": 32813.63809,
+        "total_tokens_per_second": 33111.75905,
+        "total_tokens_per_second_per_gpu": 8277.93976,
+        "p90_e2e_latency_seconds": 2374.04497,
+        "p90_ttft_seconds": 2333.92435,
+        "p90_tpot_seconds": 0.12272,
+        "p90_interactivity_tokens_per_second_per_user": 8.14853,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.07611,
+        "mean_e2e_latency_seconds": 1228.1732,
+        "avg_power_w_per_gpu": 910.878,
+        "total_gpu_energy_j": 13262403.406,
+        "joules_per_successful_query": 12654.965082
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.01357,
+        "external_cache_hit_rate": 0.0,
+        "overall_cache_hit_rate": 0.01357,
+        "theoretical_cache_hit_rate": 0.94285,
+        "gpu_cache_hit_prompt_tokens": 11932672,
+        "external_cache_hit_prompt_tokens": 0,
+        "computed_prompt_tokens": 867271629,
+        "prompt_tokens_total": 879204301,
+        "generation_tokens_total": 1173536,
+        "gpu_cache_usage_pct": 1.0
+      },
+      "matched_nvme_c384_run_id": 35646317491,
+      "nvme_delta_vs_hbm_percent": {
+        "total_tokens_per_second_per_gpu": 11.11492,
+        "output_tokens_per_second_per_gpu": 14.79552,
+        "p90_interactivity_tokens_per_second_per_user": 7.02753,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 8.84246,
+        "p90_ttft_seconds": -7.70172,
+        "p90_e2e_latency_seconds": -7.02185,
+        "mean_e2e_latency_seconds": -10.60518,
+        "num_requests_successful": 10.40076,
+        "avg_power_w_per_gpu": -2.7098,
+        "computed_prompt_tokens": -3.69369
+      },
+      "runtime_evidence": "Matched MiniMax-M3 NVFP4 TP4 AgentX HBM-only control on im-b200-c001. It completed 1,048 profiling responses with eleven InvalidInferenceResultError classifications. No external cache was configured or observed. Under the same 3,600-second protocol, NVMe c384 completed 1,157 responses and improved total throughput per GPU by 11.115%, P90 interactivity by 7.028%, and P90 TTFT by 7.702%. The win remains positive but is much narrower than at c320.",
+      "storage_evidence": "HBM-only configured zero DRAM and zero NVMe capacity with no connector. Startup storage proof on im-b200-c001 observed 17,712,236,417,024 free bytes. The workflow-owned scratch remained empty, and offload_cleanup.json matched run 35802396548 and Slurm job 16909, recorded exit_code=0, and deleted the exact task-owned directory /offload-scratch/inferencex-offload-35802396548-1-16909-93000b1997f6.",
+      "evidence_sha256": {
+        "agg_bmk.json": "0ca5fb06b108fa31a4513188d4e9ac973eb2b9c0d534d82220bfcbc394784bff",
+        "bmk_result.json": "282d6c0c2cec1bd925eb26d6fc4dc2010b61e6f31a2a376533c03adb6b712e0f",
+        "server.log": "3b2db9b23ee544c1c3aecf85748ad507c563e52aee488e5c35fbbc569c08c2df",
+        "offload_config.json": "52b23652d7f93944570f370f9e5d55773ed4f85d50eeb5442e92ff3b7701f6f2",
+        "benchmark.log": "b6b843190d0b4a4705d95065b9ba7e5107ed757b7eea3a5594a8fabd0b029c8a",
+        "offload-telemetry.jsonl": "61634a578aee3450cdb1410a6928df6943fe1bacb7444a5570552fabd5ec04c0",
+        "profile_export.jsonl": "d405b258697cdeb1d404ac26c8b35d3a78d1f93092edc4b6ec9d87c98db6d1bc",
+        "offload_cleanup.json": "ecb01327a4b48ea3e777f6b79154744113879ef039d63109efd81e11472551f9",
+        "gpu_metrics.csv": "083fe849608ee86834c9f066908bcc65b802c391c3c5982944ea53b080003d20",
+        "power_validation.json": "7a1777188c8d88a479ccafd86a2295877f7e1e877567064c1fea80a8b7779a91"
+      }
     }
   ],
-  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905",
-  "status": "Matched HBM-only c384 control 35802396548 is active. It will determine whether 4 TiB NVMe still helps after the sharp c320-to-c384 external-cache cliff.",
+  "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548",
+  "status": "Matched c384 is complete: 4 TiB HBM+NVMe still beat HBM-only, but its throughput advantage narrowed to 11.115% from 64.972% at c320. The next adaptive P0 is NVMe c448, between the modest c384 win and c512 warmup feasibility failure.",
   "last_capacity_check": {
-    "checked_at": "2026-09-23T00:30:40Z",
-    "active_study_run_ids": [
-      35802396548
-    ],
+    "checked_at": "2026-09-23T07:05:06Z",
+    "active_study_run_ids": [],
     "pending_study_run_ids": [],
-    "dispatch_allowed": true,
-    "b200_priority_jobs_queued": 0,
-    "b200_benchmark_jobs_active_before_dispatch": 0,
-    "target_node": "pending runtime evidence",
-    "target_node_state": "benchmark job 106995592887 entered in_progress at 2026-09-23T00:31:37Z",
-    "reason": "The live GitHub Actions inventory found no queued or active jobs labeled cluster:b200-nscale before dispatch; c384 became active immediately and did not add a queued B200 job."
+    "dispatch_allowed": null,
+    "b200_priority_jobs_queued": null,
+    "b200_nodes_allocated": null,
+    "b200_nodes_idle": null,
+    "target_node": "im-b200-c001",
+    "target_node_state": "allocation 16909 completed and released",
+    "observed_free_bytes": 17712236417024,
+    "reason": "HBM-only c384 completed successfully on allowlisted im-b200-c001. Its startup storage proof observed 17,712,236,417,024 free bytes; the run used no external cache and deleted its empty exact task-owned scratch. Refresh the queue and c001 availability before the c448 NVMe dispatch; the runtime must recheck capacity and O_DIRECT before cache allocation."
   },
   "next_dispatch": {
-    "requires": "Monitor matched HBM-only c384 run 35802396548 through canonical warmup, 3,600-second profiling, artifacts, and cleanup. Compare it directly with completed NVMe c384 run 35646317491. Dispatch no additional study run until that comparison is recorded."
+    "requires": "When the B200 queue is empty and im-b200-c001 is available, dispatch 4 TiB HBM+NVMe c448 as the single active-or-queued NVMe-bearing study workflow. Require the runtime guard to observe more than 4,535,485,464,576 free bytes and pass O_DIRECT before cache creation. If profiling completes, run matched HBM-only c448."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
