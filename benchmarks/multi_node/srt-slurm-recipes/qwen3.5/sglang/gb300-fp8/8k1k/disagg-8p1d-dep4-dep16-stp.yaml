@@ -9,11 +9,11 @@ services:
   - name: etcd
     type: etcd
     placement:
-      node: dedicated
+      node: head
   - name: nats
     type: nats
     placement:
-      node: dedicated
+      node: head
 dynamo:
   install: true
 
@@ -165,3 +165,14 @@ benchmark:
   req_rate: "inf"
   random_range_ratio: 0.8
   concurrencies: "2048x4096"
+
+telemetry:
+  enabled: true
+  collect_interval_ms: 1000
+  storage_subdir: power
+  required: true
+  startup_timeout_seconds: 120
+  request_timeout_seconds: 2
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    port: 19401
