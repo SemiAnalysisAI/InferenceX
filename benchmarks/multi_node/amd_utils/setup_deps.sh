@@ -135,7 +135,7 @@ _tilert_install_wheel() {
 # first differing page onward after checking a sample of the kept rows against
 # the transfer, and fans the copies out on one stream per device pair. The
 # prefill connector sends the prompt ids when the decode hello asks for them.
-# Engine-patch waiver: docs/waiver/<PR>.md. Applied when the recipe sets
+# Engine-patch waiver: docs/waiver/3376.md. Applied when the recipe sets
 # TILERT_PD_PREFIX_REUSE=1; with 0 the wheel runs as shipped.
 _TILERT_PD_REUSE_PATCH="$(dirname "${BASH_SOURCE[0]}")/patches/tilert-0.1.6.post1-pd-prefix-reuse.patch"
 
