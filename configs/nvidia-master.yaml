@@ -1068,9 +1068,10 @@ qwen3.5-fp8-b200-sglang:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 4 }
-      - { tp: 4, ep: 1, conc-start: 2, conc-end: 512 }
+      - { tp: 4, ep: 1, conc-start: 1, conc-end: 512 }
       - { tp: 4, ep: 1, conc-list: [320, 384, 448, 640] }
 
 qwen3.5-fp8-b200-sglang-agentic-mtp:
