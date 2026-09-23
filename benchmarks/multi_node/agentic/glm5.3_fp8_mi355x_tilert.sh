@@ -114,6 +114,13 @@ export PREFILL_KV_DTYPE=bfloat16
 # The ROCm backend supports block sizes [1, 64] and vLLM picks 1, which makes
 # the connector's KI plane copy fail and MLA address the wrong rows.
 export PREFILL_BLOCK_SIZE=64
+# vLLM prefill with torch.compile and CUDA graphs (no --enforce-eager). On
+# #3376's AgentX runs the prefill-side part of TTFT (vLLM prefill plus router,
+# after the decode-side steps and the KV send) stayed at 1.8 s p50 / 4.4 s p90
+# for a few thousand uncached tokens per turn. Graph pools come out of the
+# ~24 GiB left outside vLLM's budget after the staging shard and the non-torch
+# baseline; 1 restores eager mode.
+export PREFILL_ENFORCE_EAGER=0
 export DECODE_KV_DTYPE=bf16
 # The PD staging shard sits outside vLLM's budget, so vLLM needs 90.45 (weights)
 # + 40.3 (profiling) + 91.71 GiB (KV for one 1048576-token request) = 222.5 GiB

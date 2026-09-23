@@ -15,7 +15,7 @@ check_env_vars \
     TILERT_PROFILE TILERT_MODEL_TYPE TILERT_MODEL_PKG TILERT_MAX_MODEL_LEN \
     TILERT_TRANSPORT TILERT_PARSER TILERT_QUEUE_TIMEOUT TILERT_WEIGHTS_DIR \
     TILERT_RDMA_STRICT TILERT_CONVERT_LOCK_WAIT TILERT_SIMULATE_ACC_METHOD \
-    PREFILL_KV_DTYPE PREFILL_BLOCK_SIZE PREFILL_SPEC_TOKENS DECODE_KV_DTYPE \
+    PREFILL_KV_DTYPE PREFILL_BLOCK_SIZE PREFILL_SPEC_TOKENS PREFILL_ENFORCE_EAGER DECODE_KV_DTYPE \
     DECODE_MTP_SIZE GPU_MEM_UTIL SERVED_MODEL_NAME \
     DECODE_CTRL_PORT DECODE_HTTP_PORT PREFILL_PORT ROUTER_PORT \
     DECODE_WAIT PREFILL_WAIT ROUTER_WAIT SKIP_CONTAINER_BARRIER \
@@ -291,13 +291,19 @@ start_prefill() {
     [[ -n "$MODEL_NAME" && "$MODEL_NAME" != "$SERVED_MODEL_NAME" ]] && served+=("$MODEL_NAME")
     # shellcheck disable=SC2206
     local extra=( ${TILERT_PREFILL_EXTRA_FLAGS} )
+    local eager=()
+    case "$PREFILL_ENFORCE_EAGER" in
+        1) eager=(--enforce-eager) ;;
+        0) ;;
+        *) echo "ERROR: PREFILL_ENFORCE_EAGER must be 0 or 1 (got '$PREFILL_ENFORCE_EAGER')" >&2; exit 1 ;;
+    esac
     local kv_cfg
     kv_cfg=$(printf '{"kv_connector":"TileRTConnector","kv_connector_module_path":"tilert.pd_vllm.prefill_connector","kv_role":"kv_producer","kv_connector_extra_config":{"tilert_host":"%s","tilert_ctrl_port":%s,"tilert_model":"%s","tilert_max_seq_len":%s,"tilert_transport":"%s"}}' \
         "$DECODE_HOST" "$DECODE_CTRL_PORT" "$TILERT_PROFILE" "$TILERT_MAX_MODEL_LEN" "$TILERT_TRANSPORT")
     local cmd=(vllm serve "$MODEL_PATH"
         --served-model-name "${served[@]}" --port "$PREFILL_PORT"
         --tensor-parallel-size "$PREFILL_TP_SIZE" --max-model-len "$TILERT_MAX_MODEL_LEN"
-        --enforce-eager --trust-remote-code --return-tokens-as-token-ids
+        "${eager[@]}" --trust-remote-code --return-tokens-as-token-ids
         --gpu-memory-utilization "$GPU_MEM_UTIL" --kv-cache-dtype "$PREFILL_KV_DTYPE"
         --block-size "$PREFILL_BLOCK_SIZE"
         "${PREFILL_SPEC[@]}"

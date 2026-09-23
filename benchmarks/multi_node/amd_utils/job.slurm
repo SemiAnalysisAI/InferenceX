@@ -62,7 +62,7 @@ if [[ "$ENGINE" == "tilert" ]]; then
     # server_tilert.sh takes the container-creation barrier timeout from the
     # recipe (no 300s default as on the SGLang path); fail here, before sbatch
     # work is done, rather than inside the container.
-    check_env_vars CONTAINER_BARRIER_TIMEOUT TILERT_PD_PREFIX_REUSE
+    check_env_vars CONTAINER_BARRIER_TIMEOUT TILERT_PD_PREFIX_REUSE PREFILL_ENFORCE_EAGER
 fi
 
 # Resolve the models.yaml entry the same way server_sglang.sh does: agentic runs
@@ -555,6 +555,7 @@ elif [[ "$ENGINE" == "tilert" ]]; then
         -e \"TILERT_EXTRA_ENV=${TILERT_EXTRA_ENV:-}\"
         -e SERVED_MODEL_NAME=${SERVED_MODEL_NAME}
         -e PREFILL_KV_DTYPE=${PREFILL_KV_DTYPE}
+        -e PREFILL_ENFORCE_EAGER=${PREFILL_ENFORCE_EAGER}
         -e PREFILL_BLOCK_SIZE=${PREFILL_BLOCK_SIZE}
         -e PREFILL_SPEC_TOKENS=${PREFILL_SPEC_TOKENS}
         -e DECODE_KV_DTYPE=${DECODE_KV_DTYPE}
