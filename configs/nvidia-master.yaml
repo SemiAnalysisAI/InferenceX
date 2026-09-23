@@ -8253,7 +8253,7 @@ dsv41flash-fp4-h200-vllm-agentic-dspark:
 # Match published vLLM TP4/EP1 and TP8/EP1 using dsv4 attention and the nightly's
 # native MXFP4 x BF16 Marlin MoE runner.
 dsv41flash-fp4-h200-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce
+  image: lmsysorg/sglang:nightly-dev-cu13-20260923-06008c17
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:h200-dgxc
@@ -8264,8 +8264,7 @@ dsv41flash-fp4-h200-sglang-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
-      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [8] }
 
 dsv4-fp4-b200-dynamo-sglang-agentic-agg:
   image: lmsysorg/sglang:nightly-dev-20260916-c9a8fba9
