@@ -1344,7 +1344,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
           - "DECODE_MTP_SIZE=3"
 
 dsv4-fp4-mi355x-atom-disagg-agentic-hicache-mtp:
-  image: rocm/atom-dev:nightly_202609210314
+  image: rocm/atom-dev:nightly_202609221542
   # DSpark needs the draft head the -0813 checkpoint bundles
   # (dspark_target_layer_ids in config.json); the base Pro checkpoint has none.
   model: deepseek-ai/DeepSeek-V4-Pro-0813
@@ -1360,50 +1360,11 @@ dsv4-fp4-mi355x-atom-disagg-agentic-hicache-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - spec-decoding: "mtp"
-        conc-list: [ 1,16 ]
-        kv-offloading: none
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
       # DP-attention tier (recipe: concurrency 64-128). TP8 + DP attention,
       # prefill TBO only, cache-aware router, no CPU offload.
       - spec-decoding: "mtp"
-        conc-list: [ 64, 128 ]
+        conc-list: [ 128 ]
         kv-offloading: none
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-      # DP-attention + CPU offload tier (recipe: concurrency 256). Prefill adds
-      # the lmcache host KV offload tier; decode is plain Mooncake.
-      - spec-decoding: "mtp"
-        conc-list: [ 256 ]
-        kv-offloading: dram
-        kv-offload-backend: { name: lmcache }
         prefill:
           num-worker: 1
           tp: 8
