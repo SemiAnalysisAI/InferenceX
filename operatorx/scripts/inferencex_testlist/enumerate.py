@@ -8,10 +8,11 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from .dtypes import OpDtype, RowDtypes, resolve_dtypes
+from .dtypes import RowDtypes, resolve_dtypes
 from .matrix import WorkloadRow
 from .models import Arch, AttentionArch, MoeArch
 from .parallelism import Parallelism
+from .schemes import gemm_scheme
 
 
 OpTriple = tuple[str, dict[str, Any], str]
@@ -111,7 +112,7 @@ def _moe_tokens_decode(row: WorkloadRow) -> int:
 
 
 def _gemm(
-    M: int, N: int, K: int, row: WorkloadRow, dt: OpDtype,
+    M: int, N: int, K: int, row: WorkloadRow,
     role: str, shard: int, bias: bool = False,
 ) -> OpTriple:
     """Emit a canonical GEMM op.
@@ -120,15 +121,14 @@ def _gemm(
     "q_proj", "mla_q_b", "mlp_gate_up"). `shard` records the TP shard factor
     applied to the N-axis weight of this GEMM so the name field captures the
     sharding context (and identical (M,N,K,dtype) GEMMs from different
-    shardings stay distinguishable when wanted)."""
+    shardings stay distinguishable when wanted). Dtypes and scales come from
+    the checkpoint's per-role scheme (`schemes.py`), not the row precision."""
     name = f"{row.model_prefix}-{role}" + (f"-tp{shard}" if shard > 1 else "")
     args: dict[str, Any] = {
         "m": int(M),
         "n": int(N),
         "k": int(K),
-        "dtype_a": dt.activation,
-        "dtype_b": dt.weight,
-        "dtype_out": dt.output,
+        **gemm_scheme(row.model, role).args(),
     }
     if bias:
         args["bias"] = True
@@ -136,7 +136,7 @@ def _gemm(
 
 
 def _attn_block_gemms(
-    M: int, arch: Arch, par: Parallelism, row: WorkloadRow, phase: str, dt: OpDtype
+    M: int, arch: Arch, par: Parallelism, row: WorkloadRow, phase: str
 ) -> Iterable[OpTriple]:
     """Emit projection GEMMs for one attention block.
 
@@ -164,28 +164,28 @@ def _attn_block_gemms(
         # it's what the kernel actually runs.
         fused_qkv_n = (n_q + 2 * n_kv) // tp if tp == kv_shard else None
         if fused_qkv_n is not None:
-            yield _gemm(M, fused_qkv_n, H, row, dt, f"attn_qkv_proj_{phase}", tp, bias=attn_bias)
+            yield _gemm(M, fused_qkv_n, H, row, f"attn_qkv_proj_{phase}", tp, bias=attn_bias)
         else:
-            yield _gemm(M, n_q // tp, H, row, dt, f"attn_q_proj_{phase}", tp, bias=attn_bias)
-            yield _gemm(M, n_kv // kv_shard, H, row, dt, f"attn_k_proj_{phase}", kv_shard, bias=attn_bias)
-            yield _gemm(M, n_kv // kv_shard, H, row, dt, f"attn_v_proj_{phase}", kv_shard, bias=attn_bias)
-        yield _gemm(M, H, n_q // tp, row, dt, f"attn_o_proj_{phase}", tp, bias=attn_bias)
+            yield _gemm(M, n_q // tp, H, row, f"attn_q_proj_{phase}", tp, bias=attn_bias)
+            yield _gemm(M, n_kv // kv_shard, H, row, f"attn_k_proj_{phase}", kv_shard, bias=attn_bias)
+            yield _gemm(M, n_kv // kv_shard, H, row, f"attn_v_proj_{phase}", kv_shard, bias=attn_bias)
+        yield _gemm(M, H, n_q // tp, row, f"attn_o_proj_{phase}", tp, bias=attn_bias)
         return
 
     # MLA path: emit canonical 5 projections (q_a, q_b, kv_a, kv_b, o).
     q_lora = a.q_lora_rank
     kv_lora = a.kv_lora_rank
     head_qk = a.qk_nope_head_dim + a.qk_rope_head_dim
-    yield _gemm(M, q_lora, H, row, dt, f"mla_q_a_proj_{phase}", 1)
-    yield _gemm(M, (a.num_heads * head_qk) // tp, q_lora, row, dt, f"mla_q_b_proj_{phase}", tp)
-    yield _gemm(M, kv_lora + a.qk_rope_head_dim, H, row, dt, f"mla_kv_a_proj_{phase}", 1)
-    yield _gemm(M, (a.num_heads * (a.qk_nope_head_dim + a.v_head_dim)) // tp, kv_lora, row, dt,
+    yield _gemm(M, q_lora, H, row, f"mla_q_a_proj_{phase}", 1)
+    yield _gemm(M, (a.num_heads * head_qk) // tp, q_lora, row, f"mla_q_b_proj_{phase}", tp)
+    yield _gemm(M, kv_lora + a.qk_rope_head_dim, H, row, f"mla_kv_a_proj_{phase}", 1)
+    yield _gemm(M, (a.num_heads * (a.qk_nope_head_dim + a.v_head_dim)) // tp, kv_lora, row,
                 f"mla_kv_b_proj_{phase}", tp)
-    yield _gemm(M, H, (a.num_heads * a.v_head_dim) // tp, row, dt, f"mla_o_proj_{phase}", tp)
+    yield _gemm(M, H, (a.num_heads * a.v_head_dim) // tp, row, f"mla_o_proj_{phase}", tp)
 
 
 def _dense_mlp_gemms(
-    M: int, arch: Arch, par: Parallelism, row: WorkloadRow, phase: str, dt: OpDtype
+    M: int, arch: Arch, par: Parallelism, row: WorkloadRow, phase: str
 ) -> Iterable[OpTriple]:
     if arch.moe.dense_intermediate_size <= 0:
         return
@@ -194,8 +194,8 @@ def _dense_mlp_gemms(
     tp = par.tp
     # SGLang/vLLM fuse gate + up into one GEMM with width 2*intermediate, then
     # apply silu_and_mul. Emit the fused shape — that's what the kernel runs.
-    yield _gemm(M, (2 * interm) // tp, H, row, dt, f"mlp_gate_up_proj_{phase}", tp)
-    yield _gemm(M, H, interm // tp, row, dt, f"mlp_down_proj_{phase}", tp)
+    yield _gemm(M, (2 * interm) // tp, H, row, f"mlp_gate_up_proj_{phase}", tp)
+    yield _gemm(M, H, interm // tp, row, f"mlp_down_proj_{phase}", tp)
 
 
 # ---------------------------------------------------------------------------
@@ -444,16 +444,16 @@ def ops_for_row(row: WorkloadRow, arch: Arch) -> list[OpTriple]:
     emit_decode = row.phase in (None, "decode")
 
     if emit_prefill:
-        out.extend(_attn_block_gemms(prefill_M, arch, par, row, "prefill", dts.attn))
+        out.extend(_attn_block_gemms(prefill_M, arch, par, row, "prefill"))
         out.extend(_attention_ops(arch, par, row, "prefill", dts))
-        out.extend(_dense_mlp_gemms(prefill_M, arch, par, row, "prefill", dts.dense))
+        out.extend(_dense_mlp_gemms(prefill_M, arch, par, row, "prefill"))
         out.extend(_moe_ops(arch, par, row, "prefill", prefill_moe_tokens, dts))
         out.extend(_collective_ops(arch, par, row, "prefill", prefill_moe_tokens, dts))
 
     if emit_decode:
-        out.extend(_attn_block_gemms(decode_M, arch, par, row, "decode", dts.attn))
+        out.extend(_attn_block_gemms(decode_M, arch, par, row, "decode"))
         out.extend(_attention_ops(arch, par, row, "decode", dts))
-        out.extend(_dense_mlp_gemms(decode_M, arch, par, row, "decode", dts.dense))
+        out.extend(_dense_mlp_gemms(decode_M, arch, par, row, "decode"))
         out.extend(_moe_ops(arch, par, row, "decode", decode_moe_tokens, dts))
         out.extend(_collective_ops(arch, par, row, "decode", decode_moe_tokens, dts))
 

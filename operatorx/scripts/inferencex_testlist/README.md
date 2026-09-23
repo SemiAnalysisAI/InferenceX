@@ -14,7 +14,9 @@ conc, spec-decoding)` tuple in the InferenceX matrix, we:
    GPT-OSS-GQA / Qwen3.5-MoE).
 3. Emit canonical OperatorX op shapes that the workload would touch:
    - **GEMM**: attention projections, MLP gate/up/down (for dense layers),
-     sharded by TP.
+     sharded by TP. Dtypes and scales come from the checkpoint's per-role
+     quantization scheme in `schemes.py` (keyed by HF model id), so new models
+     need an entry there.
    - **Attention**: MHA or MLA, parameterised by TP head-shard and DP-attn
      batch-shard. Prefill uses the full ISL. Decode uses `mtp_factor` query tokens
      and `ISL + OSL/2` KV length.
