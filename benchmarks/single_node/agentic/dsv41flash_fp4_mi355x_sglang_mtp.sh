@@ -72,6 +72,11 @@ export SGLANG_MOE_PADDING=1
 export AITER_FLYDSL_FORCE_REDUCE=1
 export ROCM_QUICK_REDUCE_QUANTIZATION=NONE
 
+# Long-prefill scratch can fill the native allocator cache and starve HIP/RCCL
+# allocations outside PyTorch. The preview's allocator only activates GC when
+# per_process_memory_fraction is below 1; reclaim unused blocks at 80% of 99%.
+export PYTORCH_HIP_ALLOC_CONF=garbage_collection_threshold:0.8,per_process_memory_fraction:0.99
+
 CUDA_GRAPH_MAX_BS=64
 
 # Saturation arms carry a larger in-flight working set than the 30-minute
@@ -129,7 +134,7 @@ SGLANG_CMD=(
 write_command "$RESULT_DIR/sglang_command.txt" "${SGLANG_CMD[@]}"
 {
     echo "=== SGLANG_* env vars at launch ==="
-    env | grep -E '^SGLANG_' | sort
+    env | grep -E '^SGLANG_|^PYTORCH_(HIP|CUDA|ALLOC)' | sort
     echo "==================================="
 } | tee "$SERVER_LOG"
 SERVER_PID=""
