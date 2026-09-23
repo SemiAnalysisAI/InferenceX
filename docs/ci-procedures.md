@@ -299,7 +299,7 @@ CODEOWNER verification runs when an eligible human submits or edits a checklist 
 
 Execution stays on the trusted default branch and serializes per PR. Starting Claude requires the actor's base `permission` to be `write` or `admin`, and `role_name` to be `write`, `maintain`, or `admin`. Unknown/custom roles, missing fields, bots, and lookup failures do not start verification. Manual dispatch requires `pr-number` and `comment_url` to identify the same PR.
 
-The verifier updates one advisory comment with the assessed SHA and publishes no commit status. Later pushes do not extend that assessment or trigger another run. Edit the existing checklist or dispatch manually to reassess, including after a review event was missed during a merge conflict. GitHub's separate human approval requirements still apply.
+The verifier associates one advisory comment with each sign-off resource and includes the assessed SHA. Editing the same checklist updates only its associated verdict; a different checklist receives a separate verdict, so an older sign-off's verdict is never overwritten. Later pushes do not extend that assessment or trigger another run. Dispatch manually to reassess, including after a review event was missed during a merge conflict. The verifier publishes no commit status, and GitHub's separate human approval requirements still apply.
 
 Do not rerun an in-progress run blindly. A completed failed run can rerun only failed jobs and their dependents:
 

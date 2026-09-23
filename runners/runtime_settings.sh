@@ -16,15 +16,9 @@ case "${RUNNER_NAME%%_*}" in
                     export MODEL_PATH=/scratch/models/DeepSeek-V4-Pro-0813
                 fi
                 ;;
-            kimik2.5) export MODEL_PATH=/scratch/models/Kimi-K2.6-NVFP4 ;;
             kimik3) export MODEL_PATH=/scratch/models/Kimi-K3 ;;
             glm5.1) export MODEL_PATH=/scratch/models/GLM-5.1-FP8 ;;
             glm5.2) export MODEL_PATH=/scratch/models/GLM-5.2-NVFP4 ;;
-            minimaxm2.5)
-                if [[ "$FRAMEWORK" == dynamo-vllm ]]; then
-                    export B200_SQUASH_DIR=/home/slurm-shared/gharunners/squash
-                fi
-                ;;
         esac
         if [[ "$FRAMEWORK" == tilert ]]; then
             export TILERT_WEIGHTS_DIR="/scratch/models/${MODEL_PREFIX}-${PRECISION}-tilert-8shard"

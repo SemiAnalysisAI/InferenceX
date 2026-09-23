@@ -589,14 +589,11 @@ PY
         export ENVOY_PORT VLLM_PORT INFMAX_CONTAINER_WORKSPACE=/workspace
         bash /workspace/benchmarks/multi_node/llm-d/agentic.sh
     elif [[ "${EVAL_ONLY}" != "true" ]]; then
-        # ---- Benchmark sweep (one run per concurrency level) ----
-        # BENCH_MAX_CONCURRENCY is an 'x'-delimited list from submit.sh (e.g. "1024x512").
+        # Benchmark sweep. BENCH_MAX_CONCURRENCY is 'x'-delimited from submit.sh (e.g. "1024x512").
         IFS='x' read -r -a CONCURRENCIES <<< "$BENCH_MAX_CONCURRENCY"
-        # GPU counts embedded in the result filename as _gpus_/_ctx_/_gen_ tokens so the
-        # CI "Process result" step (benchmark-multinode-tmpl.yml) can parse them and run
-        # process_result.py for llm-d -- same filename convention as amd_utils/bench.sh.
-        # ctx = prefill GPUs, gen = decode GPUs; nodes*GPUS_PER_NODE is correct for any
-        # PREFILL_WORKERS/DECODE_WORKERS split (e.g. high-tpt 2P -> 16 prefill GPUs).
+        # GPU counts are embedded in the result filename as _gpus_/_ctx_/_gen_ so the CI
+        # "Process result" step can parse them (same convention as amd_utils/bench.sh).
+        # ctx = prefill GPUs, gen = decode GPUs.
         _bench_prefill_gpus=$(( PREFILL_NODES * GPUS_PER_NODE ))
         _bench_decode_gpus=$(( DECODE_NODES * GPUS_PER_NODE ))
         _bench_total_gpus=$(( _bench_prefill_gpus + _bench_decode_gpus ))
@@ -618,11 +615,8 @@ PY
                     --dsv4
                 )
             fi
-
-            # Non-fatal: a failed or timed-out conc point must not abort the sweep
-            # or (under set -e) skip the allocation release below. The EXIT trap
-            # releases the allocation regardless, but continuing here lets a
-            # multi-conc sweep record every point it can.
+            # Non-fatal: a failed or timed-out conc point must not abort the sweep or (under
+            # set -e) skip the allocation release below.
             run_benchmark_serving \
                 --bench-serving-dir /workspace \
                 --tokenizer /models \
@@ -639,7 +633,6 @@ PY
                 "${bench_extra_args[@]}" \
                 || echo "WARNING: benchmark conc=$max_concurrency failed/timed out (rc=$?)"
         done
-
     fi
 
     # ---- Eval (optional) ----

@@ -79,8 +79,8 @@ Note: while not required, `entry-name` typically takes the format `<INFMAX_MODEL
 The below list describes what each field is:
 
 - `image`: The image used to serve the benchmark, e.g., `vllm/vllm-openai:v0.10.2`
-- `model`: The model to server, e.g., `openai/gpt-oss-120b`
-- `model-prefix`: The canonical InferenceMAX model prefix reference, i.e., `dsr1` for Deepseek, `gptoss` for gptoss-120b, etc. This value is used to decipher which script in `benchmarks/` should be used in order to launch the benchmark.
+- `model`: The model to serve, e.g., `deepseek-ai/DeepSeek-R1-0528`
+- `model-prefix`: The canonical InferenceMAX model prefix reference, i.e., `dsr1` for DeepSeek-R1 or `qwen3.5` for Qwen3.5. Consult `MODELS.md` for supported model/scenario combinations. This value is used to decipher which script in `benchmarks/` should be used in order to launch the benchmark.
 - `runner`: This is the runner label on which to run the benchmark. This must be a valid key under `labels` in `runners.yaml`.
   Agentic configs must use an exact `cluster:<name>` runner label, not a broad
   SKU or capacity label, so every search-space point runs on the same hardware
