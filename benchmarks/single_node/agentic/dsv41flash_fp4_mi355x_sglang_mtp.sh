@@ -108,6 +108,10 @@ SGLANG_CMD=(
     --trust-remote-code
     --tp "$TP" --ep-size "$EP_SIZE"
     --mem-fraction-static 0.80
+    # Native FP4 prefill scratch scales with query tokens times context.
+    # The 16384-token default OOMed five canonical cells; match the existing
+    # 4096-token breakable graph ceiling without reducing model context.
+    --chunked-prefill-size 4096
     --speculative-algorithm DSPARK
     --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
