@@ -183,6 +183,10 @@ SGLANG_CMD=(
     # ~25M-token pool (0.75 reserved 51M) while eager prefill gets 115 GB.
     --mem-fraction-static 0.60
     --chunked-prefill-size 2048
+    # Bound decode starvation during long prompt bursts. Interval 0 in the
+    # canonical C32 run 35786731860 spent over four minutes only prefilling,
+    # leaving 37 live requests without streaming tokens at the profile end.
+    --prefill-decode-interval 16
     --speculative-algorithm DSPARK
     --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
