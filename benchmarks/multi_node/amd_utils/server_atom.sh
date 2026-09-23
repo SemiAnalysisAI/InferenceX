@@ -254,7 +254,15 @@ fi
 ROUTER_POLICY_ARGS="--policy random"
 if [[ "$IS_AGENTIC_RUN" == "1" ]]; then
     if [[ "$PREFILL_ENABLE_DP" == "true" ]]; then
-        ROUTER_POLICY_ARGS="--dp-aware --prefill-policy cache_aware --decode-policy cache_aware --cache-threshold 0.8 --balance-abs-threshold 20 --balance-rel-threshold 2.0 --eviction-interval 300 --atom-pd-rank-mapping-policy none"
+        if [[ "$_MAX_CONC" -eq 256 ]]; then
+            # conc=256: pin each session to a fixed DP rank (dp_sticky) and let
+            # aiperf derive the session id from the request correlation id so the
+            # router can keep the sticky mapping.
+            ROUTER_POLICY_ARGS="--dp-aware --prefill-policy dp_sticky --decode-policy dp_sticky --atom-pd-rank-mapping-policy none"
+            export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
+        else
+            ROUTER_POLICY_ARGS="--dp-aware --prefill-policy cache_aware --decode-policy cache_aware --cache-threshold 0.8 --balance-abs-threshold 20 --balance-rel-threshold 2.0 --eviction-interval 300 --atom-pd-rank-mapping-policy none"
+        fi
     else
         ROUTER_POLICY_ARGS="--prefill-policy round_robin --decode-policy round_robin --atom-pd-rank-mapping-policy none"
     fi
