@@ -9463,9 +9463,9 @@
   - dsr1-fp8-mi325x-sglang-mtp
   - qwen3.5-fp8-mi325x-sglang-mtp
   description:
-  - Return the shared SRT submodule to NVIDIA upstream main 3cbc5dd256af2bfd2fed09b724628c3f5456c85f.
+  - Return the shared SRT submodule to NVIDIA upstream release v2.23.2 (8dace5f9596907a5075bf056251563b2e9563e7d).
     Use native AToMesh with a digest-pinned official router image for single-node ATOM while preserving
     worker images and settings; use native TRT-LLM served_model_name forwarding.
-  - 共享 SRT 子模块切回 NVIDIA 上游 main 的 3cbc5dd256af2bfd2fed09b724628c3f5456c85f。单节点 ATOM 使用原生 AToMesh 和按摘要固定的官方路由器镜像，保留
+  - 共享 SRT 子模块切回 NVIDIA 上游发行版 v2.23.2（8dace5f9596907a5075bf056251563b2e9563e7d）。单节点 ATOM 使用原生 AToMesh 和按摘要固定的官方路由器镜像，保留
     worker 镜像及设置；TRT-LLM 使用原生 served_model_name 参数转发。
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
