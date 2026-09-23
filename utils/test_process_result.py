@@ -757,6 +757,60 @@ class TestPowerAggregationIntegration:
         assert patched["joules_per_output_token"] == pytest.approx(9.6, abs=0.05)
         assert (tmp_path / "power_validation_benchmark_result.json").is_file()
 
+    def test_workflow_uses_result_python_with_unsupported_ambient_python(
+        self, tmp_path, single_node_env_vars
+    ):
+        import yaml
+
+        workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/benchmark-tmpl.yml").read_text())
+        step = next(
+            s for s in workflow["jobs"]["benchmark"]["steps"] if s.get("name") == "Process result"
+        )
+        for directory in ["utils", "benchmarks"]:
+            (tmp_path / directory).symlink_to(REPO_ROOT / directory, target_is_directory=True)
+        (tmp_path / "bin").mkdir()
+        ambient_python = tmp_path / "bin/python3"
+        ambient_python.write_text("#!/bin/sh\nexit 73\n")
+        ambient_python.chmod(0o755)
+        start, end = 1_700_000_100.0, 1_700_000_160.0
+        self._write_nvidia_csv(tmp_path / "gpu_metrics.csv", start, end, 600.0, 8)
+        (tmp_path / "benchmark_result.json").write_text(
+            json.dumps(
+                {
+                    "model_id": "fixture",
+                    "max_concurrency": 8,
+                    "total_token_throughput": 1000,
+                    "output_throughput": 500,
+                    "benchmark_start_time_unix": start,
+                    "benchmark_end_time_unix": end,
+                    "duration": 60,
+                    "completed": 30,
+                    "total_input_tokens": 240_000,
+                    "total_output_tokens": 30_000,
+                }
+            )
+        )
+        env = {
+            **os.environ,
+            **single_node_env_vars,
+            "REQUIRE_POWER": "1",
+            "PATH": str(tmp_path / "bin") + os.pathsep + os.environ["PATH"],
+            "INFERENCEX_RESULTS_PYTHON": sys.executable,
+            "PYTHONPATH": str(REPO_ROOT),
+        }
+        result = subprocess.run(
+            ["bash", "-eo", "pipefail", "-c", step["run"]],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        aggregate = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
+        assert aggregate["power_valid"] == 1
+        assert aggregate["total_gpu_energy_j"] == pytest.approx(288_000)
+
     def test_missing_csv_does_not_break_process_result(self, tmp_path, single_node_env_vars):
         """Without GPU_METRICS_CSV (or with a missing file), process_result.py
         still succeeds and writes the agg JSON — just without the power fields.
@@ -1596,3 +1650,84 @@ def test_multinode_batch_rejects_unknown_point_filename(
     receipt = json.loads((tmp_path / 'result_processing_run.json').read_text())
     assert receipt['missing_concurrencies'] == [16]
     assert any('filename lacks' in point.get('error', '') for point in receipt['points'])
+
+
+@pytest.mark.parametrize("result_python", [None, "", sys.executable])
+def test_agentic_collector_preserves_archive_when_result_python_is_missing(
+    tmp_path: Path, result_python: str | None
+) -> None:
+    import tarfile
+
+    pkg = build_package(tmp_path)
+    result_dir = pkg.logs_root / "agentic/conc_4"
+    result_dir.mkdir(parents=True)
+    stem = "agentic_power_concurrency_4"
+    pkg.original_result.replace(result_dir / f"{stem}.json")
+    old_window = pkg.windows_dir / "my_result.json"
+    window = json.loads(old_window.read_text())
+    window.update(benchmark_type="custom", result_path=f"agentic/conc_4/{stem}.json")
+    old_window.unlink()
+    (pkg.windows_dir / f"{stem}.json").write_text(json.dumps(window))
+    manifest_path = pkg.power_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["expected_windows"] = [{"benchmark_type": "custom", "concurrency": 4}]
+    manifest["window_validations"][0].update(
+        benchmark_type="custom", window_file=f"windows/{stem}.json"
+    )
+    manifest_path.write_text(json.dumps(manifest))
+    source, workspace, bin_dir = [tmp_path / name for name in ("source", "workspace", "bin")]
+    for directory in (source, workspace, bin_dir):
+        directory.mkdir()
+    raw_result = {
+        "hw": "h200",
+        "conc": 4,
+        "disagg": True,
+        "num_prefill_gpu": 2,
+        "num_decode_gpu": 2,
+    }
+    (source / "point_conc4.json").write_text(json.dumps(raw_result))
+    ambient_python = bin_dir / "python3"
+    ambient_python.write_text("#!/bin/sh\nexit 73\n")
+    ambient_python.chmod(0o755)
+    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+    env.pop("INFERENCEX_RESULTS_PYTHON", None)
+    if result_python is not None:
+        env["INFERENCEX_RESULTS_PYTHON"] = result_python
+    result = subprocess.run(
+        [
+            "bash",
+            "-eo",
+            "pipefail",
+            "-c",
+            (
+                'source "$1"; sacct() { printf "12345|COMPLETED|0:0\\n"; }; '
+                'rc=0; collect_agentic_power_results 12345 "$2" "$3" "$4" point "$5" 4 || rc=$?; '
+                'printf "%s" "$rc" > "$4/collector-status"; '
+                'bundle_server_logs "$2" "$4/server-logs.tar.gz"; exit "$rc"'
+            ),
+            "bash",
+            str(REPO_ROOT / "runners/slurm_utils.sh"),
+            str(pkg.logs_root),
+            str(source),
+            str(workspace),
+            PRODUCER_SHA,
+        ],
+        env=env,
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    expected_rc = 0 if result_python else 1
+    assert result.returncode == expected_rc, result.stderr
+    assert (workspace / "collector-status").read_text() == str(expected_rc)
+    with tarfile.open(workspace / "server-logs.tar.gz") as archive:
+        assert "./power/native-job-status.txt" in archive.getnames()
+        assert f"./agentic/conc_4/{stem}.json" in archive.getnames()
+    aggregate = json.loads((workspace / "point_conc4.json").read_text())
+    if result_python:
+        assert aggregate["power_valid"] == 1
+        assert aggregate["total_gpu_energy_j"] == pytest.approx(84_000)
+    else:
+        assert "INFERENCEX_RESULTS_PYTHON" in result.stdout
+        assert aggregate == raw_result
