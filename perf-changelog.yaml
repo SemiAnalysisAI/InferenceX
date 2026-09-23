@@ -8783,3 +8783,22 @@
     - "Run a new canonical full sweep with 16 performance and 16 full-evaluation cells. Earlier EP4/EP8 and DP8 measurements remain historical evidence and do not qualify the EP1 grid."
     - "Extend only H200 SGLang AgentX performance cells at C64/C128 to 24-hour Slurm allocations and 24.5-hour GitHub jobs after the original eight-hour allocation expired during progressing warmup. Preserve normal warmup, the full 3600-second profile, image, model, precision and topology."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341
+
+- config-keys:
+  - qwen3.5-fp8-gb300-dynamo-sglang
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Preserve Qwen3.5 FP8 gb300 coverage and require validated power; include the article
+    ladder where missing.
+  - 保留现有覆盖并要求通过验证的功耗，补齐缺失的文章并发梯度。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3382
+
+- config-keys:
+  - qwen3.5-fp8-gb300-dynamo-sglang
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Enable required DCGM power telemetry for Qwen3.5 FP8 GB300 8P1D STP; colocate etcd and nats on the head node
+    for the supported telemetry clock.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3382
