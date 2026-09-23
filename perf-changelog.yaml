@@ -8770,3 +8770,16 @@
     - "Prioritize DSpark across the full AgentX concurrency curve and test 16 decode steps between prefill chunks with unchanged shipped precision and canonical acceptance; remove the STP sweep arm because measured DSpark points dominate its completed diagnostics."
     - "Reserve 64 SWA prefix tails per concurrency at C2 and above, capped at 4096, within the existing static memory budget. The 1024-tail TP4 C16 test improved throughput 4.32x over the matched default-tail baseline while preserving checkpoint math and precision."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3344
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Qualify DeepSeek-V4.1-Flash H200 SGLang on the latest official September 22 CUDA 13 nightly, matching the published vLLM starting topologies TP4/EP1 and TP8/EP1 at concurrency 1, 2, 4, 8, 16, 32, 64 and 128."
+    - "Use native Marlin MXFP4 MoE for both EP1 topologies: tensor-sharded expert widths 576 and 288 require supported padding, while the shipped SM90 CUTLASS method rejects these dimensions. Preserve shipped-default target and DSpark precision."
+    - "Retain per-rank anonymous Engram host tables, GPU-resident KV, memory fraction 0.70, prefill chunk 4096, prefill/decode interval 16 and 1024 SWA prefix tails for the exact-topology baseline."
+    - "Retain validated H200 dense-GEMM launch configurations without changing kernel code or precision; keep five-token DSpark, golden acceptance for performance and real verification for full GSM8K."
+    - "Run a new canonical full sweep with 16 performance and 16 full-evaluation cells. Earlier EP4/EP8 and DP8 measurements remain historical evidence and do not qualify the EP1 grid."
+    - "Extend only H200 SGLang AgentX performance cells at C64/C128 to 24-hour Slurm allocations and 24.5-hour GitHub jobs after the original eight-hour allocation expired during progressing warmup. Preserve normal warmup, the full 3600-second profile, image, model, precision and topology."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341
