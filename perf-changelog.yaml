@@ -8763,9 +8763,9 @@
     - minimaxm3-fp4-mi355x-atom-agentic-mtp
   scenario-type:
     - agentic-coding
-  no-evals: true
+  eval-concs: [48]
   description:
     - "Update MiniMax-M3 ATOM AgentX from rocm/atom-dev:nightly_202609171455 to nightly_202609231248 (digest sha256:80f2c66579704aba933a9ff2a6e22e1dc61917c0fe6a2b0a0166816cd6d0100a), containing ROCm/ATOM#2366. Enable ATOM_PA_FLYDSL=1 and ATOM_PA_FLYDSL_PLAN=1 for FlyDSL paged decode and context-length-aware dense-decode work planning."
     - "Use only ROCR_VISIBLE_DEVICES for automatically selected NUMA-spread GPUs and remove the inherited ROCR-to-HIP double mask. Preserve explicit ROCR allocations and HIP-only allocations; retain all 19 TP2/TP4 resident/offload points, EAGLE3 K3, golden AL 2.78, indexer CP and CPU memory budgets."
-    - "As in PR #3189, run a throughput-only PR sweep and dispatch exactly one representative TP4 C48 LMCache-offload eval separately against the same head, using the full MiniMax vendor suite and real draft acceptance."
+    - "Run all 19 throughput points and exactly one representative TP4 C48 LMCache-offload eval in the same PR sweep. Use eval-concs: [48] to restrict only eval selection, retaining the full MiniMax vendor suite and real draft acceptance."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3388

@@ -274,10 +274,10 @@ only when neither mask was supplied. Explicit ROCR and HIP-only allocations
 remain authoritative. The 19 resident/offload points, EAGLE3 K3, golden AL 2.78,
 indexer CP and DRAM budgets are preserved.
 
-Following #3189, this update uses `no-evals: true` for its PR sweep and one
-separate TP4 C48 LMCache-offload eval at the same commit. Select it with
-`test-config --config-files configs/amd-master.yaml --config-keys minimaxm3-fp4-mi355x-atom-agentic-mtp --conc 48 --evals-only`.
-That emits one `minimax-vendor` / `minimax_m3_full` job using real acceptance.
+The changelog uses `eval-concs: [48]` to include all 19 throughput points and
+exactly one TP4 C48 LMCache-offload eval in the same PR sweep. The eval uses
+`minimax-vendor` / `minimax_m3_full` with real acceptance. The concurrency filter
+changes eval selection only; throughput retains every configured point.
 
 ### DeepSeek-V4.1-Flash DSpark
 

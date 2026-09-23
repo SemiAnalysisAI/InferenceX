@@ -245,10 +245,9 @@ schedule 和 ragged verification 保持关闭。
 保留显式 ROCR 分配和仅 HIP 的分配。19 个 resident/offload 点、EAGLE3 K3、
 golden AL 2.78、indexer CP 和 DRAM 预算保持原值。
 
-沿用 #3189 的方式，本次更新的 PR sweep 设置 `no-evals: true`，另在同一提交上
-单独运行一个 TP4 C48 LMCache-offload eval。使用
-`test-config --config-files configs/amd-master.yaml --config-keys minimaxm3-fp4-mi355x-atom-agentic-mtp --conc 48 --evals-only`
-选择该点，只生成一个使用真实 acceptance 的 `minimax-vendor` / `minimax_m3_full` job。
+changelog 使用 `eval-concs: [48]`，使同一次 PR sweep 包含全部 19 个吞吐点和
+唯一一个 TP4 C48 LMCache-offload eval。eval 使用 `minimax-vendor` /
+`minimax_m3_full` 和真实 acceptance。并发过滤仅影响 eval 选择，吞吐保留所有配置点。
 
 ### DeepSeek-V4.1-Flash DSpark
 

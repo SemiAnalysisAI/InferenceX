@@ -21,6 +21,16 @@ Combining `no-evals` with `all-evals`, `evals-only`, or `eval-min-prefill-ep`
 on the entry, or with either eval PR modifier, is rejected. Such a run provides
 throughput evidence, not model-evaluation evidence.
 
+To keep throughput and a limited eval selection in one PR sweep, set
+`eval-concs: [48]` on the changelog entry instead of `no-evals`. This filters
+the eval points already selected by the normal policy and leaves every throughput
+point intact. All matching deployments at the selected concurrency remain;
+it does not impose a job-count limit or add unselected points. An empty match
+fails validation. Multi-node `all-evals` rows are narrowed to the matching
+concurrencies; other multi-node rows must match their selected `eval-conc`.
+The field requires a nonempty list of positive integers and cannot be combined
+with `no-evals` or `append-only`.
+
 There are two distinct layers: the matrix generator decides **which jobs exist**, while runtime variables decide **what a launched job does**.
 
 | Need | Generator/workflow mode | Runtime behavior |

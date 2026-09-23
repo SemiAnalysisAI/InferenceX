@@ -1,6 +1,6 @@
 import pprint
 from enum import Enum
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 import yaml
 from pydantic import (
@@ -1013,6 +1013,12 @@ class ChangelogEntry(BaseModel):
     evals_only: bool = Field(alias="evals-only", default=False)
     all_evals: bool = Field(alias="all-evals", default=False)
     no_evals: bool = Field(alias="no-evals", default=False)
+    eval_concs: list[Annotated[int, Field(gt=0, strict=True)]] | None = Field(
+        alias="eval-concs",
+        default=None,
+        min_length=1,
+        description="Keep only these already-selected eval concurrencies; preserve throughput.",
+    )
     append_only: bool = Field(
         alias="append-only",
         default=False,
@@ -1041,11 +1047,17 @@ class ChangelogEntry(BaseModel):
     def validate_append_only_mode(self) -> Self:
         """Append-only entries are throughput deltas, never eval-only requests."""
         if self.no_evals and (
-            self.evals_only or self.all_evals or self.eval_min_prefill_ep is not None
+            self.evals_only
+            or self.all_evals
+            or self.eval_min_prefill_ep is not None
+            or self.eval_concs is not None
         ):
             raise ValueError("no-evals cannot be combined with eval selection fields")
         if self.append_only and (
-            self.evals_only or self.all_evals or self.eval_min_prefill_ep is not None
+            self.evals_only
+            or self.all_evals
+            or self.eval_min_prefill_ep is not None
+            or self.eval_concs is not None
         ):
             raise ValueError("append-only cannot be combined with eval selection fields")
         return self

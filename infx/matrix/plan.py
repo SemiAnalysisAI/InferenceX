@@ -109,6 +109,23 @@ def get_config_keys_from_master(config_keys: list[str], master_config: dict) -> 
     return list(resolved_keys)
 
 
+def filter_eval_rows_by_concurrency(eval_rows: list[dict], concs: list[int] | None) -> list[dict]:
+    """Restrict selected eval points without expanding the default eval policy."""
+    if concs is None:
+        return eval_rows
+    allowed = set(concs)
+    kept = []
+    for row in eval_rows:
+        if isinstance(row["conc"], list):
+            selected = row["conc"] if row.get("eval-all-concs") else [row["eval-conc"]]
+            selected = [conc for conc in selected if conc in allowed]
+            if selected:
+                kept.append({**row, "conc": selected, "eval-conc": max(selected)})
+        elif row["conc"] in allowed:
+            kept.append(row)
+    return kept
+
+
 @contextmanager
 def generation_inputs_at_ref(ref: str) -> Iterator[GenerationInputs]:
     """Materialize config and generator inputs from one repository revision."""
@@ -543,6 +560,7 @@ def build_plan(
                 continue
 
             eval_groups = group_unseen_scenarios(all_configs, entry_scenarios, eval_scenarios_seen)
+            selected_eval_results = []
             for scenarios, eval_configs in eval_groups.items():
                 entry_eval_results = generate_current(
                     eval_configs,
@@ -552,7 +570,14 @@ def build_plan(
                 entry_eval_results = filter_eval_rows_by_prefill_ep(
                     entry_eval_results, entry.eval_min_prefill_ep
                 )
-                all_eval_results.extend(entry_eval_results)
+                selected_eval_results.extend(
+                    filter_eval_rows_by_concurrency(entry_eval_results, entry.eval_concs)
+                )
+            if eval_groups and entry.eval_concs is not None and not selected_eval_results:
+                raise ValueError(
+                    f"eval-concs {entry.eval_concs} matched no selected evals for {all_configs}"
+                )
+            all_eval_results.extend(selected_eval_results)
 
         if trim:
             all_benchmark_results = trim_conc(all_benchmark_results)
