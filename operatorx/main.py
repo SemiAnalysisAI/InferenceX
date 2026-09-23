@@ -170,7 +170,7 @@ def main() -> int:
         args.testlist_dir,
     )
 
-    # A launcher runs one job per (ep, routed_tp, shared_tp) MoE combo
+    # submit_run.py fans out one job per (ep, routed_tp, shared_tp) MoE combo
     # plus one job per ws for non-MoE ops, since sglang's group state is
     # process-global. OPERATORX_MOE_PARALLELISM scopes a job to one combo;
     # absence scopes it to non-MoE ops only.

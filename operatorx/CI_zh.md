@@ -87,7 +87,8 @@ gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
 启动失败时可能只有日志；取消时的检查点仅代表部分覆盖。分片成功要求实际测量成功，
 不能仅凭 Slurm 提交成功。结果环境信息记录工作流运行、尝试、分片、源码 SHA 和镜像 digest。
 
-使用 `gh run download` 下载产物。保留原始文件及来源信息。
+使用 `gh run download` 下载产物。保留原始文件及来源信息；
+`scripts/consolidate_results.py` 不属于 CI 流程。
 
 ## 本地验证
 
