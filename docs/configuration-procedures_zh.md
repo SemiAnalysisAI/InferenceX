@@ -394,7 +394,7 @@ canonical 对比中 p90 interactivity 提升 13.65%，吞吐下降 0.30%，p90 T
 3.51 秒。完整 GSM8K 的 1,319 个样本通过验证。其他并发点仍需完整 sweep；
 C16 结果不能证明该设置在所有并发下均有收益。
 
-GB200 TP2 使用 0.92 静态显存比例、2048-token 预填充块、`min(128*CONC,1024)` 个 SWA tails、16 的 prefill/decode interval，graph 与 running capacity 上限为 16 个请求。这些受支持的限制参考已完成的 B200 EP1 显存验证；GB200 仍须独立通过加载、图捕获、完整上下文缓存池以及全部性能和准确率测试。可扩展 CUDA allocator segments 仅减少碎片，不改变权重或精度。C64/C128 性能任务获得 24 小时 allocation，工作流额外预留 30 分钟打包产物；完整预热、3600 秒计分时段及无样本限制的 1,319 题 GSM8K 均保持不变。
+GB200 TP2 使用 0.92 静态显存比例、2048-token 预填充块、`min(128*CONC,1024)` 个 SWA tails、16 的 prefill/decode interval，graph 与 running capacity 上限为 16 个请求。这些受支持的限制参考已完成的 B200 EP1 显存验证；GB200 仍须独立通过加载、图捕获、完整上下文缓存池以及全部性能和准确率测试。可扩展 CUDA allocator segments 仅减少碎片，不改变权重或精度。C64/C128 性能任务获得分区允许的最大 12 小时 allocation，工作流额外预留 30 分钟打包产物；完整预热、3600 秒计分时段及无样本限制的 1,319 题 GSM8K 均保持不变。
 
 GB200 的主机表布局为 `per_rank`：计算节点内核通过 `madvise` 启用匿名大页，
 而 `shmem_enabled=never` 阻止共享 memfd 布局使用大页。上游在匿名主机内存中

@@ -32,7 +32,7 @@ case "${RUNNER_NAME%%_*}" in
             check_env_vars CONC EVAL_ONLY
             if [[ "$EVAL_ONLY" == false ]] && (( CONC >= 64 )); then
                 # Preserve the complete high-concurrency warmup and scored hour.
-                export SALLOC_TIME_LIMIT=1440
+                export SALLOC_TIME_LIMIT=720
             fi
         fi
         ;;
