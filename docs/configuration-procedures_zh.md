@@ -230,6 +230,26 @@ schedule 和 ragged verification 保持关闭。
 配方不再在运行时修改 AITER 源码；TP 通信融合、DSpark K6 和 graph capture
 直接使用镜像内实现。
 
+### MiniMax-M3 ATOM FlyDSL paged decode
+
+`minimaxm3-fp4-mi355x-atom-agentic-mtp` 按照
+[ROCm/ATOM#2366](https://github.com/ROCm/ATOM/pull/2366) 和
+[上游配方](https://github.com/ROCm/ATOM/blob/94cde4ba786f45b38c26ee8201444659e44f861f/recipes/MiniMax-M3-Agentic-InferenceX.md)，
+使用 `rocm/atom-dev:nightly_202609231248`，启用 `ATOM_PA_FLYDSL=1` 和
+`ATOM_PA_FLYDSL_PLAN=1`。FlyDSL 处理支持的 paged-decode shape，work planner
+按实际上下文长度均衡 dense decode 工作量；不支持的 shape 仍回退至 Gluon。
+从 `server.log` 核对实际路由，以及 work plan 是否在图捕获时创建。
+
+当 ROCR 已选择 GPU 时，脚本清除 HIP 的第二层 mask，避免再次筛选已重新编号的设备。
+仅在调用方未传入任何 mask 时，offload 才为 TP2 选择 `0,4`、为 TP4 选择 `0,1,4,5`。
+保留显式 ROCR 分配和仅 HIP 的分配。19 个 resident/offload 点、EAGLE3 K3、
+golden AL 2.78、indexer CP 和 DRAM 预算保持原值。
+
+沿用 #3189 的方式，本次更新的 PR sweep 设置 `no-evals: true`，另在同一提交上
+单独运行一个 TP4 C48 LMCache-offload eval。使用
+`test-config --config-files configs/amd-master.yaml --config-keys minimaxm3-fp4-mi355x-atom-agentic-mtp --conc 48 --evals-only`
+选择该点，只生成一个使用真实 acceptance 的 `minimax-vendor` / `minimax_m3_full` job。
+
 ### DeepSeek-V4.1-Flash DSpark
 
 GB200 的 DSpark 配方将 CUDA graph 最小捕获范围设为 64 tokens，以覆盖 AgentX 子代理并发。这会将 c1/c2/c4 的上限从 8/16/32 提升至 64；c8 及以上保持原有大小。完整轨迹、AL 3.51 和 Engram UVA 配置保持不变；需通过 CI 验证低并发尾延迟改善。

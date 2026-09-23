@@ -258,6 +258,27 @@ The pinned image is the official ATOM nightly
 The recipe does not patch AITER source at runtime; TP communication
 fusion, DSpark K6 and graph capture use the implementation shipped in the image.
 
+### MiniMax-M3 ATOM FlyDSL paged decode
+
+`minimaxm3-fp4-mi355x-atom-agentic-mtp` uses
+`rocm/atom-dev:nightly_202609231248` with `ATOM_PA_FLYDSL=1` and
+`ATOM_PA_FLYDSL_PLAN=1`, following [ROCm/ATOM#2366](https://github.com/ROCm/ATOM/pull/2366)
+and the [upstream recipe](https://github.com/ROCm/ATOM/blob/94cde4ba786f45b38c26ee8201444659e44f861f/recipes/MiniMax-M3-Agentic-InferenceX.md).
+FlyDSL handles supported paged-decode shapes; its work planner balances dense
+decode by actual context length. Unsupported shapes retain the Gluon fallback.
+Verify the selected route and capture-time work-plan creation in `server.log`.
+
+When ROCR selects GPUs, the script clears HIP's second mask to avoid filtering
+the renumbered devices again. Offload selects `0,4` for TP2 or `0,1,4,5` for TP4
+only when neither mask was supplied. Explicit ROCR and HIP-only allocations
+remain authoritative. The 19 resident/offload points, EAGLE3 K3, golden AL 2.78,
+indexer CP and DRAM budgets are preserved.
+
+Following #3189, this update uses `no-evals: true` for its PR sweep and one
+separate TP4 C48 LMCache-offload eval at the same commit. Select it with
+`test-config --config-files configs/amd-master.yaml --config-keys minimaxm3-fp4-mi355x-atom-agentic-mtp --conc 48 --evals-only`.
+That emits one `minimax-vendor` / `minimax_m3_full` job using real acceptance.
+
 ### DeepSeek-V4.1-Flash DSpark
 
 The GB200 DSpark recipe uses a minimum CUDA graph capture size of 64 tokens to cover concurrent AgentX subagents. This raises c1/c2/c4 from 8/16/32 to 64; c8 and above retain their existing sizes. The full trace, AL 3.51, and Engram UVA settings are preserved; low-concurrency tail latency improvements require CI confirmation.

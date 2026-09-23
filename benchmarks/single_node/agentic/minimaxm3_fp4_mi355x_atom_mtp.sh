@@ -36,8 +36,10 @@ if [ "$TP" -ne 2 ] && [ "$TP" -ne 4 ] && [ "$TP" -ne 8 ]; then
     exit 1
 fi
 
-if [[ -n "${ROCR_VISIBLE_DEVICES+x}" ]]; then
-    export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
+# ROCR filters and renumbers GPUs before HIP sees them. Keep a single mask;
+# applying the physical IDs again through HIP can hide the NUMA-spread ranks.
+if [[ -n "${ROCR_VISIBLE_DEVICES:-}" ]]; then
+    unset HIP_VISIBLE_DEVICES
 fi
 
 if [[ "$MODEL_PATH" == "$MODEL" ]]; then
@@ -126,7 +128,7 @@ case "$KV_OFFLOAD_BACKEND" in
         # GPUs 0-3 are on NUMA node 0, 4-7 on node 1. Ranks pinning host memory on
         # one node starve each other: 256 GB/rank takes 45 min (TP2) / 27 min (TP4)
         # all on node 0, and 21 s with TP2 split one per node.
-        if [[ -z "${ROCR_VISIBLE_DEVICES+x}" ]]; then
+        if [[ -z "${ROCR_VISIBLE_DEVICES+x}" && -z "${HIP_VISIBLE_DEVICES+x}" ]]; then
             case "$TP" in
                 2) NUMA_GPUS=0,4 ;;
                 4) NUMA_GPUS=0,1,4,5 ;;
@@ -134,7 +136,6 @@ case "$KV_OFFLOAD_BACKEND" in
             esac
             if [[ -n "$NUMA_GPUS" ]]; then
                 export ROCR_VISIBLE_DEVICES="$NUMA_GPUS"
-                export HIP_VISIBLE_DEVICES="$NUMA_GPUS"
                 echo "NUMA-spread GPUs for offload: $NUMA_GPUS"
             fi
         fi
@@ -183,6 +184,9 @@ export AITER_SITUV2_A4W4=1
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 export AITER_FLYDSL_STAGE2_FP8=1
 export ATOM_FORCE_ATTN_TRITON=1
+# ATOM #2366: opt into FlyDSL paged decode and its dense-decode work planner.
+export ATOM_PA_FLYDSL=1
+export ATOM_PA_FLYDSL_PLAN=1
 
 # golden_al_distribution/minimaxm3_eagle3_gqa.yaml: minimax-m3.thinking_on[3] -> AL 2.78.
 # Synthetic acceptance on throughput runs, real target verification on eval-only.
