@@ -1,5 +1,5 @@
 schema: 2
-name: disagg-5p1d-p-dep4-d-dep16-c260-mtp
+name: disagg-1p4d-p-dep4-d-tp4-c45-mtp
 model:
   path: glm-5.2-fp4
   container: dynamo-sglang
@@ -28,8 +28,8 @@ dynamo:
 engine: sglang
 roles:
   prefill:
-    nodes: 5
-    workers: 5
+    nodes: 1
+    workers: 1
     gpus: 4
     env:
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
@@ -60,6 +60,7 @@ roles:
     args:
       served-model-name: nvidia/GLM-5.2-NVFP4
       trust-remote-code: true
+      watchdog-timeout: 1000000
       quantization: modelopt_fp4
       kv-cache-dtype: fp8_e4m3
       disaggregation-mode: prefill
@@ -70,8 +71,8 @@ roles:
       enable-dp-attention: true
       enable-dp-lm-head: true
       load-balance-method: total_tokens
-      chunked-prefill-size: 8192
-      max-prefill-tokens: 8192
+      chunked-prefill-size: 65536
+      max-prefill-tokens: 16384
       max-running-requests: 16
       cuda-graph-max-bs-prefill: 16
       disable-cuda-graph: true
@@ -87,19 +88,18 @@ roles:
       enable-hierarchical-cache: true
       hicache-write-policy: write_back
       hicache-size: 135
-      hicache-io-backend: kernel
+      hicache-io-backend: direct
       speculative-algorithm: EAGLE
-      speculative-moe-runner-backend: deep_gemm
+      speculative-moe-runner-backend: flashinfer_trtllm
       speculative-num-steps: 2
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 3
-      watchdog-timeout: 1800
       enable-metrics: true
       enable-cache-report: true
   decode:
     nodes: 4
-    workers: 1
-    gpus: 16
+    workers: 4
+    gpus: 4
     env:
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
       PYTHONUNBUFFERED: '1'
@@ -131,6 +131,7 @@ roles:
     args:
       served-model-name: nvidia/GLM-5.2-NVFP4
       trust-remote-code: true
+      watchdog-timeout: 1000000
       quantization: modelopt_fp4
       kv-cache-dtype: fp8_e4m3
       disaggregation-mode: decode
@@ -140,37 +141,28 @@ roles:
       speculative-num-steps: 2
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 3
-      tensor-parallel-size: 16
-      data-parallel-size: 16
-      expert-parallel-size: 16
-      enable-dp-attention: true
-      enable-dp-lm-head: true
-      max-running-requests: 144
-      cuda-graph-max-bs-decode: 144
+      tensor-parallel-size: 4
+      data-parallel-size: 1
+      expert-parallel-size: 1
+      enable-dp-attention: false
+      enable-dp-lm-head: false
+      max-running-requests: 16
+      cuda-graph-max-bs-decode: 16
       chunked-prefill-size: 64
       context-length: 1048576
       dsa-prefill-backend: trtllm
       dsa-decode-backend: trtllm
-      moe-runner-backend: flashinfer_cutedsl
+      moe-runner-backend: flashinfer_trtllm
       fp4-gemm-backend: flashinfer_cutedsl
       skip-tokenizer-init: true
       stream-interval: 30
       enable-flashinfer-allreduce-fusion: true
       weight-loader-prefetch-checkpoints: true
       model-loader-extra-config: '{"enable_multithread_load": true}'
-      mem-fraction-static: 0.85
+      mem-fraction-static: 0.9
       disaggregation-decode-extra-slots: 0
-      watchdog-timeout: 1800
       enable-metrics: true
       enable-cache-report: true
-      deepep-config: /configs/deepep_config.json
-      deepep-mode: low_latency
-      ep-dispatch-algorithm: static
-      ep-num-redundant-experts: 0
-      moe-a2a-backend: deepep
-      moe-dense-tp-size: 1
-      speculative-moe-a2a-backend: deepep
-      speculative-moe-runner-backend: deep_gemm
 health_check:
   max_attempts: 1440
   interval_seconds: 10
