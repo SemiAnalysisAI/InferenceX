@@ -185,12 +185,10 @@ def _recipe_identity(entry: dict) -> dict:
         if not isinstance(worker, dict):
             continue
         settings = worker.get("additional-settings") or []
-        mapped = [
-            f"CONFIG_FILE={identities.get(setting[12:], setting[12:])}"
-            if setting.startswith("CONFIG_FILE=")
-            else setting
-            for setting in settings
-        ]
+        mapped = []
+        for setting in settings:
+            name, sep, value = setting.partition("=")
+            mapped.append(f"{name}={identities[value]}" if sep and value in identities else setting)
         if mapped != settings:
             view[role] = {**worker, "additional-settings": mapped}
     return view

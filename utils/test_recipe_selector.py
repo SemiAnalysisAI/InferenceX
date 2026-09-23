@@ -163,7 +163,7 @@ def test_fingerprint_keeps_the_identity_of_a_consolidated_recipe(repo):
             "model": "m",
             "conc": [4],
             "prefill": {"tp": 4, "additional-settings": [f"CONFIG_FILE={config_file}", "X=1"]},
-            "decode": {"tp": 8, "additional-settings": []},
+            "decode": {"tp": 8, "additional-settings": [f"EVAL_CONFIG_FILE={config_file}"]},
         }
 
     old = entry("recipes/fam/disagg-1p2d.yaml")
