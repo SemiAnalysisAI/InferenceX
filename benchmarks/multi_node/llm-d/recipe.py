@@ -40,6 +40,19 @@ def role_assignments(recipe: dict, role: str, env: dict) -> str:
                 if env.get("EVAL_ONLY") == "true":
                     config.pop("synthetic_acceptance_length", None)
                     config.pop("rejection_sample_method", None)
+                elif config.get("enable_adaptive_verification"):
+                    config.pop("synthetic_acceptance_length", None)
+                    config.pop("rejection_sample_method", None)
+                    print(
+                        f"DSpark {role}: K={config['num_speculative_tokens']}, adaptive verification",
+                        file=sys.stderr,
+                    )
+                elif config.get("rejection_sample_method") == "block":
+                    config.pop("synthetic_acceptance_length", None)
+                    print(
+                        f"DSpark {role}: K={config['num_speculative_tokens']}, real verification (block)",
+                        file=sys.stderr,
+                    )
                 else:
                     if env.get("RUN_EVAL") == "true":
                         raise ValueError("Run accuracy evals separately with EVAL_ONLY=true, not synthetic AL")

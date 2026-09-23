@@ -8618,3 +8618,12 @@
     - "Reuse the 1P1D DSpark recipe directly for the 2P1D and 3P1D sweep arms and remove the now-identical multi-prefill recipe file; topology remains caller-supplied."
     - "2P1D 和 3P1D 扫描臂直接复用 1P1D DSpark 配方，并删除现已完全相同的多预填充配方文件；拓扑仍由调用方提供。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentx
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Switch DSpark decode to K=3 with adaptive verification (no golden AL, matching agentX local runs); 1P1D sweeps to c256, 2P1D uses DEP16 decode at c256/c384, and drop 3P1D."
+    - "将 DSpark 解码切换为 K=3，启用自适应验证（不使用 golden AL，与 agentX 本地运行一致）；1P1D 扫描至 c256，2P1D 在 c256/c384 使用 DEP16 解码，并移除 3P1D。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2719
