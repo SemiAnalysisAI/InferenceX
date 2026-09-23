@@ -8720,3 +8720,12 @@
     ladder where missing.
   - 保留现有覆盖并要求通过验证的功耗，补齐缺失的文章并发梯度。
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3378
+
+- config-keys:
+  - qwen3.5-fp8-b200-sglang
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Add an E2E-only TP4/EP1 article repeat selector using the existing Qwen3.5 FP8 B200 recipe.
+  - 新增文章复测专用的 TP4/EP1 E2E 选择配置，沿用现有 Qwen3.5 FP8 B200 配方。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3378

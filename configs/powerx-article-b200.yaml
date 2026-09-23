@@ -1,0 +1,19 @@
+# A separate TP4 selector excludes the master config's TP8 rows from article repeats.
+qwen3.5-fp8-b200-sglang:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:b200-nscale
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      require-power: true
+      search-space:
+      - tp: 4
+        ep: 1
+        conc-start: 1
+        conc-end: 128
