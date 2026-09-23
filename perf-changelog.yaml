@@ -8783,3 +8783,32 @@
     - "Run a new canonical full sweep with 16 performance and 16 full-evaluation cells. Earlier EP4/EP8 and DP8 measurements remain historical evidence and do not qualify the EP1 grid."
     - "Extend only H200 SGLang AgentX performance cells at C64/C128 to 24-hour Slurm allocations and 24.5-hour GitHub jobs after the original eight-hour allocation expired during progressing warmup. Preserve normal warmup, the full 3600-second profile, image, model, precision and topology."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.2-NVFP4 B300 AgentX (agentic-coding) Dynamo-SGLang benchmarks over a 7-point sweep: aggregated single-node TP8 (conc 2/4), disaggregated low-latency TP4-prefill/TP4-decode 1P2D (conc 63), 1P3D (conc 61), 1P4D (conc 59), 1P6D (conc 58), and throughput 2P1D DEP8-decode (conc 139)"
+    - "EAGLE speculative decoding, hierarchical KV cache (hicache-size 270), MTP, decode mem-fraction-static 0.92, nixl KV transfer, and X-Dynamo-Session-ID session affinity; driven from the NVIDIA/srt-slurm base+zip_override recipes via CONFIG_FILE selectors"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260824-95f5ecd3; runner: b300-dsxe"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2654
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang image from lmsysorg/sglang:nightly-dev-cu13-20260824-95f5ecd3 to lmsysorg/sglang:nightly-dev-20260910-00840301."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2654
+
+- config-keys:
+    - glm5.2-fp4-b300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the nightly-dev-20260910-00840301 image's bundled Dynamo (1.5.0.dev20260909) and SGLang (0.0.0.dev1+g008403017) instead of a separately installed Dynamo."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2654
