@@ -1,9 +1,8 @@
 """Per-checkpoint GEMM quantization schemes, keyed by HF model id and layer role.
 
 Derived from each checkpoint's config.json / hf_quant_config.json and
-safetensors headers, resolved to the scheme vLLM runs at load time (e.g. AMD
-DeepSeek-R1 MXFP4 checkpoints ship bf16 attention, which vLLM's Quark loader
-re-quantizes to MXFP4).
+safetensors headers, resolved to the scheme run after loading (AMD DeepSeek-R1
+MXFP4 checkpoints store bf16 attention, which is re-quantized to MXFP4 at load).
 
 Role classes:
   - "attn":   every attention projection (MHA q/k/v/qkv/o, MLA q_a/q_b/kv_a/kv_b/o)

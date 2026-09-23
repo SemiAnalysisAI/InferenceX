@@ -146,7 +146,7 @@ forward `/dev/kfd` and `/dev/dri`; CPU requests follow each inference launcher.
 
 ## GEMM
 
-`gemm` args describe each operand the way vLLM's `QuantKey` does. `a` is the
+`gemm` args describe each operand's storage and quantization. `a` is the
 activation `[M, K]` and `b` the weight `[N, K]`: `{"dtype", "scale"?, "scale2"?,
 "symmetric"?}`, where `scale` is `{"dtype", "static", "group": [rows, cols]}` and
 `-1` spans a dimension (`[-1, -1]` per-tensor, `[1, -1]` per-token, `[-1, 1]`

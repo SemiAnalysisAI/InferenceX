@@ -68,8 +68,7 @@ class GemmArgs:
         static=False means computed at runtime (activation quantization inside the op).
       scale2: optional second-level scale (e.g. NVFP4's per-tensor fp32 global scale).
       symmetric: False when the format carries zero points.
-    An unquantized operand is just {"dtype": "bf16"}. The fields mirror vLLM's
-    QuantKey / ScaleDesc / GroupShape.
+    An unquantized operand is {"dtype": "bf16"}.
     """
     m: int
     n: int
