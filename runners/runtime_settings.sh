@@ -27,6 +27,15 @@ case "${RUNNER_NAME%%_*}" in
         fi
         ;;
     gb300-nv) export SLURM_PARTITION=batch_1 ;;
+    gb200-nv)
+        if [[ "$MODEL_PREFIX" == dsv41flash && "$FRAMEWORK" == sglang && "$IS_MULTINODE" == false && "$IS_AGENTIC" == 1 ]]; then
+            check_env_vars CONC EVAL_ONLY
+            if [[ "$EVAL_ONLY" == false ]] && (( CONC >= 64 )); then
+                # Preserve the complete high-concurrency warmup and scored hour.
+                export SALLOC_TIME_LIMIT=1440
+            fi
+        fi
+        ;;
     h200-dgxc-slurm)
         export HF_HUB_CACHE_MOUNT=/models/gharunners/hf-hub-cache
         export AIPERF_MMAP_CACHE_HOST_PATH=/home/sa-shared/gharunners/ai-perf-cache

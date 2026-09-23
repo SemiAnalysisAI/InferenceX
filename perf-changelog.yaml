@@ -8764,9 +8764,10 @@
   scenario-type:
   - agentic-coding
   description:
-  - Move GB200 DeepSeek-V4.1-Flash DSpark from dev-dsv41 to official CUDA 13 nightly-dev-cu13-20260922-582389ce, pinned at multi-architecture manifest sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40 (ARM64 sha256:044b18a3a7ce0437e366c60a32d7e7109d1d846aee4e301e3ff1c7932c30695a); retain TP4/EP4 and native DSpark precision and golden acceptance policy
+  - Move GB200 DeepSeek-V4.1-Flash DSpark from dev-dsv41 to official CUDA 13 nightly-dev-cu13-20260923-06008c17, pinned at multi-architecture manifest sha256:5921361fcf358cdde4df1968c941c14157f418613b099ad7f3e5aeed6427ae15 (ARM64 sha256:d49261d2edd82fed2dd6254c33e68871ccf7a399498e059ec91dc4453a5808c3); match TP2/EP1 and TP4/EP1 with native DSpark precision and golden acceptance policy
   - 'Use the upstream per_rank Engram host-table layout on GB200: anonymous row-sharded mappings can obtain 512 MiB huge pages on the measured madvise/never anonymous/shared THP policy; preserve original FP8 table weights and restore the two TP all-reduces'
   - "Use the default MTP/DSpark precision shipped by the official nightly, without custom draft quantization or precision patches."
   - Keep the sweep DSpark-only; remove the unmeasured STP entry and alias.
   - Retain min(64*concurrency, 1024) SWA prefix tails within the measured GB200 KV budget; select prefill/decode interval 16 only at TP4 C16 after canonical performance and full GSM8K qualification.
+  - "Match the published vLLM grid exactly: TP2/EP1 and TP4/EP1, each C1/2/4/8/16/32/64/128. Use stock DSpark precision; TP2 uses static memory 0.92, chunk 2048, graph/running cap 16, interval 16, expandable allocator and min(128*CONC,1024) SWA tails. Requalify all 16 performance and full GSM8K points. Avoid deadline-only failures with 24-hour allocations for C64/C128 performance while preserving complete warmup and 3600-second scoring."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3347

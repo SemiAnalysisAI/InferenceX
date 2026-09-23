@@ -437,7 +437,7 @@ manifest-reference syntax and stops immediately on import failure.
 
 DSpark uses the default precision shipped by the pinned official nightly, without custom draft quantization or precision patches. STP loads no draft; full accuracy and performance validation are still required.
 
-GB200 pins the official CUDA 13 nightly separately; its topology and memory settings are described below.
+GB200 pins official CUDA 13 nightly `20260923-06008c17` to manifest `sha256:5921361fcf358cdde4df1968c941c14157f418613b099ad7f3e5aeed6427ae15` (ARM64 `sha256:d49261d2edd82fed2dd6254c33e68871ccf7a399498e059ec91dc4453a5808c3`). It matches the published vLLM TP2/EP1 and TP4/EP1 grids at C1/2/4/8/16/32/64/128, with no DP attention. The earlier staged TP4/EP4 sweep is historical evidence, not qualification of these topologies.
 
 The GB200 sweep contains only `dsv41flash-fp4-gb200-sglang-agentic-dspark`.
 The unmeasured STP entry is excluded; adding it would require matched evidence
@@ -445,14 +445,16 @@ of a performance-frontier contribution. DSpark uses the default precision shippe
 by the pinned official nightly, without custom draft quantization or precision
 patches. Full accuracy and performance validation remain required.
 
-GB200 reserves `min(64*CONC, 1024)` SWA prefix tails while retaining static memory
-0.70 and chunk size 4096. The C16 reserve leaves a measured 27.0M full-context
+GB200 TP4 reserves `min(64*CONC, 1024)` SWA prefix tails while retaining static memory
+0.70 and chunk size 4096. The earlier TP4/EP4 C16 reserve left a measured 27.0M full-context
 KV slots and 439,040 SWA slots; the cap avoids exhausting the measured 51.82 GiB
 KV budget at high concurrency. Only TP4 C16 uses prefill/decode interval 16:
 its canonical comparison improved p90 interactivity 13.65% for 0.30% lower
 throughput, with p90 TTFT increasing from 2.35 to 3.51 seconds. Full GSM8K
 passed all 1,319 samples. Other concurrency points still require the full sweep;
 these C16 results do not establish a benefit at every concurrency.
+
+GB200 TP2 uses static memory fraction 0.92, a 2048-token prefill chunk, `min(128*CONC,1024)` SWA tails, prefill/decode interval 16 and graph/running capacity bounded to 16 requests. These supported limits follow the completed B200 EP1 memory qualification; GB200 must independently pass loading, graph capture, full-context pool checks and every performance/evaluation cell. Expandable CUDA allocator segments reduce fragmentation without changing weights or precision. C64/C128 performance receives a 24-hour allocation plus 30 minutes for workflow packaging; full warmup, the 3600-second scoring window and uncapped 1,319-question GSM8K remain unchanged.
 
 The GB200 host-table layout is `per_rank`: its compute-node kernel enables
 anonymous huge pages through `madvise`, while `shmem_enabled=never` prevents huge
