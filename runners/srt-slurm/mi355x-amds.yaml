@@ -12,3 +12,10 @@ default_sbatch_directives:
 use_gpus_per_node_directive: true
 use_segment_sbatch_directive: false
 use_exclusive_sbatch_directive: true
+default_host_setup:
+  # The GPU-drain check can take 15 minutes; leave room for the fabric check
+  # and host-memory preparation.
+  timeout_seconds: 1200
+  commands:
+    - IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/setup.sh"
+  nodes: all
