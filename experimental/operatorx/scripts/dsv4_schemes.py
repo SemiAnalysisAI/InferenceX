@@ -21,10 +21,12 @@ HEAD_DIM = 512
 BF16_ONLY_N = {64, 256, 2 * HEAD_DIM}  # indexer weights_proj, indexer kv/gate, CSA compressor
 FP8_AND_BF16_N = {HEAD_DIM}  # kv_proj (fp8) and HCA compressor (bf16)
 
-BF16 = {"dtype_a": "bf16", "dtype_b": "bf16", "dtype_out": "bf16", "scale_a": "none", "scale_b": "none",
-        "scale_dtype_a": "none", "scale_dtype_b": "none"}
-FP8_BLOCK = {"dtype_a": "e4m3", "dtype_b": "e4m3", "dtype_out": "bf16", "scale_a": "group_1x128_dynamic",
-             "scale_b": "block_128x128", "scale_dtype_a": "ue8m0", "scale_dtype_b": "ue8m0"}
+BF16 = {"a": {"dtype": "bf16"}, "b": {"dtype": "bf16"}, "out": "bf16"}
+FP8_BLOCK = {  # FP8 128x128 weight blocks, 1x128 dynamic activation groups, ue8m0 scales
+    "a": {"dtype": "e4m3", "scale": {"dtype": "ue8m0", "static": False, "group": [1, 128]}},
+    "b": {"dtype": "e4m3", "scale": {"dtype": "ue8m0", "static": True, "group": [128, 128]}},
+    "out": "bf16",
+}
 
 
 def schemes(args: dict) -> list[dict]:
@@ -49,7 +51,7 @@ def rewrite(entries: list[dict]) -> list[dict]:
             raise ValueError(f"not a gemm entry: {e['type']}")
         for s in schemes(e["args"]):
             args = {"m": e["args"]["m"], "n": e["args"]["n"], "k": e["args"]["k"], **s}
-            key = tuple(sorted(args.items()))
+            key = json.dumps(args, sort_keys=True)
             if key not in seen:
                 seen.add(key)
                 out.append({"type": "gemm", "args": args})

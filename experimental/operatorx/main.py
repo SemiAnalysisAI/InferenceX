@@ -265,7 +265,8 @@ def main() -> int:
                 run.finished_at = utc_now_iso()
                 write_run_result(out_path, run, results)
             shape_str = " ".join(
-                f"{k}={v}" for k, v in op.args.items() if not k.startswith("dtype")
+                f"{k}={json.dumps(v, separators=(',', ':')) if isinstance(v, (dict, list)) else v}"
+                for k, v in op.args.items() if not k.startswith("dtype")
             )
             print(f"[ws={ws}] {tl:12} {status:11} {op.type:18} {op.backend:10}  "
                   f"{latency_str}  wall={wall_s:6.1f}s   {shape_str}", flush=True)

@@ -21,33 +21,33 @@ from typing import Any
 
 @dataclass(frozen=True)
 class GemmScheme:
-    dtype_a: str
-    dtype_b: str
-    scale_a: str
-    scale_b: str
-    scale_dtype_a: str
-    scale_dtype_b: str
+    """Activation (a) and weight (b) operand descriptors, as in operatorx/ops/gemm.py:
+    scale groups are [rows, cols] of A [M, K] / B [N, K]; -1 spans the dimension."""
+    a: tuple
+    b: tuple
 
     def args(self) -> dict[str, Any]:
-        return {
-            "dtype_a": self.dtype_a,
-            "dtype_b": self.dtype_b,
-            "dtype_out": "bf16",
-            "scale_a": self.scale_a,
-            "scale_b": self.scale_b,
-            "scale_dtype_a": self.scale_dtype_a,
-            "scale_dtype_b": self.scale_dtype_b,
-        }
+        return {"a": _operand(*self.a), "b": _operand(*self.b), "out": "bf16"}
 
 
-BF16 = GemmScheme("bf16", "bf16", "none", "none", "none", "none")
-FP8_BLOCK = GemmScheme("e4m3", "e4m3", "group_1x128_dynamic", "block_128x128", "fp32", "fp32")
-FP8_BLOCK_UE8M0 = GemmScheme("e4m3", "e4m3", "group_1x128_dynamic", "block_128x128", "ue8m0", "ue8m0")
-FP8_PER_TENSOR = GemmScheme("e4m3", "e4m3", "per_tensor_static", "per_tensor", "fp32", "fp32")
-FP8_PER_CHANNEL = GemmScheme("e4m3", "e4m3", "per_token_dynamic", "per_channel", "fp32", "fp32")
-MXFP8 = GemmScheme("e4m3", "e4m3", "group_32_dynamic", "group_32", "ue8m0", "ue8m0")
-NVFP4 = GemmScheme("e2m1", "e2m1", "group_16_dynamic", "group_16", "e4m3", "e4m3")
-MXFP4 = GemmScheme("e2m1", "e2m1", "group_32_dynamic", "group_32", "ue8m0", "ue8m0")
+def _operand(dtype: str, scale: tuple | None = None, scale2: tuple | None = None) -> dict[str, Any]:
+    d: dict[str, Any] = {"dtype": dtype}
+    for key, sc in (("scale", scale), ("scale2", scale2)):
+        if sc is not None:
+            d[key] = {"dtype": sc[0], "static": sc[1], "group": list(sc[2])}
+    return d
+
+
+_TENSOR = ("fp32", True, (-1, -1))
+BF16 = GemmScheme(("bf16",), ("bf16",))
+FP8_BLOCK = GemmScheme(("e4m3", ("fp32", False, (1, 128))), ("e4m3", ("fp32", True, (128, 128))))
+FP8_BLOCK_UE8M0 = GemmScheme(("e4m3", ("ue8m0", False, (1, 128))), ("e4m3", ("ue8m0", True, (128, 128))))
+FP8_BLOCK32_UE8M0 = GemmScheme(("e4m3", ("ue8m0", False, (1, 32))), ("e4m3", ("ue8m0", True, (32, 32))))
+FP8_PER_TENSOR = GemmScheme(("e4m3", _TENSOR), ("e4m3", _TENSOR))
+FP8_PER_CHANNEL = GemmScheme(("e4m3", ("fp32", False, (1, -1))), ("e4m3", ("fp32", True, (-1, 1))))
+MXFP8 = GemmScheme(("e4m3", ("ue8m0", False, (1, 32))), ("e4m3", ("ue8m0", True, (1, 32))))
+NVFP4 = GemmScheme(("e2m1", ("e4m3", False, (1, 16)), _TENSOR), ("e2m1", ("e4m3", True, (1, 16)), _TENSOR))
+MXFP4 = GemmScheme(("e2m1", ("ue8m0", False, (1, 32))), ("e2m1", ("ue8m0", True, (1, 32))))
 
 
 def _roles(attn: GemmScheme, mlp: GemmScheme | None = None, attn_o: GemmScheme | None = None) -> dict:
@@ -72,6 +72,8 @@ MODEL_SCHEMES: dict[str, dict[str, GemmScheme]] = {
     "deepseek-ai/DeepSeek-V4-Pro": _roles(FP8_BLOCK_UE8M0),
     "deepseek-ai/DeepSeek-V4-Pro-0813": _roles(FP8_BLOCK_UE8M0),
     "sgl-project/DeepSeek-V4-Pro-FP8": _roles(FP8_BLOCK_UE8M0),
+    # V4.1-Flash: 32x32 weight blocks (config weight_block_size, confirmed by the scale shapes)
+    "deepseek-ai/DeepSeek-V4.1-Flash": _roles(FP8_BLOCK32_UE8M0),
     # GLM-5.x
     "zai-org/GLM-5-FP8": _roles(FP8_BLOCK),
     "zai-org/GLM-5.1-FP8": _roles(FP8_BLOCK),
