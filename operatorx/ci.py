@@ -82,7 +82,7 @@ def plan(
         )
     ):
         raise ValueError(
-            "AMD CI supports single-GPU torch GEMM, torch/aiter attention and vllm MoE"
+            "AMD CI supports single-GPU torch/vllm GEMM, torch/aiter attention and vllm MoE"
         )
     if not world_sizes or set(world_sizes) - {1, 2, 4, 8}:
         raise ValueError("world sizes must be selected from 1,2,4,8 (single node)")
