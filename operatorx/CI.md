@@ -146,14 +146,23 @@ forward `/dev/kfd` and `/dev/dri`; CPU requests follow each inference launcher.
 
 ## GEMM
 
-`gemm` args name the storage dtypes (`bf16`, `e4m3`, `e2m1`, `int4`) and the
-quantization explicitly: `scale_a` (how the bf16 activation is quantized inside
-the op), `scale_b` (weight scale granularity) and their scale dtypes. The `vllm`
-backend builds a vLLM `ReplicatedLinear` under the matching checkpoint quant
-config, runs `process_weights_after_loading` and times `layer(x)`, so vLLM picks
-the kernel; `metrics.backend_meta` records the chosen kernel classes, parameter
-dtypes and vLLM env. Emulation-only paths are reported unsupported. AMD enables
-AITER as InferenceX's ROCm launches do.
+`gemm` args describe each operand the way vLLM's `QuantKey` does. `a` is the
+activation `[M, K]` and `b` the weight `[N, K]`: `{"dtype", "scale"?, "scale2"?,
+"symmetric"?}`, where `scale` is `{"dtype", "static", "group": [rows, cols]}` and
+`-1` spans a dimension (`[-1, -1]` per-tensor, `[1, -1]` per-token, `[-1, 1]`
+per-channel, `[1, 128]` 1x128 groups, `[128, 128]` blocks). For example, FP8
+block quantization is
+`"a": {"dtype": "e4m3", "scale": {"dtype": "fp32", "static": false, "group": [1, 128]}}` and
+`"b": {"dtype": "e4m3", "scale": {"dtype": "fp32", "static": true, "group": [128, 128]}}`;
+an unquantized operand is `{"dtype": "bf16"}`. `scale.dtype` is the checkpoint's
+scale format. The runtime format a framework converts to is reported per result.
+
+The `vllm` backend builds a vLLM `ReplicatedLinear` under the checkpoint quant
+config those descriptors imply, runs `process_weights_after_loading` and times
+`layer(x)`, so vLLM picks the kernel. `metrics.backend_meta` records the chosen
+kernel classes, parameter dtypes before and after loading, and the vLLM env.
+Emulation-only paths are reported unsupported. AMD enables AITER, as
+InferenceX's ROCm launches do.
 
 ## Attention
 

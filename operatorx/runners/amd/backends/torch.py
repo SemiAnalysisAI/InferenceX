@@ -30,14 +30,17 @@ def prepare(op: Op) -> dict:
     a = op.args
     if a.get("activation") is not None:
         raise UnsupportedOpError("ROCm torch GEMM has no native activation fusion")
-    if a["dtype_a"] != a["dtype_b"]:
+    qa, qb = a["a"], a["b"]
+    if qa["dtype"] != qb["dtype"]:
         raise UnsupportedOpError("ROCm torch GEMM requires matching input dtypes")
-    fp8 = a["dtype_a"] == "e4m3"
-    scales = (a.get("scale_a", "none"), a.get("scale_b", "none"))
-    if scales != (("per_tensor_static", "per_tensor") if fp8 else ("none", "none")):
-        raise UnsupportedOpError(f"ROCm torch GEMM supports only per-tensor fp8 scales; got {scales}")
-    dtype = resolve_dtype(a["dtype_a"])
-    out_name = a.get("dtype_out") or "bf16"
+    fp8 = qa["dtype"] == "e4m3"
+    # _scaled_mm here takes one static fp32 scale per operand; unscaled GEMMs take none
+    per_tensor = {"dtype": "fp32", "static": True, "group": [-1, -1]}
+    want = ({"dtype": "e4m3", "scale": per_tensor},) * 2 if fp8 else ({"dtype": qa["dtype"]},) * 2
+    if (qa, qb) != want:
+        raise UnsupportedOpError(f"ROCm torch GEMM supports unscaled or static per-tensor fp8; got a={qa} b={qb}")
+    dtype = resolve_dtype(qa["dtype"])
+    out_name = a.get("out") or "bf16"
     if out_name not in {"bf16", "fp16", "fp32"}:
         raise UnsupportedOpError(f"unsupported GEMM output dtype={out_name!r}")
     out_dtype = resolve_dtype(out_name)

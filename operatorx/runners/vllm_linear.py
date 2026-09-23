@@ -17,27 +17,45 @@ import torch
 
 from operatorx.core import BackendImpl, Op, UnsupportedOpError, lookup_versions
 
-# (dtype_a, dtype_b, scale_a, scale_b, scale_dtype_a, scale_dtype_b) -> (vLLM quant method, quantization_config)
-_FP8_BLOCK = {"quant_method": "fp8", "activation_scheme": "dynamic", "fmt": "e4m3", "weight_block_size": [128, 128]}
-_SCHEMES = {
-    ("e4m3", "e4m3", "group_1x128_dynamic", "block_128x128", "fp32", "fp32"): ("fp8", _FP8_BLOCK),
-    # DeepSeek-V4: vLLM remaps the checkpoint's fp8 config to deepseek_v4_fp8 (ue8m0 scales).
-    ("e4m3", "e4m3", "group_1x128_dynamic", "block_128x128", "ue8m0", "ue8m0"):
-        ("deepseek_v4_fp8", {**_FP8_BLOCK, "scale_fmt": "ue8m0"}),
-    ("e4m3", "e4m3", "per_tensor_dynamic", "per_tensor", "fp32", "fp32"):
-        ("fp8", {"quant_method": "fp8", "activation_scheme": "dynamic"}),
-    ("e4m3", "e4m3", "per_tensor_static", "per_tensor", "fp32", "fp32"):
-        ("fp8", {"quant_method": "fp8", "activation_scheme": "static"}),
-    ("e4m3", "e4m3", "per_token_dynamic", "per_channel", "fp32", "fp32"): ("compressed-tensors", {
-        "quant_method": "compressed-tensors", "format": "float-quantized", "ignore": [],
-        "config_groups": {"group_0": {
-            "targets": ["Linear"],
-            "weights": {"num_bits": 8, "type": "float", "strategy": "channel", "dynamic": False, "symmetric": True},
-            "input_activations": {"num_bits": 8, "type": "float", "strategy": "token", "dynamic": True,
-                                  "symmetric": True}}}}),
-    ("e2m1", "e2m1", "group_16_dynamic", "group_16", "e4m3", "e4m3"): ("modelopt_fp4", {"quantization": {
-        "quant_algo": "NVFP4", "group_size": 16, "kv_cache_quant_algo": None, "exclude_modules": []}}),
-}
+PER_TENSOR, PER_TOKEN, PER_CHANNEL = [-1, -1], [1, -1], [-1, 1]
+
+
+def _scheme(qa: dict, qb: dict) -> tuple[str, dict] | None:
+    """Operand descriptors -> (vLLM quant method, checkpoint quantization_config), as a
+    checkpoint with that scheme would declare it; None for unquantized."""
+    if "scale" not in qa and "scale" not in qb:
+        return None if qa["dtype"] == qb["dtype"] == "bf16" else ()
+    sa, sb = qa.get("scale"), qb.get("scale")
+    if sa is None or sb is None or not sb["static"] or not qa.get("symmetric", True) or not qb.get("symmetric", True):
+        return ()
+    if qa["dtype"] == qb["dtype"] == "e4m3" and "scale2" not in qa and "scale2" not in qb:
+        ga, gb = sa["group"], sb["group"]
+        dyn = "static" if sa["static"] else "dynamic"
+        if ga == gb == PER_TENSOR and sa["dtype"] == sb["dtype"] == "fp32":
+            return "fp8", {"quant_method": "fp8", "activation_scheme": dyn}
+        if gb[0] >= 1 and gb[1] > 1 and ga == [1, gb[1]] and not sa["static"] and sa["dtype"] == sb["dtype"]:
+            cfg = {"quant_method": "fp8", "activation_scheme": "dynamic", "fmt": "e4m3", "weight_block_size": gb}
+            if sb["dtype"] == "fp32":
+                return "fp8", cfg
+            if sb["dtype"] == "ue8m0":
+                # DeepSeek-V4: vLLM remaps the checkpoint's fp8 config to deepseek_v4_fp8 (ue8m0 scales).
+                return "deepseek_v4_fp8", {**cfg, "scale_fmt": "ue8m0"}
+        if ga == PER_TOKEN and gb == PER_CHANNEL and not sa["static"]:
+            return "compressed-tensors", {
+                "quant_method": "compressed-tensors", "format": "float-quantized", "ignore": [],
+                "config_groups": {"group_0": {
+                    "targets": ["Linear"],
+                    "weights": {"num_bits": 8, "type": "float", "strategy": "channel", "dynamic": False,
+                                "symmetric": True},
+                    "input_activations": {"num_bits": 8, "type": "float", "strategy": "token", "dynamic": True,
+                                          "symmetric": True}}}}
+    if (qa["dtype"] == qb["dtype"] == "e2m1" and sa["group"] == sb["group"] == [1, 16] and not sa["static"]
+            and sa["dtype"] == sb["dtype"] == "e4m3" and qa.get("scale2") and qb.get("scale2")):
+        return "modelopt_fp4", {"quantization": {
+            "quant_algo": "NVFP4", "group_size": 16, "kv_cache_quant_algo": None, "exclude_modules": []}}
+    return ()
+
+
 # Env that steers vLLM's linear-kernel choice; recorded with every result.
 _ENV_KEYS = ("VLLM_USE_DEEP_GEMM", "VLLM_USE_DEEP_GEMM_E8M0", "VLLM_BLOCKSCALE_FP8_GEMM_FLASHINFER",
              "VLLM_ROCM_USE_AITER", "VLLM_ROCM_USE_AITER_LINEAR")
@@ -75,15 +93,14 @@ def _vllm_context():
     return ctx
 
 
-def _quant_config(a):
-    if a["dtype_a"] == a["dtype_b"] == "bf16" and a.get("scale_a", "none") == a.get("scale_b", "none") == "none":
+def _quant_config(args):
+    sch = _scheme(args["a"], args["b"])
+    if sch is None:
         return None
-    key = (a["dtype_a"], a["dtype_b"], a.get("scale_a", "none"), a.get("scale_b", "none"),
-           a.get("scale_dtype_a", "none"), a.get("scale_dtype_b", "none"))
-    if key not in _SCHEMES:
-        raise UnsupportedOpError(f"no vLLM quantization config for scheme {key}")
+    if not sch:
+        raise UnsupportedOpError(f"no vLLM quantization config for a={args['a']} b={args['b']}")
     from vllm.model_executor.layers.quantization import get_quantization_config
-    method, cfg = _SCHEMES[key]
+    method, cfg = sch
     return get_quantization_config(method).from_config(cfg)
 
 
@@ -129,7 +146,7 @@ def _prepare_gemm(op: Op) -> dict:
     m, n, k = a["m"], a["n"], a["k"]
     if min(m, n, k) <= 0:
         raise UnsupportedOpError(f"degenerate gemm shape m={m} n={n} k={k}")
-    if a.get("dtype_out", "bf16") != "bf16":
+    if a.get("out", "bf16") != "bf16":
         raise UnsupportedOpError("vLLM linear layers here are built with bf16 activations/outputs")
     _vllm_context()
     import vllm.envs as envs

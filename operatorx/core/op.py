@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Mapping
@@ -28,7 +29,8 @@ class Op:
         )
 
     def __hash__(self) -> int:
-        return hash((self.type, tuple(sorted(self.args.items())), self.backend))
+        # args may nest (e.g. gemm operand descriptors); canonical JSON is hashable.
+        return hash((self.type, json.dumps(dict(self.args), sort_keys=True), self.backend))
 
 
 @dataclass(frozen=True)
