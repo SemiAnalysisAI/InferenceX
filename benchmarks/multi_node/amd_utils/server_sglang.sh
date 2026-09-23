@@ -1104,14 +1104,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
             $MODEL_DIR $MODEL_NAME $BENCH_MAX_CONCURRENCY /run_logs/slurm_job-${SLURM_JOB_ID}"
         echo "Benchmark runner: trace_replay.sh (agentic, KV_OFFLOADING=${KV_OFFLOADING}, backend=${KV_OFFLOAD_BACKEND:-none}, CONC=${BENCH_MAX_CONCURRENCY})"
     else
-        # bench.sh signature:
-        # n_prefill n_decode prefill_gpus decode_gpus model_dir model_name log_path
-        # isl osl concurrency_list req_rate random_range_ratio num_prompts_multiplier
-        BENCH_CMD="bash $SGLANG_WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
-            $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
-            ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
-            ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
-        echo "Benchmark runner: bench.sh (fixed-seq-len)"
+        echo "ERROR: fixed-sequence runs use srt-slurm recipes, not amd_utils" >&2
+        exit 1
     fi
 
     IS_AGENTIC_RUN=0
