@@ -56,8 +56,8 @@ zip_override_concurrency:
   roles:
     agg:
       args:
-        cuda-graph-max-bs-decode: [4, 8, 16, 32, 64, 128, 256]
-        max-running-requests: [4, 8, 16, 32, 64, 128, 256]
+        cuda-graph-max-bs-decode: [1, 2, 4, 8, 16, 32, 64, 128, 256]
+        max-running-requests: [1, 2, 4, 8, 16, 32, 64, 128, 256]
   benchmark:
     env:
-      CONC: ['4', '8', '16', '32', '64', '128', '256']
+      CONC: ['1', '2', '4', '8', '16', '32', '64', '128', '256']
