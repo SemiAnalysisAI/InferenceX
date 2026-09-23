@@ -8,7 +8,7 @@ from importlib import import_module
 import torch
 
 from operatorx.core import BackendImpl, Op, Result, UnsupportedOpError
-from operatorx.runners import profiling, telemetry
+from operatorx.runners.common import profiling, telemetry
 
 _WARMUP = 5
 _ITERS = 10
