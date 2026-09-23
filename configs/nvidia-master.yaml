@@ -8075,7 +8075,7 @@ dsv41flash-fp4-h100-vllm-agentic-dspark:
 # so weights, indexer buffers and the KV pool fit 80 GB.
 # Match the published vLLM TP8/EP1 topology and every concurrency through 28.
 dsv41flash-fp4-h100-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260922-4cbf290f@sha256:504d34fd712ac2656e9a9da363160e49fddb9957b60092893d6b773fc26c0f5f
+  image: lmsysorg/sglang:nightly-dev-cu13-20260923-06008c17@sha256:5921361fcf358cdde4df1968c941c14157f418613b099ad7f3e5aeed6427ae15
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:h100-dgxc

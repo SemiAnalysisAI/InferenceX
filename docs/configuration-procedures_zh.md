@@ -351,7 +351,7 @@ H100 SGLang 候选配方与已发布 vLLM 的拓扑一致：TP8/EP1，不启用 
 
 C20 及以上性能任务使用 12 小时 Slurm allocation 和一小时预热排空时间，因为此前 C20 在仍有进展时耗尽了时限。预热请求数量和 3600 秒计分时长不变；停止慢任务前须检查实时进展。
 
-nightly 候选配方使用 `nightly-dev-cu13-20260922-4cbf290f`、原生 MXFP4 Marlin MoE，以及 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。解析后的本地快照路径让上游分配器能够在分配匿名主机表之前清理检查点文件缓存。draft 精度遵循固定镜像的默认处理，包括 WO_A 从 FP8 到 BF16 的转换。针对 GPU 的 block32 FP8 启动配置使用上游内核及其支持的 `SPLIT_K`/`SWAP_AB` 选项；检查点数据、scale、输出 dtype 和上下文限制均不变。小批次配置必须在选择边界通过 FP32 参考值和 CUDA graph 验证，再进行完整模型准确率评测及服务性能测试。较大批次保留原有配置。仍需完成规范全量 sweep 验收。
+nightly 候选配方使用 `nightly-dev-cu13-20260923-06008c17`、原生 MXFP4 Marlin MoE，以及 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。解析后的本地快照路径让上游分配器能够在分配匿名主机表之前清理检查点文件缓存。draft 精度遵循固定镜像的默认处理，包括 WO_A 从 FP8 到 BF16 的转换。针对 GPU 的 block32 FP8 启动配置使用上游内核及其支持的 `SPLIT_K`/`SWAP_AB` 选项；检查点数据、scale、输出 dtype 和上下文限制均不变。小批次配置必须在选择边界通过 FP32 参考值和 CUDA graph 验证，再进行完整模型准确率评测及服务性能测试。较大批次保留原有配置。仍需完成规范全量 sweep 验收。
 
 
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` 是 vLLM 配方在 h100、h200、b200、b300、gb200、gb300
