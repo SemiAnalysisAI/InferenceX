@@ -142,6 +142,7 @@ SGLANG_CMD=(
     --moe-runner-backend marlin
     --mem-fraction-static 0.75
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
+    --enable-decoder-swa-bounded-replay
     # Preserve native context while budgeting both live SWA and reusable tails.
     --swa-prefix-tails "$SWA_PREFIX_TAILS"
     "${SPECULATIVE_ARGS[@]}"
