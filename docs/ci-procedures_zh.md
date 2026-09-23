@@ -565,3 +565,5 @@ OperatorX 手动工作流支持 H100、H200、B200、B300、GB200、GB300、MI30
 attention 支持 torch 和 AITER。
 触发方式、覆盖范围、产物、取消及验证说明见
 [OperatorX GitHub Actions](../experimental/operatorx/CI_zh.md)。
+
+H200 DeepSeek-V4.1 Flash SGLang AgentX 在并发 64 及以上的性能任务允许 1440 分钟 Slurm 分配和 1470 分钟 GitHub 任务，以容纳正常预热及保持不变的 3600 秒正式测试；更低并发和 eval-only 任务仍使用标准期限。运行 `35775895782` 在持续推进、请求无错误的预热期间耗尽了原有八小时分配。仅重试失败任务会保留原工作流期限，因此修改期限后必须启动新运行。

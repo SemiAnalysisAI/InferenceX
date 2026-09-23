@@ -583,3 +583,5 @@ four-GPU Arm nodes; the other pools use eight-GPU x86 nodes. GEMM and attention
 use one GPU per measurement. AMD attention supports both torch and AITER.
 See [OperatorX GitHub Actions](../experimental/operatorx/CI.md) for dispatch,
 coverage, artifacts, cancellation, and validation.
+
+For H200 DeepSeek-V4.1 Flash SGLang AgentX performance at concurrency 64 or above, the launcher allows a 1440-minute Slurm allocation and the reusable workflow allows 1470 minutes. This accommodates normal warmup and the unchanged 3600-second profile; lower concurrencies and eval-only jobs retain the standard deadlines. Run `35775895782` exhausted the previous eight-hour allocation during progressing, error-free warmup. A failed-only retry retains the original workflow deadline, so deadline changes require a new workflow run.
