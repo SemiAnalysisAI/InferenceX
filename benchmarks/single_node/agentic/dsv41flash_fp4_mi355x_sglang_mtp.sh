@@ -119,6 +119,9 @@ SGLANG_CMD=(
     # The 16384-token default OOMed five canonical cells; match the existing
     # 4096-token breakable graph ceiling without reducing model context.
     --chunked-prefill-size 4096
+    # AgentX C32 fanout reached 63 running requests before a native HIP illegal
+    # access. Bound admission; additional client requests remain queued.
+    --max-running-requests 32
     --speculative-algorithm DSPARK
     --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
