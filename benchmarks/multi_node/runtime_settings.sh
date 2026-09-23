@@ -60,7 +60,7 @@ case "$FRAMEWORK" in
         if [[ "$IS_AGENTIC" == 1 || "$IS_AGENTIC" == true ]]; then
             export TILERT_QUEUE_TIMEOUT=1800
         fi
-        # The MI355X TileRT recipes run through the shared amd_utils chain
+        # The MI355X TileRT recipe runs through the shared amd_utils chain
         # (submit.sh -> job.slurm -> server.sh -> setup_deps.sh), which validates
         # the same orchestration inputs the AMD SGLang/vLLM/ATOM arms receive.
         # Without them submit.sh exits before sbatch and the launcher never gets

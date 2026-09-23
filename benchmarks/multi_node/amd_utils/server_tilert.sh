@@ -9,8 +9,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh" --validation-only
 check_env_vars \
     NODE0_ADDR NODE_RANK MODEL_DIR MODEL_NAME MODEL_PATH xP yD IPADDRS \
     DRY_RUN GPUS_PER_NODE PREFILL_TP_SIZE DECODE_TP_SIZE \
-    BENCH_INPUT_LEN BENCH_OUTPUT_LEN BENCH_RANDOM_RANGE_RATIO \
-    BENCH_REQUEST_RATE BENCH_NUM_PROMPTS_MULTIPLIER BENCH_MAX_CONCURRENCY \
+    BENCH_INPUT_LEN BENCH_OUTPUT_LEN BENCH_MAX_CONCURRENCY \
     RUN_EVAL EVAL_ONLY EVAL_FRAMEWORK BENCHMARK_LOGS_DIR WS_PATH \
     SLURM_JOB_ID SPEC_DECODING \
     TILERT_PROFILE TILERT_MODEL_TYPE TILERT_MODEL_PKG TILERT_MAX_MODEL_LEN \
@@ -80,9 +79,10 @@ if [[ "$SPEC_DECODING" == "mtp" ]]; then
     DECODE_MTP=(--with-mtp --num-mtp "$DECODE_MTP_SIZE")
 fi
 
-TILERT_IS_AGENTIC=0
-if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" || "${SCENARIO_TYPE:-}" == "agentic-coding" ]]; then
-    TILERT_IS_AGENTIC=1
+# The only TileRT recipe on this cluster is AgentX (agentic-coding).
+if [[ "${IS_AGENTIC:-0}" != "1" && "${IS_AGENTIC:-}" != "true" && "${SCENARIO_TYPE:-}" != "agentic-coding" ]]; then
+    echo "ERROR: server_tilert.sh only runs agentic-coding (IS_AGENTIC=${IS_AGENTIC:-} SCENARIO_TYPE=${SCENARIO_TYPE:-})" >&2
+    exit 1
 fi
 
 IFS=',' read -ra IP_ARRAY <<< "$IPADDRS"
@@ -97,7 +97,7 @@ host_name=$(hostname)
 
 echo "[tilert] ROLE=$TILERT_ROLE rank=$NODE_RANK host=$host_name ($host_ip)"
 echo "[tilert] PREFILL_HOST=$PREFILL_HOST:$PREFILL_PORT  DECODE_HOST=$DECODE_HOST:$DECODE_CTRL_PORT/$DECODE_HTTP_PORT  ROUTER=:$ROUTER_PORT"
-echo "[tilert] MODEL_PATH=$MODEL_PATH  profile=$TILERT_PROFILE  served=$SERVED_MODEL_NAME  max_len=$TILERT_MAX_MODEL_LEN  transport=$TILERT_TRANSPORT  kv=${PREFILL_KV_DTYPE}->${DECODE_KV_DTYPE}  mtp=${SPEC_DECODING}  agentic=$TILERT_IS_AGENTIC"
+echo "[tilert] MODEL_PATH=$MODEL_PATH  profile=$TILERT_PROFILE  served=$SERVED_MODEL_NAME  max_len=$TILERT_MAX_MODEL_LEN  transport=$TILERT_TRANSPORT  kv=${PREFILL_KV_DTYPE}->${DECODE_KV_DTYPE}  mtp=${SPEC_DECODING}"
 
 # Enable libibverbs fork safety on both ranks before any verbs context exists.
 # Without it, ibv_fork_init() can fail in these containers while Mooncake
@@ -240,8 +240,7 @@ convert_weights() {
 start_decode() {
     # shellcheck disable=SC2206
     local extra=( ${TILERT_DECODE_EXTRA_FLAGS} )
-    if [[ "$TILERT_IS_AGENTIC" == "1" && "$SPEC_DECODING" == "mtp" \
-          && "$EVAL_ONLY" != "true" && "$RUN_EVAL" != "true" ]]; then
+    if [[ "$SPEC_DECODING" == "mtp" && "$EVAL_ONLY" != "true" && "$RUN_EVAL" != "true" ]]; then
         check_env_vars MODEL_PREFIX THINKING_MODE
         local curve="${WS_PATH%/benchmarks/*}/golden_al_distribution/${MODEL_PREFIX}_mtp.yaml"
         TILERT_SIMULATE_ACC_LEN="$("$PY" - "$curve" "$THINKING_MODE" "$DECODE_MTP_SIZE" <<'PYEOF'
@@ -355,46 +354,6 @@ copy_logs_to_shared() {
 }
 trap copy_logs_to_shared EXIT
 
-run_bench_and_eval() {
-    local rc=0
-    wait_for_server_ready --port "$ROUTER_PORT" --server-log "$LOG_DIR/router_${host_name}.log" --server-pid "$ROUTER_PID"
-
-    local profile_folder="$LOG_DIR/${ENGINE}_isl_${BENCH_INPUT_LEN}_osl_${BENCH_OUTPUT_LEN}"
-    mkdir -p "$profile_folder"
-    local prefill_gpus=$(( PREFILL_TP_SIZE * xP ))
-    local decode_gpus=$(( DECODE_TP_SIZE * yD ))
-    export TRANSFORMERS_VERBOSITY=error TOKENIZERS_PARALLELISM=false
-
-    if [[ "$EVAL_ONLY" == "true" ]]; then
-        echo "EVAL_ONLY mode: skipping throughput benchmark"
-    else
-        local conc np export_file
-        for conc in ${BENCH_MAX_CONCURRENCY//x/ }; do
-            np=$(( conc * BENCH_NUM_PROMPTS_MULTIPLIER ))
-            [[ "$np" -lt 16 ]] && np=16
-            export_file="${profile_folder}/concurrency_${conc}_req_rate_${BENCH_REQUEST_RATE}_gpus_$((prefill_gpus+decode_gpus))_ctx_${prefill_gpus}_gen_${decode_gpus}"
-            echo "[bench] conc=$conc num_prompts=$np isl=$BENCH_INPUT_LEN osl=$BENCH_OUTPUT_LEN -> $export_file.json"
-            run_benchmark_serving \
-                --bench-serving-dir /workspace \
-                --model "$SERVED_MODEL_NAME" --port "$ROUTER_PORT" \
-                --backend openai-chat --endpoint /v1/chat/completions \
-                --input-len "$BENCH_INPUT_LEN" --output-len "$BENCH_OUTPUT_LEN" \
-                --random-range-ratio "$BENCH_RANDOM_RANGE_RATIO" \
-                --num-prompts "$np" --max-concurrency "$conc" \
-                --use-chat-template --tokenizer "$MODEL_PATH" --trust-remote-code \
-                --server-pid "$ROUTER_PID" \
-                --result-filename "$export_file" --result-dir /workspace/ \
-                || { rc=$?; echo "[bench] WARNING: conc=$conc failed (rc=$rc)" >&2; }
-            echo "-----------------------------------------"
-        done
-    fi
-
-    if [[ "$RUN_EVAL" == "true" ]]; then
-        run_lm_eval_on_router || rc=1
-    fi
-    return $rc
-}
-
 run_lm_eval_on_router() {
     echo "Running lm-eval evaluation on the router..."
     local ok=false _attempt
@@ -434,9 +393,9 @@ run_lm_eval_on_router() {
             export DP_ATTENTION=false PREFILL_DP_ATTENTION=false DECODE_DP_ATTENTION=false
             export ISL="${BENCH_INPUT_LEN}" OSL="${BENCH_OUTPUT_LEN}"
             # As on the SGLang path: rewrite meta_env.json from the exports above,
-            # then stage unless run_eval already did (agentic eval-only).
+            # then stage unless run_eval already did (eval-only).
             rewrite_lm_eval_meta_env
-            if [[ "$EVAL_ONLY" != "true" || "$TILERT_IS_AGENTIC" != "1" ]]; then
+            if [[ "$EVAL_ONLY" != "true" ]]; then
                 append_lm_eval_summary
             fi
         fi
@@ -584,15 +543,17 @@ case "$TILERT_ROLE" in
         echo "Ready for benchmarking on ${host_name}:${host_ip}"
         cd "$WS_PATH" || exit 1
         # EVAL_ONLY skips the AgentX replay and runs GSM8K on the same router;
-        # RUN_EVAL after a replay runs it once the replay has finished. The
-        # fixed-sequence path handles both flags inside run_bench_and_eval.
-        if [[ "$TILERT_IS_AGENTIC" == "1" && "$EVAL_ONLY" != "true" ]]; then
+        # RUN_EVAL after a replay runs it once the replay has finished.
+        if [[ "$EVAL_ONLY" == "true" ]]; then
+            echo "EVAL_ONLY mode: skipping the AgentX replay"
+            wait_for_server_ready --port "$ROUTER_PORT" --server-log "$LOG_DIR/router_${host_name}.log" --server-pid "$ROUTER_PID"
+            export TRANSFORMERS_VERBOSITY=error TOKENIZERS_PARALLELISM=false
+            run_lm_eval_on_router; BENCH_RC=$?
+        else
             run_agentic_replay; BENCH_RC=$?
             if [[ "$RUN_EVAL" == "true" ]]; then
                 run_lm_eval_on_router || BENCH_RC=1
             fi
-        else
-            run_bench_and_eval; BENCH_RC=$?
         fi
         copy_logs_to_shared
         echo "Killing the router and the prefill server"
