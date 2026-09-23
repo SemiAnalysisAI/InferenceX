@@ -25,16 +25,16 @@ labels:
   h200:
     - h200-cw_00
     - h200-cw_01
-    - h200-dgxc-slurm_0
-    - h200-dgxc-slurm_1
-    - h200-dgxc-slurm_2
-    - h200-dgxc-slurm_3
-    - h200-dgxc-slurm_4
-    - h200-dgxc-slurm_5
-    - h200-dgxc-slurm_6
-    - h200-dgxc-slurm_7
-    - h200-dgxc-slurm_8
-    - h200-dgxc-slurm_9
+    - h200-dgxc-slurm_00
+    - h200-dgxc-slurm_01
+    - h200-dgxc-slurm_02
+    - h200-dgxc-slurm_03
+    - h200-dgxc-slurm_04
+    - h200-dgxc-slurm_05
+    - h200-dgxc-slurm_06
+    - h200-dgxc-slurm_07
+    - h200-dgxc-slurm_08
+    - h200-dgxc-slurm_09
     - h200-dgxc-slurm_10
     - h200-dgxc-slurm_11
     - h200-dgxc-slurm_12
@@ -166,16 +166,16 @@ labels:
     - h200-cw_00
     - h200-cw_01
   cluster:h200-dgxc:
-    - h200-dgxc-slurm_0
-    - h200-dgxc-slurm_1
-    - h200-dgxc-slurm_2
-    - h200-dgxc-slurm_3
-    - h200-dgxc-slurm_4
-    - h200-dgxc-slurm_5
-    - h200-dgxc-slurm_6
-    - h200-dgxc-slurm_7
-    - h200-dgxc-slurm_8
-    - h200-dgxc-slurm_9
+    - h200-dgxc-slurm_00
+    - h200-dgxc-slurm_01
+    - h200-dgxc-slurm_02
+    - h200-dgxc-slurm_03
+    - h200-dgxc-slurm_04
+    - h200-dgxc-slurm_05
+    - h200-dgxc-slurm_06
+    - h200-dgxc-slurm_07
+    - h200-dgxc-slurm_08
+    - h200-dgxc-slurm_09
     - h200-dgxc-slurm_10
     - h200-dgxc-slurm_11
     - h200-dgxc-slurm_12

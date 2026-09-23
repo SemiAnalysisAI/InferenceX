@@ -9235,3 +9235,31 @@
     samples during shutdown. Keep benchmark settings and power validation unchanged.
   - AMD 功耗 CSV 逐行写出，避免 awk 输入缓冲导致采样器关闭时丢失基准窗口末尾的样本；基准设置和功耗校验保持不变。
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
+
+- config-keys:
+  - kimik3-fp4-h200-vllm-agentic-latency
+  - kimik3-fp4-h200-vllm-agentic-balanced
+  - kimik3-fp4-h200-vllm-agentic-simple
+  - dsr1-fp8-h200-sglang
+  - dsr1-fp8-h200-sglang-mtp
+  - dsv4-fp8-h200-dynamo-sglang-agentic-agg
+  - qwen3.5-fp8-h200-sglang
+  - qwen3.5-fp8-h200-sglang-mtp
+  - dsr1-fp8-h200-trt
+  - dsr1-fp8-h200-trt-mtp
+  - dsr1-fp8-h200-dynamo-trt
+  - dsr1-fp8-h200-dynamo-sglang
+  - qwen3.5-fp8-h200-sglang-agentic-mtp
+  - qwen3.8next-fp8-h200-sglang-agentic-mtp
+  - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+  - minimaxm3-fp8-h200-vllm-agentic-mtp
+  - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d
+  - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache
+  - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg
+  - dsv41flash-fp4-h200-vllm-agentic-dspark
+  - dsv41flash-fp4-h200-sglang-agentic-dspark
+  description:
+  - Align H200 DGXC runner inventory with the verified two-digit GitHub runner labels so exact point selections
+    and sweep assignments reach registered workers; benchmark recipes and settings are unchanged.
+  - H200 DGXC runner 清单与已核实的两位数字 GitHub 标签对齐，使精确测试点选择和 sweep 分配能够匹配已注册的 worker；基准配方和设置保持不变。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3352
