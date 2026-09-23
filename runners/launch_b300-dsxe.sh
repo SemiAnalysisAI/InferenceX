@@ -15,10 +15,18 @@ SLURM_ACCOUNT="benchmark"
 
 # This lane's interactive allocation notifications fail on login-02, while
 # batch submission and steps launched from the allocated node work. Keep the
-# workaround scoped to this recipe and use normal Slurm resource accounting.
-if [[ "$IS_MULTINODE" != true && "${MODEL_PREFIX:-}" == dsv41flash &&
-      "${FRAMEWORK:-}" == sglang && "${IS_AGENTIC:-}" == 1 &&
+# workaround scoped to the recipes below and use normal Slurm resource accounting.
+# Qwen3.5 FP8 fixed-sequence STP reuses the same batch allocation path.
+if [[ "$IS_MULTINODE" != true && "${MODEL_PREFIX:-}" == qwen3.5 &&
+      "${FRAMEWORK:-}" == sglang && "$IS_AGENTIC" == 0 &&
       "${B300_AGENTX_BATCH:-}" != 1 ]]; then
+    check_env_vars PRECISION SPEC_DECODING
+fi
+if [[ "$IS_MULTINODE" != true && "${FRAMEWORK:-}" == sglang &&
+      "${B300_AGENTX_BATCH:-}" != 1 ]] &&
+   { [[ "${MODEL_PREFIX:-}" == dsv41flash && "$IS_AGENTIC" == 1 ]] ||
+     [[ "${MODEL_PREFIX:-}" == qwen3.5 && "$IS_AGENTIC" == 0 &&
+        "$PRECISION" == fp8 && "$SPEC_DECODING" == none ]]; }; then
     check_env_vars GITHUB_WORKSPACE GPU_COUNT RUNNER_NAME
     BATCH_SCRIPT=$(mktemp "${RUNNER_TEMP:-$GITHUB_WORKSPACE}/b300-agentx.XXXXXX.sh") || exit 1
     BATCH_LOG="${BATCH_SCRIPT%.sh}.log"
@@ -39,7 +47,7 @@ if [[ "$IS_MULTINODE" != true && "${MODEL_PREFIX:-}" == dsv41flash &&
     trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; rm -f "$BATCH_SCRIPT"; exit "$rc"' EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
-    echo "B300 AgentX batch job $JOB_ID; log: $BATCH_LOG"
+    echo "B300 batch job $JOB_ID; log: $BATCH_LOG"
     stream_slurm_job_log "$JOB_ID" "$BATCH_LOG" || exit 1
     verify_slurm_job_status "$JOB_ID"
     exit $?

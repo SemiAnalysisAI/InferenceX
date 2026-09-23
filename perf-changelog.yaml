@@ -8720,3 +8720,13 @@
     ladder where missing.
   - 保留现有覆盖并要求通过验证的功耗，补齐缺失的文章并发梯度。
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3379
+
+- config-keys:
+  - qwen3.5-fp8-b300-sglang
+  scenario-type:
+  - fixed-seq-len
+  description:
+  - Route Qwen3.5 FP8 STP through the existing B300 batch allocation path, retaining
+    its serving settings and measurements; the batch container step uses PMIx.
+  - 将 Qwen3.5 FP8 STP 接入现有 B300 batch 分配路径，保留服务参数和测量设置；batch 容器步骤使用 PMIx。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3379
