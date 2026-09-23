@@ -4,12 +4,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validat
 check_env_vars IS_MULTINODE
 set -eo pipefail
 
-if [[ -n "${CONFIG_FILE:-}" ]]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/srt_runtime.sh"
-    run_srt_recipe_job
-    exit $?
-fi
-
 export HF_HUB_CACHE_MOUNT="/raid/inferencex/models/hub"
 export AIPERF_MMAP_CACHE_MOUNT="/raid/inferencex/aiperf-mmap-cache"
 export AIPERF_DATASET_MMAP_CACHE_DIR="/aiperf_mmap_cache"

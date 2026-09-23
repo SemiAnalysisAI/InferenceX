@@ -25,7 +25,7 @@ Archive deprecated entries in [`configs/deprecated/amd-master.yaml`](../configs/
 
 ## Dependency submodules
 
-Git records the exact dependency commits. [`.gitmodules`](../.gitmodules) defines the repositories: AIPerf at `utils/aiperf`, NVIDIA srt-slurm at `utils/srt-slurm`. TileRT and the MI355X AMD port use pinned fork checkouts in `setup_srt_slurm()`, not separate submodules. The MI355X fork and revision are selected in `runners/runtime_settings.sh`; other runners keep their existing runtime selection.
+Git records the exact dependency commits. [`.gitmodules`](../.gitmodules) defines the repositories: AIPerf at `utils/aiperf`, NVIDIA srt-slurm at `utils/srt-slurm`. TileRT is a documented manual fork checkout in `setup_srt_slurm()`, not a separate submodule.
 
 Initialize them before running benchmarks locally:
 

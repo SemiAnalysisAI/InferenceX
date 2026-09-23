@@ -38,14 +38,6 @@ case "${RUNNER_NAME%%_*}" in
         export B300_HF_CACHE_HOST_DIR="$HOME/.cache/huggingface"
         export B300_HF_CACHE_CONTAINER_DIR=/hf_hub_cache
         ;;
-    mi300x-amd)
-        check_env_vars GITHUB_WORKSPACE HOME
-        export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
-        export SRT_SLURM_SHARED_BASE="$HOME/srt-slurm"
-        export SRT_SLURM_CLUSTER_CONFIG="$GITHUB_WORKSPACE/runners/srt-slurm/mi300x-amd.yaml"
-        export SRT_SLURM_COMPUTE_ARCH=x86_64
-        export AIPERF_MMAP_CACHE_HOST_PATH="$HOME/srt-slurm/aiperf-cache"
-        ;;
     mi355x-amds)
         check_env_vars GITHUB_WORKSPACE
         export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
