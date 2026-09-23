@@ -9316,4 +9316,4 @@
     - fixed-seq-len
   description:
     - "Require validated GPU power on Qwen3.5 FP8 MI355X SGLang 8k1k (ISL 8192 / OSL 1024, TP4 EP1). Extend the concurrency ladder from 4-256 to 1-256 in amd-master.yaml and the matching srt-slurm zip_override. Leave the MTP arm unchanged."
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3380
