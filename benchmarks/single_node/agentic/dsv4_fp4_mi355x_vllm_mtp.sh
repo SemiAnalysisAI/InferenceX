@@ -43,18 +43,23 @@ agentic_pip_install --quiet Pillow fastapi uvicorn
 
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 
-# vllm-router expands one HTTP backend into a logical worker per DP rank.
-# AIPerf's X-Correlation-ID is stable across a conversation's turns; alias it
-# to the router's X-Session-ID so every turn lands on the same rank.
+# vllm-router expands one HTTP backend into a logical worker per DP rank, and
+# every rank keeps its own KV pool and its own prefix cache.
+#
+# AIPerf's X-Correlation-ID identifies a single sub-agent branch, not the whole
+# trajectory, so hashing on it scatters branches that share a trajectory's
+# context prefix across ranks and each rank then prefills that prefix again.
+# cache_aware instead matches the prompt against a radix tree of cached prefixes
+# and only falls back to load balancing once a rank is balance-abs-threshold
+# requests ahead, so it needs no session header to keep a prefix on one rank.
 USE_VLLM_ROUTER=false
 VLLM_BACKEND_PORT="$PORT"
 if [ "$DP_ATTENTION" = "true" ]; then
     USE_VLLM_ROUTER=true
     VLLM_BACKEND_PORT=$((PORT + 1))
     VLLM_ROUTER_VERSION=0.1.14
-    VLLM_ROUTER_POLICY=consistent_hash
+    VLLM_ROUTER_POLICY=cache_aware
     VLLM_ROUTER_METRICS_PORT=$((PORT + 10000))
-    export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
     agentic_pip_install --quiet "vllm-router==$VLLM_ROUTER_VERSION"
 fi
 
