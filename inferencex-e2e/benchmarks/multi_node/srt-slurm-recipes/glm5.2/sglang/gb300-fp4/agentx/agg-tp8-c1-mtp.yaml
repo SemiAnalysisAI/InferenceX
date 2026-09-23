@@ -1,4 +1,3 @@
-<<<<<<<< HEAD:inferencex-e2e/benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/agg.yaml
 # Agentic-coding SGLang aggregated recipe for GLM-5.2-NVFP4 on GB300
 # (single aggregated worker, TP8, EAGLE MTP + hierarchical-cache KV).
 #
@@ -6,8 +5,6 @@
 # CONFIG_FILE=<this file> with no zip_override selector, so it must NOT be
 # base:-wrapped. Concurrency is not a recipe field; the GHA matrix fans out
 # one job per concurrency from the master-config conc-list into srt_agentic.sh.
-========
->>>>>>>> 1a7f0dced (perf(sglang): refresh GLM-5.2 GB300 AgentX configs):inferencex-e2e/benchmarks/multi_node/srt-slurm-recipes/glm5.2/sglang/gb300-fp4/agentx/agg-tp8-c1-mtp.yaml
 schema: 2
 name: agg-tp8-c1-mtp
 model:
@@ -65,6 +62,7 @@ roles:
     args:
       served-model-name: nvidia/GLM-5.2-NVFP4
       trust-remote-code: true
+      watchdog-timeout: 1000000
       quantization: modelopt_fp4
       kv-cache-dtype: fp8_e4m3
       tensor-parallel-size: 8

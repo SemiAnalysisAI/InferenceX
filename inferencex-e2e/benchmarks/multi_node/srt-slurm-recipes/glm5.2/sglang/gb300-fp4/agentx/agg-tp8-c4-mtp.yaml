@@ -58,6 +58,7 @@ roles:
     args:
       served-model-name: nvidia/GLM-5.2-NVFP4
       trust-remote-code: true
+      watchdog-timeout: 1000000
       quantization: modelopt_fp4
       kv-cache-dtype: fp8_e4m3
       tensor-parallel-size: 8
@@ -94,7 +95,7 @@ health_check:
   interval_seconds: 10
 benchmark:
   type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic
