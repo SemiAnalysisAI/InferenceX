@@ -107,7 +107,9 @@ SGLANG_CMD=(
     --host 0.0.0.0 --port "$PORT"
     --trust-remote-code
     --tp "$TP" --ep-size "$EP_SIZE"
-    --mem-fraction-static 0.80
+    # C32 still exhausted HBM at 0.80 with 4096-token chunks; reserve
+    # another 10% of physical HBM for native long-prefill scratch.
+    --mem-fraction-static 0.70
     # Native FP4 prefill scratch scales with query tokens times context.
     # The 16384-token default OOMed five canonical cells; match the existing
     # 4096-token breakable graph ceiling without reducing model context.
