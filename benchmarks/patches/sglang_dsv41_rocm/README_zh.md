@@ -100,6 +100,8 @@ V4.1 设置 `q_head_norm=False`。nightly 的 HIP 融合 Q/K 内核始终对 Q
 为兼容 AITER 图 IPC，仍禁用 expandable segments。这是待验证的假设，
 不是已确认的性能或稳定性提升；权重、KV 格式和镜像默认 DSpark 精度均未改变。
 
-## 重建 nightly 与匹配拓扑的候选方案
+## 重建 nightly 与 TP4/EP1 验证
 
-9 月 22 日 14:49 UTC 的重建镜像摘要为 `6d71b69744074b26a02fd6267223227ca7399c540e0c1a73db10fe422a2ca405`，使用 SGLang `244db08d60` 和 AITER `acf8fdf9`。安装器检查的六个源文件哈希均未改变；GPU 导入与服务验证仍待完成。此前准确率与性能证据来自 `f35d19d2` 镜像及 TP4/EP4。实验配置匹配 vLLM 的 TP2/EP1、TP4/EP1 拓扑，覆盖至 C128；TP2 使用主机 Engram，TP4 使用 GPU Engram。EP1 使用上游内核查找，不使用仅针对 EP4 的预览调优覆盖。矩阵生成不代表任何配置已通过；仍须验证启动、完整准确率与标准性能协议。
+9 月 22 日 14:49 UTC 的重建镜像摘要为 `6d71b69744074b26a02fd6267223227ca7399c540e0c1a73db10fe422a2ca405`，使用 SGLang `244db08d60` 和 AITER `acf8fdf9`。安装器检查的六个源文件哈希均匹配，实际启动与完整准确率已通过。提交矩阵采用 GPU Engram 与上游内核查找，在 C1/2/4/8/16/32 对齐已发布的 TP4/EP1 vLLM 基线；TP2 和更高并发须另行验证。
+
+[完整 C1 GSM8K](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35776039712) 的 1,319 个样本全部完成，严格/宽松准确率为 97.3465%/97.2707%。间隔为零的[标准性能测试](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35786731860) 中 C1 通过，C32 因连续预填充超过四分钟、解码得不到执行而未通过延迟覆盖率门槛。上游支持的 `--prefill-decode-interval 16` 在预填充分块之间安排解码机会，不改变精度或内存、缓存大小。该设置的[完整 C32 GSM8K](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35816893672) 完成全部 1,319 个样本，严格/宽松准确率为 96.8158%/96.7400%。仍须完成[标准 C32 性能测试](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35816891989)及最终六点性能与评估扫描。准确率使用真实验证且不限制样本；性能保留正常预热、3,600 秒和 95% 延迟覆盖率门槛。按用户要求，功耗不再是完成条件；无效遥测仍标记无效，不据此作功耗结论。
