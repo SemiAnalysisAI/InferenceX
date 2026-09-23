@@ -4,3 +4,4 @@
 .infx-tooling/
 dist/
 experimental/multiturn/vllm_benchmark/results/
+*.resolved.yaml

@@ -8,6 +8,7 @@ set -exo pipefail
 
 # shellcheck source=runners/slurm_utils.sh
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
+materialize_srt_configs || exit 1
 
 check_env_vars SLURM_PARTITION
 export SBATCH_PARTITION="$SLURM_PARTITION"

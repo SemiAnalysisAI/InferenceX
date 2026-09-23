@@ -8,6 +8,27 @@ SRTCTL_EVAL_ARGS=(
     --set 'post_eval.command=["bash", "{infmax_workspace}/benchmarks/multi_node/srt_eval.sh", "{endpoint}", "{infmax_workspace}"]'
 )
 
+# Replace a "recipe.yaml:<selector>" CONFIG_FILE or EVAL_CONFIG_FILE with a flat
+# recipe written beside its source. Launchers read recipes as text (power
+# telemetry, name and health-check patches) before srtctl runs, so each variant
+# must look exactly like a standalone recipe. Flat recipes pass through untouched.
+materialize_srt_configs() {
+    local name value
+    for name in CONFIG_FILE EVAL_CONFIG_FILE; do
+        value="${!name}"
+        [[ "$value" == *:* ]] || continue
+        check_env_vars GITHUB_WORKSPACE
+        # Login nodes do not all ship PyYAML; the selector path is the only user.
+        value=$(PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" \
+            uv run --no-project --quiet --with pyyaml \
+            python3 -m infx.srt_slurm.recipe_selector materialize "$value" \
+            --repo-root "$GITHUB_WORKSPACE") || return 1
+        echo "Resolved $name ${!name} -> $value"
+        printf -v "$name" '%s' "$value"
+        export "${name?}"
+    done
+}
+
 # Write a job-local cluster config; profiles contain only native srt-slurm settings.
 write_srt_cluster_config() {
     if [[ $# -lt 3 || -z "$1" || -z "$2" || ( "$3" != 0 && "$3" != 1 ) ]]; then

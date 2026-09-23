@@ -5,6 +5,7 @@ check_env_vars ENROOT_IMPORT_TIME_LIMIT EVAL_ONLY IS_AGENTIC IS_MULTINODE RUN_EV
 
 # shellcheck source=runners/slurm_utils.sh
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
+materialize_srt_configs || exit 1
 
 # B300 DSXE Slurm cluster (dsxe-sa-b300-prd0); runners run as sa-gha-runner.
 # Cluster-specific facts live in this block. Multi-node jobs go through

@@ -18,7 +18,8 @@ from pathlib import Path
 
 import yaml
 
-from infx.config import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS, RUNNER_CONFIG
+from infx.config import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS, RUNNER_CONFIG, repository_root
+from infx.srt_slurm.recipe_selector import recipe_identities
 
 from .generate import (
     EvalMode,
@@ -169,12 +170,38 @@ def generation_inputs_at_ref(ref: str) -> Iterator[GenerationInputs]:
         )
 
 
+def _recipe_identity(entry: dict) -> dict:
+    """Name a consolidated recipe variant by the flat recipe path it replaced.
+
+    Moving a recipe into an override file only changes its CONFIG_FILE spelling;
+    keeping the old spelling here preserves fingerprints and curve identity.
+    """
+    identities = recipe_identities(repository_root())
+    if not identities:
+        return entry
+    view = dict(entry)
+    for role in ("prefill", "decode"):
+        worker = entry.get(role)
+        if not isinstance(worker, dict):
+            continue
+        settings = worker.get("additional-settings") or []
+        mapped = [
+            f"CONFIG_FILE={identities.get(setting[12:], setting[12:])}"
+            if setting.startswith("CONFIG_FILE=")
+            else setting
+            for setting in settings
+        ]
+        if mapped != settings:
+            view[role] = {**worker, "additional-settings": mapped}
+    return view
+
+
 def _matrix_curve_key(entry: dict) -> tuple:
     """Identify one curve while deliberately excluding point-level fields."""
     return tuple(
         sorted(
             (key, freeze_config_value(value))
-            for key, value in entry.items()
+            for key, value in _recipe_identity(entry).items()
             if key not in {"conc", "exp-name", "recipe-fingerprint"}
         )
     )
@@ -184,7 +211,7 @@ def recipe_fingerprint(entry: dict) -> str:
     """Hash the generated recipe independently of point-level concurrency/name."""
     recipe = {
         key: value
-        for key, value in entry.items()
+        for key, value in _recipe_identity(entry).items()
         if key not in {"conc", "exp-name", "recipe-fingerprint"}
     }
     canonical = json.dumps(

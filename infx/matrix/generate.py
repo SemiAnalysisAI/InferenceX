@@ -11,6 +11,7 @@ from typing import Any, Literal
 import yaml
 
 from infx.config import repository_root
+from infx.srt_slurm.recipe_selector import load_recipe, recipe_source, split_config_file
 
 from .validation import (
     DEFAULT_AGENTIC_DURATION_SECONDS,
@@ -238,23 +239,21 @@ def recipe_node_count(prefill: dict, decode: dict) -> int | None:
 
     config_file = config_files.pop()
     repo_root = repository_root()
-    recipe_root = repo_root / "benchmarks" / "multi_node" / "srt-slurm-recipes"
-    if config_file.startswith("benchmarks/multi_node/srt-slurm-recipes/"):
-        recipe_path = repo_root / config_file
-    else:
-        recipe_path = recipe_root / config_file.removeprefix("recipes/")
+    recipe_path = recipe_source(config_file, repo_root)
     if not recipe_path.exists():
         # Some srt-slurm recipes live only in the runtime image. Their master
         # config topology remains the best available scheduling estimate.
         return None
 
-    recipe = yaml.safe_load(recipe_path.read_text())
+    if split_config_file(config_file)[1] is None and "base" in yaml.safe_load(
+        recipe_path.read_text()
+    ):
+        # Without a selector srtctl submits every variant, which has no single
+        # node count. The master topology supplies the estimate.
+        return None
+    recipe = load_recipe(config_file, repo_root)
     if recipe.get("schema") != 2:
         raise ValueError(f"srt-slurm recipes must declare schema: 2: {recipe_path}")
-    if "base" in recipe:
-        # A file with several override variants has no single authoritative
-        # node count. The selected master topology supplies the estimate.
-        return None
     roles = recipe.get("roles")
     if roles:
         # Schema 2 groups node allocations by role. A colocated decode role
