@@ -132,6 +132,13 @@ if [[ "${EVAL_ONLY}" != true ]]; then
 fi
 echo "DSpark block size: $DSPARK_BLOCK_SIZE, golden AL=$DSV41_GOLDEN_AL"
 
+# Isolated recovery probe for the TP8/EP1 C64 prefill allocator failure.
+# Keep the full context and static KV budget; bound only prefill rows.
+CHUNKED_PREFILL_SIZE=4096
+if (( TP == 8 && EP_SIZE == 1 && CONC == 64 )); then
+    CHUNKED_PREFILL_SIZE=2048
+fi
+
 SGLANG_CMD=(
     python3 -m sglang.launch_server
     --model-path "$MODEL_PATH" --served-model-name "$MODEL"
@@ -146,7 +153,7 @@ SGLANG_CMD=(
     --mem-fraction-static 0.70
     # 4096, as on B200/GB200: at 8192 the indexer's prefill top-k allocated 5 GiB
     # with 29 requests in flight and OOMed c32 (run 35308550355).
-    --chunked-prefill-size 4096
+    --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     # Keep active decode requests progressing while long prefixes are queued.
     --prefill-decode-interval 16
     # The default 4*max-running-requests retains too few SWA prefix tails:

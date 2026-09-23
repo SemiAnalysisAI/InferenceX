@@ -8722,4 +8722,5 @@
     - "Retain validated H200 dense-GEMM launch configurations without changing kernel code or precision; keep five-token DSpark, golden acceptance for performance and real verification for full GSM8K."
     - "Run a new canonical full sweep with 16 performance and 16 full-evaluation cells. Earlier EP4/EP8 and DP8 measurements remain historical evidence and do not qualify the EP1 grid."
     - "Extend only H200 SGLang AgentX performance cells at C64/C128 to 24-hour Slurm allocations and 24.5-hour GitHub jobs after the original eight-hour allocation expired during progressing warmup. Preserve normal warmup, the full 3600-second profile, image, model, precision and topology."
+    - "Isolated TP8/EP1 C64 recovery probe halves prefill chunk rows to 2048 after allocator OOM warnings and an indexer gather CUDA failure; preserve full context, static memory fraction, shipped DSpark precision and the canonical workload. No successful recovery or performance gain is assumed."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341
