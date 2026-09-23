@@ -15,7 +15,7 @@ def resolve_dtype(name: str) -> torch.dtype:
     ordinary = {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": torch.float32}
     if name in ordinary:
         return ordinary[name]
-    if name == "fp8":
+    if name == "e4m3":
         arch = torch.cuda.get_device_properties(torch.cuda.current_device()).gcnArchName
         arch = arch.split(":")[0]
         if arch == "gfx942":
@@ -32,13 +32,17 @@ def prepare(op: Op) -> dict:
         raise UnsupportedOpError("ROCm torch GEMM has no native activation fusion")
     if a["dtype_a"] != a["dtype_b"]:
         raise UnsupportedOpError("ROCm torch GEMM requires matching input dtypes")
+    fp8 = a["dtype_a"] == "e4m3"
+    scales = (a.get("scale_a", "none"), a.get("scale_b", "none"))
+    if scales != (("per_tensor_static", "per_tensor") if fp8 else ("none", "none")):
+        raise UnsupportedOpError(f"ROCm torch GEMM supports only per-tensor fp8 scales; got {scales}")
     dtype = resolve_dtype(a["dtype_a"])
     out_name = a.get("dtype_out") or "bf16"
     if out_name not in {"bf16", "fp16", "fp32"}:
         raise UnsupportedOpError(f"unsupported GEMM output dtype={out_name!r}")
     out_dtype = resolve_dtype(out_name)
     m, n, k = a["m"], a["n"], a["k"]
-    if a["dtype_a"] == "fp8":
+    if fp8:
         left = torch.randn(m, k, device="cuda", dtype=torch.bfloat16).to(dtype)
         right = torch.randn(n, k, device="cuda", dtype=torch.bfloat16).to(dtype).t()
         scale_a = torch.tensor(1.0, device="cuda")
@@ -57,7 +61,7 @@ def prepare(op: Op) -> dict:
         "out_dtype": out_dtype,
         "scale_a": scale_a,
         "scale_b": scale_b,
-        "fp8": a["dtype_a"] == "fp8",
+        "fp8": fp8,
     }
 
 

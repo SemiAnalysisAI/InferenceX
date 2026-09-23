@@ -201,7 +201,7 @@ def test_platform_overlay_preserves_base_and_replaces_explicit_profile(tmp_path)
     [("flashinfer", [1], "gemm"), ("torch", [2], "gemm"), ("torch", [1], "allreduce")],
 )
 def test_amd_plan_rejects_unimplemented_execution(backend, worlds, kind):
-    with pytest.raises(ValueError, match="single-GPU torch GEMM"):
+    with pytest.raises(ValueError, match="single-GPU torch/vllm GEMM"):
         ci.plan(
             "mi300x",
             [backend],

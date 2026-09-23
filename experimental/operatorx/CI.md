@@ -138,11 +138,22 @@ can return a Slurm error even after that allocation has terminated.
 ## AMD execution
 
 `platforms.json` overlays the CollectiveX registry with the AMDS Slurm pools.
-AMD accepts single-GPU `torch` GEMM and `torch,aiter` attention. ROCm PyTorch uses HIP events through
+AMD accepts single-GPU `torch`/`vllm` GEMM and `torch,aiter` attention. ROCm PyTorch uses HIP events through
 `torch.cuda`; FP8 selects FNUZ on gfx942 and OCP on gfx950. Unsupported formats
 remain explicit. Staging lives outside `_work`, below the shared runner root
 derived from `RUNNER_TEMP`. Containers never write to the checkout. MI300X/MI325X
 forward `/dev/kfd` and `/dev/dri`; CPU requests follow each inference launcher.
+
+## GEMM
+
+`gemm` args name the storage dtypes (`bf16`, `e4m3`, `e2m1`, `int4`) and the
+quantization explicitly: `scale_a` (how the bf16 activation is quantized inside
+the op), `scale_b` (weight scale granularity) and their scale dtypes. The `vllm`
+backend builds a vLLM `ReplicatedLinear` under the matching checkpoint quant
+config, runs `process_weights_after_loading` and times `layer(x)`, so vLLM picks
+the kernel; `metrics.backend_meta` records the chosen kernel classes, parameter
+dtypes and vLLM env. Emulation-only paths are reported unsupported. AMD enables
+AITER as InferenceX's ROCm launches do.
 
 ## Attention
 
@@ -181,8 +192,7 @@ the released Kimi K3 layer's SITU activation, 3584-wide latent expert path,
 latent projections or shared experts. Those need a separate native-layer profile.
 No model weights or Hugging Face credentials are required.
 
-NVIDIA uses `vllm/vllm-openai:v0.19.0` (amd64/arm64); AMD uses the existing ROCm
-image. Select `backends=vllm` explicitly. Unsupported precision, routing or shared
+The `vllm` images are the ones InferenceX pins for its vLLM recipes (`containers.toml`). Select `backends=vllm` explicitly. Unsupported precision, routing or shared
 expert requests produce unsupported rows; import and kernel failures fail CI.
 
 Useful routed matmul TFLOPS per GPU is

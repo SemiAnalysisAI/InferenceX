@@ -16,6 +16,9 @@ _ITERS = 10
 # Same timing protocol as the NVIDIA runner: wall-clock warmup floor, GPU
 # spin ahead of the timed loop, per-iteration cache flush, inter-op cooldown.
 _WARMUP_MIN_S = float(os.environ.get("OPERATORX_WARMUP_MIN_S", "0.025"))
+# The first op of a process starts from an idle GPU; give it a longer ramp.
+_FIRST_WARMUP_S = float(os.environ.get("OPERATORX_FIRST_WARMUP_S", "1.0"))
+_FIRST = True
 _SHIELD_CYCLES = int(os.environ.get("OPERATORX_SHIELD_CYCLES", "4000000"))
 _COOLDOWN_RATIO = float(os.environ.get("OPERATORX_COOLDOWN_RATIO", "4"))
 _COOLDOWN_MAX_S = float(os.environ.get("OPERATORX_COOLDOWN_MAX_S", "1.0"))
@@ -31,8 +34,10 @@ def _time_op(impl, ctx, device: int, sleep_s: float) -> float:
     for _ in range(_WARMUP):
         impl.kernel(ctx)
     torch.cuda.synchronize()
+    global _FIRST
+    floor, _FIRST = (max(_WARMUP_MIN_S, _FIRST_WARMUP_S) if _FIRST else _WARMUP_MIN_S), False
     t0 = time.perf_counter()
-    while time.perf_counter() - t0 < _WARMUP_MIN_S:
+    while time.perf_counter() - t0 < floor:
         impl.kernel(ctx)
         torch.cuda.synchronize()
 
@@ -56,7 +61,7 @@ def _time_op(impl, ctx, device: int, sleep_s: float) -> float:
 
 
 def run(op: Op) -> Result:
-    if op.backend != "torch":
+    if op.backend not in ("torch", "vllm"):
         raise UnsupportedOpError(f"unknown AMD backend: {op.backend}")
     backend = import_module(f"operatorx.runners.amd.backends.{op.backend}")
     impl = next((item for item in backend.IMPLS if item.op_type == op.type), None)
@@ -80,6 +85,8 @@ def run(op: Op) -> Result:
         time.sleep(min(median_us * 1e-6 * (_ITERS + _WARMUP) * _COOLDOWN_RATIO,
                        _COOLDOWN_MAX_S))
     metrics = {"latency_us": median_us, "telemetry": telem}
+    if isinstance(ctx, dict) and ctx.get("meta"):
+        metrics["backend_meta"] = ctx["meta"]
     prof = profiling.profile_op(lambda: impl.kernel(ctx))
     if prof is not None:
         metrics["profile"] = prof

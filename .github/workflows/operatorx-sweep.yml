@@ -9,7 +9,7 @@ on:
         default: h100-dgxc
         options: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300, mi300x, mi325x, mi355x]
       backends:
-        description: Comma-separated backends (torch GEMM/attention, AMD aiter attention, vllm routed MoE)
+        description: Comma-separated backends (torch/vllm GEMM, torch attention, AMD aiter attention, vllm routed MoE)
         type: string
         default: torch
       testlists:
