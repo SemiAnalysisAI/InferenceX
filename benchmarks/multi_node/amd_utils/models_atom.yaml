@@ -42,7 +42,10 @@ DeepSeek-V4-Pro-AgentX: &DeepSeek-V4-Pro-AgentX
   # Rail-isolated RDMA: matched rails replace dest-device affinity. Omit
   # ATOM_MOONCAKE_MATCHED_RAILS if every default P/D HCA pair is mutually
   # reachable on the fabric.
-  env: "ATOM_MOE_GU_ITLV=1 AITER_BF16_FP8_MOE_BOUND=0 MC_GID_INDEX=1 ATOM_MOONCAKE_MATCHED_RAILS=auto NCCL_IB_DISABLE=1 ATOM_DISABLE_MMAP=true ATOM_PREFIX_CACHE_POLICY=lru ATOM_PREFIX_CACHE_PROTECTED_RATIO=0.5"
+  # ATOM_NUMA_BIND and the ATOM_DP_* ports are unconditional here: the recipe
+  # exports them in every tier, including TP (concurrency 1-32) where DP
+  # attention is off, so they cannot live in tp_dp_env/ep_dp_env (DP-only).
+  env: "ATOM_MOE_GU_ITLV=1 AITER_BF16_FP8_MOE_BOUND=0 MC_GID_INDEX=1 ATOM_MOONCAKE_MATCHED_RAILS=auto NCCL_IB_DISABLE=1 ATOM_DISABLE_MMAP=true ATOM_NUMA_BIND=1 ATOM_DP_MASTER_PORT=29510 ATOM_DP_BASE_PORT=29610 ATOM_PREFIX_CACHE_POLICY=lru ATOM_PREFIX_CACHE_PROTECTED_RATIO=0.5"
   kv_cache_flags: "--kv_cache_dtype fp8 --index-cache-dtype fp4"
   # DP-attention tiers (conc 64+): TBO is prefill-only per the recipe.
   tp_dp_flags: "--enable-dp-attention"
@@ -51,14 +54,15 @@ DeepSeek-V4-Pro-AgentX: &DeepSeek-V4-Pro-AgentX
   ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
   prefill_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention --enable-tbo"
   decode_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
-  # Shared DP env for the agentic DP-attention tiers (prefill and decode). Under
+  # DP-only env for the agentic DP-attention tiers (prefill and decode). Under
   # --dp-aware the cache-aware router sends explicit P/D rank hints that take
   # priority over engine-local session affinity and load balancing, so
   # ATOM_DP_SESSION_AFFINITY and ATOM_DP_LB_REQ_EQUIV are not needed on this
   # routing path (recipe). Cross-DP prefill coalescing (ATOM_ENABLE_PREFILL_DELAYER=0)
-  # is off on both roles per the recipe.
-  tp_dp_env: "ATOM_NUMA_BIND=1 ATOM_DP_MASTER_PORT=29510 ATOM_DP_BASE_PORT=29610 ATOM_ENABLE_PREFILL_DELAYER=0"
-  ep_dp_env: "ATOM_NUMA_BIND=1 ATOM_DP_MASTER_PORT=29510 ATOM_DP_BASE_PORT=29610 ATOM_ENABLE_PREFILL_DELAYER=0"
+  # is off on both roles per the recipe. NUMA binding and the DP ports moved to
+  # the unconditional env above because the recipe sets them in the TP tier too.
+  tp_dp_env: "ATOM_ENABLE_PREFILL_DELAYER=0"
+  ep_dp_env: "ATOM_ENABLE_PREFILL_DELAYER=0"
   # Prefill-only DP env: the recipe sets GPU_MAX_HW_QUEUES=5 on the DP-attention
   # prefill node and leaves decode unset. server_atom.sh applies this on prefill
   # nodes only.

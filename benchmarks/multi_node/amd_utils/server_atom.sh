@@ -239,7 +239,9 @@ if [[ "$IS_AGENTIC_RUN" == "1" && "${KV_OFFLOADING:-none}" == "dram" ]]; then
     # Recipe offload env (prefill node only). These are read by the lmcache
     # offload runtime, not encoded in the connector JSON, so they must be in the
     # server process env -- the launcher exports them outside the SLURM/Docker
-    # boundary where they are lost, so set them here.
+    # boundary where they are lost, so set them here. PYTHONHASHSEED=0 keeps the
+    # LMCache prefix hashes consistent across the offload worker processes.
+    export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
     export OFFLOAD_COPY_WORKERS="${OFFLOAD_COPY_WORKERS:-1}"
     export OFFLOAD_MIN_LOAD_TOKENS="${OFFLOAD_MIN_LOAD_TOKENS:-8192}"
     export OFFLOAD_SLOT_STAGING_SLOTS="${OFFLOAD_SLOT_STAGING_SLOTS:-4}"
