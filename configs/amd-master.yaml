@@ -1559,7 +1559,7 @@ glm5.3-fp8-mi355x-tilert-agentic:
 # Official 2026-09-22 14:49 UTC ROCm nightly rebuild; gfx950, ROCm 10.
 # Match the published TP4/EP1 vLLM baseline; larger topologies qualify separately.
 dsv41flash-fp4-mi355x-sglang-agentic-dspark:
-  image: lmsysorg/sglang-rocm:v0.5.20-rocm10-mi35x-20260922@sha256:6d71b69744074b26a02fd6267223227ca7399c540e0c1a73db10fe422a2ca405
+  image: lmsysorg/sglang-rocm:v0.5.20-rocm10-mi35x-20260923@sha256:cc9f4ed6cc0d8610eb01c54e0c46e1d6a51010d8aaa54d298cbf0b522c792d89
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds

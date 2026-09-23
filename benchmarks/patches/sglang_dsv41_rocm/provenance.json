@@ -1,8 +1,8 @@
 {
   "source_image": "lmsysorg/sglang:dev-dsv41-mi35x@sha256:c609f74f01b206af9664fb66da8ebef47642a7328a2478eabeebb352e014661a",
   "source_overlay_history_commit": "f8f290f2 (not publicly resolvable; image digest is authoritative)",
-  "target_image": "lmsysorg/sglang-rocm:v0.5.20-rocm10-mi35x-20260922@sha256:6d71b69744074b26a02fd6267223227ca7399c540e0c1a73db10fe422a2ca405",
-  "target_revision": "244db08d60cc05275f71079fba0dabc2bbde1eb9",
+  "target_image": "lmsysorg/sglang-rocm:v0.5.20-rocm10-mi35x-20260923@sha256:cc9f4ed6cc0d8610eb01c54e0c46e1d6a51010d8aaa54d298cbf0b522c792d89",
+  "target_revision": "abef3efb643134ab340f77c84500509488f3f298",
   "files": [
     {
       "installed_name": "backend.py",
@@ -91,8 +91,8 @@
   "registry_sha256": "dfd9c0b6e85774524f6378ae09278cf6dc000e093ddf6beaadc44d1d20bdacd1",
   "fp8_utils_sha256": "193c262f77133f58847f843446ca7b168364e4a69ff8fe88e8ed50b59efba07d",
   "engram_sha256": "6468ead93f279c478928e354e612408f2dcd562372da98c062abc154a43d0f18",
-  "model_sha256": "4164c354f38e7b35e6bf5445b4d506e610b9f956f3e85f1431946ff6b0471ded",
-  "mlp_sha256": "9ffa2913974db31151c18e4931cebceca27c64c734be59a67540d4567e5d5a9f",
+  "model_sha256": "6d84df257642d4b796096db347a8f417f650782d546b2eb0a74999b73b2f3074",
+  "mlp_sha256": "8dea8812cf1a031efb7fe39c99b9adc36438b8cceb709be86ecb8ee1ddc40f1f",
   "pool_sha256": "69e7b1dee0d2a35ac090660d354b934cf66ee9169b34e48615904f9af757f42e",
   "source_image_runtime_defaults": {
     "AITER_BF16_FP8_MOE_BOUND": "0",

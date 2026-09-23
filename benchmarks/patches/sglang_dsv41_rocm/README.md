@@ -140,3 +140,19 @@ weights, KV format and shipped DSpark precision are unchanged.
 The 14:49 UTC September 22 rebuild uses digest `6d71b69744074b26a02fd6267223227ca7399c540e0c1a73db10fe422a2ca405`, SGLang `244db08d60` and AITER `acf8fdf9`. All six installer source hashes match, and actual startup and full accuracy have passed. The submitted matrix targets the published TP4/EP1 vLLM reference at C1/2/4/8/16/32 with GPU Engram and upstream kernel lookup. TP2 and higher concurrency require separate qualification.
 
 [Full C1 GSM8K](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35776039712) passed all 1,319 examples at 97.3465% strict / 97.2707% flexible. The interval-zero [canonical performance pair](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35786731860) passed C1 but failed C32 latency coverage: over four minutes of continuous prefill starved decoding. The supported `--prefill-decode-interval 16` change schedules decode opportunities between prefill chunks without changing precision or memory/cache sizing. Its [full C32 GSM8K](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35816893672) passed all 1,319 examples at 96.8158% strict / 96.7400% flexible. [Canonical C32 performance](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35816891989) and the final six-point performance/eval sweep remain required. Accuracy uses real verification and no sample limit; performance retains normal warmup, 3,600 seconds and the 95% latency-coverage gate. Power is optional by user direction; invalid telemetry remains invalid and supports no power claim.
+
+
+## September 23 ROCm10 candidate
+
+The next image is `v0.5.20-rocm10-mi35x-20260923`, digest
+`sha256:cc9f4ed6cc0d8610eb01c54e0c46e1d6a51010d8aaa54d298cbf0b522c792d89`,
+SGLang `abef3efb643134ab340f77c84500509488f3f298`. AITER remains
+`acf8fdf9307431ece8ee275971c41cb3d1a7020b`. Compared with September 22,
+four installer-target modules are unchanged. The V4 model and V2 MLP change
+upstream MoE padded-row handling; the V4 model also gains a multimodal type
+annotation. The existing compatibility insertion points and payload are unchanged.
+Provenance accepts the two reviewed new source hashes; no loader, draft precision,
+cache, scheduling, or allocator settings change. Repeated installation against
+these exact upstream sources produces identical evidence. This is source validation,
+not GPU qualification: full GSM8K and canonical AgentX gates remain required.
+The September 22 sweep remains independently staged when qualified.

@@ -105,3 +105,16 @@ V4.1 设置 `q_head_norm=False`。nightly 的 HIP 融合 Q/K 内核始终对 Q
 9 月 22 日 14:49 UTC 的重建镜像摘要为 `6d71b69744074b26a02fd6267223227ca7399c540e0c1a73db10fe422a2ca405`，使用 SGLang `244db08d60` 和 AITER `acf8fdf9`。安装器检查的六个源文件哈希均匹配，实际启动与完整准确率已通过。提交矩阵采用 GPU Engram 与上游内核查找，在 C1/2/4/8/16/32 对齐已发布的 TP4/EP1 vLLM 基线；TP2 和更高并发须另行验证。
 
 [完整 C1 GSM8K](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35776039712) 的 1,319 个样本全部完成，严格/宽松准确率为 97.3465%/97.2707%。间隔为零的[标准性能测试](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35786731860) 中 C1 通过，C32 因连续预填充超过四分钟、解码得不到执行而未通过延迟覆盖率门槛。上游支持的 `--prefill-decode-interval 16` 在预填充分块之间安排解码机会，不改变精度或内存、缓存大小。该设置的[完整 C32 GSM8K](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35816893672) 完成全部 1,319 个样本，严格/宽松准确率为 96.8158%/96.7400%。仍须完成[标准 C32 性能测试](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35816891989)及最终六点性能与评估扫描。准确率使用真实验证且不限制样本；性能保留正常预热、3,600 秒和 95% 延迟覆盖率门槛。按用户要求，功耗不再是完成条件；无效遥测仍标记无效，不据此作功耗结论。
+
+
+## 9 月 23 日 ROCm10 候选镜像
+
+下一候选镜像为 `v0.5.20-rocm10-mi35x-20260923`，摘要
+`sha256:cc9f4ed6cc0d8610eb01c54e0c46e1d6a51010d8aaa54d298cbf0b522c792d89`，
+SGLang 提交为 `abef3efb643134ab340f77c84500509488f3f298`。AITER 仍为
+`acf8fdf9307431ece8ee275971c41cb3d1a7020b`。与 9 月 22 日相比，安装器涉及的
+六个模块中有四个未变；V4 模型和 V2 MLP 更新了上游 MoE 填充行处理，V4 模型
+另有多模态类型标注变更。现有兼容代码的插入位置与载荷保持不变，仅更新两个
+已审阅文件的来源哈希。加载器、草稿精度、缓存、调度和分配器设置均不变。
+对这些精确的上游源码重复安装得到相同证据。这仅验证源码适配，不代表 GPU
+验证完成；仍须通过完整 GSM8K 与标准 AgentX。9 月 22 日全量测试通过后仍独立暂存。
