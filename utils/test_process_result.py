@@ -1652,9 +1652,10 @@ def test_multinode_batch_rejects_unknown_point_filename(
     assert any('filename lacks' in point.get('error', '') for point in receipt['points'])
 
 
+@pytest.mark.parametrize("collector", ["shared", "h200-dcgm"])
 @pytest.mark.parametrize("result_python", [None, "", sys.executable])
 def test_agentic_collector_preserves_archive_when_result_python_is_missing(
-    tmp_path: Path, result_python: str | None
+    tmp_path: Path, result_python: str | None, collector: str
 ) -> None:
     import tarfile
 
@@ -1686,25 +1687,50 @@ def test_agentic_collector_preserves_archive_when_result_python_is_missing(
         "num_decode_gpu": 2,
     }
     (source / "point_conc4.json").write_text(json.dumps(raw_result))
-    ambient_python = bin_dir / "python3"
-    ambient_python.write_text("#!/bin/sh\nexit 73\n")
-    ambient_python.chmod(0o755)
+    for name in ("python", "python3"):
+        ambient_python = bin_dir / name
+        ambient_python.write_text("#!/bin/sh\nexit 73\n")
+        ambient_python.chmod(0o755)
     env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
     env.pop("INFERENCEX_RESULTS_PYTHON", None)
     if result_python is not None:
         env["INFERENCEX_RESULTS_PYTHON"] = result_python
+    command = (
+        'source "$1"; sacct() { printf "12345|COMPLETED|0:0\\n"; }; '
+        'rc=0; collect_agentic_power_results 12345 "$2" "$3" "$4" point "$5" 4 || rc=$?; '
+        'bundle_server_logs "$2" "$4/server-logs.tar.gz"; exit "$rc"'
+    )
+    archive_name = "server-logs.tar.gz"
+    if collector == "h200-dcgm":
+        # Provisioning and Slurm submission are outside this processing regression.
+        launcher = (REPO_ROOT / "runners/launch_h200-dgxc-slurm.sh").read_text()
+        start = launcher.index('    AGENTX_POWER_RC="$SRT_JOB_RC"')
+        end = launcher.index('    if [[ "${EVAL_ONLY}" != "true" ]]; then', start)
+        command = 'source "$1";\n' + launcher[start:end]
+        archive_name = "multinode_server_logs.tar.gz"
+        (workspace / "point_conc4.json").write_text(json.dumps(raw_result))
+        (workspace / "infx").symlink_to(REPO_ROOT / "infx", target_is_directory=True)
+        (workspace / "exporter-image.sha256").write_text("fixture-exporter\n")
+        (workspace / "power-producer-sha.txt").write_text(PRODUCER_SHA + "\n")
+        env.update(
+            GITHUB_WORKSPACE=str(workspace),
+            LOGS_DIR=str(pkg.logs_root),
+            RESULT_FILENAME="point",
+            CONC_LIST="4",
+            SRT_SLURM_COMMIT=PRODUCER_SHA,
+            SRT_JOB_RC="0",
+            USES_KIMIK3_POWER="0",
+            USES_DCGM_POWER="1",
+            EVAL_ONLY="false",
+            REQUIRE_POWER="true",
+        )
     result = subprocess.run(
         [
             "bash",
             "-eo",
             "pipefail",
             "-c",
-            (
-                'source "$1"; sacct() { printf "12345|COMPLETED|0:0\\n"; }; '
-                'rc=0; collect_agentic_power_results 12345 "$2" "$3" "$4" point "$5" 4 || rc=$?; '
-                'printf "%s" "$rc" > "$4/collector-status"; '
-                'bundle_server_logs "$2" "$4/server-logs.tar.gz"; exit "$rc"'
-            ),
+            command,
             "bash",
             str(REPO_ROOT / "runners/slurm_utils.sh"),
             str(pkg.logs_root),
@@ -1720,9 +1746,9 @@ def test_agentic_collector_preserves_archive_when_result_python_is_missing(
     )
     expected_rc = 0 if result_python else 1
     assert result.returncode == expected_rc, result.stderr
-    assert (workspace / "collector-status").read_text() == str(expected_rc)
-    with tarfile.open(workspace / "server-logs.tar.gz") as archive:
-        assert "./power/native-job-status.txt" in archive.getnames()
+    with tarfile.open(workspace / archive_name) as archive:
+        if collector == "shared":
+            assert "./power/native-job-status.txt" in archive.getnames()
         assert f"./agentic/conc_4/{stem}.json" in archive.getnames()
     aggregate = json.loads((workspace / "point_conc4.json").read_text())
     if result_python:
