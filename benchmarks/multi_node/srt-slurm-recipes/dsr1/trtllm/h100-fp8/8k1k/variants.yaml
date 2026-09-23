@@ -1,0 +1,391 @@
+# srt-slurm recipes for dsr1/trtllm/h100-fp8/8k1k: shared settings in base, one override per
+# benchmark configuration. Select one with
+# CONFIG_FILE=recipes/dsr1/trtllm/h100-fp8/8k1k/variants.yaml:override_<name>.
+
+schema: 2
+
+base:
+  model:
+    path: DeepSeek-R1-0528
+    container: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post3
+    precision: fp8
+  resources:
+    gpu_type: h100
+    gpus_per_node: 8
+  engine: trtllm
+  roles:
+    prefill:
+      env:
+        UCX_CUDA_IPC_ENABLE_MNNVL: n
+        TRTLLM_ENABLE_PDL: '1'
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        TLLM_LOG_LEVEL: INFO
+        TRTLLM_DISABLE_KV_CACHE_TRANSFER_OVERLAP: '1'
+        TRTLLM_FORCE_ALLTOALL_METHOD: DeepEP
+      args:
+        max_batch_size: 1
+        max_num_tokens: 8224
+        max_seq_len: 8232
+        tensor_parallel_size: 16
+        moe_expert_parallel_size: 16
+        enable_attention_dp: true
+        pipeline_parallel_size: 1
+        print_iter_log: true
+        cuda_graph_config: null
+        disable_overlap_scheduler: true
+        moe_config:
+          backend: WIDEEP
+          max_num_tokens: 16384
+        kv_cache_config:
+          enable_block_reuse: false
+          free_gpu_memory_fraction: 0.3
+          dtype: fp8
+        cache_transceiver_config:
+          backend: UCX
+          max_tokens_in_buffer: 8256
+    decode:
+      env:
+        NCCL_NVLS_ENABLE: '0'
+        UCX_CUDA_IPC_ENABLE_MNNVL: n
+        TRTLLM_ENABLE_PDL: '1'
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        TLLM_LOG_LEVEL: INFO
+      args:
+        tensor_parallel_size: 16
+        moe_expert_parallel_size: 16
+        pipeline_parallel_size: 1
+        max_seq_len: 9256
+        cuda_graph_config:
+          enable_padding: true
+        print_iter_log: true
+        kv_cache_config:
+          enable_block_reuse: false
+          free_gpu_memory_fraction: 0.9
+          dtype: fp8
+        moe_config:
+          use_low_precision_moe_combine: true
+        cache_transceiver_config:
+          max_tokens_in_buffer: 8256
+          backend: UCX
+        stream_interval: 100
+        num_postprocess_workers: 4
+  benchmark:
+    type: sa-bench
+    isl: 8192
+    osl: 1024
+    req_rate: inf
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+  dynamo:
+    install: false
+    # The container tag identifies a pre-39d2a68 Dynamo release; the image is not digest-pinned.
+    # Use NATS for a recipe prior to Dynamo commit 39d2a68.
+    request_plane: nats
+
+override_disagg_1p1d_dep16_b4_eplb0_mtp3:
+  name: h100_8k1k_ctx1dep16_gen1dep16_batch4_eplb0_mtp3
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      args:
+        enable_chunked_prefill: true
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+    decode:
+      nodes: 2
+      workers: 1
+      env:
+        TRTLLM_DISABLE_KV_CACHE_TRANSFER_OVERLAP: '1'
+        TRTLLM_FORCE_ALLTOALL_METHOD: DeepEP
+      args:
+        enable_attention_dp: true
+        enable_lm_head_tp_in_adp: true
+        max_batch_size: 4
+        max_num_tokens: 128
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4]
+        moe_config:
+          backend: WIDEEP
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+  benchmark:
+    concurrencies: '77'
+
+override_disagg_1p2d_tep16_b32_eplb0_mtp3:
+  name: h100_8k1k_ctx1dep16_gen2tep16_batch32_eplb0_mtp3
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      args:
+        enable_chunked_prefill: false
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+    decode:
+      nodes: 4
+      workers: 2
+      args:
+        enable_attention_dp: false
+        enable_lm_head_tp_in_adp: false
+        max_batch_size: 32
+        max_num_tokens: 256
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8, 16, 24, 32]
+        moe_config:
+          backend: CUTLASS
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+  benchmark:
+    concurrencies: '78'
+
+# (frontend.enable_multiple_frontends) There are errors about colliding on port 8080, and others.
+override_disagg_1p2d_tep16_b64_eplb0_mtp0:
+  name: h100_8k1k_ctx1dep16_gen2tep16_batch64_eplb0_mtp0
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      args:
+        enable_chunked_prefill: false
+    decode:
+      nodes: 4
+      workers: 2
+      args:
+        enable_attention_dp: false
+        enable_lm_head_tp_in_adp: false
+        max_batch_size: 64
+        max_num_tokens: 256
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64]
+        moe_config:
+          backend: CUTLASS
+  benchmark:
+    concurrencies: '154'
+
+override_disagg_1p3d_tep16_b1_eplb0_mtp0:
+  name: h100_8k1k_ctx1dep16_gen3tep16_batch1_eplb0_mtp0
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      args:
+        enable_chunked_prefill: false
+    decode:
+      nodes: 6
+      workers: 3
+      env:
+        TRTLLM_DISABLE_KV_CACHE_TRANSFER_OVERLAP: '1'
+      args:
+        enable_attention_dp: false
+        enable_lm_head_tp_in_adp: false
+        max_batch_size: 1
+        max_num_tokens: 256
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4]
+        moe_config:
+          backend: CUTLASS
+  benchmark:
+    concurrencies: '6'
+
+override_disagg_1p3d_tep16_b1_eplb0_mtp3:
+  name: h100_8k1k_ctx1dep16_gen3tep16_batch1_eplb0_mtp3
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      args:
+        enable_chunked_prefill: true
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+    decode:
+      nodes: 6
+      workers: 3
+      args:
+        enable_attention_dp: false
+        enable_lm_head_tp_in_adp: false
+        max_batch_size: 1
+        max_num_tokens: 256
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4]
+        moe_config:
+          backend: CUTLASS
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+  benchmark:
+    concurrencies: '6'
+
+# (frontend.enable_multiple_frontends) There are errors about colliding on port 8080, and others.
+override_disagg_1p3d_tep16_b2_eplb0_mtp0:
+  name: h100_8k1k_ctx1dep16_gen3tep16_batch2_eplb0_mtp0
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      args:
+        enable_chunked_prefill: false
+    decode:
+      nodes: 6
+      workers: 3
+      args:
+        enable_attention_dp: false
+        enable_lm_head_tp_in_adp: false
+        max_batch_size: 2
+        max_num_tokens: 256
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4]
+        moe_config:
+          backend: CUTLASS
+  benchmark:
+    concurrencies: '9'
+
+override_disagg_1p3d_tep16_b2_eplb0_mtp3:
+  name: h100_8k1k_ctx1dep16_gen3tep16_batch2_eplb0_mtp3
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      args:
+        enable_chunked_prefill: true
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+    decode:
+      nodes: 6
+      workers: 3
+      args:
+        enable_attention_dp: false
+        enable_lm_head_tp_in_adp: false
+        max_batch_size: 2
+        max_num_tokens: 256
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4]
+        moe_config:
+          backend: CUTLASS
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+  benchmark:
+    concurrencies: '9'
+
+# (frontend.enable_multiple_frontends) There are errors about colliding on port 8080, and others.
+override_disagg_1p3d_tep16_b8_eplb0_mtp0:
+  name: h100_8k1k_ctx1dep16_gen3tep16_batch8_eplb0_mtp0
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      args:
+        enable_chunked_prefill: true
+    decode:
+      nodes: 6
+      workers: 3
+      args:
+        enable_attention_dp: false
+        enable_lm_head_tp_in_adp: false
+        max_batch_size: 8
+        max_num_tokens: 256
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8]
+        moe_config:
+          backend: CUTLASS
+  benchmark:
+    concurrencies: '30'
+
+override_disagg_1p3d_tep16_b8_eplb0_mtp3:
+  name: h100_8k1k_ctx1dep16_gen3tep16_batch8_eplb0_mtp3
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      args:
+        enable_chunked_prefill: false
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+    decode:
+      nodes: 6
+      workers: 3
+      args:
+        enable_attention_dp: false
+        enable_lm_head_tp_in_adp: false
+        max_batch_size: 8
+        max_num_tokens: 256
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8]
+        moe_config:
+          backend: CUTLASS
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+  benchmark:
+    concurrencies: '30'
+
+override_disagg_2p1d_dep16_b16_eplb0_mtp0:
+  name: h100_8k1k_ctx2dep16_gen1dep16_batch16_eplb0_mtp0
+  roles:
+    prefill:
+      nodes: 4
+      workers: 2
+      args:
+        enable_chunked_prefill: false
+    decode:
+      nodes: 2
+      workers: 1
+      env:
+        TRTLLM_DISABLE_KV_CACHE_TRANSFER_OVERLAP: '1'
+        TRTLLM_FORCE_ALLTOALL_METHOD: DeepEP
+      args:
+        enable_attention_dp: true
+        enable_lm_head_tp_in_adp: false
+        max_batch_size: 16
+        max_num_tokens: 128
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8, 16]
+        moe_config:
+          backend: WIDEEP
+  benchmark:
+    concurrencies: '308'
+
+override_disagg_2p1d_dep16_b8_eplb0_mtp3:
+  name: h100_8k1k_ctx2dep16_gen1dep16_batch8_eplb0_mtp3
+  roles:
+    prefill:
+      nodes: 4
+      workers: 2
+      args:
+        enable_chunked_prefill: true
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+    decode:
+      nodes: 2
+      workers: 1
+      env:
+        TRTLLM_DISABLE_KV_CACHE_TRANSFER_OVERLAP: '1'
+        TRTLLM_FORCE_ALLTOALL_METHOD: DeepEP
+      args:
+        enable_attention_dp: true
+        enable_lm_head_tp_in_adp: true
+        max_batch_size: 8
+        max_num_tokens: 128
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8]
+        moe_config:
+          backend: WIDEEP
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+  benchmark:
+    concurrencies: '154'

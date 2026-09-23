@@ -1,0 +1,301 @@
+# srt-slurm recipes for dsr1/sglang/gb300-fp8/8k1k: shared settings in base, one override per
+# benchmark configuration. Select one with
+# CONFIG_FILE=recipes/dsr1/sglang/gb300-fp8/8k1k/variants.yaml:override_<name>.
+
+schema: 2
+
+base:
+  model:
+    path: dsr1-fp8
+    container: dynamo-sglang
+    precision: fp8
+  frontend:
+    nginx_container: nginx
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  dynamo:
+    # Dynamo 0.8.0 was the default when this recipe was written; pin it explicitly.
+    # Use NATS for a recipe prior to Dynamo commit 39d2a68.
+    request_plane: nats
+    source:
+      pypi: 0.8.0
+  engine: sglang
+  roles:
+    prefill:
+      env:
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        PYTHONUNBUFFERED: '1'
+        DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+        SGLANG_DG_CACHE_DIR: /configs/dg-10212025
+        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+        SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+        MC_TE_METRIC: 'true'
+        MC_FORCE_MNNVL: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+      args:
+        served-model-name: deepseek-ai/DeepSeek-R1
+        trust-remote-code: true
+        kv-cache-dtype: fp8_e4m3
+        attention-backend: trtllm_mla
+        disable-radix-cache: true
+        watchdog-timeout: 1000000
+        context-length: 9300
+        disaggregation-mode: prefill
+        disaggregation-transfer-backend: nixl
+        load-balance-method: round_robin
+    decode:
+      workers: 1
+      env:
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        PYTHONUNBUFFERED: '1'
+        DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+        SGLANG_DG_CACHE_DIR: /configs/dg-10212025
+        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+        SGLANG_DECODE_BOOTSTRAP_TIMEOUT: '1000'
+        SGLANG_HACK_SEQ_BOOTSTRAP_ROOM: '1'
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+        SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+        MC_TE_METRIC: 'true'
+        MC_FORCE_MNNVL: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+      args:
+        served-model-name: deepseek-ai/DeepSeek-R1
+        trust-remote-code: true
+        kv-cache-dtype: fp8_e4m3
+        attention-backend: trtllm_mla
+        disable-radix-cache: true
+        watchdog-timeout: 1000000
+        context-length: 9300
+        disaggregation-mode: decode
+        disaggregation-transfer-backend: nixl
+        prefill-round-robin-balance: true
+  benchmark:
+    type: sa-bench
+    isl: 8192
+    osl: 1024
+    req_rate: inf
+
+override_disagg_1p1d_p_tp4_d_tp4_b128_c4x8_stp:
+  name: gb300-8k1k-fp8-low-latency
+  slurm:
+    time_limit: 02:00:00
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      # SGLANG_ENABLE_FLASHINFER_GEMM: "1" # deprecated in 0.5.7, --fp8-gemm-backend=flashinfer_trtllm
+      env:
+        SGLANG_ENABLE_JIT_DEEPGEMM: 'false'
+      args:
+        quantization: fp8
+        moe-runner-backend: flashinfer_trtllm
+        fp8-gemm-backend: flashinfer_trtllm
+        stream-interval: 10
+        mem-fraction-static: 0.95
+        max-total-tokens: 32768
+        chunked-prefill-size: 32768
+        max-prefill-tokens: 32768
+        cuda-graph-max-bs: 128
+        max-running-requests: 128
+        scheduler-recv-interval: 10
+        # to save mem
+        enable-flashinfer-allreduce-fusion: false
+        # to save mem
+        enable-symm-mem: false
+        tensor-parallel-size: 4
+        data-parallel-size: 1
+        expert-parallel-size: 1
+    decode:
+      nodes: 1
+      # SGLANG_ENABLE_FLASHINFER_GEMM: "1" # deprecated in 0.5.7, --fp8-gemm-backend=flashinfer_trtllm
+      env:
+        SGLANG_ENABLE_JIT_DEEPGEMM: 'false'
+      args:
+        quantization: fp8
+        moe-runner-backend: flashinfer_trtllm
+        fp8-gemm-backend: flashinfer_trtllm
+        stream-interval: 10
+        mem-fraction-static: 0.85
+        # save mem
+        chunked-prefill-size: -1
+        cuda-graph-max-bs: 128
+        max-running-requests: 128
+        # save mem
+        scheduler-recv-interval: 1
+        # to save mem
+        enable-flashinfer-allreduce-fusion: false
+        # to save mem
+        enable-symm-mem: false
+        tensor-parallel-size: 4
+        data-parallel-size: 1
+        expert-parallel-size: 1
+  benchmark:
+    concurrencies: [4, 8]
+
+# GB300 FP8 Mid Throughput Configuration
+override_disagg_5p1d_p_tp8_ep8_dp8_d_tp32_ep32_dp32_b45000_c128x256x512x1024_stp:
+  name: gb300-8k1k-fp8-mid
+  roles:
+    prefill:
+      nodes: 10
+      workers: 5
+      # Decode-specific environment variables
+      # Model configuration
+      # KV cache and attention
+      # Radix cache disabled
+      # Prefill-specific mode
+      # Request handling
+      args:
+        # Other flags
+        stream-interval: 50
+        # Memory and token limits
+        mem-fraction-static: 0.75
+        max-total-tokens: 524288
+        chunked-prefill-size: 131072
+        max-running-requests: 30000
+        skip-tokenizer-init: true
+        # Parallelism
+        tp-size: 8
+        dp-size: 8
+        ep-size: 8
+        enable-dp-attention: true
+        disable-shared-experts-fusion: true
+        eplb-algorithm: deepseek
+        disaggregation-bootstrap-port: 30001
+        # Performance optimizations
+        disable-cuda-graph: true
+        # DeepEP configuration
+        moe-a2a-backend: deepep
+        deepep-mode: normal
+        ep-dispatch-algorithm: dynamic
+        moe-dense-tp-size: 1
+        enable-dp-lm-head: true
+        ep-num-redundant-experts: 32
+        deepep-config: /configs/deepep_config.json
+    decode:
+      nodes: 8
+      env:
+        SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '768'
+      # Model configuration
+      # KV cache and attention
+      # Radix cache disabled
+      # Decode-specific mode
+      args:
+        # Other flags
+        stream-interval: 50
+        # Memory and token limits
+        mem-fraction-static: 0.82
+        chunked-prefill-size: 36864
+        cuda-graph-max-bs: 768
+        max-running-requests: 45000
+        skip-tokenizer-init: true
+        # Parallelism
+        tp-size: 32
+        dp-size: 32
+        ep-size: 32
+        enable-dp-attention: true
+        decode-log-interval: 1000
+        disable-shared-experts-fusion: true
+        eplb-algorithm: deepseek
+        disaggregation-bootstrap-port: 30001
+        # DeepEP configuration
+        moe-a2a-backend: deepep
+        deepep-mode: low_latency
+        ep-dispatch-algorithm: static
+        moe-dense-tp-size: 1
+        enable-dp-lm-head: true
+        ep-num-redundant-experts: 32
+        deepep-config: /configs/deepep_config.json
+        # CUDA graphs
+        cuda-graph-bs: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 264, 272, 280, 288, 296, 304, 312, 320, 328, 336, 344, 352, 360, 368, 376, 384, 416, 448, 480, 512, 544, 576, 608, 640, 672, 704, 736, 768]
+  benchmark:
+    concurrencies: [128, 256, 512, 1024]
+
+# GB300 FP8 Max Throughput Configuration
+override_disagg_6p1d_p_tp8_ep8_dp8_d_tp24_ep24_dp24_b45000_c2048x4096_stp:
+  name: gb300-8k1k-fp8-max
+  roles:
+    prefill:
+      nodes: 12
+      workers: 6
+      # Decode-specific environment variables
+      # Model configuration
+      # KV cache and attention
+      # Radix cache disabled
+      # Prefill-specific mode
+      # Request handling
+      args:
+        # Other flags
+        stream-interval: 50
+        # Memory and token limits
+        mem-fraction-static: 0.75
+        max-total-tokens: 524288
+        chunked-prefill-size: 131072
+        max-running-requests: 30000
+        skip-tokenizer-init: true
+        # Parallelism
+        tp-size: 8
+        dp-size: 8
+        ep-size: 8
+        enable-dp-attention: true
+        disable-shared-experts-fusion: true
+        eplb-algorithm: deepseek
+        disaggregation-bootstrap-port: 30001
+        # Performance optimizations
+        disable-cuda-graph: true
+        # DeepEP configuration
+        moe-a2a-backend: deepep
+        deepep-mode: normal
+        ep-dispatch-algorithm: dynamic
+        moe-dense-tp-size: 1
+        enable-dp-lm-head: true
+        ep-num-redundant-experts: 32
+        deepep-config: /configs/deepep_config.json
+    decode:
+      nodes: 6
+      env:
+        SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '768'
+      # Model configuration
+      # KV cache and attention
+      # Radix cache disabled
+      # Decode-specific mode
+      args:
+        # Other flags
+        stream-interval: 50
+        # Memory and token limits
+        mem-fraction-static: 0.82
+        chunked-prefill-size: 36864
+        cuda-graph-max-bs: 768
+        max-running-requests: 45000
+        skip-tokenizer-init: true
+        # Parallelism
+        tp-size: 24
+        dp-size: 24
+        ep-size: 24
+        enable-dp-attention: true
+        decode-log-interval: 1000
+        disable-shared-experts-fusion: true
+        eplb-algorithm: deepseek
+        disaggregation-bootstrap-port: 30001
+        # DeepEP configuration
+        moe-a2a-backend: deepep
+        deepep-mode: low_latency
+        ep-dispatch-algorithm: static
+        moe-dense-tp-size: 1
+        enable-dp-lm-head: true
+        ep-num-redundant-experts: 32
+        deepep-config: /configs/deepep_config.json
+        # CUDA graphs
+        cuda-graph-bs: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 264, 272, 280, 288, 296, 304, 312, 320, 328, 336, 344, 352, 360, 368, 376, 384, 416, 448, 480, 512, 544, 576, 608, 640, 672, 704, 736, 768]
+  benchmark:
+    concurrencies: [2048, 4096]

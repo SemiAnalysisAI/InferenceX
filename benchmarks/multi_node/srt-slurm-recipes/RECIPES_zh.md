@@ -15,14 +15,15 @@ InferenceX 要求 srt-slurm 2.0 或更新版本，且配置必须声明 `schema:
 ```text
 dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml
 glm5.2/sglang/h200-fp8/agentx/disagg-1p1d-pcp8-tp8-dp8-mtp6-hicache.yaml
-qwen3.5/trtllm/gb300-fp4/agentx/disagg-1p7d-dep4-tep8-c7-b1-mtp-kvoffload.yaml
+qwen3.5/trtllm/gb300-fp4/agentx/variants.yaml
 ```
 
 - 使用主配置中的 `model-prefix` 和 `precision` 标签。引擎目录为 `sglang`、`vllm`、`trtllm` 或 `tilert`；前端仍在配置内显式声明。硬件目录使用 `b200`、`gb300` 等 GPU 型号，不使用集群名称。
 - 工作负载目录为 `1k1k`、`8k1k` 或 `agentx`。已有的跨序列长度配置集合放在 `fixed-seq-len` 下，保留其覆盖项选择器。
 - 文件名使用小写字母和连字符，以 `agg` 或 `disagg` 开头。包含拓扑及用于区分同目录配置的关键参数，例如并行方式、批大小、并发数、MTP、卸载或缓存设置。避免日期、带序号的延迟/吞吐量标签，以及重复目录中已有的模型或硬件信息。
 - 拓扑名中的 `1p4d` 表示预填充/解码 worker 数，不一定等于物理节点数。`p-tp4` 和 `d-tp8` 分别标识预填充和解码 TP；`b` 表示批大小，`c` 表示并发数。运行参数以 YAML 为准。
-- 覆盖项集合使用 `*-variants.yaml` 命名。即使内容相同，也保留独立扫描入口：配置路径参与评估分组。Qwen3.5 的 `*-stp-sweep.yaml` 和 `*-mtp-sweep.yaml` 保留了这一既有区别。
+- 同一目录下的兄弟配置合并为一个 `variants.yaml`：共享的 `base` 加上每个基准配置一个 `override_<name>` 块，每块显式设置 `name`。主配置通过 `CONFIG_FILE=recipes/<dir>/variants.yaml:override_<name>` 选择其一。覆盖项名称沿用上述文件命名规则，使用小写和下划线（例如 `override_disagg_1p1d_dep8_b8_eplb0_mtp3`）。覆盖项只列出与 `base` 不同的设置；列表整体替换而非合并，`null` 会删除该键。仅适用于单个配置的注释放在对应覆盖项内。指纹身份见[同一配方的多个变体](../../../docs/configuration-procedures_zh.md#同一配方的多个变体)。仅当差异无法用覆盖项表达（兄弟配置之间存在不同的显式 `null`），或已弃用配置仍引用该文件时，目录中才保留独立文件。
+- 其他覆盖项集合使用 `*-variants.yaml` 命名。即使内容相同，也保留独立扫描入口：配置路径参与评估分组。Qwen3.5 的 `*-stp-sweep.yaml` 和 `*-mtp-sweep.yaml` 保留了这一既有区别。
 - 移动文件时，同步更新当前及已弃用主配置中的 `CONFIG_FILE`、`EVAL_CONFIG_FILE`，以及启动器路径规则、工作流过滤器和本地文档。保留上游来源 URL，并保持历史性能变更日志不变。不为旧目录结构提供别名。
 
 共享运行时资源保留在模型目录旁的 `configs/` 中，不属于独立基准测试配置。`configs/dsv4-moe-load-balancer-configs/` 中的四个文件原样取自 NVIDIA/srt-slurm 提交 `deb1dfd9934398664f92d194169c183e009da83b`，保留了 17 个 DSV4 TRT 配置使用的 EPLB 初始专家分配。`setup_srt_slurm()` 将这些文件复制到作业仓库的 `configs/` 目录，供配置中的绑定挂载使用。将配置文件放入本目录不会启用该配置；实际基准测试矩阵由主配置决定。

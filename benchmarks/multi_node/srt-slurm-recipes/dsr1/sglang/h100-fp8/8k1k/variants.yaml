@@ -1,0 +1,182 @@
+# srt-slurm recipes for dsr1/sglang/h100-fp8/8k1k: shared settings in base, one override per
+# benchmark configuration. Select one with
+# CONFIG_FILE=recipes/dsr1/sglang/h100-fp8/8k1k/variants.yaml:override_<name>.
+
+schema: 2
+
+base:
+  model:
+    path: dsr1-fp8
+    container: lmsysorg/sglang:v0.5.8-cu130
+    precision: fp8
+  resources:
+    gpu_type: h100
+    gpus_per_node: 8
+  dynamo:
+    # Dynamo 0.8.0 was the default when this recipe was written; pin it explicitly.
+    # Use NATS for a recipe prior to Dynamo commit 39d2a68.
+    request_plane: nats
+    source:
+      pypi: 0.8.0
+  frontend:
+    nginx_container: nginx-sqsh
+  engine: sglang
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      env:
+        SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
+      # Decode-specific environment variables
+      # Prefill capacity
+      args:
+        # Model configuration
+        served-model-name: deepseek-ai/DeepSeek-R1
+        model-path: /model/
+        skip-tokenizer-init: true
+        trust-remote-code: true
+        watchdog-timeout: 1000000
+        # Parallelism
+        tp-size: 16
+        dp-size: 1
+        ep-size: 1
+        enable-dp-attention: false
+        # KV cache and attention
+        attention-backend: flashinfer
+        # Radix cache disabled
+        disable-radix-cache: true
+        # Prefill-specific mode
+        disaggregation-bootstrap-port: 30001
+        disaggregation-mode: prefill
+        disaggregation-transfer-backend: nixl
+        # Memory and token limits
+        mem-fraction-static: 0.6
+        max-prefill-tokens: 2048
+        chunked-prefill-size: 2048
+        # Request handling
+        load-balance-method: round_robin
+    decode:
+      nodes: 2
+      workers: 1
+      env:
+        SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
+      # Memory and token limits
+      args:
+        # Model configuration
+        served-model-name: deepseek-ai/DeepSeek-R1
+        model-path: /model/
+        skip-tokenizer-init: true
+        trust-remote-code: true
+        watchdog-timeout: 1000000
+        # Parallelism
+        tp-size: 16
+        # KV cache and attention
+        attention-backend: flashinfer
+        # Other flags
+        disable-radix-cache: true
+        stream-interval: 1
+        # Disagg
+        disaggregation-bootstrap-port: 30001
+        disaggregation-mode: decode
+        disaggregation-transfer-backend: nixl
+  benchmark:
+    type: sa-bench
+    isl: 8192
+    osl: 1024
+    req_rate: inf
+
+override_disagg_1p1d_p_tp16_d_tp16_b128_c1x2x4x8x16x32x64x128_mtp:
+  name: h100-fp8-1p1d-max-tp-mtp
+  roles:
+    prefill:
+      env:
+        SGLANG_ENABLE_SPEC_V2: '1'
+      args:
+        max-running-requests: 2
+        # MTP (Multi-Token Prediction)
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 2
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 3
+    decode:
+      env:
+        SGLANG_ENABLE_SPEC_V2: '1'
+      args:
+        dp-size: 1
+        ep-size: 1
+        enable-dp-attention: false
+        mem-fraction-static: 0.9
+        max-running-requests: 128
+        cuda-graph-max-bs: 128
+        # MTP (Multi-Token Prediction)
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 2
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 3
+  benchmark:
+    concurrencies: 1x2x4x8x16x32x64x128
+
+override_disagg_1p1d_p_tp16_d_tp16_b128_c1x2x4x8x16x32x64x128_stp:
+  name: h100-fp8-1p1d-max-tp
+  roles:
+    prefill:
+      args:
+        max-running-requests: 2
+    decode:
+      args:
+        dp-size: 1
+        ep-size: 1
+        enable-dp-attention: false
+        mem-fraction-static: 0.9
+        max-running-requests: 128
+        cuda-graph-max-bs: 128
+  benchmark:
+    concurrencies: 1x2x4x8x16x32x64x128
+
+override_disagg_1p1d_p_tp16_d_tp16_ep16_dp16_b64_c1x2x4x8x16x32x64_mtp:
+  name: h100-fp8-1p1d-max-dep-mtp
+  roles:
+    prefill:
+      env:
+        SGLANG_ENABLE_SPEC_V2: '1'
+      args:
+        max-running-requests: 4
+        # MTP (Multi-Token Prediction)
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 2
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 3
+    decode:
+      env:
+        SGLANG_ENABLE_SPEC_V2: '1'
+      args:
+        dp-size: 16
+        ep-size: 16
+        enable-dp-attention: true
+        mem-fraction-static: 0.85
+        max-running-requests: 64
+        cuda-graph-max-bs: 64
+        # MTP
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 2
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 3
+  benchmark:
+    concurrencies: 1x2x4x8x16x32x64
+
+override_disagg_1p1d_p_tp16_d_tp16_ep16_dp16_b64_c1x2x4x8x16x32x64_stp:
+  name: h100-fp8-1p1d-max-dep
+  roles:
+    prefill:
+      args:
+        max-running-requests: 4
+    decode:
+      args:
+        dp-size: 16
+        ep-size: 16
+        enable-dp-attention: true
+        mem-fraction-static: 0.9
+        max-running-requests: 64
+        cuda-graph-max-bs: 64
+  benchmark:
+    concurrencies: 1x2x4x8x16x32x64
