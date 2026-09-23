@@ -378,7 +378,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             esac
             (
                 cd "$GITHUB_WORKSPACE"
-                python -m infx.results.agentic.power_adapter "${power_args[@]}"
+                check_env_vars INFERENCEX_RESULTS_PYTHON
+                "$INFERENCEX_RESULTS_PYTHON" -m infx.results.agentic.power_adapter "${power_args[@]}"
             ) || AGENTX_POWER_RC=$?
         done
     fi
