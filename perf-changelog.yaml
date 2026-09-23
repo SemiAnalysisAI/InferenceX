@@ -8710,3 +8710,37 @@
     - "删除显式的 direct/page_first_direct HiCache 覆盖，使 TP4/EP4 HiCache arm 运行 SGLang 默认的 kernel/page_first 路径；处于休眠状态的 DP-attention 与 Mooncake 分支同样删除这两个覆盖。该路径在 ROCm 上的正确性来自 sgl-project/sglang#35233——它把 registered host pool 的 device-accessible alias 交给 transfer kernel；上游在同一个 TP4/EP4 MXFP4 MI355X arm 上实测并发 14 时 kernel/page_first 为 338 tok/s，direct/page_first_direct 为 291 tok/s。"
     - "将 dram-utilization 从 0.80 提升到 0.85，并把 TP4/EP4 arm 的 ratio-1.0 host KV pool（实测约 115.19 GB/rank）改为固定 180 GB/rank；DSA indexer 同比扩展到约 41.25 GB/rank，在 SA 的 1,274 GB 预算内保留约 125 GB 启动余量。该 arm 的并发 sweep 为 4、8、10、12、14、16，TP8/EP1 GPU-resident arm 仅保留 1、2、4。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3329
+
+- config-keys:
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg-mooncake
+  description:
+    - "Add GB300 MiniMax-M3 Dynamo-vLLM AgentX aggregate and disaggregated recipes with EAGLE3-GQA"
+    - "Use the current shared srt-slurm dependency for process-local Mooncake store configuration"
+    - "新增采用 EAGLE3-GQA 的 GB300 MiniMax-M3 Dynamo-vLLM AgentX 聚合与分离式部署配置；采用当前共享 srt-slurm 依赖为各工作进程配置 Mooncake 存储"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3232
+
+- config-keys:
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg-mooncake
+  description:
+    - "Isolate the checksum-pinned Mooncake wheel install from unrelated image package overrides"
+    - "将固定校验和的 Mooncake wheel 安装与镜像中无关的软件包版本覆盖项隔离"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3232
+
+- config-keys:
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg-mooncake
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Rename the TP2 max-num-seqs-4 disaggregated recipe and update its selected concurrency and references together"
+    - "重命名 TP2 max-num-seqs-4 分离式部署配方，并同步更新其选定并发度与引用"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3232
+
+- config-keys:
+    - minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg-mooncake
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the selected concurrency and matching recipe names for the TEP4 max-num-seqs-2 and TP2 max-num-seqs-2 disaggregated points"
+    - "更新 TEP4 max-num-seqs-2 与 TP2 max-num-seqs-2 分离式部署点的选定并发度及对应配方名称"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3232
