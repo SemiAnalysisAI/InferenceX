@@ -3,14 +3,14 @@ schema: 2
 name: qwen35-b300-disagg-1p1d-tp2ep2-tp2ep2-colocated-c48-mtp-hicache
 model:
   path: qwen3.5-fp8
-  container: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+  container: lmsysorg/sglang:nightly-dev-cu13-20260922-4cbf290f@sha256:3ee16325ce408cf4c39fbe89e25a72b564bd7070683257d2c0e99d00ee5e4748
   precision: fp8
 identity:
   model:
     repo: Qwen/Qwen3.5-397B-A17B-FP8
     revision: ea5b4f81096f3901c91dea97f81324302495781d
   container:
-    image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+    image: lmsysorg/sglang:nightly-dev-cu13-20260922-4cbf290f@sha256:3ee16325ce408cf4c39fbe89e25a72b564bd7070683257d2c0e99d00ee5e4748
 dynamo:
   install: true
   source:

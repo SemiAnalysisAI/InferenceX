@@ -8523,7 +8523,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
 # Recipes allow four hours for canonical warmup, one-hour profiling and artifact processing.
 # Temporary node exclusions cover observed startup/resource failures, not measured performance.
 qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+  image: lmsysorg/sglang:nightly-dev-cu13-20260922-4cbf290f@sha256:3ee16325ce408cf4c39fbe89e25a72b564bd7070683257d2c0e99d00ee5e4748
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b300-dsxe
