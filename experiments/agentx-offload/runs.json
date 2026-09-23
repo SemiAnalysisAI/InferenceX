@@ -3606,11 +3606,15 @@
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35832083322/job/107086935194",
       "performance_result": null,
       "target_node": "im-b200-c001",
+      "node": "im-b200-c001",
       "runner": "b200-nscale-slurm_00",
+      "allocation_id": "16913",
       "capacity_bytes_per_node": 4398046511104,
       "capacity_reserve_bytes": 137438953472,
       "capacity_required_bytes": 4535485464576,
-      "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c448, 3,600-second profiling, kv-offloading=nvme with the vllm-simple backend, and experiment=agentx-offload. A fresh GitHub Actions inventory found zero queued and zero active cluster:b200-nscale benchmark jobs immediately before dispatch. The preceding HBM-only c384 allocation on allowlisted im-b200-c001 had completed, released the node, observed 17,712,236,417,024 free bytes at startup, and deleted its empty exact task-owned scratch. The pinned runtime must still obtain a fresh c001 free-byte measurement above 4,535,485,464,576 bytes and pass O_DIRECT before creating this run's 4 TiB cache."
+      "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c448, 3,600-second profiling, kv-offloading=nvme with the vllm-simple backend, and experiment=agentx-offload. A fresh GitHub Actions inventory found zero queued and zero active cluster:b200-nscale benchmark jobs immediately before dispatch. The preceding HBM-only c384 allocation on allowlisted im-b200-c001 had completed, released the node, observed 17,712,236,417,024 free bytes at startup, and deleted its empty exact task-owned scratch.",
+      "admission_evidence": "Slurm allocation 16913 landed on allowlisted im-b200-c001. Runtime preflight observed 17,713,174,757,376 free bytes on xfs /dev/md0 over eight non-rotating NVMe leaves, exceeding the 4 TiB budget plus 128 GiB reserve, and passed O_DIRECT before creating the exact task-owned scratch.",
+      "live_phase_evidence": "At 2026-09-23T07:53:23Z the canonical warmup was making forward progress with 177 of 4,958 requests returned, 301 in flight, and zero errors after 720 seconds. All four 1 TiB lazy disk-backed cache files existed; telemetry showed 4,398,044,086,272 logical bytes and 1,812,282,699,776 allocated bytes at the latest retained sample. No OOM, NCCL failure, traceback, connection refusal, or storage-guard failure was observed."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548",
@@ -3626,9 +3630,9 @@
     "b200_nodes_allocated": null,
     "b200_nodes_idle": null,
     "target_node": "im-b200-c001",
-    "target_node_state": "c448 runner active; Slurm node placement and fresh runtime storage guard pending",
-    "observed_free_bytes": 17712236417024,
-    "reason": "The c448 benchmark job entered Launch job script on runner b200-nscale-slurm_00 and is the only active-or-queued NVMe-bearing study run. Dispatch no other NVMe-bearing workflow until it is terminal and exact scratch cleanup is verified. Runtime admission must refresh capacity and O_DIRECT on allowlisted c001 before cache creation."
+    "target_node_state": "c448 allocation 16913 active on allowlisted im-b200-c001; storage guard passed; canonical warmup in progress",
+    "observed_free_bytes": 17713174757376,
+    "reason": "The c448 benchmark is the only active-or-queued NVMe-bearing study run. It passed fresh c001 capacity and O_DIRECT admission and is making forward warmup progress with zero errors. Dispatch no other NVMe-bearing workflow until it is terminal and exact scratch cleanup is verified."
   },
   "next_dispatch": {
     "requires": "Do not dispatch another NVMe-bearing workflow while run 35832083322 is queued or active. If c448 profiles successfully and cleanup is verified, record it and dispatch the matched HBM-only c448 control when the B200 queue permits. If c448 fails during warmup, retain the feasibility evidence and choose the next midpoint between c384 and c448."
