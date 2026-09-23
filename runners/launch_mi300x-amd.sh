@@ -20,7 +20,7 @@ if [[ "$EXECUTION_PATH" == native-single-node ]]; then
     export SALLOC_TIME_LIMIT=180
     export SRT_SRUN_OPTIONS='{"container-remap-root":"", "container-writable":""}'
     SRT_SQUASH_FILE="/raid/inferencex/squash/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    launch_srt_single_node mi300x-amd
+    launch_srt_single_node mi300x-amd --var GITHUB_WORKSPACE "$GITHUB_WORKSPACE"
     exit $?
 fi
 
