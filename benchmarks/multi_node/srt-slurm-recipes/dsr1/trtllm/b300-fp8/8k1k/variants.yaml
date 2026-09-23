@@ -1,0 +1,461 @@
+# srt-slurm recipes for dsr1/trtllm/b300-fp8/8k1k: shared settings in base, one override per
+# benchmark configuration. Select one with
+# CONFIG_FILE=recipes/dsr1/trtllm/b300-fp8/8k1k/variants.yaml:override_<name>.
+
+schema: 2
+
+base:
+  model:
+    path: dsr1-fp8
+    container: dynamo-trtllm
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  engine: trtllm
+  roles:
+    prefill:
+      gpus: 4
+      env:
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        OMPI_MCA_coll_ucc_enable: '0'
+        TLLM_ALL_RANK_LOG: '1'
+        TLLM_LOG_LEVEL: INFO
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        UCX_CUDA_IPC_ENABLE_MNNVL: n
+        UCX_MAX_RMA_RAILS: '1'
+        UCX_MAX_RNDV_RAILS: '1'
+        UCX_RNDV_SCHEME: put_zcopy
+        OMPI_MCA_btl: tcp,self
+        OMPI_MCA_pml: ob1
+        TRTLLM_UCX_INTERFACE: mlx5_0:1,mlx5_1:1,mlx5_10:1,mlx5_11:1,mlx5_16:1,mlx5_17:1,mlx5_20:1,mlx5_21:1,mlx5_22:1,mlx5_23:1,mlx5_4:1,mlx5_5:1,mlx5_8:1,mlx5_9:1,mlx5_2:1,mlx5_3:1
+      args:
+        allreduce_strategy: AUTO
+        cache_transceiver_config:
+          backend: UCX
+          max_tokens_in_buffer: 8320
+        cuda_graph_config:
+          enable_padding: false
+        disable_overlap_scheduler: true
+        enable_attention_dp: true
+        enable_iter_perf_stats: false
+        enable_iter_req_stats: false
+        kv_cache_config:
+          dtype: fp8
+          enable_block_reuse: false
+          free_gpu_memory_fraction: 0.6
+        max_batch_size: 8
+        max_num_tokens: 8320
+        max_seq_len: 8320
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 1
+        pipeline_parallel_size: 1
+        print_iter_log: true
+        tensor_parallel_size: 4
+    decode:
+      gpus: 8
+      env:
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        OMPI_MCA_coll_ucc_enable: '0'
+        TLLM_ALL_RANK_LOG: '1'
+        TLLM_LOG_LEVEL: INFO
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        UCX_CUDA_IPC_ENABLE_MNNVL: n
+        UCX_MAX_RMA_RAILS: '1'
+        UCX_MAX_RNDV_RAILS: '1'
+        UCX_RNDV_SCHEME: put_zcopy
+        OMPI_MCA_btl: tcp,self
+        OMPI_MCA_pml: ob1
+        TRTLLM_UCX_INTERFACE: mlx5_0:1,mlx5_1:1,mlx5_10:1,mlx5_11:1,mlx5_16:1,mlx5_17:1,mlx5_20:1,mlx5_21:1,mlx5_22:1,mlx5_23:1,mlx5_4:1,mlx5_5:1,mlx5_8:1,mlx5_9:1,mlx5_2:1,mlx5_3:1
+      args:
+        allreduce_strategy: AUTO
+        cache_transceiver_config:
+          backend: UCX
+          max_tokens_in_buffer: 8320
+        cuda_graph_config:
+          enable_padding: true
+        disable_overlap_scheduler: false
+        enable_iter_perf_stats: false
+        enable_iter_req_stats: false
+        kv_cache_config:
+          dtype: fp8
+          enable_block_reuse: false
+          free_gpu_memory_fraction: 0.8
+        max_seq_len: 9344
+        moe_config:
+          backend: TRTLLM
+        pipeline_parallel_size: 1
+        print_iter_log: true
+        stream_interval: 20
+        tensor_parallel_size: 8
+  benchmark:
+    type: sa-bench
+    isl: 8192
+    osl: 1024
+    req_rate: inf
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+  health_check:
+    max_attempts: 360
+    interval_seconds: 10
+  dynamo:
+    # The unversioned container alias does not identify a Dynamo version or hash.
+    # Use NATS for a recipe with an unverified Dynamo revision.
+    request_plane: nats
+    install: false
+
+override_disagg_1p1d_dp8_b8_eplb0_mtp3_c72:
+  name: ctx1_gen1_dp8_batch8_eplb0_mtp3_72
+  model:
+    precision: fp4
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+      args:
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+    decode:
+      nodes: 1
+      workers: 1
+      args:
+        cuda_graph_config:
+          max_batch_size: 8
+        enable_attention_dp: true
+        max_batch_size: 8
+        max_num_tokens: 90
+        moe_expert_parallel_size: 1
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+  benchmark:
+    concurrencies: [72]
+
+override_disagg_1p2d_tp8_b16_eplb0_mtp3_c40:
+  name: ctx1_gen2_tp8_batch16_eplb0_mtp3_40
+  model:
+    precision: fp4
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+      args:
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+    decode:
+      nodes: 2
+      workers: 2
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+      args:
+        cuda_graph_config:
+          max_batch_size: 16
+        enable_attention_dp: false
+        max_batch_size: 16
+        max_num_tokens: 80
+        moe_expert_parallel_size: 1
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+  benchmark:
+    concurrencies: [40]
+
+override_disagg_1p4d_tp8_b1_eplb0_mtp3_c8:
+  name: ctx1_gen4_tp8_batch1_eplb0_mtp3_8
+  model:
+    precision: fp4
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+      args:
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+    decode:
+      nodes: 4
+      workers: 4
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+      args:
+        cuda_graph_config:
+          max_batch_size: 1
+        enable_attention_dp: false
+        max_batch_size: 1
+        max_num_tokens: 4
+        moe_expert_parallel_size: 1
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+  benchmark:
+    concurrencies: [5]
+
+override_disagg_1p4d_tp8_b16_eplb0_mtp0_c64:
+  name: ctx1_gen4_tp8_batch16_eplb0_mtp0_64
+  model:
+    precision: fp8
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+    decode:
+      nodes: 4
+      workers: 4
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+      args:
+        cuda_graph_config:
+          max_batch_size: 16
+        enable_attention_dp: false
+        max_batch_size: 16
+        max_num_tokens: 512
+        moe_expert_parallel_size: 1
+  benchmark:
+    concurrencies: [64]
+
+override_disagg_1p4d_tp8_b4_eplb0_mtp3_c20:
+  name: ctx1_gen4_tp8_batch4_eplb0_mtp3_20
+  model:
+    precision: fp4
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+      args:
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+    decode:
+      nodes: 4
+      workers: 4
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+      args:
+        cuda_graph_config:
+          max_batch_size: 4
+        enable_attention_dp: false
+        max_batch_size: 4
+        max_num_tokens: 20
+        moe_expert_parallel_size: 1
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+  benchmark:
+    concurrencies: [20]
+
+override_disagg_1p8d_tp8_b1_eplb0_mtp0_c16:
+  name: ctx1_gen8_tp8_batch2_eplb0_mtp0_16
+  model:
+    precision: fp8
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+    decode:
+      nodes: 8
+      workers: 8
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+      args:
+        cuda_graph_config:
+          max_batch_size: 1
+        enable_attention_dp: false
+        max_batch_size: 1
+        max_num_tokens: 1
+        moe_expert_parallel_size: 1
+  benchmark:
+    concurrencies: [10]
+
+override_disagg_2p1d_dp8_b16_eplb0_mtp3_c144:
+  name: ctx2_gen1_dp8_batch16_eplb0_mtp3_144
+  model:
+    precision: fp4
+  roles:
+    prefill:
+      nodes: 1
+      workers: 2
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+      args:
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+    decode:
+      nodes: 1
+      workers: 1
+      args:
+        cuda_graph_config:
+          max_batch_size: 16
+        enable_attention_dp: true
+        max_batch_size: 16
+        max_num_tokens: 180
+        moe_expert_parallel_size: 1
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+  benchmark:
+    concurrencies: [144]
+
+override_disagg_2p1d_dp8_b32_eplb0_mtp0_c256:
+  name: ctx2_gen1_dp8_batch32_eplb0_mtp0_256
+  model:
+    precision: fp8
+  roles:
+    prefill:
+      nodes: 1
+      workers: 2
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+    decode:
+      nodes: 1
+      workers: 1
+      args:
+        cuda_graph_config:
+          max_batch_size: 32
+        enable_attention_dp: true
+        max_batch_size: 32
+        max_num_tokens: 512
+        moe_expert_parallel_size: 1
+  benchmark:
+    concurrencies: [256]
+
+override_disagg_3p1d_dp8_b64_eplb0_mtp0_c512:
+  name: ctx3_gen1_dp8_batch64_eplb0_mtp0_512
+  model:
+    precision: fp8
+  roles:
+    prefill:
+      nodes: 2
+      workers: 3
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+    decode:
+      nodes: 1
+      workers: 1
+      args:
+        cuda_graph_config:
+          max_batch_size: 64
+        enable_attention_dp: true
+        max_batch_size: 64
+        max_num_tokens: 512
+        moe_expert_parallel_size: 1
+  benchmark:
+    concurrencies: [512]
+
+override_disagg_3p5d_tp8_b64_eplb0_mtp0_c256:
+  name: ctx3_gen5_tp8_batch64_eplb0_mtp0_256
+  model:
+    precision: fp8
+  roles:
+    prefill:
+      nodes: 2
+      workers: 3
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+    decode:
+      nodes: 5
+      workers: 5
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+      args:
+        cuda_graph_config:
+          max_batch_size: 64
+        enable_attention_dp: false
+        max_batch_size: 64
+        max_num_tokens: 512
+        moe_expert_parallel_size: 1
+  benchmark:
+    concurrencies: [256]
+
+override_disagg_4p1d_dp8_b64_eplb0_mtp2_c512:
+  name: ctx4_gen1_dp8_batch64_eplb0_mtp2_512
+  model:
+    precision: fp4
+  roles:
+    prefill:
+      nodes: 2
+      workers: 4
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+      args:
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 2
+    decode:
+      nodes: 1
+      workers: 1
+      args:
+        cuda_graph_config:
+          max_batch_size: 64
+        enable_attention_dp: true
+        max_batch_size: 64
+        max_num_tokens: 650
+        moe_expert_parallel_size: 1
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 2
+  benchmark:
+    concurrencies: [512]
+
+override_disagg_5p1d_dp8_b128_eplb0_mtp0_c1075:
+  name: ctx5_gen1_dp8_batch128_eplb0_mtp0_1075
+  model:
+    precision: fp8
+  roles:
+    prefill:
+      nodes: 3
+      workers: 5
+    decode:
+      nodes: 1
+      workers: 1
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+      args:
+        cuda_graph_config:
+          max_batch_size: 128
+        enable_attention_dp: true
+        max_batch_size: 128
+        max_num_tokens: 512
+        moe_expert_parallel_size: 1
+  benchmark:
+    concurrencies: [1075]
+
+override_disagg_7p1d_dep8_b384_eplb0_mtp0_c3072:
+  name: ctx7_gen1_dep8_batch384_eplb0_mtp0_3072
+  model:
+    precision: fp8
+  roles:
+    prefill:
+      nodes: 4
+      workers: 7
+      env:
+        TRTLLM_ENABLE_PDL: '1'
+    decode:
+      nodes: 1
+      workers: 1
+      args:
+        cuda_graph_config:
+          max_batch_size: 384
+        enable_attention_dp: true
+        max_batch_size: 384
+        max_num_tokens: 512
+        moe_expert_parallel_size: 8
+  benchmark:
+    concurrencies: [3072]

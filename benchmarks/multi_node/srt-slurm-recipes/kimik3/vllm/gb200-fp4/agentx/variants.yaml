@@ -1,0 +1,1186 @@
+# srt-slurm recipes for kimik3/vllm/gb200-fp4/agentx: shared settings in base, one override per
+# benchmark configuration. Select one with
+# CONFIG_FILE=recipes/kimik3/vllm/gb200-fp4/agentx/variants.yaml:override_<name>.
+
+schema: 2
+
+base:
+  model:
+    path: kimi-k3
+    precision: fp4
+  identity:
+    model:
+      repo: moonshotai/Kimi-K3
+    container: {}
+  dynamo: {}
+  slurm: {}
+  health_check:
+    interval_seconds: 10
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  frontend:
+    enable_multiple_frontends: false
+  engine:
+    type: vllm
+    connector: null
+  roles:
+    agg:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+        VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: '1'
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        VLLM_RPC_TIMEOUT: '600000'
+      args:
+        served-model-name: moonshotai/Kimi-K3
+        trust-remote-code: true
+        language-model-only: true
+        reasoning-parser: kimi_k3
+        no-enable-flashinfer-autotune: true
+        enable-prefix-caching: true
+        kv-cache-dtype: fp8
+        attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
+  sbatch_directives: {}
+  srun_options:
+    container-remap-root: ''
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+    env:
+      INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+      AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: '300'
+      RESULT_DIR: /logs/agentic
+      PORT: '8000'
+      IS_MULTINODE: 'true'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+      AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
+      HF_HUB_CACHE: /hf_hub_cache
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+
+# GB200 TP16/DCP16 aggregate profile with DSpark K=4 and max-num-seqs 2.
+override_agg_dcp16_dspark4_maxseq2_mooncake:
+  name: kimi-k3-vllm-agg-gb200-dcp16-dspark4-maxseq2-mooncake-agentic
+  model:
+    container: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef
+  identity:
+    container:
+      image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef
+    frameworks:
+      dynamo: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
+  dynamo:
+    install: true
+    source:
+      rev: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
+  slurm:
+    time_limit: 04:00:00
+  health_check:
+    max_attempts: 720
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: nats
+      type: nats
+      placement:
+        node: infra
+      options:
+        max_payload_mb: 32
+    - name: mooncake-master
+      type: mooncake-master
+      args: [--eviction_high_watermark_ratio=0.95, --eviction_ratio=0.10]
+      options:
+        store_config:
+          metadata_server: P2PHANDSHAKE
+          global_segment_size: 96GB
+          local_buffer_size: 4GB
+          protocol: rdma
+          device_name: mlx5_0,mlx5_1,mlx5_2,mlx5_3
+          mode: embedded
+          enable_offload: false
+  frontend:
+    type: dynamo
+    args:
+      dyn-chat-processor: vllm
+      trust-remote-code: true
+      tool-call-parser: kimi_k3
+      reasoning-parser: kimi_k3
+      enable-auto-tool-choice: true
+      router-mode: random
+      router-session-affinity-ttl-secs: 900
+    env:
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
+      DYN_TOKENIZER_CACHE_BYTES: '8589934592'
+  roles:
+    agg:
+      env:
+        # Preserve the measured collective fallback when moving to the built image.
+        VLLM_USE_DIRECT_DCP_A2A: '0'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '0'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
+        VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
+        PYTHONNOUSERSITE: '1'
+        TORCH_CUDA_ARCH_LIST: '10.0'
+        PYTHONHASHSEED: '42'
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '900'
+        MC_GID_INDEX: '3'
+        MC_STORE_MEMCPY: '1'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        MC_SLICE_SIZE: '1048576'
+        MC_WORKERS_PER_CTX: '4'
+        WITH_NVIDIA_PEERMEM: '0'
+        VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
+      args:
+        tensor-parallel-size: 16
+        decode-context-parallel-size: 16
+        dcp-comm-backend: a2a
+        max-num-seqs: 2
+        max-num-batched-tokens: 8192
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        load-format: safetensors
+        safetensors-load-strategy: lazy
+        moe-backend: auto
+        enable-cumem-allocator: true
+        prefix-match-unit: 128
+        stream-interval: 10
+        attention-backend: TOKENSPEED_MLA
+        # Throughput jobs inject the committed K=4 golden AL (3.36); EVAL_ONLY
+        # preserves this real target-verification configuration.
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-cudagraph-capture-size: 1024
+        kv-cache-memory: 10737418240
+        kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
+  sbatch_directives:
+    mem: '0'
+    cpus-per-task: '144'
+    comment: '''{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will take extra loading time."}}'''
+  srun_options:
+    mem: '0'
+  telemetry:
+    enabled: true
+    collect_interval_ms: 1000
+    storage_subdir: power
+    required: true
+    startup_timeout_seconds: 120
+    request_timeout_seconds: 2
+    collector_join_timeout_seconds: 12
+    dcgm_exporter:
+      container_image: dcgm-exporter
+      port: 9401
+  benchmark:
+    client_placement: head
+    concurrencies: [1, 2, 4, 8, 16]
+    env:
+      ENABLE_AGENTX_POWER: '1'
+      REQUIRE_POWER: '1'
+      AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: '0.25'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+
+# GB200 TP16/DCP16 aggregate profile without speculative decoding.
+override_agg_dcp16_nospec_mooncake:
+  name: kimi-k3-vllm-agg-gb200-dcp16-nospec-mooncake-agentic
+  model:
+    container: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef
+  identity:
+    container:
+      image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef
+    frameworks:
+      dynamo: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
+  dynamo:
+    install: true
+    source:
+      rev: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
+  slurm:
+    time_limit: 04:00:00
+  health_check:
+    max_attempts: 720
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: nats
+      type: nats
+      placement:
+        node: infra
+      options:
+        max_payload_mb: 32
+    - name: mooncake-master
+      type: mooncake-master
+      args: [--eviction_high_watermark_ratio=0.95, --eviction_ratio=0.10]
+      options:
+        store_config:
+          metadata_server: P2PHANDSHAKE
+          global_segment_size: 96GB
+          local_buffer_size: 4GB
+          protocol: rdma
+          device_name: mlx5_0,mlx5_1,mlx5_2,mlx5_3
+          mode: embedded
+          enable_offload: false
+  frontend:
+    type: dynamo
+    args:
+      dyn-chat-processor: vllm
+      trust-remote-code: true
+      tool-call-parser: kimi_k3
+      reasoning-parser: kimi_k3
+      enable-auto-tool-choice: true
+      router-mode: random
+      router-session-affinity-ttl-secs: 900
+    env:
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
+      DYN_TOKENIZER_CACHE_BYTES: '8589934592'
+  roles:
+    agg:
+      env:
+        # Preserve the measured collective fallback when moving to the built image.
+        VLLM_USE_DIRECT_DCP_A2A: '0'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '0'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
+        VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
+        PYTHONNOUSERSITE: '1'
+        TORCH_CUDA_ARCH_LIST: '10.0'
+        PYTHONHASHSEED: '42'
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '900'
+        MC_GID_INDEX: '3'
+        MC_STORE_MEMCPY: '1'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        MC_SLICE_SIZE: '1048576'
+        MC_WORKERS_PER_CTX: '4'
+        WITH_NVIDIA_PEERMEM: '0'
+        VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
+      args:
+        tensor-parallel-size: 16
+        decode-context-parallel-size: 16
+        dcp-comm-backend: a2a
+        max-num-seqs: 1000
+        max-num-batched-tokens: 16384
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        load-format: safetensors
+        safetensors-load-strategy: lazy
+        moe-backend: auto
+        prefix-match-unit: 128
+        stream-interval: 10
+        attention-backend: FLASHINFER_MLA
+        max-cudagraph-capture-size: 1024
+        kv-cache-memory: 10737418240
+        kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
+  sbatch_directives:
+    mem: '0'
+    cpus-per-task: '144'
+    comment: '''{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will take extra loading time."}}'''
+  srun_options:
+    mem: '0'
+  telemetry:
+    enabled: true
+    collect_interval_ms: 1000
+    storage_subdir: power
+    required: true
+    startup_timeout_seconds: 120
+    request_timeout_seconds: 2
+    collector_join_timeout_seconds: 12
+    dcgm_exporter:
+      container_image: dcgm-exporter
+      port: 9401
+  benchmark:
+    client_placement: head
+    concurrencies: [8, 40, 48]
+    env:
+      ENABLE_AGENTX_POWER: '1'
+      REQUIRE_POWER: '1'
+      AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: '0.25'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+
+override_agg_dep16_vllm_simple_offload:
+  name: kimi-k3-vllm-agg-gb200-dep16-throughput-vllm-simple-offload-agentic
+  # High-concurrency host-DRAM KV-offload variant of the official throughput-
+  # oriented multi_node_dep profile. TP4 x DP4 gives EP16 across four four-GPU
+  # GB200 nodes. Each TP rank receives a 128 GiB CPU KV pool (512 GiB per node).
+  # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_dep
+  model:
+    container: vllm/vllm-openai:kimi-k3
+  identity:
+    container:
+      image: vllm/vllm-openai:kimi-k3
+    frameworks:
+      dynamo: 1.3.0
+  dynamo:
+    install: true
+    source:
+      rev: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
+  slurm:
+    time_limit: '12:00:00'
+  health_check:
+    max_attempts: 2160
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: nats
+      type: nats
+      placement:
+        node: infra
+      options:
+        max_payload_mb: 32
+  frontend:
+    type: dynamo
+    args:
+      # Use vLLM's Kimi K3 parser so OpenAI responses expose structured
+      # tool_calls instead of raw XTML in message.content.
+      dyn-chat-processor: vllm
+      trust-remote-code: true
+      tool-call-parser: kimi_k3
+      reasoning-parser: kimi_k3
+      enable-auto-tool-choice: true
+      router-mode: kv
+      router-kv-events: true
+      router-temperature: '0'
+      router-min-initial-workers: 1
+      kv-cache-block-size: 64
+  roles:
+    agg:
+      env:
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        PYTHONHASHSEED: '42'
+        HF_HUB_CACHE: /hf_hub_cache
+        HUGGINGFACE_HUB_CACHE: /hf_hub_cache
+        TRANSFORMERS_CACHE: /hf_hub_cache
+        VLLM_LOG_STATS_INTERVAL: '1'
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: mnnvl
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_NVLS_ENABLE: '1'
+        UCX_MEMTYPE_CACHE: n
+        UCX_NET_DEVICES: mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1
+        UCX_TLS: rc,cuda_copy
+        NCCL_IB_HCA: mlx5_0,mlx5_1,mlx5_2,mlx5_3
+        NCCL_P2P_LEVEL: NVL
+        NVIDIA_GDRCOPY: '1'
+        PYTORCH_ALLOC_CONF: expandable_segments:True
+        DG_JIT_CACHE_DIR: /tmp/dg-cache-kimi-k3-gb200-dep16-offload-{job_id}
+      args:
+        tensor-parallel-size: 4
+        # The largest offload point is c384 / DP4 = 96 sequences per engine.
+        # Capture even sequence counts: all configured DP4 steady-state batch
+        # sizes are exact hits, while odd loads pad by at most one sequence.
+        max-num-seqs: 96
+        max-num-batched-tokens: 16384
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        # FlashInfer's larger TP4 MoE representation leaves too little transient
+        # HBM for fastsafetensors' GPU-staging path when DSpark is loaded.
+        load-format: safetensors
+        safetensors-load-strategy: lazy
+        # DeepGEMM mega-MoE grid barriers time out under DSpark MRV2 with the
+        # one-sided all-to-all worker; use the supported Kimi K3 FlashInfer path.
+        moe-backend: flashinfer_trtllm
+        attention-backend: FLASHINFER_MLA
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":2,"attention_backend":"FLASHINFER_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":549755813888,"cpu_bytes_to_use_per_rank":137438953472,"lazy_offload":false}}'
+        pipeline-parallel-size: 1
+        data-parallel-size: 4
+        data-parallel-rpc-port: 13345
+        enable-expert-parallel: true
+        kda-prefill-backend: flashkda
+        kernel-config: '{"enable_cutedsl_warmup":true}'
+        all2all-backend: flashinfer_nvlink_one_sided
+        gpu-memory-utilization: 0.94
+        compilation-config: '{"cudagraph_mode":"PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,102,108,114,120,126,132,138,144,150,156,162,168,174,180,186,192,198,204,210,216,222,228,234,240,246,252,258,264,270,276,282,288]}'
+        block-size: 64
+        disable-custom-all-reduce: true
+        scheduler-cls: vllm.v1.core.sched.async_scheduler.AsyncScheduler
+  sbatch_directives:
+    mem: '0'
+    cpus-per-task: '144'
+  benchmark:
+    env:
+      AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+  setup_script: kimik3-dspark-config-compat.sh
+  environment:
+    ETCD_LEASE_TTL: '7200'
+
+override_agg_dep16:
+  name: kimi-k3-vllm-agg-gb200-dep16-throughput-agentic
+  # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_dep
+  # Day-0 GB200 translation of the official throughput-oriented multi_node_dep
+  # profile. TP4 x DP4 gives EP16 across four four-GPU GB200 nodes.
+  model:
+    container: vllm/vllm-openai:kimi-k3
+  identity:
+    container:
+      image: vllm/vllm-openai:kimi-k3
+    frameworks:
+      dynamo: 1.3.0
+  dynamo:
+    install: true
+    source:
+      rev: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
+  slurm:
+    time_limit: '12:00:00'
+  health_check:
+    max_attempts: 2160
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: nats
+      type: nats
+      placement:
+        node: infra
+      options:
+        max_payload_mb: 32
+  frontend:
+    type: dynamo
+    args:
+      # Use vLLM's Kimi K3 parser so OpenAI responses expose structured
+      # tool_calls instead of raw XTML in message.content.
+      dyn-chat-processor: vllm
+      trust-remote-code: true
+      tool-call-parser: kimi_k3
+      reasoning-parser: kimi_k3
+      enable-auto-tool-choice: true
+      router-mode: kv
+      router-kv-events: true
+      router-temperature: '0'
+      router-min-initial-workers: 1
+      kv-cache-block-size: 64
+  roles:
+    agg:
+      env:
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        HF_HUB_CACHE: /hf_hub_cache
+        HUGGINGFACE_HUB_CACHE: /hf_hub_cache
+        TRANSFORMERS_CACHE: /hf_hub_cache
+        VLLM_LOG_STATS_INTERVAL: '1'
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: mnnvl
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_NVLS_ENABLE: '1'
+        UCX_MEMTYPE_CACHE: n
+        UCX_NET_DEVICES: mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1
+        UCX_TLS: rc,cuda_copy
+        NCCL_IB_HCA: mlx5_0,mlx5_1,mlx5_2,mlx5_3
+        NCCL_P2P_LEVEL: NVL
+        NVIDIA_GDRCOPY: '1'
+        PYTORCH_ALLOC_CONF: expandable_segments:True
+        DG_JIT_CACHE_DIR: /tmp/dg-cache-kimi-k3-gb200-dep16-{job_id}
+      args:
+        tensor-parallel-size: 4
+        # The largest regular DEP point is c256 / DP4 = 64 sequences per engine.
+        # Capturing 128 sequence slots consumes 10.9 GiB and leaves too little
+        # runtime workspace for FlashInfer's MXFP4 MoE kernel.
+        max-num-seqs: 64
+        max-num-batched-tokens: 16384
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        # FlashInfer's larger TP4 MoE representation leaves too little transient
+        # HBM for fastsafetensors' GPU-staging path when DSpark is loaded.
+        load-format: safetensors
+        safetensors-load-strategy: lazy
+        # DeepGEMM mega-MoE grid barriers time out under DSpark MRV2 with the
+        # one-sided all-to-all worker; use the supported Kimi K3 FlashInfer path.
+        moe-backend: flashinfer_trtllm
+        attention-backend: FLASHINFER_MLA
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":2,"attention_backend":"FLASHINFER_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        pipeline-parallel-size: 1
+        data-parallel-size: 4
+        data-parallel-rpc-port: 13345
+        enable-expert-parallel: true
+        kda-prefill-backend: flashkda
+        kernel-config: '{"enable_cutedsl_warmup":true}'
+        all2all-backend: flashinfer_nvlink_one_sided
+        gpu-memory-utilization: 0.94
+        compilation-config: '{"cudagraph_mode":"PIECEWISE","cudagraph_capture_sizes":[3,6,9,12,15,18,21,24,27,30,33,36,39,42,45,48,51,54,57,60,63,66,69,72,75,78,81,84,87,90,93,96,99,102,105,108,111,114,117,120,123,126,129,132,135,138,141,144,147,150,153,156,159,162,165,168,171,174,177,180,183,186,189,192]}'
+        block-size: 64
+        disable-custom-all-reduce: true
+        scheduler-cls: vllm.v1.core.sched.async_scheduler.AsyncScheduler
+  sbatch_directives:
+    mem: '0'
+    cpus-per-task: '144'
+  benchmark:
+    env:
+      AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+  setup_script: kimik3-dspark-config-compat.sh
+  environment:
+    ETCD_LEASE_TTL: '7200'
+
+override_agg_tep16_balanced:
+  name: kimi-k3-vllm-agg-gb200-tep16-balanced-agentic
+  # Day-0 GB200 translation of the official balanced multi_node_tep profile.
+  # Dense layers and MoE experts are sharded across 16 GPUs on four GB200 nodes
+  # with the official FP8 KV cache.
+  # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_tep
+  model:
+    container: vllm/vllm-openai:kimi-k3
+  identity:
+    container:
+      image: vllm/vllm-openai:kimi-k3
+    frameworks:
+      dynamo: 1.3.0
+  dynamo:
+    install: true
+    source:
+      rev: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
+  slurm:
+    time_limit: '8:00:00'
+  health_check:
+    max_attempts: 2160
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: nats
+      type: nats
+      placement:
+        node: infra
+      options:
+        max_payload_mb: 32
+  frontend:
+    type: dynamo
+    args:
+      # Use vLLM's Kimi K3 parser so OpenAI responses expose structured
+      # tool_calls instead of raw XTML in message.content.
+      dyn-chat-processor: vllm
+      trust-remote-code: true
+      tool-call-parser: kimi_k3
+      reasoning-parser: kimi_k3
+      enable-auto-tool-choice: true
+      router-mode: kv
+      router-kv-events: true
+      router-temperature: '0'
+      router-min-initial-workers: 1
+      kv-cache-block-size: 64
+  roles:
+    agg:
+      env:
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        HF_HUB_CACHE: /hf_hub_cache
+        HUGGINGFACE_HUB_CACHE: /hf_hub_cache
+        TRANSFORMERS_CACHE: /hf_hub_cache
+        VLLM_LOG_STATS_INTERVAL: '1'
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: mnnvl
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_NVLS_ENABLE: '1'
+        UCX_MEMTYPE_CACHE: n
+        UCX_NET_DEVICES: mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1
+        UCX_TLS: rc,cuda_copy
+        NCCL_IB_HCA: mlx5_0,mlx5_1,mlx5_2,mlx5_3
+        NCCL_P2P_LEVEL: NVL
+        NVIDIA_GDRCOPY: '1'
+        PYTORCH_ALLOC_CONF: expandable_segments:True
+        DG_JIT_CACHE_DIR: /tmp/dg-cache-kimi-k3-gb200-tep16-{job_id}
+      args:
+        tensor-parallel-size: 16
+        max-num-seqs: 32
+        max-num-batched-tokens: 8192
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        load-format: fastsafetensors
+        safetensors-load-strategy: lazy
+        moe-backend: flashinfer_trtllm
+        attention-backend: FLASHINFER_MLA
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":2,"attention_backend":"FLASHINFER_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        pipeline-parallel-size: 1
+        enable-expert-parallel: true
+        kda-prefill-backend: flashkda
+        kernel-config: '{"enable_cutedsl_warmup":true}'
+        all2all-backend: flashinfer_nvlink_one_sided
+        gpu-memory-utilization: 0.92
+        compilation-config: '{"cudagraph_capture_sizes":[3,6,9,12,15,18,21,24,27,30,33,36,39,42,45,48,51,54,57,60,63,66,69,72,75,78,81,84,87,90,93,96],"pass_config":{"fuse_allreduce_rms":false}}'
+        block-size: 64
+        disable-custom-all-reduce: true
+        scheduler-cls: vllm.v1.core.sched.async_scheduler.AsyncScheduler
+  sbatch_directives:
+    mem: '0'
+    cpus-per-task: '144'
+  benchmark:
+    env:
+      AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
+  setup_script: kimik3-dspark-config-compat.sh
+  environment:
+    ETCD_LEASE_TTL: '7200'
+
+override_agg_tp16_latency:
+  name: kimi-k3-vllm-agg-gb200-tp16-latency-agentic
+  # Day-0 GB200 translation of the official latency-oriented multi_node_tp
+  # profile. TP16 spans four GB200 nodes and uses the official FP8 KV cache.
+  # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_tp
+  model:
+    container: vllm/vllm-openai:kimi-k3
+  identity:
+    container:
+      image: vllm/vllm-openai:kimi-k3
+    frameworks:
+      dynamo: 1.3.0
+  dynamo:
+    install: true
+    source:
+      rev: ba83080ecd31c1ce918559e576d3c5bc9e092ff1
+  slurm:
+    time_limit: '8:00:00'
+  health_check:
+    max_attempts: 2160
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: nats
+      type: nats
+      placement:
+        node: infra
+      options:
+        max_payload_mb: 32
+  frontend:
+    type: dynamo
+    args:
+      # Use vLLM's Kimi K3 parser so OpenAI responses expose structured
+      # tool_calls instead of raw XTML in message.content.
+      dyn-chat-processor: vllm
+      trust-remote-code: true
+      tool-call-parser: kimi_k3
+      reasoning-parser: kimi_k3
+      enable-auto-tool-choice: true
+      router-mode: kv
+      router-kv-events: true
+      router-temperature: '0'
+      router-min-initial-workers: 1
+      kv-cache-block-size: 64
+  roles:
+    agg:
+      env:
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        HF_HUB_CACHE: /hf_hub_cache
+        HUGGINGFACE_HUB_CACHE: /hf_hub_cache
+        TRANSFORMERS_CACHE: /hf_hub_cache
+        VLLM_LOG_STATS_INTERVAL: '1'
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: mnnvl
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_NVLS_ENABLE: '1'
+        UCX_MEMTYPE_CACHE: n
+        UCX_NET_DEVICES: mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1
+        UCX_TLS: rc,cuda_copy
+        NCCL_IB_HCA: mlx5_0,mlx5_1,mlx5_2,mlx5_3
+        NCCL_P2P_LEVEL: NVL
+        NVIDIA_GDRCOPY: '1'
+        PYTORCH_ALLOC_CONF: expandable_segments:True
+        DG_JIT_CACHE_DIR: /tmp/dg-cache-kimi-k3-gb200-tp16-{job_id}
+      args:
+        tensor-parallel-size: 16
+        max-num-seqs: 8
+        max-num-batched-tokens: 8192
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        load-format: fastsafetensors
+        safetensors-load-strategy: lazy
+        moe-backend: flashinfer_trtllm
+        attention-backend: FLASHINFER_MLA
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":2,"attention_backend":"FLASHINFER_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        pipeline-parallel-size: 1
+        kda-prefill-backend: flashkda
+        kernel-config: '{"enable_cutedsl_warmup":true}'
+        gpu-memory-utilization: 0.92
+        compilation-config: '{"cudagraph_capture_sizes":[3,6,9,12,15,18,21,24],"pass_config":{"fuse_allreduce_rms":false}}'
+        block-size: 64
+        disable-custom-all-reduce: true
+        scheduler-cls: vllm.v1.core.sched.async_scheduler.AsyncScheduler
+  sbatch_directives:
+    mem: '0'
+    cpus-per-task: '144'
+  benchmark:
+    env:
+      AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: '0.25'
+      AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
+  setup_script: kimik3-dspark-config-compat.sh
+  environment:
+    ETCD_LEASE_TTL: '7200'
+
+override_agg_tp8pp2_mooncake_c16:
+  name: kimik3-vllm-agg-gb200-tp8pp2-mooncake-c16-agentic
+  model:
+    container: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-728d3ad
+  identity:
+    container:
+      image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-728d3ad
+  dynamo:
+    install: false
+  slurm:
+    time_limit: '8:00:00'
+  health_check:
+    max_attempts: 720
+  services:
+    - name: mooncake-master
+      type: mooncake-master
+      options:
+        store_config:
+          metadata_server: P2PHANDSHAKE
+          global_segment_size: 200GB
+          local_buffer_size: 4GB
+          protocol: rdma
+          device_name: mlx5_0,mlx5_1,mlx5_2,mlx5_3
+          mode: embedded
+          enable_offload: false
+  frontend:
+    type: vllm
+  roles:
+    agg:
+      env:
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
+        VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
+        MC_GID_INDEX: '3'
+        MC_STORE_MEMCPY: '1'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        MC_SLICE_SIZE: '1048576'
+        MC_WORKERS_PER_CTX: '4'
+        WITH_NVIDIA_PEERMEM: '0'
+        VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
+        HF_HUB_CACHE: /hf_hub_cache
+        HUGGINGFACE_HUB_CACHE: /hf_hub_cache
+        VLLM_LOG_STATS_INTERVAL: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        UCX_MEMTYPE_CACHE: n
+        UCX_NET_DEVICES: mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
+        VLLM_SERVER_DEV_MODE: '1'
+        TILELANG_CLEANUP_TEMP_FILES: '1'
+        UCX_MEMTYPE_REG_WHOLE: n
+      args:
+        tensor-parallel-size: 8
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        max-num-seqs: 32
+        max-num-batched-tokens: 8192
+        load-format: fastsafetensors
+        moe-backend: auto
+        prefix-match-unit: 128
+        attention-backend: TOKENSPEED_MLA
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"method":"dspark","attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic"}'
+        kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
+        pipeline-parallel-size: 2
+        gpu-memory-utilization: 0.87
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,16,24,40,56,64,80,104,128,256,512,1024,2048,4096,8192]}'
+        max-model-len: 1048576
+        enable-prompt-tokens-details: true
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+  sbatch_directives:
+    segment: '1'
+  telemetry:
+    enabled: true
+    collect_interval_ms: 1000
+    storage_subdir: power
+    required: true
+    startup_timeout_seconds: 120
+    request_timeout_seconds: 2
+    collector_join_timeout_seconds: 12
+    dcgm_exporter:
+      container_image: dcgm-exporter
+      port: 9401
+  benchmark:
+    client_placement: head
+    concurrencies: [16]
+    env:
+      ENABLE_AGENTX_POWER: '1'
+      REQUIRE_POWER: '1'
+      AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: '0.25'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      AIPERF_SERVER_METRICS_URLS: http://localhost:8000/metrics
+
+override_agg_tp8pp2_mooncake_c32:
+  name: kimik3-vllm-agg-gb200-tp8pp2-mooncake-c32-agentic
+  model:
+    container: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-728d3ad
+  identity:
+    container:
+      image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-728d3ad
+  dynamo:
+    install: false
+  slurm:
+    time_limit: '8:00:00'
+  health_check:
+    max_attempts: 720
+  services:
+    - name: mooncake-master
+      type: mooncake-master
+      options:
+        store_config:
+          metadata_server: P2PHANDSHAKE
+          global_segment_size: 200GB
+          local_buffer_size: 4GB
+          protocol: rdma
+          device_name: mlx5_0,mlx5_1,mlx5_2,mlx5_3
+          mode: embedded
+          enable_offload: false
+  frontend:
+    type: vllm
+  roles:
+    agg:
+      env:
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
+        VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
+        MC_GID_INDEX: '3'
+        MC_STORE_MEMCPY: '1'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        MC_SLICE_SIZE: '1048576'
+        MC_WORKERS_PER_CTX: '4'
+        WITH_NVIDIA_PEERMEM: '0'
+        VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
+        HF_HUB_CACHE: /hf_hub_cache
+        HUGGINGFACE_HUB_CACHE: /hf_hub_cache
+        VLLM_LOG_STATS_INTERVAL: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        UCX_MEMTYPE_CACHE: n
+        UCX_NET_DEVICES: mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
+        VLLM_SERVER_DEV_MODE: '1'
+        TILELANG_CLEANUP_TEMP_FILES: '1'
+        UCX_MEMTYPE_REG_WHOLE: n
+      args:
+        tensor-parallel-size: 8
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        max-num-seqs: 64
+        max-num-batched-tokens: 8192
+        load-format: fastsafetensors
+        moe-backend: auto
+        prefix-match-unit: 128
+        attention-backend: TOKENSPEED_MLA
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"method":"dspark","attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic"}'
+        kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
+        pipeline-parallel-size: 2
+        gpu-memory-utilization: 0.87
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,7,18,34,53,64,75,100,128,256,512,1024,2048,4096,8192]}'
+        max-model-len: 1048576
+        enable-prompt-tokens-details: true
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+  sbatch_directives:
+    segment: '1'
+  telemetry:
+    enabled: true
+    collect_interval_ms: 1000
+    storage_subdir: power
+    required: true
+    startup_timeout_seconds: 120
+    request_timeout_seconds: 2
+    collector_join_timeout_seconds: 12
+    dcgm_exporter:
+      container_image: dcgm-exporter
+      port: 9401
+  benchmark:
+    client_placement: head
+    concurrencies: [32]
+    env:
+      ENABLE_AGENTX_POWER: '1'
+      REQUIRE_POWER: '1'
+      AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: '0.25'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      AIPERF_SERVER_METRICS_URLS: http://localhost:8000/metrics
+
+override_agg_tp8pp2_mooncake_c48:
+  name: kimik3-vllm-agg-gb200-tp8pp2-mooncake-c48-agentic
+  model:
+    container: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-728d3ad
+  identity:
+    container:
+      image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-728d3ad
+  dynamo:
+    install: false
+  slurm:
+    time_limit: '8:00:00'
+  health_check:
+    max_attempts: 720
+  services:
+    - name: mooncake-master
+      type: mooncake-master
+      options:
+        store_config:
+          metadata_server: P2PHANDSHAKE
+          global_segment_size: 200GB
+          local_buffer_size: 4GB
+          protocol: rdma
+          device_name: mlx5_0,mlx5_1,mlx5_2,mlx5_3
+          mode: embedded
+          enable_offload: false
+  frontend:
+    type: vllm
+  roles:
+    agg:
+      env:
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
+        VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
+        MC_GID_INDEX: '3'
+        MC_STORE_MEMCPY: '1'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        MC_SLICE_SIZE: '1048576'
+        MC_WORKERS_PER_CTX: '4'
+        WITH_NVIDIA_PEERMEM: '0'
+        VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
+        HF_HUB_CACHE: /hf_hub_cache
+        HUGGINGFACE_HUB_CACHE: /hf_hub_cache
+        VLLM_LOG_STATS_INTERVAL: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        UCX_MEMTYPE_CACHE: n
+        UCX_NET_DEVICES: mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
+        VLLM_SERVER_DEV_MODE: '1'
+        TILELANG_CLEANUP_TEMP_FILES: '1'
+        UCX_MEMTYPE_REG_WHOLE: n
+      args:
+        tensor-parallel-size: 8
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        max-num-seqs: 96
+        max-num-batched-tokens: 8192
+        load-format: fastsafetensors
+        moe-backend: auto
+        prefix-match-unit: 128
+        attention-backend: TOKENSPEED_MLA
+        kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
+        pipeline-parallel-size: 2
+        gpu-memory-utilization: 0.87
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,7,18,34,53,64,75,100,128,256,512,1024,2048,4096,8192]}'
+        max-model-len: 1048576
+        enable-prompt-tokens-details: true
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+  sbatch_directives:
+    segment: '1'
+  telemetry:
+    enabled: true
+    collect_interval_ms: 1000
+    storage_subdir: power
+    required: true
+    startup_timeout_seconds: 120
+    request_timeout_seconds: 2
+    collector_join_timeout_seconds: 12
+    dcgm_exporter:
+      container_image: dcgm-exporter
+      port: 9401
+  benchmark:
+    client_placement: head
+    concurrencies: [48]
+    env:
+      ENABLE_AGENTX_POWER: '1'
+      REQUIRE_POWER: '1'
+      AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: '0.25'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      AIPERF_SERVER_METRICS_URLS: http://localhost:8000/metrics
+
+override_agg_tp8pp2_mooncake_c72:
+  name: kimik3-vllm-agg-gb200-tp8pp2-mooncake-c72-agentic
+  model:
+    container: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-728d3ad
+  identity:
+    container:
+      image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-728d3ad
+  dynamo:
+    install: false
+  slurm:
+    time_limit: '8:00:00'
+  health_check:
+    max_attempts: 720
+  services:
+    - name: mooncake-master
+      type: mooncake-master
+      options:
+        store_config:
+          metadata_server: P2PHANDSHAKE
+          global_segment_size: 200GB
+          local_buffer_size: 4GB
+          protocol: rdma
+          device_name: mlx5_0,mlx5_1,mlx5_2,mlx5_3
+          mode: embedded
+          enable_offload: false
+  frontend:
+    type: vllm
+  roles:
+    agg:
+      env:
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
+        VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
+        MC_GID_INDEX: '3'
+        MC_STORE_MEMCPY: '1'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        MC_SLICE_SIZE: '1048576'
+        MC_WORKERS_PER_CTX: '4'
+        WITH_NVIDIA_PEERMEM: '0'
+        VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
+        HF_HUB_CACHE: /hf_hub_cache
+        HUGGINGFACE_HUB_CACHE: /hf_hub_cache
+        VLLM_LOG_STATS_INTERVAL: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        UCX_MEMTYPE_CACHE: n
+        UCX_NET_DEVICES: mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
+        VLLM_SERVER_DEV_MODE: '1'
+        TILELANG_CLEANUP_TEMP_FILES: '1'
+        UCX_MEMTYPE_REG_WHOLE: n
+      args:
+        tensor-parallel-size: 8
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        max-num-seqs: 144
+        max-num-batched-tokens: 8192
+        load-format: fastsafetensors
+        moe-backend: auto
+        prefix-match-unit: 128
+        attention-backend: TOKENSPEED_MLA
+        kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
+        pipeline-parallel-size: 2
+        gpu-memory-utilization: 0.87
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,7,18,34,53,64,75,100,128,256,512,1024,2048,4096,8192]}'
+        max-model-len: 1048576
+        enable-prompt-tokens-details: true
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+  sbatch_directives:
+    segment: '1'
+  telemetry:
+    enabled: true
+    collect_interval_ms: 1000
+    storage_subdir: power
+    required: true
+    startup_timeout_seconds: 120
+    request_timeout_seconds: 2
+    collector_join_timeout_seconds: 12
+    dcgm_exporter:
+      container_image: dcgm-exporter
+      port: 9401
+  benchmark:
+    client_placement: head
+    concurrencies: [72]
+    env:
+      ENABLE_AGENTX_POWER: '1'
+      REQUIRE_POWER: '1'
+      AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: '0.25'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      AIPERF_SERVER_METRICS_URLS: http://localhost:8000/metrics
+
+override_agg_tp8pp2_mooncake_c96:
+  name: kimik3-vllm-agg-gb200-tp8pp2-mooncake-c96-agentic
+  model:
+    container: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-728d3ad
+  identity:
+    container:
+      image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-728d3ad
+  dynamo:
+    install: false
+  slurm:
+    time_limit: '8:00:00'
+  health_check:
+    max_attempts: 720
+  services:
+    - name: mooncake-master
+      type: mooncake-master
+      options:
+        store_config:
+          metadata_server: P2PHANDSHAKE
+          global_segment_size: 200GB
+          local_buffer_size: 4GB
+          protocol: rdma
+          device_name: mlx5_0,mlx5_1,mlx5_2,mlx5_3
+          mode: embedded
+          enable_offload: false
+  frontend:
+    type: vllm
+  roles:
+    agg:
+      env:
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
+        VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
+        MC_GID_INDEX: '3'
+        MC_STORE_MEMCPY: '1'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        MC_SLICE_SIZE: '1048576'
+        MC_WORKERS_PER_CTX: '4'
+        WITH_NVIDIA_PEERMEM: '0'
+        VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
+        HF_HUB_CACHE: /hf_hub_cache
+        HUGGINGFACE_HUB_CACHE: /hf_hub_cache
+        VLLM_LOG_STATS_INTERVAL: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        UCX_MEMTYPE_CACHE: n
+        UCX_NET_DEVICES: mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
+        VLLM_SERVER_DEV_MODE: '1'
+        TILELANG_CLEANUP_TEMP_FILES: '1'
+        UCX_MEMTYPE_REG_WHOLE: n
+      args:
+        tensor-parallel-size: 8
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        max-num-seqs: 192
+        max-num-batched-tokens: 8192
+        load-format: fastsafetensors
+        moe-backend: auto
+        prefix-match-unit: 128
+        attention-backend: TOKENSPEED_MLA
+        kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
+        pipeline-parallel-size: 2
+        gpu-memory-utilization: 0.87
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,7,18,34,53,64,75,100,128,256,512,1024,2048,4096,8192]}'
+        max-model-len: 1048576
+        enable-prompt-tokens-details: true
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+  sbatch_directives:
+    segment: '1'
+  telemetry:
+    enabled: true
+    collect_interval_ms: 1000
+    storage_subdir: power
+    required: true
+    startup_timeout_seconds: 120
+    request_timeout_seconds: 2
+    collector_join_timeout_seconds: 12
+    dcgm_exporter:
+      container_image: dcgm-exporter
+      port: 9401
+  benchmark:
+    client_placement: head
+    concurrencies: [96]
+    env:
+      ENABLE_AGENTX_POWER: '1'
+      REQUIRE_POWER: '1'
+      AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: '0.25'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      AIPERF_SERVER_METRICS_URLS: http://localhost:8000/metrics

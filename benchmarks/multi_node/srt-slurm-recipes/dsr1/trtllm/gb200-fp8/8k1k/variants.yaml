@@ -1,0 +1,514 @@
+# srt-slurm recipes for dsr1/trtllm/gb200-fp8/8k1k: shared settings in base, one override per
+# benchmark configuration. Select one with
+# CONFIG_FILE=recipes/dsr1/trtllm/gb200-fp8/8k1k/variants.yaml:override_<name>.
+
+schema: 2
+
+base:
+  model:
+    path: dsr1-fp8
+    container: dynamo-trtllm
+    precision: fp8
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  engine: trtllm
+  roles:
+    prefill:
+      gpus: 8
+      env:
+        TLLM_LOG_LEVEL: INFO
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        ENROOT_ALLOW_DEV: 'yes'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+      args:
+        cache_transceiver_config:
+          backend: UCX
+          max_tokens_in_buffer: 16384
+        cuda_graph_config: null
+        disable_overlap_scheduler: true
+        enable_attention_dp: true
+        kv_cache_config:
+          dtype: fp8
+          enable_block_reuse: false
+          free_gpu_memory_fraction: 0.4
+        max_batch_size: 2
+        max_num_tokens: 16384
+        max_seq_len: 8232
+        moe_config:
+          backend: DEEPGEMM
+        moe_expert_parallel_size: 8
+        pipeline_parallel_size: 1
+        print_iter_log: true
+        tensor_parallel_size: 8
+    decode:
+      env:
+        TLLM_LOG_LEVEL: INFO
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        ENROOT_ALLOW_DEV: 'yes'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        TRTLLM_FORCE_COMM_METHOD: NVLINK_TWO_SIDED
+        ENABLE_CONFIGURABLE_MOE: '1'
+      args:
+        cache_transceiver_config:
+          backend: UCX
+          max_tokens_in_buffer: 16384
+        cuda_graph_config:
+          enable_padding: true
+        kv_cache_config:
+          dtype: fp8
+          enable_block_reuse: false
+        max_seq_len: 9256
+        moe_config:
+          use_low_precision_moe_combine: true
+        num_postprocess_workers: 4
+        pipeline_parallel_size: 1
+        print_iter_log: true
+        stream_interval: 100
+  benchmark:
+    type: sa-bench
+    isl: 8192
+    osl: 1024
+    req_rate: inf
+  frontend:
+    type: dynamo
+    nginx_container: nginx-sqsh
+  health_check:
+    max_attempts: 360
+    interval_seconds: 10
+  dynamo:
+    install: false
+    # The unversioned container alias does not identify a Dynamo version or hash.
+    # Use NATS for a recipe with an unverified Dynamo revision.
+    request_plane: nats
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: dedicated
+    - name: nats
+      type: nats
+      placement:
+        node: dedicated
+
+override_disagg_1p3d_tep8_b1_eplb0_mtp0_c6:
+  name: ctx1_gen3_tep8_batch1_eplb0_mtp0_6
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+    decode:
+      nodes: 6
+      workers: 3
+      gpus: 8
+      args:
+        allreduce_strategy: MNNVL
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4]
+        enable_attention_dp: false
+        enable_lm_head_tp_in_adp: false
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.9
+        max_batch_size: 1
+        max_num_tokens: 1
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 8
+        tensor_parallel_size: 8
+  benchmark:
+    concurrencies: ['6']
+
+override_disagg_1p3d_tep8_b16_eplb0_mtp0_c63:
+  name: ctx1_gen3_tep8_batch16_eplb0_mtp0_63
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+    decode:
+      nodes: 6
+      workers: 3
+      gpus: 8
+      args:
+        allreduce_strategy: MNNVL
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8, 16]
+        enable_attention_dp: false
+        enable_lm_head_tp_in_adp: false
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.9
+        max_batch_size: 16
+        max_num_tokens: 16
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 8
+        tensor_parallel_size: 8
+  benchmark:
+    concurrencies: ['63']
+
+override_disagg_1p3d_tep8_b2_eplb0_mtp3_c6:
+  name: ctx1_gen3_tep8_batch2_eplb0_mtp3_6
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      args:
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+    decode:
+      nodes: 6
+      workers: 3
+      gpus: 8
+      args:
+        allreduce_strategy: MNNVL
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4]
+        enable_attention_dp: false
+        enable_lm_head_tp_in_adp: false
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.8
+        max_batch_size: 2
+        max_num_tokens: 8
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 8
+        tensor_parallel_size: 8
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+  benchmark:
+    concurrencies: ['6']
+
+override_disagg_1p3d_tep8_b4_eplb0_mtp0_c18:
+  name: ctx1_gen3_tep8_batch4_eplb0_mtp0_18
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+    decode:
+      nodes: 6
+      workers: 3
+      gpus: 8
+      args:
+        allreduce_strategy: MNNVL
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4]
+        enable_attention_dp: false
+        enable_lm_head_tp_in_adp: false
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.9
+        max_batch_size: 4
+        max_num_tokens: 4
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 8
+        tensor_parallel_size: 8
+  benchmark:
+    concurrencies: ['18']
+
+override_disagg_1p3d_tep8_b4_eplb0_mtp3_c15:
+  name: ctx1_gen3_tep8_batch4_eplb0_mtp3_15
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      args:
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+    decode:
+      nodes: 6
+      workers: 3
+      gpus: 8
+      args:
+        allreduce_strategy: MNNVL
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4]
+        enable_attention_dp: false
+        enable_lm_head_tp_in_adp: false
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.8
+        max_batch_size: 4
+        max_num_tokens: 16
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 8
+        tensor_parallel_size: 8
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+  benchmark:
+    concurrencies: ['15']
+
+override_disagg_2p1d_dep32_b2_eplb0_mtp3_c90:
+  name: ctx2_gen1_dep32_batch2_eplb0_mtp3_90
+  roles:
+    prefill:
+      nodes: 4
+      workers: 2
+      args:
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+    decode:
+      nodes: 8
+      workers: 1
+      gpus: 32
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4]
+        enable_attention_dp: true
+        enable_lm_head_tp_in_adp: true
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.7
+        max_batch_size: 2
+        max_num_tokens: 8
+        moe_config:
+          backend: DEEPGEMM
+        moe_expert_parallel_size: 32
+        tensor_parallel_size: 32
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+  benchmark:
+    concurrencies: ['90']
+
+override_disagg_2p1d_dep32_b8_eplb0_mtp0_c333:
+  name: ctx2_gen1_dep32_batch8_eplb0_mtp0_333
+  roles:
+    prefill:
+      nodes: 4
+      workers: 2
+    decode:
+      nodes: 8
+      workers: 1
+      gpus: 32
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8]
+        enable_attention_dp: true
+        enable_lm_head_tp_in_adp: false
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.75
+        max_batch_size: 8
+        max_num_tokens: 8
+        moe_config:
+          backend: DEEPGEMM
+        moe_expert_parallel_size: 32
+        tensor_parallel_size: 32
+  benchmark:
+    concurrencies: ['333']
+
+override_disagg_3p1d_dep16_b16_eplb0_mtp3_c333:
+  name: ctx3_gen1_dep16_batch16_eplb0_mtp3_333
+  roles:
+    prefill:
+      nodes: 6
+      workers: 3
+      args:
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8, 16]
+        enable_attention_dp: true
+        enable_lm_head_tp_in_adp: true
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.7
+        max_batch_size: 16
+        max_num_tokens: 64
+        moe_config:
+          backend: DEEPGEMM
+        moe_expert_parallel_size: 16
+        tensor_parallel_size: 16
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+  benchmark:
+    concurrencies: ['333']
+
+override_disagg_3p1d_dep16_b32_eplb0_mtp0_c615:
+  name: ctx3_gen1_dep16_batch32_eplb0_mtp0_615
+  roles:
+    prefill:
+      nodes: 6
+      workers: 3
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8, 16, 24, 32]
+        enable_attention_dp: true
+        enable_lm_head_tp_in_adp: false
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.8
+        max_batch_size: 32
+        max_num_tokens: 32
+        moe_config:
+          backend: DEEPGEMM
+        moe_expert_parallel_size: 16
+        tensor_parallel_size: 16
+  benchmark:
+    concurrencies: ['615']
+
+override_disagg_3p1d_dep8_b64_eplb0_mtp3_c666:
+  name: ctx3_gen1_dep8_batch64_eplb0_mtp3_666
+  roles:
+    prefill:
+      nodes: 6
+      workers: 3
+      args:
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64]
+        enable_attention_dp: true
+        enable_lm_head_tp_in_adp: true
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.8
+        max_batch_size: 64
+        max_num_tokens: 256
+        moe_config:
+          backend: DEEPGEMM
+        moe_expert_parallel_size: 8
+        tensor_parallel_size: 8
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+  benchmark:
+    concurrencies: ['666']
+
+override_disagg_4p1d_dep32_b16_eplb0_mtp0_c666:
+  name: ctx4_gen1_dep32_batch16_eplb0_mtp0_666
+  roles:
+    prefill:
+      nodes: 8
+      workers: 4
+    decode:
+      nodes: 8
+      workers: 1
+      gpus: 32
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8, 16]
+        enable_attention_dp: true
+        enable_lm_head_tp_in_adp: false
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.75
+        max_batch_size: 16
+        max_num_tokens: 16
+        moe_config:
+          backend: DEEPGEMM
+        moe_expert_parallel_size: 32
+        tensor_parallel_size: 32
+  benchmark:
+    concurrencies: ['666']
+
+override_disagg_4p1d_dep32_b8_eplb0_mtp3_c333:
+  name: ctx4_gen1_dep32_batch8_eplb0_mtp3_333
+  roles:
+    prefill:
+      nodes: 8
+      workers: 4
+      args:
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+    decode:
+      nodes: 8
+      workers: 1
+      gpus: 32
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8]
+        enable_attention_dp: true
+        enable_lm_head_tp_in_adp: true
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.7
+        max_batch_size: 8
+        max_num_tokens: 32
+        moe_config:
+          backend: DEEPGEMM
+        moe_expert_parallel_size: 32
+        tensor_parallel_size: 32
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+  benchmark:
+    concurrencies: ['333']
+
+override_disagg_5p1d_dep16_b32_eplb0_mtp3_c666:
+  name: ctx5_gen1_dep16_batch32_eplb0_mtp3_666
+  roles:
+    prefill:
+      nodes: 10
+      workers: 5
+      args:
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8, 16, 24, 32]
+        enable_attention_dp: true
+        enable_lm_head_tp_in_adp: true
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.7
+        max_batch_size: 32
+        max_num_tokens: 128
+        moe_config:
+          backend: DEEPGEMM
+        moe_expert_parallel_size: 16
+        tensor_parallel_size: 16
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+  benchmark:
+    concurrencies: ['666']
+
+override_disagg_5p1d_dep16_b64_eplb0_mtp0_c1229:
+  name: ctx5_gen1_dep16_batch64_eplb0_mtp0_1229
+  roles:
+    prefill:
+      nodes: 10
+      workers: 5
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64]
+        enable_attention_dp: true
+        enable_lm_head_tp_in_adp: false
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.8
+        max_batch_size: 64
+        max_num_tokens: 64
+        moe_config:
+          backend: DEEPGEMM
+        moe_expert_parallel_size: 16
+        tensor_parallel_size: 16
+  benchmark:
+    concurrencies: ['1229']
