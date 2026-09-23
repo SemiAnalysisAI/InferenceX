@@ -1,8 +1,7 @@
 """Minimal cluster routing table.
 
 Maps cluster id -> platform (for runner dispatch) and cluster id -> chip
-(for legacy/grouped layouts). No peak-throughput or bandwidth info — that
-lives in dashboard_build/hardware.py.
+(for legacy/grouped layouts). No peak-throughput or bandwidth info.
 """
 from __future__ import annotations
 
