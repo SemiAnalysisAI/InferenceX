@@ -72,15 +72,6 @@ export SGLANG_MOE_PADDING=1
 export AITER_FLYDSL_FORCE_REDUCE=1
 export ROCM_QUICK_REDUCE_QUANTIZATION=NONE
 
-# AgentX concurrency counts live session trees, not individual requests.
-# Allow subagent fan-out to exceed CONC without clipping request bursts, but
-# cap the pool at 128: DSpark verify buffers scale with it, and 256 at c128
-# did not fit next to the graphs on H200. Decode graphs stay at the cookbook's
-# 64; larger batches decode eagerly, as the cookbook's high-throughput cell does.
-MAX_RUNNING_REQUESTS=$((2 * CONC))
-if (( MAX_RUNNING_REQUESTS > 128 )); then
-    MAX_RUNNING_REQUESTS=128
-fi
 CUDA_GRAPH_MAX_BS=64
 
 # Saturation arms carry a larger in-flight working set than the 30-minute
@@ -116,18 +107,9 @@ SGLANG_CMD=(
     --host 0.0.0.0 --port "$PORT"
     --trust-remote-code
     --tp "$TP" --ep-size "$EP_SIZE"
-    # Official MI350X memory budget; bound AgentX long-prefill chunks to the
-    # official 4096-token breakable graph ceiling. Qualify on current GPU
-    # Engram on the model-preview image using its native implementation.
     --mem-fraction-static 0.80
-    --chunked-prefill-size 4096
-    # Bound decode starvation during long prompt bursts. Interval 0 in the
-    # canonical C32 run 35786731860 spent over four minutes only prefilling,
-    # leaving 37 live requests without streaming tokens at the profile end.
-    --prefill-decode-interval 16
     --speculative-algorithm DSPARK
     --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
-    --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     --cuda-graph-backend-prefill breakable
     --cuda-graph-max-bs-prefill 4096
