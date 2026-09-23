@@ -92,18 +92,18 @@ _tilert_install_missing() {
 
 install_tilert_container_tools() {
     if command -v ip >/dev/null 2>&1 && command -v curl >/dev/null 2>&1 \
-        && command -v ibv_devices >/dev/null 2>&1 && command -v patch >/dev/null 2>&1; then
+        && command -v ibv_devices >/dev/null 2>&1; then
         echo "[SETUP] Container RDMA/net tools already present"
         return 0
     fi
-    echo "[SETUP] Installing iproute2 + curl + patch + ibverbs userspace in container..."
+    echo "[SETUP] Installing iproute2 + curl + ibverbs userspace in container..."
     apt-get update -q -y && apt-get install -q -y --no-install-recommends \
-        iproute2 curl patch ibverbs-utils libibverbs1 librdmacm1 ibverbs-providers \
+        iproute2 curl ibverbs-utils libibverbs1 librdmacm1 ibverbs-providers \
         && rm -rf /var/lib/apt/lists/*
-    if ! command -v ip >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1 || ! command -v patch >/dev/null 2>&1; then
-        echo "[SETUP] ERROR: failed to install iproute2/curl/patch"; exit 1
+    if ! command -v ip >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
+        echo "[SETUP] ERROR: failed to install iproute2/curl"; exit 1
     fi
-    _SETUP_INSTALLED+=("iproute2+curl+patch+ibverbs")
+    _SETUP_INSTALLED+=("iproute2+curl+ibverbs")
 }
 
 _tilert_install_wheel() {
@@ -127,37 +127,9 @@ _tilert_install_wheel() {
     _SETUP_INSTALLED+=("$TILERT_PACKAGE==$TILERT_VERSION($mode)")
 }
 
-# KV prefix reuse across AgentX turns. tilert 0.1.6.post1 resets the decode
-# sequence and copies the whole prompt's KV into all eight rank caches on every
-# request, one layer after another on the default streams: 2.4 s at the p50
-# AgentX context, although most turns only extend the previous prompt. The
-# patch keeps the last prompt's KV resident, copies only the rows from the
-# first differing page onward after checking a sample of the kept rows against
-# the transfer, and fans the copies out on one stream per device pair. The
-# prefill connector sends the prompt ids when the decode hello asks for them.
-# Engine-patch waiver: docs/waiver/3376.md. Applied when the recipe sets
-# TILERT_PD_PREFIX_REUSE=1; with 0 the wheel runs as shipped.
-_TILERT_PD_REUSE_PATCH="$(dirname "${BASH_SOURCE[0]}")/patches/tilert-0.1.6.post1-pd-prefix-reuse.patch"
-
-_tilert_apply_pd_reuse_patch() {
-    [[ "$TILERT_PD_PREFIX_REUSE" == "1" ]] || { echo "[SETUP] KV prefix reuse off (TILERT_PD_PREFIX_REUSE=$TILERT_PD_PREFIX_REUSE); tilert unpatched"; return 0; }
-    local dir
-    dir="$("$PY" -c 'import os, tilert.pd_vllm as m; print(os.path.dirname(m.__file__))')" || { echo "[SETUP] ERROR: cannot locate tilert.pd_vllm"; exit 1; }
-    if grep -q "_REUSE_ENV = 'TILERT_PD_PREFIX_REUSE'" "$dir/profiles/glm5_rocm_engine.py"; then
-        echo "[SETUP] tilert KV prefix reuse patch already applied in $dir"
-        return 0
-    fi
-    [[ -f "$_TILERT_PD_REUSE_PATCH" ]] || { echo "[SETUP] ERROR: missing $_TILERT_PD_REUSE_PATCH"; exit 1; }
-    echo "[SETUP] applying $(basename "$_TILERT_PD_REUSE_PATCH") to $dir"
-    patch -p1 -s -N -d "$dir" < "$_TILERT_PD_REUSE_PATCH" || { echo "[SETUP] ERROR: patch failed to apply"; exit 1; }
-    "$PY" -m py_compile "$dir"/*.py "$dir"/profiles/*.py || { echo "[SETUP] ERROR: patched tilert.pd_vllm does not compile"; exit 1; }
-    _SETUP_INSTALLED+=("tilert-pd-prefix-reuse.patch")
-}
-
 install_tilert_decode() {
     install_tilert_container_tools
     _tilert_install_wheel full
-    _tilert_apply_pd_reuse_patch
     _tilert_install_missing uvicorn $TILERT_HTTP_DEPS
     _tilert_install_missing mooncake.engine "$TILERT_TRANSPORT_DEPS"
     _tilert_install_missing transformers "$TILERT_TRANSFORMERS_SPEC"
@@ -177,7 +149,6 @@ install_tilert_prefill() {
     echo "[SETUP] prefill-side vLLM $vllm_v"
     install_tilert_container_tools
     _tilert_install_wheel no-deps
-    _tilert_apply_pd_reuse_patch
     _tilert_install_missing mooncake.engine "$TILERT_TRANSPORT_DEPS"
     "$PY" -c "import tilert.pd_vllm.prefill_connector" 2>/dev/null || {
         echo "[SETUP] WARN: import tilert.pd_vllm.prefill_connector failed (vLLM will report again when loading the connector plugin):"
@@ -194,11 +165,7 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     export PATH="${UCX_HOME}/bin:/usr/local/bin/etcd:/root/.cargo/bin:${PATH}"
     export LD_LIBRARY_PATH="${UCX_HOME}/lib:${RIXL_HOME}/lib:${RIXL_HOME}/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
 elif [[ "$ENGINE" == "tilert" ]]; then
-    check_env_vars TILERT_VERSION TILERT_PD_PREFIX_REUSE
-    if [[ "$TILERT_PD_PREFIX_REUSE" == "1" && "$TILERT_VERSION" != "0.1.6.post1" ]]; then
-        echo "[SETUP] ERROR: $_TILERT_PD_REUSE_PATCH targets tilert 0.1.6.post1, got $TILERT_VERSION; rebase the patch or set TILERT_PD_PREFIX_REUSE=0"
-        exit 1
-    fi
+    check_env_vars TILERT_VERSION
     TILERT_PIP_SPEC="$TILERT_PACKAGE==$TILERT_VERSION"
     _tilert_resolve_python
     case "${TILERT_ROLE:-}" in

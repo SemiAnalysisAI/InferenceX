@@ -95,12 +95,6 @@ export TILERT_PARSER=none
 export TILERT_RDMA_STRICT=0
 export TILERT_CONVERT_LOCK_WAIT=21600
 export TILERT_SIMULATE_ACC_METHOD=match-expected
-# Keep the KV of the previous turn on the decode node and copy in only what the
-# new prompt adds (patches/tilert-0.1.6.post1-pd-prefix-reuse.patch, applied by
-# setup_deps.sh). At concurrency 1, 200 of 239 AgentX turns continue the
-# previous request's conversation, adding 334 tokens at the median; the
-# unpatched wheel re-copies the whole context into all eight ranks each turn.
-export TILERT_PD_PREFIX_REUSE=1
 export TILERT_WEIGHTS_DIR="/models/${MODEL_NAME}-tilert-tp${DECODE_TP}"
 # bf16 MLA KV on both roles. This is the only layout TileRT 0.1.6 can consume
 # from vLLM on ROCm: MlaNsaProfile.classify_layers infers the layout from the
@@ -114,13 +108,6 @@ export PREFILL_KV_DTYPE=bfloat16
 # The ROCm backend supports block sizes [1, 64] and vLLM picks 1, which makes
 # the connector's KI plane copy fail and MLA address the wrong rows.
 export PREFILL_BLOCK_SIZE=64
-# vLLM prefill with torch.compile and CUDA graphs (no --enforce-eager). On
-# #3376's AgentX runs the prefill-side part of TTFT (vLLM prefill plus router,
-# after the decode-side steps and the KV send) stayed at 1.8 s p50 / 4.4 s p90
-# for a few thousand uncached tokens per turn. Graph pools come out of the
-# ~24 GiB left outside vLLM's budget after the staging shard and the non-torch
-# baseline; 1 restores eager mode.
-export PREFILL_ENFORCE_EAGER=0
 export DECODE_KV_DTYPE=bf16
 # The PD staging shard sits outside vLLM's budget, so vLLM needs 90.45 (weights)
 # + 40.3 (profiling) + 91.71 GiB (KV for one 1048576-token request) = 222.5 GiB
