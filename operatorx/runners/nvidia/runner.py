@@ -15,6 +15,9 @@ _ITERS = 10
 # Wall-clock warmup floor: iteration-count warmup alone is far shorter than
 # the SM clock ramp after the inter-op cooldown.
 _WARMUP_MIN_S = float(os.environ.get("OPERATORX_WARMUP_MIN_S", "0.025"))
+# The first op of a process starts from an idle GPU; give it a longer ramp.
+_FIRST_WARMUP_S = float(os.environ.get("OPERATORX_FIRST_WARMUP_S", "1.0"))
+_FIRST = True
 # GPU spin enqueued ahead of the timed loop so the CPU queues every timed
 # iteration before the first one runs; event brackets then exclude host
 # launch overhead.
@@ -59,8 +62,10 @@ def _time_op(impl: BackendImpl, ctx, sleep_s: float) -> float:
     for _ in range(_WARMUP):
         impl.kernel(ctx)
     torch.cuda.synchronize()
+    global _FIRST
+    floor, _FIRST = (max(_WARMUP_MIN_S, _FIRST_WARMUP_S) if _FIRST else _WARMUP_MIN_S), False
     t0 = time.perf_counter()
-    while time.perf_counter() - t0 < _WARMUP_MIN_S:
+    while time.perf_counter() - t0 < floor:
         impl.kernel(ctx)
         torch.cuda.synchronize()
 
@@ -97,6 +102,8 @@ def run(op: Op) -> Result:
         time.sleep(min(busy_s * _COOLDOWN_RATIO, _COOLDOWN_MAX_S))
 
     metrics = {"latency_us": median_us, "telemetry": telem}
+    if isinstance(ctx, dict) and ctx.get("meta"):
+        metrics["backend_meta"] = ctx["meta"]
     prof = profiling.profile_op(lambda: impl.kernel(ctx))
     if prof is not None:
         metrics["profile"] = prof
