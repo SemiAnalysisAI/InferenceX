@@ -1383,48 +1383,54 @@ dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark:
   disagg: true
   scenarios:
     agentic-coding:
+    # MTP tiers with GPU-resident KV, unchanged from run 35643358891 apart from
+    # the image bump. Concurrency 1/16 run plain TP8; 64/128 add DP attention
+    # (c128 measured in run 35810485934, gsm8k eval in run 35851118405).
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: "mtp"
+        conc-list: [ 1, 16 ]
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
+      # DP-attention tier (recipe: concurrency 64-128). TP8 + DP attention,
+      # prefill TBO only, cache-aware router, no CPU offload.
+      - spec-decoding: "mtp"
+        conc-list: [ 64, 128 ]
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
+    # DP-attention + CPU offload tier (recipe: concurrency 256). Prefill adds
+    # the lmcache host KV offload tier; decode is plain Mooncake. DSpark draft
+    # model and dram-utilization 0.50 as measured in run 35825955863.
     - dram-utilization: 0.50
       search-space:
-      #- spec-decoding: "draft_model"
-      #  conc-list: [ 1,16 ]
-      #  kv-offloading: none
-      #  prefill:
-      #    num-worker: 1
-      #    tp: 8
-      #    ep: 1
-      #    dp-attn: false
-      #    additional-settings:
-      #    - "PREFILL_NODES=1"
-      #  decode:
-      #    num-worker: 1
-      #    tp: 8
-      #    ep: 1
-      #    dp-attn: false
-      #    additional-settings:
-      #    - "DECODE_NODES=1"
-      #    - "DECODE_MTP_SIZE=3"
-      ## DP-attention tier (recipe: concurrency 64-128). TP8 + DP attention,
-      ## prefill TBO only, cache-aware router, no CPU offload.
-      #- spec-decoding: "draft_model"
-      #  conc-list: [ 64, 128 ]
-      #  kv-offloading: none
-      #  prefill:
-      #    num-worker: 1
-      #    tp: 8
-      #    ep: 1
-      #    dp-attn: true
-      #    additional-settings:
-      #    - "PREFILL_NODES=1"
-      #  decode:
-      #    num-worker: 1
-      #    tp: 8
-      #    ep: 1
-      #    dp-attn: true
-      #    additional-settings:
-      #    - "DECODE_NODES=1"
-      #    - "DECODE_MTP_SIZE=3"
-      # DP-attention + CPU offload tier (recipe: concurrency 256). Prefill adds
-      # the lmcache host KV offload tier; decode is plain Mooncake.
       - spec-decoding: "draft_model"
         conc-list: [ 256 ]
         kv-offloading: dram
@@ -1444,7 +1450,6 @@ dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=3"
-
 
 minimaxm3-fp4-mi355x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:nightly-2a02f6efe319c885e3ccbcecde402e0028f9ec1e

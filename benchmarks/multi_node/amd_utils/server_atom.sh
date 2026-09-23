@@ -466,6 +466,10 @@ if [ "$NODE_RANK" -eq 0 ]; then
         else
             pushd /workspace
 
+            # job.slurm's -e allowlist forwards ROUTER_PORT but not PORT, and
+            # run_lm_eval's check_env_vars guard runs before it parses --port.
+            export PORT="${ROUTER_PORT}"
+
             source /workspace/benchmarks/benchmark_lib.sh
 
             if [[ -n "${EVAL_CONC:-}" ]]; then

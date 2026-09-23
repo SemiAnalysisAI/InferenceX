@@ -7809,13 +7809,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3108
 
 - config-keys:
-    - dsv4-fp4-mi355x-atom-disagg-agentic-hicache-mtp
+    - dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark
   scenario-type:
     - agentic-coding
   description:
-    - "Add DeepSeek-V4-Pro MXFP4 ATOM PD-disaggregated AgentX MTP on MI355X (cluster:mi355x-amds, image rocm/atom-dev:nightly_202609140614), the ATOM counterpart to dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp; mooncake RDMA KV transfer, atomesh PD router."
-    - "Search space (1P1D TP8): TP EP1 concurrency 1, 2, 8, 16; TP8/EP8 DP-attention concurrency 64, 128 with no offload; TP8/EP8 DP-attention concurrency 256 with an lmcache_offload CPU KV tier (multi connector, max_pending_saves 8, slot_sidecar_staging_slots 4, LRU, 256-token chunks)."
-    - "Per ATOM DeepSeek-V4-Agentic-PD-Max recipe: prefix caching on, FP8 KV and index cache, block-size 256, TBO on prefill only, MTP (--method mtp --num-speculative-tokens 3) with synthetic acceptance length 2.49 on throughput runs, dp-sticky idx2idx routing on the DP tiers, max-num-seqs = 2x concurrency."
+    - "Add DeepSeek-V4-Pro-0813 MXFP4 ATOM PD-disaggregated AgentX on MI355X (cluster:mi355x-amds, image rocm/atom-dev:nightly_202609221542), the ATOM counterpart to dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp; 1P1D TP8, mooncake RDMA KV transfer, atomesh PD router."
+    - "Search space: conc 1 and 16 on plain TP8 and conc 64 and 128 with DP attention, all four on MTP with GPU-resident KV at dram-utilization 0.80; plus conc 256 with DP attention, the DSpark draft model and the lmcache host KV tier (multi connector, max_pending_saves 8, slot_sidecar_staging_slots 4, LRU, 256-token chunks) at dram-utilization 0.50 with dp-sticky idx2idx routing. conc 1/16/64 keep the shape run 35643358891 used and change only the image."
+    - "conc-128 on this image (run 35810485934, 3627 s, 13917 of 15339 requests profiled, 0 errors): 464105 total tok/s (29007 tok/s/GPU over 16 GPUs), 3934 output tok/s (246 tok/s/GPU), TTFT mean 9.75 s / p50 8.70 / p90 15.89, TPOT mean 12.98 ms / p90 14.43, interactivity mean 77.0 / p90 69.3, e2e mean 23.01 s, 3.84 QPS, 96.6% theoretical prefix-cache hit rate."
+    - "conc-256 on this image (run 35825955863, 3630 s, 21317 of 24162 requests profiled, 0 errors): 776348 total tok/s (48522 tok/s/GPU), 5794 output tok/s (362 tok/s/GPU), TTFT mean 18.10 s / p50 12.62 / p90 32.78, TPOT mean 15.95 ms / p90 17.57, interactivity mean 62.7 / p90 56.9, e2e mean 33.89 s, 5.88 QPS, 96.8% theoretical prefix-cache hit rate. Not a clean scaling comparison against conc-128: this tier also swaps MTP for the DSpark draft model and adds the lmcache host KV tier."
+    - "Accuracy on the conc-128 DP-attention cell (run 35851118405, lm-eval gsm8k 5-shot, eval concurrency 128, n=1319): em_strict 0.9719 +/- 0.0045, em_flexible 0.9712 +/- 0.0046. conc 1, 16 and 64 are unmeasured on this image."
+    - "server_atom.sh exports PORT before sourcing benchmark_lib.sh on the eval path. run_lm_eval's check_env_vars guard runs before it parses --port and job.slurm's docker -e allowlist forwards ROUTER_PORT but never PORT, so every multi-node lm-eval cell aborted 8 s in; because check_env_vars exits rather than returning, node 0 also skipped its router teardown and the decode node hung in 'Waiting until router closes...' until the job was cancelled (run 35643358891)."
+    - "Per ATOM DeepSeek-V4-Agentic-PD-Max recipe: prefix caching on, FP8 KV and index cache, block-size 256, TBO on prefill only, max-num-seqs = 2x concurrency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3158
 
 - config-keys:
