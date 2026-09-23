@@ -3733,15 +3733,19 @@
       "started_at": "2026-09-23T15:31:22Z",
       "job_id": 107253058546,
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35882091021/job/107253058546",
+      "node": "im-b200-c001",
+      "runner": "b200-nscale-slurm_00",
+      "allocation_id": "16943",
       "performance_result": null,
       "matched_nvme_run_id": 35832083322,
-      "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c448, 3,600-second profiling, kv-offloading=none, and experiment=agentx-offload. A fresh GitHub Actions inventory found no active or queued job carrying the cluster:b200-nscale label before dispatch. The matched NVMe c448 workflow was terminal, its artifacts were accepted, and its exact task-owned scratch cleanup was verified."
+      "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c448, 3,600-second profiling, kv-offloading=none, and experiment=agentx-offload. A fresh GitHub Actions inventory found no active or queued job carrying the cluster:b200-nscale label before dispatch. The matched NVMe c448 workflow was terminal, its artifacts were accepted, and its exact task-owned scratch cleanup was verified.",
+      "live_phase_evidence": "Slurm allocation 16943 started on im-b200-c001 through runner b200-nscale-slurm_00. Canonical warmup started at 2026-09-23T15:40:32Z. At 15:52:02Z it had returned 163 of 4,958 requests with 315 in flight and zero errors. Benchmark and server logs continued updating with no OOM, NCCL failure, traceback, connection refusal, or storage failure."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322",
   "status": "4 TiB HBM+NVMe c448 run 35832083322 completed successfully with verified artifacts and exact scratch cleanup. Matched HBM-only c448 control 35882091021 is now active through the InferenceX workflow.",
   "last_capacity_check": {
-    "checked_at": "2026-09-23T15:31:22Z",
+    "checked_at": "2026-09-23T15:52:17Z",
     "active_study_run_ids": [
       35882091021
     ],
@@ -3750,8 +3754,8 @@
     "b200_priority_jobs_queued": 0,
     "b200_nodes_allocated": null,
     "b200_nodes_idle": null,
-    "target_node": null,
-    "target_node_state": "HBM-only c448 workflow 35882091021 active; benchmark placement pending",
+    "target_node": "im-b200-c001",
+    "target_node_state": "HBM-only c448 allocation 16943 active on im-b200-c001; canonical warmup healthy",
     "observed_free_bytes": null,
     "reason": "The matched HBM-only c448 control is active. Dispatch no additional study workflow until it is terminal or the one-queued-B200-job ceiling permits another planned point."
   },
