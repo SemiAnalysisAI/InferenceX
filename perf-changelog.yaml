@@ -8719,4 +8719,4 @@
   - Preserve Qwen3.5 FP8 mi355x coverage and require validated power; include the
     article ladder where missing.
   - 保留现有覆盖并要求通过验证的功耗，补齐缺失的文章并发梯度。
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3380
