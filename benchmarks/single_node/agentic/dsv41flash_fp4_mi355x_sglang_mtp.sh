@@ -162,27 +162,18 @@ echo "DSpark block size: $DSPARK_BLOCK_SIZE, golden AL=$DSV41_GOLDEN_AL"
 python3 "$(dirname "$0")/../../patches/sglang_dsv41_rocm/install.py" \
     --evidence "$RESULT_DIR/sglang_dsv41_rocm_backport.json"
 
-# Experimental EP1 topology candidate with the nightly unified radix cache.
+# Official MI350X TP4/EP4 recipe adapted for AgentX radix prefix reuse.
 SGLANG_CMD=(
     python3 -m sglang.launch_server
     --model-path "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0 --port "$PORT"
     --trust-remote-code
     --tp "$TP" --ep-size "$EP_SIZE"
-    # 0.60 rather than the cookbook's 0.8, and a 2048-token prefill chunk (half
-    # the CUDA arms' 4096, halving each chunk's transient indexer buffers): the sparse-attention indexer and DSpark prefill buffers
-    # scale with the chunk times the 1M context (the default 16384 exhausted
-    # HBM on the first 66k-99k-token prompts), and the per-chunk RCCL
-    # collectives shrink with it. With 8192 and the queue cap, c1-c16 served
-    # but c32 still lost a rank 27 warmup requests in (run 35374653446).
-    # With the Engram tables resident on the GPU the weights take 128.8 GB of
-    # each 288 GB MI355X, so 0.75 left only 72 GB outside the static pool and
-    # the c2 prefill of a 126k-token prompt still aborted its RCCL queue with
-    # HSA_STATUS_ERROR_OUT_OF_RESOURCES at 0 MB free (run 35376928227). The
-    # full-attention KV costs 1.67 KB per token, so 0.60 still reserves a
-    # ~25M-token pool (0.75 reserved 51M) while eager prefill gets 115 GB.
-    --mem-fraction-static 0.60
-    --chunked-prefill-size 2048
+    # Official MI350X memory budget; bound AgentX long-prefill chunks to the
+    # official 4096-token breakable graph ceiling. Qualify on current GPU
+    # Engram and ROCm10 instead of inheriting the old host-table graph failure.
+    --mem-fraction-static 0.80
+    --chunked-prefill-size 4096
     # Bound decode starvation during long prompt bursts. Interval 0 in the
     # canonical C32 run 35786731860 spent over four minutes only prefilling,
     # leaving 37 live requests without streaming tokens at the profile end.
@@ -191,11 +182,8 @@ SGLANG_CMD=(
     --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
-    # The cookbook's breakable prefill graph is disabled here: with the Engram
-    # tables in host memory, capturing the 2048-token prefill graph raised
-    # hipErrorIllegalAddress on every rank (run 35306715045, c1). Prefill of
-    # 60k-600k-token AgentX prompts runs eagerly; decode graphs are unchanged.
-    --cuda-graph-backend-prefill disabled
+    --cuda-graph-backend-prefill breakable
+    --cuda-graph-max-bs-prefill 4096
     --reasoning-parser auto
     --tool-call-parser auto
     # Draft-token forward passes under long-context agentic load block the
