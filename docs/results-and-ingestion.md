@@ -109,6 +109,16 @@ The PR changelog selects representative NVIDIA and AMD coverage, not an exhausti
 
 Processing and diagnostic power-audit uploads run after launcher or validation failure, retaining raw and aggregate JSON. Normal `bmk_*` upload requires successful benchmark and processing steps, so an incomplete batch or failed Slurm job does not publish diagnostic rows. The main-branch ingest trigger can still publish other successful configurations from a partially failed sweep; it does not establish complete fleet coverage. Downstream importers can use the retained outcome to reject explicitly failed benchmarks.
 
+### SRT multinode window retention
+
+Power audit sidecars retain independently validated measurements in `selected_window`;
+`package_integrity_valid` records shared evidence checks and `window_validations` records
+per-window verdicts. Retention requires trusted evidence, matching topology and result binding.
+If a sibling window fails, top-level and aggregate `power_valid` stay false, sidecar `metrics`
+stays empty, aggregate power metrics are omitted, and `REQUIRE_POWER=1` fails. The sidecar may still contain the healthy window's
+metrics and top-level `per_gpu_energy_j` / `per_gpu_max_sample_gap_s` diagnostics;
+these do not authorize publication. Replay never rewrites inputs or repairs inconsistent evidence.
+
 ### Native multinode telemetry
 
 `native_power_collect.sh` and `native_power_lifecycle.sh` provide per-node collection and bounded ready/stop receipts. Launchers opt into the native package under `LOGS/native_power`; this prerequisite enables no new recipe. The adapter validates serving GPU identity, synchronized clocks, collector completion, and complete formal-window coverage. It preserves per-node failures, sample counts, and collector revision in the audit.

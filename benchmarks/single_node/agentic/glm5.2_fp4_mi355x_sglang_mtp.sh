@@ -60,30 +60,31 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 # essentially unchanged throughput per GPU compared with fused Top-K v2.
 export SGLANG_OPT_USE_TOPK_V2=false
  
-# HiCache L2 (host DRAM), optionally with Mooncake L3. KV_OFFLOADING=dram
-# requires KV_OFFLOAD_BACKEND=hicache or mooncake. TP arm: the corpus
-# saturates any fixed DRAM pool at conc >= 10; ratio 1.0 (~453 GB pinned at
-# TP4) is the default. The DP arm runs only at conc >= 32, where the host tier
-# absorbs overflow: ratio 0.5 (~1.2 TB pinned), since 1.5 OOMs the host at conc 48.
+# HiCache L2 (host DRAM), optionally with Mooncake L3. The TP4 HiCache arm
+# uses 180 GB/rank; including the DSA indexer, it leaves about 125 GB inside
+# the SA runner's 0.85 DRAM budget. Dormant DP and Mooncake paths retain ratio sizing.
 CACHE_ARGS=()
 if agentic_kv_offload_enabled; then
     if [ "$DP_ATTENTION" = "true" ]; then
         HICACHE_RATIO="0.5"
     else
         HICACHE_RATIO="1.0"
+        HICACHE_SIZE_GB="180"
     fi
     HICACHE_WRITE_POLICY="write_through"
-    HICACHE_IO_BACKEND="direct"
-    HICACHE_MEM_LAYOUT="page_first_direct"
     case "$KV_OFFLOAD_BACKEND" in
         hicache)
-            echo "HiCache (GPU+host DRAM only): ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
+            if [ "$DP_ATTENTION" = "true" ]; then
+                HICACHE_SIZING_ARGS=(--hicache-ratio "$HICACHE_RATIO")
+                echo "HiCache (GPU+host DRAM only): ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY"
+            else
+                HICACHE_SIZING_ARGS=(--hicache-size "$HICACHE_SIZE_GB")
+                echo "HiCache (GPU+host DRAM only): size=${HICACHE_SIZE_GB}GB/rank, write_policy=$HICACHE_WRITE_POLICY"
+            fi
             CACHE_ARGS=(
                 --enable-hierarchical-cache
-                --hicache-ratio "$HICACHE_RATIO"
+                "${HICACHE_SIZING_ARGS[@]}"
                 --hicache-write-policy "$HICACHE_WRITE_POLICY"
-                --hicache-io-backend "$HICACHE_IO_BACKEND"
-                --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
             )
             ;;
         mooncake)
@@ -117,8 +118,6 @@ EOF
                 --hicache-ratio "$HICACHE_RATIO"
                 --hicache-size 0
                 --hicache-write-policy "$HICACHE_WRITE_POLICY"
-                --hicache-io-backend "$HICACHE_IO_BACKEND"
-                --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
                 --hicache-storage-backend mooncake
                 --hicache-storage-prefetch-policy wait_complete
             )
