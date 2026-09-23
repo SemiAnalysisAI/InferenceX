@@ -8791,4 +8791,4 @@
   description:
     - "Update the GLM-5.2 MXFP4 MI355X SGLang AgentX image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260920 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923 (digest sha256:59eeb83aea8fb5dff4a0c8964da2adf690af9494b2b3271ea13a54018adbaa39); keep all serving flags, HiCache settings, and sweep points unchanged."
     - "将 GLM-5.2 MXFP4 MI355X SGLang AgentX 镜像从 lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260920 更新到 lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923（digest sha256:59eeb83aea8fb5dff4a0c8964da2adf690af9494b2b3271ea13a54018adbaa39）；其余服务参数、HiCache 设置与 sweep 点保持不变。"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3399
