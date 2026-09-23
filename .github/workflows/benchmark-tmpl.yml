@@ -277,6 +277,20 @@ jobs:
           submodules: true
           persist-credentials: false
 
+      - name: Set up uv for result processing
+        if: ${{ !inputs.eval-only }}
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: false
+
+      - name: Prepare result-processing Python
+        if: ${{ !inputs.eval-only }}
+        run: |
+          uv python install --no-bin 3.12
+          result_python=$(uv python find --system 3.12)
+          "$result_python" --version
+          echo "INFERENCEX_RESULTS_PYTHON=$result_python" >> "$GITHUB_ENV"
+
       - name: Launch job script
         env:
           RUNNER_NAME: ${{ runner.name }}
@@ -344,11 +358,13 @@ jobs:
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
         run: |
+          source benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars INFERENCEX_RESULTS_PYTHON
           if [ ! -f "$RESULT_FILENAME.json" ]; then
             echo "no raw result to process: $RESULT_FILENAME.json" >&2
             exit 1
           fi
-          python3 utils/process_result.py
+          "$INFERENCEX_RESULTS_PYTHON" utils/process_result.py
 
       - name: Upload result
         if: ${{ success() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}

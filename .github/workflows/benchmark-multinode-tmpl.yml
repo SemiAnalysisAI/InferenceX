@@ -304,6 +304,20 @@ jobs:
           submodules: true
           persist-credentials: false
 
+      - name: Set up uv for result processing
+        if: ${{ !inputs.eval-only }}
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: false
+
+      - name: Prepare result-processing Python
+        if: ${{ !inputs.eval-only }}
+        run: |
+          uv python install --no-bin 3.12
+          result_python=$(uv python find --system 3.12)
+          "$result_python" --version
+          echo "INFERENCEX_RESULTS_PYTHON=$result_python" >> "$GITHUB_ENV"
+
       - name: Launch multi-node job script
         env:
           PREFILL_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).prefill.additional-settings) }}
@@ -396,6 +410,8 @@ jobs:
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
         run: |
+          source benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars INFERENCEX_RESULTS_PYTHON
           # Launcher stamp supplies the producer SHA unless the
           # power-producer-sha input is set as a manual override
           if [ -z "$POWER_PRODUCER_SHA" ] && [ -f power-producer-sha.txt ]; then
@@ -404,7 +420,7 @@ jobs:
           fi
           # Older measured refs predate the batch CLI. Import failures in a
           # present processor are errors, not a reason to downgrade validation.
-          has_batch=$(python3 - <<'PY'
+          has_batch=$("$INFERENCEX_RESULTS_PYTHON" - <<'PY'
           import importlib
           from pathlib import Path
           if Path('infx/results/fixed_sequence.py').is_file():
@@ -415,7 +431,7 @@ jobs:
           PY
           )
           if [ "$has_batch" = 1 ]; then
-            python3 utils/process_result.py --all
+            "$INFERENCEX_RESULTS_PYTHON" utils/process_result.py --all
           else
             batch_rc=0
             observed=()
@@ -430,7 +446,7 @@ jobs:
                 prefill_gpus=${BASH_REMATCH[6]:-$gpus}
                 decode_gpus=${BASH_REMATCH[7]:-0}
                 RESULT_FILENAME=${result_file%.json} IS_MULTINODE=true PREFILL_GPUS="$prefill_gpus" DECODE_GPUS="$decode_gpus" \
-                  python3 utils/process_result.py || batch_rc=1
+                  "$INFERENCEX_RESULTS_PYTHON" utils/process_result.py || batch_rc=1
               else
                 echo "Unrecognized result filename: $result_file" >&2
                 batch_rc=1
