@@ -155,7 +155,9 @@ block quantization is
 `"a": {"dtype": "e4m3", "scale": {"dtype": "fp32", "static": false, "group": [1, 128]}}` and
 `"b": {"dtype": "e4m3", "scale": {"dtype": "fp32", "static": true, "group": [128, 128]}}`;
 an unquantized operand is `{"dtype": "bf16"}`. `scale.dtype` is the checkpoint's
-scale format. The runtime format a framework converts to is reported per result.
+scale format. `input` is the dtype an operand arrives in (default bf16): when it
+differs from `dtype`, quantization is part of the op; when equal, the operand is
+pre-quantized. The runtime format a framework converts to is reported per result.
 
 The `vllm` backend builds a vLLM `ReplicatedLinear` under the checkpoint quant
 config those descriptors imply, runs `process_weights_after_loading` and times
