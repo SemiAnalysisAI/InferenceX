@@ -354,6 +354,17 @@ Maximum concurrency for 1,048,576 tokens per request: 6.70x
 
 ### SGLang 上的 DeepSeek-V4.1-Flash DSpark
 
+GB300 候选配方通过 digest 固定 `lmsysorg/sglang:dev-cu13-nightly-0924`，来自
+[run 36045441324](https://github.com/sgl-project/sglang/actions/runs/36045441324)，源码提交为
+`6a14b801417adeb844ff690e8ebe314c126eeb97`。TP2/EP2 启动设置不变。TP4/EP4 使用
+16,384-token prefill chunk、prefill/decode interval 0、per-rank 主机 Engram、
+4,096 个 SWA 前缀尾部、static ragged verification，以及均为 128 的运行请求与 decode
+graph 上限；不启用 mixed chunk prefill。两种拓扑均保留静态显存比例 0.80、原生上下文与
+默认后端、DSpark block size 5，且仅性能测试使用 AL 3.51；准确率评测使用真实验证。
+并发仍为 C1/2/4/8/16/32/64/128，性能采样为 3,600 秒。旧镜像 `4cbf290f` 上的同条件
+本地 C64 测试支持该 TP4 选择，但不能作为新镜像或其他并发点的验收结果；接受新曲线前
+必须重新完成全量性能与准确率测试。
+
 H100 SGLang 候选配方在并发 1/2/4/8/16/20 下测试 DSpark。C1/C2 按并发数的 8 倍保留 SWA 前缀尾部，C4 及以上按 32 倍保留。相同条件下的一小时对比否决了统一的 128 尾部下限：C2 吞吐量仅提高 1.7%，交互性能却下降 44.5%。已完成的 STP 对比没有贡献实测性能前沿点，因此所选 sweep 不包含 STP。配方在预填充分块之间插入 16 步解码，轨迹内容和上下文限制保持不变。
 
 同一 sweep 还会在 C4/C8/C16/C20 下验证受支持的 TP8/EP8/DP8 attention。DP 使用原生一致性哈希路由器与稳定会话键、DP LM-head，以及每 rank 64 个 SWA 前缀尾部。C16 的完整 GSM8K 已通过全部 1,319 个样本；其性能贡献仍在测量中。原生 1M 上下文与 AgentX 子代理/会话语义保持不变。
@@ -365,8 +376,8 @@ nightly 候选配方使用 `nightly-dev-cu13-20260922-582389ce`、原生 MXFP4 M
 与 mi355x 上的 SGLang 对应版本（每个 SKU 一个 PR），遵循
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1)。
 该模型尚无正式发布的 SGLang 版本。B200 通过 digest 固定 CUDA 13 nightly 镜像
-`lmsysorg/sglang:nightly-dev-cu13-20260922-4cbf290f`；其他 NVIDIA 配方使用
-`lmsysorg/sglang:dev-dsv41`，MI355X 使用 `lmsysorg/sglang:dev-dsv41-mi35x`。
+`lmsysorg/sglang:nightly-dev-cu13-20260922-4cbf290f`；其他 NVIDIA 镜像固定版本见
+`configs/nvidia-master.yaml`，MI355X 使用 `lmsysorg/sglang:dev-dsv41-mi35x`。
 
 B200 在 TP4/EP4 C1–128 与 TP2/EP2 C1–8 全部使用上游默认 DSpark。
 Engram 保留在主机 DRAM，设置 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。

@@ -408,6 +408,18 @@ Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/mode
 
 ### DeepSeek-V4.1-Flash DSpark on SGLang
 
+The GB300 candidate pins `lmsysorg/sglang:dev-cu13-nightly-0924` by digest, built from
+`6a14b801417adeb844ff690e8ebe314c126eeb97` in [run 36045441324](https://github.com/sgl-project/sglang/actions/runs/36045441324).
+TP2/EP2 launch settings are unchanged. TP4/EP4 uses 16,384-token prefill chunks,
+prefill/decode interval 0, per-rank host Engram, 4,096 SWA prefix tails, static
+ragged verification, and running-request/decode-graph caps of 128; mixed chunk
+prefill remains disabled. Both retain static memory fraction 0.80, native context
+and backend defaults, DSpark block size 5, and AL 3.51 for performance only.
+Accuracy evaluations use real verification. Both topologies retain C1/2/4/8/16/32/64/128
+and 3,600-second profiles. Matched local C64 runs on the older `4cbf290f` image
+support the TP4 choice; they do not qualify the new image or the other concurrency
+points. Require a fresh full performance and accuracy sweep before accepting the curve.
+
 The H100 SGLang candidate sweeps DSpark at concurrency 1/2/4/8/16/20. It retains 8 SWA prefix tails per concurrency at C1/C2 and 32 at C4 and above. A matched one-hour comparison rejected a blanket 128-tail floor: C2 throughput improved only 1.7% while interactivity fell 44.5%. Completed STP comparisons did not contribute a measured frontier point, so STP is excluded from the selected sweep. The recipe interleaves 16 decode steps between prefill chunks, preserving trace content and context limits.
 
 The same sweep also qualifies supported TP8/EP8/DP8 attention at C4/C8/C16/C20. DP uses a stock consistent-hash router with stable session keys, DP LM-head execution, and 64 SWA prefix tails per rank. Full C16 GSM8K passed on all 1,319 examples; its performance contribution remains under measurement. The native 1M context and the AgentX subagent/session semantics are preserved.
@@ -418,8 +430,8 @@ The nightly candidate uses `nightly-dev-cu13-20260922-582389ce`, native MXFP4 Ma
 arms, one PR per SKU across h100, h200, b200, b300, gb200, gb300 and mi355x. They follow the
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1),
 which has no released SGLang version for this model yet. B200 pins the CUDA 13 nightly
-`lmsysorg/sglang:nightly-dev-cu13-20260922-4cbf290f` by digest; the other NVIDIA arms use
-`lmsysorg/sglang:dev-dsv41` and MI355X uses `lmsysorg/sglang:dev-dsv41-mi35x`.
+`lmsysorg/sglang:nightly-dev-cu13-20260922-4cbf290f` by digest; other NVIDIA image pins
+are recorded in `configs/nvidia-master.yaml`, and MI355X uses `lmsysorg/sglang:dev-dsv41-mi35x`.
 
 B200 uses shipped-default DSpark across TP4/EP4 C1–128 and TP2/EP2 C1–8.
 Engram stays in host DRAM with `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`.

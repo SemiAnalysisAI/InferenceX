@@ -45,17 +45,10 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# TP4 has room for the original Engram tables in HBM: the STP baseline used
-# 73.3 GiB for weights before the ~47.2 GiB tables. Host shards still had 0%
-# huge-page backing on some ranks after model-local cache advice, so avoid
-# that lookup bottleneck on TP4. TP2 retains the anonymous host-table layout.
-if (( TP >= 4 )); then
-    export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0
-    unset SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT
-else
-    export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
-    export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
-fi
+# Retain TP2's anonymous host-table layout and use the same placement on TP4
+# to leave HBM for the larger prefill workspace and cached prefixes.
+export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
+export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
 
 # The bundled Markov embedding/head weights are natively BF16. Preserve the
 # nightly default that keeps W2 BF16 instead of converting it to FP32.
@@ -132,6 +125,17 @@ MEM_FRACTION_STATIC=0.80
 CHUNKED_PREFILL_SIZE=4096
 if (( TP == 2 && CONC >= 64 )); then
     CHUNKED_PREFILL_SIZE=8192
+fi
+
+# Matched one-hour C64 runs favor 16K chunks without delaying prefills.
+# Keep this TP4 candidate fixed across the sweep; TP2 retains its recipe above.
+if (( TP == 4 )); then
+    CHUNKED_PREFILL_SIZE=16384
+    SCHEDULING_ARGS=(--prefill-decode-interval 0)
+    CACHE_ARGS=(--swa-prefix-tails 4096)
+    MAX_RUNNING_REQUESTS=128
+    CUDA_GRAPH_MAX_BS=128
+    export SGLANG_RAGGED_VERIFY_MODE=static
 fi
 
 SGLANG_CMD=(
