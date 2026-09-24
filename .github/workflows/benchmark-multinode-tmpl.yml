@@ -150,7 +150,7 @@ env:
   DISAGG: ${{ fromJSON(inputs.config).disagg }}
   PREFILL_HARDWARE: ${{ fromJSON(inputs.config).prefill.hardware }}
   DECODE_HARDWARE: ${{ fromJSON(inputs.config).decode.hardware }}
-  RUN_EVAL: ${{ inputs.run-eval && !(inputs.eval-framework == 'bfcl' && (fromJSON(inputs.config).framework == 'trt' || fromJSON(inputs.config).framework == 'dynamo-trt')) }}
+  RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
   EVAL_FRAMEWORK: ${{ inputs.eval-framework }}
   EVAL_SUITE: ${{ inputs.eval-suite }}
@@ -200,8 +200,6 @@ permissions:
 
 jobs:
   benchmark:
-    # BFCL is disabled for TRT; skip eval-only jobs before reserving a GPU runner.
-    if: ${{ !(inputs.eval-only && inputs.eval-framework == 'bfcl' && (fromJSON(inputs.config).framework == 'trt' || fromJSON(inputs.config).framework == 'dynamo-trt')) }}
     runs-on: >-
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&

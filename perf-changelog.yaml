@@ -8875,3 +8875,10 @@
     - "Experiment: validate official TRT nightly 1.3.0rc28.dev202609230047 with native EAGLE3 and full MiniMax vendor evals"
     - "实验：验证 TRT 官方 nightly 1.3.0rc28.dev202609230047 的原生 EAGLE3 与 MiniMax 完整厂商评估"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+  description:
+    - "Experiment only: test native Responses BFCL smoke with eager prefill and unchanged EAGLE3; retain production TRT BFCL guard on the main PR branch"
+    - "仅用于实验：以 eager 预填充及原生 EAGLE3 验证 Responses BFCL 冒烟测试；主 PR 分支继续禁用 TRT BFCL"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

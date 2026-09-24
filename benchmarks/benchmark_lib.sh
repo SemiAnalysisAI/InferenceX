@@ -1698,20 +1698,7 @@ _run_bfcl_smoke_eval() {
     _run_bfcl_suite_eval bfcl_smoke 4 900 false "$@"
 }
 
-_skip_bfcl_for_trt() {
-    case "${FRAMEWORK:-}" in
-        trt|dynamo-trt)
-            echo "SKIP: BFCL is disabled for ${FRAMEWORK}; no evaluation score was produced."
-            return 0
-            ;;
-        *) return 1 ;;
-    esac
-}
-
 run_bfcl_eval() {
-    if _skip_bfcl_for_trt; then
-        return 0
-    fi
     local eval_suite="${EVAL_SUITE:-bfcl_smoke}"
     export EVAL_SUITE="$eval_suite"
 
@@ -2925,9 +2912,6 @@ run_eval() {
     fi
 
     local framework="${EVAL_FRAMEWORK:-${cli_framework:-$scenario_default}}"
-    if [ "$framework" = "bfcl" ] && _skip_bfcl_for_trt; then
-        return 0
-    fi
     case "$framework" in
         kimi-vendor)
             [ -n "${EVAL_SUITE:-}" ] || EVAL_SUITE="kimi_tool_call_schema"

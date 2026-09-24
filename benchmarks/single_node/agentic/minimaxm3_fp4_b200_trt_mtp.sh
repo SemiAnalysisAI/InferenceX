@@ -92,13 +92,9 @@ max_batch_size: $MAX_BATCH
 cuda_graph_config:
     enable_padding: true
     batch_sizes: [${CAPTURE_BATCH_LIST%, }]
-torch_compile_config:
-    enable_fullgraph: true
-    enable_inductor: false
-    enable_piecewise_cuda_graph: true
-    capture_num_tokens: [${CAPTURE_TOKENS_LIST%, }]
-    enable_userbuffers: true
-    max_num_streams: 3
+# Experimental BFCL probe: eager prefill; native EAGLE3 stays enabled.
+torch_compile_config: null
+prefill_cuda_graph_backend: disabled
 moe_config:
     backend: TRTLLM
     use_low_precision_moe_combine: true
