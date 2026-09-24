@@ -29,10 +29,15 @@ nvidia-smi
 
 SERVER_LOG=/workspace/server.log
 
+REQUEST_LOG_ARGS=()
 CONTEXT_LENGTH=$((ISL + OSL + 20))
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     CONTEXT_LENGTH="$EVAL_MAX_MODEL_LEN"
+    if [ "$CONC" = "256" ]; then
+        REQUEST_LOG_ARGS=(--log-requests --log-requests-level 3 --log-requests-format json)
+        export SGLANG_LOG_REQUEST_EXCEEDED_MS=0
+    fi
 fi
 
 start_gpu_monitor
@@ -58,7 +63,7 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL_PATH --se
 --scheduler-recv-interval 10 \
 --tokenizer-worker-num 6 \
 --tokenizer-path $MODEL_PATH \
---context-length $CONTEXT_LENGTH > $SERVER_LOG 2>&1 &
+--context-length $CONTEXT_LENGTH "${REQUEST_LOG_ARGS[@]}" > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
