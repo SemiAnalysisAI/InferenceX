@@ -8839,3 +8839,9 @@
     - "Retain 8 SWA prefix tails per concurrency at C1/C2 after rejecting the 128-tail floor in matched canonical testing; use 32 per concurrency at C4 and above, reaching 640 at C20 within the static cache budget."
     - "Qualify supported DP8 attention and DP LM-head at C4/C8/C16/C20 with consistent-hash session routing and 64 SWA tails per rank; retain the complete plain TP8 curve and unchanged shipped precision, static budget and native context."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3345
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.14-cu130 to v0.5.20-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3411
