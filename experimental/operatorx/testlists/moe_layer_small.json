@@ -2032,7 +2032,10 @@
         "seed": 0
       }
     },
-    "name": "moonshotai/Kimi-K3"
+    "name": "moonshotai/Kimi-K3",
+    "recipes": [
+      "kimik3-fp4-mi355x-vllm-agentic-mtp"
+    ]
   },
   {
     "type": "moe_layer",

@@ -298,7 +298,7 @@ def _launcher(ctx: dict):
         if _is_fault(e):
             raise
         torch.cuda.synchronize()
-        print(f"[vllm_linear] CUDA-graph capture failed, timing eagerly: {type(e).__name__}: {e}"[:300],
+        print(f"[vllm.linear] CUDA-graph capture failed, timing eagerly: {type(e).__name__}: {e}"[:300],
               file=sys.stderr)
         return eager
     ctx["graph"], ctx["x_padded"] = g, xp

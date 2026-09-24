@@ -13,8 +13,8 @@ from __future__ import annotations
 import torch
 
 from operatorx.core import BackendImpl, Op, UnsupportedOpError
-from operatorx.runners.common import vllm_linear
-from operatorx.runners.common.vllm_linear import _ENV_KEYS, _fill, _is_fault, _launcher, versions
+from operatorx.runners.common.vllm import linear as vllm_linear
+from operatorx.runners.common.vllm.linear import _ENV_KEYS, _fill, _is_fault, _launcher, versions
 
 __all__ = ["IMPLS", "versions"]
 
