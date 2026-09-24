@@ -39,7 +39,7 @@ def _check_scale(s: Any, where: str) -> None:
         raise ValueError(f"{where}.group must be [rows, cols] with each -1 or >= 1, got {g!r}")
 
 
-def _check_operand(d: Any, where: str) -> None:
+def check_operand(d: Any, where: str) -> None:
     if not isinstance(d, dict) or "dtype" not in d or set(d) - {"dtype", "scale", "scale2", "symmetric"}:
         raise ValueError(f"{where} must be {{dtype[, scale, scale2, symmetric]}}, got {d!r}")
     if d["dtype"] not in ELEMENT_DTYPES:
@@ -80,8 +80,8 @@ class GemmArgs:
     activation: str | None = None
 
     def __post_init__(self):
-        _check_operand(self.a, "a")
-        _check_operand(self.b, "b")
+        check_operand(self.a, "a")
+        check_operand(self.b, "b")
         if self.out not in ELEMENT_DTYPES:
             raise ValueError(f"out {self.out!r} not in {sorted(ELEMENT_DTYPES)}")
 
