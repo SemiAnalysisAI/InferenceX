@@ -61,7 +61,7 @@ fi
 
 # TileRT configuration. Every value is explicit here: server_tilert.sh
 # validates each one with check_env_vars and supplies no defaults of its own.
-export TILERT_VERSION=0.1.6.post1
+export TILERT_VERSION=0.1.6.post2
 export TILERT_PROFILE=glm5_2          # decode_server --model (TileRT model profile)
 export TILERT_MODEL_TYPE=glm-5        # weight_converter --model_type (fallback converter)
 export TILERT_MODEL_PKG=glm_5_2_rocm  # per-model converter package, preferred when importable

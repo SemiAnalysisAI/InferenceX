@@ -35,6 +35,15 @@ git submodule update --init
 
 To upgrade, fetch and check out the desired commit inside the relevant submodule, then commit the updated submodule pointer in InferenceX. Benchmark workflows already initialize submodules. Slurm launchers make a local Git clone for each job so recipe staging and runtime writes do not modify the submodule, and record the actual commit for result provenance. NVIDIA setup clones locally; TileRT setup fetches its pinned fork commit over the network.
 
+Single-node fixed-sequence recipes use NVIDIA upstream srt-slurm. ATOM recipes use
+the native `atomesh` frontend with one aggregate worker and
+`enable_multiple_frontends: false`. The router's pinned official image belongs in
+`frontend.container_image`: older benchmark worker images do not include AToMesh.
+Keep `model.container` aligned with the master config's worker `image`; changing the
+router image does not require changing the worker image. TRT-LLM recipes use native
+`engine.served_model_name`, without duplicating that flag in `roles.agg.extra_args`.
+The former fork's direct ATOM frontend is not required.
+
 ### Cluster profiles
 
 Launchers that use srt-slurm keep their cluster configuration in
@@ -405,11 +414,17 @@ Source: [upstream recipe](https://github.com/vllm-project/recipes/blob/main/mode
 
 ### DeepSeek-V4.1-Flash DSpark on SGLang
 
+The H100 SGLang candidate sweeps DSpark at concurrency 1/2/4/8/16/20. It retains 8 SWA prefix tails per concurrency at C1/C2 and 32 at C4 and above. A matched one-hour comparison rejected a blanket 128-tail floor: C2 throughput improved only 1.7% while interactivity fell 44.5%. Completed STP comparisons did not contribute a measured frontier point, so STP is excluded from the selected sweep. The recipe interleaves 16 decode steps between prefill chunks, preserving trace content and context limits.
+
+The same sweep also qualifies supported TP8/EP8/DP8 attention at C4/C8/C16/C20. DP uses a stock consistent-hash router with stable session keys, DP LM-head execution, and 64 SWA prefix tails per rank. Full C16 GSM8K passed on all 1,319 examples; its performance contribution remains under measurement. The native 1M context and the AgentX subagent/session semantics are preserved.
+
+The nightly candidate uses `nightly-dev-cu13-20260922-582389ce`, native MXFP4 Marlin MoE, and `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`. A resolved local snapshot lets the upstream allocator evict checkpoint file cache before allocating anonymous host tables. Draft precision follows the pinned image's default handling, including its WO_A FP8-to-BF16 conversion. GPU-specific block32 FP8 launch configurations use the upstream kernel and supported `SPLIT_K`/`SWAP_AB` options; checkpoint data, scales, output dtype and context limits remain unchanged. Small-batch configurations require FP32-reference and CUDA-graph validation at selection boundaries, followed by full-model accuracy and serving measurements. Larger batches retain their previous configurations. Full canonical qualification is still required.
+
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` are the SGLang counterparts of the vLLM
 arms, one PR per SKU across h100, h200, b200, b300, gb200, gb300 and mi355x. They follow the
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1),
 which has no released SGLang version for this model yet. B200 pins the CUDA 13 nightly
-`lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce` by digest; the other NVIDIA arms use
+`lmsysorg/sglang:nightly-dev-cu13-20260922-4cbf290f` by digest; the other NVIDIA arms use
 `lmsysorg/sglang:dev-dsv41` and MI355X uses `lmsysorg/sglang:dev-dsv41-mi35x`.
 
 B200 uses shipped-default DSpark across TP4/EP4 C1–128 and TP2/EP2 C1–8.
@@ -442,6 +457,32 @@ The B200 launcher also converts pinned Docker digests to the installed Enroot
 manifest-reference syntax and stops immediately on import failure.
 
 DSpark uses the default precision shipped by the pinned official nightly, without custom draft quantization or precision patches. STP loads no draft; full accuracy and performance validation are still required.
+
+GB200 pins official CUDA 13 nightly `20260923-06008c17` to manifest `sha256:5921361fcf358cdde4df1968c941c14157f418613b099ad7f3e5aeed6427ae15` (ARM64 `sha256:d49261d2edd82fed2dd6254c33e68871ccf7a399498e059ec91dc4453a5808c3`). It matches the published vLLM TP2/EP1 and TP4/EP1 grids at C1/2/4/8/16/32/64/128, with no DP attention. The earlier staged TP4/EP4 sweep is historical evidence, not qualification of these topologies.
+
+The GB200 sweep contains only `dsv41flash-fp4-gb200-sglang-agentic-dspark`.
+The unmeasured STP entry is excluded; adding it would require matched evidence
+of a performance-frontier contribution. DSpark uses the default precision shipped
+by the pinned official nightly, without custom draft quantization or precision
+patches. Full accuracy and performance validation remain required.
+
+GB200 TP4 reserves `min(64*CONC, 1024)` SWA prefix tails while retaining static memory
+0.70 and chunk size 4096. The earlier TP4/EP4 C16 reserve left a measured 27.0M full-context
+KV slots and 439,040 SWA slots; the cap avoids exhausting the measured 51.82 GiB
+KV budget at high concurrency. Only TP4 C16 uses prefill/decode interval 16:
+its canonical comparison improved p90 interactivity 13.65% for 0.30% lower
+throughput, with p90 TTFT increasing from 2.35 to 3.51 seconds. Full GSM8K
+passed all 1,319 samples. Other concurrency points still require the full sweep;
+these C16 results do not establish a benefit at every concurrency.
+
+GB200 TP2 uses static memory fraction 0.92, a 2048-token prefill chunk, `min(128*CONC,1024)` SWA tails, prefill/decode interval 16 and graph/running capacity bounded to 16 requests. These supported limits follow the completed B200 EP1 memory qualification; GB200 must independently pass loading, graph capture, full-context pool checks and every performance/evaluation cell. Expandable CUDA allocator segments reduce fragmentation without changing weights or precision. C64/C128 performance receives the partition maximum 12-hour allocation plus 30 minutes for workflow packaging; full warmup, the 3600-second scoring window and uncapped 1,319-question GSM8K remain unchanged.
+
+The GB200 host-table layout is `per_rank`: its compute-node kernel enables
+anonymous huge pages through `madvise`, while `shmem_enabled=never` prevents huge
+pages for the shared memfd layout. Upstream allocates row shards in anonymous host
+memory and requests 512 MiB huge pages with `MADV_HUGEPAGE`/`MADV_COLLAPSE`.
+It preserves the original FP8 table weights and restores the two TP all-reduces;
+inspect startup's actual resident/huge-page counts before claiming a benefit.
 
 DSpark is the checkpoint's own bundled draft. SGLang exposes no EAGLE or MTP path and no
 `--speculative-num-steps` knob for it; the recipes pass `--speculative-algorithm DSPARK
