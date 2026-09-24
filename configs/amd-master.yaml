@@ -980,9 +980,11 @@ qwen3.5-fp8-mi325x-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
+# DeepSeek-V4-Pro-0813 FP4 AgentX on one MI355X node using vLLM DSpark K6.
+# Keep the historical config key for changelog compatibility.
 dsv4-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
-  model: deepseek-ai/DeepSeek-V4-Pro
+  image: vllm/vllm-openai-rocm:nightly-e9757321527ca1ecd514c07c1418dd2c53da3d19
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
   precision: fp4
@@ -992,13 +994,14 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 32, 40, 48, 56, 64] }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 16, 32, 40, 48, 56, 64] }
       # Single-node validation found c128 to be the DPA throughput peak among
       # c64/c128/c256. Add c192 to locate the knee before the c256 regression.
-      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128, 192], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: draft_model, conc-list: [64, 128, 192], router: { name: vllm-router, version: "0.1.14" } }
       # LMCache invalid-block recovery currently assumes one KV-cache group,
-      # while MTP creates two. Restore these points after the upstream hybrid
-      # KV recovery fix lands: https://github.com/vllm-project/vllm/pull/45497
+      # while speculative decoding creates two. Restore these points after the
+      # upstream hybrid KV recovery fix lands:
+      # https://github.com/vllm-project/vllm/pull/45497
 
 # DeepSeek-V4-Pro-0813 FP4 AgentX on one MI355X node using ATOM DSpark K6.
 # Both throughput bands use thinking_on golden AL 3.77; eval uses real

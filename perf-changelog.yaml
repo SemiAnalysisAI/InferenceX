@@ -8802,3 +8802,16 @@
     - "Keep radix caching enabled for AgentX and bound prefill chunks to the 4096-token bound after native FP4 prefill scratch exhausted HBM with the 16384-token default in five canonical cells. Reserve additional native scratch headroom with static memory fraction 0.70 after C32 still exhausted HBM at 0.80 with 4096-token chunks. Enable native allocator garbage collection at threshold 0.8 with process fraction 0.99 after physical HBM still filled during long prefill at static fraction 0.70. Cap server admission at 32 after native C32 warmup reached 63 running requests and failed with HIP illegal access; preserve all client fanout as queued work. Disable native prefill graphs after the admission-capped C32 test still failed with HIP illegal access during breakable prefill; keep decode graphs and treat this as a bounded runtime correction pending qualification. Cap the full KV pool at 3145728 tokens after the pinned native compressed-cache store and its compiled gfx950 code showed signed int32 byte offsets that overflow for large full-token locations. This supported capacity limit keeps ratio-1 storage below 2 GiB without patching kernels or reducing the model context limit; validate canonical C32 and full GSM before selection. Scheduler cadence remains at the official default. Preserve full 1M context, shipped-default DSpark precision, canonical thinking-on AL3.51 throughput and real full1319 GSM verification."
     - "Use image-native attention, dense FP8 and MoE kernels, allocator defaults and EP4 tuning data; remove the downstream nightly compatibility installer, source payload, tuning copy, hash checks and obsolete waiver documentation. The model-preview image explicitly supersedes the earlier latest-nightly selection for this lane."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3343
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Switch the MI355X vLLM DeepSeek-V4-Pro AgentX sweep from MTP K3 to DSpark K6, using DeepSeek-V4-Pro-0813 revision 72e1d3230f6c080a530b0a1d46f8eb4602340597, probabilistic drafting, thinking-on golden acceptance length 3.77 for throughput, and real target verification for eval."
+    - "Update the image to the latest published and locally tested vllm/vllm-openai-rocm:nightly-e9757321527ca1ecd514c07c1418dd2c53da3d19 while preserving the existing TP8/EP1, DP-attention, router, KV-offload, concurrency, and duration settings."
+    - "Local 8x MI355X DPA-TP8/EP1 concurrency-4 validation improved P90 interactivity from 59.72 to 97.36 tok/s/user and total throughput per GPU from 2,261.58 to 2,742.19 tok/s versus MTP K3, with zero request errors."
+    - "将 MI355X vLLM DeepSeek-V4-Pro AgentX 扫描从 MTP K3 切换为 DSpark K6，使用 DeepSeek-V4-Pro-0813 revision 72e1d3230f6c080a530b0a1d46f8eb4602340597、概率式 drafting、吞吐测试 thinking-on golden acceptance length 3.77，以及评估时的真实 target verification。"
+    - "将镜像更新至当前最新且已完成本机实测的 vllm/vllm-openai-rocm:nightly-e9757321527ca1ecd514c07c1418dd2c53da3d19，同时保持现有 TP8/EP1、DP attention、router、KV offload、并发列表和运行时长不变。"
+    - "本地 8x MI355X DPA-TP8/EP1 并发 4 验证中，相比 MTP K3，P90 交互速度从 59.72 提升至 97.36 tok/s/user，单卡总吞吐量从 2,261.58 提升至 2,742.19 tok/s，且无请求错误。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3406
