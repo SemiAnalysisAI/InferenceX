@@ -147,7 +147,7 @@ base:
     interval_seconds: 5
   benchmark:
     type: custom
-    command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh --trust-remote-code
+    command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
     env:
       MODEL: deepseek-ai/DeepSeek-R1-0528
       ISL: '8192'
@@ -292,7 +292,6 @@ override_mtp_2p1d_dep8:
   benchmark:
     env:
       BENCHMARK_VARIANT: mtp1-2p1d-dep8
-      USE_CHAT_TEMPLATE: 'true'
 override_mtp_1p2d_tp8:
   name: mi355x-dsr1-fp8-mtp2-1p2d-tp8-fixed-seq
   resources: {}
@@ -318,7 +317,6 @@ override_mtp_1p2d_tp8:
   benchmark:
     env:
       BENCHMARK_VARIANT: mtp2-1p2d-tp8
-      USE_CHAT_TEMPLATE: 'true'
 override_mtp_1p1d_tp4_tp8:
   name: mi355x-dsr1-fp8-mtp2-1p1d-tp4-tp8-fixed-seq
   resources: {}
@@ -347,4 +345,3 @@ override_mtp_1p1d_tp4_tp8:
   benchmark:
     env:
       BENCHMARK_VARIANT: mtp2-1p1d-tp4-tp8
-      USE_CHAT_TEMPLATE: 'true'

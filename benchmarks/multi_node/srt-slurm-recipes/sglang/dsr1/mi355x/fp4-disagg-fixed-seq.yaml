@@ -157,7 +157,7 @@ base:
     interval_seconds: 5
   benchmark:
     type: custom
-    command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh --trust-remote-code
+    command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
     env:
       MODEL: amd/DeepSeek-R1-0528-MXFP4-v2
       TOKENIZER: /model
@@ -361,7 +361,6 @@ override_mtp3_1p1d_tp8:
   benchmark:
     env:
       BENCHMARK_VARIANT: mtp3-1p1d-tp8
-      USE_CHAT_TEMPLATE: 'true'
 override_mtp3_1p2d_tp8_wide:
   name: mi355x-dsr1-fp4-mtp3-1p2d-tp8-wide-fixed-seq
   resources: {}
@@ -391,7 +390,6 @@ override_mtp3_1p2d_tp8_wide:
   benchmark:
     env:
       BENCHMARK_VARIANT: mtp3-1p2d-tp8-wide
-      USE_CHAT_TEMPLATE: 'true'
 override_mtp3_1p2d_tp8_narrow:
   name: mi355x-dsr1-fp4-mtp3-1p2d-tp8-narrow-fixed-seq
   resources: {}
@@ -421,7 +419,6 @@ override_mtp3_1p2d_tp8_narrow:
   benchmark:
     env:
       BENCHMARK_VARIANT: mtp3-1p2d-tp8-narrow
-      USE_CHAT_TEMPLATE: 'true'
 override_mtp2_1p2d_tp8:
   name: mi355x-dsr1-fp4-mtp2-1p2d-tp8-fixed-seq
   resources: {}
@@ -451,7 +448,6 @@ override_mtp2_1p2d_tp8:
   benchmark:
     env:
       BENCHMARK_VARIANT: mtp2-1p2d-tp8
-      USE_CHAT_TEMPLATE: 'true'
 override_mtp3_1p1d_dep8:
   name: mi355x-dsr1-fp4-mtp3-1p1d-dep8-fixed-seq
   roles:
@@ -529,7 +525,6 @@ override_mtp3_1p1d_dep8:
   benchmark:
     env:
       BENCHMARK_VARIANT: mtp3-1p1d-dep8
-      USE_CHAT_TEMPLATE: 'true'
 override_mtp1_1p1d_dep8:
   name: mi355x-dsr1-fp4-mtp1-1p1d-dep8-fixed-seq
   roles:
@@ -607,7 +602,6 @@ override_mtp1_1p1d_dep8:
   benchmark:
     env:
       BENCHMARK_VARIANT: mtp1-1p1d-dep8
-      USE_CHAT_TEMPLATE: 'true'
 override_mtp1_2p1d_dep8:
   name: mi355x-dsr1-fp4-mtp1-2p1d-dep8-fixed-seq
   resources: {}
@@ -690,4 +684,3 @@ override_mtp1_2p1d_dep8:
   benchmark:
     env:
       BENCHMARK_VARIANT: mtp1-2p1d-dep8
-      USE_CHAT_TEMPLATE: 'true'
