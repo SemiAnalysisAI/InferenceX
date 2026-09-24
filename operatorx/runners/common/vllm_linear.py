@@ -6,12 +6,13 @@ quantization_config selects), loads synthetic weights in checkpoint format,
 runs vLLM's process_weights_after_loading, and times layer(x) on a bf16
 activation - so activation quantization, kernel selection and any weight
 repacking are vLLM's own - replayed as a CUDA graph where vLLM would capture
-one. The kernel vLLM chose and the graph decision are reported per op.
+one. The kernel vLLM chose is reported per op.
 """
 from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 
 import torch
@@ -254,19 +255,17 @@ def _capture_sizes() -> list[int]:
 
 
 def _launcher(ctx: dict):
-    """As vLLM serves it: batches up to the largest capture size replay a full CUDA
-    graph captured at the next capture size (the batch is padded up to it); larger
-    batches run eagerly. OPERATORX_CUDA_GRAPHS=0 forces eager."""
-    x, meta = ctx["x"], ctx["meta"]
-    eager = lambda: _kernel_gemm(ctx)  # noqa: E731
-    if os.environ.get("OPERATORX_CUDA_GRAPHS", "1") != "1":
-        meta["graph"] = {"mode": "eager", "reason": "OPERATORX_CUDA_GRAPHS=0"}
-        return eager
+    """(callable to time, whether it is a CUDA-graph replay). As vLLM serves it, a batch
+    of up to the max capture size replays a graph captured at the next capture size
+    (the batch padded up to it); larger batches run eagerly. The cap is vLLM's default
+    unless OPERATORX_CUDA_GRAPH_MAX_TOKENS sets it (0 = never graph); deployments set
+    their own (max-cudagraph-capture-size, cudagraph_mode)."""
+    x = ctx["x"]
+    eager = (lambda: _kernel_gemm(ctx)), False  # noqa: E731
     sizes = _capture_sizes()
-    m = x.shape[0]
-    size = next((s for s in sizes if s >= m), None)
-    if size is None:
-        meta["graph"] = {"mode": "eager", "reason": f"m > max capture size {sizes[-1]}"}
+    cap = int(os.environ.get("OPERATORX_CUDA_GRAPH_MAX_TOKENS", sizes[-1]))
+    size = next((s for s in sizes if s >= x.shape[0]), None)
+    if cap <= 0 or size is None or size > cap:
         return eager
     xp = torch.randn(size, x.shape[1], device=x.device, dtype=x.dtype)
     try:
@@ -281,11 +280,11 @@ def _launcher(ctx: dict):
         if _is_fault(e):
             raise
         torch.cuda.synchronize()
-        meta["graph"] = {"mode": "eager", "reason": f"capture failed: {type(e).__name__}: {e}"[:200]}
+        print(f"[vllm_linear] CUDA-graph capture failed, timing eagerly: {type(e).__name__}: {e}"[:300],
+              file=sys.stderr)
         return eager
     ctx["graph"], ctx["x_padded"] = g, xp
-    meta["graph"] = {"mode": "full", "capture_size": size, "tokens": m, "max_capture_size": sizes[-1]}
-    return g.replay
+    return g.replay, True
 
 
 IMPLS = [BackendImpl(op_type="gemm", prepare=_prepare_gemm, kernel=_kernel_gemm, launcher=_launcher)]

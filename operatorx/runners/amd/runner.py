@@ -78,14 +78,14 @@ def run(op: Op) -> Result:
         _L2_BUF[device] = torch.empty(size, dtype=torch.int8, device="cuda")
     ctx = impl.prepare(op)
 
-    fn = impl.launcher(ctx) if impl.launcher else (lambda: impl.kernel(ctx))
+    fn, cuda_graph = impl.launcher(ctx) if impl.launcher else ((lambda: impl.kernel(ctx)), False)
     median_us, telem = telemetry.measure(
         op, lambda sleep_s: _time_op(fn, device, sleep_s))
 
     if _COOLDOWN_RATIO > 0.0:
         time.sleep(min(median_us * 1e-6 * (_ITERS + _WARMUP) * _COOLDOWN_RATIO,
                        _COOLDOWN_MAX_S))
-    metrics = {"latency_us": median_us, "telemetry": telem}
+    metrics = {"latency_us": median_us, "cuda_graph": cuda_graph, "telemetry": telem}
     if isinstance(ctx, dict) and ctx.get("meta"):
         metrics["backend_meta"] = ctx["meta"]
     prof = profiling.profile_op(fn)
