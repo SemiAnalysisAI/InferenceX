@@ -347,11 +347,18 @@ Maximum concurrency for 1,048,576 tokens per request: 6.70x
 
 ### SGLang 上的 DeepSeek-V4.1-Flash DSpark
 
+H100 SGLang 候选配方在并发 1/2/4/8/16/20 下测试 DSpark。C1/C2 按并发数的 8 倍保留 SWA 前缀尾部，C4 及以上按 32 倍保留。相同条件下的一小时对比否决了统一的 128 尾部下限：C2 吞吐量仅提高 1.7%，交互性能却下降 44.5%。已完成的 STP 对比没有贡献实测性能前沿点，因此所选 sweep 不包含 STP。配方在预填充分块之间插入 16 步解码，轨迹内容和上下文限制保持不变。
+
+同一 sweep 还会在 C4/C8/C16/C20 下验证受支持的 TP8/EP8/DP8 attention。DP 使用原生一致性哈希路由器与稳定会话键、DP LM-head，以及每 rank 64 个 SWA 前缀尾部。C16 的完整 GSM8K 已通过全部 1,319 个样本；其性能贡献仍在测量中。原生 1M 上下文与 AgentX 子代理/会话语义保持不变。
+
+nightly 候选配方使用 `nightly-dev-cu13-20260922-582389ce`、原生 MXFP4 Marlin MoE，以及 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。解析后的本地快照路径让上游分配器能够在分配匿名主机表之前清理检查点文件缓存。draft 精度遵循固定镜像的默认处理，包括 WO_A 从 FP8 到 BF16 的转换。针对 GPU 的 block32 FP8 启动配置使用上游内核及其支持的 `SPLIT_K`/`SWAP_AB` 选项；检查点数据、scale、输出 dtype 和上下文限制均不变。小批次配置必须在选择边界通过 FP32 参考值和 CUDA graph 验证，再进行完整模型准确率评测及服务性能测试。较大批次保留原有配置。仍需完成规范全量 sweep 验收。
+
+
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` 是 vLLM 配方在 h100、h200、b200、b300、gb200、gb300
 与 mi355x 上的 SGLang 对应版本（每个 SKU 一个 PR），遵循
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1)。
 该模型尚无正式发布的 SGLang 版本。B200 通过 digest 固定 CUDA 13 nightly 镜像
-`lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce`；其他 NVIDIA 配方使用
+`lmsysorg/sglang:nightly-dev-cu13-20260922-4cbf290f`；其他 NVIDIA 配方使用
 `lmsysorg/sglang:dev-dsv41`，MI355X 使用 `lmsysorg/sglang:dev-dsv41-mi35x`。
 
 B200 在 TP4/EP4 C1–128 与 TP2/EP2 C1–8 全部使用上游默认 DSpark。
