@@ -8825,4 +8825,4 @@
     - "Enable FlyDSL FP8 prefill attention (ATOM_USE_FLYDSL_FP8_PREFILL_ATTN=1) on every concurrency; ATOM defaults it off."
     - "Hold a ready prefill for four decode passes from concurrency 16 up (ATOM_PREFILL_DECODE_INTERVAL=4, ATOM_PREFILL_DELAYER_MAX_QUEUE_MS=5000). Concurrency 1, 4 and 14 are unchanged."
     - "Keep the published concurrency set [1, 4, 14, 16, 48, 56, 72], max-num-seqs, max-num-batched-tokens, gpu-memory-utilization, the CUDA-graph ladder, dcp-size, draft depth, synthetic acceptance, ReplaySSM placement and LMCache sizing unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3407
