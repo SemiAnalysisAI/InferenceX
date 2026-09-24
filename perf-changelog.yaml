@@ -8888,3 +8888,11 @@
   description:
     - "Use the canonical registry URL for the B200 TRT nightly test; the launcher supplies the Enroot separator."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+    - minimaxm3-fp4-b300-trtllm-agentic-mtp
+  description:
+    - "Experiment: qualify official TRT 1.3.0rc29.dev202609240000 with native Chat Completions BFCL on B200 and full MiniMax vendor validation on B300; preserve EAGLE3 and native DRAM KV offload."
+    - "实验：在 B200 上验证 TRT 官方镜像 1.3.0rc29.dev202609240000 的原生 Chat Completions BFCL，在 B300 上运行完整 MiniMax 厂商评估；保留 EAGLE3 和原生 DRAM KV 卸载。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
