@@ -4,6 +4,10 @@ CollectiveX is an experimental MoE expert-parallel communication benchmark. It m
 combine, and paired roundtrip latency across EP libraries and accelerator systems, then uploads
 neutral result artifacts.
 
+A standalone [vLLM `swap_blocks` benchmark](docs/swap-blocks.md)
+([中文](docs/swap-blocks_zh.md)) measures pinned CPU↔GPU and same-GPU block copies,
+with its own correctness checks and latency/bandwidth JSON output.
+
 CollectiveX schedules benchmarks, executes them on real allocations, and uploads the neutral
 artifacts each run emits. It does not validate those artifacts, promote, rank, recommend, select, or
 decide what a consumer displays. Any downstream display or comparison is the consumer's

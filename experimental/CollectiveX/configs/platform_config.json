@@ -76,30 +76,18 @@
       "scale_up_domain": 8,
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
-      "backends": {"deepep-v2": [
-    8
-   ], "nccl-ep": [
-    8
-   ]},
-      "ll_backends": {
-   "nccl-ep": [
-    8
-   ]
-  },
-      "fabric": {
-    "nic": "AWS EFA (p6-b300.48xlarge, 16 x 400G per node)",
-    "switch": "AWS EFA fabric (SRD)"
-   },
-   "operator": {
+      "backends": {"deepep-v2": [8], "nccl-ep": [8]},
+      "ll_backends": {"nccl-ep": [8]},
+      "fabric": {"nic": "AWS EFA (p6-b300.48xlarge, 16 x 400G per node)", "switch": "AWS EFA fabric (SRD)"},
+      "operator": {
         "partition": "batch_1",
         "account": "benchmark",
-        "qos": "normal",
-        "squash_dir": "/data/home/sa-gha-runner/collectivex/containers"
+        "squash_dir": "/data/home/sa-gha-runner/squash"
       },
       "network": {
-    "rdma_fabric": "efa",
-    "rdma_devices": "rdmap86s0,rdmap87s0,rdmap101s0,rdmap102s0,rdmap116s0,rdmap117s0,rdmap131s0,rdmap132s0,rdmap146s0,rdmap147s0,rdmap161s0,rdmap162s0,rdmap176s0,rdmap177s0,rdmap191s0,rdmap192s0"
-   }
+        "rdma_fabric": "efa",
+        "rdma_devices": "rdmap86s0,rdmap87s0,rdmap101s0,rdmap102s0,rdmap116s0,rdmap117s0,rdmap131s0,rdmap132s0,rdmap146s0,rdmap147s0,rdmap161s0,rdmap162s0,rdmap176s0,rdmap177s0,rdmap191s0,rdmap192s0"
+      }
     },
     "gb200": {
       "arch": "sm100",
@@ -136,7 +124,6 @@
       "operator": {
         "partition": "batch_1",
         "account": "benchmark",
-        "qos": "batch_1_qos",
         "squash_dir": "/data/home/sa-shared/collectivex/containers",
         "enroot_cache_path": "/data/home/sa-shared/collectivex/enroot-cache",
         "exclude_nodes": "im-gb300-r01-c003,im-gb300-r01-c005"
@@ -167,6 +154,46 @@
       "backends": {"mori": [8], "uccl-ep": [8]},
       "ll_backends": {"mori": [8]},
       "fabric": {"nic": "n/a (single-node scale-up)", "switch": "n/a (single-node scale-up)"}
+    },
+    "mi300x": {
+      "arch": "gfx942",
+      "product": "mi300x",
+      "image": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
+      "image_platform": "linux/amd64",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "xgmi",
+      "launcher": "mi-amds",
+      "backends": {},
+      "ll_backends": {},
+      "fabric": {
+        "nic": "n/a (single-node scale-up)",
+        "switch": "n/a (single-node scale-up)"
+      },
+      "operator": {
+        "partition": "compute",
+        "squash_dir": "/raid/inferencex/squash"
+      }
+    },
+    "mi325x": {
+      "arch": "gfx942",
+      "product": "mi325x",
+      "image": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
+      "image_platform": "linux/amd64",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "xgmi",
+      "launcher": "mi-amds",
+      "backends": {},
+      "ll_backends": {},
+      "fabric": {
+        "nic": "n/a (single-node scale-up)",
+        "switch": "n/a (single-node scale-up)"
+      },
+      "operator": {
+        "partition": "compute",
+        "squash_dir": "/raid/squash"
+      }
     },
     "mi355x": {
       "arch": "gfx950",

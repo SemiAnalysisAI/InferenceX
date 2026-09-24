@@ -23,7 +23,10 @@ of that role's GPUs across the whole serving window, not a phase power.
 Ordinary benchmark runs are best-effort: invalid telemetry records
 ``power_valid=0`` (and no energy metrics) in the aggregate plus a validation
 sidecar, but never fails the benchmark. Power studies set ``REQUIRE_POWER=1``
-to fail after those audit artifacts exist.
+to fail after those audit artifacts exist. If a consistent package contains a
+failed sibling window, the sidecar retains the healthy measurement in
+``selected_window`` and its per-GPU diagnostics at the top level. Publication
+and aggregate power metrics remain blocked.
 """
 
 from __future__ import annotations
@@ -38,24 +41,25 @@ import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
+from typing import Any
 
+# ROLE_METRIC_KEYS and WHOLE_METRIC_KEYS are re-exported for callers that
+# import them through this module.
+from . import (
+    ALL_POWER_METRIC_KEYS as _ALL_POWER_METRIC_KEYS,
+    ROLE_METRIC_KEYS as ROLE_METRIC_KEYS,
+    WHOLE_METRIC_KEYS as WHOLE_METRIC_KEYS,
+)
 from .common import (
     BenchmarkData,
     _append_reason,
     _integrate_device,
     _load_benchmark_data,
+    _percentile_total_power,
     _write_json_atomic,
     audit_metrics,
     benchmark_window_payload,
     patch_power_metrics,
-)
-
-from . import (
-    ALL_POWER_METRIC_KEYS as _ALL_POWER_METRIC_KEYS,
-    POWER_METRIC_SCHEMA_VERSION,
-    ROLE_METRIC_KEYS,
-    WHOLE_METRIC_KEYS,
-    with_power_metrics,
 )
 
 # --- srt-slurm dcgm-power v1 wire contract (mirrored constants) -------------
@@ -80,6 +84,9 @@ SAMPLES_HEADER = (
     "gpu_uuid",
     "power_w",
 )
+
+# srt-slurm v2 appends optional utilization fields to the power samples.
+SAMPLES_HEADER_V2 = (*SAMPLES_HEADER, "gpu_util_pct", "sm_active")
 
 # Fixed by the producer contract (srt-slurm contract.MAX_SAMPLE_GAP_SECONDS),
 # NOT a multiple of the configured sample interval.
@@ -131,11 +138,11 @@ def _stays_below(root: Path, relative: str) -> bool:
     return True
 
 
-def _is_finite(value) -> bool:
+def _is_finite(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
-def _is_positive_finite(value) -> bool:
+def _is_positive_finite(value: Any) -> bool:
     return _is_finite(value) and value > 0
 
 
@@ -208,19 +215,19 @@ class ObservedDevice:
         }
 
 
-def _text(value, label: str) -> str:
+def _text(value: Any, label: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{label} is not a non-empty string: {value!r}")
     return value
 
 
-def _whole(value, label: str, *, minimum: int) -> int:
+def _whole(value: Any, label: str, *, minimum: int) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
         raise ValueError(f"{label} is not an integer >= {minimum}: {value!r}")
     return value
 
 
-def _role(value) -> str:
+def _role(value: Any) -> str:
     if value not in WORKER_ROLES:
         raise ValueError(f"worker_role is not one of {WORKER_ROLES}: {value!r}")
     return value
@@ -293,9 +300,11 @@ def _check_wire_contract(manifest: dict) -> list[str]:
         failures.append("started_at_unix is not a finite number")
     if not _is_finite(manifest.get("stopped_at_unix")):
         failures.append("stopped_at_unix is not finite in a terminal manifest")
-    for key in ("sample_interval_seconds", "request_timeout_seconds"):
-        if not _is_positive_finite(manifest.get(key)):
-            failures.append(f"{key} is not finite and positive")
+    failures.extend(
+        f"{key} is not finite and positive"
+        for key in ("sample_interval_seconds", "request_timeout_seconds")
+        if not _is_positive_finite(manifest.get(key))
+    )
     for key in ("scrape_count", "sample_row_count"):
         value = manifest.get(key)
         if not isinstance(value, int) or isinstance(value, bool) or value < 0:
@@ -330,8 +339,10 @@ def _check_wire_contract(manifest: dict) -> list[str]:
 # --- strict samples parsing (mirrors srt-slurm samples.read_samples) --------
 
 
-def _parse_sample_row(raw: list[str]) -> SampleRow | None:
-    if len(raw) != len(SAMPLES_HEADER):
+def _parse_sample_row(raw: list[str], expected_version: int) -> SampleRow | None:
+    """Validate the selected CSV generation, including optional utilization."""
+    header = SAMPLES_HEADER_V2 if expected_version == 2 else SAMPLES_HEADER
+    if len(raw) != len(header):
         return None
     try:
         schema_version = int(raw[0])
@@ -339,10 +350,16 @@ def _parse_sample_row(raw: list[str]) -> SampleRow | None:
         scrape_seq = int(raw[2])
         gpu_index = int(raw[4])
         power_w = float(raw[6])
+        if expected_version == 2:
+            for cell, maximum in zip(raw[7:], (100.0, 1.0), strict=False):
+                if cell:
+                    value = float(cell)
+                    if not math.isfinite(value) or not 0 <= value <= maximum:
+                        return None
     except ValueError:
         return None
     hostname, gpu_uuid = raw[3], raw[5]
-    if schema_version != SCHEMA_VERSION or not hostname or not gpu_uuid:
+    if schema_version != expected_version or not hostname or not gpu_uuid:
         return None
     if not math.isfinite(timestamp_unix) or not math.isfinite(power_w) or power_w < 0:
         return None
@@ -368,10 +385,14 @@ def read_samples(path: Path) -> tuple[tuple[SampleRow, ...], tuple[str, ...]]:
         with open(path, newline="", encoding="utf-8") as handle:
             reader = csv.reader(handle)
             header = next(reader, None)
-            if header != list(SAMPLES_HEADER):
+            if header == list(SAMPLES_HEADER):
+                expected_version = 1
+            elif header == list(SAMPLES_HEADER_V2):
+                expected_version = 2
+            else:
                 return (), ("samples_csv_header_mismatch",)
             for raw in reader:
-                row = _parse_sample_row(raw)
+                row = _parse_sample_row(raw, expected_version)
                 if row is None:
                     reasons.append("samples_csv_malformed")
                     continue
@@ -428,7 +449,9 @@ def derive_observed_devices(rows: tuple[SampleRow, ...]) -> list[ObservedDevice]
 # --- device identity / topology (mirrors srt-slurm validation.py) -----------
 
 
-def _resolve_roles(devices: list[ExpectedDevice]) -> tuple[dict[tuple[str, int], str], list[str]]:
+def _resolve_roles(
+    devices: list[ExpectedDevice],
+) -> tuple[dict[tuple[str, int], str], list[str]]:
     roles: dict[tuple[str, int], str] = {}
     for device in devices:
         distinct = {assignment.worker_role for assignment in device.assignments}
@@ -438,7 +461,9 @@ def _resolve_roles(devices: list[ExpectedDevice]) -> tuple[dict[tuple[str, int],
     return roles, []
 
 
-def _resolve_het_groups(devices: list[ExpectedDevice]) -> tuple[dict[str, int | None], list[str]]:
+def _resolve_het_groups(
+    devices: list[ExpectedDevice],
+) -> tuple[dict[str, int | None], list[str]]:
     groups: dict[str, int | None] = {}
     for device in devices:
         distinct = {assignment.het_group for assignment in device.assignments}
@@ -547,7 +572,7 @@ class ParsedWindow:
     duration: float | None
 
 
-def _window_status_invariants_hold(status: str, end, duration, reason) -> bool:
+def _window_status_invariants_hold(status: str, end: Any, duration: Any, reason: Any) -> bool:
     if status == WINDOW_STATUS_RUNNING:
         return end is None and duration is None and reason is None
     if status == "interrupted":
@@ -559,7 +584,9 @@ def _window_status_invariants_hold(status: str, end, duration, reason) -> bool:
     return isinstance(reason, str) and bool(reason)
 
 
-def _parse_window(path: Path, relative: str, result_root: Path) -> tuple[ParsedWindow | None, list[str]]:
+def _parse_window(
+    path: Path, relative: str, result_root: Path
+) -> tuple[ParsedWindow | None, list[str]]:
     try:
         payload = json.loads(path.read_text())
     except (OSError, ValueError):
@@ -619,7 +646,10 @@ def _scan_windows(
 
     if not _stays_below(windows_dir.parent, WINDOWS_DIRNAME):
         artifact_errors.append(
-            {"path": WINDOWS_DIRNAME, "reason_codes": ["measurement_window_artifact_path_invalid"]}
+            {
+                "path": WINDOWS_DIRNAME,
+                "reason_codes": ["measurement_window_artifact_path_invalid"],
+            }
         )
         return parsed, duplicates
 
@@ -627,7 +657,10 @@ def _scan_windows(
         relative = f"{WINDOWS_DIRNAME}/{path.name}"
         if path.is_symlink() or not path.is_file():
             artifact_errors.append(
-                {"path": relative, "reason_codes": ["measurement_window_artifact_path_invalid"]}
+                {
+                    "path": relative,
+                    "reason_codes": ["measurement_window_artifact_path_invalid"],
+                }
             )
             continue
 
@@ -640,9 +673,14 @@ def _scan_windows(
         if key in parsed:
             duplicates.add(key)
             artifact_errors.append(
-                {"path": parsed[key].relative_path, "reason_codes": ["measurement_window_duplicate"]}
+                {
+                    "path": parsed[key].relative_path,
+                    "reason_codes": ["measurement_window_duplicate"],
+                }
             )
-            artifact_errors.append({"path": relative, "reason_codes": ["measurement_window_duplicate"]})
+            artifact_errors.append(
+                {"path": relative, "reason_codes": ["measurement_window_duplicate"]}
+            )
             continue
         parsed[key] = window
 
@@ -708,7 +746,8 @@ def _check_coverage(
             reasons.append("measurement_window_not_bracketed")
             continue
         largest = max(
-            (later - earlier for earlier, later in itertools.pairwise(sequence)), default=0.0
+            (later - earlier for earlier, later in itertools.pairwise(sequence)),
+            default=0.0,
         )
         gaps[f"{device.hostname}/{device.gpu_uuids[0]}"] = largest
         if largest > MAX_SAMPLE_GAP_SECONDS:
@@ -733,7 +772,10 @@ def _validate_expected_windows(
     for key, window in sorted(parsed.items()):
         if key not in expected_keys:
             artifact_errors.append(
-                {"path": window.relative_path, "reason_codes": ["measurement_window_unexpected"]}
+                {
+                    "path": window.relative_path,
+                    "reason_codes": ["measurement_window_unexpected"],
+                }
             )
 
     validations: list[dict] = []
@@ -766,7 +808,10 @@ def _validate_expected_windows(
         gaps: dict[str, float] = {}
         if not reasons:
             gaps, coverage_reasons = _check_coverage(
-                window.start_unix, window.end_unix, expected_device_keys, observed_devices
+                window.start_unix,
+                window.end_unix,
+                expected_device_keys,
+                observed_devices,
             )
             reasons.extend(coverage_reasons)
             if coverage_reasons:
@@ -806,7 +851,11 @@ def _check_stored_evidence(
     stored_scrapes = manifest.get("scrape_count")
     if rows:
         least = max(row.scrape_seq for row in rows) + 1
-        if not isinstance(stored_scrapes, int) or isinstance(stored_scrapes, bool) or stored_scrapes < least:
+        if (
+            not isinstance(stored_scrapes, int)
+            or isinstance(stored_scrapes, bool)
+            or stored_scrapes < least
+        ):
             failures.append(f"scrape_count is {stored_scrapes!r}, disk needs at least {least}")
 
     if not observed:
@@ -840,10 +889,14 @@ class MultinodePowerAudit:
     failures: list[str] = field(default_factory=list)
     stored_publication_valid: bool | None = None
     recomputed_publication_valid: bool | None = None
+    package_integrity_valid: bool = False
+    window_validations: list[dict] = field(default_factory=list)
     producer_git_commit: str | None = None
     expected_producer_git_commit: str | None = None
     exporter_image_sha256: str | None = None
     window: dict | None = None
+    window_power_valid: bool = False
+    window_metrics: dict[str, float] = field(default_factory=dict)
     per_gpu_energy_j: dict[str, float] = field(default_factory=dict)
     per_gpu_role: dict[str, str] = field(default_factory=dict)
     per_gpu_max_sample_gap_s: dict[str, float] = field(default_factory=dict)
@@ -945,21 +998,38 @@ def validate_and_integrate(
     )
     if not expected_windows:
         recompute_failures.append("no expected measurement window")
-    for validation in validations:
-        recompute_failures += [
-            f"{reason} (window {validation['benchmark_type']}/{validation['concurrency']})"
-            for reason in validation["reason_codes"]
-        ]
+    audit.window_validations = validations
+    window_failures = [
+        f"{reason} (window {validation['benchmark_type']}/{validation['concurrency']})"
+        for validation in validations
+        for reason in validation["reason_codes"]
+    ]
     recompute_failures += [
-        f"{reason} ({error['path']})" for error in artifact_errors for reason in error["reason_codes"]
+        f"{reason} ({error['path']})"
+        for error in artifact_errors
+        for reason in error["reason_codes"]
     ]
     recompute_failures += _check_stored_evidence(
-        manifest, expected_devices, expected_windows, rows, observed, validations, artifact_errors
+        manifest,
+        expected_devices,
+        expected_windows,
+        rows,
+        observed,
+        validations,
+        artifact_errors,
     )
 
-    audit.recomputed_publication_valid = not recompute_failures
-    audit.failures.extend(recompute_failures)
-    if recompute_failures:
+    audit.recomputed_publication_valid = not (recompute_failures or window_failures)
+    # A faithfully recorded failed window does not corrupt its siblings. Keep
+    # the complete package verdict for publication, while separately requiring
+    # trusted, reconciled evidence before retaining any individual measurement.
+    audit.package_integrity_valid = (
+        not recompute_failures
+        and not audit.reasons
+        and audit.stored_publication_valid == audit.recomputed_publication_valid
+    )
+    audit.failures.extend(recompute_failures + window_failures)
+    if recompute_failures or window_failures:
         _append_reason(audit.reasons, "package_recompute_invalid")
 
     # Gate: stored verdict must agree with the recomputation, and both must be
@@ -981,7 +1051,9 @@ def validate_and_integrate(
     # workers are mutually exclusive with disaggregated prefill/decode workers;
     # this prevents phase-local fields from being fabricated for shared GPUs.
     expected_roles = {}
+    topology_valid = True
     if aggregate_gpus > 0 and (prefill_gpus > 0 or decode_gpus > 0):
+        topology_valid = False
         _add_reason(
             audit,
             "topology_env_mismatch",
@@ -994,6 +1066,7 @@ def validate_and_integrate(
     if aggregate_gpus > 0:
         expected_roles["agg"] = aggregate_gpus
     if not expected_roles:
+        topology_valid = False
         _add_reason(
             audit,
             "topology_env_mismatch",
@@ -1001,6 +1074,7 @@ def validate_and_integrate(
         )
     elif roles:
         topology_failures = _check_role_topology(expected_devices, roles, expected_roles)
+        topology_valid = topology_valid and not topology_failures
         for failure in topology_failures:
             _add_reason(audit, "topology_env_mismatch", failure)
 
@@ -1015,8 +1089,7 @@ def validate_and_integrate(
         if len(device.gpu_uuids) == 1
     }
     audit.per_gpu_role = {
-        uuid_label.get(key, f"{key[0]}/{key[1]}"): role
-        for key, role in sorted(roles.items())
+        uuid_label.get(key, f"{key[0]}/{key[1]}"): role for key, role in sorted(roles.items())
     }
 
     # Gate: exactly one completed window must belong to THIS processed result.
@@ -1026,7 +1099,18 @@ def validate_and_integrate(
         audit, parsed_windows, logs_root, bench_result_path, benchmark
     )
 
-    if audit.reasons or window is None or benchmark is None:
+    if (
+        not audit.package_integrity_valid
+        or not topology_valid
+        or window is None
+        or benchmark is None
+        or not any(
+            validation["benchmark_type"] == window.benchmark_type
+            and validation["concurrency"] == window.concurrency
+            and validation["power_coverage_valid"]
+            for validation in validations
+        )
+    ):
         return audit
 
     # Integration: per-GPU trapezoid clipped to the formal window; roles sum.
@@ -1042,9 +1126,7 @@ def validate_and_integrate(
     for device in expected_devices:
         samples = sorted(per_key_samples.get(device.key, []))
         label = uuid_label[device.key]
-        energy = _integrate_device(
-            samples, start_unix=window.start_unix, end_unix=window.end_unix
-        )
+        energy = _integrate_device(samples, start_unix=window.start_unix, end_unix=window.end_unix)
         per_gpu_energy[label] = energy
         role = roles.get(device.key)
         if role in role_energy:
@@ -1053,7 +1135,8 @@ def validate_and_integrate(
             by_key[device.key].sample_times, window.start_unix, window.end_unix
         )
         per_gpu_gap[label] = max(
-            (later - earlier for earlier, later in itertools.pairwise(sequence)), default=0.0
+            (later - earlier for earlier, later in itertools.pairwise(sequence)),
+            default=0.0,
         )
 
     audit.per_gpu_energy_j = per_gpu_energy
@@ -1062,8 +1145,25 @@ def validate_and_integrate(
     duration_s = window.end_unix - window.start_unix
     total_energy = sum(per_gpu_energy.values())
     total_tokens = benchmark.total_input_tokens + benchmark.total_output_tokens
+    device_samples = [sorted(per_key_samples[device.key]) for device in expected_devices]
+    p75_total = _percentile_total_power(
+        device_samples,
+        start_unix=window.start_unix,
+        end_unix=window.end_unix,
+        quantile=0.75,
+    )
+    p90_total = _percentile_total_power(
+        device_samples,
+        start_unix=window.start_unix,
+        end_unix=window.end_unix,
+        quantile=0.9,
+    )
     metrics = {
         "avg_power_w": total_energy / duration_s / len(expected_devices),
+        "p75_power_w": p75_total / len(expected_devices),
+        "p75_total_gpu_power_w": p75_total,
+        "p90_power_w": p90_total / len(expected_devices),
+        "p90_total_gpu_power_w": p90_total,
         "avg_total_gpu_power_w": total_energy / duration_s,
         "total_gpu_energy_j": total_energy,
         "joules_per_successful_query": total_energy / benchmark.completed,
@@ -1089,8 +1189,13 @@ def validate_and_integrate(
     if non_finite:
         _add_reason(audit, "non_finite_power_metric", f"non-finite: {', '.join(non_finite)}")
         return audit
-    audit.metrics = metrics
-    audit.power_valid = True
+    audit.window_metrics = metrics
+    audit.window_power_valid = True
+    # Retention is independent of publication. An invalid sibling still blocks
+    # aggregate metrics and REQUIRE_POWER, even for this healthy measurement.
+    if not audit.reasons:
+        audit.metrics = metrics
+        audit.power_valid = True
     return audit
 
 
@@ -1131,7 +1236,9 @@ def _select_window_for_result(
         original = json.loads(original_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         _add_reason(
-            audit, "measurement_window_result_missing", f"original result unreadable: {original_path}"
+            audit,
+            "measurement_window_result_missing",
+            f"original result unreadable: {original_path}",
         )
         return None
     if _canonical_sha256(original) != _canonical_sha256(processed):
@@ -1169,7 +1276,10 @@ def _select_window_for_result(
 
 def _patch_agg(agg_path: Path, audit: MultinodePowerAudit) -> None:
     patch_power_metrics(
-        agg_path, metric_keys=_ALL_POWER_METRIC_KEYS, power_valid=audit.power_valid, metrics=audit.metrics,
+        agg_path,
+        metric_keys=_ALL_POWER_METRIC_KEYS,
+        power_valid=audit.power_valid,
+        metrics=audit.metrics,
     )
 
 
@@ -1188,8 +1298,19 @@ def _sidecar_payload(
         "telemetry_source": str(power_dir),
         "benchmark_result": str(bench_result),
         "benchmark_window": benchmark_window_payload(benchmark),
-        "selected_window": audit.window,
+        "selected_window": (
+            {
+                **audit.window,
+                "power_valid": audit.window_power_valid,
+                "metrics": audit_metrics(audit.window_metrics),
+            }
+            if audit.window is not None
+            else None
+        ),
+        "package_integrity_valid": audit.package_integrity_valid,
+        "window_validations": audit.window_validations,
         "integration_method": _INTEGRATION_METHOD,
+        "power_percentile_method": "time_weighted_synchronized_total_piecewise_linear",
         "producer": {
             "producer_git_commit": audit.producer_git_commit,
             "expected_producer_git_commit": audit.expected_producer_git_commit,

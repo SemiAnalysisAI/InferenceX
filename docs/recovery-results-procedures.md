@@ -24,12 +24,18 @@ Sources: [sweep debugging guardrails](../.agents/skills/debug-runs/SKILL.md#L78-
 
 ### Throughput results
 
+Reusable benchmark workflows prepare Python 3.12 before GPU launch and export its
+absolute path as `INFERENCEX_RESULTS_PYTHON`. Fixed-sequence processing and AgentX
+power processing, including the H200 DCGM path, validate and use this interpreter.
+A missing or empty setting fails processing; AgentX launchers still stage available
+audit and server artifacts before returning the failure.
+
 For a normal single-node throughput job:
 
 1. The launcher must leave `${RESULT_FILENAME}.json` in the workspace. The workflow waits briefly and fails if it never appears.
 2. `utils/process_result.py` reads the raw JSON plus topology/runtime environment variables, normalizes metadata and per-GPU throughput, converts millisecond fields to seconds, derives interactivity, and writes `agg_${RESULT_FILENAME}.json`.
 3. The job uploads that aggregate as artifact `bmk_${RESULT_FILENAME}`.
-4. `collect-results.yml` downloads `bmk_*`, runs `python3 utils/collect_results.py results/ bmk`, and uploads `results_bmk`, whose payload is `agg_bmk.json`.
+4. `collect-results.yml` downloads `bmk_*`, runs `python3 -m infx.results.collect_results results/ bmk`, and uploads `results_bmk`, whose payload is `agg_bmk.json`.
 
 For multi-node throughput, every `${RESULT_FILENAME}_*.json` is processed separately. The workflow derives total, prefill, and decode GPU counts from each filename and invokes:
 
@@ -38,7 +44,7 @@ RESULT_FILENAME=${result_file%.json} \
 IS_MULTINODE=true \
 PREFILL_GPUS="$prefill_gpus" \
 DECODE_GPUS="$decode_gpus" \
-python3 utils/process_result.py
+"$INFERENCEX_RESULTS_PYTHON" -m infx.results.fixed_sequence
 ```
 
 The uploaded `bmk_${RESULT_FILENAME}` artifact contains `agg_${RESULT_FILENAME}_*.json`. Missing source files indicate a benchmark/launcher failure. Missing `agg_` files indicate a processing failure. Missing `results_bmk` indicates a collection failure. Do not classify any of those as a database failure.
@@ -51,7 +57,7 @@ Eval jobs upload per-config artifacts named `eval_${EXP_NAME}_${RESULT_FILENAME}
 
 - an eval-only job errors when no eval files are found.
 - eval files upload under `always()`, preserving partial evidence from a failed job.
-- `utils/evals/validate_scores.py` validates eval-only score coverage after upload.
+- `infx/evals/validate_scores.py` validates eval-only score coverage after upload.
 - `collect-evals.yml` downloads `eval_*`, runs `collect_eval_results.py`, prints a summary, and uploads `eval_results_all/agg_eval_all.json`.
 
 The app can ingest both the aggregate rows and the per-config eval directories. They converge on the same natural key, while sample files attach detail to the resolved eval row. Therefore, an aggregate alone proves collection, not sample completeness. Verify the per-config artifact when sample-level output matters.
@@ -171,7 +177,7 @@ Use the repository's recovery-PR procedure. Do not rerun the failed target, do n
 Run from a clean InferenceX checkout with authenticated `gh`, `git`, `jq`, and Python dependencies available:
 
 ```bash
-python3 utils/recover_failed_ingest.py inspect-target \
+python3 -m infx.workflows.recover_failed_ingest inspect-target \
   "$FAILED_RUN_OR_JOB_URL" \
   --output /tmp/infx-recovery-target.json
 
@@ -183,7 +189,7 @@ ORIGINAL_MERGE_SHA=$(jq -r .merge_sha /tmp/infx-recovery-target.json)
 gh run view "$TARGET_RUN_ID" --repo SemiAnalysisAI/InferenceX \
   --job "$TARGET_JOB_ID" --log > "/tmp/infx-target-$TARGET_RUN_ID.log"
 
-python3 utils/recover_failed_ingest.py audit-changelog \
+python3 -m infx.workflows.recover_failed_ingest audit-changelog \
   --ref "$ORIGINAL_MERGE_SHA"
 ```
 
@@ -223,17 +229,17 @@ Create an empty recovery PR from current `main`, give it exactly one full-sweep 
 gh pr edit "$RECOVERY_PR" --repo SemiAnalysisAI/InferenceX \
   --add-label full-sweep-fail-fast
 gh pr comment "$RECOVERY_PR" --repo SemiAnalysisAI/InferenceX \
-  --body "/reuse-sweep-run $SOURCE_RUN_ID"
+  --body "/use $SOURCE_RUN_ID"
 ```
 
 Append recovery entries to the end of `perf-changelog.yaml`. Never modify historical bytes. Preserve the original `config-keys`, `description`, `evals-only`, and `scenario-type`, but use the recovery PR URL. Validate both the changelog and generated scope:
 
 ```bash
-python3 utils/validate_perf_changelog.py \
+python3 -m infx.workflows.validate_perf_changelog \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \
   --head-ref "$RECOVERY_COMMIT"
-python3 utils/process_changelog.py \
+python3 -m infx.matrix.plan \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \
   --head-ref "$RECOVERY_COMMIT" \
@@ -425,3 +431,28 @@ Remaining durable fix:
 ```
 
 This evidence is the completion gate. “Workflow green” without artifact identity, source/merge identity, and ingest counts is not a verified result recovery.
+
+### AMD multi-node SGLang teardown
+
+On exit, including a failed startup/readiness check, the AMD SGLang launcher sends
+TERM only to its recorded `setsid` process groups. Normal completion stages results
+before this cleanup. It allows 30 seconds for graceful
+exit, then sends KILL to surviving groups and checks for exit for another five
+seconds. This handles orphaned or TERM-resistant workers that otherwise hold log
+pipes open. These cleanup deadlines do not change profiling, evaluation, or server
+readiness deadlines. A failed client retains its exit status; unresolved cleanup
+fails an otherwise successful node. Kernel-blocked processes may still require
+separately authorized node repair. Do not change or discard completed metrics to
+work around teardown failures. A single EXIT handler owns group cleanup and the
+existing UMBP standalone PID cleanup; the latter still runs if group cleanup fails.
+
+### AMD multi-node GPU preflight coordination
+
+The Slurm launcher completes Docker pre-clean and the existing GPU VRAM drain
+check on every selected node in a separate Slurm step before launching any server
+container. A failed preflight prevents the serving step; it does not consume a
+healthy peer's container-readiness deadline. Node-local `preflight_<hostname>.log`
+files are included in the normal log fan-in, including failures. The VRAM threshold,
+15-minute GPU guard, and container/server readiness deadlines remain unchanged.
+This coordination prevents a peer-barrier race; it does not repair a GPU driver
+that fails to reclaim memory. The existing Docker pre-clean scope is unchanged.

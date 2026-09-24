@@ -1,29 +1,17 @@
 #!/bin/bash
-# Pre-flight RDMA QoS/DCQCN validation for a single node, run by job.slurm via
-# `srun` across every allocated node BEFORE any container/GPU time is spent.
+# Pre-flight RDMA QoS/DCQCN validation, run by job.slurm via srun on every allocated
+# node before any container/GPU time is spent. A misconfigured NIC (PFC not covering
+# the RoCE priority, DCQCN disabled) does not make MoRI's cross-node RDMA error out;
+# it quietly degrades into unexplained tail latency hours later.
 #
-# A misconfigured NIC (PFC not covering the RoCE priority, DCQCN disabled, ...)
-# doesn't make MoRI's cross-node EP/RDMA transfers error out -- it just quietly
-# degrades, and the only symptom is unexplained tail latency or throughput
-# variance in the benchmark numbers hours later. Failing fast here, before the
-# job burns node-hours, is much cheaper than debugging that after the fact.
+# check_qos()/check_dcqcn() are trimmed from ROCm/mori tools/env_check.sh
+# (https://github.com/ROCm/mori/blob/main/tools/env_check.sh); its full-mesh
+# ib_write_bw/ib_write_lat tests are deliberately not ported since this must take
+# seconds. Scoped to AMD Pollara (ionic) NICs via nicctl; port the bnxt_*/mlx5_*
+# checks from upstream if those NICs join the fleet.
 #
-# check_qos()/check_dcqcn() below are trimmed/adapted from ROCm/mori's
-# tools/env_check.sh:
-#   https://github.com/ROCm/mori/blob/main/tools/env_check.sh
-# The upstream script's expensive ib_write_bw/ib_write_lat full-mesh bandwidth
-# and latency tests are intentionally NOT ported here -- this runs before
-# every single job, so it must be fast (seconds), not a multi-minute
-# fabric-wide benchmark of its own.
-#
-# Scoped to AMD Pollara (ionic) NICs via nicctl, matching this repo's current
-# fleet (see env.sh's nicctl-based MORI_RDMA_TC/SL detection). If bnxt_re or
-# mlx5 NICs are added to the fleet, port the bnxt_*/mlx5_* check_* functions
-# from the upstream script following the same pattern.
-#
-# Exit code: 0 = OK (or gracefully skipped, e.g. no ionic NICs on this host),
-#            1 = hard QoS/DCQCN misconfiguration -- do not proceed with the run.
-set -uo pipefail
+# Exit 0 = OK or gracefully skipped (no ionic NICs); 1 = hard misconfiguration.
+set -o pipefail
 
 AINIC_MIN_VER="1.117.5-a-45"   # minimum recommended AINIC firmware for IBGDA
 
@@ -138,8 +126,6 @@ check_dcqcn() {
     [[ "$cnp_count" -eq 1 ]] || die "CNP DSCP not consistent across NICs: $cnp_values"
     log_ok "CNP DSCP = $cnp_values (consistent across all NICs)"
 }
-
-# ============================= main =============================
 
 if ! command -v nicctl &>/dev/null; then
     log_warn "nicctl not found on $(hostname -s) -- skipping RDMA QoS/DCQCN pre-flight check (not an ionic NIC host, or nicctl not on PATH)"

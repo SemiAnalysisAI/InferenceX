@@ -9,19 +9,17 @@
 #SBATCH --open-mode=append
 
 # Persistent vLLM server for Qwen3.5-397B-A17B (tensor-parallel)
-set -euo pipefail
+set -eo pipefail
 
 MODEL="Qwen/Qwen3.5-397B-A17B"
 PORT=8000
 SERVER_INFO_FILE=/workspace/logs/server_info.txt
 
-# Write server address to shared file for client jobs
 HOSTNAME=$(hostname)
 echo "http://${HOSTNAME}:${PORT}" > "$SERVER_INFO_FILE"
 echo "Server will be available at: http://${HOSTNAME}:${PORT}"
 echo "Server info written to: $SERVER_INFO_FILE"
 
-# Trap to clean up on exit
 cleanup() {
     echo "Cleaning up..."
     rm -f "$SERVER_INFO_FILE"
@@ -30,7 +28,6 @@ trap cleanup EXIT
 
 export VLLM_CACHE_ROOT=/model_storage/vllm_cache
 
-# Start vLLM server (foreground - keeps job alive)
 echo "Starting vLLM server..."
 
 exec vllm serve $MODEL \

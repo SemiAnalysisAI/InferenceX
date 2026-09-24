@@ -1,21 +1,19 @@
 #!/usr/bin/bash
+
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars EVAL_ONLY IS_MULTINODE REQUIRE_POWER RUN_EVAL SALLOC_TIME_LIMIT
 set -eo pipefail
 
-# System-specific configuration for H200 DGXC Slurm cluster
 SLURM_PARTITION="main"
 SLURM_ACCOUNT="sa-shared"
-HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/models/gharunners/hf-hub-cache}"
-AIPERF_MMAP_CACHE_HOST_PATH="${AIPERF_MMAP_CACHE_HOST_PATH:-/home/sa-shared/gharunners/ai-perf-cache}"
+check_env_vars HF_HUB_CACHE_MOUNT
+check_env_vars AIPERF_MMAP_CACHE_HOST_PATH
+DSV4_MODEL_REPO="deepseek-ai/DeepSeek-V4-Pro-0813"
 
-# Immutable producer prerequisite for the GLM-5.2 AgentX lane. This fork is
-# intentionally long-lived; update the SHA only after reviewing a new fork
-# commit and re-running the H200 hardware gate.
-POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
-POWER_SRT_SLURM_PIN="e5c837f06a362dc888dfea2ee588e9f19c298270"
 
 set -x
 
-source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
@@ -26,51 +24,56 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     CONFIG_PATH="${CONFIG_FILE%%:*}"
     LOCAL_CONFIG_FILE="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${CONFIG_PATH#recipes/}"
 
-    # The producer pin decision is recipe-driven. Upstream-only recipes have
-    # no workspace mirror and remain non-power.
     USES_DCGM_POWER=0
     _RECIPE_REL="${CONFIG_FILE%%:*}"
     _RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
     if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
         /^telemetry:/ { t = 1; next }
         t && /^[^ ]/  { t = 0 }
-        t && /^  provider: dcgm-power$/ { p = 1 }
+        t && /^  dcgm_exporter:/ { p = 1 }
         t && /^  enabled: true$/        { e = 1 }
         END { exit !(p && e) }
     ' "$_RECIPE_SRC"; then
         USES_DCGM_POWER=1
     fi
 
-    # Only explicitly reviewed H200 FP8 AgentX recipes may use dcgm-power.
-    # Future recipes must earn a separate cluster smoke instead of inheriting
-    # this lane.
-    if [[ "$USES_DCGM_POWER" == "1" && (
+    USES_KIMIK3_POWER=0
+    if [[ "$USES_DCGM_POWER" == "1" && "$IS_AGENTIC" == "1" &&
+        "$MODEL_PREFIX" == "kimik3" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "vllm" ]]; then
+        USES_KIMIK3_POWER=1
+
+    elif [[ "$USES_DCGM_POWER" == "1" && (
         "$IS_AGENTIC" != "1" ||
         "$FRAMEWORK" != "dynamo-sglang" ||
         ( "$MODEL_PREFIX" != "glm5.2" && "$MODEL_PREFIX" != "dsv4" ) ||
         "$PRECISION" != "fp8"
     ) ]]; then
-        echo "Error: H200 dcgm-power is validated only for AgentX dynamo-sglang glm5.2/fp8 or dsv4/fp8" >&2
+        echo "Error: H200 dcgm-power requires AgentX dynamo-sglang glm5.2/dsv4 FP8 or Kimi-K3 vLLM FP4" >&2
         exit 1
     fi
 
-    # MODEL_PATH: Override with pre-downloaded paths on H200 runner
-    # The yaml files specify HuggingFace model IDs for portability, but we use
-    # local paths to avoid repeated downloading on the shared H200 cluster.
+    # Recipes name HF model IDs; resolve them to pre-staged paths so the shared
+    # cluster does not re-download. SRT_SLURM_MODEL_PREFIX must match the
+    # recipe's model.path alias.
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp8" ]]; then
-            # The shared HF cache already contains the H200 FP8 checkpoint;
-            # default to that local path (overridable via DSV4_MODEL_PATH) so
-            # srtctl preflight finds the directory instead of trying to pull the
-            # hf: model ID, which fails on the compute node ("path is
-            # unavailable. Pull or register the model yourself").
-            export MODEL_PATH="${DSV4_MODEL_PATH:-${HF_HUB_CACHE_MOUNT}/DeepSeek-V4-Pro}"
-            export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+            # Stage the dated checkpoint into shared storage below before
+            # srtctl preflight. DSV4_MODEL_PATH remains available for clusters
+            # that manage the checkpoint out of band.
+            if [[ -n "${DSV4_MODEL_PATH:-}" ]]; then
+                export MODEL_PATH="$DSV4_MODEL_PATH"
+                DSV4_STAGE_MODEL=0
+            else
+                export MODEL_PATH="${HF_HUB_CACHE_MOUNT}/DeepSeek-V4-Pro-0813"
+                DSV4_STAGE_MODEL=1
+            fi
+            export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro-0813"
         elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
             export MODEL_PATH="/models/DeepSeek-R1-0528"
             export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
         elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp8" ]]; then
-            export MODEL_PATH="${GLM52_FP8_MODEL_PATH:-/models/GLM-5.2-FP8}"
+            check_env_vars GLM52_FP8_MODEL_PATH
+            export MODEL_PATH="${GLM52_FP8_MODEL_PATH}"
             if [[ ! -d "$MODEL_PATH" ]]; then
                 export MODEL_PATH="hf:zai-org/GLM-5.2-FP8"
             fi
@@ -101,58 +104,14 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         exit 1
     fi
 
-    echo "Cloning srt-slurm repository..."
+    echo "Preparing job-local srt-slurm checkout..."
     SRT_REPO_DIR="srt-slurm"
     if [ -d "$SRT_REPO_DIR" ]; then
         echo "Removing existing $SRT_REPO_DIR..."
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    if [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && (
-        "$MODEL_PREFIX" == "glm5.2" || "$MODEL_PREFIX" == "dsv4"
-    ) ]]; then
-        if [[ "$USES_DCGM_POWER" == "1" ]]; then
-            # The pinned fork carries the v1.0.44 AgentX lifecycle plus the formal
-            # custom-benchmark dcgm-power contract used by the allowlisted recipes.
-            git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
-            cd "$SRT_REPO_DIR"
-            git checkout "$POWER_SRT_SLURM_PIN" || exit 1
-            test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
-            git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
-        elif [[ "$MODEL_PREFIX" == "dsv4" ]]; then
-            # Non-power DSV4 runs keep the upstream release their perf-changelog
-            # provenance records. v1.0.38 also injects every logical SGLang worker
-            # leader's /metrics URL into AIPERF_SERVER_METRICS_URLS for custom
-            # benchmarks; v1.0.10 wired that only for built-in AIPerf runners, so
-            # the AgentX trace artifacts came back with no backend engine series
-            # behind them.
-            git clone --branch v1.0.38 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-            cd "$SRT_REPO_DIR"
-        else
-            # v1.0.44 includes the AgentX custom benchmark integration and passes
-            # every logical SGLang worker's Prometheus URL to AIPerf.
-            git clone --branch v1.0.44 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-            cd "$SRT_REPO_DIR"
-        fi
-    elif [[ $IS_AGENTIC == "1" && $FRAMEWORK == "vllm" && $MODEL_PREFIX == "kimik3" ]]; then
-        git clone https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-        git checkout df5baa93f4caf5169dea2a4236ad2cc742fe40e7
-        mkdir -p recipes/vllm/kimi-k3/agentic
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
-            recipes/vllm/kimi-k3/agentic
-    elif [[ "$IS_AGENTIC" == "1" ]]; then
-        git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-    else
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-        git checkout sa-submission-q2-2026
-    fi
-    if [[ "${EVAL_FRAMEWORK:-lm-eval}" != "lm-eval" ]]; then
-        python3 "$GITHUB_WORKSPACE/runners/patch_srt_eval_dispatch.py" "$(pwd)" \
-            || exit 1
-    fi
+    setup_srt_slurm "$SRT_REPO_DIR" "$FRAMEWORK" "$USES_DCGM_POWER" || exit 1
 
     echo "Installing srtctl..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -162,6 +121,31 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     source .venv/bin/activate
     uv pip install -e .
 
+    # A full sweep starts several independent runner jobs at once. Serialize
+    # the initial DSV4 download into the shared model directory so those jobs
+    # cannot race on Hugging Face's per-file locks. The completion marker is
+    # written only after `hf download` verifies every repository file, making
+    # interrupted downloads resumable by the next job.
+    if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp8" && $DSV4_STAGE_MODEL == "1" ]]; then
+        DSV4_MODEL_READY="${MODEL_PATH}/.inference-max-download-complete"
+        DSV4_MODEL_LOCK="${MODEL_PATH}.download.lock"
+        if [[ ! -f "$DSV4_MODEL_READY" ]]; then
+            uv pip install huggingface-hub
+            mkdir -p "$(dirname "$MODEL_PATH")"
+            (
+                exec 9>"$DSV4_MODEL_LOCK"
+                flock -w 14400 9 || { echo "Error: Timed out waiting for $DSV4_MODEL_LOCK" >&2; exit 1; }
+                if [[ ! -f "$DSV4_MODEL_READY" ]]; then
+                    hf download "$DSV4_MODEL_REPO" --local-dir "$MODEL_PATH"
+                    touch "$DSV4_MODEL_READY"
+                fi
+            )
+        fi
+    fi
+    if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp8" ]]; then
+        test -r "$MODEL_PATH/config.json" || { echo "Error: DSV4 model path is unavailable: $MODEL_PATH" >&2; exit 1; }
+    fi
+
     if ! command -v srtctl &> /dev/null; then
         echo "Error: Failed to install srtctl"
         exit 1
@@ -169,11 +153,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     echo "Configs available at: $SRT_REPO_DIR/"
 
-    # Map container images to local squash files based on framework
     NGINX_SQUASH_FILE="/data/containers/nginx+1.27.4.sqsh"
 
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-        # SGLang container mapping
         if [[ $MODEL_PREFIX == "glm5.2" ]]; then
             SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
         else
@@ -181,7 +163,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         fi
         CONTAINER_KEY="$IMAGE"
     elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
-        # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
         CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
         SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
     elif [[ $FRAMEWORK == "vllm" ]]; then
@@ -189,14 +170,16 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     fi
 
-    if [[ $MODEL_PREFIX == "glm5.2" ]] && ! unsquashfs -l "$SQUASH_FILE" >/dev/null 2>&1; then
+    if [[ $FRAMEWORK == "dynamo-sglang" && (
+        $MODEL_PREFIX == "glm5.2" || $MODEL_PREFIX == "dsv4"
+    ) ]] && ! unsquashfs -l "$SQUASH_FILE" >/dev/null 2>&1; then
         DOCKER_IMAGE=$(echo "$IMAGE" | sed 's/#/\//g')
         LOCK_FILE="${SQUASH_FILE}.lock"
         mkdir -p "$(dirname "$SQUASH_FILE")"
         srun --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT" \
             --nodes=1 --ntasks=1 --time=30 --job-name="$RUNNER_NAME" \
             bash -c "
-                set -euo pipefail
+                set -eo pipefail
                 exec 9>\"$LOCK_FILE\"
                 flock -w 1800 9
                 if unsquashfs -l \"$SQUASH_FILE\" >/dev/null 2>&1; then
@@ -207,6 +190,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
                 mkdir -p \"\$ENROOT_CACHE_PATH\"
                 enroot import -o \"$SQUASH_FILE\" docker://$DOCKER_IMAGE
             "
+    fi
+    if [[ $FRAMEWORK == "dynamo-sglang" && (
+        $MODEL_PREFIX == "glm5.2" || $MODEL_PREFIX == "dsv4"
+    ) ]]; then
+        test -r "$SQUASH_FILE" || { echo "Error: SGLang squash is not readable: $SQUASH_FILE" >&2; exit 1; }
+        unsquashfs -l "$SQUASH_FILE" >/dev/null || { echo "Error: SGLang squash is invalid: $SQUASH_FILE" >&2; exit 1; }
     fi
 
     if [[ "$USES_DCGM_POWER" == "1" ]]; then
@@ -220,7 +209,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             srun --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT" \
                 --nodes=1 --ntasks=1 --time=30 --job-name="$RUNNER_NAME" \
                 bash -c "
-                    set -euo pipefail
+                    set -eo pipefail
                     exec 9>\"$DCGM_EXPORTER_LOCK\"
                     flock -w 1800 9
                     if unsquashfs -l \"$DCGM_EXPORTER_SQSH\" >/dev/null 2>&1; then
@@ -239,65 +228,74 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     export ISL="$ISL"
     export OSL="$OSL"
-    export EVAL_ONLY="${EVAL_ONLY:-false}"
 
-    # Create srtslurm.yaml for srtctl (used by both frameworks)
     SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
-    DEFAULT_MOUNTS_BLOCK=""
+    SRT_HF_HUB_CACHE_MOUNT="$HF_HUB_CACHE_MOUNT"
     if [[ "$IS_AGENTIC" == "1" ]]; then
         AIPERF_MMAP_CACHE_HOST_PATH="/home/sa-shared/gharunners/ai-perf-cache"
         HF_HUB_CACHE_HOST_PATH="/models/gharunners/hf-hub-cache"
         mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH"
-        DEFAULT_MOUNTS_BLOCK="default_mounts:
-  ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
-  ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+        SRT_HF_HUB_CACHE_MOUNT="$HF_HUB_CACHE_HOST_PATH"
     fi
     echo "Creating srtslurm.yaml configuration..."
-    cat > srtslurm.yaml <<EOF
-# SRT SLURM Configuration for H200
-
-# Default SLURM settings
-default_account: "${SLURM_ACCOUNT}"
-default_partition: "${SLURM_PARTITION}"
-default_time_limit: "4:00:00"
-# Resource defaults
-gpus_per_node: 8
-network_interface: ""
-# Path to srtctl repo root (where the configs live)
-srtctl_root: "${SRTCTL_ROOT}"
-# Persistent AgentX dataset and Hugging Face caches mounted into every
-# server and benchmark container.
-default_mounts:
-  "${AIPERF_MMAP_CACHE_HOST_PATH}": "/aiperf_mmap_cache"
-  "${HF_HUB_CACHE_MOUNT}": "/hf_hub_cache"
-# Model path aliases
-model_paths:
-  "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
-  "${MODEL_PREFIX}": "${MODEL_PATH}"
-containers:
-  dynamo-trtllm: "${SQUASH_FILE}"
-  dynamo-sglang: "${SQUASH_FILE}"
-  dynamo-vllm: "${SQUASH_FILE}"
-  nginx-sqsh: "${NGINX_SQUASH_FILE}"
-  latest: "${SQUASH_FILE}"
-  "${CONTAINER_KEY}": "${SQUASH_FILE}"
-# SLURM directive compatibility
-use_gpus_per_node_directive: true
-use_segment_sbatch_directive: false
-use_exclusive_sbatch_directive: false
-${DEFAULT_MOUNTS_BLOCK}
-EOF
-
-    if [[ "$USES_DCGM_POWER" == "1" ]]; then
-        sed -i "/^  nginx-sqsh:/a\\  dcgm-exporter: ${DCGM_EXPORTER_SQSH}" srtslurm.yaml
-        grep -q "^  dcgm-exporter: " srtslurm.yaml || { echo "Error: dcgm-exporter injection failed: nginx-sqsh anchor not found in srtslurm.yaml" >&2; exit 1; }
+    SRT_DEFAULT_TIME_LIMIT="4:00:00"
+    if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ]]; then
+        SRT_DEFAULT_TIME_LIMIT="8:00:00"
     fi
+    write_srt_cluster_config h200-dgxc-slurm srtslurm.yaml "$USES_DCGM_POWER" \
+        --model "$SRT_SLURM_MODEL_PREFIX" "$MODEL_PATH" \
+        --var CONTAINER_KEY "$CONTAINER_KEY" \
+        --model "$MODEL_PREFIX" "$MODEL_PATH" \
+        --var SRT_DEFAULT_TIME_LIMIT "$SRT_DEFAULT_TIME_LIMIT" \
+        --var AIPERF_MMAP_CACHE_HOST_PATH "$AIPERF_MMAP_CACHE_HOST_PATH" \
+        --var HF_HUB_CACHE_MOUNT "$SRT_HF_HUB_CACHE_MOUNT" || exit 1
 
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
 
-    echo "Running make setup..."
-    make setup ARCH=x86_64
+    # GitHub release downloads occasionally return a truncated NATS/etcd
+    # archive with a successful HTTP status. The pinned srt-slurm Makefile's
+    # wget retry only covers transport failures, so validate setup by its exit
+    # status. Retry only when an archive that remains on disk fails an
+    # integrity check, and discard only that incomplete archive.
+    SRT_SETUP_MAX_ATTEMPTS=5
+    SRT_SETUP_SUCCEEDED=0
+    for ((SRT_SETUP_ATTEMPT = 1; SRT_SETUP_ATTEMPT <= SRT_SETUP_MAX_ATTEMPTS; SRT_SETUP_ATTEMPT++)); do
+        echo "Running make setup (attempt ${SRT_SETUP_ATTEMPT}/${SRT_SETUP_MAX_ATTEMPTS})..."
+        if make setup ARCH=x86_64; then
+            SRT_SETUP_SUCCEEDED=1
+            break
+        fi
+
+        SRT_SETUP_INVALID_ARCHIVE=0
+        for archive in configs/nats-server-v*.deb; do
+            [[ -e "$archive" ]] || continue
+            if ! dpkg-deb --contents "$archive" >/dev/null 2>&1; then
+                echo "Removing incomplete NATS archive: $archive" >&2
+                rm -f "$archive"
+                SRT_SETUP_INVALID_ARCHIVE=1
+            fi
+        done
+        for archive in configs/etcd-*.tar.gz; do
+            [[ -e "$archive" ]] || continue
+            if ! tar -tzf "$archive" >/dev/null 2>&1; then
+                echo "Removing incomplete etcd archive: $archive" >&2
+                rm -f "$archive"
+                SRT_SETUP_INVALID_ARCHIVE=1
+            fi
+        done
+        if [[ "$SRT_SETUP_INVALID_ARCHIVE" != "1" ]]; then
+            echo "Error: srt-slurm setup failed without an invalid NATS/etcd archive; not retrying" >&2
+            exit 1
+        fi
+        if ((SRT_SETUP_ATTEMPT < SRT_SETUP_MAX_ATTEMPTS)); then
+            sleep $((SRT_SETUP_ATTEMPT * 5))
+        fi
+    done
+    if [[ "$SRT_SETUP_SUCCEEDED" != "1" ]]; then
+        echo "Error: srt-slurm setup failed after ${SRT_SETUP_MAX_ATTEMPTS} attempts" >&2
+        exit 1
+    fi
 
     if [[ -f "$LOCAL_CONFIG_FILE" ]]; then
         mkdir -p "$(dirname "$CONFIG_PATH")"
@@ -310,27 +308,21 @@ EOF
             "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}"
     fi
 
-    # Export eval-related env vars for srt-slurm post-benchmark eval
+    # Read by srt-slurm's post-benchmark eval.
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 
     echo "Submitting job with srtctl..."
 
-    # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
     sed -i '/^health_check:/,/^[^ ]/{ /^health_check:/d; /^  /d; }' "$CONFIG_PATH"
     printf '\nhealth_check:\n  max_attempts: 720\n  interval_seconds: 10\n' >> "$CONFIG_PATH"
-    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
-        python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-            "$CONFIG_PATH" "$FRAMEWORK" || exit 1
-    fi
     WORKLOAD_TAG="${ISL}x${OSL}"
     if [[ "$IS_AGENTIC" == "1" ]]; then
         WORKLOAD_TAG="agentic"
     fi
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h200,${MODEL_PREFIX},${PRECISION},${WORKLOAD_TAG},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_OUTPUT=$(apply_srt_recipe "$CONFIG_FILE" "$FRAMEWORK" "${SRTCTL_EVAL_ARGS[@]}" -f "$CONFIG_FILE" --tags "h200,${MODEL_PREFIX},${PRECISION},${WORKLOAD_TAG},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
-    # Extract JOB_ID from srtctl output
     JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
 
     set +x
@@ -342,13 +334,15 @@ EOF
 
     echo "Extracted JOB_ID: $JOB_ID"
 
-    # Use the JOB_ID to find the logs directory
-    # srtctl creates logs in outputs/JOB_ID/logs/
     LOGS_DIR="outputs/$JOB_ID/logs"
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
     trap 'rc=$?; bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT INT TERM HUP
 
-    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+    SRT_JOB_RC=0
+    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || SRT_JOB_RC=$?
+    if [[ "$SRT_JOB_RC" != "0" && "$USES_KIMIK3_POWER" != "1" ]]; then
+        exit "$SRT_JOB_RC"
+    fi
 
     set -x
 
@@ -362,7 +356,13 @@ EOF
 
     echo "Found logs directory: $LOGS_DIR"
 
-    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    AGENTX_POWER_RC="$SRT_JOB_RC"
+    if [[ "$USES_KIMIK3_POWER" == "1" && "${EVAL_ONLY}" != "true" ]]; then
+        read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
+        collect_agentic_power_results "$JOB_ID" "$LOGS_DIR" \
+            "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$RESULT_FILENAME" \
+            "$SRT_SLURM_COMMIT" "${POWER_CONCURRENCIES[@]}" || AGENTX_POWER_RC=$?
+    elif [[ "$USES_DCGM_POWER" == "1" && "${EVAL_ONLY}" != "true" ]]; then
         POWER_LOGS_ROOT=$(cd "$LOGS_DIR" && pwd -P)
         read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
         for concurrency in "${POWER_CONCURRENCIES[@]}"; do
@@ -371,16 +371,19 @@ EOF
                 --agg-result "$GITHUB_WORKSPACE/${RESULT_FILENAME}_conc${concurrency}.json"
                 --power-dir "$POWER_LOGS_ROOT/power"
                 --logs-root "$POWER_LOGS_ROOT"
-                --expected-producer-sha "$POWER_SRT_SLURM_PIN"
+                --expected-producer-sha "$SRT_SLURM_COMMIT"
             )
-            case "${REQUIRE_POWER:-0}" in
+            case "${REQUIRE_POWER}" in
                 1|true|TRUE|yes|YES) power_args+=(--require-power) ;;
             esac
             (
                 cd "$GITHUB_WORKSPACE"
-                python -m utils.agentic.aggregation.power_adapter "${power_args[@]}"
-            ) || exit 1
+                check_env_vars INFERENCEX_RESULTS_PYTHON
+                "$INFERENCEX_RESULTS_PYTHON" -m infx.results.agentic.power_adapter "${power_args[@]}"
+            ) || AGENTX_POWER_RC=$?
         done
+    fi
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
         mkdir -p "$LOGS_DIR/power"
         cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
         cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
@@ -389,14 +392,18 @@ EOF
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
     bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 
-    if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+    if [[ "$AGENTX_POWER_RC" != "0" ]]; then
+        echo "ERROR: AgentX power validation failed; available audit and server artifacts were staged" >&2
+        exit "$AGENTX_POWER_RC"
+    fi
+
+    if [[ "${EVAL_ONLY}" != "true" ]]; then
         copy_fixed_sequence_results "$LOGS_DIR" "$GITHUB_WORKSPACE" "$RESULT_FILENAME"
     else
         echo "EVAL_ONLY=true: Skipping benchmark result collection"
     fi
 
-    # Collect eval results if eval was requested
-    if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
+    if [[ "${RUN_EVAL}" == "true" || "${EVAL_ONLY}" == "true" ]]; then
         EVAL_DIR="$LOGS_DIR/eval_results"
         if [ -d "$EVAL_DIR" ]; then
             echo "Extracting eval results from $EVAL_DIR"
@@ -425,13 +432,13 @@ EOF
 else
     SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-    # Convert pyxis image format (nvcr.io#path) to docker format (nvcr.io/path) for enroot import
+    # enroot import wants nvcr.io/path, not the pyxis nvcr.io#path spelling.
     DOCKER_IMAGE=$(echo "$IMAGE" | sed 's/#/\//g')
     LOCK_FILE="${SQUASH_FILE}.lock"
 
-    export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+    check_env_vars GPU_COUNT
 
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --time="${SALLOC_TIME_LIMIT}" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
     if [[ -z "$JOB_ID" ]]; then
         echo "ERROR: failed to resolve H200 Slurm allocation" >&2
@@ -439,8 +446,8 @@ else
     fi
     trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
 
-    # Use flock to serialize concurrent imports to the same squash file
-    # Override ENROOT_CACHE_PATH to avoid permission issues with system-wide cache on worker nodes
+    # Serialize concurrent imports of the same squash file. ENROOT_CACHE_PATH
+    # avoids permission issues with the system-wide cache on worker nodes.
     srun --jobid=$JOB_ID bash -c "
         export ENROOT_CACHE_PATH=\$HOME/.cache/enroot
         mkdir -p \$ENROOT_CACHE_PATH
@@ -462,10 +469,26 @@ else
         BENCH_SCRIPT="${BENCH_BASE}${LEGACY_FW_SUFFIX}${SPEC_SUFFIX}.sh"
     fi
 
-    if [[ "$IMAGE" == *deepseek-v4-hopper* ]]; then
+    # DeepSeek-V4.1-Flash creates AgentX runtime directories next to the
+    # repository, which must not land under /workspace.
+    if [[ "$IMAGE" == *deepseek-v4-hopper* || "$MODEL_PREFIX" == "dsv41flash" ]]; then
         CONTAINER_MOUNT_DIR=/ix
     else
         CONTAINER_MOUNT_DIR=/workspace
+    fi
+    if [[ "$MODEL_PREFIX" == "dsv41flash" ]]; then
+        # Cover DSpark5 verification for concurrent AgentX subagents at c1/c2/c4.
+        export DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE=64
+        export INFMAX_CONTAINER_WORKSPACE=/ix
+        export RESULT_DIR=/ix/results
+        # The HF cache here is a VIRTIOFS mount, which vLLM does not treat as a
+        # network FS, so it memory-maps the 475 GiB checkpoint lazily. On the
+        # 2026-09-15 nightly that path loaded 19/48 shards in the 3600 s
+        # readiness window (run 35012494184). Stream the shards into page cache
+        # with parallel readers first, and give cold loads the same two-hour
+        # deadline the GB300 launcher uses.
+        export VLLM_SAFETENSORS_LOAD_STRATEGY=prefetch
+        export VLLM_ENGINE_READY_TIMEOUT_S=7200
     fi
 
     srun --jobid=$JOB_ID \

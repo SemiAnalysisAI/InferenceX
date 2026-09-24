@@ -3,7 +3,7 @@
 Graded QA jobs (`gsm8k`, `gpqa`) catch accuracy regressions from parallelism,
 concurrency, kernels, and other throughput optimizations. They run separately
 from throughput. Selection lives in `mark_eval_entries()` in
-`utils/matrix_logic/generate_sweep_configs.py`.
+`infx.matrix.generate`.
 
 ## Selection
 
@@ -14,9 +14,11 @@ from throughput. Selection lives in `mark_eval_entries()` in
   topology at its highest eligible concurrency. Rows differing only by
   concurrency share a topology.
 - **Kimi K3 agentic:** every generated point automatically runs
-  `kimi-vendor` with `kimi_tool_call_schema`.
+  `kimi-vendor` with `kimi_tool_call_schema_full` (204 schema cases in two
+  stream modes, 408 checks). The two-check smoke requires an explicit override.
 - **MiniMax M3 agentic:** every generated point automatically runs
-  `minimax-vendor` with `minimax_m3_smoke`.
+  `minimax-vendor` with `minimax_m3_full` (102 provider cases). The one-case
+  smoke requires an explicit override.
 - **Other agentic models (GSM8K):** opt-in through `--evals-only` or
   `--all-evals`, at the highest concurrency per deployment group.
 - **BFCL:** explicit only. No automatic model mapping selects BFCL.
@@ -69,14 +71,14 @@ Generate the complete deployment-smoke matrices with:
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  python utils/matrix_logic/generate_sweep_configs.py full-sweep \
+  python -m infx.matrix.generate full-sweep \
   --config-files configs/nvidia-master.yaml configs/amd-master.yaml \
   --model-prefix kimik3 \
   --scenario-type agentic-coding \
   --evals-only --all-evals --trim-conc
 
 uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-  python utils/matrix_logic/generate_sweep_configs.py full-sweep \
+  python -m infx.matrix.generate full-sweep \
   --config-files configs/nvidia-master.yaml configs/amd-master.yaml \
   --model-prefix minimaxm3 \
   --scenario-type agentic-coding \
@@ -88,10 +90,12 @@ Capacity-limited campaigns can split a `test-config` result with `--conc` and
 row, so a shard cannot silently include another deployment that shares the same
 configuration key and concurrency.
 
-Run each generated matrix with the matching vendor smoke and `bfcl_smoke`.
-The full Kimi, MiniMax, and BFCL suites use the same endpoint and artifact
-paths, but are diagnostic model-quality campaigns rather than a replacement
-for the per-topology deployment smoke.
+Kimi and MiniMax matrix rows select their full vendor suites automatically, including with
+`--trim-conc`; that option trims deployment points, not schema cases. For an
+explicit deployment smoke, override `eval-framework: kimi-vendor` and
+`eval-suite: kimi_tool_call_schema`; for MiniMax, use `eval-framework: minimax-vendor`
+and `eval-suite: minimax_m3_smoke`. Run `bfcl_smoke` explicitly as needed. Full suites use the same endpoint and
+artifact paths; a smoke result does not establish full-suite quality.
 
 ### Artifact reuse
 
@@ -111,20 +115,37 @@ opted-in generic agentic evals use
 (`lm-eval`) with GSM8K. Workflow inputs can explicitly override the
 matrix-selected framework or suite for manual diagnostics.
 
-The Kimi smoke runs automatically for every generated `kimik3` agentic point.
+The Kimi full suite runs automatically for every generated `kimik3` agentic point.
 The matrix selects `eval-framework: kimi-vendor` and
-`eval-suite: kimi_tool_call_schema`. To invoke the same smoke manually from the
+`eval-suite: kimi_tool_call_schema_full`. To invoke the full suite manually from the
 repository root after a server is ready:
 
 ```bash
 source benchmarks/benchmark_lib.sh
 export EVAL_FRAMEWORK=kimi-vendor
-export EVAL_SUITE=kimi_tool_call_schema
+export EVAL_SUITE=kimi_tool_call_schema_full
 export EVAL_RESULT_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
 run_eval --port "$PORT"
 append_lm_eval_summary
-python3 utils/evals/validate_scores.py
+python3 -m infx.evals.validate_scores
 ```
+
+For a short endpoint check, explicitly set `EVAL_SUITE=kimi_tool_call_schema`
+instead (or the same `eval-suite` workflow input). Historical smoke artifacts
+retain their original task name and sample counts; they are not full-suite
+results.
+
+| Kimi task | Selection | Unique schema cases | Reported checks (`n_eff`) |
+| --- | --- | ---: | ---: |
+| `kimi_tool_call_schema` | Explicit smoke | 1 | 2 |
+| `kimi_tool_call_schema_full` | Automatic AgentX evaluation | 204 | 408 |
+
+Each schema case runs once in streaming and once in non-streaming mode. A
+smoke score of `1.0` therefore means 2/2 checks passed on one schema case.
+Read the task and effective sample count with the score. Both tasks measure
+tool-call argument schema conformance, not GSM8K accuracy or overall agent
+quality. The full suite retains its `0.0` quality threshold: a completed score
+is diagnostic, while missing outcomes and integration failures fail the job.
 
 The framework selects a suite-specific subprocess adapter, while the suite
 selects a case set understood by that adapter. Each adapter owns its endpoint
@@ -165,7 +186,7 @@ The selection is `TestAdditionalProperties:1`, parametrized upstream in
 non-streaming and streaming modes. Each mode runs once through the unchanged
 upstream pytest harness. The unchanged native report remains one final outcome
 per mode. It is uploaded as `kimi_vendor_report.json`, and
-`utils/evals/kimi_vendor_eval.py` projects those two outcomes into the existing
+`infx/evals/kimi_vendor_eval.py` projects those two outcomes into the existing
 eval result shape. Both outcomes are recorded with a `0.0`
 `kimi_tool_call_schema` threshold, so model quality remains diagnostic. Setup,
 timeout, and collection failures emit a zero-score result with error metadata.
@@ -175,20 +196,28 @@ process.
 This smoke validates one object-schema tool call. It does not cover tool choice,
 parallel calls, multi-turn execution, or general agent quality. Multi-value
 batched concurrency is unsupported. Multi-node aggregate jobs run the same
-two-case smoke against their OpenAI-compatible frontend. Eval-only launchers
-restore real block verification before submitting recipes that otherwise use
-synthetic acceptance for throughput.
+two-check smoke against their OpenAI-compatible frontend when explicitly
+selected. Eval-only launchers restore real block verification before submitting
+recipes that otherwise use synthetic acceptance for throughput.
 
 ### Kimi full tool-call schema diagnostic
 
 `kimi_tool_call_schema_full` runs the same pinned upstream test module with
 `--selection all`. It evaluates all 204 selected Walle schema cases in
 non-streaming and streaming modes, for 408 reported outcomes. Eight pytest
-workers share a two-hour whole-suite timeout. The native report must declare
+workers run without an adapter-level whole-suite deadline. The native report must declare
 the exact selected suite and line identities, contain both modes for every
 case, and reconcile all outcome counts before projection.
 
-Select it explicitly with `eval-framework: kimi-vendor` and
+The Python adapter's optional `--timeout-seconds <positive-seconds>` argument
+sets an explicit whole-suite deadline when needed. The smoke retains its
+900-second default deadline. Stock verifier request timeouts, engine readiness
+deadlines, and workflow/scheduler allocation limits still apply; removing the
+full-suite adapter deadline does not create an unlimited GPU allocation.
+
+Automatic Kimi K3 AgentX eval rows select this suite for both AMD and NVIDIA,
+including single-node and multi-node deployments. Manual dispatch can also
+select `eval-framework: kimi-vendor` and
 `eval-suite: kimi_tool_call_schema_full`. Its threshold is `0.0`, so model
 quality is diagnostic while setup, timeout, malformed-report, and integration
 failures still fail through the standard zero-effective-sample error path. The
@@ -197,10 +226,9 @@ envelope, artifact staging, collector, and dashboard path.
 
 ### MiniMax provider compatibility smoke
 
-The Phase 1 MiniMax smoke runs automatically for every generated `minimaxm3`
-agentic point. The matrix selects `eval-framework: minimax-vendor` and
-`eval-suite: minimax_m3_smoke`. To invoke the same smoke manually from the
-repository root against an already-ready server:
+The MiniMax smoke is an explicit one-case endpoint check. Automatic `minimaxm3`
+agentic points select the full 102-case suite. To invoke the smoke manually from
+the repository root against an already-ready server:
 
 ```bash
 source benchmarks/benchmark_lib.sh
@@ -210,10 +238,10 @@ export EVAL_SUITE=minimax_m3_smoke
 export EVAL_RESULT_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
 run_eval --port "$PORT"
 append_lm_eval_summary
-python3 utils/evals/validate_scores.py
+python3 -m infx.evals.validate_scores
 ```
 
-`utils/evals/minimax_m3_smoke.json` is derived from
+`infx/evals/minimax_m3_smoke.json` is derived from
 [MiniMax-AI/MiniMax-Provider-Verifier](https://github.com/MiniMax-AI/MiniMax-Provider-Verifier)
 `sample.jsonl` at commit
 `c899f95e17bfc4a338ddd4cb1638279125885e55`. The vendored fixture retains
@@ -257,8 +285,10 @@ quality.
 
 ### MiniMax M3 full provider diagnostic
 
-`minimax_m3_full` is an explicit, non-gating expansion of the smoke to all 102
-rows in the pinned MiniMax Provider Verifier dataset:
+`minimax_m3_full` runs automatically for every generated `minimaxm3` AgentX
+eval point on AMD and NVIDIA, including single-node and multi-node deployments.
+It covers all 102 rows in the pinned MiniMax Provider Verifier dataset; completed
+quality scores remain diagnostic. It can also be selected explicitly:
 
 ```bash
 source benchmarks/benchmark_lib.sh
@@ -267,11 +297,11 @@ export EVAL_SUITE=minimax_m3_full
 export MODEL_NAME='<served model identifier>'
 run_eval --port "$PORT"
 append_lm_eval_summary
-python3 utils/evals/validate_scores.py
+python3 -m infx.evals.validate_scores
 ```
 
 The runner downloads only the eight source and validator files allowlisted in
-`utils/evals/minimax_m3_full_eval.py` at commit
+`infx/evals/minimax_m3_full_eval.py` at commit
 `c899f95e17bfc4a338ddd4cb1638279125885e55`, verifies each SHA256, and executes
 the pinned `verify.py` once. It uses five workers, a 600-second request timeout,
 three upstream retries, and a seven-hour whole-suite timeout. The workflow
@@ -300,7 +330,7 @@ export EVAL_SUITE=bfcl_smoke
 export EVAL_RESULT_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
 run_eval --port "$PORT"
 append_lm_eval_summary
-python3 utils/evals/validate_scores.py
+python3 -m infx.evals.validate_scores
 ```
 
 The validator reads BFCL's declared `acc` metric from the compatibility result,
@@ -501,7 +531,7 @@ Multi-node evals support two hardware paths:
 - Eval artifacts copied to `/run_logs/slurm_job-*/eval_results/`
 - `runners/launch_mi355x-amds.sh` skips benchmark result collection when `EVAL_ONLY=true` and uses `find` to locate eval results
 
-**NVIDIA Slurm multi-node (GB200, GB300, B200, B300, H100, H200)** runs through [srt-slurm](https://github.com/NVIDIA/srt-slurm) on the `sa-submission-q2-2026` branch.
+**NVIDIA Slurm multi-node (GB200, GB300, B200, B300, H100, H200)** runs through [srt-slurm](https://github.com/NVIDIA/srt-slurm) at the shared Git submodule revision at `utils/srt-slurm`. Native `post_eval.command` and `post_eval.passthrough_env` select the InferenceX eval dispatcher without modifying the upstream checkout.
 - `do_sweep.py` skips the benchmark stage when `EVAL_ONLY=true`, runs `_run_post_eval()` directly
 - In eval-only mode, uses the full `wait_for_model()` health check (same as benchmark stage) since the benchmark health check was skipped
 - The registered srt-slurm `lm-eval` post-runner sources InferenceX's `benchmark_lib.sh` from the mounted workspace (`/infmax-workspace`). Kimi-selected launches patch that hook to use generic `run_eval` dispatch while preserving lm-eval as the default.
@@ -529,7 +559,7 @@ For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it conta
 Eval results are collected by `.github/workflows/collect-evals.yml`:
 
 1. Downloads all `eval_*` artifacts
-2. Runs `utils/collect_eval_results.py` to aggregate results
+2. Runs `infx/results/collect_eval_results.py` to aggregate results
 3. Outputs `agg_eval_<exp_name>.json` with all eval metrics
 4. Publishes a summary table to GitHub Step Summary
 
@@ -578,31 +608,31 @@ attempt cannot replace a newer failed retry.
 | `EVAL_ONLY` | `false` | Skip throughput, only run evals (set by workflow) |
 | `EVAL_FRAMEWORK` | Workflow: `auto`; benchmark runner: `lm-eval` | Eval runner (`lm-eval`, `swebench`, `kimi-vendor`, `minimax-vendor`, or `bfcl`). `auto` resolves from matrix metadata before reusable workflow dispatch |
 | `EVAL_SUITE` | Matrix-selected for automatic vendor evals; otherwise basename of `EVAL_TASKS_DIR` or `gsm8k` | Provider suite selector and artifact identity. Explicit workflow overrides remain supported |
-| `EVAL_TASKS_DIR` | `utils/evals/gsm8k.yaml` | Path to lm-eval task YAML |
+| `EVAL_TASKS_DIR` | `infx/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
 | `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval. A space-separated list enables sequential batched evals against one live engine |
 | `EVAL_LIMIT` | empty | Limit eval to first N instances (smoke tests). Empty means the full set |
 
 ### Score validation
-`utils/evals/validate_scores.py` checks eval results against thresholds in `utils/evals/thresholds.yaml`. Runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
+`infx/evals/validate_scores.py` checks eval results against thresholds in `infx/evals/thresholds.yaml`. Runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
 
 ### Adding a new eval task
 
-1. Create a task YAML in `utils/evals/` following the lm-eval task format.
-2. Set `EVAL_TASKS_DIR=utils/evals/<your_task>.yaml` when running benchmarks.
-3. Update `utils/collect_eval_results.py` if new metrics need extraction.
+1. Create a task YAML in `infx/evals/` following the lm-eval task format.
+2. Set `EVAL_TASKS_DIR=infx/evals/<your_task>.yaml` when running benchmarks.
+3. Update `infx/results/collect_eval_results.py` if new metrics need extraction.
 
 ### Adding a provider verifier
 
-1. Add a provider-specific adapter under `utils/evals/`.
+1. Add a provider-specific adapter under `infx/evals/`.
 2. Add an explicit framework case in `run_eval`; keep suite-specific policy in
    that adapter's shell runner.
 3. Install dependencies in a provider-specific isolated runtime.
 4. Emit `result_format: inferencex-eval-v1`, preserve the native report in an
    explicitly uploaded suite-specific path, set `EVAL_SUITE`, and add a threshold.
 
-### Runtime patches (`utils/evals/patches/`)
+### Runtime patches (`infx/evals/patches/`)
 
 The benchmark helpers invoke these standalone scripts against pinned dependencies.
 Source rewrites are anchor-checked, idempotent, and atomic.
@@ -630,8 +660,8 @@ run_eval --framework swebench --port "$PORT"
 append_lm_eval_summary
 ```
 
-- Task metadata and single-shot prompt: `utils/evals/swebench_lite.yaml`.
-- Scoring: `utils/evals/swebench_score.py` (diff extraction → `predictions.jsonl` →
+- Task metadata and single-shot prompt: `infx/evals/swebench_lite.yaml`.
+- Scoring: `infx/evals/swebench_score.py` (diff extraction → `predictions.jsonl` →
   `python -m swebench.harness.run_evaluation` → resolved-rate → results JSON). Offline
   `--report` mode skips Docker for testing.
 - Generation modes (`SWEBENCH_GEN_MODE`) include `agentic`, the default, which runs the
@@ -660,6 +690,6 @@ append_lm_eval_summary
 
 ## Task files
 The following files are task definitions from lm-eval. More information on changes lives within the files:
-- `utils/evals/gsm8k.yaml`
-- `utils/evals/gpqa_diamond.yaml`
-- `utils/evals/swebench_lite.yaml` (generation only, scored by `swebench_score.py`)
+- `infx/evals/gsm8k.yaml`
+- `infx/evals/gpqa_diamond.yaml`
+- `infx/evals/swebench_lite.yaml` (generation only, scored by `swebench_score.py`)

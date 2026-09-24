@@ -10,40 +10,33 @@
 #   each instance spans PREFILL_NODES / DECODE_NODES nodes via vLLM
 #   --data-parallel-hybrid-lb. Total nodes = PREFILL_NODES + DECODE_NODES.
 
-set -euo pipefail
+set -eo pipefail
 
 # Repo root resolved from this script's location, so paths below are
 # independent of the caller's $PWD (the wrapper cd's into llm-d/ before
 # invoking this script).
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
-check_env() {
-    local name="$1"
-    if [[ -z "${!name:-}" ]]; then
-        echo "Error: ${name} not set" >&2
-        exit 1
-    fi
-}
-
-check_env SLURM_ACCOUNT
-check_env SLURM_PARTITION
-check_env TIME_LIMIT
-check_env MODEL_PATH
-check_env MODEL_NAME
-check_env CONTAINER_IMAGE
-check_env RUNNER_NAME
-check_env BENCHMARK_LOGS_DIR
+source "$REPO_ROOT/benchmarks/benchmark_lib.sh" --validation-only
+check_env_vars \
+    SLURM_ACCOUNT SLURM_PARTITION TIME_LIMIT MODEL_PATH MODEL_NAME \
+    CONTAINER_IMAGE RUNNER_NAME BENCHMARK_LOGS_DIR GPUS_PER_NODE PREFILL_WORKERS \
+    DECODE_WORKERS BENCH_NUM_PROMPTS_MULTIPLIER RUN_EVAL EVAL_ONLY EVAL_FRAMEWORK \
+    SWEBENCH_USE_MODAL IS_AGENTIC FRAMEWORK SPEC_DECODING IS_MULTINODE
+if [[ $# -ne 7 ]]; then
+    echo "Usage: submit.sh prefill_nodes decode_nodes isl osl concurrencies request_rate random_range_ratio" >&2
+    exit 1
+fi
 
 PREFILL_NODES=$1
 DECODE_NODES=$2
 ISL=$3
 OSL=$4
 CONCURRENCIES=$5
-REQUEST_RATE=${6:-inf}
-RANDOM_RANGE_RATIO=${7:-0.8}
+REQUEST_RATE=${6}
+RANDOM_RANGE_RATIO=${7}
 
 NUM_NODES=$((PREFILL_NODES + DECODE_NODES))
-GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 
 export DOCKER_IMAGE_NAME=$CONTAINER_IMAGE
 export MODEL_DIR=$MODEL_PATH
@@ -52,12 +45,11 @@ export NUM_NODES=$NUM_NODES
 export PREFILL_NODES=$PREFILL_NODES
 export DECODE_NODES=$DECODE_NODES
 export GPUS_PER_NODE=$GPUS_PER_NODE
-# Worker count per role (Option B): the role's nodes are split into this many
-# INDEPENDENT DP/EP engines (default 1 = one engine over all role nodes). Each
-# engine spans role_nodes/workers nodes, so DP_SIZE is PER-ENGINE. Matches how
-# dynamo/AMD and upstream oci-high-tpt run 2P high-tpt (2 prefill : 1 decode).
-export PREFILL_WORKERS="${PREFILL_WORKERS:-1}"
-export DECODE_WORKERS="${DECODE_WORKERS:-1}"
+# Each role's nodes split into this many INDEPENDENT DP/EP engines (default 1 = one
+# engine over all role nodes), so DP_SIZE is PER-ENGINE. Matches how dynamo/AMD and
+# upstream oci-high-tpt run 2P high-tpt (2 prefill : 1 decode).
+export PREFILL_WORKERS
+export DECODE_WORKERS
 if (( PREFILL_NODES % PREFILL_WORKERS != 0 )); then
     echo "Error: PREFILL_NODES ($PREFILL_NODES) not divisible by PREFILL_WORKERS ($PREFILL_WORKERS)" >&2
     exit 1
@@ -73,28 +65,27 @@ export BENCH_OUTPUT_LEN=$OSL
 export BENCH_MAX_CONCURRENCY=$CONCURRENCIES
 export BENCH_REQUEST_RATE=$REQUEST_RATE
 export BENCH_RANDOM_RANGE_RATIO=$RANDOM_RANGE_RATIO
-# Match the AMD multinode default.
-export BENCH_NUM_PROMPTS_MULTIPLIER="${BENCH_NUM_PROMPTS_MULTIPLIER:-10}"
+export BENCH_NUM_PROMPTS_MULTIPLIER
 
-export RUN_EVAL="${RUN_EVAL:-false}"
-export EVAL_ONLY="${EVAL_ONLY:-false}"
+export RUN_EVAL
+export EVAL_ONLY
 export EVAL_CONC="${EVAL_CONC:-}"
-export EVAL_FRAMEWORK="${EVAL_FRAMEWORK:-lm-eval}"
+export EVAL_FRAMEWORK
 export EVAL_LIMIT="${EVAL_LIMIT:-}"
 export EVAL_SUITE="${EVAL_SUITE:-}"
 export SWEBENCH_GEN_MODE="${SWEBENCH_GEN_MODE:-}"
-export SWEBENCH_USE_MODAL="${SWEBENCH_USE_MODAL:-false}"
+export SWEBENCH_USE_MODAL
 export MODAL_TOKEN_ID="${MODAL_TOKEN_ID:-}"
 export MODAL_TOKEN_SECRET="${MODAL_TOKEN_SECRET:-}"
-export IS_AGENTIC="${IS_AGENTIC:-0}"
+export IS_AGENTIC
 export SCENARIO_TYPE="${SCENARIO_TYPE:-}"
-export FRAMEWORK="${FRAMEWORK:-llmd-vllm}"
+export FRAMEWORK
 export PRECISION="${PRECISION:-}"
 export MODEL_PREFIX="${MODEL_PREFIX:-}"
 export RUNNER_TYPE="${RUNNER_TYPE:-}"
 export RESULT_FILENAME="${RESULT_FILENAME:-}"
-export SPEC_DECODING="${SPEC_DECODING:-none}"
-export IS_MULTINODE="${IS_MULTINODE:-true}"
+export SPEC_DECODING
+export IS_MULTINODE
 export CONFIG_FILE="${CONFIG_FILE:-}"
 
 # Recipe may override SLURM time limit (longer topologies need more wall time).

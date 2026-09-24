@@ -49,7 +49,8 @@ if [[ -n "${MODEL_PATH:-}" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
     fi
 else
-    MODEL_CACHE_ROOT="${HF_HUB_CACHE:-${HF_HOME:-$HOME/.cache/huggingface/hub}}"
+    check_env_vars HF_HUB_CACHE
+    MODEL_CACHE_ROOT="$HF_HUB_CACHE"
     MODEL_CACHE_DIR="$MODEL_CACHE_ROOT/models--${MODEL//\//--}"
     mkdir -p "$MODEL_CACHE_ROOT"
     MODEL_PATH=$(resolve_complete_model_snapshot "$MODEL_CACHE_DIR")
@@ -86,6 +87,8 @@ install_agentic_deps
 
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export PYTHONNOUSERSITE=1
+# Humming for dense MXFP8 linear layers; atomic reduction for the Marlin MXFP8 MoE path.
+export VLLM_MARLIN_USE_ATOMIC_ADD=1
 
 SERVER_LOG="$RESULT_DIR/server.log"
 MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
@@ -110,8 +113,10 @@ MODEL_CHECKPOINT_PAGE_CACHE_GIB=414
 MOONCAKE_LOCAL_BUFFER_GIB=4
 if [ "$KV_OFFLOADING" = "none" ]; then
     require_agentic_kv_offload_none
+    GPU_MEMORY_UTILIZATION=0.95
 elif [ "$KV_OFFLOADING" = "dram" ]; then
     require_agentic_kv_offload_backend mooncake
+    GPU_MEMORY_UTILIZATION=0.90
     TOTAL_CPU_DRAM_GIB=$((TOTAL_CPU_DRAM_GB * 1000000000 / 1073741824))
     PER_RANK_GB=$(((TOTAL_CPU_DRAM_GIB - MODEL_CHECKPOINT_PAGE_CACHE_GIB) / TP - MOONCAKE_LOCAL_BUFFER_GIB))
     if (( PER_RANK_GB <= 0 )); then
@@ -178,9 +183,10 @@ VLLM_CMD=(
     --port "$PORT"
     --tensor-parallel-size "$TP"
     --data-parallel-size 1
-    --gpu-memory-utilization 0.90
+    --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION"
     --kv-cache-dtype fp8
-    --attention-backend TRITON_ATTN
+    --attention-backend FLASH_ATTN
+    --linear-backend humming
     --block-size 128
     --language-model-only
     --enable-prefix-caching
