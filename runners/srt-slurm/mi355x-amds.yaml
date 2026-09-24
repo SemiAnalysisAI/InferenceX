@@ -22,6 +22,8 @@ default_sbatch_directives:
 
 model_paths:
   DeepSeek-V4-Pro-0813: /it-share/data/DeepSeek-V4-Pro-0813
+  # The Hub snapshot's config drops vision_config, which SGLang's Qwen-VL processor requires.
+  Qwen3.5-397B-A17B-FP8: /it-share/data/Qwen3.5-397B-A17B-FP8
 
 default_mounts:
   /dev/kfd: /dev/kfd

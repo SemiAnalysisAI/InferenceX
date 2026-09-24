@@ -6,7 +6,7 @@ schema: 2
 name: "mi355x-sglang-qwen3.5-fp8-disagg-1p1d-tp4p-tp8d-fixed-seq"
 
 model:
-  path: "hf:Qwen/Qwen3.5-397B-A17B-FP8"
+  path: "Qwen3.5-397B-A17B-FP8"
   container: "lmsysorg/sglang:v0.5.16-rocm720-mi35x"
   precision: "fp8"
 
