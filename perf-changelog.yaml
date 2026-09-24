@@ -8790,5 +8790,5 @@
   scenario-type:
     - fixed-seq-len
   description:
-    - "Bump the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260922 on the MI355X Qwen3.5 MXFP4 fixed-seq-len SGLang arms (non-MTP and MTP)."
+    - "Bump the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260913 to lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260924 on the MI355X Qwen3.5 MXFP4 fixed-seq-len SGLang arms (non-MTP and MTP)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3365
