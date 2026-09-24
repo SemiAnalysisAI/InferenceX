@@ -3981,25 +3981,47 @@
         "gpu_metrics.csv": "c93dfde1137c209a1e971b83501538ded8c884a6bcd25cf7bbee4275b5f0ad34",
         "power_validation.json": "575c3540e73679fb63b65dd7b3f27347ab6c51fd88be115b7be0db6835d9a194"
       }
+    },
+    {
+      "run_id": 35972536894,
+      "url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35972536894",
+      "arm": "none",
+      "concurrency": 480,
+      "repeat": 1,
+      "attempt": 1,
+      "head_sha": "50363fd2b8bf03a5ce42bac8d2a111375bd77ff2",
+      "status": "in_progress",
+      "workflow_name": "offload-v1-none-c480-r1-20260924",
+      "dispatched_at": "2026-09-24T07:58:20Z",
+      "get_jobs_job_id": 107545352196,
+      "performance_result": null,
+      "matched_nvme_run_id": 35934408414,
+      "dispatch_evidence": "The exact matrix preview resolved MiniMax-M3 NVFP4, vLLM, TP4, four GPUs, canonical AgentX c480, 3,600-second profiling, kv-offloading=none, zero CPU DRAM, and experiment=agentx-offload. Immediately before dispatch, a fresh GitHub Actions job-label inventory found zero active and zero queued jobs carrying cluster:b200-nscale. The matched NVMe c480 workflow was terminal, its artifacts were hash-verified, and its exact 4 TiB task-owned scratch cleanup was verified absent.",
+      "get_jobs_completed_at": "2026-09-24T07:58:41Z",
+      "started_at": "2026-09-24T07:58:48Z",
+      "job_id": 107545446563,
+      "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35972536894/job/107545446563"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414",
-  "status": "The adaptive 4 TiB HBM+NVMe c480 run completed successfully. It is a mixed result relative to NVMe c448 and requires the matched HBM-only c480 control before judging the offload benefit at this concurrency.",
+  "status": "The adaptive 4 TiB HBM+NVMe c480 run completed successfully with a mixed tradeoff relative to NVMe c448. Its matched HBM-only c480 control is now in progress.",
   "last_capacity_check": {
-    "checked_at": "2026-09-24T07:33:12Z",
-    "active_study_run_ids": [],
+    "checked_at": "2026-09-24T07:58:48Z",
+    "active_study_run_ids": [
+      35972536894
+    ],
     "pending_study_run_ids": [],
     "dispatch_allowed": false,
     "b200_priority_jobs_queued": 0,
     "b200_nodes_allocated": null,
     "b200_nodes_idle": null,
     "target_node": "im-b200-c001",
-    "target_node_state": "c480 workflow terminal; exact scratch cleanup verified",
-    "observed_free_bytes": 17712031088640,
-    "reason": "c480 completed and exact task-owned scratch cleanup is verified. Refresh the cluster-wide B200 queue before dispatching its matched HBM-only control."
+    "target_node_state": "matched HBM-only c480 benchmark job is in progress",
+    "observed_free_bytes": null,
+    "reason": "The matched HBM-only c480 benchmark job is in progress with the required nodes:1 label. Dispatch nothing else until its canonical run, aggregation, and exact task-owned scratch cleanup are complete."
   },
   "next_dispatch": {
-    "requires": "Refresh the cluster-wide B200 queue. If no B200 job is already queued, dispatch the matched HBM-only c480 control and follow canonical warmup, 3,600-second profiling, artifacts, aggregation, and exact task-owned scratch cleanup."
+    "requires": "Monitor matched HBM-only c480 run 35972536894 through benchmark job generation, allocation, canonical warmup, 3,600-second profiling, artifacts, aggregation, and exact task-owned scratch cleanup. Then compare it directly with NVMe c480 run 35934408414."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
