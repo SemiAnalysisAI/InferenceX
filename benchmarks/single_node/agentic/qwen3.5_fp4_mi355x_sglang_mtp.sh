@@ -58,13 +58,15 @@ trap 'exit 143' TERM
 CACHE_ARGS=()
 if require_agentic_kv_offload_backend hicache; then
     HICACHE_RATIO="1.5"
+    HICACHE_SIZE="253"
     HICACHE_WRITE_POLICY="write_through"
     HICACHE_IO_BACKEND="kernel"
     HICACHE_MEM_LAYOUT="page_first"
-    echo "HiCache CPU tier: ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT, dram_budget=${TOTAL_CPU_DRAM_GB} GB, tp=$TP"
+    echo "HiCache CPU tier: ratio=$HICACHE_RATIO, size=$HICACHE_SIZE GB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT, dram_budget=${TOTAL_CPU_DRAM_GB} GB, tp=$TP"
     CACHE_ARGS=(
         --enable-hierarchical-cache
         --hicache-ratio "$HICACHE_RATIO"
+        --hicache-size "$HICACHE_SIZE"
         --hicache-write-policy "$HICACHE_WRITE_POLICY"
         --hicache-io-backend "$HICACHE_IO_BACKEND"
         --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
