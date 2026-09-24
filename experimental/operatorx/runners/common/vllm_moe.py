@@ -79,8 +79,9 @@ def _act_fn(act: dict):
 
 
 class _SharedMLP(torch.nn.Module):
-    def __init__(self, hidden: int, inter: int, act: dict, qc, prefix: str):
+    def __init__(self, hidden: int, inter: int, act: dict, qc, prefix: str, expert_gate=None):
         super().__init__()
+        self.expert_gate = expert_gate  # Qwen: sigmoid(gate(x)) scales the shared output
         from vllm.model_executor.layers.linear import MergedColumnParallelLinear, RowParallelLinear
         self.gate_up_proj = MergedColumnParallelLinear(hidden, [inter] * 2, bias=False, quant_config=qc,
                                                        disable_tp=True, prefix=f"{prefix}.gate_up_proj")
@@ -91,6 +92,8 @@ class _SharedMLP(torch.nn.Module):
     def forward(self, x):
         h, _ = self.gate_up_proj(x)
         h, _ = self.down_proj(self.act_fn(h))
+        if self.expert_gate is not None:
+            h = torch.sigmoid(self.expert_gate(x)[0]) * h
         return h
 
 
@@ -207,15 +210,18 @@ class _MoeBlock(torch.nn.Module):
             if sq["w13"] != sq["w2"]:
                 raise UnsupportedOpError("shared experts take one weight scheme for w13/w2")
             sqc = _quant(sq["x"], sq["w13"], "shared")
-            if (sq == {"x": q["x"], "w13": q["w13"], "w2": q["w2"]} and sh.get("gate") is None
-                    and not ex.get("latent")):
+            if sq == {"x": q["x"], "w13": q["w13"], "w2": q["w2"]} and not ex.get("latent"):
                 fused_shared = resolve_layer_fused_shared_expert(qc, prefix)
-            if not fused_shared:
-                shared = _SharedMLP(H, sh["inter"] * sh["count"], act, sqc, f"{prefix}.shared_experts")
+            expert_gate = None
             if sh.get("gate") == "sigmoid":
                 from vllm.model_executor.layers.linear import ReplicatedLinear
-                shared_gate = ReplicatedLinear(H, 1, bias=False, quant_config=None, disable_tp=True,
+                expert_gate = ReplicatedLinear(H, 1, bias=False, quant_config=None, disable_tp=True,
                                                prefix=f"{prefix}.shared_expert_gate")
+            if fused_shared:  # as Qwen's block: the runner takes the gate only with fused shared experts
+                shared_gate = expert_gate
+            else:
+                shared = _SharedMLP(H, sh["inter"] * sh["count"], act, sqc, f"{prefix}.shared_experts",
+                                    expert_gate=expert_gate)
         latent = {}
         self.down_proj = None
         if ex.get("latent"):  # Kimi-K3: routed experts run at width L between bf16 projections
