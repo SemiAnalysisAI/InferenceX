@@ -22,8 +22,7 @@ fi
 if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
     hf download "$MODEL" --local-dir "$MODEL_PATH"
 else
-    hf download "$MODEL"
-    MODEL_PATH=$(python3 -c 'from huggingface_hub import snapshot_download; import sys; print(snapshot_download(repo_id=sys.argv[1], local_files_only=True))' "$MODEL")
+    MODEL_PATH=$(hf download "$MODEL")
     export MODEL_PATH
 fi
 
