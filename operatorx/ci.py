@@ -56,6 +56,11 @@ NCU_METRICS = ",".join((
     "l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld.sum",
     "l1tex__data_pipe_lsu_wavefronts_mem_shared_op_st.sum",
 ))
+# Host Nsight Compute installs, oldest to newest (sort -V) by ncu path.
+NCU_SEARCH = (
+    "ls -d /opt/nvidia/nsight-compute/*/ncu /usr/local/cuda*/nsight-compute*/ncu "
+    "/opt/nvidia/nsight-compute*/ncu $(command -v ncu) 2>/dev/null | xargs -r readlink -f | sort -uV"
+)
 # rocprofv3 fits only a few counters per hardware pass, so a counters run repeats per pass.
 ROCPROF_PASSES = {
     "fetch": ["FETCH_SIZE"],
@@ -540,10 +545,15 @@ def execute(args) -> None:
         if cell["moe"]:
             env["OPERATORX_MOE_PARALLELISM"] = ":".join(map(str, cell["moe"]))
         mounts = f"{stage}:/opx"
-        # NVIDIA images carry no Nsight Compute; counters runs use the host's.
+        # NVIDIA images carry no Nsight Compute; counters runs mount the node's newest.
         if cell.get("mode") == "counters" and cell["pool"] not in AMD_POOLS:
-            if Path("/opt/nvidia").is_dir():
-                mounts += ",/opt/nvidia:/host-nvidia"
+            found = subprocess.run(
+                ["srun", f"--jobid={job}", "--nodes=1", "--ntasks=1", "bash", "-c", NCU_SEARCH],
+                capture_output=True, text=True, timeout=120,
+            ).stdout.split()
+            (root / "ncu.log").write_text("\n".join(found) + "\n")
+            if found:
+                mounts += f",{Path(found[-1]).parent}:/host-ncu"
         if cell["pool"] in ("mi300x", "mi325x"):
             mounts += ",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri"
         run = [
@@ -634,10 +644,11 @@ def rank() -> None:
                 argv[-1] = str(cache / f"results-{tag}")
             subprocess.run(argv, check=True)
         return
-    candidates = sorted(Path("/host-nvidia").glob("nsight-compute/*/ncu"))
-    ncu = str(candidates[-1]) if candidates else shutil.which("ncu")
+    ncu = "/host-ncu/ncu" if Path("/host-ncu/ncu").exists() else shutil.which("ncu")
     if not ncu:
-        raise RuntimeError("counters mode needs ncu: none in the image or under /opt/nvidia")
+        raise RuntimeError(
+            "counters mode needs ncu: none in the image, and the node has none under "
+            "/opt/nvidia/nsight-compute, /usr/local/cuda*/nsight-compute* or on PATH")
     os.execv(ncu, [
         ncu, "--clock-control", "none", "--target-processes", "all",
         "--nvtx", "--nvtx-include", "regex:opx[0-9]+/", "--metrics", NCU_METRICS,
