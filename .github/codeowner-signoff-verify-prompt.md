@@ -403,6 +403,23 @@ loaded by the pinned upstream image with its default handling and no draft-relat
 settings from the submission. PASS when the effective draft precision matches that
 baseline. FAIL when the submission makes the draft cheaper than that baseline.
 
+EXPLICIT PROHIBITION: `SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE` must not be enabled
+going forward. FAIL Check 13 if the effective recipe enables it (`=1` or any
+other enabling value recognized by the pinned implementation), including through
+an inherited environment, shared launcher/helper, container setting, or image
+default. This is a named prohibition, not merely an inspection lead, and the
+general baseline allowances below do not exempt it. Trace the effective value at
+the pinned SHA even when the PR does not add the flag itself. An unset value or
+`=0` is not a violation of this named prohibition if the pinned implementation
+confirms it is disabled; comments, documentation, and removed diff lines are not
+runtime enablement. If the effective value cannot be verified, do not PASS.
+Report the config/script, enabling value and where it comes from, and require
+removing the enablement and verifying that the draft runs as shipped. Passing
+evals, matching an upstream recipe, AL measurements, or historical NVIDIA runs
+do not exempt it. Apply this to submissions under review, including image-only
+bumps and re-enabled recipes; do not retroactively fail historical runs solely
+because they predate the rule.
+
 "As it ships" does NOT mean BF16 and does NOT mean the unquantized release:
 - If the served FP8 checkpoint stores its MTP head in FP8, the FP8 head IS the
   baseline. Swapping in the BF16 release's head, or forcing an unquantized-draft
@@ -582,9 +599,10 @@ Check 4 or Check 14 also warns.
 Keep the `N/A — <reason>` row so the reviewer sees it was considered.
 Write the complete verdict to `/tmp/codeowner-signoff-verdict.md` using the Write
 or Bash tool. Do not post, edit, or delete GitHub comments, labels, or commit
-statuses. The workflow publishes this file as a new PR comment for every verification,
-preserving earlier verdict comments and recording only the assessed commit. It does not publish
-commit statuses or carry the verdict forward to later commits.
+statuses. The workflow publishes this file as the verdict associated with this sign-off resource.
+Reverification of the same sign-off updates that verdict; verdicts for other sign-offs stay
+unchanged. It records only the assessed commit and does not publish commit statuses or carry the
+verdict forward to later commits.
 Do not include a hidden marker or assessed-commit footer; the publisher adds them.
 Always write your full current assessment, even if it matches a previous verdict.
 

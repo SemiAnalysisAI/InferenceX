@@ -287,11 +287,11 @@ gh api "/repos/SemiAnalysisAI/InferenceX/actions/runs/$RUN_ID" \
 
 ### 安全重跑
 
-CODEOWNER 验证会在合格的人类用户为打开且非草稿的 PR 提交新清单时触发，也可通过 `pr-number` 和该清单的 `comment_url` 手动分发。它仅适用于可信目标分支 CODEOWNERS 中存在非管理员、非 core owner 的改动；其他改动跳过验证。归属、重命名及权限规则见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
+CODEOWNER 验证会在合格的人类用户为打开且非草稿的 PR 提交或编辑清单时触发，也可通过 `pr-number` 和该清单的 `comment_url` 手动分发。它仅适用于可信目标分支 CODEOWNERS 中存在非管理员、非 core owner 的改动；其他改动跳过验证。归属、重命名及权限规则见[贡献指南](../CONTRIBUTING_zh.md#pr-review-checklistcodeowner-签署)。
 
 验证使用可信默认分支代码，并按 PR 串行执行。启动 Claude 要求触发者的基础 `permission` 为 `write` 或 `admin`，且 `role_name` 为 `write`、`maintain` 或 `admin`。未知或自定义角色、字段缺失、机器人触发和查询失败均不能启动验证。手动分发的 `pr-number` 和 `comment_url` 必须指向同一 PR。
 
-验证器在每次验证后发布一条新的供审阅参考的评论，注明实际评估的 SHA，不再发布提交状态。后续推送不会延续该评估，也不会触发新运行。编辑清单不会触发验证。需要重新评估时，请手动分发；合并冲突期间遗漏的 Review 事件也按此方式重试。GitHub 单独设置的人工批准要求仍然适用。
+验证器为每个签署资源关联一条供审阅参考的评论，并注明实际评估的 SHA。编辑同一清单时只更新与其关联的裁定；不同清单会获得独立裁定，因此旧签署的裁定不会被覆盖。后续推送不会延续该评估，也不会触发新运行。需要重新评估时，请手动分发；合并冲突期间遗漏的 Review 事件也按此方式重试。验证器不发布提交状态，GitHub 单独设置的人工批准要求仍然适用。
 
 不要盲目重跑仍在执行的 Run。已结束的失败 Run 可以只重跑失败 Job 及其依赖项：
 
@@ -563,3 +563,5 @@ OperatorX 手动工作流支持 H100、H200、B200、B300、GB200、GB300、MI30
 attention 支持 torch 和 AITER。
 触发方式、覆盖范围、产物、取消及验证说明见
 [OperatorX GitHub Actions](../experimental/operatorx/CI_zh.md)。
+
+H200 DeepSeek-V4.1 Flash SGLang AgentX 在并发 64 及以上的性能任务允许 1440 分钟 Slurm 分配和 1470 分钟 GitHub 任务，以容纳正常预热及保持不变的 3600 秒正式测试；更低并发和 eval-only 任务仍使用标准期限。运行 `35775895782` 在持续推进、请求无错误的预热期间耗尽了原有八小时分配。仅重试失败任务会保留原工作流期限，因此修改期限后必须启动新运行。

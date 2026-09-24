@@ -4,13 +4,14 @@
 #
 # The reusable workflows run runners/launch_${RUNNER_NAME%%_*}.sh, so every
 # b200-nscale-slurm_* runner enters here and this is the pool's only launcher.
-# Three execution paths share the file and are selected once, below:
+# Execution paths share the file and are selected once, below:
 #   native-srt     multi-node lanes whose srt-slurm recipes are maintained
 #                  against this cluster (DSV4 / Kimi K3 / GLM-5.2
 #                  FP4 and GLM-5.1 FP8 TileRT)
 #   multinode-srt  every other multi-node job, through srt-slurm with the
 #                  cluster-wide model table
-#   single-node    salloc + srun of the benchmarks/single_node script
+#   native-single-node  fixed-sequence jobs, which require an SRT recipe
+#   agentic        salloc + srun of the existing AgentX script
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
 check_env_vars EVAL_ONLY IS_AGENTIC IS_MULTINODE RUN_EVAL
 # Exported for this pool by runners/runtime_settings.sh.
@@ -49,8 +50,11 @@ if uses_native_srt_lane; then
     LAUNCH_PATH="native-srt"
 elif [[ "$IS_MULTINODE" == "true" ]]; then
     LAUNCH_PATH="multinode-srt"
+elif [[ "$IS_AGENTIC" == "0" ]]; then
+    check_env_vars SRT_RECIPE
+    LAUNCH_PATH="native-single-node"
 else
-    LAUNCH_PATH="single-node"
+    LAUNCH_PATH="agentic"
 fi
 echo "B200 Nscale launch path: $LAUNCH_PATH"
 
@@ -146,6 +150,15 @@ else
     echo "Available models under /scratch/models:"
     ls -la /scratch/models
     exit 1
+fi
+
+if [[ "$LAUNCH_PATH" == native-single-node ]]; then
+    HF_HUB_CACHE_MOUNT=/data/home/sa-shared/gharunners/hf-hub-cache
+    SRT_MODEL_PATH="$MODEL_PATH"
+    SRT_SQUASH_FILE="$B200_SQUASH_DIR/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    launch_srt_single_node b200-nscale-slurm \
+        --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION"
+    exit $?
 fi
 
 # ---------------------------------------------------------------------------
@@ -754,10 +767,10 @@ run_multinode_srt() {
 }
 
 # ---------------------------------------------------------------------------
-# single-node: salloc + srun of the benchmarks/single_node script
+# agentic: salloc + srun of the existing AgentX script
 # ---------------------------------------------------------------------------
 
-run_single_node() {
+run_agentic() {
     # The runner lease reserves the Slurm nodes before this single-node job is
     # submitted to the Nscale batch_1 partition.
     check_env_vars SALLOC_TIME_LIMIT GPU_COUNT
@@ -834,5 +847,5 @@ run_single_node() {
 case "$LAUNCH_PATH" in
     native-srt) run_native_srt_lane ;;
     multinode-srt) run_multinode_srt ;;
-    single-node) run_single_node ;;
+    agentic) run_agentic ;;
 esac

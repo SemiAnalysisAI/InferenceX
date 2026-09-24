@@ -295,11 +295,11 @@ The [`Claude Code` workflow](../.github/workflows/claude.yml) has separate revie
 
 ### Rerun safely
 
-CODEOWNER verification runs when an eligible human submits a new checklist on an open, ready PR, or manually dispatches it with `pr-number` and that checklist's `comment_url`. It applies only to changes with a non-admin, non-core owner under trusted target-branch CODEOWNERS. Other changes skip verification. See the [contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off) for ownership, rename, and permission rules.
+CODEOWNER verification runs when an eligible human submits or edits a checklist on an open, ready PR, or manually dispatches it with `pr-number` and that checklist's `comment_url`. It applies only to changes with a non-admin, non-core owner under trusted target-branch CODEOWNERS. Other changes skip verification. See the [contribution guide](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off) for ownership, rename, and permission rules.
 
 Execution stays on the trusted default branch and serializes per PR. Starting Claude requires the actor's base `permission` to be `write` or `admin`, and `role_name` to be `write`, `maintain`, or `admin`. Unknown/custom roles, missing fields, bots, and lookup failures do not start verification. Manual dispatch requires `pr-number` and `comment_url` to identify the same PR.
 
-The verifier posts a new advisory comment with the assessed SHA for each verification and publishes no commit status. Later pushes do not extend that assessment or trigger another run. Checklist edits do not trigger verification. Dispatch manually to reassess, including after a review event was missed during a merge conflict. GitHub's separate human approval requirements still apply.
+The verifier associates one advisory comment with each sign-off resource and includes the assessed SHA. Editing the same checklist updates only its associated verdict; a different checklist receives a separate verdict, so an older sign-off's verdict is never overwritten. Later pushes do not extend that assessment or trigger another run. Dispatch manually to reassess, including after a review event was missed during a merge conflict. The verifier publishes no commit status, and GitHub's separate human approval requirements still apply.
 
 Do not rerun an in-progress run blindly. A completed failed run can rerun only failed jobs and their dependents:
 
@@ -581,3 +581,5 @@ four-GPU Arm nodes; the other pools use eight-GPU x86 nodes. GEMM and attention
 use one GPU per measurement. AMD attention supports both torch and AITER.
 See [OperatorX GitHub Actions](../experimental/operatorx/CI.md) for dispatch,
 coverage, artifacts, cancellation, and validation.
+
+For H200 DeepSeek-V4.1 Flash SGLang AgentX performance at concurrency 64 or above, the launcher allows a 1440-minute Slurm allocation and the reusable workflow allows 1470 minutes. This accommodates normal warmup and the unchanged 3600-second profile; lower concurrencies and eval-only jobs retain the standard deadlines. Run `35775895782` exhausted the previous eight-hour allocation during progressing, error-free warmup. A failed-only retry retains the original workflow deadline, so deadline changes require a new workflow run.

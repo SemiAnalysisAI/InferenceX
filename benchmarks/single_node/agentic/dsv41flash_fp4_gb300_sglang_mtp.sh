@@ -1,40 +1,27 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-# DeepSeek-V4.1-Flash on GB300, using the image's native DSpark.
+# DeepSeek-V4.1-Flash AgentX on GB300 with native STP or DSpark serving.
+# Both use TP2/TP4 and GPU-resident KV cache.
+# https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP EP_SIZE CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
-check_env_vars EVAL_ONLY SPEC_DECODING IMAGE
+check_env_vars EVAL_ONLY SPEC_DECODING
 require_agentic_kv_offload_none
-
-if [[ "$MODEL" != deepseek-ai/DeepSeek-V4.1-Flash || "$TP" != "$EP_SIZE" || "$SPEC_DECODING" != mtp ]]; then
-    echo "This recipe requires DeepSeek-V4.1-Flash, EP_SIZE=TP, and SPEC_DECODING=mtp" >&2
-    exit 1
-fi
-# Engram weight placement changes with load; KV stays on GPU throughout.
-case "$TP:$CONC" in
-    4:1|4:2|4:4|4:8)
-        export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0
-        ;;
-    4:32|4:64|4:80|2:16|2:32)
-        export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
-        export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
-        ;;
-    *) echo "Unsupported GB300 SGLang point: TP=$TP CONC=$CONC" >&2; exit 1 ;;
-esac
-case "$EVAL_ONLY" in
-    true|false) ;;
-    *) echo "EVAL_ONLY must be true or false" >&2; exit 1 ;;
-esac
 export GPU_COUNT="$TP"
-export PYTHONNOUSERSITE=1
-export PYTHONUNBUFFERED=1
 
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+    echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
+fi
+
+# Complete/resume partial downloads instead of trusting nonempty directories.
 if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
     hf download "$MODEL" --local-dir "$MODEL_PATH"
 else
     hf download "$MODEL"
-    export MODEL_PATH="$MODEL"
+    # Engram's model-local cache advice needs actual checkpoint file paths.
+    MODEL_PATH=$(python3 -c 'from huggingface_hub import snapshot_download; import sys; print(snapshot_download(repo_id=sys.argv[1], local_files_only=True))' "$MODEL")
+    export MODEL_PATH
 fi
 
 nvidia-smi
@@ -42,46 +29,110 @@ resolve_trace_source
 install_agentic_deps
 mkdir -p "$RESULT_DIR"
 SERVER_LOG="$RESULT_DIR/server.log"
+export PYTHONNOUSERSITE=1
+export PYTHONUNBUFFERED=1
 
+# Agentic warmup dispatches hundreds of large prompts at once and SGLang's
+# tokenizer can leave bytes unacknowledged past AIPerf's default 30 s
+# TCP_USER_TIMEOUT, so Linux aborts live localhost connections.
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
+# Outlast AIPerf's pooled connections so an inter-turn idle gap cannot race
+# Uvicorn's five-second keep-alive closure.
 export SGLANG_TIMEOUT_KEEP_ALIVE=900
+
+# AgentX measures the thinking-on regime, which is also the committed golden-AL
+# curve. SGLang ships thinking off by default for this model.
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
-export SGLANG_RAGGED_VERIFY_MODE=static
 
-# SGLang graph sizes count requests, not the six target-verify token rows.
-# Reserve two requests per trajectory for fan-out; this is a scheduling cap,
-# not a guarantee about the number of subagents a trajectory may spawn.
-MAX_RUNNING_REQUESTS=$((2 * CONC))
-CUDA_GRAPH_MAX_BS=64
-while (( CUDA_GRAPH_MAX_BS < MAX_RUNNING_REQUESTS )); do
-    CUDA_GRAPH_MAX_BS=$((2 * CUDA_GRAPH_MAX_BS))
-done
-
-# Initial tuning follows the newer B200 TP4 recipe; qualify it on GB300.
-SWA_PREFIX_TAILS=$((64 * CONC))
-if (( SWA_PREFIX_TAILS < 128 )); then
-    SWA_PREFIX_TAILS=128
-elif (( SWA_PREFIX_TAILS > 4096 )); then
-    SWA_PREFIX_TAILS=4096
+# TP4 has room for the original Engram tables in HBM: the STP baseline used
+# 73.3 GiB for weights before the ~47.2 GiB tables. Host shards still had 0%
+# huge-page backing on some ranks after model-local cache advice, so avoid
+# that lookup bottleneck on TP4. TP2 retains the anonymous host-table layout.
+if (( TP >= 4 )); then
+    export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0
+    unset SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT
+else
+    export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
+    export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
 fi
+
+# The bundled Markov embedding/head weights are natively BF16. Preserve the
+# nightly default that keeps W2 BF16 instead of converting it to FP32.
+export SGLANG_DSPARK_OPT_MARKOV_W2_BF16=True
+
+# AgentX concurrency counts live session trees, not individual requests.
+# Allow subagent fan-out to exceed CONC without clipping request bursts, but
+# never let the pool exceed the decode graph batch: a DSpark verify step for a
+# batch above the captured 64 runs eagerly and allocates its attention
+# workspace on the fly, which OOMed the H200 eval at 128 running requests
+# (6.4 GiB allocation with 2 GiB free, run 35306704553). Batches within the
+# graph tier reuse the capture-time workspace instead.
+CUDA_GRAPH_MAX_BS=64
+MAX_RUNNING_REQUESTS=$((2 * CONC))
+if (( MAX_RUNNING_REQUESTS > CUDA_GRAPH_MAX_BS )); then
+    MAX_RUNNING_REQUESTS=$CUDA_GRAPH_MAX_BS
+fi
+
+# Saturation arms carry a larger in-flight working set than the 30-minute
+# default warmup drain allows.
 if (( CONC >= 32 )); then
     export AGENTIC_WARMUP_GRACE_PERIOD=3600
 fi
 
-# Match the published vLLM arm's thinking-on golden AL, not the earlier
-# diagnostic AL=5.4. Accuracy evals must never inherit forced acceptance.
-unset SGLANG_SIMULATE_ACC_LEN SGLANG_SIMULATE_ACC_METHOD SGLANG_SIMULATE_ACC_TOKEN_MODE
-if [[ "$EVAL_ONLY" == false ]]; then
-    export SGLANG_SIMULATE_ACC_LEN=3.51
-    export SGLANG_SIMULATE_ACC_METHOD=match-expected
-    export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
-fi
-
+# Pyxis shares the host network; port 8888 can already belong to a host service.
 select_available_server_port
 export AIPERF_SERVER_URL="http://localhost:${PORT}"
 export AIPERF_SERVER_METRICS_URLS="${AIPERF_SERVER_URL}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="sglang:"
+echo "Using SGLang endpoint ${AIPERF_SERVER_URL}"
+
+# The caller selects native non-speculative serving or the bundled DSpark
+# draft. STP and accuracy evals must never inherit synthetic acceptance.
+unset SGLANG_SIMULATE_ACC_LEN SGLANG_SIMULATE_ACC_METHOD SGLANG_SIMULATE_ACC_TOKEN_MODE
+SPECULATIVE_ARGS=()
+# Bound long-prefill decode stalls for DSpark as well as the STP comparison.
+SCHEDULING_ARGS=(--prefill-decode-interval 16)
+# Compressed full-KV capacity alone cannot preserve a prefix whose SWA tail
+# has been evicted. Reserve more cached tails within the static pool for the
+# DSpark comparisons above C1; checkpoint math stays unchanged.
+CACHE_ARGS=()
+if [[ "$SPEC_DECODING" == mtp ]] && (( CONC >= 2 )); then
+    SWA_PREFIX_TAILS=$((64 * CONC))
+    if (( SWA_PREFIX_TAILS > 4096 )); then
+        SWA_PREFIX_TAILS=4096
+    fi
+    CACHE_ARGS=(--swa-prefix-tails "$SWA_PREFIX_TAILS")
+fi
+case "$SPEC_DECODING" in
+    mtp)
+        DSPARK_BLOCK_SIZE=5
+        DSV41_GOLDEN_AL=3.51
+        SPECULATIVE_ARGS=(--speculative-algorithm DSPARK --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE")
+        if [[ "$EVAL_ONLY" != true ]]; then
+            export SGLANG_SIMULATE_ACC_LEN="$DSV41_GOLDEN_AL"
+            export SGLANG_SIMULATE_ACC_METHOD=match-expected
+            export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
+        fi
+        echo "DSpark block size: $DSPARK_BLOCK_SIZE, golden AL=$DSV41_GOLDEN_AL"
+        ;;
+    none)
+        # Interleave decode with long chunked prefills to bound decode stalls.
+        echo "Native non-speculative serving; synthetic acceptance disabled"
+        ;;
+    *)
+        echo "Unsupported SPEC_DECODING=$SPEC_DECODING; expected mtp or none" >&2
+        exit 1
+        ;;
+esac
+
+# Test larger prefill batches at high TP2 concurrency while preserving
+# the validated static cache budget and native 1M context.
+MEM_FRACTION_STATIC=0.80
+CHUNKED_PREFILL_SIZE=4096
+if (( TP == 2 && CONC >= 64 )); then
+    CHUNKED_PREFILL_SIZE=8192
+fi
 
 SGLANG_CMD=(
     python3 -m sglang.launch_server
@@ -89,23 +140,25 @@ SGLANG_CMD=(
     --host 0.0.0.0 --port "$PORT"
     --trust-remote-code
     --tp "$TP" --ep-size "$EP_SIZE"
-    --mem-fraction-static 0.80
-    --chunked-prefill-size 4096
-    --prefill-decode-interval 16
-    --swa-prefix-tails "$SWA_PREFIX_TAILS"
-    --speculative-algorithm DSPARK
-    --speculative-dspark-block-size 5
+    # Backends resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl
+    # on Blackwell); the cookbook warns that overriding them costs decode speed.
+    # Bound prefill workspace while retaining the native 1M context.
+    --mem-fraction-static "$MEM_FRACTION_STATIC"
+    --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
+    "${SPECULATIVE_ARGS[@]}"
+    "${SCHEDULING_ARGS[@]}"
+    "${CACHE_ARGS[@]}"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     --reasoning-parser auto
     --tool-call-parser auto
+    # Draft-token forward passes under long-context agentic load block the
+    # scheduler long enough to trip the 1800 s default watchdog mid-warmup.
     --watchdog-timeout 3600
     --enable-metrics
-    --enable-cache-report
 )
 write_command "$RESULT_DIR/sglang_command.txt" "${SGLANG_CMD[@]}"
 {
-    printf 'IMAGE=%s\n' "$IMAGE"
     echo "=== SGLANG_* env vars at launch ==="
     env | grep -E '^SGLANG_' | sort
     echo "==================================="
@@ -114,9 +167,10 @@ write_command "$RESULT_DIR/sglang_command.txt" "${SGLANG_CMD[@]}"
 SERVER_PID=$!
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [[ "$EVAL_ONLY" == true ]]; then
+if [[ "${EVAL_ONLY}" == true ]]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
+    REPLAY_CMD+=" --server-metrics ${AIPERF_SERVER_METRICS_URLS}"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 fi
