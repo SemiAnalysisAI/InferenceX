@@ -10,7 +10,7 @@ from operatorx.ops.gemm import ELEMENT_DTYPES, check_operand
 SCORING = {"softmax", "sigmoid", "sqrtsoftplus"}
 ACTIVATIONS = {"silu", "gelu", "gelu_tanh", "swigluoai", "situ", "swiglustep"}
 GATE_DTYPES = {"bf16", "fp32"}
-DISTRIBUTIONS = {"natural", "balanced"}
+DISTRIBUTIONS = {"natural", "balanced", "single_hot"}
 
 
 def _keys(d: Any, where: str, required: set[str], optional: set[str] = frozenset()) -> None:
@@ -38,7 +38,7 @@ def _check_quant(q: Any, where: str, operands: set[str]) -> None:
 
 
 def _check_experts(e: Any) -> None:
-    _keys(e, "experts", {"num", "top_k", "inter", "quant"}, {"bias", "latent", "zero"})
+    _keys(e, "experts", {"num", "top_k", "inter", "quant"}, {"bias", "latent", "latent_norm", "zero"})
     for k in ("num", "top_k", "inter"):
         _pos_int(e[k], f"experts.{k}")
     if e["top_k"] > e["num"]:
@@ -47,8 +47,11 @@ def _check_experts(e: Any) -> None:
         _pos_int(e["latent"], "experts.latent")
     if not isinstance(e.get("zero", 0), int) or e.get("zero", 0) < 0:
         raise ValueError("experts.zero must be a non-negative int")
-    if not isinstance(e.get("bias", False), bool):
-        raise ValueError("experts.bias must be a bool")
+    for k in ("bias", "latent_norm"):
+        if not isinstance(e.get(k, False), bool):
+            raise ValueError(f"experts.{k} must be a bool")
+    if e.get("latent_norm") and not e.get("latent"):
+        raise ValueError("experts.latent_norm needs experts.latent")
     _check_quant(e["quant"], "experts.quant", {"x", "w13", "w2", "a2"})
 
 
@@ -82,11 +85,12 @@ def _check_router(r: Any, num_experts: int) -> None:
 
 
 def _check_activation(a: Any) -> None:
-    _keys(a, "activation", {"kind"}, {"gated", "limit", "alpha", "beta"})
+    _keys(a, "activation", {"kind"}, {"gated", "interleaved", "limit", "alpha", "beta"})
     if a["kind"] not in ACTIVATIONS:
         raise ValueError(f"activation.kind must be one of {sorted(ACTIVATIONS)}")
-    if not isinstance(a.get("gated", True), bool):
-        raise ValueError("activation.gated must be a bool")
+    for k, default in (("gated", True), ("interleaved", False)):
+        if not isinstance(a.get(k, default), bool):
+            raise ValueError(f"activation.{k} must be a bool")
     for k in ("limit", "alpha", "beta"):
         _number(a.get(k), f"activation.{k}")
 
@@ -123,10 +127,11 @@ class MoeLayerArgs:
     descriptors are the gemm op's ({"dtype", "scale"?, "scale2"?, "symmetric"?}).
 
     experts: {"num": E, "top_k": K, "inter": I, "quant": {x, w13, w2, a2},
-              "bias"?: bool, "latent"?: L, "zero"?: n}
+              "bias"?: bool, "latent"?: L, "latent_norm"?: bool, "zero"?: n}
       quant.x is the experts' input as they consume it, w13 the fused gate/up
       weight, w2 the down weight, a2 the intermediate activation. latent: experts
-      run at width L with H->L / L->H projections. zero: identity experts.
+      run at width L with bf16 H->L / L->H projections (latent_norm: RMSNorm on the
+      routed latent output before L->H). zero: identity experts.
     router: {"gate": {"dtype", "logits"?}, "scoring": softmax|sigmoid|sqrtsoftplus,
              "select": {"kind": "topk"} | {"kind": "grouped_topk", "groups", "topk_groups"}
                        | {"kind": "hash", "vocab"},
@@ -134,13 +139,16 @@ class MoeLayerArgs:
              "weight_on_input"?: router weight applied to the expert input}
       gate.dtype is the router weight's dtype, gate.logits the dtype of the logits it
       produces (default: gate.dtype).
-    activation: {"kind", "gated"?: default true, "limit"?, "alpha"?, "beta"?}
-      swigluoai: alpha scales the gate sigmoid, limit clamps. situ: alpha and beta
+    activation: {"kind", "gated"?: default true, "interleaved"?: gate/up rows interleaved
+                 in w13 (default false: [gate; up]), "limit"?, "alpha"?, "beta"?}
+      swigluoai: alpha scales the gate sigmoid, beta offsets up, limit clamps. situ: alpha and beta
       soft-cap the gate and up halves (alpha*tanh(g/alpha)*sigmoid(g) * beta*tanh(u/beta)).
     shared: null | {"count", "inter", "quant": {x, w13, w2}, "gate"?: null|"sigmoid"}
-    routing: {"distribution": "natural" | "balanced" | {"kind": "zipf", "s"}, "seed"}
-      natural: routing is whatever the router computes on seeded random inputs;
-      balanced / zipf: expert load is forced to that distribution.
+    routing: {"distribution": "natural" | "balanced" | "single_hot" | {"kind": "zipf", "s"}, "seed"}
+      natural: routing is whatever the router computes on seeded random inputs.
+      Otherwise expert choice is forced: balanced spreads tokens evenly over experts,
+      zipf draws experts with probability ~ 1/rank^s, single_hot sends every token to
+      expert 0 plus top_k-1 random experts. Router weights stay the router's.
     """
     tokens: int
     hidden: int

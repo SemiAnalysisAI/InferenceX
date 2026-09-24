@@ -19,6 +19,7 @@ from operatorx.runners.common.vllm_linear import _ENV_KEYS, _fill, _is_fault, _l
 __all__ = ["IMPLS", "versions"]
 
 _DTYPES = {"bf16": torch.bfloat16, "fp32": torch.float32}
+_MAX_TOKENS = 2048  # covers the largest CUDA-graph capture size
 _WORKSPACE = False
 _LAYER = 0
 
@@ -53,8 +54,9 @@ def _act_kwargs(act: dict) -> dict:
     if kind == "silu":
         return {"activation": "silu", "swiglu_limit": act.get("limit")}
     if kind == "swigluoai":
-        return {"activation": "swigluoai", "swiglu_limit": act.get("limit", 7.0),
-                "swiglu_alpha": act.get("alpha", 1.702), "swiglu_beta": act.get("beta")}
+        return {"activation": "swigluoai" if act.get("interleaved") else "swigluoai_uninterleave",
+                "swiglu_limit": act.get("limit", 7.0), "swiglu_alpha": act.get("alpha", 1.702),
+                "swiglu_beta": act.get("beta")}
     if kind == "situ":
         return {"activation": "situ", "activation_situ_beta": act.get("alpha", 1.0),
                 "activation_situ_linear_beta": act.get("beta")}
@@ -67,7 +69,10 @@ def _act_fn(act: dict):
     if kind == "silu":
         return A.SiluAndMulWithClamp(act["limit"]) if act.get("limit") else A.SiluAndMul()
     if kind == "swigluoai":
-        return A.SwigluOAIAndMul(alpha=act.get("alpha", 1.702), limit=act.get("limit", 7.0))
+        if act.get("interleaved"):
+            return A.SwigluOAIAndMul(alpha=act.get("alpha", 1.702), limit=act.get("limit", 7.0))
+        return A.SiluAndMulWithClamp(act.get("limit", 7.0), alpha=act.get("alpha", 1.702),
+                                     beta=act.get("beta") or 0.0)
     if kind == "situ":
         return A.SituAndMul(beta=act.get("alpha", 1.0), linear_beta=act.get("beta"))
     raise UnsupportedOpError(f"shared-expert activation {kind!r} is not wired")
@@ -89,8 +94,74 @@ class _SharedMLP(torch.nn.Module):
         return h
 
 
+# DeepSeek-V4 routed experts: MXFP4 weights under the checkpoint's fp8 (ue8m0) config,
+# which vLLM routes to its MXFP4 MoE method (expert_dtype "fp4").
+_DSV4_FP4_EXPERTS = ("deepseek_v4_fp8", {"quant_method": "fp8", "activation_scheme": "dynamic", "fmt": "e4m3",
+                                         "scale_fmt": "ue8m0", "weight_block_size": [128, 128]})
+
+
+def _expert_quant(x: dict, w: dict):
+    if (x.get("dtype") == "e4m3" and x.get("scale", {}).get("dtype") == "ue8m0" and w["dtype"] == "e2m1"
+            and w.get("scale") == {"dtype": "ue8m0", "static": True, "group": [1, 32]} and "scale2" not in w):
+        from vllm.model_executor.layers.quantization import get_quantization_config
+        method, cfg = _DSV4_FP4_EXPERTS
+        return get_quantization_config(method).from_config(cfg)
+    return _quant(x, w, "experts")
+
+
+def _scores(logits: torch.Tensor, scoring: str) -> torch.Tensor:
+    logits = logits.float()
+    if scoring == "softmax":
+        return torch.softmax(logits, dim=-1)
+    if scoring == "sigmoid":
+        return torch.sigmoid(logits)
+    return torch.sqrt(torch.nn.functional.softplus(logits))  # sqrtsoftplus
+
+
+def _forced_ids(dist, tokens: int, experts: int, top_k: int, seed: int) -> torch.Tensor:
+    """[tokens, top_k] expert ids with the requested expert-load distribution."""
+    g = torch.Generator().manual_seed(seed)
+    if dist == "balanced":  # round-robin: every expert gets tokens*top_k/experts slots
+        base = torch.arange(tokens * top_k) % experts
+        ids = base.view(tokens, top_k)
+        return ids[:, torch.randperm(top_k, generator=g)]
+    if dist == "single_hot":
+        rest = torch.stack([torch.randperm(experts - 1, generator=g)[: top_k - 1] + 1 for _ in range(tokens)])
+        return torch.cat([torch.zeros(tokens, 1, dtype=torch.long), rest], dim=1)
+    p = 1.0 / torch.arange(1, experts + 1, dtype=torch.float64) ** dist["s"]  # zipf over expert rank
+    ranked = torch.randperm(experts, generator=g)
+    return ranked[torch.multinomial(p.expand(tokens, -1), top_k, replacement=False, generator=g)]
+
+
+def _kimi_latent():
+    """Kimi-K3's latent-MoE runner and output transform (platform-specific modules)."""
+    from vllm.platforms import current_platform
+    if current_platform.is_rocm():
+        from vllm.models.kimi_k3.amd.latent_moe_runner import ROCmLatentMoERunner as LatentMoERunner
+        from vllm.models.kimi_k3.amd.linear import KimiRoutedOutputTransform
+        return LatentMoERunner, KimiRoutedOutputTransform, 256
+    from vllm.models.kimi_k3.nvidia.latent_moe_runner import LatentMoERunner
+    from vllm.models.kimi_k3.nvidia.model import (_ROUTED_DOWN_PROJ_STREAM_TOKEN_THRESHOLD,
+                                                  KimiRoutedOutputTransform)
+    return LatentMoERunner, KimiRoutedOutputTransform, _ROUTED_DOWN_PROJ_STREAM_TOKEN_THRESHOLD
+
+
+class _ForcedRouting:
+    """vLLM custom_routing_function: fixed expert choice, the router's weights for it."""
+
+    def __init__(self, owner: torch.nn.Module, scoring: str):
+        self.owner, self.scoring = owner, scoring
+
+    def __call__(self, hidden_states, gating_output, topk, renormalize):
+        ids = self.owner.forced_ids[: gating_output.shape[0]]
+        w = _scores(gating_output, self.scoring).gather(1, ids.long())
+        if renormalize:
+            w = w / w.sum(dim=-1, keepdim=True)
+        return w, ids
+
+
 class _MoeBlock(torch.nn.Module):
-    """Router + routed experts (+ shared experts), called as the model's block would."""
+    """Router + routed experts (+ shared experts), wired as vLLM's model blocks wire them."""
 
     def __init__(self, a: dict, prefix: str):
         super().__init__()
@@ -98,31 +169,46 @@ class _MoeBlock(torch.nn.Module):
         from vllm.model_executor.layers.fused_moe.router.gate_linear import GateLinear
         from vllm.model_executor.layers.fused_moe.utils import resolve_layer_fused_shared_expert
         ex, rt, sh, act = a["experts"], a["router"], a.get("shared"), a["activation"]
-        for key, what in (("latent", "latent experts"), ("zero", "zero experts")):
-            if ex.get(key):
-                raise UnsupportedOpError(f"{what} are not wired for vLLM MoE yet")
-        if rt["select"]["kind"] == "hash":
-            raise UnsupportedOpError("hash routing is not wired for vLLM MoE yet")
+        if ex.get("zero"):
+            raise UnsupportedOpError("zero experts are not wired for vLLM MoE yet")
         if rt.get("weight_on_input"):
             raise UnsupportedOpError("router weight on the expert input is not wired")
         q = ex["quant"]
         if q["w13"] != q["w2"] or q["a2"] != q["x"]:
             raise UnsupportedOpError("vLLM MoE takes one scheme for w13/w2 and for x/a2")
-        qc = _quant(q["x"], q["w13"], "experts")
+        qc = _expert_quant(q["x"], q["w13"])
         vllm_linear._set_quant_fp8_op(qc)
-        H = a["hidden"]
+        H, E, K = a["hidden"], ex["num"], ex["top_k"]
+        L = ex.get("latent") or H
+        sel = rt["select"]
+        routing = a.get("routing") or {"distribution": "natural", "seed": 0}
         logits = _DTYPES[rt["gate"].get("logits", rt["gate"]["dtype"])]
-        self.gate = GateLinear(H, ex["num"], params_dtype=_DTYPES[rt["gate"]["dtype"]],
+        self.gate = GateLinear(H, E, params_dtype=_DTYPES[rt["gate"]["dtype"]],
                                out_dtype=None if logits == torch.bfloat16 else logits, prefix=f"{prefix}.gate")
         self.gate.e_score_correction_bias = (
-            torch.nn.Parameter(torch.zeros(ex["num"], dtype=torch.float32)) if rt.get("bias") else None)
+            torch.nn.Parameter(torch.zeros(E, dtype=torch.float32)) if rt.get("bias") else None)
+        self.gate.tid2eid = None
+        self.register_buffer("input_ids", None)
+        if sel["kind"] == "hash":  # DeepSeek-V4 hash layers: token id -> experts table
+            g = torch.Generator().manual_seed(routing["seed"])
+            self.gate.tid2eid = torch.nn.Parameter(
+                torch.randint(0, E, (sel["vocab"], K), generator=g, dtype=torch.int32), requires_grad=False)
+            self.register_buffer("input_ids", torch.randint(0, sel["vocab"], (_MAX_TOKENS,), generator=g))
+        custom = None
+        if routing["distribution"] != "natural":
+            if sel["kind"] == "hash":
+                raise UnsupportedOpError("a forced expert-load distribution conflicts with hash routing")
+            ids = _forced_ids(routing["distribution"], _MAX_TOKENS, E, K, routing["seed"])
+            self.register_buffer("forced_ids", ids.to(torch.int32))
+            custom = _ForcedRouting(self, rt["scoring"])
         shared, shared_gate, fused_shared = None, None, False
         if sh is not None:
             sq = sh["quant"]
             if sq["w13"] != sq["w2"]:
                 raise UnsupportedOpError("shared experts take one weight scheme for w13/w2")
             sqc = _quant(sq["x"], sq["w13"], "shared")
-            if sq == {"x": q["x"], "w13": q["w13"], "w2": q["w2"]} and sh.get("gate") is None:
+            if (sq == {"x": q["x"], "w13": q["w13"], "w2": q["w2"]} and sh.get("gate") is None
+                    and not ex.get("latent")):
                 fused_shared = resolve_layer_fused_shared_expert(qc, prefix)
             if not fused_shared:
                 shared = _SharedMLP(H, sh["inter"] * sh["count"], act, sqc, f"{prefix}.shared_experts")
@@ -130,29 +216,55 @@ class _MoeBlock(torch.nn.Module):
                 from vllm.model_executor.layers.linear import ReplicatedLinear
                 shared_gate = ReplicatedLinear(H, 1, bias=False, quant_config=None, disable_tp=True,
                                                prefix=f"{prefix}.shared_expert_gate")
-        sel = rt["select"]
-        grouped = sel["kind"] == "grouped_topk"
+        latent = {}
+        self.down_proj = None
+        if ex.get("latent"):  # Kimi-K3: routed experts run at width L between bf16 projections
+            from vllm.model_executor.layers.layernorm import RMSNorm
+            from vllm.model_executor.layers.linear import ReplicatedLinear
+            LatentMoERunner, KimiRoutedOutputTransform, self._stream_tokens = _kimi_latent()
+            self.down_proj = ReplicatedLinear(H, L, bias=False, quant_config=None,
+                                              prefix=f"{prefix}.routed_expert_down_proj")
+            norm = RMSNorm(L) if ex.get("latent_norm") else None
+            up = ReplicatedLinear(L, H, bias=False, quant_config=None, prefix=f"{prefix}.routed_expert_up_proj")
+            self.up_transform = KimiRoutedOutputTransform(norm, up)
+            latent = {"routed_output_transform": self.up_transform, "runner_cls": LatentMoERunner}
+        # a forced expert choice replaces selection, so vLLM's grouped/bias selection is off
+        grouped = sel["kind"] == "grouped_topk" and custom is None
+        bias = None if custom is not None else self.gate.e_score_correction_bias
         self.experts = FusedMoEFactory(
-            num_experts=ex["num"], top_k=ex["top_k"], hidden_size=H, intermediate_size=ex["inter"],
-            renormalize=bool(rt.get("renormalize")), quant_config=qc,
-            use_grouped_topk=grouped or rt.get("bias", False),
-            num_expert_group=sel["groups"] if grouped else 1,
-            topk_group=sel["topk_groups"] if grouped else 1,
+            num_experts=E, top_k=K, hidden_size=L, intermediate_size=ex["inter"],
+            renormalize=bool(rt.get("renormalize")), quant_config=qc, use_grouped_topk=grouped,
+            num_expert_group=sel["groups"] if grouped else None,
+            topk_group=sel["topk_groups"] if grouped else None,
             prefix=f"{prefix}.experts", scoring_func=rt["scoring"],
             routed_scaling_factor=rt.get("scale") or 1.0,
-            e_score_correction_bias=self.gate.e_score_correction_bias,
+            e_score_correction_bias=bias,
+            hash_indices_table=self.gate.tid2eid, custom_routing_function=custom,
             has_bias=bool(ex.get("bias")), reduce_results=False,
             n_shared_experts=sh["count"] if fused_shared else None, fuse_shared_experts=fused_shared,
-            router_logits_dtype=self.gate.out_dtype, gate=self.gate,
-            shared_experts=shared, shared_expert_gate=shared_gate, **_act_kwargs(act))
+            router_logits_dtype=self.gate.out_dtype, gate=None if ex.get("latent") else self.gate,
+            shared_experts=shared, shared_expert_gate=shared_gate, **latent, **_act_kwargs(act))
         self.shared = shared
         self.fused_shared = fused_shared
+        if ex.get("latent"):
+            from vllm.utils.torch_utils import aux_stream
+            self._aux = aux_stream()
+            self._events = (torch.cuda.Event(), torch.cuda.Event())
 
     def forward(self, x):
         from vllm.config import get_current_vllm_config
         from vllm.forward_context import set_forward_context
-        with set_forward_context(None, get_current_vllm_config(), num_tokens=x.shape[0]):
-            return self.experts(hidden_states=x, router_logits=x)
+        T = x.shape[0]
+        with set_forward_context(None, get_current_vllm_config(), num_tokens=T):
+            if self.down_proj is None:
+                ids = None if self.input_ids is None else self.input_ids[:T]
+                return self.experts(hidden_states=x, router_logits=x, input_ids=ids)
+            # as Kimi-K3's block: router and latent down projection on two streams at decode sizes
+            from vllm.utils.multi_stream_utils import maybe_execute_in_parallel
+            logits, (lat, _) = maybe_execute_in_parallel(
+                lambda: self.gate(x)[0], lambda: self.down_proj(x), self._events[0], self._events[1],
+                self._aux if T <= self._stream_tokens else None)
+            return self.experts(hidden_states=lat, router_logits=logits, shared_experts_input=x)
 
 
 def _describe(block) -> dict:
@@ -176,14 +288,19 @@ def _describe(block) -> dict:
     return out
 
 
+def _missing_op(e: BaseException) -> bool:
+    """A vLLM custom op this build does not ship (e.g. Marlin repack on ROCm)."""
+    return isinstance(e, AttributeError) and "_OpNamespace" in str(e)
+
+
 def _prepare_moe(op: Op) -> dict:
     global _LAYER
     a = op.args
     if a.get("out", "bf16") != "bf16":
         raise UnsupportedOpError("vLLM MoE layers return bf16")
+    if a["tokens"] > _MAX_TOKENS:
+        raise UnsupportedOpError(f"tokens > {_MAX_TOKENS} is not wired")
     routing = a.get("routing") or {"distribution": "natural", "seed": 0}
-    if routing["distribution"] != "natural":
-        raise UnsupportedOpError("forced expert-load distributions are not wired for vLLM MoE yet")
     _context()
     import vllm.envs as envs
     from vllm.model_executor.layers.quantization.base_config import QuantizeMethodBase
@@ -198,12 +315,15 @@ def _prepare_moe(op: Op) -> dict:
             _fill(m)
         if block.gate.e_score_correction_bias is not None:
             block.gate.e_score_correction_bias.data.zero_()
+        if block.gate.tid2eid is not None:  # the filler knows nothing of expert ids
+            block.gate.tid2eid.data.random_(0, a["experts"]["num"])
         for m in block.modules():
             qm = getattr(m, "quant_method", None)
             if isinstance(qm, QuantizeMethodBase):
                 qm.process_weights_after_loading(m)
-    except (NotImplementedError, AssertionError, ValueError, RuntimeError, TypeError, KeyError) as e:
-        if _is_fault(e):
+    except (NotImplementedError, AssertionError, ValueError, RuntimeError, TypeError, KeyError,
+            AttributeError) as e:
+        if _is_fault(e) or (isinstance(e, AttributeError) and not _missing_op(e)):
             raise
         raise UnsupportedOpError(f"vLLM rejected this MoE layer: {type(e).__name__}: {e}"[:400]) from e
     finally:
@@ -218,8 +338,8 @@ def _prepare_moe(op: Op) -> dict:
     try:
         _kernel_moe(ctx)
         torch.cuda.synchronize()
-    except (NotImplementedError, AssertionError, RuntimeError, ValueError, TypeError) as e:
-        if _is_fault(e):
+    except (NotImplementedError, AssertionError, RuntimeError, ValueError, TypeError, AttributeError) as e:
+        if _is_fault(e) or (isinstance(e, AttributeError) and not _missing_op(e)):
             raise
         raise UnsupportedOpError(f"vLLM MoE kernel failed: {type(e).__name__}: {e}"[:400]) from e
     return ctx
