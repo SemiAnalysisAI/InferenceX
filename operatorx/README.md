@@ -1,7 +1,7 @@
 # operatorx
 
 Multi-platform inference operator benchmark suite. Times one op at a time
-(gemm, attention, moe, collectives, ...) on NVIDIA / AMD / TPU / Trainium and
+(gemm, ...) on NVIDIA / AMD / TPU / Trainium and
 emits one JSON per run under `results/<platform>/<cluster>/`.
 
 See `CLUSTERS.md` for how to reach each cluster and the per-host quirks.
@@ -25,8 +25,8 @@ Defaults that apply: `OPERATORX_CLUSTER=b200_dgx_8x`,
 
 ### b300 (HGX-style, 8x B300)
 
-The b300 cluster needs a non-default partition + account + qos, has its own
-squash dir, and DeepEP has known IBGDA issues here so we exclude it.
+The b300 cluster needs a non-default partition + account + qos and has its own
+squash dir.
 
 ```bash
 ssh tailscale-b300
@@ -36,7 +36,7 @@ OPERATORX_PARTITION=batch_1 \
 OPERATORX_ACCOUNT=benchmark \
 OPERATORX_QOS=batch_1_qos \
 OPERATORX_SQUASH_DIR=/data/home/sa-shared/harrison/containers \
-OPERATORX_BACKENDS=torch,deepgemm,flashinfer,sglang \
+OPERATORX_BACKENDS=vllm \
 python3 scripts/submit_run.py nvidia
 ```
 
