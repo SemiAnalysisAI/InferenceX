@@ -8882,3 +8882,9 @@
     - "Experiment only: test native Responses BFCL smoke with eager prefill and unchanged EAGLE3; retain production TRT BFCL guard on the main PR branch"
     - "仅用于实验：以 eager 预填充及原生 EAGLE3 验证 Responses BFCL 冒烟测试；主 PR 分支继续禁用 TRT BFCL"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - minimaxm3-fp4-b200-trtllm-agentic-mtp
+  description:
+    - "Use the canonical registry URL for the B200 TRT nightly test; the launcher supplies the Enroot separator."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
