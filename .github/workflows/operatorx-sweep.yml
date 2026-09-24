@@ -16,6 +16,11 @@ on:
         description: Comma-separated testlist stems
         type: string
         default: gemm
+      mode:
+        description: timing (latency, telemetry, profiler replay) or counters (per-kernel ncu / rocprofv3 counters; latencies perturbed)
+        type: choice
+        default: timing
+        options: [timing, counters]
       world_sizes:
         description: Comma-separated world sizes (1,2,4; also 8 on eight-GPU pools)
         type: string
@@ -61,18 +66,19 @@ jobs:
           OPERATORX_BACKENDS: ${{ inputs.backends || 'vllm' }}
           OPERATORX_TESTLISTS: ${{ inputs.testlists || 'gemm' }}
           OPERATORX_WORLD_SIZES: ${{ inputs.world_sizes || '1' }}
+          OPERATORX_MODE: ${{ inputs.mode || 'timing' }}
           OPERATORX_RECOVERY_RUN: ${{ inputs.recovery_run_id }}
           OPERATORX_CHUNK_SIZE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.chunk_size) || '500' }}
           PYTHONPATH: experimental
         run: |
           set -eo pipefail
           source benchmarks/benchmark_lib.sh --validation-only
-          check_env_vars OPERATORX_POOL OPERATORX_BACKENDS OPERATORX_TESTLISTS OPERATORX_WORLD_SIZES OPERATORX_CHUNK_SIZE GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_SHA GITHUB_OUTPUT
+          check_env_vars OPERATORX_POOL OPERATORX_BACKENDS OPERATORX_TESTLISTS OPERATORX_WORLD_SIZES OPERATORX_MODE OPERATORX_CHUNK_SIZE GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_SHA GITHUB_OUTPUT
           python3 -m operatorx.ci plan \
             --platform-config experimental/operatorx/platforms.json \
             --pool "$OPERATORX_POOL" --backends "$OPERATORX_BACKENDS" \
             --testlists "$OPERATORX_TESTLISTS" --world-sizes "$OPERATORX_WORLD_SIZES" \
-            --chunk-size "$OPERATORX_CHUNK_SIZE" --run-id "$GITHUB_RUN_ID" \
+            --chunk-size "$OPERATORX_CHUNK_SIZE" --mode "$OPERATORX_MODE" --run-id "$GITHUB_RUN_ID" \
             --attempt "$GITHUB_RUN_ATTEMPT" --source-sha "$GITHUB_SHA" \
             --out operatorx-manifest.json > operatorx-matrix.json
           if [ -n "$OPERATORX_RECOVERY_RUN" ]; then
