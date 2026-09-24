@@ -132,9 +132,9 @@ elif [[ "$EXECUTION_PATH" == multinode ]]; then
     curl -LsSf https://astral.sh/uv/install.sh | sh
     source $HOME/.local/bin/env
 
-    uv venv
+    uv venv --quiet
     source .venv/bin/activate
-    uv pip install -e .
+    uv pip install --quiet -e .
 
     # A full sweep starts several independent runner jobs at once. Serialize
     # the initial DSV4 download into the shared model directory so those jobs
@@ -145,7 +145,7 @@ elif [[ "$EXECUTION_PATH" == multinode ]]; then
         DSV4_MODEL_READY="${MODEL_PATH}/.inference-max-download-complete"
         DSV4_MODEL_LOCK="${MODEL_PATH}.download.lock"
         if [[ ! -f "$DSV4_MODEL_READY" ]]; then
-            uv pip install huggingface-hub
+            uv pip install --quiet huggingface-hub
             mkdir -p "$(dirname "$MODEL_PATH")"
             (
                 exec 9>"$DSV4_MODEL_LOCK"

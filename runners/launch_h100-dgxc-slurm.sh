@@ -76,9 +76,9 @@ elif [[ "$EXECUTION_PATH" == multinode ]]; then
     export PATH="$UV_INSTALL_DIR:$PATH"
     source $UV_INSTALL_DIR/env
 
-    uv venv
+    uv venv --quiet
     source .venv/bin/activate
-    uv pip install -e .
+    uv pip install --quiet -e .
 
     if ! command -v srtctl &> /dev/null; then
         echo "Error: Failed to install srtctl"

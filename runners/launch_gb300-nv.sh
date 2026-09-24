@@ -223,9 +223,9 @@ VENV_DIR="${GITHUB_WORKSPACE}/.venv-srt-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-$
 rm -rf "$VENV_DIR"
 # --seed installs pip; srtctl's prefetch-ai-dynamo-wheel.sh (recipes with
 # dynamo.wheel) otherwise fails with "No module named pip".
-uv venv --seed "$VENV_DIR"
+uv venv --quiet --seed "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
-uv pip install -e .
+uv pip install --quiet -e .
 
 if ! command -v srtctl &> /dev/null; then
     echo "Error: Failed to install srtctl"

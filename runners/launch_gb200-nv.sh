@@ -402,12 +402,12 @@ source $HOME/.local/bin/env
 # SRT_REPO_DIR; a uv-managed python under a head-node-only path leaves
 # .venv/bin/python3 a broken symlink there, so pin /usr/bin/python3.
 if uses_watchtower_shared_fs && [[ -x /usr/bin/python3 ]]; then
-    uv venv --seed --python /usr/bin/python3
+    uv venv --quiet --seed --python /usr/bin/python3
 else
-    uv venv --seed
+    uv venv --quiet --seed
 fi
 source .venv/bin/activate
-uv pip install -e .
+uv pip install --quiet -e .
 
 if ! command -v srtctl &> /dev/null; then
     echo "Error: Failed to install srtctl"

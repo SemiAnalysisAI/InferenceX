@@ -181,9 +181,9 @@ export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
 curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$UV_INSTALL_DIR:$PATH"
 
-uv venv "$GITHUB_WORKSPACE/.venv"
+uv venv --quiet "$GITHUB_WORKSPACE/.venv"
 source "$GITHUB_WORKSPACE/.venv/bin/activate"
-uv pip install -e .
+uv pip install --quiet -e .
 
 if ! command -v srtctl &> /dev/null; then
     echo "Error: Failed to install srtctl"
