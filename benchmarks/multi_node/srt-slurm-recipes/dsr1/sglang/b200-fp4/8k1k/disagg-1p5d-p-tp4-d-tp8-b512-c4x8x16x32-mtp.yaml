@@ -136,9 +136,10 @@ health_check:
   interval_seconds: 10
 
 benchmark:
-  type: "sa-bench"
-  isl: 8192
-  osl: 1024
-  req_rate: 300
-  concurrencies: "4x8x16x32"
-  use_chat_template: true
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
+  env:
+    MODEL: deepseek-ai/DeepSeek-R1
+    TOKENIZER: /model
+    ISL: '8192'
+    OSL: '1024'

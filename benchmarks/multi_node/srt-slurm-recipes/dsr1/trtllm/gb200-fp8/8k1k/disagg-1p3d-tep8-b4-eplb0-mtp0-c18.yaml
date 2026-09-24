@@ -94,11 +94,13 @@ roles:
 
 
 benchmark:
-  type: "sa-bench"
-  isl: 8192
-  osl: 1024
-  concurrencies: ['18']
-  req_rate: "inf"
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
+  env:
+    MODEL: dsr1-fp8
+    TOKENIZER: /model
+    ISL: '8192'
+    OSL: '1024'
 
 frontend:
   type: "dynamo"

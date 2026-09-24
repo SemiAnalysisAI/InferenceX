@@ -160,10 +160,13 @@ base:
     interval_seconds: 10
 
   benchmark:
-    type: "sa-bench"
-    isl: 8192
-    osl: 1024
-    req_rate: "inf"
+    type: custom
+    command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-R1
+      TOKENIZER: /model
+      ISL: '8192'
+      OSL: '1024'
 
 
 # STP TP4 prefill mode: TP4 (DP=1, EP=1) instead of dep4 — low-latency single-node
@@ -181,8 +184,6 @@ override_stp_tp4:
     decode:
       args:
         expert-parallel-size: 1
-  benchmark:
-    concurrencies: "4x8x16x64"
 
 
 # MTP TP4 prefill mode: same as STP tp4 but adds EAGLE speculative decoding
@@ -208,8 +209,6 @@ override_mtp_tp4:
         speculative-num-steps: 2
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 3
-  benchmark:
-    concurrencies: "4x8x16x64"
 
 
 # STP low-latency: dep4 prefill + tep8 decode (DP=1), scale sweep 1p1d/1p5d/2p5d
@@ -226,8 +225,6 @@ zip_override_stp_lowlat:
     decode:
       nodes: [1, 5, 5]
       workers: [1, 5, 5]
-  benchmark:
-    concurrencies: ["64x128", "8", "4x128"]
 
 
 # MTP low-latency: same scales as STP, adds EAGLE speculative decoding
@@ -253,8 +250,6 @@ zip_override_mtp_lowlat:
         speculative-num-steps: 2
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 3
-  benchmark:
-    concurrencies: ["64x128", "8", "4x128"]
 
 
 # STP max-throughput 7p2d: dep4 prefill + dep8 decode, flashinfer_cutlass backend
@@ -283,8 +278,6 @@ override_stp_maxtpt_7p2d:
         max-running-requests: 2048
         cuda-graph-max-bs: 1024
         fp4-gemm-backend: "flashinfer_cutlass"
-  benchmark:
-    concurrencies: "1024x2048"
 
 
 # MTP max-throughput 7p2d: same as STP but adds EAGLE speculative decoding
@@ -320,8 +313,6 @@ override_mtp_maxtpt_7p2d:
         speculative-num-steps: 2
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 3
-  benchmark:
-    concurrencies: "1024x2048"
 
 
 # MTP-only: 4p1d, no frontends, SGLANG_FLASHINFER_FP4_GEMM_BACKEND env var (fp4-gemm-backend: null
@@ -365,5 +356,3 @@ override_mtp_maxtpt_4p1d:
         speculative-num-steps: 2
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 3
-  benchmark:
-    concurrencies: "1024"

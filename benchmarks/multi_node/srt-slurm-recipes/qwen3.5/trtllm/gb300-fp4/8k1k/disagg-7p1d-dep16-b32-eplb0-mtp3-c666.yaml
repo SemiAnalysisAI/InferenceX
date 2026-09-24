@@ -134,10 +134,10 @@ frontend:
     DYN_TOKENIZER: "fastokens"
 
 benchmark:
-  type: sa-bench
-  isl: 8192
-  osl: 1024
-  concurrencies:
-    - 666
-  req_rate: inf
-  num_prompts_mult: 16
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
+  env:
+    MODEL: qwen3.5-fp4
+    TOKENIZER: /model
+    ISL: '8192'
+    OSL: '1024'

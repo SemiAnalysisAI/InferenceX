@@ -173,8 +173,10 @@ roles:
       cuda-graph-max-bs: 768
 
 benchmark:
-  type: "sa-bench"
-  isl: 8192
-  osl: 1024
-  concurrencies: [128, 256, 512, 1024]
-  req_rate: "inf"
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
+  env:
+    MODEL: deepseek-ai/DeepSeek-R1
+    TOKENIZER: /model
+    ISL: '8192'
+    OSL: '1024'

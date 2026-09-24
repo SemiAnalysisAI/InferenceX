@@ -169,12 +169,14 @@ roles:
       stream-interval: 50
 
 benchmark:
-  type: "sa-bench"
-  isl: 8192
-  osl: 1024
+  type: custom
   concurrencies: "5120"
-  req_rate: "inf"
-  random_range_ratio: 0.8
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
+  env:
+    MODEL: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+    TOKENIZER: /model
+    ISL: '8192'
+    OSL: '1024'
 
 telemetry:
   enabled: true
