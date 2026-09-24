@@ -8,25 +8,17 @@ source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 
 # B300 DSXE Slurm cluster (dsxe-sa-b300-prd0); runners run as sa-gha-runner.
 # Cluster-specific facts live in this block. Multi-node jobs go through
-# srt-slurm/srtctl, single-node jobs through salloc + pyxis.
+# srt-slurm/srtctl; AgentX and explicit collector scripts retain salloc + pyxis.
 
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
 
 # This lane's interactive allocation notifications fail on login-02, while
 # batch submission and steps launched from the allocated node work. Keep the
-# workaround scoped to the recipes below and use normal Slurm resource accounting.
-# Qwen3.5 FP8 fixed-sequence STP reuses the same batch allocation path.
-if [[ "$IS_MULTINODE" != true && "${MODEL_PREFIX:-}" == qwen3.5 &&
-      "${FRAMEWORK:-}" == sglang && "$IS_AGENTIC" == 0 &&
+# workaround scoped to this recipe and use normal Slurm resource accounting.
+if [[ "$IS_MULTINODE" != true && "${MODEL_PREFIX:-}" == dsv41flash &&
+      "${FRAMEWORK:-}" == sglang && "${IS_AGENTIC:-}" == 1 &&
       "${B300_AGENTX_BATCH:-}" != 1 ]]; then
-    check_env_vars PRECISION SPEC_DECODING
-fi
-if [[ "$IS_MULTINODE" != true && "${FRAMEWORK:-}" == sglang &&
-      "${B300_AGENTX_BATCH:-}" != 1 ]] &&
-   { [[ "${MODEL_PREFIX:-}" == dsv41flash && "$IS_AGENTIC" == 1 ]] ||
-     [[ "${MODEL_PREFIX:-}" == qwen3.5 && "$IS_AGENTIC" == 0 &&
-        "$PRECISION" == fp8 && "$SPEC_DECODING" == none ]]; }; then
     check_env_vars GITHUB_WORKSPACE GPU_COUNT RUNNER_NAME
     BATCH_SCRIPT=$(mktemp "${RUNNER_TEMP:-$GITHUB_WORKSPACE}/b300-agentx.XXXXXX.sh") || exit 1
     BATCH_LOG="${BATCH_SCRIPT%.sh}.log"
@@ -47,7 +39,7 @@ if [[ "$IS_MULTINODE" != true && "${FRAMEWORK:-}" == sglang &&
     trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; rm -f "$BATCH_SCRIPT"; exit "$rc"' EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
-    echo "B300 batch job $JOB_ID; log: $BATCH_LOG"
+    echo "B300 AgentX batch job $JOB_ID; log: $BATCH_LOG"
     stream_slurm_job_log "$JOB_ID" "$BATCH_LOG" || exit 1
     verify_slurm_job_status "$JOB_ID"
     exit $?
@@ -85,7 +77,6 @@ STAGED_MODELS=(
     Qwen3.8-2.4T-A95B-FP8
 )
 
-mkdir -p "$SQUASH_DIR"
 set -x
 
 # Keep this definition above the IS_MULTINODE branch: both paths call it, and
@@ -101,6 +92,8 @@ import_squash_image() {
     local image_ref="$1"
     local sqsh="$2"
     local lock="${2}.lock"
+
+    mkdir -p "$SQUASH_DIR"
 
     if unsquashfs -l "$sqsh" > /dev/null 2>&1; then
         echo "Squash file already present, skipping import: $sqsh"
@@ -128,7 +121,29 @@ import_squash_image() {
     test -r "$sqsh" || { echo "Error: squash file not readable: $sqsh" >&2; exit 1; }
 }
 
-if [[ "$IS_MULTINODE" == "true" ]]; then
+EXECUTION_PATH=agentic
+if [[ "$IS_MULTINODE" == true ]]; then
+    EXECUTION_PATH=multinode
+elif [[ -n "${BENCH_SCRIPT_OVERRIDE:-}" ]]; then
+    # SPEED-Bench collectors explicitly supply their script outside this migration.
+    EXECUTION_PATH=script
+elif [[ "$IS_AGENTIC" == 0 ]]; then
+    check_env_vars SRT_RECIPE
+    EXECUTION_PATH=native-single-node
+fi
+
+if [[ "$EXECUTION_PATH" == native-single-node ]]; then
+    check_env_vars B300_HF_CACHE_HOST_DIR
+    HF_HUB_CACHE_MOUNT="$B300_HF_CACHE_HOST_DIR/hub"
+    SRT_MODEL_PATH="$MODEL_ROOT/${MODEL##*/}"
+    if [[ "$MODEL" == nvidia/DeepSeek-R1-0528-FP4-V2 ]]; then
+        SRT_MODEL_PATH="$MODEL_ROOT/DeepSeek-R1-0528-NVFP4-v2"
+    fi
+    SRT_SQUASH_FILE="$SQUASH_DIR/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    launch_srt_single_node b300-dsxe \
+        --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION" \
+        --var MODEL_ROOT "$MODEL_ROOT"
+elif [[ "$EXECUTION_PATH" == multinode ]]; then
 
 if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" && $FRAMEWORK != "dynamo-vllm" ]]; then
     echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, dynamo-vllm"
