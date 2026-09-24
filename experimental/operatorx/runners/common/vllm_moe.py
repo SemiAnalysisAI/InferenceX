@@ -288,6 +288,19 @@ def _describe(block) -> dict:
     return out
 
 
+def _release_previous() -> None:
+    """vLLM registers every MoE layer by name in the forward context; drop the previous
+    op's so its weights and workspaces are freed before the next layer is built."""
+    import gc
+
+    from vllm.config import get_current_vllm_config
+    ctx = get_current_vllm_config().compilation_config.static_forward_context
+    for name in [k for k in ctx if k.startswith("model.layers.")]:
+        del ctx[name]
+    gc.collect()
+    torch.cuda.empty_cache()
+
+
 def _missing_op(e: BaseException) -> bool:
     """A vLLM custom op this build does not ship (e.g. Marlin repack on ROCm)."""
     return isinstance(e, AttributeError) and "_OpNamespace" in str(e)
@@ -302,6 +315,7 @@ def _prepare_moe(op: Op) -> dict:
         raise UnsupportedOpError(f"tokens > {_MAX_TOKENS} is not wired")
     routing = a.get("routing") or {"distribution": "natural", "seed": 0}
     _context()
+    _release_previous()
     import vllm.envs as envs
     from vllm.model_executor.layers.quantization.base_config import QuantizeMethodBase
     torch.manual_seed(routing["seed"])
