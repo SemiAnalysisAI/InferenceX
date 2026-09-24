@@ -267,7 +267,7 @@ GB300 launcher 将引擎就绪等待时间设为 7200 秒。在[运行 345049691
 
 `dsv41flash-fp4-mi355x-atom-agentic-dspark` 按照
 [ATOM 上游配方](https://github.com/ROCm/ATOM/blob/53b11c9a665e786798785acbedfdfd4da3fb87c4/recipes/DeepSeek-V4.1-Flash-Agentic.md)
-使用 `rocm/atom-dev:nightly_202609231248`。TP2 覆盖并发
+使用 `rocm/atom-dev:nightly_202609241513`。TP2 覆盖并发
 `[1, 2, 8, 16, 32, 64]`，TP4 覆盖 `[2, 8, 16, 32, 64]`，不启用专家并行或
 KV 卸载。所有点均使用 BF16 KV、FP8 index cache、128 个最大序列、16K
 批处理 token／prefill chunk、block size 16 的前缀缓存、8K 状态检查点、

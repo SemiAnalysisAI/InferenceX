@@ -300,7 +300,7 @@ Source: [upstream recipe](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flas
 
 `dsv41flash-fp4-mi355x-atom-agentic-dspark` follows the
 [upstream ATOM recipe](https://github.com/ROCm/ATOM/blob/53b11c9a665e786798785acbedfdfd4da3fb87c4/recipes/DeepSeek-V4.1-Flash-Agentic.md)
-with `rocm/atom-dev:nightly_202609231248`. TP2 covers concurrency
+with `rocm/atom-dev:nightly_202609241513`. TP2 covers concurrency
 `[1, 2, 8, 16, 32, 64]`; TP4 covers `[2, 8, 16, 32, 64]`, without expert
 parallelism or KV offload. Every point uses BF16 KV, FP8 index cache, 128 maximum
 sequences, 16K batched-token/prefill chunks, prefix caching with block size 16,
