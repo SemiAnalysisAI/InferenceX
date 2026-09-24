@@ -347,11 +347,18 @@ Maximum concurrency for 1,048,576 tokens per request: 6.70x
 
 ### SGLang 上的 DeepSeek-V4.1-Flash DSpark
 
+H100 SGLang 候选配方在并发 1/2/4/8/16/20 下测试 DSpark。C1/C2 按并发数的 8 倍保留 SWA 前缀尾部，C4 及以上按 32 倍保留。相同条件下的一小时对比否决了统一的 128 尾部下限：C2 吞吐量仅提高 1.7%，交互性能却下降 44.5%。已完成的 STP 对比没有贡献实测性能前沿点，因此所选 sweep 不包含 STP。配方在预填充分块之间插入 16 步解码，轨迹内容和上下文限制保持不变。
+
+同一 sweep 还会在 C4/C8/C16/C20 下验证受支持的 TP8/EP8/DP8 attention。DP 使用原生一致性哈希路由器与稳定会话键、DP LM-head，以及每 rank 64 个 SWA 前缀尾部。C16 的完整 GSM8K 已通过全部 1,319 个样本；其性能贡献仍在测量中。原生 1M 上下文与 AgentX 子代理/会话语义保持不变。
+
+nightly 候选配方使用 `nightly-dev-cu13-20260922-582389ce`、原生 MXFP4 Marlin MoE，以及 `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank`。解析后的本地快照路径让上游分配器能够在分配匿名主机表之前清理检查点文件缓存。draft 精度遵循固定镜像的默认处理，包括 WO_A 从 FP8 到 BF16 的转换。针对 GPU 的 block32 FP8 启动配置使用上游内核及其支持的 `SPLIT_K`/`SWAP_AB` 选项；检查点数据、scale、输出 dtype 和上下文限制均不变。小批次配置必须在选择边界通过 FP32 参考值和 CUDA graph 验证，再进行完整模型准确率评测及服务性能测试。较大批次保留原有配置。仍需完成规范全量 sweep 验收。
+
+
 `dsv41flash-fp4-<sku>-sglang-agentic-dspark` 是 vLLM 配方在 h100、h200、b200、b300、gb200、gb300
 与 mi355x 上的 SGLang 对应版本（每个 SKU 一个 PR），遵循
 [SGLang cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1)。
 该模型尚无正式发布的 SGLang 版本。B200 通过 digest 固定 CUDA 13 nightly 镜像
-`lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce`；其他 NVIDIA 配方使用
+`lmsysorg/sglang:nightly-dev-cu13-20260922-4cbf290f`；其他 NVIDIA 配方使用
 `lmsysorg/sglang:dev-dsv41`，MI355X 使用 `lmsysorg/sglang:dev-dsv41-mi35x`。
 
 B200 在 TP4/EP4 C1–128 与 TP2/EP2 C1–8 全部使用上游默认 DSpark。
@@ -379,6 +386,28 @@ B200 启动器还将固定 Docker digest
 转为已安装 Enroot 支持的 manifest 引用格式，并在导入失败时立即停止。
 
 DSpark 使用固定官方 nightly 默认提供的精度，不应用自定义草稿量化或精度补丁。STP 不加载草稿模型；完整准确率和性能验证仍然必需。
+
+GB200 固定官方 CUDA 13 nightly `20260923-06008c17`，manifest 为 `sha256:5921361fcf358cdde4df1968c941c14157f418613b099ad7f3e5aeed6427ae15`（ARM64 为 `sha256:d49261d2edd82fed2dd6254c33e68871ccf7a399498e059ec91dc4453a5808c3`）。拓扑与已发布 vLLM 一致：TP2/EP1 和 TP4/EP1，均覆盖 C1/2/4/8/16/32/64/128，不启用 DP attention。此前已暂存的 TP4/EP4 sweep 仅为历史证据，不能替代本次拓扑验证。
+
+GB200 sweep 仅包含 `dsv41flash-fp4-gb200-sglang-agentic-dspark`。
+移除尚无实测依据的 STP 条目；若要加入，须通过匹配测试证明其对性能前沿有贡献。
+DSpark 使用固定官方 nightly 默认提供的精度，不应用自定义草稿量化或精度补丁。
+完整准确率和性能验证仍然必需。
+
+GB200 TP4 保留 `min(64*CONC, 1024)` 个 SWA prefix tails，并维持 static memory 0.70
+和 chunk size 4096。此前 TP4/EP4 C16 实测保留 2,700 万个 full-context KV slots 与 439,040 个 SWA slots；
+该上限避免高并发时耗尽实测 51.82 GiB KV 预算。仅 TP4 C16 使用 prefill/decode interval 16：
+canonical 对比中 p90 interactivity 提升 13.65%，吞吐下降 0.30%，p90 TTFT 从 2.35 秒增至
+3.51 秒。完整 GSM8K 的 1,319 个样本通过验证。其他并发点仍需完整 sweep；
+C16 结果不能证明该设置在所有并发下均有收益。
+
+GB200 TP2 使用 0.92 静态显存比例、2048-token 预填充块、`min(128*CONC,1024)` 个 SWA tails、16 的 prefill/decode interval，graph 与 running capacity 上限为 16 个请求。这些受支持的限制参考已完成的 B200 EP1 显存验证；GB200 仍须独立通过加载、图捕获、完整上下文缓存池以及全部性能和准确率测试。可扩展 CUDA allocator segments 仅减少碎片，不改变权重或精度。C64/C128 性能任务获得分区允许的最大 12 小时 allocation，工作流额外预留 30 分钟打包产物；完整预热、3600 秒计分时段及无样本限制的 1,319 题 GSM8K 均保持不变。
+
+GB200 的主机表布局为 `per_rank`：计算节点内核通过 `madvise` 启用匿名大页，
+而 `shmem_enabled=never` 阻止共享 memfd 布局使用大页。上游在匿名主机内存中
+按行分片，并通过 `MADV_HUGEPAGE`/`MADV_COLLAPSE` 请求 512 MiB 大页。
+该方式保留原始 FP8 表权重，并恢复两次 TP all-reduce；声称性能收益前，
+须检查启动日志中的实际驻留内存与大页覆盖量。
 
 DSpark 是检查点自带的草稿模型。SGLang 对它不提供 EAGLE 或 MTP 路径，也没有
 `--speculative-num-steps` 参数；配方传入 `--speculative-algorithm DSPARK
