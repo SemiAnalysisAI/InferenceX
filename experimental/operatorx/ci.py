@@ -859,9 +859,16 @@ def main() -> None:
         )
         digests = {c["image"]: "" for c in result["include"]}
         for image in digests:
-            digest = probe_module().resolve_image_digest(image)
-            digests[image] = digest
-            if not digest:
+            digests[image] = probe_module().resolve_image_digest(image)
+        for cell in result["include"]:
+            # a recipe whose image tag the registry no longer serves (pruned nightlies) runs on
+            # the backend's own image with the recipe's env; the manifest records the swap
+            if not digests[cell["image"]] and cell.get("recipe"):
+                cell["recipe_image_unavailable"] = cell["image"]
+                cell["image"] = images[cell["backends"][0]]["image"]
+                digests.setdefault(cell["image"], probe_module().resolve_image_digest(cell["image"]))
+        for image in {c["image"] for c in result["include"]}:
+            if not digests.get(image):
                 raise RuntimeError(f"cannot resolve image digest: {image}")
         for cell in result["include"]:
             cell["digest"] = digests[cell["image"]]
