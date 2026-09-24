@@ -5,7 +5,7 @@
       "arch": "gfx942",
       "gpus_per_node": 8,
       "image_platform": "linux/amd64",
-      "operator": {"partition": "compute", "cpus_per_node": 128}
+      "operator": {"partition": "compute-0", "cpus_per_node": 128}
     },
     "mi325x": {
       "arch": "gfx942",
