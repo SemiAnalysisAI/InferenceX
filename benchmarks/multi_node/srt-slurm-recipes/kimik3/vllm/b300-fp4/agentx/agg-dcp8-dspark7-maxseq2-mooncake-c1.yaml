@@ -85,6 +85,7 @@ roles:
       served-model-name: moonshotai/Kimi-K3
       load-format: fastsafetensors
       kv-cache-dtype: fp8
+      mamba-ssm-cache-dtype: bfloat16
       gpu-memory-utilization: 0.94
       tensor-parallel-size: 8
       decode-context-parallel-size: 8

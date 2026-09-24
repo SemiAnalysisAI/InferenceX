@@ -116,9 +116,11 @@ roles:
       prefix-match-unit: 128
       load-format: fastsafetensors
       kv-cache-dtype: fp8
+      mamba-ssm-cache-dtype: bfloat16
       gpu-memory-utilization: 0.94
       tensor-parallel-size: 8
       decode-context-parallel-size: 8
+      cp-kv-cache-interleave-size: 1
       dcp-comm-backend: a2a
       enable-cumem-allocator: true
       trust-remote-code: true
@@ -186,9 +188,11 @@ roles:
       prefix-match-unit: 128
       load-format: fastsafetensors
       kv-cache-dtype: fp8
+      mamba-ssm-cache-dtype: bfloat16
       gpu-memory-utilization: 0.94
       tensor-parallel-size: 8
       decode-context-parallel-size: 8
+      cp-kv-cache-interleave-size: 1
       dcp-comm-backend: a2a
       enable-cumem-allocator: true
       trust-remote-code: true

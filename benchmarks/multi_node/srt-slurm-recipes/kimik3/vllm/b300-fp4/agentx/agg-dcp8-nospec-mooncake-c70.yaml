@@ -83,7 +83,7 @@ roles:
       tensor-parallel-size: 8
       decode-context-parallel-size: 8
       dcp-comm-backend: a2a
-      gpu-memory-utilization: 0.94
+      gpu-memory-utilization: 0.92
       max-num-batched-tokens: 16384
       trust-remote-code: true
       language-model-only: true
@@ -92,6 +92,7 @@ roles:
       enable-prefix-caching: true
       prefix-match-unit: 128
       kv-cache-dtype: fp8
+      mamba-ssm-cache-dtype: bfloat16
       stream-interval: 10
       attention-backend: TOKENSPEED_MLA
       attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
