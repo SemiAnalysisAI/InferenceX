@@ -1,0 +1,77 @@
+base:
+  schema: 2
+  name: qwen3.5-fp8-b200-sglang-8k1k
+  model:
+    path: hf:Qwen/Qwen3.5-397B-A17B-FP8
+    container: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+    precision: fp8
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        enable-symm-mem: true
+        disable-radix-cache: true
+        quantization: fp8
+        kv-cache-dtype: fp8_e4m3
+        mamba-ssm-dtype: bfloat16
+        mamba-full-memory-ratio: 0.37
+        linear-attn-prefill-backend: flashinfer
+        attention-backend: trtllm_mha
+        moe-runner-backend: flashinfer_trtllm
+        cuda-graph-max-bs-decode: 1
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+        mem-fraction-static: 0.86
+        stream-interval: 50
+        scheduler-recv-interval: 10
+        tokenizer-worker-num: 6
+        context-length: 9236
+        served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
+        enable-metrics: false
+      env:
+        PYTHONNOUSERSITE: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
+    env:
+      MODEL: Qwen/Qwen3.5-397B-A17B-FP8
+      ISL: '8192'
+      OSL: '1024'
+      RANDOM_RANGE_RATIO: '0.8'
+      USE_CHAT_TEMPLATE: 'false'
+zip_override_tp8_ep1:
+  roles:
+    agg:
+      args:
+        cuda-graph-max-bs-decode: [1, 2, 4]
+  benchmark:
+    env:
+      CONC: ['1', '2', '4']
+zip_override_tp4_ep1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        cuda-graph-max-bs-decode: [2, 4, 8, 16, 32, 64, 128, 256, 512, 320, 384, 448, 640]
+        scheduler-recv-interval: [10, 10, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30]
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: ['2', '4', '8', '16', '32', '64', '128', '256', '512', '320', '384', '448', '640']
