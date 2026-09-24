@@ -82,7 +82,7 @@
       "operator": {
         "partition": "batch_1",
         "account": "benchmark",
-        "squash_dir": "/data/home/sa-gha-runner/squash"
+        "squash_dir": "/data/home/sa-gha-runner/collectivex/containers"
       },
       "network": {
         "rdma_fabric": "efa",
