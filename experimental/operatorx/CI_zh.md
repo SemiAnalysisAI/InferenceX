@@ -26,8 +26,8 @@ GB200/GB300 每次使用一个四卡计算托盘，不会占用整个 NVL72 机�
 ## 触发运行
 
 GitHub 注册该工作流后，选择 **OperatorX Sweep → Run workflow**，指定源码分支，
-并保留初始默认值：`pool=h100-dgxc`、`backends=torch`、`testlists=gemm`、
-`world_sizes=1`、`chunk_size=500`。这会将完整的 GEMM 测试列表拆分为有界分片（目前为 7,212 个测试、15 个分片）。
+并保留初始默认值：`pool=h100-dgxc`、`backends=vllm`、`testlists=gemm`、
+`world_sizes=1`、`chunk_size=500`。这会将完整的 GEMM 测试列表拆分为有界分片（目前为 5,416 个测试、11 个分片）。
 列表中包含所选后端不支持的精度，以及可能超出设备显存的形状。不支持的测试会保留
 在结果中；实际的内核和显存分配错误仍会使 CI 失败。运行完整列表不代表其中每个
 测试都能在 H100 上执行。
@@ -35,15 +35,15 @@ GitHub 注册该工作流后，选择 **OperatorX Sweep → Run workflow**，指
 
 ```bash
 gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
-  --ref <branch> -f pool=h100-dgxc -f backends=torch \
+  --ref <branch> -f pool=h100-dgxc -f backends=vllm \
   -f testlists=gemm -f world_sizes=1 -f chunk_size=500
 ```
 
 快速检查基础设施时，可显式选择 `testlists=gemm_perf` 和 `chunk_size=50`
-（11 个 BF16 测试）。其他 NVIDIA 后端和测试列表需要显式选择，
-不能视为已经通过 Hopper 验证。
+（11 个 BF16 测试）。`gemm_serving_8k1k_min` 和 `gemm_serving_all_min`
+包含 InferenceX 推理服务配置中的 GEMM。
 不支持的操作会保留在结果中。后端导入错误、基准错误，以及没有任何成功结果，
-都会使分片失败。先验证 BF16 GEMM，再验证范围受限的集合通信和兼容的 MoE 组合。
+都会使分片失败。先验证 BF16 GEMM，再验证量化格式。
 不要假定面向 Blackwell 的 FP4 内核可以在 Hopper 上运行。
 
 ## 执行约定
@@ -117,51 +117,10 @@ CPU 检查不能证明 GPU 兼容性或集群存储可见性。
 ## AMD 执行
 
 `platforms.json` 在 CollectiveX 配置之上补充 AMDS Slurm 运行器池。
-AMD 接受单卡 `torch` GEMM 和 `torch,aiter` attention。ROCm PyTorch 通过 `torch.cuda` 使用 HIP 事件计时；
+AMD 接受单卡 `torch`/`vllm` GEMM。ROCm PyTorch 通过 `torch.cuda` 使用 HIP 事件计时；
 FP8 在 gfx942 上选择 FNUZ，在 gfx950 上选择 OCP。不支持的格式会明确记录。
 暂存目录由 `RUNNER_TEMP` 推导，位于共享运行器根目录下、`_work` 之外。容器不写入
 源码检出目录。MI300X/MI325X 显式传递 `/dev/kfd` 和 `/dev/dri`；CPU 请求沿用各推理启动器。
 
-## Attention
-
-`testlists=attention_perf` 包含八个 BF16/FP16 MHA/GQA 及物化 MLA 的 prefill/decode
-测试；`attention` 运行完整的 2,315 个测试。NVIDIA 使用 `backends=torch`，AMD 还支持
-`backends=torch,aiter`。Attention 记录微秒延迟。不支持的精度或布局会明确记录；显存分配
-或内核错误仍使 CI 失败。严格模式保留不支持的后端/算子组合，不会静默丢弃计划覆盖。
-
-PyTorch 为矩形 decode 输入使用右下对齐的因果掩码，分组 KV 在计时前展开。两个 MLA
-后端只测量物化 Q/K/V 的 attention，不包含压缩缓存投影或 RoPE。AITER 直接调用
-`flash_attn_func`，保留原生分组 KV 和右下对齐的因果语义。当前支持统一 BF16/FP16、
-连续 KV，以及不超过 256 且能被八整除的 head dimension；其他请求记录为不支持，
-不会回退到 torch。实验算子变更记录在相邻的 `perf-changelog.yaml`，与根目录中受推理
+实验算子变更记录在相邻的 `perf-changelog.yaml`，与根目录中受推理
 配置键约束的变更日志分开维护。
-
-
-## Kimi K3 路由专家 MoE 基准测试配置
-
-选择 `testlists=kimi_k3_moe_perf`、`backends=vllm`、`world_sizes=1`，运行八个
-BF16 路由专家测试：本地 token 数为 1、16、128、1024，分别使用 EP8 和 TP8 形状。
-通用配置依据 [vLLM #50082](https://github.com/vllm-project/vllm/pull/50082)：
-896 个专家、top-16、hidden 7168、intermediate 3072。EP8 分配 112 个专家，
-intermediate 为 3072；TP8 分配 896 个专家，intermediate 为 384。
-两者均在**单张 GPU** 上运行，不创建实际分布式通信组，也不测量通信。
-
-界面明确标注为 **Kimi K3 (vLLM benchmark profile)**。它测量 vLLM 的通用 SiLU
-路由专家内核，使用计时前生成的合成本地均匀随机路由。计时包含融合专家实现中的
- token 排序、gate/up GEMM、SiLU-and-multiply、down GEMM 和加权归约；不包含
-router/top-k 计算、共享专家和通信。该配置不测量已发布 Kimi K3 层的 SITU 激活、
-3584 维潜在专家路径、潜在投影或共享专家；这些需要独立的原生层测试配置。
-无需模型权重或 Hugging Face 凭据。
-
-NVIDIA 使用 `vllm/vllm-openai:v0.19.0`（amd64/arm64），AMD 复用现有 ROCm 镜像。
-需显式选择 `backends=vllm`。不支持的精度、路由和共享专家请求会记录为 unsupported；
-导入或内核执行错误使 CI 失败。
-
-单卡路由矩阵乘法有效 TFLOPS 为
-`6*num_tokens*top_k*hidden*(intermediate/routed_tensor_parallel_size)/(latency_us*1e6)`。
-本地 top-k 全部指向本地专家表，与通用基准测试的 EP 模拟方式一致。不要再次除以 EP，
-也不要乘以节点分配的 GPU 数。该指标不计激活或路由的 FLOP，不代表完整模型吞吐量。
-
-### GPU 验证状态
-
-完整的八项 BF16 测试已在 H200、MI300X 和 MI325X 上通过。H100 目前在执行内核前失败：Enroot 导入 vLLM 镜像时，在 `/tmp` 和 `/var/tmp` 均无法转换 OCI whiteout。CollectiveX swap-blocks 也记录了相同的主机限制。H100 需先恢复镜像导入环境，才能提供性能数据；本次改动不修改节点配置。B200、B300、GB200、GB300 和 MI355X 的任务正在等待共享 GPU 资源。注册 GPU 池不代表已完成运行时验证。

@@ -27,9 +27,9 @@ from CollectiveX's platform registry, and both planning and execution validate t
 
 Once GitHub has registered the workflow, select **OperatorX Sweep → Run workflow**,
 choose the source branch, and keep the initial defaults: `pool=h100-dgxc`,
-`backends=torch`, `testlists=gemm`, `world_sizes=1`, `chunk_size=500`.
+`backends=vllm`, `testlists=gemm`, `world_sizes=1`, `chunk_size=500`.
 This schedules the complete checked-in GEMM catalog in bounded shards (currently
-7,212 cases in 15 shards). The catalog includes formats unsupported by a selected
+5,416 cases in 11 shards). The catalog includes formats unsupported by a selected
 backend and shapes that can exceed device memory. Unsupported rows remain visible;
 actual kernel and allocation errors fail CI. A full catalog run is not a promise
 that every case fits or is supported on H100. A newly added workflow
@@ -37,15 +37,15 @@ may need to reach the default branch before GitHub accepts manual dispatch.
 
 ```bash
 gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
-  --ref <branch> -f pool=h100-dgxc -f backends=torch \
+  --ref <branch> -f pool=h100-dgxc -f backends=vllm \
   -f testlists=gemm -f world_sizes=1 -f chunk_size=500
 ```
 
 For a quick infrastructure smoke check, explicitly select `testlists=gemm_perf`
-and `chunk_size=50` (11 BF16 cases). Other NVIDIA backends and testlists are explicit
-selections, not validated Hopper coverage. Unsupported operations remain visible in results. Backend
+and `chunk_size=50` (11 BF16 cases). `gemm_serving_8k1k_min` and
+`gemm_serving_all_min` hold the GEMMs of InferenceX serving configurations. Unsupported operations remain visible in results. Backend
 import errors, benchmark errors, and zero successful rows fail the shard.
-Start with BF16 GEMM, then bounded collectives and compatible MoE combinations.
+Start with BF16 GEMM, then the quantized formats.
 Do not infer that Blackwell-specific FP4 kernels work on Hopper.
 
 ## Execution contract
@@ -138,7 +138,7 @@ can return a Slurm error even after that allocation has terminated.
 ## AMD execution
 
 `platforms.json` overlays the CollectiveX registry with the AMDS Slurm pools.
-AMD accepts single-GPU `torch`/`vllm` GEMM and `torch,aiter` attention. ROCm PyTorch uses HIP events through
+AMD accepts single-GPU `torch`/`vllm` GEMM. ROCm PyTorch uses HIP events through
 `torch.cuda`; FP8 selects FNUZ on gfx942 and OCP on gfx950. Unsupported formats
 remain explicit. Staging lives outside `_work`, below the shared runner root
 derived from `RUNNER_TEMP`. Containers never write to the checkout. MI300X/MI325X
@@ -177,53 +177,5 @@ zero experts, and gemm operand descriptors for `x`, `w13`, `w2`, `a2`), `router`
 Execution (expert kernels, dispatch, shared-expert fusion or stream overlap, graphs)
 is the backend's choice. No backend implements it yet.
 
-## Attention
-
-Select `testlists=attention_perf` for eight BF16/FP16 MHA/GQA and materialized MLA
-prefill/decode cases, or `attention` for the full 2,315-case catalog. NVIDIA uses
-`backends=torch`; AMD also supports `backends=torch,aiter`. Attention measures
-latency in microseconds. Unsupported precision/layout combinations are recorded,
-and allocation or kernel errors still fail CI. Strict CI retains unsupported
-backend/operator pairs instead of dropping requested coverage.
-
-PyTorch uses bottom-right causal masking for rectangular decode inputs. Grouped
-KV expansion happens before timing. Both MLA backends time attention on
-materialized Q/K/V; compressed-cache projection and RoPE are excluded. AITER calls
-`flash_attn_func` directly with native grouped KV heads and bottom-right causality.
-It accepts uniform BF16/FP16, contiguous KV, and head dimensions divisible by eight
-up to 256; other requests remain unsupported rather than fall back to torch.
 Experimental operator changes are recorded in the adjacent `perf-changelog.yaml`,
 separately from the root inference-recipe changelog's config-key schema.
-
-
-## Kimi K3 routed MoE benchmark profile
-
-`testlists=kimi_k3_moe_perf`, `backends=vllm`, `world_sizes=1` runs eight BF16
-routed-expert cases: 1, 16, 128 and 1024 local tokens, each with EP8 or TP8 shapes.
-The generic profile follows [vLLM #50082](https://github.com/vllm-project/vllm/pull/50082):
-896 experts, top-16, hidden 7168 and intermediate 3072. EP8 allocates 112 experts
-with intermediate 3072; TP8 allocates 896 experts with intermediate 384.
-Both execute on **one GPU**, with no live distributed groups or communication.
-
-This is explicitly **Kimi K3 (vLLM benchmark profile)**. It measures vLLM's generic
-SiLU routed expert kernel with synthetic, uniform-random local routing prepared
-before timing. The timer includes the fused expert implementation's token sorting,
-gate/up GEMM, SiLU-and-multiply, down GEMM and weighted reduction; it excludes
-router/top-k calculation, shared experts and communication. It does not measure
-the released Kimi K3 layer's SITU activation, 3584-wide latent expert path,
-latent projections or shared experts. Those need a separate native-layer profile.
-No model weights or Hugging Face credentials are required.
-
-The `vllm` images are the ones InferenceX pins for its vLLM recipes (`containers.toml`). Select `backends=vllm` explicitly. Unsupported precision, routing or shared
-expert requests produce unsupported rows; import and kernel failures fail CI.
-
-Useful routed matmul TFLOPS per GPU is
-`6*num_tokens*top_k*hidden*(intermediate/routed_tensor_parallel_size)/(latency_us*1e6)`.
-The local top-k routes all target the local expert table, matching the generic
-benchmark's EP emulation. Do not divide the measured work by EP again or multiply
-by the number of GPUs in the allocation. These kernel measurements exclude
-activation and routing FLOPs and are not full-model throughput.
-
-### GPU validation status
-
-The complete eight-case BF16 profile passed on H200, MI300X and MI325X. H100 currently fails before kernel execution: its Enroot importer rejects OCI whiteout conversion for the vLLM image on both `/tmp` and `/var/tmp`. The same host limitation is recorded by CollectiveX swap-blocks. H100 requires a working image-import environment before performance can be reported; this change does not modify node configuration. B200, B300, GB200, GB300 and MI355X dispatches are awaiting shared GPU capacity. A registered pool is not runtime validation.

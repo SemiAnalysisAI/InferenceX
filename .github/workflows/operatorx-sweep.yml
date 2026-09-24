@@ -9,9 +9,9 @@ on:
         default: h100-dgxc
         options: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300, mi300x, mi325x, mi355x]
       backends:
-        description: Comma-separated backends (torch/vllm GEMM, torch attention, AMD aiter attention, vllm routed MoE)
+        description: Comma-separated backends (vllm GEMM; AMD also torch GEMM)
         type: string
-        default: torch
+        default: vllm
       testlists:
         description: Comma-separated testlist stems
         type: string
@@ -58,7 +58,7 @@ jobs:
         id: plan
         env:
           OPERATORX_POOL: ${{ inputs.pool || 'h100-dgxc' }}
-          OPERATORX_BACKENDS: ${{ inputs.backends || 'torch' }}
+          OPERATORX_BACKENDS: ${{ inputs.backends || 'vllm' }}
           OPERATORX_TESTLISTS: ${{ inputs.testlists || 'gemm' }}
           OPERATORX_WORLD_SIZES: ${{ inputs.world_sizes || '1' }}
           OPERATORX_RECOVERY_RUN: ${{ inputs.recovery_run_id }}

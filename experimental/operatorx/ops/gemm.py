@@ -58,6 +58,12 @@ def check_operand(d: Any, where: str) -> None:
         raise ValueError(f"{where}.symmetric must be a bool")
 
 
+def plain_dtype(args: dict) -> str | None:
+    """The shared element dtype when neither operand is quantized, else None."""
+    qa, qb = args["a"], args["b"]
+    return qa["dtype"] if qa == qb == {"dtype": qa["dtype"]} else None
+
+
 @dataclass(frozen=True)
 class GemmArgs:
     """C[M,N] = activation(A[M,K] @ B[N,K]^T + bias); A = activation, B = weight.

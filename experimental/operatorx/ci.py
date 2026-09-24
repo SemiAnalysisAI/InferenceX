@@ -73,16 +73,16 @@ def plan(
     if not backends or set(backends) - images.keys():
         raise ValueError("select at least one registered backend for this GPU platform")
     if pool in AMD_POOLS and (
-        set(backends) - {"torch", "aiter", "vllm"}
+        set(backends) - {"torch", "vllm"}
         or world_sizes != [1]
         or any(
-            shape["type"] not in {"gemm", "attention_mha", "attention_mla", "moe_gemm"}
+            shape["type"] not in {"gemm", "moe_gemm"}
             for shapes in testlists.values()
             for shape in shapes
         )
     ):
         raise ValueError(
-            "AMD CI supports single-GPU torch/vllm GEMM, torch/aiter attention and vllm MoE"
+            "AMD CI supports single-GPU torch/vllm GEMM"
         )
     if not world_sizes or set(world_sizes) - {1, 2, 4, 8}:
         raise ValueError("world sizes must be selected from 1,2,4,8 (single node)")
@@ -661,6 +661,13 @@ def main() -> None:
         }
         vendor = "amd" if args.pool in AMD_POOLS else "nvidia"
         images = tomllib.loads((ROOT / "containers.toml").read_text())[vendor]
+        # Fail here, before any node is allocated, for a backend with no module.
+        missing = [
+            b for b in args.backends.split(",")
+            if not (ROOT / "runners" / vendor / "backends" / f"{b}.py").is_file()
+        ]
+        if missing:
+            raise ValueError(f"no {vendor} backend module for: {', '.join(missing)}")
         result = plan(
             args.pool,
             args.backends.split(","),

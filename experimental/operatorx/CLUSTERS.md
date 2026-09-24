@@ -53,9 +53,8 @@ OPERATORX_JOB_NAME=<job-name> python3 scripts/submit_run.py nvidia
 |-------------------|--------------------------------------------------------------|
 | Hardware          | 8× B300 per node                                             |
 | OS note           | If the login node runs Python 3.10, `submit_run.py` falls back to `tomli` for TOML parsing |
-| Excluded backends | Exclude DeepEP because IBGDA is known to hang on this fabric |
 
-Override the SLURM knobs for your cluster and drop DeepEP:
+Override the SLURM knobs for your cluster:
 
 ```bash
 OPERATORX_CLUSTER=b300_hgx_8x \
@@ -63,7 +62,7 @@ OPERATORX_PARTITION=<partition> \
 OPERATORX_ACCOUNT=<account> \
 OPERATORX_QOS=<qos> \
 OPERATORX_SQUASH_DIR=<squash-dir> \
-OPERATORX_BACKENDS=torch,deepgemm,flashinfer,sglang \
+OPERATORX_BACKENDS=vllm \
 OPERATORX_JOB_NAME=<job-name> \
 python3 scripts/submit_run.py nvidia
 ```
@@ -79,7 +78,7 @@ hardware-specific guidance yet.
 |-----------|--------------------------------------------------------------|
 | Hardware  | 8× MI355 OAM per node                                        |
 | GRES      | e.g. `gpu:amd_instinct_mi355_oam:8`                          |
-| Backends  | `containers.toml` `amd.torch` / `amd.aiter` → `vllm-openai-rocm` |
+| Backends  | `containers.toml` `amd.torch` / `amd.vllm` → `vllm-openai-rocm` |
 
 ```bash
 OPERATORX_CLUSTER=mi355x_8x \
