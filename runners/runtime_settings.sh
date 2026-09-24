@@ -46,6 +46,10 @@ case "${RUNNER_NAME%%_*}" in
             fi
         fi
         export HF_HUB_CACHE_MOUNT=/models/gharunners/hf-hub-cache
+        case "$MODEL_PREFIX/$PRECISION" in
+            dsr1/fp8) export SRT_MODEL_PATH=/models/DeepSeek-R1-0528 ;;
+            qwen3.5/fp8) export SRT_MODEL_PATH="$HF_HUB_CACHE_MOUNT/Qwen3.5-397B-A17B-FP8" ;;
+        esac
         export AIPERF_MMAP_CACHE_HOST_PATH=/home/sa-shared/gharunners/ai-perf-cache
         export DSV4_MODEL_PATH="$HF_HUB_CACHE_MOUNT/DeepSeek-V4-Pro"
         export GLM52_FP8_MODEL_PATH=/models/GLM-5.2-FP8
@@ -58,9 +62,5 @@ case "${RUNNER_NAME%%_*}" in
     mi355x-amds)
         check_env_vars GITHUB_WORKSPACE
         export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
-        ;;
-    rtx6000pro-lat)
-        export HF_HUB_CACHE_MOUNT=/var/lib/inferencex/hf-hub-cache
-        export NCCL_IB_DISABLE=1
         ;;
 esac

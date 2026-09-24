@@ -35,6 +35,15 @@ git submodule update --init
 
 To upgrade, fetch and check out the desired commit inside the relevant submodule, then commit the updated submodule pointer in InferenceX. Benchmark workflows already initialize submodules. Slurm launchers make a local Git clone for each job so recipe staging and runtime writes do not modify the submodule, and record the actual commit for result provenance. NVIDIA setup clones locally; TileRT setup fetches its pinned fork commit over the network.
 
+Single-node fixed-sequence recipes use NVIDIA upstream srt-slurm. ATOM recipes use
+the native `atomesh` frontend with one aggregate worker and
+`enable_multiple_frontends: false`. The router's pinned official image belongs in
+`frontend.container_image`: older benchmark worker images do not include AToMesh.
+Keep `model.container` aligned with the master config's worker `image`; changing the
+router image does not require changing the worker image. TRT-LLM recipes use native
+`engine.served_model_name`, without duplicating that flag in `roles.agg.extra_args`.
+The former fork's direct ATOM frontend is not required.
+
 ### Cluster profiles
 
 Launchers that use srt-slurm keep their cluster configuration in
