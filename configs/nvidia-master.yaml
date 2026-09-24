@@ -9015,3 +9015,196 @@ dsv41flash-fp4-gb300-sglang-agentic-dspark:
       search-space:
       - { tp: 2, ep: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
       - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128] }
+
+dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-agg:
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28
+  model: deepseek-ai/DeepSeek-V4-Pro-DSpark
+  model-prefix: dsv4
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router:
+    name: dynamo-router
+    version: 1.3.0.dev20260720
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: draft_model
+        conc-list:
+        - 1
+        num-nodes: 2
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/agg-tp8-c1-dspark5.yaml
+      - spec-decoding: draft_model
+        conc-list:
+        - 4
+        num-nodes: 2
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/agg-tp8-c4-dspark5.yaml
+      - spec-decoding: draft_model
+        conc-list:
+        - 8
+        num-nodes: 2
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/agg-tp8-c8-dspark5.yaml
+dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-disagg:
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28
+  model: deepseek-ai/DeepSeek-V4-Pro-DSpark
+  model-prefix: dsv4
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router:
+    name: dynamo-router
+    version: 1.3.0.dev20260720
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: draft_model
+        conc-list:
+        - 32
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep8-dep8-c32-dspark5.yaml
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      - spec-decoding: draft_model
+        conc-list:
+        - 64
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep8-dep8-c64-dspark5.yaml
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      - spec-decoding: draft_model
+        conc-list:
+        - 128
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep8-dep8-c128-dspark5.yaml
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      - spec-decoding: draft_model
+        conc-list:
+        - 256
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep8-dep8-c256-dspark5.yaml
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      - spec-decoding: draft_model
+        conc-list:
+        - 360
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep8-dep12-c360-dspark6.yaml
+        decode:
+          num-worker: 1
+          tp: 12
+          ep: 12
+          dp-attn: true
+      - spec-decoding: draft_model
+        conc-list:
+        - 384
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep8-dep8-c384-dspark6.yaml
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      - spec-decoding: draft_model
+        conc-list:
+        - 384
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 12
+          ep: 12
+          dp-attn: true
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep12-dep12-c384-dspark5.yaml
+        decode:
+          num-worker: 1
+          tp: 12
+          ep: 12
+          dp-attn: true
+      - spec-decoding: draft_model
+        conc-list:
+        - 512
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 12
+          ep: 12
+          dp-attn: true
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-1p1d-dep12-dep16-c512-dspark6.yaml
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
