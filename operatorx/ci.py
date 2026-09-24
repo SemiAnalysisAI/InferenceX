@@ -56,11 +56,22 @@ NCU_METRICS = ",".join((
     "l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld.sum",
     "l1tex__data_pipe_lsu_wavefronts_mem_shared_op_st.sum",
 ))
-# Host Nsight Compute installs, oldest to newest (sort -V) by ncu path.
+# Host Nsight Compute: real installs (<root>/nsight-compute[-]<version>/ncu), then any ncu on PATH.
 NCU_SEARCH = (
     "ls -d /opt/nvidia/nsight-compute/*/ncu /usr/local/cuda*/nsight-compute*/ncu "
-    "/opt/nvidia/nsight-compute*/ncu $(command -v ncu) 2>/dev/null | xargs -r readlink -f | sort -uV"
+    "/opt/nvidia/nsight-compute*/ncu $(command -v ncu) 2>/dev/null | xargs -r readlink -f | sort -u"
 )
+
+
+def pick_ncu(paths: list[str]) -> Path | None:
+    """Newest real Nsight Compute install; a PATH wrapper (e.g. cuda/bin/ncu) only as a fallback."""
+    def version(p: Path) -> tuple:
+        name = p.parent.name.removeprefix("nsight-compute").lstrip("-")
+        return tuple(int(x) for x in re.findall(r"\d+", name))
+    real = [Path(p) for p in paths if "nsight-compute" in Path(p).parent.as_posix()]
+    if real:
+        return max(real, key=version)
+    return Path(paths[-1]) if paths else None
 # rocprofv3 fits only a few counters per hardware pass, so a counters run repeats per pass.
 ROCPROF_PASSES = {
     "fetch": ["FETCH_SIZE"],
@@ -552,10 +563,10 @@ def execute(args) -> None:
                 capture_output=True, text=True, timeout=120,
             ).stdout.split()
             (root / "ncu.log").write_text("\n".join(found) + "\n")
-            if found:
+            ncu = pick_ncu(found)
+            if ncu is not None:
                 # ncu is a wrapper that finds its install next to itself (../), so mount the
                 # whole install tree at the same path
-                ncu = Path(found[-1])
                 mounts += f",{ncu.parent.parent}:{ncu.parent.parent}"
                 env["OPERATORX_NCU"] = str(ncu)
         if cell["pool"] in ("mi300x", "mi325x"):
