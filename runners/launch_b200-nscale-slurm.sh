@@ -384,7 +384,7 @@ run_native_srt_lane() {
         sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "$CONFIG_PATH"
     fi
 
-    if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
         read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
         python "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
             "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1

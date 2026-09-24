@@ -495,7 +495,7 @@ if command -v squeue >/dev/null 2>&1; then
 fi
 sed -i "s/^name:.*/name: \"${SRT_SLURM_JOB_NAME}\"/" "$CONFIG_PATH"
 
-if [[ "$USES_AGENTX_POWER" == "1" ]]; then
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
     read -r -a POWER_CONCURRENCIES <<< "$CONC_LIST"
     python3 "$GITHUB_WORKSPACE/runners/inject_srt_power_concurrencies.py" \
         "$CONFIG_PATH" "${POWER_CONCURRENCIES[@]}" || exit 1
