@@ -48,6 +48,10 @@ _TRACE_EVERY = int(os.environ.get("OPERATORX_PROFILE_TRACE_EVERY", "200"))
 _MARKERS = os.environ.get("OPERATORX_PROFILE_MARKERS", "") == "1"
 # name of the kernel the int8 zero_() flush dispatches
 _FLUSH_KERNEL_MARKER = "FillFunctor"
+# GPU spin enqueued after each flush so the replay's launches queue up behind it and
+# the timeline shows device time, not host launch gaps; torch.cuda._sleep's kernel
+_SHIELD_CYCLES = int(os.environ.get("OPERATORX_SHIELD_CYCLES", "4000000"))
+_SHIELD_KERNEL_MARKER = "spin_kernel"
 
 _ARG_FIELDS = (
     ("grid", "grid"),
@@ -75,6 +79,8 @@ def _replay_stats(events: list[dict]) -> dict | None:
             if cur:
                 replays.append(cur)
             cur = []
+        elif _SHIELD_KERNEL_MARKER in e.get("name", ""):
+            continue
         else:
             cur.append(e)
     if cur:
@@ -146,6 +152,8 @@ def profile_op(kernel_fn) -> dict | None:
         with torch.profiler.profile(activities=acts) as prof:
             for _ in range(_ITERS):
                 _flush_caches()
+                if _SHIELD_CYCLES > 0:
+                    torch.cuda._sleep(_SHIELD_CYCLES)
                 kernel_fn()
             torch.cuda.synchronize()
     except Exception as e:
@@ -166,6 +174,8 @@ def profile_op(kernel_fn) -> dict | None:
                   if e.get("ph") == "X" and e.get("cat") in ("kernel", "gpu_memcpy", "gpu_memset")]
     for e in gpu_events:
         name = e.get("name", "")[:200]
+        if _SHIELD_KERNEL_MARKER in name:
+            continue
         if _FLUSH_MB > 0 and _FLUSH_KERNEL_MARKER in name:
             flush_excluded += 1
             continue

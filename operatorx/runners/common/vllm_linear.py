@@ -111,7 +111,12 @@ def _vllm_context():
     init_distributed_environment(world_size=1, rank=0, local_rank=torch.cuda.current_device(),
                                  distributed_init_method=f"tcp://127.0.0.1:{29500 + os.getpid() % 1000}",
                                  backend="nccl")
-    initialize_model_parallel(1, 1)
+    # with no model config vLLM also builds the expert-parallel group (size 1), which MoE layers need
+    model_config, vcfg.model_config = vcfg.model_config, None
+    try:
+        initialize_model_parallel(1, 1)
+    finally:
+        vcfg.model_config = model_config
     _READY = ctx
     return ctx
 
