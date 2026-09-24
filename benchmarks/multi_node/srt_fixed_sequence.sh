@@ -5,7 +5,7 @@
 # layout that copy_fixed_sequence_results collects.
 set -eo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh" --validation-only
-check_env_vars MODEL ISL OSL SRT_FRONTEND_HOST SRT_FRONTEND_PORT CONC_LIST \
+check_env_vars ISL OSL SRT_FRONTEND_HOST SRT_FRONTEND_PORT CONC_LIST \
     PREFILL_NUM_WORKERS PREFILL_TP DECODE_NUM_WORKERS DECODE_TP
 CLIENT_ARGS=(--trust-remote-code)
 case "${CLIENT_BACKEND:=openai}" in
@@ -20,6 +20,9 @@ case "${USE_CHAT_TEMPLATE:=true}" in
 esac
 
 repo_root="$(dirname "${BASH_SOURCE[0]}")/../.."
+# Request the name the workers registered; the workflow's MODEL is the HF id, which can differ.
+model=$(curl -sf "http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}/v1/models" |
+    python3 -c 'import json, sys; print(json.load(sys.stdin)["data"][0]["id"])')
 result_dir="/logs/sa-bench_isl_${ISL}_osl_${OSL}"
 mkdir -p "$result_dir"
 ctx=$((PREFILL_NUM_WORKERS * PREFILL_TP))
@@ -30,8 +33,8 @@ for concurrency in $CONC_LIST; do
         --backend "$CLIENT_BACKEND" \
         --base-url "http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}" \
         --endpoint "$endpoint" \
-        --model "$MODEL" \
-        --tokenizer "${TOKENIZER:-$MODEL}" \
+        --model "$model" \
+        --tokenizer "${TOKENIZER:-$model}" \
         --dataset-name random \
         --random-input-len "$ISL" \
         --random-output-len "$OSL" \

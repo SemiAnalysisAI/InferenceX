@@ -110,7 +110,6 @@ benchmark:
   type: custom
   command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
   env:
-    MODEL: amd/Qwen3.5-397B-A17B-MXFP4
     ISL: '8192'
     OSL: '1024'
     HF_HOME: /hf_hub_cache
