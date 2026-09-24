@@ -168,7 +168,7 @@ InferenceX's ROCm launches do.
 
 ## MoE layer
 
-`moe_layer` (`ops/moe_layer.py`) describes one MoE layer from the router GEMM on
+`moe_layer` (`ops/moe.py`) describes one MoE layer from the router GEMM on
 normed hidden states to the combined output: shape (`tokens`, `hidden`),
 routed `experts` (count, top-k, intermediate size, optional biases / latent width /
 zero experts, and gemm operand descriptors for `x`, `w13`, `w2`, `a2`), `router`
