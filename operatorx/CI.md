@@ -164,6 +164,17 @@ kernel classes, parameter dtypes before and after loading, and the vLLM env.
 Emulation-only paths are reported unsupported. AMD enables AITER, as
 InferenceX's ROCm launches do.
 
+## MoE layer
+
+`moe_layer` (`ops/moe_layer.py`) describes one MoE layer from the router GEMM on
+normed hidden states to the combined output: shape (`tokens`, `hidden`),
+routed `experts` (count, top-k, intermediate size, optional biases / latent width /
+zero experts, and gemm operand descriptors for `x`, `w13`, `w2`, `a2`), `router`
+(gate dtype, scoring, top-k / grouped / hash selection, bias, renormalize, scale),
+`activation`, optional `shared` experts, and the `routing` data distribution.
+Execution (expert kernels, dispatch, shared-expert fusion or stream overlap, graphs)
+is the backend's choice. No backend implements it yet.
+
 ## Attention
 
 Select `testlists=attention_perf` for eight BF16/FP16 MHA/GQA and materialized MLA
