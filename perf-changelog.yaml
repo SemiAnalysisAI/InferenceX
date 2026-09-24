@@ -8860,4 +8860,4 @@
   description:
   - Add GB200 vLLM DSpark AgentX recipes on 20ebb28, including C32 and C64.
   - 新增使用 20ebb28 的 GB200 vLLM DSpark AgentX 配置，包含 C32 和 C64。
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3416
