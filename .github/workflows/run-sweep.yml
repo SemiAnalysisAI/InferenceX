@@ -112,7 +112,7 @@ jobs:
                   fi
 
             - name: Set up uv
-              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+              uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
 
             - name: Validate perf-changelog matrix
               env:
@@ -265,14 +265,14 @@ jobs:
                         ['infx tooling', data.sha],
                       ]).write();
                       return data.sha;
-            - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+            - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
             - name: Classify priority criteria
               id: classify
               if: >-
                   vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
                   github.event_name == 'pull_request'
               continue-on-error: true
-              uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
+              uses: anthropics/claude-code-action@2261fcfc88e7de1b55f179edd588805e12de71f2 # v1.0.228
               with:
                   github_token: ${{ github.token }}
                   # Repository integration credential for the scoped sweep/ingest job.
@@ -921,7 +921,7 @@ jobs:
                   pattern: results_*
 
             - name: Set up uv
-              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+              uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
 
             - name: Calculate success rate
               run: >-
@@ -963,7 +963,7 @@ jobs:
                   pattern: results_bmk
 
             - name: Set up uv
-              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+              uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
 
             - name: Compare results against main
               run: >-
