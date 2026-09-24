@@ -1,0 +1,134 @@
+base:
+  schema: 2
+  name: dsr1-fp4-b200-trt-8k1k
+  model:
+    path: hf:nvidia/DeepSeek-R1-0528-FP4-V2
+    container: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
+    precision: fp4
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: trtllm_serve
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: trtllm
+    served_model_name: nvidia/DeepSeek-R1-0528-FP4-V2
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        cuda_graph_config:
+          enable_padding: true
+        print_iter_log: true
+        kv_cache_config:
+          dtype: fp8
+          free_gpu_memory_fraction: 0.8
+          enable_block_reuse: false
+        stream_interval: 10
+        trust_remote_code: true
+        backend: pytorch
+        max_seq_len: 9472
+        pipeline_parallel_size: 1
+        enable_iter_perf_stats: false
+        return_perf_metrics: false
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
+    env:
+      MODEL: nvidia/DeepSeek-R1-0528-FP4-V2
+      ISL: '8192'
+      OSL: '1024'
+      RANDOM_RANGE_RATIO: '0.8'
+      USE_CHAT_TEMPLATE: 'false'
+zip_override_tp4_ep1:
+  roles:
+    agg:
+      args:
+        cuda_graph_config:
+          max_batch_size: [4, 8, 16, 32]
+        enable_attention_dp: false
+        moe_config:
+          backend: TRTLLM
+        max_num_tokens: 8320
+        tensor_parallel_size: 4
+        moe_expert_parallel_size: 1
+  benchmark:
+    env:
+      CONC: ['4', '8', '16', '32']
+zip_override_tp4_ep4:
+  roles:
+    agg:
+      args:
+        cuda_graph_config:
+          max_batch_size: 32
+        enable_attention_dp: false
+        moe_config:
+          backend: TRTLLM
+        max_num_tokens: 8320
+        tensor_parallel_size: 4
+        moe_expert_parallel_size: 4
+  benchmark:
+    env:
+      CONC: ['32']
+zip_override_tp4_ep4_dpa:
+  roles:
+    agg:
+      args:
+        cuda_graph_config:
+          max_batch_size: 64
+        enable_attention_dp: true
+        moe_config:
+          backend: CUTLASS
+        attention_dp_config:
+          batching_wait_iters: 0
+          enable_balance: true
+          timeout_iters: 60
+        max_num_tokens: 8512
+        tensor_parallel_size: 4
+        moe_expert_parallel_size: 4
+  benchmark:
+    env:
+      CONC: ['256']
+zip_override_tp8_ep1:
+  roles:
+    agg:
+      args:
+        cuda_graph_config:
+          max_batch_size: 4
+        enable_attention_dp: false
+        moe_config:
+          backend: TRTLLM
+        max_num_tokens: 8320
+        tensor_parallel_size: 8
+        moe_expert_parallel_size: 1
+      gpus: 8
+  benchmark:
+    env:
+      CONC: ['4']
+zip_override_tp8_ep8_dpa:
+  roles:
+    agg:
+      args:
+        cuda_graph_config:
+          max_batch_size: [32, 64]
+        enable_attention_dp: true
+        moe_config:
+          backend: CUTLASS
+        attention_dp_config:
+          batching_wait_iters: 0
+          enable_balance: true
+          timeout_iters: 60
+        max_num_tokens: [8384, 8512]
+        tensor_parallel_size: 8
+        moe_expert_parallel_size: 8
+      gpus: 8
+  benchmark:
+    env:
+      CONC: ['128', '256']

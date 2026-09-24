@@ -1,0 +1,25 @@
+diff --git a/docs/config-reference.md b/docs/config-reference.md
+index 17cfccba8..d6ddf2874 100644
+--- a/docs/config-reference.md
++++ b/docs/config-reference.md
+@@ -2014,6 +2014,8 @@ post_eval:
+ 
+ `MODEL_NAME` (the served model name) and `EVAL_CONC` are always set by srtctl. `srtctl dry-run` prints the effective dispatch.
+ 
++Eval steps inherit the recipe's `srun_options`, including container flags such as `container-writable`.
++
+ ---
+ 
+ ## services
+diff --git a/src/srtctl/cli/do_sweep.py b/src/srtctl/cli/do_sweep.py
+index 4ff19ade6..ceba6ad6b 100644
+--- a/src/srtctl/cli/do_sweep.py
++++ b/src/srtctl/cli/do_sweep.py
+@@ -603,6 +603,7 @@ def _run_post_eval(self, stop_event: threading.Event) -> int:
+             container_image=str(self.runtime.container_image),
+             container_mounts=self.runtime.container_mounts,
+             env_to_set=env_to_set,
++            srun_options=self.runtime.srun_options,
+             het_group=self.runtime.nodes.het_group_for(self.runtime.nodes.head),
+         )
+ 

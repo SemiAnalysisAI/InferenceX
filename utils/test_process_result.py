@@ -1,9 +1,11 @@
 """Exercise the fixed-sequence module CLI with controlled environment and artifacts."""
 import json
 import os
+import select
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -1032,6 +1034,42 @@ class TestPowerAggregationIntegration:
             "type": "ImportError" if fail_import else "RuntimeError",
             "message": "forced import failure" if fail_import else "forced aggregation failure",
         }
+
+    def test_amd_csv_filter_streams_complete_rows_before_eof(self):
+        """A live producer must not leave telemetry buffered until shutdown."""
+        benchmark_lib = REPO_ROOT / "benchmarks/benchmark_lib.sh"
+        expected = b"timestamp,gpu,socket_power\n123,0,400\n124,0,410\n"
+        with subprocess.Popen(
+            ["bash", "-c", f"source {str(benchmark_lib)!r}; _filter_amd_smi_metrics"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env={"PATH": os.environ["PATH"], "PYTHONDONTWRITEBYTECODE": "1"},
+        ) as process:
+            try:
+                process.stdin.write(
+                    b"diagnostic before header\ntimestamp,gpu,socket_power\n123,0,400\n"
+                    b"timestamp,gpu,socket_power\n124,0,410\n125,0,4"
+                )
+                process.stdin.flush()
+                received = b""
+                deadline = time.monotonic() + 5
+                while len(received) < len(expected):
+                    ready, _, _ = select.select(
+                        [process.stdout], [], [], max(0, deadline - time.monotonic())
+                    )
+                    assert ready, "CSV rows remained buffered while the producer was open"
+                    chunk = os.read(process.stdout.fileno(), 4096)
+                    assert chunk, "filter exited before consuming the live stream"
+                    received += chunk
+                assert received == expected
+                process.stdin.close()
+                assert process.wait(timeout=5) == 0
+                assert process.stdout.read() == b""  # Discard the incomplete final row.
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=5)
 
     def test_stop_gpu_monitor_appends_final_nvidia_sample(self, tmp_path):
         """Stopping between 1 Hz ticks still records one post-benchmark sample."""
