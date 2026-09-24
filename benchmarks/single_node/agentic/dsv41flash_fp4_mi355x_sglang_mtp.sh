@@ -122,6 +122,9 @@ SGLANG_CMD=(
     # AgentX C32 fanout reached 63 running requests before a native HIP illegal
     # access. Bound admission; additional client requests remain queued.
     --max-running-requests 32
+    # Eager prefill still faulted during overlap scheduler prefix matching.
+    # Test the native synchronous scheduler without changing cached payloads.
+    --disable-overlap-schedule
     --speculative-algorithm DSPARK
     --speculative-dspark-block-size "$DSPARK_BLOCK_SIZE"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
