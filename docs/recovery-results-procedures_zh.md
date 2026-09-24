@@ -24,6 +24,11 @@
 
 ### 吞吐量结果
 
+可复用基准工作流在启动 GPU 任务前准备 Python 3.12，并通过
+`INFERENCEX_RESULTS_PYTHON` 导出其绝对路径。固定序列结果处理和 AgentX 功耗处理
+（包括 H200 DCGM 路径）都会校验并使用该解释器。该设置缺失或为空时，处理失败；
+AgentX launcher 仍会先保留已有的审计和服务端产物，再返回失败状态。
+
 对于普通单节点吞吐量任务：
 
 1. launcher 必须在工作区留下 `${RESULT_FILENAME}.json`。工作流会短暂等待；如果该文件一直没有出现，任务失败。
@@ -38,7 +43,7 @@ RESULT_FILENAME=${result_file%.json} \
 IS_MULTINODE=true \
 PREFILL_GPUS="$prefill_gpus" \
 DECODE_GPUS="$decode_gpus" \
-python3 -m infx.results.fixed_sequence
+"$INFERENCEX_RESULTS_PYTHON" -m infx.results.fixed_sequence
 ```
 
 上传的 `bmk_${RESULT_FILENAME}` 制品包含 `agg_${RESULT_FILENAME}_*.json`。缺少源文件属于基准/launcher 故障；缺少 `agg_` 文件属于结果处理故障；缺少 `results_bmk` 属于收集故障。不要把这些问题归类为数据库故障。
