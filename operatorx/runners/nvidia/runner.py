@@ -54,19 +54,19 @@ def _clear_l2() -> None:
     _L2_BUF[dev].zero_()
 
 
-def _time_op(impl: BackendImpl, ctx, sleep_s: float) -> float:
+def _time_op(fn, sleep_s: float) -> float:
     """Median of _ITERS cold, event-timed iterations in us.
 
     sleep_s > 0 spaces iterations with a host sleep (throttle retry), which
     forces a sync per iteration, so each gets its own smaller shield."""
     for _ in range(_WARMUP):
-        impl.kernel(ctx)
+        fn()
     torch.cuda.synchronize()
     global _FIRST
     floor, _FIRST = (max(_WARMUP_MIN_S, _FIRST_WARMUP_S) if _FIRST else _WARMUP_MIN_S), False
     t0 = time.perf_counter()
     while time.perf_counter() - t0 < floor:
-        impl.kernel(ctx)
+        fn()
         torch.cuda.synchronize()
 
     starts = [torch.cuda.Event(enable_timing=True) for _ in range(_ITERS)]
@@ -79,7 +79,7 @@ def _time_op(impl: BackendImpl, ctx, sleep_s: float) -> float:
             torch.cuda._sleep(max(_SHIELD_CYCLES // 4, 500000))
         _clear_l2()
         start.record()
-        impl.kernel(ctx)
+        fn()
         end.record()
         if sleep_s > 0.0:
             torch.cuda.synchronize()
@@ -95,7 +95,8 @@ def run(op: Op) -> Result:
         raise UnsupportedOpError(f"nvidia/{op.backend} has no impl for op_type={op.type!r}")
     ctx = impl.prepare(op)
 
-    median_us, telem = telemetry.measure(op, lambda sleep_s: _time_op(impl, ctx, sleep_s))
+    fn = impl.launcher(ctx) if impl.launcher else (lambda: impl.kernel(ctx))
+    median_us, telem = telemetry.measure(op, lambda sleep_s: _time_op(fn, sleep_s))
 
     if _COOLDOWN_RATIO > 0.0:
         busy_s = median_us * 1e-6 * (_ITERS + _WARMUP)
@@ -104,7 +105,7 @@ def run(op: Op) -> Result:
     metrics = {"latency_us": median_us, "telemetry": telem}
     if isinstance(ctx, dict) and ctx.get("meta"):
         metrics["backend_meta"] = ctx["meta"]
-    prof = profiling.profile_op(lambda: impl.kernel(ctx))
+    prof = profiling.profile_op(fn)
     if prof is not None:
         metrics["profile"] = prof
     return Result(op=op, metrics=metrics)

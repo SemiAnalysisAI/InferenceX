@@ -29,16 +29,16 @@ _FLUSH_MB = int(os.environ.get("OPERATORX_FLUSH_MB", "512"))
 _L2_BUF: dict[int, torch.Tensor] = {}
 
 
-def _time_op(impl, ctx, device: int, sleep_s: float) -> float:
+def _time_op(fn, device: int, sleep_s: float) -> float:
     """Median of _ITERS cold, event-timed iterations in us."""
     for _ in range(_WARMUP):
-        impl.kernel(ctx)
+        fn()
     torch.cuda.synchronize()
     global _FIRST
     floor, _FIRST = (max(_WARMUP_MIN_S, _FIRST_WARMUP_S) if _FIRST else _WARMUP_MIN_S), False
     t0 = time.perf_counter()
     while time.perf_counter() - t0 < floor:
-        impl.kernel(ctx)
+        fn()
         torch.cuda.synchronize()
 
     starts = [torch.cuda.Event(enable_timing=True) for _ in range(_ITERS)]
@@ -51,7 +51,7 @@ def _time_op(impl, ctx, device: int, sleep_s: float) -> float:
             torch.cuda._sleep(max(_SHIELD_CYCLES // 4, 500000))
         _L2_BUF[device].zero_()
         start.record()
-        impl.kernel(ctx)
+        fn()
         end.record()
         if sleep_s > 0.0:
             torch.cuda.synchronize()
@@ -78,8 +78,9 @@ def run(op: Op) -> Result:
         _L2_BUF[device] = torch.empty(size, dtype=torch.int8, device="cuda")
     ctx = impl.prepare(op)
 
+    fn = impl.launcher(ctx) if impl.launcher else (lambda: impl.kernel(ctx))
     median_us, telem = telemetry.measure(
-        op, lambda sleep_s: _time_op(impl, ctx, device, sleep_s))
+        op, lambda sleep_s: _time_op(fn, device, sleep_s))
 
     if _COOLDOWN_RATIO > 0.0:
         time.sleep(min(median_us * 1e-6 * (_ITERS + _WARMUP) * _COOLDOWN_RATIO,
@@ -87,7 +88,7 @@ def run(op: Op) -> Result:
     metrics = {"latency_us": median_us, "telemetry": telem}
     if isinstance(ctx, dict) and ctx.get("meta"):
         metrics["backend_meta"] = ctx["meta"]
-    prof = profiling.profile_op(lambda: impl.kernel(ctx))
+    prof = profiling.profile_op(fn)
     if prof is not None:
         metrics["profile"] = prof
     return Result(op=op, metrics=metrics)
