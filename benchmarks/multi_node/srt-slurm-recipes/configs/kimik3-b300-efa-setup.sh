@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 set -eo pipefail
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq --no-install-recommends build-essential bzip2 ca-certificates curl libibverbs-dev librdmacm-dev numactl patch
+apt_update() {
+    for attempt in 1 2 3 4 5; do
+        apt-get update -qq -o Acquire::Retries=3 && return
+        rm -rf /var/lib/apt/lists/*
+        sleep $((attempt * 5))
+    done
+    return 1
+}
+apt_update
+apt-get install -y -qq -o Acquire::Retries=3 --no-install-recommends build-essential bzip2 ca-certificates curl libibverbs-dev librdmacm-dev numactl patch
 curl -fL --retry 3 https://github.com/ofiwg/libfabric/releases/download/v1.22.0/libfabric-1.22.0.tar.bz2 -o /tmp/libfabric.tar.bz2
 tar xjf /tmp/libfabric.tar.bz2 -C /tmp
 cd /tmp/libfabric-1.22.0
@@ -18,7 +26,7 @@ p.write_text(s.replace(old, new).replace(decl, decl.replace("\tint device_idx;",
 PY
 NVML_HEADER="$(find /usr/local/cuda /usr/include /usr/local -name nvml.h -print -quit 2>/dev/null)"
 if [[ -z "$NVML_HEADER" ]]; then
-    apt-get install -y -qq --no-install-recommends cuda-nvml-dev-13-0
+    apt-get install -y -qq -o Acquire::Retries=3 --no-install-recommends cuda-nvml-dev-13-0
     NVML_HEADER="$(find /usr/local/cuda /usr/include /usr/local -name nvml.h -print -quit 2>/dev/null)"
 fi
 test -n "$NVML_HEADER"
