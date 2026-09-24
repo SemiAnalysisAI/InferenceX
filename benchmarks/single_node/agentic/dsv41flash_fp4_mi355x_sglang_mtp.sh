@@ -51,6 +51,9 @@ SERVER_LOG="$RESULT_DIR/server.log"
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 
+# Diagnostic only: synchronize HIP kernels to identify the first illegal access.
+export AMD_SERIALIZE_KERNEL=3
+
 # Agentic warmup dispatches hundreds of large prompts at once and SGLang's
 # tokenizer can leave bytes unacknowledged past AIPerf's default 30 s
 # TCP_USER_TIMEOUT, so Linux aborts live localhost connections.
@@ -138,7 +141,7 @@ SGLANG_CMD=(
 write_command "$RESULT_DIR/sglang_command.txt" "${SGLANG_CMD[@]}"
 {
     echo "=== SGLANG_* env vars at launch ==="
-    env | grep -E '^SGLANG_|^PYTORCH_(HIP|CUDA|ALLOC)' | sort
+    env | grep -E '^SGLANG_|^PYTORCH_(HIP|CUDA|ALLOC)|^AMD_SERIALIZE_KERNEL=' | sort
     echo "==================================="
 } | tee "$SERVER_LOG"
 SERVER_PID=""
