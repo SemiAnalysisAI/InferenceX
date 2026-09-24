@@ -110,7 +110,6 @@ roles:
       MC_STORE_MEMCPY: '1'
       MC_WORKERS_PER_CTX: '4'
     args:
-      no-enable-flashinfer-autotune: true
       enable-logging-iteration-details: true
       kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
       served-model-name: moonshotai/Kimi-K3
@@ -130,6 +129,7 @@ roles:
       attention-config: '{"mla_prefill_backend": "TRTLLM_RAGGED", "use_prefill_query_quantization": true}'
       speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"rejection_sample_method":"block","draft_sample_method":"probabilistic"}'
       enable-prefix-caching: true
+      enable-flashinfer-autotune: true
     kv_events: true
   decode:
     nodes: 1
@@ -181,7 +181,6 @@ roles:
       MC_STORE_MEMCPY: '1'
       MC_WORKERS_PER_CTX: '4'
     args:
-      no-enable-flashinfer-autotune: true
       enable-logging-iteration-details: true
       kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
       served-model-name: moonshotai/Kimi-K3
@@ -201,6 +200,7 @@ roles:
       attention-config: '{"mla_prefill_backend": "TRTLLM_RAGGED", "use_prefill_query_quantization": true}'
       speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"rejection_sample_method":"block","draft_sample_method":"probabilistic"}'
       enable-prefix-caching: true
+      enable-flashinfer-autotune: true
 sbatch_directives:
   cpus-per-task: '72'
   mem: '0'

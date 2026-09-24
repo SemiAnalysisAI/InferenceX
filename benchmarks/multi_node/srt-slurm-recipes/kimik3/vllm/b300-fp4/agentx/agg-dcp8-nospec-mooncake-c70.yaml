@@ -89,7 +89,6 @@ roles:
       language-model-only: true
       load-format: fastsafetensors
       moe-backend: auto
-      no-enable-flashinfer-autotune: true
       enable-prefix-caching: true
       prefix-match-unit: 128
       kv-cache-dtype: fp8
@@ -98,6 +97,7 @@ roles:
       attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
       max-cudagraph-capture-size: 1024
       kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_offload":false}}'
+      enable-flashinfer-autotune: true
 health_check:
   max_attempts: 720
   interval_seconds: 10

@@ -129,7 +129,7 @@ roles:
       attention-config: '{"mla_prefill_backend": "TRTLLM_RAGGED", "use_prefill_query_quantization": true}'
       speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"rejection_sample_method":"block","draft_sample_method":"probabilistic"}'
       enable-prefix-caching: true
-      no-enable-flashinfer-autotune: true
+      enable-flashinfer-autotune: true
     kv_events: true
   decode:
     nodes: 3
@@ -199,7 +199,7 @@ roles:
       attention-config: '{"mla_prefill_backend": "TRTLLM_RAGGED", "use_prefill_query_quantization": true}'
       speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"rejection_sample_method":"block","draft_sample_method":"probabilistic"}'
       enable-prefix-caching: true
-      no-enable-flashinfer-autotune: true
+      enable-flashinfer-autotune: true
 sbatch_directives:
   cpus-per-task: '72'
   mem: '0'

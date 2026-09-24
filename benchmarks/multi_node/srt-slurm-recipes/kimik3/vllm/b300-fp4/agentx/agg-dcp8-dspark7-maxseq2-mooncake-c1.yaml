@@ -96,13 +96,13 @@ roles:
       stream-interval: 10
       language-model-only: true
       moe-backend: auto
-      no-enable-flashinfer-autotune: true
       enable-cumem-allocator: true
       attention-backend: TOKENSPEED_MLA
       attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
       speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":7,"rejection_sample_method":"block","draft_sample_method":"probabilistic"}'
       enable-prefix-caching: true
       prefix-match-unit: 128
+      enable-flashinfer-autotune: true
 health_check:
   max_attempts: 720
   interval_seconds: 10
