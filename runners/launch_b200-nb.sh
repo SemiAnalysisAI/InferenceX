@@ -1,5 +1,8 @@
 #!/usr/bin/bash
 
+source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
+check_env_vars IS_MULTINODE
+
 HF_HUB_CACHE_MOUNT="/mnt/data/gharunners/hf-hub-cache/"
 PARTITION="main"
 FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
@@ -26,7 +29,7 @@ else
     CONTAINER_MOUNT_DIR=/workspace
 fi
 
-export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+check_env_vars GPU_COUNT
 
 set -x
 srun --partition=$PARTITION --gres=gpu:$GPU_COUNT --exclusive --job-name="$RUNNER_NAME" \

@@ -2,6 +2,13 @@ name: Template - Multi-Node Benchmark
 
 on:
   workflow_call:
+    secrets:
+      INFERENCEX_OFFICIAL_RO_HF_TOKEN:
+        required: true
+      MODAL_TOKEN_ID:
+        required: false
+      MODAL_TOKEN_SECRET:
+        required: false
     inputs:
       config:
         description: "Benchmark configuration as JSON"
@@ -111,6 +118,16 @@ on:
         type: string
 
 env:
+  PORT: '8888'
+  INFMAX_CONTAINER_WORKSPACE: '/workspace'
+  DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE: '1'
+  MODEL_DOWNLOAD_LOCK_TIMEOUT: '21600'
+  ENROOT_IMPORT_TIME_LIMIT: '120'
+  SALLOC_TIME_LIMIT: '480'
+  GPU_MONITOR_INTERVAL: '1'
+  GPU_METRICS_CSV: 'gpu_metrics.csv'
+  KEEP_LOGS: '0'
+  IS_MULTINODE: 'true'
   RANDOM_RANGE_RATIO: 0.8
   # Day-zero models resolved via hf: ids download from the Hub inside the
   # slurm job (srtctl pre-download + dynamo hub fetch). Anonymous requests
@@ -120,6 +137,7 @@ env:
   EXP_NAME: ${{ fromJSON(inputs.config).exp-name }}
   RECIPE_FINGERPRINT: ${{ fromJSON(inputs.config)['recipe-fingerprint'] || '' }}
   IMAGE: ${{ fromJSON(inputs.config).image }}
+  THINKING_MODE: thinking_on
   MODEL_PREFIX: ${{ fromJSON(inputs.config).model-prefix }}
   MODEL: ${{ fromJSON(inputs.config).model }}
   FRAMEWORK: ${{ fromJSON(inputs.config).framework }}
@@ -138,7 +156,7 @@ env:
   EVAL_SUITE: ${{ inputs.eval-suite }}
   EVAL_CONC: ${{ inputs.eval-conc }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
-  SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
+  SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode || 'agentic' }}
   # GPU/multi-node runners lack Docker for SWE-bench scoring.
   SWEBENCH_USE_MODAL: 'true'
   MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
@@ -241,7 +259,7 @@ jobs:
       - name: Slurm cleanup (pre-run)
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
-            for job_name in "${{ runner.name }}" "inferencex-${{ runner.name }}"; do
+            for job_name in "${RUNNER_NAME}" "inferencex-${RUNNER_NAME}"; do
               echo "[Slurm] Cleaning up jobs named: $job_name ..."
               scancel --user="$USER" --name="$job_name" || true
               while [ -n "$(squeue --user="$USER" --name="$job_name" --noheader --format='%i')" ]; do
@@ -262,7 +280,7 @@ jobs:
           # module git dir — a truncated clone may lack HEAD entirely, and a
           # git dir whose HEAD does not resolve to a commit is dropped
           # together with its worktree so checkout re-clones it.
-          repo_dir="${{ github.workspace }}"
+          repo_dir="${GITHUB_WORKSPACE}"
           if [ -d "${repo_dir}/.git" ]; then
             find "${repo_dir}/.git" -name index.lock -type f -delete || true
             for gitdir in "${repo_dir}"/.git/modules/* "${repo_dir}"/.git/modules/*/*; do
@@ -278,14 +296,30 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
           ref: ${{ inputs.ref || github.sha }}
           clean: true
           submodules: true
+          persist-credentials: false
+
+      - name: Set up uv for result processing
+        if: ${{ !inputs.eval-only }}
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: false
+
+      - name: Prepare result-processing Python
+        if: ${{ !inputs.eval-only }}
+        run: |
+          uv python install --no-bin 3.12
+          result_python=$(uv python find --system 3.12)
+          "$result_python" --version
+          echo "INFERENCEX_RESULTS_PYTHON=$result_python" >> "$GITHUB_ENV"
 
       - name: Launch multi-node job script
         env:
+          PREFILL_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).prefill.additional-settings) }}
+          DECODE_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).decode.additional-settings) }}
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
           RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
@@ -305,17 +339,42 @@ jobs:
           eval_artifact_conc="$(python3 -c 'import hashlib,os; print(hashlib.sha256(os.environ["CONC_LIST"].encode()).hexdigest()[:12])')"
           echo "EVAL_ARTIFACT_CONC=${eval_artifact_conc}" >> "$GITHUB_ENV"
 
-          export ${{ join(fromJSON(inputs.config).prefill.additional-settings, ' ') }} ${{ join(fromJSON(inputs.config).decode.additional-settings, ' ') }}
+          # Historical measured revisions own their configuration in the launchers.
+          if [[ -f benchmarks/runtime_settings.sh ]]; then
+            source benchmarks/runtime_settings.sh
+          fi
+          if [[ -f runners/runtime_settings.sh ]]; then
+            source runners/runtime_settings.sh
+          fi
+          # Historical measured revisions own their configuration in the launchers.
+          if [[ -f benchmarks/multi_node/runtime_settings.sh ]]; then
+            source benchmarks/multi_node/runtime_settings.sh
+          fi
+          # Assign data literally; recipe values must never become shell code.
+          settings_json=$(jq -cen \
+            --argjson prefill "$PREFILL_ADDITIONAL_SETTINGS" \
+            --argjson decode "$DECODE_ADDITIONAL_SETTINGS" \
+            '($prefill // []) + ($decode // []) |
+             if all(.[]; type == "string" and test("^[A-Za-z_][A-Za-z0-9_]*=")) then .
+             else error("additional-settings must contain NAME=value assignments") end')
+          while IFS= read -r -d '' setting; do
+            export "$setting"
+          done < <(jq -j '.[] + "\u0000"' <<< "$settings_json")
+          # Resolve the workflow's documented automatic eval-concurrency selection.
+          if [[ -z "$EVAL_CONC" ]]; then
+            EVAL_CONC=$(python3 -c 'import os; print(max(map(int, os.environ["CONC_LIST"].split())))')
+          fi
+          export EVAL_CONC
           export IS_MULTINODE=true
-          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
-          if [ "${{ inputs.eval-only }}" = "true" ]; then
+          bash "./runners/launch_${RUNNER_NAME%%_*}.sh"
+          if [ "${EVAL_ONLY}" = "true" ]; then
             echo "Eval-only mode: skipping benchmark result file check"
             # Verify eval produced results
             if ! ls results*.json 1>/dev/null 2>&1; then
               echo "Eval-only run failed: no results*.json files found." >&2
               exit 1
             fi
-          elif [ "${{ inputs.scenario-type }}" = "agentic-coding" ]; then
+          elif [ "${SCENARIO_TYPE}" = "agentic-coding" ]; then
             expected_count=$(wc -w <<< "$CONC_LIST" | tr -d ' ')
             shopt -s nullglob
             agentic_results=("${RESULT_FILENAME}"_conc*.json)
@@ -336,10 +395,8 @@ jobs:
               fi
             done
           else
-            # Check if at least one result file was created
-            if ls ${RESULT_FILENAME}_*.json 1> /dev/null 2>&1; then
-              echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
-              echo "Found result files: $(ls ${RESULT_FILENAME}_*.json)"
+            if ls -- "${RESULT_FILENAME}"_*.json 1> /dev/null 2>&1; then
+              printf 'Found result file: %s\n' "${RESULT_FILENAME}"_*.json
             else
               echo "Run failed: No benchmark result files found for ${RESULT_FILENAME}_*.json" >&2
               exit 1
@@ -351,6 +408,8 @@ jobs:
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
         run: |
+          source benchmarks/benchmark_lib.sh --validation-only
+          check_env_vars INFERENCEX_RESULTS_PYTHON
           # Launcher stamp supplies the producer SHA unless the
           # power-producer-sha input is set as a manual override
           if [ -z "$POWER_PRODUCER_SHA" ] && [ -f power-producer-sha.txt ]; then
@@ -359,7 +418,7 @@ jobs:
           fi
           # Older measured refs predate the batch CLI. Import failures in a
           # present processor are errors, not a reason to downgrade validation.
-          has_batch=$(python3 - <<'PY'
+          has_batch=$("$INFERENCEX_RESULTS_PYTHON" - <<'PY'
           import importlib
           from pathlib import Path
           if Path('infx/results/fixed_sequence.py').is_file():
@@ -370,7 +429,7 @@ jobs:
           PY
           )
           if [ "$has_batch" = 1 ]; then
-            python3 utils/process_result.py --all
+            "$INFERENCEX_RESULTS_PYTHON" utils/process_result.py --all
           else
             batch_rc=0
             observed=()
@@ -385,7 +444,7 @@ jobs:
                 prefill_gpus=${BASH_REMATCH[6]:-$gpus}
                 decode_gpus=${BASH_REMATCH[7]:-0}
                 RESULT_FILENAME=${result_file%.json} IS_MULTINODE=true PREFILL_GPUS="$prefill_gpus" DECODE_GPUS="$decode_gpus" \
-                  python3 utils/process_result.py || batch_rc=1
+                  "$INFERENCEX_RESULTS_PYTHON" utils/process_result.py || batch_rc=1
               else
                 echo "Unrecognized result filename: $result_file" >&2
                 batch_rc=1

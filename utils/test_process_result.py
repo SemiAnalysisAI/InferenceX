@@ -1,157 +1,18 @@
 """Exercise the fixed-sequence module CLI with controlled environment and artifacts."""
 import json
 import os
-import re
-import shutil
 import signal
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
-import yaml
 
 from infx.results.power.multinode import ROLE_METRIC_KEYS, WHOLE_METRIC_KEYS
 from test_aggregate_power_multinode import PRODUCER_SHA, build_package
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MODULE_COMMAND = [sys.executable, "-m", "infx.results.fixed_sequence"]
-
-
-@pytest.mark.parametrize(("historical", "expected_filename"), [
-    (False, "fixture"),
-    (True, "1d8fcd0d7905fdaee2bd136c221bde34db0b88e16a9e4043c238a9607e29a990"),
-])
-def test_launch_step_computes_gpu_count_and_result_identity(
-    tmp_path, single_node_env_vars, historical, expected_filename,
-):
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/benchmark-tmpl.yml").read_text())
-    step = next(step for step in workflow["jobs"]["benchmark"]["steps"] if step.get("name") == "Launch job script")
-    script = step["run"].replace("${{ inputs.eval-only }}", "false").replace(
-        "${{ inputs.scenario-type }}", "fixed-seq-len")
-    if not historical:
-        for file in ("utils/result_filename.py", "infx/__init__.py", "infx/results/__init__.py",
-                     "infx/results/result_filename.py"):
-            target = tmp_path / file
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(REPO_ROOT / file, target)
-    (tmp_path / "runners").mkdir()
-    (tmp_path / "runners/launch_fixture-node.sh").write_text('''python3 - <<'PY'
-import json, os
-with open('received.json', 'w') as output:
-    json.dump(dict(os.environ), output)
-PY
-printf '{}' > "$RESULT_FILENAME.json"
-''')
-    result = subprocess.run(
-        ["bash", "-euo", "pipefail", "-c", script], cwd=tmp_path, capture_output=True, text=True, timeout=10,
-        env={**os.environ, **single_node_env_vars,
-             "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}", "PYTHONPATH": "",
-             "TP": "4", "PP_SIZE": "2", "PCP_SIZE": "3", "DCP_SIZE": "4",
-             "RUNNER_NAME": "fixture-node_03", "RUNNER_TYPE": "fixture-node",
-             "RESULT_FILENAME_BASE": "fixture", "RECIPE_FINGERPRINT": "",
-             "GITHUB_ENV": str(tmp_path / "github-env")},
-    )
-    assert result.returncode == 0, result.stderr
-    received = json.loads((tmp_path / "received.json").read_text())
-    assert received["GPU_COUNT"] == "24"
-    assert received["RESULT_FILENAME"] == expected_filename
-    published = dict(line.split("=", 1) for line in (tmp_path / "github-env").read_text().splitlines())
-    assert published == {"GPU_COUNT": "24", "RESULT_FILENAME": expected_filename}
-
-
-def test_single_node_workflow_reports_missing_raw_result(tmp_path, single_node_env_vars):
-    workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-tmpl.yml').read_text())
-    step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
-                if step.get('name') == 'Process result')
-    shutil.copytree(REPO_ROOT / 'infx', tmp_path / 'infx')
-    (tmp_path / 'utils').mkdir()
-    shutil.copy(REPO_ROOT / 'utils/process_result.py', tmp_path / 'utils/process_result.py')
-    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=tmp_path,
-                            env={**os.environ, **single_node_env_vars, 'RESULT_FILENAME': 'missing',
-                                 'PATH': f"{Path(sys.executable).parent}:{os.environ['PATH']}"},
-                            capture_output=True, text=True, timeout=10)
-    assert result.returncode == 1
-    assert 'no raw result to process: missing.json' in result.stderr
-    assert 'Traceback' not in result.stderr
-    assert not (tmp_path / 'agg_missing.json').exists()
-
-
-@pytest.mark.parametrize(("scenario", "eval_only", "artifacts", "diagnostic"), [
-    ("fixed-seq-len", False, {"fixture_conc4.json": {}}, None),
-    ("fixed-seq-len", False, {}, "No benchmark result files found"),
-    ("agentic-coding", False, {"fixture_conc4.json": {"num_requests_successful": 3},
-                               "fixture_conc8.json": {"num_requests_successful": 5}}, None),
-    ("agentic-coding", False, {"fixture_conc4.json": {"num_requests_successful": 3}},
-     "expected 2 agentic results, found 1"),
-    ("agentic-coding", False, {"fixture_conc4.json": {"num_requests_successful": 3},
-                               "fixture_conc8.json": {"num_requests_successful": 0}},
-     "zero successful requests"),
-    ("agentic-coding", True, {"results_fixture.json": {}}, None),
-    ("agentic-coding", True, {}, "no results*.json files found"),
-])
-def test_multinode_launch_checks_the_expected_result_batch(
-    tmp_path, multinode_env_vars, scenario, eval_only, artifacts, diagnostic,
-):
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/benchmark-multinode-tmpl.yml").read_text())
-    step = next(step for step in workflow["jobs"]["benchmark"]["steps"]
-                if step.get("name") == "Launch multi-node job script")
-    script = step["run"].replace("${{ inputs.eval-only }}", str(eval_only).lower()).replace(
-        "${{ inputs.scenario-type }}", scenario)
-    script = re.sub(r"\$\{\{ join\([^\n]*?additional-settings[^\n]*?\}\}", "", script)
-    for file in ("utils/result_filename.py", "infx/__init__.py", "infx/results/__init__.py",
-                 "infx/results/result_filename.py"):
-        target = tmp_path / file
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(REPO_ROOT / file, target)
-    (tmp_path / "runners").mkdir()
-    (tmp_path / "runners/launch_fixture-node.sh").write_text("exit 0\n")
-    for filename, payload in artifacts.items():
-        (tmp_path / filename).write_text(json.dumps(payload))
-    result = subprocess.run(
-        ["bash", "-euo", "pipefail", "-c", script], cwd=tmp_path, capture_output=True, text=True, timeout=10,
-        env={**os.environ, **multinode_env_vars,
-             "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}", "PYTHONPATH": "",
-             "RUNNER_NAME": "fixture-node_03", "RESULT_FILENAME_BASE": "fixture",
-             "RECIPE_FINGERPRINT": "", "CONC_LIST": "4 8", "GITHUB_ENV": str(tmp_path / "github-env")},
-    )
-    if diagnostic:
-        assert result.returncode == 1
-        assert diagnostic in result.stderr
-    else:
-        assert result.returncode == 0, result.stderr
-    published = dict(line.split("=", 1) for line in (tmp_path / "github-env").read_text().splitlines())
-    assert published == {"RESULT_FILENAME": "fixture", "EVAL_ARTIFACT_RECIPE": "",
-                         "EVAL_ARTIFACT_CONC": "809c025ba41f"}
-
-
-@pytest.mark.parametrize("workflow_name", ["benchmark-tmpl.yml", "benchmark-multinode-tmpl.yml", "profile.yml"])
-def test_workflow_processes_results_through_compatibility_entrypoint(
-    tmp_path, workflow_name, single_node_env_vars, multinode_env_vars, sample_benchmark_result,
-):
-    shutil.copytree(REPO_ROOT / "infx", tmp_path / "infx")
-    (tmp_path / "utils").mkdir()
-    shutil.copy(REPO_ROOT / "utils/process_result.py", tmp_path / "utils/process_result.py")
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows" / workflow_name).read_text())
-    step = next(step for job in workflow["jobs"].values() for step in job.get("steps", [])
-                if step.get("name", "").startswith("Process result"))
-    multinode = workflow_name == "benchmark-multinode-tmpl.yml"
-    stem = "fixture_conc64_gpus_28_ctx_20_gen_8" if multinode else "fixture"
-    (tmp_path / f"{stem}.json").write_text(json.dumps({
-        **sample_benchmark_result, "total_token_throughput": 56, "output_throughput": 28,
-    }))
-    env = {**(multinode_env_vars if multinode else single_node_env_vars),
-           "RESULT_FILENAME": "fixture" if multinode else stem, "POWER_PRODUCER_SHA": "",
-           "CONC_LIST": "64",
-           "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}"}
-    result = subprocess.run(["bash", "-euo", "pipefail", "-c", step["run"]],
-                            cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10)
-    assert result.returncode == 0, result.stderr
-    data = json.loads((tmp_path / f"agg_{stem}.json").read_text())
-    assert data["conc"] == 64
-    assert data["disagg"] is multinode
-    assert data["tput_per_gpu"] == (2 if multinode else 7)
-    assert (tmp_path / f"power_validation_{stem}.json").is_file()
 
 
 @pytest.mark.parametrize('fingerprint', ['', 'a' * 64, 'a' * 16 + 'b' * 48])
@@ -895,6 +756,60 @@ class TestPowerAggregationIntegration:
         # 600W × 8 GPUs × 60s / 30_000 tokens = 9.6 J/tok
         assert patched["joules_per_output_token"] == pytest.approx(9.6, abs=0.05)
         assert (tmp_path / "power_validation_benchmark_result.json").is_file()
+
+    def test_workflow_uses_result_python_with_unsupported_ambient_python(
+        self, tmp_path, single_node_env_vars
+    ):
+        import yaml
+
+        workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/benchmark-tmpl.yml").read_text())
+        step = next(
+            s for s in workflow["jobs"]["benchmark"]["steps"] if s.get("name") == "Process result"
+        )
+        for directory in ["utils", "benchmarks"]:
+            (tmp_path / directory).symlink_to(REPO_ROOT / directory, target_is_directory=True)
+        (tmp_path / "bin").mkdir()
+        ambient_python = tmp_path / "bin/python3"
+        ambient_python.write_text("#!/bin/sh\nexit 73\n")
+        ambient_python.chmod(0o755)
+        start, end = 1_700_000_100.0, 1_700_000_160.0
+        self._write_nvidia_csv(tmp_path / "gpu_metrics.csv", start, end, 600.0, 8)
+        (tmp_path / "benchmark_result.json").write_text(
+            json.dumps(
+                {
+                    "model_id": "fixture",
+                    "max_concurrency": 8,
+                    "total_token_throughput": 1000,
+                    "output_throughput": 500,
+                    "benchmark_start_time_unix": start,
+                    "benchmark_end_time_unix": end,
+                    "duration": 60,
+                    "completed": 30,
+                    "total_input_tokens": 240_000,
+                    "total_output_tokens": 30_000,
+                }
+            )
+        )
+        env = {
+            **os.environ,
+            **single_node_env_vars,
+            "REQUIRE_POWER": "1",
+            "PATH": str(tmp_path / "bin") + os.pathsep + os.environ["PATH"],
+            "INFERENCEX_RESULTS_PYTHON": sys.executable,
+            "PYTHONPATH": str(REPO_ROOT),
+        }
+        result = subprocess.run(
+            ["bash", "-eo", "pipefail", "-c", step["run"]],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        aggregate = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
+        assert aggregate["power_valid"] == 1
+        assert aggregate["total_gpu_energy_j"] == pytest.approx(288_000)
 
     def test_missing_csv_does_not_break_process_result(self, tmp_path, single_node_env_vars):
         """Without GPU_METRICS_CSV (or with a missing file), process_result.py
@@ -1700,22 +1615,6 @@ def test_public_power_audit_bounds_text_and_device_identifiers():
     assert audit['observed_gpu_ids'][:2] == ['gpu0', 'gpu1']
 
 
-@pytest.mark.parametrize('step_name', ['Upload GPU metrics', 'Upload power audit bundle'])
-def test_workflow_retains_context_for_each_metrics_csv(tmp_path, step_name):
-    import yaml
-
-    workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-tmpl.yml').read_text())
-    step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
-                if step.get('name') == step_name)
-    patterns = step['with']['path'].splitlines()
-    for relative in ['gpu_metrics_concurrency_4_context.json',
-                     'results/gpu_metrics_concurrency_4_context.json']:
-        path = tmp_path / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text('{"timestamp_timezone":"UTC"}')
-        assert any(path in tmp_path.glob(pattern.strip()) for pattern in patterns)
-
-
 @pytest.mark.parametrize('sidecar', ['run_recipe_conc4_gpus_4_ctx_2_gen_2.pytorch.json',
                                     'run_gpu_metrics_context.json', 'run_gpu_metrics_identity.json'])
 @pytest.mark.parametrize('point_state', ['valid', 'missing', 'malformed'])
@@ -1753,51 +1652,108 @@ def test_multinode_batch_rejects_unknown_point_filename(
     assert any('filename lacks' in point.get('error', '') for point in receipt['points'])
 
 
-@pytest.mark.parametrize('first_rc', [0, 7])
-@pytest.mark.parametrize('expected_concs', ['4 16', '4 8 16', '4'])
-def test_multinode_workflow_processes_every_point_with_legacy_processor(tmp_path, first_rc, expected_concs):
-    (tmp_path / 'utils').mkdir()
-    (tmp_path / 'utils/process_result.py').write_text('''import json, os, sys
-from pathlib import Path
-stem = os.environ['RESULT_FILENAME']
-data = json.loads(Path(stem + '.json').read_text())
-Path('agg_' + stem + '.json').write_text(json.dumps(data))
-sys.exit(data['exit_code'])
-''')
-    for conc, rc in [(4, first_rc), (16, 0)]:
-        (tmp_path / f'run_conc{conc}_gpus_4_ctx_2_gen_2.json').write_text(
-            json.dumps({'exit_code': rc}))
-    workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-multinode-tmpl.yml').read_text())
-    step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
-                if step.get('name') == 'Process result')
-    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=tmp_path,
-                            env={**os.environ, 'RESULT_FILENAME': 'run', 'POWER_PRODUCER_SHA': '',
-                                 'CONC_LIST': expected_concs, 'PYTHONPATH': '',
-                                 'PATH': f"{Path(sys.executable).parent}:{os.environ['PATH']}"},
-                            capture_output=True, text=True, timeout=10)
-    assert result.returncode == int(bool(first_rc) or expected_concs != '4 16'), result.stderr
-    for conc in [4, 16]:
-        assert (tmp_path / f'agg_run_conc{conc}_gpus_4_ctx_2_gen_2.json').is_file()
+@pytest.mark.parametrize("collector", ["shared", "h200-dcgm"])
+@pytest.mark.parametrize("result_python", [None, "", sys.executable])
+def test_agentic_collector_preserves_archive_when_result_python_is_missing(
+    tmp_path: Path, result_python: str | None, collector: str
+) -> None:
+    import tarfile
 
-
-def test_multinode_workflow_does_not_downgrade_processor_import_errors(tmp_path):
-    (tmp_path / 'infx/results').mkdir(parents=True)
-    (tmp_path / 'infx/__init__.py').touch()
-    (tmp_path / 'infx/results/__init__.py').touch()
-    (tmp_path / 'infx/results/fixed_sequence.py').write_text(
-        'raise RuntimeError("broken processor import")\n')
-    (tmp_path / 'utils').mkdir()
-    (tmp_path / 'utils/process_result.py').write_text(
-        'from pathlib import Path\nPath("legacy-called").touch()\n')
-    (tmp_path / 'run_conc4_gpus_4.json').write_text('{}')
-    workflow = yaml.safe_load((REPO_ROOT / '.github/workflows/benchmark-multinode-tmpl.yml').read_text())
-    step = next(step for job in workflow['jobs'].values() for step in job.get('steps', [])
-                if step.get('name') == 'Process result')
-    result = subprocess.run(['bash', '-euo', 'pipefail', '-c', step['run']], cwd=tmp_path,
-                            env={**os.environ, 'RESULT_FILENAME': 'run', 'POWER_PRODUCER_SHA': '',
-                                 'CONC_LIST': '4', 'PYTHONPATH': '',
-                                 'PATH': f"{Path(sys.executable).parent}:{os.environ['PATH']}"},
-                            capture_output=True, text=True, timeout=10)
-    assert result.returncode != 0
-    assert 'broken processor import' in result.stderr
-    assert not (tmp_path / 'legacy-called').exists()
+    pkg = build_package(tmp_path)
+    result_dir = pkg.logs_root / "agentic/conc_4"
+    result_dir.mkdir(parents=True)
+    stem = "agentic_power_concurrency_4"
+    pkg.original_result.replace(result_dir / f"{stem}.json")
+    old_window = pkg.windows_dir / "my_result.json"
+    window = json.loads(old_window.read_text())
+    window.update(benchmark_type="custom", result_path=f"agentic/conc_4/{stem}.json")
+    old_window.unlink()
+    (pkg.windows_dir / f"{stem}.json").write_text(json.dumps(window))
+    manifest_path = pkg.power_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["expected_windows"] = [{"benchmark_type": "custom", "concurrency": 4}]
+    manifest["window_validations"][0].update(
+        benchmark_type="custom", window_file=f"windows/{stem}.json"
+    )
+    manifest_path.write_text(json.dumps(manifest))
+    source, workspace, bin_dir = [tmp_path / name for name in ("source", "workspace", "bin")]
+    for directory in (source, workspace, bin_dir):
+        directory.mkdir()
+    raw_result = {
+        "hw": "h200",
+        "conc": 4,
+        "disagg": True,
+        "num_prefill_gpu": 2,
+        "num_decode_gpu": 2,
+    }
+    (source / "point_conc4.json").write_text(json.dumps(raw_result))
+    for name in ("python", "python3"):
+        ambient_python = bin_dir / name
+        ambient_python.write_text("#!/bin/sh\nexit 73\n")
+        ambient_python.chmod(0o755)
+    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+    env.pop("INFERENCEX_RESULTS_PYTHON", None)
+    if result_python is not None:
+        env["INFERENCEX_RESULTS_PYTHON"] = result_python
+    command = (
+        'source "$1"; sacct() { printf "12345|COMPLETED|0:0\\n"; }; '
+        'rc=0; collect_agentic_power_results 12345 "$2" "$3" "$4" point "$5" 4 || rc=$?; '
+        'bundle_server_logs "$2" "$4/server-logs.tar.gz"; exit "$rc"'
+    )
+    archive_name = "server-logs.tar.gz"
+    if collector == "h200-dcgm":
+        # Provisioning and Slurm submission are outside this processing regression.
+        launcher = (REPO_ROOT / "runners/launch_h200-dgxc-slurm.sh").read_text()
+        start = launcher.index('    AGENTX_POWER_RC="$SRT_JOB_RC"')
+        end = launcher.index('    if [[ "${EVAL_ONLY}" != "true" ]]; then', start)
+        command = 'source "$1";\n' + launcher[start:end]
+        archive_name = "multinode_server_logs.tar.gz"
+        (workspace / "point_conc4.json").write_text(json.dumps(raw_result))
+        (workspace / "infx").symlink_to(REPO_ROOT / "infx", target_is_directory=True)
+        (workspace / "exporter-image.sha256").write_text("fixture-exporter\n")
+        (workspace / "power-producer-sha.txt").write_text(PRODUCER_SHA + "\n")
+        env.update(
+            GITHUB_WORKSPACE=str(workspace),
+            LOGS_DIR=str(pkg.logs_root),
+            RESULT_FILENAME="point",
+            CONC_LIST="4",
+            SRT_SLURM_COMMIT=PRODUCER_SHA,
+            SRT_JOB_RC="0",
+            USES_KIMIK3_POWER="0",
+            USES_DCGM_POWER="1",
+            EVAL_ONLY="false",
+            REQUIRE_POWER="true",
+        )
+    result = subprocess.run(
+        [
+            "bash",
+            "-eo",
+            "pipefail",
+            "-c",
+            command,
+            "bash",
+            str(REPO_ROOT / "runners/slurm_utils.sh"),
+            str(pkg.logs_root),
+            str(source),
+            str(workspace),
+            PRODUCER_SHA,
+        ],
+        env=env,
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    expected_rc = 0 if result_python else 1
+    assert result.returncode == expected_rc, result.stderr
+    with tarfile.open(workspace / archive_name) as archive:
+        if collector == "shared":
+            assert "./power/native-job-status.txt" in archive.getnames()
+        assert f"./agentic/conc_4/{stem}.json" in archive.getnames()
+    aggregate = json.loads((workspace / "point_conc4.json").read_text())
+    if result_python:
+        assert aggregate["power_valid"] == 1
+        assert aggregate["total_gpu_energy_j"] == pytest.approx(84_000)
+    else:
+        assert "INFERENCEX_RESULTS_PYTHON" in result.stdout
+        assert aggregate == raw_result

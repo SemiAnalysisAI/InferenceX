@@ -24,6 +24,11 @@
 
 ### 吞吐量结果
 
+可复用基准工作流在启动 GPU 任务前准备 Python 3.12，并通过
+`INFERENCEX_RESULTS_PYTHON` 导出其绝对路径。固定序列结果处理和 AgentX 功耗处理
+（包括 H200 DCGM 路径）都会校验并使用该解释器。该设置缺失或为空时，处理失败；
+AgentX launcher 仍会先保留已有的审计和服务端产物，再返回失败状态。
+
 对于普通单节点吞吐量任务：
 
 1. launcher 必须在工作区留下 `${RESULT_FILENAME}.json`。工作流会短暂等待；如果该文件一直没有出现，任务失败。
@@ -38,7 +43,7 @@ RESULT_FILENAME=${result_file%.json} \
 IS_MULTINODE=true \
 PREFILL_GPUS="$prefill_gpus" \
 DECODE_GPUS="$decode_gpus" \
-python3 -m infx.results.fixed_sequence
+"$INFERENCEX_RESULTS_PYTHON" -m infx.results.fixed_sequence
 ```
 
 上传的 `bmk_${RESULT_FILENAME}` 制品包含 `agg_${RESULT_FILENAME}_*.json`。缺少源文件属于基准/launcher 故障；缺少 `agg_` 文件属于结果处理故障；缺少 `results_bmk` 属于收集故障。不要把这些问题归类为数据库故障。
@@ -223,7 +228,7 @@ gh api \
 gh pr edit "$RECOVERY_PR" --repo SemiAnalysisAI/InferenceX \
   --add-label full-sweep-fail-fast
 gh pr comment "$RECOVERY_PR" --repo SemiAnalysisAI/InferenceX \
-  --body "/reuse-sweep-run $SOURCE_RUN_ID"
+  --body "/use $SOURCE_RUN_ID"
 ```
 
 把恢复条目追加到 `perf-changelog.yaml` 末尾；绝不要修改历史字节。保留原始 `config-keys`、`description`、`evals-only` 和 `scenario-type`，但使用恢复 PR URL。验证 changelog 和生成的范围：
@@ -425,3 +430,23 @@ Remaining durable fix:
 ```
 
 这些证据就是完成关卡。如果没有制品身份、source/merge 身份和摄取数量，仅仅“工作流绿色”并不代表结果恢复已经验证。
+
+### AMD 多节点 SGLang 清理
+
+退出时（包括启动或就绪检查失败），AMD SGLang 启动器仅向其记录的 `setsid`
+进程组发送 TERM，等待最多 30 秒。正常完成时，先暂存结果再进行清理。随后向仍存活的进程组发送 KILL，再等待最多
+5 秒并检查退出状态。这可以清理已成为孤儿进程或忽略 TERM 的工作进程，避免其
+持续占用日志管道。这些清理期限不会改变性能采集、评估或服务器就绪检查的期限。
+客户端失败时保留原退出码；若客户端成功但清理仍未完成，则节点任务失败。
+内核阻塞的进程仍可能需要另行授权的节点修复。不要为绕过清理失败而修改或丢弃
+已完成的指标。单一 EXIT 处理器统一负责进程组清理和现有 UMBP 独立进程 PID
+清理；即使进程组清理失败，后者仍会执行。
+
+### AMD 多节点 GPU 预检协调
+
+Slurm 启动器先在独立步骤中完成所有选定节点的 Docker 预清理和现有 GPU VRAM
+回收检查，然后才启动服务器容器。任一节点预检失败都会阻止服务步骤启动，不会
+消耗健康节点等待容器就绪的期限。节点本地的 `preflight_<hostname>.log` 文件
+通过常规日志汇总流程收集，包括失败日志。VRAM 阈值、15 分钟 GPU 检查期限及
+容器和服务器就绪期限均保持不变。这一协调消除了节点间等待的竞态，但无法修复
+不能回收显存的 GPU 驱动。现有 Docker 预清理范围保持不变。

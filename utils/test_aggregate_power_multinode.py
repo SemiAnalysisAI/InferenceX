@@ -232,9 +232,116 @@ def assert_invalid(pkg, expected_reason, **run_kwargs):
         assert key not in agg
     sidecar = pkg.sidecar()
     assert sidecar["power_valid"] is False
+    if sidecar["selected_window"] is not None:
+        assert sidecar["selected_window"]["power_valid"] is False
+        assert sidecar["selected_window"]["metrics"] == {}
     assert expected_reason in sidecar["reasons"]
     assert pkg.run(require_power=True, **run_kwargs) == 1
     return sidecar
+
+
+def build_mixed_package(tmp_path, failure):
+    """Retain a healthy C4 and an independently failed expected C8 window."""
+    pkg = build_package(tmp_path, publication_valid=False)
+    manifest_path = pkg.power_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["expected_windows"].append({"benchmark_type": "sa-bench", "concurrency": 8})
+    reason = {
+        "failed": "measurement_window_incomplete",
+        "missing": "measurement_window_missing",
+        "not_bracketed": "measurement_window_not_bracketed",
+    }[failure]
+    window_file = None
+    if failure != "missing":
+        window_file = "windows/failed_result.json"
+        # C8 is beyond the retained samples; C4's bytes and coverage stay intact.
+        window = {
+            "schema_version": 1,
+            "clock_source": "head_node_unix_clock",
+            "benchmark_type": "sa-bench",
+            "concurrency": 8,
+            "status": "failed" if failure == "failed" else "completed",
+            "benchmark_start_time_unix": 1100.0,
+            "benchmark_end_time_unix": 1160.0,
+            "duration": 60.0,
+            "reason": "benchmark_exit_nonzero" if failure == "failed" else None,
+            "result_path": "failed_result.json",
+        }
+        (pkg.power_dir / window_file).write_text(json.dumps(window))
+        (pkg.logs_root / "failed_result.json").write_text(json.dumps({
+            **BENCH_FIELDS,
+            "max_concurrency": 8,
+            "benchmark_start_time_unix": 1100.0,
+            "benchmark_end_time_unix": 1160.0,
+        }))
+    manifest["window_validations"].append({
+        "benchmark_type": "sa-bench",
+        "concurrency": 8,
+        "window_file": window_file,
+        "power_coverage_valid": False,
+        "reason_codes": [reason],
+        "per_device_max_sample_gap_seconds": {},
+    })
+    manifest["reason_codes"] = [reason]
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+    return pkg, reason
+
+
+@pytest.mark.parametrize("failure", ["failed", "missing", "not_bracketed"])
+def test_mixed_windows_retain_healthy_measurement_without_publication(tmp_path, failure):
+    pkg, reason = build_mixed_package(tmp_path, failure)
+    retained = {path: path.read_bytes() for path in pkg.logs_root.rglob("*") if path.is_file()}
+
+    assert pkg.run() == 0
+    audit = pkg.sidecar()
+    assert audit["package_integrity_valid"] is True
+    assert audit["selected_window"]["concurrency"] == 4
+    assert audit["selected_window"]["power_valid"] is True
+    assert audit["selected_window"]["metrics"]["total_gpu_energy_j"] == 84000.0
+    assert audit["power_valid"] is False
+    assert audit["metrics"] == {}
+    assert audit["window_validations"][1]["concurrency"] == 8
+    assert audit["window_validations"][1]["reason_codes"] == [reason]
+    assert audit["producer"]["stored_publication_valid"] is False
+    assert audit["producer"]["recomputed_publication_valid"] is False
+    assert pkg.agg()["power_valid"] == 0
+    assert "total_gpu_energy_j" not in pkg.agg()
+
+    # Replaying with the required-power gate still fails after retaining the
+    # independent measurement, and never changes the input package or verdict.
+    assert pkg.run(require_power=True) == 1
+    assert pkg.sidecar() == audit
+    assert {path: path.read_bytes() for path in retained} == retained
+
+
+@pytest.mark.parametrize("corruption", ["samples", "stored_window", "stored_verdict"])
+def test_mixed_package_corruption_blocks_even_healthy_measurement(tmp_path, corruption):
+    pkg, _ = build_mixed_package(tmp_path, "failed")
+    if corruption == "samples":
+        _rewrite_samples(pkg, lambda body: body + [body[0]])
+    elif corruption == "stored_window":
+        manifest = json.loads((pkg.power_dir / "manifest.json").read_text())
+        manifest["window_validations"][1]["reason_codes"] = []
+        _edit_manifest(pkg, window_validations=manifest["window_validations"])
+    else:
+        _edit_manifest(pkg, publication_valid=True)
+    audit = assert_invalid(pkg, "package_recompute_invalid")
+    assert audit["package_integrity_valid"] is False
+    assert audit["selected_window"]["power_valid"] is False
+    assert audit["selected_window"]["metrics"] == {}
+
+
+@pytest.mark.parametrize("failure", ["failed", "missing", "not_bracketed"])
+def test_failed_measurement_cannot_acquire_sibling_metrics(tmp_path, failure):
+    pkg, reason = build_mixed_package(tmp_path, failure)
+    pkg.bench_result.write_text(json.dumps({
+        **BENCH_FIELDS,
+        "max_concurrency": 8,
+        "benchmark_start_time_unix": 1100.0,
+        "benchmark_end_time_unix": 1160.0,
+    }))
+    audit = assert_invalid(pkg, "package_recompute_invalid")
+    assert audit["window_validations"][1]["reason_codes"] == [reason]
 
 
 class TestValidPackage:
@@ -618,3 +725,38 @@ class TestManifestGates:
         pkg = build_package(tmp_path)
         _edit_manifest(pkg, status="incomplete", publication_valid=False)
         assert_invalid(pkg, "package_recompute_invalid")
+
+
+@pytest.mark.parametrize("utilization", [("", ""), ("75.5", "0.9")])
+def test_v2_samples_preserve_energy(tmp_path, utilization):
+    """The pinned producer's optional utilization columns preserve board energy."""
+    pkg = build_package(tmp_path)
+    path = pkg.power_dir / "samples.csv"
+    with path.open(newline="") as handle:
+        rows = list(csv.reader(handle))
+    with path.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(rows[0] + ["gpu_util_pct", "sm_active"])
+        writer.writerows([[2, *row[1:], *utilization] for row in rows[1:]])
+    assert pkg.run(require_power=True) == 0
+    assert pkg.agg()["power_valid"] == 1
+    assert pkg.agg()["total_gpu_energy_j"] == pytest.approx(84000)
+
+
+@pytest.mark.parametrize("row", [
+    [1, 1, 0, "node", 0, "GPU-0", 300, "", ""],
+    [2, 1, 0, "node", 0, "GPU-0", 300, "nan", ""],
+    [2, 1, 0, "node", 0, "GPU-0", 300, 101, ""],
+    [2, 1, 0, "node", 0, "GPU-0", 300, 50, 1.1],
+    [2, 1, 0, "node", 0, "GPU-0", 300],
+])
+def test_v2_samples_reject_mixed_versions_and_invalid_utilization(tmp_path, row):
+    path = tmp_path / "samples.csv"
+    with path.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["schema_version", "timestamp_unix", "scrape_seq", "hostname",
+                         "gpu_index", "gpu_uuid", "power_w", "gpu_util_pct", "sm_active"])
+        writer.writerow(row)
+    rows, reasons = apm.read_samples(path)
+    assert not rows
+    assert reasons == ("samples_csv_malformed",)

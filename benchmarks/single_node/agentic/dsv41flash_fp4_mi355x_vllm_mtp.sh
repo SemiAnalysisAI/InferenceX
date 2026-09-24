@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-# DeepSeek-V4.1-Flash on MI355X: native DSpark and GPU-resident KV.
-# Follow upstream AMD defaults for Engram; storage behavior needs verification.
-# Image: vllm/vllm-openai-rocm:nightly-eed1f3d0c6043bd494424a22443ee198dd56f657
-# MI355X run 34710937012 passed concurrency 1-32 and eval-only concurrency 32.
+# DeepSeek-V4.1-Flash on MI355X: native DSpark, GPU-resident KV.
 # https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+check_env_vars EVAL_ONLY
 require_agentic_kv_offload_none
 export GPU_COUNT="$TP"
 
@@ -24,17 +22,13 @@ if [[ -n "${ROCR_VISIBLE_DEVICES:-}" ]]; then
 fi
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
-# AITER's Triton MoE GEMM repeatedly warns that Gluon is unavailable and falls
-# back to Triton. Gluon supports only gfx1250, so on this gfx950 recipe that
-# message was 98% of a gsm8k server log (411k of 417k lines, 30 MiB of 32 MiB).
-# This process-global threshold can also hide other AITER Triton warnings; set
-# it back to WARNING while diagnosing new startup or runtime failures. This is
-# log hygiene only: the observed emits cost 0.03% of wall time per worker.
+# AITER's Triton MoE GEMM warns on every call that Gluon (gfx1250-only) is
+# unavailable; on gfx950 that was 98% of the server log. Set back to WARNING
+# when diagnosing new AITER startup or runtime failures.
 export AITER_TRITON_LOG_LEVEL=ERROR
 # DeepseekV41ForCausalLM is not torch-compiled upstream, so the default
-# cudagraph_mode=FULL_AND_PIECEWISE aborts at engine init with "piecewise CUDA
-# graphs unavailable" (run 34566727564). The model is built for the breakable
-# cudagraph path -- amd/attention.py uses eager_break_during_capture.
+# cudagraph_mode=FULL_AND_PIECEWISE aborts at engine init ("piecewise CUDA
+# graphs unavailable"); amd/attention.py uses eager_break_during_capture.
 export VLLM_USE_BREAKABLE_CUDAGRAPH=1
 export OMP_NUM_THREADS=1
 # Pin the full-context corpus for this 1M-context recipe.
@@ -47,16 +41,66 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_RUST_FRONTEND=1
 export PYTHONUNBUFFERED=1
 
-# Explicit reproducibility cap. Upstream vllm serve selects 1024 on GPUs with
-# at least 160 GiB, while the previous local 2*CONC cap sat below AgentX's
-# subagent fan-out. At CONC=1 it admitted 2 requests and left the rest queued
-# on scheduling capacity. Pinning 128 also keeps CAPTURE_SIZE deterministic.
-MAX_NUM_SEQS=128
+# vllm-project/vllm#57491 widened the two is_cuda() gates to is_cuda_alike(), so
+# on gfx950 this image resolves an Engram config and an explicit value is needed
+# rather than the VLLM_PLE_CPU_OFFLOAD default.
+#
+# The tables cost 47.2 GiB per rank at TP=4, so 94.4 GiB at TP=2, which does not
+# fit beside half of the 511 GB checkpoint on a 288 GiB card: TP=2 always
+# offloads. TP=4 keeps them resident, as the validated concurrency 1-32 run
+# measured, because offloaded lookups go to pinned host memory over UVA and
+# nothing below c128 is short of KV. Resident leaves 14.83M KV tokens, which is
+# 232K per request at c64 and healthy, but only 116K at c128, under the 122K at
+# which TP=2 c64 collapsed. Offloading lifts it to 33.06M, so 258K at c128.
+if (( TP == 2 || CONC >= 128 )); then
+    ENGRAM_CONFIG='{"cpu_offload":true}'
+else
+    ENGRAM_CONFIG='{"cpu_offload":false}'
+fi
+
+# Graph capture covers twice the outer concurrency, floored at the #3058 size of
+# 128 sequences, across the 1+5 DSpark token shape. Twice leaves headroom for
+# AgentX subagent fan-out above the outer concurrency.
 NUM_SPEC_TOKENS=5
+GRAPH_NUM_SEQS=$((2 * CONC))
+if (( GRAPH_NUM_SEQS < 128 )); then
+    GRAPH_NUM_SEQS=128
+fi
 CAPTURE_SIZE=1
-while (( CAPTURE_SIZE < MAX_NUM_SEQS * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
+while (( CAPTURE_SIZE < GRAPH_NUM_SEQS * (1 + NUM_SPEC_TOKENS) && CAPTURE_SIZE < 2048 )); do
     CAPTURE_SIZE=$((CAPTURE_SIZE * 2))
 done
+
+# The sparse-attention indexer and its companion per-rank buffers scale with
+# --max-num-batched-tokens at roughly 4.4 MiB per token, measured on gfx950, so
+# a smaller prefill chunk buys KV room. TP=2 starts from half the per-rank space
+# and is the arm that runs short: at the upstream 16384 it holds 7.84M KV
+# tokens, 122K per request at c64, where run 35574132719 fell to a 17.6% prefix
+# cache hit rate, 187 s TTFT and 150 tok/s against 94.8%, 1.3 s and 957 tok/s at
+# c32. Every point that held had 232K per request or more, so keep the upstream
+# chunk through c32 (245K at TP=2) and trade it away only above that. B300 runs
+# 8192 at TP=4 and the Blackwell TP=2 arms run 4096 (#3320, #3321).
+if (( CONC >= 128 )); then
+    (( TP == 2 )) && BATCHED_TOKENS=4096 || BATCHED_TOKENS=8192
+elif (( TP == 2 && CONC >= 64 )); then
+    BATCHED_TOKENS=8192
+else
+    BATCHED_TOKENS=16384
+fi
+
+# DSpark verifies 1+5 tokens per sequence, so a decode batch of max_num_seqs
+# needs six times that many token slots. The MI355X API-server default of 1024
+# sequences therefore wants 6144, and below that the engram projection faults
+# during profiling: TP=2 c128 at 4096 leaves four slots per sequence and dies
+# with HSA_STATUS_ERROR_EXCEPTION at M=1024, N=129280, K=256, reproduced on two
+# separate GPU pairs. Where the chunk is that small, cap in-flight sequences at
+# the shape graph capture already covers, which also keeps the largest decode
+# batch on a captured graph. Leave the default alone everywhere else.
+DEFAULT_MAX_NUM_SEQS=1024
+MAX_NUM_SEQS=""
+if (( BATCHED_TOKENS < DEFAULT_MAX_NUM_SEQS * (1 + NUM_SPEC_TOKENS) )); then
+    MAX_NUM_SEQS="$GRAPH_NUM_SEQS"
+fi
 
 # Use the runner-specific port assigned by launch_mi355x-amds.sh.
 export AIPERF_SERVER_URL="http://localhost:${PORT}"
@@ -68,8 +112,8 @@ echo "Using vLLM endpoint ${AIPERF_SERVER_URL}"
 # Accuracy evals keep real block rejection; throughput fixes acceptance to AL 3.51.
 # Adaptive verification stays off in both modes on ROCm: it trims verification
 # requests on device, which DeepseekV4IndexerBackend does not support, so the
-# engine refused to start with it enabled (run 34651830283, eval-only c32).
-if [[ "${EVAL_ONLY:-false}" == true ]]; then
+# engine refuses to start with it enabled.
+if [[ "${EVAL_ONLY}" == true ]]; then
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
 else
     SPEC_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":3.51,"enable_adaptive_verification":false}'
@@ -81,22 +125,31 @@ VLLM_CMD=(
     --tokenizer-mode deepseek_v41
     --tool-call-parser deepseek_v41 --enable-auto-tool-choice
     --reasoning-parser deepseek_v41
+    --engram-config "$ENGRAM_CONFIG"
     # aiter, not aiter_triton_mxfp4_bf16: the plain name opens vLLM's full
-    # priority list and the CK kernel at its head wins. Despite the BF16
-    # backend name and this checkpoint's activation_scheme=dynamic, CK
-    # quantizes activations to FP8 internally and dispatches the a8w4 experts
-    # (mfma_moe1_silu_mul_afp8_wfp4_bf16 / mfma_moe2_afp8_wfp4_bf16) that the
-    # DSV4-Pro MI355X recipe already gets. Pinning the Triton name instead
-    # forced the W4A16 _moe_gemm_a16w4 kernel.
+    # priority list and the CK kernel at its head wins. CK quantizes
+    # activations to FP8 internally and dispatches the a8w4 experts
+    # (mfma_moe1_silu_mul_afp8_wfp4_bf16 / mfma_moe2_afp8_wfp4_bf16); the
+    # Triton name forces the W4A16 _moe_gemm_a16w4 kernel instead.
     --moe-backend aiter
     --gpu-memory-utilization 0.9
     --speculative-config "$SPEC_CONFIG"
     --max-model-len 1048576
-    --max-num-seqs "$MAX_NUM_SEQS"
     --max-cudagraph-capture-size "$CAPTURE_SIZE"
-    --max-num-batched-tokens 16384
+    --max-num-batched-tokens "$BATCHED_TOKENS"
+    # vllm-project/vllm#56227 added SWA bounded replay (default on) after the
+    # eed1f3d0 pin and before this one. It pads the replayed tokens' slots in the
+    # prefix-cacheable groups, but the window clamp it relies on landed in the
+    # FlashInfer and FlashMLA kernels; the ROCm sparse SWA path only gained the
+    # replay_start kwarg. On gfx950 every TP=2 and TP=4 point of run 35567570539
+    # died with HSA_STATUS_ERROR_MEMORY_FAULT at the first prefix hit carrying a
+    # replay start. Drop this once ROCm clamps too; prefix caching stays on.
+    --no-swa-bounded-replay
     --disable-uvicorn-access-log
 )
+if [[ -n "$MAX_NUM_SEQS" ]]; then
+    VLLM_CMD+=(--max-num-seqs "$MAX_NUM_SEQS")
+fi
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
 SERVER_PID=""
@@ -113,7 +166,7 @@ trap 'exit 143' TERM
 SERVER_PID=$!
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [[ "${EVAL_ONLY:-false}" == true ]]; then
+if [[ "${EVAL_ONLY}" == true ]]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"

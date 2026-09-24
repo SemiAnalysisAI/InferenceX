@@ -170,7 +170,7 @@ def test_collector_retains_error_value_semantics(tmp_path: Path, error: object, 
 def test_effective_count_accepts_only_positive_finite_numbers(
     tmp_path: Path, effective: object, success: bool,
 ) -> None:
-    from infx.workflows.validate_reusable_sweep_artifacts import _raw_result_error
+    from infx.results.evals import result_error
 
     (tmp_path / "meta_env.json").write_text("{}")
     path = tmp_path / "results.json"
@@ -183,7 +183,7 @@ def test_effective_count_accepts_only_positive_finite_numbers(
 
     assert row["infrastructure_success"] is success
     assert row["n_eff"] == (effective if success else 0)
-    assert (_raw_result_error(path) is None) is success
+    assert (result_error(json.loads(path.read_text())) is None) is success
 
 
 @pytest.mark.parametrize("config,error", [
@@ -237,13 +237,10 @@ def test_build_row_preserves_topology_defaults_and_score_precedence() -> None:
 def test_result_readers_recognize_format_markers(
     tmp_path: Path, payload: object, recognized: bool,
 ) -> None:
-    from infx.workflows.validate_reusable_sweep_artifacts import _recognized_eval_result_paths
-
     path = tmp_path / "results.json"
     path.write_text(json.dumps(payload))
     expected = [path] if recognized else []
     assert detect_lm_eval_jsons(tmp_path) == expected
-    assert _recognized_eval_result_paths([path]) == expected
 
 
 @pytest.mark.parametrize("name,expected", [
@@ -255,10 +252,7 @@ def test_result_readers_recognize_format_markers(
     ("results.json", None),
 ])
 def test_result_readers_parse_concurrency_suffixes(name: str, expected: int | None) -> None:
-    from infx.workflows.validate_reusable_sweep_artifacts import _result_concurrency
-
     assert result_concurrency(Path(name)) == expected
-    assert _result_concurrency(name) == expected
 
 
 def test_build_row_preserves_sequence_lengths() -> None:

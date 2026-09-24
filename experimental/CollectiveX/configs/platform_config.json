@@ -82,9 +82,7 @@
       "operator": {
         "partition": "batch_1",
         "account": "benchmark",
-        "qos": "batch_1_qos",
-        "squash_dir": "/data/home/sa-shared/sqsh",
-        "exclude_nodes": "b300-001,b300-005,b300-009,b300-016,b300-018"
+        "squash_dir": "/data/home/sa-gha-runner/squash"
       },
       "network": {
         "socket_ifname": "bond0",
@@ -129,7 +127,6 @@
       "operator": {
         "partition": "batch_1",
         "account": "benchmark",
-        "qos": "batch_1_qos",
         "squash_dir": "/data/home/sa-shared/collectivex/containers",
         "enroot_cache_path": "/data/home/sa-shared/collectivex/enroot-cache",
         "exclude_nodes": "im-gb300-r01-c003,im-gb300-r01-c005"
@@ -160,6 +157,46 @@
       "backends": {"mori": [8], "uccl-ep": [8]},
       "ll_backends": {"mori": [8]},
       "fabric": {"nic": "n/a (single-node scale-up)", "switch": "n/a (single-node scale-up)"}
+    },
+    "mi300x": {
+      "arch": "gfx942",
+      "product": "mi300x",
+      "image": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
+      "image_platform": "linux/amd64",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "xgmi",
+      "launcher": "mi-amds",
+      "backends": {},
+      "ll_backends": {},
+      "fabric": {
+        "nic": "n/a (single-node scale-up)",
+        "switch": "n/a (single-node scale-up)"
+      },
+      "operator": {
+        "partition": "compute",
+        "squash_dir": "/raid/inferencex/squash"
+      }
+    },
+    "mi325x": {
+      "arch": "gfx942",
+      "product": "mi325x",
+      "image": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
+      "image_platform": "linux/amd64",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "xgmi",
+      "launcher": "mi-amds",
+      "backends": {},
+      "ll_backends": {},
+      "fabric": {
+        "nic": "n/a (single-node scale-up)",
+        "switch": "n/a (single-node scale-up)"
+      },
+      "operator": {
+        "partition": "compute",
+        "squash_dir": "/raid/squash"
+      }
     },
     "mi355x": {
       "arch": "gfx950",
