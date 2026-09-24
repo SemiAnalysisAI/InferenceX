@@ -11,9 +11,11 @@ SCALE_DTYPES = {"fp32", "bf16", "fp16", "e4m3", "ue8m0"}
 
 
 def quant(dtype: str, scale: dict | None = None, scale2: dict | None = None,
-          symmetric: bool = True) -> dict[str, Any]:
+          symmetric: bool = True, input: str = "bf16") -> dict[str, Any]:
     """Canonical operand descriptor; defaults are omitted so equal operands hash equal."""
     d: dict[str, Any] = {"dtype": dtype}
+    if input != "bf16":
+        d["input"] = input
     if scale is not None:
         d["scale"] = scale
     if scale2 is not None:
@@ -40,8 +42,10 @@ def _check_scale(s: Any, where: str) -> None:
 
 
 def check_operand(d: Any, where: str) -> None:
-    if not isinstance(d, dict) or "dtype" not in d or set(d) - {"dtype", "scale", "scale2", "symmetric"}:
-        raise ValueError(f"{where} must be {{dtype[, scale, scale2, symmetric]}}, got {d!r}")
+    if not isinstance(d, dict) or "dtype" not in d or set(d) - {"dtype", "scale", "scale2", "symmetric", "input"}:
+        raise ValueError(f"{where} must be {{dtype[, scale, scale2, symmetric, input]}}, got {d!r}")
+    if d.get("input", "bf16") not in ELEMENT_DTYPES:
+        raise ValueError(f"{where}.input {d['input']!r} not in {sorted(ELEMENT_DTYPES)}")
     if d["dtype"] not in ELEMENT_DTYPES:
         raise ValueError(f"{where}.dtype {d['dtype']!r} not in {sorted(ELEMENT_DTYPES)}")
     if "scale" in d:
@@ -68,6 +72,9 @@ class GemmArgs:
         static=False means computed at runtime (activation quantization inside the op).
       scale2: optional second-level scale (e.g. NVFP4's per-tensor fp32 global scale).
       symmetric: False when the format carries zero points.
+      input: dtype the operand arrives in (default bf16). When it differs from
+        dtype, quantizing to dtype is part of the op; when equal, the operand
+        is pre-quantized and the op starts at the matmul.
     An unquantized operand is {"dtype": "bf16"}.
     """
     m: int
