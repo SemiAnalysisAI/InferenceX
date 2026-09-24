@@ -1,1 +1,1 @@
-from operatorx.ops import gemm, moe_layer
+from operatorx.ops import gemm, moe

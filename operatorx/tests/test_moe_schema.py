@@ -3,7 +3,7 @@ import copy
 import pytest
 
 from operatorx.ops.gemm import quant, scale
-from operatorx.ops.moe_layer import MoeLayerArgs
+from operatorx.ops.moe import MoeLayerArgs
 
 FP8_X = quant("e4m3", scale("fp32", False, (1, 128)))
 FP8_W = quant("e4m3", scale("fp32", True, (128, 128)))
