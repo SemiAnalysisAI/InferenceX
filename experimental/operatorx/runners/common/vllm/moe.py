@@ -14,7 +14,8 @@ import torch
 
 from operatorx.core import BackendImpl, Op, UnsupportedOpError
 from operatorx.runners.common.vllm import linear as vllm_linear
-from operatorx.runners.common.vllm.linear import _ENV_KEYS, _fill, _is_fault, _launcher, versions
+from operatorx.runners.common.vllm.linear import (_ENV_KEYS, _fill, _is_fault, _launcher, device, sync,
+                                                  versions)
 
 __all__ = ["IMPLS", "versions"]
 
@@ -42,9 +43,7 @@ def _quant(x: dict, w: dict, where: str):
         return None
     if not sch:
         raise UnsupportedOpError(f"{where}: no vLLM quantization config for x={x} w={w}")
-    from vllm.model_executor.layers.quantization import get_quantization_config
-    method, cfg = sch
-    return get_quantization_config(method).from_config(cfg)
+    return vllm_linear.quant_config(*sch)
 
 
 def _act_kwargs(act: dict) -> dict:
@@ -106,9 +105,7 @@ _DSV4_FP4_EXPERTS = ("deepseek_v4_fp8", {"quant_method": "fp8", "activation_sche
 def _expert_quant(x: dict, w: dict):
     if (x.get("dtype") == "e4m3" and x.get("scale", {}).get("dtype") == "ue8m0" and w["dtype"] == "e2m1"
             and w.get("scale") == {"dtype": "ue8m0", "static": True, "group": [1, 32]} and "scale2" not in w):
-        from vllm.model_executor.layers.quantization import get_quantization_config
-        method, cfg = _DSV4_FP4_EXPERTS
-        return get_quantization_config(method).from_config(cfg)
+        return vllm_linear.quant_config(*_DSV4_FP4_EXPERTS)
     return _quant(x, w, "experts")
 
 
@@ -237,6 +234,7 @@ class _MoeBlock(torch.nn.Module):
         # a forced expert choice replaces selection, so vLLM's grouped/bias selection is off
         grouped = sel["kind"] == "grouped_topk" and custom is None
         bias = None if custom is not None else self.gate.e_score_correction_bias
+        self.experts_quant_config = qc
         self.experts = FusedMoEFactory(
             num_experts=E, top_k=K, hidden_size=L, intermediate_size=ex["inter"],
             renormalize=bool(rt.get("renormalize")), quant_config=qc, use_grouped_topk=grouped,
@@ -252,7 +250,7 @@ class _MoeBlock(torch.nn.Module):
             shared_experts=shared, shared_expert_gate=shared_gate, **latent, **_act_kwargs(act))
         self.shared = shared
         self.fused_shared = fused_shared
-        if ex.get("latent"):
+        if ex.get("latent") and device().type == "cuda":
             from vllm.utils.torch_utils import aux_stream
             self._aux = aux_stream()
             self._events = (torch.cuda.Event(), torch.cuda.Event())
@@ -262,7 +260,11 @@ class _MoeBlock(torch.nn.Module):
         from vllm.forward_context import set_forward_context
         T = x.shape[0]
         with set_forward_context(None, get_current_vllm_config(), num_tokens=T):
-            if self.down_proj is None:
+            if self.down_proj is None or not hasattr(self, "_aux"):
+                if self.down_proj is not None:  # latent projection without an aux stream
+                    lat, _ = self.down_proj(x)
+                    return self.experts(hidden_states=lat, router_logits=self.gate(x)[0],
+                                        shared_experts_input=x)
                 ids = None if self.input_ids is None else self.input_ids[:T]
                 return self.experts(hidden_states=x, router_logits=x, input_ids=ids)
             # as Kimi-K3's block: router and latent down projection on two streams at decode sizes
@@ -330,17 +332,26 @@ def _prepare_moe(op: Op) -> dict:
     prev = torch.get_default_dtype()
     torch.set_default_dtype(torch.bfloat16)
     try:
-        block = _MoeBlock(a, prefix).cuda()
+        block = _MoeBlock(a, prefix).to(device())
         for m in block.modules():
             _fill(m)
         if block.gate.e_score_correction_bias is not None:
             block.gate.e_score_correction_bias.data.zero_()
         if block.gate.tid2eid is not None:  # the filler knows nothing of expert ids
             block.gate.tid2eid.data.random_(0, a["experts"]["num"])
+        methods = []
         for m in block.modules():
             qm = getattr(m, "quant_method", None)
             if isinstance(qm, QuantizeMethodBase):
+                methods.append(type(qm).__name__)
                 qm.process_weights_after_loading(m)
+        # A quantized block whose every method came out unquantized computed bf16 and
+        # would be recorded under the quantized row it is not. A bf16 shared expert
+        # beside quantized routed ones is normal, so only an all-unquantized block counts.
+        if block.experts_quant_config is not None and methods and all("Unquantized" in n for n in methods):
+            raise UnsupportedOpError(
+                f"{type(block.experts_quant_config).__name__} has no quantized MoE method here; "
+                f"the layer fell back to {sorted(set(methods))}")
     except (NotImplementedError, AssertionError, ValueError, RuntimeError, TypeError, KeyError,
             AttributeError) as e:
         if _is_fault(e) or (isinstance(e, AttributeError) and not _missing_op(e)):
@@ -351,13 +362,13 @@ def _prepare_moe(op: Op) -> dict:
     kernels = _describe(block)
     if any("Emulation" in str(v) for e in kernels.values() for v in e.values()):
         raise UnsupportedOpError(f"vLLM has only an emulation kernel for this MoE layer here: {kernels}")
-    x = torch.randn(a["tokens"], a["hidden"], device="cuda", dtype=torch.bfloat16)
+    x = torch.randn(a["tokens"], a["hidden"], device=device(), dtype=torch.bfloat16)
     ctx = {"layer": block, "x": x,
            "meta": {"vllm_modules": kernels, "fused_shared_experts": block.fused_shared,
                     "vllm_env": {k: getattr(envs, k) for k in (*_ENV_KEYS, *_MOE_ENV_KEYS) if hasattr(envs, k)}}}
     try:
         _kernel_moe(ctx)
-        torch.cuda.synchronize()
+        sync()
     except (NotImplementedError, AssertionError, RuntimeError, ValueError, TypeError, AttributeError) as e:
         if _is_fault(e) or (isinstance(e, AttributeError) and not _missing_op(e)):
             raise
