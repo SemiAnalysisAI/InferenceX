@@ -363,8 +363,9 @@ fi
 # =============================================================================
 # Hugepage Pre-flight
 # =============================================================================
-# Reclaim stale, fully idle hugepage reservations before starting containers;
-# a leftover reservation can make HiCache host-pool sizing fail at startup.
+# Reclaim idle hugepages left reserved before starting containers (pages still
+# in use are kept); a leftover reservation can make HiCache host-pool sizing
+# fail at startup.
 # SKIP_HUGEPAGE_CHECK=1 to bypass. See hugepage_sanity.sh.
 HUGEPAGE_CHECK_SCRIPT="$(pwd)/helpers/hugepage_sanity.sh"
 if [[ "${SKIP_HUGEPAGE_CHECK:-0}" == "1" ]]; then

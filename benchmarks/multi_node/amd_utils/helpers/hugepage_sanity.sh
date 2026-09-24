@@ -4,8 +4,10 @@
 # HiCache host-pool sizing fail at startup; this reclaims it, or grows the
 # pool when a caller (the UMBP DRAM tier) needs hugepages.
 #
-# Safety: only a fully idle pool (Free == Total, Rsvd == 0) is shrunk; if any
-# page is in use the pool is left alone with a warning.
+# Safety: a shrink only releases idle pages. Pages in use or reserved (Rsvd)
+# are kept: the kernel never shrinks the pool below in-use + reserved, and
+# turns held pages above the target into surplus pages that are freed once
+# their owner releases them.
 #
 # Knobs:
 #   SKIP_HUGEPAGE_CHECK=1  skip this check entirely
@@ -49,15 +51,25 @@ if [[ "$TOTAL" -eq "$TARGET" ]]; then
 fi
 
 IN_USE=$(( TOTAL - FREE ))
+# Pages the kernel will not release: mapped (in use) plus reserved for an
+# existing mapping but not yet faulted in (Rsvd, counted inside Free).
+HELD=$(( IN_USE + RSVD ))
+# Pool size expected after the change; the checks below compare against it.
+EXPECTED=$TARGET
 IS_GROW=0
 if [[ "$TOTAL" -gt "$TARGET" ]]; then
-    # Shrinking: refuse if anything is actually using the pool.
-    if [[ "$IN_USE" -gt 0 || "$RSVD" -gt 0 ]]; then
-        log_warn "$TOTAL hugepages ($(gb "$TOTAL") GB) reserved but $IN_USE in use / $RSVD rsvd -- another workload owns them; leaving the pool alone."
+    # Shrinking: release the idle pages, keep the held ones.
+    if [[ "$HELD" -ge "$TOTAL" ]]; then
+        log_warn "all $TOTAL hugepages ($(gb "$TOTAL") GB) are held ($IN_USE in use / $RSVD rsvd) -- nothing idle to release."
         log_warn "HiCache host-pool sizing may fail on this node. Re-run once the owning job finishes, or exclude this node."
         exit 0
     fi
-    log "$TOTAL idle hugepages ($(gb "$TOTAL") GB) reserved, none in use -- reclaiming to $TARGET"
+    if [[ "$HELD" -gt "$TARGET" ]]; then
+        EXPECTED=$HELD
+        log_warn "$TOTAL hugepages ($(gb "$TOTAL") GB) reserved, $IN_USE in use / $RSVD rsvd -- releasing $(( TOTAL - HELD )) idle ($(gb $(( TOTAL - HELD ))) GB), keeping $HELD held ($(gb "$HELD") GB) until their owner frees them"
+    else
+        log "$TOTAL hugepages ($(gb "$TOTAL") GB) reserved, $HELD held -- reclaiming to $TARGET"
+    fi
 else
     IS_GROW=1
     log "growing nr_hugepages $TOTAL -> $TARGET ($(gb "$TARGET") GB)"
@@ -85,14 +97,15 @@ fi
 NEW_TOTAL=$(meminfo_field HugePages_Total)
 : "${NEW_TOTAL:=$TOTAL}"
 
-if [[ "$NEW_TOTAL" -eq "$TARGET" ]]; then
+if [[ "$NEW_TOTAL" -eq "$EXPECTED" ]]; then
     log "nr_hugepages now $NEW_TOTAL ($(gb "$NEW_TOTAL") GB); freed $(gb $(( TOTAL - NEW_TOTAL ))) GB back to normal allocation"
     exit 0
 fi
 
-# Shrink partially satisfied: fail only if the leftover is large.
-if [[ "$NEW_TOTAL" -gt "$TARGET" && $(( NEW_TOTAL - TARGET )) -ge "$FAIL_THRESHOLD_PAGES" ]]; then
-    log_fail "still $NEW_TOTAL hugepages ($(gb "$NEW_TOTAL") GB) reserved after trying to reach $TARGET."
+# Shrink partially satisfied: fail only if the idle leftover is large (held
+# pages are already accounted for in EXPECTED).
+if [[ "$NEW_TOTAL" -gt "$EXPECTED" && $(( NEW_TOTAL - EXPECTED )) -ge "$FAIL_THRESHOLD_PAGES" ]]; then
+    log_fail "still $NEW_TOTAL hugepages ($(gb "$NEW_TOTAL") GB) reserved after trying to reach $EXPECTED."
     log_fail "That much RAM carved out will make HiCache host-pool sizing fail later in model load."
     log_fail "Fix the node (sysctl vm.nr_hugepages=$TARGET), exclude it, or set SKIP_HUGEPAGE_CHECK=1 to proceed anyway."
     exit 1
@@ -116,5 +129,5 @@ if [[ "$IS_GROW" -eq 1 && "$NEW_TOTAL" -lt "$TARGET" ]]; then
     exit 0
 fi
 
-log_warn "nr_hugepages is $NEW_TOTAL, wanted $TARGET (difference under the $FAIL_THRESHOLD_PAGES-page fail threshold); proceeding"
+log_warn "nr_hugepages is $NEW_TOTAL, wanted $EXPECTED (difference under the $FAIL_THRESHOLD_PAGES-page fail threshold); proceeding"
 exit 0
