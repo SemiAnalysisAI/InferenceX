@@ -992,7 +992,7 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.60
+    - dram-utilization: 0.20
       search-space:
       #- { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 16, 32, 40, 48, 56, 64] }
       ## Single-node validation found c128 to be the DPA throughput peak among
