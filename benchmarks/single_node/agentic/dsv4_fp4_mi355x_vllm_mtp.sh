@@ -305,6 +305,7 @@ case "$SPEC_DECODING" in
         fi
         ;;
     draft_model)
+        export VLLM_USE_V2_MODEL_RUNNER=1
         NUM_SPEC_TOKENS=6
         SYNTHETIC_ACCEPT_LEN=3.77
         if [ "${EVAL_ONLY}" = "true" ]; then
