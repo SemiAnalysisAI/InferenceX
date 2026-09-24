@@ -38,6 +38,8 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     MODELS_YAML="$(pwd)/models_vllm.yaml"
 elif [[ "$ENGINE" == "atom-disagg" ]]; then
     MODELS_YAML="$(pwd)/models_atom.yaml"
+elif [[ "$ENGINE" == "tilert" ]]; then
+    MODELS_YAML="$(pwd)/models_tilert.yaml"
 else
     MODELS_YAML="$(pwd)/models.yaml"
 fi
@@ -50,6 +52,17 @@ fi
 if [[ -z "${DOCKER_IMAGE_NAME:-}" ]]; then
     echo "Error: DOCKER_IMAGE_NAME is not set."
     exit 1
+fi
+
+if [[ "$ENGINE" == "tilert" && -z "${PREFILL_IMAGE:-}" ]]; then
+    echo "Error: ENGINE=tilert requires PREFILL_IMAGE (e.g. PREFILL_IMAGE=vllm/vllm-openai-rocm:nightly-<sha> in prefill.additional-settings)."
+    exit 1
+fi
+if [[ "$ENGINE" == "tilert" ]]; then
+    # server_tilert.sh takes the container-creation barrier timeout from the
+    # recipe (no 300s default as on the SGLang path); fail here, before sbatch
+    # work is done, rather than inside the container.
+    check_env_vars CONTAINER_BARRIER_TIMEOUT
 fi
 
 # Resolve the models.yaml entry the same way server_sglang.sh does: agentic runs
@@ -522,6 +535,41 @@ elif [[ "$ENGINE" == "atom-disagg" ]]; then
         -e EXTRA_SERVER_ARGS=\${EXTRA_SERVER_ARGS:-}
         -e IBDEVICES=${IBDEVICES:-}
     )
+elif [[ "$ENGINE" == "tilert" ]]; then
+    DOCKER_ENV_ENGINE=(
+        -e MODEL_PATH=$DOCKER_MODEL_PATH
+        -e PREFILL_IMAGE=${PREFILL_IMAGE}
+        -e TILERT_VERSION=${TILERT_VERSION}
+        -e TILERT_PROFILE=${TILERT_PROFILE}
+        -e TILERT_MODEL_TYPE=${TILERT_MODEL_TYPE}
+        -e TILERT_MODEL_PKG=${TILERT_MODEL_PKG}
+        -e TILERT_MAX_MODEL_LEN=${TILERT_MAX_MODEL_LEN}
+        -e TILERT_TRANSPORT=${TILERT_TRANSPORT}
+        -e TILERT_PARSER=${TILERT_PARSER}
+        -e TILERT_QUEUE_TIMEOUT=${TILERT_QUEUE_TIMEOUT}
+        -e TILERT_WEIGHTS_DIR=${TILERT_WEIGHTS_DIR}
+        -e TILERT_RDMA_STRICT=${TILERT_RDMA_STRICT}
+        -e TILERT_CONVERT_LOCK_WAIT=${TILERT_CONVERT_LOCK_WAIT}
+        -e TILERT_SIMULATE_ACC_METHOD=${TILERT_SIMULATE_ACC_METHOD}
+        -e \"TILERT_EXTRA_ENV=${TILERT_EXTRA_ENV:-}\"
+        -e SERVED_MODEL_NAME=${SERVED_MODEL_NAME}
+        -e PREFILL_KV_DTYPE=${PREFILL_KV_DTYPE}
+        -e PREFILL_BLOCK_SIZE=${PREFILL_BLOCK_SIZE}
+        -e PREFILL_SPEC_TOKENS=${PREFILL_SPEC_TOKENS}
+        -e DECODE_KV_DTYPE=${DECODE_KV_DTYPE}
+        -e GPU_MEM_UTIL=${GPU_MEM_UTIL}
+        -e PREFILL_PORT=${PREFILL_PORT}
+        -e DECODE_CTRL_PORT=${DECODE_CTRL_PORT}
+        -e DECODE_HTTP_PORT=${DECODE_HTTP_PORT}
+        -e DECODE_WAIT=${DECODE_WAIT}
+        -e PREFILL_WAIT=${PREFILL_WAIT}
+        -e ROUTER_WAIT=${ROUTER_WAIT}
+        -e SKIP_CONTAINER_BARRIER=${SKIP_CONTAINER_BARRIER}
+        # Golden-acceptance selection on agentic MTP runs; unset elsewhere.
+        -e THINKING_MODE=${THINKING_MODE:-}
+        -e IBDEVICES=${IBDEVICES:-}
+        -e PYTHONPYCACHEPREFIX=/tmp/pycache
+    )
 else
     DOCKER_ENV_ENGINE=(
         -e SGLANG_WS_PATH=${WS_PATH}
@@ -704,6 +752,12 @@ if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \
     set +e
 fi
 
+RANK_IMAGE=
+if [[ \"$ENGINE\" == \"tilert\" && \"\$SLURM_PROCID\" -lt \"$xP\" ]]; then
+    RANK_IMAGE=\"$PREFILL_IMAGE\"
+    echo \"[tilert] rank \$SLURM_PROCID is a prefill rank; using PREFILL_IMAGE=\$RANK_IMAGE\"
+fi
+
 \$MAYBE_EXEC \$DOCKER_CMD run \
     --init \
     --stop-timeout 10 \
@@ -745,7 +799,7 @@ fi
     ${CLIENT_DOCKER_ENV} \
     --name \"$DOCKER_CONT_NAME\" \
     --entrypoint \"\" \
-    \"$DOCKER_IMAGE_NAME\" bash -lc '
+    \"\${RANK_IMAGE:-$DOCKER_IMAGE_NAME}\" bash -lc '
         set -o pipefail
         mkdir -p /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'
         '"$RUN_FILE_FULL"' 2>&1 | tee /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'/server_\$(hostname).log

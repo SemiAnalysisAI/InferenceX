@@ -70,6 +70,7 @@ PYENV
             return 1
         fi
         SRT_SLURM_COMMIT=$(git -C "$source" rev-parse HEAD) || return 1
+        SRTCTL_EVAL_ARGS+=(--set benchmark.stream_output=true)
         # A local clone keeps job writes isolated and preserves upstream Git provenance.
         git clone --no-hardlinks "$source" "$destination" || return 1
     fi
@@ -305,8 +306,9 @@ collect_agentic_power_results() {
     copy_agentic_results "$source_dir" "$workspace" "$result_filename" || rc=$?
     for concurrency in "$@"; do
         (
+            check_env_vars INFERENCEX_RESULTS_PYTHON
             cd "$workspace" || exit 1
-            PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.results.agentic.power_adapter \
+            PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" "$INFERENCEX_RESULTS_PYTHON" -m infx.results.agentic.power_adapter \
                 --result-dir "$logs_dir/agentic/conc_${concurrency}" \
                 --agg-result "$workspace/${result_filename}_conc${concurrency}.json" \
                 --power-dir "$logs_dir/power" \
