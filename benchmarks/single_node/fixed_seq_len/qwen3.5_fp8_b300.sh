@@ -43,7 +43,7 @@ fi
 start_gpu_monitor
 
 set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL_PATH --served-model-name $MODEL --host 0.0.0.0 --port $PORT \
+PYTHONNOUSERSITE=1 SGLANG_ENABLE_JIT_DEEPGEMM=0 python3 -m sglang.launch_server --model-path $MODEL_PATH --served-model-name $MODEL --host 0.0.0.0 --port $PORT \
 --trust-remote-code \
 --tensor-parallel-size $TP --data-parallel-size 1 --expert-parallel-size $EP_SIZE \
 --enable-symm-mem \
