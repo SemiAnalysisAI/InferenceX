@@ -110,6 +110,16 @@ def test_service_pid_mismatch_never_approves_monitor(monkeypatch):
     assert amd.observe_system_monitor(1)["status"] == "unverified"
 
 
+def test_bytes_service_description_is_decoded_before_parsing(monkeypatch):
+    # _command returns bytes by contract; parsing must decode instead of raising TypeError.
+    description = (b"MainPID=42\nExecMainPID=43\nExecStart={ path=/opt/gpuagent/gpuagent ; }\n"
+                   b"ActiveState=active\nSubState=running\nControlGroup=/system.slice/gpuagent.service\nType=simple\n")
+    monkeypatch.setattr(amd, "_command", lambda *a, **k: description)
+    monkeypatch.setattr(amd, "monitor_process", lambda pid: pytest.fail("mismatched service PID must be rejected"))
+    record = amd.observe_system_monitor(1)
+    assert record["status"] == "unverified" and record["error_type"] == "ValueError"
+
+
 def test_unreadable_monitor_identity_remains_a_foreign_process(monkeypatch):
     def unreadable(pid):
         raise PermissionError("process identity unavailable")

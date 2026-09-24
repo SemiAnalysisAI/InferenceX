@@ -40,7 +40,8 @@ def observe_system_monitor(timeout: float) -> dict:
     record = {"service": "gpuagent.service", "observed_at": _now(), "status": "unverified"}
     try:
         raw = _command(["systemctl", "show", "gpuagent.service", "--property=MainPID,ExecMainPID,ExecStart,ActiveState,SubState,ControlGroup,Type"], timeout=timeout)
-        properties = dict(line.split("=", 1) for line in raw.splitlines() if "=" in line)
+        text = raw.decode() if isinstance(raw, bytes) else raw
+        properties = dict(line.split("=", 1) for line in text.splitlines() if "=" in line)
         pid = int(properties["MainPID"])
         executable = re.search(r"(?:^|[ {])path=(/[^ ;}]+)", properties["ExecStart"])
         if (properties["ActiveState"] != "active" or properties["SubState"] != "running"
