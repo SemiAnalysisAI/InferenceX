@@ -8817,6 +8817,30 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3347
 
 - config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic-dspark
+  description:
+    - "Enable official decoder SWA bounded replay for H200 DeepSeek V4.1 Flash native DSpark"
+    - "Pin SGLang nightly-dev-cu13-20260923-06008c17; qualify TP4/EP1 and TP8/EP1 C1-128 with unchanged shipped draft precision"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3392
+
+- config-keys:
+    - dsv41flash-fp4-h100-sglang-agentic-dspark
+    - dsv41flash-fp4-h100-sglang-agentic-dspark-dpa
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move H100 DeepSeek-V4.1-Flash DSpark from dev-dsv41 to upstream SGLang nightly-dev-cu13-20260922-582389ce and retain automatic attention selection from the current cookbook."
+    - "Use stock nightly DSpark precision and kernels, with row-sharded anonymous host Engram tables and a resolved local snapshot for upstream file-scoped page-cache eviction and huge-page backing."
+    - "Retain TP8/EP8, GPU-resident KV, 4096-token prefill chunks, static memory fraction 0.70, the shipped draft precision defaults, and the existing AgentX acceptance and real-verification eval behavior."
+    - "Use DSpark across the full AgentX concurrency curve with 16 decode steps between prefill chunks, unchanged shipped precision and canonical acceptance; completed STP diagnostics did not contribute a measured frontier point."
+    - "Install H100-specific block32 FP8 GEMM tiling configurations for six shapes, adding independently validated draft N512/K5120 and N1280/K5120 choices while retaining stock settings above batch320 and batch190 respectively, including supported SPLIT_K/SWAP_AB small-batch choices for N1792/K5120 and N576/K5120; retain previous large-batch settings and default tiling for the regressing N5120/K288 batch-64 case; preserve stock weights, scales and output precision and record the resolved config hashes."
+    - "Use expandable CUDA allocator segments to reduce fragmentation from long-context indexer masks without changing checkpoint precision or the static KV budget."
+    - "Select the supported native MXFP4 Marlin MoE backend on Hopper, retaining BF16 activations and the nightly's shipped draft precision."
+    - "Retain 8 SWA prefix tails per concurrency at C1/C2 after rejecting the 128-tail floor in matched canonical testing; use 32 per concurrency at C4 and above, reaching 640 at C20 within the static cache budget."
+    - "Qualify supported DP8 attention and DP LM-head at C4/C8/C16/C20 with consistent-hash session routing and 64 SWA tails per rank; retain the complete plain TP8 curve and unchanged shipped precision, static budget and native context."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3345
+
+- config-keys:
     - kimik3-fp4-b300-dynamo-vllm-agentic-mooncake-dcp8-agg
     - kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
     - kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg

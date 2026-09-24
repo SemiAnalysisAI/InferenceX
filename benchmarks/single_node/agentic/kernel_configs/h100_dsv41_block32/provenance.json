@@ -1,0 +1,71 @@
+{
+  "sglang_commit": "0f6761b54facebb47f2068f87ecccd8f14da3a0e",
+  "image": "lmsysorg/sglang:nightly-dev-cu13-20260921-0f6761b5",
+  "hardware": "NVIDIA H100 80GB HBM3",
+  "tuner": "benchmark/kernels/quantization/tuning_block_wise_kernel.py",
+  "search_change": "Use BLOCK_SIZE_K=[32] for checkpoint block32 scales; upstream CUDA candidates [64,128] otherwise filter to an empty search.",
+  "tuning_slurm_job": 18452,
+  "selected_audit_slurm_job": 18457,
+  "resolver_install_slurm_job": 18458,
+  "validation": "39 cases: FP32 dequantized reference rtol=0.02/atol=0.05; exact CUDA graph/eager equality; alternating timing order. BF16 rounding may differ from default tiling.",
+  "selection": "N5120/K288 batch64 restored to upstream default after timing regression.",
+  "precision": "Stock FP8 inputs and scales, BF16 output; no quantization or model changes.",
+  "split_k_audit": {
+    "slurm_job": 18479,
+    "cases": 80,
+    "mechanism": "Pinned upstream Hopper SPLIT_K and SWAP_AB launch configuration, FP32 partial reduction, unchanged FP8 inputs/scales and BF16 output",
+    "shapes": [
+      "N1792/K5120",
+      "N576/K5120"
+    ],
+    "boundary_validation": "Slurm18480:56/56 FP32-reference and exact CUDA-graph replay checks passed, batch boundariesM1..1024; changed cases all faster in alternating-order microtimings",
+    "large_batch_policy": "Retain original fallback selection for M129..8192 using explicit boundary anchors"
+  },
+  "draft_projection_audit": {
+    "device": "NVIDIA H100 80GB HBM3",
+    "image": "nightly-dev-cu13-20260922-582389ce",
+    "search": {
+      "job": 18492,
+      "cases": 144,
+      "status": "COMPLETED0:0"
+    },
+    "boundary": {
+      "job": 18493,
+      "cases": 206,
+      "status": "COMPLETED0:0"
+    },
+    "trimmed_boundary": {
+      "job": 18494,
+      "cases": 20,
+      "status": "COMPLETED0:0"
+    },
+    "reference": "FP32 dequant reference rtol.02/atol.05; exact eager/graph replay; no quantization or kernel code changes",
+    "ranges": {
+      "N512": "M1..320 tuned; M0 and M>=321 stock",
+      "N1280": "M1..190 tuned; M0 and M>=191 stock"
+    },
+    "retained_speedup_range": [
+      1.1861693666195017,
+      6.770688638312714
+    ],
+    "baseline_l2_max": 0.0016977186314761639,
+    "candidate_l2_max": 0.0016970767173916101,
+    "hashes": {
+      "N=1280,K=5120,device_name=NVIDIA_H100_80GB_HBM3,dtype=fp8_w8a8,block_shape=[32, 32].json": "635f684b6ed8b538709249baa5c474bf8583f952bcee330e01fd0f9e0ce714a3",
+      "N=512,K=5120,device_name=NVIDIA_H100_80GB_HBM3,dtype=fp8_w8a8,block_shape=[32, 32].json": "193fc012550dce39bb4de0a4bde28eed5cee79f2900ed95841fe18ccb6d8c187"
+    },
+    "serving_qualification": {
+      "candidate_run": 35683668032,
+      "baseline_run": 35683669703,
+      "protocol": "Matched canonical C1, 3600 seconds, normal warmup; zero profiled errors and valid power in both runs",
+      "candidate_total_tps_per_gpu": 1239.57314,
+      "baseline_total_tps_per_gpu": 958.51774,
+      "candidate_p90_interactivity": 90.89516,
+      "baseline_p90_interactivity": 60.93631,
+      "full_gsm8k_run": 35683671358,
+      "full_gsm8k_examples": 1319,
+      "full_gsm8k_strict_accuracy": 0.9696739954510993,
+      "final_sweep": "Required after integration"
+    }
+  }
+}
