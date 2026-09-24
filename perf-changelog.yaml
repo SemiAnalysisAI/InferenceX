@@ -8852,6 +8852,21 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3404
 
 - config-keys:
+    - dsv4-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Switch the MI355X vLLM DeepSeek-V4-Pro AgentX sweep from MTP K3 to DSpark K6, using DeepSeek-V4-Pro-0813 revision 72e1d3230f6c080a530b0a1d46f8eb4602340597, probabilistic drafting, thinking-on golden acceptance length 3.77 for throughput, and real target verification for eval."
+    - "Update the image to the latest published and locally tested vllm/vllm-openai-rocm:nightly-e9757321527ca1ecd514c07c1418dd2c53da3d19 while preserving the existing TP8/EP1, DP-attention, router, KV-offload, concurrency, and duration settings."
+    - "Local 8x MI355X DPA-TP8/EP1 concurrency-4 validation improved P90 interactivity from 59.72 to 97.36 tok/s/user and total throughput per GPU from 2,261.58 to 2,742.19 tok/s versus MTP K3, with zero request errors."
+    - "This PR does not change the data types of the DeepSeek-V4-Pro-0813 draft layers; it only touches the benchmark launcher and config to switch the speculative-decoding method from MTP K3 to DSpark K6, keeping the checkpoint's shipped FP4 draft precision and the vLLM image dtype defaults unchanged."
+    - "将 MI355X vLLM DeepSeek-V4-Pro AgentX 扫描从 MTP K3 切换为 DSpark K6，使用 DeepSeek-V4-Pro-0813 revision 72e1d3230f6c080a530b0a1d46f8eb4602340597、概率式 drafting、吞吐测试 thinking-on golden acceptance length 3.77，以及评估时的真实 target verification。"
+    - "将镜像更新至当前最新且已完成本机实测的 vllm/vllm-openai-rocm:nightly-e9757321527ca1ecd514c07c1418dd2c53da3d19，同时保持现有 TP8/EP1、DP attention、router、KV offload、并发列表和运行时长不变。"
+    - "本地 8x MI355X DPA-TP8/EP1 并发 4 验证中，相比 MTP K3，P90 交互速度从 59.72 提升至 97.36 tok/s/user，单卡总吞吐量从 2,261.58 提升至 2,742.19 tok/s，且无请求错误。"
+    - "本 PR 不改变 DeepSeek-V4-Pro-0813 draft 层的数据类型；仅修改基准测试启动脚本与配置，将投机解码方式从 MTP K3 切换为 DSpark K6，保持 checkpoint 自带的 FP4 draft 精度与 vLLM 镜像的 dtype 默认设置不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3406
+
+- config-keys:
   - dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-agg
   - dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
   scenario-type:
