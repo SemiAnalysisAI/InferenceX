@@ -119,6 +119,9 @@ SGLANG_CMD=(
     # The 16384-token default OOMed five canonical cells; match the existing
     # 4096-token prefill bound without reducing model context.
     --chunked-prefill-size 4096
+    # The native preview's compressed-KV store computes byte offsets in signed
+    # int32. Keep ratio-1 pages below 2 GiB without reducing the 1M context limit.
+    --max-total-tokens 3145728
     # AgentX C32 fanout reached 63 running requests before a native HIP illegal
     # access. Bound admission; additional client requests remain queued.
     --max-running-requests 32
