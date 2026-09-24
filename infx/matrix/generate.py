@@ -850,6 +850,8 @@ def _fixed_sequence_entries(
                         Fields.SPEC_DECODING.value: spec_decoding,
                     }
                 )
+                if benchmark.get(Fields.SRT_RECIPE.value) is not None:
+                    entry[Fields.SRT_RECIPE.value] = benchmark[Fields.SRT_RECIPE.value]
             entry.update(
                 {
                     Fields.EXP_NAME.value: f"{model_code}_{seq_len_to_str(isl, osl)}",
