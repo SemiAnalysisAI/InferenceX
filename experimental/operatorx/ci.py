@@ -553,7 +553,11 @@ def execute(args) -> None:
             ).stdout.split()
             (root / "ncu.log").write_text("\n".join(found) + "\n")
             if found:
-                mounts += f",{Path(found[-1]).parent}:/host-ncu"
+                # ncu is a wrapper that finds its install next to itself (../), so mount the
+                # whole install tree at the same path
+                ncu = Path(found[-1])
+                mounts += f",{ncu.parent.parent}:{ncu.parent.parent}"
+                env["OPERATORX_NCU"] = str(ncu)
         if cell["pool"] in ("mi300x", "mi325x"):
             mounts += ",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri"
         run = [
@@ -644,7 +648,7 @@ def rank() -> None:
                 argv[-1] = str(cache / f"results-{tag}")
             subprocess.run(argv, check=True)
         return
-    ncu = "/host-ncu/ncu" if Path("/host-ncu/ncu").exists() else shutil.which("ncu")
+    ncu = os.environ.get("OPERATORX_NCU") or shutil.which("ncu")
     if not ncu:
         raise RuntimeError(
             "counters mode needs ncu: none in the image, and the node has none under "
