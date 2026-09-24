@@ -177,5 +177,10 @@ zero experts, and gemm operand descriptors for `x`, `w13`, `w2`, `a2`), `router`
 Execution (expert kernels, dispatch, shared-expert fusion or stream overlap, graphs)
 is the backend's choice. No backend implements it yet.
 
+`testlists/moe_layer_small.json` holds one full-size routed MoE layer per InferenceX
+MoE checkpoint scheme (DeepSeek-R1, DeepSeek-V4-Pro/V4.1-Flash, Qwen3.5, Qwen3.8-Flash-Next,
+GLM-5.2, Kimi-K3, MiniMax-M3 in their FP8/NVFP4/MXFP4/MXFP8 variants) at `tokens=1`,
+20 cases. Each layer's weights fit on one GPU.
+
 Experimental operator changes are recorded in the adjacent `perf-changelog.yaml`,
 separately from the root inference-recipe changelog's config-key schema.

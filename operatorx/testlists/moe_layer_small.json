@@ -1,0 +1,2410 @@
+[
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 7168,
+      "experts": {
+        "num": 256,
+        "top_k": 8,
+        "inter": 2048,
+        "quant": {
+          "x": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": false,
+              "group": [
+                1,
+                128
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                128,
+                128
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                128,
+                128
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": false,
+              "group": [
+                1,
+                128
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "bf16"
+        },
+        "scoring": "sigmoid",
+        "select": {
+          "kind": "grouped_topk",
+          "groups": 8,
+          "topk_groups": 4
+        },
+        "bias": true,
+        "renormalize": true,
+        "scale": 2.5
+      },
+      "activation": {
+        "kind": "silu"
+      },
+      "shared": {
+        "count": 1,
+        "inter": 2048,
+        "quant": {
+          "x": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": false,
+              "group": [
+                1,
+                128
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                128,
+                128
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                128,
+                128
+              ]
+            }
+          }
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "deepseek-ai/DeepSeek-R1-0528"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 7168,
+      "experts": {
+        "num": 256,
+        "top_k": 8,
+        "inter": 2048,
+        "quant": {
+          "x": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": false,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": true,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": true,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": false,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "bf16"
+        },
+        "scoring": "sigmoid",
+        "select": {
+          "kind": "grouped_topk",
+          "groups": 8,
+          "topk_groups": 4
+        },
+        "bias": true,
+        "renormalize": true,
+        "scale": 2.5
+      },
+      "activation": {
+        "kind": "silu"
+      },
+      "shared": {
+        "count": 1,
+        "inter": 2048,
+        "quant": {
+          "x": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": false,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": true,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": true,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          }
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "nvidia/DeepSeek-R1-0528-NVFP4-v2"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 7168,
+      "experts": {
+        "num": 256,
+        "top_k": 8,
+        "inter": 2048,
+        "quant": {
+          "x": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "bf16"
+        },
+        "scoring": "sigmoid",
+        "select": {
+          "kind": "grouped_topk",
+          "groups": 8,
+          "topk_groups": 4
+        },
+        "bias": true,
+        "renormalize": true,
+        "scale": 2.5
+      },
+      "activation": {
+        "kind": "silu"
+      },
+      "shared": {
+        "count": 1,
+        "inter": 2048,
+        "quant": {
+          "x": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          }
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "amd/DeepSeek-R1-0528-MXFP4"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 7168,
+      "experts": {
+        "num": 384,
+        "top_k": 6,
+        "inter": 3072,
+        "quant": {
+          "x": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "bf16"
+        },
+        "scoring": "sqrtsoftplus",
+        "select": {
+          "kind": "topk"
+        },
+        "bias": true,
+        "renormalize": true,
+        "scale": 2.5
+      },
+      "activation": {
+        "kind": "silu",
+        "limit": 10.0
+      },
+      "shared": {
+        "count": 1,
+        "inter": 3072,
+        "quant": {
+          "x": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                128
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                128,
+                128
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                128,
+                128
+              ]
+            }
+          }
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "deepseek-ai/DeepSeek-V4-Pro"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 7168,
+      "experts": {
+        "num": 384,
+        "top_k": 6,
+        "inter": 3072,
+        "quant": {
+          "x": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "bf16"
+        },
+        "scoring": "sqrtsoftplus",
+        "select": {
+          "kind": "hash",
+          "vocab": 129280
+        },
+        "bias": false,
+        "renormalize": true,
+        "scale": 2.5
+      },
+      "activation": {
+        "kind": "silu",
+        "limit": 10.0
+      },
+      "shared": {
+        "count": 1,
+        "inter": 3072,
+        "quant": {
+          "x": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                128
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                128,
+                128
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                128,
+                128
+              ]
+            }
+          }
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "deepseek-ai/DeepSeek-V4-Pro:hash-layer"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 5120,
+      "experts": {
+        "num": 384,
+        "top_k": 6,
+        "inter": 2304,
+        "quant": {
+          "x": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "bf16"
+        },
+        "scoring": "sqrtsoftplus",
+        "select": {
+          "kind": "topk"
+        },
+        "bias": true,
+        "renormalize": true,
+        "scale": 1.5
+      },
+      "activation": {
+        "kind": "silu",
+        "limit": 10.0
+      },
+      "shared": {
+        "count": 1,
+        "inter": 2304,
+        "quant": {
+          "x": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                32,
+                32
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                32,
+                32
+              ]
+            }
+          }
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "deepseek-ai/DeepSeek-V4.1-Flash"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 4096,
+      "experts": {
+        "num": 512,
+        "top_k": 10,
+        "inter": 1024,
+        "quant": {
+          "x": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": false,
+              "group": [
+                1,
+                128
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "bf16",
+              "static": true,
+              "group": [
+                128,
+                128
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "bf16",
+              "static": true,
+              "group": [
+                128,
+                128
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": false,
+              "group": [
+                1,
+                128
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "bf16"
+        },
+        "scoring": "softmax",
+        "select": {
+          "kind": "topk"
+        },
+        "renormalize": true
+      },
+      "activation": {
+        "kind": "silu"
+      },
+      "shared": {
+        "count": 1,
+        "inter": 1024,
+        "quant": {
+          "x": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": false,
+              "group": [
+                1,
+                128
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "bf16",
+              "static": true,
+              "group": [
+                128,
+                128
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "bf16",
+              "static": true,
+              "group": [
+                128,
+                128
+              ]
+            }
+          }
+        },
+        "gate": "sigmoid"
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "Qwen/Qwen3.5-397B-A17B-FP8"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 4096,
+      "experts": {
+        "num": 512,
+        "top_k": 10,
+        "inter": 1024,
+        "quant": {
+          "x": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": false,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": true,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": true,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": false,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "bf16"
+        },
+        "scoring": "softmax",
+        "select": {
+          "kind": "topk"
+        },
+        "renormalize": true
+      },
+      "activation": {
+        "kind": "silu"
+      },
+      "shared": {
+        "count": 1,
+        "inter": 1024,
+        "quant": {
+          "x": {
+            "dtype": "bf16"
+          },
+          "w13": {
+            "dtype": "bf16"
+          },
+          "w2": {
+            "dtype": "bf16"
+          }
+        },
+        "gate": "sigmoid"
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "nvidia/Qwen3.5-397B-A17B-NVFP4"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 4096,
+      "experts": {
+        "num": 512,
+        "top_k": 10,
+        "inter": 1024,
+        "quant": {
+          "x": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": false,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": true,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": true,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": false,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "bf16"
+        },
+        "scoring": "softmax",
+        "select": {
+          "kind": "topk"
+        },
+        "renormalize": true
+      },
+      "activation": {
+        "kind": "silu"
+      },
+      "shared": {
+        "count": 1,
+        "inter": 1024,
+        "quant": {
+          "x": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          }
+        },
+        "gate": "sigmoid"
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "nvidia/Qwen3.5-397B-A17B-NVFP4-V2"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 4096,
+      "experts": {
+        "num": 512,
+        "top_k": 10,
+        "inter": 1024,
+        "quant": {
+          "x": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "bf16"
+        },
+        "scoring": "softmax",
+        "select": {
+          "kind": "topk"
+        },
+        "renormalize": true
+      },
+      "activation": {
+        "kind": "silu"
+      },
+      "shared": {
+        "count": 1,
+        "inter": 1024,
+        "quant": {
+          "x": {
+            "dtype": "bf16"
+          },
+          "w13": {
+            "dtype": "bf16"
+          },
+          "w2": {
+            "dtype": "bf16"
+          }
+        },
+        "gate": "sigmoid"
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "amd/Qwen3.5-397B-A17B-MXFP4"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 4096,
+      "experts": {
+        "num": 512,
+        "top_k": 10,
+        "inter": 1024,
+        "quant": {
+          "x": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "bf16"
+        },
+        "scoring": "softmax",
+        "select": {
+          "kind": "topk"
+        },
+        "renormalize": true
+      },
+      "activation": {
+        "kind": "silu"
+      },
+      "shared": {
+        "count": 1,
+        "inter": 1024,
+        "quant": {
+          "x": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          }
+        },
+        "gate": "sigmoid"
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 2560,
+      "experts": {
+        "num": 512,
+        "top_k": 10,
+        "inter": 640,
+        "quant": {
+          "x": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": false,
+              "group": [
+                1,
+                128
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "bf16",
+              "static": true,
+              "group": [
+                128,
+                128
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "bf16",
+              "static": true,
+              "group": [
+                128,
+                128
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": false,
+              "group": [
+                1,
+                128
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "bf16"
+        },
+        "scoring": "softmax",
+        "select": {
+          "kind": "topk"
+        },
+        "renormalize": true
+      },
+      "activation": {
+        "kind": "silu"
+      },
+      "shared": {
+        "count": 1,
+        "inter": 640,
+        "quant": {
+          "x": {
+            "dtype": "bf16"
+          },
+          "w13": {
+            "dtype": "bf16"
+          },
+          "w2": {
+            "dtype": "bf16"
+          }
+        },
+        "gate": "sigmoid"
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "Qwen/Qwen3.8-Flash-Next-FP8"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 2560,
+      "experts": {
+        "num": 512,
+        "top_k": 10,
+        "inter": 640,
+        "quant": {
+          "x": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": false,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": true,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": true,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": false,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "bf16"
+        },
+        "scoring": "softmax",
+        "select": {
+          "kind": "topk"
+        },
+        "renormalize": true
+      },
+      "activation": {
+        "kind": "silu"
+      },
+      "shared": {
+        "count": 1,
+        "inter": 640,
+        "quant": {
+          "x": {
+            "dtype": "bf16"
+          },
+          "w13": {
+            "dtype": "bf16"
+          },
+          "w2": {
+            "dtype": "bf16"
+          }
+        },
+        "gate": "sigmoid"
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "RadixArk/Qwen3.8-Flash-Next-NVFP4"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 6144,
+      "experts": {
+        "num": 256,
+        "top_k": 8,
+        "inter": 2048,
+        "quant": {
+          "x": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": false,
+              "group": [
+                1,
+                128
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                128,
+                128
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                128,
+                128
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": false,
+              "group": [
+                1,
+                128
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "bf16"
+        },
+        "scoring": "sigmoid",
+        "select": {
+          "kind": "topk"
+        },
+        "bias": true,
+        "renormalize": true,
+        "scale": 2.5
+      },
+      "activation": {
+        "kind": "silu"
+      },
+      "shared": {
+        "count": 1,
+        "inter": 2048,
+        "quant": {
+          "x": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": false,
+              "group": [
+                1,
+                128
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                128,
+                128
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                128,
+                128
+              ]
+            }
+          }
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "zai-org/GLM-5.2-FP8"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 6144,
+      "experts": {
+        "num": 256,
+        "top_k": 8,
+        "inter": 2048,
+        "quant": {
+          "x": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": false,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": true,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": true,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": false,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "bf16"
+        },
+        "scoring": "sigmoid",
+        "select": {
+          "kind": "topk"
+        },
+        "bias": true,
+        "renormalize": true,
+        "scale": 2.5
+      },
+      "activation": {
+        "kind": "silu"
+      },
+      "shared": {
+        "count": 1,
+        "inter": 2048,
+        "quant": {
+          "x": {
+            "dtype": "bf16"
+          },
+          "w13": {
+            "dtype": "bf16"
+          },
+          "w2": {
+            "dtype": "bf16"
+          }
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "nvidia/GLM-5.2-NVFP4"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 6144,
+      "experts": {
+        "num": 256,
+        "top_k": 8,
+        "inter": 2048,
+        "quant": {
+          "x": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "bf16"
+        },
+        "scoring": "sigmoid",
+        "select": {
+          "kind": "topk"
+        },
+        "bias": true,
+        "renormalize": true,
+        "scale": 2.5
+      },
+      "activation": {
+        "kind": "silu"
+      },
+      "shared": {
+        "count": 1,
+        "inter": 2048,
+        "quant": {
+          "x": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          }
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "amd/GLM-5.2-MXFP4"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 7168,
+      "experts": {
+        "num": 896,
+        "top_k": 16,
+        "inter": 3072,
+        "latent": 3584,
+        "quant": {
+          "x": {
+            "dtype": "bf16"
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "bf16"
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "bf16"
+        },
+        "scoring": "sigmoid",
+        "select": {
+          "kind": "topk"
+        },
+        "bias": true,
+        "renormalize": true,
+        "scale": 1.0
+      },
+      "activation": {
+        "kind": "situ",
+        "alpha": 4.0,
+        "beta": 25.0
+      },
+      "shared": {
+        "count": 2,
+        "inter": 3072,
+        "quant": {
+          "x": {
+            "dtype": "bf16"
+          },
+          "w13": {
+            "dtype": "bf16"
+          },
+          "w2": {
+            "dtype": "bf16"
+          }
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "moonshotai/Kimi-K3"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 6144,
+      "experts": {
+        "num": 128,
+        "top_k": 4,
+        "inter": 3072,
+        "quant": {
+          "x": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "fp32"
+        },
+        "scoring": "sigmoid",
+        "select": {
+          "kind": "topk"
+        },
+        "bias": true,
+        "renormalize": true,
+        "scale": 2.0
+      },
+      "activation": {
+        "kind": "swigluoai",
+        "alpha": 1.702,
+        "limit": 7.0
+      },
+      "shared": {
+        "count": 1,
+        "inter": 3072,
+        "quant": {
+          "x": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          }
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "MiniMaxAI/MiniMax-M3-MXFP8"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 6144,
+      "experts": {
+        "num": 128,
+        "top_k": 4,
+        "inter": 3072,
+        "quant": {
+          "x": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": false,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": true,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": true,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "e4m3",
+              "static": false,
+              "group": [
+                1,
+                16
+              ]
+            },
+            "scale2": {
+              "dtype": "fp32",
+              "static": true,
+              "group": [
+                -1,
+                -1
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "fp32"
+        },
+        "scoring": "sigmoid",
+        "select": {
+          "kind": "topk"
+        },
+        "bias": true,
+        "renormalize": true,
+        "scale": 2.0
+      },
+      "activation": {
+        "kind": "swigluoai",
+        "alpha": 1.702,
+        "limit": 7.0
+      },
+      "shared": {
+        "count": 1,
+        "inter": 3072,
+        "quant": {
+          "x": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e4m3",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          }
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "nvidia/MiniMax-M3-NVFP4"
+  },
+  {
+    "type": "moe_layer",
+    "args": {
+      "tokens": 1,
+      "hidden": 6144,
+      "experts": {
+        "num": 128,
+        "top_k": 4,
+        "inter": 3072,
+        "quant": {
+          "x": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "a2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          }
+        }
+      },
+      "router": {
+        "gate": {
+          "dtype": "fp32"
+        },
+        "scoring": "sigmoid",
+        "select": {
+          "kind": "topk"
+        },
+        "bias": true,
+        "renormalize": true,
+        "scale": 2.0
+      },
+      "activation": {
+        "kind": "swigluoai",
+        "alpha": 1.702,
+        "limit": 7.0
+      },
+      "shared": {
+        "count": 1,
+        "inter": 3072,
+        "quant": {
+          "x": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": false,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w13": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          },
+          "w2": {
+            "dtype": "e2m1",
+            "scale": {
+              "dtype": "ue8m0",
+              "static": true,
+              "group": [
+                1,
+                32
+              ]
+            }
+          }
+        }
+      },
+      "routing": {
+        "distribution": "natural",
+        "seed": 0
+      }
+    },
+    "name": "amd/MiniMax-M3-MXFP4"
+  }
+]

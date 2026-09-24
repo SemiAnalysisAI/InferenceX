@@ -132,6 +132,8 @@ class MoeLayerArgs:
              "bias"?: score-correction bias, "renormalize"?, "scale"?: routed scaling factor,
              "weight_on_input"?: router weight applied to the expert input}
     activation: {"kind", "gated"?: default true, "limit"?, "alpha"?, "beta"?}
+      swigluoai: alpha scales the gate sigmoid, limit clamps. situ: alpha and beta
+      soft-cap the gate and up halves (alpha*tanh(g/alpha)*sigmoid(g) * beta*tanh(u/beta)).
     shared: null | {"count", "inter", "quant": {x, w13, w2}, "gate"?: null|"sigmoid"}
     routing: {"distribution": "natural" | "balanced" | {"kind": "zipf", "s"}, "seed"}
       natural: routing is whatever the router computes on seeded random inputs;
