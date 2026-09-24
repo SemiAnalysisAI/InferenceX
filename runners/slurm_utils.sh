@@ -145,9 +145,8 @@ apply_srt_recipe() {
     local config="$1" framework="$2"
     shift 2
     # Slurm creates a separate compute venv; do not inherit the login venv marker.
-    # Quiet uv's dependency chatter, not the orchestrator or benchmark output.
     PYTHONPATH="$INFERENCEX_SLURM_UTILS_DIR/..${PYTHONPATH:+:$PYTHONPATH}" \
-        env -u VIRTUAL_ENV UV_QUIET=1 python3 -m infx.srt_slurm.synthetic_acceptance \
+        env -u VIRTUAL_ENV python3 -m infx.srt_slurm.synthetic_acceptance \
         "$config" "$framework" -- "$@"
 }
 
