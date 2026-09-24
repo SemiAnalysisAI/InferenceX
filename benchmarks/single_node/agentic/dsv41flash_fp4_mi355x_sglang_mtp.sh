@@ -72,6 +72,10 @@ export SGLANG_MOE_PADDING=1
 export AITER_FLYDSL_FORCE_REDUCE=1
 export ROCM_QUICK_REDUCE_QUANTIZATION=NONE
 
+# The native scheduler enables its shared-buffer WAR fence by default on CUDA
+# only. Enable the same supported barrier on ROCm before radix/pool writes.
+export SGLANG_ENABLE_WAR_BARRIER=1
+
 # Long-prefill scratch can fill the native allocator cache and starve HIP/RCCL
 # allocations outside PyTorch. The preview's allocator only activates GC when
 # per_process_memory_fraction is below 1; reclaim unused blocks at 80% of 99%.
