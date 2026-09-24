@@ -8815,3 +8815,10 @@
   - Retain min(64*concurrency, 1024) SWA prefix tails within the measured GB200 KV budget; select prefill/decode interval 16 only at TP4 C16 after canonical performance and full GSM8K qualification.
   - "Match the published vLLM grid exactly: TP2/EP1 and TP4/EP1, each C1/2/4/8/16/32/64/128. Use stock DSpark precision; TP2 uses static memory 0.92, chunk 2048, graph/running cap 16, interval 16, expandable allocator and min(128*CONC,1024) SWA tails. Requalify all 16 performance and full GSM8K points. Avoid deadline-only failures with the supported 12-hour partition maximum for C64/C128 performance while preserving complete warmup and 3600-second scoring."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3347
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic-dspark
+  description:
+    - "Enable official decoder SWA bounded replay for H200 DeepSeek V4.1 Flash native DSpark"
+    - "Pin SGLang nightly-dev-cu13-20260923-06008c17; qualify TP4/EP1 and TP8/EP1 C1-128 with unchanged shipped draft precision"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3392
