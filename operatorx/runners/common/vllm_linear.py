@@ -5,7 +5,8 @@ weight scheme implies (the same config classes a checkpoint's
 quantization_config selects), loads synthetic weights in checkpoint format,
 runs vLLM's process_weights_after_loading, and times layer(x) on a bf16
 activation - so activation quantization, kernel selection and any weight
-repacking are vLLM's own. The kernel vLLM chose is reported per op.
+repacking are vLLM's own - replayed as a CUDA graph where vLLM would capture
+one. The kernel vLLM chose and the graph decision are reported per op.
 """
 from __future__ import annotations
 
@@ -18,6 +19,21 @@ import torch
 from operatorx.core import BackendImpl, Op, UnsupportedOpError, lookup_versions
 
 PER_TENSOR, PER_TOKEN, PER_CHANNEL = [-1, -1], [1, -1], [-1, 1]
+
+_MX_FP4 = {"dtype": "fp4", "qscheme": "per_group", "ch_axis": -1, "group_size": 32, "symmetric": None,
+           "round_method": "half_even", "scale_type": "float", "scale_format": "e8m0",
+           "scale_calculation_mode": "even", "mx_element_dtype": None, "observer_cls": "PerBlockMXObserver",
+           "is_scale_quant": False}
+# The quantization_config AMD's MXFP4 checkpoints ship (e.g. amd/Kimi-K2.5-MXFP4), exclusions dropped.
+_QUARK_MXFP4 = {
+    "quant_method": "quark", "quant_mode": "eager_mode", "exclude": [], "algo_config": None,
+    "global_quant_config": {"input_tensors": {**_MX_FP4, "is_dynamic": True},
+                            "weight": {**_MX_FP4, "is_dynamic": False},
+                            "output_tensors": None, "bias": None, "target_device": None},
+    "layer_type_quant_config": {}, "layer_quant_config": {}, "kv_cache_quant_config": {},
+    "export": {"kv_cache_group": [], "min_kv_scale": 0.0, "pack_method": "reorder",
+               "weight_format": "real_quantized", "weight_merge_groups": None},
+}
 
 
 def _scheme(qa: dict, qb: dict) -> tuple[str, dict] | None:
@@ -49,6 +65,9 @@ def _scheme(qa: dict, qb: dict) -> tuple[str, dict] | None:
                                 "symmetric": True},
                     "input_activations": {"num_bits": 8, "type": "float", "strategy": "token", "dynamic": True,
                                           "symmetric": True}}}}
+    if (qa["dtype"] == qb["dtype"] == "e2m1" and sa["group"] == sb["group"] == [1, 32] and not sa["static"]
+            and sa["dtype"] == sb["dtype"] == "ue8m0" and "scale2" not in qa and "scale2" not in qb):
+        return "quark", _QUARK_MXFP4
     if (qa["dtype"] == qb["dtype"] == "e2m1" and sa["group"] == sb["group"] == [1, 16] and not sa["static"]
             and sa["dtype"] == sb["dtype"] == "e4m3" and qa.get("scale2") and qb.get("scale2")):
         return "modelopt_fp4", {"quantization": {
@@ -83,6 +102,10 @@ def _vllm_context():
                    "torch_dtype": "bfloat16"}, f)
     vcfg = VllmConfig()
     vcfg.model_config = ModelConfig(model=cfg_dir, dtype="bfloat16", skip_tokenizer_init=True)
+    try:
+        vcfg._set_cudagraph_sizes()  # vLLM's default capture sizes for this config
+    except Exception:
+        pass
     ctx = set_current_vllm_config(vcfg)
     ctx.__enter__()
     init_distributed_environment(world_size=1, rank=0, local_rank=torch.cuda.current_device(),
@@ -102,6 +125,25 @@ def _quant_config(args):
     from vllm.model_executor.layers.quantization import get_quantization_config
     method, cfg = sch
     return get_quantization_config(method).from_config(cfg)
+
+
+def _set_quant_fp8_op(qc) -> None:
+    """VllmConfig turns on the CUDA quant_fp8 custom op for checkpoints with blocked
+    weights; mirror that per layer (CustomOp reads it when the layer is built)."""
+    from vllm.config import get_current_vllm_config
+    ops = get_current_vllm_config().compilation_config.custom_ops
+    blocked = getattr(qc, "weight_block_size", None) is not None
+    if blocked and "+quant_fp8" not in ops:
+        ops.append("+quant_fp8")
+    elif not blocked and "+quant_fp8" in ops:
+        ops.remove("+quant_fp8")
+
+
+def _is_fault(e: BaseException) -> bool:
+    """Allocation failures and device faults are errors, never 'unsupported'."""
+    msg = str(e)
+    return isinstance(e, torch.OutOfMemoryError) or any(
+        s in msg for s in ("CUDA error", "HIP error", "illegal memory", "out of memory", "device-side assert"))
 
 
 def _fill(layer: torch.nn.Module) -> None:
@@ -152,17 +194,24 @@ def _prepare_gemm(op: Op) -> dict:
     import vllm.envs as envs
     from vllm.model_executor.layers.linear import ReplicatedLinear
     qc = _quant_config(a)
+    _set_quant_fp8_op(qc)
     prev = torch.get_default_dtype()
     torch.set_default_dtype(torch.bfloat16)  # as vLLM's model loader does while building layers
     try:
         layer = ReplicatedLinear(k, n, bias=bool(a.get("bias")), quant_config=qc, params_dtype=torch.bfloat16,
                                  prefix="model.layers.0.mlp.down_proj", disable_tp=True).cuda()
+        # set by the column/row-parallel linears real layers use; some kernels read them
+        for attr, v in (("input_size_per_partition", k), ("output_size_per_partition", n)):
+            if not hasattr(layer, attr):
+                setattr(layer, attr, v)
         _fill(layer)
         loaded = _param_dtypes(layer)
         qm = layer.quant_method
         if hasattr(qm, "process_weights_after_loading"):
             qm.process_weights_after_loading(layer)
-    except (NotImplementedError, AssertionError, ValueError) as e:
+    except (NotImplementedError, AssertionError, ValueError, RuntimeError) as e:
+        if _is_fault(e):
+            raise
         raise UnsupportedOpError(f"vLLM rejected {a}: {type(e).__name__}: {e}"[:400]) from e
     finally:
         torch.set_default_dtype(prev)
@@ -178,6 +227,8 @@ def _prepare_gemm(op: Op) -> dict:
         _kernel_gemm(ctx)
         torch.cuda.synchronize()
     except (NotImplementedError, AssertionError, RuntimeError, ValueError) as e:
+        if _is_fault(e):
+            raise
         raise UnsupportedOpError(f"vLLM kernel failed for {a}: {type(e).__name__}: {e}"[:400]) from e
     return ctx
 
@@ -186,4 +237,50 @@ def _kernel_gemm(ctx: dict) -> None:
     ctx["out"] = ctx["layer"](ctx["x"])
 
 
-IMPLS = [BackendImpl(op_type="gemm", prepare=_prepare_gemm, kernel=_kernel_gemm)]
+def _capture_sizes() -> list[int]:
+    from vllm.config import get_current_vllm_config
+    sizes = get_current_vllm_config().compilation_config.cudagraph_capture_sizes
+    if sizes:
+        return sorted(sizes)
+    # VllmConfig._set_cudagraph_sizes' default candidates
+    from vllm.platforms import current_platform
+    top = 1024 if current_platform.is_device_capability_family(100) else 512
+    return [1, 2, 4] + list(range(8, 256, 8)) + list(range(256, top + 1, 16))
+
+
+def _launcher(ctx: dict):
+    """As vLLM serves it: batches up to the largest capture size replay a full CUDA
+    graph captured at the next capture size (the batch is padded up to it); larger
+    batches run eagerly. OPERATORX_CUDA_GRAPHS=0 forces eager."""
+    x, meta = ctx["x"], ctx["meta"]
+    eager = lambda: _kernel_gemm(ctx)  # noqa: E731
+    if os.environ.get("OPERATORX_CUDA_GRAPHS", "1") != "1":
+        meta["graph"] = {"mode": "eager", "reason": "OPERATORX_CUDA_GRAPHS=0"}
+        return eager
+    sizes = _capture_sizes()
+    m = x.shape[0]
+    size = next((s for s in sizes if s >= m), None)
+    if size is None:
+        meta["graph"] = {"mode": "eager", "reason": f"m > max capture size {sizes[-1]}"}
+        return eager
+    xp = torch.randn(size, x.shape[1], device=x.device, dtype=x.dtype)
+    try:
+        for _ in range(2):
+            ctx["layer"](xp)
+        torch.cuda.synchronize()
+        g = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(g, pool=torch.cuda.graph_pool_handle()):
+            ctx["graph_out"] = ctx["layer"](xp)
+        torch.cuda.synchronize()
+    except Exception as e:
+        if _is_fault(e):
+            raise
+        torch.cuda.synchronize()
+        meta["graph"] = {"mode": "eager", "reason": f"capture failed: {type(e).__name__}: {e}"[:200]}
+        return eager
+    ctx["graph"], ctx["x_padded"] = g, xp
+    meta["graph"] = {"mode": "full", "capture_size": size, "tokens": m, "max_capture_size": sizes[-1]}
+    return g.replay
+
+
+IMPLS = [BackendImpl(op_type="gemm", prepare=_prepare_gemm, kernel=_kernel_gemm, launcher=_launcher)]
