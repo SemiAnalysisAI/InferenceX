@@ -37,12 +37,26 @@ _QUARK_MXFP4 = {
 }
 
 
+# Kimi-K3's routed experts: MXFP4 weights, bf16 activations (compressed-tensors mxfp4-pack).
+_CT_MXFP4_W4A16 = {
+    "quant_method": "compressed-tensors", "format": "mxfp4-pack-quantized", "ignore": [],
+    "config_groups": {"group_0": {
+        "format": "mxfp4-pack-quantized", "targets": ["Linear"], "input_activations": None,
+        "output_activations": None,
+        "weights": {"actorder": None, "block_structure": None, "dynamic": False, "group_size": 32, "num_bits": 4,
+                    "observer": "minmax", "observer_kwargs": {}, "scale_dtype": "torch.uint8",
+                    "strategy": "group", "symmetric": True, "type": "float", "zp_dtype": None}}}}
+
+
 def _scheme(qa: dict, qb: dict) -> tuple[str, dict] | None:
     """Operand descriptors -> (vLLM quant method, checkpoint quantization_config), as a
     checkpoint with that scheme would declare it; None for unquantized."""
     if "scale" not in qa and "scale" not in qb:
         return None if qa["dtype"] == qb["dtype"] == "bf16" else ()
     sa, sb = qa.get("scale"), qb.get("scale")
+    if (qa == {"dtype": "bf16"} and qb["dtype"] == "e2m1" and sb == {"dtype": "ue8m0", "static": True, "group": [1, 32]}
+            and "scale2" not in qb):
+        return "compressed-tensors", _CT_MXFP4_W4A16
     if sa is None or sb is None or not sb["static"] or not qa.get("symmetric", True) or not qb.get("symmetric", True):
         return ()
     if qa["dtype"] == qb["dtype"] == "e4m3" and "scale2" not in qa and "scale2" not in qb:
@@ -50,9 +64,13 @@ def _scheme(qa: dict, qb: dict) -> tuple[str, dict] | None:
         dyn = "static" if sa["static"] else "dynamic"
         if ga == gb == PER_TENSOR and sa["dtype"] == sb["dtype"] == "fp32":
             return "fp8", {"quant_method": "fp8", "activation_scheme": dyn}
-        if gb[0] >= 1 and gb[1] > 1 and ga == [1, gb[1]] and not sa["static"] and sa["dtype"] == sb["dtype"]:
+        if ga == gb == [1, 32] and sa["dtype"] == sb["dtype"] == "ue8m0" and not sa["static"]:
+            return "mxfp8", {"quant_method": "mxfp8", "activation_scheme": "dynamic", "weight_block_size": [1, 32],
+                             "ignored_layers": []}
+        if gb[0] >= 1 and gb[1] > 1 and ga == [1, gb[1]] and not sa["static"] and (
+                sa["dtype"] == sb["dtype"] or (sa["dtype"] == "fp32" and sb["dtype"] == "bf16")):
             cfg = {"quant_method": "fp8", "activation_scheme": "dynamic", "fmt": "e4m3", "weight_block_size": gb}
-            if sb["dtype"] == "fp32":
+            if sb["dtype"] in ("fp32", "bf16"):  # bf16 block scales load like fp32 ones
                 return "fp8", cfg
             if sb["dtype"] == "ue8m0":
                 # DeepSeek-V4: vLLM remaps the checkpoint's fp8 config to deepseek_v4_fp8 (ue8m0 scales).

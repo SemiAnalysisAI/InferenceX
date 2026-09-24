@@ -54,9 +54,10 @@ def _check_experts(e: Any) -> None:
 
 def _check_router(r: Any, num_experts: int) -> None:
     _keys(r, "router", {"gate", "scoring", "select"}, {"bias", "renormalize", "scale", "weight_on_input"})
-    _keys(r["gate"], "router.gate", {"dtype"})
-    if r["gate"]["dtype"] not in GATE_DTYPES:
-        raise ValueError(f"router.gate.dtype must be one of {sorted(GATE_DTYPES)}")
+    _keys(r["gate"], "router.gate", {"dtype"}, {"logits"})
+    for k in ("dtype", "logits"):
+        if r["gate"].get(k, "bf16") not in GATE_DTYPES:
+            raise ValueError(f"router.gate.{k} must be one of {sorted(GATE_DTYPES)}")
     if r["scoring"] not in SCORING:
         raise ValueError(f"router.scoring must be one of {sorted(SCORING)}")
     s = r["select"]
@@ -126,11 +127,13 @@ class MoeLayerArgs:
       quant.x is the experts' input as they consume it, w13 the fused gate/up
       weight, w2 the down weight, a2 the intermediate activation. latent: experts
       run at width L with H->L / L->H projections. zero: identity experts.
-    router: {"gate": {"dtype"}, "scoring": softmax|sigmoid|sqrtsoftplus,
+    router: {"gate": {"dtype", "logits"?}, "scoring": softmax|sigmoid|sqrtsoftplus,
              "select": {"kind": "topk"} | {"kind": "grouped_topk", "groups", "topk_groups"}
                        | {"kind": "hash", "vocab"},
              "bias"?: score-correction bias, "renormalize"?, "scale"?: routed scaling factor,
              "weight_on_input"?: router weight applied to the expert input}
+      gate.dtype is the router weight's dtype, gate.logits the dtype of the logits it
+      produces (default: gate.dtype).
     activation: {"kind", "gated"?: default true, "limit"?, "alpha"?, "beta"?}
       swigluoai: alpha scales the gate sigmoid, limit clamps. situ: alpha and beta
       soft-cap the gate and up halves (alpha*tanh(g/alpha)*sigmoid(g) * beta*tanh(u/beta)).
