@@ -21,6 +21,16 @@ from operatorx.core import BackendImpl, Op, UnsupportedOpError, lookup_versions
 
 PER_TENSOR, PER_TOKEN, PER_CHANNEL = [-1, -1], [1, -1], [-1, 1]
 
+
+def device() -> "torch.device":
+    """The accelerator vLLM is running on (cuda on NVIDIA and ROCm)."""
+    from vllm.platforms import current_platform
+    return torch.device(current_platform.device_type)
+
+
+def sync() -> None:
+    getattr(torch, device().type).synchronize()
+
 _MX_FP4 = {"dtype": "fp4", "qscheme": "per_group", "ch_axis": -1, "group_size": 32, "symmetric": None,
            "round_method": "half_even", "scale_type": "float", "scale_format": "e8m0",
            "scale_calculation_mode": "even", "mx_element_dtype": None, "observer_cls": "PerBlockMXObserver",
@@ -146,9 +156,26 @@ def _quant_config(args):
         return None
     if not sch:
         raise UnsupportedOpError(f"no vLLM quantization config for a={args['a']} b={args['b']}")
-    from vllm.model_executor.layers.quantization import get_quantization_config
-    method, cfg = sch
+    return quant_config(*sch)
+
+
+def quant_config(method: str, cfg: dict):
+    """Instantiate the config vLLM registers for a checkpoint's quant_method."""
+    from vllm.model_executor.layers.quantization import QUANTIZATION_METHODS, get_quantization_config
+    if method not in QUANTIZATION_METHODS:
+        raise UnsupportedOpError(f"vLLM has no {method!r} quantization method")
     return get_quantization_config(method).from_config(cfg)
+
+
+def _reject_fallback(qc, method) -> None:
+    """A quantized checkpoint whose layer got an unquantized method computed something
+    else - bf16 weights and a bf16 matmul - and would be recorded under the quantized
+    row it is not. vLLM's mxfp4 does this for linear layers, where only its MoE experts
+    have a kernel."""
+    if qc is not None and "Unquantized" in type(method).__name__:
+        raise UnsupportedOpError(
+            f"{type(qc).__name__} has no quantized linear method here; the layer fell back "
+            f"to {type(method).__name__}")
 
 
 def _set_quant_fp8_op(qc) -> None:
@@ -223,7 +250,7 @@ def _prepare_gemm(op: Op) -> dict:
     torch.set_default_dtype(torch.bfloat16)  # as vLLM's model loader does while building layers
     try:
         layer = ReplicatedLinear(k, n, bias=bool(a.get("bias")), quant_config=qc, params_dtype=torch.bfloat16,
-                                 prefix="model.layers.0.mlp.down_proj", disable_tp=True).cuda()
+                                 prefix="model.layers.0.mlp.down_proj", disable_tp=True).to(device())
         # set by the column/row-parallel linears real layers use; some kernels read them
         for attr, v in (("input_size_per_partition", k), ("output_size_per_partition", n)):
             if not hasattr(layer, attr):
@@ -231,6 +258,7 @@ def _prepare_gemm(op: Op) -> dict:
         _fill(layer)
         loaded = _param_dtypes(layer)
         qm = layer.quant_method
+        _reject_fallback(qc, qm)
         if hasattr(qm, "process_weights_after_loading"):
             qm.process_weights_after_loading(layer)
     except (NotImplementedError, AssertionError, ValueError, RuntimeError) as e:
@@ -242,14 +270,14 @@ def _prepare_gemm(op: Op) -> dict:
     kernels = _kernel_names(layer)
     if any(v.startswith("Emulation") for v in kernels.values()):
         raise UnsupportedOpError(f"vLLM has only an emulation kernel for {a} here: {kernels}")
-    x = torch.randn(m, k, device="cuda", dtype=torch.bfloat16)
+    x = torch.randn(m, k, device=device(), dtype=torch.bfloat16)
     ctx = {"layer": layer, "x": x,
            "meta": {"vllm_quant_method": type(qm).__name__, "vllm_kernels": kernels,
                     "param_dtypes_loaded": loaded, "param_dtypes": _param_dtypes(layer),
                     "vllm_env": {k: getattr(envs, k) for k in _ENV_KEYS if hasattr(envs, k)}}}
     try:
         _kernel_gemm(ctx)
-        torch.cuda.synchronize()
+        sync()
     except (NotImplementedError, AssertionError, RuntimeError, ValueError) as e:
         if _is_fault(e):
             raise
