@@ -8770,19 +8770,6 @@
     - "Prioritize DSpark across the full AgentX concurrency curve and test 16 decode steps between prefill chunks with unchanged shipped precision and canonical acceptance; remove the STP sweep arm because measured DSpark points dominate its completed diagnostics."
     - "Reserve 64 SWA prefix tails per concurrency at C2 and above, capped at 4096, within the existing static memory budget. The 1024-tail TP4 C16 test improved throughput 4.32x over the matched default-tail baseline while preserving checkpoint math and precision."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3344
-
-- config-keys:
-    - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Move all six points (c4, c16, c32, c48, c192, c256) onto the UMBP linker; c128 dropped. c4/c16 were no-offload and c32/48 were HiCache; c16 and c32/48 prefill go TP8 -> TP4. DSpark gamma 6 at c4/c16, 3 above."
-    - "Bump to image lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923."
-    - "UMBP tier on 2 MiB hugepages by default: job.slurm reserves them on prefill nodes and releases them on every exit path, hugepage_sanity.sh fails a short grow, and server_sglang.sh refuses a run that fell back to 4 KiB pages."
-    - "Allow pure-TP prefill on the linker, add --optimistic-prefill-attempts 2 on umbp-linker prefill, raise the UMBP client ready probe to 120 s, derive CONTAINER_BARRIER_TIMEOUT from UMBP_SA_WAIT_SECONDS + 600, and wire UMBP_DRAM_CEILING_GB through."
-    - "Add DeepSeek-V4-Pro-0813 golden AL for draft lengths 4, 5, 7 and 8 (3.36 / 3.61 / 3.73 / 3.47)."
-    - "Agentic PD router: pin --decode-policy round_robin so decode no longer inherits the prefill --policy (consistent_hashing)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3256
   
 - config-keys:
     - glm5.3-fp8-mi355x-tilert-agentic
@@ -8828,3 +8815,16 @@
   - Retain min(64*concurrency, 1024) SWA prefix tails within the measured GB200 KV budget; select prefill/decode interval 16 only at TP4 C16 after canonical performance and full GSM8K qualification.
   - "Match the published vLLM grid exactly: TP2/EP1 and TP4/EP1, each C1/2/4/8/16/32/64/128. Use stock DSpark precision; TP2 uses static memory 0.92, chunk 2048, graph/running cap 16, interval 16, expandable allocator and min(128*CONC,1024) SWA tails. Requalify all 16 performance and full GSM8K points. Avoid deadline-only failures with the supported 12-hour partition maximum for C64/C128 performance while preserving complete warmup and 3600-second scoring."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3347
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move all six points (c4, c16, c32, c48, c192, c256) onto the UMBP linker; c128 dropped. c4/c16 were no-offload and c32/48 were HiCache; c16 and c32/48 prefill go TP8 -> TP4. DSpark gamma 6 at c4/c16, 3 above."
+    - "Bump to image lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260923."
+    - "UMBP tier on 2 MiB hugepages by default: job.slurm reserves them on prefill nodes and releases them on every exit path, hugepage_sanity.sh fails a short grow, and server_sglang.sh refuses a run that fell back to 4 KiB pages."
+    - "Allow pure-TP prefill on the linker, add --optimistic-prefill-attempts 2 on umbp-linker prefill, raise the UMBP client ready probe to 120 s, derive CONTAINER_BARRIER_TIMEOUT from UMBP_SA_WAIT_SECONDS + 600, and wire UMBP_DRAM_CEILING_GB through."
+    - "Add DeepSeek-V4-Pro-0813 golden AL for draft lengths 4, 5, 7 and 8 (3.36 / 3.61 / 3.73 / 3.47)."
+    - "Agentic PD router: pin --decode-policy round_robin so decode no longer inherits the prefill --policy (consistent_hashing)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3256
