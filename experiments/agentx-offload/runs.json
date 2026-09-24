@@ -4006,13 +4006,13 @@
       "allocation_id": "17024",
       "scratch": "/offload-scratch/inferencex-offload-35972536894-1-17024-7b267305607e",
       "admission_evidence": "Slurm allocation 17024 landed on im-b200-c001. The HBM-only configuration resolved zero DRAM and zero NVMe capacity with no connector. Startup storage proof observed 17,712,233,512,960 free bytes on xfs /dev/md0 over eight non-rotating NVMe leaves; O_DIRECT was correctly not required for this HBM-only arm.",
-      "live_evidence": "Canonical warmup started at 2026-09-24T08:08:07Z and completed at 14:51:29Z with all 5,310 requests returned, zero cancellations, one transient ClientOSError classification, and 24,202.28 seconds elapsed. Canonical 3,600-second profiling started immediately at 14:51:29Z with 480 resumed trajectory sessions. The vLLM server remained responsive and accepted new profiling requests; no OOM, NCCL/RCCL failure, traceback, connection refusal, or fatal signal was observed."
+      "live_evidence": "Canonical warmup started at 2026-09-24T08:08:07Z and completed at 14:51:29Z with all 5,310 requests returned, zero cancellations, one transient ClientOSError classification, and 24,202.28 seconds elapsed. Canonical 3,600-second profiling started immediately at 14:51:29Z with 480 resumed trajectory sessions. The profiling send window ended at 15:51:29Z after sending 1,785 requests. At the 30-second cutoff it had completed 1,097 accepted responses with zero profiling errors and began cancelling and draining 688 in-flight credits for aggregation. The vLLM server remained responsive; no OOM, NCCL/RCCL failure, traceback, connection refusal, or fatal signal was observed."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414",
-  "status": "The adaptive 4 TiB HBM+NVMe c480 run completed successfully with a mixed tradeoff relative to NVMe c448. Its matched HBM-only c480 control completed canonical warmup and is now in 3,600-second profiling.",
+  "status": "The adaptive 4 TiB HBM+NVMe c480 run completed successfully with a mixed tradeoff relative to NVMe c448. Its matched HBM-only c480 control completed the 3,600-second profiling send window and is draining cutoff credits before aggregation.",
   "last_capacity_check": {
-    "checked_at": "2026-09-24T14:51:29Z",
+    "checked_at": "2026-09-24T15:51:59Z",
     "active_study_run_ids": [
       35972536894
     ],
@@ -4024,7 +4024,7 @@
     "target_node": "im-b200-c001",
     "target_node_state": "allocated to active matched HBM-only c480 run 35972536894 under Slurm allocation 17024",
     "observed_free_bytes": 17712233512960,
-    "reason": "Matched HBM-only c480 completed canonical warmup and is healthy in 3,600-second profiling on im-b200-c001. Dispatch nothing else until its canonical run, aggregation, and exact task-owned scratch cleanup are complete."
+    "reason": "Matched HBM-only c480 completed its canonical profiling send window and is draining cutoff credits on im-b200-c001 before aggregation. Dispatch nothing else until aggregation and exact task-owned scratch cleanup are complete."
   },
   "next_dispatch": {
     "requires": "Monitor matched HBM-only c480 run 35972536894 through benchmark job generation, allocation, canonical warmup, 3,600-second profiling, artifacts, aggregation, and exact task-owned scratch cleanup. Then compare it directly with NVMe c480 run 35934408414."
