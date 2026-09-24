@@ -3875,13 +3875,13 @@
       "allocation_id": 16993,
       "scratch": "/offload-scratch/inferencex-offload-35934408414-1-16993-659802d8b091",
       "admission_evidence": "Slurm allocation 16993 landed on allowlisted im-b200-c001. Runtime preflight observed 17,712,031,088,640 free bytes on xfs /dev/md0 over eight non-rotating NVMe leaves, exceeded the 4 TiB budget plus 128 GiB reserve, and verified O_DIRECT before creating the exact task-owned scratch.",
-      "live_evidence": "Canonical warmup started at 2026-09-23T23:46:31Z. At 23:53:01Z it had returned 86 of 5,310 requests with 424 in flight and zero errors after 390.1 seconds. Four lazy disk-backed cache files reported 4,398,044,086,272 logical bytes and 835,491,045,376 allocated bytes in the latest retained telemetry sample. No OOM, NCCL/RCCL failure, traceback, connection refusal, storage-guard failure, or O_DIRECT failure was observed."
+      "live_evidence": "Canonical warmup started at 2026-09-23T23:46:31Z and completed at 2026-09-24T06:28:20Z with all 5,310 requests completed, zero cancelled, and zero errors after 24,108.24 seconds. Canonical 3,600-second profiling started immediately at 06:28:20Z. At 07:21:21Z, profiling had completed 997 successful responses with zero errors; server metrics reported 3.5% HBM prefix-cache hits, 8.7% external-cache hits, 99.1% KV usage, and 35,182 input plus 357 output tokens/s. Four lazy disk-backed cache files reported 4,398,044,086,272 logical bytes and 4,398,040,649,728 allocated bytes after materialization. No OOM, NCCL/RCCL failure, traceback, connection refusal, storage-guard failure, or O_DIRECT failure was observed."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35469801850,35497846918,35524019140,35524083518,35542182560,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021",
-  "status": "Matched c448 is complete with a 7.122% NVMe total-throughput-per-GPU win. The adaptive 4 TiB HBM+NVMe c480 midpoint is active on allowlisted im-b200-c001 with capacity and O_DIRECT admission verified; canonical warmup is making forward progress without errors.",
+  "status": "Matched c448 is complete with a 7.122% NVMe total-throughput-per-GPU win. The adaptive 4 TiB HBM+NVMe c480 midpoint completed canonical warmup without errors and is in its 3,600-second profiling phase on allowlisted im-b200-c001.",
   "last_capacity_check": {
-    "checked_at": "2026-09-23T23:53:01Z",
+    "checked_at": "2026-09-24T07:21:21Z",
     "active_study_run_ids": [
       35934408414
     ],
