@@ -40,8 +40,7 @@ frontend、一个聚合 worker，并设置 `enable_multiple_frontends: false`。
 镜像不包含 AToMesh，因此通过 `frontend.container_image` 单独固定路由器的官方镜像。
 `model.container` 必须与主配置中的 worker `image` 一致；更换路由器镜像无需更换 worker
 镜像。TRT-LLM 配方使用原生 `engine.served_model_name`，不再通过 `roles.agg.extra_args`
-重复传入该参数。不再依赖此前分叉中的 ATOM 直连 frontend。历史直连 smoke 不能作为新路由
-路径的验收证据；需在新固定版本上验证启动、请求、功耗、清理和性能。
+重复传入该参数。不再依赖此前分叉中的 ATOM 直连 frontend。
 
 ## 规程索引
 

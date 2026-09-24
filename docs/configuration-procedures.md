@@ -42,9 +42,7 @@ the native `atomesh` frontend with one aggregate worker and
 Keep `model.container` aligned with the master config's worker `image`; changing the
 router image does not require changing the worker image. TRT-LLM recipes use native
 `engine.served_model_name`, without duplicating that flag in `roles.agg.extra_args`.
-The former fork's direct ATOM frontend is not required. Historical direct-serving
-smokes do not qualify the new router path; verify startup, requests, power, cleanup,
-and performance on the new pin.
+The former fork's direct ATOM frontend is not required.
 
 ### Cluster profiles
 

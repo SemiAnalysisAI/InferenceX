@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 import traceback
 from collections import defaultdict
-from collections.abc import Collection, Iterator
+from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -90,12 +90,7 @@ def filter_eval_rows_by_prefill_ep(eval_rows: list[dict], min_prefill_ep: int | 
     return kept
 
 
-def get_config_keys_from_master(
-    config_keys: list[str],
-    master_config: dict,
-    *,
-    deprecated_config_keys: Collection[str] = (),
-) -> list[str]:
+def get_config_keys_from_master(config_keys: list[str], master_config: dict) -> list[str]:
     resolved_keys = {}
     for key in config_keys:
         if "*" in key:
@@ -108,8 +103,6 @@ def get_config_keys_from_master(
             for matched_key in matched_keys:
                 resolved_keys.setdefault(matched_key, None)
         elif key not in master_config:
-            if key in deprecated_config_keys:
-                continue
             raise ValueError(f"Config key '{key}' not found in master configs.")
         else:
             resolved_keys.setdefault(key, None)
@@ -494,27 +487,9 @@ def build_plan(
                     error,
                 ) from error
 
-        # A later commit can retire a config named by an earlier changelog entry.
-        # Preserve that history without scheduling archives or accepting typos.
-        # Append-only entries still require every selected config to remain active.
-        deprecated_keys: set[str] = set()
-        if not has_append_only and any(
-            "*" not in key and key not in master_config
-            for entry in parsed_entries
-            for key in entry.config_keys
-        ):
-            archives = [Path(path).parent / "deprecated" / Path(path).name for path in config_files]
-            deprecated_keys = set(
-                load_config_files(
-                    [str(path) for path in archives if path.is_file()], validate=False
-                )
-            )
-
         resolved_entries = []
         for entry in parsed_entries:
-            all_configs = get_config_keys_from_master(
-                entry.config_keys, master_config, deprecated_config_keys=deprecated_keys
-            )
+            all_configs = get_config_keys_from_master(entry.config_keys, master_config)
             resolved_entries.append((entry, all_configs))
 
         base_inputs = None

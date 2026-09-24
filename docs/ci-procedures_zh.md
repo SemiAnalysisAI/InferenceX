@@ -172,8 +172,6 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
 
 当 PR 将启用对应修饰标签时，加入 `--all-evals` 和/或 `--evals-only`；[`run-sweep.yml`](../.github/workflows/run-sweep.yml) 会传递相同参数。绝不使用 Formatter 重写 `perf-changelog.yaml`，也绝不能把单独通过 `yaml.safe_load` 当作充分的 Changelog 验证。
 
-Changelog 条目可能引用同一 PR 后续提交中退役的配置。若精确键名已从活跃主配置移除，但仍存在于对应厂商的 `configs/deprecated/` 归档中，该条目会保留在 Changelog 元数据中，但不生成作业。活跃定义优先于归档版本；通配符仅匹配活跃配置，未知键名仍报错，`append-only` 条目不得退役配置。
-
 ## 手动端到端派发
 
 仅在完全相同的生成器命令已于本地成功后，才使用 [`e2e-tests.yml`](../.github/workflows/e2e-tests.yml) 执行受限的一次性 Run。测试名称必须唯一。在通用模式中，`--ref main` 选择已部署的 Workflow 定义，输入 `ref` 则选择要测量的 Branch 或 SHA。Setup 只解析一次该 ref，并将 checkout SHA 传给全部八条基准测试和评测路径，覆盖单节点、多节点、固定序列和 AgentX Job。即使分支在排队期间前进，后续 Job 仍使用该 SHA。未提供输入 `ref` 时，仍使用 `github.sha`。
