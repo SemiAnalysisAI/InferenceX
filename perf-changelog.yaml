@@ -8792,12 +8792,3 @@
     - "Run a new canonical full sweep with 16 performance and 16 full-evaluation cells. Earlier EP4/EP8 and DP8 measurements remain historical evidence and do not qualify the EP1 grid."
     - "Extend only H200 SGLang AgentX performance cells at C64/C128 to 24-hour Slurm allocations and 24.5-hour GitHub jobs after the original eight-hour allocation expired during progressing warmup. Preserve normal warmup, the full 3600-second profile, image, model, precision and topology."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341
-
-- config-keys:
-    - kimik3-fp4-b300-dynamo-vllm-agentic-mooncake-dcp8-agg
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Add the single-node Kimi-K3 B300 TP8/DCP8 Mooncake EFA AgentX c70 recipe on vLLM nightly 0961bbae with the CUDA graph pool fix."
-    - "新增单节点 Kimi-K3 B300 TP8/DCP8 Mooncake EFA AgentX c70 配置，使用 vLLM nightly 0961bbae，并包含 CUDA Graph 内存池修复。"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3405
