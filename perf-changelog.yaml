@@ -8861,3 +8861,13 @@
   - Add GB200 vLLM DSpark AgentX recipes on 20ebb28, including C32 and C64.
   - 新增使用 20ebb28 的 GB200 vLLM DSpark AgentX 配置，包含 C32 和 C64。
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3416
+
+- config-keys:
+  - dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+  - dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+  - agentic-coding
+  description:
+  - Include throughput runs for the GB200 DSpark AgentX recipes.
+  - 为 GB200 DSpark AgentX 配置添加吞吐量测试。
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3416
