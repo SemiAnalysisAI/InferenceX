@@ -8815,3 +8815,14 @@
   - Retain min(64*concurrency, 1024) SWA prefix tails within the measured GB200 KV budget; select prefill/decode interval 16 only at TP4 C16 after canonical performance and full GSM8K qualification.
   - "Match the published vLLM grid exactly: TP2/EP1 and TP4/EP1, each C1/2/4/8/16/32/64/128. Use stock DSpark precision; TP2 uses static memory 0.92, chunk 2048, graph/running cap 16, interval 16, expandable allocator and min(128*CONC,1024) SWA tails. Requalify all 16 performance and full GSM8K points. Avoid deadline-only failures with the supported 12-hour partition maximum for C64/C128 performance while preserving complete warmup and 3600-second scoring."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3347
+
+- config-keys:
+    - kimik3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the MI355X Kimi-K3 FP4 ATOM AgentX submission to image rocm/atom-dev:ubuntu24.04_py3.12_pytorch_release_2.10.0_kimi_k3_agentic_0924, tracking recipes/Agentic-Kimi-K3.md as retuned in ROCm/ATOM#2382."
+    - "Enable FlyDSL FP8 prefill attention (ATOM_USE_FLYDSL_FP8_PREFILL_ATTN=1) on every concurrency; ATOM defaults it off."
+    - "Hold a ready prefill for four decode passes from concurrency 16 up (ATOM_PREFILL_DECODE_INTERVAL=4, ATOM_PREFILL_DELAYER_MAX_QUEUE_MS=5000). Concurrency 1, 4 and 14 are unchanged."
+    - "Keep the published concurrency set [1, 4, 14, 16, 48, 56, 72], max-num-seqs, max-num-batched-tokens, gpu-memory-utilization, the CUDA-graph ladder, dcp-size, draft depth, synthetic acceptance, ReplaySSM placement and LMCache sizing unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
