@@ -106,6 +106,51 @@ def load_platforms(path: Path) -> dict:
     return platforms
 
 
+REPO = ROOT.parents[1]
+# launch-script exports that are serving/benchmark plumbing, not kernel selection
+_RECIPE_ENV_SKIP = re.compile(r"^(AIPERF_|HF_|MODEL|PORT|RESULT|SERVER|LMCACHE|PYTHONHASHSEED|VLLM_ENGINE_READY)")
+
+
+def family(name: str) -> str:
+    """Hardware family of a pool or recipe runner: 'cluster:mi355x-amds' / 'mi355x' -> 'mi355x'."""
+    return name.removeprefix("cluster:").split("-")[0]
+
+
+def recipe_env(script: Path) -> dict[str, str]:
+    """The launch script's unconditional top-level `export NAME=value` lines (no expansion)."""
+    env = {}
+    for line in script.read_text().splitlines():
+        m = re.fullmatch(r"export ([A-Z_][A-Z0-9_]*)=(['\"]?)([^$`'\"\s]*)\2", line)
+        if m and not _RECIPE_ENV_SKIP.match(m.group(1)):
+            env[m.group(1)] = m.group(3)
+    return env
+
+
+def load_recipes(keys: set[str]) -> dict[str, dict]:
+    """InferenceX recipes (configs/*-master.yaml) by key: image, framework, hardware family,
+    and the env its single-node launch script exports."""
+    import yaml
+
+    out = {}
+    for vendor in ("amd", "nvidia"):
+        configs = yaml.safe_load((REPO / f"configs/{vendor}-master.yaml").read_text())
+        for key in keys & configs.keys():
+            r = configs[key]
+            hw = family(r["runner"])
+            spec = any(s.get("spec-decoding") == "mtp" for sc in (r.get("scenarios") or {}).values()
+                       for s in (sc[0].get("search-space", []) if isinstance(sc, list) and sc else []))
+            name = f"{r['model-prefix']}_{r['precision']}_{hw}{'_mtp' if spec else ''}.sh"
+            scripts = [REPO / "benchmarks/single_node" / sub / name for sub in ("agentic", "")]
+            script = next((x for x in scripts if x.is_file()), None)
+            out[key] = {"image": r["image"], "framework": r["framework"], "hardware": hw,
+                        "script": str(script.relative_to(REPO)) if script else None,
+                        "env": recipe_env(script) if script else {}}
+    missing = keys - out.keys()
+    if missing:
+        raise ValueError(f"unknown InferenceX recipes: {sorted(missing)}")
+    return out
+
+
 def write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -122,6 +167,7 @@ def plan(
     chunk_size: int,
     platforms: dict[str, dict],
     mode: str = "timing",
+    recipes: dict[str, dict] | None = None,
 ) -> dict:
     if pool not in POOLS:
         raise ValueError(f"unsupported pool: {pool}")
@@ -177,13 +223,25 @@ def plan(
                 if shape["type"] == "moe_forward"
                 else ()
             )
-            groups[(ws, moe)].append({"testlist": name, "shape": shape})
+            # an entry naming an InferenceX recipe for this hardware runs with that recipe's
+            # image and launch env, in its own shard
+            recipe = next((k for k in shape.get("recipes", ()) if recipes and k in recipes
+                           and recipes[k]["hardware"] == family(pool)
+                           and recipes[k]["framework"] in backends), None)
+            groups[(ws, moe, recipe or "")].append({"testlist": name, "shape": shape})
     image_groups = defaultdict(list)
     for backend in sorted(set(backends)):
         image_groups[images[backend]["image"]].append(backend)
     cells = []
-    for image, selected in sorted(image_groups.items()):
-        for (ws, moe), cases in sorted(groups.items()):
+    shards = []
+    for (ws, moe, recipe), cases in sorted(groups.items()):
+        if recipe:
+            r = recipes[recipe]
+            shards.append((r["image"], [r["framework"]], ws, moe, cases,
+                           {"recipe": recipe, "recipe_script": r["script"], "env": r["env"]}))
+        else:
+            shards += [(image, selected, ws, moe, cases, {}) for image, selected in sorted(image_groups.items())]
+    for image, selected, ws, moe, cases, extra in shards:
             for offset in range(0, len(cases), chunk_size):
                 cell = {
                     "pool": pool,
@@ -198,6 +256,7 @@ def plan(
                     "backends": selected,
                     "offset": offset,
                     "cases": cases[offset : offset + chunk_size],
+                    **extra,
                 }
                 identity = hashlib.sha256(
                     json.dumps(cell, sort_keys=True).encode()
@@ -544,6 +603,7 @@ def execute(args) -> None:
             OPERATORX_SHARD_ID=cell["id"],
             OPERATORX_BACKENDS=",".join(cell["backends"]),
             OPERATORX_MODE=cell.get("mode", "timing"),
+            OPERATORX_RECIPE=cell.get("recipe", ""),
             OPERATORX_TESTLISTS=",".join(
                 sorted({c["testlist"] for c in cell["cases"]})
             ),
@@ -553,6 +613,7 @@ def execute(args) -> None:
             MASTER_ADDR="127.0.0.1",
             MASTER_PORT="29500",
         )
+        env.update(cell.get("env", {}))  # the InferenceX recipe's launch env
         if cell["moe"]:
             env["OPERATORX_MOE_PARALLELISM"] = ":".join(map(str, cell["moe"]))
         mounts = f"{stage}:/opx"
@@ -793,6 +854,8 @@ def main() -> None:
             args.chunk_size,
             load_platforms(args.platform_config),
             args.mode,
+            recipes=load_recipes({k for shapes in lists.values() for s in shapes for k in s.get("recipes", ())})
+            if any(s.get("recipes") for shapes in lists.values() for s in shapes) else None,
         )
         digests = {c["image"]: "" for c in result["include"]}
         for image in digests:
