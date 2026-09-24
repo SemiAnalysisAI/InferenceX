@@ -69,19 +69,39 @@ _flush_buf = None
 _counter = 0
 
 
+def _harness_events(events: list[dict]) -> tuple[set[int], set[int]]:
+    """(flush, spin) event ids among the sorted GPU events. The op itself may launch fill
+    kernels, so the flush is identified by position: the last fill before each spin (the
+    loop issues flush, spin, replay). Without a spin, every fill counts as a flush."""
+    flush, spin, last_fill = set(), set(), None
+    for i, e in enumerate(events):
+        name = e.get("name", "")
+        if _SHIELD_KERNEL_MARKER in name:
+            spin.add(i)
+            if last_fill is not None:
+                flush.add(last_fill)
+            last_fill = None
+        elif _FLUSH_MB > 0 and _FLUSH_KERNEL_MARKER in name:
+            last_fill = i
+            if _SHIELD_CYCLES <= 0:
+                flush.add(i)
+    return flush, spin
+
+
 def _replay_stats(events: list[dict]) -> dict | None:
-    """Timing structure of the replays; the per-replay flush kernel separates them."""
+    """Timing structure of the replays; each starts after the spin (or flush) before it."""
     if _FLUSH_MB <= 0:
         return None
+    events = sorted(events, key=lambda e: float(e.get("ts", 0.0)))
+    flush, spin = _harness_events(events)
+    bounds = spin if spin else flush
     replays, cur = [], []
-    for e in sorted(events, key=lambda e: float(e.get("ts", 0.0))):
-        if _FLUSH_KERNEL_MARKER in e.get("name", ""):
+    for i, e in enumerate(events):
+        if i in bounds:
             if cur:
                 replays.append(cur)
             cur = []
-        elif _SHIELD_KERNEL_MARKER in e.get("name", ""):
-            continue
-        else:
+        elif i not in flush and i not in spin:
             cur.append(e)
     if cur:
         replays.append(cur)
@@ -169,15 +189,14 @@ def profile_op(kernel_fn) -> dict | None:
         return {"error": f"trace: {type(e).__name__}: {e}"[:200]}
 
     kernels: dict[str, dict] = {}
-    flush_excluded = 0
-    gpu_events = [e for e in events
-                  if e.get("ph") == "X" and e.get("cat") in ("kernel", "gpu_memcpy", "gpu_memset")]
-    for e in gpu_events:
+    gpu_events = sorted((e for e in events
+                         if e.get("ph") == "X" and e.get("cat") in ("kernel", "gpu_memcpy", "gpu_memset")),
+                        key=lambda e: float(e.get("ts", 0.0)))
+    flush, spin = _harness_events(gpu_events)
+    flush_excluded = len(flush)
+    for i, e in enumerate(gpu_events):
         name = e.get("name", "")[:200]
-        if _SHIELD_KERNEL_MARKER in name:
-            continue
-        if _FLUSH_MB > 0 and _FLUSH_KERNEL_MARKER in name:
-            flush_excluded += 1
+        if i in flush or i in spin:
             continue
         a = e.get("args") or {}
         k = kernels.setdefault(name, {"name": name, "cat": e["cat"], "count": 0, "total_us": 0.0})
