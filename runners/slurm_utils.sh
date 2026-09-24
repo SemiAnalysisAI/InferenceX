@@ -73,6 +73,12 @@ PYENV
         SRTCTL_EVAL_ARGS+=(--set benchmark.stream_output=true)
         # A local clone keeps job writes isolated and preserves upstream Git provenance.
         git clone --no-hardlinks "$source" "$destination" || return 1
+        # Temporary fixes awaiting upstream merge; see runners/srt-slurm/patches/README.md.
+        local patch
+        for patch in "$GITHUB_WORKSPACE"/runners/srt-slurm/patches/*.patch; do
+            [[ -e "$patch" ]] || continue
+            git -C "$destination" apply "$patch" || return 1
+        done
     fi
     cd "$destination" || return 1
     [[ "$(git rev-parse HEAD)" == "$SRT_SLURM_COMMIT" ]] || return 1
