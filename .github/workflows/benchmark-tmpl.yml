@@ -110,6 +110,7 @@ env:
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   EXP_NAME: ${{ fromJSON(inputs.config).exp-name }}
   RECIPE_FINGERPRINT: ${{ fromJSON(inputs.config).recipe-fingerprint || '' }}
+  SRT_RECIPE: ${{ fromJSON(inputs.config).srt-recipe || '' }}
   MODEL: ${{ fromJSON(inputs.config).model }}
   THINKING_MODE: thinking_on
   MODEL_PREFIX: ${{ fromJSON(inputs.config).model-prefix }}
@@ -401,6 +402,9 @@ jobs:
             server.log
             results/*.log
             results/*_config.json
+            srt-single-node-logs.tar.gz
+            srt-single-node-submission.json
+            srt-slurm-sha.txt
           if-no-files-found: ignore
 
       - name: Upload GPU metrics
