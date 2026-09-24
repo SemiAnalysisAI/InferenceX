@@ -34,6 +34,7 @@
 
 禁止（提交方对 draft 精度的 hack）：
 
+- 今后明确禁止启用 `SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE`（`=1` 或锁定实现认可的其他启用值），包括从环境、launcher、容器或镜像默认值继承的启用设置。上述基线允许项不能豁免此 flag。审阅者必须核实它在实际配方中已禁用；只有锁定实现确认未启用时，未设置或 `=0` 才可接受。历史运行不能作为当前待审提交的先例或例外，此要求也适用于仅更新镜像或重新启用配方的提交。本规则不追溯否定生效前的运行。
 - 通过 flag、环境变量、配置文件或转换步骤，将 draft 权重、激活或计算量化到发布精度以下，无论在线还是离线。包括对 BF16 MTP head 使用 `--speculative-draft-model-quantization quark_mxfp4`、`SGLANG_GLM_NEXTN_MOE_PTPC=1`，以及 `exclude_layer` 模式未覆盖整个 draft head 的 ATOM `--online_quant_config`。
 - 针对 draft 的 dtype 或 KV cache dtype 覆盖设置，使其精度低于框架对该 checkpoint 的默认值。
 - 替换为经过精度转换或不同量化方式的 draft checkpoint，或使用与所服务 target 不同发布版本的 draft head。
