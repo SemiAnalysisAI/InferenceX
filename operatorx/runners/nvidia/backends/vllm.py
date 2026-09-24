@@ -1,7 +1,7 @@
 """Dense GEMM and MoE layers through vLLM's own layers and kernel selection."""
-from operatorx.runners.common import vllm_linear, vllm_moe
-from operatorx.runners.common.vllm_linear import versions
+from operatorx.runners.common.vllm import linear, moe
+from operatorx.runners.common.vllm.linear import versions
 
-IMPLS = [*vllm_linear.IMPLS, *vllm_moe.IMPLS]
+IMPLS = [*linear.IMPLS, *moe.IMPLS]
 
 __all__ = ["IMPLS", "versions"]
