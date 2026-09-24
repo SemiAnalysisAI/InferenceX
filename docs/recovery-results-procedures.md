@@ -24,6 +24,12 @@ Sources: [sweep debugging guardrails](../.agents/skills/debug-runs/SKILL.md#L78-
 
 ### Throughput results
 
+Reusable benchmark workflows prepare Python 3.12 before GPU launch and export its
+absolute path as `INFERENCEX_RESULTS_PYTHON`. Fixed-sequence processing and AgentX
+power processing, including the H200 DCGM path, validate and use this interpreter.
+A missing or empty setting fails processing; AgentX launchers still stage available
+audit and server artifacts before returning the failure.
+
 For a normal single-node throughput job:
 
 1. The launcher must leave `${RESULT_FILENAME}.json` in the workspace. The workflow waits briefly and fails if it never appears.
@@ -38,7 +44,7 @@ RESULT_FILENAME=${result_file%.json} \
 IS_MULTINODE=true \
 PREFILL_GPUS="$prefill_gpus" \
 DECODE_GPUS="$decode_gpus" \
-python3 -m infx.results.fixed_sequence
+"$INFERENCEX_RESULTS_PYTHON" -m infx.results.fixed_sequence
 ```
 
 The uploaded `bmk_${RESULT_FILENAME}` artifact contains `agg_${RESULT_FILENAME}_*.json`. Missing source files indicate a benchmark/launcher failure. Missing `agg_` files indicate a processing failure. Missing `results_bmk` indicates a collection failure. Do not classify any of those as a database failure.

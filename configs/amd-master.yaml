@@ -1546,7 +1546,7 @@ glm5.3-fp8-mi355x-tilert-agentic:
   runner: cluster:mi355x-amds
   precision: fp8
   framework: tilert
-  router: { name: tilert-pd-router, version: "0.1.6.post1" }
+  router: { name: tilert-pd-router, version: "0.1.6.post2" }
   multinode: true
   disagg: true
   kv-p2p-transfer: mooncake
@@ -1571,3 +1571,19 @@ glm5.3-fp8-mi355x-tilert-agentic:
           additional-settings:
           - "DECODE_NODES=1"
           - "TILERT_EXTRA_ENV=GLM5_AR_N=2"
+
+# User-selected official DeepSeek V4.1 MI35X model preview, pinned by digest.
+# Official MI350X TP4/EP4 candidate; compare against the separate TP4/EP1 vLLM baseline.
+dsv41flash-fp4-mi355x-sglang-agentic-dspark:
+  image: lmsysorg/sglang:dev-dsv41-mi35x@sha256:c609f74f01b206af9664fb66da8ebef47642a7328a2478eabeebb352e014661a
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      - { tp: 4, ep: 4, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32] }

@@ -1,18 +1,14 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-# DeepSeek-V4.1-Flash AgentX on GB200 with shipped-default DSpark serving.
-# Match vLLM's TP2/EP1 and TP4/EP1 layouts with GPU-resident KV cache.
+# DeepSeek-V4.1-Flash AgentX on GB300 with native STP or DSpark serving.
+# Both use TP2/TP4 and GPU-resident KV cache.
 # https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
 source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP EP_SIZE CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 check_env_vars EVAL_ONLY SPEC_DECODING
 require_agentic_kv_offload_none
 export GPU_COUNT="$TP"
-if (( TP == 2 )); then
-    # Bound fragmentation during stock MXFP4 loading and long-context prefills.
-    export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -22,7 +18,9 @@ fi
 if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL" ]]; then
     hf download "$MODEL" --local-dir "$MODEL_PATH"
 else
-    MODEL_PATH=$(hf download "$MODEL")
+    hf download "$MODEL"
+    # Engram's model-local cache advice needs actual checkpoint file paths.
+    MODEL_PATH=$(python3 -c 'from huggingface_hub import snapshot_download; import sys; print(snapshot_download(repo_id=sys.argv[1], local_files_only=True))' "$MODEL")
     export MODEL_PATH
 fi
 
@@ -33,8 +31,6 @@ mkdir -p "$RESULT_DIR"
 SERVER_LOG="$RESULT_DIR/server.log"
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
-
-# Use the default DSpark precision shipped by the pinned SGLang nightly.
 
 # Agentic warmup dispatches hundreds of large prompts at once and SGLang's
 # tokenizer can leave bytes unacknowledged past AIPerf's default 30 s
@@ -49,14 +45,21 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV41_REASONING_EFFORT=high
 
-# Keep the Engram weights in row-sharded host DRAM. GB200's 64 KiB-page
-# kernel enables anonymous THP with madvise but disables shmem THP, so the
-# shared memfd layout cannot obtain huge-page backing. The upstream per-rank
-# layout uses anonymous mappings, MADV_HUGEPAGE and MADV_COLLAPSE for 512 MiB
-# pages; row ownership and the original FP8 table weights are preserved.
-# This trades two TP all-reduces for fewer host-table translation misses.
-export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
-export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
+# TP4 has room for the original Engram tables in HBM: the STP baseline used
+# 73.3 GiB for weights before the ~47.2 GiB tables. Host shards still had 0%
+# huge-page backing on some ranks after model-local cache advice, so avoid
+# that lookup bottleneck on TP4. TP2 retains the anonymous host-table layout.
+if (( TP >= 4 )); then
+    export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0
+    unset SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT
+else
+    export SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=1
+    export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
+fi
+
+# The bundled Markov embedding/head weights are natively BF16. Preserve the
+# nightly default that keeps W2 BF16 instead of converting it to FP32.
+export SGLANG_DSPARK_OPT_MARKOV_W2_BF16=True
 
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts, but
@@ -66,20 +69,6 @@ export SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT=per_rank
 # (6.4 GiB allocation with 2 GiB free, run 35306704553). Batches within the
 # graph tier reuse the capture-time workspace instead.
 CUDA_GRAPH_MAX_BS=64
-MEM_FRACTION_STATIC=0.70
-CHUNKED_PREFILL_SIZE=4096
-case "$TP" in
-    2)
-        # EP1 keeps all 384 experts tensor-sharded per rank. The nearby B200
-        # EP1 run passed full GSM8K with these supported memory limits; GB200
-        # still requires its own pool, graph and full-curve validation.
-        MEM_FRACTION_STATIC=0.92
-        CHUNKED_PREFILL_SIZE=2048
-        CUDA_GRAPH_MAX_BS=16
-        ;;
-    4) ;;
-    *) echo "Unsupported TP=$TP; expected 2 or 4" >&2; exit 1 ;;
-esac
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 if (( MAX_RUNNING_REQUESTS > CUDA_GRAPH_MAX_BS )); then
     MAX_RUNNING_REQUESTS=$CUDA_GRAPH_MAX_BS
@@ -102,6 +91,19 @@ echo "Using SGLang endpoint ${AIPERF_SERVER_URL}"
 # draft. STP and accuracy evals must never inherit synthetic acceptance.
 unset SGLANG_SIMULATE_ACC_LEN SGLANG_SIMULATE_ACC_METHOD SGLANG_SIMULATE_ACC_TOKEN_MODE
 SPECULATIVE_ARGS=()
+# Bound long-prefill decode stalls for DSpark as well as the STP comparison.
+SCHEDULING_ARGS=(--prefill-decode-interval 16)
+# Compressed full-KV capacity alone cannot preserve a prefix whose SWA tail
+# has been evicted. Reserve more cached tails within the static pool for the
+# DSpark comparisons above C1; checkpoint math stays unchanged.
+CACHE_ARGS=()
+if [[ "$SPEC_DECODING" == mtp ]] && (( CONC >= 2 )); then
+    SWA_PREFIX_TAILS=$((64 * CONC))
+    if (( SWA_PREFIX_TAILS > 4096 )); then
+        SWA_PREFIX_TAILS=4096
+    fi
+    CACHE_ARGS=(--swa-prefix-tails "$SWA_PREFIX_TAILS")
+fi
 case "$SPEC_DECODING" in
     mtp)
         DSPARK_BLOCK_SIZE=5
@@ -115,6 +117,7 @@ case "$SPEC_DECODING" in
         echo "DSpark block size: $DSPARK_BLOCK_SIZE, golden AL=$DSV41_GOLDEN_AL"
         ;;
     none)
+        # Interleave decode with long chunked prefills to bound decode stalls.
         echo "Native non-speculative serving; synthetic acceptance disabled"
         ;;
     *)
@@ -123,23 +126,12 @@ case "$SPEC_DECODING" in
         ;;
 esac
 
-# Cached prefixes need their final SWA window as well as full-attention KV.
-# C16 measured 27.0M full tokens with 1,024 retained tails. Cap the reserve:
-# uncapped 64*CONC at C128 would exceed this node's measured KV budget.
-SWA_PREFIX_TAILS=$((64 * CONC))
-if (( TP == 2 )); then
-    SWA_PREFIX_TAILS=$((128 * CONC))
-fi
-if (( SWA_PREFIX_TAILS > 1024 )); then
-    SWA_PREFIX_TAILS=1024
-fi
-
-# Earlier TP4/EP4 C16 canonical comparison: +13.65% p90 interactivity, -0.30% throughput,
-# with p90 TTFT increasing from 2.35 s to 3.51 s. Other TP4 points keep defaults.
-# TP2 retains the supported interval used by its B200 EP1 memory qualification.
-SCHEDULING_ARGS=()
-if (( TP == 2 || CONC == 16 )); then
-    SCHEDULING_ARGS=(--prefill-decode-interval 16)
+# Test larger prefill batches at high TP2 concurrency while preserving
+# the validated static cache budget and native 1M context.
+MEM_FRACTION_STATIC=0.80
+CHUNKED_PREFILL_SIZE=4096
+if (( TP == 2 && CONC >= 64 )); then
+    CHUNKED_PREFILL_SIZE=8192
 fi
 
 SGLANG_CMD=(
@@ -150,15 +142,12 @@ SGLANG_CMD=(
     --tp "$TP" --ep-size "$EP_SIZE"
     # Backends resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl
     # on Blackwell); the cookbook warns that overriding them costs decode speed.
-    # 0.70 rather than the cookbook's 0.8, and a bounded prefill chunk: the
-    # sparse-attention indexer and DSpark prefill buffers scale with the chunk
-    # times the 1M context, and the default 16384 chunk exhausted HBM on the
-    # first 66k-99k-token AgentX prompts.
+    # Bound prefill workspace while retaining the native 1M context.
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
-    --swa-prefix-tails "$SWA_PREFIX_TAILS"
-    "${SCHEDULING_ARGS[@]}"
     "${SPECULATIVE_ARGS[@]}"
+    "${SCHEDULING_ARGS[@]}"
+    "${CACHE_ARGS[@]}"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     --reasoning-parser auto
