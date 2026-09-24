@@ -36,7 +36,9 @@ def prepare(op: Op) -> dict:
     fp8 = qa["dtype"] == "e4m3"
     # _scaled_mm here takes one static fp32 scale per operand; unscaled GEMMs take none
     per_tensor = {"dtype": "fp32", "static": True, "group": [-1, -1]}
-    want = ({"dtype": "e4m3", "scale": per_tensor},) * 2 if fp8 else ({"dtype": qa["dtype"]},) * 2
+    # the FP8 path multiplies pre-quantized operands: activation quantization is not in the op
+    want = (({"dtype": "e4m3", "scale": per_tensor, "input": "e4m3"}, {"dtype": "e4m3", "scale": per_tensor})
+            if fp8 else ({"dtype": qa["dtype"]},) * 2)
     if (qa, qb) != want:
         raise UnsupportedOpError(f"ROCm torch GEMM supports unscaled or static per-tensor fp8; got a={qa} b={qb}")
     dtype = resolve_dtype(qa["dtype"])

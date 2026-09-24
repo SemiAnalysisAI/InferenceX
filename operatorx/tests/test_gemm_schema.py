@@ -31,3 +31,11 @@ def test_nvfp4_and_asymmetric_descriptors():
 def test_bad_descriptors_rejected(bad):
     with pytest.raises(ValueError):
         GemmArgs(m=1, n=1, k=1, a=bad, b=FP8_B)
+
+
+def test_pre_quantized_input():
+    a = quant("e4m3", scale("fp32", True, (-1, -1)), input="e4m3")
+    assert a["input"] == "e4m3" and "input" not in FP8_A
+    GemmArgs(m=1, n=128, k=128, a=a, b=FP8_B)
+    with pytest.raises(ValueError):
+        GemmArgs(m=1, n=128, k=128, a={**a, "input": "fp8"}, b=FP8_B)

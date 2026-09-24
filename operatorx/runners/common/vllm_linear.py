@@ -188,8 +188,8 @@ def _prepare_gemm(op: Op) -> dict:
     m, n, k = a["m"], a["n"], a["k"]
     if min(m, n, k) <= 0:
         raise UnsupportedOpError(f"degenerate gemm shape m={m} n={n} k={k}")
-    if a.get("out", "bf16") != "bf16":
-        raise UnsupportedOpError("vLLM linear layers here are built with bf16 activations/outputs")
+    if a.get("out", "bf16") != "bf16" or a["a"].get("input", "bf16") != "bf16":
+        raise UnsupportedOpError("vLLM linear layers take a bf16 activation and return bf16")
     _vllm_context()
     import vllm.envs as envs
     from vllm.model_executor.layers.linear import ReplicatedLinear
