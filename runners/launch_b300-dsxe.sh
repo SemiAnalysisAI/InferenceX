@@ -217,8 +217,7 @@ write_srt_cluster_config b300-dsxe srtslurm.yaml "$USES_DCGM_POWER" \
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
 
-echo "Running make setup..."
-make setup ARCH=x86_64
+run_srt_setup ARCH=x86_64
 
 # Read by srt-slurm's post-benchmark eval.
 export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"

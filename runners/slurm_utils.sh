@@ -94,6 +94,20 @@ PYENV
     cp -R "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/." configs/ || return 1
 }
 
+# Keep installer output in the artifacts, but print diagnostics on failure.
+run_srt_setup() {
+    check_env_vars GITHUB_WORKSPACE
+    local setup_log="$GITHUB_WORKSPACE/srt-setup.log" status
+    echo "Setting up srt-slurm (details: srt-setup.log)"
+    if make setup "$@" >> "$setup_log" 2>&1; then
+        echo "srt-slurm setup complete"
+    else
+        status=$?
+        cat "$setup_log" >&2
+        return "$status"
+    fi
+}
+
 # Use the requested image's cache identity, never a convenient older squash file.
 resolve_h100_srt_container() {
     local image="$1" framework="$2"
@@ -178,7 +192,7 @@ launch_srt_single_node() {
         --var SRT_DEFAULT_TIME_LIMIT "$SALLOC_TIME_LIMIT" \
         --model "hf:$MODEL" "$SRT_MODEL_PATH" --container "$IMAGE" "$SRT_CONTAINER" \
         --mount "$HF_HUB_CACHE_MOUNT" "$HF_HUB_CACHE" --exclusive "$@"
-    make setup ARCH=x86_64
+    run_srt_setup ARCH=x86_64
 
     SRT_JOB_ID=""
     SRT_JOB_OUTPUT=""

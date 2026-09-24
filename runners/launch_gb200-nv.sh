@@ -450,8 +450,7 @@ write_srt_cluster_config gb200-nv srtslurm.yaml "$USES_DCGM_POWER" \
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
 
-echo "Running make setup..."
-make setup ARCH=aarch64 || exit 1
+run_srt_setup ARCH=aarch64 || exit 1
 
 # Read by srt-slurm's post-benchmark eval. Watchtower runners keep
 # GITHUB_WORKSPACE on Lustre, so compute nodes mount it directly; staging

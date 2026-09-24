@@ -277,7 +277,7 @@ elif [[ "$EXECUTION_PATH" == multinode ]]; then
     SRT_SETUP_SUCCEEDED=0
     for ((SRT_SETUP_ATTEMPT = 1; SRT_SETUP_ATTEMPT <= SRT_SETUP_MAX_ATTEMPTS; SRT_SETUP_ATTEMPT++)); do
         echo "Running make setup (attempt ${SRT_SETUP_ATTEMPT}/${SRT_SETUP_MAX_ATTEMPTS})..."
-        if make setup ARCH=x86_64; then
+        if run_srt_setup ARCH=x86_64; then
             SRT_SETUP_SUCCEEDED=1
             break
         fi
