@@ -41,6 +41,12 @@ gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
   -f testlists=gemm -f world_sizes=1 -f chunk_size=500
 ```
 
+`mode=timing` (default) records latency, telemetry and a profiler replay per op.
+`mode=counters` instead runs each op once under Nsight Compute (NVIDIA; the host's
+`/opt/nvidia/nsight-compute`) or rocprofv3 (AMD; 12 counter passes, so use a smaller
+`chunk_size`), with raw counter files under `results/counters/`. Latencies from a
+counters run are perturbed by the profiler.
+
 For a quick infrastructure smoke check, explicitly select `testlists=gemm_perf`
 and `chunk_size=50` (11 BF16 cases). `gemm_serving_8k1k_min` and
 `gemm_serving_all_min` hold the GEMMs of InferenceX serving configurations. Unsupported operations remain visible in results. Backend
@@ -175,7 +181,11 @@ zero experts, and gemm operand descriptors for `x`, `w13`, `w2`, `a2`), `router`
 (gate dtype, scoring, top-k / grouped / hash selection, bias, renormalize, scale),
 `activation`, optional `shared` experts, and the `routing` data distribution.
 Execution (expert kernels, dispatch, shared-expert fusion or stream overlap, graphs)
-is the backend's choice. No backend implements it yet.
+is the backend's choice. The `vllm` backend (`runners/common/vllm_moe.py`) builds
+vLLM's router (`GateLinear`), routed experts (`FusedMoEFactory`) and shared-expert
+MLP under the quant configs the descriptors imply and times the block; vLLM picks the
+expert kernels, shared-expert fusion and streams. Latent experts, hash routing, zero
+experts and forced expert-load distributions are reported unsupported for now.
 
 `testlists/moe_layer_small.json` holds one full-size routed MoE layer per InferenceX
 MoE checkpoint scheme (DeepSeek-R1, DeepSeek-V4-Pro/V4.1-Flash, Qwen3.5, Qwen3.8-Flash-Next,
