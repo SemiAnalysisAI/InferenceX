@@ -32,6 +32,51 @@ POOLS = {
     "mi355x": "mi355x_8x",
 }
 AMD_POOLS = {"mi300x", "mi325x", "mi355x"}
+MODES = ("timing", "counters")
+# Hardware counters per kernel. Latencies from a counters run are perturbed by the profiler.
+NCU_METRICS = ",".join((
+    "gpu__time_duration.sum", "sm__cycles_elapsed.avg.per_second",
+    "gpc__cycles_elapsed.avg.per_second", "dram__cycles_elapsed.avg.per_second",
+    "sm__throughput.avg.pct_of_peak_sustained_elapsed",
+    "dram__throughput.avg.pct_of_peak_sustained_elapsed",
+    "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed",
+    "sm__warps_active.avg.pct_of_peak_sustained_active",
+    "sm__cycles_active.sum", "sm__cycles_active.avg", "sm__cycles_active.min",
+    "sm__cycles_active.max", "dram__bytes_read.sum", "dram__bytes_read.avg",
+    "dram__bytes_read.min", "dram__bytes_read.max", "dram__bytes_write.sum",
+    "lts__t_sectors.sum", "lts__t_sectors.avg", "lts__t_sectors.min", "lts__t_sectors.max",
+    "lts__t_sector_hit_rate.pct", "lts__t_sectors_lookup_hit.sum",
+    "lts__t_sectors_lookup_miss.sum", "lts__t_sectors_op_read.sum",
+    "lts__t_sectors_op_write.sum", "lts__t_sectors_op_atom.sum", "lts__t_sectors_op_red.sum",
+    "lts__t_sectors_aperture_sysmem_op_read.sum", "lts__t_sectors_aperture_sysmem_op_write.sum",
+    "l1tex__t_sector_hit_rate.pct", "l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum",
+    "l1tex__t_sectors_pipe_lsu_mem_global_op_st.sum",
+    "l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum",
+    "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum",
+    "l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld.sum",
+    "l1tex__data_pipe_lsu_wavefronts_mem_shared_op_st.sum",
+))
+# rocprofv3 fits only a few counters per hardware pass, so a counters run repeats per pass.
+ROCPROF_PASSES = {
+    "fetch": ["FETCH_SIZE"],
+    "hm": ["TCC_HIT_sum", "TCC_MISS_sum"],
+    "rdhist": ["TCC_EA0_RDREQ_128B_sum", "TCC_EA0_RDREQ_32B_sum", "TCC_EA0_RDREQ_64B_sum",
+               "TCC_EA0_RDREQ_sum"],
+    "sqcomp": ["SQ_BUSY_CYCLES", "SQ_INSTS_MFMA", "SQ_INSTS_VALU", "SQ_VALU_MFMA_BUSY_CYCLES",
+               "SQ_WAVES", "SQ_WAVE_CYCLES"],
+    "sqmem": ["SQ_INSTS_LDS_LOAD", "SQ_INSTS_LDS_STORE", "SQ_INSTS_SMEM", "SQ_INSTS_VMEM_RD",
+              "SQ_INSTS_VMEM_WR", "SQ_LDS_BANK_CONFLICT"],
+    "stalls": ["TCC_BUBBLE_sum", "TCC_EA0_RDREQ_DRAM_CREDIT_STALL_sum",
+               "TCC_EA0_WRREQ_DRAM_CREDIT_STALL_sum"],
+    "tccops": ["TCC_ATOMIC_sum", "TCC_READ_sum", "TCC_REQ_sum", "TCC_WRITE_sum"],
+    "tcp": ["TCP_TAGRAM0_REQ_sum", "TCP_TOTAL_CACHE_ACCESSES_sum", "TCP_TOTAL_READ_sum",
+            "TCP_TOTAL_WRITE_sum"],
+    "util": ["LdsUtil", "MemUnitStalled", "SALUBusy", "VALUBusy", "VALUUtilization"],
+    "util2": ["GPU_UTIL", "SQC_DCACHE_HITS", "SQC_ICACHE_HITS", "TD_TD_BUSY_sum"],
+    "wom": ["GRBM_GUI_ACTIVE", "MfmaUtil", "OccupancyPercent", "WRITE_SIZE"],
+    "wrdst": ["TCC_EA0_RDREQ_DRAM_sum", "TCC_EA0_WRREQ_64B_sum", "TCC_EA0_WRREQ_DRAM_sum",
+              "TCC_EA0_WRREQ_sum"],
+}
 
 
 def load_platforms(path: Path) -> dict:
@@ -60,9 +105,12 @@ def plan(
     world_sizes: list[int],
     chunk_size: int,
     platforms: dict[str, dict],
+    mode: str = "timing",
 ) -> dict:
     if pool not in POOLS:
         raise ValueError(f"unsupported pool: {pool}")
+    if mode not in MODES:
+        raise ValueError(f"mode must be one of {', '.join(MODES)}")
     hardware = platforms[pool]
     gpus = hardware["gpus_per_node"]
     image_platform = hardware["image_platform"]
@@ -130,6 +178,7 @@ def plan(
                     "world_size": ws,
                     "moe": moe,
                     "image": image,
+                    "mode": mode,
                     "backends": selected,
                     "offset": offset,
                     "cases": cases[offset : offset + chunk_size],
@@ -478,6 +527,7 @@ def execute(args) -> None:
             OPERATORX_GITHUB_RUN_ATTEMPT=args.attempt,
             OPERATORX_SHARD_ID=cell["id"],
             OPERATORX_BACKENDS=",".join(cell["backends"]),
+            OPERATORX_MODE=cell.get("mode", "timing"),
             OPERATORX_TESTLISTS=",".join(
                 sorted({c["testlist"] for c in cell["cases"]})
             ),
@@ -490,6 +540,10 @@ def execute(args) -> None:
         if cell["moe"]:
             env["OPERATORX_MOE_PARALLELISM"] = ":".join(map(str, cell["moe"]))
         mounts = f"{stage}:/opx"
+        # NVIDIA images carry no Nsight Compute; counters runs use the host's.
+        if cell.get("mode") == "counters" and cell["pool"] not in AMD_POOLS:
+            if Path("/opt/nvidia").is_dir():
+                mounts += ",/opt/nvidia:/host-nvidia"
         if cell["pool"] in ("mi300x", "mi325x"):
             mounts += ",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri"
         run = [
@@ -512,8 +566,9 @@ def execute(args) -> None:
             run.append("--container-remap-root")
         if cell["pool"] == "b300":
             run.append("--mpi=none")
-        # The Python entrypoint preserves the allocated GPU mask without a shell.
-        run += ["python3", "-m", "operatorx.ci", "rank"]
+        # The Python entrypoint preserves the allocated GPU mask without a shell. Run it
+        # by path: an image's own PYTHONPATH (ROCm images set one) replaces the host's.
+        run += ["python3", "/opx/source/experimental/operatorx/ci.py", "rank"]
         command(run, root / "benchmark.log", env=env)
         rc = 0
     finally:
@@ -531,6 +586,9 @@ def rank() -> None:
         if not os.environ.get(key):
             raise ValueError(f"required rank input missing: {key}")
     os.environ["RANK"] = os.environ["SLURM_PROCID"]
+    source = "/opx/source/experimental"
+    paths = [x for x in os.environ.get("PYTHONPATH", "").split(":") if x and x != source]
+    os.environ["PYTHONPATH"] = ":".join([source, *paths])
     os.environ["LOCAL_RANK"] = os.environ["SLURM_LOCALID"]
     cache = (
         Path("/tmp") / f"operatorx-{os.environ['SLURM_JOB_ID']}-{os.environ['RANK']}"
@@ -541,19 +599,50 @@ def rank() -> None:
         TRITON_CACHE_DIR=str(cache / "triton"),
         MPLCONFIGDIR=str(cache / "matplotlib"),
     )
-    os.execv(
+    bench = [
         sys.executable,
-        [
-            sys.executable,
-            "-m",
-            "operatorx",
-            "--strict",
-            "--testlist-dir",
-            "/opx/testlists",
-            "--results-dir",
-            "/opx/results",
-        ],
+        "-m",
+        "operatorx",
+        "--strict",
+        "--testlist-dir",
+        "/opx/testlists",
+        "--results-dir",
+        "/opx/results",
+    ]
+    if os.environ.get("OPERATORX_MODE", "timing") != "counters":
+        os.execv(sys.executable, bench)
+    # One profiled replay per op, marked so counters join to ops; no timing warmups.
+    os.environ.update(
+        OPERATORX_PROFILE="1",
+        OPERATORX_PROFILE_MARKERS="1",
+        OPERATORX_PROFILE_ITERS="1",
+        OPERATORX_WARMUP_MIN_S="0",
+        OPERATORX_FIRST_WARMUP_S="0",
+        OPERATORX_COOLDOWN_RATIO="0",
+        OPERATORX_THROTTLE_RETRIES="0",
     )
+    out = Path("/opx/results/counters")
+    out.mkdir(parents=True, exist_ok=True)
+    rank_id = os.environ["RANK"]
+    rocprof = shutil.which("rocprofv3")
+    if rocprof:
+        for i, (tag, counters) in enumerate(ROCPROF_PASSES.items()):
+            argv = [rocprof, "--pmc", *counters, "--kernel-trace", "--marker-trace",
+                    "--output-format", "csv", "-d", str(out / tag), "-o", f"rank{rank_id}",
+                    "--", *bench]
+            if i:  # results rows come from the first pass only
+                argv[-1] = str(cache / f"results-{tag}")
+            subprocess.run(argv, check=True)
+        return
+    candidates = sorted(Path("/host-nvidia").glob("nsight-compute/*/ncu"))
+    ncu = str(candidates[-1]) if candidates else shutil.which("ncu")
+    if not ncu:
+        raise RuntimeError("counters mode needs ncu: none in the image or under /opt/nvidia")
+    os.execv(ncu, [
+        ncu, "--clock-control", "none", "--target-processes", "all",
+        "--nvtx", "--nvtx-include", "regex:opx[0-9]+/", "--metrics", NCU_METRICS,
+        "--csv", "--log-file", str(out / f"ncu-rank{rank_id}.csv"), *bench,
+    ])
 
 
 def summarize(manifest: dict, artifacts: Path) -> dict:
@@ -618,6 +707,7 @@ def main() -> None:
     ):
         p.add_argument("--" + name, required=True)
     p.add_argument("--chunk-size", required=True, type=int)
+    p.add_argument("--mode", default="timing", choices=MODES)
     p.add_argument("--platform-config", required=True, type=Path)
     p.add_argument("--out", required=True, type=Path)
     p = sub.add_parser("execute")
@@ -676,6 +766,7 @@ def main() -> None:
             [int(w) for w in args.world_sizes.split(",")],
             args.chunk_size,
             load_platforms(args.platform_config),
+            args.mode,
         )
         digests = {c["image"]: "" for c in result["include"]}
         for image in digests:
