@@ -1,0 +1,29 @@
+diff --git a/vllm/entrypoints/openai/cli_args.py b/vllm/entrypoints/openai/cli_args.py
+new file mode 100644
+index 000000000..59033807f
+--- /dev/null
++++ b/vllm/entrypoints/openai/cli_args.py
+@@ -0,0 +1,3 @@
++from vllm.entrypoints.launchers.cli_args import FrontendArgs
++
++__all__ = ["FrontendArgs"]
+diff --git a/vllm/entrypoints/openai/engine/__init__.py b/vllm/entrypoints/openai/engine/__init__.py
+new file mode 100644
+index 000000000..19c7f833c
+--- /dev/null
++++ b/vllm/entrypoints/openai/engine/__init__.py
+@@ -0,0 +1 @@
++__all__ = []
+diff --git a/vllm/entrypoints/openai/engine/protocol.py b/vllm/entrypoints/openai/engine/protocol.py
+new file mode 100644
+index 000000000..f778b9d50
+--- /dev/null
++++ b/vllm/entrypoints/openai/engine/protocol.py
+@@ -0,0 +1,7 @@
++from vllm.entrypoints.generate.base.protocol import (
++    DeltaFunctionCall,
++    DeltaMessage,
++    DeltaToolCall,
++)
++
++__all__ = ["DeltaFunctionCall", "DeltaMessage", "DeltaToolCall"]

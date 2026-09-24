@@ -32,3 +32,4 @@ grep -q 'provider: efa' /tmp/fi-info
 python3 -m pip uninstall -y mooncake-transfer-engine mooncake-transfer-engine-cuda13
 python3 -m pip install --no-deps mooncake-transfer-engine-efa-cuda13==0.3.13.post1
 patch --batch --forward -d /usr/local/lib/python3.12/dist-packages -p1 </configs/patches/vllm-separate-cudagraph-pools.patch
+patch --batch --forward -d /usr/local/lib/python3.12/dist-packages -p1 </configs/patches/vllm-dynamo-compat.patch
