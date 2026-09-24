@@ -8823,5 +8823,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add six Kimi-K3 B300 Mooncake EFA AgentX configurations on vLLM nightly 0961bbae: aggregate c1/c4/c70 and disaggregated 1P1D/1P2D/1P3D."
+    - "Add six Kimi-K3 B300 Mooncake EFA AgentX configurations on vLLM nightly 0961bbae with BF16 SSM cache: aggregate c1/c4/c70 and disaggregated 1P1D/1P2D/1P3D."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3405
