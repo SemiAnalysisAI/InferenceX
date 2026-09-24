@@ -1004,7 +1004,7 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
 # Both throughput bands use thinking_on golden AL 3.77; eval uses real
 # acceptance. Keep the historical config key for changelog compatibility.
 dsv4-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202609161445
+  image: rocm/atom-dev:nightly_202609231534@sha256:9ccf6a72d7d89bb1c10ecb9b6e34e12a0a15ff74027426327bdb09b8ec961f9d
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
