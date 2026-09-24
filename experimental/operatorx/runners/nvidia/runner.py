@@ -95,14 +95,14 @@ def run(op: Op) -> Result:
         raise UnsupportedOpError(f"nvidia/{op.backend} has no impl for op_type={op.type!r}")
     ctx = impl.prepare(op)
 
-    fn = impl.launcher(ctx) if impl.launcher else (lambda: impl.kernel(ctx))
+    fn, cuda_graph = impl.launcher(ctx) if impl.launcher else ((lambda: impl.kernel(ctx)), False)
     median_us, telem = telemetry.measure(op, lambda sleep_s: _time_op(fn, sleep_s))
 
     if _COOLDOWN_RATIO > 0.0:
         busy_s = median_us * 1e-6 * (_ITERS + _WARMUP)
         time.sleep(min(busy_s * _COOLDOWN_RATIO, _COOLDOWN_MAX_S))
 
-    metrics = {"latency_us": median_us, "telemetry": telem}
+    metrics = {"latency_us": median_us, "cuda_graph": cuda_graph, "telemetry": telem}
     if isinstance(ctx, dict) and ctx.get("meta"):
         metrics["backend_meta"] = ctx["meta"]
     prof = profiling.profile_op(fn)
