@@ -11,7 +11,7 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=vllm-native or lmcache.
+# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=vllm-native, vllm-simple or lmcache.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -75,15 +75,17 @@ agentic_pip_install --quiet Pillow fastapi uvicorn
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 
 # vllm-router expands one HTTP backend into a logical worker per DP rank.
+# The cache_aware policy routes on prefix overlap (radix tree per rank) so
+# conversation turns reusing KV land on the rank already holding that prefix.
 # AIPerf's X-Correlation-ID is stable across a conversation's turns; alias it
-# to the router's X-Session-ID so every turn lands on the same rank.
+# to the router's X-Session-ID as a session-affinity fallback.
 USE_VLLM_ROUTER=false
 VLLM_BACKEND_PORT="$PORT"
 if [ "$DP_ATTENTION" = "true" ]; then
     USE_VLLM_ROUTER=true
     VLLM_BACKEND_PORT=$((PORT + 1))
     VLLM_ROUTER_VERSION=0.1.14
-    VLLM_ROUTER_POLICY=consistent_hash
+    VLLM_ROUTER_POLICY=cache_aware
     VLLM_ROUTER_METRICS_PORT=$((PORT + 10000))
     export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
     agentic_pip_install --quiet "vllm-router==$VLLM_ROUTER_VERSION"
@@ -127,6 +129,18 @@ if agentic_kv_offload_enabled; then
             --kv_offloading_size "$TOTAL_CPU_DRAM_PARTITION_GB"
         )
 
+        ;;
+      vllm-simple)
+        require_agentic_kv_offload_backend vllm-simple
+        CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / TP ))
+        # Identical prefixes must hash to identical block keys across ranks.
+        export PYTHONHASHSEED=42
+        SIMPLE_LAZY_OFFLOAD="false"
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":$CPU_BYTES_PER_RANK,\"lazy_offload\":$SIMPLE_LAZY_OFFLOAD}}"
+        )
+        echo "SimpleCPUOffloadConnector: ${CPU_BYTES_PER_RANK} B/rank x ${TP} ranks, lazy_offload=$SIMPLE_LAZY_OFFLOAD"
         ;;
       lmcache)
         require_agentic_kv_offload_backend lmcache
@@ -259,7 +273,7 @@ if agentic_kv_offload_enabled; then
             )
         ;;
       *)
-        echo "Error: unsupported KV_OFFLOAD_BACKEND '$KV_OFFLOAD_BACKEND' (expected: vllm-native, lmcache)" >&2
+        echo "Error: unsupported KV_OFFLOAD_BACKEND '$KV_OFFLOAD_BACKEND' (expected: vllm-native, vllm-simple, lmcache)" >&2
         exit 1
         ;;
     esac
@@ -374,6 +388,9 @@ if [ "$USE_VLLM_ROUTER" = "true" ]; then
     vllm-router \
         --worker-urls "http://localhost:$VLLM_BACKEND_PORT" \
         --policy "$VLLM_ROUTER_POLICY" \
+        --cache-threshold 0.5 \
+        --balance-abs-threshold 32 \
+        --balance-rel-threshold 1.1 \
         --intra-node-data-parallel-size "$TP" \
         --host 0.0.0.0 \
         --port "$PORT" \
