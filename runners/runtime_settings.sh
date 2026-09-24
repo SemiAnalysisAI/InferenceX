@@ -28,6 +28,14 @@ case "${RUNNER_NAME%%_*}" in
         ;;
     gb300-nv) export SLURM_PARTITION=batch_1 ;;
     h200-dgxc-slurm)
+        if [[ "$MODEL_PREFIX" == dsv41flash && "$FRAMEWORK" == sglang && "$IS_MULTINODE" == false && "$IS_AGENTIC" == 1 ]]; then
+            check_env_vars CONC EVAL_ONLY
+            if [[ "$EVAL_ONLY" == false ]] && (( CONC >= 64 )); then
+                # The exact EP1 baseline needs more than eight hours for normal
+                # high-concurrency warmup plus the unchanged hour-long profile.
+                export SALLOC_TIME_LIMIT=1440
+            fi
+        fi
         export HF_HUB_CACHE_MOUNT=/models/gharunners/hf-hub-cache
         export AIPERF_MMAP_CACHE_HOST_PATH=/home/sa-shared/gharunners/ai-perf-cache
         export DSV4_MODEL_PATH="$HF_HUB_CACHE_MOUNT/DeepSeek-V4-Pro"

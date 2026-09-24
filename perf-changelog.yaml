@@ -8783,3 +8783,25 @@
     - "Add DeepSeek-V4-Pro-0813 golden AL for draft lengths 4, 5, 7 and 8 (3.36 / 3.61 / 3.73 / 3.47)."
     - "Agentic PD router: pin --decode-policy round_robin so decode no longer inherits the prefill --policy (consistent_hashing)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3256
+  
+- config-keys:
+    - glm5.3-fp8-mi355x-tilert-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump tilert 0.1.6.post1 -> 0.1.6.post2 (PyPI, 2026-09-23) on both TileRT ranks; router metadata follows. post2 changes six pd_vllm files: the ROCm decode inject (glm5_rocm_engine.py) now broadcasts each layer's KV to all eight rank caches with grouped RCCL ncclBroadcast (TILERT_INJECT_MODE, default rccl, falling back to per-source-device rotating streams, then the old serial copy) instead of serial default-stream copy_ calls, and the prefill extract (mla_nsa.py) gathers each layer with one index_select per device on side streams (TILERT_EXTRACT_MODE, default fast). The ROCm fp8 KV layout, multi-sender staging (TILERT_PD_SENDERS) and host-resident PD buffers (TILERT_PD_BUFFER_DEVICE) are new but opt-in and left off, so the 1M-context bf16 KV, layer-sharded on-GPU buffer configuration is otherwise unchanged. TileRT reports AgentX TTFT p50 5.7 s -> 2.2 s at concurrency 1. No patches, images unchanged."
+    - "两侧 TileRT rank 上 tilert 由 0.1.6.post1 升级到 0.1.6.post2（PyPI，2026-09-23），router 元数据随之更新。post2 修改了 pd_vllm 的六个文件：ROCm decode 注入（glm5_rocm_engine.py）改为用分组 RCCL ncclBroadcast 把每层 KV 广播到全部 8 个 rank 的缓存（TILERT_INJECT_MODE，默认 rccl，失败时回退到按源设备轮转的多流拷贝，再回退到旧的串行拷贝），不再在默认流上串行 copy_；prefill 提取（mla_nsa.py）在各设备的旁路流上每层一次 index_select 完成收集（TILERT_EXTRACT_MODE，默认 fast）。ROCm fp8 KV 布局、多发送端暂存（TILERT_PD_SENDERS）与主机内存 PD 缓冲（TILERT_PD_BUFFER_DEVICE）为新增的可选项，默认关闭，因此 1M 上下文、bf16 KV、按层分片的 GPU 缓冲配置其余不变。TileRT 报告并发 1 下 AgentX TTFT p50 由 5.7 秒降至 2.2 秒。无补丁，镜像不变。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3389
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Qualify DeepSeek-V4.1-Flash H200 SGLang on the latest official September 22 CUDA 13 nightly, matching the published vLLM starting topologies TP4/EP1 and TP8/EP1 at concurrency 1, 2, 4, 8, 16, 32, 64 and 128."
+    - "Use native Marlin MXFP4 MoE for both EP1 topologies: tensor-sharded expert widths 576 and 288 require supported padding, while the shipped SM90 CUTLASS method rejects these dimensions. Preserve shipped-default target and DSpark precision."
+    - "Retain per-rank anonymous Engram host tables, GPU-resident KV, memory fraction 0.70, prefill chunk 4096, prefill/decode interval 16 and 1024 SWA prefix tails for the exact-topology baseline."
+    - "Retain validated H200 dense-GEMM launch configurations without changing kernel code or precision; keep five-token DSpark, golden acceptance for performance and real verification for full GSM8K."
+    - "Run a new canonical full sweep with 16 performance and 16 full-evaluation cells. Earlier EP4/EP8 and DP8 measurements remain historical evidence and do not qualify the EP1 grid."
+    - "Extend only H200 SGLang AgentX performance cells at C64/C128 to 24-hour Slurm allocations and 24.5-hour GitHub jobs after the original eight-hour allocation expired during progressing warmup. Preserve normal warmup, the full 3600-second profile, image, model, precision and topology."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3341
