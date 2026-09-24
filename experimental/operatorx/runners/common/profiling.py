@@ -9,7 +9,12 @@ per-kernel breakdown is attached to the result:
     "kernels": [{"name", "cat", "count_per_call", "us_per_call",
                  "grid", "block", "regs", "smem", "blocks_per_sm",
                  "warps_per_sm", "occupancy_pct"}, ...],   # sorted by time
-    "gpu_us_per_call": ...,
+    "gpu_us_per_call": ...,          # sum of kernel durations
+    "span_us", "busy_us", "gap_us", "overlap_us", "streams",
+                                     # of the median-span replay: first start -> last end,
+                                     # union of kernel time across streams, span - busy,
+                                     # sum of durations - busy (concurrent kernels)
+    "timeline": [{"name", "stream", "start_us", "dur_us"}, ...],  # that replay, op-relative
     "flush_kernels_excluded": ...,
     "trace": ...,                    # when a chrome trace was kept
   }
@@ -54,8 +59,52 @@ _ARG_FIELDS = (
     ("est. achieved occupancy %", "occupancy_pct"),
 )
 
+_TIMELINE_MAX = 64
+
 _flush_buf = None
 _counter = 0
+
+
+def _replay_stats(events: list[dict]) -> dict | None:
+    """Timing structure of the replays; the per-replay flush kernel separates them."""
+    if _FLUSH_MB <= 0:
+        return None
+    replays, cur = [], []
+    for e in sorted(events, key=lambda e: float(e.get("ts", 0.0))):
+        if _FLUSH_KERNEL_MARKER in e.get("name", ""):
+            if cur:
+                replays.append(cur)
+            cur = []
+        else:
+            cur.append(e)
+    if cur:
+        replays.append(cur)
+    if not replays:
+        return None
+    rows = []
+    for r in replays:
+        iv = sorted((float(e["ts"]), float(e["ts"]) + float(e.get("dur", 0.0))) for e in r)
+        busy, end = 0.0, None
+        for a, b in iv:
+            if end is None or a > end:
+                busy += b - a
+                end = b
+            elif b > end:
+                busy += b - end
+                end = b
+        span = max(b for _, b in iv) - iv[0][0]
+        total = sum(b - a for a, b in iv)
+        rows.append((span, busy, span - busy, total - busy,
+                     len({(e.get("args") or {}).get("stream") for e in r})))
+    # all fields from one replay: the median by span
+    i = sorted(range(len(rows)), key=lambda j: rows[j][0])[len(rows) // 2]
+    span, busy, gap, overlap, streams = rows[i]
+    t0 = min(float(e["ts"]) for e in replays[i])
+    timeline = [{"name": e.get("name", "")[:120], "stream": (e.get("args") or {}).get("stream"),
+                 "start_us": round(float(e["ts"]) - t0, 3), "dur_us": round(float(e.get("dur", 0.0)), 3)}
+                for e in sorted(replays[i], key=lambda e: float(e["ts"]))[:_TIMELINE_MAX]]
+    return {"span_us": round(span, 3), "busy_us": round(busy, 3), "gap_us": round(gap, 3),
+            "overlap_us": round(overlap, 3), "streams": streams, "timeline": timeline}
 
 
 def _flush_caches() -> None:
@@ -113,9 +162,9 @@ def profile_op(kernel_fn) -> dict | None:
 
     kernels: dict[str, dict] = {}
     flush_excluded = 0
-    for e in events:
-        if e.get("ph") != "X" or e.get("cat") not in ("kernel", "gpu_memcpy", "gpu_memset"):
-            continue
+    gpu_events = [e for e in events
+                  if e.get("ph") == "X" and e.get("cat") in ("kernel", "gpu_memcpy", "gpu_memset")]
+    for e in gpu_events:
         name = e.get("name", "")[:200]
         if _FLUSH_MB > 0 and _FLUSH_KERNEL_MARKER in name:
             flush_excluded += 1
@@ -139,6 +188,9 @@ def profile_op(kernel_fn) -> dict | None:
                "op_index": _counter}
     if flush_excluded:
         summary["flush_kernels_excluded"] = flush_excluded
+    stats = _replay_stats(gpu_events)
+    if stats:
+        summary.update(stats)
 
     try:
         # "== 1 % N" so that TRACE_EVERY=1 keeps every trace

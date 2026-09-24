@@ -9,9 +9,15 @@ from operatorx.core.op import Op
 
 @dataclass(frozen=True)
 class BackendImpl:
+    """prepare(op) -> ctx; kernel(ctx) runs the op once.
+
+    launcher(ctx), when given, returns the callable the runner times and profiles
+    instead of kernel(ctx): how the backend's framework would execute the op
+    (e.g. a CUDA-graph replay). It records its choice in ctx["meta"]."""
     op_type: str
     prepare: Callable[[Op], Any]
     kernel: Callable[[Any], None]
+    launcher: Callable[[Any], Callable[[], None]] | None = None
 
 
 def lookup_versions(*pkg_names: str) -> dict[str, str]:
