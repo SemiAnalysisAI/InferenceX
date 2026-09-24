@@ -113,7 +113,6 @@ benchmark:
   type: custom
   command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
   env:
-    MODEL: deepseek-ai/DeepSeek-R1
     TOKENIZER: /model
     ISL: '8192'
     OSL: '1024'

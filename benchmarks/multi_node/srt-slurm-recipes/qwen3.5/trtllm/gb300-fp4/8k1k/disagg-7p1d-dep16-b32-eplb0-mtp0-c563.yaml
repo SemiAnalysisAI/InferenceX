@@ -134,7 +134,6 @@ benchmark:
   type: custom
   command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
   env:
-    MODEL: qwen3.5-fp4
     TOKENIZER: /model
     ISL: '8192'
     OSL: '1024'

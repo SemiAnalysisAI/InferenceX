@@ -119,7 +119,6 @@ benchmark:
   concurrencies: "1x2x4x8x16x32x64x128"
   command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
   env:
-    MODEL: Qwen/Qwen3.5-397B-A17B-FP8
     TOKENIZER: /model
     ISL: '8192'
     OSL: '1024'
