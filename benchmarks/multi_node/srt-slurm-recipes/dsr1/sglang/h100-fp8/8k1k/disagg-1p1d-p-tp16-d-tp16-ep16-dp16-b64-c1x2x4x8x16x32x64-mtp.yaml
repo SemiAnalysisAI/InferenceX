@@ -124,3 +124,17 @@ benchmark:
     TOKENIZER: /model
     ISL: '8192'
     OSL: '1024'
+
+# The first container step on an H100 node spends ~8 minutes setting up the job
+# image, and etcd/NATS are that first step; the 300s default times out.
+services:
+  - name: etcd
+    type: etcd
+    readiness:
+      port: 2379
+      timeout_seconds: 1200
+  - name: nats
+    type: nats
+    readiness:
+      port: 4222
+      timeout_seconds: 1200

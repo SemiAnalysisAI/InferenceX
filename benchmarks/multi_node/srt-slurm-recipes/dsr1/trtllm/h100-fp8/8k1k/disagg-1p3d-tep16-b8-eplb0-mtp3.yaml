@@ -108,3 +108,17 @@ dynamo:
   # The container tag identifies a pre-39d2a68 Dynamo release; the image is not digest-pinned.
   # Use NATS for a recipe prior to Dynamo commit 39d2a68.
   request_plane: "nats"
+
+# The first container step on an H100 node spends ~8 minutes setting up the job
+# image, and etcd/NATS are that first step; the 300s default times out.
+services:
+  - name: etcd
+    type: etcd
+    readiness:
+      port: 2379
+      timeout_seconds: 1200
+  - name: nats
+    type: nats
+    readiness:
+      port: 4222
+      timeout_seconds: 1200
