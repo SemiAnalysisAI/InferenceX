@@ -76,7 +76,7 @@ def plan(
         set(backends) - {"torch", "vllm"}
         or world_sizes != [1]
         or any(
-            shape["type"] not in {"gemm", "moe_gemm"}
+            shape["type"] not in {"gemm", "moe_gemm", "moe_layer"}
             for shapes in testlists.values()
             for shape in shapes
         )
