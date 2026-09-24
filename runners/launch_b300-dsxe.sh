@@ -8,7 +8,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 
 # B300 DSXE Slurm cluster (dsxe-sa-b300-prd0); runners run as sa-gha-runner.
 # Cluster-specific facts live in this block. Multi-node jobs go through
-# srt-slurm/srtctl, single-node jobs through salloc + pyxis.
+# srt-slurm/srtctl; AgentX and explicit collector scripts retain salloc + pyxis.
 
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
@@ -77,7 +77,6 @@ STAGED_MODELS=(
     Qwen3.8-2.4T-A95B-FP8
 )
 
-mkdir -p "$SQUASH_DIR"
 set -x
 
 # Keep this definition above the IS_MULTINODE branch: both paths call it, and
@@ -93,6 +92,8 @@ import_squash_image() {
     local image_ref="$1"
     local sqsh="$2"
     local lock="${2}.lock"
+
+    mkdir -p "$SQUASH_DIR"
 
     if unsquashfs -l "$sqsh" > /dev/null 2>&1; then
         echo "Squash file already present, skipping import: $sqsh"
@@ -120,7 +121,29 @@ import_squash_image() {
     test -r "$sqsh" || { echo "Error: squash file not readable: $sqsh" >&2; exit 1; }
 }
 
-if [[ "$IS_MULTINODE" == "true" ]]; then
+EXECUTION_PATH=agentic
+if [[ "$IS_MULTINODE" == true ]]; then
+    EXECUTION_PATH=multinode
+elif [[ -n "${BENCH_SCRIPT_OVERRIDE:-}" ]]; then
+    # SPEED-Bench collectors explicitly supply their script outside this migration.
+    EXECUTION_PATH=script
+elif [[ "$IS_AGENTIC" == 0 ]]; then
+    check_env_vars SRT_RECIPE
+    EXECUTION_PATH=native-single-node
+fi
+
+if [[ "$EXECUTION_PATH" == native-single-node ]]; then
+    check_env_vars B300_HF_CACHE_HOST_DIR
+    HF_HUB_CACHE_MOUNT="$B300_HF_CACHE_HOST_DIR/hub"
+    SRT_MODEL_PATH="$MODEL_ROOT/${MODEL##*/}"
+    if [[ "$MODEL" == nvidia/DeepSeek-R1-0528-FP4-V2 ]]; then
+        SRT_MODEL_PATH="$MODEL_ROOT/DeepSeek-R1-0528-NVFP4-v2"
+    fi
+    SRT_SQUASH_FILE="$SQUASH_DIR/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    launch_srt_single_node b300-dsxe \
+        --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION" \
+        --var MODEL_ROOT "$MODEL_ROOT"
+elif [[ "$EXECUTION_PATH" == multinode ]]; then
 
 if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" && $FRAMEWORK != "dynamo-vllm" ]]; then
     echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, dynamo-vllm"

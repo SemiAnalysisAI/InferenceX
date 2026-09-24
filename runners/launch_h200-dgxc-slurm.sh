@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
 source "$(dirname "${BASH_SOURCE[0]}")/../benchmarks/benchmark_lib.sh" --validation-only || exit 1
-check_env_vars EVAL_ONLY IS_MULTINODE REQUIRE_POWER RUN_EVAL SALLOC_TIME_LIMIT
+check_env_vars EVAL_ONLY IS_MULTINODE REQUIRE_POWER RUN_EVAL SALLOC_TIME_LIMIT IS_AGENTIC
 set -eo pipefail
 
 SLURM_PARTITION="main"
@@ -15,7 +15,22 @@ set -x
 
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh" || exit 1
 
-if [[ "$IS_MULTINODE" == "true" ]]; then
+EXECUTION_PATH=agentic
+if [[ "$IS_MULTINODE" == true ]]; then
+    EXECUTION_PATH=multinode
+elif [[ "$IS_AGENTIC" == 0 ]]; then
+    check_env_vars SRT_RECIPE
+    EXECUTION_PATH=native-single-node
+fi
+
+if [[ "$EXECUTION_PATH" == native-single-node ]]; then
+    SRT_SQUASH_FILE="/data/containers/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    launch_srt_single_node h200-dgxc-slurm \
+        --var SLURM_ACCOUNT "$SLURM_ACCOUNT" --var SLURM_PARTITION "$SLURM_PARTITION" \
+        --var AIPERF_MMAP_CACHE_HOST_PATH "$AIPERF_MMAP_CACHE_HOST_PATH" \
+        --var HF_HUB_CACHE_MOUNT "$HF_HUB_CACHE_MOUNT" --var CONTAINER_KEY "$IMAGE"
+
+elif [[ "$EXECUTION_PATH" == multinode ]]; then
 
     if [[ -z "${CONFIG_FILE:-}" ]]; then
         echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2

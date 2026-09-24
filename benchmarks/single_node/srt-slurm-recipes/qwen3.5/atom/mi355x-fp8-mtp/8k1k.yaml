@@ -1,0 +1,53 @@
+base:
+  schema: 2
+  name: qwen3.5-fp8-mi355x-atom-mtp-8k1k
+  model:
+    path: hf:Qwen/Qwen3.5-397B-A17B-FP8
+    container: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
+    precision: fp8
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: atomesh
+    container_image: rocm/atom-dev@sha256:f00a9dc588a380038fdad54cd57a956043cb316ddda54ebb1b62a24f8caa343b
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: atom
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        kv_cache_dtype: fp8
+        max-model-len: 10240
+        gpu-memory-utilization: 0.9
+        method: mtp
+        num-speculative-tokens: 3
+        trust-remote-code: true
+      env:
+        OMP_NUM_THREADS: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh --trust-remote-code
+    env:
+      MODEL: Qwen/Qwen3.5-397B-A17B-FP8
+      ISL: '8192'
+      OSL: '1024'
+      RANDOM_RANGE_RATIO: '0.8'
+      USE_CHAT_TEMPLATE: 'true'
+zip_override_tp4_ep1:
+  benchmark:
+    env:
+      CONC: ['4', '8', '16', '32', '64', '128', '256']
+zip_override_tp8_ep1:
+  roles:
+    agg:
+      gpus: 8
+  benchmark:
+    env:
+      CONC: ['4', '8', '16', '32', '64', '128', '256']
