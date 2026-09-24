@@ -1388,7 +1388,7 @@ dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark:
     # (c128 measured in run 35810485934, gsm8k eval in run 35851118405).
     - dram-utilization: 0.80
       search-space:
-      - spec-decoding: "mtp"
+      - spec-decoding: "draft_model"
         conc-list: [ 1, 16 ]
         kv-offloading: none
         prefill:
@@ -1408,7 +1408,7 @@ dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark:
           - "DECODE_MTP_SIZE=3"
       # DP-attention tier (recipe: concurrency 64-128). TP8 + DP attention,
       # prefill TBO only, cache-aware router, no CPU offload.
-      - spec-decoding: "mtp"
+      - spec-decoding: "draft_model"
         conc-list: [ 64, 128 ]
         kv-offloading: none
         prefill:
