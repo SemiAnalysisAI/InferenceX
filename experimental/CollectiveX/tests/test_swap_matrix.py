@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from runtime.swap_nodes import existing_exclusions
+from runtime.scheduler import existing_exclusions
 from swap_matrix import build_matrix
 
 
@@ -48,13 +48,13 @@ class SwapMatrixTests(unittest.TestCase):
 class SwapNodeTests(unittest.TestCase):
     def test_retired_exclusions_do_not_break_allocation_and_live_ones_remain(self):
         with mock.patch(
-            "runtime.swap_nodes.subprocess.check_output",
+            "runtime.scheduler.subprocess.check_output",
             side_effect=["retired\nquarantined\n", "healthy\nquarantined\n"],
         ):
             self.assertEqual(existing_exclusions("retired,quarantined"), "quarantined")
         with (
             mock.patch(
-                "runtime.swap_nodes.subprocess.check_output", side_effect=["old\n", ""]
+                "runtime.scheduler.subprocess.check_output", side_effect=["old\n", ""]
             ),
             self.assertRaisesRegex(ValueError, "no nodes"),
         ):

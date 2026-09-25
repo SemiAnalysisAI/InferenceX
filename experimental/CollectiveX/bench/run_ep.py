@@ -14,7 +14,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.dirname(HERE)]
 
-import ep_case  # noqa: E402
+from ep_results import is_case_id  # noqa: E402
 import ep_harness  # noqa: E402  (stdlib-only; safe before torch)
 
 
@@ -25,6 +25,73 @@ BACKENDS = {
     "nccl-ep": ("ep_nccl", "NCCLEPBackend"),
     "flashinfer-ep": ("ep_flashinfer", "FlashInferEPBackend"),
 }
+
+
+
+def format_collective_version(raw) -> str:
+    """Normalize PyTorch's tuple or packed NCCL/RCCL version representation."""
+    if isinstance(raw, int):
+        if raw < 10_000:
+            return f"{raw // 1000}.{raw // 100 % 10}.{raw % 100}"
+        return f"{raw // 10_000}.{raw // 100 % 100}.{raw % 100}"
+    if isinstance(raw, (tuple, list)):
+        return ".".join(map(str, raw))
+    return str(raw) if raw not in (None, "") else "unknown"
+
+
+def add_common_args(ap: argparse.ArgumentParser) -> None:
+    """Add the varying v1 inputs; fixed profile values are not CLI axes."""
+    ap.add_argument("--mode", required=True, choices=["normal", "low-latency"])
+    ap.add_argument("--precision", required=True, choices=["bf16", "fp8"],
+                    help="dispatch payload precision; combine is always BF16")
+    ap.add_argument("--phase", required=True, choices=["decode", "prefill"],
+                    help="token-size regime label: decode (small T) / prefill (large T)")
+    ap.add_argument("--tokens-ladder", required=True,
+                    help="space/comma-separated source-tokens-per-rank sweep; the matrix "
+                         "supplies the workload's phase ladder from configs/sweep.json")
+    ap.add_argument("--hidden", type=int, required=True)
+    ap.add_argument("--topk", type=int, required=True)
+    ap.add_argument("--experts", type=int, required=True,
+                    help="TOTAL experts (fixed across EP degrees)")
+    ap.add_argument("--routing", required=True, choices=["uniform"])
+    ap.add_argument("--case-id", required=True)
+    ap.add_argument("--suite", required=True)
+    ap.add_argument("--workload-name", required=True)
+    ap.add_argument("--seed", type=int, required=True,
+                    help="routing-trace seed; part of the workload identity in configs/sweep.json")
+    ap.add_argument(
+        "--version",
+        type=int,
+        required=True,
+        help="iterable benchmark version copied verbatim into the emitted result",
+    )
+    # The single cross-SKU profile lives in configs/sweep.json
+    # `timing:`; the matrix bakes it into every scheduled case.
+    ap.add_argument("--warmup", type=int, required=True,
+                    help="untimed full roundtrips before each trial/point")
+    ap.add_argument("--iters", type=int, required=True,
+                    help="timed iterations per trial")
+    ap.add_argument("--trials", type=int, required=True,
+                    help="timed trials")
+    # Chain sampling on its own knobs: one call already yields chain_iters free-running pairs, so
+    # it converges in far fewer trials than the fresh-entry components. The matrix bakes these from
+    # configs/sweep.json `timing:`; the defaults match it, for cases scheduled before the fields.
+    ap.add_argument("--chain-iters", type=int, default=128,
+                    help="free-running dispatch->combine pairs per chain trial")
+    ap.add_argument("--chain-trials", type=int, default=4,
+                    help="chain trials per ladder point")
+    ap.add_argument("--chain-drop", type=int, default=16,
+                    help="head pairs discarded per chain trial (pipeline fill, not period)")
+    # provenance / output
+    ap.add_argument("--runner", required=True)
+    ap.add_argument("--topology-class", required=True)
+    ap.add_argument("--transport", required=True)
+    ap.add_argument("--scope", required=True, choices=["scale-up", "scale-out"])
+    ap.add_argument("--scale-up-transport", required=True)
+    ap.add_argument("--scale-out-transport", required=True)
+    ap.add_argument("--gpus-per-node", type=int, required=True)
+    ap.add_argument("--scale-up-domain", type=int, required=True)
+    ap.add_argument("--out", required=True)
 
 
 def _loaded_collective_version() -> str | None:
@@ -42,7 +109,7 @@ def _loaded_collective_version() -> str | None:
         library = ctypes.CDLL(paths.pop())
         if library.ncclGetVersion(ctypes.byref(version)) != 0:
             return None
-        return ep_case.format_collective_version(version.value)
+        return format_collective_version(version.value)
     except (AttributeError, OSError):
         return None
 
@@ -62,10 +129,10 @@ def _runtime_info(torch, *, vendor: str) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description="CollectiveX EP dispatch/combine sweep")
     ap.add_argument("--backend", required=True, choices=list(BACKENDS))
-    ep_case.add_common_args(ap)
+    add_common_args(ap)
     args = ap.parse_args()
 
-    if not ep_case.is_case_id(args.case_id):
+    if not is_case_id(args.case_id):
         print(f"ERROR: invalid native case ID {args.case_id!r}", file=sys.stderr)
         return 2
     # Seed and timing arrive baked into the case argv from the single

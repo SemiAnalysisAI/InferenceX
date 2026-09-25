@@ -1,4 +1,5 @@
 """Source staging and backend-cache behavior without a cluster or vendor build."""
+
 from __future__ import annotations
 
 import os
@@ -48,7 +49,9 @@ class BackendBuilds(unittest.TestCase):
             root = Path(temporary)
             (root / "cache.lock").symlink_to(root / "untouched")
             with self.assertRaisesRegex(RuntimeError, "cache lock is unsafe"):
-                build.install_cached(root / "cache", "site", lambda cache: (root / "installed").touch())
+                build.install_cached(
+                    root / "cache", "site", lambda cache: (root / "installed").touch()
+                )
             self.assertFalse((root / "installed").exists())
             self.assertFalse((root / "untouched").exists())
 
@@ -60,18 +63,38 @@ class BackendBuilds(unittest.TestCase):
             (repository / "payload").write_text("pinned source\n")
             subprocess.run(["git", "-C", str(repository), "add", "payload"], check=True)
             subprocess.run(
-                ["git", "-C", str(repository), "-c", "user.name=Test", "-c",
-                 "user.email=test@example.invalid", "commit", "-qm", "fixture"], check=True,
+                [
+                    "git",
+                    "-C",
+                    str(repository),
+                    "-c",
+                    "user.name=Test",
+                    "-c",
+                    "user.email=test@example.invalid",
+                    "commit",
+                    "-qm",
+                    "fixture",
+                ],
+                check=True,
             )
             revision = subprocess.check_output(
-                ["git", "-C", str(repository), "rev-parse", "HEAD"], text=True,
+                ["git", "-C", str(repository), "rev-parse", "HEAD"],
+                text=True,
             ).strip()
             destination = root / "stage/experimental/CollectiveX/.collx_sources"
             with mock.patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": str(root / "gitconfig")}):
-                staged = build.stage_source(destination, "uccl", str(repository), revision, (), root / "git.log")
-                build.stage_source(destination, "uccl", str(root / "absent"), revision, (), root / "git.log")
-            with mock.patch.dict(build.SOURCES, {"uccl-ep": ("uccl", str(repository), revision, ())}):
-                build.materialize_source(root / "build", "uccl-ep", {"COLLX_BACKEND_SOURCE_ROOT": str(destination)})
+                staged = build.stage_source(
+                    destination, "uccl", str(repository), revision, (), root / "git.log"
+                )
+                build.stage_source(
+                    destination, "uccl", str(root / "absent"), revision, (), root / "git.log"
+                )
+            with mock.patch.dict(
+                build.SOURCES, {"uccl-ep": ("uccl", str(repository), revision, ())}
+            ):
+                build.materialize_source(
+                    root / "build", "uccl-ep", {"COLLX_BACKEND_SOURCE_ROOT": str(destination)}
+                )
             (root / "build/payload").write_text("build change\n")
             self.assertEqual((staged / "payload").read_text(), "pinned source\n")
             self.assertEqual((root / "build/payload").read_text(), "build change\n")

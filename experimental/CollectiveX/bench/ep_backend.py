@@ -11,8 +11,18 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import torch
 
-from ep_case import token_ladder
-from ep_timing import EPTiming
+from ep_measurement import EPTiming
+
+
+
+def token_ladder(spec: str, cap: int | None) -> tuple[list[int], list[int]]:
+    """Return (ladder, dropped) from an explicit spec (there is no default — the
+    model-specific ladders live in configs/sweep.json); positive ints; clamped to
+    `cap` with dropped points reported (never silently truncated)."""
+    want = sorted({t for t in (int(t) for t in spec.replace(",", " ").split() if t) if t > 0})
+    if cap is not None:
+        return [t for t in want if t <= cap], [t for t in want if t > cap]
+    return want, []
 
 
 @dataclass

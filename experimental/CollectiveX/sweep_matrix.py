@@ -11,7 +11,7 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "bench"))
 
-import ep_case  # noqa: E402
+import ep_results  # noqa: E402
 
 
 TOPOLOGY_FIELDS = (
@@ -230,7 +230,7 @@ def resolve_matrix(
                                 "timing": timing_profile,
                                 **{field: topology[field] for field in TOPOLOGY_FIELDS},
                             }
-                            case["case_id"] = ep_case.case_id(sku, case)
+                            case["case_id"] = ep_results.case_id(sku, case)
                             requested_cases.append({
                                 "sku": sku,
                                 "case": case,

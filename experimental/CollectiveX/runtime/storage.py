@@ -1,4 +1,5 @@
 """Image-cache identity, imports, and isolated compute-visible source staging."""
+
 from __future__ import annotations
 
 from contextlib import nullcontext, suppress
@@ -14,7 +15,23 @@ import tempfile
 import time
 
 from . import probe
-from .process import locked, log, log_path, log_tail, run
+from .scheduler import locked, log, log_path, log_tail, run
+
+
+# Keep private state and generated results out of a fresh execution's source tree.
+EXCLUDES = {
+    "__pycache__",
+    "results",
+    ".shards",
+    ".collx_workloads",
+    ".collx_backend",
+    ".collx_sources",
+    ".venv",
+    ".pytest_cache",
+    "private-infra.md",
+    "goal.md",
+    "notes.md",
+}
 
 
 class ImportFailure(RuntimeError):
@@ -76,23 +93,40 @@ def import_image(options: dict, env: dict[str, str] | None = None) -> Path:
     env = dict(os.environ if env is None else env)
     supported = {"linux/amd64": {"x86_64", "amd64"}, "linux/arm64": {"aarch64", "arm64"}}
     if platform.machine() not in supported.get(options["platform"], set()):
-        raise ImportFailure("container image platform does not match the allocated architecture", 13)
+        raise ImportFailure(
+            "container image platform does not match the allocated architecture", 13
+        )
     mode = options["mode"]
     scratch = options.get("scratch", "")
-    if mode == "compute" and scratch and (not Path(scratch).is_absolute() or not Path(scratch).is_dir()):
+    if (
+        mode == "compute"
+        and scratch
+        and (not Path(scratch).is_absolute() or not Path(scratch).is_dir())
+    ):
         raise ImportFailure("invalid container import scratch directory", 14)
     path = Path(options["path"])
     lock = Path(options["lock"])
     image, digest = options["image"], options.get("digest", "")
     local_scratch = mode == "compute" or options.get("local_scratch", False)
-    prefix = "inferencex-collectivex-home." if mode == "compute" else "inferencex-collectivex-enroot."
-    context = tempfile.TemporaryDirectory(prefix=prefix, dir=scratch or "/tmp") if local_scratch else nullcontext(None)
+    prefix = (
+        "inferencex-collectivex-home." if mode == "compute" else "inferencex-collectivex-enroot."
+    )
+    context = (
+        tempfile.TemporaryDirectory(prefix=prefix, dir=scratch or "/tmp")
+        if local_scratch
+        else nullcontext(None)
+    )
     with context as temporary:
         if temporary is not None:
             base = Path(temporary)
             if mode == "compute":
                 env.update(HOME=temporary, XDG_CACHE_HOME=str(base / ".cache"))
-            for key, name in (("TEMP", "tmp"), ("CACHE", "cache"), ("DATA", "data"), ("RUNTIME", "run")):
+            for key, name in (
+                ("TEMP", "tmp"),
+                ("CACHE", "cache"),
+                ("DATA", "data"),
+                ("RUNTIME", "run"),
+            ):
                 directory = base / (f"enroot-{name}" if mode == "compute" else name)
                 directory.mkdir()
                 env[f"ENROOT_{key}_PATH"] = str(directory)
@@ -101,18 +135,32 @@ def import_image(options: dict, env: dict[str, str] | None = None) -> Path:
         # remote shared storage serializes imports, while node-local caches import in parallel.
         with locked(lock, 2700 if mode == "local" else None, private=False):
             verdict = squash_verdict(path, digest, options.get("refresh_epoch"))
-            if verdict == "reuse" and run(["unsquashfs", "-l", str(path)], env=env, check=False).returncode:
+            if (
+                verdict == "reuse"
+                and run(["unsquashfs", "-l", str(path)], env=env, check=False).returncode
+            ):
                 verdict = "invalid"
             if verdict == "reuse":
                 log("container squash ready (reusing staged import)")
                 return path
             log(f"importing configured container image ({verdict})")
             if mode == "compute":
-                commands = [["enroot", "version"],
-                            ["df", "-hT", env["ENROOT_TEMP_PATH"], str(path.parent)],
-                            ["findmnt", "-T", env["ENROOT_TEMP_PATH"], "-o", "TARGET,SOURCE,FSTYPE,OPTIONS"]]
-                commands += [["df", "-hT", directory] for directory in
-                             ("/tmp", "/var/tmp", "/dev/shm", "/scratch", "/local") if Path(directory).is_dir()]
+                commands = [
+                    ["enroot", "version"],
+                    ["df", "-hT", env["ENROOT_TEMP_PATH"], str(path.parent)],
+                    [
+                        "findmnt",
+                        "-T",
+                        env["ENROOT_TEMP_PATH"],
+                        "-o",
+                        "TARGET,SOURCE,FSTYPE,OPTIONS",
+                    ],
+                ]
+                commands += [
+                    ["df", "-hT", directory]
+                    for directory in ("/tmp", "/var/tmp", "/dev/shm", "/scratch", "/local")
+                    if Path(directory).is_dir()
+                ]
                 converter = shutil.which("enroot-aufs2ovlfs", path=env.get("PATH"))
                 if converter:
                     commands.append(["getcap", converter])
@@ -133,25 +181,34 @@ def import_image(options: dict, env: dict[str, str] | None = None) -> Path:
             sanitized = re.sub(r"[/:@#]", "_", image)
             for previous in path.parent.glob(f"*_{sanitized}.sqsh"):
                 with suppress(OSError):
-                    if (previous != path and not previous.is_symlink() and previous.is_file()
-                            and int((time.time() - previous.stat().st_mtime) / 60) > 2880):
+                    if (
+                        previous != path
+                        and not previous.is_symlink()
+                        and previous.is_file()
+                        and int((time.time() - previous.stat().st_mtime) / 60) > 2880
+                    ):
                         previous.unlink()
     return path
 
 
-def ensure_image(allocation, env: dict[str, str], *, local: bool = False,
-                 attempt: int = 1) -> Path:
+def ensure_image(allocation, env: dict[str, str], *, local: bool = False, attempt: int = 1) -> Path:
     """Retry compute imports with independent logs; architecture mismatches never retry."""
-    path = squash_path(Path(env["COLLX_SQUASH_DIR"]), env["COLLECTIVEX_IMAGE"], env["COLLX_IMAGE_PLATFORM"])
+    path = squash_path(
+        Path(env["COLLX_SQUASH_DIR"]), env["COLLECTIVEX_IMAGE"], env["COLLX_IMAGE_PLATFORM"]
+    )
     lock_dir = Path(env.get("COLLX_LOCK_DIR") or path.parent / ".locks")
     options = {
-        "path": str(path), "lock": str(lock_dir / f"{path.stem}.lock"),
-        "image": env["COLLECTIVEX_IMAGE"], "platform": env["COLLX_IMAGE_PLATFORM"],
-        "digest": env.get("COLLX_IMAGE_DIGEST", ""), "mode": "local" if local else "compute",
+        "path": str(path),
+        "lock": str(lock_dir / f"{path.stem}.lock"),
+        "image": env["COLLECTIVEX_IMAGE"],
+        "platform": env["COLLX_IMAGE_PLATFORM"],
+        "digest": env.get("COLLX_IMAGE_DIGEST", ""),
+        "mode": "local" if local else "compute",
         "scratch": "" if local else env.get("COLLX_IMPORT_TMPDIR", ""),
         "local_scratch": local,
         "refresh_epoch": int(env.get("COLLX_LAUNCH_EPOCH") or time.time())
-        if env.get("COLLX_IMAGE_REFRESH", "0") == "1" else None,
+        if env.get("COLLX_IMAGE_REFRESH", "0") == "1"
+        else None,
     }
     label = "container-import" + (f"-a{attempt}" if attempt > 1 else "")
     attempts = 1 if local else int(env.get("COLLX_IMPORT_ATTEMPTS", "3"))
@@ -160,19 +217,33 @@ def ensure_image(allocation, env: dict[str, str], *, local: bool = False,
         try:
             if local:
                 # Keep imports in a child process so importer environment and scratch stay local.
-                run(["python3", str(Path(__file__).with_name("node.py")), "import-image",
-                     json.dumps(options)], env=env, path=output)
+                run(
+                    [
+                        "python3",
+                        str(Path(__file__).with_name("node.py")),
+                        "import-image",
+                        json.dumps(options),
+                    ],
+                    env=env,
+                    path=output,
+                )
             else:
-                allocation.host(int(env["COLLX_NODES"]), ["import-image", json.dumps(options)], output)
+                allocation.host(
+                    int(env["COLLX_NODES"]), ["import-image", json.dumps(options)], output
+                )
             return path
         except subprocess.CalledProcessError as exc:
             log_tail(output)
             if exc.returncode == 13:
-                raise RuntimeError("container image platform does not match the allocated architecture") from exc
+                raise RuntimeError(
+                    "container image platform does not match the allocated architecture"
+                ) from exc
             # GB300 soft-mounted NFS/RDMA may briefly fail mkdir. Re-taking the lock and
             # removing a partial import makes a retry safe, with the original 30s * attempt backoff.
             if index < attempts:
-                log(f"container import attempt {index}/{attempts} failed (rc={exc.returncode}); retrying")
+                log(
+                    f"container import attempt {index}/{attempts} failed (rc={exc.returncode}); retrying"
+                )
                 time.sleep(index * 30)
     raise RuntimeError(f"container import failed after {attempts} attempts")
 
@@ -201,7 +272,9 @@ def prepare_stage_dir(runner: str, env: dict[str, str]) -> dict[str, str]:
             # These passwd homes are login-local; the squash parent is compute-visible.
             selected = implicit_stage_base(str(Path(squash).parent))
         elif runner in ("b300", "gb300"):
-            selected = implicit_stage_base(isolation_key=env.get("COLLECTIVEX_EXECUTION_ID") or env.get("GITHUB_RUN_ID", ""))
+            selected = implicit_stage_base(
+                isolation_key=env.get("COLLECTIVEX_EXECUTION_ID") or env.get("GITHUB_RUN_ID", "")
+            )
         elif runner == "h200-dgxc":
             selected = implicit_stage_base()
         elif runner in ("mi300x", "mi325x", "mi355x"):
@@ -210,11 +283,15 @@ def prepare_stage_dir(runner: str, env: dict[str, str]) -> dict[str, str]:
                 raise RuntimeError("canonical AMD execution requires a standard shared runner temp")
             selected = implicit_stage_base(str(temporary.parent.parent))
         else:
-            raise RuntimeError("canonical CollectiveX execution requires a configured shared stage directory")
+            raise RuntimeError(
+                "canonical CollectiveX execution requires a configured shared stage directory"
+            )
     elif runner == "mi300x":
         selected = Path(selected).resolve()
         if not selected.is_dir():
-            raise RuntimeError("canonical MI300X execution cannot resolve the shared stage directory")
+            raise RuntimeError(
+                "canonical MI300X execution cannot resolve the shared stage directory"
+            )
     result["COLLX_STAGE_DIR"] = str(selected)
     return result
 
@@ -242,13 +319,14 @@ def stage_path(repo: Path, env: dict[str, str]) -> Path:
 
 def stage_repository(repo: Path, destination: Path) -> None:
     """Copy only CollectiveX, preserving the existing private-file exclusions."""
-    from .stage import EXCLUDES
-
     destination.mkdir(mode=0o700)
     log("staging CollectiveX on compute-visible storage")
     try:
-        shutil.copytree(repo / "experimental/CollectiveX", destination / "experimental/CollectiveX",
-                        ignore=shutil.ignore_patterns(*EXCLUDES))
+        shutil.copytree(
+            repo / "experimental/CollectiveX",
+            destination / "experimental/CollectiveX",
+            ignore=shutil.ignore_patterns(*EXCLUDES),
+        )
     except Exception:
         try:
             shutil.rmtree(destination)

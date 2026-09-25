@@ -21,12 +21,11 @@ import urllib.error
 
 RUNTIME = Path(__file__).resolve().parents[1] / "runtime"
 BENCH = Path(__file__).resolve().parents[1] / "bench"
-sys.path.insert(0, str(RUNTIME))
+sys.path.insert(0, str(RUNTIME.parent))
 sys.path.insert(0, str(BENCH))
 
-import probe  # noqa: E402
-import config  # noqa: E402
-import stage  # noqa: E402
+from runtime import probe, config, storage  # noqa: E402
+from runtime.scheduler import SlurmAllocation  # noqa: E402
 import ep_oracle  # noqa: E402
 
 import ep_results  # noqa: E402
@@ -121,7 +120,7 @@ class ImageDigestResolutionTests(unittest.TestCase):
                 probe.resolve_image_digest("ghcr.io/org/image:tag", opener=opener), "")
 
 
-# runtime/common.sh collx_squash_path/collx_squash_verdict are the stage-once seam:
+# storage.ensure_image/squash_verdict are the stage-once seam:
 # keying the squash by GITHUB_RUN_ID is exactly the defect that re-imported 30-65GB
 # per run per cluster, and keying it by digest made a transient registry blip miss
 # the staged file -- so the path is a pure function of platform + image reference,
@@ -130,17 +129,17 @@ class SquashCacheKeyTests(unittest.TestCase):
     IMAGE = "rocm/sgl-dev:sglang-v1"
     DIGEST = "sha256:" + "ab" * 32
 
-    def _bash(self, script: str, env: dict, args: list) -> str:
-        result = subprocess.run(
-            ["bash", "-c", f'source "{RUNTIME / "common.sh"}" && {script}', "collx", *args],
-            capture_output=True, text=True, check=True,
-            env={"PATH": os.environ["PATH"], "COLLX_IMAGE_PLATFORM": "linux/amd64", **env},
-        )
-        return result.stdout
+    def _path(self, env: dict) -> str:
+        with tempfile.TemporaryDirectory() as directory:
+            allocation = types.SimpleNamespace(root=Path(directory), host=lambda *args: None)
+            return str(storage.ensure_image(allocation, {
+                "COLLX_IMAGE_PLATFORM": "linux/amd64", "COLLX_SQUASH_DIR": "/squash",
+                "COLLECTIVEX_IMAGE": self.IMAGE, "COLLX_NODES": "1", **env,
+            }))
 
     def test_the_path_is_invariant_across_runs_and_digests(self) -> None:
         paths = {
-            self._bash('collx_squash_path /squash "$1"', env, [self.IMAGE])
+            self._path(env)
             for env in (
                 {"GITHUB_RUN_ID": "1111", "GITHUB_RUN_ATTEMPT": "1"},
                 {"GITHUB_RUN_ID": "2222", "COLLECTIVEX_EXECUTION_ID": "2222_2_c007"},
@@ -149,13 +148,12 @@ class SquashCacheKeyTests(unittest.TestCase):
             )
         }
         self.assertEqual(paths, {"/squash/_rocm_sgl-dev_sglang-v1.sqsh"})
-        arm = self._bash('collx_squash_path /squash "$1"',
-                         {"COLLX_IMAGE_PLATFORM": "linux/arm64"}, [self.IMAGE])
+        arm = self._path({"COLLX_IMAGE_PLATFORM": "linux/arm64"})
         self.assertEqual(arm, "/squash/_linux_arm64_rocm_sgl-dev_sglang-v1.sqsh")
 
     def test_the_verdict_orders_refresh_stamp_and_reuse_correctly(self) -> None:
-        verdict = lambda sq, digest="", epoch="": self._bash(  # noqa: E731
-            'collx_squash_verdict "$1" "$2" "$3"', {}, [str(sq), digest, epoch])
+        def verdict(sq, digest="", epoch=""):
+            return storage.squash_verdict(sq, digest, int(epoch) if epoch else None)
         with tempfile.TemporaryDirectory() as directory:
             sq = Path(directory) / "img.sqsh"
             self.assertEqual(verdict(sq), "absent")
@@ -175,17 +173,14 @@ class SquashCacheKeyTests(unittest.TestCase):
 
 class ConfigTests(unittest.TestCase):
     @staticmethod
-    def _emit_operator(path: str) -> bytes:
+    def _emit_operator(path: str) -> dict:
         platform = {
             "image": "example/engine:test", "image_platform": "linux/arm64",
             "operator": {"partition": "baseline", "account": "shared"},
             "network": {"rdma_devices": "mlx5_1:1"},
         }
-        output = io.BytesIO()
-        with mock.patch.object(config, "_platforms", return_value={"test-sku": platform}), \
-                mock.patch.object(sys, "stdout", types.SimpleNamespace(buffer=output)):
-            config.operator_config(path, "test-sku")
-        return output.getvalue()
+        with mock.patch.object(config, "_platforms", return_value={"test-sku": platform}):
+            return config.operator_values(path, "test-sku")
 
     def test_operator_config_overrides_baseline_and_preserves_platform_settings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -201,20 +196,20 @@ class ConfigTests(unittest.TestCase):
             }))
             path.chmod(0o600)
             payload = self._emit_operator(str(path))
-            self.assertIn(b"COLLX_PARTITION\0gpu\0", payload)
-            self.assertIn(b"COLLX_ACCOUNT\0bench\0", payload)
-            self.assertIn(b"COLLX_SQUASH_DIR\0" + directory.encode() + b"\0", payload)
-            self.assertIn(b"COLLX_IMAGE\0example/engine:test\0", payload)
-            self.assertIn(b"COLLX_IMAGE_PLATFORM\0linux/arm64\0", payload)
-            self.assertIn(b"COLLX_RDMA_DEVICES\0mlx5_1:1\0", payload)
+            self.assertEqual(payload["partition"], "gpu")
+            self.assertEqual(payload["account"], "bench")
+            self.assertEqual(payload["squash_dir"], directory)
+            self.assertEqual(payload["image"], "example/engine:test")
+            self.assertEqual(payload["image_platform"], "linux/arm64")
+            self.assertEqual(payload["rdma_devices"], "mlx5_1:1")
 
     def test_operator_config_registry_only_emits_tracked_baseline(self) -> None:
         # "-" = no operator document: the registry's per-SKU operator block is
         # the tracked baseline (plus its network overlay where present).
         payload = self._emit_operator("-")
-        self.assertIn(b"COLLX_PARTITION\0baseline\0", payload)
-        self.assertIn(b"COLLX_ACCOUNT\0shared\0", payload)
-        self.assertIn(b"COLLX_RDMA_DEVICES\0mlx5_1:1\0", payload)
+        self.assertEqual(payload["partition"], "baseline")
+        self.assertEqual(payload["account"], "shared")
+        self.assertEqual(payload["rdma_devices"], "mlx5_1:1")
 
 class SingleNodeHcaOverrideTests(unittest.TestCase):
     # collx_apply_network_profile's single-node early return must still honor a
@@ -222,65 +217,40 @@ class SingleNodeHcaOverrideTests(unittest.TestCase):
     # self-enables IBGDA even single-node, and only the storage-IB rails accept
     # AH/DCT creation), while scale-out runs keep resolving NVSHMEM_HCA_LIST
     # from the ordinary scale-out selector.
-    @staticmethod
-    def _profile_env(script: str) -> str:
-        completed = subprocess.run(
-            ["bash", "-c", script], cwd=RUNTIME.parent,
-            capture_output=True, text=True, check=True,
-        )
-        return completed.stdout.strip().splitlines()[-1]
-
     def test_single_node_override_exports_the_pinned_hca_list(self) -> None:
-        line = self._profile_env(
-            "source runtime/common.sh 2>/dev/null;"
-            " export COLLX_SINGLE_NODE_RDMA_DEVICES='mlx5_12:1,mlx5_13:1';"
-            " collx_apply_network_profile 1 nvlink;"
-            " echo \"${NVSHMEM_HCA_LIST:-unset}\""
-        )
-        self.assertEqual(line, "mlx5_12:1,mlx5_13:1")
+        env = probe.network_environment({"COLLX_SINGLE_NODE_RDMA_DEVICES": "mlx5_12:1,mlx5_13:1"}, 1, "nvlink")
+        self.assertEqual(env["NVSHMEM_HCA_LIST"], "mlx5_12:1,mlx5_13:1")
 
     def test_single_node_without_override_exports_nothing(self) -> None:
-        line = self._profile_env(
-            "source runtime/common.sh 2>/dev/null;"
-            " collx_apply_network_profile 1 nvlink;"
-            " echo \"${NVSHMEM_HCA_LIST:-unset}\""
-        )
-        self.assertEqual(line, "unset")
+        env = probe.network_environment({}, 1, "nvlink")
+        self.assertNotIn("NVSHMEM_HCA_LIST", env)
 
     def test_scale_out_ignores_the_single_node_selector(self) -> None:
-        line = self._profile_env(
-            "source runtime/common.sh 2>/dev/null;"
-            " export COLLX_SINGLE_NODE_RDMA_DEVICES='mlx5_12:1';"
-            " export COLLX_RDMA_DEVICES='mlx5_0:1,mlx5_1:1';"
-            " collx_apply_network_profile 2 nvlink-rdma;"
-            " echo \"${NVSHMEM_HCA_LIST:-unset}\""
-        )
-        self.assertEqual(line, "mlx5_0:1,mlx5_1:1")
+        env = probe.network_environment({"COLLX_SINGLE_NODE_RDMA_DEVICES": "mlx5_12:1",
+                                           "COLLX_RDMA_DEVICES": "mlx5_0:1,mlx5_1:1"}, 2, "nvlink-rdma")
+        self.assertEqual(env["NVSHMEM_HCA_LIST"], "mlx5_0:1,mlx5_1:1")
 
 
 class StageTests(unittest.TestCase):
     def test_create_copy_and_validate_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            source = root / "source"
+            repo = root / "source"
+            source = repo / "experimental/CollectiveX"
             target = root / "stage"
             (source / "runtime").mkdir(parents=True)
-            (source / "runtime" / "common.sh").write_text("test")
+            (source / "runtime/public.py").write_text("test")
             (source / "goal.md").write_text("private")
             (source / ".shards").mkdir()
-            (source / ".shards" / "leg.json").write_text("{}")
-            args = type("Args", (), {"stage": str(target)})
-            stage.create_stage(args)
-            copy_args = type(
-                "Args", (), {"source": str(source), "target": str(target / "experimental" / "CollectiveX")}
-            )
-            stage.copy_repository(copy_args)
-            staged = target / "experimental" / "CollectiveX"
-            self.assertTrue((staged / "runtime" / "common.sh").is_file())
+            (source / ".shards/leg.json").write_text("{}")
+            storage.stage_repository(repo, target)
+            staged = target / "experimental/CollectiveX"
+            self.assertTrue((staged / "runtime/public.py").is_file())
             self.assertFalse((staged / ".shards").exists())
             self.assertFalse((staged / "goal.md").exists())
-            cleanup_args = type("Args", (), {"root": str(target)})
-            stage.validate_cleanup(cleanup_args)
+            storage.cleanup_stage(target, repo)
+            self.assertFalse(target.exists())
+
 
 # Probe output is consumed by the launcher to select an interface and link layer.
 SOCKET_MARKER = r"^\[collectivex-private\] socket-interface-selected=([A-Za-z][A-Za-z0-9_.-]{0,31})$"
@@ -377,19 +347,6 @@ class NetworkProfileContract(unittest.TestCase):
             self.assertEqual(rc, 1)
             self.assertIn("[collectivex-private] rdma-port-1=link-layer-invalid", lines)
 
-# config.py case-args is the single case→invocation codec: collx_run_shard decodes one
-# null-delimited argv per case and hands it verbatim to bench/run_ep.py. Parse the
-# emitted argv with the same parser shape run_ep builds so the two sides cannot
-# drift — a flag the codec emits but run_ep does not declare (or vice versa) fails
-# here instead of on a GPU allocation.
-# logical_byte_provenance is where FP8 changes MEASUREMENT semantics (asymmetric
-# per-direction byte counts), so its arithmetic and guards are pinned here on CPU.
-try:
-    import torch as _torch
-except Exception:  # torch is absent in the CPU test image; these checks run on GPU CI
-    _torch = None
-
-
 class ContainerImportRetry(unittest.TestCase):
     """A failed container import is retried, because the failure is usually the storage blinking.
 
@@ -401,71 +358,46 @@ class ContainerImportRetry(unittest.TestCase):
     minutes into each leg, so the import must not treat one such failure as terminal.
     """
 
-    HARNESS = """
-set -u
-export COLLX_IMAGE_PLATFORM=linux/amd64
-export COLLX_JOB_ROOT="$ROOT/job"
-mkdir -p "$COLLX_JOB_ROOT"
-mkdir -p "$ROOT/bin" "$ROOT/sqsh"
-# Fake srun: appends one line per invocation and replays a scripted exit-code sequence.
-cat > "$ROOT/bin/srun" <<'FAKE'
-#!/bin/bash
-echo call >> "$ROOT/calls"
-n=$(wc -l < "$ROOT/calls" | tr -d ' ')
-codes=($RC_SEQUENCE)
-idx=$(( n - 1 )); [ $idx -ge ${#codes[@]} ] && idx=$(( ${#codes[@]} - 1 ))
-exit ${codes[$idx]}
-FAKE
-chmod +x "$ROOT/bin/srun"
-export PATH="$ROOT/bin:$PATH"
-source "$COMMON"
-sleep() { :; }              # collapse the backoff
-unsquashfs() { return 0; }  # a present squash short-circuits the import
-out="$(collx_ensure_squash_on_job 12345 "$ROOT/sqsh" some/image:tag)"; rc=$?
-echo "RC=$rc"
-echo "OUT=$out"
-echo "CALLS=$(wc -l < "$ROOT/calls" 2>/dev/null | tr -d ' ' || echo 0)"
-"""
-
-    def _run(self, rc_sequence: str):
-        with tempfile.TemporaryDirectory() as root:
-            proc = subprocess.run(
-                ["bash", "-c", self.HARNESS],
-                env={
-                    **os.environ, "ROOT": root, "COMMON": str(RUNTIME / "common.sh"),
-                    "RC_SEQUENCE": rc_sequence, "COLLX_IMPORT_ATTEMPTS": "3",
-                },
-                capture_output=True, text=True,
-            )
-        fields = dict(
-            line.split("=", 1) for line in proc.stdout.splitlines() if "=" in line
-            and line.split("=", 1)[0] in ("RC", "OUT", "CALLS")
+    def _run(self, sequence):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        binary = root / "bin"
+        binary.mkdir()
+        self.calls_file = root / "calls"
+        script = binary / "srun"
+        script.write_text(
+            f"#!{sys.executable}\nimport os, pathlib, sys\n"
+            "path = pathlib.Path(os.environ['CALLS'])\n"
+            "with path.open('a') as output: output.write('call\\n')\n"
+            "count = len(path.read_text().splitlines())\n"
+            "codes = os.environ['CODES'].split()\n"
+            "sys.exit(int(codes[min(count - 1, len(codes) - 1)]))\n"
         )
-        return fields, proc
+        script.chmod(0o755)
+        env = {**os.environ, "PATH": f"{binary}:{os.environ['PATH']}", "CALLS": str(self.calls_file),
+               "CODES": sequence, "COLLX_IMAGE_PLATFORM": "linux/amd64", "COLLX_NODES": "1",
+               "COLLX_SQUASH_DIR": str(root / "sqsh"), "COLLECTIVEX_IMAGE": "some/image:tag"}
+        allocation = SlurmAllocation(root, env)
+        allocation.job_id = "12345"
+        with mock.patch("runtime.storage.time.sleep"):
+            return storage.ensure_image(allocation, env)
 
     def test_a_transient_failure_is_retried_and_then_succeeds(self):
-        # Also the fixture's own control: if the job-root shape were wrong the function would
-        # fail before ever reaching srun, CALLS would be 0, and every assertion here would pass
-        # vacuously. Asserting the invocation count is what makes that impossible.
-        fields, proc = self._run("1 0")
-        self.assertEqual(fields.get("CALLS"), "2", proc.stdout + proc.stderr)
-        self.assertEqual(fields.get("RC"), "0", proc.stdout + proc.stderr)
-        # Callers capture stdout as the squash path, so nothing else may reach it.
-        self.assertTrue(fields.get("OUT", "").endswith(".sqsh"), fields)
+        path = self._run("1 0")
+        self.assertEqual(len(self.calls_file.read_text().splitlines()), 2)
+        self.assertIsInstance(path, Path)
+        self.assertTrue(str(path).endswith(".sqsh"))
 
     def test_an_architecture_mismatch_is_not_retried(self):
-        # rc 13 is the remote platform mismatch: a property of the case, not the moment, so
-        # retrying only delays the real message by two backoffs.
-        fields, proc = self._run("13 13 13")
-        self.assertEqual(fields.get("CALLS"), "1", proc.stdout + proc.stderr)
-        self.assertEqual(fields.get("RC"), "1", proc.stdout + proc.stderr)
+        # rc 13 is a property of the case, not the moment; retries only delay the message.
+        with self.assertRaisesRegex(RuntimeError, "platform does not match"):
+            self._run("13 13 13")
+        self.assertEqual(len(self.calls_file.read_text().splitlines()), 1)
 
 
-# config.py case-args is the single case→invocation codec: collx_run_shard decodes one
-# null-delimited argv per case and hands it verbatim to bench/run_ep.py. Parse the
-# emitted argv with the actual parser run_ep builds so the two sides cannot
-# drift — a flag the codec emits but run_ep does not declare (or vice versa) fails
-# here instead of on a GPU allocation.
+# The case-to-argv codec is imported directly. Parse its result with the actual run_ep
+# parser so missing or misspelled flags fail here instead of inside a GPU allocation.
 class CaseArgvContract(unittest.TestCase):
     CASE = {
         "backend": "deepep-v2", "mode": "normal", "precision": "bf16",
@@ -496,21 +428,9 @@ class CaseArgvContract(unittest.TestCase):
                 run_ep.main()
         return parse.call_args.args[0]
 
-    def _decode(self, stdout: bytes) -> list:
-        parts = stdout.split(b"\0")
-        self.assertEqual(parts[-1], b"")
-        return [part.decode() for part in parts[:-1]]
-
     def _case_argv(self, placement: list, case: dict | None = None) -> list:
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "shard.json"
-            path.write_text(json.dumps({"version": 1, "cases": [case or self.CASE]}))
-            result = subprocess.run(
-                [sys.executable, str(RUNTIME / "config.py"), "case-args",
-                 str(path), "0", "h200-dgxc", "TS", *placement],
-                capture_output=True, check=True,
-            )
-        return self._decode(result.stdout)
+        return config.case_arguments({"version": 1, "cases": [case or self.CASE]},
+                                     0, "h200-dgxc", "TS", tuple(placement))
 
     def test_case_args_round_trips_through_the_run_ep_parser(self) -> None:
         argv = self._case_argv(["16", "2", "8", "8"])
@@ -562,7 +482,7 @@ class CaseArgvContract(unittest.TestCase):
             "8:256", "8:256:32:128", "8:256:32:128:4:16:2", "",
         ):
             with self.subTest(timing=timing):
-                with self.assertRaises(subprocess.CalledProcessError):
+                with self.assertRaises(SystemExit):
                     self._case_argv(["16", "2", "8", "8"], case={**self.CASE, "timing": timing})
         # Types are NOT checked by the codec -- as has always been true for iters/trials/warmup
         # -- so the property is that the argv it emits still cannot parse into a run.
@@ -573,7 +493,7 @@ class CaseArgvContract(unittest.TestCase):
             self._run_ep_parser().parse_args(argv)
 
     def test_case_args_fails_closed_on_placement_mismatch(self) -> None:
-        with self.assertRaises(subprocess.CalledProcessError):
+        with self.assertRaises(SystemExit):
             self._case_argv(["8", "1", "8", "8"])
 
     def test_each_backend_round_trips_through_the_run_ep_parser(self) -> None:

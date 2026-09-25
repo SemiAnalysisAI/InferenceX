@@ -4,9 +4,35 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import os
+import re
 
-from ep_case import case_id
 from ep_measurement import _pcts, _reduce_int, _reduce_vec
+
+
+_CASE_ID = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
+_NON_SLUG = re.compile(r"[^a-z0-9]+")
+
+
+def is_case_id(value) -> bool:
+    return bool(isinstance(value, str) and _CASE_ID.fullmatch(value))
+
+
+def case_id(sku: str, case: dict) -> str:
+    parts = (
+        sku,
+        case["backend"],
+        case["workload"],
+        case["mode"],
+        case["phase"],
+        f"ep{int(case['ep'])}",
+        case["routing"],
+        case["precision"],
+    )
+    values = [_NON_SLUG.sub("-", str(part).lower()).strip("-") for part in parts]
+    if not all(values):
+        raise ValueError("case ID contains an empty factor")
+    return "-".join(values)
+
 
 def logical_byte_provenance(
     logical_copies: int,
@@ -470,7 +496,7 @@ def write_results(args, backend, torch, dist, device, rank, world_size,
               f"status={doc['outcome']['status']} {len(rows)} pts, routing_consistent={routing_consistent}, "
               f"{component_summary} "
               f"-> {args.out}")
-    # CI honesty: run_sweep's return code is the only success signal collx_run_shard (and thus CI)
+    # CI honesty: run_sweep's return code is the only success signal run_ep_cases (and thus CI)
     # reads — the doc is uploaded regardless, via the launcher's always() stage step. A captured
     # `invalid` outcome (semantic correctness or cross-rank routing identity failed) must therefore
     # fail the leg, not ride as a green success; otherwise a persistent oracle failure is invisible

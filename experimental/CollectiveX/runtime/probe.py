@@ -35,12 +35,14 @@ def prepare_cache(parent_path: str) -> str:
 DIGEST_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
 # Every manifest media type a tag can point at; a multi-arch tag answers with its index
 # digest, which changes whenever any platform updates -- over-eager, never stale.
-MANIFEST_ACCEPT = ", ".join((
-    "application/vnd.oci.image.index.v1+json",
-    "application/vnd.docker.distribution.manifest.list.v2+json",
-    "application/vnd.oci.image.manifest.v1+json",
-    "application/vnd.docker.distribution.manifest.v2+json",
-))
+MANIFEST_ACCEPT = ", ".join(
+    (
+        "application/vnd.oci.image.index.v1+json",
+        "application/vnd.docker.distribution.manifest.list.v2+json",
+        "application/vnd.oci.image.manifest.v1+json",
+        "application/vnd.docker.distribution.manifest.v2+json",
+    )
+)
 
 
 def registry_reference(image: str) -> tuple[str, str, str]:
@@ -61,8 +63,7 @@ def resolve_image_digest(image: str, timeout: float = 10.0, opener=None) -> str:
     url = f"https://{host}/v2/{repository}/manifests/{tag}"
 
     def head(token: str = ""):
-        request = urllib.request.Request(
-            url, method="HEAD", headers={"Accept": MANIFEST_ACCEPT})
+        request = urllib.request.Request(url, method="HEAD", headers={"Accept": MANIFEST_ACCEPT})
         if token:
             request.add_header("Authorization", f"Bearer {token}")
         return opener.open(request, timeout=timeout)
@@ -71,16 +72,16 @@ def resolve_image_digest(image: str, timeout: float = 10.0, opener=None) -> str:
         try:
             response = head()
         except urllib.error.HTTPError as error:
-            challenge = dict(re.findall(r'([A-Za-z_]+)="([^"]*)"',
-                                        error.headers.get("WWW-Authenticate", "")))
+            challenge = dict(
+                re.findall(r'([A-Za-z_]+)="([^"]*)"', error.headers.get("WWW-Authenticate", ""))
+            )
             realm = challenge.get("realm", "")
             if error.code != 401 or not realm.startswith("https://"):
                 return ""
             query = {"scope": f"repository:{repository}:pull"}
             if challenge.get("service"):
                 query["service"] = challenge["service"]
-            with opener.open(f"{realm}?{urllib.parse.urlencode(query)}",
-                             timeout=timeout) as grant:
+            with opener.open(f"{realm}?{urllib.parse.urlencode(query)}", timeout=timeout) as grant:
                 body = json.loads(grant.read().decode())
             token = body.get("token") or body.get("access_token") or ""
             if not token:
@@ -96,12 +97,20 @@ def resolve_image_digest(image: str, timeout: float = 10.0, opener=None) -> str:
 def validate_cuda_context(expected: int) -> None:
     cuda = ctypes.CDLL("libcuda.so.1")
     count = ctypes.c_int()
-    if cuda.cuInit(0) != 0 or cuda.cuDeviceGetCount(ctypes.byref(count)) != 0 or count.value != expected:
+    if (
+        cuda.cuInit(0) != 0
+        or cuda.cuDeviceGetCount(ctypes.byref(count)) != 0
+        or count.value != expected
+    ):
         raise SystemExit(1)
 
 
-_GPU_HEALTH_FIELDS = ("index", "clocks_event_reasons.sw_thermal_slowdown",
-                      "clocks_event_reasons.hw_thermal_slowdown", "temperature.gpu")
+_GPU_HEALTH_FIELDS = (
+    "index",
+    "clocks_event_reasons.sw_thermal_slowdown",
+    "clocks_event_reasons.hw_thermal_slowdown",
+    "temperature.gpu",
+)
 
 
 def gpu_health_faults(output: str, max_temperature_c: int = 90) -> list[str]:
@@ -170,9 +179,11 @@ def validate_gpu_health(max_temperature_c: int = 90) -> None:
         return
     try:
         output = subprocess.run(
-            ["nvidia-smi", f"--query-gpu={','.join(_GPU_HEALTH_FIELDS)}",
-             "--format=csv,noheader"],
-            capture_output=True, text=True, timeout=60, check=True,
+            ["nvidia-smi", f"--query-gpu={','.join(_GPU_HEALTH_FIELDS)}", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=True,
         ).stdout
     except (OSError, subprocess.SubprocessError):
         return
@@ -184,14 +195,16 @@ def validate_gpu_health(max_temperature_c: int = 90) -> None:
     # Positive control: without it a blind gate -- no visible devices, or a driver spelling these
     # fields `clocks_throttle_reasons.*` -- is indistinguishable from a healthy pass.
     spread = gpu_temperature_spread(output)
-    detail = "" if spread is None else f" hottest={spread[0]}C median={spread[1]}C spread={spread[2]}C"
+    detail = (
+        "" if spread is None else f" hottest={spread[0]}C median={spread[1]}C spread={spread[2]}C"
+    )
     _emit(
         f"gpu-health-checked gpus={sum(1 for line in output.splitlines() if line.strip())}{detail}"
     )
 
 
 def _emit(marker: str) -> None:
-    # collx_validate_network_profile_on_job (runtime/common.sh) greps these exact strings
+    # validated_selectors consumes these exact strings
     # out of the per-node probe log to derive COLLX_SOCKET_IFNAME / COLLX_RDMA_LINK_LAYER and to
     # diagnose failures. The marker vocabulary is a string contract with that function —
     # keep the two halves in lockstep (see tests/test_runtime.py::NetworkProfileContract).
@@ -203,38 +216,48 @@ def _check_port(port_path: Path, ordinal: int, gid_index: str, profile: str, fab
     # non-empty GID at the pinned index, and agrees with any already-seen link layer;
     # otherwise emit the matching rdma-port-<ordinal>=<reason> marker and return None.
     if not port_path.is_dir():
-        _emit(f"rdma-port-{ordinal}=missing"); return None
+        _emit(f"rdma-port-{ordinal}=missing")
+        return None
     state = port_path / "state"
     if not state.is_file() or state.read_text().split()[:1] != ["4:"]:
-        _emit(f"rdma-port-{ordinal}=inactive"); return None
+        _emit(f"rdma-port-{ordinal}=inactive")
+        return None
     if gid_index:
         gid = port_path / "gids" / gid_index
         if not gid.is_file():
-            _emit(f"rdma-port-{ordinal}=gid-missing"); return None
+            _emit(f"rdma-port-{ordinal}=gid-missing")
+            return None
         if not "".join(c for c in gid.read_text() if c not in ":0" and not c.isspace()):
-            _emit(f"rdma-port-{ordinal}=gid-empty"); return None
+            _emit(f"rdma-port-{ordinal}=gid-empty")
+            return None
     link = port_path / "link_layer"
     if not link.is_file():
-        _emit(f"rdma-port-{ordinal}=link-layer-missing"); return None
+        _emit(f"rdma-port-{ordinal}=link-layer-missing")
+        return None
     layer = {"Ethernet": "roce", "InfiniBand": "infiniband"}.get(link.read_text().strip())
     # AWS EFA is a verbs device whose port carries no link layer (sysfs says Unspecified or
     # Unknown, rdma-core names it rdmap*). Only an operator-declared EFA fabric may accept that.
     if layer is None and fabric == "efa" and link.read_text().strip() in ("Unspecified", "Unknown"):
         layer = "efa"
     if layer is None:
-        _emit(f"rdma-port-{ordinal}=link-layer-invalid"); return None
+        _emit(f"rdma-port-{ordinal}=link-layer-invalid")
+        return None
     if profile and profile != layer:
-        _emit(f"rdma-port-{ordinal}=link-layer-mixed"); return None
+        _emit(f"rdma-port-{ordinal}=link-layer-mixed")
+        return None
     return layer
 
 
 def _read(path: Path) -> str:
-    try: return path.read_text().strip() if path.is_file() else "?"
-    except OSError: return "?"
+    try:
+        return path.read_text().strip() if path.is_file() else "?"
+    except OSError:
+        return "?"
 
 
-def _emit_fabric_inventory(sys_root: Path = Path("/sys"),
-                           route_path: Path = Path("/proc/net/route")) -> None:
+def _emit_fabric_inventory(
+    sys_root: Path = Path("/sys"), route_path: Path = Path("/proc/net/route")
+) -> None:
     # Failure-path diagnostic only. When the operator-pinned profile does not match the node
     # (a pool moved under an existing SKU, as b300-nv -> b300-dsxe did), the launcher's log tail
     # is the only view an operator without shell access has of the node, so say what IS there:
@@ -245,10 +268,13 @@ def _emit_fabric_inventory(sys_root: Path = Path("/sys"),
     nets = []
     net_root = sys_root / "class" / "net"
     for net in sorted(net_root.iterdir()) if net_root.is_dir() else []:
-        if net.name == "lo": continue
+        if net.name == "lo":
+            continue
         nets.append(f"{net.name}={_read(net / 'operstate')}")
-    try: default = default_route_interface(route_path)
-    except OSError: default = ""
+    try:
+        default = default_route_interface(route_path)
+    except OSError:
+        default = ""
     _emit(f"fabric-inventory-default-route={default or 'none'}")
     _emit(f"fabric-inventory-net={','.join(nets) or 'none'}")
     if os.environ.get("SLURM_NODEID", "0") != "0":
@@ -257,26 +283,40 @@ def _emit_fabric_inventory(sys_root: Path = Path("/sys"),
     for dev in sorted(ib_root.iterdir()) if ib_root.is_dir() else []:
         ports = []
         ports_root = dev / "ports"
-        for port in sorted(p for p in ports_root.iterdir() if p.is_dir()) if ports_root.is_dir() else []:
-            ports.append(f"{port.name}:{_read(port / 'state').split(':')[0]}"
-                         f"/{_read(port / 'link_layer')}/{_read(port / 'phys_state').split(':')[0]}"
-                         f"/{_read(port / 'rate').split(' ')[0]}")
+        for port in (
+            sorted(p for p in ports_root.iterdir() if p.is_dir()) if ports_root.is_dir() else []
+        ):
+            ports.append(
+                f"{port.name}:{_read(port / 'state').split(':')[0]}"
+                f"/{_read(port / 'link_layer')}/{_read(port / 'phys_state').split(':')[0]}"
+                f"/{_read(port / 'rate').split(' ')[0]}"
+            )
         net_dir = dev / "device" / "net"
         netdevs = ",".join(sorted(n.name for n in net_dir.iterdir())) if net_dir.is_dir() else "-"
-        _emit(f"fabric-inventory-rdma-device={dev.name} ports={';'.join(ports) or '-'} "
-              f"hca={_read(dev / 'hca_type')} fw={_read(dev / 'fw_ver')} "
-              f"pci={_read(dev / 'device' / 'vendor')}:{_read(dev / 'device' / 'device')} netdev={netdevs}")
+        _emit(
+            f"fabric-inventory-rdma-device={dev.name} ports={';'.join(ports) or '-'} "
+            f"hca={_read(dev / 'hca_type')} fw={_read(dev / 'fw_ver')} "
+            f"pci={_read(dev / 'device' / 'vendor')}:{_read(dev / 'device' / 'device')} netdev={netdevs}"
+        )
     try:
-        topo = subprocess.run(["nvidia-smi", "topo", "-m"], capture_output=True, text=True, timeout=30).stdout
+        topo = subprocess.run(
+            ["nvidia-smi", "topo", "-m"], capture_output=True, text=True, timeout=30
+        ).stdout
     except (OSError, subprocess.SubprocessError):
         topo = ""
     for line in topo.splitlines()[:40]:
-        if line.strip(): _emit(f"fabric-inventory-topo {line.rstrip()}")
+        if line.strip():
+            _emit(f"fabric-inventory-topo {line.rstrip()}")
 
-def validate_network_profile(socket_names: str, rdma_devices: str, gid_index: str,
-                             fabric: str = "",
-                             sys_root: Path = Path("/sys"),
-                             route_path: Path = Path("/proc/net/route")) -> None:
+
+def validate_network_profile(
+    socket_names: str,
+    rdma_devices: str,
+    gid_index: str,
+    fabric: str = "",
+    sys_root: Path = Path("/sys"),
+    route_path: Path = Path("/proc/net/route"),
+) -> None:
     # Prove the operator-pinned scale-out fabric on this node: resolve the cross-node socket
     # interface (operator selector, else this node's default route), confirm it is live, and
     # confirm every pinned RDMA port is active with a consistent link layer. On success emit
@@ -291,20 +331,24 @@ def validate_network_profile(socket_names: str, rdma_devices: str, gid_index: st
     _emit(f"socket-interface-selected={interface}")
     net = sys_root / "class" / "net" / interface
     if not net.is_dir():
-        _emit("socket-interface-1=missing"); raise SystemExit(1)
+        _emit("socket-interface-1=missing")
+        raise SystemExit(1)
     operstate = net / "operstate"
     state = operstate.read_text().strip() if operstate.is_file() else ""
     if state not in ("up", "unknown"):
-        _emit("socket-interface-1=down"); raise SystemExit(1)
+        _emit("socket-interface-1=down")
+        raise SystemExit(1)
     profile = ""
     for ordinal, selector in enumerate((s for s in rdma_devices.split(",") if s), start=1):
         device, _, configured_port = selector.partition(":")
         ports = sys_root / "class" / "infiniband" / device / "ports"
         if not ports.is_dir():
-            _emit(f"rdma-device-{ordinal}=missing"); raise SystemExit(1)
+            _emit(f"rdma-device-{ordinal}=missing")
+            raise SystemExit(1)
         if configured_port:
             layer = _check_port(ports / configured_port, ordinal, gid_index, profile, fabric)
-            if layer is None: raise SystemExit(1)
+            if layer is None:
+                raise SystemExit(1)
             profile = layer
         else:
             active = False
@@ -312,31 +356,227 @@ def validate_network_profile(socket_names: str, rdma_devices: str, gid_index: st
                 layer = _check_port(port_path, ordinal, gid_index, profile, fabric)
                 if layer is not None:
                     profile, active = layer, True
-            if not active: raise SystemExit(1)
-    if not profile: raise SystemExit(1)
+            if not active:
+                raise SystemExit(1)
+    if not profile:
+        raise SystemExit(1)
     _emit(f"rdma-link-layer={profile}")
 
 
+DEVICE_LIST = (
+    r"[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?(,[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?)*"
+)
+INTERFACE = r"[A-Za-z][A-Za-z0-9_.-]{0,31}"
+SCRUB = """NCCL_NET NCCL_NET_PLUGIN NCCL_SOCKET_IFNAME GLOO_SOCKET_IFNAME NCCL_IB_HCA
+NCCL_IB_GID_INDEX NCCL_IB_SL NCCL_IB_MERGE_NICS NCCL_CROSS_NIC
+NVSHMEM_ENABLE_NIC_PE_MAPPING NVSHMEM_HCA_LIST NVSHMEM_IB_GID_INDEX NVSHMEM_IB_SL
+NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_IBGDA_NIC_HANDLER EP_NIC_NAME EP_OVERRIDE_RDMA_SL
+MORI_RDMA_DEVICES MORI_RDMA_TC MORI_IO_TC MORI_RDMA_SL MORI_IO_SL
+UCCL_SOCKET_IFNAME UCCL_IB_HCA UCCL_IB_GID_INDEX UCCL_IB_SL UCCL_IB_TC
+UCCL_IB_MAX_INFLIGHT_BYTES UCCL_IB_MAX_INFLIGHT_NORMAL UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC""".split()
+
+
+def gid_environment(env: dict[str, str], layer: str) -> dict[str, str]:
+    """Only RoCE consumes a GID index; UCCL needs its own variable, not NCCL's."""
+    result = dict(env)
+    names = ("NVSHMEM_IB_GID_INDEX", "NCCL_IB_GID_INDEX", "UCCL_IB_GID_INDEX")
+    for name in names:
+        result.pop(name, None)
+    index = env.get("COLLX_IB_GID_INDEX", "")
+    if index:
+        if layer not in ("roce", "infiniband", "efa"):
+            raise ValueError("unsupported RDMA link layer")
+        if layer == "roce":
+            result.update(dict.fromkeys(names, index))
+    return result
+
+
+def network_environment(env: dict[str, str], nodes: int, transport: str) -> dict[str, str]:
+    """Apply the existing platform selectors without inheriting another transport's state."""
+    if nodes < 1:
+        raise ValueError("invalid network placement")
+    result = {key: value for key, value in env.items() if key not in SCRUB}
+    single = env.get("COLLX_SINGLE_NODE_RDMA_DEVICES", "")
+    # Single-node and MNNVL runs need only the scrub. Single-node low-latency kernels use
+    # NVLink/XGMI; /dev/gdrdrv is absent on H200. A pinned HCA list can still steer the legacy
+    # Buffer's self-enabled IBGDA initialization away from B300 rails that reject AH creation.
+    if nodes == 1 and single:
+        if not re.fullmatch(DEVICE_LIST, single):
+            raise ValueError("invalid private single-node RDMA device selector")
+        result["NVSHMEM_HCA_LIST"] = single
+    if nodes == 1 or transport == "mnnvl":
+        return result
+
+    devices = env.get("COLLX_RDMA_DEVICES", "")
+    if not devices:
+        raise ValueError("RDMA execution requires a private device selector")
+    if not re.fullmatch(DEVICE_LIST, devices):
+        raise ValueError("invalid private RDMA device selector")
+    fabric = env.get("COLLX_RDMA_FABRIC", "")
+    if fabric not in ("", "efa"):
+        raise ValueError("invalid private RDMA fabric")
+    interface = env.get("COLLX_SOCKET_IFNAME", "")
+    if interface:
+        if not re.fullmatch(INTERFACE, interface):
+            raise ValueError("invalid private socket interface selector")
+        result.update(NCCL_SOCKET_IFNAME=interface, GLOO_SOCKET_IFNAME=interface)
+    if fabric == "efa":
+        # EFA has no verbs GID/SL/TC selectors. The cluster's enroot hook mounts aws-ofi-nccl;
+        # its libfabric plugin enumerates the rails and exports ncclGinPlugin for GIN.
+        result.update(
+            NCCL_NET_PLUGIN="ofi",
+            FI_PROVIDER="efa",
+            FI_EFA_FORK_SAFE="1",
+            NVSHMEM_REMOTE_TRANSPORT="libfabric",
+            NVSHMEM_LIBFABRIC_PROVIDER="efa",
+        )
+        return result
+
+    names = [selector.split(":")[0] for selector in devices.split(",")]
+    result.update(
+        NVSHMEM_HCA_LIST=devices,
+        NVSHMEM_ENABLE_NIC_PE_MAPPING="1",
+        NCCL_IB_HCA=f"={devices}",
+        MORI_RDMA_DEVICES=",".join(names),
+        EP_NIC_NAME=names[0],
+        UCCL_IB_HCA=f"={devices}",
+        UCCL_SOCKET_IFNAME=interface,
+    )
+    # RCCL selects its own plugin; forcing NCCL_NET=IB breaks AMD. UCCL honors the exact
+    # '=' selector and ':port'; dropping them would prefix-match mlx5_1 against mlx5_10..19.
+    if env.get("COLLX_VENDOR", "nvidia") == "amd":
+        result.update(
+            UCCL_IB_MAX_INFLIGHT_BYTES="2097152",
+            UCCL_IB_MAX_INFLIGHT_NORMAL="1",
+            UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC="1",
+        )
+    else:
+        result["NCCL_NET"] = "IB"
+    # NCCL's dual-port fusion disables GIN. Rail-isolated fabrics also prohibit cross-NIC
+    # pairs: peers on separate per-port subnets black-hole at QP RTR.
+    result["NCCL_IB_MERGE_NICS"] = "0"
+    isolated = env.get("COLLX_RAIL_ISOLATED", "")
+    if isolated not in ("", "0", "1"):
+        raise ValueError("invalid private rail isolation flag")
+    if isolated == "1":
+        result["NCCL_CROSS_NIC"] = "0"
+    for field, limit, label, targets in (
+        ("COLLX_IB_GID_INDEX", 255, "IB GID index", ()),
+        (
+            "COLLX_RDMA_SERVICE_LEVEL",
+            15,
+            "RDMA service level",
+            (
+                "NVSHMEM_IB_SL",
+                "NCCL_IB_SL",
+                "EP_OVERRIDE_RDMA_SL",
+                "MORI_RDMA_SL",
+                "MORI_IO_SL",
+                "UCCL_IB_SL",
+            ),
+        ),
+        (
+            "COLLX_RDMA_TRAFFIC_CLASS",
+            255,
+            "RDMA traffic class",
+            ("MORI_RDMA_TC", "MORI_IO_TC", "UCCL_IB_TC"),
+        ),
+    ):
+        value = env.get(field, "")
+        if value:
+            if not re.fullmatch(r"[0-9]+", value) or int(value) > limit:
+                raise ValueError(f"invalid private {label}")
+            result.update(dict.fromkeys(targets, value))
+    result.update(NVSHMEM_IB_ENABLE_IBGDA="1", NVSHMEM_IBGDA_NIC_HANDLER="gpu")
+    layer = env.get("COLLX_RDMA_LINK_LAYER", "")
+    if layer:
+        if layer not in ("roce", "infiniband", "efa"):
+            raise ValueError("invalid validated RDMA link layer")
+        result = gid_environment(result, layer)
+    return result
+
+
+def validated_selectors(output: str, nodes: int, env: dict[str, str]) -> dict[str, str]:
+    """Resolve the existing private probe markers, including different per-node interfaces."""
+    interfaces = re.findall(
+        rf"^\[collectivex-private\] socket-interface-selected=({INTERFACE})$", output, re.M
+    )
+    count = len(re.findall(r"^\[collectivex-private\] socket-interface-selected=", output, re.M))
+    if not interfaces or count != nodes:
+        raise RuntimeError(
+            f"network-profile-socket-markers={count}/{nodes} unique={len(set(interfaces))}"
+        )
+    layers = re.findall(
+        r"^\[collectivex-private\] rdma-link-layer=(roce|infiniband|efa)$", output, re.M
+    )
+    if len(layers) != nodes or len(set(layers)) != 1:
+        raise RuntimeError("network-profile link-layer markers disagree")
+    result = dict(env)
+    if len(set(interfaces)) == 1:
+        result["COLLX_SOCKET_IFNAME"] = interfaces[0]
+    else:
+        result.pop("COLLX_SOCKET_IFNAME", None)
+    result["COLLX_RDMA_LINK_LAYER"] = layers[0]
+    return gid_environment(result, layers[0])
+
+
+def validate_container_network(env: dict[str, str], sys_root: Path = Path("/sys")) -> None:
+    """Recheck the selected host interfaces inside the actual container."""
+    if int(env.get("COLLX_NODES", "1")) <= 1 or env.get("COLLX_TRANSPORT") == "mnnvl":
+        return
+    devices = env.get("COLLX_RDMA_DEVICES", "")
+    if not re.fullmatch(DEVICE_LIST, devices):
+        raise RuntimeError("invalid scale-out RDMA selector")
+    if env.get("COLLX_RDMA_FABRIC") == "efa":
+        if not os.access("/opt/amazon/ofi-nccl/lib/libnccl-net-ofi.so", os.R_OK):
+            raise RuntimeError("aws-ofi-nccl plugin is absent inside the container")
+    if not env.get("GLOO_SOCKET_IFNAME") or not devices:
+        raise RuntimeError("scale-out network selectors are unavailable")
+    for interface in env["GLOO_SOCKET_IFNAME"].split(","):
+        if not (sys_root / "class/net" / interface).is_dir():
+            raise RuntimeError("configured scale-out socket interface is absent")
+    for device in devices.split(","):
+        if not (sys_root / "class/infiniband" / device.split(":")[0]).is_dir():
+            raise RuntimeError("configured scale-out RDMA device is absent")
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(); commands = parser.add_subparsers(dest="command", required=True)
+    parser = argparse.ArgumentParser()
+    commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("default-route-interface")
-    command = commands.add_parser("prepare-cache"); command.add_argument("parent")
-    command = commands.add_parser("cuda-context"); command.add_argument("expected", type=int)
-    command = commands.add_parser("image-digest"); command.add_argument("image")
+    command = commands.add_parser("prepare-cache")
+    command.add_argument("parent")
+    command = commands.add_parser("cuda-context")
+    command.add_argument("expected", type=int)
+    command = commands.add_parser("image-digest")
+    command.add_argument("image")
     commands.add_parser("gpu-health")
-    command = commands.add_parser("network-profile"); command.add_argument("socket_names"); command.add_argument("rdma_devices"); command.add_argument("gid_index"); command.add_argument("fabric", nargs="?", default="")
+    command = commands.add_parser("network-profile")
+    command.add_argument("socket_names")
+    command.add_argument("rdma_devices")
+    command.add_argument("gid_index")
+    command.add_argument("fabric", nargs="?", default="")
     args = parser.parse_args()
-    if args.command == "default-route-interface": print(default_route_interface(), end="")
-    elif args.command == "prepare-cache": print(prepare_cache(args.parent), end="")
-    elif args.command == "cuda-context": validate_cuda_context(args.expected)
-    elif args.command == "image-digest": print(resolve_image_digest(args.image), end="")
-    elif args.command == "gpu-health": validate_gpu_health()
+    if args.command == "default-route-interface":
+        print(default_route_interface(), end="")
+    elif args.command == "prepare-cache":
+        print(prepare_cache(args.parent), end="")
+    elif args.command == "cuda-context":
+        validate_cuda_context(args.expected)
+    elif args.command == "image-digest":
+        print(resolve_image_digest(args.image), end="")
+    elif args.command == "gpu-health":
+        validate_gpu_health()
     else:
         try:
-            validate_network_profile(args.socket_names, args.rdma_devices, args.gid_index, args.fabric)
+            validate_network_profile(
+                args.socket_names, args.rdma_devices, args.gid_index, args.fabric
+            )
         except SystemExit as exc:
-            if exc.code: _emit_fabric_inventory()
+            if exc.code:
+                _emit_fabric_inventory()
             raise
 
 
-if __name__ == "__main__": main()
+if __name__ == "__main__":
+    main()

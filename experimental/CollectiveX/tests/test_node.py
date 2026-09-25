@@ -1,4 +1,5 @@
 """Compute-host transport, image cache, and per-rank bootstrap behavior."""
+
 from __future__ import annotations
 
 import json
@@ -20,7 +21,11 @@ class NodeTests(unittest.TestCase):
     def test_rank_cli_executes_the_benchmark_with_its_unmodified_flags(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            shutil.copytree(Path(node.__file__).parent, root / "runtime", ignore=shutil.ignore_patterns("__pycache__"))
+            shutil.copytree(
+                Path(node.__file__).parent,
+                root / "runtime",
+                ignore=shutil.ignore_patterns("__pycache__"),
+            )
             binary = root / "bin"
             binary.mkdir()
             interpreter = binary / "python3"
@@ -31,15 +36,38 @@ class NodeTests(unittest.TestCase):
             interpreter.chmod(0o755)
             build.write_rank_environment(root, "0", "mori", {})
             result = subprocess.run(
-                [sys.executable, str(root / "runtime/node.py"), "rank", "--", "--backend", "mori", "--mode", "normal"],
-                env={**os.environ, "PATH": f"{binary}:{os.environ['PATH']}", "SLURM_NODEID": "0",
-                     "SLURM_PROCID": "2", "SLURM_LOCALID": "2", "SLURM_NTASKS": "8",
-                     "COLLX_NGPUS": "8", "COLLX_GPUS_PER_NODE": "8", "COLLX_NODES": "1"},
-                text=True, capture_output=True, check=True,
+                [
+                    sys.executable,
+                    str(root / "runtime/node.py"),
+                    "rank",
+                    "--",
+                    "--backend",
+                    "mori",
+                    "--mode",
+                    "normal",
+                ],
+                env={
+                    **os.environ,
+                    "PATH": f"{binary}:{os.environ['PATH']}",
+                    "SLURM_NODEID": "0",
+                    "SLURM_PROCID": "2",
+                    "SLURM_LOCALID": "2",
+                    "SLURM_NTASKS": "8",
+                    "COLLX_NGPUS": "8",
+                    "COLLX_GPUS_PER_NODE": "8",
+                    "COLLX_NODES": "1",
+                },
+                text=True,
+                capture_output=True,
+                check=True,
             )
-            self.assertEqual(json.loads(result.stdout), {
-                "args": ["bench/run_ep.py", "--backend", "mori", "--mode", "normal"], "rank": "2",
-            })
+            self.assertEqual(
+                json.loads(result.stdout),
+                {
+                    "args": ["bench/run_ep.py", "--backend", "mori", "--mode", "normal"],
+                    "rank": "2",
+                },
+            )
 
     def test_remote_zipapp_runs_without_reading_the_staged_checkout(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -53,7 +81,9 @@ class NodeTests(unittest.TestCase):
                 path = binary / name
                 path.write_text(f"#!{sys.executable}\nimport os, sys\n" + body)
                 path.chmod(0o755)
-            allocation = SlurmAllocation(root, {**os.environ, "PATH": f"{binary}:{os.environ['PATH']}"})
+            allocation = SlurmAllocation(
+                root, {**os.environ, "PATH": f"{binary}:{os.environ['PATH']}"}
+            )
             allocation.job_id = "321"
             allocation.host(1, ["address", ""], root / "probe.log")
             self.assertEqual((root / "probe.log").read_text(), "compute-zero\n")
@@ -61,17 +91,34 @@ class NodeTests(unittest.TestCase):
     def test_rank_identity_comes_from_slurm_and_only_backend_fields_are_loaded(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            build.write_rank_environment(root, "1", "deepep-v2", {
-                "PATH": "/venv/bin:/bin", "EP_REUSE_NCCL_COMM": "1", "SECRET": "not-forwarded",
-            })
+            build.write_rank_environment(
+                root,
+                "1",
+                "deepep-v2",
+                {
+                    "PATH": "/venv/bin:/bin",
+                    "EP_REUSE_NCCL_COMM": "1",
+                    "SECRET": "not-forwarded",
+                },
+            )
             incoming = {
-                "SLURM_NODEID": "1", "SLURM_PROCID": "5", "SLURM_LOCALID": "1",
-                "SLURM_NTASKS": "8", "COLLX_NGPUS": "8", "COLLX_GPUS_PER_NODE": "4",
-                "COLLX_NODES": "2", "COLLX_TRANSPORT": "mnnvl", "EP_SUPPRESS_NCCL_CHECK": "1",
-                "RANK": "wrong", "PATH": "/bin",
+                "SLURM_NODEID": "1",
+                "SLURM_PROCID": "5",
+                "SLURM_LOCALID": "1",
+                "SLURM_NTASKS": "8",
+                "COLLX_NGPUS": "8",
+                "COLLX_GPUS_PER_NODE": "4",
+                "COLLX_NODES": "2",
+                "COLLX_TRANSPORT": "mnnvl",
+                "EP_SUPPRESS_NCCL_CHECK": "1",
+                "RANK": "wrong",
+                "PATH": "/bin",
             }
             env = node.rank_environment(root, incoming)
-            self.assertEqual((env["RANK"], env["LOCAL_RANK"], env["WORLD_SIZE"], env["LOCAL_WORLD_SIZE"]), ("5", "1", "8", "4"))
+            self.assertEqual(
+                (env["RANK"], env["LOCAL_RANK"], env["WORLD_SIZE"], env["LOCAL_WORLD_SIZE"]),
+                ("5", "1", "8", "4"),
+            )
             self.assertEqual(env["PATH"], "/venv/bin:/bin")
             self.assertEqual(env["EP_REUSE_NCCL_COMM"], "1")
             self.assertNotIn("EP_SUPPRESS_NCCL_CHECK", env)
@@ -98,11 +145,11 @@ class ImageCacheTests(unittest.TestCase):
             binary = root / "bin"
             binary.mkdir()
             programs = {
-                "enroot": '''
+                "enroot": """
 if sys.argv[1] == 'import':
     pathlib.Path(sys.argv[sys.argv.index('-o') + 1]).write_text('image')
     with open(os.environ['IMPORTS'], 'a') as stream: stream.write('imported\\n')
-''',
+""",
                 "unsquashfs": "sys.exit(0 if pathlib.Path(sys.argv[-1]).is_file() else 1)\n",
             }
             for name, body in programs.items():
@@ -110,10 +157,20 @@ if sys.argv[1] == 'import':
                 path.write_text(f"#!{sys.executable}\nimport os, pathlib, sys\n" + body)
                 path.chmod(0o755)
             image = storage.squash_path(root, "some/image:tag", "linux/amd64")
-            options = {"path": str(image), "lock": str(root / "image.lock"),
-                       "platform": "linux/amd64", "mode": "local", "image": "some/image:tag",
-                       "digest": "first", "local_scratch": True}
-            env = {**os.environ, "PATH": f"{binary}:{os.environ['PATH']}", "IMPORTS": str(root / "imports")}
+            options = {
+                "path": str(image),
+                "lock": str(root / "image.lock"),
+                "platform": "linux/amd64",
+                "mode": "local",
+                "image": "some/image:tag",
+                "digest": "first",
+                "local_scratch": True,
+            }
+            env = {
+                **os.environ,
+                "PATH": f"{binary}:{os.environ['PATH']}",
+                "IMPORTS": str(root / "imports"),
+            }
             with mock.patch("runtime.storage.platform.machine", return_value="x86_64"):
                 storage.import_image(options, env)
                 storage.import_image(options, env)

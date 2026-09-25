@@ -21,7 +21,7 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
     raise
 
 
-# The source pin in runtime/common.sh is upstream main, which carries #630 and #640. This
+# The source pin in runtime/build.py is upstream main, which carries #630 and #640. This
 # adapter does not check the wheel's commit tag, only that the loaded deep_ep exposes
 # ElasticBuffer.
 
